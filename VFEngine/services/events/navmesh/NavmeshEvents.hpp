@@ -72,6 +72,12 @@ namespace events::navmesh
         std::string_view getName() const override { return "GetAgentVelocity"; }
     };
 
+    struct GetAgentSpeedQuery : IQuery<float>
+    {
+        services::EntityHandle entity;
+        std::string_view getName() const override { return "GetAgentSpeed"; }
+    };
+
     struct NavmeshRaycastQuery : IQuery<navigation::NavmeshRaycastResult>
     {
         glm::vec3 from;

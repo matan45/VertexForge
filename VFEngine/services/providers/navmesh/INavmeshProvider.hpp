@@ -48,6 +48,7 @@ namespace services
         virtual void updateCrowdAgentParams(int agentIndex, float maxSpeed, float maxAcceleration) = 0;
         virtual glm::vec3 getCrowdAgentPosition(int agentIndex) const = 0;
         virtual glm::vec3 getCrowdAgentVelocity(int agentIndex) const = 0;
+        virtual float getCrowdAgentMaxSpeed(int agentIndex) const = 0;
         virtual void updateCrowd(float deltaTime) = 0;
 
         virtual void getDebugMesh(std::vector<glm::vec3>& outVertices,

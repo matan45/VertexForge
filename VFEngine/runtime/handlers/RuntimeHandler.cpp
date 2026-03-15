@@ -132,7 +132,7 @@ namespace handlers {
             // Run script onLateUpdate after world transforms are computed
             if (scriptingService) {
                 float deltaTime = static_cast<float>(engineTime::Timer::getDeltaTime());
-                static_cast<services::ScriptingServiceImpl*>(scriptingService.get())->lateUpdateScripts(deltaTime);
+                scriptingService->lateUpdateScripts(deltaTime);
             }
 
             // Ensure cameras are registered before updating them
@@ -374,7 +374,7 @@ namespace handlers {
             {
                 physicsPlayModeHandler->setScriptFixedUpdateCallback([this](float fixedDt)
                 {
-                    static_cast<services::ScriptingServiceImpl*>(scriptingService.get())->fixedUpdateScripts(fixedDt);
+                    scriptingService->fixedUpdateScripts(fixedDt);
                 });
             }
         }

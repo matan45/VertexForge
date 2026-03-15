@@ -594,6 +594,19 @@ namespace core
         return {ag->vel[0], ag->vel[1], ag->vel[2]};
     }
 
+    float NavmeshAdapter::getCrowdAgentMaxSpeed(int agentIndex) const
+    {
+        std::lock_guard lock(navMeshMutex);
+        if (!crowd)
+            return 0.0f;
+
+        const dtCrowdAgent* ag = crowd->getAgent(agentIndex);
+        if (!ag || !ag->active)
+            return 0.0f;
+
+        return ag->params.maxSpeed;
+    }
+
     void NavmeshAdapter::updateCrowd(float deltaTime)
     {
         std::lock_guard lock(navMeshMutex);

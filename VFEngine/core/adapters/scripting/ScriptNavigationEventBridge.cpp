@@ -13,7 +13,7 @@ namespace core
     ScriptNavigationEventBridge::ScriptNavigationEventBridge(
         ::services::ScriptInterpreter* interpreter,
         const std::unordered_map<uint64_t, std::unordered_set<std::string>>& instanceToInterfaces,
-        const std::unordered_map<uint64_t, std::any>& instanceToObject,
+        std::unordered_map<uint64_t, std::any>& instanceToObject,
         const std::unordered_map<uint64_t, ::services::EntityHandle>& instanceToEntity)
         : interpreter(interpreter)
         , instanceToInterfaces(instanceToInterfaces)
@@ -81,7 +81,7 @@ namespace core
             try
             {
                 NativeAPIRegistry::setCurrentEntity(entity);
-                auto& instance = std::any_cast<value::Value&>(const_cast<std::any&>(objIt->second));
+                auto& instance = std::any_cast<value::Value&>(objIt->second);
                 interpreter->callMethod(instance, methodName, {});
             }
             catch (const std::exception& e)

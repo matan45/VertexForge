@@ -98,8 +98,9 @@ namespace core
         auto it = runtimes.find(entity.id);
         if (it == runtimes.end()) return "stopped";
         if (!it->second.enabled) return "stopped";
+        if (!it->second.lastTickStatus.has_value()) return "stopped";
 
-        switch (it->second.lastTickStatus)
+        switch (*it->second.lastTickStatus)
         {
         case behaviortree::BTNodeStatus::Running: return "running";
         case behaviortree::BTNodeStatus::Success: return "success";

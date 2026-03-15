@@ -23,6 +23,7 @@ namespace services
         void stopAgent(EntityHandle entity);
         void updateAgentConfig(EntityHandle entity, float maxSpeed, float maxAcceleration);
         glm::vec3 getAgentVelocity(EntityHandle entity) const;
+        float getAgentSpeed(EntityHandle entity) const;
         void updatePositions(float deltaTime);
 
         void suspendAgentsOnUnloadedTiles(const std::vector<navigation::NavmeshTileCoord>& unloadedTiles);

@@ -69,6 +69,7 @@ namespace core
         void updateCrowdAgentParams(int agentIndex, float maxSpeed, float maxAcceleration) override;
         glm::vec3 getCrowdAgentPosition(int agentIndex) const override;
         glm::vec3 getCrowdAgentVelocity(int agentIndex) const override;
+        float getCrowdAgentMaxSpeed(int agentIndex) const override;
         void updateCrowd(float deltaTime) override;
 
         // === Debug ===

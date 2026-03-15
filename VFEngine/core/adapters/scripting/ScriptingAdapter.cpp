@@ -526,6 +526,8 @@ namespace core
             auto* eventLoop = vm->getEventLoop();
             if (eventLoop)
             {
+                // Process up to 64 pending async tasks per frame to avoid stalling
+                // the frame loop. Remaining tasks carry over to the next frame.
                 int budget = 64;
                 while (budget-- > 0 && eventLoop->tick()) {}
             }
@@ -545,6 +547,7 @@ namespace core
             auto* eventLoop = vm->getEventLoop();
             if (eventLoop)
             {
+                // Same budget as tickCoroutines — see comment there
                 int budget = 64;
                 while (budget-- > 0 && eventLoop->tick()) {}
             }

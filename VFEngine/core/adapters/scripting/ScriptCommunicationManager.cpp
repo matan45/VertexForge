@@ -13,7 +13,7 @@ namespace core
         ::services::ScriptInterpreter* interpreter,
         const std::unordered_map<uint64_t, std::string>& instanceToClassName,
         const std::unordered_map<uint64_t, ::services::EntityHandle>& instanceToEntity,
-        const std::unordered_map<uint64_t, std::any>& instanceToObject)
+        std::unordered_map<uint64_t, std::any>& instanceToObject)
         : interpreter(interpreter)
         , instanceToClassName(instanceToClassName)
         , instanceToEntity(instanceToEntity)
@@ -107,21 +107,28 @@ namespace core
     void ScriptCommunicationManager::broadcastMessage(uint64_t entityId, const value::Value& callback,
                                                        const std::vector<value::Value>& args)
     {
-        // Send to this entity
-        sendMessage(entityId, callback, args);
-
-        // Get children and recurse
         auto& dispatcher = events::EventDispatcher::instance();
-        services::EntityHandle handle{entityId};
 
-        events::scene::GetEntityQuery query;
-        query.entity = handle;
-        auto result = dispatcher.query(query);
-        if (result.has_value())
+        // Iterative BFS to avoid stack overflow on deep hierarchies
+        std::vector<uint64_t> queue;
+        queue.push_back(entityId);
+
+        while (!queue.empty())
         {
-            for (const auto& child : result->children)
+            uint64_t current = queue.back();
+            queue.pop_back();
+
+            sendMessage(current, callback, args);
+
+            events::scene::GetEntityQuery query;
+            query.entity = services::EntityHandle{current};
+            auto result = dispatcher.query(query);
+            if (result.has_value())
             {
-                broadcastMessage(child.id, callback, args);
+                for (const auto& child : result->children)
+                {
+                    queue.push_back(child.id);
+                }
             }
         }
     }

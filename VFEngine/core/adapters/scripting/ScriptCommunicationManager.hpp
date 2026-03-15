@@ -22,7 +22,7 @@ namespace core
         ::services::ScriptInterpreter* interpreter;
         const std::unordered_map<uint64_t, std::string>& instanceToClassName;
         const std::unordered_map<uint64_t, ::services::EntityHandle>& instanceToEntity;
-        const std::unordered_map<uint64_t, std::any>& instanceToObject;
+        std::unordered_map<uint64_t, std::any>& instanceToObject;
 
         struct Listener
         {
@@ -39,7 +39,7 @@ namespace core
             ::services::ScriptInterpreter* interpreter,
             const std::unordered_map<uint64_t, std::string>& instanceToClassName,
             const std::unordered_map<uint64_t, ::services::EntityHandle>& instanceToEntity,
-            const std::unordered_map<uint64_t, std::any>& instanceToObject);
+            std::unordered_map<uint64_t, std::any>& instanceToObject);
 
         ~ScriptCommunicationManager() = default;
 

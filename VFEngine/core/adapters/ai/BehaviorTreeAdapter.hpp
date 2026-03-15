@@ -4,6 +4,7 @@
 #include "../../../utilities/behaviortree/BehaviorTreeAsset.hpp"
 #include <unordered_map>
 #include <memory>
+#include <optional>
 
 namespace services
 {
@@ -63,7 +64,7 @@ namespace core
             std::unique_ptr<behaviortree::BehaviorTreeRuntime> runtime;
             std::string treePath;
             bool enabled = true;
-            behaviortree::BTNodeStatus lastTickStatus = behaviortree::BTNodeStatus::Failure;
+            std::optional<behaviortree::BTNodeStatus> lastTickStatus;
         };
 
         // Collision-safe key for script instances: (entityId, scriptPath)

@@ -127,6 +127,13 @@ namespace services
         return navmeshProvider->getCrowdAgentVelocity(it->second);
     }
 
+    float NavmeshAgentManager::getAgentSpeed(EntityHandle entity) const
+    {
+        auto it = entityToAgentIndex.find(entity.id);
+        if (it == entityToAgentIndex.end()) return 0.0f;
+        return navmeshProvider->getCrowdAgentMaxSpeed(it->second);
+    }
+
     void NavmeshAgentManager::updatePositions(float deltaTime)
     {
         if (entityToAgentIndex.empty())
@@ -155,9 +162,21 @@ namespace services
             auto targetIt = entityToTarget.find(entityId);
             if (targetIt != entityToTarget.end())
             {
+                // Read per-agent thresholds from component, fall back to defaults
+                float arrivalDist = ARRIVAL_DISTANCE;
+                float stuckVelThresh = STUCK_VELOCITY_THRESHOLD;
+                float stuckTimeThresh = STUCK_TIME_THRESHOLD;
+                if (registry.all_of<components::NavmeshAgentComponent>(enttEntity))
+                {
+                    const auto& agentComp = registry.get<components::NavmeshAgentComponent>(enttEntity);
+                    arrivalDist = agentComp.arrivalDistance;
+                    stuckVelThresh = agentComp.stuckVelocityThreshold;
+                    stuckTimeThresh = agentComp.stuckTimeThreshold;
+                }
+
                 float distToTarget = glm::distance(agentPos, targetIt->second);
 
-                if (distToTarget <= ARRIVAL_DISTANCE)
+                if (distToTarget <= arrivalDist)
                 {
                     entityToTarget.erase(targetIt);
                     entityStuckTimer.erase(entityId);
@@ -171,10 +190,10 @@ namespace services
                     glm::vec3 velocity = navmeshProvider->getCrowdAgentVelocity(agentIdx);
                     float speed = glm::length(velocity);
 
-                    if (speed < STUCK_VELOCITY_THRESHOLD)
+                    if (speed < stuckVelThresh)
                     {
                         entityStuckTimer[entityId] += deltaTime;
-                        if (entityStuckTimer[entityId] >= STUCK_TIME_THRESHOLD)
+                        if (entityStuckTimer[entityId] >= stuckTimeThresh)
                         {
                             entityToTarget.erase(targetIt);
                             entityStuckTimer.erase(entityId);

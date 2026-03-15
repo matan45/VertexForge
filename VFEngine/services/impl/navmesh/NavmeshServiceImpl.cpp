@@ -134,6 +134,12 @@ namespace services
                 return agentManager.getAgentVelocity(query.entity);
             });
 
+        dispatcher.registerQueryHandler<events::navmesh::GetAgentSpeedQuery>(
+            [this](const events::navmesh::GetAgentSpeedQuery& query)
+            {
+                return agentManager.getAgentSpeed(query.entity);
+            });
+
         dispatcher.registerQueryHandler<events::navmesh::HasNavmeshQuery>(
             [this](const events::navmesh::HasNavmeshQuery&)
             {

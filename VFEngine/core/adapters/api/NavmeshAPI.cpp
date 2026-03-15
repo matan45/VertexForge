@@ -5,8 +5,6 @@
 #include "NativeHelpers.hpp"
 #include "../../../services/events/EventDispatcher.hpp"
 #include "../../../services/events/navmesh/NavmeshEvents.hpp"
-#include "scene/EntityRegistry.hpp"
-#include "components/Components.hpp"
 
 namespace core::api
 {
@@ -181,19 +179,13 @@ namespace core::api
             });
 
         interpreter->registerNativeFunction("_native_navmesh_getAgentSpeed",
-            [](const std::vector<value::Value>& args) -> value::Value
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
             {
                 if (args.empty()) return value::Value(0.0);
 
-                auto entity = intToEntity(extractInt64(args[0]));
-                auto& registry = scene::EntityRegistry::getRegistry();
-                auto enttEntity = static_cast<entt::entity>(static_cast<uint32_t>(entity.id));
-                if (!registry.valid(enttEntity) ||
-                    !registry.all_of<components::NavmeshAgentComponent>(enttEntity))
-                    return value::Value(0.0);
-
-                const auto& agent = registry.get<components::NavmeshAgentComponent>(enttEntity);
-                return value::Value(static_cast<double>(agent.maxSpeed));
+                events::navmesh::GetAgentSpeedQuery query;
+                query.entity = intToEntity(extractInt64(args[0]));
+                return value::Value(static_cast<double>(dispatcher.query(query)));
             });
 
         interpreter->registerNativeFunction("_native_navmesh_getAgentVelocity",
