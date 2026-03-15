@@ -386,44 +386,6 @@ project "Plugin"
       optimize "On"
 
 
--- Test Plugin: DLL for testing custom component registration (VK-931)
-group "Test"
-project "TestComponentPlugin"
-   kind "SharedLib"
-   language "C++"
-   cppdialect "C++20"
-   location "plugins/TestComponentPlugin"
-   targetdir "bin/%{prj.name}/%{cfg.buildcfg}/%{cfg.platform}"
-
-   files { "plugins/TestComponentPlugin/**.hpp", "plugins/TestComponentPlugin/**.cpp" }
-
-   includedirs {
-      "dependencies/spdlog/include",
-      "dependencies/glm",
-      "dependencies/entt/single_include",
-      "dependencies/imgui",
-      "dependencies/json/single_include",
-      vulkanLibPath.."/Include",
-      "VFEngine/plugin",
-      "VFEngine/utilities",
-      "VFEngine/services"
-   }
-
-   defines { "_CRT_SECURE_NO_WARNINGS" }
-
-   filter "configurations:Debug"
-      defines { "DEBUG" }
-      symbols "On"
-      postbuildcommands {
-         "{COPY} ../../bin/TestComponentPlugin/Debug/x64/TestComponentPlugin.dll ../../plugins/"
-      }
-
-   filter "configurations:Release"
-      defines { "NDEBUG" }
-      optimize "On"
-      postbuildcommands {
-         "{COPY} ../../bin/TestComponentPlugin/Release/x64/TestComponentPlugin.dll ../../plugins/"
-      }
 
 group "Engine"
 
