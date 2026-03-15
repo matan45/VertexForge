@@ -21,6 +21,9 @@ namespace services
         void removeAgent(EntityHandle entity);
         void setAgentDestination(EntityHandle entity, const glm::vec3& target);
         void stopAgent(EntityHandle entity);
+        void updateAgentConfig(EntityHandle entity, float maxSpeed, float maxAcceleration);
+        glm::vec3 getAgentVelocity(EntityHandle entity) const;
+        float getAgentSpeed(EntityHandle entity) const;
         void updatePositions(float deltaTime);
 
         void suspendAgentsOnUnloadedTiles(const std::vector<navigation::NavmeshTileCoord>& unloadedTiles);
@@ -33,6 +36,11 @@ namespace services
         TileCoordFunc worldToTileCoord;
 
         std::unordered_map<uint64_t, int> entityToAgentIndex;
+        std::unordered_map<uint64_t, glm::vec3> entityToTarget;
+        std::unordered_map<uint64_t, float> entityStuckTimer;
+        static constexpr float ARRIVAL_DISTANCE = 1.0f;
+        static constexpr float STUCK_VELOCITY_THRESHOLD = 0.1f;
+        static constexpr float STUCK_TIME_THRESHOLD = 0.5f;
 
         struct SuspendedAgent
         {

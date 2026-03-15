@@ -9,6 +9,7 @@
 #include <glm/gtc/quaternion.hpp>
 #include <optional>
 #include <vector>
+#include <functional>
 
 namespace services
 {
@@ -34,6 +35,7 @@ namespace services
         virtual void cleanUp() = 0;
         virtual bool isInitialized() const = 0;
         virtual void update(float deltaTime) = 0;
+        virtual void setPostStepCallback(std::function<void(float)> callback) = 0;
 
         virtual void setGravity(const glm::vec3& gravity) = 0;
         virtual glm::vec3 getGravity() const = 0;

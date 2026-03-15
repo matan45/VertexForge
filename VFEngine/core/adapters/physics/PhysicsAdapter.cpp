@@ -153,9 +153,15 @@ namespace core
         fixedTimestep->update(deltaTime, [this](float fixedDt)
         {
             physicsWorld->step(fixedDt);
+            if (postStepCallback) postStepCallback(fixedDt);
         });
 
         physicsWorld->processContactEvents();
+    }
+
+    void PhysicsAdapter::setPostStepCallback(std::function<void(float)> callback)
+    {
+        postStepCallback = std::move(callback);
     }
 
     void PhysicsAdapter::setGravity(const glm::vec3& gravity)

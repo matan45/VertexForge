@@ -230,5 +230,29 @@ namespace core::api
                 dispatcher.execute(cmd);
                 return value::Value(std::monostate{});
             });
+
+        interpreter->registerNativeFunction("_native_bt_isEnabled",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                if (args.empty()) return value::Value(false);
+                auto entity = resolveEntity(args[0]);
+                if (!entity) return value::Value(false);
+
+                events::ai::IsBehaviorTreeEnabledQuery query;
+                query.entity = services::EntityHandle{static_cast<uint64_t>(extractInt64(args[0]))};
+                return value::Value(dispatcher.query(query));
+            });
+
+        interpreter->registerNativeFunction("_native_bt_getStatus",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                if (args.empty()) return value::Value(std::string{"stopped"});
+                auto entity = resolveEntity(args[0]);
+                if (!entity) return value::Value(std::string{"stopped"});
+
+                events::ai::GetBehaviorTreeStatusQuery query;
+                query.entity = services::EntityHandle{static_cast<uint64_t>(extractInt64(args[0]))};
+                return value::Value(dispatcher.query(query));
+            });
     }
 }

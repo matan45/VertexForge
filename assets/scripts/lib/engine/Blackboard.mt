@@ -62,4 +62,14 @@ public class Blackboard {
     public static function setEnabled(int entityId, bool enabled): void {
         _native_bt_setBehaviorTreeEnabled(entityId, enabled);
     }
+
+    // Check if a behavior tree is currently enabled
+    public static function isEnabled(int entityId): bool {
+        return _native_bt_isEnabled(entityId);
+    }
+
+    // Get the current status of a behavior tree: "running", "success", "failure", or "stopped"
+    public static function getStatus(int entityId): string {
+        return _native_bt_getStatus(entityId);
+    }
 }

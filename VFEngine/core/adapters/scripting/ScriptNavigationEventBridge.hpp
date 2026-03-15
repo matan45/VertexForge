@@ -15,17 +15,10 @@ namespace services
 
 namespace core
 {
-    class ScriptAnimationEventBridge
+    class ScriptNavigationEventBridge
     {
-    private:
-        ::services::ScriptInterpreter* interpreter;
-        const std::unordered_map<uint64_t, std::unordered_set<std::string>>& instanceToInterfaces;
-        std::unordered_map<uint64_t, std::any>& instanceToObject;
-        const std::unordered_map<uint64_t, ::services::EntityHandle>& instanceToEntity;
-
-        std::vector<::events::SubscriptionToken> tokens;
     public:
-        ScriptAnimationEventBridge(
+        ScriptNavigationEventBridge(
             ::services::ScriptInterpreter* interpreter,
             const std::unordered_map<uint64_t, std::unordered_set<std::string>>& instanceToInterfaces,
             std::unordered_map<uint64_t, std::any>& instanceToObject,
@@ -35,9 +28,14 @@ namespace core
         void unsubscribeAll();
 
     private:
-        void dispatchAnimationEvent(::services::EntityHandle entity,
-                                    const std::string& eventName,
-                                    const std::string& stateName,
-                                    const std::string& payload);
+        void dispatchNavigationCallback(const char* methodName,
+                                         ::services::EntityHandle entity);
+
+        ::services::ScriptInterpreter* interpreter;
+        const std::unordered_map<uint64_t, std::unordered_set<std::string>>& instanceToInterfaces;
+        std::unordered_map<uint64_t, std::any>& instanceToObject;
+        const std::unordered_map<uint64_t, ::services::EntityHandle>& instanceToEntity;
+
+        std::vector<::events::SubscriptionToken> tokens;
     };
 }

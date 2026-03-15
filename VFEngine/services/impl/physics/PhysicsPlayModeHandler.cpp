@@ -343,6 +343,15 @@ namespace services
         initializePhysicsAnimations();
         initializeCharacterControllers();
 
+        // Wire script onFixedUpdate to run after each physics sub-step
+        if (scriptFixedUpdateCallback)
+        {
+            physicsProvider->setPostStepCallback([this](float fixedDt)
+            {
+                scriptFixedUpdateCallback(fixedDt);
+            });
+        }
+
         physicsActive = true;
         vfLogInfo("Physics play mode started with {} bodies, {} characters",
                   activePhysicsBodies.size(), activeCharacterControllers.size());
@@ -367,6 +376,8 @@ namespace services
         {
             physicsProvider->removeRigidBody(handle);
         }
+
+        physicsProvider->setPostStepCallback(nullptr);
 
         activePhysicsBodies.clear();
         rootMotionLastSyncPos.clear();

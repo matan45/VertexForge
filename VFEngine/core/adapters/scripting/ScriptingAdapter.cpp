@@ -9,7 +9,14 @@
 #include "ScriptAnimationEventBridge.hpp"
 #include "ScriptSocketEventBridge.hpp"
 #include "ScriptVFXEventBridge.hpp"
+#include "ScriptNavigationEventBridge.hpp"
 #include "NativeAPIRegistry.hpp"
+#include "CoroutineManager.hpp"
+#include "ScriptCommunicationManager.hpp"
+#include "../api/CoroutineAPI.hpp"
+#include "../api/ScriptCommunicationAPI.hpp"
+#include <runtime/EventLoop.hpp>
+#include <vm/runtime/VirtualMachine.hpp>
 #include <filesystem>
 #include <fstream>
 #include <regex>
@@ -31,6 +38,7 @@ namespace core
             if (objIt == instanceToObject.end()) return;
 
             NativeAPIRegistry::setCurrentEntity(instanceToEntity[instanceId]);
+            NativeAPIRegistry::setCurrentInstanceId(instanceId);
             auto& instance = std::any_cast<value::Value&>(objIt->second);
             interpreter->callMethod(instance, methodName, args);
         }
@@ -51,7 +59,14 @@ namespace core
         {
             interpreter = std::make_unique<::services::ScriptInterpreter>();
 
+            coroutineManager = std::make_unique<CoroutineManager>();
+
+            communicationManager = std::make_unique<ScriptCommunicationManager>(
+                interpreter.get(), instanceToClassName, instanceToEntity, instanceToObject);
+
             apiRegistry = std::make_unique<NativeAPIRegistry>(interpreter.get());
+            api::CoroutineAPI::setCoroutineManager(coroutineManager.get());
+            api::ScriptCommunicationAPI::setManager(communicationManager.get());
             apiRegistry->registerEngineAPIs();
 
             uiEventBridge = std::make_unique<ScriptUIEventBridge>(
@@ -69,11 +84,15 @@ namespace core
             vfxEventBridge = std::make_unique<ScriptVFXEventBridge>(
                 interpreter.get(), instanceToInterfaces, instanceToObject, instanceToEntity);
 
+            navigationEventBridge = std::make_unique<ScriptNavigationEventBridge>(
+                interpreter.get(), instanceToInterfaces, instanceToObject, instanceToEntity);
+
             physicsEventBridge->subscribeAll();
             uiEventBridge->subscribeAll();
             animationEventBridge->subscribeAll();
             socketEventBridge->subscribeAll();
             vfxEventBridge->subscribeAll();
+            navigationEventBridge->subscribeAll();
 
             initialized = true;
             return true;
@@ -91,6 +110,7 @@ namespace core
     {
         if (!initialized) return;
 
+        if (navigationEventBridge) navigationEventBridge->unsubscribeAll();
         if (vfxEventBridge) vfxEventBridge->unsubscribeAll();
         if (socketEventBridge) socketEventBridge->unsubscribeAll();
         if (animationEventBridge) animationEventBridge->unsubscribeAll();
@@ -299,14 +319,15 @@ namespace core
             instanceToObject[instanceId] = std::any(instance);
 
             // Cache implemented interfaces for collision/trigger/UI callbacks
-            static constexpr std::array<const char*, 13> kCheckedInterfaces = {
+            static constexpr std::array<const char*, 14> kCheckedInterfaces = {
                 "ICollisionListener", "ITriggerListener",
                 "IUIButtonListener", "IUITextInputListener", "IUICheckboxListener",
                 "IUIDropdownListener", "IUITabsListener", "IUISliderListener",
                 "IUIProgressBarListener", "IUIDragDropListener",
                 "IAnimationEventListener",
                 "ISocketAttachmentListener",
-                "IVFXEventListener"
+                "IVFXEventListener",
+                "INavigationEventListener"
             };
 
             std::unordered_set<std::string> interfaces;
@@ -338,6 +359,16 @@ namespace core
 
     void ScriptingAdapter::unloadScript(uint64_t instanceId)
     {
+        if (coroutineManager)
+        {
+            coroutineManager->removeAllForInstance(instanceId);
+        }
+
+        if (communicationManager)
+        {
+            communicationManager->removeListenersForInstance(instanceId);
+        }
+
         auto it = instanceToClassName.find(instanceId);
         if (it != instanceToClassName.end())
         {
@@ -351,6 +382,16 @@ namespace core
 
     void ScriptingAdapter::unloadAllScripts()
     {
+        if (coroutineManager)
+        {
+            coroutineManager->clear();
+        }
+
+        if (communicationManager)
+        {
+            communicationManager->clearAll();
+        }
+
         instanceToClassName.clear();
         instanceToEntity.clear();
         instanceToObject.clear();
@@ -403,6 +444,113 @@ namespace core
             setError(services::ScriptError::Type::Runtime,
                      std::string("onUpdate failed: ") + e.what());
             vfLogError("[Script] onUpdate failed: {}", e.what());
+        }
+    }
+
+    void ScriptingAdapter::callOnFixedUpdate(uint64_t instanceId, float fixedDeltaTime)
+    {
+        if (!isScriptLoaded(instanceId)) return;
+
+        auto stateIt = instanceToPlaybackState.find(instanceId);
+        if (stateIt == instanceToPlaybackState.end() ||
+            stateIt->second != services::ScriptPlaybackState::Playing)
+            return;
+
+        try
+        {
+            callScriptMethod(interpreter.get(), instanceToObject, instanceToEntity, instanceId, "onFixedUpdate", {value::Value(fixedDeltaTime)});
+        }
+        catch (const std::exception&)
+        {
+            // Silently ignore if script does not define onFixedUpdate
+        }
+    }
+
+    void ScriptingAdapter::callOnLateUpdate(uint64_t instanceId, float deltaTime)
+    {
+        if (!isScriptLoaded(instanceId)) return;
+
+        auto stateIt = instanceToPlaybackState.find(instanceId);
+        if (stateIt == instanceToPlaybackState.end() ||
+            stateIt->second != services::ScriptPlaybackState::Playing)
+            return;
+
+        try
+        {
+            callScriptMethod(interpreter.get(), instanceToObject, instanceToEntity, instanceId, "onLateUpdate", {value::Value(deltaTime)});
+        }
+        catch (const std::exception&)
+        {
+            // Silently ignore if script does not define onLateUpdate
+        }
+    }
+
+    void ScriptingAdapter::callOnEnable(uint64_t instanceId)
+    {
+        if (!isScriptLoaded(instanceId)) return;
+
+        try
+        {
+            callScriptMethod(interpreter.get(), instanceToObject, instanceToEntity, instanceId, "onEnable", {});
+        }
+        catch (const std::exception&)
+        {
+            // Silently ignore if script does not define onEnable
+        }
+    }
+
+    void ScriptingAdapter::callOnDisable(uint64_t instanceId)
+    {
+        if (!isScriptLoaded(instanceId)) return;
+
+        try
+        {
+            callScriptMethod(interpreter.get(), instanceToObject, instanceToEntity, instanceId, "onDisable", {});
+        }
+        catch (const std::exception&)
+        {
+            // Silently ignore if script does not define onDisable
+        }
+    }
+
+    void ScriptingAdapter::tickCoroutines(float deltaTime)
+    {
+        if (coroutineManager)
+        {
+            coroutineManager->tickFrame(static_cast<double>(deltaTime));
+        }
+
+        auto vm = interpreter->getVM();
+        if (vm)
+        {
+            auto* eventLoop = vm->getEventLoop();
+            if (eventLoop)
+            {
+                // Process up to 64 pending async tasks per frame to avoid stalling
+                // the frame loop. Remaining tasks carry over to the next frame.
+                int budget = 64;
+                while (budget-- > 0 && eventLoop->tick()) {}
+            }
+        }
+    }
+
+    void ScriptingAdapter::tickFixedUpdateCoroutines()
+    {
+        if (coroutineManager)
+        {
+            coroutineManager->tickFixedUpdate();
+        }
+
+        auto vm = interpreter->getVM();
+        if (vm)
+        {
+            auto* eventLoop = vm->getEventLoop();
+            if (eventLoop)
+            {
+                // Same budget as tickCoroutines — see comment there
+                int budget = 64;
+                while (budget-- > 0 && eventLoop->tick()) {}
+            }
         }
     }
 

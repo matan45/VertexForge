@@ -107,6 +107,7 @@
     <ClInclude Include="adapters\api\BehaviorTreeAPI.hpp" />
     <ClInclude Include="adapters\api\CameraAPI.hpp" />
     <ClInclude Include="adapters\api\ControllerAPI.hpp" />
+    <ClInclude Include="adapters\api\CoroutineAPI.hpp" />
     <ClInclude Include="adapters\api\DebugDrawAPI.hpp" />
     <ClInclude Include="adapters\api\DecalAPI.hpp" />
     <ClInclude Include="adapters\api\EntityAPI.hpp" />
@@ -126,6 +127,7 @@
     <ClInclude Include="adapters\api\PostProcessAPI.hpp" />
     <ClInclude Include="adapters\api\PostProcessAPIHelpers.hpp" />
     <ClInclude Include="adapters\api\RenderTextureAPI.hpp" />
+    <ClInclude Include="adapters\api\ScriptCommunicationAPI.hpp" />
     <ClInclude Include="adapters\api\SocketAPI.hpp" />
     <ClInclude Include="adapters\api\UIAPI.hpp" />
     <ClInclude Include="adapters\api\UIAnimationAPI.hpp" />
@@ -152,8 +154,11 @@
     <ClInclude Include="adapters\render\PostProcessAdapter.hpp" />
     <ClInclude Include="adapters\render\RenderHookAdapter.hpp" />
     <ClInclude Include="adapters\render\RenderTextureAdapter.hpp" />
+    <ClInclude Include="adapters\scripting\CoroutineManager.hpp" />
     <ClInclude Include="adapters\scripting\NativeAPIRegistry.hpp" />
     <ClInclude Include="adapters\scripting\ScriptAnimationEventBridge.hpp" />
+    <ClInclude Include="adapters\scripting\ScriptCommunicationManager.hpp" />
+    <ClInclude Include="adapters\scripting\ScriptNavigationEventBridge.hpp" />
     <ClInclude Include="adapters\scripting\ScriptPhysicsEventBridge.hpp" />
     <ClInclude Include="adapters\scripting\ScriptSocketEventBridge.hpp" />
     <ClInclude Include="adapters\scripting\ScriptUIEventBridge.hpp" />
@@ -213,6 +218,7 @@
     <ClCompile Include="adapters\api\BehaviorTreeAPI.cpp" />
     <ClCompile Include="adapters\api\CameraAPI.cpp" />
     <ClCompile Include="adapters\api\ControllerAPI.cpp" />
+    <ClCompile Include="adapters\api\CoroutineAPI.cpp" />
     <ClCompile Include="adapters\api\DebugDrawAPI.cpp" />
     <ClCompile Include="adapters\api\DecalAPI.cpp" />
     <ClCompile Include="adapters\api\EntityAPI.cpp" />
@@ -231,6 +237,7 @@
     <ClCompile Include="adapters\api\PostProcessAPI.cpp" />
     <ClCompile Include="adapters\api\PostProcessAPIAdvanced.cpp" />
     <ClCompile Include="adapters\api\RenderTextureAPI.cpp" />
+    <ClCompile Include="adapters\api\ScriptCommunicationAPI.cpp" />
     <ClCompile Include="adapters\api\SocketAPI.cpp" />
     <ClCompile Include="adapters\api\UIAPI.cpp" />
     <ClCompile Include="adapters\api\UIAnimationAPI.cpp" />
@@ -258,8 +265,11 @@
     <ClCompile Include="adapters\render\PostProcessAdapter.cpp" />
     <ClCompile Include="adapters\render\RenderHookAdapter.cpp" />
     <ClCompile Include="adapters\render\RenderTextureAdapter.cpp" />
+    <ClCompile Include="adapters\scripting\CoroutineManager.cpp" />
     <ClCompile Include="adapters\scripting\NativeAPIRegistry.cpp" />
     <ClCompile Include="adapters\scripting\ScriptAnimationEventBridge.cpp" />
+    <ClCompile Include="adapters\scripting\ScriptCommunicationManager.cpp" />
+    <ClCompile Include="adapters\scripting\ScriptNavigationEventBridge.cpp" />
     <ClCompile Include="adapters\scripting\ScriptPhysicsEventBridge.cpp" />
     <ClCompile Include="adapters\scripting\ScriptSocketEventBridge.cpp" />
     <ClCompile Include="adapters\scripting\ScriptUIEventBridge.cpp" />

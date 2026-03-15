@@ -13,7 +13,7 @@ namespace core
     ScriptSocketEventBridge::ScriptSocketEventBridge(
         ::services::ScriptInterpreter* interpreter,
         const std::unordered_map<uint64_t, std::unordered_set<std::string>>& instanceToInterfaces,
-        const std::unordered_map<uint64_t, std::any>& instanceToObject,
+        std::unordered_map<uint64_t, std::any>& instanceToObject,
         const std::unordered_map<uint64_t, ::services::EntityHandle>& instanceToEntity)
         : interpreter(interpreter)
         , instanceToInterfaces(instanceToInterfaces)
@@ -83,7 +83,7 @@ namespace core
                 try
                 {
                     NativeAPIRegistry::setCurrentEntity(targetEntity);
-                    auto& instance = std::any_cast<value::Value&>(const_cast<std::any&>(objIt->second));
+                    auto& instance = std::any_cast<value::Value&>(objIt->second);
                     // Args: (childId, parentId, socketName)
                     interpreter->callMethod(instance, methodName,
                                             {value::Value(static_cast<int64_t>(childEntity.id)),

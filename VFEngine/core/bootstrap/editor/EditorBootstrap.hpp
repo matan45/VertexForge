@@ -202,6 +202,7 @@ namespace core
         // === Frame Callbacks ===
 
         void setFrameCallback(std::function<void()> callback);
+        void setPostUpdateCallback(std::function<void()> callback);
         void triggerResize();
     };
 }

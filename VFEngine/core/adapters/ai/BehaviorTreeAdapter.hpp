@@ -4,6 +4,7 @@
 #include "../../../utilities/behaviortree/BehaviorTreeAsset.hpp"
 #include <unordered_map>
 #include <memory>
+#include <optional>
 
 namespace services
 {
@@ -26,6 +27,7 @@ namespace core
         bool hasTree(services::EntityHandle entity) const override;
         std::string getTreePath(services::EntityHandle entity) const override;
         bool isEnabled(services::EntityHandle entity) const override;
+        std::string getStatus(services::EntityHandle entity) const override;
 
         void updateAll(float deltaTime) override;
         void stopAll() override;
@@ -62,6 +64,7 @@ namespace core
             std::unique_ptr<behaviortree::BehaviorTreeRuntime> runtime;
             std::string treePath;
             bool enabled = true;
+            std::optional<behaviortree::BTNodeStatus> lastTickStatus;
         };
 
         // Collision-safe key for script instances: (entityId, scriptPath)

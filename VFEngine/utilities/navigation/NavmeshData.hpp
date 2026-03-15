@@ -76,6 +76,13 @@ namespace navigation
         bool isValid = false;
     };
 
+    struct NavmeshRaycastResult
+    {
+        bool hit = false;
+        glm::vec3 hitPoint{0.0f};
+        float hitDistance = 0.0f;
+    };
+
     constexpr uint32_t NAVMESH_FILE_MAGIC = 0x564E4D53; // "VNMS"
     constexpr uint32_t NAVMESH_FILE_VERSION = 1;
     constexpr uint32_t NAVMESH_TILE_FILE_VERSION = 2;

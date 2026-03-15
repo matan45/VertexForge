@@ -293,7 +293,20 @@ namespace services
         auto* entry = scriptComp.findByPath(scriptPath);
         if (entry)
         {
+            bool wasEnabled = entry->enabled;
             entry->enabled = enabled;
+
+            if (entry->started && entry->playbackState == ScriptPlaybackState::Playing)
+            {
+                if (!wasEnabled && enabled)
+                {
+                    scriptingProvider->callOnEnable(entry->instanceId);
+                }
+                else if (wasEnabled && !enabled)
+                {
+                    scriptingProvider->callOnDisable(entry->instanceId);
+                }
+            }
         }
     }
 
@@ -369,10 +382,62 @@ namespace services
                 if (entry.playbackState == ScriptPlaybackState::Playing && !entry.started)
                 {
                     entry.started = true;
+                    if (entry.enabled)
+                    {
+                        scriptingProvider->callOnEnable(entry.instanceId);
+                    }
                 }
 
                 // Call onUpdate - the provider will check playback state internally
                 scriptingProvider->callOnUpdate(entry.instanceId, deltaTime);
+            }
+        }
+
+        scriptingProvider->tickCoroutines(deltaTime);
+    }
+
+    void ScriptingServiceImpl::fixedUpdateScripts(float fixedDeltaTime)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto view = registry.view<components::ScriptComponent>();
+
+        for (auto entity : view)
+        {
+            if (registry.all_of<components::NameComponent>(entity))
+            {
+                const auto& nameComp = registry.get<components::NameComponent>(entity);
+                if (!nameComp.isActive) continue;
+            }
+
+            auto& scriptComp = view.get<components::ScriptComponent>(entity);
+            for (auto& entry : scriptComp.scripts)
+            {
+                if (!entry.enabled || !entry.started || entry.instanceId == 0) continue;
+                scriptingProvider->callOnFixedUpdate(entry.instanceId, fixedDeltaTime);
+            }
+        }
+
+        scriptingProvider->tickFixedUpdateCoroutines();
+    }
+
+    void ScriptingServiceImpl::lateUpdateScripts(float deltaTime)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto view = registry.view<components::ScriptComponent>();
+
+        for (auto entity : view)
+        {
+            if (registry.all_of<components::NameComponent>(entity))
+            {
+                const auto& nameComp = registry.get<components::NameComponent>(entity);
+                if (!nameComp.isActive) continue;
+            }
+
+            auto& scriptComp = view.get<components::ScriptComponent>(entity);
+            for (auto& entry : scriptComp.scripts)
+            {
+                if (!entry.enabled || !entry.started || entry.instanceId == 0) continue;
+                scriptingProvider->callOnLateUpdate(entry.instanceId, deltaTime);
             }
         }
     }
@@ -387,9 +452,13 @@ namespace services
             auto& scriptComp = view.get<components::ScriptComponent>(entity);
             for (auto& entry : scriptComp.scripts)
             {
-                // Call onDestroy for started scripts
+                // Call onDisable then onDestroy for started scripts
                 if (entry.started)
                 {
+                    if (entry.enabled)
+                    {
+                        scriptingProvider->callOnDisable(entry.instanceId);
+                    }
                     scriptingProvider->callOnDestroy(entry.instanceId);
                 }
                 // Reset script entry state

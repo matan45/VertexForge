@@ -33,6 +33,8 @@ namespace services
         bool isScriptEnabled(EntityHandle entity, const std::string& scriptPath) const override;
 
         void updateScripts(float deltaTime) override;
+        void fixedUpdateScripts(float fixedDeltaTime) override;
+        void lateUpdateScripts(float deltaTime) override;
         void stopAllScripts() override;
     };
 }

@@ -19,17 +19,24 @@ namespace core
     class ScriptAnimationEventBridge;
     class ScriptSocketEventBridge;
     class ScriptVFXEventBridge;
+    class ScriptNavigationEventBridge;
+
+    class CoroutineManager;
+    class ScriptCommunicationManager;
 
     class ScriptingAdapter : public ::services::IScriptingProvider
     {
     private:
         std::unique_ptr<::services::ScriptInterpreter> interpreter;
         std::unique_ptr<NativeAPIRegistry> apiRegistry;
+        std::unique_ptr<CoroutineManager> coroutineManager;
         std::unique_ptr<ScriptUIEventBridge> uiEventBridge;
         std::unique_ptr<ScriptPhysicsEventBridge> physicsEventBridge;
         std::unique_ptr<ScriptAnimationEventBridge> animationEventBridge;
         std::unique_ptr<ScriptSocketEventBridge> socketEventBridge;
         std::unique_ptr<ScriptVFXEventBridge> vfxEventBridge;
+        std::unique_ptr<ScriptNavigationEventBridge> navigationEventBridge;
+        std::unique_ptr<ScriptCommunicationManager> communicationManager;
 
         std::unordered_map<uint64_t, std::string> instanceToClassName;
         std::unordered_map<uint64_t, ::services::EntityHandle> instanceToEntity;
@@ -74,7 +81,14 @@ namespace core
         // === Lifecycle Calls ===
         void callOnStart(uint64_t instanceId) override;
         void callOnUpdate(uint64_t instanceId, float deltaTime) override;
+        void callOnFixedUpdate(uint64_t instanceId, float fixedDeltaTime) override;
+        void callOnLateUpdate(uint64_t instanceId, float deltaTime) override;
+        void callOnEnable(uint64_t instanceId) override;
+        void callOnDisable(uint64_t instanceId) override;
         void callOnDestroy(uint64_t instanceId) override;
+
+        void tickCoroutines(float deltaTime) override;
+        void tickFixedUpdateCoroutines() override;
 
         std::string callMethodWithReturn(uint64_t instanceId, const std::string& methodName,
                                           const std::vector<std::any>& args = {}) override;

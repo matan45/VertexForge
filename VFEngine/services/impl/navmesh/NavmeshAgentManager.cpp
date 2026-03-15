@@ -1,5 +1,7 @@
 #include "NavmeshAgentManager.hpp"
 #include "../../data/EntityConversion.hpp"
+#include "../../events/EventDispatcher.hpp"
+#include "../../events/navmesh/NavmeshEvents.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
 #include <unordered_set>
@@ -85,6 +87,8 @@ namespace services
         if (it != entityToAgentIndex.end())
         {
             navmeshProvider->setCrowdAgentTarget(it->second, target);
+            entityToTarget[entity.id] = target;
+            entityStuckTimer.erase(entity.id);
         }
     }
 
@@ -94,7 +98,40 @@ namespace services
         if (it != entityToAgentIndex.end())
         {
             navmeshProvider->stopCrowdAgent(it->second);
+            entityToTarget.erase(entity.id);
+            entityStuckTimer.erase(entity.id);
         }
+    }
+
+    void NavmeshAgentManager::updateAgentConfig(EntityHandle entity, float maxSpeed, float maxAcceleration)
+    {
+        auto it = entityToAgentIndex.find(entity.id);
+        if (it == entityToAgentIndex.end()) return;
+
+        navmeshProvider->updateCrowdAgentParams(it->second, maxSpeed, maxAcceleration);
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto enttEntity = internal::fromHandle(entity);
+        if (registry.valid(enttEntity) && registry.all_of<components::NavmeshAgentComponent>(enttEntity))
+        {
+            auto& agent = registry.get<components::NavmeshAgentComponent>(enttEntity);
+            if (maxSpeed >= 0.0f) agent.maxSpeed = maxSpeed;
+            if (maxAcceleration >= 0.0f) agent.maxAcceleration = maxAcceleration;
+        }
+    }
+
+    glm::vec3 NavmeshAgentManager::getAgentVelocity(EntityHandle entity) const
+    {
+        auto it = entityToAgentIndex.find(entity.id);
+        if (it == entityToAgentIndex.end()) return glm::vec3(0.0f);
+        return navmeshProvider->getCrowdAgentVelocity(it->second);
+    }
+
+    float NavmeshAgentManager::getAgentSpeed(EntityHandle entity) const
+    {
+        auto it = entityToAgentIndex.find(entity.id);
+        if (it == entityToAgentIndex.end()) return 0.0f;
+        return navmeshProvider->getCrowdAgentMaxSpeed(it->second);
     }
 
     void NavmeshAgentManager::updatePositions(float deltaTime)
@@ -120,6 +157,58 @@ namespace services
             auto& transform = registry.get<components::TransformComponent>(enttEntity);
             transform.position = agentPos;
             transform.isDirty = true;
+
+            // Check arrival and blocked state
+            auto targetIt = entityToTarget.find(entityId);
+            if (targetIt != entityToTarget.end())
+            {
+                // Read per-agent thresholds from component, fall back to defaults
+                float arrivalDist = ARRIVAL_DISTANCE;
+                float stuckVelThresh = STUCK_VELOCITY_THRESHOLD;
+                float stuckTimeThresh = STUCK_TIME_THRESHOLD;
+                if (registry.all_of<components::NavmeshAgentComponent>(enttEntity))
+                {
+                    const auto& agentComp = registry.get<components::NavmeshAgentComponent>(enttEntity);
+                    arrivalDist = agentComp.arrivalDistance;
+                    stuckVelThresh = agentComp.stuckVelocityThreshold;
+                    stuckTimeThresh = agentComp.stuckTimeThreshold;
+                }
+
+                float distToTarget = glm::distance(agentPos, targetIt->second);
+
+                if (distToTarget <= arrivalDist)
+                {
+                    entityToTarget.erase(targetIt);
+                    entityStuckTimer.erase(entityId);
+
+                    events::navmesh::AgentReachedDestinationNotification notif;
+                    notif.entity = handle;
+                    ::events::EventDispatcher::instance().publish(notif);
+                }
+                else
+                {
+                    glm::vec3 velocity = navmeshProvider->getCrowdAgentVelocity(agentIdx);
+                    float speed = glm::length(velocity);
+
+                    if (speed < stuckVelThresh)
+                    {
+                        entityStuckTimer[entityId] += deltaTime;
+                        if (entityStuckTimer[entityId] >= stuckTimeThresh)
+                        {
+                            entityToTarget.erase(targetIt);
+                            entityStuckTimer.erase(entityId);
+
+                            events::navmesh::AgentPathBlockedNotification notif;
+                            notif.entity = handle;
+                            ::events::EventDispatcher::instance().publish(notif);
+                        }
+                    }
+                    else
+                    {
+                        entityStuckTimer.erase(entityId);
+                    }
+                }
+            }
         }
     }
 
@@ -214,6 +303,8 @@ namespace services
     void NavmeshAgentManager::clear()
     {
         entityToAgentIndex.clear();
+        entityToTarget.clear();
+        entityStuckTimer.clear();
         suspendedAgents.clear();
     }
 }

@@ -58,6 +58,45 @@ namespace events::navmesh
     };
 
 
+    struct UpdateAgentConfigCommand : ICommand<>
+    {
+        services::EntityHandle entity;
+        float maxSpeed = -1.0f;
+        float maxAcceleration = -1.0f;
+        std::string_view getName() const override { return "UpdateAgentConfig"; }
+    };
+
+    struct GetAgentVelocityQuery : IQuery<glm::vec3>
+    {
+        services::EntityHandle entity;
+        std::string_view getName() const override { return "GetAgentVelocity"; }
+    };
+
+    struct GetAgentSpeedQuery : IQuery<float>
+    {
+        services::EntityHandle entity;
+        std::string_view getName() const override { return "GetAgentSpeed"; }
+    };
+
+    struct NavmeshRaycastQuery : IQuery<navigation::NavmeshRaycastResult>
+    {
+        glm::vec3 from;
+        glm::vec3 to;
+        std::string_view getName() const override { return "NavmeshRaycast"; }
+    };
+
+    struct AgentReachedDestinationNotification : INotification
+    {
+        services::EntityHandle entity;
+        std::string_view getName() const override { return "AgentReachedDestination"; }
+    };
+
+    struct AgentPathBlockedNotification : INotification
+    {
+        services::EntityHandle entity;
+        std::string_view getName() const override { return "AgentPathBlocked"; }
+    };
+
     struct FindPathQuery : IQuery<navigation::NavPath>
     {
         glm::vec3 start;

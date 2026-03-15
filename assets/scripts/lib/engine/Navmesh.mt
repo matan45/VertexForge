@@ -51,6 +51,13 @@ public class Navmesh {
         return new Vec3f(raw[0], raw[1], raw[2]);
     }
 
+    // Navmesh raycast for line-of-sight checks
+    // Returns float[4]: [hit(0/1), hitX, hitY, hitZ]
+    // If hit is 0, the path is clear (no obstacle between from and to on the navmesh)
+    public static function raycast(Vec3f from, Vec3f to): float[] {
+        return _native_navmesh_raycast(from.x, from.y, from.z, to.x, to.y, to.z);
+    }
+
     // ============================================
     // Agent Control
     // ============================================
@@ -61,8 +68,38 @@ public class Navmesh {
         _native_navmesh_setDestination(entityId, target.x, target.y, target.z);
     }
 
+    // High-level move-to command (alias for setDestination)
+    public static function moveTo(int entityId, Vec3f target): void {
+        _native_navmesh_setDestination(entityId, target.x, target.y, target.z);
+    }
+
     // Stop an entity's NavmeshAgent from moving
     public static function stopAgent(int entityId): void {
         _native_navmesh_stopAgent(entityId);
+    }
+
+    // ============================================
+    // Agent Configuration
+    // ============================================
+
+    // Set the maximum speed for an entity's NavmeshAgent
+    public static function setSpeed(int entityId, float speed): void {
+        _native_navmesh_setAgentSpeed(entityId, speed);
+    }
+
+    // Set the maximum acceleration for an entity's NavmeshAgent
+    public static function setAcceleration(int entityId, float accel): void {
+        _native_navmesh_setAgentAcceleration(entityId, accel);
+    }
+
+    // Get the current max speed of an entity's NavmeshAgent
+    public static function getSpeed(int entityId): float {
+        return _native_navmesh_getAgentSpeed(entityId);
+    }
+
+    // Get the current velocity of an entity's NavmeshAgent
+    public static function getVelocity(int entityId): Vec3f {
+        float[] raw = _native_navmesh_getAgentVelocity(entityId);
+        return new Vec3f(raw[0], raw[1], raw[2]);
     }
 }

@@ -1,16 +1,16 @@
 // mType headers must come first to avoid Windows macro conflicts
 #include <services/ScriptInterpreter.hpp>
 
-#include "ScriptAnimationEventBridge.hpp"
+#include "ScriptNavigationEventBridge.hpp"
 #include "NativeAPIRegistry.hpp"
-#include "../../services/events/animation/AnimationEventEvents.hpp"
+#include "events/navmesh/NavmeshEvents.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
 
 #include "print/Log.hpp"
 namespace core
 {
-    ScriptAnimationEventBridge::ScriptAnimationEventBridge(
+    ScriptNavigationEventBridge::ScriptNavigationEventBridge(
         ::services::ScriptInterpreter* interpreter,
         const std::unordered_map<uint64_t, std::unordered_set<std::string>>& instanceToInterfaces,
         std::unordered_map<uint64_t, std::any>& instanceToObject,
@@ -22,20 +22,26 @@ namespace core
     {
     }
 
-    void ScriptAnimationEventBridge::subscribeAll()
+    void ScriptNavigationEventBridge::subscribeAll()
     {
         auto& dispatcher = ::events::EventDispatcher::instance();
 
-        tokens.push_back(dispatcher.subscribe<::events::animation::AnimationEventFiredNotification>(
-            [this](const ::events::animation::AnimationEventFiredNotification& notif)
+        tokens.push_back(dispatcher.subscribe<::events::navmesh::AgentReachedDestinationNotification>(
+            [this](const ::events::navmesh::AgentReachedDestinationNotification& notif)
             {
-                dispatchAnimationEvent(notif.entity, notif.eventName, notif.stateName, notif.payload);
+                dispatchNavigationCallback("onDestinationReached", notif.entity);
             }));
 
-        vfLogInfo("[ScriptAnimationEventBridge] Subscribed to animation events");
+        tokens.push_back(dispatcher.subscribe<::events::navmesh::AgentPathBlockedNotification>(
+            [this](const ::events::navmesh::AgentPathBlockedNotification& notif)
+            {
+                dispatchNavigationCallback("onPathBlocked", notif.entity);
+            }));
+
+        vfLogInfo("[ScriptNavigationEventBridge] Subscribed to navigation events");
     }
 
-    void ScriptAnimationEventBridge::unsubscribeAll()
+    void ScriptNavigationEventBridge::unsubscribeAll()
     {
         auto& dispatcher = ::events::EventDispatcher::instance();
         for (auto& token : tokens)
@@ -44,14 +50,11 @@ namespace core
         }
         tokens.clear();
 
-        vfLogInfo("[ScriptAnimationEventBridge] Unsubscribed from animation events");
+        vfLogInfo("[ScriptNavigationEventBridge] Unsubscribed from navigation events");
     }
 
-    void ScriptAnimationEventBridge::dispatchAnimationEvent(
-        ::services::EntityHandle entity,
-        const std::string& eventName,
-        const std::string& stateName,
-        const std::string& payload)
+    void ScriptNavigationEventBridge::dispatchNavigationCallback(
+        const char* methodName, ::services::EntityHandle entity)
     {
         auto& registry = scene::EntityRegistry::getRegistry();
 
@@ -61,13 +64,15 @@ namespace core
             static_cast<entt::entity>(entity.id));
         if (!scriptComp) return;
 
+        const std::string requiredInterface = "INavigationEventListener";
+
         for (const auto& [instanceId, entityHandle] : instanceToEntity)
         {
             if (entityHandle.id != entity.id) continue;
 
             auto interfaceIt = instanceToInterfaces.find(instanceId);
             if (interfaceIt == instanceToInterfaces.end() ||
-                interfaceIt->second.find("IAnimationEventListener") == interfaceIt->second.end())
+                interfaceIt->second.find(requiredInterface) == interfaceIt->second.end())
                 continue;
 
             auto objIt = instanceToObject.find(instanceId);
@@ -77,14 +82,11 @@ namespace core
             {
                 NativeAPIRegistry::setCurrentEntity(entity);
                 auto& instance = std::any_cast<value::Value&>(objIt->second);
-                interpreter->callMethod(instance, "onAnimationEvent",
-                                        {value::Value(eventName),
-                                         value::Value(stateName),
-                                         value::Value(payload)});
+                interpreter->callMethod(instance, methodName, {});
             }
             catch (const std::exception& e)
             {
-                vfLogWarning("[ScriptAnimationEventBridge] onAnimationEvent callback error: {}", e.what());
+                vfLogWarning("[ScriptNavigationEventBridge] {} callback error: {}", methodName, e.what());
             }
         }
     }

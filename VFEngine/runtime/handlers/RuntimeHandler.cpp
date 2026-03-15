@@ -129,6 +129,12 @@ namespace handlers {
 
         // Post-update callback runs AFTER scene graph update (WorldTransformComponent is valid)
         bootstrap->setPostUpdateCallback([this]() {
+            // Run script onLateUpdate after world transforms are computed
+            if (scriptingService) {
+                float deltaTime = static_cast<float>(engineTime::Timer::getDeltaTime());
+                scriptingService->lateUpdateScripts(deltaTime);
+            }
+
             // Ensure cameras are registered before updating them
             // (updateCamera needs the camera to be registered in the occlusion manager)
             if (auto* offScreen = bootstrap->getOffScreenProvider()) {
@@ -362,6 +368,15 @@ namespace handlers {
             physicsPlayModeHandler = std::make_unique<services::PhysicsPlayModeHandler>(physicsProvider);
             physicsPlayModeHandler->setWaterService(waterServiceImpl.get());
             physicsPlayModeHandler->subscribeToEvents();
+
+            // Wire script onFixedUpdate to run after each physics sub-step
+            if (scriptingService)
+            {
+                physicsPlayModeHandler->setScriptFixedUpdateCallback([this](float fixedDt)
+                {
+                    scriptingService->fixedUpdateScripts(fixedDt);
+                });
+            }
         }
 
         if (auto* navmeshProvider = bootstrap->getNavmeshProvider())

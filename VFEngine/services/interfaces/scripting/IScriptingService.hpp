@@ -29,6 +29,8 @@ namespace services
         virtual bool isScriptEnabled(EntityHandle entity, const std::string& scriptPath) const = 0;
 
         virtual void updateScripts(float deltaTime) = 0;
+        virtual void fixedUpdateScripts(float fixedDeltaTime) = 0;
+        virtual void lateUpdateScripts(float deltaTime) = 0;
         virtual void stopAllScripts() = 0;
     };
 }

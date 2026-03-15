@@ -404,6 +404,45 @@ namespace core
         return result;
     }
 
+    navigation::NavmeshRaycastResult NavmeshAdapter::navmeshRaycast(const glm::vec3& from, const glm::vec3& to)
+    {
+        std::lock_guard lock(navMeshMutex);
+        navigation::NavmeshRaycastResult result;
+
+        if (!navMesh || !navQuery)
+            return result;
+
+        float fromPos[3] = {from.x, from.y, from.z};
+        float toPos[3] = {to.x, to.y, to.z};
+
+        dtQueryFilter filter;
+        filter.setIncludeFlags(0xFFFF);
+        filter.setExcludeFlags(0);
+
+        dtPolyRef startRef = 0;
+        float nearestStart[3] = {0.0f, 0.0f, 0.0f};
+        dtStatus status = navQuery->findNearestPoly(fromPos, TARGET_HALF_EXTENTS, &filter, &startRef, nearestStart);
+
+        if (dtStatusFailed(status) || !startRef)
+            return result;
+
+        float t = 0.0f;
+        float hitNormal[3] = {0.0f, 0.0f, 0.0f};
+        dtPolyRef polys[MAX_POLYS];
+        int nPolys = 0;
+
+        navQuery->raycast(startRef, nearestStart, toPos, &filter, &t, hitNormal, polys, &nPolys, MAX_POLYS);
+
+        if (t < 1.0f)
+        {
+            result.hit = true;
+            result.hitPoint = from + t * (to - from);
+            result.hitDistance = glm::distance(from, result.hitPoint);
+        }
+
+        return result;
+    }
+
     glm::vec3 NavmeshAdapter::getClosestPoint(const glm::vec3& point, float searchRadius)
     {
         std::lock_guard lock(navMeshMutex);
@@ -515,6 +554,20 @@ namespace core
         }
     }
 
+    void NavmeshAdapter::updateCrowdAgentParams(int agentIndex, float maxSpeed, float maxAcceleration)
+    {
+        std::lock_guard lock(navMeshMutex);
+        if (!crowd) return;
+
+        const dtCrowdAgent* ag = crowd->getAgent(agentIndex);
+        if (!ag || !ag->active) return;
+
+        dtCrowdAgentParams params = ag->params;
+        if (maxSpeed >= 0.0f) params.maxSpeed = maxSpeed;
+        if (maxAcceleration >= 0.0f) params.maxAcceleration = maxAcceleration;
+        crowd->updateAgentParameters(agentIndex, &params);
+    }
+
     glm::vec3 NavmeshAdapter::getCrowdAgentPosition(int agentIndex) const
     {
         std::lock_guard lock(navMeshMutex);
@@ -539,6 +592,19 @@ namespace core
             return {0.0f, 0.0f, 0.0f};
 
         return {ag->vel[0], ag->vel[1], ag->vel[2]};
+    }
+
+    float NavmeshAdapter::getCrowdAgentMaxSpeed(int agentIndex) const
+    {
+        std::lock_guard lock(navMeshMutex);
+        if (!crowd)
+            return 0.0f;
+
+        const dtCrowdAgent* ag = crowd->getAgent(agentIndex);
+        if (!ag || !ag->active)
+            return 0.0f;
+
+        return ag->params.maxSpeed;
     }
 
     void NavmeshAdapter::updateCrowd(float deltaTime)

@@ -17,6 +17,11 @@ namespace components
         float maxAcceleration = 8.0f;
         float stoppingDistance = 0.1f;
 
+        // Arrival and stuck detection
+        float arrivalDistance = 1.0f;
+        float stuckVelocityThreshold = 0.1f;
+        float stuckTimeThreshold = 0.5f;
+
         // Avoidance
         uint8_t avoidanceQuality = 3;       // 0-3, higher = better but slower
         float separationWeight = 2.0f;

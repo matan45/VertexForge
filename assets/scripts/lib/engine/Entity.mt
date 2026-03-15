@@ -9,6 +9,7 @@
 //   Entity::setPosition(self, new Vec3f(1.0, 2.0, 3.0));
 
 import * from "../math/Vec3f.mt";
+import * from "ScriptCallback.mt";
 
 public class Entity {
     public constructor() {
@@ -194,5 +195,32 @@ public class Entity {
     // Destroy an entity and all its children
     public static function destroy(int entityId): void {
         _native_entity_destroy(entityId);
+    }
+
+    // ============================================
+    // Cross-Script Communication
+    // ============================================
+
+    // Get a script instance by class name from an entity
+    // Returns the script cast to T, or null if not found
+    public static function <T> getScript(int entityId, string className): T {
+        return (T)_native_entity_getScript(entityId, className);
+    }
+
+    // Check if an entity has a loaded script of the given class name
+    public static function hasScriptOfType(int entityId, string className): bool {
+        return _native_entity_hasScript(entityId, className);
+    }
+
+    // Call a callback for each script attached to an entity
+    // The callback receives the script object as its argument
+    public static function sendMessage(int entityId, ScriptCallback callback): void {
+        _native_entity_sendMessage(entityId, callback);
+    }
+
+    // Call a callback for each script on the entity and all descendants recursively
+    // The callback receives each script object as its argument
+    public static function broadcastMessage(int entityId, ScriptCallback callback): void {
+        _native_entity_broadcastMessage(entityId, callback);
     }
 }
