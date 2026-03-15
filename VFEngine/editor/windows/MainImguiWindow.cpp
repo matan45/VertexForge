@@ -28,6 +28,7 @@ namespace windows
         menuBar.setGIConfigWindow(&giConfigWindow);
         menuBar.setVolumetricFogConfigWindow(&volumetricFogConfigWindow);
         menuBar.setLightStreamingDebugWindow(&lightStreamingDebugWindow);
+        menuBar.setPluginManagerWindow(&pluginManagerWindow);
         subscribeToEvents();
     }
 
@@ -108,6 +109,7 @@ namespace windows
             giConfigWindow.draw();
             volumetricFogConfigWindow.draw();
             lightStreamingDebugWindow.draw();
+            pluginManagerWindow.draw();
         }
         ImGui::End();
     }

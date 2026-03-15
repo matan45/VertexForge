@@ -29,6 +29,8 @@ namespace plugin {
     private:
         std::vector<LoadedPlugin> plugins;
         std::unordered_set<std::string> capabilities;
+        std::filesystem::path pluginsDirectory;
+        inline static PluginManager* activeInstance = nullptr;
     public:
         explicit PluginManager(std::unordered_set<std::string> capabilities);
         ~PluginManager();
@@ -40,6 +42,8 @@ namespace plugin {
 
         const std::vector<LoadedPlugin>& getLoadedPlugins() const;
         size_t getPluginCount() const;
+        const std::filesystem::path& getPluginsDirectory() const { return pluginsDirectory; }
+        static const PluginManager* getActive() { return activeInstance; }
         std::vector<std::unique_ptr<pipeline::PipelineStage>> takeAllImportStages();
 
     private:

@@ -11,11 +11,13 @@ namespace plugin {
     PluginManager::PluginManager(std::unordered_set<std::string> capabilities)
         : capabilities(std::move(capabilities))
     {
+        activeInstance = this;
     }
 
     PluginManager::~PluginManager()
     {
         shutdownAll();
+        activeInstance = nullptr;
     }
 
     void PluginManager::loadAll(const std::filesystem::path& pluginDirectory)
@@ -26,6 +28,7 @@ namespace plugin {
         }
 
         vfLogInfo("Scanning for plugins in '{}'...", pluginDirectory.string());
+        pluginsDirectory = pluginDirectory;
 
         // Phase 1: Collect descriptors from .vfplugin files
         std::vector<PluginDescriptor> descriptors;

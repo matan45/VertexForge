@@ -25,6 +25,7 @@ namespace windows
     class GIConfigWindow;
     class VolumetricFogConfigWindow;
     class LightStreamingDebugWindow;
+    class PluginManagerWindow;
     class MainMenuBar
     {
     private:
@@ -53,6 +54,7 @@ namespace windows
         GIConfigWindow* giConfigWindow = nullptr;
         VolumetricFogConfigWindow* volumetricFogConfigWindow = nullptr;
         LightStreamingDebugWindow* lightStreamingDebugWindow = nullptr;
+        PluginManagerWindow* pluginManagerWindow = nullptr;
     public:
         MainMenuBar();
         ~MainMenuBar();
@@ -135,6 +137,11 @@ namespace windows
         void setAudioMixerWindow(AudioMixerWindow* window)
         {
             audioMixerWindow = window;
+        }
+
+        void setPluginManagerWindow(PluginManagerWindow* window)
+        {
+            pluginManagerWindow = window;
         }
 
     private:
