@@ -107,7 +107,7 @@ namespace controllers::offscreen
             const auto& audioComp = view.get<components::AudioSource3DComponent>(entity);
             const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
 
-            if (!audioComp.showDebugSpheres)
+            if (!audioComp.showDebugSpheres && !audioComp.showDebugCone)
             {
                 continue;
             }
@@ -117,6 +117,21 @@ namespace controllers::offscreen
             renderData.minDistance = audioComp.minDistance;
             renderData.maxDistance = audioComp.maxDistance;
             renderData.showDebugSpheres = audioComp.showDebugSpheres;
+            renderData.innerConeAngle = audioComp.innerConeAngle;
+            renderData.outerConeAngle = audioComp.outerConeAngle;
+            renderData.showDebugCone = audioComp.showDebugCone;
+
+            if (registry.all_of<components::TransformComponent>(entity))
+            {
+                const auto& transform = registry.get<components::TransformComponent>(entity);
+                float yawRad = glm::radians(transform.rotation.y);
+                float pitchRad = glm::radians(transform.rotation.x);
+                glm::vec3 forward;
+                forward.x = -std::sin(yawRad) * std::cos(pitchRad);
+                forward.y = std::sin(pitchRad);
+                forward.z = -std::cos(yawRad) * std::cos(pitchRad);
+                renderData.direction = glm::normalize(forward);
+            }
 
             audioSphereDrawList.push_back(renderData);
         }

@@ -122,6 +122,22 @@ namespace core::api
                     cmd.params.filterStartDistance = audioComp.filterStartDistance;
                     cmd.params.filterMaxDistance = audioComp.filterMaxDistance;
                     cmd.params.filterIntensity = audioComp.filterIntensity;
+                    cmd.params.innerConeAngle = audioComp.innerConeAngle;
+                    cmd.params.outerConeAngle = audioComp.outerConeAngle;
+                    cmd.params.outerConeGain = audioComp.outerConeGain;
+
+                    if (registry.all_of<components::TransformComponent>(*entity))
+                    {
+                        auto& transform = registry.get<components::TransformComponent>(*entity);
+                        float yawRad = glm::radians(transform.rotation.y);
+                        float pitchRad = glm::radians(transform.rotation.x);
+                        glm::vec3 forward;
+                        forward.x = -std::sin(yawRad) * std::cos(pitchRad);
+                        forward.y = std::sin(pitchRad);
+                        forward.z = -std::cos(yawRad) * std::cos(pitchRad);
+                        cmd.params.direction = glm::normalize(forward);
+                    }
+
                     auto handle = dispatcher.execute(cmd);
 
                     audioComp.activeHandle = handle.id;

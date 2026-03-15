@@ -289,6 +289,10 @@ namespace core::audio
         setRolloffFactor(config.rolloffFactor);
         setDistanceFilterParams(config.enableDistanceFilter, config.filterStartDistance,
                                 config.filterMaxDistance, config.filterIntensity);
+        setDirection(config.direction);
+        setConeInnerAngle(config.innerConeAngle);
+        setConeOuterAngle(config.outerConeAngle);
+        setConeOuterGain(config.outerConeGain);
     }
 
     float AudioSource::getPlaybackPosition() const
@@ -305,6 +309,34 @@ namespace core::audio
         if (!isValid()) return;
         alSourcef(sourceId, AL_SEC_OFFSET, seconds);
         AudioSystem::checkError("setPlaybackPosition");
+    }
+
+    void AudioSource::setDirection(const glm::vec3& dir)
+    {
+        if (!isValid()) return;
+        alSource3f(sourceId, AL_DIRECTION, dir.x, dir.y, dir.z);
+        AudioSystem::checkError("setDirection");
+    }
+
+    void AudioSource::setConeInnerAngle(float degrees)
+    {
+        if (!isValid()) return;
+        alSourcef(sourceId, AL_CONE_INNER_ANGLE, degrees);
+        AudioSystem::checkError("setConeInnerAngle");
+    }
+
+    void AudioSource::setConeOuterAngle(float degrees)
+    {
+        if (!isValid()) return;
+        alSourcef(sourceId, AL_CONE_OUTER_ANGLE, degrees);
+        AudioSystem::checkError("setConeOuterAngle");
+    }
+
+    void AudioSource::setConeOuterGain(float gain)
+    {
+        if (!isValid()) return;
+        alSourcef(sourceId, AL_CONE_OUTER_GAIN, gain);
+        AudioSystem::checkError("setConeOuterGain");
     }
 
     void AudioSource::initFilter()

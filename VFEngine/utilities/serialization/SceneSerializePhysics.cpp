@@ -62,6 +62,10 @@ namespace serialization
         j["filterStartDistance"] = audioSource.filterStartDistance;
         j["filterMaxDistance"] = audioSource.filterMaxDistance;
         j["filterIntensity"] = audioSource.filterIntensity;
+        j["innerConeAngle"] = audioSource.innerConeAngle;
+        j["outerConeAngle"] = audioSource.outerConeAngle;
+        j["outerConeGain"] = audioSource.outerConeGain;
+        j["showDebugCone"] = audioSource.showDebugCone;
         return j;
     }
 
@@ -110,6 +114,22 @@ namespace serialization
         if (auto it = j.find("filterIntensity"); it != j.end() && it->is_number())
         {
             audioSource.filterIntensity = it->get<float>();
+        }
+        if (auto it = j.find("innerConeAngle"); it != j.end() && it->is_number())
+        {
+            audioSource.innerConeAngle = it->get<float>();
+        }
+        if (auto it = j.find("outerConeAngle"); it != j.end() && it->is_number())
+        {
+            audioSource.outerConeAngle = it->get<float>();
+        }
+        if (auto it = j.find("outerConeGain"); it != j.end() && it->is_number())
+        {
+            audioSource.outerConeGain = it->get<float>();
+        }
+        if (auto it = j.find("showDebugCone"); it != j.end() && it->is_boolean())
+        {
+            audioSource.showDebugCone = it->get<bool>();
         }
         // Reset runtime state
         audioSource.activeHandle = 0;

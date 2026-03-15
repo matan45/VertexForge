@@ -97,6 +97,11 @@ namespace components
         float filterMaxDistance = 100.0f;
         float filterIntensity = 1.0f;
 
+        float innerConeAngle = 360.0f;
+        float outerConeAngle = 360.0f;
+        float outerConeGain = 0.0f;
+        bool showDebugCone = false;
+
         uint64_t activeHandle = 0;
         bool isPlaying = false;
     };

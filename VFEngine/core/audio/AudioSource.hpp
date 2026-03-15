@@ -28,6 +28,11 @@ namespace core::audio
         float filterStartDistance = 10.0f;
         float filterMaxDistance = 100.0f;
         float filterIntensity = 1.0f;
+
+        float innerConeAngle = 360.0f;
+        float outerConeAngle = 360.0f;
+        float outerConeGain = 0.0f;
+        glm::vec3 direction{0.0f, 0.0f, -1.0f};
     };
 
     class AudioSource
@@ -94,6 +99,11 @@ namespace core::audio
 
         float getPlaybackPosition() const;
         void setPlaybackPosition(float seconds);
+
+        void setDirection(const glm::vec3& dir);
+        void setConeInnerAngle(float degrees);
+        void setConeOuterAngle(float degrees);
+        void setConeOuterGain(float gain);
 
         void initFilter();
         void cleanUpFilter();

@@ -115,6 +115,10 @@ namespace core::audio
         config.filterStartDistance = params.filterStartDistance;
         config.filterMaxDistance = params.filterMaxDistance;
         config.filterIntensity = params.filterIntensity;
+        config.innerConeAngle = params.innerConeAngle;
+        config.outerConeAngle = params.outerConeAngle;
+        config.outerConeGain = params.outerConeGain;
+        config.direction = params.direction;
         source->applyConfig(config);
 
         source->play();
@@ -148,6 +152,10 @@ namespace core::audio
         config.filterStartDistance = params.filterStartDistance;
         config.filterMaxDistance = params.filterMaxDistance;
         config.filterIntensity = params.filterIntensity;
+        config.innerConeAngle = params.innerConeAngle;
+        config.outerConeAngle = params.outerConeAngle;
+        config.outerConeGain = params.outerConeGain;
+        config.direction = params.direction;
 
         return streamingManager->playStreaming(path, config);
     }

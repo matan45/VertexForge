@@ -24,6 +24,11 @@ namespace services {
         float filterStartDistance = 10.0f;
         float filterMaxDistance = 100.0f;
         float filterIntensity = 1.0f;
+
+        float innerConeAngle = 360.0f;
+        float outerConeAngle = 360.0f;
+        float outerConeGain = 0.0f;
+        glm::vec3 direction{0.0f, 0.0f, -1.0f};
     };
 
     class IAudioProvider {

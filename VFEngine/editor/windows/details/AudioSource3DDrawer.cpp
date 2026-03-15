@@ -7,6 +7,9 @@
 #include "nfd/FileDialog.hpp"
 #include <imgui.h>
 #include <fstream>
+#include <cmath>
+#include <algorithm>
+#include <glm/trigonometric.hpp>
 
 namespace windows::details
 {
@@ -54,6 +57,8 @@ namespace windows::details
             changed |= drawSpatialSettings(audioData);
             ImGui::Spacing();
             changed |= drawDistanceFilterSettings(audioData);
+            ImGui::Spacing();
+            changed |= drawConeSettings(audioData);
 
             if (changed)
             {
@@ -275,6 +280,59 @@ namespace windows::details
         return changed;
     }
 
+    bool AudioSource3DDrawer::drawConeSettings(services::AudioSource3DData& audioData)
+    {
+        bool changed = false;
+
+        ImGui::Text("Cone Attenuation:");
+        ImGui::Indent(10.0f);
+
+        if (ImGui::SliderFloat("Inner Cone Angle##3D", &audioData.innerConeAngle, 0.0f, 360.0f, "%.0f deg"))
+        {
+            changed = true;
+        }
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip("Full volume within this angle (360 = omnidirectional)");
+        }
+
+        if (ImGui::SliderFloat("Outer Cone Angle##3D", &audioData.outerConeAngle, 0.0f, 360.0f, "%.0f deg"))
+        {
+            if (audioData.outerConeAngle < audioData.innerConeAngle)
+            {
+                audioData.outerConeAngle = audioData.innerConeAngle;
+            }
+            changed = true;
+        }
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip("Volume fades to outer gain between inner and outer cone angles");
+        }
+
+        if (ImGui::SliderFloat("Outer Cone Gain##3D", &audioData.outerConeGain, 0.0f, 1.0f, "%.2f"))
+        {
+            changed = true;
+        }
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip("Volume multiplier outside the outer cone (0 = silent)");
+        }
+
+        ImGui::Spacing();
+        if (ImGui::Checkbox("Show Debug Cone##3D", &audioData.showDebugCone))
+        {
+            changed = true;
+        }
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip("Draw wireframe cone visualization in editor");
+        }
+
+        ImGui::Unindent(10.0f);
+
+        return changed;
+    }
+
     void AudioSource3DDrawer::drawPlaybackControls(services::EntityHandle handle,
                                                    const services::AudioSource3DData& audioData)
     {
@@ -333,6 +391,20 @@ namespace windows::details
                 playCmd.params.filterStartDistance = audioData.filterStartDistance;
                 playCmd.params.filterMaxDistance = audioData.filterMaxDistance;
                 playCmd.params.filterIntensity = audioData.filterIntensity;
+                playCmd.params.innerConeAngle = audioData.innerConeAngle;
+                playCmd.params.outerConeAngle = audioData.outerConeAngle;
+                playCmd.params.outerConeGain = audioData.outerConeGain;
+
+                if (transformOpt.has_value())
+                {
+                    float yawRad = glm::radians(transformOpt->rotation.y);
+                    float pitchRad = glm::radians(transformOpt->rotation.x);
+                    glm::vec3 forward;
+                    forward.x = -std::sin(yawRad) * std::cos(pitchRad);
+                    forward.y = std::sin(pitchRad);
+                    forward.z = -std::cos(yawRad) * std::cos(pitchRad);
+                    playCmd.params.direction = glm::normalize(forward);
+                }
 
                 services::AudioHandle newHandle = dispatcher.execute(playCmd);
                 audioPreviewHandles[previewKey] = newHandle;

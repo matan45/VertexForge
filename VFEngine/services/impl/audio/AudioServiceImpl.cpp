@@ -164,6 +164,10 @@ namespace services {
         playParams.filterStartDistance = params.filterStartDistance;
         playParams.filterMaxDistance = params.filterMaxDistance;
         playParams.filterIntensity = params.filterIntensity;
+        playParams.innerConeAngle = params.innerConeAngle;
+        playParams.outerConeAngle = params.outerConeAngle;
+        playParams.outerConeGain = params.outerConeGain;
+        playParams.direction = params.direction;
         return playParams;
     }
 

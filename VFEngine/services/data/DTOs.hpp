@@ -183,6 +183,11 @@ namespace services
         float filterStartDistance = 10.0f;
         float filterMaxDistance = 100.0f;
         float filterIntensity = 1.0f;
+
+        float innerConeAngle = 360.0f;
+        float outerConeAngle = 360.0f;
+        float outerConeGain = 0.0f;
+        bool showDebugCone = false;
     };
 
     struct ColliderComponentData

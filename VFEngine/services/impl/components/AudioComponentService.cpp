@@ -179,6 +179,10 @@ namespace services {
         data.filterStartDistance = comp.filterStartDistance;
         data.filterMaxDistance = comp.filterMaxDistance;
         data.filterIntensity = comp.filterIntensity;
+        data.innerConeAngle = comp.innerConeAngle;
+        data.outerConeAngle = comp.outerConeAngle;
+        data.outerConeGain = comp.outerConeGain;
+        data.showDebugCone = comp.showDebugCone;
         return data;
     }
 
@@ -209,6 +213,10 @@ namespace services {
         comp.filterStartDistance = audioData.filterStartDistance;
         comp.filterMaxDistance = audioData.filterMaxDistance;
         comp.filterIntensity = audioData.filterIntensity;
+        comp.innerConeAngle = audioData.innerConeAngle;
+        comp.outerConeAngle = audioData.outerConeAngle;
+        comp.outerConeGain = audioData.outerConeGain;
+        comp.showDebugCone = audioData.showDebugCone;
         if (!audioData.audioFilePath.empty()) {
             lifecycle.acquire(audioData.audioFilePath, resource::AssetType::Audio);
         }

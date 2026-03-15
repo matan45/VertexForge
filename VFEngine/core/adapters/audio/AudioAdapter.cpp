@@ -64,6 +64,10 @@ namespace core {
         coreParams.filterStartDistance = params.filterStartDistance;
         coreParams.filterMaxDistance = params.filterMaxDistance;
         coreParams.filterIntensity = params.filterIntensity;
+        coreParams.innerConeAngle = params.innerConeAngle;
+        coreParams.outerConeAngle = params.outerConeAngle;
+        coreParams.outerConeGain = params.outerConeGain;
+        coreParams.direction = params.direction;
 
         return audioController->playSound3D(path, position, coreParams);
     }
@@ -84,6 +88,10 @@ namespace core {
         coreParams.filterStartDistance = params.filterStartDistance;
         coreParams.filterMaxDistance = params.filterMaxDistance;
         coreParams.filterIntensity = params.filterIntensity;
+        coreParams.innerConeAngle = params.innerConeAngle;
+        coreParams.outerConeAngle = params.outerConeAngle;
+        coreParams.outerConeGain = params.outerConeGain;
+        coreParams.direction = params.direction;
 
         return audioController->playStreamingSound(path, coreParams);
     }
