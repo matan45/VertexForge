@@ -74,6 +74,10 @@ namespace core
         // === Lifecycle Calls ===
         void callOnStart(uint64_t instanceId) override;
         void callOnUpdate(uint64_t instanceId, float deltaTime) override;
+        void callOnFixedUpdate(uint64_t instanceId, float fixedDeltaTime) override;
+        void callOnLateUpdate(uint64_t instanceId, float deltaTime) override;
+        void callOnEnable(uint64_t instanceId) override;
+        void callOnDisable(uint64_t instanceId) override;
         void callOnDestroy(uint64_t instanceId) override;
 
         std::string callMethodWithReturn(uint64_t instanceId, const std::string& methodName,

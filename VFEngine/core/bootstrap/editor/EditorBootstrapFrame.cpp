@@ -47,4 +47,12 @@ namespace core
             });
         }
     }
+
+    void EditorBootstrap::setPostUpdateCallback(std::function<void()> callback)
+    {
+        if (coreInterface)
+        {
+            coreInterface->setPostUpdateCallback(std::move(callback));
+        }
+    }
 }

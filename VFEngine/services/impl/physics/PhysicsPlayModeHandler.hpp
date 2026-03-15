@@ -17,6 +17,7 @@ namespace services
     private:
         IPhysicsProvider* physicsProvider = nullptr;
         WaterService* waterService = nullptr;
+        std::function<void(float)> scriptFixedUpdateCallback;
         ::events::SubscriptionToken editorModeChangedToken;
         std::unordered_set<EntityHandle, EntityHandle::Hash> activePhysicsBodies;
         bool physicsActive = false;
@@ -32,6 +33,7 @@ namespace services
         PhysicsPlayModeHandler& operator=(const PhysicsPlayModeHandler&) = delete;
 
         void setWaterService(WaterService* service) { waterService = service; }
+        void setScriptFixedUpdateCallback(std::function<void(float)> callback) { scriptFixedUpdateCallback = std::move(callback); }
 
         void subscribeToEvents();
         void unsubscribeFromEvents();

@@ -406,6 +406,72 @@ namespace core
         }
     }
 
+    void ScriptingAdapter::callOnFixedUpdate(uint64_t instanceId, float fixedDeltaTime)
+    {
+        if (!isScriptLoaded(instanceId)) return;
+
+        auto stateIt = instanceToPlaybackState.find(instanceId);
+        if (stateIt == instanceToPlaybackState.end() ||
+            stateIt->second != services::ScriptPlaybackState::Playing)
+            return;
+
+        try
+        {
+            callScriptMethod(interpreter.get(), instanceToObject, instanceToEntity, instanceId, "onFixedUpdate", {value::Value(fixedDeltaTime)});
+        }
+        catch (const std::exception&)
+        {
+            // Silently ignore if script does not define onFixedUpdate
+        }
+    }
+
+    void ScriptingAdapter::callOnLateUpdate(uint64_t instanceId, float deltaTime)
+    {
+        if (!isScriptLoaded(instanceId)) return;
+
+        auto stateIt = instanceToPlaybackState.find(instanceId);
+        if (stateIt == instanceToPlaybackState.end() ||
+            stateIt->second != services::ScriptPlaybackState::Playing)
+            return;
+
+        try
+        {
+            callScriptMethod(interpreter.get(), instanceToObject, instanceToEntity, instanceId, "onLateUpdate", {value::Value(deltaTime)});
+        }
+        catch (const std::exception&)
+        {
+            // Silently ignore if script does not define onLateUpdate
+        }
+    }
+
+    void ScriptingAdapter::callOnEnable(uint64_t instanceId)
+    {
+        if (!isScriptLoaded(instanceId)) return;
+
+        try
+        {
+            callScriptMethod(interpreter.get(), instanceToObject, instanceToEntity, instanceId, "onEnable", {});
+        }
+        catch (const std::exception&)
+        {
+            // Silently ignore if script does not define onEnable
+        }
+    }
+
+    void ScriptingAdapter::callOnDisable(uint64_t instanceId)
+    {
+        if (!isScriptLoaded(instanceId)) return;
+
+        try
+        {
+            callScriptMethod(interpreter.get(), instanceToObject, instanceToEntity, instanceId, "onDisable", {});
+        }
+        catch (const std::exception&)
+        {
+            // Silently ignore if script does not define onDisable
+        }
+    }
+
     void ScriptingAdapter::callOnDestroy(uint64_t instanceId)
     {
         if (!isScriptLoaded(instanceId)) return;

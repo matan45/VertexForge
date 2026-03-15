@@ -19,6 +19,7 @@ namespace core
         std::unique_ptr<physics::FixedTimestep> fixedTimestep;
         types::PhysicsSettings currentSettings;
         mutable std::mutex settingsMutex;
+        std::function<void(float)> postStepCallback;
 
     public:
         explicit PhysicsAdapter();
@@ -32,6 +33,7 @@ namespace core
         bool isInitialized() const override;
 
         void update(float deltaTime) override;
+        void setPostStepCallback(std::function<void(float)> callback) override;
 
         void setGravity(const glm::vec3& gravity) override;
         glm::vec3 getGravity() const override;

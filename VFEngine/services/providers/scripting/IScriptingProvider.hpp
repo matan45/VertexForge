@@ -45,6 +45,10 @@ namespace services {
         // === Lifecycle Calls ===
         virtual void callOnStart(uint64_t instanceId) = 0;
         virtual void callOnUpdate(uint64_t instanceId, float deltaTime) = 0;
+        virtual void callOnFixedUpdate(uint64_t instanceId, float fixedDeltaTime) = 0;
+        virtual void callOnLateUpdate(uint64_t instanceId, float deltaTime) = 0;
+        virtual void callOnEnable(uint64_t instanceId) = 0;
+        virtual void callOnDisable(uint64_t instanceId) = 0;
         virtual void callOnDestroy(uint64_t instanceId) = 0;
 
         // === Generic Method Call ===

@@ -196,6 +196,27 @@ namespace handlers
             }
         });
 
+        bootstrap->setPostUpdateCallback([this]()
+        {
+            if (editorModeService && editorModeService->isPlayMode())
+            {
+                float deltaTime = static_cast<float>(engineTime::Timer::getDeltaTime());
+                if (scriptingService)
+                {
+                    scriptingService->lateUpdateScripts(deltaTime);
+                }
+            }
+        });
+
+        // Wire script onFixedUpdate to run after each physics sub-step
+        if (physicsPlayModeHandler && scriptingService)
+        {
+            physicsPlayModeHandler->setScriptFixedUpdateCallback([this](float fixedDt)
+            {
+                scriptingService->fixedUpdateScripts(fixedDt);
+            });
+        }
+
         setupEventSubscriptions();
 
         editor::SplashScreen::instance().setStatus("Setting up UI...");
