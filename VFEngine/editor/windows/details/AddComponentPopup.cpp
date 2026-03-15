@@ -8,6 +8,7 @@
 #include "events/physics/SocketEvents.hpp"
 #include "events/physics/IKEvents.hpp"
 #include "events/scene/ReverbZoneEvents.hpp"
+#include "events/plugin/PluginComponentEvents.hpp"
 #include <imgui.h>
 
 namespace windows::details
@@ -45,6 +46,7 @@ namespace windows::details
             drawAnimationSection(c);
             drawLightingSection(c);
             drawUISection(c);
+            drawPluginSection(c);
 
             bool allAdded = c.hasCamera && c.hasMesh && c.hasAudio2D && c.hasAudio3D && c.hasScript &&
                            c.hasCollider && c.hasRigidBody && c.hasPhysicsAnimation &&
@@ -654,6 +656,59 @@ namespace windows::details
             if (ImGui::IsItemHovered())
             {
                 ImGui::SetTooltip("Marks this element as a drop receiver for drag-and-drop");
+            }
+        }
+    }
+
+    void AddComponentPopup::drawPluginSection(const ComponentPresence& c)
+    {
+        auto handle = c.handle;
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        events::plugin::GetRegisteredPluginComponentsQuery listQuery;
+        auto registeredNames = dispatcher.query(listQuery);
+
+        if (registeredNames.empty())
+            return;
+
+        // Check which plugin components this entity already has
+        std::vector<std::pair<std::string, std::string>> available; // qualifiedName, displayName
+        for (const auto& qualifiedName : registeredNames)
+        {
+            events::plugin::GetPluginComponentDataQuery dataQuery;
+            dataQuery.entity = handle;
+            dataQuery.qualifiedName = qualifiedName;
+            auto dataOpt = dispatcher.query(dataQuery);
+
+            if (!dataOpt.has_value())
+            {
+                // Extract display name
+                std::string displayName = qualifiedName;
+                auto sep = qualifiedName.find("::");
+                if (sep != std::string::npos)
+                {
+                    displayName = qualifiedName.substr(sep + 2) + " (" + qualifiedName.substr(0, sep) + ")";
+                }
+                available.emplace_back(qualifiedName, displayName);
+            }
+        }
+
+        if (available.empty())
+            return;
+
+        ImGui::Spacing();
+        ImGui::TextDisabled("Plugin");
+        ImGui::Separator();
+
+        for (const auto& [qualifiedName, displayName] : available)
+        {
+            std::string label = "  " + displayName;
+            if (ImGui::Selectable(label.c_str()))
+            {
+                events::plugin::AddPluginComponentCommand cmd;
+                cmd.entity = handle;
+                cmd.qualifiedName = qualifiedName;
+                dispatcher.execute(cmd);
             }
         }
     }

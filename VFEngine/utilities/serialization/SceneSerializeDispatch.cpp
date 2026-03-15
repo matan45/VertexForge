@@ -5,6 +5,15 @@
 
 namespace serialization
 {
+    SceneSerialization::PluginSerializeFn SceneSerialization::pluginSerializeHook;
+    SceneSerialization::PluginDeserializeFn SceneSerialization::pluginDeserializeHook;
+
+    void SceneSerialization::setPluginSerializationHooks(PluginSerializeFn serialize, PluginDeserializeFn deserialize)
+    {
+        pluginSerializeHook = std::move(serialize);
+        pluginDeserializeHook = std::move(deserialize);
+    }
+
     json SceneSerialization::serializeEntityComponents(scene::Entity& entity)
     {
         json componentsJson = json::object();
@@ -291,6 +300,16 @@ namespace serialization
         {
             componentsJson["decal"] = serializeDecal(
                 entity.getComponent<components::DecalComponent>());
+        }
+
+        // Plugin components
+        if (pluginSerializeHook)
+        {
+            auto pluginJson = pluginSerializeHook(entity);
+            for (auto& [key, value] : pluginJson.items())
+            {
+                componentsJson[key] = std::move(value);
+            }
         }
 
         return componentsJson;
@@ -631,6 +650,23 @@ namespace serialization
         {
             auto& decalComp = entity.addOrReplaceComponent<components::DecalComponent>();
             deserializeDecal(componentsJson["decal"], decalComp);
+        }
+
+        // Plugin components
+        if (pluginDeserializeHook)
+        {
+            json pluginEntries = json::object();
+            for (const auto& [key, value] : componentsJson.items())
+            {
+                if (key.rfind("plugin:", 0) == 0)
+                {
+                    pluginEntries[key] = value;
+                }
+            }
+            if (!pluginEntries.empty())
+            {
+                pluginDeserializeHook(pluginEntries, entity);
+            }
         }
     }
 

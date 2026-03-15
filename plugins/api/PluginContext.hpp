@@ -80,7 +80,7 @@ namespace plugin {
         // The engine auto-generates serialization, deserialization, and inspector UI.
         // Optionally call setInspector() on the builder for a custom ImGui inspector.
         // Call .build() to finalize registration.
-        virtual ComponentBuilder& registerComponent(const std::string& componentName) = 0;
+        virtual ComponentBuilder registerComponent(const std::string& componentName) = 0;
 
         // === Plugin Component ECS Helpers ===
         // Safe across DLL boundary — all EnTT operations execute in the exe's address space.
@@ -89,12 +89,6 @@ namespace plugin {
         virtual bool removePluginComponent(entt::entity entity, const std::string& componentName) = 0;
         virtual PluginComponentData* getPluginComponent(entt::entity entity, const std::string& componentName) = 0;
         virtual bool hasPluginComponent(entt::entity entity, const std::string& componentName) = 0;
-
-        // Iterate all entities that have a specific plugin component.
-        // The callback receives the entity handle and a typed data accessor.
-        // Iteration happens exe-side (safe across DLL boundary).
-        virtual void forEachWithComponent(const std::string& componentName,
-                                           const std::function<void(entt::entity, PluginComponentData&)>& callback) = 0;
 
         // === ECS Registry Access ===
         // Returns the global EnTT entity registry.
@@ -119,7 +113,6 @@ namespace plugin {
         virtual void logInfo(const std::string& message) = 0;
         virtual void logWarning(const std::string& message) = 0;
         virtual void logError(const std::string& message) = 0;
-
     };
 
 }

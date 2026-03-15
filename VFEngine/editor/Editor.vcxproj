@@ -187,6 +187,7 @@
     <ClInclude Include="windows\details\NavmeshAgentDrawer.hpp" />
     <ClInclude Include="windows\details\NavmeshRootDrawer.hpp" />
     <ClInclude Include="windows\details\PhysicsAnimationDrawer.hpp" />
+    <ClInclude Include="windows\details\PluginComponentDrawer.hpp" />
     <ClInclude Include="windows\details\PointLightDrawer.hpp" />
     <ClInclude Include="windows\details\RenderTextureDrawer.hpp" />
     <ClInclude Include="windows\details\RenderTexturePickerWidget.hpp" />
@@ -334,6 +335,7 @@
     <ClCompile Include="windows\details\NavmeshAgentDrawer.cpp" />
     <ClCompile Include="windows\details\NavmeshRootDrawer.cpp" />
     <ClCompile Include="windows\details\PhysicsAnimationDrawer.cpp" />
+    <ClCompile Include="windows\details\PluginComponentDrawer.cpp" />
     <ClCompile Include="windows\details\PointLightDrawer.cpp" />
     <ClCompile Include="windows\details\RenderTextureDrawer.cpp" />
     <ClCompile Include="windows\details\RenderTexturePickerWidget.cpp" />

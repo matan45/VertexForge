@@ -13,6 +13,7 @@
 #include "VegetationComponents.hpp"
 #include "MeshBrushComponents.hpp"
 #include "DecalComponents.hpp"
+#include "PluginComponents.hpp"
 
 namespace components
 {

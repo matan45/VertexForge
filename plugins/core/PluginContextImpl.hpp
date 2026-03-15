@@ -29,7 +29,6 @@ namespace plugin {
         std::vector<plugin::RenderHookHandle> registeredRenderHooks;
         std::vector<std::string> registeredComponentNames;
         std::unordered_map<std::string, PluginComponentData> componentDataWrappers;
-        std::unique_ptr<class ComponentBuilderImpl> activeBuilder;
 
     public:
         explicit PluginContextImpl(const std::string& pluginName,
@@ -40,13 +39,11 @@ namespace plugin {
         events::SubscriptionToken managedSubscribe(events::SubscriptionToken token) override;
         void registerEditorWindow(std::shared_ptr<controllers::imguiHandler::ImguiWindow> window) override;
         void registerImportStage(std::unique_ptr<pipeline::PipelineStage> stage) override;
-        ComponentBuilder& registerComponent(const std::string& componentName) override;
+        ComponentBuilder registerComponent(const std::string& componentName) override;
         bool addPluginComponent(entt::entity entity, const std::string& componentName) override;
         bool removePluginComponent(entt::entity entity, const std::string& componentName) override;
         PluginComponentData* getPluginComponent(entt::entity entity, const std::string& componentName) override;
         bool hasPluginComponent(entt::entity entity, const std::string& componentName) override;
-        void forEachWithComponent(const std::string& componentName,
-                                   const std::function<void(entt::entity, PluginComponentData&)>& callback) override;
         void registerScriptFunction(const std::string& name, std::any function) override;
         plugin::RenderHookHandle registerRenderPassHook(
             plugin::RenderPassHookPoint hookPoint,
@@ -60,10 +57,13 @@ namespace plugin {
         void logWarning(const std::string& message) override;
         void logError(const std::string& message) override;
 
-        void finalizeComponentRegistration(class ComponentBuilderImpl& builder);
+        // Called by ComponentBuilder::build() to finalize registration.
+        void finalizeComponentRegistration(ComponentBuilder& builder);
 
+        // Called by PluginManager during shutdown to clean up all registrations.
         void cleanupAll();
 
+        // Returns and releases ownership of all registered import stages.
         std::vector<std::unique_ptr<pipeline::PipelineStage>> takeImportStages();
 
         const std::string& getPluginName() const { return pluginName; }

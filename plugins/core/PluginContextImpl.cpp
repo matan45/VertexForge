@@ -1,7 +1,7 @@
 #include "print/Log.hpp"
 #include "PluginContextImpl.hpp"
 #include "PluginComponentRegistry.hpp"
-#include "ComponentBuilderImpl.hpp"
+#include "../api/PluginComponentBuilder.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/scripting/ScriptingEvents.hpp"
 #include "events/render/RenderHookEvents.hpp"
@@ -70,13 +70,12 @@ namespace plugin {
         return std::move(registeredImportStages);
     }
 
-    ComponentBuilder& PluginContextImpl::registerComponent(const std::string& componentName)
+    ComponentBuilder PluginContextImpl::registerComponent(const std::string& componentName)
     {
-        activeBuilder = std::make_unique<ComponentBuilderImpl>(this, componentName);
-        return *activeBuilder;
+        return ComponentBuilder(this, componentName);
     }
 
-    void PluginContextImpl::finalizeComponentRegistration(ComponentBuilderImpl& builder)
+    void PluginContextImpl::finalizeComponentRegistration(ComponentBuilder& builder)
     {
         std::string qualifiedName = pluginName + "::" + builder.getComponentName();
 
@@ -155,6 +154,7 @@ namespace plugin {
         if (it == pluginComp.components.end())
             return nullptr;
 
+        // Create or update the wrapper to point at the current data
         componentDataWrappers.insert_or_assign(qualifiedName, PluginComponentData(&it->second));
         return &componentDataWrappers.at(qualifiedName);
     }
@@ -171,23 +171,10 @@ namespace plugin {
         return pluginComp.components.contains(qualifiedName);
     }
 
-    void PluginContextImpl::forEachWithComponent(const std::string& componentName,
-                                                  const std::function<void(entt::entity, PluginComponentData&)>& callback)
+    // ComponentBuilder::build() implementation
+    void ComponentBuilder::build()
     {
-        std::string qualifiedName = pluginName + "::" + componentName;
-        auto& reg = scene::EntityRegistry::getRegistry();
-        auto view = reg.view<components::PluginComponentsComponent>();
-
-        for (auto entity : view)
-        {
-            auto& pluginComp = view.get<components::PluginComponentsComponent>(entity);
-            auto it = pluginComp.components.find(qualifiedName);
-            if (it != pluginComp.components.end())
-            {
-                PluginComponentData data(&it->second);
-                callback(entity, data);
-            }
-        }
+        context->finalizeComponentRegistration(*this);
     }
 
     void PluginContextImpl::registerScriptFunction(const std::string& name, std::any function)
@@ -256,6 +243,7 @@ namespace plugin {
 
     std::string PluginContextImpl::getPluginDataPath() const
     {
+        // Sanitize pluginName: strip path separators and traversal sequences
         std::string safeName;
         safeName.reserve(pluginName.size());
         for (char c : pluginName) {
@@ -265,6 +253,7 @@ namespace plugin {
                 safeName += c;
             }
         }
+        // Reject names that are entirely dots (e.g. "..", "...")
         if (safeName.find_first_not_of('.') == std::string::npos) {
             safeName = "_plugin_";
         }
@@ -304,6 +293,7 @@ namespace plugin {
             try {
                 dispatcher.execute(cmd);
             } catch (...) {
+                // Handler may already be unregistered during shutdown
             }
         }
         registeredRenderHooks.clear();
@@ -333,8 +323,6 @@ namespace plugin {
             PluginComponentRegistry::instance().unregisterPlugin(pluginName);
             registeredComponentNames.clear();
         }
-
-        componentDataWrappers.clear();
     }
 
 }
