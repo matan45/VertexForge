@@ -58,6 +58,10 @@ namespace serialization
         j["minDistance"] = audioSource.minDistance;
         j["maxDistance"] = audioSource.maxDistance;
         j["showDebugSpheres"] = audioSource.showDebugSpheres;
+        j["enableDistanceFilter"] = audioSource.enableDistanceFilter;
+        j["filterStartDistance"] = audioSource.filterStartDistance;
+        j["filterMaxDistance"] = audioSource.filterMaxDistance;
+        j["filterIntensity"] = audioSource.filterIntensity;
         return j;
     }
 
@@ -90,6 +94,22 @@ namespace serialization
         if (auto it = j.find("showDebugSpheres"); it != j.end() && it->is_boolean())
         {
             audioSource.showDebugSpheres = it->get<bool>();
+        }
+        if (auto it = j.find("enableDistanceFilter"); it != j.end() && it->is_boolean())
+        {
+            audioSource.enableDistanceFilter = it->get<bool>();
+        }
+        if (auto it = j.find("filterStartDistance"); it != j.end() && it->is_number())
+        {
+            audioSource.filterStartDistance = it->get<float>();
+        }
+        if (auto it = j.find("filterMaxDistance"); it != j.end() && it->is_number())
+        {
+            audioSource.filterMaxDistance = it->get<float>();
+        }
+        if (auto it = j.find("filterIntensity"); it != j.end() && it->is_number())
+        {
+            audioSource.filterIntensity = it->get<float>();
         }
         // Reset runtime state
         audioSource.activeHandle = 0;

@@ -8,6 +8,7 @@
 #include <glm/glm.hpp>
 #include <string>
 #include <memory>
+#include <chrono>
 
 namespace core::audio {
 
@@ -21,6 +22,11 @@ namespace core::audio {
         float maxDistance = 100.0f;
         float rolloffFactor = 1.0f;
         bool streaming = false;
+
+        bool enableDistanceFilter = false;
+        float filterStartDistance = 10.0f;
+        float filterMaxDistance = 100.0f;
+        float filterIntensity = 1.0f;
     };
 
     class AudioController {
@@ -32,6 +38,7 @@ namespace core::audio {
         std::unique_ptr<StreamingAudioManager> streamingManager;
 
         bool initialized = false;
+        std::chrono::steady_clock::time_point lastUpdateTime;
     public:
         explicit AudioController();
         ~AudioController();

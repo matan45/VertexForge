@@ -36,6 +36,7 @@ namespace core::audio
         sourceManager->initPool(32);
 
         initialized = true;
+        lastUpdateTime = std::chrono::steady_clock::now();
         return true;
     }
 
@@ -59,8 +60,14 @@ namespace core::audio
     void AudioController::update()
     {
         if (!initialized) return;
+
+        auto now = std::chrono::steady_clock::now();
+        float deltaTime = std::chrono::duration<float>(now - lastUpdateTime).count();
+        lastUpdateTime = now;
+
         sourceManager->update();
         streamingManager->update();
+        sourceManager->updateFilters(listener->getPosition(), deltaTime);
     }
 
     AudioHandle AudioController::playSound(const std::string& path, const PlaySoundParams& params)
@@ -104,6 +111,10 @@ namespace core::audio
         config.minDistance = params.minDistance;
         config.maxDistance = params.maxDistance;
         config.rolloffFactor = params.rolloffFactor;
+        config.enableDistanceFilter = params.enableDistanceFilter;
+        config.filterStartDistance = params.filterStartDistance;
+        config.filterMaxDistance = params.filterMaxDistance;
+        config.filterIntensity = params.filterIntensity;
         source->applyConfig(config);
 
         source->play();
@@ -133,6 +144,10 @@ namespace core::audio
         config.minDistance = params.minDistance;
         config.maxDistance = params.maxDistance;
         config.rolloffFactor = params.rolloffFactor;
+        config.enableDistanceFilter = params.enableDistanceFilter;
+        config.filterStartDistance = params.filterStartDistance;
+        config.filterMaxDistance = params.filterMaxDistance;
+        config.filterIntensity = params.filterIntensity;
 
         return streamingManager->playStreaming(path, config);
     }

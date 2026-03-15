@@ -29,6 +29,8 @@ namespace windows
             drawListenerSection();
             ImGui::Spacing();
             drawDistanceModelSection();
+            ImGui::Spacing();
+            drawDistanceFilterSection();
 
             ImGui::Spacing();
             ImGui::Separator();
@@ -145,6 +147,61 @@ namespace windows
             }
             ImGui::PopItemWidth();
             ImGui::TextDisabled("How quickly sound attenuates with distance");
+
+            ImGui::Unindent();
+        }
+    }
+
+    void AudioConfigWindow::drawDistanceFilterSection()
+    {
+        if (ImGui::CollapsingHeader("Distance Filter Defaults", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            ImGui::Indent();
+
+            if (ImGui::Checkbox("Enable Distance Filtering##Config", &settings.enableDistanceFilter))
+            {
+                isDirty = true;
+            }
+            ImGui::TextDisabled("Globally enable/disable distance-based low-pass filtering for 3D sources");
+
+            if (settings.enableDistanceFilter)
+            {
+                ImGui::Spacing();
+
+                ImGui::Text("Default Filter Start Distance");
+                ImGui::PushItemWidth(-1);
+                if (ImGui::DragFloat("##FilterStartDist", &settings.defaultFilterStartDistance, 0.1f, 0.1f, 100.0f, "%.1f"))
+                {
+                    isDirty = true;
+                }
+                ImGui::PopItemWidth();
+                ImGui::TextDisabled("Distance at which filtering begins");
+
+                ImGui::Spacing();
+
+                ImGui::Text("Default Filter Max Distance");
+                ImGui::PushItemWidth(-1);
+                if (ImGui::DragFloat("##FilterMaxDist", &settings.defaultFilterMaxDistance, 1.0f, 1.0f, 500.0f, "%.1f"))
+                {
+                    isDirty = true;
+                }
+                ImGui::PopItemWidth();
+                ImGui::TextDisabled("Distance at which filter reaches full strength");
+
+                ImGui::Spacing();
+
+                ImGui::Text("Default Filter Intensity");
+                ImGui::PushItemWidth(-1);
+                if (ImGui::DragFloat("##FilterIntensity", &settings.defaultFilterIntensity, 0.01f, 0.0f, 1.0f, "%.2f"))
+                {
+                    isDirty = true;
+                }
+                ImGui::PopItemWidth();
+                ImGui::TextDisabled("Strength of the low-pass filter effect (0 = none, 1 = full)");
+            }
+
+            ImGui::Spacing();
+            ImGui::TextDisabled("Per-source settings override these defaults");
 
             ImGui::Unindent();
         }

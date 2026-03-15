@@ -52,6 +52,8 @@ namespace windows::details
             changed |= drawAudioSettings(audioData);
             ImGui::Spacing();
             changed |= drawSpatialSettings(audioData);
+            ImGui::Spacing();
+            changed |= drawDistanceFilterSettings(audioData);
 
             if (changed)
             {
@@ -221,6 +223,57 @@ namespace windows::details
         return changed;
     }
 
+    bool AudioSource3DDrawer::drawDistanceFilterSettings(services::AudioSource3DData& audioData)
+    {
+        bool changed = false;
+
+        ImGui::Text("Distance Filter:");
+        ImGui::Indent(10.0f);
+
+        if (ImGui::Checkbox("Enable Distance Filter##3D", &audioData.enableDistanceFilter))
+        {
+            changed = true;
+        }
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip("Apply low-pass filter based on distance to simulate air absorption");
+        }
+
+        if (audioData.enableDistanceFilter)
+        {
+            if (ImGui::SliderFloat("Filter Start Distance##3D", &audioData.filterStartDistance, 0.1f, 100.0f, "%.1f"))
+            {
+                changed = true;
+            }
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("Distance at which high-frequency attenuation begins");
+            }
+
+            if (ImGui::SliderFloat("Filter Max Distance##3D", &audioData.filterMaxDistance, 1.0f, 500.0f, "%.1f"))
+            {
+                changed = true;
+            }
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("Distance at which filter reaches full strength");
+            }
+
+            if (ImGui::SliderFloat("Filter Intensity##3D", &audioData.filterIntensity, 0.0f, 1.0f, "%.2f"))
+            {
+                changed = true;
+            }
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("Strength of the low-pass filter effect");
+            }
+        }
+
+        ImGui::Unindent(10.0f);
+
+        return changed;
+    }
+
     void AudioSource3DDrawer::drawPlaybackControls(services::EntityHandle handle,
                                                    const services::AudioSource3DData& audioData)
     {
@@ -251,7 +304,7 @@ namespace windows::details
 
         // Play button
         bool canPlay = !audioData.audioFilePath.empty() && !isCurrentlyPlaying;
-        if (!canPlay) ImGui::BeginDisabled();
+        ImGui::BeginDisabled(!canPlay);
         if (ImGui::Button("Play##3D", ImVec2(60, 0)))
         {
             if (isPaused)
@@ -275,16 +328,20 @@ namespace windows::details
                 playCmd.params.loop = audioData.loop;
                 playCmd.params.minDistance = audioData.minDistance;
                 playCmd.params.maxDistance = audioData.maxDistance;
+                playCmd.params.enableDistanceFilter = audioData.enableDistanceFilter;
+                playCmd.params.filterStartDistance = audioData.filterStartDistance;
+                playCmd.params.filterMaxDistance = audioData.filterMaxDistance;
+                playCmd.params.filterIntensity = audioData.filterIntensity;
 
                 services::AudioHandle newHandle = dispatcher.execute(playCmd);
                 audioPreviewHandles[previewKey] = newHandle;
             }
         }
-        if (!canPlay) ImGui::EndDisabled();
+        ImGui::EndDisabled();
 
         // Pause button
         ImGui::SameLine();
-        if (!isCurrentlyPlaying) ImGui::BeginDisabled();
+        ImGui::BeginDisabled(!isCurrentlyPlaying);
         if (ImGui::Button("Pause##3D", ImVec2(60, 0)))
         {
             if (hasPreviewHandle)
@@ -294,11 +351,11 @@ namespace windows::details
                 dispatcher.execute(pauseCmd);
             }
         }
-        if (!isCurrentlyPlaying) ImGui::EndDisabled();
+        ImGui::EndDisabled();
 
         // Stop button
         ImGui::SameLine();
-        if (!hasPreviewHandle) ImGui::BeginDisabled();
+        ImGui::BeginDisabled(!hasPreviewHandle);
         if (ImGui::Button("Stop##3D", ImVec2(60, 0)))
         {
             if (hasPreviewHandle)
@@ -309,7 +366,7 @@ namespace windows::details
                 audioPreviewHandles.erase(previewKey);
             }
         }
-        if (!hasPreviewHandle) ImGui::EndDisabled();
+        ImGui::EndDisabled();
     }
 
     void AudioSource3DDrawer::clearHandles()

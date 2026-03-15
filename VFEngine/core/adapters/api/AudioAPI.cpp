@@ -118,6 +118,10 @@ namespace core::api
                     cmd.params.is3D = true;
                     cmd.params.minDistance = audioComp.minDistance;
                     cmd.params.maxDistance = audioComp.maxDistance;
+                    cmd.params.enableDistanceFilter = audioComp.enableDistanceFilter;
+                    cmd.params.filterStartDistance = audioComp.filterStartDistance;
+                    cmd.params.filterMaxDistance = audioComp.filterMaxDistance;
+                    cmd.params.filterIntensity = audioComp.filterIntensity;
                     auto handle = dispatcher.execute(cmd);
 
                     audioComp.activeHandle = handle.id;

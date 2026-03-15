@@ -276,6 +276,13 @@ namespace serialization
             {"defaultRolloffFactor", settings.defaultRolloffFactor}
         };
 
+        j["distanceFilter"] = {
+            {"enabled", settings.enableDistanceFilter},
+            {"defaultStartDistance", settings.defaultFilterStartDistance},
+            {"defaultMaxDistance", settings.defaultFilterMaxDistance},
+            {"defaultIntensity", settings.defaultFilterIntensity}
+        };
+
         return j;
     }
 
@@ -299,6 +306,19 @@ namespace serialization
                 settings.distanceModel = stringToAudioDistanceModel(dm["model"].get<std::string>());
             if (dm.contains("defaultRolloffFactor") && dm["defaultRolloffFactor"].is_number())
                 settings.defaultRolloffFactor = dm["defaultRolloffFactor"].get<float>();
+        }
+
+        if (j.contains("distanceFilter") && j["distanceFilter"].is_object())
+        {
+            const auto& df = j["distanceFilter"];
+            if (df.contains("enabled") && df["enabled"].is_boolean())
+                settings.enableDistanceFilter = df["enabled"].get<bool>();
+            if (df.contains("defaultStartDistance") && df["defaultStartDistance"].is_number())
+                settings.defaultFilterStartDistance = df["defaultStartDistance"].get<float>();
+            if (df.contains("defaultMaxDistance") && df["defaultMaxDistance"].is_number())
+                settings.defaultFilterMaxDistance = df["defaultMaxDistance"].get<float>();
+            if (df.contains("defaultIntensity") && df["defaultIntensity"].is_number())
+                settings.defaultFilterIntensity = df["defaultIntensity"].get<float>();
         }
     }
 }

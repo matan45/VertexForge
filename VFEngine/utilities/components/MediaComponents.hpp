@@ -92,6 +92,11 @@ namespace components
         float maxDistance = 100.0f;
         bool showDebugSpheres = false;
 
+        bool enableDistanceFilter = true;
+        float filterStartDistance = 10.0f;
+        float filterMaxDistance = 100.0f;
+        float filterIntensity = 1.0f;
+
         uint64_t activeHandle = 0;
         bool isPlaying = false;
     };

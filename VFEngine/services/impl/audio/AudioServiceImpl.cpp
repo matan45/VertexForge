@@ -160,6 +160,10 @@ namespace services {
         playParams.maxDistance = params.maxDistance;
         playParams.rolloffFactor = params.rolloffFactor;
         playParams.streaming = params.streaming;
+        playParams.enableDistanceFilter = params.enableDistanceFilter;
+        playParams.filterStartDistance = params.filterStartDistance;
+        playParams.filterMaxDistance = params.filterMaxDistance;
+        playParams.filterIntensity = params.filterIntensity;
         return playParams;
     }
 

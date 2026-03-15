@@ -20,6 +20,11 @@ namespace services {
         float maxDistance = 100.0f;
         float rolloffFactor = 1.0f;
         bool streaming = false;
+
+        bool enableDistanceFilter = true;
+        float filterStartDistance = 10.0f;
+        float filterMaxDistance = 100.0f;
+        float filterIntensity = 1.0f;
     };
 
     class IAudioService {

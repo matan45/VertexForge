@@ -60,6 +60,10 @@ namespace core {
         coreParams.maxDistance = params.maxDistance;
         coreParams.rolloffFactor = params.rolloffFactor;
         coreParams.streaming = params.streaming;
+        coreParams.enableDistanceFilter = params.enableDistanceFilter;
+        coreParams.filterStartDistance = params.filterStartDistance;
+        coreParams.filterMaxDistance = params.filterMaxDistance;
+        coreParams.filterIntensity = params.filterIntensity;
 
         return audioController->playSound3D(path, position, coreParams);
     }
@@ -76,6 +80,10 @@ namespace core {
         coreParams.maxDistance = params.maxDistance;
         coreParams.rolloffFactor = params.rolloffFactor;
         coreParams.streaming = true;
+        coreParams.enableDistanceFilter = params.enableDistanceFilter;
+        coreParams.filterStartDistance = params.filterStartDistance;
+        coreParams.filterMaxDistance = params.filterMaxDistance;
+        coreParams.filterIntensity = params.filterIntensity;
 
         return audioController->playStreamingSound(path, coreParams);
     }

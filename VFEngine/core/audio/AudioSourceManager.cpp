@@ -70,6 +70,7 @@ namespace core::audio {
 
         if (index < sourcePool.size()) {
             sourcePool[index]->stop();
+            sourcePool[index]->detachFilter();
             sourcePool[index]->setBuffer(0);
             freeIndices.push_back(index);
         }
@@ -127,6 +128,18 @@ namespace core::audio {
 
         for (AudioHandle handle : toRelease) {
             releaseSource(handle);
+        }
+    }
+
+    void AudioSourceManager::updateFilters(const glm::vec3& listenerPos, float deltaTime) {
+        for (auto& [handle, index] : activeHandles) {
+            if (index < sourcePool.size()) {
+                auto* source = sourcePool[index].get();
+                if (source->isPlaying()) {
+                    float distance = glm::distance(listenerPos, source->getPosition());
+                    source->updateDistanceFilter(distance, deltaTime);
+                }
+            }
         }
     }
 

@@ -1,5 +1,6 @@
 #pragma once
 #include "AudioSource.hpp"
+#include <glm/glm.hpp>
 #include <cstdint>
 #include <unordered_map>
 #include <vector>
@@ -34,6 +35,7 @@ namespace core::audio
 
         void stopAll();
         void update();
+        void updateFilters(const glm::vec3& listenerPos, float deltaTime);
 
         size_t getActiveCount() const { return activeHandles.size(); }
         size_t getPoolSize() const { return sourcePool.size(); }

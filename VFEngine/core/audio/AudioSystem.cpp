@@ -4,6 +4,12 @@
 
 namespace core::audio {
 
+    bool AudioSystem::s_efxAvailable = false;
+    LPALGENFILTERS AudioSystem::alGenFilters = nullptr;
+    LPALDELETEFILTERS AudioSystem::alDeleteFilters = nullptr;
+    LPALFILTERI AudioSystem::alFilteri = nullptr;
+    LPALFILTERF AudioSystem::alFilterf = nullptr;
+
     AudioSystem::~AudioSystem() {
         if (initialized) {
             cleanUp();
@@ -41,6 +47,34 @@ namespace core::audio {
         alGetError();
 
         alDistanceModel(AL_INVERSE_DISTANCE_CLAMPED);
+
+        efxSupported = alcIsExtensionPresent(device, "ALC_EXT_EFX") == ALC_TRUE;
+        if (efxSupported)
+        {
+            alGenFilters = reinterpret_cast<LPALGENFILTERS>(alGetProcAddress("alGenFilters"));
+            alDeleteFilters = reinterpret_cast<LPALDELETEFILTERS>(alGetProcAddress("alDeleteFilters"));
+            alFilteri = reinterpret_cast<LPALFILTERI>(alGetProcAddress("alFilteri"));
+            alFilterf = reinterpret_cast<LPALFILTERF>(alGetProcAddress("alFilterf"));
+
+            if (!alGenFilters || !alDeleteFilters || !alFilteri || !alFilterf)
+            {
+                vfLogWarning("OpenAL EFX extension present but failed to load filter functions");
+                efxSupported = false;
+                alGenFilters = nullptr;
+                alDeleteFilters = nullptr;
+                alFilteri = nullptr;
+                alFilterf = nullptr;
+            }
+            else
+            {
+                vfLogInfo("OpenAL EFX extension supported");
+            }
+        }
+        else
+        {
+            vfLogWarning("OpenAL EFX extension not available - distance filtering disabled");
+        }
+        s_efxAvailable = efxSupported;
 
         initialized = true;
 

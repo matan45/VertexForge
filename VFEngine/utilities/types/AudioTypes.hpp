@@ -22,6 +22,11 @@ namespace types
         AudioDistanceModel distanceModel = AudioDistanceModel::InverseDistanceClamped;
         float defaultRolloffFactor = 1.0f;
 
+        bool enableDistanceFilter = true;
+        float defaultFilterStartDistance = 10.0f;
+        float defaultFilterMaxDistance = 100.0f;
+        float defaultFilterIntensity = 1.0f;
+
         static AudioSettings createDefault()
         {
             AudioSettings settings;
@@ -30,6 +35,10 @@ namespace types
             settings.speedOfSound = 343.3f;
             settings.distanceModel = AudioDistanceModel::InverseDistanceClamped;
             settings.defaultRolloffFactor = 1.0f;
+            settings.enableDistanceFilter = true;
+            settings.defaultFilterStartDistance = 10.0f;
+            settings.defaultFilterMaxDistance = 100.0f;
+            settings.defaultFilterIntensity = 1.0f;
             return settings;
         }
     };
