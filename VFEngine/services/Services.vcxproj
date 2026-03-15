@@ -113,6 +113,7 @@
     <ClInclude Include="events\animation\AnimationEventEvents.hpp" />
     <ClInclude Include="events\animation\AnimationPreviewEvents.hpp" />
     <ClInclude Include="events\animation\AnimatorEvents.hpp" />
+    <ClInclude Include="events\audio\AudioBusEvents.hpp" />
     <ClInclude Include="events\audio\AudioEvents.hpp" />
     <ClInclude Include="events\audio\AudioSettingsEvents.hpp" />
     <ClInclude Include="events\editor\EditorModeEvents.hpp" />

@@ -2,6 +2,7 @@
 #include "../../data/EntityHandle.hpp"
 #include <glm/glm.hpp>
 #include <string>
+#include <vector>
 
 namespace services {
 
@@ -30,6 +31,8 @@ namespace services {
         float outerConeAngle = 360.0f;
         float outerConeGain = 0.0f;
         glm::vec3 direction{0.0f, 0.0f, -1.0f};
+
+        std::string busName = "Master";
     };
 
     class IAudioService {
@@ -72,6 +75,19 @@ namespace services {
         virtual bool setPlaybackPosition(AudioHandle handle, float seconds) = 0;
 
         virtual float getDuration(AudioHandle handle) const = 0;
+
+        // === Audio Buses ===
+        virtual void createBus(const std::string& busName, const std::string& parentName = "Master") = 0;
+        virtual void setBusVolume(const std::string& busName, float volume) = 0;
+        virtual void setBusMuted(const std::string& busName, bool muted) = 0;
+        virtual void setBusSoloed(const std::string& busName, bool soloed) = 0;
+        virtual float getBusVolume(const std::string& busName) const = 0;
+        virtual bool isBusMuted(const std::string& busName) const = 0;
+        virtual std::vector<std::string> getBusNames() const = 0;
+        virtual void saveMixSnapshot(const std::string& name) = 0;
+        virtual void loadMixSnapshot(const std::string& name) = 0;
+        virtual void deleteMixSnapshot(const std::string& name) = 0;
+        virtual std::vector<std::string> getSnapshotNames() const = 0;
     };
 
 }

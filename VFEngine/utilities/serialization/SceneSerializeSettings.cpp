@@ -283,6 +283,38 @@ namespace serialization
             {"defaultIntensity", settings.defaultFilterIntensity}
         };
 
+        json busesArray = json::array();
+        for (const auto& bus : settings.busDefinitions)
+        {
+            json busJson;
+            busJson["name"] = bus.name;
+            busJson["parentName"] = bus.parentName;
+            busJson["defaultVolume"] = bus.defaultVolume;
+            busesArray.push_back(busJson);
+        }
+        j["buses"] = busesArray;
+
+        json snapshotsArray = json::array();
+        for (const auto& snapshot : settings.mixSnapshots)
+        {
+            json snapJson;
+            snapJson["name"] = snapshot.name;
+            json volumesObj = json::object();
+            for (const auto& [busName, vol] : snapshot.busVolumes)
+            {
+                volumesObj[busName] = vol;
+            }
+            snapJson["busVolumes"] = volumesObj;
+            json mutesObj = json::object();
+            for (const auto& [busName, muted] : snapshot.busMutes)
+            {
+                mutesObj[busName] = muted;
+            }
+            snapJson["busMutes"] = mutesObj;
+            snapshotsArray.push_back(snapJson);
+        }
+        j["mixSnapshots"] = snapshotsArray;
+
         return j;
     }
 
@@ -319,6 +351,50 @@ namespace serialization
                 settings.defaultFilterMaxDistance = df["defaultMaxDistance"].get<float>();
             if (df.contains("defaultIntensity") && df["defaultIntensity"].is_number())
                 settings.defaultFilterIntensity = df["defaultIntensity"].get<float>();
+        }
+
+        if (j.contains("buses") && j["buses"].is_array())
+        {
+            settings.busDefinitions.clear();
+            for (const auto& busJson : j["buses"])
+            {
+                types::AudioBusDefinition bus;
+                if (busJson.contains("name") && busJson["name"].is_string())
+                    bus.name = busJson["name"].get<std::string>();
+                if (busJson.contains("parentName") && busJson["parentName"].is_string())
+                    bus.parentName = busJson["parentName"].get<std::string>();
+                if (busJson.contains("defaultVolume") && busJson["defaultVolume"].is_number())
+                    bus.defaultVolume = busJson["defaultVolume"].get<float>();
+                settings.busDefinitions.push_back(bus);
+            }
+        }
+
+        if (j.contains("mixSnapshots") && j["mixSnapshots"].is_array())
+        {
+            settings.mixSnapshots.clear();
+            for (const auto& snapJson : j["mixSnapshots"])
+            {
+                types::AudioMixSnapshotDefinition snapshot;
+                if (snapJson.contains("name") && snapJson["name"].is_string())
+                    snapshot.name = snapJson["name"].get<std::string>();
+                if (snapJson.contains("busVolumes") && snapJson["busVolumes"].is_object())
+                {
+                    for (auto it = snapJson["busVolumes"].begin(); it != snapJson["busVolumes"].end(); ++it)
+                    {
+                        if (it.value().is_number())
+                            snapshot.busVolumes[it.key()] = it.value().get<float>();
+                    }
+                }
+                if (snapJson.contains("busMutes") && snapJson["busMutes"].is_object())
+                {
+                    for (auto it = snapJson["busMutes"].begin(); it != snapJson["busMutes"].end(); ++it)
+                    {
+                        if (it.value().is_boolean())
+                            snapshot.busMutes[it.key()] = it.value().get<bool>();
+                    }
+                }
+                settings.mixSnapshots.push_back(snapshot);
+            }
         }
     }
 }

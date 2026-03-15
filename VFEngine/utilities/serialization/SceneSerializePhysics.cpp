@@ -20,6 +20,7 @@ namespace serialization
         j["volume"] = audioSource.volume;
         j["pitch"] = audioSource.pitch;
         j["loop"] = audioSource.loop;
+        j["busName"] = audioSource.busName;
         return j;
     }
 
@@ -40,6 +41,10 @@ namespace serialization
         if (auto it = j.find("loop"); it != j.end() && it->is_boolean())
         {
             audioSource.loop = it->get<bool>();
+        }
+        if (auto it = j.find("busName"); it != j.end() && it->is_string())
+        {
+            audioSource.busName = it->get<std::string>();
         }
         // Reset runtime state
         audioSource.activeHandle = 0;
@@ -66,6 +71,7 @@ namespace serialization
         j["outerConeAngle"] = audioSource.outerConeAngle;
         j["outerConeGain"] = audioSource.outerConeGain;
         j["showDebugCone"] = audioSource.showDebugCone;
+        j["busName"] = audioSource.busName;
         return j;
     }
 
@@ -130,6 +136,10 @@ namespace serialization
         if (auto it = j.find("showDebugCone"); it != j.end() && it->is_boolean())
         {
             audioSource.showDebugCone = it->get<bool>();
+        }
+        if (auto it = j.find("busName"); it != j.end() && it->is_string())
+        {
+            audioSource.busName = it->get<std::string>();
         }
         // Reset runtime state
         audioSource.activeHandle = 0;

@@ -15,6 +15,7 @@ namespace windows
         windowFlags = window_flags;
 
         menuBar.setWindows(&iblWindow, &editorCameraWindow, &cullingStatsWindow, &importDialog, &physicsConfigWindow, &audioConfigWindow, &renderConfigWindow);
+        menuBar.setAudioMixerWindow(&audioMixerWindow);
         menuBar.setProjectSettingsWindow(&projectSettingsWindow);
         menuBar.setTerrainCreationWindow(&terrainCreationWindow);
         menuBar.setPostProcessConfigWindow(&postProcessConfigWindow);
@@ -88,6 +89,7 @@ namespace windows
             cullingStatsWindow.draw();
             physicsConfigWindow.draw();
             audioConfigWindow.draw();
+            audioMixerWindow.draw();
             renderConfigWindow.draw();
             postProcessConfigWindow.draw();
             projectSettingsWindow.draw();

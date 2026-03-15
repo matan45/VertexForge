@@ -5,6 +5,7 @@
 #include "import/ImportModalDialog.hpp"
 #include "config/PhysicsConfigWindow.hpp"
 #include "config/AudioConfigWindow.hpp"
+#include "audio/AudioMixerWindow.hpp"
 #include "config/RenderConfigWindow.hpp"
 #include "config/ProjectSettingsWindow.hpp"
 #include "terrain/TerrainCreationWindow.hpp"
@@ -187,6 +188,13 @@ namespace windows
                 if (audioConfigWindow)
                 {
                     audioConfigWindow->show();
+                }
+            }
+            else if (ImGui::MenuItem("Audio Mixer"))
+            {
+                if (audioMixerWindow)
+                {
+                    audioMixerWindow->show();
                 }
             }
             else if (ImGui::MenuItem("Render Config"))

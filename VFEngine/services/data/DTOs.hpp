@@ -167,6 +167,7 @@ namespace services
         float volume = 1.0f;
         float pitch = 1.0f;
         bool loop = false;
+        std::string busName = "Music";
     };
 
     struct AudioSource3DData
@@ -188,6 +189,7 @@ namespace services
         float outerConeAngle = 360.0f;
         float outerConeGain = 0.0f;
         bool showDebugCone = false;
+        std::string busName = "SFX";
     };
 
     struct ColliderComponentData

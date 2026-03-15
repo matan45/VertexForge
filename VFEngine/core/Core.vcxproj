@@ -167,6 +167,7 @@
     <ClInclude Include="adapters\vfx\VFXPreviewAdapter.hpp" />
     <ClInclude Include="adapters\vfx\VFXRuntimeAdapter.hpp" />
     <ClInclude Include="audio\AudioBufferManager.hpp" />
+    <ClInclude Include="audio\AudioBusManager.hpp" />
     <ClInclude Include="audio\AudioController.hpp" />
     <ClInclude Include="audio\AudioListener.hpp" />
     <ClInclude Include="audio\AudioSceneUpdater.hpp" />
@@ -269,6 +270,7 @@
     <ClCompile Include="adapters\vfx\VFXPreviewAdapter.cpp" />
     <ClCompile Include="adapters\vfx\VFXRuntimeAdapter.cpp" />
     <ClCompile Include="audio\AudioBufferManager.cpp" />
+    <ClCompile Include="audio\AudioBusManager.cpp" />
     <ClCompile Include="audio\AudioController.cpp" />
     <ClCompile Include="audio\AudioListener.cpp" />
     <ClCompile Include="audio\AudioSceneUpdater.cpp" />

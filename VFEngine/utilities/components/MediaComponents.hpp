@@ -78,6 +78,8 @@ namespace components
         float pitch = 1.0f;
         bool loop = false;
 
+        std::string busName = "Music";
+
         uint64_t activeHandle = 0;
         bool isPlaying = false;
     };
@@ -101,6 +103,8 @@ namespace components
         float outerConeAngle = 360.0f;
         float outerConeGain = 0.0f;
         bool showDebugCone = false;
+
+        std::string busName = "SFX";
 
         uint64_t activeHandle = 0;
         bool isPlaying = false;

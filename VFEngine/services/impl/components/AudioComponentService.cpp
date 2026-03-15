@@ -78,6 +78,7 @@ namespace services {
         data.volume = comp.volume;
         data.pitch = comp.pitch;
         data.loop = comp.loop;
+        data.busName = comp.busName;
         return data;
     }
 
@@ -101,6 +102,7 @@ namespace services {
         comp.volume = audioData.volume;
         comp.pitch = audioData.pitch;
         comp.loop = audioData.loop;
+        comp.busName = audioData.busName;
         if (!audioData.audioFilePath.empty()) {
             lifecycle.acquire(audioData.audioFilePath, resource::AssetType::Audio);
         }
@@ -183,6 +185,7 @@ namespace services {
         data.outerConeAngle = comp.outerConeAngle;
         data.outerConeGain = comp.outerConeGain;
         data.showDebugCone = comp.showDebugCone;
+        data.busName = comp.busName;
         return data;
     }
 
@@ -217,6 +220,7 @@ namespace services {
         comp.outerConeAngle = audioData.outerConeAngle;
         comp.outerConeGain = audioData.outerConeGain;
         comp.showDebugCone = audioData.showDebugCone;
+        comp.busName = audioData.busName;
         if (!audioData.audioFilePath.empty()) {
             lifecycle.acquire(audioData.audioFilePath, resource::AssetType::Audio);
         }

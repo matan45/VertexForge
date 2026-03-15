@@ -153,6 +153,7 @@
     <ClInclude Include="windows\animation\AnimatorNodeGraph.hpp" />
     <ClInclude Include="windows\animation\AnimatorPropertiesPanel.hpp" />
     <ClInclude Include="windows\animation\ColliderOverlayRenderer.hpp" />
+    <ClInclude Include="windows\audio\AudioMixerWindow.hpp" />
     <ClInclude Include="windows\config\AudioConfigWindow.hpp" />
     <ClInclude Include="windows\config\CullingStatsWindow.hpp" />
     <ClInclude Include="windows\config\EditorCameraWindow.hpp" />
@@ -298,6 +299,7 @@
     <ClCompile Include="windows\animation\AnimatorNodeGraph.cpp" />
     <ClCompile Include="windows\animation\AnimatorPropertiesPanel.cpp" />
     <ClCompile Include="windows\animation\ColliderOverlayRenderer.cpp" />
+    <ClCompile Include="windows\audio\AudioMixerWindow.cpp" />
     <ClCompile Include="windows\config\AudioConfigWindow.cpp" />
     <ClCompile Include="windows\config\CullingStatsWindow.cpp" />
     <ClCompile Include="windows\config\EditorCameraWindow.cpp" />

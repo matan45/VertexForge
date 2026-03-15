@@ -5,6 +5,7 @@
 #include "NativeHelpers.hpp"
 #include "../../../services/events/EventDispatcher.hpp"
 #include "../../../services/events/audio/AudioEvents.hpp"
+#include "../../../services/events/audio/AudioBusEvents.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
 
@@ -73,6 +74,7 @@ namespace core::api
                     cmd.params.pitch = audioComp.pitch;
                     cmd.params.loop = audioComp.loop;
                     cmd.params.is3D = false;
+                    cmd.params.busName = audioComp.busName;
                     auto handle = dispatcher.execute(cmd);
 
                     audioComp.activeHandle = handle.id;
@@ -138,6 +140,7 @@ namespace core::api
                         cmd.params.direction = glm::normalize(forward);
                     }
 
+                    cmd.params.busName = audioComp.busName;
                     auto handle = dispatcher.execute(cmd);
 
                     audioComp.activeHandle = handle.id;
@@ -337,6 +340,73 @@ namespace core::api
                     }, value::Value(false));
                 });
         }
+
+        void registerBusFunctions(services::ScriptInterpreter* interpreter,
+                                  events::EventDispatcher& dispatcher)
+        {
+            interpreter->registerNativeFunction("_native_audio_setBusVolume",
+                [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+                {
+                    if (args.size() < 2) return value::Value(std::monostate{});
+                    std::string busName = extractString(args[0]);
+                    float volume = extractFloat(args[1]);
+
+                    events::audio::SetBusVolumeCommand cmd;
+                    cmd.busName = busName;
+                    cmd.volume = volume;
+                    dispatcher.execute(cmd);
+                    return value::Value(std::monostate{});
+                });
+
+            interpreter->registerNativeFunction("_native_audio_getBusVolume",
+                [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+                {
+                    if (args.empty()) return value::Value(1.0f);
+                    std::string busName = extractString(args[0]);
+
+                    events::audio::GetBusVolumeQuery query;
+                    query.busName = busName;
+                    return value::Value(dispatcher.query(query));
+                });
+
+            interpreter->registerNativeFunction("_native_audio_muteBus",
+                [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+                {
+                    if (args.size() < 2) return value::Value(std::monostate{});
+                    std::string busName = extractString(args[0]);
+                    bool muted = extractBool(args[1]);
+
+                    events::audio::SetBusMutedCommand cmd;
+                    cmd.busName = busName;
+                    cmd.muted = muted;
+                    dispatcher.execute(cmd);
+                    return value::Value(std::monostate{});
+                });
+
+            interpreter->registerNativeFunction("_native_audio_saveSnapshot",
+                [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+                {
+                    if (args.empty()) return value::Value(std::monostate{});
+                    std::string name = extractString(args[0]);
+
+                    events::audio::SaveMixSnapshotCommand cmd;
+                    cmd.name = name;
+                    dispatcher.execute(cmd);
+                    return value::Value(std::monostate{});
+                });
+
+            interpreter->registerNativeFunction("_native_audio_loadSnapshot",
+                [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+                {
+                    if (args.empty()) return value::Value(std::monostate{});
+                    std::string name = extractString(args[0]);
+
+                    events::audio::LoadMixSnapshotCommand cmd;
+                    cmd.name = name;
+                    dispatcher.execute(cmd);
+                    return value::Value(std::monostate{});
+                });
+        }
     }
 
     void AudioAPI::registerAPI(services::ScriptInterpreter* interpreter)
@@ -344,5 +414,6 @@ namespace core::api
         auto& dispatcher = events::EventDispatcher::instance();
         registerPlaybackFunctions(interpreter, dispatcher);
         registerPropertyFunctions(interpreter, dispatcher);
+        registerBusFunctions(interpreter, dispatcher);
     }
 }

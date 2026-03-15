@@ -11,6 +11,7 @@ namespace windows
     class ImportModalDialog;
     class PhysicsConfigWindow;
     class AudioConfigWindow;
+    class AudioMixerWindow;
     class RenderConfigWindow;
     class ProjectSettingsWindow;
     class TerrainCreationWindow;
@@ -38,6 +39,7 @@ namespace windows
         ImportModalDialog* importDialog = nullptr;
         PhysicsConfigWindow* physicsConfigWindow = nullptr;
         AudioConfigWindow* audioConfigWindow = nullptr;
+        AudioMixerWindow* audioMixerWindow = nullptr;
         RenderConfigWindow* renderConfigWindow = nullptr;
         ProjectSettingsWindow* projectSettingsWindow = nullptr;
         TerrainCreationWindow* terrainCreationWindow = nullptr;
@@ -128,6 +130,11 @@ namespace windows
         void setLightStreamingDebugWindow(LightStreamingDebugWindow* window)
         {
             lightStreamingDebugWindow = window;
+        }
+
+        void setAudioMixerWindow(AudioMixerWindow* window)
+        {
+            audioMixerWindow = window;
         }
 
     private:

@@ -1,6 +1,7 @@
 #pragma once
 #include <glm/glm.hpp>
 #include <string>
+#include <vector>
 #include <cstdint>
 #include "types/AudioTypes.hpp"
 
@@ -29,6 +30,8 @@ namespace services {
         float outerConeAngle = 360.0f;
         float outerConeGain = 0.0f;
         glm::vec3 direction{0.0f, 0.0f, -1.0f};
+
+        std::string busName = "Master";
     };
 
     class IAudioProvider {
@@ -66,6 +69,19 @@ namespace services {
         // === Audio Settings ===
         virtual void applySettings(const types::AudioSettings& settings) = 0;
         virtual types::AudioSettings getCurrentSettings() const = 0;
+
+        // === Audio Buses ===
+        virtual void createBus(const std::string& busName, const std::string& parentName = "Master") = 0;
+        virtual void setBusVolume(const std::string& busName, float volume) = 0;
+        virtual void setBusMuted(const std::string& busName, bool muted) = 0;
+        virtual void setBusSoloed(const std::string& busName, bool soloed) = 0;
+        virtual float getBusVolume(const std::string& busName) const = 0;
+        virtual bool isBusMuted(const std::string& busName) const = 0;
+        virtual std::vector<std::string> getBusNames() const = 0;
+        virtual void saveMixSnapshot(const std::string& name) = 0;
+        virtual void loadMixSnapshot(const std::string& name) = 0;
+        virtual void deleteMixSnapshot(const std::string& name) = 0;
+        virtual std::vector<std::string> getSnapshotNames() const = 0;
     };
 
 }

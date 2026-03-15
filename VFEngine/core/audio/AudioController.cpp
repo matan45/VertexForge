@@ -9,6 +9,7 @@ namespace core::audio
           , sourceManager(std::make_unique<AudioSourceManager>(0))
           , listener(std::make_unique<AudioListener>())
           , streamingManager(std::make_unique<StreamingAudioManager>())
+          , busManager(std::make_unique<AudioBusManager>())
     {
     }
 
@@ -35,6 +36,23 @@ namespace core::audio
 
         sourceManager->initPool(32);
 
+        busManager->init([this](AudioHandle handle, float effectiveVolume)
+        {
+            if (StreamingAudioManager::isStreamingHandle(handle))
+            {
+                streamingManager->setVolume(handle, effectiveVolume);
+            }
+            else
+            {
+                AudioSource* source = sourceManager->getSource(handle);
+                if (source)
+                {
+                    source->setVolume(effectiveVolume);
+                }
+            }
+        });
+        busManager->createDefaultBuses();
+
         initialized = true;
         lastUpdateTime = std::chrono::steady_clock::now();
         return true;
@@ -49,6 +67,7 @@ namespace core::audio
 
         stopAll();
 
+        busManager->cleanUp();
         sourceManager.reset();
         streamingManager.reset();
         bufferManager.reset();
@@ -121,6 +140,8 @@ namespace core::audio
         config.direction = params.direction;
         source->applyConfig(config);
 
+        busManager->assignSource(handle, params.busName, params.volume);
+
         source->play();
 
         return handle;
@@ -157,12 +178,21 @@ namespace core::audio
         config.outerConeGain = params.outerConeGain;
         config.direction = params.direction;
 
-        return streamingManager->playStreaming(path, config);
+        AudioHandle handle = streamingManager->playStreaming(path, config);
+
+        if (handle != InvalidAudioHandle)
+        {
+            busManager->assignSource(handle, params.busName, params.volume);
+        }
+
+        return handle;
     }
 
     void AudioController::stopSound(AudioHandle handle)
     {
         if (!initialized) return;
+
+        busManager->removeSource(handle);
 
         if (StreamingAudioManager::isStreamingHandle(handle))
         {
@@ -233,19 +263,7 @@ namespace core::audio
     void AudioController::setVolume(AudioHandle handle, float volume)
     {
         if (!initialized) return;
-
-        if (StreamingAudioManager::isStreamingHandle(handle))
-        {
-            streamingManager->setVolume(handle, volume);
-        }
-        else
-        {
-            AudioSource* source = sourceManager->getSource(handle);
-            if (source)
-            {
-                source->setVolume(volume);
-            }
-        }
+        busManager->setSourceUserVolume(handle, volume);
     }
 
     void AudioController::setPitch(AudioHandle handle, float pitch)
@@ -331,12 +349,88 @@ namespace core::audio
     {
         if (!initialized) return;
         audioSystem->applySettings(settings);
+
+        if (!settings.busDefinitions.empty())
+        {
+            busManager->loadBusDefinitions(settings.busDefinitions);
+        }
+
+        busManager->setBusVolume("Master", settings.masterVolume);
+        busManager->loadSnapshots(settings.mixSnapshots);
     }
 
     types::AudioSettings AudioController::getCurrentSettings() const
     {
         if (!initialized) return types::AudioSettings::createDefault();
         return audioSystem->getCurrentSettings();
+    }
+
+    // === Audio Buses ===
+
+    void AudioController::createBus(const std::string& busName, const std::string& parentName)
+    {
+        if (!initialized) return;
+        busManager->createBus(busName, parentName);
+    }
+
+    void AudioController::setBusVolume(const std::string& busName, float volume)
+    {
+        if (!initialized) return;
+        busManager->setBusVolume(busName, volume);
+    }
+
+    void AudioController::setBusMuted(const std::string& busName, bool muted)
+    {
+        if (!initialized) return;
+        busManager->setBusMuted(busName, muted);
+    }
+
+    void AudioController::setBusSoloed(const std::string& busName, bool soloed)
+    {
+        if (!initialized) return;
+        busManager->setBusSoloed(busName, soloed);
+    }
+
+    float AudioController::getBusVolume(const std::string& busName) const
+    {
+        if (!initialized) return 1.0f;
+        return busManager->getBusVolume(busName);
+    }
+
+    bool AudioController::isBusMuted(const std::string& busName) const
+    {
+        if (!initialized) return false;
+        return busManager->isBusMuted(busName);
+    }
+
+    std::vector<std::string> AudioController::getBusNames() const
+    {
+        if (!initialized) return {};
+        return busManager->getBusNames();
+    }
+
+    void AudioController::saveMixSnapshot(const std::string& name)
+    {
+        if (!initialized) return;
+        busManager->saveSnapshot(name);
+    }
+
+    void AudioController::loadMixSnapshot(const std::string& name)
+    {
+        if (!initialized) return;
+        busManager->loadSnapshot(name);
+    }
+
+    void AudioController::deleteMixSnapshot(const std::string& name)
+    {
+        if (!initialized) return;
+        busManager->deleteSnapshot(name);
+    }
+
+    std::vector<std::string> AudioController::getSnapshotNames() const
+    {
+        if (!initialized) return {};
+        return busManager->getSnapshotNames();
     }
 
     void AudioController::unloadAudioBuffer(const std::string& path)

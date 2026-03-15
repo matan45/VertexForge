@@ -1,5 +1,8 @@
 #pragma once
 #include <cstdint>
+#include <string>
+#include <vector>
+#include <map>
 
 namespace types
 {
@@ -14,6 +17,20 @@ namespace types
         ExponentDistanceClamped = 6
     };
 
+    struct AudioBusDefinition
+    {
+        std::string name;
+        std::string parentName = "Master";
+        float defaultVolume = 1.0f;
+    };
+
+    struct AudioMixSnapshotDefinition
+    {
+        std::string name;
+        std::map<std::string, float> busVolumes;
+        std::map<std::string, bool> busMutes;
+    };
+
     struct AudioSettings
     {
         float masterVolume = 1.0f;
@@ -26,6 +43,9 @@ namespace types
         float defaultFilterStartDistance = 10.0f;
         float defaultFilterMaxDistance = 100.0f;
         float defaultFilterIntensity = 1.0f;
+
+        std::vector<AudioBusDefinition> busDefinitions;
+        std::vector<AudioMixSnapshotDefinition> mixSnapshots;
 
         static AudioSettings createDefault()
         {

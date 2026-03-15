@@ -53,5 +53,18 @@ namespace core
         // === Audio Settings ===
         void applySettings(const types::AudioSettings& settings) override;
         types::AudioSettings getCurrentSettings() const override;
+
+        // === Audio Buses ===
+        void createBus(const std::string& busName, const std::string& parentName = "Master") override;
+        void setBusVolume(const std::string& busName, float volume) override;
+        void setBusMuted(const std::string& busName, bool muted) override;
+        void setBusSoloed(const std::string& busName, bool soloed) override;
+        float getBusVolume(const std::string& busName) const override;
+        bool isBusMuted(const std::string& busName) const override;
+        std::vector<std::string> getBusNames() const override;
+        void saveMixSnapshot(const std::string& name) override;
+        void loadMixSnapshot(const std::string& name) override;
+        void deleteMixSnapshot(const std::string& name) override;
+        std::vector<std::string> getSnapshotNames() const override;
     };
 }

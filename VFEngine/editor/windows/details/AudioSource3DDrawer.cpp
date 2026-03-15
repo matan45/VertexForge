@@ -4,6 +4,7 @@
 #include "events/EventDispatcher.hpp"
 #include "events/project/SceneEvents.hpp"
 #include "events/audio/AudioEvents.hpp"
+#include "events/audio/AudioBusEvents.hpp"
 #include "nfd/FileDialog.hpp"
 #include <imgui.h>
 #include <fstream>
@@ -184,6 +185,32 @@ namespace windows::details
         if (ImGui::Checkbox("Loop##3D", &audioData.loop))
         {
             changed = true;
+        }
+
+        ImGui::Spacing();
+
+        auto& busDispatcher = events::EventDispatcher::instance();
+        events::audio::GetBusNamesQuery busNamesQuery;
+        auto busNames = busDispatcher.query(busNamesQuery);
+        if (!busNames.empty())
+        {
+            if (ImGui::BeginCombo("Bus##3D", audioData.busName.c_str()))
+            {
+                for (const auto& name : busNames)
+                {
+                    bool isSelected = (audioData.busName == name);
+                    if (ImGui::Selectable(name.c_str(), isSelected))
+                    {
+                        audioData.busName = name;
+                        changed = true;
+                    }
+                    if (isSelected)
+                    {
+                        ImGui::SetItemDefaultFocus();
+                    }
+                }
+                ImGui::EndCombo();
+            }
         }
 
         return changed;
@@ -394,6 +421,7 @@ namespace windows::details
                 playCmd.params.innerConeAngle = audioData.innerConeAngle;
                 playCmd.params.outerConeAngle = audioData.outerConeAngle;
                 playCmd.params.outerConeGain = audioData.outerConeGain;
+                playCmd.params.busName = audioData.busName;
 
                 if (transformOpt.has_value())
                 {
