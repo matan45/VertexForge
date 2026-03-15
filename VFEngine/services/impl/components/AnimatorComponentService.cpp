@@ -269,6 +269,31 @@ namespace services
                 animatorProvider->setLODConfig(config);
             });
 
+        // Layer management
+        dispatcher.registerCommandHandler<events::animator::SetAnimationLayerWeightCommand>(
+            [this](const events::animator::SetAnimationLayerWeightCommand& cmd)
+            {
+                animatorProvider->setLayerWeight(cmd.entity, cmd.layerIndex, cmd.weight);
+            });
+
+        dispatcher.registerQueryHandler<events::animator::GetAnimationLayerWeightQuery>(
+            [this](const events::animator::GetAnimationLayerWeightQuery& query)
+            {
+                return animatorProvider->getLayerWeight(query.entity, query.layerIndex);
+            });
+
+        dispatcher.registerQueryHandler<events::animator::GetAnimationLayerCountQuery>(
+            [this](const events::animator::GetAnimationLayerCountQuery& query)
+            {
+                return animatorProvider->getLayerCount(query.entity);
+            });
+
+        dispatcher.registerQueryHandler<events::animator::GetAnimationLayerNameQuery>(
+            [this](const events::animator::GetAnimationLayerNameQuery& query)
+            {
+                return animatorProvider->getLayerName(query.entity, query.layerIndex);
+            });
+
         dispatcher.subscribe<::events::scene::SceneLoadedNotification>(
             [this](const ::events::scene::SceneLoadedNotification&)
             {

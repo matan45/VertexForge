@@ -1,6 +1,7 @@
 #pragma once
 
 #include "AnimatorStateMachine.hpp"
+#include "AnimationLayerStack.hpp"
 #include "AnimationLOD.hpp"
 #include "AnimationDataCache.hpp"
 #include "SocketAttachmentUpdater.hpp"
@@ -26,7 +27,7 @@ namespace animation
     private:
         AnimationDataCache dataCache;
 
-        std::unordered_map<entt::entity, std::unique_ptr<AnimatorStateMachine>> animators;
+        std::unordered_map<entt::entity, std::unique_ptr<AnimationLayerStack>> animators;
 
         events::SubscriptionToken meshDataChangedToken;
         events::SubscriptionToken editorModeChangedToken;
@@ -81,6 +82,9 @@ namespace animation
         void destroyEntityAnimator(entt::entity entity);
         bool hasAnimator(entt::entity entity) const;
 
+        AnimationLayerStack* getLayerStack(entt::entity entity);
+        const AnimationLayerStack* getLayerStack(entt::entity entity) const;
+
         AnimatorStateMachine* getAnimator(entt::entity entity);
         const AnimatorStateMachine* getAnimator(entt::entity entity) const;
 
@@ -105,7 +109,7 @@ namespace animation
         const std::vector<glm::mat4>* getCachedSocketTransforms(entt::entity entity) const;
 
     private:
-        using ActiveAnimatorList = std::vector<std::pair<entt::entity, AnimatorStateMachine*>>;
+        using ActiveAnimatorList = std::vector<std::pair<entt::entity, AnimationLayerStack*>>;
 
         RuntimeAnimatorSystem() = default;
         ~RuntimeAnimatorSystem() = default;
@@ -115,9 +119,9 @@ namespace animation
         ActiveAnimatorList evaluateAnimations(float deltaTime);
         void processPendingStreamingInits();
         bool isEntityInFrustum(entt::entity entity, entt::registry& registry) const;
-        void publishAnimationEvents(entt::entity entity, AnimatorStateMachine* anim);
-        void applyRootMotion(entt::entity entity, AnimatorStateMachine* anim, entt::registry& registry);
-        void applyIKPostProcess(entt::entity entity, AnimatorStateMachine* anim, entt::registry& registry);
+        void publishAnimationEvents(entt::entity entity, AnimationLayerStack* anim);
+        void applyRootMotion(entt::entity entity, AnimationLayerStack* anim, entt::registry& registry);
+        void applyIKPostProcess(entt::entity entity, AnimationLayerStack* anim, entt::registry& registry);
 
         uint64_t computeInstanceGroupKey(const std::string& animatorPath, uint32_t stateId,
                                           uint8_t lodLevel, float normalizedTime) const;

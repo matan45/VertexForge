@@ -3,6 +3,8 @@
 #include "imguiHandler/ImguiWindow.hpp"
 #include "AnimatorNodeGraph.hpp"
 #include "AnimatorPropertiesPanel.hpp"
+#include "AnimatorLayerPanel.hpp"
+#include "BoneMaskEditorPanel.hpp"
 #include "animator/AnimatorTypes.hpp"
 #include "providers/PreviewInstanceId.hpp"
 #include <string>
@@ -34,8 +36,12 @@ namespace windows
 
         services::PreviewInstanceId instanceId;
 
+        uint32_t selectedLayerIndex = 0;
+
         animation::AnimatorNodeGraph nodeGraph;
         animation::AnimatorPropertiesPanel propertiesPanel;
+        animation::AnimatorLayerPanel layerPanel;
+        animation::BoneMaskEditorPanel boneMaskPanel;
     public:
         explicit AnimatorEditorWindow(const std::string& path);
         ~AnimatorEditorWindow() override;
@@ -52,5 +58,8 @@ namespace windows
 
         void drawMenuBar();
         void drawToolbar();
+
+        animator::AnimatorGraph* getActiveGraph();
+        void ensureLayersInitialized();
     };
 }

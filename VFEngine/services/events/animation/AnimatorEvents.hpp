@@ -132,4 +132,33 @@ namespace services::events::animator
         ::services::EntityHandle entity;
         std::string_view getName() const override { return "GetEntityRootMotion"; }
     };
+
+    // Layer management events
+    struct SetAnimationLayerWeightCommand : ::events::ICommand<void>
+    {
+        ::services::EntityHandle entity;
+        uint32_t layerIndex;
+        float weight;
+        std::string_view getName() const override { return "SetAnimationLayerWeight"; }
+    };
+
+    struct GetAnimationLayerWeightQuery : ::events::IQuery<float>
+    {
+        ::services::EntityHandle entity;
+        uint32_t layerIndex;
+        std::string_view getName() const override { return "GetAnimationLayerWeight"; }
+    };
+
+    struct GetAnimationLayerCountQuery : ::events::IQuery<uint32_t>
+    {
+        ::services::EntityHandle entity;
+        std::string_view getName() const override { return "GetAnimationLayerCount"; }
+    };
+
+    struct GetAnimationLayerNameQuery : ::events::IQuery<std::string>
+    {
+        ::services::EntityHandle entity;
+        uint32_t layerIndex;
+        std::string_view getName() const override { return "GetAnimationLayerName"; }
+    };
 }

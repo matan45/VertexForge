@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <glm/glm.hpp>
 #include "AnimationEventTypes.hpp"
+#include "AnimationLayerTypes.hpp"
 #include "BlendTreeTypes.hpp"
 
 namespace animator
@@ -99,11 +100,26 @@ namespace animator
         std::vector<const AnimatorTransition*> getTransitionsFromState(uint32_t stateId) const;
     };
 
+    struct AnimationLayerData
+    {
+        std::string name = "Base Layer";
+        float weight = 1.0f;
+        LayerBlendMode blendMode = LayerBlendMode::Override;
+        LayerSourceMode sourceMode = LayerSourceMode::StateMachine;
+        std::string boneMaskName;
+        std::string directClipPath;
+        bool directClipLoop = true;
+        float directClipSpeed = 1.0f;
+        AnimatorGraph graph;
+    };
+
     struct AnimatorData
     {
         std::string version = "1.0";
         std::string name;
         AnimatorGraph graph;
+        std::vector<AnimationLayerData> layers;
+        std::vector<BoneMaskDefinition> boneMasks;
     };
 
     struct AnimatorRuntimeParameters

@@ -10,10 +10,12 @@ namespace animation
     void AnimatorStateMachine::initialize(const animator::AnimatorData& data, const resource::SkeletonData* skeleton, AnimationLoadCallback loadCallback)
     {
         animatorData = &data;
+        activeGraph = &data.graph;
         skeletonData = skeleton;
         animationLoadCallback = std::move(loadCallback);
 
-        parameters.initializeFromGraph(data.graph);
+        ownedParameters.initializeFromGraph(data.graph);
+        parameters = &ownedParameters;
 
         state = AnimatorStateMachineState{};
         state.currentStateId = data.graph.defaultStateId;
@@ -29,9 +31,41 @@ namespace animation
         evaluateCurrentPose();
     }
 
+    void AnimatorStateMachine::initializeFromGraph(const animator::AnimatorGraph& graph, const resource::SkeletonData* skeleton,
+                                                    AnimationLoadCallback loadCallback, animator::AnimatorRuntimeParameters* externalParams)
+    {
+        animatorData = nullptr;
+        activeGraph = &graph;
+        skeletonData = skeleton;
+        animationLoadCallback = std::move(loadCallback);
+
+        if (externalParams)
+        {
+            parameters = externalParams;
+        }
+        else
+        {
+            ownedParameters.initializeFromGraph(graph);
+            parameters = &ownedParameters;
+        }
+
+        state = AnimatorStateMachineState{};
+        state.currentStateId = graph.defaultStateId;
+        state.isPlaying = true;
+
+        loadedAnimations.clear();
+        loadedBlendTreeStates.clear();
+
+        loadAnimationForState(state.currentStateId);
+
+        initialized = true;
+
+        evaluateCurrentPose();
+    }
+
     void AnimatorStateMachine::update(float deltaTime)
     {
-        if (!initialized || !animatorData || !state.isPlaying)
+        if (!initialized || !activeGraph || !state.isPlaying)
         {
             return;
         }
@@ -94,7 +128,7 @@ namespace animation
     {
         firedEventsThisFrame.clear();
 
-        if (!animatorData)
+        if (!activeGraph)
             return;
 
         const animator::AnimatorState* currentState = getCurrentAnimatorState();
@@ -175,10 +209,10 @@ namespace animation
 
     void AnimatorStateMachine::evaluateTransitions()
     {
-        if (!animatorData)
+        if (!activeGraph)
             return;
 
-        auto transitions = animatorData->graph.getTransitionsFromState(state.currentStateId);
+        auto transitions = activeGraph->getTransitionsFromState(state.currentStateId);
 
         for (const animator::AnimatorTransition* transition : transitions)
         {
@@ -203,7 +237,7 @@ namespace animation
                 }
             }
 
-            if (animator::evaluateAllConditions(transition->conditions, parameters))
+            if (animator::evaluateAllConditions(transition->conditions, *parameters))
             {
                 if (transition->hasExitTime)
                 {
@@ -214,10 +248,10 @@ namespace animation
 
                 for (const auto& condition : transition->conditions)
                 {
-                    const auto* param = animatorData->graph.findParameter(condition.parameterName);
+                    const auto* param = activeGraph->findParameter(condition.parameterName);
                     if (param && param->type == animator::AnimatorParameterType::Trigger)
                     {
-                        parameters.resetTrigger(condition.parameterName);
+                        parameters->resetTrigger(condition.parameterName);
                     }
                 }
                 break;
@@ -281,7 +315,7 @@ namespace animation
     std::vector<glm::mat4> AnimatorStateMachine::evaluateStatePose(
         uint32_t stateId, float time, AnimationEvaluator& evaluator, glm::vec3* outRootPos) const
     {
-        const animator::AnimatorState* animState = animatorData->graph.findStateById(stateId);
+        const animator::AnimatorState* animState = activeGraph->findStateById(stateId);
 
         if (animState && hasBlendTree(stateId))
         {
@@ -324,10 +358,10 @@ namespace animation
 
     void AnimatorStateMachine::evaluateCurrentPose()
     {
-        if (!animatorData || !skeletonData)
+        if (!activeGraph || !skeletonData)
         {
-            vfLogWarning("[AnimatorStateMachine] Cannot evaluate pose: animatorData={}, skeletonData={}",
-                         animatorData != nullptr, skeletonData != nullptr);
+            vfLogWarning("[AnimatorStateMachine] Cannot evaluate pose: activeGraph={}, skeletonData={}",
+                         activeGraph != nullptr, skeletonData != nullptr);
             currentBoneMatrices.clear();
             return;
         }
@@ -380,12 +414,12 @@ namespace animation
 
     bool AnimatorStateMachine::loadAnimationForState(uint32_t stateId)
     {
-        if (!animatorData || !animationLoadCallback)
+        if (!activeGraph || !animationLoadCallback)
         {
             return false;
         }
 
-        const animator::AnimatorState* animState = animatorData->graph.findStateById(stateId);
+        const animator::AnimatorState* animState = activeGraph->findStateById(stateId);
         if (!animState)
         {
             loadedAnimations[stateId] = nullptr;
@@ -435,9 +469,9 @@ namespace animation
 
     float AnimatorStateMachine::getAnimationDuration(uint32_t stateId) const
     {
-        if (animatorData)
+        if (activeGraph)
         {
-            const animator::AnimatorState* animState = animatorData->graph.findStateById(stateId);
+            const animator::AnimatorState* animState = activeGraph->findStateById(stateId);
             if (animState && animState->blendTree.has_value() && !animState->blendTree->entries.empty())
             {
                 for (const auto& entry : animState->blendTree->entries)
@@ -466,9 +500,9 @@ namespace animation
 
     bool AnimatorStateMachine::hasBlendTree(uint32_t stateId) const
     {
-        if (!animatorData)
+        if (!activeGraph)
             return false;
-        const animator::AnimatorState* animState = animatorData->graph.findStateById(stateId);
+        const animator::AnimatorState* animState = activeGraph->findStateById(stateId);
         return animState && animState->blendTree.has_value();
     }
 
@@ -479,7 +513,7 @@ namespace animation
             return {};
 
         return blendTreeEvaluator.evaluate(
-            animState.blendTree.value(), parameters, *skeletonData, time, animationLoadCallback);
+            animState.blendTree.value(), *parameters, *skeletonData, time, animationLoadCallback);
     }
 
     std::vector<glm::mat4> AnimatorStateMachine::evaluateBlendTreePose(
@@ -489,6 +523,6 @@ namespace animation
             return {};
 
         return blendTreeEvaluator.evaluate(
-            animState.blendTree.value(), parameters, *skeletonData, time, animationLoadCallback, outRootPosition);
+            animState.blendTree.value(), *parameters, *skeletonData, time, animationLoadCallback, outRootPosition);
     }
 }

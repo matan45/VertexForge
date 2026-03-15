@@ -9,7 +9,7 @@
 
 namespace animation
 {
-    class AnimatorStateMachine;
+    class AnimationLayerStack;
 
     class AnimationDataCache
     {
@@ -26,6 +26,6 @@ namespace animation
         void clearSkeletons();
         void clearAll();
 
-        void cleanupUnused(const std::unordered_map<entt::entity, std::unique_ptr<AnimatorStateMachine>>& animators);
+        void cleanupUnused(const std::unordered_map<entt::entity, std::unique_ptr<AnimationLayerStack>>& animators);
     };
 }
