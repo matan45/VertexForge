@@ -22,8 +22,9 @@ namespace windows::animation
             idleState.name = "Idle";
             idleState.loop = true;
             idleState.position = glm::vec2(250.0f, 100.0f);
+            uint32_t idleId = idleState.id;
             newLayer.graph.states.push_back(std::move(idleState));
-            newLayer.graph.defaultStateId = 1;
+            newLayer.graph.defaultStateId = idleId;
 
             animatorData->layers.push_back(std::move(newLayer));
             isDirty = true;

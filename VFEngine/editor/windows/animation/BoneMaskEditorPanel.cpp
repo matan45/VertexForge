@@ -75,16 +75,22 @@ namespace windows::animation
     {
         // Simple list of bone names with add/remove
         char boneBuf[128] = {};
+        std::strncpy(boneBuf, newBoneName.c_str(), sizeof(boneBuf) - 1);
+        boneBuf[sizeof(boneBuf) - 1] = '\0';
         ImGui::SetNextItemWidth(150.0f);
-        ImGui::InputText("##BoneName", boneBuf, sizeof(boneBuf));
-        ImGui::SameLine();
-        if (ImGui::Button("Add Bone") && boneBuf[0] != '\0')
+        if (ImGui::InputText("##BoneName", boneBuf, sizeof(boneBuf)))
         {
-            std::string boneName(boneBuf);
+            newBoneName = boneBuf;
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Add Bone") && !newBoneName.empty())
+        {
+            std::string boneName = newBoneName;
             auto it = std::find(mask.includedBoneNames.begin(), mask.includedBoneNames.end(), boneName);
             if (it == mask.includedBoneNames.end())
             {
                 mask.includedBoneNames.push_back(boneName);
+                newBoneName.clear();
                 isDirty = true;
             }
         }

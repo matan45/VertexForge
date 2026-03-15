@@ -98,20 +98,21 @@ namespace animation
         if (!skeletonData || !animatorData)
             return;
 
-        for (auto& layer : layers)
+        if (skeletonData->bones.size() > animator::MAX_BONE_MASK_SIZE)
         {
-            // Find the bone mask definition by name
+            vfLogWarning("[AnimationLayerStack] Skeleton has {} bones but bone masks support max {}. Bones beyond index {} will be excluded from masks.",
+                         skeletonData->bones.size(), animator::MAX_BONE_MASK_SIZE, animator::MAX_BONE_MASK_SIZE - 1);
+        }
+
+        for (size_t i = 0; i < layers.size(); ++i)
+        {
+            auto& layer = layers[i];
+
+            // Look up mask name directly by index
             std::string maskName;
-            if (animatorData->layers.size() > 0)
+            if (i < animatorData->layers.size())
             {
-                for (size_t i = 0; i < animatorData->layers.size() && i < layers.size(); ++i)
-                {
-                    if (&layers[i] == &layer)
-                    {
-                        maskName = animatorData->layers[i].boneMaskName;
-                        break;
-                    }
-                }
+                maskName = animatorData->layers[i].boneMaskName;
             }
 
             if (maskName.empty())
@@ -143,7 +144,7 @@ namespace animation
             layer.boneMask.reset();
             for (const auto& boneName : maskDef->includedBoneNames)
             {
-                for (size_t boneIdx = 0; boneIdx < skeletonData->bones.size(); ++boneIdx)
+                for (size_t boneIdx = 0; boneIdx < skeletonData->bones.size() && boneIdx < animator::MAX_BONE_MASK_SIZE; ++boneIdx)
                 {
                     if (skeletonData->bones[boneIdx].name == boneName)
                     {
@@ -219,6 +220,8 @@ namespace animation
         if (!initialized)
             return;
 
+        cachedFiredEvents.clear();
+
         for (auto& layer : layers)
         {
             if (layer.weight <= 0.001f)
@@ -255,6 +258,15 @@ namespace animation
                         }
                     }
                 }
+            }
+        }
+
+        for (const auto& layer : layers)
+        {
+            if (layer.stateMachine)
+            {
+                const auto& events = layer.stateMachine->getFiredEvents();
+                cachedFiredEvents.insert(cachedFiredEvents.end(), events.begin(), events.end());
             }
         }
 
@@ -310,6 +322,9 @@ namespace animation
             }
             else if (layer.blendMode == animator::LayerBlendMode::Additive)
             {
+                if (layer.referencePose.empty() && !skeletonData)
+                    continue;
+
                 const auto& refPose = layer.referencePose.empty()
                     ? skeletonData->bindPoses
                     : layer.referencePose;
@@ -509,18 +524,9 @@ namespace animation
         return glm::vec3(0.0f);
     }
 
-    std::vector<const animator::AnimationEvent*> AnimationLayerStack::getFiredEvents() const
+    const std::vector<const animator::AnimationEvent*>& AnimationLayerStack::getFiredEvents() const
     {
-        std::vector<const animator::AnimationEvent*> allEvents;
-        for (const auto& layer : layers)
-        {
-            if (layer.stateMachine)
-            {
-                const auto& events = layer.stateMachine->getFiredEvents();
-                allEvents.insert(allEvents.end(), events.begin(), events.end());
-            }
-        }
-        return allEvents;
+        return cachedFiredEvents;
     }
 
     void AnimationLayerStack::computeSocketTransforms(

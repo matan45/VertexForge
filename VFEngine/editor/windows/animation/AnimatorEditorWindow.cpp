@@ -90,6 +90,7 @@ namespace windows
         baseLayer.graph = animatorData->graph;
         animatorData->layers.push_back(std::move(baseLayer));
         selectedLayerIndex = 0;
+        isDirty = true;
     }
 
     void AnimatorEditorWindow::draw()
@@ -147,11 +148,11 @@ namespace windows
                     {
                         if (layerIndexBeforePanel < animatorData->layers.size())
                         {
-                            animatorData->layers[layerIndexBeforePanel].graph = animatorData->graph;
+                            std::swap(animatorData->graph, animatorData->layers[layerIndexBeforePanel].graph);
                         }
                         if (selectedLayerIndex < animatorData->layers.size())
                         {
-                            animatorData->graph = animatorData->layers[selectedLayerIndex].graph;
+                            std::swap(animatorData->graph, animatorData->layers[selectedLayerIndex].graph);
                         }
                     }
                     selectedStateId = 0;
@@ -161,8 +162,8 @@ namespace windows
                 }
                 else if (animatorData && !animatorData->layers.empty() && selectedLayerIndex < animatorData->layers.size())
                 {
-                    // Same layer: just sync from layer (first frame or after reload)
-                    animatorData->graph = animatorData->layers[selectedLayerIndex].graph;
+                    // Same layer: swap layer graph in for editing
+                    std::swap(animatorData->graph, animatorData->layers[selectedLayerIndex].graph);
                 }
 
                 if (ImGui::CollapsingHeader("Parameters", ImGuiTreeNodeFlags_DefaultOpen))
@@ -198,10 +199,10 @@ namespace windows
                 nodeGraph.draw(animatorData.get(), selectedStateId, selectedTransitionId,
                                isDirty, needsPositionInit, needsNavigateToContent, pendingZoomSteps);
 
-                // Sync changes back to the selected layer
+                // Swap the edited graph back into the selected layer
                 if (animatorData && !animatorData->layers.empty() && selectedLayerIndex < animatorData->layers.size())
                 {
-                    animatorData->layers[selectedLayerIndex].graph = animatorData->graph;
+                    std::swap(animatorData->graph, animatorData->layers[selectedLayerIndex].graph);
                 }
 
                 propertiesPanel.drawAddParameterPopup(animatorData.get(), showAddParameterPopup,

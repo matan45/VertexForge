@@ -8,7 +8,7 @@
 
 namespace animator
 {
-    inline constexpr const char* ANIMATOR_FORMAT_VERSION = "1.1";
+    inline constexpr const char* ANIMATOR_FORMAT_VERSION = "1.0";
 
     class AnimatorAsset
     {

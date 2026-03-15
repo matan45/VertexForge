@@ -94,7 +94,7 @@ namespace animation
         glm::vec3 consumeRootMotionDelta();
 
         // Events (aggregated from all layers)
-        std::vector<const animator::AnimationEvent*> getFiredEvents() const;
+        const std::vector<const animator::AnimationEvent*>& getFiredEvents() const;
 
         // Socket computation
         void computeSocketTransforms(const std::vector<animator::SocketDefinition>& sockets,
@@ -111,6 +111,7 @@ namespace animation
         AnimationLoadCallback animationLoadCallback;
         animator::AnimatorRuntimeParameters sharedParameters;
         bool initialized = false;
+        mutable std::vector<const animator::AnimationEvent*> cachedFiredEvents;
 
         void blendLayers();
         void resolveBoneMasks();

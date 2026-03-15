@@ -16,6 +16,7 @@ namespace windows::animation
     private:
         int selectedMaskIndex = -1;
         std::string newMaskName;
+        std::string newBoneName;
 
         void drawMaskList(animator::AnimatorData* animatorData, bool& isDirty);
         void drawBoneTree(animator::BoneMaskDefinition& mask, bool& isDirty);

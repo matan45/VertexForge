@@ -544,7 +544,7 @@ namespace animator
     AnimatorData AnimatorAsset::parseAnimatorData(const json& j, const WarningLogger& logWarning)
     {
         AnimatorData animator;
-        animator.version = j.value("version", "1.0");
+        animator.version = j.value("version", ANIMATOR_FORMAT_VERSION);
         animator.name = j.value("name", "Unnamed Animator");
 
         if (animator.name.empty())
@@ -751,9 +751,10 @@ namespace animator
         idleState.name = "Idle";
         idleState.loop = true;
         idleState.position = glm::vec2(250.0f, 100.0f);
+        uint32_t idleId = idleState.id;
         animator.graph.states.push_back(std::move(idleState));
 
-        animator.graph.defaultStateId = 1;
+        animator.graph.defaultStateId = idleId;
 
         return animator;
     }
