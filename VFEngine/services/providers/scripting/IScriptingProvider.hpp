@@ -51,6 +51,10 @@ namespace services {
         virtual void callOnDisable(uint64_t instanceId) = 0;
         virtual void callOnDestroy(uint64_t instanceId) = 0;
 
+        // === Coroutine Tick ===
+        virtual void tickCoroutines(float deltaTime) = 0;
+        virtual void tickFixedUpdateCoroutines() = 0;
+
         // === Generic Method Call ===
         virtual std::string callMethodWithReturn(uint64_t instanceId, const std::string& methodName,
                                                   const std::vector<std::any>& args = {}) = 0;

@@ -11,6 +11,10 @@
 #include "ScriptVFXEventBridge.hpp"
 #include "ScriptNavigationEventBridge.hpp"
 #include "NativeAPIRegistry.hpp"
+#include "CoroutineManager.hpp"
+#include "../api/CoroutineAPI.hpp"
+#include <runtime/EventLoop.hpp>
+#include <vm/runtime/VirtualMachine.hpp>
 #include <filesystem>
 #include <fstream>
 #include <regex>
@@ -32,6 +36,7 @@ namespace core
             if (objIt == instanceToObject.end()) return;
 
             NativeAPIRegistry::setCurrentEntity(instanceToEntity[instanceId]);
+            NativeAPIRegistry::setCurrentInstanceId(instanceId);
             auto& instance = std::any_cast<value::Value&>(objIt->second);
             interpreter->callMethod(instance, methodName, args);
         }
@@ -52,7 +57,10 @@ namespace core
         {
             interpreter = std::make_unique<::services::ScriptInterpreter>();
 
+            coroutineManager = std::make_unique<CoroutineManager>();
+
             apiRegistry = std::make_unique<NativeAPIRegistry>(interpreter.get());
+            api::CoroutineAPI::setCoroutineManager(coroutineManager.get());
             apiRegistry->registerEngineAPIs();
 
             uiEventBridge = std::make_unique<ScriptUIEventBridge>(
@@ -345,6 +353,11 @@ namespace core
 
     void ScriptingAdapter::unloadScript(uint64_t instanceId)
     {
+        if (coroutineManager)
+        {
+            coroutineManager->removeAllForInstance(instanceId);
+        }
+
         auto it = instanceToClassName.find(instanceId);
         if (it != instanceToClassName.end())
         {
@@ -358,6 +371,11 @@ namespace core
 
     void ScriptingAdapter::unloadAllScripts()
     {
+        if (coroutineManager)
+        {
+            coroutineManager->clear();
+        }
+
         instanceToClassName.clear();
         instanceToEntity.clear();
         instanceToObject.clear();
@@ -476,6 +494,44 @@ namespace core
         catch (const std::exception&)
         {
             // Silently ignore if script does not define onDisable
+        }
+    }
+
+    void ScriptingAdapter::tickCoroutines(float deltaTime)
+    {
+        if (coroutineManager)
+        {
+            coroutineManager->tickFrame(static_cast<double>(deltaTime));
+        }
+
+        auto vm = interpreter->getVM();
+        if (vm)
+        {
+            auto* eventLoop = vm->getEventLoop();
+            if (eventLoop)
+            {
+                int budget = 64;
+                while (budget-- > 0 && eventLoop->tick()) {}
+            }
+        }
+    }
+
+    void ScriptingAdapter::tickFixedUpdateCoroutines()
+    {
+        if (coroutineManager)
+        {
+            coroutineManager->tickFixedUpdate();
+        }
+
+        auto vm = interpreter->getVM();
+        if (vm)
+        {
+            auto* eventLoop = vm->getEventLoop();
+            if (eventLoop)
+            {
+                int budget = 64;
+                while (budget-- > 0 && eventLoop->tick()) {}
+            }
         }
     }
 

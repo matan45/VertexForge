@@ -23,6 +23,7 @@
 #include "../api/DebugDrawAPI.hpp"
 #include "../api/BehaviorTreeAPI.hpp"
 #include "../api/DecalAPI.hpp"
+#include "../api/CoroutineAPI.hpp"
 
 #include "print/Log.hpp"
 namespace core
@@ -40,6 +41,16 @@ namespace core
     ::services::EntityHandle NativeAPIRegistry::getCurrentEntity()
     {
         return currentCallbackEntity;
+    }
+
+    void NativeAPIRegistry::setCurrentInstanceId(uint64_t id)
+    {
+        currentInstanceId = id;
+    }
+
+    uint64_t NativeAPIRegistry::getCurrentInstanceId()
+    {
+        return currentInstanceId;
     }
 
     void NativeAPIRegistry::registerEngineAPIs()
@@ -68,6 +79,7 @@ namespace core
         api::DebugDrawAPI::registerAPI(interpreter);
         api::BehaviorTreeAPI::registerAPI(interpreter);
         api::DecalAPI::registerAPI(interpreter);
+        api::CoroutineAPI::registerAPI(interpreter);
 
         vfLogInfo("[NativeAPIRegistry] Registered native engine APIs");
     }

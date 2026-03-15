@@ -21,11 +21,14 @@ namespace core
     class ScriptVFXEventBridge;
     class ScriptNavigationEventBridge;
 
+    class CoroutineManager;
+
     class ScriptingAdapter : public ::services::IScriptingProvider
     {
     private:
         std::unique_ptr<::services::ScriptInterpreter> interpreter;
         std::unique_ptr<NativeAPIRegistry> apiRegistry;
+        std::unique_ptr<CoroutineManager> coroutineManager;
         std::unique_ptr<ScriptUIEventBridge> uiEventBridge;
         std::unique_ptr<ScriptPhysicsEventBridge> physicsEventBridge;
         std::unique_ptr<ScriptAnimationEventBridge> animationEventBridge;
@@ -81,6 +84,9 @@ namespace core
         void callOnEnable(uint64_t instanceId) override;
         void callOnDisable(uint64_t instanceId) override;
         void callOnDestroy(uint64_t instanceId) override;
+
+        void tickCoroutines(float deltaTime) override;
+        void tickFixedUpdateCoroutines() override;
 
         std::string callMethodWithReturn(uint64_t instanceId, const std::string& methodName,
                                           const std::vector<std::any>& args = {}) override;

@@ -392,6 +392,8 @@ namespace services
                 scriptingProvider->callOnUpdate(entry.instanceId, deltaTime);
             }
         }
+
+        scriptingProvider->tickCoroutines(deltaTime);
     }
 
     void ScriptingServiceImpl::fixedUpdateScripts(float fixedDeltaTime)
@@ -414,6 +416,8 @@ namespace services
                 scriptingProvider->callOnFixedUpdate(entry.instanceId, fixedDeltaTime);
             }
         }
+
+        scriptingProvider->tickFixedUpdateCoroutines();
     }
 
     void ScriptingServiceImpl::lateUpdateScripts(float deltaTime)

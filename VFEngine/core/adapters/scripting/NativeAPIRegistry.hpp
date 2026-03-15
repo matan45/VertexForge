@@ -16,6 +16,7 @@ namespace core
 
         // Current context for native callbacks
         inline static ::services::EntityHandle currentCallbackEntity = ::services::EntityHandle::invalid();
+        inline static uint64_t currentInstanceId = 0;
 
     public:
         explicit NativeAPIRegistry(::services::ScriptInterpreter* interp);
@@ -28,6 +29,9 @@ namespace core
 
         static void setCurrentEntity(const ::services::EntityHandle& entity);
         static ::services::EntityHandle getCurrentEntity();
+
+        static void setCurrentInstanceId(uint64_t id);
+        static uint64_t getCurrentInstanceId();
 
         // Called at the start of each frame to reset rate limiters
         static void beginFrame();
