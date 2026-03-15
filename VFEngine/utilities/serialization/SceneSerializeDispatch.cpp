@@ -7,9 +7,11 @@ namespace serialization
 {
     SceneSerialization::PluginSerializeFn SceneSerialization::pluginSerializeHook;
     SceneSerialization::PluginDeserializeFn SceneSerialization::pluginDeserializeHook;
+    std::shared_mutex SceneSerialization::pluginHookMutex;
 
     void SceneSerialization::setPluginSerializationHooks(PluginSerializeFn serialize, PluginDeserializeFn deserialize)
     {
+        std::unique_lock lock(pluginHookMutex);
         pluginSerializeHook = std::move(serialize);
         pluginDeserializeHook = std::move(deserialize);
     }
@@ -303,12 +305,15 @@ namespace serialization
         }
 
         // Plugin components
-        if (pluginSerializeHook)
         {
-            auto pluginJson = pluginSerializeHook(entity);
-            for (auto& [key, value] : pluginJson.items())
+            std::shared_lock lock(pluginHookMutex);
+            if (pluginSerializeHook)
             {
-                componentsJson[key] = std::move(value);
+                auto pluginJson = pluginSerializeHook(entity);
+                for (auto& [key, value] : pluginJson.items())
+                {
+                    componentsJson[key] = std::move(value);
+                }
             }
         }
 
@@ -653,19 +658,22 @@ namespace serialization
         }
 
         // Plugin components
-        if (pluginDeserializeHook)
         {
-            json pluginEntries = json::object();
-            for (const auto& [key, value] : componentsJson.items())
+            std::shared_lock lock(pluginHookMutex);
+            if (pluginDeserializeHook)
             {
-                if (key.rfind("plugin:", 0) == 0)
+                json pluginEntries = json::object();
+                for (const auto& [key, value] : componentsJson.items())
                 {
-                    pluginEntries[key] = value;
+                    if (key.rfind("plugin:", 0) == 0)
+                    {
+                        pluginEntries[key] = value;
+                    }
                 }
-            }
-            if (!pluginEntries.empty())
-            {
-                pluginDeserializeHook(pluginEntries, entity);
+                if (!pluginEntries.empty())
+                {
+                    pluginDeserializeHook(pluginEntries, entity);
+                }
             }
         }
     }

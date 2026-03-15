@@ -107,6 +107,7 @@
     <ClInclude Include="core\PluginSerializationBridge.hpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="api\PluginDescriptor.cpp" />
     <ClCompile Include="core\ComponentBuilderImpl.cpp" />
     <ClCompile Include="core\DynamicLibrary.cpp" />
     <ClCompile Include="core\PluginComponentRegistry.cpp" />

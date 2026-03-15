@@ -1,6 +1,7 @@
 #pragma once
 #include <string_view>
 #include <functional>
+#include <shared_mutex>
 #include <nlohmann/json.hpp>
 #include "../scene/Entity.hpp"
 #include "../types/PhysicsTypes.hpp"
@@ -275,5 +276,6 @@ namespace serialization
 
         static PluginSerializeFn pluginSerializeHook;
         static PluginDeserializeFn pluginDeserializeHook;
+        static std::shared_mutex pluginHookMutex;
     };
 }

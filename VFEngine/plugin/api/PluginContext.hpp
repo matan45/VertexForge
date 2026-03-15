@@ -88,6 +88,9 @@ namespace plugin {
         // Use these instead of directly accessing the registry for plugin component data.
         virtual bool addPluginComponent(entt::entity entity, const std::string& componentName) = 0;
         virtual bool removePluginComponent(entt::entity entity, const std::string& componentName) = 0;
+        // WARNING: The returned pointer is valid only until the next ECS mutation
+        // (scene clear, entity destroy, component remove, plugin unload).
+        // Do NOT cache this pointer across frames — re-query each frame.
         virtual PluginComponentData* getPluginComponent(entt::entity entity, const std::string& componentName) = 0;
         virtual bool hasPluginComponent(entt::entity entity, const std::string& componentName) = 0;
 

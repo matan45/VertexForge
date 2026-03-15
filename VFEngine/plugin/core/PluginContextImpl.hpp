@@ -29,6 +29,7 @@ namespace plugin {
         std::vector<plugin::RenderHookHandle> registeredRenderHooks;
         std::vector<std::string> registeredComponentNames;
         std::vector<events::SubscriptionToken> pluginEventSubscriptions;
+        // Keyed by "entityId:qualifiedName" to avoid cross-entity data corruption
         std::unordered_map<std::string, PluginComponentData> componentDataWrappers;
         std::unique_ptr<class ComponentBuilderImpl> activeBuilder;
 

@@ -156,8 +156,9 @@ namespace plugin {
         if (it == pluginComp.components.end())
             return nullptr;
 
-        componentDataWrappers.insert_or_assign(qualifiedName, PluginComponentData(&it->second));
-        return &componentDataWrappers.at(qualifiedName);
+        std::string key = std::to_string(static_cast<uint32_t>(entity)) + ":" + qualifiedName;
+        componentDataWrappers.insert_or_assign(key, PluginComponentData(&it->second));
+        return &componentDataWrappers.at(key);
     }
 
     bool PluginContextImpl::hasPluginComponent(entt::entity entity, const std::string& componentName)

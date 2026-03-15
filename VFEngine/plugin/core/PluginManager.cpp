@@ -5,12 +5,14 @@
 #include "Pipeline.hpp"
 #include <algorithm>
 #include <unordered_set>
+#include <cassert>
 
 namespace plugin {
 
     PluginManager::PluginManager(std::unordered_set<std::string> capabilities)
         : capabilities(std::move(capabilities))
     {
+        assert(activeInstance == nullptr && "Only one PluginManager instance may exist at a time");
         activeInstance = this;
     }
 

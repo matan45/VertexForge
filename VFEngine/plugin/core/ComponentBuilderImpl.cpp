@@ -1,5 +1,6 @@
 #include "ComponentBuilderImpl.hpp"
 #include "PluginContextImpl.hpp"
+#include "print/Log.hpp"
 
 namespace plugin
 {
@@ -122,6 +123,12 @@ namespace plugin
 
     void ComponentBuilderImpl::build()
     {
+        if (!nestedStack.empty())
+        {
+            vfLogWarning("Plugin component '{}' has {} unclosed addArray/addObject call(s) — auto-closing",
+                         componentName, nestedStack.size());
+            nestedStack.clear();
+        }
         context->finalizeComponentRegistration(*this);
     }
 }

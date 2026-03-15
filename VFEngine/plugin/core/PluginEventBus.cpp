@@ -17,6 +17,7 @@ namespace plugin
         token.id = nextTokenId++;
 
         subscribers[eventName].push_back({token, std::move(handler)});
+        tokenToEvent[token.id] = eventName;
         return token;
     }
 
@@ -24,26 +25,26 @@ namespace plugin
     {
         std::unique_lock lock(mutex);
 
-        for (auto& [eventName, subs] : subscribers)
-        {
-            std::erase_if(subs, [&](const Subscriber& s)
-            {
-                return s.token == token;
-            });
-        }
+        auto it = tokenToEvent.find(token.id);
+        if (it == tokenToEvent.end())
+            return;
+
+        auto& subs = subscribers[it->second];
+        std::erase_if(subs, [&](const Subscriber& s) { return s.token == token; });
+
+        tokenToEvent.erase(it);
     }
 
     void PluginEventBus::publish(const std::string& eventName, const nlohmann::json& data)
     {
-        std::shared_lock lock(mutex);
-
-        auto it = subscribers.find(eventName);
-        if (it == subscribers.end())
-            return;
-
-        // Copy handlers to avoid holding lock during callbacks
-        auto handlers = it->second;
-        lock.unlock();
+        std::vector<Subscriber> handlers;
+        {
+            std::shared_lock lock(mutex);
+            auto it = subscribers.find(eventName);
+            if (it == subscribers.end())
+                return;
+            handlers = it->second;
+        }
 
         for (const auto& sub : handlers)
         {

@@ -33,6 +33,7 @@ namespace plugin
 
         mutable std::shared_mutex mutex;
         std::unordered_map<std::string, std::vector<Subscriber>> subscribers;
+        std::unordered_map<uint64_t, std::string> tokenToEvent; // reverse index
         std::atomic<uint64_t> nextTokenId{1};
     };
 }

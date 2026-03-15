@@ -240,10 +240,26 @@ namespace windows
 
         json["enabled"] = enabled;
 
-        std::ofstream outFile(vfpluginPath);
-        if (outFile.is_open())
+        // Atomic write: write to temp file, then rename over original
+        auto tempPath = vfpluginPath;
+        tempPath += ".tmp";
+
+        std::ofstream outFile(tempPath);
+        if (!outFile.is_open())
+            return;
+
+        outFile << json.dump(4);
+        outFile.close();
+
+        std::error_code ec;
+        std::filesystem::rename(tempPath, vfpluginPath, ec);
+        if (ec)
         {
-            outFile << json.dump(4);
+            // Rename failed — fall back to direct overwrite
+            std::filesystem::remove(tempPath, ec);
+            std::ofstream fallback(vfpluginPath);
+            if (fallback.is_open())
+                fallback << json.dump(4);
         }
     }
 }
