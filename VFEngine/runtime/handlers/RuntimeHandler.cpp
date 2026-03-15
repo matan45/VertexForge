@@ -16,6 +16,7 @@
 #include "impl/physics/PhysicsPlayModeHandler.hpp"
 #include "impl/physics/ControllerServiceImpl.hpp"
 #include "../audio/AudioSceneUpdater.hpp"
+#include "../audio/ReverbZoneManager.hpp"
 #include "../adapters/terrain/TerrainRenderAdapter.hpp"
 #include "../adapters/terrain/WaterRenderAdapter.hpp"
 #include "impl/render/RenderTextureServiceImpl.hpp"
@@ -324,6 +325,9 @@ namespace handlers {
         windowStateService = std::make_shared<services::WindowStateServiceImpl>(bootstrap->getWindow());
         audioService = std::make_shared<services::AudioServiceImpl>(bootstrap->getAudioProvider());
         audioSceneUpdater = std::make_unique<core::audio::AudioSceneUpdater>();
+        auto* reverbZoneMgr = static_cast<core::audio::ReverbZoneManager*>(
+            bootstrap->getAudioProvider()->getReverbZoneManager());
+        audioSceneUpdater->setReverbZoneManager(reverbZoneMgr);
 
         scriptingService = std::make_shared<services::ScriptingServiceImpl>(
             bootstrap->getScriptingProvider(),

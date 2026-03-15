@@ -80,6 +80,9 @@ namespace serialization
         static json serializeAudioSource3D(const components::AudioSource3DComponent& audioSource);
         static void deserializeAudioSource3D(const json& j, components::AudioSource3DComponent& audioSource);
 
+        static json serializeReverbZone(const components::ReverbZoneComponent& zone);
+        static void deserializeReverbZone(const json& j, components::ReverbZoneComponent& zone);
+
         static json serializeScript(const components::ScriptComponent& script);
         static void deserializeScript(const json& j, components::ScriptComponent& script);
 

@@ -104,6 +104,7 @@ namespace controllers
         ctx.showGrid = showGrid;
 
         framePreparation->prepareAudioSpheres(ctx);
+        framePreparation->prepareReverbZones(ctx);
     }
 
     void OffScreenController::prepareFrameLightGizmos()

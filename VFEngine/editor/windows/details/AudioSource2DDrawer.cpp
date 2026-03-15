@@ -4,6 +4,7 @@
 #include "events/EventDispatcher.hpp"
 #include "events/project/SceneEvents.hpp"
 #include "events/audio/AudioEvents.hpp"
+#include "events/audio/AudioBusEvents.hpp"
 #include "nfd/FileDialog.hpp"
 #include <imgui.h>
 #include <fstream>
@@ -144,13 +145,14 @@ namespace windows::details
         }
 
         ImGui::SameLine();
-        if (audioData.audioFilePath.empty()) ImGui::BeginDisabled();
+        bool clearDisabled = audioData.audioFilePath.empty();
+        ImGui::BeginDisabled(clearDisabled);
         if (ImGui::Button("Clear##Audio2D"))
         {
             audioData.audioFilePath = "";
             changed = true;
         }
-        if (audioData.audioFilePath.empty()) ImGui::EndDisabled();
+        ImGui::EndDisabled();
 
         return changed;
     }
@@ -174,6 +176,32 @@ namespace windows::details
         if (ImGui::Checkbox("Loop##2D", &audioData.loop))
         {
             changed = true;
+        }
+
+        ImGui::Spacing();
+
+        auto& busDispatcher = events::EventDispatcher::instance();
+        events::audio::GetBusNamesQuery busNamesQuery;
+        auto busNames = busDispatcher.query(busNamesQuery);
+        if (!busNames.empty())
+        {
+            if (ImGui::BeginCombo("Bus##2D", audioData.busName.c_str()))
+            {
+                for (const auto& name : busNames)
+                {
+                    bool isSelected = (audioData.busName == name);
+                    if (ImGui::Selectable(name.c_str(), isSelected))
+                    {
+                        audioData.busName = name;
+                        changed = true;
+                    }
+                    if (isSelected)
+                    {
+                        ImGui::SetItemDefaultFocus();
+                    }
+                }
+                ImGui::EndCombo();
+            }
         }
 
         return changed;
@@ -225,6 +253,7 @@ namespace windows::details
                 playCmd.params.volume = audioData.volume;
                 playCmd.params.pitch = audioData.pitch;
                 playCmd.params.loop = audioData.loop;
+                playCmd.params.busName = audioData.busName;
 
                 services::AudioHandle newHandle = dispatcher.execute(playCmd);
                 audioPreviewHandles[previewKey] = newHandle;

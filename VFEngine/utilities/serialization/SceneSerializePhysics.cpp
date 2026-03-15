@@ -20,6 +20,7 @@ namespace serialization
         j["volume"] = audioSource.volume;
         j["pitch"] = audioSource.pitch;
         j["loop"] = audioSource.loop;
+        j["busName"] = audioSource.busName;
         return j;
     }
 
@@ -41,6 +42,10 @@ namespace serialization
         {
             audioSource.loop = it->get<bool>();
         }
+        if (auto it = j.find("busName"); it != j.end() && it->is_string())
+        {
+            audioSource.busName = it->get<std::string>();
+        }
         // Reset runtime state
         audioSource.activeHandle = 0;
         audioSource.isPlaying = false;
@@ -58,6 +63,15 @@ namespace serialization
         j["minDistance"] = audioSource.minDistance;
         j["maxDistance"] = audioSource.maxDistance;
         j["showDebugSpheres"] = audioSource.showDebugSpheres;
+        j["enableDistanceFilter"] = audioSource.enableDistanceFilter;
+        j["filterStartDistance"] = audioSource.filterStartDistance;
+        j["filterMaxDistance"] = audioSource.filterMaxDistance;
+        j["filterIntensity"] = audioSource.filterIntensity;
+        j["innerConeAngle"] = audioSource.innerConeAngle;
+        j["outerConeAngle"] = audioSource.outerConeAngle;
+        j["outerConeGain"] = audioSource.outerConeGain;
+        j["showDebugCone"] = audioSource.showDebugCone;
+        j["busName"] = audioSource.busName;
         return j;
     }
 
@@ -91,9 +105,100 @@ namespace serialization
         {
             audioSource.showDebugSpheres = it->get<bool>();
         }
+        if (auto it = j.find("enableDistanceFilter"); it != j.end() && it->is_boolean())
+        {
+            audioSource.enableDistanceFilter = it->get<bool>();
+        }
+        if (auto it = j.find("filterStartDistance"); it != j.end() && it->is_number())
+        {
+            audioSource.filterStartDistance = it->get<float>();
+        }
+        if (auto it = j.find("filterMaxDistance"); it != j.end() && it->is_number())
+        {
+            audioSource.filterMaxDistance = it->get<float>();
+        }
+        if (auto it = j.find("filterIntensity"); it != j.end() && it->is_number())
+        {
+            audioSource.filterIntensity = it->get<float>();
+        }
+        if (auto it = j.find("innerConeAngle"); it != j.end() && it->is_number())
+        {
+            audioSource.innerConeAngle = it->get<float>();
+        }
+        if (auto it = j.find("outerConeAngle"); it != j.end() && it->is_number())
+        {
+            audioSource.outerConeAngle = it->get<float>();
+        }
+        if (auto it = j.find("outerConeGain"); it != j.end() && it->is_number())
+        {
+            audioSource.outerConeGain = it->get<float>();
+        }
+        if (auto it = j.find("showDebugCone"); it != j.end() && it->is_boolean())
+        {
+            audioSource.showDebugCone = it->get<bool>();
+        }
+        if (auto it = j.find("busName"); it != j.end() && it->is_string())
+        {
+            audioSource.busName = it->get<std::string>();
+        }
         // Reset runtime state
         audioSource.activeHandle = 0;
         audioSource.isPlaying = false;
+    }
+
+    json SceneSerialization::serializeReverbZone(const components::ReverbZoneComponent& zone)
+    {
+        json j;
+        j["shape"] = static_cast<int>(zone.shape);
+        j["radius"] = zone.radius;
+        j["halfExtents"] = json::array({zone.halfExtents.x, zone.halfExtents.y, zone.halfExtents.z});
+        j["presetName"] = zone.presetName;
+        j["priority"] = zone.priority;
+        j["falloffDistance"] = zone.falloffDistance;
+        j["wetLevel"] = zone.wetLevel;
+        j["showDebugVolume"] = zone.showDebugVolume;
+        return j;
+    }
+
+    void SceneSerialization::deserializeReverbZone(const json& j, components::ReverbZoneComponent& zone)
+    {
+        if (auto it = j.find("shape"); it != j.end() && it->is_number())
+        {
+            zone.shape = static_cast<components::ReverbZoneShape>(it->get<int>());
+        }
+        if (auto it = j.find("radius"); it != j.end() && it->is_number())
+        {
+            zone.radius = it->get<float>();
+        }
+        if (j.contains("halfExtents") && j["halfExtents"].is_array() && j["halfExtents"].size() == 3)
+        {
+            zone.halfExtents.x = j["halfExtents"][0].get<float>();
+            zone.halfExtents.y = j["halfExtents"][1].get<float>();
+            zone.halfExtents.z = j["halfExtents"][2].get<float>();
+        }
+        if (auto it = j.find("presetName"); it != j.end() && it->is_string())
+        {
+            zone.presetName = it->get<std::string>();
+        }
+        if (auto it = j.find("priority"); it != j.end() && it->is_number())
+        {
+            zone.priority = it->get<int>();
+        }
+        if (auto it = j.find("falloffDistance"); it != j.end() && it->is_number())
+        {
+            zone.falloffDistance = it->get<float>();
+        }
+        if (auto it = j.find("wetLevel"); it != j.end() && it->is_number())
+        {
+            zone.wetLevel = it->get<float>();
+        }
+        if (auto it = j.find("showDebugVolume"); it != j.end() && it->is_boolean())
+        {
+            zone.showDebugVolume = it->get<bool>();
+        }
+        // Reset runtime state
+        zone.isListenerInside = false;
+        zone.currentBlendWeight = 0.0f;
     }
 
     json SceneSerialization::serializeScript(const components::ScriptComponent& script)

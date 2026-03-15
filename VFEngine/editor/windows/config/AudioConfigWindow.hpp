@@ -14,6 +14,7 @@ namespace windows
 
         void drawListenerSection();
         void drawDistanceModelSection();
+        void drawDistanceFilterSection();
 
         void loadFromScene();
         void saveToScene();

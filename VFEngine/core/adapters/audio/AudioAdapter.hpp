@@ -53,5 +53,30 @@ namespace core
         // === Audio Settings ===
         void applySettings(const types::AudioSettings& settings) override;
         types::AudioSettings getCurrentSettings() const override;
+
+        // === Audio Buses ===
+        void createBus(const std::string& busName, const std::string& parentName = "Master") override;
+        void setBusVolume(const std::string& busName, float volume) override;
+        void setBusMuted(const std::string& busName, bool muted) override;
+        void setBusSoloed(const std::string& busName, bool soloed) override;
+        float getBusVolume(const std::string& busName) const override;
+        bool isBusMuted(const std::string& busName) const override;
+        std::vector<std::string> getBusNames() const override;
+        void saveMixSnapshot(const std::string& name) override;
+        void loadMixSnapshot(const std::string& name) override;
+        void deleteMixSnapshot(const std::string& name) override;
+        std::vector<std::string> getSnapshotNames() const override;
+
+        // === Audio Effects ===
+        bool addBusEffect(const std::string& busName, const types::BusEffectConfig& config) override;
+        bool removeBusEffect(const std::string& busName, uint32_t effectId) override;
+        bool updateBusEffect(const std::string& busName, uint32_t effectId, const types::BusEffectConfig& config) override;
+        bool setBusEffectEnabled(const std::string& busName, uint32_t effectId, bool enabled) override;
+        bool setBusEffectWetDry(const std::string& busName, uint32_t effectId, float wetDry) override;
+        std::vector<types::BusEffectConfig> getBusEffectChain(const std::string& busName) const override;
+        int getMaxEffectsPerBus() const override;
+
+        // === Reverb Zones ===
+        void* getReverbZoneManager() override;
     };
 }

@@ -60,6 +60,15 @@ namespace core {
         coreParams.maxDistance = params.maxDistance;
         coreParams.rolloffFactor = params.rolloffFactor;
         coreParams.streaming = params.streaming;
+        coreParams.enableDistanceFilter = params.enableDistanceFilter;
+        coreParams.filterStartDistance = params.filterStartDistance;
+        coreParams.filterMaxDistance = params.filterMaxDistance;
+        coreParams.filterIntensity = params.filterIntensity;
+        coreParams.innerConeAngle = params.innerConeAngle;
+        coreParams.outerConeAngle = params.outerConeAngle;
+        coreParams.outerConeGain = params.outerConeGain;
+        coreParams.direction = params.direction;
+        coreParams.busName = params.busName;
 
         return audioController->playSound3D(path, position, coreParams);
     }
@@ -76,6 +85,15 @@ namespace core {
         coreParams.maxDistance = params.maxDistance;
         coreParams.rolloffFactor = params.rolloffFactor;
         coreParams.streaming = true;
+        coreParams.enableDistanceFilter = params.enableDistanceFilter;
+        coreParams.filterStartDistance = params.filterStartDistance;
+        coreParams.filterMaxDistance = params.filterMaxDistance;
+        coreParams.filterIntensity = params.filterIntensity;
+        coreParams.innerConeAngle = params.innerConeAngle;
+        coreParams.outerConeAngle = params.outerConeAngle;
+        coreParams.outerConeGain = params.outerConeGain;
+        coreParams.direction = params.direction;
+        coreParams.busName = params.busName;
 
         return audioController->playStreamingSound(path, coreParams);
     }
@@ -127,6 +145,85 @@ namespace core {
 
     types::AudioSettings AudioAdapter::getCurrentSettings() const {
         return audioController->getCurrentSettings();
+    }
+
+    void AudioAdapter::createBus(const std::string& busName, const std::string& parentName) {
+        audioController->createBus(busName, parentName);
+    }
+
+    void AudioAdapter::setBusVolume(const std::string& busName, float volume) {
+        audioController->setBusVolume(busName, volume);
+    }
+
+    void AudioAdapter::setBusMuted(const std::string& busName, bool muted) {
+        audioController->setBusMuted(busName, muted);
+    }
+
+    void AudioAdapter::setBusSoloed(const std::string& busName, bool soloed) {
+        audioController->setBusSoloed(busName, soloed);
+    }
+
+    float AudioAdapter::getBusVolume(const std::string& busName) const {
+        return audioController->getBusVolume(busName);
+    }
+
+    bool AudioAdapter::isBusMuted(const std::string& busName) const {
+        return audioController->isBusMuted(busName);
+    }
+
+    std::vector<std::string> AudioAdapter::getBusNames() const {
+        return audioController->getBusNames();
+    }
+
+    void AudioAdapter::saveMixSnapshot(const std::string& name) {
+        audioController->saveMixSnapshot(name);
+    }
+
+    void AudioAdapter::loadMixSnapshot(const std::string& name) {
+        audioController->loadMixSnapshot(name);
+    }
+
+    void AudioAdapter::deleteMixSnapshot(const std::string& name) {
+        audioController->deleteMixSnapshot(name);
+    }
+
+    std::vector<std::string> AudioAdapter::getSnapshotNames() const {
+        return audioController->getSnapshotNames();
+    }
+
+    // === Audio Effects ===
+
+    bool AudioAdapter::addBusEffect(const std::string& busName, const types::BusEffectConfig& config) {
+        return audioController->addBusEffect(busName, config);
+    }
+
+    bool AudioAdapter::removeBusEffect(const std::string& busName, uint32_t effectId) {
+        return audioController->removeBusEffect(busName, effectId);
+    }
+
+    bool AudioAdapter::updateBusEffect(const std::string& busName, uint32_t effectId,
+                                        const types::BusEffectConfig& config) {
+        return audioController->updateBusEffect(busName, effectId, config);
+    }
+
+    bool AudioAdapter::setBusEffectEnabled(const std::string& busName, uint32_t effectId, bool enabled) {
+        return audioController->setBusEffectEnabled(busName, effectId, enabled);
+    }
+
+    bool AudioAdapter::setBusEffectWetDry(const std::string& busName, uint32_t effectId, float wetDry) {
+        return audioController->setBusEffectWetDry(busName, effectId, wetDry);
+    }
+
+    std::vector<types::BusEffectConfig> AudioAdapter::getBusEffectChain(const std::string& busName) const {
+        return audioController->getBusEffectChain(busName);
+    }
+
+    int AudioAdapter::getMaxEffectsPerBus() const {
+        return audioController->getMaxEffectsPerBus();
+    }
+
+    void* AudioAdapter::getReverbZoneManager() {
+        return audioController->getReverbZoneManager();
     }
 
 }

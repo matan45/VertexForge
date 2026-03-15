@@ -49,6 +49,7 @@
 #include "../adapters/terrain/TerrainRenderAdapter.hpp"
 #include "../adapters/terrain/WaterRenderAdapter.hpp"
 #include "../audio/AudioSceneUpdater.hpp"
+#include "../audio/ReverbZoneManager.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/vegetation/GrassEvents.hpp"
 #include "providers/vegetation/IGrassRenderProvider.hpp"
@@ -368,6 +369,9 @@ namespace handlers
             bootstrap->getSceneGraphSystem()
         );
         audioSceneUpdater = std::make_unique<core::audio::AudioSceneUpdater>();
+        auto* reverbZoneMgr = static_cast<core::audio::ReverbZoneManager*>(
+            bootstrap->getAudioProvider()->getReverbZoneManager());
+        audioSceneUpdater->setReverbZoneManager(reverbZoneMgr);
     }
 
     void EditorHandler::createPhysicsServices()

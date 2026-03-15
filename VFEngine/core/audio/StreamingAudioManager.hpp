@@ -52,6 +52,9 @@ namespace core::audio
         // Must be called from main update loop
         void update();
 
+        // Get the OpenAL source ID for a streaming handle
+        ALuint getSourceId(AudioHandle handle) const;
+
         // Get count of active streaming sources
         size_t getActiveCount() const { return activeSources.size(); }
 

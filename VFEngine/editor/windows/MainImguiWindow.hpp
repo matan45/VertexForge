@@ -6,6 +6,7 @@
 #include "import/ImportModalDialog.hpp"
 #include "config/PhysicsConfigWindow.hpp"
 #include "config/AudioConfigWindow.hpp"
+#include "audio/AudioMixerWindow.hpp"
 #include "config/RenderConfigWindow.hpp"
 #include "config/PostProcessConfigWindow.hpp"
 #include "config/ProjectSettingsWindow.hpp"
@@ -46,6 +47,7 @@ namespace windows
         ImportModalDialog importDialog;
         PhysicsConfigWindow physicsConfigWindow;
         AudioConfigWindow audioConfigWindow;
+        AudioMixerWindow audioMixerWindow;
         RenderConfigWindow renderConfigWindow;
         PostProcessConfigWindow postProcessConfigWindow;
         ProjectSettingsWindow projectSettingsWindow;

@@ -1,6 +1,7 @@
 #pragma once
 #include "EntityHandle.hpp"
 #include "types/PhysicsTypes.hpp"
+#include "types/AudioEffectTypes.hpp"
 #include "types/PhysicsAnimationTypes.hpp"
 #include <rendertexture/RenderTextureTypes.hpp>
 #include <glm/glm.hpp>
@@ -167,6 +168,7 @@ namespace services
         float volume = 1.0f;
         float pitch = 1.0f;
         bool loop = false;
+        std::string busName = "Music";
     };
 
     struct AudioSource3DData
@@ -178,6 +180,30 @@ namespace services
         float minDistance = 1.0f;
         float maxDistance = 100.0f;
         bool showDebugSpheres = false;
+
+        bool enableDistanceFilter = true;
+        float filterStartDistance = 10.0f;
+        float filterMaxDistance = 100.0f;
+        float filterIntensity = 1.0f;
+
+        float innerConeAngle = 360.0f;
+        float outerConeAngle = 360.0f;
+        float outerConeGain = 0.0f;
+        bool showDebugCone = false;
+        std::string busName = "SFX";
+    };
+
+    struct ReverbZoneData
+    {
+        uint8_t shape = 0; // 0=Sphere, 1=Box
+        float radius = 10.0f;
+        glm::vec3 halfExtents{5.0f};
+        std::string presetName = "Generic";
+        types::ReverbParams customParams;
+        int priority = 0;
+        float falloffDistance = 2.0f;
+        float wetLevel = 1.0f;
+        bool showDebugVolume = false;
     };
 
     struct ColliderComponentData

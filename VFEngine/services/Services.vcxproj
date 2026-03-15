@@ -113,6 +113,8 @@
     <ClInclude Include="events\animation\AnimationEventEvents.hpp" />
     <ClInclude Include="events\animation\AnimationPreviewEvents.hpp" />
     <ClInclude Include="events\animation\AnimatorEvents.hpp" />
+    <ClInclude Include="events\audio\AudioBusEvents.hpp" />
+    <ClInclude Include="events\audio\AudioEffectEvents.hpp" />
     <ClInclude Include="events\audio\AudioEvents.hpp" />
     <ClInclude Include="events\audio\AudioSettingsEvents.hpp" />
     <ClInclude Include="events\editor\EditorModeEvents.hpp" />
@@ -149,6 +151,7 @@
     <ClInclude Include="events\scene\ComponentMediaEvents.hpp" />
     <ClInclude Include="events\scene\ComponentPhysicsLightEvents.hpp" />
     <ClInclude Include="events\scene\EntityTransformEvents.hpp" />
+    <ClInclude Include="events\scene\ReverbZoneEvents.hpp" />
     <ClInclude Include="events\scene\ScenePersistenceEvents.hpp" />
     <ClInclude Include="events\scripting\ScriptingEvents.hpp" />
     <ClInclude Include="events\terrain\BrushEvents.hpp" />

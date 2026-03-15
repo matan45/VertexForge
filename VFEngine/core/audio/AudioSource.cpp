@@ -1,5 +1,6 @@
 #include "AudioSource.hpp"
 #include "AudioSystem.hpp"
+#include <algorithm>
 
 namespace core::audio
 {
@@ -17,6 +18,8 @@ namespace core::audio
         alSourcei(sourceId, AL_LOOPING, AL_FALSE);
         alSourcei(sourceId, AL_SOURCE_RELATIVE, AL_TRUE);
         alSource3f(sourceId, AL_POSITION, 0.0f, 0.0f, 0.0f);
+
+        initFilter();
     }
 
     AudioSource::~AudioSource()
@@ -27,6 +30,7 @@ namespace core::audio
 
             alSourceStop(sourceId);
             alSourcei(sourceId, AL_BUFFER, 0);
+            cleanUpFilter();
             alDeleteSources(1, &sourceId);
 
             alGetError();
@@ -35,10 +39,18 @@ namespace core::audio
     }
 
     AudioSource::AudioSource(AudioSource&& other) noexcept
-        : sourceId(other.sourceId), spatialEnabled(other.spatialEnabled)
+        : sourceId(other.sourceId), spatialEnabled(other.spatialEnabled),
+          filterId(other.filterId), currentGainHF(other.currentGainHF),
+          distanceFilterEnabled(other.distanceFilterEnabled),
+          filterStartDistance(other.filterStartDistance),
+          filterMaxDistance(other.filterMaxDistance),
+          filterIntensity(other.filterIntensity)
     {
         other.sourceId = 0;
         other.spatialEnabled = false;
+        other.filterId = 0;
+        other.currentGainHF = 1.0f;
+        other.distanceFilterEnabled = false;
     }
 
     AudioSource& AudioSource::operator=(AudioSource&& other) noexcept
@@ -49,12 +61,22 @@ namespace core::audio
             {
                 alSourceStop(sourceId);
                 alSourcei(sourceId, AL_BUFFER, 0);
+                cleanUpFilter();
                 alDeleteSources(1, &sourceId);
             }
             sourceId = other.sourceId;
             spatialEnabled = other.spatialEnabled;
+            filterId = other.filterId;
+            currentGainHF = other.currentGainHF;
+            distanceFilterEnabled = other.distanceFilterEnabled;
+            filterStartDistance = other.filterStartDistance;
+            filterMaxDistance = other.filterMaxDistance;
+            filterIntensity = other.filterIntensity;
             other.sourceId = 0;
             other.spatialEnabled = false;
+            other.filterId = 0;
+            other.currentGainHF = 1.0f;
+            other.distanceFilterEnabled = false;
         }
         return *this;
     }
@@ -265,6 +287,12 @@ namespace core::audio
         setMinDistance(config.minDistance);
         setMaxDistance(config.maxDistance);
         setRolloffFactor(config.rolloffFactor);
+        setDistanceFilterParams(config.enableDistanceFilter, config.filterStartDistance,
+                                config.filterMaxDistance, config.filterIntensity);
+        setDirection(config.direction);
+        setConeInnerAngle(config.innerConeAngle);
+        setConeOuterAngle(config.outerConeAngle);
+        setConeOuterGain(config.outerConeGain);
     }
 
     float AudioSource::getPlaybackPosition() const
@@ -281,5 +309,120 @@ namespace core::audio
         if (!isValid()) return;
         alSourcef(sourceId, AL_SEC_OFFSET, seconds);
         AudioSystem::checkError("setPlaybackPosition");
+    }
+
+    void AudioSource::setDirection(const glm::vec3& dir)
+    {
+        if (!isValid()) return;
+        alSource3f(sourceId, AL_DIRECTION, dir.x, dir.y, dir.z);
+        AudioSystem::checkError("setDirection");
+    }
+
+    void AudioSource::setConeInnerAngle(float degrees)
+    {
+        if (!isValid()) return;
+        alSourcef(sourceId, AL_CONE_INNER_ANGLE, degrees);
+        AudioSystem::checkError("setConeInnerAngle");
+    }
+
+    void AudioSource::setConeOuterAngle(float degrees)
+    {
+        if (!isValid()) return;
+        alSourcef(sourceId, AL_CONE_OUTER_ANGLE, degrees);
+        AudioSystem::checkError("setConeOuterAngle");
+    }
+
+    void AudioSource::setConeOuterGain(float gain)
+    {
+        if (!isValid()) return;
+        alSourcef(sourceId, AL_CONE_OUTER_GAIN, gain);
+        AudioSystem::checkError("setConeOuterGain");
+    }
+
+    void AudioSource::initFilter()
+    {
+        if (!AudioSystem::isEfxAvailable()) return;
+
+        AudioSystem::alGenFilters(1, &filterId);
+        if (AudioSystem::checkError("alGenFilters"))
+        {
+            filterId = 0;
+            return;
+        }
+
+        AudioSystem::alFilteri(filterId, AL_FILTER_TYPE, AL_FILTER_LOWPASS);
+        if (AudioSystem::checkError("alFilteri AL_FILTER_LOWPASS"))
+        {
+            AudioSystem::alDeleteFilters(1, &filterId);
+            filterId = 0;
+        }
+    }
+
+    void AudioSource::cleanUpFilter()
+    {
+        if (filterId != 0)
+        {
+            if (sourceId != 0)
+            {
+                alSourcei(sourceId, AL_DIRECT_FILTER, AL_FILTER_NULL);
+            }
+            AudioSystem::alDeleteFilters(1, &filterId);
+            filterId = 0;
+        }
+        currentGainHF = 1.0f;
+    }
+
+    void AudioSource::setDistanceFilterParams(bool enabled, float startDist, float maxDist, float intensity)
+    {
+        distanceFilterEnabled = enabled;
+        filterStartDistance = startDist;
+        filterMaxDistance = maxDist;
+        filterIntensity = std::clamp(intensity, 0.0f, 1.0f);
+    }
+
+    void AudioSource::updateDistanceFilter(float distance, float deltaTime)
+    {
+        if (!isValid() || filterId == 0) return;
+
+        if (!distanceFilterEnabled)
+        {
+            if (currentGainHF < 1.0f)
+            {
+                detachFilter();
+            }
+            return;
+        }
+
+        float targetGainHF = 1.0f;
+        if (distance >= filterMaxDistance)
+        {
+            targetGainHF = 1.0f - filterIntensity * 0.9f;
+        }
+        else if (distance > filterStartDistance)
+        {
+            float t = (distance - filterStartDistance) / (filterMaxDistance - filterStartDistance);
+            targetGainHF = 1.0f - filterIntensity * 0.9f * t;
+        }
+
+        targetGainHF = std::clamp(targetGainHF, 0.1f, 1.0f);
+
+        constexpr float smoothingRate = 10.0f;
+        float lerpFactor = std::min(1.0f, deltaTime * smoothingRate);
+        currentGainHF += (targetGainHF - currentGainHF) * lerpFactor;
+
+        AudioSystem::alFilterf(filterId, AL_LOWPASS_GAINHF, currentGainHF);
+        AudioSystem::alFilterf(filterId, AL_LOWPASS_GAIN, 1.0f);
+        alSourcei(sourceId, AL_DIRECT_FILTER, static_cast<ALint>(filterId));
+    }
+
+    void AudioSource::detachFilter()
+    {
+        if (!isValid()) return;
+
+        if (filterId != 0)
+        {
+            alSourcei(sourceId, AL_DIRECT_FILTER, AL_FILTER_NULL);
+        }
+        currentGainHF = 1.0f;
     }
 }

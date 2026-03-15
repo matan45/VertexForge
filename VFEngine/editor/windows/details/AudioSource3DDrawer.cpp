@@ -4,9 +4,13 @@
 #include "events/EventDispatcher.hpp"
 #include "events/project/SceneEvents.hpp"
 #include "events/audio/AudioEvents.hpp"
+#include "events/audio/AudioBusEvents.hpp"
 #include "nfd/FileDialog.hpp"
 #include <imgui.h>
 #include <fstream>
+#include <cmath>
+#include <algorithm>
+#include <glm/trigonometric.hpp>
 
 namespace windows::details
 {
@@ -52,6 +56,10 @@ namespace windows::details
             changed |= drawAudioSettings(audioData);
             ImGui::Spacing();
             changed |= drawSpatialSettings(audioData);
+            ImGui::Spacing();
+            changed |= drawDistanceFilterSettings(audioData);
+            ImGui::Spacing();
+            changed |= drawConeSettings(audioData);
 
             if (changed)
             {
@@ -146,13 +154,14 @@ namespace windows::details
         }
 
         ImGui::SameLine();
-        if (audioData.audioFilePath.empty()) ImGui::BeginDisabled();
+        bool clearDisabled = audioData.audioFilePath.empty();
+        ImGui::BeginDisabled(clearDisabled);
         if (ImGui::Button("Clear##Audio3D"))
         {
             audioData.audioFilePath = "";
             changed = true;
         }
-        if (audioData.audioFilePath.empty()) ImGui::EndDisabled();
+        ImGui::EndDisabled();
 
         return changed;
     }
@@ -176,6 +185,32 @@ namespace windows::details
         if (ImGui::Checkbox("Loop##3D", &audioData.loop))
         {
             changed = true;
+        }
+
+        ImGui::Spacing();
+
+        auto& busDispatcher = events::EventDispatcher::instance();
+        events::audio::GetBusNamesQuery busNamesQuery;
+        auto busNames = busDispatcher.query(busNamesQuery);
+        if (!busNames.empty())
+        {
+            if (ImGui::BeginCombo("Bus##3D", audioData.busName.c_str()))
+            {
+                for (const auto& name : busNames)
+                {
+                    bool isSelected = (audioData.busName == name);
+                    if (ImGui::Selectable(name.c_str(), isSelected))
+                    {
+                        audioData.busName = name;
+                        changed = true;
+                    }
+                    if (isSelected)
+                    {
+                        ImGui::SetItemDefaultFocus();
+                    }
+                }
+                ImGui::EndCombo();
+            }
         }
 
         return changed;
@@ -221,6 +256,110 @@ namespace windows::details
         return changed;
     }
 
+    bool AudioSource3DDrawer::drawDistanceFilterSettings(services::AudioSource3DData& audioData)
+    {
+        bool changed = false;
+
+        ImGui::Text("Distance Filter:");
+        ImGui::Indent(10.0f);
+
+        if (ImGui::Checkbox("Enable Distance Filter##3D", &audioData.enableDistanceFilter))
+        {
+            changed = true;
+        }
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip("Apply low-pass filter based on distance to simulate air absorption");
+        }
+
+        if (audioData.enableDistanceFilter)
+        {
+            if (ImGui::SliderFloat("Filter Start Distance##3D", &audioData.filterStartDistance, 0.1f, 100.0f, "%.1f"))
+            {
+                changed = true;
+            }
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("Distance at which high-frequency attenuation begins");
+            }
+
+            if (ImGui::SliderFloat("Filter Max Distance##3D", &audioData.filterMaxDistance, 1.0f, 500.0f, "%.1f"))
+            {
+                changed = true;
+            }
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("Distance at which filter reaches full strength");
+            }
+
+            if (ImGui::SliderFloat("Filter Intensity##3D", &audioData.filterIntensity, 0.0f, 1.0f, "%.2f"))
+            {
+                changed = true;
+            }
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("Strength of the low-pass filter effect");
+            }
+        }
+
+        ImGui::Unindent(10.0f);
+
+        return changed;
+    }
+
+    bool AudioSource3DDrawer::drawConeSettings(services::AudioSource3DData& audioData)
+    {
+        bool changed = false;
+
+        ImGui::Text("Cone Attenuation:");
+        ImGui::Indent(10.0f);
+
+        if (ImGui::SliderFloat("Inner Cone Angle##3D", &audioData.innerConeAngle, 0.0f, 360.0f, "%.0f deg"))
+        {
+            changed = true;
+        }
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip("Full volume within this angle (360 = omnidirectional)");
+        }
+
+        if (ImGui::SliderFloat("Outer Cone Angle##3D", &audioData.outerConeAngle, 0.0f, 360.0f, "%.0f deg"))
+        {
+            if (audioData.outerConeAngle < audioData.innerConeAngle)
+            {
+                audioData.outerConeAngle = audioData.innerConeAngle;
+            }
+            changed = true;
+        }
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip("Volume fades to outer gain between inner and outer cone angles");
+        }
+
+        if (ImGui::SliderFloat("Outer Cone Gain##3D", &audioData.outerConeGain, 0.0f, 1.0f, "%.2f"))
+        {
+            changed = true;
+        }
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip("Volume multiplier outside the outer cone (0 = silent)");
+        }
+
+        ImGui::Spacing();
+        if (ImGui::Checkbox("Show Debug Cone##3D", &audioData.showDebugCone))
+        {
+            changed = true;
+        }
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip("Draw wireframe cone visualization in editor");
+        }
+
+        ImGui::Unindent(10.0f);
+
+        return changed;
+    }
+
     void AudioSource3DDrawer::drawPlaybackControls(services::EntityHandle handle,
                                                    const services::AudioSource3DData& audioData)
     {
@@ -251,7 +390,7 @@ namespace windows::details
 
         // Play button
         bool canPlay = !audioData.audioFilePath.empty() && !isCurrentlyPlaying;
-        if (!canPlay) ImGui::BeginDisabled();
+        ImGui::BeginDisabled(!canPlay);
         if (ImGui::Button("Play##3D", ImVec2(60, 0)))
         {
             if (isPaused)
@@ -275,16 +414,35 @@ namespace windows::details
                 playCmd.params.loop = audioData.loop;
                 playCmd.params.minDistance = audioData.minDistance;
                 playCmd.params.maxDistance = audioData.maxDistance;
+                playCmd.params.enableDistanceFilter = audioData.enableDistanceFilter;
+                playCmd.params.filterStartDistance = audioData.filterStartDistance;
+                playCmd.params.filterMaxDistance = audioData.filterMaxDistance;
+                playCmd.params.filterIntensity = audioData.filterIntensity;
+                playCmd.params.innerConeAngle = audioData.innerConeAngle;
+                playCmd.params.outerConeAngle = audioData.outerConeAngle;
+                playCmd.params.outerConeGain = audioData.outerConeGain;
+                playCmd.params.busName = audioData.busName;
+
+                if (transformOpt.has_value())
+                {
+                    float yawRad = glm::radians(transformOpt->rotation.y);
+                    float pitchRad = glm::radians(transformOpt->rotation.x);
+                    glm::vec3 forward;
+                    forward.x = -std::sin(yawRad) * std::cos(pitchRad);
+                    forward.y = std::sin(pitchRad);
+                    forward.z = -std::cos(yawRad) * std::cos(pitchRad);
+                    playCmd.params.direction = glm::normalize(forward);
+                }
 
                 services::AudioHandle newHandle = dispatcher.execute(playCmd);
                 audioPreviewHandles[previewKey] = newHandle;
             }
         }
-        if (!canPlay) ImGui::EndDisabled();
+        ImGui::EndDisabled();
 
         // Pause button
         ImGui::SameLine();
-        if (!isCurrentlyPlaying) ImGui::BeginDisabled();
+        ImGui::BeginDisabled(!isCurrentlyPlaying);
         if (ImGui::Button("Pause##3D", ImVec2(60, 0)))
         {
             if (hasPreviewHandle)
@@ -294,11 +452,11 @@ namespace windows::details
                 dispatcher.execute(pauseCmd);
             }
         }
-        if (!isCurrentlyPlaying) ImGui::EndDisabled();
+        ImGui::EndDisabled();
 
         // Stop button
         ImGui::SameLine();
-        if (!hasPreviewHandle) ImGui::BeginDisabled();
+        ImGui::BeginDisabled(!hasPreviewHandle);
         if (ImGui::Button("Stop##3D", ImVec2(60, 0)))
         {
             if (hasPreviewHandle)
@@ -309,7 +467,7 @@ namespace windows::details
                 audioPreviewHandles.erase(previewKey);
             }
         }
-        if (!hasPreviewHandle) ImGui::EndDisabled();
+        ImGui::EndDisabled();
     }
 
     void AudioSource3DDrawer::clearHandles()

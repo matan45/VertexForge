@@ -1,5 +1,9 @@
 #pragma once
 #include <cstdint>
+#include <string>
+#include <vector>
+#include <map>
+#include "AudioEffectTypes.hpp"
 
 namespace types
 {
@@ -14,6 +18,21 @@ namespace types
         ExponentDistanceClamped = 6
     };
 
+    struct AudioBusDefinition
+    {
+        std::string name;
+        std::string parentName = "Master";
+        float defaultVolume = 1.0f;
+        std::vector<BusEffectConfig> effects;
+    };
+
+    struct AudioMixSnapshotDefinition
+    {
+        std::string name;
+        std::map<std::string, float> busVolumes;
+        std::map<std::string, bool> busMutes;
+    };
+
     struct AudioSettings
     {
         float masterVolume = 1.0f;
@@ -21,6 +40,14 @@ namespace types
         float speedOfSound = 343.3f;
         AudioDistanceModel distanceModel = AudioDistanceModel::InverseDistanceClamped;
         float defaultRolloffFactor = 1.0f;
+
+        bool enableDistanceFilter = true;
+        float defaultFilterStartDistance = 10.0f;
+        float defaultFilterMaxDistance = 100.0f;
+        float defaultFilterIntensity = 1.0f;
+
+        std::vector<AudioBusDefinition> busDefinitions;
+        std::vector<AudioMixSnapshotDefinition> mixSnapshots;
 
         static AudioSettings createDefault()
         {
@@ -30,6 +57,10 @@ namespace types
             settings.speedOfSound = 343.3f;
             settings.distanceModel = AudioDistanceModel::InverseDistanceClamped;
             settings.defaultRolloffFactor = 1.0f;
+            settings.enableDistanceFilter = true;
+            settings.defaultFilterStartDistance = 10.0f;
+            settings.defaultFilterMaxDistance = 100.0f;
+            settings.defaultFilterIntensity = 1.0f;
             return settings;
         }
     };

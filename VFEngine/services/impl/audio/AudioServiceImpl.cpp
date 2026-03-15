@@ -1,6 +1,8 @@
 #include "AudioServiceImpl.hpp"
 #include "../../events/audio/AudioEvents.hpp"
 #include "../../events/audio/AudioSettingsEvents.hpp"
+#include "../../events/audio/AudioBusEvents.hpp"
+#include "../../events/audio/AudioEffectEvents.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include <cassert>
 
@@ -91,6 +93,100 @@ namespace services {
             [this](const auto&) {
                 return audioProvider->getCurrentSettings();
             });
+
+        // Audio Bus Commands
+        dispatcher.registerCommandHandler<events::audio::CreateBusCommand>(
+            [this](const auto& cmd) {
+                createBus(cmd.busName, cmd.parentName);
+            });
+
+        dispatcher.registerCommandHandler<events::audio::SetBusVolumeCommand>(
+            [this](const auto& cmd) {
+                setBusVolume(cmd.busName, cmd.volume);
+            });
+
+        dispatcher.registerCommandHandler<events::audio::SetBusMutedCommand>(
+            [this](const auto& cmd) {
+                setBusMuted(cmd.busName, cmd.muted);
+            });
+
+        dispatcher.registerCommandHandler<events::audio::SetBusSoloedCommand>(
+            [this](const auto& cmd) {
+                setBusSoloed(cmd.busName, cmd.soloed);
+            });
+
+        dispatcher.registerCommandHandler<events::audio::SaveMixSnapshotCommand>(
+            [this](const auto& cmd) {
+                saveMixSnapshot(cmd.name);
+            });
+
+        dispatcher.registerCommandHandler<events::audio::LoadMixSnapshotCommand>(
+            [this](const auto& cmd) {
+                loadMixSnapshot(cmd.name);
+            });
+
+        dispatcher.registerCommandHandler<events::audio::DeleteMixSnapshotCommand>(
+            [this](const auto& cmd) {
+                deleteMixSnapshot(cmd.name);
+            });
+
+        // Audio Bus Queries
+        dispatcher.registerQueryHandler<events::audio::GetBusVolumeQuery>(
+            [this](const auto& query) {
+                return getBusVolume(query.busName);
+            });
+
+        dispatcher.registerQueryHandler<events::audio::IsBusMutedQuery>(
+            [this](const auto& query) {
+                return isBusMuted(query.busName);
+            });
+
+        dispatcher.registerQueryHandler<events::audio::GetBusNamesQuery>(
+            [this](const auto&) {
+                return getBusNames();
+            });
+
+        dispatcher.registerQueryHandler<events::audio::GetSnapshotNamesQuery>(
+            [this](const auto&) {
+                return getSnapshotNames();
+            });
+
+        // Audio Effect Commands
+        dispatcher.registerCommandHandler<events::audio::AddBusEffectCommand>(
+            [this](const auto& cmd) {
+                return addBusEffect(cmd.busName, cmd.config);
+            });
+
+        dispatcher.registerCommandHandler<events::audio::RemoveBusEffectCommand>(
+            [this](const auto& cmd) {
+                return removeBusEffect(cmd.busName, cmd.effectId);
+            });
+
+        dispatcher.registerCommandHandler<events::audio::UpdateBusEffectCommand>(
+            [this](const auto& cmd) {
+                return updateBusEffect(cmd.busName, cmd.effectId, cmd.config);
+            });
+
+        dispatcher.registerCommandHandler<events::audio::SetBusEffectEnabledCommand>(
+            [this](const auto& cmd) {
+                return setBusEffectEnabled(cmd.busName, cmd.effectId, cmd.enabled);
+            });
+
+        dispatcher.registerCommandHandler<events::audio::SetBusEffectWetDryCommand>(
+            [this](const auto& cmd) {
+                return setBusEffectWetDry(cmd.busName, cmd.effectId, cmd.wetDryMix);
+            });
+
+        // Audio Effect Queries
+        dispatcher.registerQueryHandler<events::audio::GetBusEffectChainQuery>(
+            [this](const auto& query) {
+                return getBusEffectChain(query.busName);
+            });
+
+        dispatcher.registerQueryHandler<events::audio::GetMaxEffectsPerBusQuery>(
+            [this](const auto&) {
+                return getMaxEffectsPerBus();
+            });
     }
 
     void AudioServiceImpl::setListenerPosition(const glm::vec3& position,
@@ -160,7 +256,91 @@ namespace services {
         playParams.maxDistance = params.maxDistance;
         playParams.rolloffFactor = params.rolloffFactor;
         playParams.streaming = params.streaming;
+        playParams.enableDistanceFilter = params.enableDistanceFilter;
+        playParams.filterStartDistance = params.filterStartDistance;
+        playParams.filterMaxDistance = params.filterMaxDistance;
+        playParams.filterIntensity = params.filterIntensity;
+        playParams.innerConeAngle = params.innerConeAngle;
+        playParams.outerConeAngle = params.outerConeAngle;
+        playParams.outerConeGain = params.outerConeGain;
+        playParams.direction = params.direction;
+        playParams.busName = params.busName;
         return playParams;
+    }
+
+    void AudioServiceImpl::createBus(const std::string& busName, const std::string& parentName) {
+        audioProvider->createBus(busName, parentName);
+    }
+
+    void AudioServiceImpl::setBusVolume(const std::string& busName, float volume) {
+        audioProvider->setBusVolume(busName, volume);
+    }
+
+    void AudioServiceImpl::setBusMuted(const std::string& busName, bool muted) {
+        audioProvider->setBusMuted(busName, muted);
+    }
+
+    void AudioServiceImpl::setBusSoloed(const std::string& busName, bool soloed) {
+        audioProvider->setBusSoloed(busName, soloed);
+    }
+
+    float AudioServiceImpl::getBusVolume(const std::string& busName) const {
+        return audioProvider->getBusVolume(busName);
+    }
+
+    bool AudioServiceImpl::isBusMuted(const std::string& busName) const {
+        return audioProvider->isBusMuted(busName);
+    }
+
+    std::vector<std::string> AudioServiceImpl::getBusNames() const {
+        return audioProvider->getBusNames();
+    }
+
+    void AudioServiceImpl::saveMixSnapshot(const std::string& name) {
+        audioProvider->saveMixSnapshot(name);
+    }
+
+    void AudioServiceImpl::loadMixSnapshot(const std::string& name) {
+        audioProvider->loadMixSnapshot(name);
+    }
+
+    void AudioServiceImpl::deleteMixSnapshot(const std::string& name) {
+        audioProvider->deleteMixSnapshot(name);
+    }
+
+    std::vector<std::string> AudioServiceImpl::getSnapshotNames() const {
+        return audioProvider->getSnapshotNames();
+    }
+
+    // === Audio Effects ===
+
+    bool AudioServiceImpl::addBusEffect(const std::string& busName, const types::BusEffectConfig& config) {
+        return audioProvider->addBusEffect(busName, config);
+    }
+
+    bool AudioServiceImpl::removeBusEffect(const std::string& busName, uint32_t effectId) {
+        return audioProvider->removeBusEffect(busName, effectId);
+    }
+
+    bool AudioServiceImpl::updateBusEffect(const std::string& busName, uint32_t effectId,
+                                            const types::BusEffectConfig& config) {
+        return audioProvider->updateBusEffect(busName, effectId, config);
+    }
+
+    bool AudioServiceImpl::setBusEffectEnabled(const std::string& busName, uint32_t effectId, bool enabled) {
+        return audioProvider->setBusEffectEnabled(busName, effectId, enabled);
+    }
+
+    bool AudioServiceImpl::setBusEffectWetDry(const std::string& busName, uint32_t effectId, float wetDry) {
+        return audioProvider->setBusEffectWetDry(busName, effectId, wetDry);
+    }
+
+    std::vector<types::BusEffectConfig> AudioServiceImpl::getBusEffectChain(const std::string& busName) const {
+        return audioProvider->getBusEffectChain(busName);
+    }
+
+    int AudioServiceImpl::getMaxEffectsPerBus() const {
+        return audioProvider->getMaxEffectsPerBus();
     }
 
 }

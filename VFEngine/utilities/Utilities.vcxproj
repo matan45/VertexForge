@@ -201,6 +201,7 @@
     <ClInclude Include="threading\JobSystem.hpp" />
     <ClInclude Include="time\Clock.hpp" />
     <ClInclude Include="time\Timer.hpp" />
+    <ClInclude Include="types\AudioEffectTypes.hpp" />
     <ClInclude Include="types\AudioTypes.hpp" />
     <ClInclude Include="types\CameraTypes.hpp" />
     <ClInclude Include="types\NavmeshTypes.hpp" />

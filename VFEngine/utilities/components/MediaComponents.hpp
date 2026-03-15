@@ -7,6 +7,7 @@
 #include <entt/entt.hpp>
 #include "../../services/data/ScriptTypes.hpp"
 #include "../animator/SocketTypes.hpp"
+#include "../types/AudioEffectTypes.hpp"
 
 namespace components
 {
@@ -27,6 +28,7 @@ namespace components
         Particle,
         Billboard,
         Text,
+        ReverbZone,
         Custom
     };
 
@@ -66,6 +68,7 @@ namespace components
             case BillboardIconType::Particle: return 6;
             case BillboardIconType::Billboard: return 7;
             case BillboardIconType::Text: return 8;
+            case BillboardIconType::ReverbZone: return 9;
             default: return atlasIndex;
             }
         }
@@ -77,6 +80,8 @@ namespace components
         float volume = 1.0f;
         float pitch = 1.0f;
         bool loop = false;
+
+        std::string busName = "Music";
 
         uint64_t activeHandle = 0;
         bool isPlaying = false;
@@ -91,6 +96,18 @@ namespace components
         float minDistance = 1.0f;
         float maxDistance = 100.0f;
         bool showDebugSpheres = false;
+
+        bool enableDistanceFilter = true;
+        float filterStartDistance = 10.0f;
+        float filterMaxDistance = 100.0f;
+        float filterIntensity = 1.0f;
+
+        float innerConeAngle = 360.0f;
+        float outerConeAngle = 360.0f;
+        float outerConeGain = 0.0f;
+        bool showDebugCone = false;
+
+        std::string busName = "SFX";
 
         uint64_t activeHandle = 0;
         bool isPlaying = false;
@@ -188,5 +205,30 @@ namespace components
         std::string behaviorTreePath;
         bool isInitialized = false;
         bool enabled = true;
+    };
+
+    enum class ReverbZoneShape : uint8_t
+    {
+        Sphere = 0,
+        Box = 1
+    };
+
+    struct ReverbZoneComponent
+    {
+        ReverbZoneShape shape = ReverbZoneShape::Sphere;
+        float radius = 10.0f;
+        glm::vec3 halfExtents{5.0f};
+
+        std::string presetName = "Generic";
+        types::ReverbParams customParams;
+
+        int priority = 0;
+        float falloffDistance = 2.0f;
+        float wetLevel = 1.0f;
+        bool showDebugVolume = false;
+
+        // Runtime (not serialized)
+        bool isListenerInside = false;
+        float currentBlendWeight = 0.0f;
     };
 }

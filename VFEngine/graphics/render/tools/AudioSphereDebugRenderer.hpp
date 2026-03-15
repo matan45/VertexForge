@@ -18,6 +18,11 @@ namespace render::mesh
         float minDistance;
         float maxDistance;
         bool showDebugSpheres = false;
+
+        float innerConeAngle = 360.0f;
+        float outerConeAngle = 360.0f;
+        glm::vec3 direction{0.0f, 0.0f, -1.0f};
+        bool showDebugCone = false;
     };
 
     struct AudioSpherePushConstants
@@ -41,7 +46,14 @@ namespace render::mesh
 
         uint32_t indexCount = 0;
 
+        vk::Buffer coneVertexBuffer;
+        vk::DeviceMemory coneVertexBufferMemory;
+        vk::Buffer coneIndexBuffer;
+        vk::DeviceMemory coneIndexBufferMemory;
+        uint32_t coneIndexCount = 0;
+
         static constexpr int SPHERE_SEGMENTS = 32;
+        static constexpr int CONE_SEGMENTS = 24;
 
     public:
         explicit AudioSphereDebugRenderer(core::Device& device, core::SwapChain& swapChain);
@@ -61,5 +73,10 @@ namespace render::mesh
         void loadShader();
         void createPipeline(vk::RenderPass renderPass);
         void createBuffers();
+        void createConeBuffers();
+
+        void renderCones(const vk::CommandBuffer& commandBuffer,
+                         const std::vector<AudioSphereRenderData>& audioSourceDrawList,
+                         const glm::mat4& viewProj) const;
     };
 }

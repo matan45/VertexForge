@@ -20,6 +20,8 @@ namespace windows::details
         bool drawAudioFilePath(services::AudioSource3DData& audioData);
         bool drawAudioSettings(services::AudioSource3DData& audioData);
         bool drawSpatialSettings(services::AudioSource3DData& audioData);
+        bool drawDistanceFilterSettings(services::AudioSource3DData& audioData);
+        bool drawConeSettings(services::AudioSource3DData& audioData);
         void drawPlaybackControls(services::EntityHandle handle, const services::AudioSource3DData& audioData);
     };
 }
