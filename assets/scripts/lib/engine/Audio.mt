@@ -8,6 +8,7 @@
 //   Audio::stop(self);             // Stop audio playback
 //   Audio::setVolume(self, 0.5);   // Set volume to 50%
 //   bool playing = Audio::isPlaying(self);
+//   Audio::setBusVolume("Music", 0.8);  // Set Music bus to 80%
 
 public class Audio {
     public constructor() {
@@ -91,5 +92,111 @@ public class Audio {
     // Note: Takes effect on next play() call
     public static function setLoop(int entityId, bool loop): void {
         _native_audio_setLoop(entityId, loop);
+    }
+
+    // ============================================
+    // Distance Filter (VK-920)
+    // ============================================
+
+    // Set distance-based low-pass filter parameters on a 3D audio source
+    // Simulates air absorption of high frequencies over distance
+    // enabled: toggle filter on/off
+    // startDistance: distance at which filtering begins
+    // maxDistance: distance at which filter reaches full strength
+    // intensity: strength of the low-pass effect (0.0 to 1.0)
+    public static function setDistanceFilter(int entityId, bool enabled, float startDistance, float maxDistance, float intensity): void {
+        _native_audio_setDistanceFilter(entityId, enabled, startDistance, maxDistance, intensity);
+    }
+
+    // Check if distance filter is enabled on a 3D audio source
+    public static function getDistanceFilterEnabled(int entityId): bool {
+        return _native_audio_getDistanceFilterEnabled(entityId);
+    }
+
+    // Get distance filter intensity (0.0 to 1.0)
+    public static function getFilterIntensity(int entityId): float {
+        return _native_audio_getFilterIntensity(entityId);
+    }
+
+    // ============================================
+    // Cone Attenuation (VK-918)
+    // ============================================
+
+    // Set cone angles for directional audio (3D sources only)
+    // innerAngle: full volume within this angle (0-360, 360 = omnidirectional)
+    // outerAngle: volume fades to outerGain between inner and outer angles (0-360)
+    public static function setConeAngles(int entityId, float innerAngle, float outerAngle): void {
+        _native_audio_setConeAngles(entityId, innerAngle, outerAngle);
+    }
+
+    // Get inner cone angle in degrees (0-360)
+    public static function getConeInnerAngle(int entityId): float {
+        return _native_audio_getConeInnerAngle(entityId);
+    }
+
+    // Get outer cone angle in degrees (0-360)
+    public static function getConeOuterAngle(int entityId): float {
+        return _native_audio_getConeOuterAngle(entityId);
+    }
+
+    // Set volume multiplier outside the outer cone (0.0 = silent, 1.0 = full)
+    public static function setConeOuterGain(int entityId, float gain): void {
+        _native_audio_setConeOuterGain(entityId, gain);
+    }
+
+    // Get volume multiplier outside the outer cone
+    public static function getConeOuterGain(int entityId): float {
+        return _native_audio_getConeOuterGain(entityId);
+    }
+
+    // ============================================
+    // Audio Bus Assignment (VK-916)
+    // ============================================
+
+    // Set the audio bus for an entity's audio component
+    // busName: name of the bus (e.g., "Master", "Music", "SFX", "Dialogue", "Ambient")
+    public static function setBus(int entityId, string busName): void {
+        _native_audio_setBus(entityId, busName);
+    }
+
+    // Get the audio bus name for an entity's audio component
+    public static function getBus(int entityId): string {
+        return _native_audio_getBus(entityId);
+    }
+
+    // ============================================
+    // Audio Bus Mixing (VK-916)
+    // ============================================
+
+    // Set volume for an audio bus (affects all sources on that bus)
+    // busName: name of the bus
+    // volume: 0.0 to 1.0
+    public static function setBusVolume(string busName, float volume): void {
+        _native_audio_setBusVolume(busName, volume);
+    }
+
+    // Get current volume of an audio bus
+    public static function getBusVolume(string busName): float {
+        return _native_audio_getBusVolume(busName);
+    }
+
+    // Mute or unmute an audio bus
+    // When muted, all sources on the bus are silenced
+    public static function muteBus(string busName, bool muted): void {
+        _native_audio_muteBus(busName, muted);
+    }
+
+    // ============================================
+    // Mix Snapshots (VK-916)
+    // ============================================
+
+    // Save current bus volume/mute states as a named snapshot
+    public static function saveSnapshot(string name): void {
+        _native_audio_saveSnapshot(name);
+    }
+
+    // Restore bus states from a previously saved snapshot
+    public static function loadSnapshot(string name): void {
+        _native_audio_loadSnapshot(name);
     }
 }
