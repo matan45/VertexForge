@@ -2,6 +2,7 @@
 #include "PluginContextImpl.hpp"
 #include "PluginComponentRegistry.hpp"
 #include "ComponentBuilderImpl.hpp"
+#include "PluginEventBus.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/scripting/ScriptingEvents.hpp"
 #include "events/render/RenderHookEvents.hpp"
@@ -190,6 +191,19 @@ namespace plugin {
         }
     }
 
+    void PluginContextImpl::publishEvent(const std::string& eventName, const nlohmann::json& data)
+    {
+        PluginEventBus::instance().publish(eventName, data);
+    }
+
+    events::SubscriptionToken PluginContextImpl::subscribeEvent(const std::string& eventName,
+                                                                 std::function<void(const nlohmann::json&)> handler)
+    {
+        auto token = PluginEventBus::instance().subscribe(eventName, std::move(handler));
+        pluginEventSubscriptions.push_back(token);
+        return token;
+    }
+
     void PluginContextImpl::registerScriptFunction(const std::string& name, std::any function)
     {
         if (!hasCapability(std::string(capability::scripting))) {
@@ -312,6 +326,11 @@ namespace plugin {
             controllers::imguiHandler::ImguiWindowHandler::remove(window);
         }
         registeredWindows.clear();
+
+        for (const auto& token : pluginEventSubscriptions) {
+            PluginEventBus::instance().unsubscribe(token);
+        }
+        pluginEventSubscriptions.clear();
 
         // Clean up plugin components from all entities
         if (!registeredComponentNames.empty())

@@ -24,6 +24,10 @@ namespace plugin
         ComponentBuilder& addVec3(const std::string& name, glm::vec3 defaultVal) override;
         ComponentBuilder& addVec4(const std::string& name, glm::vec4 defaultVal) override;
         ComponentBuilder& addColor(const std::string& name, glm::vec4 defaultVal) override;
+        ComponentBuilder& addArray(const std::string& name) override;
+        ComponentBuilder& endArray() override;
+        ComponentBuilder& addObject(const std::string& name) override;
+        ComponentBuilder& endObject() override;
         ComponentBuilder& setInspector(std::function<bool(nlohmann::json&)> inspectorCallback) override;
         void build() override;
 
@@ -32,9 +36,16 @@ namespace plugin
         const std::function<bool(nlohmann::json&)>& getInspector() const { return inspector; }
 
     private:
+        // Returns the property list we're currently adding to (top-level or nested)
+        std::vector<components::plugin::PropertyDescriptor>& currentProperties();
+
         PluginContextImpl* context;
         std::string componentName;
         std::vector<components::plugin::PropertyDescriptor> properties;
         std::function<bool(nlohmann::json&)> inspector;
+
+        // Stack for nested array/object building
+        // Each entry points to the children vector of the array/object being defined
+        std::vector<std::vector<components::plugin::PropertyDescriptor>*> nestedStack;
     };
 }

@@ -5,13 +5,14 @@
 #include <any>
 #include <utility>
 #include <entt/entt.hpp>
+#include <nlohmann/json.hpp>
 #include "../../services/data/RenderHookTypes.hpp"
+#include "../../services/events/EventTypes.hpp"
 
 struct ImGuiContext;
 
 namespace events {
     class EventDispatcher;
-    struct SubscriptionToken;
 }
 
 namespace controllers::imguiHandler {
@@ -95,6 +96,17 @@ namespace plugin {
         // Iteration happens exe-side (safe across DLL boundary).
         virtual void forEachWithComponent(const std::string& componentName,
                                            const std::function<void(entt::entity, PluginComponentData&)>& callback) = 0;
+
+        // === Plugin Events ===
+        // Dynamic event system for plugin-to-plugin and plugin-to-engine communication.
+        // Uses string event names + JSON payloads (safe across DLL boundaries).
+
+        // Publish a fire-and-forget notification. All subscribers receive it.
+        virtual void publishEvent(const std::string& eventName, const nlohmann::json& data = {}) = 0;
+
+        // Subscribe to a named event. Returns a subscription token (auto-cleaned on plugin unload).
+        virtual events::SubscriptionToken subscribeEvent(const std::string& eventName,
+                                                          std::function<void(const nlohmann::json&)> handler) = 0;
 
         // === ECS Registry Access ===
         // Returns the global EnTT entity registry.

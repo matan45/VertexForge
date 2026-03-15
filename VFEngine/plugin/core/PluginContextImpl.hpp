@@ -28,6 +28,7 @@ namespace plugin {
         std::vector<std::unique_ptr<pipeline::PipelineStage>> registeredImportStages;
         std::vector<plugin::RenderHookHandle> registeredRenderHooks;
         std::vector<std::string> registeredComponentNames;
+        std::vector<events::SubscriptionToken> pluginEventSubscriptions;
         std::unordered_map<std::string, PluginComponentData> componentDataWrappers;
         std::unique_ptr<class ComponentBuilderImpl> activeBuilder;
 
@@ -47,6 +48,9 @@ namespace plugin {
         bool hasPluginComponent(entt::entity entity, const std::string& componentName) override;
         void forEachWithComponent(const std::string& componentName,
                                    const std::function<void(entt::entity, PluginComponentData&)>& callback) override;
+        void publishEvent(const std::string& eventName, const nlohmann::json& data) override;
+        events::SubscriptionToken subscribeEvent(const std::string& eventName,
+                                                  std::function<void(const nlohmann::json&)> handler) override;
         void registerScriptFunction(const std::string& name, std::any function) override;
         plugin::RenderHookHandle registerRenderPassHook(
             plugin::RenderPassHookPoint hookPoint,

@@ -238,6 +238,85 @@ namespace windows::details
                     }
                     break;
                 }
+                case PropertyType::Array:
+                {
+                    if (!data.contains(prop.name) || !data[prop.name].is_array())
+                        data[prop.name] = nlohmann::json::array();
+
+                    auto& arr = data[prop.name];
+                    std::string headerLabel = prop.name + " (" + std::to_string(arr.size()) + ")";
+                    std::string headerId = "##arr_" + prop.name;
+
+                    if (ImGui::TreeNode((headerLabel + headerId).c_str()))
+                    {
+                        int removeIdx = -1;
+                        for (size_t i = 0; i < arr.size(); ++i)
+                        {
+                            ImGui::PushID(static_cast<int>(i));
+
+                            std::string elemLabel = "[" + std::to_string(i) + "]";
+                            if (ImGui::TreeNode(elemLabel.c_str()))
+                            {
+                                if (!prop.children.empty() && arr[i].is_object())
+                                {
+                                    if (drawAutoInspector(prop.children, arr[i]))
+                                        changed = true;
+                                }
+
+                                ImGui::TreePop();
+                            }
+
+                            ImGui::SameLine();
+                            if (ImGui::SmallButton("X"))
+                            {
+                                removeIdx = static_cast<int>(i);
+                            }
+
+                            ImGui::PopID();
+                        }
+
+                        if (removeIdx >= 0)
+                        {
+                            arr.erase(arr.begin() + removeIdx);
+                            changed = true;
+                        }
+
+                        if (ImGui::SmallButton(("+ Add##" + prop.name).c_str()))
+                        {
+                            // Build default element from children schema
+                            nlohmann::json newElem = nlohmann::json::object();
+                            for (const auto& child : prop.children)
+                            {
+                                newElem[child.name] = child.defaultValue;
+                            }
+                            arr.push_back(std::move(newElem));
+                            changed = true;
+                        }
+
+                        ImGui::TreePop();
+                    }
+                    break;
+                }
+                case PropertyType::Object:
+                {
+                    if (!data.contains(prop.name) || !data[prop.name].is_object())
+                    {
+                        // Initialize from default
+                        data[prop.name] = prop.defaultValue;
+                    }
+
+                    std::string headerId = "##obj_" + prop.name;
+                    if (ImGui::TreeNode((prop.name + headerId).c_str()))
+                    {
+                        if (!prop.children.empty())
+                        {
+                            if (drawAutoInspector(prop.children, data[prop.name]))
+                                changed = true;
+                        }
+                        ImGui::TreePop();
+                    }
+                    break;
+                }
             }
         }
 

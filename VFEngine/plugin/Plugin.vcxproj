@@ -101,6 +101,7 @@
     <ClInclude Include="core\DynamicLibrary.hpp" />
     <ClInclude Include="core\PluginComponentRegistry.hpp" />
     <ClInclude Include="core\PluginContextImpl.hpp" />
+    <ClInclude Include="core\PluginEventBus.hpp" />
     <ClInclude Include="core\PluginManager.hpp" />
     <ClInclude Include="core\PluginSerializationBridge.hpp" />
   </ItemGroup>
@@ -109,6 +110,7 @@
     <ClCompile Include="core\DynamicLibrary.cpp" />
     <ClCompile Include="core\PluginComponentRegistry.cpp" />
     <ClCompile Include="core\PluginContextImpl.cpp" />
+    <ClCompile Include="core\PluginEventBus.cpp" />
     <ClCompile Include="core\PluginManager.cpp" />
     <ClCompile Include="core\PluginSerializationBridge.cpp" />
   </ItemGroup>

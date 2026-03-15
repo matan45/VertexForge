@@ -1,6 +1,7 @@
 #pragma once
 #include <nlohmann/json.hpp>
 #include <string>
+#include <vector>
 #include <cstdint>
 
 namespace components::plugin
@@ -14,7 +15,9 @@ namespace components::plugin
         Vec2,
         Vec3,
         Vec4,
-        Color
+        Color,
+        Array,  // dynamic-length list, element schema defined by children[0]
+        Object  // fixed struct, fields defined by children
     };
 
     struct PropertyDescriptor
@@ -24,5 +27,6 @@ namespace components::plugin
         nlohmann::json defaultValue;
         float min = 0.0f;
         float max = 0.0f;
+        std::vector<PropertyDescriptor> children; // element schema (Array) or fields (Object)
     };
 }

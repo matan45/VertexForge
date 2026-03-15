@@ -83,6 +83,46 @@ namespace plugin
 
         void setColor(const std::string& name, glm::vec4 value) { setVec4(name, value); }
 
+        // Array accessors
+        size_t getArraySize(const std::string& name) const
+        {
+            if (auto it = data->find(name); it != data->end() && it->is_array())
+                return it->size();
+            return 0;
+        }
+
+        PluginComponentData getArrayElement(const std::string& name, size_t index)
+        {
+            if (auto it = data->find(name); it != data->end() && it->is_array() && index < it->size())
+                return PluginComponentData(&(*it)[index]);
+            return PluginComponentData(nullptr);
+        }
+
+        void addArrayElement(const std::string& name, const nlohmann::json& element = nlohmann::json::object())
+        {
+            if (!data->contains(name) || !(*data)[name].is_array())
+                (*data)[name] = nlohmann::json::array();
+            (*data)[name].push_back(element);
+        }
+
+        void removeArrayElement(const std::string& name, size_t index)
+        {
+            if (auto it = data->find(name); it != data->end() && it->is_array() && index < it->size())
+                it->erase(it->begin() + static_cast<nlohmann::json::difference_type>(index));
+        }
+
+        // Object accessor — returns a wrapper for a nested object field
+        PluginComponentData getObject(const std::string& name)
+        {
+            if (auto it = data->find(name); it != data->end() && it->is_object())
+                return PluginComponentData(&(*it));
+            return PluginComponentData(nullptr);
+        }
+
+        // Raw JSON access (for advanced use)
+        nlohmann::json* getRawJson() { return data; }
+        const nlohmann::json* getRawJson() const { return data; }
+
         bool isValid() const { return data != nullptr; }
 
     private:

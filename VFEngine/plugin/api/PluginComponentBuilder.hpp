@@ -27,6 +27,22 @@ namespace plugin
         virtual ComponentBuilder& addVec4(const std::string& name, glm::vec4 defaultVal) = 0;
         virtual ComponentBuilder& addColor(const std::string& name, glm::vec4 defaultVal) = 0;
 
+        // Add a dynamic-length array property.
+        // Use the returned builder to define the element schema (one element's properties).
+        // Example: addArray("items").addString("name", "").addInt("count", 1).endArray();
+        virtual ComponentBuilder& addArray(const std::string& name) = 0;
+
+        // End the current array element definition and return to the parent builder.
+        virtual ComponentBuilder& endArray() = 0;
+
+        // Add a nested object property (fixed struct with named fields).
+        // Use the returned builder to define the object's fields.
+        // Example: addObject("stats").addInt("str", 10).addInt("dex", 10).endObject();
+        virtual ComponentBuilder& addObject(const std::string& name) = 0;
+
+        // End the current object definition and return to the parent builder.
+        virtual ComponentBuilder& endObject() = 0;
+
         // Optional: provide a custom ImGui inspector callback.
         // Only used in Editor (ignored in Runtime).
         // The callback receives mutable JSON data and returns true if any value was modified.
