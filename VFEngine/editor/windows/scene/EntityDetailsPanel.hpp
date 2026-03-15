@@ -50,6 +50,7 @@
 #include "../details/ReverbZoneDrawer.hpp"
 #include "../details/NavmeshRootDrawer.hpp"
 #include "../details/WorldSectorDrawer.hpp"
+#include "../details/PluginComponentDrawer.hpp"
 #include "../details/AddComponentPopup.hpp"
 
 namespace windows
@@ -107,6 +108,7 @@ namespace windows
         details::ReverbZoneDrawer reverbZoneDrawer;
         details::NavmeshRootDrawer navmeshRootDrawer;
         details::WorldSectorDrawer worldSectorDrawer;
+        details::PluginComponentDrawer pluginComponentDrawer;
         details::AddComponentPopup addComponentPopup;
 
     public:

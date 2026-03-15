@@ -27,7 +27,13 @@
       "Bash(grep -r \"behavior\\\\|BehaviorTree\\\\|btree\" /c/matan/VertexForge/VFEngine --include=\"*.hpp\" --include=\"*.cpp\" -l 2>/dev/null | head -20)",
       "Bash(grep -n \"class PipelineStage\" /c/matan/VertexForge/VFEngine/import/pipeline/stages/*.hpp)",
       "Bash(find \"C:\\\\matan\\\\VertexForge\\\\VFEngine\\\\editor\" -name \"*.cpp\" -o -name \"*.hpp\" | xargs grep -l \"PluginManager\" 2>/dev/null | head -5)",
-      "Bash(find \"C:\\\\matan\\\\VertexForge\\\\VFEngine\\\\runtime\" -name \"*.cpp\" -o -name \"*.hpp\" | xargs grep -l \"PluginManager\" 2>/dev/null | head -5)"
+      "Bash(find \"C:\\\\matan\\\\VertexForge\\\\VFEngine\\\\runtime\" -name \"*.cpp\" -o -name \"*.hpp\" | xargs grep -l \"PluginManager\" 2>/dev/null | head -5)",
+      "Bash(find /c/matan/VertexForge/VFEngine/graphics/render -name \"*Renderer*.cpp\" | xargs grep -l \"bindDescriptorSets\\\\|descriptor\" | head -5)",
+      "Bash(find /c/matan/VertexForge/VFEngine/graphics -name \"*OffScreen*\" -o -name \"*offscreen*\" | grep -E \"\\\\.\\(hpp|cpp\\)$\")",
+      "WebFetch(domain:docs.godotengine.org)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(grep:*)"
     ],
     "deny": [],
     "ask": []

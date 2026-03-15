@@ -26,6 +26,7 @@ namespace windows
         PhysAnim,
         Water,
         BehaviorTree,
+        Plugin,
         Other
     };
 
@@ -50,7 +51,8 @@ namespace windows
         Navmesh = 16,
         PhysAnim = 17,
         Water = 18,
-        BehaviorTree = 19
+        BehaviorTree = 19,
+        Plugin = 20
     };
 
     struct Asset

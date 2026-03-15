@@ -5,13 +5,14 @@
 #include <any>
 #include <utility>
 #include <entt/entt.hpp>
+#include <nlohmann/json.hpp>
 #include "../../services/data/RenderHookTypes.hpp"
+#include "../../services/events/EventTypes.hpp"
 
 struct ImGuiContext;
 
 namespace events {
     class EventDispatcher;
-    struct SubscriptionToken;
 }
 
 namespace controllers::imguiHandler {
@@ -23,6 +24,9 @@ namespace pipeline {
 }
 
 namespace plugin {
+
+    class ComponentBuilder;
+    class PluginComponentData;
 
     namespace capability {
         constexpr std::string_view editor   = "editor";
@@ -71,9 +75,47 @@ namespace plugin {
         // Unregister a previously registered render hook. Also cleaned up automatically on unload.
         virtual void unregisterRenderPassHook(RenderHookHandle handle) = 0;
 
+        // === Custom Component Registration ===
+        // Register a custom component type using the property descriptor builder.
+        // Declare typed properties (int, float, bool, string, vec2/3/4, color) with defaults and min/max hints.
+        // The engine auto-generates serialization, deserialization, and inspector UI.
+        // Optionally call setInspector() on the builder for a custom ImGui inspector.
+        // Call .build() to finalize registration.
+        virtual ComponentBuilder& registerComponent(const std::string& componentName) = 0;
+
+        // === Plugin Component ECS Helpers ===
+        // Safe across DLL boundary — all EnTT operations execute in the exe's address space.
+        // Use these instead of directly accessing the registry for plugin component data.
+        virtual bool addPluginComponent(entt::entity entity, const std::string& componentName) = 0;
+        virtual bool removePluginComponent(entt::entity entity, const std::string& componentName) = 0;
+        // WARNING: The returned pointer is valid only until the next ECS mutation
+        // (scene clear, entity destroy, component remove, plugin unload).
+        // Do NOT cache this pointer across frames — re-query each frame.
+        virtual PluginComponentData* getPluginComponent(entt::entity entity, const std::string& componentName) = 0;
+        virtual bool hasPluginComponent(entt::entity entity, const std::string& componentName) = 0;
+
+        // Iterate all entities that have a specific plugin component.
+        // The callback receives the entity handle and a typed data accessor.
+        // Iteration happens exe-side (safe across DLL boundary).
+        virtual void forEachWithComponent(const std::string& componentName,
+                                           const std::function<void(entt::entity, PluginComponentData&)>& callback) = 0;
+
+        // === Plugin Events ===
+        // Dynamic event system for plugin-to-plugin and plugin-to-engine communication.
+        // Uses string event names + JSON payloads (safe across DLL boundaries).
+
+        // Publish a fire-and-forget notification. All subscribers receive it.
+        virtual void publishEvent(const std::string& eventName, const nlohmann::json& data = {}) = 0;
+
+        // Subscribe to a named event. Returns a subscription token (auto-cleaned on plugin unload).
+        virtual events::SubscriptionToken subscribeEvent(const std::string& eventName,
+                                                          std::function<void(const nlohmann::json&)> handler) = 0;
+
         // === ECS Registry Access ===
         // Returns the global EnTT entity registry.
         // Use this for direct component manipulation (add, get, view, etc.).
+        // NOTE: For plugin-defined custom components, use the plugin component helpers above
+        // instead of the registry directly, to avoid EnTT DLL type-ID issues.
         virtual entt::registry& getRegistry() = 0;
 
         // === Capability Queries ===
@@ -92,6 +134,7 @@ namespace plugin {
         virtual void logInfo(const std::string& message) = 0;
         virtual void logWarning(const std::string& message) = 0;
         virtual void logError(const std::string& message) = 0;
+
     };
 
 }

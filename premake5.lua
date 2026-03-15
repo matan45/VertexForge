@@ -115,6 +115,7 @@ project "Core"
 	  "dependencies/openal-soft/include", -- OpenAL headers
 	  "dependencies/mtype/mType",         -- mType scripting language
 	  vulkanLibPath.."/Include",
+	  "dependencies/json/single_include",  -- nlohmann/json (for PluginComponents)
 	  "dependencies/JoltPhysics",          -- Jolt Physics headers
 	  "dependencies/recastnavigation/Recast/Include",   -- Recast navmesh generation
 	  "dependencies/recastnavigation/Detour/Include",   -- Detour pathfinding
@@ -253,6 +254,7 @@ project "Runtime"
       "dependencies/spdlog/include",
       "dependencies/glm",
       "dependencies/entt/single_include",
+      "dependencies/json/single_include",  -- nlohmann/json (for PluginComponents)
       "VFEngine/utilities",
       "VFEngine/services",              -- Services interfaces only
       "VFEngine/core/bootstrap",        -- For RuntimeBootstrap
@@ -364,6 +366,7 @@ project "Plugin"
       "dependencies/entt/single_include",
       "dependencies/imgui",
       vulkanLibPath.."/Include",            -- For vk::CommandBuffer in RenderHookTypes
+      "dependencies/json/single_include",  -- nlohmann/json (for plugin component registration)
       "VFEngine/utilities",
       "VFEngine/services",
       "VFEngine/import/pipeline",          -- For PipelineStage base class
@@ -382,6 +385,9 @@ project "Plugin"
       defines { "NDEBUG" }
       optimize "On"
 
+
+
+group "Engine"
 
 -- Project 6: Window
 project "Window"

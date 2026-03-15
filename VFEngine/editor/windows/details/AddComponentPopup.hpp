@@ -57,6 +57,7 @@ namespace windows::details {
         void drawAnimationSection(const ComponentPresence& c);
         void drawLightingSection(const ComponentPresence& c);
         void drawUISection(const ComponentPresence& c);
+        void drawPluginSection(const ComponentPresence& c);
     };
 
 }

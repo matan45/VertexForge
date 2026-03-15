@@ -18,6 +18,7 @@
 #include "AssetLifecycleWindow.hpp"
 #include "WorldSectorWindow.hpp"
 #include "VFXDebugWindow.hpp"
+#include "PluginManagerWindow.hpp"
 #include "AnimationDebugWindow.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/project/SceneEvents.hpp"
@@ -202,6 +203,13 @@ namespace windows
                 if (renderConfigWindow)
                 {
                     renderConfigWindow->show();
+                }
+            }
+            else if (ImGui::MenuItem("Plugin Manager"))
+            {
+                if (pluginManagerWindow)
+                {
+                    pluginManagerWindow->show();
                 }
             }
             ImGui::EndMenu();

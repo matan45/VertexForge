@@ -5,6 +5,17 @@
 
 namespace serialization
 {
+    SceneSerialization::PluginSerializeFn SceneSerialization::pluginSerializeHook;
+    SceneSerialization::PluginDeserializeFn SceneSerialization::pluginDeserializeHook;
+    std::shared_mutex SceneSerialization::pluginHookMutex;
+
+    void SceneSerialization::setPluginSerializationHooks(PluginSerializeFn serialize, PluginDeserializeFn deserialize)
+    {
+        std::unique_lock lock(pluginHookMutex);
+        pluginSerializeHook = std::move(serialize);
+        pluginDeserializeHook = std::move(deserialize);
+    }
+
     json SceneSerialization::serializeEntityComponents(scene::Entity& entity)
     {
         json componentsJson = json::object();
@@ -291,6 +302,19 @@ namespace serialization
         {
             componentsJson["decal"] = serializeDecal(
                 entity.getComponent<components::DecalComponent>());
+        }
+
+        // Plugin components
+        {
+            std::shared_lock lock(pluginHookMutex);
+            if (pluginSerializeHook)
+            {
+                auto pluginJson = pluginSerializeHook(entity);
+                for (auto& [key, value] : pluginJson.items())
+                {
+                    componentsJson[key] = std::move(value);
+                }
+            }
         }
 
         return componentsJson;
@@ -631,6 +655,26 @@ namespace serialization
         {
             auto& decalComp = entity.addOrReplaceComponent<components::DecalComponent>();
             deserializeDecal(componentsJson["decal"], decalComp);
+        }
+
+        // Plugin components
+        {
+            std::shared_lock lock(pluginHookMutex);
+            if (pluginDeserializeHook)
+            {
+                json pluginEntries = json::object();
+                for (const auto& [key, value] : componentsJson.items())
+                {
+                    if (key.rfind("plugin:", 0) == 0)
+                    {
+                        pluginEntries[key] = value;
+                    }
+                }
+                if (!pluginEntries.empty())
+                {
+                    pluginDeserializeHook(pluginEntries, entity);
+                }
+            }
         }
     }
 

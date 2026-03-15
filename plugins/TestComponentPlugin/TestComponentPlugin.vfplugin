@@ -1,0 +1,12 @@
+{
+    "apiVersion": 4,
+    "author": "VertexForge",
+    "capabilities": [],
+    "dependencies": [],
+    "description": "Test plugin for custom component registration",
+    "enabled": false,
+    "library": "TestComponentPlugin.dll",
+    "loadOrder": 100,
+    "name": "TestComponents",
+    "version": "1.0.0"
+}

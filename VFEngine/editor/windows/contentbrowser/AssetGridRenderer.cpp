@@ -216,6 +216,9 @@ namespace windows
         case BehaviorTree:
             icon = AtlasIcon::BehaviorTree;
             break;
+        case Plugin:
+            icon = AtlasIcon::Plugin;
+            break;
         case Other:
             if (fs::is_directory(asset.path))
             {

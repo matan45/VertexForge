@@ -136,6 +136,7 @@
     <ClInclude Include="windows\MainMenuBar.hpp" />
     <ClInclude Include="windows\MaterialEditorWindow.hpp" />
     <ClInclude Include="windows\MaterialInstanceEditorWindow.hpp" />
+    <ClInclude Include="windows\PluginManagerWindow.hpp" />
     <ClInclude Include="windows\VFXDebugWindow.hpp" />
     <ClInclude Include="windows\WaterEditorWindow.hpp" />
     <ClInclude Include="windows\WorldSectorWindow.hpp" />
@@ -187,6 +188,7 @@
     <ClInclude Include="windows\details\NavmeshAgentDrawer.hpp" />
     <ClInclude Include="windows\details\NavmeshRootDrawer.hpp" />
     <ClInclude Include="windows\details\PhysicsAnimationDrawer.hpp" />
+    <ClInclude Include="windows\details\PluginComponentDrawer.hpp" />
     <ClInclude Include="windows\details\PointLightDrawer.hpp" />
     <ClInclude Include="windows\details\RenderTextureDrawer.hpp" />
     <ClInclude Include="windows\details\RenderTexturePickerWidget.hpp" />
@@ -283,6 +285,7 @@
     <ClCompile Include="windows\MainMenuBar.cpp" />
     <ClCompile Include="windows\MaterialEditorWindow.cpp" />
     <ClCompile Include="windows\MaterialInstanceEditorWindow.cpp" />
+    <ClCompile Include="windows\PluginManagerWindow.cpp" />
     <ClCompile Include="windows\VFXDebugWindow.cpp" />
     <ClCompile Include="windows\WaterEditorWindow.cpp" />
     <ClCompile Include="windows\WorldSectorWindow.cpp" />
@@ -334,6 +337,7 @@
     <ClCompile Include="windows\details\NavmeshAgentDrawer.cpp" />
     <ClCompile Include="windows\details\NavmeshRootDrawer.cpp" />
     <ClCompile Include="windows\details\PhysicsAnimationDrawer.cpp" />
+    <ClCompile Include="windows\details\PluginComponentDrawer.cpp" />
     <ClCompile Include="windows\details\PointLightDrawer.cpp" />
     <ClCompile Include="windows\details\RenderTextureDrawer.cpp" />
     <ClCompile Include="windows\details\RenderTexturePickerWidget.cpp" />

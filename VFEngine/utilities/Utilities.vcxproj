@@ -116,6 +116,8 @@
     <ClInclude Include="components\NavmeshComponents.hpp" />
     <ClInclude Include="components\PhysicsAnimationComponent.hpp" />
     <ClInclude Include="components\PhysicsComponents.hpp" />
+    <ClInclude Include="components\PluginComponents.hpp" />
+    <ClInclude Include="components\PluginPropertyTypes.hpp" />
     <ClInclude Include="components\TerrainComponents.hpp" />
     <ClInclude Include="components\UIComponents.hpp" />
     <ClInclude Include="components\VegetationComponents.hpp" />

@@ -25,7 +25,7 @@ namespace windows
         services::EditorTextureHandle iconAtlas;
         bool iconsLoaded = false;
 
-        static constexpr uint32_t ATLAS_COLS = 4;
+        static constexpr uint32_t ATLAS_COLS = 5;
         static constexpr uint32_t ATLAS_ROWS = 5;
         static constexpr float THUMBNAIL_SIZE = 64.0f;
         static constexpr float PADDING = 16.0f;

@@ -454,6 +454,7 @@ namespace windows
         if (extension == ".vfWater") return Water;
         if (extension == ".vfBehaviorTree") return BehaviorTree;
         if (extension == ".mt") return Script;
+        if (extension == ".vfplugin") return Plugin;
 
         bool isVfAsset = (extension == ".vfImage" || extension == ".vfHdr" ||
             extension == ".vfMesh" || extension == ".vfAudio" ||

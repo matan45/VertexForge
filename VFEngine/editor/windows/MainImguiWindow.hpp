@@ -25,6 +25,7 @@
 #include "config/GIConfigWindow.hpp"
 #include "config/VolumetricFogConfigWindow.hpp"
 #include "config/LightStreamingDebugWindow.hpp"
+#include "PluginManagerWindow.hpp"
 #include "MainMenuBar.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/terrain/TerrainEvents.hpp"
@@ -66,6 +67,7 @@ namespace windows
         GIConfigWindow giConfigWindow;
         VolumetricFogConfigWindow volumetricFogConfigWindow;
         LightStreamingDebugWindow lightStreamingDebugWindow;
+        PluginManagerWindow pluginManagerWindow;
         MainMenuBar menuBar;
 
         events::SubscriptionToken sceneClearedToken;
