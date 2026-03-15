@@ -95,6 +95,7 @@
     <ClInclude Include="api\PluginComponentBuilder.hpp" />
     <ClInclude Include="api\PluginComponentData.hpp" />
     <ClInclude Include="api\PluginContext.hpp" />
+    <ClInclude Include="api\PluginDescriptor.hpp" />
     <ClInclude Include="api\PluginExport.hpp" />
     <ClInclude Include="api\PluginVersion.hpp" />
     <ClInclude Include="core\ComponentBuilderImpl.hpp" />

@@ -30,7 +30,7 @@ import os
 
 # Configuration
 TILE_SIZE = 64
-GRID_COLS = 4
+GRID_COLS = 5
 GRID_ROWS = 5
 ATLAS_WIDTH = TILE_SIZE * GRID_COLS   # 256
 ATLAS_HEIGHT = TILE_SIZE * GRID_ROWS  # 320
@@ -58,6 +58,7 @@ ICON_FILES = {
     17: "physAnim",              # physics animation
     18: "sea",              # physics animation
     19: "ai-tree",              # physics animation
+    20: "plugin",              # physics animation
 }
 
 def find_icon_file(base_name):
