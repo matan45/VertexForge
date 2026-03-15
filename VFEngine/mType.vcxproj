@@ -146,6 +146,9 @@
     <ClInclude Include="..\dependencies\mtype\mType\ast\nodes\statements\IfNode.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\ast\nodes\statements\ImportNode.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\ast\nodes\statements\IndexAssignmentNode.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\ast\nodes\statements\MatchCaseNode.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\ast\nodes\statements\MatchDefaultNode.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\ast\nodes\statements\MatchNode.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\ast\nodes\statements\MemberAssignmentNode.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\ast\nodes\statements\ProgramNode.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\ast\nodes\statements\SwitchNode.hpp" />
@@ -191,6 +194,7 @@
     <ClInclude Include="..\dependencies\mtype\mType\environment\registry\builtin\CosFunction.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\environment\registry\builtin\HashCodeFunction.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\environment\registry\builtin\IndexOfFunction.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\environment\registry\builtin\ObjectClassBootstrap.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\environment\registry\builtin\ParsePrimitiveFunction.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\environment\registry\builtin\PrintFunction.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\environment\registry\builtin\SinFunction.hpp" />
@@ -352,6 +356,7 @@
     <ClInclude Include="..\dependencies\mtype\mType\value\NativeArray.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\value\ParameterType.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\value\ParameterTypeConverter.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\value\PrimitiveTypeTag.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\value\PromiseValue.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\value\SparseMultiArray.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\value\StringPool.hpp" />
@@ -442,6 +447,11 @@
     <ClInclude Include="..\dependencies\mtype\mType\vm\optimization\patterns\StackOptimizationPattern.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\vm\optimization\patterns\StrengthReductionPattern.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\vm\optimization\patterns\TypeSpecializationPattern.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\profiler\ProfilerContext.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\profiler\ProfilerData.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\profiler\ProfilerHookHelper.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\profiler\ProfilerMode.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\profiler\ProfilerReport.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\vm\runtime\VirtualMachine.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\vm\runtime\context\ExecutionContext.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\vm\runtime\executors\ArithmeticExecutor.hpp" />
@@ -465,6 +475,7 @@
     <ClInclude Include="..\dependencies\mtype\mType\vm\runtime\utils\ArrayBoundsChecker.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\vm\runtime\utils\ErrorLocationHelper.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\vm\runtime\utils\ExceptionHandler.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\runtime\utils\NullCheckUtils.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\vm\runtime\validation\AccessValidator.hpp" />
     <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\a64.h" />
     <ClInclude Include="..\dependencies\mtype\vendor\asmjit\asmjit\arm.h" />
@@ -627,6 +638,9 @@
     <ClCompile Include="..\dependencies\mtype\mType\ast\nodes\statements\IfNode.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\ast\nodes\statements\ImportNode.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\ast\nodes\statements\IndexAssignmentNode.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\ast\nodes\statements\MatchCaseNode.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\ast\nodes\statements\MatchDefaultNode.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\ast\nodes\statements\MatchNode.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\ast\nodes\statements\MemberAssignmentNode.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\ast\nodes\statements\ProgramNode.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\ast\nodes\statements\SwitchNode.cpp" />
@@ -659,6 +673,7 @@
     <ClCompile Include="..\dependencies\mtype\mType\environment\registry\builtin\CosFunction.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\environment\registry\builtin\HashCodeFunction.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\environment\registry\builtin\IndexOfFunction.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\environment\registry\builtin\ObjectClassBootstrap.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\environment\registry\builtin\ParsePrimitiveFunction.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\environment\registry\builtin\PrintFunction.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\environment\registry\builtin\SinFunction.cpp" />
@@ -865,6 +880,9 @@
     <ClCompile Include="..\dependencies\mtype\mType\vm\optimization\patterns\StackOptimizationPattern.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\vm\optimization\patterns\StrengthReductionPattern.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\vm\optimization\patterns\TypeSpecializationPattern.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\profiler\ProfilerContext.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\profiler\ProfilerHookHelper.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\profiler\ProfilerReport.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\vm\runtime\VirtualMachine.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\vm\runtime\context\ExecutionContext.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\vm\runtime\executors\ArithmeticExecutor.cpp" />
