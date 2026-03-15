@@ -28,6 +28,7 @@ namespace components
         Particle,
         Billboard,
         Text,
+        ReverbZone,
         Custom
     };
 
@@ -67,6 +68,7 @@ namespace components
             case BillboardIconType::Particle: return 6;
             case BillboardIconType::Billboard: return 7;
             case BillboardIconType::Text: return 8;
+            case BillboardIconType::ReverbZone: return 9;
             default: return atlasIndex;
             }
         }

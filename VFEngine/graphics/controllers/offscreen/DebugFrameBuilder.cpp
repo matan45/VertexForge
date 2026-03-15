@@ -15,6 +15,8 @@
 #include "../../render/lighting/ClusterGridManager.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
+#include "../../../services/events/EventDispatcher.hpp"
+#include "../../../services/events/render/DebugDrawEvents.hpp"
 #include <glm/gtc/matrix_transform.hpp>
 #include <algorithm>
 #include <cmath>
@@ -149,6 +151,75 @@ namespace controllers::offscreen
         }
 
         renderHandler->setAudioSphereDrawList(std::move(audioSphereDrawList));
+    }
+
+    void DebugFrameBuilder::prepareReverbZones(const FrameContext& ctx)
+    {
+        if (ctx.playModeActive || !ctx.showDebugRendering)
+        {
+            return;
+        }
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto& dispatcher = events::EventDispatcher::instance();
+        auto view = registry.view<components::ReverbZoneComponent, components::WorldTransformComponent>();
+
+        for (auto entity : view)
+        {
+            if (registry.all_of<components::NameComponent>(entity))
+            {
+                const auto& nameComp = registry.get<components::NameComponent>(entity);
+                if (!nameComp.isActive) continue;
+            }
+
+            const auto& zone = view.get<components::ReverbZoneComponent>(entity);
+            if (!zone.showDebugVolume) continue;
+
+            const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
+            glm::vec3 position = glm::vec3(worldTransform.worldMatrix[3]);
+
+            glm::vec4 innerColor(0.0f, 0.8f, 0.8f, 1.0f); // Cyan for zone boundary
+            glm::vec4 outerColor(0.0f, 0.4f, 0.4f, 1.0f); // Darker cyan for falloff
+
+            if (zone.shape == components::ReverbZoneShape::Sphere)
+            {
+                // Inner zone boundary
+                events::debugdraw::DrawSphereCommand innerCmd;
+                innerCmd.center = position;
+                innerCmd.radius = zone.radius;
+                innerCmd.color = innerColor;
+                dispatcher.execute(innerCmd);
+
+                // Outer falloff boundary
+                if (zone.falloffDistance > 0.0f)
+                {
+                    events::debugdraw::DrawSphereCommand outerCmd;
+                    outerCmd.center = position;
+                    outerCmd.radius = zone.radius + zone.falloffDistance;
+                    outerCmd.color = outerColor;
+                    dispatcher.execute(outerCmd);
+                }
+            }
+            else // Box
+            {
+                // Inner zone boundary
+                events::debugdraw::DrawBoxCommand innerCmd;
+                innerCmd.center = position;
+                innerCmd.halfExtents = zone.halfExtents;
+                innerCmd.color = innerColor;
+                dispatcher.execute(innerCmd);
+
+                // Outer falloff boundary
+                if (zone.falloffDistance > 0.0f)
+                {
+                    events::debugdraw::DrawBoxCommand outerCmd;
+                    outerCmd.center = position;
+                    outerCmd.halfExtents = zone.halfExtents + glm::vec3(zone.falloffDistance);
+                    outerCmd.color = outerColor;
+                    dispatcher.execute(outerCmd);
+                }
+            }
+        }
     }
 
     void DebugFrameBuilder::prepareGrid(const FrameContext& ctx)

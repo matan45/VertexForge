@@ -1,6 +1,9 @@
 #include "ReverbZoneManager.hpp"
+#include "AudioSystem.hpp"
 #include "ReverbPresets.hpp"
 #include "components/Components.hpp"
+#include <AL/al.h>
+#include <AL/efx.h>
 #include "print/Log.hpp"
 #include <algorithm>
 #include <glm/gtc/matrix_inverse.hpp>

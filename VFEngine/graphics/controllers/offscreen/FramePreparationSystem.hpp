@@ -88,6 +88,7 @@ namespace controllers::offscreen
 
         void prepareCameraFrustums(const FrameContext& ctx) { debugBuilder.prepareCameraFrustums(ctx); }
         void prepareAudioSpheres(const FrameContext& ctx) { debugBuilder.prepareAudioSpheres(ctx); }
+        void prepareReverbZones(const FrameContext& ctx) { debugBuilder.prepareReverbZones(ctx); }
         void prepareGrid(const FrameContext& ctx) { debugBuilder.prepareGrid(ctx); }
         void preparePhysicsColliders(const FrameContext& ctx) { debugBuilder.preparePhysicsColliders(ctx); }
         void prepareLightGizmos(const FrameContext& ctx) { debugBuilder.prepareLightGizmos(ctx); }

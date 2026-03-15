@@ -237,7 +237,7 @@ namespace services {
         scene::Entity sceneEntity(internal::fromHandle(entity));
         if (!sceneEntity.hasComponent<components::ReverbZoneComponent>()) {
             sceneEntity.addComponent<components::ReverbZoneComponent>();
-            autoAttachBillboard(entity, static_cast<uint32_t>(components::BillboardIconType::Audio3D));
+            autoAttachBillboard(entity, static_cast<uint32_t>(components::BillboardIconType::ReverbZone));
             return true;
         }
         return false;
@@ -250,7 +250,7 @@ namespace services {
         scene::Entity sceneEntity(internal::fromHandle(entity));
         if (sceneEntity.hasComponent<components::ReverbZoneComponent>()) {
             sceneEntity.removeComponent<components::ReverbZoneComponent>();
-            autoDetachBillboard(entity, static_cast<uint32_t>(components::BillboardIconType::Audio3D));
+            autoDetachBillboard(entity, static_cast<uint32_t>(components::BillboardIconType::ReverbZone));
             return true;
         }
         return false;
