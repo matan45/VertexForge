@@ -118,11 +118,8 @@ namespace windows
                 float panelWidth = 300.0f;
                 float graphWidth = innerSize.x - panelWidth - ImGui::GetStyle().ItemSpacing.x;
 
-                // Sync animatorData->graph with selected layer's graph
-                if (animatorData && !animatorData->layers.empty() && selectedLayerIndex < animatorData->layers.size())
-                {
-                    animatorData->graph = animatorData->layers[selectedLayerIndex].graph;
-                }
+                // Save previous layer index to detect changes
+                uint32_t layerIndexBeforePanel = selectedLayerIndex;
 
                 ImGui::BeginChild("PropertiesPanel", ImVec2(panelWidth, innerSize.y), true);
 
@@ -141,6 +138,32 @@ namespace windows
                 }
 
                 ImGui::Separator();
+
+                // Sync graph from selected layer AFTER layer panel (selection may have changed)
+                if (selectedLayerIndex != layerIndexBeforePanel)
+                {
+                    // Layer changed: sync old edits back, then load new layer's graph
+                    if (animatorData && !animatorData->layers.empty())
+                    {
+                        if (layerIndexBeforePanel < animatorData->layers.size())
+                        {
+                            animatorData->layers[layerIndexBeforePanel].graph = animatorData->graph;
+                        }
+                        if (selectedLayerIndex < animatorData->layers.size())
+                        {
+                            animatorData->graph = animatorData->layers[selectedLayerIndex].graph;
+                        }
+                    }
+                    selectedStateId = 0;
+                    selectedTransitionId = 0;
+                    needsPositionInit = true;
+                    needsNavigateToContent = true;
+                }
+                else if (animatorData && !animatorData->layers.empty() && selectedLayerIndex < animatorData->layers.size())
+                {
+                    // Same layer: just sync from layer (first frame or after reload)
+                    animatorData->graph = animatorData->layers[selectedLayerIndex].graph;
+                }
 
                 if (ImGui::CollapsingHeader("Parameters", ImGuiTreeNodeFlags_DefaultOpen))
                 {

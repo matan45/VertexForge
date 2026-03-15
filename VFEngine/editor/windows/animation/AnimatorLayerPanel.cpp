@@ -12,7 +12,7 @@ namespace windows::animation
         if (ImGui::Button("Add Layer"))
         {
             animator::AnimationLayerData newLayer;
-            newLayer.name = "Layer " + std::to_string(animatorData->layers.size());
+            newLayer.name = "Layer " + std::to_string(animatorData->layers.size() + 1);
             newLayer.weight = 1.0f;
             newLayer.blendMode = animator::LayerBlendMode::Override;
             newLayer.sourceMode = animator::LayerSourceMode::StateMachine;
