@@ -19,6 +19,7 @@ namespace core
     class ScriptAnimationEventBridge;
     class ScriptSocketEventBridge;
     class ScriptVFXEventBridge;
+    class ScriptNavigationEventBridge;
 
     class ScriptingAdapter : public ::services::IScriptingProvider
     {
@@ -30,6 +31,7 @@ namespace core
         std::unique_ptr<ScriptAnimationEventBridge> animationEventBridge;
         std::unique_ptr<ScriptSocketEventBridge> socketEventBridge;
         std::unique_ptr<ScriptVFXEventBridge> vfxEventBridge;
+        std::unique_ptr<ScriptNavigationEventBridge> navigationEventBridge;
 
         std::unordered_map<uint64_t, std::string> instanceToClassName;
         std::unordered_map<uint64_t, ::services::EntityHandle> instanceToEntity;

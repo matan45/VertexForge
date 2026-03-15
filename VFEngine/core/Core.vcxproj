@@ -154,6 +154,7 @@
     <ClInclude Include="adapters\render\RenderTextureAdapter.hpp" />
     <ClInclude Include="adapters\scripting\NativeAPIRegistry.hpp" />
     <ClInclude Include="adapters\scripting\ScriptAnimationEventBridge.hpp" />
+    <ClInclude Include="adapters\scripting\ScriptNavigationEventBridge.hpp" />
     <ClInclude Include="adapters\scripting\ScriptPhysicsEventBridge.hpp" />
     <ClInclude Include="adapters\scripting\ScriptSocketEventBridge.hpp" />
     <ClInclude Include="adapters\scripting\ScriptUIEventBridge.hpp" />
@@ -260,6 +261,7 @@
     <ClCompile Include="adapters\render\RenderTextureAdapter.cpp" />
     <ClCompile Include="adapters\scripting\NativeAPIRegistry.cpp" />
     <ClCompile Include="adapters\scripting\ScriptAnimationEventBridge.cpp" />
+    <ClCompile Include="adapters\scripting\ScriptNavigationEventBridge.cpp" />
     <ClCompile Include="adapters\scripting\ScriptPhysicsEventBridge.cpp" />
     <ClCompile Include="adapters\scripting\ScriptSocketEventBridge.cpp" />
     <ClCompile Include="adapters\scripting\ScriptUIEventBridge.cpp" />

@@ -36,6 +36,7 @@ namespace services
 
         virtual navigation::NavPath findPath(const glm::vec3& start, const glm::vec3& end,
                                               float agentRadius, float agentHeight) = 0;
+        virtual navigation::NavmeshRaycastResult navmeshRaycast(const glm::vec3& from, const glm::vec3& to) = 0;
         virtual glm::vec3 getClosestPoint(const glm::vec3& point, float searchRadius) = 0;
         virtual bool isPointOnNavmesh(const glm::vec3& point, float tolerance) = 0;
 
@@ -44,6 +45,7 @@ namespace services
         virtual void removeCrowdAgent(int agentIndex) = 0;
         virtual void setCrowdAgentTarget(int agentIndex, const glm::vec3& target) = 0;
         virtual void stopCrowdAgent(int agentIndex) = 0;
+        virtual void updateCrowdAgentParams(int agentIndex, float maxSpeed, float maxAcceleration) = 0;
         virtual glm::vec3 getCrowdAgentPosition(int agentIndex) const = 0;
         virtual glm::vec3 getCrowdAgentVelocity(int agentIndex) const = 0;
         virtual void updateCrowd(float deltaTime) = 0;

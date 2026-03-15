@@ -65,6 +65,12 @@ namespace services
                 return provider->isEnabled(query.entity);
             });
 
+        dispatcher.registerQueryHandler<events::ai::GetBehaviorTreeStatusQuery>(
+            [this](const auto& query)
+            {
+                return provider->getStatus(query.entity);
+            });
+
         dispatcher.registerQueryHandler<events::ai::GetBlackboardValueQuery>(
             [this](const auto& query)
             {

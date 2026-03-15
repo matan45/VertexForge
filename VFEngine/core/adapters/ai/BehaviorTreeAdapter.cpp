@@ -93,6 +93,21 @@ namespace core
         return it != runtimes.end() && it->second.enabled;
     }
 
+    std::string BehaviorTreeAdapter::getStatus(services::EntityHandle entity) const
+    {
+        auto it = runtimes.find(entity.id);
+        if (it == runtimes.end()) return "stopped";
+        if (!it->second.enabled) return "stopped";
+
+        switch (it->second.lastTickStatus)
+        {
+        case behaviortree::BTNodeStatus::Running: return "running";
+        case behaviortree::BTNodeStatus::Success: return "success";
+        case behaviortree::BTNodeStatus::Failure: return "failure";
+        default: return "stopped";
+        }
+    }
+
     void BehaviorTreeAdapter::updateAll(float deltaTime)
     {
         std::vector<uint64_t> entityIds;
@@ -108,7 +123,7 @@ namespace core
             auto& instance = it->second;
             if (!instance.enabled || !instance.runtime) continue;
 
-            instance.runtime->tick(deltaTime, this);
+            instance.lastTickStatus = instance.runtime->tick(deltaTime, this);
         }
     }
 

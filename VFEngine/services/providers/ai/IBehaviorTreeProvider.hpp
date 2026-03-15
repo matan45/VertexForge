@@ -16,6 +16,7 @@ namespace services {
         virtual bool hasTree(EntityHandle entity) const = 0;
         virtual std::string getTreePath(EntityHandle entity) const = 0;
         virtual bool isEnabled(EntityHandle entity) const = 0;
+        virtual std::string getStatus(EntityHandle entity) const = 0;
 
         // === Runtime ===
         virtual void updateAll(float deltaTime) = 0;

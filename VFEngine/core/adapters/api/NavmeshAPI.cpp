@@ -5,6 +5,8 @@
 #include "NativeHelpers.hpp"
 #include "../../../services/events/EventDispatcher.hpp"
 #include "../../../services/events/navmesh/NavmeshEvents.hpp"
+#include "scene/EntityRegistry.hpp"
+#include "components/Components.hpp"
 
 namespace core::api
 {
@@ -109,6 +111,98 @@ namespace core::api
                 events::navmesh::GetClosestPointQuery query;
                 query.point = glm::vec3(extractFloat(args[0]), extractFloat(args[1]),
                                          extractFloat(args[2]));
+                return makeVec3Array(dispatcher.query(query));
+            });
+
+        interpreter->registerNativeFunction("_native_navmesh_raycast",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                if (pathQueryCountThisFrame >= MAX_PATH_QUERIES_PER_FRAME)
+                {
+                    vfLogWarning("[Script] Navmesh query rate limit exceeded ({}/frame)",
+                                 MAX_PATH_QUERIES_PER_FRAME);
+                    auto result = std::make_shared<value::NativeArray>(4, value::ValueType::FLOAT);
+                    result->set(0, value::Value(0.0f));
+                    result->set(1, value::Value(0.0f));
+                    result->set(2, value::Value(0.0f));
+                    result->set(3, value::Value(0.0f));
+                    return value::Value(result);
+                }
+                pathQueryCountThisFrame++;
+
+                if (args.size() < 6)
+                {
+                    auto result = std::make_shared<value::NativeArray>(4, value::ValueType::FLOAT);
+                    result->set(0, value::Value(0.0f));
+                    result->set(1, value::Value(0.0f));
+                    result->set(2, value::Value(0.0f));
+                    result->set(3, value::Value(0.0f));
+                    return value::Value(result);
+                }
+
+                events::navmesh::NavmeshRaycastQuery query;
+                query.from = glm::vec3(extractFloat(args[0]), extractFloat(args[1]),
+                                        extractFloat(args[2]));
+                query.to = glm::vec3(extractFloat(args[3]), extractFloat(args[4]),
+                                      extractFloat(args[5]));
+
+                auto hit = dispatcher.query(query);
+
+                auto result = std::make_shared<value::NativeArray>(4, value::ValueType::FLOAT);
+                result->set(0, value::Value(hit.hit ? 1.0f : 0.0f));
+                result->set(1, value::Value(hit.hitPoint.x));
+                result->set(2, value::Value(hit.hitPoint.y));
+                result->set(3, value::Value(hit.hitPoint.z));
+                return value::Value(result);
+            });
+
+        interpreter->registerNativeFunction("_native_navmesh_setAgentSpeed",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                if (args.size() < 2) return value::Value(std::monostate{});
+
+                events::navmesh::UpdateAgentConfigCommand cmd;
+                cmd.entity = intToEntity(extractInt64(args[0]));
+                cmd.maxSpeed = extractFloat(args[1]);
+                dispatcher.execute(cmd);
+                return value::Value(std::monostate{});
+            });
+
+        interpreter->registerNativeFunction("_native_navmesh_setAgentAcceleration",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                if (args.size() < 2) return value::Value(std::monostate{});
+
+                events::navmesh::UpdateAgentConfigCommand cmd;
+                cmd.entity = intToEntity(extractInt64(args[0]));
+                cmd.maxAcceleration = extractFloat(args[1]);
+                dispatcher.execute(cmd);
+                return value::Value(std::monostate{});
+            });
+
+        interpreter->registerNativeFunction("_native_navmesh_getAgentSpeed",
+            [](const std::vector<value::Value>& args) -> value::Value
+            {
+                if (args.empty()) return value::Value(0.0);
+
+                auto entity = intToEntity(extractInt64(args[0]));
+                auto& registry = scene::EntityRegistry::getRegistry();
+                auto enttEntity = static_cast<entt::entity>(static_cast<uint32_t>(entity.id));
+                if (!registry.valid(enttEntity) ||
+                    !registry.all_of<components::NavmeshAgentComponent>(enttEntity))
+                    return value::Value(0.0);
+
+                const auto& agent = registry.get<components::NavmeshAgentComponent>(enttEntity);
+                return value::Value(static_cast<double>(agent.maxSpeed));
+            });
+
+        interpreter->registerNativeFunction("_native_navmesh_getAgentVelocity",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                if (args.empty()) return makeVec3Array(glm::vec3(0.0f));
+
+                events::navmesh::GetAgentVelocityQuery query;
+                query.entity = intToEntity(extractInt64(args[0]));
                 return makeVec3Array(dispatcher.query(query));
             });
 

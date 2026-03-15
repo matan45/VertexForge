@@ -60,6 +60,12 @@ namespace events::ai {
         std::string_view getName() const override { return "IsBehaviorTreeEnabled"; }
     };
 
+    struct GetBehaviorTreeStatusQuery : IQuery<std::string> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "GetBehaviorTreeStatus"; }
+    };
+
     struct HasBlackboardKeyQuery : IQuery<bool> {
         services::EntityHandle entity;
         std::string key;

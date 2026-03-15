@@ -56,6 +56,7 @@ namespace core
         // === Pathfinding ===
         navigation::NavPath findPath(const glm::vec3& start, const glm::vec3& end,
                                       float agentRadius, float agentHeight) override;
+        navigation::NavmeshRaycastResult navmeshRaycast(const glm::vec3& from, const glm::vec3& to) override;
         glm::vec3 getClosestPoint(const glm::vec3& point, float searchRadius) override;
         bool isPointOnNavmesh(const glm::vec3& point, float tolerance) override;
 
@@ -65,6 +66,7 @@ namespace core
         void removeCrowdAgent(int agentIndex) override;
         void setCrowdAgentTarget(int agentIndex, const glm::vec3& target) override;
         void stopCrowdAgent(int agentIndex) override;
+        void updateCrowdAgentParams(int agentIndex, float maxSpeed, float maxAcceleration) override;
         glm::vec3 getCrowdAgentPosition(int agentIndex) const override;
         glm::vec3 getCrowdAgentVelocity(int agentIndex) const override;
         void updateCrowd(float deltaTime) override;

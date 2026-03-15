@@ -116,6 +116,24 @@ namespace services
                 return isPointOnNavmesh(query.point, query.tolerance);
             });
 
+        dispatcher.registerQueryHandler<events::navmesh::NavmeshRaycastQuery>(
+            [this](const events::navmesh::NavmeshRaycastQuery& query)
+            {
+                return navmeshProvider->navmeshRaycast(query.from, query.to);
+            });
+
+        dispatcher.registerCommandHandler<events::navmesh::UpdateAgentConfigCommand>(
+            [this](const events::navmesh::UpdateAgentConfigCommand& cmd)
+            {
+                agentManager.updateAgentConfig(cmd.entity, cmd.maxSpeed, cmd.maxAcceleration);
+            });
+
+        dispatcher.registerQueryHandler<events::navmesh::GetAgentVelocityQuery>(
+            [this](const events::navmesh::GetAgentVelocityQuery& query)
+            {
+                return agentManager.getAgentVelocity(query.entity);
+            });
+
         dispatcher.registerQueryHandler<events::navmesh::HasNavmeshQuery>(
             [this](const events::navmesh::HasNavmeshQuery&)
             {
