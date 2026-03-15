@@ -144,13 +144,14 @@ namespace windows::details
         }
 
         ImGui::SameLine();
-        if (audioData.audioFilePath.empty()) ImGui::BeginDisabled();
+        bool clearDisabled = audioData.audioFilePath.empty();
+        ImGui::BeginDisabled(clearDisabled);
         if (ImGui::Button("Clear##Audio2D"))
         {
             audioData.audioFilePath = "";
             changed = true;
         }
-        if (audioData.audioFilePath.empty()) ImGui::EndDisabled();
+        ImGui::EndDisabled();
 
         return changed;
     }
