@@ -1,6 +1,6 @@
 #include "AnimatorSystemController.hpp"
 #include "../animation/RuntimeAnimatorSystem.hpp"
-#include "../animation/AnimatorStateMachine.hpp"
+#include "../animation/AnimationLayerStack.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
 
@@ -175,5 +175,36 @@ namespace controllers
             return registry.get<components::AnimatorComponent>(entity).applyRootMotion;
         }
         return false;
+    }
+
+    void AnimatorSystemController::setLayerWeight(entt::entity entity, uint32_t layerIndex, float weight)
+    {
+        auto* stack = animation::RuntimeAnimatorSystem::instance().getLayerStack(entity);
+        if (stack)
+            stack->setLayerWeight(layerIndex, weight);
+    }
+
+    float AnimatorSystemController::getLayerWeight(entt::entity entity, uint32_t layerIndex) const
+    {
+        auto* stack = animation::RuntimeAnimatorSystem::instance().getLayerStack(entity);
+        if (stack)
+            return stack->getLayerWeight(layerIndex);
+        return 0.0f;
+    }
+
+    uint32_t AnimatorSystemController::getLayerCount(entt::entity entity) const
+    {
+        auto* stack = animation::RuntimeAnimatorSystem::instance().getLayerStack(entity);
+        if (stack)
+            return stack->getLayerCount();
+        return 0;
+    }
+
+    std::string AnimatorSystemController::getLayerName(entt::entity entity, uint32_t layerIndex) const
+    {
+        auto* stack = animation::RuntimeAnimatorSystem::instance().getLayerStack(entity);
+        if (stack)
+            return stack->getLayerName(layerIndex);
+        return "";
     }
 }

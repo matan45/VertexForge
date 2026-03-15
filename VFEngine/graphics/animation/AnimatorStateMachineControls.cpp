@@ -20,51 +20,51 @@ namespace animation
 
     const animator::AnimatorState* AnimatorStateMachine::getCurrentAnimatorState() const
     {
-        if (!animatorData)
+        if (!activeGraph)
             return nullptr;
-        return animatorData->graph.findStateById(state.currentStateId);
+        return activeGraph->findStateById(state.currentStateId);
     }
 
     const animator::AnimatorState* AnimatorStateMachine::getPreviousAnimatorState() const
     {
-        if (!animatorData)
+        if (!activeGraph)
             return nullptr;
-        return animatorData->graph.findStateById(state.previousStateId);
+        return activeGraph->findStateById(state.previousStateId);
     }
 
     void AnimatorStateMachine::setFloat(const std::string& name, float value)
     {
-        parameters.setFloat(name, value);
+        parameters->setFloat(name, value);
     }
 
     void AnimatorStateMachine::setInt(const std::string& name, int32_t value)
     {
-        parameters.setInt(name, value);
+        parameters->setInt(name, value);
     }
 
     void AnimatorStateMachine::setBool(const std::string& name, bool value)
     {
-        parameters.setBool(name, value);
+        parameters->setBool(name, value);
     }
 
     void AnimatorStateMachine::setTrigger(const std::string& name)
     {
-        parameters.setTrigger(name);
+        parameters->setTrigger(name);
     }
 
     float AnimatorStateMachine::getFloat(const std::string& name) const
     {
-        return parameters.getFloat(name);
+        return parameters->getFloat(name);
     }
 
     int32_t AnimatorStateMachine::getInt(const std::string& name) const
     {
-        return parameters.getInt(name);
+        return parameters->getInt(name);
     }
 
     bool AnimatorStateMachine::getBool(const std::string& name) const
     {
-        return parameters.getBool(name);
+        return parameters->getBool(name);
     }
 
     void AnimatorStateMachine::play()
@@ -89,24 +89,24 @@ namespace animation
 
     void AnimatorStateMachine::reset()
     {
-        if (!animatorData)
+        if (!activeGraph)
             return;
 
         state = AnimatorStateMachineState{};
-        state.currentStateId = animatorData->graph.defaultStateId;
+        state.currentStateId = activeGraph->defaultStateId;
         state.isPlaying = true;
 
-        parameters.initializeFromGraph(animatorData->graph);
+        parameters->initializeFromGraph(*activeGraph);
 
         loadAnimationForState(state.currentStateId);
     }
 
     void AnimatorStateMachine::forceTransitionTo(uint32_t stateId, float blendDuration)
     {
-        if (!animatorData)
+        if (!activeGraph)
             return;
 
-        const animator::AnimatorState* targetState = animatorData->graph.findStateById(stateId);
+        const animator::AnimatorState* targetState = activeGraph->findStateById(stateId);
         if (!targetState)
         {
             return;
@@ -122,10 +122,10 @@ namespace animation
 
     void AnimatorStateMachine::forceTransitionTo(const std::string& stateName, float blendDuration)
     {
-        if (!animatorData)
+        if (!activeGraph)
             return;
 
-        const animator::AnimatorState* targetState = animatorData->graph.findStateByName(stateName);
+        const animator::AnimatorState* targetState = activeGraph->findStateByName(stateName);
         if (!targetState)
         {
             return;

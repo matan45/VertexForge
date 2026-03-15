@@ -180,4 +180,24 @@ namespace core
         animSys.getLODManager().setConfig(lodCfg);
         animSys.setMaxStreamingInitPerFrame(config.maxStreamingInitPerFrame);
     }
+
+    void AnimatorAdapter::setLayerWeight(services::EntityHandle entity, uint32_t layerIndex, float weight)
+    {
+        withEntity(entity, [&](entt::entity e) { controller->setLayerWeight(e, layerIndex, weight); });
+    }
+
+    float AnimatorAdapter::getLayerWeight(services::EntityHandle entity, uint32_t layerIndex) const
+    {
+        return withEntityOr<float>(entity, 0.0f, [&](entt::entity e) { return controller->getLayerWeight(e, layerIndex); });
+    }
+
+    uint32_t AnimatorAdapter::getLayerCount(services::EntityHandle entity) const
+    {
+        return withEntityOr<uint32_t>(entity, 0u, [&](entt::entity e) { return controller->getLayerCount(e); });
+    }
+
+    std::string AnimatorAdapter::getLayerName(services::EntityHandle entity, uint32_t layerIndex) const
+    {
+        return withEntityOr<std::string>(entity, "", [&](entt::entity e) { return controller->getLayerName(e, layerIndex); });
+    }
 }

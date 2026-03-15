@@ -9,14 +9,14 @@
 
 namespace animation
 {
-    class AnimatorStateMachine;
+    class AnimationLayerStack;
     class AnimationDataCache;
 
     class SocketAttachmentUpdater
     {
     public:
         SocketAttachmentUpdater(
-            const std::unordered_map<entt::entity, std::unique_ptr<AnimatorStateMachine>>& animators,
+            const std::unordered_map<entt::entity, std::unique_ptr<AnimationLayerStack>>& animators,
             AnimationDataCache& dataCache);
 
         void update();
@@ -27,7 +27,7 @@ namespace animation
         void resolveAttachmentParent(entt::entity attachedEntity);
         void applyAttachmentTransform(entt::entity attachedEntity);
 
-        const std::unordered_map<entt::entity, std::unique_ptr<AnimatorStateMachine>>& animators;
+        const std::unordered_map<entt::entity, std::unique_ptr<AnimationLayerStack>>& animators;
         AnimationDataCache& dataCache;
         std::unordered_map<entt::entity, std::vector<glm::mat4>> socketTransformCache;
     };

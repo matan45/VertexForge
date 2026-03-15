@@ -47,5 +47,11 @@ namespace core
 
         [[nodiscard]] LODConfig getLODConfig() const override;
         void setLODConfig(const LODConfig& config) override;
+
+        // Layer management
+        void setLayerWeight(services::EntityHandle entity, uint32_t layerIndex, float weight) override;
+        [[nodiscard]] float getLayerWeight(services::EntityHandle entity, uint32_t layerIndex) const override;
+        [[nodiscard]] uint32_t getLayerCount(services::EntityHandle entity) const override;
+        [[nodiscard]] std::string getLayerName(services::EntityHandle entity, uint32_t layerIndex) const override;
     };
 }

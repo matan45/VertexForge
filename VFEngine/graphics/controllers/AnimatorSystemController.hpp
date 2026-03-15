@@ -35,5 +35,11 @@ namespace controllers
 
         void setRootMotion(entt::entity entity, bool enabled);
         [[nodiscard]] bool getRootMotion(entt::entity entity) const;
+
+        // Layer management
+        void setLayerWeight(entt::entity entity, uint32_t layerIndex, float weight);
+        [[nodiscard]] float getLayerWeight(entt::entity entity, uint32_t layerIndex) const;
+        [[nodiscard]] uint32_t getLayerCount(entt::entity entity) const;
+        [[nodiscard]] std::string getLayerName(entt::entity entity, uint32_t layerIndex) const;
     };
 }

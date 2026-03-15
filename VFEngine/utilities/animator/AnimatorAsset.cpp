@@ -417,6 +417,130 @@ namespace animator
         }
     }
 
+    json AnimatorAsset::serializeGraph(const AnimatorGraph& graph)
+    {
+        json j;
+        j["defaultState"] = graph.defaultStateId;
+        j["anyStatePosition"] = json::array({graph.anyStatePosition.x, graph.anyStatePosition.y});
+        j["entryPosition"] = json::array({graph.entryPosition.x, graph.entryPosition.y});
+
+        json parametersJson = json::array();
+        for (const auto& param : graph.parameters)
+        {
+            parametersJson.push_back(serializeParameter(param));
+        }
+        j["parameters"] = parametersJson;
+
+        json statesJson = json::array();
+        for (const auto& state : graph.states)
+        {
+            statesJson.push_back(serializeState(state));
+        }
+        j["states"] = statesJson;
+
+        json transitionsJson = json::array();
+        for (const auto& transition : graph.transitions)
+        {
+            transitionsJson.push_back(serializeTransition(transition));
+        }
+        j["transitions"] = transitionsJson;
+
+        return j;
+    }
+
+    void AnimatorAsset::parseGraph(const json& j, AnimatorGraph& graph, const WarningLogger& logWarning)
+    {
+        parseAnimatorParameters(j, graph, logWarning);
+        parseAnimatorStates(j, graph, logWarning);
+        parseAnimatorTransitions(j, graph, logWarning);
+        parseGraphLayout(j, graph, logWarning);
+    }
+
+    json AnimatorAsset::serializeLayer(const AnimationLayerData& layer)
+    {
+        json j;
+        j["name"] = layer.name;
+        j["weight"] = layer.weight;
+        j["blendMode"] = layerBlendModeToString(layer.blendMode);
+        j["sourceMode"] = layerSourceModeToString(layer.sourceMode);
+
+        if (!layer.boneMaskName.empty())
+        {
+            j["boneMask"] = layer.boneMaskName;
+        }
+
+        if (layer.sourceMode == LayerSourceMode::DirectClip)
+        {
+            j["directClipPath"] = layer.directClipPath;
+            j["directClipLoop"] = layer.directClipLoop;
+            j["directClipSpeed"] = layer.directClipSpeed;
+        }
+
+        if (layer.blendMode == LayerBlendMode::Additive)
+        {
+            j["additiveRefPose"] = additiveReferencePoseToString(layer.additiveRefPose);
+            j["additiveRefFrame"] = layer.additiveRefFrame;
+        }
+
+        if (layer.sourceMode == LayerSourceMode::StateMachine)
+        {
+            j["graph"] = serializeGraph(layer.graph);
+        }
+
+        return j;
+    }
+
+    AnimationLayerData AnimatorAsset::deserializeLayer(const json& j, const WarningLogger& logWarning)
+    {
+        AnimationLayerData layer;
+        layer.name = j.value("name", "Layer");
+        layer.weight = j.value("weight", 1.0f);
+        layer.blendMode = stringToLayerBlendMode(j.value("blendMode", "Override"));
+        layer.sourceMode = stringToLayerSourceMode(j.value("sourceMode", "StateMachine"));
+        layer.boneMaskName = j.value("boneMask", "");
+        layer.directClipPath = j.value("directClipPath", "");
+        layer.directClipLoop = j.value("directClipLoop", true);
+        layer.directClipSpeed = j.value("directClipSpeed", 1.0f);
+        layer.additiveRefPose = stringToAdditiveReferencePose(j.value("additiveRefPose", "FirstFrame"));
+        layer.additiveRefFrame = j.value("additiveRefFrame", 0.0f);
+
+        if (j.contains("graph") && j["graph"].is_object())
+        {
+            parseGraph(j["graph"], layer.graph, logWarning);
+        }
+
+        return layer;
+    }
+
+    json AnimatorAsset::serializeBoneMask(const BoneMaskDefinition& mask)
+    {
+        json j;
+        j["name"] = mask.name;
+        j["bones"] = json::array();
+        for (const auto& boneName : mask.includedBoneNames)
+        {
+            j["bones"].push_back(boneName);
+        }
+        return j;
+    }
+
+    BoneMaskDefinition AnimatorAsset::deserializeBoneMask(const json& j)
+    {
+        BoneMaskDefinition mask;
+        mask.name = j.value("name", "");
+        if (j.contains("bones") && j["bones"].is_array())
+        {
+            for (const auto& boneJson : j["bones"])
+            {
+                if (boneJson.is_string())
+                {
+                    mask.includedBoneNames.push_back(boneJson.get<std::string>());
+                }
+            }
+        }
+        return mask;
+    }
+
     AnimatorData AnimatorAsset::parseAnimatorData(const json& j, const WarningLogger& logWarning)
     {
         AnimatorData animator;
@@ -429,10 +553,46 @@ namespace animator
             logWarning("Animator has empty name, using default");
         }
 
-        parseAnimatorParameters(j, animator.graph, logWarning);
-        parseAnimatorStates(j, animator.graph, logWarning);
-        parseAnimatorTransitions(j, animator.graph, logWarning);
-        parseGraphLayout(j, animator.graph, logWarning);
+        // Parse bone masks
+        if (j.contains("boneMasks") && j["boneMasks"].is_array())
+        {
+            for (const auto& maskJson : j["boneMasks"])
+            {
+                if (maskJson.is_object())
+                {
+                    animator.boneMasks.push_back(deserializeBoneMask(maskJson));
+                }
+            }
+        }
+
+        // Parse layers if present (v1.1+), otherwise use single graph (v1.0 backward compat)
+        if (j.contains("layers") && j["layers"].is_array() && !j["layers"].empty())
+        {
+            for (size_t i = 0; i < j["layers"].size(); ++i)
+            {
+                const auto& layerJson = j["layers"][i];
+                if (!layerJson.is_object())
+                {
+                    logWarning(std::format("Layer at index {} is not an object, skipping", i));
+                    continue;
+                }
+                animator.layers.push_back(deserializeLayer(layerJson, logWarning));
+            }
+
+            // For backward compat, populate the root graph from the base layer
+            if (!animator.layers.empty())
+            {
+                animator.graph = animator.layers[0].graph;
+            }
+        }
+        else
+        {
+            // v1.0 format: single graph at root level
+            parseAnimatorParameters(j, animator.graph, logWarning);
+            parseAnimatorStates(j, animator.graph, logWarning);
+            parseAnimatorTransitions(j, animator.graph, logWarning);
+            parseGraphLayout(j, animator.graph, logWarning);
+        }
 
         return animator;
     }
@@ -471,9 +631,10 @@ namespace animator
                 vfLogWarning("Loaded animator '{}' with {} warning(s)", animator.name, warningCount);
             }
 
-            vfLogInfo("Loaded animator '{}': {} states, {} transitions, {} parameters",
+            vfLogInfo("Loaded animator '{}': {} states, {} transitions, {} parameters, {} layers",
                       animator.name, animator.graph.states.size(),
-                      animator.graph.transitions.size(), animator.graph.parameters.size());
+                      animator.graph.transitions.size(), animator.graph.parameters.size(),
+                      animator.layers.size());
 
             return animator;
         }
@@ -495,30 +656,56 @@ namespace animator
 
         j["version"] = ANIMATOR_FORMAT_VERSION;
         j["name"] = animator.name;
-        j["defaultState"] = animator.graph.defaultStateId;
-        j["anyStatePosition"] = json::array({animator.graph.anyStatePosition.x, animator.graph.anyStatePosition.y});
-        j["entryPosition"] = json::array({animator.graph.entryPosition.x, animator.graph.entryPosition.y});
 
-        json parametersJson = json::array();
-        for (const auto& param : animator.graph.parameters)
+        // Serialize bone masks
+        if (!animator.boneMasks.empty())
         {
-            parametersJson.push_back(serializeParameter(param));
+            json masksJson = json::array();
+            for (const auto& mask : animator.boneMasks)
+            {
+                masksJson.push_back(serializeBoneMask(mask));
+            }
+            j["boneMasks"] = masksJson;
         }
-        j["parameters"] = parametersJson;
 
-        json statesJson = json::array();
-        for (const auto& state : animator.graph.states)
+        if (!animator.layers.empty())
         {
-            statesJson.push_back(serializeState(state));
+            // Multi-layer format (v1.1)
+            json layersJson = json::array();
+            for (const auto& layer : animator.layers)
+            {
+                layersJson.push_back(serializeLayer(layer));
+            }
+            j["layers"] = layersJson;
         }
-        j["states"] = statesJson;
+        else
+        {
+            // Single-graph format (v1.0 backward compat)
+            j["defaultState"] = animator.graph.defaultStateId;
+            j["anyStatePosition"] = json::array({animator.graph.anyStatePosition.x, animator.graph.anyStatePosition.y});
+            j["entryPosition"] = json::array({animator.graph.entryPosition.x, animator.graph.entryPosition.y});
 
-        json transitionsJson = json::array();
-        for (const auto& transition : animator.graph.transitions)
-        {
-            transitionsJson.push_back(serializeTransition(transition));
+            json parametersJson = json::array();
+            for (const auto& param : animator.graph.parameters)
+            {
+                parametersJson.push_back(serializeParameter(param));
+            }
+            j["parameters"] = parametersJson;
+
+            json statesJson = json::array();
+            for (const auto& state : animator.graph.states)
+            {
+                statesJson.push_back(serializeState(state));
+            }
+            j["states"] = statesJson;
+
+            json transitionsJson = json::array();
+            for (const auto& transition : animator.graph.transitions)
+            {
+                transitionsJson.push_back(serializeTransition(transition));
+            }
+            j["transitions"] = transitionsJson;
         }
-        j["transitions"] = transitionsJson;
 
         return j;
     }
@@ -564,9 +751,10 @@ namespace animator
         idleState.name = "Idle";
         idleState.loop = true;
         idleState.position = glm::vec2(250.0f, 100.0f);
+        uint32_t idleId = idleState.id;
         animator.graph.states.push_back(std::move(idleState));
 
-        animator.graph.defaultStateId = 1;
+        animator.graph.defaultStateId = idleId;
 
         return animator;
     }

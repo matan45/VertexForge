@@ -92,6 +92,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="animator\AnimationEventTypes.hpp" />
+    <ClInclude Include="animator\AnimationLayerTypes.hpp" />
     <ClInclude Include="animator\AnimatorAsset.hpp" />
     <ClInclude Include="animator\AnimatorTypes.hpp" />
     <ClInclude Include="animator\BlendTreeTypes.hpp" />

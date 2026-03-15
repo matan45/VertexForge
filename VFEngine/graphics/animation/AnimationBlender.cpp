@@ -148,6 +148,97 @@ namespace animation
         return result;
     }
 
+    void AnimationBlender::blendPosesWithMask(
+        std::vector<glm::mat4>& basePose,
+        const std::vector<glm::mat4>& layerPose,
+        float weight,
+        const animator::BoneMask& mask,
+        bool hasMask)
+    {
+        if (layerPose.empty() || basePose.empty())
+            return;
+
+        size_t boneCount = std::min(basePose.size(), layerPose.size());
+        weight = glm::clamp(weight, 0.0f, 1.0f);
+
+        if (weight <= 0.001f)
+            return;
+
+        for (size_t i = 0; i < boneCount; ++i)
+        {
+            if (hasMask && !mask.test(i))
+                continue;
+
+            if (weight >= 0.999f)
+            {
+                basePose[i] = layerPose[i];
+            }
+            else
+            {
+                glm::vec3 posA, posB;
+                glm::quat rotA, rotB;
+                glm::vec3 scaleA, scaleB;
+
+                decomposeMatrix(basePose[i], posA, rotA, scaleA);
+                decomposeMatrix(layerPose[i], posB, rotB, scaleB);
+
+                BlendedBone blended = blendBoneTransforms(posA, rotA, scaleA, posB, rotB, scaleB, weight);
+                basePose[i] = composeMatrix(blended.position, blended.rotation, blended.scale);
+            }
+        }
+    }
+
+    void AnimationBlender::additivePoseBlend(
+        std::vector<glm::mat4>& basePose,
+        const std::vector<glm::mat4>& additivePose,
+        float weight,
+        const animator::BoneMask& mask,
+        bool hasMask,
+        const std::vector<glm::mat4>& bindPoses)
+    {
+        if (additivePose.empty() || basePose.empty() || bindPoses.empty())
+            return;
+
+        size_t boneCount = std::min({basePose.size(), additivePose.size(), bindPoses.size()});
+        weight = glm::clamp(weight, 0.0f, 1.0f);
+
+        if (weight <= 0.001f)
+            return;
+
+        for (size_t i = 0; i < boneCount; ++i)
+        {
+            if (hasMask && !mask.test(i))
+                continue;
+
+            glm::vec3 basePos, additivePos, bindPos;
+            glm::quat baseRot, additiveRot, bindRot;
+            glm::vec3 baseScale, additiveScale, bindScale;
+
+            decomposeMatrix(basePose[i], basePos, baseRot, baseScale);
+            decomposeMatrix(additivePose[i], additivePos, additiveRot, additiveScale);
+            decomposeMatrix(bindPoses[i], bindPos, bindRot, bindScale);
+
+            // Compute additive delta: difference from bind pose
+            glm::vec3 deltaPos = (additivePos - bindPos) * weight;
+            glm::quat deltaRot = additiveRot * glm::inverse(bindRot);
+            deltaRot = glm::slerp(glm::quat(1.0f, 0.0f, 0.0f, 0.0f), deltaRot, weight);
+
+            glm::vec3 deltaScale(1.0f);
+            if (glm::length(bindScale) > 0.0001f)
+            {
+                glm::vec3 scaleRatio = additiveScale / bindScale;
+                deltaScale = glm::mix(glm::vec3(1.0f), scaleRatio, weight);
+            }
+
+            // Apply delta to base
+            glm::vec3 resultPos = basePos + deltaPos;
+            glm::quat resultRot = deltaRot * baseRot;
+            glm::vec3 resultScale = baseScale * deltaScale;
+
+            basePose[i] = composeMatrix(resultPos, resultRot, resultScale);
+        }
+    }
+
     void AnimationBlender::decomposeMatrix(const glm::mat4& matrix,
                                            glm::vec3& position,
                                            glm::quat& rotation,

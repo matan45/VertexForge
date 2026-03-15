@@ -63,11 +63,42 @@ namespace windows
         }
     }
 
+    animator::AnimatorGraph* AnimatorEditorWindow::getActiveGraph()
+    {
+        if (!animatorData)
+            return nullptr;
+
+        if (!animatorData->layers.empty() && selectedLayerIndex < animatorData->layers.size())
+        {
+            return &animatorData->layers[selectedLayerIndex].graph;
+        }
+
+        return &animatorData->graph;
+    }
+
+    void AnimatorEditorWindow::ensureLayersInitialized()
+    {
+        if (!animatorData || !animatorData->layers.empty())
+            return;
+
+        // Migrate single-graph format to layers format for editing
+        animator::AnimationLayerData baseLayer;
+        baseLayer.name = "Base Layer";
+        baseLayer.weight = 1.0f;
+        baseLayer.blendMode = animator::LayerBlendMode::Override;
+        baseLayer.sourceMode = animator::LayerSourceMode::StateMachine;
+        baseLayer.graph = animatorData->graph;
+        animatorData->layers.push_back(std::move(baseLayer));
+        selectedLayerIndex = 0;
+        isDirty = true;
+    }
+
     void AnimatorEditorWindow::draw()
     {
         if (needsInit)
         {
             initEditor();
+            ensureLayersInitialized();
         }
 
         std::string title = windowTitle + (isDirty ? " *###AnimatorEditor" : "###AnimatorEditor");
@@ -88,7 +119,52 @@ namespace windows
                 float panelWidth = 300.0f;
                 float graphWidth = innerSize.x - panelWidth - ImGui::GetStyle().ItemSpacing.x;
 
+                // Save previous layer index to detect changes
+                uint32_t layerIndexBeforePanel = selectedLayerIndex;
+
                 ImGui::BeginChild("PropertiesPanel", ImVec2(panelWidth, innerSize.y), true);
+
+                // Layers section
+                if (ImGui::CollapsingHeader("Layers", ImGuiTreeNodeFlags_DefaultOpen))
+                {
+                    layerPanel.draw(animatorData.get(), selectedLayerIndex, isDirty);
+                }
+
+                ImGui::Separator();
+
+                // Bone Masks section
+                if (ImGui::CollapsingHeader("Bone Masks"))
+                {
+                    boneMaskPanel.draw(animatorData.get(), isDirty);
+                }
+
+                ImGui::Separator();
+
+                // Sync graph from selected layer AFTER layer panel (selection may have changed)
+                if (selectedLayerIndex != layerIndexBeforePanel)
+                {
+                    // Layer changed: sync old edits back, then load new layer's graph
+                    if (animatorData && !animatorData->layers.empty())
+                    {
+                        if (layerIndexBeforePanel < animatorData->layers.size())
+                        {
+                            std::swap(animatorData->graph, animatorData->layers[layerIndexBeforePanel].graph);
+                        }
+                        if (selectedLayerIndex < animatorData->layers.size())
+                        {
+                            std::swap(animatorData->graph, animatorData->layers[selectedLayerIndex].graph);
+                        }
+                    }
+                    selectedStateId = 0;
+                    selectedTransitionId = 0;
+                    needsPositionInit = true;
+                    needsNavigateToContent = true;
+                }
+                else if (animatorData && !animatorData->layers.empty() && selectedLayerIndex < animatorData->layers.size())
+                {
+                    // Same layer: swap layer graph in for editing
+                    std::swap(animatorData->graph, animatorData->layers[selectedLayerIndex].graph);
+                }
 
                 if (ImGui::CollapsingHeader("Parameters", ImGuiTreeNodeFlags_DefaultOpen))
                 {
@@ -119,8 +195,15 @@ namespace windows
 
                 ImGui::BeginChild("NodeGraphPanel", ImVec2(graphWidth, innerSize.y), true,
                                   ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+
                 nodeGraph.draw(animatorData.get(), selectedStateId, selectedTransitionId,
                                isDirty, needsPositionInit, needsNavigateToContent, pendingZoomSteps);
+
+                // Swap the edited graph back into the selected layer
+                if (animatorData && !animatorData->layers.empty() && selectedLayerIndex < animatorData->layers.size())
+                {
+                    std::swap(animatorData->graph, animatorData->layers[selectedLayerIndex].graph);
+                }
 
                 propertiesPanel.drawAddParameterPopup(animatorData.get(), showAddParameterPopup,
                                                        newParameterName, newParameterType, isDirty);
@@ -158,13 +241,14 @@ namespace windows
             {
                 if (ImGui::MenuItem("Add State"))
                 {
-                    if (animatorData)
+                    auto* graph = getActiveGraph();
+                    if (graph)
                     {
                         animator::AnimatorState state;
-                        state.id = animatorData->graph.nextStateId++;
+                        state.id = graph->nextStateId++;
                         state.name = "New State " + std::to_string(state.id);
                         state.position = glm::vec2(200.0f, 100.0f);
-                        animatorData->graph.states.push_back(std::move(state));
+                        graph->states.push_back(std::move(state));
                         isDirty = true;
                     }
                 }
@@ -189,13 +273,14 @@ namespace windows
 
         if (ImGui::Button("Add State"))
         {
-            if (animatorData)
+            auto* graph = getActiveGraph();
+            if (graph)
             {
                 animator::AnimatorState state;
-                state.id = animatorData->graph.nextStateId++;
+                state.id = graph->nextStateId++;
                 state.name = "New State " + std::to_string(state.id);
-                state.position = glm::vec2(200.0f + (animatorData->graph.states.size() * 50.0f), 100.0f);
-                animatorData->graph.states.push_back(std::move(state));
+                state.position = glm::vec2(200.0f + (graph->states.size() * 50.0f), 100.0f);
+                graph->states.push_back(std::move(state));
                 isDirty = true;
             }
         }

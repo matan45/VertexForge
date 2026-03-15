@@ -36,9 +36,11 @@ namespace animation
     {
     private:
         const animator::AnimatorData* animatorData = nullptr;
+        const animator::AnimatorGraph* activeGraph = nullptr;
         const resource::SkeletonData* skeletonData = nullptr;
         AnimationLoadCallback animationLoadCallback;
-        animator::AnimatorRuntimeParameters parameters;
+        animator::AnimatorRuntimeParameters ownedParameters;
+        animator::AnimatorRuntimeParameters* parameters = nullptr;
         AnimatorStateMachineState state;
 
         AnimationEvaluator currentEvaluator;
@@ -64,6 +66,8 @@ namespace animation
         ~AnimatorStateMachine();
 
         void initialize(const animator::AnimatorData& data, const resource::SkeletonData* skeleton, AnimationLoadCallback loadCallback);
+        void initializeFromGraph(const animator::AnimatorGraph& graph, const resource::SkeletonData* skeleton,
+                                 AnimationLoadCallback loadCallback, animator::AnimatorRuntimeParameters* externalParams = nullptr);
 
         void update(float deltaTime);
 
@@ -101,6 +105,7 @@ namespace animation
         void forceTransitionTo(const std::string& stateName, float blendDuration = 0.25f);
 
         const animator::AnimatorData* getAnimatorData() const { return animatorData; }
+        const animator::AnimatorGraph* getActiveGraph() const { return activeGraph; }
 
         const std::vector<const animator::AnimationEvent*>& getFiredEvents() const { return firedEventsThisFrame; }
 

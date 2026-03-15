@@ -39,6 +39,15 @@ namespace animator
         static nlohmann::json serializeBlendTree(const BlendTreeData& blendTree);
         static BlendTreeData deserializeBlendTree(const nlohmann::json& j);
 
+        static nlohmann::json serializeLayer(const AnimationLayerData& layer);
+        static AnimationLayerData deserializeLayer(const nlohmann::json& j, const WarningLogger& logWarning);
+
+        static nlohmann::json serializeBoneMask(const BoneMaskDefinition& mask);
+        static BoneMaskDefinition deserializeBoneMask(const nlohmann::json& j);
+
+        static nlohmann::json serializeGraph(const AnimatorGraph& graph);
+        static void parseGraph(const nlohmann::json& j, AnimatorGraph& graph, const WarningLogger& logWarning);
+
         // Load helpers
         static std::optional<nlohmann::json> readJsonFromFile(std::string_view path);
         static AnimatorData parseAnimatorData(const nlohmann::json& j, const WarningLogger& logWarning);

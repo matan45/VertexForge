@@ -57,5 +57,11 @@ namespace services
 
         virtual void setRootMotion(EntityHandle entity, bool enabled) = 0;
         [[nodiscard]] virtual bool getRootMotion(EntityHandle entity) const = 0;
+
+        // Layer management
+        virtual void setLayerWeight(EntityHandle entity, uint32_t layerIndex, float weight) = 0;
+        [[nodiscard]] virtual float getLayerWeight(EntityHandle entity, uint32_t layerIndex) const = 0;
+        [[nodiscard]] virtual uint32_t getLayerCount(EntityHandle entity) const = 0;
+        [[nodiscard]] virtual std::string getLayerName(EntityHandle entity, uint32_t layerIndex) const = 0;
     };
 }

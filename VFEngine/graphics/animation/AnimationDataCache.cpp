@@ -1,5 +1,5 @@
 #include "AnimationDataCache.hpp"
-#include "AnimatorStateMachine.hpp"
+#include "AnimationLayerStack.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
 #include "resource/ResourceManager.hpp"
@@ -116,7 +116,7 @@ namespace animation
         skeletonDataCache.clear();
     }
 
-    void AnimationDataCache::cleanupUnused(const std::unordered_map<entt::entity, std::unique_ptr<AnimatorStateMachine>>& animators)
+    void AnimationDataCache::cleanupUnused(const std::unordered_map<entt::entity, std::unique_ptr<AnimationLayerStack>>& animators)
     {
         std::unordered_set<std::string> usedAnimatorPaths;
         std::unordered_set<std::string> usedMeshPaths;

@@ -151,8 +151,10 @@
     <ClInclude Include="windows\animation\AnimationTimelinePanel.hpp" />
     <ClInclude Include="windows\animation\AnimationViewport.hpp" />
     <ClInclude Include="windows\animation\AnimatorEditorWindow.hpp" />
+    <ClInclude Include="windows\animation\AnimatorLayerPanel.hpp" />
     <ClInclude Include="windows\animation\AnimatorNodeGraph.hpp" />
     <ClInclude Include="windows\animation\AnimatorPropertiesPanel.hpp" />
+    <ClInclude Include="windows\animation\BoneMaskEditorPanel.hpp" />
     <ClInclude Include="windows\animation\ColliderOverlayRenderer.hpp" />
     <ClInclude Include="windows\audio\AudioMixerWindow.hpp" />
     <ClInclude Include="windows\config\AudioConfigWindow.hpp" />
@@ -300,8 +302,10 @@
     <ClCompile Include="windows\animation\AnimationTimelinePanel.cpp" />
     <ClCompile Include="windows\animation\AnimationViewport.cpp" />
     <ClCompile Include="windows\animation\AnimatorEditorWindow.cpp" />
+    <ClCompile Include="windows\animation\AnimatorLayerPanel.cpp" />
     <ClCompile Include="windows\animation\AnimatorNodeGraph.cpp" />
     <ClCompile Include="windows\animation\AnimatorPropertiesPanel.cpp" />
+    <ClCompile Include="windows\animation\BoneMaskEditorPanel.cpp" />
     <ClCompile Include="windows\animation\ColliderOverlayRenderer.cpp" />
     <ClCompile Include="windows\audio\AudioMixerWindow.cpp" />
     <ClCompile Include="windows\config\AudioConfigWindow.cpp" />

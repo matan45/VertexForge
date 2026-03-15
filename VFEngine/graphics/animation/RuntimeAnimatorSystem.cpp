@@ -1,4 +1,5 @@
 #include "RuntimeAnimatorSystem.hpp"
+#include "AnimationLayerStack.hpp"
 #include "IKPostProcess.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
@@ -259,12 +260,12 @@ namespace animation
         activeInstanceGroupCount = 0;
 
         ActiveAnimatorList activeAnimators;
-        std::vector<std::pair<entt::entity, AnimatorStateMachine*>> lodInterpolateEntities;
+        std::vector<std::pair<entt::entity, AnimationLayerStack*>> lodInterpolateEntities;
 
         struct EvalCandidate
         {
             entt::entity entity;
-            AnimatorStateMachine* anim;
+            AnimationLayerStack* anim;
             uint8_t lodLevel;
         };
         std::vector<EvalCandidate> evalCandidates;
@@ -316,7 +317,7 @@ namespace animation
         }
 
         ActiveAnimatorList leadersToEvaluate;
-        std::vector<std::pair<entt::entity, AnimatorStateMachine*>> followersToSync;
+        std::vector<std::pair<entt::entity, AnimationLayerStack*>> followersToSync;
 
         for (auto& candidate : evalCandidates)
         {
@@ -326,7 +327,8 @@ namespace animation
                 continue;
             }
 
-            const animator::AnimatorState* currentState = candidate.anim->getCurrentAnimatorState();
+            const AnimatorStateMachine* baseSM = candidate.anim->getBaseStateMachine();
+            const animator::AnimatorState* currentState = baseSM ? baseSM->getCurrentAnimatorState() : nullptr;
             if (!currentState)
             {
                 leadersToEvaluate.push_back({candidate.entity, candidate.anim});
@@ -345,7 +347,7 @@ namespace animation
                 continue;
             }
 
-            float normalizedTime = candidate.anim->getNormalizedStateTime();
+            float normalizedTime = candidate.anim->getNormalizedTime();
             uint64_t groupKey = computeInstanceGroupKey(animatorPath, currentState->id,
                                                          candidate.lodLevel, normalizedTime);
 
@@ -454,14 +456,13 @@ namespace animation
         return activeAnimators;
     }
 
-    void RuntimeAnimatorSystem::publishAnimationEvents(entt::entity entity, AnimatorStateMachine* anim)
+    void RuntimeAnimatorSystem::publishAnimationEvents(entt::entity entity, AnimationLayerStack* anim)
     {
-        const auto& firedEvents = anim->getFiredEvents();
+        auto firedEvents = anim->getFiredEvents();
         if (firedEvents.empty())
             return;
 
-        const animator::AnimatorState* currentState = anim->getCurrentAnimatorState();
-        std::string stateName = currentState ? currentState->name : "";
+        std::string stateName = anim->getCurrentStateName();
         auto entityHandle = services::internal::toHandle(entity);
 
         for (const auto* event : firedEvents)
@@ -475,7 +476,7 @@ namespace animation
         }
     }
 
-    void RuntimeAnimatorSystem::applyRootMotion(entt::entity entity, AnimatorStateMachine* anim,
+    void RuntimeAnimatorSystem::applyRootMotion(entt::entity entity, AnimationLayerStack* anim,
                                                  entt::registry& registry)
     {
         if (!registry.valid(entity) ||
@@ -497,7 +498,7 @@ namespace animation
         }
     }
 
-    void RuntimeAnimatorSystem::applyIKPostProcess(entt::entity entity, AnimatorStateMachine* anim,
+    void RuntimeAnimatorSystem::applyIKPostProcess(entt::entity entity, AnimationLayerStack* anim,
                                                     entt::registry& registry)
     {
         if (!registry.valid(entity) || !registry.all_of<components::IKTargetComponent>(entity))
@@ -580,15 +581,15 @@ namespace animation
             return;
         }
 
-        auto stateMachine = std::make_unique<AnimatorStateMachine>();
+        auto layerStack = std::make_unique<AnimationLayerStack>();
 
-        stateMachine->initialize(*animatorData, skeleton, [this](const std::string& path) -> const resource::AnimationData*
+        layerStack->initialize(*animatorData, skeleton, [this](const std::string& path) -> const resource::AnimationData*
         {
             return dataCache.loadAnimation(path);
         });
 
-        AnimatorStateMachine* rawPtr = stateMachine.get();
-        animators[entity] = std::move(stateMachine);
+        AnimationLayerStack* rawPtr = layerStack.get();
+        animators[entity] = std::move(layerStack);
 
         if (!registry.all_of<components::AnimatorComponent>(entity))
         {
@@ -596,7 +597,7 @@ namespace animation
         }
 
         auto& animComp = registry.get<components::AnimatorComponent>(entity);
-        animComp.stateMachine = rawPtr;
+        animComp.stateMachine = rawPtr->getBaseStateMachine();
         animComp.animatorPath = animatorPath;
         animComp.isInitialized = true;
 
@@ -632,7 +633,7 @@ namespace animation
         return animators.find(entity) != animators.end();
     }
 
-    AnimatorStateMachine* RuntimeAnimatorSystem::getAnimator(entt::entity entity)
+    AnimationLayerStack* RuntimeAnimatorSystem::getLayerStack(entt::entity entity)
     {
         auto it = animators.find(entity);
         if (it != animators.end())
@@ -642,7 +643,7 @@ namespace animation
         return nullptr;
     }
 
-    const AnimatorStateMachine* RuntimeAnimatorSystem::getAnimator(entt::entity entity) const
+    const AnimationLayerStack* RuntimeAnimatorSystem::getLayerStack(entt::entity entity) const
     {
         auto it = animators.find(entity);
         if (it != animators.end())
@@ -650,6 +651,18 @@ namespace animation
             return it->second.get();
         }
         return nullptr;
+    }
+
+    AnimatorStateMachine* RuntimeAnimatorSystem::getAnimator(entt::entity entity)
+    {
+        auto* stack = getLayerStack(entity);
+        return stack ? stack->getBaseStateMachine() : nullptr;
+    }
+
+    const AnimatorStateMachine* RuntimeAnimatorSystem::getAnimator(entt::entity entity) const
+    {
+        auto* stack = getLayerStack(entity);
+        return stack ? stack->getBaseStateMachine() : nullptr;
     }
 
     void RuntimeAnimatorSystem::syncWithRegistry()

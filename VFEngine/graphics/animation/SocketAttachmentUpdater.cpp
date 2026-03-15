@@ -1,6 +1,6 @@
 #include "SocketAttachmentUpdater.hpp"
 #include "AnimationDataCache.hpp"
-#include "AnimatorStateMachine.hpp"
+#include "AnimationLayerStack.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
 #include <glm/gtc/quaternion.hpp>
@@ -8,7 +8,7 @@
 namespace animation
 {
     SocketAttachmentUpdater::SocketAttachmentUpdater(
-        const std::unordered_map<entt::entity, std::unique_ptr<AnimatorStateMachine>>& animators,
+        const std::unordered_map<entt::entity, std::unique_ptr<AnimationLayerStack>>& animators,
         AnimationDataCache& dataCache)
         : animators(animators)
         , dataCache(dataCache)
