@@ -6,6 +6,7 @@
 #include "StreamingAudioManager.hpp"
 #include "AudioBusManager.hpp"
 #include "AudioEffectManager.hpp"
+#include "ReverbZoneManager.hpp"
 #include "types/AudioTypes.hpp"
 #include "types/AudioEffectTypes.hpp"
 #include <glm/glm.hpp>
@@ -48,6 +49,7 @@ namespace core::audio {
         std::unique_ptr<StreamingAudioManager> streamingManager;
         std::unique_ptr<AudioBusManager> busManager;
         std::unique_ptr<AudioEffectManager> effectManager;
+        std::unique_ptr<ReverbZoneManager> reverbZoneManager;
 
         bool initialized = false;
         std::chrono::steady_clock::time_point lastUpdateTime;
@@ -111,6 +113,9 @@ namespace core::audio {
         bool setBusEffectWetDry(const std::string& busName, uint32_t effectId, float wetDry);
         std::vector<types::BusEffectConfig> getBusEffectChain(const std::string& busName) const;
         int getMaxEffectsPerBus() const;
+
+        // === Reverb Zones ===
+        ReverbZoneManager* getReverbZoneManager() { return reverbZoneManager.get(); }
 
         // === Buffer Management ===
         void unloadAudioBuffer(const std::string& path);

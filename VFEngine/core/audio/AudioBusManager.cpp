@@ -1,5 +1,6 @@
 #include "AudioBusManager.hpp"
 #include "AudioEffectManager.hpp"
+#include "ReverbZoneManager.hpp"
 #include "print/Log.hpp"
 #include <algorithm>
 
@@ -13,6 +14,11 @@ namespace core::audio
     void AudioBusManager::setEffectManager(AudioEffectManager* manager)
     {
         effectManager = manager;
+    }
+
+    void AudioBusManager::setReverbZoneManager(ReverbZoneManager* manager)
+    {
+        reverbZoneManager = manager;
     }
 
     void AudioBusManager::setSourceResolveCallback(SourceResolveCallback callback)
@@ -187,13 +193,20 @@ namespace core::audio
             volumeCallback(handle, userVolume * effective);
         }
 
-        // Route source to bus effects
-        if (effectManager && sourceResolveCallback)
+        // Route source to bus effects and reverb zones
+        if (sourceResolveCallback)
         {
             ALuint sourceId = sourceResolveCallback(handle);
             if (sourceId != 0)
             {
-                effectManager->routeSourceToBus(sourceId, busId);
+                if (effectManager)
+                {
+                    effectManager->routeSourceToBus(sourceId, busId);
+                }
+                if (reverbZoneManager)
+                {
+                    reverbZoneManager->routeSource(sourceId);
+                }
             }
         }
     }
@@ -203,13 +216,20 @@ namespace core::audio
         auto it = trackedSources.find(handle);
         if (it != trackedSources.end())
         {
-            // Unroute source from bus effects
-            if (effectManager && sourceResolveCallback)
+            // Unroute source from bus effects and reverb zones
+            if (sourceResolveCallback)
             {
                 ALuint sourceId = sourceResolveCallback(handle);
                 if (sourceId != 0)
                 {
-                    effectManager->unrouteSource(sourceId, it->second.busId);
+                    if (effectManager)
+                    {
+                        effectManager->unrouteSource(sourceId, it->second.busId);
+                    }
+                    if (reverbZoneManager)
+                    {
+                        reverbZoneManager->unrouteSource(sourceId);
+                    }
                 }
             }
             trackedSources.erase(it);

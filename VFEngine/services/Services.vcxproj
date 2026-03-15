@@ -151,6 +151,7 @@
     <ClInclude Include="events\scene\ComponentMediaEvents.hpp" />
     <ClInclude Include="events\scene\ComponentPhysicsLightEvents.hpp" />
     <ClInclude Include="events\scene\EntityTransformEvents.hpp" />
+    <ClInclude Include="events\scene\ReverbZoneEvents.hpp" />
     <ClInclude Include="events\scene\ScenePersistenceEvents.hpp" />
     <ClInclude Include="events\scripting\ScriptingEvents.hpp" />
     <ClInclude Include="events\terrain\BrushEvents.hpp" />

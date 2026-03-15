@@ -190,6 +190,7 @@
     <ClInclude Include="windows\details\PointLightDrawer.hpp" />
     <ClInclude Include="windows\details\RenderTextureDrawer.hpp" />
     <ClInclude Include="windows\details\RenderTexturePickerWidget.hpp" />
+    <ClInclude Include="windows\details\ReverbZoneDrawer.hpp" />
     <ClInclude Include="windows\details\RigidBodyDrawer.hpp" />
     <ClInclude Include="windows\details\ScriptDrawer.hpp" />
     <ClInclude Include="windows\details\SocketAttachmentDrawer.hpp" />
@@ -336,6 +337,7 @@
     <ClCompile Include="windows\details\PointLightDrawer.cpp" />
     <ClCompile Include="windows\details\RenderTextureDrawer.cpp" />
     <ClCompile Include="windows\details\RenderTexturePickerWidget.cpp" />
+    <ClCompile Include="windows\details\ReverbZoneDrawer.cpp" />
     <ClCompile Include="windows\details\RigidBodyDrawer.cpp" />
     <ClCompile Include="windows\details\ScriptDrawer.cpp" />
     <ClCompile Include="windows\details\SocketAttachmentDrawer.cpp" />

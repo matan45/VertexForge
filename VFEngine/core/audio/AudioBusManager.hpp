@@ -24,6 +24,7 @@ namespace core::audio
     };
 
     class AudioEffectManager;
+    class ReverbZoneManager;
 
     struct MixSnapshot
     {
@@ -48,6 +49,7 @@ namespace core::audio
 
         void init(VolumeApplyCallback callback);
         void setEffectManager(AudioEffectManager* manager);
+        void setReverbZoneManager(ReverbZoneManager* manager);
         void setSourceResolveCallback(SourceResolveCallback callback);
         void cleanUp();
 
@@ -105,5 +107,6 @@ namespace core::audio
         VolumeApplyCallback volumeCallback;
         SourceResolveCallback sourceResolveCallback;
         AudioEffectManager* effectManager = nullptr;
+        ReverbZoneManager* reverbZoneManager = nullptr;
     };
 }

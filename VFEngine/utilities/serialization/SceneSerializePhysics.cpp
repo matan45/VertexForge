@@ -146,6 +146,61 @@ namespace serialization
         audioSource.isPlaying = false;
     }
 
+    json SceneSerialization::serializeReverbZone(const components::ReverbZoneComponent& zone)
+    {
+        json j;
+        j["shape"] = static_cast<int>(zone.shape);
+        j["radius"] = zone.radius;
+        j["halfExtents"] = json::array({zone.halfExtents.x, zone.halfExtents.y, zone.halfExtents.z});
+        j["presetName"] = zone.presetName;
+        j["priority"] = zone.priority;
+        j["falloffDistance"] = zone.falloffDistance;
+        j["wetLevel"] = zone.wetLevel;
+        j["showDebugVolume"] = zone.showDebugVolume;
+        return j;
+    }
+
+    void SceneSerialization::deserializeReverbZone(const json& j, components::ReverbZoneComponent& zone)
+    {
+        if (auto it = j.find("shape"); it != j.end() && it->is_number())
+        {
+            zone.shape = static_cast<components::ReverbZoneShape>(it->get<int>());
+        }
+        if (auto it = j.find("radius"); it != j.end() && it->is_number())
+        {
+            zone.radius = it->get<float>();
+        }
+        if (j.contains("halfExtents") && j["halfExtents"].is_array() && j["halfExtents"].size() == 3)
+        {
+            zone.halfExtents.x = j["halfExtents"][0].get<float>();
+            zone.halfExtents.y = j["halfExtents"][1].get<float>();
+            zone.halfExtents.z = j["halfExtents"][2].get<float>();
+        }
+        if (auto it = j.find("presetName"); it != j.end() && it->is_string())
+        {
+            zone.presetName = it->get<std::string>();
+        }
+        if (auto it = j.find("priority"); it != j.end() && it->is_number())
+        {
+            zone.priority = it->get<int>();
+        }
+        if (auto it = j.find("falloffDistance"); it != j.end() && it->is_number())
+        {
+            zone.falloffDistance = it->get<float>();
+        }
+        if (auto it = j.find("wetLevel"); it != j.end() && it->is_number())
+        {
+            zone.wetLevel = it->get<float>();
+        }
+        if (auto it = j.find("showDebugVolume"); it != j.end() && it->is_boolean())
+        {
+            zone.showDebugVolume = it->get<bool>();
+        }
+        // Reset runtime state
+        zone.isListenerInside = false;
+        zone.currentBlendWeight = 0.0f;
+    }
+
     json SceneSerialization::serializeScript(const components::ScriptComponent& script)
     {
         json j;

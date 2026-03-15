@@ -222,4 +222,8 @@ namespace core {
         return audioController->getMaxEffectsPerBus();
     }
 
+    void* AudioAdapter::getReverbZoneManager() {
+        return audioController->getReverbZoneManager();
+    }
+
 }

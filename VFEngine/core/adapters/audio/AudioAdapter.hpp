@@ -75,5 +75,8 @@ namespace core
         bool setBusEffectWetDry(const std::string& busName, uint32_t effectId, float wetDry) override;
         std::vector<types::BusEffectConfig> getBusEffectChain(const std::string& busName) const override;
         int getMaxEffectsPerBus() const override;
+
+        // === Reverb Zones ===
+        void* getReverbZoneManager() override;
     };
 }

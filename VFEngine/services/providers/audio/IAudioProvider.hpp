@@ -92,6 +92,9 @@ namespace services {
         virtual bool setBusEffectWetDry(const std::string& busName, uint32_t effectId, float wetDry) = 0;
         virtual std::vector<types::BusEffectConfig> getBusEffectChain(const std::string& busName) const = 0;
         virtual int getMaxEffectsPerBus() const = 0;
+
+        // === Reverb Zones ===
+        virtual void* getReverbZoneManager() = 0; // Returns core::audio::ReverbZoneManager*
     };
 
 }

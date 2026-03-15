@@ -6,6 +6,7 @@
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/project/SceneEvents.hpp"
+#include "../../events/scene/ReverbZoneEvents.hpp"
 #include "resource/AssetLifecycleManager.hpp"
 
 namespace services {
@@ -227,6 +228,85 @@ namespace services {
         return true;
     }
 
+    // ========== REVERB ZONE COMPONENT OPERATIONS ==========
+
+    bool AudioComponentService::addReverbZoneComponent(EntityHandle entity) {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) return false;
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (!sceneEntity.hasComponent<components::ReverbZoneComponent>()) {
+            sceneEntity.addComponent<components::ReverbZoneComponent>();
+            autoAttachBillboard(entity, static_cast<uint32_t>(components::BillboardIconType::Audio3D));
+            return true;
+        }
+        return false;
+    }
+
+    bool AudioComponentService::removeReverbZoneComponent(EntityHandle entity) {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) return false;
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (sceneEntity.hasComponent<components::ReverbZoneComponent>()) {
+            sceneEntity.removeComponent<components::ReverbZoneComponent>();
+            autoDetachBillboard(entity, static_cast<uint32_t>(components::BillboardIconType::Audio3D));
+            return true;
+        }
+        return false;
+    }
+
+    bool AudioComponentService::hasReverbZoneComponent(EntityHandle entity) const {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) return false;
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        return sceneEntity.hasComponent<components::ReverbZoneComponent>();
+    }
+
+    std::optional<ReverbZoneData> AudioComponentService::getReverbZoneData(EntityHandle entity) const {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) return std::nullopt;
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (!sceneEntity.hasComponent<components::ReverbZoneComponent>()) return std::nullopt;
+
+        const auto& comp = sceneEntity.getComponent<components::ReverbZoneComponent>();
+        ReverbZoneData data;
+        data.shape = static_cast<uint8_t>(comp.shape);
+        data.radius = comp.radius;
+        data.halfExtents = comp.halfExtents;
+        data.presetName = comp.presetName;
+        data.customParams = comp.customParams;
+        data.priority = comp.priority;
+        data.falloffDistance = comp.falloffDistance;
+        data.wetLevel = comp.wetLevel;
+        data.showDebugVolume = comp.showDebugVolume;
+        return data;
+    }
+
+    bool AudioComponentService::setReverbZoneData(EntityHandle entity, const ReverbZoneData& data) {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) return false;
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (!sceneEntity.hasComponent<components::ReverbZoneComponent>()) {
+            sceneEntity.addComponent<components::ReverbZoneComponent>();
+        }
+
+        auto& comp = sceneEntity.getComponent<components::ReverbZoneComponent>();
+        comp.shape = static_cast<components::ReverbZoneShape>(data.shape);
+        comp.radius = data.radius;
+        comp.halfExtents = data.halfExtents;
+        comp.presetName = data.presetName;
+        comp.customParams = data.customParams;
+        comp.priority = data.priority;
+        comp.falloffDistance = data.falloffDistance;
+        comp.wetLevel = data.wetLevel;
+        comp.showDebugVolume = data.showDebugVolume;
+        return true;
+    }
+
     void AudioComponentService::autoAttachBillboard(EntityHandle entity, uint32_t iconType) {
         auto& registry = scene::EntityRegistry::getRegistry();
         if (!internal::isValidHandle(entity, registry)) {
@@ -309,6 +389,32 @@ namespace services {
         dispatcher.registerQueryHandler<events::scene::GetAudioSource3DDataQuery>(
             [this](const events::scene::GetAudioSource3DDataQuery& query) {
                 return getAudioSource3DData(query.entity);
+            });
+
+        // Reverb Zone component handlers
+        dispatcher.registerCommandHandler<events::scene::AddReverbZoneComponentCommand>(
+            [this](const events::scene::AddReverbZoneComponentCommand& cmd) {
+                return addReverbZoneComponent(cmd.entity);
+            });
+
+        dispatcher.registerCommandHandler<events::scene::RemoveReverbZoneComponentCommand>(
+            [this](const events::scene::RemoveReverbZoneComponentCommand& cmd) {
+                return removeReverbZoneComponent(cmd.entity);
+            });
+
+        dispatcher.registerCommandHandler<events::scene::SetReverbZoneDataCommand>(
+            [this](const events::scene::SetReverbZoneDataCommand& cmd) {
+                return setReverbZoneData(cmd.entity, cmd.data);
+            });
+
+        dispatcher.registerQueryHandler<events::scene::HasReverbZoneComponentQuery>(
+            [this](const events::scene::HasReverbZoneComponentQuery& query) {
+                return hasReverbZoneComponent(query.entity);
+            });
+
+        dispatcher.registerQueryHandler<events::scene::GetReverbZoneDataQuery>(
+            [this](const events::scene::GetReverbZoneDataQuery& query) {
+                return getReverbZoneData(query.entity);
             });
     }
 

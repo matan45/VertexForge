@@ -11,6 +11,7 @@ namespace core::audio
           , streamingManager(std::make_unique<StreamingAudioManager>())
           , busManager(std::make_unique<AudioBusManager>())
           , effectManager(std::make_unique<AudioEffectManager>())
+          , reverbZoneManager(std::make_unique<ReverbZoneManager>())
     {
     }
 
@@ -37,8 +38,19 @@ namespace core::audio
 
         sourceManager->initPool(32);
 
-        // Initialize effect manager
-        effectManager->init(audioSystem->getMaxAuxiliarySends());
+        // Initialize effect manager and reverb zone manager
+        int maxSends = audioSystem->getMaxAuxiliarySends();
+        int zoneSend = -1;
+        int busEffectSends = maxSends;
+
+        if (maxSends >= 2)
+        {
+            zoneSend = maxSends - 1;
+            busEffectSends = maxSends - 1;
+        }
+
+        effectManager->init(busEffectSends);
+        reverbZoneManager->init(zoneSend);
 
         busManager->init([this](AudioHandle handle, float effectiveVolume)
         {
@@ -56,6 +68,7 @@ namespace core::audio
             }
         });
         busManager->setEffectManager(effectManager.get());
+        busManager->setReverbZoneManager(reverbZoneManager.get());
         busManager->setSourceResolveCallback([this](AudioHandle handle) -> ALuint
         {
             if (StreamingAudioManager::isStreamingHandle(handle))
@@ -84,6 +97,7 @@ namespace core::audio
 
         stopAll();
 
+        reverbZoneManager->cleanUp();
         effectManager->cleanUp();
         busManager->cleanUp();
         sourceManager.reset();

@@ -31,5 +31,5 @@ namespace components
                                                NavmeshAgentComponent, NavmeshComponent, ControllerComponent,
                                                IKTargetComponent, WorldSectorComponent,
                                                GrassComponent, MeshBrushInstanceComponent,
-                                               BehaviorTreeComponent, DecalComponent>;
+                                               BehaviorTreeComponent, DecalComponent, ReverbZoneComponent>;
 }

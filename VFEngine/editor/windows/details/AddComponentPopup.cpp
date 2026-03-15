@@ -7,6 +7,7 @@
 #include "events/ui/UIEvents.hpp"
 #include "events/physics/SocketEvents.hpp"
 #include "events/physics/IKEvents.hpp"
+#include "events/scene/ReverbZoneEvents.hpp"
 #include <imgui.h>
 
 namespace windows::details
@@ -55,7 +56,7 @@ namespace windows::details
                            c.hasUITabs && c.hasUISlider && c.hasUIProgressBar && c.hasUIAnimation && c.hasUIMask &&
                            c.hasUIDraggable && c.hasUIDropTarget &&
                            c.hasNavmeshAgent && c.hasRenderTexture && c.hasController &&
-                           c.hasIK && c.hasBehaviorTree && c.hasDecal;
+                           c.hasIK && c.hasBehaviorTree && c.hasDecal && c.hasReverbZone;
             if (allAdded)
             {
                 ImGui::Spacing();
@@ -121,6 +122,20 @@ namespace windows::details
             if (ImGui::IsItemHovered())
             {
                 ImGui::SetTooltip("Cached audio for spatial sound effects");
+            }
+        }
+
+        if (!c.hasReverbZone)
+        {
+            if (ImGui::Selectable("  Reverb Zone"))
+            {
+                events::scene::AddReverbZoneComponentCommand cmd;
+                cmd.entity = handle;
+                dispatcher.execute(cmd);
+            }
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("Environmental reverb zone with shape volume and presets");
             }
         }
 

@@ -97,6 +97,7 @@ namespace windows
         bool hasIK = ikDrawer.draw(handle);
         bool hasBehaviorTree = behaviorTreeDrawer.draw(handle);
         bool hasDecal = decalDrawer.draw(handle);
+        bool hasReverbZone = reverbZoneDrawer.draw(handle);
 
         // Terrain components (read-only display)
         terrainDrawer.draw(handle);
@@ -133,7 +134,7 @@ namespace windows
                                 hasUICheckbox, hasUIDropdown, hasUITabs, hasUISlider,
                                 hasUIProgressBar, hasSocketAttachment, hasNavmeshAgent,
                                 hasRenderTexture, hasController, hasIK, hasBehaviorTree,
-                                hasDecal, hasUIAnimation, hasUIMask,
+                                hasDecal, hasReverbZone, hasUIAnimation, hasUIMask,
                                 hasUIDraggable, hasUIDropTarget});
     }
 

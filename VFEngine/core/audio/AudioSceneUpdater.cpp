@@ -1,4 +1,5 @@
 #include "AudioSceneUpdater.hpp"
+#include "ReverbZoneManager.hpp"
 #include "../../services/events/EventDispatcher.hpp"
 #include "../../services/events/audio/AudioEvents.hpp"
 #include "scene/EntityRegistry.hpp"
@@ -16,6 +17,15 @@ namespace core::audio {
         cmd.forward = forward;
         cmd.up = up;
         dispatcher.execute(cmd);
+
+        lastListenerPos = position;
+
+        // Update reverb zones based on listener position
+        if (reverbZoneManager)
+        {
+            auto& registry = scene::EntityRegistry::getRegistry();
+            reverbZoneManager->update(position, registry);
+        }
     }
 
     void AudioSceneUpdater::updateListenerFromPrimaryCamera()

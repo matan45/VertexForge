@@ -58,6 +58,12 @@ namespace serialization
                 entity.getComponent<components::AudioSource3DComponent>());
         }
 
+        if (entity.hasComponent<components::ReverbZoneComponent>())
+        {
+            componentsJson["reverbZone"] = serializeReverbZone(
+                entity.getComponent<components::ReverbZoneComponent>());
+        }
+
         if (entity.hasComponent<components::ScriptComponent>())
         {
             componentsJson["script"] = serializeScript(entity.getComponent<components::ScriptComponent>());
@@ -366,6 +372,12 @@ namespace serialization
                 auto& billboard = entity.addOrReplaceComponent<components::BillboardComponent>();
                 billboard.iconType = components::BillboardIconType::Audio3D;
             }
+        }
+
+        if (componentsJson.contains("reverbZone"))
+        {
+            auto& reverbComp = entity.addOrReplaceComponent<components::ReverbZoneComponent>();
+            deserializeReverbZone(componentsJson["reverbZone"], reverbComp);
         }
 
         if (componentsJson.contains("script"))

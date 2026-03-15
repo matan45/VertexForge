@@ -7,6 +7,7 @@
 #include <entt/entt.hpp>
 #include "../../services/data/ScriptTypes.hpp"
 #include "../animator/SocketTypes.hpp"
+#include "../types/AudioEffectTypes.hpp"
 
 namespace components
 {
@@ -202,5 +203,30 @@ namespace components
         std::string behaviorTreePath;
         bool isInitialized = false;
         bool enabled = true;
+    };
+
+    enum class ReverbZoneShape : uint8_t
+    {
+        Sphere = 0,
+        Box = 1
+    };
+
+    struct ReverbZoneComponent
+    {
+        ReverbZoneShape shape = ReverbZoneShape::Sphere;
+        float radius = 10.0f;
+        glm::vec3 halfExtents{5.0f};
+
+        std::string presetName = "Generic";
+        types::ReverbParams customParams;
+
+        int priority = 0;
+        float falloffDistance = 2.0f;
+        float wetLevel = 1.0f;
+        bool showDebugVolume = false;
+
+        // Runtime (not serialized)
+        bool isListenerInside = false;
+        float currentBlendWeight = 0.0f;
     };
 }
