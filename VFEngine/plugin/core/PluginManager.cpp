@@ -69,39 +69,11 @@ namespace plugin {
             }
         }
 
-        // Phase 2: Sort by loadOrder (ascending), then by name
-        std::sort(descriptors.begin(), descriptors.end(),
-            [](const PluginDescriptor& a, const PluginDescriptor& b)
-            {
-                if (a.loadOrder != b.loadOrder)
-                    return a.loadOrder < b.loadOrder;
-                return a.name < b.name;
-            });
-
-        // Phase 3: Validate dependencies
-        std::unordered_set<std::string> availableNames;
-        for (const auto& desc : descriptors)
-            availableNames.insert(desc.name);
-
-        std::vector<PluginDescriptor> validDescriptors;
-        for (auto& desc : descriptors)
-        {
-            bool depsMet = true;
-            for (const auto& dep : desc.dependencies)
-            {
-                if (!availableNames.contains(dep))
-                {
-                    vfLogError("Plugin '{}' has unmet dependency: '{}'", desc.name, dep);
-                    depsMet = false;
-                    break;
-                }
-            }
-            if (depsMet)
-                validDescriptors.push_back(std::move(desc));
-        }
+        // Phase 2+3: Topological sort with dependency validation and cycle detection
+        auto sortedDescriptors = resolveLoadOrder(descriptors);
 
         // Phase 4: Load plugins from descriptors
-        for (const auto& desc : validDescriptors)
+        for (const auto& desc : sortedDescriptors)
         {
             loadPlugin(desc);
         }
@@ -124,6 +96,105 @@ namespace plugin {
         }
 
         vfLogInfo("Loaded {} plugin(s)", plugins.size());
+    }
+
+    std::vector<PluginDescriptor> PluginManager::resolveLoadOrder(std::vector<PluginDescriptor>& descriptors)
+    {
+        // Build name → descriptor index map
+        std::unordered_map<std::string, size_t> nameToIndex;
+        for (size_t i = 0; i < descriptors.size(); ++i)
+            nameToIndex[descriptors[i].name] = i;
+
+        // Remove plugins with missing dependencies
+        std::vector<PluginDescriptor> valid;
+        for (auto& desc : descriptors)
+        {
+            bool depsMet = true;
+            for (const auto& dep : desc.dependencies)
+            {
+                if (!nameToIndex.contains(dep))
+                {
+                    vfLogError("Plugin '{}' has unmet dependency: '{}', skipping", desc.name, dep);
+                    depsMet = false;
+                    break;
+                }
+            }
+            if (depsMet)
+                valid.push_back(std::move(desc));
+        }
+
+        // Rebuild index map for valid set
+        nameToIndex.clear();
+        for (size_t i = 0; i < valid.size(); ++i)
+            nameToIndex[valid[i].name] = i;
+
+        // Kahn's algorithm: compute in-degrees
+        std::vector<int> inDegree(valid.size(), 0);
+        // adjacency: plugin index → list of indices that depend on it
+        std::vector<std::vector<size_t>> dependents(valid.size());
+
+        for (size_t i = 0; i < valid.size(); ++i)
+        {
+            for (const auto& dep : valid[i].dependencies)
+            {
+                auto it = nameToIndex.find(dep);
+                if (it != nameToIndex.end())
+                {
+                    dependents[it->second].push_back(i);
+                    inDegree[i]++;
+                }
+            }
+        }
+
+        // Seed queue with zero in-degree plugins, sorted by loadOrder then name
+        std::vector<size_t> queue;
+        for (size_t i = 0; i < valid.size(); ++i)
+        {
+            if (inDegree[i] == 0)
+                queue.push_back(i);
+        }
+
+        std::vector<PluginDescriptor> sorted;
+        sorted.reserve(valid.size());
+
+        while (!queue.empty())
+        {
+            // Sort current wave by loadOrder, then name
+            std::sort(queue.begin(), queue.end(), [&](size_t a, size_t b)
+            {
+                if (valid[a].loadOrder != valid[b].loadOrder)
+                    return valid[a].loadOrder < valid[b].loadOrder;
+                return valid[a].name < valid[b].name;
+            });
+
+            std::vector<size_t> nextQueue;
+            for (size_t idx : queue)
+            {
+                sorted.push_back(std::move(valid[idx]));
+
+                for (size_t dependent : dependents[idx])
+                {
+                    inDegree[dependent]--;
+                    if (inDegree[dependent] == 0)
+                        nextQueue.push_back(dependent);
+                }
+            }
+            queue = std::move(nextQueue);
+        }
+
+        // Cycle detection: any remaining plugins with in-degree > 0
+        if (sorted.size() < valid.size())
+        {
+            for (size_t i = 0; i < valid.size(); ++i)
+            {
+                if (inDegree[i] > 0 && !valid[i].name.empty())
+                {
+                    vfLogError("Plugin '{}' is part of a dependency cycle, skipping", valid[i].name);
+                }
+            }
+        }
+
+        return sorted;
     }
 
     bool PluginManager::loadPlugin(const PluginDescriptor& descriptor)

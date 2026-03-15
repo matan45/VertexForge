@@ -46,6 +46,7 @@ namespace plugin {
         bool loadPlugin(const PluginDescriptor& descriptor);
         bool loadPluginFromDll(const std::filesystem::path& dllPath);
         bool validatePluginVersion(DynamicLibrary& lib) const;
+        std::vector<PluginDescriptor> resolveLoadOrder(std::vector<PluginDescriptor>& descriptors);
     };
 
 }
