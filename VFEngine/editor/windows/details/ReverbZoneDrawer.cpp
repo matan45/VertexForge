@@ -144,11 +144,46 @@ namespace windows::details
         ImGui::Text("Preset:");
         ImGui::Indent(10.0f);
 
+        // Full list of all 113 EFX reverb presets + Custom
         static const char* presetNames[] = {
-            "Generic", "Room", "Bathroom", "Living Room", "Stone Room",
-            "Auditorium", "Concert Hall", "Cave", "Arena", "Hangar",
-            "Hallway", "Forest", "City", "Mountains", "Underwater",
-            "Chapel", "Custom"
+            "Generic", "Padded Cell", "Room", "Bathroom", "Living Room",
+            "Stone Room", "Auditorium", "Concert Hall", "Cave", "Arena",
+            "Hangar", "Carpeted Hallway", "Hallway", "Stone Corridor", "Alley",
+            "Forest", "City", "Mountains", "Quarry", "Plain",
+            "Parking Lot", "Sewer Pipe", "Underwater", "Drugged", "Dizzy",
+            "Psychotic",
+            "Castle Small Room", "Castle Short Passage", "Castle Medium Room",
+            "Castle Large Room", "Castle Long Passage", "Castle Hall",
+            "Castle Cupboard", "Castle Courtyard", "Castle Alcove",
+            "Factory Small Room", "Factory Short Passage", "Factory Medium Room",
+            "Factory Large Room", "Factory Long Passage", "Factory Hall",
+            "Factory Cupboard", "Factory Courtyard", "Factory Alcove",
+            "Ice Palace Small Room", "Ice Palace Short Passage", "Ice Palace Medium Room",
+            "Ice Palace Large Room", "Ice Palace Long Passage", "Ice Palace Hall",
+            "Ice Palace Cupboard", "Ice Palace Courtyard", "Ice Palace Alcove",
+            "Space Station Small Room", "Space Station Short Passage", "Space Station Medium Room",
+            "Space Station Large Room", "Space Station Long Passage", "Space Station Hall",
+            "Space Station Cupboard", "Space Station Alcove",
+            "Wooden Small Room", "Wooden Short Passage", "Wooden Medium Room",
+            "Wooden Large Room", "Wooden Long Passage", "Wooden Hall",
+            "Wooden Cupboard", "Wooden Courtyard", "Wooden Alcove",
+            "Sport Empty Stadium", "Sport Squash Court", "Sport Small Swimming Pool",
+            "Sport Large Swimming Pool", "Sport Gymnasium", "Sport Full Stadium",
+            "Sport Stadium Tannoy",
+            "Prefab Workshop", "Prefab School Room", "Prefab Practise Room",
+            "Prefab Outhouse", "Prefab Caravan",
+            "Dome Tomb", "Pipe Small", "Dome Saint Pauls",
+            "Pipe Long Thin", "Pipe Large", "Pipe Resonant",
+            "Outdoors Backyard", "Outdoors Rolling Plains", "Outdoors Deep Canyon",
+            "Outdoors Creek", "Outdoors Valley",
+            "Mood Heaven", "Mood Hell", "Mood Memory",
+            "Driving Commentator", "Driving Pit Garage",
+            "Driving In-Car Racer", "Driving In-Car Sports", "Driving In-Car Luxury",
+            "Driving Full Grand Prix", "Driving Empty Grand Prix", "Driving Tunnel",
+            "City Streets", "City Subway", "City Museum",
+            "City Library", "City Underpass", "City Abandoned",
+            "Dusty Room", "Chapel", "Small Water Room",
+            "Custom"
         };
         constexpr int presetCount = IM_ARRAYSIZE(presetNames);
 
@@ -162,17 +197,32 @@ namespace windows::details
             }
         }
 
-        if (ImGui::Combo("Preset##RZ", &currentPreset, presetNames, presetCount))
+        // Use BeginCombo for scrollable list instead of Combo
+        const char* preview = presetNames[currentPreset];
+        if (ImGui::BeginCombo("Preset##RZ", preview))
         {
-            if (currentPreset == presetCount - 1)
+            for (int i = 0; i < presetCount; ++i)
             {
-                data.presetName = "";
+                bool isSelected = (currentPreset == i);
+                if (ImGui::Selectable(presetNames[i], isSelected))
+                {
+                    currentPreset = i;
+                    if (currentPreset == presetCount - 1)
+                    {
+                        data.presetName = "";
+                    }
+                    else
+                    {
+                        data.presetName = presetNames[currentPreset];
+                    }
+                    changed = true;
+                }
+                if (isSelected)
+                {
+                    ImGui::SetItemDefaultFocus();
+                }
             }
-            else
-            {
-                data.presetName = presetNames[currentPreset];
-            }
-            changed = true;
+            ImGui::EndCombo();
         }
 
         ImGui::Unindent(10.0f);

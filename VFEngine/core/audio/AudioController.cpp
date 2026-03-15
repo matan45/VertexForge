@@ -12,6 +12,7 @@ namespace core::audio
           , busManager(std::make_unique<AudioBusManager>())
           , effectManager(std::make_unique<AudioEffectManager>())
           , reverbZoneManager(std::make_unique<ReverbZoneManager>())
+          , lastUpdateTime(std::chrono::steady_clock::now())
     {
     }
 
@@ -116,6 +117,7 @@ namespace core::audio
         float deltaTime = std::chrono::duration<float>(now - lastUpdateTime).count();
         lastUpdateTime = now;
 
+        busManager->flushDirtyVolumes();
         sourceManager->update();
         streamingManager->update();
         sourceManager->updateFilters(listener->getPosition(), deltaTime);
@@ -172,8 +174,8 @@ namespace core::audio
         config.direction = params.direction;
         source->applyConfig(config);
 
+        // Assign to bus before play so effect routing is active from first sample
         busManager->assignSource(handle, params.busName, params.volume);
-
         source->play();
 
         return handle;
@@ -224,8 +226,7 @@ namespace core::audio
     {
         if (!initialized) return;
 
-        busManager->removeSource(handle);
-
+        // Stop the source first, then remove from bus tracking
         if (StreamingAudioManager::isStreamingHandle(handle))
         {
             streamingManager->stop(handle);
@@ -236,8 +237,14 @@ namespace core::audio
             if (source)
             {
                 source->stop();
-                sourceManager->releaseSource(handle);
             }
+        }
+
+        busManager->removeSource(handle);
+
+        if (!StreamingAudioManager::isStreamingHandle(handle))
+        {
+            sourceManager->releaseSource(handle);
         }
     }
 

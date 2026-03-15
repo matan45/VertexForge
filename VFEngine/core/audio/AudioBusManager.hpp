@@ -29,9 +29,9 @@ namespace core::audio
     struct MixSnapshot
     {
         std::string name;
-        std::map<std::string, float> busVolumes;
-        std::map<std::string, bool> busMutes;
-        std::map<std::string, std::vector<types::BusEffectConfig>> busEffects;
+        std::map<uint32_t, float> busVolumes;
+        std::map<uint32_t, bool> busMutes;
+        std::map<uint32_t, std::vector<types::BusEffectConfig>> busEffects;
     };
 
     struct TrackedSource
@@ -40,6 +40,15 @@ namespace core::audio
         uint32_t busId = 0;
         float userVolume = 1.0f;
     };
+
+    namespace BusNames
+    {
+        constexpr const char* Master = "Master";
+        constexpr const char* Music = "Music";
+        constexpr const char* SFX = "SFX";
+        constexpr const char* Dialogue = "Dialogue";
+        constexpr const char* Ambient = "Ambient";
+    }
 
     class AudioBusManager
     {
@@ -72,6 +81,9 @@ namespace core::audio
         void assignSource(AudioHandle handle, const std::string& busName, float userVolume);
         void removeSource(AudioHandle handle);
         void setSourceUserVolume(AudioHandle handle, float volume);
+
+        // Call once per frame to flush deferred volume recalculations
+        void flushDirtyVolumes();
 
         // Snapshots
         void saveSnapshot(const std::string& name);
@@ -108,5 +120,6 @@ namespace core::audio
         SourceResolveCallback sourceResolveCallback;
         AudioEffectManager* effectManager = nullptr;
         ReverbZoneManager* reverbZoneManager = nullptr;
+        bool volumesDirty = false;
     };
 }

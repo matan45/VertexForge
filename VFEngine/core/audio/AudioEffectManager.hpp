@@ -19,6 +19,9 @@ namespace core::audio
         float wetDryMix = 1.0f;
     };
 
+    // All methods must be called from the thread owning the OpenAL context (main thread).
+    // OpenAL EFX calls are not thread-safe; the engine enforces this by dispatching
+    // all audio commands synchronously on the main thread via CQRS event handlers.
     class AudioEffectManager
     {
     public:
@@ -36,6 +39,7 @@ namespace core::audio
         void unrouteSource(ALuint sourceId, uint32_t busId);
 
         std::vector<types::BusEffectConfig> getBusEffectChain(uint32_t busId) const;
+        const std::vector<EffectSlotEntry>& getBusEffectSlots(uint32_t busId) const;
         int getMaxEffectsPerBus() const { return maxSends; }
 
     private:

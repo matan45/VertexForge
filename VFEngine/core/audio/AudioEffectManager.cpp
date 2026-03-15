@@ -244,6 +244,17 @@ namespace core::audio
         return result;
     }
 
+    const std::vector<EffectSlotEntry>& AudioEffectManager::getBusEffectSlots(uint32_t busId) const
+    {
+        static const std::vector<EffectSlotEntry> empty;
+        auto it = busEffects.find(busId);
+        if (it == busEffects.end())
+        {
+            return empty;
+        }
+        return it->second;
+    }
+
     EffectSlotEntry* AudioEffectManager::findEffect(uint32_t busId, uint32_t effectId)
     {
         auto it = busEffects.find(busId);
@@ -310,6 +321,10 @@ namespace core::audio
             else if constexpr (std::is_same_v<T, types::ChorusParams>)
             {
                 applyChorusParams(effect, params);
+            }
+            else
+            {
+                static_assert(sizeof(T) == 0, "Unhandled effect parameter type in applyEffectParams");
             }
         }, config.params);
     }

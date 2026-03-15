@@ -49,6 +49,21 @@ namespace core::audio
             if (it != nameToId.end())
             {
                 parentId = it->second;
+
+                // Guard against circular parent references
+                uint32_t ancestor = parentId;
+                int maxDepth = 32;
+                while (maxDepth-- > 0)
+                {
+                    auto* parentBus = getBus(ancestor);
+                    if (!parentBus || parentBus->id == parentBus->parentId) break;
+                    ancestor = parentBus->parentId;
+                }
+                if (maxDepth <= 0)
+                {
+                    vfLogWarning("AudioBusManager: Circular parent detected for bus '{}', defaulting to Master", name);
+                    parentId = 0;
+                }
             }
         }
 
@@ -115,8 +130,7 @@ namespace core::audio
         if (!bus) return;
 
         bus->volume = std::clamp(volume, 0.0f, 1.0f);
-        recalculateEffectiveVolumes();
-        applyEffectiveVolumesToSources();
+        volumesDirty = true;
     }
 
     void AudioBusManager::setBusMuted(const std::string& name, bool muted)
@@ -125,8 +139,7 @@ namespace core::audio
         if (!bus) return;
 
         bus->muted = muted;
-        recalculateEffectiveVolumes();
-        applyEffectiveVolumesToSources();
+        volumesDirty = true;
     }
 
     void AudioBusManager::setBusSoloed(const std::string& name, bool soloed)
@@ -135,6 +148,13 @@ namespace core::audio
         if (!bus) return;
 
         bus->soloed = soloed;
+        volumesDirty = true;
+    }
+
+    void AudioBusManager::flushDirtyVolumes()
+    {
+        if (!volumesDirty) return;
+        volumesDirty = false;
         recalculateEffectiveVolumes();
         applyEffectiveVolumesToSources();
     }
@@ -258,15 +278,15 @@ namespace core::audio
         snapshot.name = name;
         for (const auto& bus : buses)
         {
-            snapshot.busVolumes[bus.name] = bus.volume;
-            snapshot.busMutes[bus.name] = bus.muted;
+            snapshot.busVolumes[bus.id] = bus.volume;
+            snapshot.busMutes[bus.id] = bus.muted;
 
             if (effectManager)
             {
                 auto chain = effectManager->getBusEffectChain(bus.id);
                 if (!chain.empty())
                 {
-                    snapshot.busEffects[bus.name] = chain;
+                    snapshot.busEffects[bus.id] = chain;
                 }
             }
         }
@@ -281,13 +301,13 @@ namespace core::audio
         const auto& snapshot = it->second;
         for (auto& bus : buses)
         {
-            auto volIt = snapshot.busVolumes.find(bus.name);
+            auto volIt = snapshot.busVolumes.find(bus.id);
             if (volIt != snapshot.busVolumes.end())
             {
                 bus.volume = volIt->second;
             }
 
-            auto muteIt = snapshot.busMutes.find(bus.name);
+            auto muteIt = snapshot.busMutes.find(bus.id);
             if (muteIt != snapshot.busMutes.end())
             {
                 bus.muted = muteIt->second;
@@ -315,11 +335,11 @@ namespace core::audio
 
     void AudioBusManager::createDefaultBuses()
     {
-        createBus("Master", "");
-        createBus("Music", "Master");
-        createBus("SFX", "Master");
-        createBus("Dialogue", "Master");
-        createBus("Ambient", "Master");
+        createBus(BusNames::Master, "");
+        createBus(BusNames::Music, BusNames::Master);
+        createBus(BusNames::SFX, BusNames::Master);
+        createBus(BusNames::Dialogue, BusNames::Master);
+        createBus(BusNames::Ambient, BusNames::Master);
     }
 
     void AudioBusManager::loadBusDefinitions(const std::vector<types::AudioBusDefinition>& definitions)
@@ -402,8 +422,17 @@ namespace core::audio
         {
             MixSnapshot snapshot;
             snapshot.name = def.name;
-            snapshot.busVolumes = def.busVolumes;
-            snapshot.busMutes = def.busMutes;
+            // Convert string-keyed serialization format to id-keyed internal format
+            for (const auto& [busName, vol] : def.busVolumes)
+            {
+                uint32_t id = getBusIdByName(busName);
+                snapshot.busVolumes[id] = vol;
+            }
+            for (const auto& [busName, muted] : def.busMutes)
+            {
+                uint32_t id = getBusIdByName(busName);
+                snapshot.busMutes[id] = muted;
+            }
             snapshots[def.name] = std::move(snapshot);
         }
     }
@@ -415,8 +444,21 @@ namespace core::audio
         {
             types::AudioMixSnapshotDefinition def;
             def.name = snapshot.name;
-            def.busVolumes = snapshot.busVolumes;
-            def.busMutes = snapshot.busMutes;
+            // Convert id-keyed internal format to string-keyed serialization format
+            for (const auto& [busId, vol] : snapshot.busVolumes)
+            {
+                for (const auto& bus : buses)
+                {
+                    if (bus.id == busId) { def.busVolumes[bus.name] = vol; break; }
+                }
+            }
+            for (const auto& [busId, muted] : snapshot.busMutes)
+            {
+                for (const auto& bus : buses)
+                {
+                    if (bus.id == busId) { def.busMutes[bus.name] = muted; break; }
+                }
+            }
             defs.push_back(std::move(def));
         }
         return defs;
