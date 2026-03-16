@@ -325,6 +325,11 @@ namespace controllers::offscreen
                     continue;
                 }
 
+                if (!registry.all_of<components::MeshComponent, components::WorldTransformComponent>(entity))
+                {
+                    continue;
+                }
+
                 if (registry.all_of<components::NameComponent>(entity))
                 {
                     const auto& nameComp = registry.get<components::NameComponent>(entity);
@@ -539,6 +544,22 @@ namespace controllers::offscreen
 
         bool billboardReady = renderHandler->isBillboardPipelineInitialized();
         bool textReady = renderHandler->isTextPipelineInitialized();
+
+        // Pre-assure component storage once on the main thread before first parallel use.
+        // registry.view() internally calls assure<T>() which WRITES to the storage map
+        // if the type hasn't been seen yet. Two parallel jobs both triggering assure()
+        // for different types corrupts the internal storage map (EnTT is not thread-safe).
+        static bool storageAssured = false;
+        if (!storageAssured)
+        {
+            auto& registry = scene::EntityRegistry::getRegistry();
+            registry.storage<components::BillboardComponent>();
+            registry.storage<components::WorldTransformComponent>();
+            registry.storage<components::NameComponent>();
+            registry.storage<components::RenderTextureComponent>();
+            registry.storage<components::TextComponent>();
+            storageAssured = true;
+        }
 
         // Gather billboard and text data in parallel (read-only ECS queries)
         auto& jobs = threading::JobSystem::instance();

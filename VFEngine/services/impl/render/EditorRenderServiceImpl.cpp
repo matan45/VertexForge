@@ -39,10 +39,14 @@ namespace services
             return ViewportTextureHandle{};
         }
 
-        // Skip all render preparation during scene transitions to prevent
-        // race condition with entity destruction (registry is not thread-safe)
+        // Skip render preparation during scene transitions to prevent
+        // race condition with entity destruction (registry is not thread-safe).
+        // Clear the flag so the NEXT frame renders normally — this ensures one full
+        // frame is skipped after restoreSnapshot(), giving LevelHandler::update()
+        // a chance to add WorldTransformComponent to restored entities.
         if (scene::EntityRegistry::isSceneTransitioning())
         {
+            scene::EntityRegistry::setSceneTransitioning(false);
             return lastViewportHandle;
         }
 

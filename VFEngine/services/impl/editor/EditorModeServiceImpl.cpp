@@ -101,7 +101,7 @@ namespace services
 
         if (!restoreSuccess)
         {
-            scene::EntityRegistry::setSceneTransitioning(false);
+            // Leave flag true — cleared next frame by getViewportTexture()
             playModeSnapshot.reset();
             return;
         }
@@ -142,8 +142,8 @@ namespace services
             }
         }
 
-        // Re-allow render preparation to access registry
-        scene::EntityRegistry::setSceneTransitioning(false);
+        // Leave sceneTransitioning = true so the rest of this frame skips render prep.
+        // EditorRenderServiceImpl::getViewportTexture() will clear it on the next frame.
 
         playModeSnapshot.reset();
     }

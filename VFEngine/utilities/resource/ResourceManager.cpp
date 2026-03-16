@@ -239,12 +239,24 @@ namespace resource
 
     std::future<std::shared_ptr<std::vector<ShaderModel>>> ResourceManager::loadShaderAsync(std::string_view path)
     {
-        if (auto resource = shaderCache[path.data()].lock()) {
-            return make_ready_future(resource);
+        {
+            std::scoped_lock lock(cacheMutex);
+            auto it = shaderCache.find(std::string(path));
+            if (it != shaderCache.end()) {
+                if (auto resource = it->second.lock()) {
+                    return make_ready_future(resource);
+                }
+            }
         }
 
+        pendingAsyncOps.fetch_add(1, std::memory_order_relaxed);
         return std::async(std::launch::async, [path = std::string(path)]() -> std::shared_ptr<std::vector<ShaderModel>> {
+            struct AsyncGuard { ~AsyncGuard() { pendingAsyncOps.fetch_sub(1, std::memory_order_release); } } guard;
             try {
+                if (shuttingDown.load(std::memory_order_acquire)) {
+                    return nullptr;
+                }
+
                 if (path.empty()) {
                     vfLogError("Empty path provided for shader loading");
                     return nullptr;
@@ -252,7 +264,7 @@ namespace resource
 
                 auto resource = std::make_shared<std::vector<ShaderModel>>(ShaderResource::readShaderFile(path));
 
-                if (resource) {
+                if (resource && !shuttingDown.load(std::memory_order_acquire)) {
                     std::scoped_lock lock(cacheMutex);
                     shaderCache[path] = resource;
                 }
@@ -291,11 +303,29 @@ namespace resource
     void ResourceManager::init()
     {
         running = true;
+        shuttingDown = false;
+        pendingAsyncOps = 0;
         cleanupThread = std::jthread(&ResourceManager::periodicCleanup);
     }
 
     void ResourceManager::cleanUp()
     {
+        shuttingDown.store(true, std::memory_order_release);
+
+        // Wait for in-flight async operations to complete (with timeout)
+        constexpr int maxWaitMs = 5000;
+        int waited = 0;
+        while (pendingAsyncOps.load(std::memory_order_acquire) > 0 && waited < maxWaitMs)
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            ++waited;
+        }
+        if (waited >= maxWaitMs)
+        {
+            vfLogWarning("ResourceManager::cleanUp() timed out waiting for {} pending async operations",
+                         pendingAsyncOps.load(std::memory_order_relaxed));
+        }
+
         notifyThread();
         cleanupCondition.notify_one();
         releaseResources();

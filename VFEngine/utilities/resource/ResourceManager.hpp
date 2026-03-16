@@ -41,6 +41,8 @@ namespace resource {
 		inline static std::jthread cleanupThread;
 		inline static std::condition_variable cleanupCondition;
 		inline static std::atomic<bool> running;
+		inline static std::atomic<bool> shuttingDown{ false };
+		inline static std::atomic<uint32_t> pendingAsyncOps{ 0 };
 
 	public:
 		static FileType readHeaderFile(const fs::path& filePath);
@@ -104,8 +106,14 @@ namespace resource {
 			return make_ready_future(std::shared_ptr<T>(nullptr));
 		}
 
-		if (auto resource = cache[guid].lock()) {
-			return make_ready_future(resource);
+		{
+			std::scoped_lock lock(cacheMutex);
+			auto it = cache.find(guid);
+			if (it != cache.end()) {
+				if (auto resource = it->second.lock()) {
+					return make_ready_future(resource);
+				}
+			}
 		}
 
 		std::string path = ref.resolve();
@@ -114,11 +122,17 @@ namespace resource {
 			return make_ready_future(std::shared_ptr<T>(nullptr));
 		}
 
+		pendingAsyncOps.fetch_add(1, std::memory_order_relaxed);
 		return std::async(std::launch::async, [path = std::move(path), guid, loader, &cache, assetType, memEstimator]() -> std::shared_ptr<T> {
+			struct AsyncGuard { ~AsyncGuard() { pendingAsyncOps.fetch_sub(1, std::memory_order_release); } } guard;
 			try {
+				if (shuttingDown.load(std::memory_order_acquire)) {
+					return nullptr;
+				}
+
 				auto resource = std::make_shared<T>(loader(path));
 
-				if (resource) {
+				if (resource && !shuttingDown.load(std::memory_order_acquire)) {
 					std::scoped_lock lock(cacheMutex);
 					cache[guid] = resource;
 					if (assetType != AssetType::COUNT) {

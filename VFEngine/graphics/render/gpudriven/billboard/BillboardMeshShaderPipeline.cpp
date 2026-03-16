@@ -104,6 +104,18 @@ namespace render::gpudriven
         vk::Device vkDevice = devicePtr->getLogicalDevice();
         vkDevice.waitIdle();
 
+        if (taskShader)
+        {
+            taskShader->cleanUp();
+            taskShader.reset();
+        }
+
+        if (meshFragShader)
+        {
+            meshFragShader->cleanUp();
+            meshFragShader.reset();
+        }
+
         if (graphicsPipeline)
         {
             vkDevice.destroyPipeline(graphicsPipeline);
