@@ -28,27 +28,6 @@ namespace core
             }
             case resource::TextureCompressionFormat::BC6H:
                 return vk::Format::eBc6HUfloatBlock;
-            case resource::TextureCompressionFormat::ASTC_4x4:
-            {
-                if (uncompressedFormat == vk::Format::eR8G8B8A8Srgb ||
-                    uncompressedFormat == vk::Format::eB8G8R8A8Srgb)
-                    return vk::Format::eAstc4x4SrgbBlock;
-                return vk::Format::eAstc4x4UnormBlock;
-            }
-            case resource::TextureCompressionFormat::ASTC_6x6:
-            {
-                if (uncompressedFormat == vk::Format::eR8G8B8A8Srgb ||
-                    uncompressedFormat == vk::Format::eB8G8R8A8Srgb)
-                    return vk::Format::eAstc6x6SrgbBlock;
-                return vk::Format::eAstc6x6UnormBlock;
-            }
-            case resource::TextureCompressionFormat::ASTC_8x8:
-            {
-                if (uncompressedFormat == vk::Format::eR8G8B8A8Srgb ||
-                    uncompressedFormat == vk::Format::eB8G8R8A8Srgb)
-                    return vk::Format::eAstc8x8SrgbBlock;
-                return vk::Format::eAstc8x8UnormBlock;
-            }
             default:
                 return uncompressedFormat;
         }

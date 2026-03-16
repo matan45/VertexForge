@@ -159,13 +159,12 @@ project "Import"
 	  "dependencies/meshoptimizer/src",  -- meshoptimizer for LOD generation
 	  "dependencies/v-hacd",             -- V-HACD for convex decomposition
 	  "dependencies/freetype/include",   -- FreeType headers
-	  "dependencies/ispc_texcomp",       -- ISPCTextureCompressor (BC7/BC6H)
-	  "dependencies/astc-encoder/Source" -- astc-encoder (ASTC)
+	  "dependencies/ispc_texcomp"        -- ISPCTextureCompressor (BC7/BC6H)
    }
 
    defines { "_CRT_SECURE_NO_WARNINGS", "VF_IMPORT_BUILD_DLL", "MESHOPTIMIZER_API=__declspec(dllimport)" }
 
-   links { "Utilities", "meshoptimizer", "ispc_texcomp", "astc_encoder" }
+   links { "Utilities", "meshoptimizer", "ispc_texcomp" }
 
    -- Debug configuration
    filter "configurations:Debug"
@@ -768,32 +767,6 @@ project "ispc_texcomp"
       defines { "NDEBUG" }
       optimize "On"
 
-
--- Project: astc-encoder (ASTC texture compression)
-project "astc_encoder"
-   kind "StaticLib"
-   language "C++"
-   cppdialect "C++17"
-   targetdir "bin/%{prj.name}/%{cfg.buildcfg}/%{cfg.platform}"
-
-   files {
-      "dependencies/astc-encoder/Source/astcenc.h",
-      "dependencies/astc-encoder/Source/astcenc.cpp"
-   }
-
-   includedirs {
-      "dependencies/astc-encoder/Source"
-   }
-
-   defines { "_CRT_SECURE_NO_WARNINGS" }
-
-   filter "configurations:Debug"
-      defines { "DEBUG" }
-      symbols "On"
-
-   filter "configurations:Release"
-      defines { "NDEBUG" }
-      optimize "On"
 
 
 -- Project: assimp and softal need to build with cmake...

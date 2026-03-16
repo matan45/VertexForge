@@ -21,12 +21,6 @@ namespace types
             const float* rgbaFloat, uint32_t width, uint32_t height,
             importConfig::TextureCompressionQuality quality);
 
-        // Compress RGBA8 data to ASTC
-        static std::vector<unsigned char> compressASTC(
-            const unsigned char* rgbaData, uint32_t width, uint32_t height,
-            uint32_t blockX, uint32_t blockY,
-            importConfig::TextureCompressionQuality quality);
-
         // Calculate compressed data size in bytes
         static uint32_t calculateCompressedSize(
             uint32_t width, uint32_t height,
@@ -38,6 +32,10 @@ namespace types
             const unsigned char* data, uint32_t width, uint32_t height,
             uint32_t blockX, uint32_t blockY, uint32_t bpp,
             uint32_t& paddedWidth, uint32_t& paddedHeight);
+
+        // Decompress BC7 data back to RGBA8
+        static std::vector<unsigned char> decompressBC7(
+            const unsigned char* compressedData, uint32_t width, uint32_t height);
 
         // Get block dimensions for a compression format
         static void getBlockDimensions(resource::TextureCompressionFormat format,

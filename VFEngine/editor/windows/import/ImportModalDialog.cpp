@@ -207,14 +207,14 @@ namespace windows
                 ImGui::Text("Texture Compression:");
                 ImGui::Indent();
 
-                const char* modeNames[] = {"Uncompressed", "BC (BC7/BC6H)", "ASTC"};
+                const char* modeNames[] = {"Uncompressed", "BC (BC7/BC6H)"};
                 int modeIndex = static_cast<int>(compressionMode);
                 if (ImGui::Combo("Compression Mode", &modeIndex, modeNames, IM_ARRAYSIZE(modeNames)))
                 {
                     compressionMode = static_cast<importConfig::TextureCompressionMode>(modeIndex);
                 }
                 if (ImGui::IsItemHovered())
-                    ImGui::SetTooltip("BC: Desktop standard (4-8x smaller). ASTC: Mobile/cross-platform");
+                    ImGui::SetTooltip("BC: Desktop standard (4-8x smaller)");
 
                 if (compressionMode != importConfig::TextureCompressionMode::Uncompressed)
                 {

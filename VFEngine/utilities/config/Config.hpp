@@ -43,8 +43,7 @@ namespace importConfig
     enum class TextureCompressionMode
     {
         Uncompressed,
-        BC,    // BC7 for LDR, BC6H for HDR (desktop standard)
-        ASTC   // ASTC for mobile/cross-platform
+        BC     // BC7 for LDR, BC6H for HDR (desktop standard)
     };
 
     // Texture compression quality

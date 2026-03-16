@@ -159,7 +159,7 @@ namespace editor::materialeditor
             ImGui::Text("Output Compression:");
             ImGui::Indent();
             {
-                const char* modeNames[] = {"Uncompressed", "BC (BC7)", "ASTC"};
+                const char* modeNames[] = {"Uncompressed", "BC (BC7)"};
                 int modeIndex = static_cast<int>(compressionMode);
                 if (ImGui::Combo("Mode", &modeIndex, modeNames, IM_ARRAYSIZE(modeNames)))
                 {
@@ -215,37 +215,38 @@ namespace editor::materialeditor
         input.metallicPath = metallicPath;
         input.outputPath = outputPath;
 
+        // Set up decompress callback for compressed input textures
+        input.decompressCallback = [](resource::TextureData& textureData)
+        {
+            if (textureData.compressionFormat == resource::TextureCompressionFormat::BC7 &&
+                !textureData.mipData.empty())
+            {
+                auto& mip = textureData.mipData[0];
+                auto decompressed = types::TextureCompressor::decompressBC7(
+                    mip.data.data(), mip.width, mip.height);
+
+                if (!decompressed.empty())
+                {
+                    mip.data = std::move(decompressed);
+                    mip.dataSize = static_cast<uint32_t>(mip.data.size());
+                    textureData.compressionFormat = resource::TextureCompressionFormat::Uncompressed;
+                }
+            }
+        };
+
         // Set up compression callback if compression is enabled
         auto mode = compressionMode;
         auto quality = compressionQuality;
         if (mode != importConfig::TextureCompressionMode::Uncompressed)
         {
-            input.compressCallback = [mode, quality](resource::TextureData& textureData)
+            input.compressCallback = [quality](resource::TextureData& textureData)
             {
-                resource::TextureCompressionFormat format;
-                if (mode == importConfig::TextureCompressionMode::BC)
-                    format = resource::TextureCompressionFormat::BC7;
-                else
-                    format = resource::TextureCompressionFormat::ASTC_4x4;
-
-                textureData.compressionFormat = format;
+                textureData.compressionFormat = resource::TextureCompressionFormat::BC7;
 
                 for (auto& mip : textureData.mipData)
                 {
-                    std::vector<unsigned char> compressed;
-
-                    if (format == resource::TextureCompressionFormat::BC7)
-                    {
-                        compressed = types::TextureCompressor::compressBC7(
-                            mip.data.data(), mip.width, mip.height, quality);
-                    }
-                    else
-                    {
-                        uint32_t blockX, blockY;
-                        types::TextureCompressor::getBlockDimensions(format, blockX, blockY);
-                        compressed = types::TextureCompressor::compressASTC(
-                            mip.data.data(), mip.width, mip.height, blockX, blockY, quality);
-                    }
+                    auto compressed = types::TextureCompressor::compressBC7(
+                        mip.data.data(), mip.width, mip.height, quality);
 
                     if (!compressed.empty())
                     {

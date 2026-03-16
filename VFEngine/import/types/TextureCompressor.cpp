@@ -2,7 +2,6 @@
 #include "print/Log.hpp"
 
 #include <ispc_texcomp.h>
-#include <astcenc.h>
 #include <cstring>
 #include <cmath>
 #include <algorithm>
@@ -41,12 +40,7 @@ namespace types
         {
             case resource::TextureCompressionFormat::BC7:
             case resource::TextureCompressionFormat::BC6H:
-            case resource::TextureCompressionFormat::ASTC_4x4:
                 blockX = 4; blockY = 4; break;
-            case resource::TextureCompressionFormat::ASTC_6x6:
-                blockX = 6; blockY = 6; break;
-            case resource::TextureCompressionFormat::ASTC_8x8:
-                blockX = 8; blockY = 8; break;
             default:
                 blockX = 1; blockY = 1; break;
         }
@@ -63,7 +57,7 @@ namespace types
 
         uint32_t blocksX = (width + blockX - 1) / blockX;
         uint32_t blocksY = (height + blockY - 1) / blockY;
-        return blocksX * blocksY * 16; // All BC/ASTC formats use 16 bytes per block
+        return blocksX * blocksY * 16; // All BC formats use 16 bytes per block
     }
 
     std::vector<unsigned char> TextureCompressor::padToBlockSize(
@@ -190,82 +184,128 @@ namespace types
         return compressed;
     }
 
-    std::vector<unsigned char> TextureCompressor::compressASTC(
-        const unsigned char* rgbaData, uint32_t width, uint32_t height,
-        uint32_t blockX, uint32_t blockY,
-        importConfig::TextureCompressionQuality quality)
+    // ========================================================================
+    // BC7 Mode 6 decoder
+    // Reads 128-bit blocks, extracts endpoints/indices, interpolates to RGBA8
+    // ========================================================================
+
+    static uint64_t getBits128(const uint8_t block[16], int startBit, int numBits)
     {
-        // Pad to block alignment
-        uint32_t paddedW, paddedH;
-        auto padded = padToBlockSize(rgbaData, width, height, blockX, blockY, 4, paddedW, paddedH);
+        uint64_t lo, hi;
+        std::memcpy(&lo, block, 8);
+        std::memcpy(&hi, block + 8, 8);
 
-        // Configure astc-encoder
-        float astcQuality;
-        switch (quality)
+        uint64_t result = 0;
+        if (startBit < 64)
         {
-            case importConfig::TextureCompressionQuality::Fast:
-                astcQuality = ASTCENC_PRE_FAST;
-                break;
-            case importConfig::TextureCompressionQuality::Balanced:
-                astcQuality = ASTCENC_PRE_MEDIUM;
-                break;
-            case importConfig::TextureCompressionQuality::Quality:
-                astcQuality = ASTCENC_PRE_THOROUGH;
-                break;
+            result = lo >> startBit;
+            if (startBit + numBits > 64)
+                result |= hi << (64 - startBit);
+        }
+        else
+        {
+            result = hi >> (startBit - 64);
         }
 
-        astcenc_config config;
-        astcenc_status status = astcenc_config_init(
-            ASTCENC_PRF_LDR_SRGB, blockX, blockY, 1,
-            astcQuality, 0, &config);
-
-        if (status != ASTCENC_SUCCESS)
-        {
-            vfLogError("ASTC config init failed: {}", astcenc_get_error_string(status));
-            return {};
-        }
-
-        astcenc_context* context = nullptr;
-        status = astcenc_context_alloc(&config, 1, &context);
-        if (status != ASTCENC_SUCCESS)
-        {
-            vfLogError("ASTC context alloc failed: {}", astcenc_get_error_string(status));
-            return {};
-        }
-
-        // Setup image - astcenc wants row pointers
-        std::vector<void*> rowPointers(paddedH);
-        for (uint32_t y = 0; y < paddedH; ++y)
-        {
-            rowPointers[y] = padded.data() + static_cast<size_t>(y) * paddedW * 4;
-        }
-
-        astcenc_image image;
-        image.dim_x = paddedW;
-        image.dim_y = paddedH;
-        image.dim_z = 1;
-        image.data_type = ASTCENC_TYPE_U8;
-        image.data = rowPointers.data();
-
-        astcenc_swizzle swizzle{ASTCENC_SWZ_R, ASTCENC_SWZ_G, ASTCENC_SWZ_B, ASTCENC_SWZ_A};
-
-        // Allocate output
-        uint32_t blocksXCount = (paddedW + blockX - 1) / blockX;
-        uint32_t blocksYCount = (paddedH + blockY - 1) / blockY;
-        size_t outputSize = static_cast<size_t>(blocksXCount) * blocksYCount * 16;
-        std::vector<unsigned char> compressed(outputSize);
-
-        status = astcenc_compress_image(context, &image, &swizzle,
-                                        compressed.data(), outputSize, 0);
-
-        astcenc_context_free(context);
-
-        if (status != ASTCENC_SUCCESS)
-        {
-            vfLogError("ASTC compression failed: {}", astcenc_get_error_string(status));
-            return {};
-        }
-
-        return compressed;
+        uint64_t mask = (numBits >= 64) ? ~0ULL : ((1ULL << numBits) - 1);
+        return result & mask;
     }
+
+    std::vector<unsigned char> TextureCompressor::decompressBC7(
+        const unsigned char* compressedData, uint32_t width, uint32_t height)
+    {
+        // BC7 interpolation weights for 4-bit indices
+        static const int weights4[16] = { 0, 4, 9, 13, 17, 21, 26, 30, 34, 38, 43, 47, 51, 55, 60, 64 };
+
+        uint32_t blocksX = (width + 3) / 4;
+        uint32_t blocksY = (height + 3) / 4;
+
+        std::vector<unsigned char> output(static_cast<size_t>(width) * height * 4);
+
+        for (uint32_t by = 0; by < blocksY; ++by)
+        {
+            for (uint32_t bx = 0; bx < blocksX; ++bx)
+            {
+                const uint8_t* block = compressedData + (by * blocksX + bx) * 16;
+
+                // Detect mode from lowest set bit
+                uint8_t modeByte = block[0];
+                int mode = -1;
+                for (int i = 0; i < 8; ++i)
+                {
+                    if (modeByte & (1 << i))
+                    {
+                        mode = i;
+                        break;
+                    }
+                }
+
+                uint8_t pixels[16][4];
+
+                if (mode == 6)
+                {
+                    // Mode 6: 7-bit RGBA endpoints, 1 p-bit per endpoint, 4-bit indices
+                    uint8_t ep0[4], ep1[4];
+                    ep0[0] = static_cast<uint8_t>(getBits128(block, 7, 7));
+                    ep1[0] = static_cast<uint8_t>(getBits128(block, 14, 7));
+                    ep0[1] = static_cast<uint8_t>(getBits128(block, 21, 7));
+                    ep1[1] = static_cast<uint8_t>(getBits128(block, 28, 7));
+                    ep0[2] = static_cast<uint8_t>(getBits128(block, 35, 7));
+                    ep1[2] = static_cast<uint8_t>(getBits128(block, 42, 7));
+                    ep0[3] = static_cast<uint8_t>(getBits128(block, 49, 7));
+                    ep1[3] = static_cast<uint8_t>(getBits128(block, 56, 7));
+                    uint8_t p0 = static_cast<uint8_t>(getBits128(block, 63, 1));
+                    uint8_t p1 = static_cast<uint8_t>(getBits128(block, 64, 1));
+
+                    // Reconstruct 8-bit endpoints
+                    int e0[4], e1[4];
+                    for (int c = 0; c < 4; ++c)
+                    {
+                        e0[c] = (ep0[c] << 1) | p0;
+                        e1[c] = (ep1[c] << 1) | p1;
+                    }
+
+                    // Read indices: anchor is 3-bit, rest are 4-bit
+                    uint8_t indices[16];
+                    indices[0] = static_cast<uint8_t>(getBits128(block, 65, 3));
+                    for (int i = 1; i < 16; ++i)
+                        indices[i] = static_cast<uint8_t>(getBits128(block, 65 + 3 + (i - 1) * 4, 4));
+
+                    // Interpolate
+                    for (int i = 0; i < 16; ++i)
+                    {
+                        int w = weights4[indices[i]];
+                        for (int c = 0; c < 4; ++c)
+                            pixels[i][c] = static_cast<uint8_t>((e0[c] * (64 - w) + e1[c] * w + 32) >> 6);
+                    }
+                }
+                else
+                {
+                    // Unsupported mode — decode as mid-gray
+                    for (int i = 0; i < 16; ++i)
+                    {
+                        pixels[i][0] = pixels[i][1] = pixels[i][2] = 128;
+                        pixels[i][3] = 255;
+                    }
+                }
+
+                // Write pixels to output (clip to actual image dimensions)
+                for (int py = 0; py < 4; ++py)
+                {
+                    uint32_t dstY = by * 4 + py;
+                    if (dstY >= height) continue;
+                    for (int px = 0; px < 4; ++px)
+                    {
+                        uint32_t dstX = bx * 4 + px;
+                        if (dstX >= width) continue;
+                        size_t dstIdx = (static_cast<size_t>(dstY) * width + dstX) * 4;
+                        std::memcpy(&output[dstIdx], pixels[py * 4 + px], 4);
+                    }
+                }
+            }
+        }
+
+        return output;
+    }
+
 }

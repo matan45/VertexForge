@@ -478,34 +478,12 @@ namespace types
 			return;
 		}
 
-		resource::TextureCompressionFormat format;
-		if (mode == importConfig::TextureCompressionMode::BC)
-		{
-			format = resource::TextureCompressionFormat::BC7;
-		}
-		else // ASTC
-		{
-			format = resource::TextureCompressionFormat::ASTC_4x4;
-		}
-
-		textureData.compressionFormat = format;
+		textureData.compressionFormat = resource::TextureCompressionFormat::BC7;
 
 		for (auto& mip : textureData.mipData)
 		{
-			std::vector<unsigned char> compressed;
-
-			if (format == resource::TextureCompressionFormat::BC7)
-			{
-				compressed = TextureCompressor::compressBC7(
-					mip.data.data(), mip.width, mip.height, quality);
-			}
-			else
-			{
-				uint32_t blockX, blockY;
-				TextureCompressor::getBlockDimensions(format, blockX, blockY);
-				compressed = TextureCompressor::compressASTC(
-					mip.data.data(), mip.width, mip.height, blockX, blockY, quality);
-			}
+			auto compressed = TextureCompressor::compressBC7(
+				mip.data.data(), mip.width, mip.height, quality);
 
 			if (!compressed.empty())
 			{
@@ -520,9 +498,8 @@ namespace types
 			}
 		}
 
-		vfLogInfo("Compressed texture {}x{} to {} ({} mips)",
+		vfLogInfo("Compressed texture {}x{} to BC7 ({} mips)",
 			textureData.width, textureData.height,
-			format == resource::TextureCompressionFormat::BC7 ? "BC7" : "ASTC",
 			textureData.mipLevels);
 	}
 
@@ -534,12 +511,6 @@ namespace types
 		{
 			hdrData.compressionFormat = resource::TextureCompressionFormat::Uncompressed;
 			return;
-		}
-
-		// BC6H for HDR data (ASTC HDR not supported in this path)
-		if (mode == importConfig::TextureCompressionMode::ASTC)
-		{
-			vfLogWarning("ASTC HDR compression not supported, falling back to BC6H");
 		}
 
 		hdrData.compressionFormat = resource::TextureCompressionFormat::BC6H;

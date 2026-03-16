@@ -320,6 +320,26 @@ namespace texture
     }
 
     // ============================================================================
+    // Helper: Decompress compressed textures for CPU pixel access
+    // ============================================================================
+    static void decompressIfNeeded(
+        bool hasAo, bool hasRoughness, bool hasMetallic,
+        std::shared_ptr<resource::TextureData>& aoData,
+        std::shared_ptr<resource::TextureData>& roughnessData,
+        std::shared_ptr<resource::TextureData>& metallicData,
+        const TextureDecompressCallback& decompressCallback)
+    {
+        if (!decompressCallback) return;
+
+        if (hasAo && aoData && aoData->compressionFormat != resource::TextureCompressionFormat::Uncompressed)
+            decompressCallback(*aoData);
+        if (hasRoughness && roughnessData && roughnessData->compressionFormat != resource::TextureCompressionFormat::Uncompressed)
+            decompressCallback(*roughnessData);
+        if (hasMetallic && metallicData && metallicData->compressionFormat != resource::TextureCompressionFormat::Uncompressed)
+            decompressCallback(*metallicData);
+    }
+
+    // ============================================================================
     // Helper: Validate loaded texture data
     // ============================================================================
     static bool validateLoadedTextures(
@@ -330,20 +350,20 @@ namespace texture
         const OrmPackInput& input,
         std::string& errorMessage)
     {
-        // ORM packing requires uncompressed pixel access — compressed textures cannot be sampled on CPU
+        // After decompression attempt, check if any textures are still compressed
         if (hasAo && aoData && aoData->compressionFormat != resource::TextureCompressionFormat::Uncompressed)
         {
-            errorMessage = "AO texture is compressed (BC7/ASTC). Re-import as Uncompressed for ORM packing: " + input.aoPath;
+            errorMessage = "AO texture is compressed and could not be decompressed: " + input.aoPath;
             return false;
         }
         if (hasRoughness && roughnessData && roughnessData->compressionFormat != resource::TextureCompressionFormat::Uncompressed)
         {
-            errorMessage = "Roughness texture is compressed. Re-import as Uncompressed for ORM packing: " + input.roughnessPath;
+            errorMessage = "Roughness texture is compressed and could not be decompressed: " + input.roughnessPath;
             return false;
         }
         if (hasMetallic && metallicData && metallicData->compressionFormat != resource::TextureCompressionFormat::Uncompressed)
         {
-            errorMessage = "Metallic texture is compressed. Re-import as Uncompressed for ORM packing: " + input.metallicPath;
+            errorMessage = "Metallic texture is compressed and could not be decompressed: " + input.metallicPath;
             return false;
         }
         if (hasAo && (!aoData || aoData->textureData().empty()))
@@ -455,6 +475,12 @@ namespace texture
 
         loadTextures(input, hasAo, hasRoughness, hasMetallic,
                      aoData, roughnessData, metallicData, progressCallback);
+
+        if (progressCallback) progressCallback(0.4f);
+
+        // Decompress any compressed input textures for CPU pixel access
+        decompressIfNeeded(hasAo, hasRoughness, hasMetallic,
+                          aoData, roughnessData, metallicData, input.decompressCallback);
 
         if (progressCallback) progressCallback(0.5f);
 

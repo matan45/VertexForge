@@ -249,9 +249,6 @@ namespace controllers
                 switch (texturePtr->compressionFormat)
                 {
                     case resource::TextureCompressionFormat::BC7: format = vk::Format::eBc7SrgbBlock; break;
-                    case resource::TextureCompressionFormat::ASTC_4x4: format = vk::Format::eAstc4x4SrgbBlock; break;
-                    case resource::TextureCompressionFormat::ASTC_6x6: format = vk::Format::eAstc6x6SrgbBlock; break;
-                    case resource::TextureCompressionFormat::ASTC_8x8: format = vk::Format::eAstc8x8SrgbBlock; break;
                     default: break;
                 }
             }

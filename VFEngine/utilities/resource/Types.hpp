@@ -18,10 +18,7 @@ namespace resource
     {
         Uncompressed = 0,
         BC7 = 1,
-        BC6H = 2,
-        ASTC_4x4 = 3,
-        ASTC_6x6 = 4,
-        ASTC_8x8 = 5
+        BC6H = 2
     };
 
     enum class ShaderType :uint8_t
