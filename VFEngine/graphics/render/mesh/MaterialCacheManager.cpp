@@ -19,7 +19,7 @@ namespace render::mesh
         if (material::isInstanceFile(materialPath))
         {
             auto instanceData = resource::ResourceManager::loadMaterialInstance(asset::AssetRef::fromPath(materialPath));
-            if (!instanceData || instanceData->parentMaterialRef.resolve().empty())
+            if (!instanceData || !instanceData->parentMaterialRef.isValid())
             {
                 return nullptr;
             }

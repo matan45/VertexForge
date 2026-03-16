@@ -185,8 +185,11 @@ namespace types
     }
 
     // ========================================================================
-    // BC7 Mode 6 decoder
-    // Reads 128-bit blocks, extracts endpoints/indices, interpolates to RGBA8
+    // BC7 Mode 6 decoder (PARTIAL — editor/debug use only)
+    // Only decodes Mode 6 blocks. Modes 0-5 and 7 fall back to mid-gray.
+    // BC7 has 8 modes; ispc_texcomp can emit any of them.
+    // Do NOT use this in runtime paths — implement full spec or use a library.
+    // Currently unused (no call sites) — kept for future editor thumbnail use.
     // ========================================================================
 
     static uint64_t getBits128(const uint8_t block[16], int startBit, int numBits)

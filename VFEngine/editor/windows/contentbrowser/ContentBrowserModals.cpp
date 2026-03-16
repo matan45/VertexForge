@@ -13,7 +13,6 @@
 #include <vfx/VFXAsset.hpp>
 #include <terrain/TerrainMaterialAsset.hpp>
 #include <behaviortree/BehaviorTreeAsset.hpp>
-#include <asset/AssetDatabase.hpp>
 
 namespace windows
 {
@@ -682,7 +681,10 @@ namespace windows
             ImGui::Text("GUID: %s", referencesGuid.toString().c_str());
             ImGui::Separator();
 
-            auto dependentGuids = asset::AssetDatabase::instance().getDependents(referencesGuid);
+            auto& dispatcher = events::EventDispatcher::instance();
+            events::assetdb::GetAssetDependentsQuery depsQuery;
+            depsQuery.guid = referencesGuid;
+            auto dependentGuids = dispatcher.query(depsQuery);
 
             if (dependentGuids.empty())
             {
@@ -694,7 +696,9 @@ namespace windows
                 ImGui::BeginChild("ReferencesList", ImVec2(500, 200), true);
                 for (const auto& depGuid : dependentGuids)
                 {
-                    auto pathOpt = asset::AssetDatabase::instance().getPath(depGuid);
+                    events::assetdb::GetAssetPathQuery pathQuery;
+                    pathQuery.guid = depGuid;
+                    auto pathOpt = dispatcher.query(pathQuery);
                     if (pathOpt)
                     {
                         ImGui::BulletText("%s", pathOpt->c_str());
@@ -725,7 +729,10 @@ namespace windows
             ImGui::Text("GUID: %s", dependenciesGuid.toString().c_str());
             ImGui::Separator();
 
-            auto depGuids = asset::AssetDatabase::instance().getDependencies(dependenciesGuid);
+            auto& dispatcher = events::EventDispatcher::instance();
+            events::assetdb::GetAssetDependenciesQuery depsQuery;
+            depsQuery.guid = dependenciesGuid;
+            auto depGuids = dispatcher.query(depsQuery);
 
             if (depGuids.empty())
             {
@@ -737,7 +744,9 @@ namespace windows
                 ImGui::BeginChild("DependenciesList", ImVec2(500, 200), true);
                 for (const auto& depGuid : depGuids)
                 {
-                    auto pathOpt = asset::AssetDatabase::instance().getPath(depGuid);
+                    events::assetdb::GetAssetPathQuery pathQuery;
+                    pathQuery.guid = depGuid;
+                    auto pathOpt = dispatcher.query(pathQuery);
                     if (pathOpt)
                     {
                         ImGui::BulletText("%s", pathOpt->c_str());

@@ -199,7 +199,11 @@ namespace types
             auto now = std::chrono::system_clock::now();
             auto time = std::chrono::system_clock::to_time_t(now);
             std::tm tm{};
+#ifdef _WIN32
             localtime_s(&tm, &time);
+#else
+            localtime_r(&time, &tm);
+#endif
             char buf[32];
             std::strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", &tm);
             metadata.importTimestamp = buf;

@@ -215,10 +215,11 @@ namespace editor::materialeditor
         input.metallicPath = metallicPath;
         input.outputPath = outputPath;
 
-        // Set up compression callback if compression is enabled
-        auto mode = compressionMode;
+        // Set up compression callback if compression is enabled.
+        // Only quality is captured — mode is only used here to gate whether compression
+        // happens at all. When enabled, ORM textures are always BC7 (LDR data).
         auto quality = compressionQuality;
-        if (mode != importConfig::TextureCompressionMode::Uncompressed)
+        if (compressionMode != importConfig::TextureCompressionMode::Uncompressed)
         {
             input.compressCallback = [quality](resource::TextureData& textureData)
             {

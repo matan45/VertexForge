@@ -41,15 +41,21 @@ namespace asset
         return AssetRef(AssetGUID::fromString(hex));
     }
 
-    std::string AssetRef::resolve() const
+    const std::string& AssetRef::resolve() const
     {
-        if (!guid.isValid()) return {};
+        if (cacheValid)
+            return cachedPath;
+
+        if (!guid.isValid())
+        {
+            cachedPath.clear();
+            cacheValid = true;
+            return cachedPath;
+        }
 
         auto pathOpt = AssetDatabase::instance().getPath(guid);
-        if (pathOpt)
-        {
-            return *pathOpt;
-        }
-        return {};
+        cachedPath = pathOpt ? *pathOpt : std::string{};
+        cacheValid = true;
+        return cachedPath;
     }
 }

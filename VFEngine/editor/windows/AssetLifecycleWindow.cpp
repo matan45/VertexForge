@@ -120,6 +120,7 @@ namespace windows
                 }
 
                 std::string assetPath = asset::AssetRef::fromGUID(asset.guid).resolve();
+                if (assetPath.empty()) assetPath = asset.guid.toString();
 
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();
@@ -205,6 +206,7 @@ namespace windows
             for (const auto& asset : cachedPending)
             {
                 std::string pendingPath = asset::AssetRef::fromGUID(asset.guid).resolve();
+                if (pendingPath.empty()) pendingPath = asset.guid.toString();
 
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();

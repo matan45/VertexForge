@@ -7,8 +7,6 @@
 #include <resource/AssetTypes.hpp>
 #include <imgui.h>
 #include <thread>
-#include <filesystem>
-#include <algorithm>
 
 namespace
 {
@@ -237,9 +235,7 @@ namespace windows
             bool hasAudioFiles = false;
             for (const auto& f : files)
             {
-                auto ext = std::filesystem::path(f).extension().string();
-                std::transform(ext.begin(), ext.end(), ext.begin(), ::toupper);
-                if (ext == ".WAV" || ext == ".OGG" || ext == ".MP3")
+                if (files::FileUtils::isAudioFile(f))
                 {
                     hasAudioFiles = true;
                     break;

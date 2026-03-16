@@ -57,7 +57,7 @@ namespace animation
             if (registry.all_of<components::MeshComponent>(entity))
             {
                 const auto& meshComp = registry.get<components::MeshComponent>(entity);
-                if (!!meshComp.meshRef.isValid())
+                if (meshComp.meshRef.isValid())
                 {
                     skeleton = dataCache.loadSkeleton(meshComp.meshRef.resolve());
                 }
@@ -137,7 +137,7 @@ namespace animation
         if (registry.all_of<components::MeshComponent>(attachment.parentEntity))
         {
             const auto& meshComp = registry.get<components::MeshComponent>(attachment.parentEntity);
-            if (!!meshComp.meshRef.isValid())
+            if (meshComp.meshRef.isValid())
             {
                 skeleton = dataCache.loadSkeleton(meshComp.meshRef.resolve());
             }

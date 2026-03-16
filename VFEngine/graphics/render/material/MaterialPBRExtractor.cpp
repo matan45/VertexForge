@@ -422,7 +422,7 @@ namespace render::mesh
         {
             // Load instance data
             auto instanceData = resource::ResourceManager::loadMaterialInstance(asset::AssetRef::fromPath(materialOrInstancePath));
-            if (!instanceData || instanceData->parentMaterialRef.resolve().empty())
+            if (!instanceData || !instanceData->parentMaterialRef.isValid())
             {
                 return pbr;
             }

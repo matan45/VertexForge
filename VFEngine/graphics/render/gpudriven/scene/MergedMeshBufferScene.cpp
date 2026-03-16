@@ -147,7 +147,7 @@ namespace render::gpudriven
                 // Sequential-only path: the parallel phase pre-populates
                 // instanceToParentCache so this branch is never taken concurrently.
                 auto instanceData = resource::ResourceManager::loadMaterialInstance(asset::AssetRef::fromPath(materialPath));
-                if (instanceData && !instanceData->parentMaterialRef.resolve().empty())
+                if (instanceData && instanceData->parentMaterialRef.isValid())
                 {
                     effectiveMaterialPath = instanceData->parentMaterialRef.resolve();
                     instanceToParentCache[materialPath] = effectiveMaterialPath;
@@ -418,7 +418,7 @@ namespace render::gpudriven
                         if (instanceToParentCache.find(materialPath) == instanceToParentCache.end())
                         {
                             auto instanceData = resource::ResourceManager::loadMaterialInstance(asset::AssetRef::fromPath(materialPath));
-                            if (instanceData && !instanceData->parentMaterialRef.resolve().empty())
+                            if (instanceData && instanceData->parentMaterialRef.isValid())
                             {
                                 instanceToParentCache[materialPath] = instanceData->parentMaterialRef.resolve();
                             }
