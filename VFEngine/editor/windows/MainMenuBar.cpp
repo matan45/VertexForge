@@ -19,6 +19,7 @@
 #include "WorldSectorWindow.hpp"
 #include "VFXDebugWindow.hpp"
 #include "PluginManagerWindow.hpp"
+#include "config/InputActionMappingWindow.hpp"
 #include "AnimationDebugWindow.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/project/SceneEvents.hpp"
@@ -203,6 +204,13 @@ namespace windows
                 if (renderConfigWindow)
                 {
                     renderConfigWindow->show();
+                }
+            }
+            else if (ImGui::MenuItem("Input Action Mapping"))
+            {
+                if (inputActionMappingWindow)
+                {
+                    inputActionMappingWindow->show();
                 }
             }
             else if (ImGui::MenuItem("Plugin Manager"))

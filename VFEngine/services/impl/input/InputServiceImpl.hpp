@@ -27,6 +27,7 @@ namespace services {
 
         // Mouse State
         bool isMouseButtonDown(int button) const override;
+        bool isMouseButtonPressed(int button) const override;
         bool isMouseButtonReleased(int button) const override;
         bool isDoubleClick(int button) const override;
         glm::vec2 getMousePosition() const override;
@@ -44,8 +45,22 @@ namespace services {
         void update() override;
         bool isInputCapturedByUI() const override;
 
+        void setKeyboardEnabled(bool enabled) override;
+        void setMouseEnabled(bool enabled) override;
+        void setCursorVisible(bool visible) override;
+        bool isKeyboardEnabled() const override;
+        bool isMouseEnabled() const override;
+        bool isCursorVisible() const override;
+
     private:
+       void publishInputNotifications();
+
        std::unique_ptr<window::InputController> inputController;
+       std::vector<int> notifKeyBuffer;
+       std::vector<int> notifButtonBuffer;
+       bool keyboardEnabled = true;
+       bool mouseEnabled = true;
+       bool cursorVisible = true;
     };
 
 }

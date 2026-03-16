@@ -158,21 +158,24 @@ namespace window
         frameCharBuffer.swap(charBuffer);
         charBuffer.clear();
 
-        // Key pressed edge detection
+        // Key pressed/released edge detection
         for (int key = 0; key < MAX_KEYS; ++key)
         {
             bool down = (glfwWindow && glfwGetKey(glfwWindow, key) == GLFW_PRESS);
             keyPressed[key] = down && !wasKeyDown[key];
+            keyReleased[key] = !down && wasKeyDown[key];
             wasKeyDown[key] = down;
         }
 
-        // Double-click detection
+        // Mouse button pressed/released edge detection + double-click detection
         double currentTime = glfwGetTime();
         for (int button = 0; button < MAX_MOUSE_BUTTONS; ++button)
         {
             doubleClickDetected[button] = false;
 
             bool isDown = isMouseButtonDown(button);
+            mouseButtonPressed[button] = isDown && !wasButtonDown[button];
+            mouseButtonReleased[button] = !isDown && wasButtonDown[button];
 
             // Detect button press (transition from up to down)
             if (isDown && !wasButtonDown[button])
@@ -207,6 +210,44 @@ namespace window
     {
         if (!glfwWindow) return;
         glfwSetClipboardString(glfwWindow, text.c_str());
+    }
+
+    bool InputController::isMouseButtonPressed(int button) const
+    {
+        if (button < 0 || button >= MAX_MOUSE_BUTTONS) return false;
+        return mouseButtonPressed[button];
+    }
+
+    void InputController::getJustPressedKeys(std::vector<int>& outKeys) const
+    {
+        for (int key = 0; key < MAX_KEYS; ++key)
+        {
+            if (keyPressed[key]) outKeys.push_back(key);
+        }
+    }
+
+    void InputController::getJustReleasedKeys(std::vector<int>& outKeys) const
+    {
+        for (int key = 0; key < MAX_KEYS; ++key)
+        {
+            if (keyReleased[key]) outKeys.push_back(key);
+        }
+    }
+
+    void InputController::getJustPressedMouseButtons(std::vector<int>& outButtons) const
+    {
+        for (int button = 0; button < MAX_MOUSE_BUTTONS; ++button)
+        {
+            if (mouseButtonPressed[button]) outButtons.push_back(button);
+        }
+    }
+
+    void InputController::getJustReleasedMouseButtons(std::vector<int>& outButtons) const
+    {
+        for (int button = 0; button < MAX_MOUSE_BUTTONS; ++button)
+        {
+            if (mouseButtonReleased[button]) outButtons.push_back(button);
+        }
     }
 
     void InputController::onScroll(double xoffset, double yoffset)

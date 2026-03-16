@@ -122,5 +122,61 @@ namespace core::api
                 query.button = button;
                 return value::Value(dispatcher.query(query));
             });
+        // _native_input_setKeyboardEnabled(enabled) -> void
+        interpreter->registerNativeFunction("_native_input_setKeyboardEnabled",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                if (args.empty()) return value::Value(std::monostate{});
+                bool enabled = extractBool(args[0]);
+                events::input::SetKeyboardEnabledCommand cmd;
+                cmd.enabled = enabled;
+                dispatcher.execute(cmd);
+                return value::Value(std::monostate{});
+            });
+
+        // _native_input_setMouseEnabled(enabled) -> void
+        interpreter->registerNativeFunction("_native_input_setMouseEnabled",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                if (args.empty()) return value::Value(std::monostate{});
+                bool enabled = extractBool(args[0]);
+                events::input::SetMouseEnabledCommand cmd;
+                cmd.enabled = enabled;
+                dispatcher.execute(cmd);
+                return value::Value(std::monostate{});
+            });
+
+        // _native_input_setCursorVisible(visible) -> void
+        interpreter->registerNativeFunction("_native_input_setCursorVisible",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                if (args.empty()) return value::Value(std::monostate{});
+                bool visible = extractBool(args[0]);
+                events::input::SetCursorVisibleCommand cmd;
+                cmd.visible = visible;
+                dispatcher.execute(cmd);
+                return value::Value(std::monostate{});
+            });
+
+        // _native_input_isKeyboardEnabled() -> bool
+        interpreter->registerNativeFunction("_native_input_isKeyboardEnabled",
+            [&dispatcher](const std::vector<value::Value>&) -> value::Value
+            {
+                return value::Value(dispatcher.query(events::input::IsKeyboardEnabledQuery{}));
+            });
+
+        // _native_input_isMouseEnabled() -> bool
+        interpreter->registerNativeFunction("_native_input_isMouseEnabled",
+            [&dispatcher](const std::vector<value::Value>&) -> value::Value
+            {
+                return value::Value(dispatcher.query(events::input::IsMouseEnabledQuery{}));
+            });
+
+        // _native_input_isCursorVisible() -> bool
+        interpreter->registerNativeFunction("_native_input_isCursorVisible",
+            [&dispatcher](const std::vector<value::Value>&) -> value::Value
+            {
+                return value::Value(dispatcher.query(events::input::IsCursorVisibleQuery{}));
+            });
     }
 }

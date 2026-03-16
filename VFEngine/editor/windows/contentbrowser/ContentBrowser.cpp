@@ -278,6 +278,11 @@ namespace windows
                     cmd.filePath = StringUtil::wstringToUtf8(selectedFile.wstring());
                     events::EventDispatcher::instance().execute(cmd);
                 }
+                else if (selectedType == AssetType::InputMapping)
+                {
+                    events::application::OpenInputMappingWindowNotification notif;
+                    events::EventDispatcher::instance().publish(notif);
+                }
                 else if (selectedType != AssetType::Navmesh && selectedType != AssetType::PhysAnim)
                 {
                     showFileWindow = true;
@@ -455,6 +460,7 @@ namespace windows
         if (extension == ".vfBehaviorTree") return BehaviorTree;
         if (extension == ".mt") return Script;
         if (extension == ".vfplugin") return Plugin;
+        if (extension == ".vfInputMapping") return InputMapping;
 
         bool isVfAsset = (extension == ".vfImage" || extension == ".vfHdr" ||
             extension == ".vfMesh" || extension == ".vfAudio" ||

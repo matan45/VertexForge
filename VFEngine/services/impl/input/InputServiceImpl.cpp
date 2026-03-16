@@ -1,7 +1,9 @@
 #include "InputServiceImpl.hpp"
 #include "../../Window/controllers/InputController.hpp"
 #include "../../events/EventDispatcher.hpp"
+#include "input/KeyCodes.hpp"
 #include "../../events/project/ApplicationEvents.hpp"
+#include <GLFW/glfw3.h>
 #include <imgui.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -15,17 +17,17 @@ namespace services {
     InputServiceImpl::~InputServiceImpl() = default;
 
     bool InputServiceImpl::isKeyDown(int keyCode) const {
-        if (!inputController) return false;
+        if (!inputController || !keyboardEnabled) return false;
         return inputController->isKeyDown(keyCode);
     }
 
     bool InputServiceImpl::isKeyReleased(int keyCode) const {
-        if (!inputController) return false;
+        if (!inputController || !keyboardEnabled) return false;
         return inputController->isKeyReleased(keyCode);
     }
 
     bool InputServiceImpl::isKeyPressed(int keyCode) const {
-        if (!inputController) return false;
+        if (!inputController || !keyboardEnabled) return false;
         return inputController->isKeyPressed(keyCode);
     }
 
@@ -47,17 +49,22 @@ namespace services {
     }
 
     bool InputServiceImpl::isMouseButtonDown(int button) const {
-        if (!inputController) return false;
+        if (!inputController || !mouseEnabled) return false;
         return inputController->isMouseButtonDown(button);
     }
 
+    bool InputServiceImpl::isMouseButtonPressed(int button) const {
+        if (!inputController || !mouseEnabled) return false;
+        return inputController->isMouseButtonPressed(button);
+    }
+
     bool InputServiceImpl::isMouseButtonReleased(int button) const {
-        if (!inputController) return false;
+        if (!inputController || !mouseEnabled) return false;
         return inputController->isMouseButtonReleased(button);
     }
 
     bool InputServiceImpl::isDoubleClick(int button) const {
-        if (!inputController) return false;
+        if (!inputController || !mouseEnabled) return false;
         return inputController->isDoubleClick(button);
     }
 
@@ -143,12 +150,93 @@ namespace services {
         if (!inputController) return;
 
         inputController->update();
+        publishInputNotifications();
+    }
+
+    void InputServiceImpl::publishInputNotifications() {
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        bool shiftDown = inputController->isKeyDown(input::Key::LeftShift) || inputController->isKeyDown(input::Key::RightShift);
+        bool ctrlDown = inputController->isKeyDown(input::Key::LeftControl) || inputController->isKeyDown(input::Key::RightControl);
+        bool altDown = inputController->isKeyDown(input::Key::LeftAlt) || inputController->isKeyDown(input::Key::RightAlt);
+        glm::vec2 mousePos = inputController->getMousePosition();
+
+        notifKeyBuffer.clear();
+        inputController->getJustPressedKeys(notifKeyBuffer);
+        for (int key : notifKeyBuffer) {
+            events::input::KeyPressedNotification notif;
+            notif.keyCode = key;
+            notif.shiftDown = shiftDown;
+            notif.ctrlDown = ctrlDown;
+            notif.altDown = altDown;
+            notif.mouseX = mousePos.x;
+            notif.mouseY = mousePos.y;
+            dispatcher.publish(notif);
+        }
+
+        notifKeyBuffer.clear();
+        inputController->getJustReleasedKeys(notifKeyBuffer);
+        for (int key : notifKeyBuffer) {
+            events::input::KeyReleasedNotification notif;
+            notif.keyCode = key;
+            notif.shiftDown = shiftDown;
+            notif.ctrlDown = ctrlDown;
+            notif.altDown = altDown;
+            notif.mouseX = mousePos.x;
+            notif.mouseY = mousePos.y;
+            dispatcher.publish(notif);
+        }
+
+        notifButtonBuffer.clear();
+        inputController->getJustPressedMouseButtons(notifButtonBuffer);
+        for (int btn : notifButtonBuffer) {
+            events::input::MouseButtonPressedNotification notif;
+            notif.button = btn;
+            notif.shiftDown = shiftDown;
+            notif.ctrlDown = ctrlDown;
+            notif.altDown = altDown;
+            notif.mouseX = mousePos.x;
+            notif.mouseY = mousePos.y;
+            dispatcher.publish(notif);
+        }
+
+        notifButtonBuffer.clear();
+        inputController->getJustReleasedMouseButtons(notifButtonBuffer);
+        for (int btn : notifButtonBuffer) {
+            events::input::MouseButtonReleasedNotification notif;
+            notif.button = btn;
+            notif.shiftDown = shiftDown;
+            notif.ctrlDown = ctrlDown;
+            notif.altDown = altDown;
+            notif.mouseX = mousePos.x;
+            notif.mouseY = mousePos.y;
+            dispatcher.publish(notif);
+        }
     }
 
     bool InputServiceImpl::isInputCapturedByUI() const {
         ImGuiIO& io = ImGui::GetIO();
         return io.WantCaptureKeyboard || io.WantCaptureMouse;
     }
+
+    void InputServiceImpl::setKeyboardEnabled(bool enabled) {
+        keyboardEnabled = enabled;
+    }
+
+    void InputServiceImpl::setMouseEnabled(bool enabled) {
+        mouseEnabled = enabled;
+    }
+
+    void InputServiceImpl::setCursorVisible(bool visible) {
+        cursorVisible = visible;
+        if (inputController) {
+            inputController->setCursorMode(visible ? GLFW_CURSOR_NORMAL : GLFW_CURSOR_HIDDEN);
+        }
+    }
+
+    bool InputServiceImpl::isKeyboardEnabled() const { return keyboardEnabled; }
+    bool InputServiceImpl::isMouseEnabled() const { return mouseEnabled; }
+    bool InputServiceImpl::isCursorVisible() const { return cursorVisible; }
 
     void InputServiceImpl::registerEventHandlers() {
         auto& dispatcher = events::EventDispatcher::instance();
@@ -184,6 +272,11 @@ namespace services {
                 return isKeyReleased(query.keyCode);
             });
 
+        dispatcher.registerQueryHandler<events::input::IsMouseButtonPressedQuery>(
+            [this](const events::input::IsMouseButtonPressedQuery& query) {
+                return isMouseButtonPressed(query.button);
+            });
+
         dispatcher.registerQueryHandler<events::input::IsMouseButtonReleasedQuery>(
             [this](const events::input::IsMouseButtonReleasedQuery& query) {
                 return isMouseButtonReleased(query.button);
@@ -212,6 +305,36 @@ namespace services {
         dispatcher.registerCommandHandler<events::input::SetClipboardTextCommand>(
             [this](const events::input::SetClipboardTextCommand& cmd) {
                 setClipboardText(cmd.text);
+            });
+
+        dispatcher.registerCommandHandler<events::input::SetKeyboardEnabledCommand>(
+            [this](const events::input::SetKeyboardEnabledCommand& cmd) {
+                setKeyboardEnabled(cmd.enabled);
+            });
+
+        dispatcher.registerCommandHandler<events::input::SetMouseEnabledCommand>(
+            [this](const events::input::SetMouseEnabledCommand& cmd) {
+                setMouseEnabled(cmd.enabled);
+            });
+
+        dispatcher.registerCommandHandler<events::input::SetCursorVisibleCommand>(
+            [this](const events::input::SetCursorVisibleCommand& cmd) {
+                setCursorVisible(cmd.visible);
+            });
+
+        dispatcher.registerQueryHandler<events::input::IsKeyboardEnabledQuery>(
+            [this](const events::input::IsKeyboardEnabledQuery&) {
+                return isKeyboardEnabled();
+            });
+
+        dispatcher.registerQueryHandler<events::input::IsMouseEnabledQuery>(
+            [this](const events::input::IsMouseEnabledQuery&) {
+                return isMouseEnabled();
+            });
+
+        dispatcher.registerQueryHandler<events::input::IsCursorVisibleQuery>(
+            [this](const events::input::IsCursorVisibleQuery&) {
+                return isCursorVisible();
             });
     }
 

@@ -4,6 +4,7 @@
 #include "impl/project/SceneServiceImpl.hpp"
 #include "impl/render/RuntimeRenderServiceImpl.hpp"
 #include "impl/input/InputServiceImpl.hpp"
+#include "impl/input/ActionMappingServiceImpl.hpp"
 #include "impl/editor/WindowStateServiceImpl.hpp"
 #include "impl/audio/AudioServiceImpl.hpp"
 #include "impl/scripting/ScriptingServiceImpl.hpp"
@@ -242,6 +243,7 @@ namespace handlers {
         renderService.reset();
         sceneService.reset();
         windowStateService.reset();
+        actionMappingService.reset();
         inputService.reset();
 
         bootstrap->cleanUp();
@@ -328,6 +330,7 @@ namespace handlers {
             bootstrap->getPostProcessProvider()
         );
         inputService = std::make_shared<services::InputServiceImpl>(bootstrap->getWindow());
+        actionMappingService = std::make_shared<services::ActionMappingServiceImpl>();
         windowStateService = std::make_shared<services::WindowStateServiceImpl>(bootstrap->getWindow());
         audioService = std::make_shared<services::AudioServiceImpl>(bootstrap->getAudioProvider());
         audioSceneUpdater = std::make_unique<core::audio::AudioSceneUpdater>();
@@ -425,6 +428,7 @@ namespace handlers {
         projectService->registerEventHandlers();
         renderService->registerEventHandlers();
         inputService->registerEventHandlers();
+        actionMappingService->registerEventHandlers();
         windowStateService->registerEventHandlers();
         static_cast<services::AudioServiceImpl*>(audioService.get())->registerEventHandlers();
         static_cast<services::ScriptingServiceImpl*>(scriptingService.get())->registerEventHandlers();

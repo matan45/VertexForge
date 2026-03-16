@@ -29,6 +29,7 @@ namespace windows
         menuBar.setVolumetricFogConfigWindow(&volumetricFogConfigWindow);
         menuBar.setLightStreamingDebugWindow(&lightStreamingDebugWindow);
         menuBar.setPluginManagerWindow(&pluginManagerWindow);
+        menuBar.setInputActionMappingWindow(&inputActionMappingWindow);
         subscribeToEvents();
     }
 
@@ -38,6 +39,7 @@ namespace windows
         dispatcher.unsubscribe(sceneClearedToken);
         dispatcher.unsubscribe(sceneLoadedToken);
         dispatcher.unsubscribe(openImportDialogToken);
+        dispatcher.unsubscribe(openInputMappingToken);
     }
 
     void MainImguiWindow::subscribeToEvents()
@@ -63,6 +65,12 @@ namespace windows
             [this](const events::application::OpenImportDialogNotification&)
             {
                 importDialog.openImportDialog();
+            });
+
+        openInputMappingToken = dispatcher.subscribe<events::application::OpenInputMappingWindowNotification>(
+            [this](const events::application::OpenInputMappingWindowNotification&)
+            {
+                inputActionMappingWindow.show();
             });
     }
 
@@ -110,6 +118,7 @@ namespace windows
             volumetricFogConfigWindow.draw();
             lightStreamingDebugWindow.draw();
             pluginManagerWindow.draw();
+            inputActionMappingWindow.draw();
         }
         ImGui::End();
     }

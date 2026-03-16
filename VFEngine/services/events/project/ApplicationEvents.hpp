@@ -53,4 +53,8 @@ namespace events::application {
         std::string_view getName() const override { return "OpenImportDialog"; }
     };
 
+    struct OpenInputMappingWindowNotification : INotification {
+        std::string_view getName() const override { return "OpenInputMappingWindow"; }
+    };
+
 }

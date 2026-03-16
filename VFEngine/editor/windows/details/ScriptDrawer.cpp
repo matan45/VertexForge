@@ -124,6 +124,37 @@ namespace windows::details
             ImGui::SetTooltip("%s", scriptPath.c_str());
         }
 
+        // Input priority
+        {
+            auto enttEntity = services::internal::fromHandle(handle);
+            auto& registry = scene::EntityRegistry::getRegistry();
+            if (registry.all_of<components::ScriptComponent>(enttEntity))
+            {
+                auto& scriptComp = registry.get<components::ScriptComponent>(enttEntity);
+                auto* entry = scriptComp.findByPath(scriptPath);
+                if (entry)
+                {
+                    ImGui::SameLine();
+                    ImGui::SetNextItemWidth(60.0f);
+                    if (ImGui::InputInt("##Priority", &entry->inputPriority, 0, 0))
+                    {
+                        // Propagate to running instance if loaded
+                        if (entry->instanceId != 0)
+                        {
+                            events::scripting::SetInstancePriorityCommand cmd;
+                            cmd.instanceId = entry->instanceId;
+                            cmd.priority = entry->inputPriority;
+                            dispatcher.execute(cmd);
+                        }
+                    }
+                    if (ImGui::IsItemHovered())
+                    {
+                        ImGui::SetTooltip("Input Priority (higher = handles input first)");
+                    }
+                }
+            }
+        }
+
         // Remove button
         ImGui::SameLine();
         EntityDetailsPanel::pushRemoveButtonStyle();

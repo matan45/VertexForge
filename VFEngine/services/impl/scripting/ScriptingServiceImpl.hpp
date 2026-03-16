@@ -2,6 +2,8 @@
 #include "../../interfaces/scripting/IScriptingService.hpp"
 #include "../../providers/scripting/IScriptingProvider.hpp"
 #include "scene/SceneGraphSystem.hpp"
+#include "components/Components.hpp"
+#include <entt/entt.hpp>
 
 namespace services
 {
@@ -10,6 +12,14 @@ namespace services
     private:
         IScriptingProvider* scriptingProvider;
         std::shared_ptr<scene::SceneGraphSystem> sceneGraph;
+
+        struct ScriptUpdateEntry
+        {
+            entt::entity entity;
+            components::ScriptEntry* entry;
+            int priority;
+        };
+        std::vector<ScriptUpdateEntry> cachedUpdateList;
 
         std::string getManifestPath() const;
 

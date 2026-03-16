@@ -219,6 +219,9 @@ namespace windows
         case Plugin:
             icon = AtlasIcon::Plugin;
             break;
+        case InputMapping:
+            icon = AtlasIcon::InputMapping;
+            break;
         case Other:
             if (fs::is_directory(asset.path))
             {

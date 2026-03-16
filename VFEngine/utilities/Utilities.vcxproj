@@ -136,6 +136,7 @@
     <ClInclude Include="export\ExportConfig.hpp" />
     <ClInclude Include="export\GameExporter.hpp" />
     <ClInclude Include="geometry\SphereGenerator.hpp" />
+    <ClInclude Include="input\KeyCodes.hpp" />
     <ClInclude Include="material\MaterialAsset.hpp" />
     <ClInclude Include="material\MaterialGraphHelper.hpp" />
     <ClInclude Include="material\MaterialInstanceAsset.hpp" />

@@ -41,6 +41,12 @@ namespace events::input {
         std::string_view getName() const override { return "IsKeyReleased"; }
     };
 
+    struct IsMouseButtonPressedQuery : IQuery<bool> {
+        int button;
+
+        std::string_view getName() const override { return "IsMouseButtonPressed"; }
+    };
+
     struct IsMouseButtonReleasedQuery : IQuery<bool> {
         int button;
 
@@ -73,29 +79,80 @@ namespace events::input {
     };
 
     // ============================================
+    // COMMANDS - Input control
+    // ============================================
+
+    struct SetKeyboardEnabledCommand : ICommand<void> {
+        bool enabled;
+        std::string_view getName() const override { return "SetKeyboardEnabled"; }
+    };
+
+    struct SetMouseEnabledCommand : ICommand<void> {
+        bool enabled;
+        std::string_view getName() const override { return "SetMouseEnabled"; }
+    };
+
+    struct SetCursorVisibleCommand : ICommand<void> {
+        bool visible;
+        std::string_view getName() const override { return "SetCursorVisible"; }
+    };
+
+    struct IsKeyboardEnabledQuery : IQuery<bool> {
+        std::string_view getName() const override { return "IsKeyboardEnabled"; }
+    };
+
+    struct IsMouseEnabledQuery : IQuery<bool> {
+        std::string_view getName() const override { return "IsMouseEnabled"; }
+    };
+
+    struct IsCursorVisibleQuery : IQuery<bool> {
+        std::string_view getName() const override { return "IsCursorVisible"; }
+    };
+
+    // ============================================
     // NOTIFICATIONS - State change broadcasts
     // ============================================
 
     struct KeyPressedNotification : INotification {
         int keyCode;
+        bool shiftDown;
+        bool ctrlDown;
+        bool altDown;
+        float mouseX;
+        float mouseY;
 
         std::string_view getName() const override { return "KeyPressed"; }
     };
 
     struct KeyReleasedNotification : INotification {
         int keyCode;
+        bool shiftDown;
+        bool ctrlDown;
+        bool altDown;
+        float mouseX;
+        float mouseY;
 
         std::string_view getName() const override { return "KeyReleased"; }
     };
 
     struct MouseButtonPressedNotification : INotification {
         int button;
+        bool shiftDown;
+        bool ctrlDown;
+        bool altDown;
+        float mouseX;
+        float mouseY;
 
         std::string_view getName() const override { return "MouseButtonPressed"; }
     };
 
     struct MouseButtonReleasedNotification : INotification {
         int button;
+        bool shiftDown;
+        bool ctrlDown;
+        bool altDown;
+        float mouseX;
+        float mouseY;
 
         std::string_view getName() const override { return "MouseButtonReleased"; }
     };

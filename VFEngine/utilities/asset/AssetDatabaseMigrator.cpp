@@ -26,6 +26,7 @@ namespace asset
         if (ext == ".vfvfx")           return resource::AssetType::VFX;
         if (ext == ".vffont")          return resource::AssetType::Font;
         if (ext == ".vfnavmesh")       return resource::AssetType::Navmesh;
+        if (ext == ".vfinputmapping") return resource::AssetType::InputMapping;
         return resource::AssetType::COUNT;
     }
 
@@ -44,7 +45,8 @@ namespace asset
             ".vfimage", ".vfhdr", ".vfmesh", ".vfaudio", ".vfanim",
             ".vfmat", ".vfmatinstance", ".vfanimator", ".vfvfx",
             ".vffont", ".vfscene", ".vfprefab", ".vfterrain",
-            ".vfterrainmat", ".vfwater", ".vfnavmesh", ".vfimposter"
+            ".vfterrainmat", ".vfwater", ".vfnavmesh", ".vfimposter",
+            ".vfinputmapping"
         };
 
         try

@@ -10,6 +10,7 @@
 #include "ScriptSocketEventBridge.hpp"
 #include "ScriptVFXEventBridge.hpp"
 #include "ScriptNavigationEventBridge.hpp"
+#include "ScriptInputActionEventBridge.hpp"
 #include "NativeAPIRegistry.hpp"
 #include "CoroutineManager.hpp"
 #include "ScriptCommunicationManager.hpp"
@@ -87,12 +88,16 @@ namespace core
             navigationEventBridge = std::make_unique<ScriptNavigationEventBridge>(
                 interpreter.get(), instanceToInterfaces, instanceToObject, instanceToEntity);
 
+            inputActionEventBridge = std::make_unique<ScriptInputActionEventBridge>(
+                interpreter.get(), instanceToInterfaces, instanceToObject, instanceToEntity, instanceToPriority);
+
             physicsEventBridge->subscribeAll();
             uiEventBridge->subscribeAll();
             animationEventBridge->subscribeAll();
             socketEventBridge->subscribeAll();
             vfxEventBridge->subscribeAll();
             navigationEventBridge->subscribeAll();
+            inputActionEventBridge->subscribeAll();
 
             initialized = true;
             return true;
@@ -110,6 +115,7 @@ namespace core
     {
         if (!initialized) return;
 
+        if (inputActionEventBridge) inputActionEventBridge->unsubscribeAll();
         if (navigationEventBridge) navigationEventBridge->unsubscribeAll();
         if (vfxEventBridge) vfxEventBridge->unsubscribeAll();
         if (socketEventBridge) socketEventBridge->unsubscribeAll();
@@ -319,7 +325,7 @@ namespace core
             instanceToObject[instanceId] = std::any(instance);
 
             // Cache implemented interfaces for collision/trigger/UI callbacks
-            static constexpr std::array<const char*, 14> kCheckedInterfaces = {
+            static constexpr std::array<const char*, 15> kCheckedInterfaces = {
                 "ICollisionListener", "ITriggerListener",
                 "IUIButtonListener", "IUITextInputListener", "IUICheckboxListener",
                 "IUIDropdownListener", "IUITabsListener", "IUISliderListener",
@@ -327,7 +333,8 @@ namespace core
                 "IAnimationEventListener",
                 "ISocketAttachmentListener",
                 "IVFXEventListener",
-                "INavigationEventListener"
+                "INavigationEventListener",
+                "IInputActionListener"
             };
 
             std::unordered_set<std::string> interfaces;
@@ -338,6 +345,7 @@ namespace core
             }
             instanceToInterfaces[instanceId] = std::move(interfaces);
             instanceToPlaybackState[instanceId] = services::ScriptPlaybackState::Stopped;
+            instanceToPriority[instanceId] = 0;
 
             services::ScriptInstanceInfo info;
             info.instanceId = instanceId;
@@ -377,6 +385,7 @@ namespace core
             instanceToObject.erase(instanceId);
             instanceToInterfaces.erase(instanceId);
             instanceToPlaybackState.erase(instanceId);
+            instanceToPriority.erase(instanceId);
         }
     }
 
@@ -397,6 +406,7 @@ namespace core
         instanceToObject.clear();
         instanceToInterfaces.clear();
         instanceToPlaybackState.clear();
+        instanceToPriority.clear();
         nextInstanceId = 1;
         vfLogInfo("[ScriptingAdapter] All scripts unloaded, instance counter reset");
     }
@@ -630,6 +640,11 @@ namespace core
             callOnStart(instanceId);
         state = services::ScriptPlaybackState::Playing;
         vfLogInfo("[ScriptingAdapter] Script {} now playing", instanceId);
+    }
+
+    void ScriptingAdapter::setInstancePriority(uint64_t instanceId, int priority)
+    {
+        instanceToPriority[instanceId] = priority;
     }
 
     std::optional<services::ScriptError> ScriptingAdapter::getLastError() const

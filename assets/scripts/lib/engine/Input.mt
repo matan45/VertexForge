@@ -73,4 +73,38 @@ public class Input {
     public static function getMouseDeltaY(): float {
         return _native_input_getMouseDeltaY();
     }
+
+    // ============================================
+    // Input Control
+    // ============================================
+
+    // Enable or disable keyboard input
+    public static function setKeyboardEnabled(bool enabled): void {
+        _native_input_setKeyboardEnabled(enabled);
+    }
+
+    // Enable or disable mouse input
+    public static function setMouseEnabled(bool enabled): void {
+        _native_input_setMouseEnabled(enabled);
+    }
+
+    // Show or hide the mouse cursor
+    public static function setCursorVisible(bool visible): void {
+        _native_input_setCursorVisible(visible);
+    }
+
+    // Check if keyboard input is enabled
+    public static function isKeyboardEnabled(): bool {
+        return _native_input_isKeyboardEnabled();
+    }
+
+    // Check if mouse input is enabled
+    public static function isMouseEnabled(): bool {
+        return _native_input_isMouseEnabled();
+    }
+
+    // Check if mouse cursor is visible
+    public static function isCursorVisible(): bool {
+        return _native_input_isCursorVisible();
+    }
 }

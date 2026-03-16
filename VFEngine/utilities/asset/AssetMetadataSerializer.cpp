@@ -97,6 +97,7 @@ namespace asset
         if (str == "Font")             return resource::AssetType::Font;
         if (str == "Skeleton")         return resource::AssetType::Skeleton;
         if (str == "Navmesh")          return resource::AssetType::Navmesh;
+        if (str == "InputMapping")     return resource::AssetType::InputMapping;
         return resource::AssetType::COUNT;
     }
 }

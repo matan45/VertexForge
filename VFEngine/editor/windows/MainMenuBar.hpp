@@ -26,6 +26,7 @@ namespace windows
     class VolumetricFogConfigWindow;
     class LightStreamingDebugWindow;
     class PluginManagerWindow;
+    class InputActionMappingWindow;
     class MainMenuBar
     {
     private:
@@ -55,6 +56,7 @@ namespace windows
         VolumetricFogConfigWindow* volumetricFogConfigWindow = nullptr;
         LightStreamingDebugWindow* lightStreamingDebugWindow = nullptr;
         PluginManagerWindow* pluginManagerWindow = nullptr;
+        InputActionMappingWindow* inputActionMappingWindow = nullptr;
     public:
         MainMenuBar();
         ~MainMenuBar();
@@ -142,6 +144,11 @@ namespace windows
         void setPluginManagerWindow(PluginManagerWindow* window)
         {
             pluginManagerWindow = window;
+        }
+
+        void setInputActionMappingWindow(InputActionMappingWindow* window)
+        {
+            inputActionMappingWindow = window;
         }
 
     private:

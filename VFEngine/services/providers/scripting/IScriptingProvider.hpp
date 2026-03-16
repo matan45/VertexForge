@@ -61,6 +61,8 @@ namespace services {
 
         virtual void playVFX(uint64_t instanceId) = 0;
 
+        virtual void setInstancePriority(uint64_t instanceId, int priority) = 0;
+
         // === Error Handling ===
         virtual std::optional<ScriptError> getLastError() const = 0;
         virtual void clearError() = 0;

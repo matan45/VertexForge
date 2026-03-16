@@ -3,6 +3,7 @@
 #include "../../events/scripting/ScriptingEvents.hpp"
 #include "../../events/editor/EditorModeEvents.hpp"
 #include "../../events/project/ProjectEvents.hpp"
+#include "../../events/input/ActionMappingEvents.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "scene/EntityRegistry.hpp"
@@ -10,6 +11,7 @@
 #include <asset/AssetRef.hpp>
 #include <cassert>
 #include <filesystem>
+#include <algorithm>
 
 namespace services
 {
@@ -115,6 +117,16 @@ namespace services
                 }
             });
 
+        // === Instance Priority ===
+        dispatcher.registerCommandHandler<events::scripting::SetInstancePriorityCommand>(
+            [this](const events::scripting::SetInstancePriorityCommand& cmd)
+            {
+                if (scriptingProvider)
+                {
+                    scriptingProvider->setInstancePriority(cmd.instanceId, cmd.priority);
+                }
+            });
+
         // === Mode Change Subscription ===
         dispatcher.subscribe<events::editor::EditorModeChangedNotification>(
             [this](const events::editor::EditorModeChangedNotification& notification)
@@ -203,18 +215,19 @@ namespace services
 
         auto& scriptComp = registry.get<components::ScriptComponent>(enttEntity);
 
-        auto scriptRef = asset::AssetRef::fromPath(data.scriptPath);
-
         // Check if script already attached
-        if (scriptRef.isValid() && scriptComp.hasScript(scriptRef))
+        if (scriptComp.hasScriptPath(data.scriptPath))
         {
             vfLogWarning("[Script] Script '{}' already attached to entity", data.scriptPath);
             return false;
         }
 
+        auto scriptRef = asset::AssetRef::fromPath(data.scriptPath);
+
         // Just store the script ref - actual loading happens when Play is pressed
         components::ScriptEntry entry;
         entry.scriptRef = scriptRef;
+        entry.scriptPath = data.scriptPath;
         entry.enabled = data.enabled;
 
         scriptComp.scripts.push_back(entry);
@@ -235,8 +248,7 @@ namespace services
         }
 
         auto& scriptComp = registry.get<components::ScriptComponent>(enttEntity);
-        auto scriptRef = asset::AssetRef::fromPath(scriptPath);
-        auto* entry = scriptComp.findByRef(scriptRef);
+        auto* entry = scriptComp.findByPath(scriptPath);
 
         if (!entry)
         {
@@ -253,7 +265,7 @@ namespace services
         scriptingProvider->unloadScript(entry->instanceId);
 
         // Remove from component
-        scriptComp.removeByRef(scriptRef);
+        scriptComp.removeByPath(scriptPath);
 
         // Remove component entirely if no scripts left
         if (scriptComp.scripts.empty())
@@ -278,7 +290,14 @@ namespace services
         const auto& scriptComp = registry.get<components::ScriptComponent>(enttEntity);
         for (const auto& entry : scriptComp.scripts)
         {
-            paths.push_back(entry.scriptRef.resolve());
+            if (!entry.scriptPath.empty())
+            {
+                paths.push_back(entry.scriptPath);
+            }
+            else
+            {
+                paths.push_back(entry.scriptRef.resolve());
+            }
         }
         return paths;
     }
@@ -294,8 +313,7 @@ namespace services
         }
 
         auto& scriptComp = registry.get<components::ScriptComponent>(enttEntity);
-        auto scriptRef = asset::AssetRef::fromPath(scriptPath);
-        auto* entry = scriptComp.findByRef(scriptRef);
+        auto* entry = scriptComp.findByPath(scriptPath);
         if (entry)
         {
             bool wasEnabled = entry->enabled;
@@ -326,49 +344,46 @@ namespace services
         }
 
         const auto& scriptComp = registry.get<components::ScriptComponent>(enttEntity);
-        auto scriptRef = asset::AssetRef::fromPath(scriptPath);
-        const auto* entry = scriptComp.findByRef(scriptRef);
+        const auto* entry = scriptComp.findByPath(scriptPath);
         return entry ? entry->enabled : false;
     }
 
     void ScriptingServiceImpl::updateScripts(float deltaTime)
     {
-        auto& registry = scene::EntityRegistry::getRegistry();
+        auto& dispatcher = ::events::EventDispatcher::instance();
 
-        // Iterate all entities with ScriptComponent
+        // Clear per-frame action consumption (guard against handler being unregistered during shutdown)
+        try { dispatcher.execute(events::input::ClearConsumedActionsCommand{}); }
+        catch (...) {}
+
+        auto& registry = scene::EntityRegistry::getRegistry();
         auto view = registry.view<components::ScriptComponent>();
+
+        cachedUpdateList.clear();
 
         for (auto entity : view)
         {
-            // Skip inactive entities
             if (registry.all_of<components::NameComponent>(entity))
             {
                 const auto& nameComp = registry.get<components::NameComponent>(entity);
-                if (!nameComp.isActive)
-                {
-                    continue;
-                }
+                if (!nameComp.isActive) continue;
             }
 
             auto& scriptComp = view.get<components::ScriptComponent>(entity);
-
-            // Update each script on this entity
             for (auto& entry : scriptComp.scripts)
             {
-                if (!entry.enabled)
-                {
-                    continue;
-                }
+                if (!entry.enabled) continue;
 
-                // If instanceId is 0, script needs to be loaded (e.g., after scene restore)
-                if (entry.instanceId == 0 && entry.scriptRef.isValid())
+                // Load script if needed
+                if (entry.instanceId == 0 && (!entry.scriptPath.empty() || entry.scriptRef.isValid()))
                 {
-                    auto info = scriptingProvider->loadScript(entry.scriptRef.resolve(), toHandle(entity));
+                    std::string path = !entry.scriptPath.empty() ? entry.scriptPath : entry.scriptRef.resolve();
+                    auto info = scriptingProvider->loadScript(path, toHandle(entity));
                     if (info.has_value())
                     {
                         entry.instanceId = info->instanceId;
-                        // Auto-start script: set to Playing and call playScript
                         entry.playbackState = ScriptPlaybackState::Playing;
+                        scriptingProvider->setInstancePriority(entry.instanceId, entry.inputPriority);
                         scriptingProvider->playVFX(entry.instanceId);
                     }
                     else
@@ -377,14 +392,12 @@ namespace services
                     }
                 }
 
-                // For backwards compatibility: if script loaded but playback state is Stopped, start it
                 if (!entry.started && entry.playbackState == ScriptPlaybackState::Stopped)
                 {
                     entry.playbackState = ScriptPlaybackState::Playing;
                     scriptingProvider->playVFX(entry.instanceId);
                 }
 
-                // Track started state (set when playScript calls onStart)
                 if (entry.playbackState == ScriptPlaybackState::Playing && !entry.started)
                 {
                     entry.started = true;
@@ -394,9 +407,20 @@ namespace services
                     }
                 }
 
-                // Call onUpdate - the provider will check playback state internally
-                scriptingProvider->callOnUpdate(entry.instanceId, deltaTime);
+                cachedUpdateList.push_back({entity, &entry, entry.inputPriority});
             }
+        }
+
+        // Sort by priority descending (higher priority scripts execute first)
+        std::stable_sort(cachedUpdateList.begin(), cachedUpdateList.end(),
+            [](const ScriptUpdateEntry& a, const ScriptUpdateEntry& b)
+            {
+                return a.priority > b.priority;
+            });
+
+        for (auto& [entity, entry, priority] : cachedUpdateList)
+        {
+            scriptingProvider->callOnUpdate(entry->instanceId, deltaTime);
         }
 
         scriptingProvider->tickCoroutines(deltaTime);

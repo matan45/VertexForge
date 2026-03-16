@@ -91,6 +91,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="data\ActionMappingTypes.hpp" />
     <ClInclude Include="data\AsyncLoadingTypes.hpp" />
     <ClInclude Include="data\CullingCategories.hpp" />
     <ClInclude Include="data\DTOs.hpp" />
@@ -121,6 +122,8 @@
     <ClInclude Include="events\editor\EditorModeEvents.hpp" />
     <ClInclude Include="events\editor\SculptModeEvents.hpp" />
     <ClInclude Include="events\editor\UndoRedoEvents.hpp" />
+    <ClInclude Include="events\input\ActionMappingEvents.hpp" />
+    <ClInclude Include="events\input\InputContextEvents.hpp" />
     <ClInclude Include="events\input\InputEvents.hpp" />
     <ClInclude Include="events\lifecycle\AssetLifecycleEvents.hpp" />
     <ClInclude Include="events\meshbrush\MeshBrushEvents.hpp" />
@@ -206,6 +209,7 @@
     <ClInclude Include="impl\editor\SculptModeServiceImpl.hpp" />
     <ClInclude Include="impl\editor\UndoRedoServiceImpl.hpp" />
     <ClInclude Include="impl\editor\WindowStateServiceImpl.hpp" />
+    <ClInclude Include="impl\input\ActionMappingServiceImpl.hpp" />
     <ClInclude Include="impl\input\InputServiceImpl.hpp" />
     <ClInclude Include="impl\lifecycle\AssetLifecycleServiceImpl.hpp" />
     <ClInclude Include="impl\meshbrush\MeshBrushModeServiceImpl.hpp" />
@@ -260,6 +264,7 @@
     <ClInclude Include="interfaces\editor\ISculptModeService.hpp" />
     <ClInclude Include="interfaces\editor\IUndoRedoService.hpp" />
     <ClInclude Include="interfaces\editor\IWindowStateService.hpp" />
+    <ClInclude Include="interfaces\input\IActionMappingService.hpp" />
     <ClInclude Include="interfaces\input\IInputService.hpp" />
     <ClInclude Include="interfaces\lifecycle\IAssetLifecycleService.hpp" />
     <ClInclude Include="interfaces\meshbrush\IMeshBrushModeService.hpp" />
@@ -325,6 +330,7 @@
     <ClInclude Include="providers\vegetation\IVegetationRenderProvider.hpp" />
     <ClInclude Include="providers\vfx\IVFXPreviewProvider.hpp" />
     <ClInclude Include="providers\vfx\IVFXRuntimeProvider.hpp" />
+    <ClInclude Include="serialization\InputMappingSerialization.hpp" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="events\EventDispatcher.cpp" />
@@ -361,6 +367,7 @@
     <ClCompile Include="impl\editor\SculptModeServiceImpl.cpp" />
     <ClCompile Include="impl\editor\UndoRedoServiceImpl.cpp" />
     <ClCompile Include="impl\editor\WindowStateServiceImpl.cpp" />
+    <ClCompile Include="impl\input\ActionMappingServiceImpl.cpp" />
     <ClCompile Include="impl\input\InputServiceImpl.cpp" />
     <ClCompile Include="impl\lifecycle\AssetLifecycleServiceImpl.cpp" />
     <ClCompile Include="impl\meshbrush\MeshBrushModeServiceImpl.cpp" />
@@ -424,6 +431,7 @@
     <ClCompile Include="impl\world\WorldSectorPersistenceOps.cpp" />
     <ClCompile Include="impl\world\WorldSectorServiceImpl.cpp" />
     <ClCompile Include="impl\world\WorldSectorStreamingOps.cpp" />
+    <ClCompile Include="serialization\InputMappingSerialization.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\utilities\Utilities.vcxproj">

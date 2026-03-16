@@ -22,6 +22,7 @@ namespace resource {
 		Font = 11,
 		Skeleton = 12,
 		Navmesh = 13,
+		InputMapping = 14,
 		COUNT
 	};
 
@@ -41,6 +42,7 @@ namespace resource {
 		case AssetType::Font:             return "Font";
 		case AssetType::Skeleton:         return "Skeleton";
 		case AssetType::Navmesh:          return "Navmesh";
+		case AssetType::InputMapping:     return "InputMapping";
 		default:                          return "Unknown";
 		}
 	}
