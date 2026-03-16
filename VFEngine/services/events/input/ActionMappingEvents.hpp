@@ -49,6 +49,12 @@ namespace events::input {
         std::string_view getName() const override { return "RegisterAction"; }
     };
 
+    struct UnregisterActionCommand : ICommand<void> {
+        std::string actionName;
+
+        std::string_view getName() const override { return "UnregisterAction"; }
+    };
+
     struct AddActionBindingCommand : ICommand<void> {
         std::string actionName;
         services::InputBinding binding;

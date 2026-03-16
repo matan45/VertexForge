@@ -23,6 +23,8 @@ namespace services {
         void registerAction(const std::string& actionName,
                              const std::vector<InputBinding>& defaultBindings) override;
 
+        void unregisterAction(const std::string& actionName) override;
+
         void addBinding(const std::string& actionName, const InputBinding& binding) override;
         void removeBinding(const std::string& actionName, const InputBinding& binding) override;
         void setBindings(const std::string& actionName,

@@ -123,20 +123,55 @@ namespace windows
             ImGui::SameLine();
             if (ImGui::Button("Save"))
             {
-                auto& dispatcher = events::EventDispatcher::instance();
-                events::input::SaveActionBindingsCommand cmd;
-                cmd.filePath = "config/default.vfInputMapping";
-                dispatcher.execute(cmd);
+                std::vector<std::pair<std::wstring, std::wstring>> fileTypes = {
+                    {L"VF Input Mapping (*.vfInputMapping)", L"*.vfInputMapping"}
+                };
+                std::string savePath = fileDialog.saveFileDialog(fileTypes, L"vfInputMapping");
+                if (!savePath.empty())
+                {
+                    auto& dispatcher = events::EventDispatcher::instance();
+                    events::input::SaveActionBindingsCommand cmd;
+                    cmd.filePath = savePath;
+                    dispatcher.execute(cmd);
+                }
             }
 
             ImGui::SameLine();
             if (ImGui::Button("Load"))
             {
-                auto& dispatcher = events::EventDispatcher::instance();
-                events::input::LoadActionBindingsCommand cmd;
-                cmd.filePath = "config/default.vfInputMapping";
-                dispatcher.execute(cmd);
-                needsRefresh = true;
+                std::vector<std::pair<std::wstring, std::wstring>> fileTypes = {
+                    {L"VF Input Mapping (*.vfInputMapping)", L"*.vfInputMapping"}
+                };
+                std::string loadPath = fileDialog.openFileDialog(fileTypes);
+                if (!loadPath.empty())
+                {
+                    auto& dispatcher = events::EventDispatcher::instance();
+                    events::input::LoadActionBindingsCommand cmd;
+                    cmd.filePath = loadPath;
+                    dispatcher.execute(cmd);
+                    needsRefresh = true;
+                }
+            }
+
+            ImGui::Separator();
+            ImGui::Spacing();
+
+            // Create new action
+            ImGui::SetNextItemWidth(200.0f);
+            ImGui::InputTextWithHint("##newaction", "Action name...", newActionName, sizeof(newActionName));
+            ImGui::SameLine();
+            if (ImGui::Button("+ New Action"))
+            {
+                std::string name(newActionName);
+                if (!name.empty())
+                {
+                    auto& dispatcher = events::EventDispatcher::instance();
+                    events::input::RegisterActionCommand cmd;
+                    cmd.actionName = name;
+                    dispatcher.execute(cmd);
+                    newActionName[0] = '\0';
+                    needsRefresh = true;
+                }
             }
 
             ImGui::Separator();
@@ -144,7 +179,7 @@ namespace windows
 
             if (entries.empty())
             {
-                ImGui::TextDisabled("No actions registered. Register actions from scripts using InputAction::register()");
+                ImGui::TextDisabled("No actions defined. Use '+ New Action' above to create one.");
             }
             else
             {
@@ -263,7 +298,26 @@ namespace windows
         auto& entry = entries[index];
         ImGui::PushID(entry.name.c_str());
 
-        if (ImGui::CollapsingHeader(entry.name.c_str(), ImGuiTreeNodeFlags_DefaultOpen))
+        bool headerOpen = ImGui::CollapsingHeader(entry.name.c_str(),
+            ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
+
+        // Delete action button on the right
+        ImGui::SameLine(ImGui::GetContentRegionAvail().x + ImGui::GetCursorPosX() - 25.0f);
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.6f, 0.15f, 0.15f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.2f, 0.2f, 1.0f));
+        if (ImGui::SmallButton("Del"))
+        {
+            auto& dispatcher = events::EventDispatcher::instance();
+            events::input::UnregisterActionCommand cmd;
+            cmd.actionName = entry.name;
+            dispatcher.execute(cmd);
+            needsRefresh = true;
+        }
+        ImGui::PopStyleColor(2);
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Delete action '%s'", entry.name.c_str());
+
+        if (headerOpen)
         {
             ImGui::Indent(16.0f);
 

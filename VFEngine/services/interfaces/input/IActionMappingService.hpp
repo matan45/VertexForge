@@ -24,6 +24,9 @@ namespace services {
         virtual void registerAction(const std::string& actionName,
                                      const std::vector<InputBinding>& defaultBindings) = 0;
 
+        // Action removal
+        virtual void unregisterAction(const std::string& actionName) = 0;
+
         // Binding mutations
         virtual void addBinding(const std::string& actionName, const InputBinding& binding) = 0;
         virtual void removeBinding(const std::string& actionName, const InputBinding& binding) = 0;

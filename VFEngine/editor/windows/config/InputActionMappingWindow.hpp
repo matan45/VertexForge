@@ -1,6 +1,7 @@
 #pragma once
 #include "imguiHandler/ImguiWindow.hpp"
 #include "data/ActionMappingTypes.hpp"
+#include "nfd/FileDialog.hpp"
 #include <vector>
 #include <string>
 
@@ -28,6 +29,8 @@ namespace windows
         bool needsRefresh = true;
         bool waitingForKey = false;
         int captureActionIndex = -1;
+        char newActionName[128] = {};
+        nfd::FileDialog fileDialog;
         std::vector<ActionEntry> entries;
 
         void refresh();

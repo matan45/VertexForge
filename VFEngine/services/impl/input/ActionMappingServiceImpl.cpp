@@ -143,6 +143,14 @@ namespace services {
     }
 
     // ============================================
+    // Action removal
+    // ============================================
+
+    void ActionMappingServiceImpl::unregisterAction(const std::string& actionName) {
+        actions.erase(actionName);
+    }
+
+    // ============================================
     // Binding mutations
     // ============================================
 
@@ -324,6 +332,11 @@ namespace services {
         dispatcher.registerCommandHandler<events::input::RegisterActionCommand>(
             [this](const events::input::RegisterActionCommand& cmd) {
                 registerAction(cmd.actionName, cmd.defaultBindings);
+            });
+
+        dispatcher.registerCommandHandler<events::input::UnregisterActionCommand>(
+            [this](const events::input::UnregisterActionCommand& cmd) {
+                unregisterAction(cmd.actionName);
             });
 
         dispatcher.registerCommandHandler<events::input::AddActionBindingCommand>(
