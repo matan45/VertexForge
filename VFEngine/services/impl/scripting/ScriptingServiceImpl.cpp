@@ -205,18 +205,19 @@ namespace services
 
         auto& scriptComp = registry.get<components::ScriptComponent>(enttEntity);
 
-        auto scriptRef = asset::AssetRef::fromPath(data.scriptPath);
-
         // Check if script already attached
-        if (scriptRef.isValid() && scriptComp.hasScript(scriptRef))
+        if (scriptComp.hasScriptPath(data.scriptPath))
         {
             vfLogWarning("[Script] Script '{}' already attached to entity", data.scriptPath);
             return false;
         }
 
+        auto scriptRef = asset::AssetRef::fromPath(data.scriptPath);
+
         // Just store the script ref - actual loading happens when Play is pressed
         components::ScriptEntry entry;
         entry.scriptRef = scriptRef;
+        entry.scriptPath = data.scriptPath;
         entry.enabled = data.enabled;
 
         scriptComp.scripts.push_back(entry);
@@ -237,8 +238,7 @@ namespace services
         }
 
         auto& scriptComp = registry.get<components::ScriptComponent>(enttEntity);
-        auto scriptRef = asset::AssetRef::fromPath(scriptPath);
-        auto* entry = scriptComp.findByRef(scriptRef);
+        auto* entry = scriptComp.findByPath(scriptPath);
 
         if (!entry)
         {
@@ -255,7 +255,7 @@ namespace services
         scriptingProvider->unloadScript(entry->instanceId);
 
         // Remove from component
-        scriptComp.removeByRef(scriptRef);
+        scriptComp.removeByPath(scriptPath);
 
         // Remove component entirely if no scripts left
         if (scriptComp.scripts.empty())
@@ -280,7 +280,14 @@ namespace services
         const auto& scriptComp = registry.get<components::ScriptComponent>(enttEntity);
         for (const auto& entry : scriptComp.scripts)
         {
-            paths.push_back(entry.scriptRef.resolve());
+            if (!entry.scriptPath.empty())
+            {
+                paths.push_back(entry.scriptPath);
+            }
+            else
+            {
+                paths.push_back(entry.scriptRef.resolve());
+            }
         }
         return paths;
     }
@@ -296,8 +303,7 @@ namespace services
         }
 
         auto& scriptComp = registry.get<components::ScriptComponent>(enttEntity);
-        auto scriptRef = asset::AssetRef::fromPath(scriptPath);
-        auto* entry = scriptComp.findByRef(scriptRef);
+        auto* entry = scriptComp.findByPath(scriptPath);
         if (entry)
         {
             bool wasEnabled = entry->enabled;
@@ -328,8 +334,7 @@ namespace services
         }
 
         const auto& scriptComp = registry.get<components::ScriptComponent>(enttEntity);
-        auto scriptRef = asset::AssetRef::fromPath(scriptPath);
-        const auto* entry = scriptComp.findByRef(scriptRef);
+        const auto* entry = scriptComp.findByPath(scriptPath);
         return entry ? entry->enabled : false;
     }
 
@@ -366,9 +371,10 @@ namespace services
                 if (!entry.enabled) continue;
 
                 // Load script if needed
-                if (entry.instanceId == 0 && entry.scriptRef.isValid())
+                if (entry.instanceId == 0 && (!entry.scriptPath.empty() || entry.scriptRef.isValid()))
                 {
-                    auto info = scriptingProvider->loadScript(entry.scriptRef.resolve(), toHandle(entity));
+                    std::string path = !entry.scriptPath.empty() ? entry.scriptPath : entry.scriptRef.resolve();
+                    auto info = scriptingProvider->loadScript(path, toHandle(entity));
                     if (info.has_value())
                     {
                         entry.instanceId = info->instanceId;

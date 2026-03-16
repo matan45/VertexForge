@@ -117,6 +117,7 @@ namespace components
     struct ScriptEntry
     {
         asset::AssetRef scriptRef;
+        std::string scriptPath;
         bool enabled = true;
         int inputPriority = 0;
 
@@ -153,10 +154,45 @@ namespace components
             return findByRef(ref) != nullptr;
         }
 
+        ScriptEntry* findByPath(const std::string& path)
+        {
+            for (auto& entry : scripts)
+            {
+                if (entry.scriptPath == path) return &entry;
+            }
+            return nullptr;
+        }
+
+        const ScriptEntry* findByPath(const std::string& path) const
+        {
+            for (const auto& entry : scripts)
+            {
+                if (entry.scriptPath == path) return &entry;
+            }
+            return nullptr;
+        }
+
+        bool hasScriptPath(const std::string& path) const
+        {
+            return findByPath(path) != nullptr;
+        }
+
         bool removeByRef(const asset::AssetRef& ref)
         {
             auto it = std::remove_if(scripts.begin(), scripts.end(),
                                      [&ref](const ScriptEntry& e) { return e.scriptRef == ref; });
+            if (it != scripts.end())
+            {
+                scripts.erase(it, scripts.end());
+                return true;
+            }
+            return false;
+        }
+
+        bool removeByPath(const std::string& path)
+        {
+            auto it = std::remove_if(scripts.begin(), scripts.end(),
+                                     [&path](const ScriptEntry& e) { return e.scriptPath == path; });
             if (it != scripts.end())
             {
                 scripts.erase(it, scripts.end());

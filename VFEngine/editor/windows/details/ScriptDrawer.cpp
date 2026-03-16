@@ -125,21 +125,22 @@ namespace windows::details
         }
 
         // Input priority
-        auto enttEntity = services::internal::fromHandle(handle);
-        auto& registry = scene::EntityRegistry::getRegistry();
-        if (registry.all_of<components::ScriptComponent>(enttEntity))
         {
-            auto& scriptComp = registry.get<components::ScriptComponent>(enttEntity);
-            auto scriptRef = asset::AssetRef::fromPath(scriptPath);
-            auto* entry = scriptComp.findByRef(scriptRef);
-            if (entry)
+            auto enttEntity = services::internal::fromHandle(handle);
+            auto& registry = scene::EntityRegistry::getRegistry();
+            if (registry.all_of<components::ScriptComponent>(enttEntity))
             {
-                ImGui::SameLine();
-                ImGui::SetNextItemWidth(60.0f);
-                ImGui::InputInt("##Priority", &entry->inputPriority, 0, 0);
-                if (ImGui::IsItemHovered())
+                auto& scriptComp = registry.get<components::ScriptComponent>(enttEntity);
+                auto* entry = scriptComp.findByPath(scriptPath);
+                if (entry)
                 {
-                    ImGui::SetTooltip("Input Priority (higher = handles input first)");
+                    ImGui::SameLine();
+                    ImGui::SetNextItemWidth(60.0f);
+                    ImGui::InputInt("##Priority", &entry->inputPriority, 0, 0);
+                    if (ImGui::IsItemHovered())
+                    {
+                        ImGui::SetTooltip("Input Priority (higher = handles input first)");
+                    }
                 }
             }
         }
