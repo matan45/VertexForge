@@ -4,6 +4,7 @@
 #include <shared_mutex>
 #include <nlohmann/json.hpp>
 #include "../scene/Entity.hpp"
+#include "../asset/AssetRef.hpp"
 #include "../types/PhysicsTypes.hpp"
 #include "../types/PhysicsAnimationTypes.hpp"
 #include "../types/NavmeshTypes.hpp"
@@ -67,7 +68,7 @@ namespace serialization
         static void deserializeCamera(const json& j, components::CameraComponent& camera);
 
         static json serializeIBL(const components::IBLComponent& ibl);
-        static std::string deserializeIBL(const json& j);
+        static asset::AssetRef deserializeIBLRef(const json& j);
 
         static json serializeMesh(const components::MeshComponent& mesh);
         static void deserializeMesh(const json& j, components::MeshComponent& mesh);

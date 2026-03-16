@@ -12,50 +12,50 @@ namespace resource {
 		if (entity.hasComponent<components::MeshComponent>())
 		{
 			const auto& mesh = entity.getComponent<components::MeshComponent>();
-			if (!mesh.meshPath.empty()) lifecycle.acquire(mesh.meshPath, AssetType::Mesh);
-			if (!mesh.animatorPath.empty()) lifecycle.acquire(mesh.animatorPath, AssetType::Animator);
+			if (mesh.meshRef.isValid()) lifecycle.acquire(mesh.meshRef.getGUID(), AssetType::Mesh);
+			if (mesh.animatorRef.isValid()) lifecycle.acquire(mesh.animatorRef.getGUID(), AssetType::Animator);
 		}
 
 		if (entity.hasComponent<components::MaterialComponent>())
 		{
 			const auto& mat = entity.getComponent<components::MaterialComponent>();
-			if (!mat.defaultMaterial.empty()) lifecycle.acquire(mat.defaultMaterial, AssetType::Material);
-			for (const auto& [name, path] : mat.subMeshMaterials)
+			if (mat.defaultMaterialRef.isValid()) lifecycle.acquire(mat.defaultMaterialRef.getGUID(), AssetType::Material);
+			for (const auto& [name, ref] : mat.subMeshMaterials)
 			{
-				if (!path.empty()) lifecycle.acquire(path, AssetType::Material);
+				if (ref.isValid()) lifecycle.acquire(ref.getGUID(), AssetType::Material);
 			}
 		}
 
 		if (entity.hasComponent<components::AudioSource2DComponent>())
 		{
 			const auto& audio = entity.getComponent<components::AudioSource2DComponent>();
-			if (!audio.audioFilePath.empty()) lifecycle.acquire(audio.audioFilePath, AssetType::Audio);
+			if (audio.audioRef.isValid()) lifecycle.acquire(audio.audioRef.getGUID(), AssetType::Audio);
 		}
 
 		if (entity.hasComponent<components::AudioSource3DComponent>())
 		{
 			const auto& audio = entity.getComponent<components::AudioSource3DComponent>();
-			if (!audio.audioFilePath.empty()) lifecycle.acquire(audio.audioFilePath, AssetType::Audio);
+			if (audio.audioRef.isValid()) lifecycle.acquire(audio.audioRef.getGUID(), AssetType::Audio);
 		}
 
 		if (entity.hasComponent<components::VFXComponent>())
 		{
 			const auto& vfx = entity.getComponent<components::VFXComponent>();
-			if (!vfx.vfxPath.empty()) lifecycle.acquire(vfx.vfxPath, AssetType::VFX);
+			if (vfx.vfxRef.isValid()) lifecycle.acquire(vfx.vfxRef.getGUID(), AssetType::VFX);
 		}
 
 		if (entity.hasComponent<components::AnimatorComponent>())
 		{
 			const auto& anim = entity.getComponent<components::AnimatorComponent>();
-			if (!anim.animatorPath.empty()) lifecycle.acquire(anim.animatorPath, AssetType::Animator);
+			if (anim.animatorRef.isValid()) lifecycle.acquire(anim.animatorRef.getGUID(), AssetType::Animator);
 		}
 
 		if (entity.hasComponent<components::DecalComponent>())
 		{
 			const auto& decal = entity.getComponent<components::DecalComponent>();
-			if (!decal.albedoTexture.empty()) lifecycle.acquire(decal.albedoTexture, AssetType::Texture);
-			if (!decal.normalTexture.empty()) lifecycle.acquire(decal.normalTexture, AssetType::Texture);
-			if (!decal.ormTexture.empty()) lifecycle.acquire(decal.ormTexture, AssetType::Texture);
+			if (decal.albedoTextureRef.isValid()) lifecycle.acquire(decal.albedoTextureRef.getGUID(), AssetType::Texture);
+			if (decal.normalTextureRef.isValid()) lifecycle.acquire(decal.normalTextureRef.getGUID(), AssetType::Texture);
+			if (decal.ormTextureRef.isValid()) lifecycle.acquire(decal.ormTextureRef.getGUID(), AssetType::Texture);
 		}
 	}
 
@@ -64,50 +64,50 @@ namespace resource {
 		if (entity.hasComponent<components::MeshComponent>())
 		{
 			const auto& mesh = entity.getComponent<components::MeshComponent>();
-			if (!mesh.meshPath.empty()) lifecycle.release(mesh.meshPath);
-			if (!mesh.animatorPath.empty()) lifecycle.release(mesh.animatorPath);
+			if (mesh.meshRef.isValid()) lifecycle.release(mesh.meshRef.getGUID());
+			if (mesh.animatorRef.isValid()) lifecycle.release(mesh.animatorRef.getGUID());
 		}
 
 		if (entity.hasComponent<components::MaterialComponent>())
 		{
 			const auto& mat = entity.getComponent<components::MaterialComponent>();
-			if (!mat.defaultMaterial.empty()) lifecycle.release(mat.defaultMaterial);
-			for (const auto& [name, path] : mat.subMeshMaterials)
+			if (mat.defaultMaterialRef.isValid()) lifecycle.release(mat.defaultMaterialRef.getGUID());
+			for (const auto& [name, ref] : mat.subMeshMaterials)
 			{
-				if (!path.empty()) lifecycle.release(path);
+				if (ref.isValid()) lifecycle.release(ref.getGUID());
 			}
 		}
 
 		if (entity.hasComponent<components::AudioSource2DComponent>())
 		{
 			const auto& audio = entity.getComponent<components::AudioSource2DComponent>();
-			if (!audio.audioFilePath.empty()) lifecycle.release(audio.audioFilePath);
+			if (audio.audioRef.isValid()) lifecycle.release(audio.audioRef.getGUID());
 		}
 
 		if (entity.hasComponent<components::AudioSource3DComponent>())
 		{
 			const auto& audio = entity.getComponent<components::AudioSource3DComponent>();
-			if (!audio.audioFilePath.empty()) lifecycle.release(audio.audioFilePath);
+			if (audio.audioRef.isValid()) lifecycle.release(audio.audioRef.getGUID());
 		}
 
 		if (entity.hasComponent<components::VFXComponent>())
 		{
 			const auto& vfx = entity.getComponent<components::VFXComponent>();
-			if (!vfx.vfxPath.empty()) lifecycle.release(vfx.vfxPath);
+			if (vfx.vfxRef.isValid()) lifecycle.release(vfx.vfxRef.getGUID());
 		}
 
 		if (entity.hasComponent<components::AnimatorComponent>())
 		{
 			const auto& anim = entity.getComponent<components::AnimatorComponent>();
-			if (!anim.animatorPath.empty()) lifecycle.release(anim.animatorPath);
+			if (anim.animatorRef.isValid()) lifecycle.release(anim.animatorRef.getGUID());
 		}
 
 		if (entity.hasComponent<components::DecalComponent>())
 		{
 			const auto& decal = entity.getComponent<components::DecalComponent>();
-			if (!decal.albedoTexture.empty()) lifecycle.release(decal.albedoTexture);
-			if (!decal.normalTexture.empty()) lifecycle.release(decal.normalTexture);
-			if (!decal.ormTexture.empty()) lifecycle.release(decal.ormTexture);
+			if (decal.albedoTextureRef.isValid()) lifecycle.release(decal.albedoTextureRef.getGUID());
+			if (decal.normalTextureRef.isValid()) lifecycle.release(decal.normalTextureRef.getGUID());
+			if (decal.ormTextureRef.isValid()) lifecycle.release(decal.ormTextureRef.getGUID());
 		}
 	}
 

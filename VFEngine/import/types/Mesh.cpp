@@ -4,6 +4,7 @@
 #include "MeshSerializer.hpp"
 #include "config/Config.hpp"
 #include "resource/EndianUtils.hpp"
+#include "resource/VertexQuantization.hpp"
 
 #include <vector>
 #include <fstream>
@@ -330,7 +331,7 @@ namespace
         resource::endian::writeLE<uint32_t>(outFile, Version::minor);
         resource::endian::writeLE<uint32_t>(outFile, Version::patch);
         resource::endian::writeLE<uint32_t>(outFile, numMeshes);
-        resource::endian::writeLE<uint32_t>(outFile, 0);
+        resource::endian::writeLE<uint32_t>(outFile, static_cast<uint32_t>(resource::MeshCompressionFlags::ALL));
     }
 
     void writeSubmeshHeader(std::ofstream& outFile, const aiMesh* assimpMesh)
@@ -440,7 +441,7 @@ namespace types
             auto lodLevels = lodGen.generateLODLevels(lod0);
 
             for (uint32_t lod = 0; lod < resource::LOD_LEVEL_COUNT; ++lod)
-                serializer.writeLODLevel(outFile, lodLevels[lod]);
+                serializer.writeLODLevelCompressed(outFile, lodLevels[lod]);
 
             vfLogInfo("  Generating meshlets...");
             std::array<MeshletBuildResult, resource::LOD_LEVEL_COUNT> meshletResults;

@@ -252,7 +252,7 @@ namespace core::api
                 }
 
                 const auto& vfxComp = registry.get<components::VFXComponent>(entity);
-                return value::Value(vfxComp.vfxPath);
+                return value::Value(vfxComp.vfxRef.resolve());
             });
 
         // _native_vfx_setPath(entityId, path) -> void
@@ -282,7 +282,7 @@ namespace core::api
                 }
 
                 auto& vfxComp = registry.get<components::VFXComponent>(entity);
-                vfxComp.vfxPath = path;
+                vfxComp.vfxRef = asset::AssetRef::fromPath(path);
 
                 return value::Value(std::monostate{});
             });

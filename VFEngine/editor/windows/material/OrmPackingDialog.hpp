@@ -1,5 +1,6 @@
 #pragma once
 #include <string>
+#include "config/Config.hpp"
 
 namespace editor::materialeditor
 {
@@ -12,6 +13,9 @@ namespace editor::materialeditor
         std::string roughnessPath;
         std::string metallicPath;
         std::string outputPath;
+
+        importConfig::TextureCompressionMode compressionMode = importConfig::TextureCompressionMode::BC;
+        importConfig::TextureCompressionQuality compressionQuality = importConfig::TextureCompressionQuality::Balanced;
 
         std::string errorMessage;
         float progress = 0.0f;

@@ -72,7 +72,7 @@ namespace services {
 
         UILabelData data;
         data.text = comp.text;
-        data.fontPath = comp.fontPath;
+        data.fontRef = comp.fontRef;
         data.fontSize = comp.fontSize;
         data.fontStyle = static_cast<uint8_t>(comp.fontStyle);
         data.color = comp.color;
@@ -98,7 +98,7 @@ namespace services {
 
         auto& comp = sceneEntity.getComponent<components::UILabelComponent>();
         comp.text = labelData.text;
-        comp.fontPath = labelData.fontPath;
+        comp.fontRef = labelData.fontRef;
         comp.fontSize = labelData.fontSize;
         comp.fontStyle = static_cast<components::FontStyle>(labelData.fontStyle);
         comp.color = labelData.color;
@@ -206,10 +206,10 @@ namespace services {
         data.hoveredColor = comp.hoveredColor;
         data.pressedColor = comp.pressedColor;
         data.disabledColor = comp.disabledColor;
-        data.normalTexture = comp.normalTexture;
-        data.hoverTexture = comp.hoverTexture;
-        data.pressedTexture = comp.pressedTexture;
-        data.disabledTexture = comp.disabledTexture;
+        data.normalTextureRef = comp.normalTextureRef;
+        data.hoverTextureRef = comp.hoverTextureRef;
+        data.pressedTextureRef = comp.pressedTextureRef;
+        data.disabledTextureRef = comp.disabledTextureRef;
         data.colorTransitionDuration = comp.colorTransitionDuration;
         data.interactable = comp.interactable;
         data.currentState = static_cast<uint8_t>(comp.currentState);
@@ -232,10 +232,10 @@ namespace services {
         comp.hoveredColor = buttonData.hoveredColor;
         comp.pressedColor = buttonData.pressedColor;
         comp.disabledColor = buttonData.disabledColor;
-        comp.normalTexture = buttonData.normalTexture;
-        comp.hoverTexture = buttonData.hoverTexture;
-        comp.pressedTexture = buttonData.pressedTexture;
-        comp.disabledTexture = buttonData.disabledTexture;
+        comp.normalTextureRef = buttonData.normalTextureRef;
+        comp.hoverTextureRef = buttonData.hoverTextureRef;
+        comp.pressedTextureRef = buttonData.pressedTextureRef;
+        comp.disabledTextureRef = buttonData.disabledTextureRef;
         comp.colorTransitionDuration = buttonData.colorTransitionDuration;
         comp.interactable = buttonData.interactable;
         comp.currentState = static_cast<components::UIButtonState>(buttonData.currentState);
@@ -312,7 +312,7 @@ namespace services {
         UITextInputData data;
         data.text = comp.text;
         data.placeholderText = comp.placeholderText;
-        data.fontPath = comp.fontPath;
+        data.fontRef = comp.fontRef;
         data.fontSize = comp.fontSize;
         data.textColor = comp.textColor;
         data.placeholderColor = comp.placeholderColor;
@@ -345,7 +345,7 @@ namespace services {
         auto& comp = sceneEntity.getComponent<components::UITextInputComponent>();
         comp.text = textInputData.text;
         comp.placeholderText = textInputData.placeholderText;
-        comp.fontPath = textInputData.fontPath;
+        comp.fontRef = textInputData.fontRef;
         comp.fontSize = textInputData.fontSize;
         comp.textColor = textInputData.textColor;
         comp.placeholderColor = textInputData.placeholderColor;
@@ -439,10 +439,10 @@ namespace services {
         data.checkedColor = comp.checkedColor;
         data.hoveredColor = comp.hoveredColor;
         data.disabledColor = comp.disabledColor;
-        data.uncheckedTexture = comp.uncheckedTexture;
-        data.checkedTexture = comp.checkedTexture;
-        data.hoveredTexture = comp.hoveredTexture;
-        data.disabledTexture = comp.disabledTexture;
+        data.uncheckedTextureRef = comp.uncheckedTextureRef;
+        data.checkedTextureRef = comp.checkedTextureRef;
+        data.hoveredTextureRef = comp.hoveredTextureRef;
+        data.disabledTextureRef = comp.disabledTextureRef;
         data.colorTransitionDuration = comp.colorTransitionDuration;
         data.interactable = comp.interactable;
         data.labelToggle = comp.labelToggle;
@@ -469,10 +469,10 @@ namespace services {
         comp.checkedColor = checkboxData.checkedColor;
         comp.hoveredColor = checkboxData.hoveredColor;
         comp.disabledColor = checkboxData.disabledColor;
-        comp.uncheckedTexture = checkboxData.uncheckedTexture;
-        comp.checkedTexture = checkboxData.checkedTexture;
-        comp.hoveredTexture = checkboxData.hoveredTexture;
-        comp.disabledTexture = checkboxData.disabledTexture;
+        comp.uncheckedTextureRef = checkboxData.uncheckedTextureRef;
+        comp.checkedTextureRef = checkboxData.checkedTextureRef;
+        comp.hoveredTextureRef = checkboxData.hoveredTextureRef;
+        comp.disabledTextureRef = checkboxData.disabledTextureRef;
         comp.colorTransitionDuration = checkboxData.colorTransitionDuration;
         comp.interactable = checkboxData.interactable;
         comp.labelToggle = checkboxData.labelToggle;

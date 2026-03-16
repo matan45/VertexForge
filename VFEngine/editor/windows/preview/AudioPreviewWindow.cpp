@@ -1,6 +1,7 @@
 #include "AudioPreviewWindow.hpp"
 #include "imgui.h"
 #include "resource/ResourceManager.hpp"
+#include "asset/AssetRef.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/audio/AudioEvents.hpp"
 #include <filesystem>
@@ -142,7 +143,7 @@ namespace windows
                 return result;
             }
 
-            auto audioFuture = resource::ResourceManager::loadAudioAsync(path);
+            auto audioFuture = resource::ResourceManager::loadAudioAsync(asset::AssetRef::fromPath(path));
             auto audioPtr = audioFuture.get();
             if (!audioPtr)
             {

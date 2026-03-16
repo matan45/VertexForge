@@ -92,7 +92,7 @@ namespace services {
         UIDropdownData data;
         data.options.reserve(comp.options.size());
         for (const auto& opt : comp.options) {
-            data.options.push_back({opt.text, opt.iconPath});
+            data.options.push_back({opt.text, opt.iconRef});
         }
         data.selectedIndex = comp.selectedIndex;
         data.placeholderText = comp.placeholderText;
@@ -105,7 +105,7 @@ namespace services {
         data.listBackgroundColor = comp.listBackgroundColor;
         data.itemNormalColor = comp.itemNormalColor;
         data.itemHoveredColor = comp.itemHoveredColor;
-        data.fontPath = comp.fontPath;
+        data.fontRef = comp.fontRef;
         data.fontSize = comp.fontSize;
         data.colorTransitionDuration = comp.colorTransitionDuration;
         data.currentState = static_cast<uint8_t>(comp.currentState);
@@ -129,7 +129,7 @@ namespace services {
         comp.options.clear();
         comp.options.reserve(dropdownData.options.size());
         for (const auto& opt : dropdownData.options) {
-            comp.options.push_back({opt.text, opt.iconPath});
+            comp.options.push_back({opt.text, opt.iconRef});
         }
         comp.selectedIndex = dropdownData.selectedIndex;
         comp.placeholderText = dropdownData.placeholderText;
@@ -142,7 +142,7 @@ namespace services {
         comp.listBackgroundColor = dropdownData.listBackgroundColor;
         comp.itemNormalColor = dropdownData.itemNormalColor;
         comp.itemHoveredColor = dropdownData.itemHoveredColor;
-        comp.fontPath = dropdownData.fontPath;
+        comp.fontRef = dropdownData.fontRef;
         comp.fontSize = dropdownData.fontSize;
         comp.colorTransitionDuration = dropdownData.colorTransitionDuration;
         comp.currentState = static_cast<components::UIDropdownState>(dropdownData.currentState);

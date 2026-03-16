@@ -223,10 +223,10 @@ namespace animation
 
         for (size_t i = 0; i < n && i < weights.size(); ++i)
         {
-            if (weights[i] <= 0.001f || entries[i].animationPath.empty())
+            if (weights[i] <= 0.001f || !entries[i].animationRef.isValid())
                 continue;
 
-            const resource::AnimationData* animData = loadCallback(entries[i].animationPath);
+            const resource::AnimationData* animData = loadCallback(entries[i].animationRef.resolve());
             if (!animData)
                 continue;
 

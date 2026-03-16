@@ -6,8 +6,10 @@
 #include "events/EventDispatcher.hpp"
 #include "events/render/PreviewEvents.hpp"
 #include "events/render/MaterialEvents.hpp"
+#include "events/project/ResourceEvents.hpp"
 #include "time/Timer.hpp"
 #include "nfd/FileDialog.hpp"
+#include <asset/AssetRef.hpp>
 #include <imgui.h>
 #include <glm/glm.hpp>
 #include <filesystem>
@@ -50,7 +52,7 @@ namespace windows
     {
         if (material::MaterialManager::instance().reloadInstance(instancePath))
         {
-            instanceData = resource::ResourceManager::loadMaterialInstance(instancePath);
+            instanceData = resource::ResourceManager::loadMaterialInstance(asset::AssetRef::fromPath(instancePath));
         }
 
         if (!instanceData)
@@ -62,9 +64,9 @@ namespace windows
 
     void MaterialInstanceEditorWindow::loadParent()
     {
-        if (instanceData && !instanceData->parentMaterialPath.empty())
+        if (instanceData && instanceData->parentMaterialRef.isValid())
         {
-            parentMaterial = resource::ResourceManager::loadMaterial(instanceData->parentMaterialPath);
+            parentMaterial = resource::ResourceManager::loadMaterial(instanceData->parentMaterialRef);
             if (parentMaterial)
             {
                 parentPBR = material::MaterialGraphHelper::extractPBRFromGraph(*parentMaterial);
@@ -87,6 +89,10 @@ namespace windows
             events::material::MaterialFileSavedNotification notification;
             notification.materialPath = instancePath;
             events::EventDispatcher::instance().publish(notification);
+
+            events::resource::AssetSavedNotification assetNotif;
+            assetNotif.filePath = instancePath;
+            events::EventDispatcher::instance().publish(assetNotif);
         }
     }
 
@@ -304,12 +310,13 @@ namespace windows
     void MaterialInstanceEditorWindow::drawParentInfo()
     {
         ImGui::Text("Parent Material:");
-        if (instanceData && !instanceData->parentMaterialPath.empty())
+        if (instanceData && instanceData->parentMaterialRef.isValid())
         {
-            fs::path parentPath(instanceData->parentMaterialPath);
+            std::string parentMatPath = instanceData->parentMaterialRef.resolve();
+            fs::path parentPath(parentMatPath);
             ImGui::TextColored(ImVec4(0.7f, 0.9f, 0.7f, 1.0f), "%s", parentPath.filename().string().c_str());
             ImGui::SameLine();
-            ImGui::TextDisabled("(%s)", instanceData->parentMaterialPath.c_str());
+            ImGui::TextDisabled("(%s)", parentMatPath.c_str());
         }
         else
         {
@@ -400,15 +407,17 @@ namespace windows
         ImGui::PushID(static_cast<int>(slot));
 
         bool hasOverride = instanceData && instanceData->isTextureOverridden(slot);
-        std::string currentPath = hasOverride ? instanceData->getTextureOverride(slot) : parentTexture;
+        auto overrideRef = hasOverride ? instanceData->getTextureOverride(slot) : asset::AssetRef::invalid();
+        std::string currentPath = hasOverride && overrideRef.isValid() ? overrideRef.resolve() : parentTexture;
 
         bool overrideEnabled = hasOverride;
         if (ImGui::Checkbox("##TexOverride", &overrideEnabled))
         {
             if (overrideEnabled)
             {
-                std::string initialPath = parentTexture.empty() ? " " : parentTexture;
-                instanceData->textureOverrides[slot] = initialPath;
+                instanceData->textureOverrides[slot] = parentTexture.empty()
+                    ? asset::AssetRef::invalid()
+                    : asset::AssetRef::fromPath(parentTexture);
             }
             else
             {
@@ -444,7 +453,7 @@ namespace windows
             std::string selectedPath = fileDialog.openFileDialog(filters);
             if (!selectedPath.empty())
             {
-                instanceData->textureOverrides[slot] = selectedPath;
+                instanceData->textureOverrides[slot] = asset::AssetRef::fromPath(selectedPath);
                 changed = true;
             }
         }
@@ -599,8 +608,8 @@ namespace windows
         {
             if (instanceData->isTextureOverridden(slot))
             {
-                std::string path = instanceData->getTextureOverride(slot);
-                if (path != " " && !path.empty()) return path;
+                auto ref = instanceData->getTextureOverride(slot);
+                if (ref.isValid()) return ref.resolve();
             }
             return parentPath;
         };

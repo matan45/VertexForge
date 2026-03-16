@@ -2,6 +2,7 @@
 #include <string>
 #include <functional>
 #include "../resource/Types.hpp"
+#include "../config/Config.hpp"
 
 namespace texture
 {
@@ -13,6 +14,9 @@ namespace texture
         std::string errorMessage;
     };
 
+    // Callback for compressing a TextureData in-place after ORM channel packing
+    using TextureCompressCallback = std::function<void(resource::TextureData& textureData)>;
+
     // Input paths for ORM packing - all optional
     // At least one texture must be provided to determine output dimensions
     struct OrmPackInput {
@@ -20,6 +24,7 @@ namespace texture
         std::string roughnessPath;  // Optional - defaults to 128 (mid roughness)
         std::string metallicPath;   // Optional - defaults to 0 (non-metallic)
         std::string outputPath;     // Required
+        TextureCompressCallback compressCallback;     // Optional - compresses output before saving
     };
 
     class OrmTexturePacker
@@ -43,6 +48,7 @@ namespace texture
             const resource::TextureData* roughnessTexture,
             const resource::TextureData* metallicTexture,
             const std::string& outputPath,
-            OrmPackProgressCallback progressCallback = nullptr);
+            OrmPackProgressCallback progressCallback = nullptr,
+            TextureCompressCallback compressCallback = nullptr);
     };
 }

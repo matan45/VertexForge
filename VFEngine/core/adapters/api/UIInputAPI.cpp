@@ -310,12 +310,12 @@ namespace core::api
                     std::string::size_type pos = optionsStr.find('|');
                     while (pos != std::string::npos)
                     {
-                        dropdownData.options.push_back({optionsStr.substr(start, pos - start), ""});
+                        dropdownData.options.push_back({optionsStr.substr(start, pos - start), asset::AssetRef{}});
                         start = pos + 1;
                         pos = optionsStr.find('|', start);
                     }
                     if (start < optionsStr.size())
-                        dropdownData.options.push_back({optionsStr.substr(start), ""});
+                        dropdownData.options.push_back({optionsStr.substr(start), asset::AssetRef{}});
 
                     if (dropdownData.selectedIndex >= static_cast<int>(dropdownData.options.size()))
                         dropdownData.selectedIndex = static_cast<int>(dropdownData.options.size()) - 1;

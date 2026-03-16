@@ -42,7 +42,7 @@ namespace render::ui
             whiteTexData.height = 1;
             whiteTexData.numbersOfChannels = 4;
             whiteTexData.mipLevels = 1;
-            whiteTexData.mipData.push_back({1, 1, {255, 255, 255, 255}});
+            whiteTexData.mipData.push_back({.width = 1, .height = 1, .dataSize = 4, .data = {255, 255, 255, 255}});
 
             auto texture = std::make_unique<core::Texture>(device);
             texture->loadTextureFromData(whiteTexData, vk::Format::eR8G8B8A8Unorm, false);

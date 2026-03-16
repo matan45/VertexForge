@@ -335,10 +335,10 @@ namespace serialization
 
         if (componentsJson.contains("ibl"))
         {
-            std::string iblFileName = deserializeIBL(componentsJson["ibl"]);
-            if (!iblFileName.empty())
+            auto iblRef = deserializeIBLRef(componentsJson["ibl"]);
+            if (iblRef.isValid())
             {
-                entity.addOrReplaceComponent<components::IBLComponent>().fileName = iblFileName;
+                entity.addOrReplaceComponent<components::IBLComponent>().hdrRef = iblRef;
             }
         }
 

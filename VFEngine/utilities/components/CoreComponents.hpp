@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <entt/entt.hpp>
 #include "../uuid/UUID.hpp"
+#include "../asset/AssetRef.hpp"
 #include "../rendertexture/RenderTextureTypes.hpp"
 
 namespace components
@@ -51,7 +52,7 @@ namespace components
 
     struct IBLComponent
     {
-        std::string fileName;
+        asset::AssetRef hdrRef;
     };
 
     struct WorldSectorComponent
@@ -171,8 +172,8 @@ namespace components
 
     struct MeshComponent
     {
-        std::string meshPath;
-        std::string animatorPath;
+        asset::AssetRef meshRef;
+        asset::AssetRef animatorRef;
         bool showBoundingBox = false;
         bool applyRootMotion = false;
         float maxDrawDistance = 0.0f; // 0 = use category default from render config
@@ -180,28 +181,28 @@ namespace components
 
     struct MaterialComponent
     {
-        std::string defaultMaterial;
-        std::map<std::string, std::string> subMeshMaterials;
+        asset::AssetRef defaultMaterialRef;
+        std::map<std::string, asset::AssetRef> subMeshMaterials;
         std::map<std::string, float> parameterOverrides;
 
-        void setSubMeshMaterial(const std::string& submeshName, const std::string& matPath)
+        void setSubMeshMaterial(const std::string& submeshName, const asset::AssetRef& matRef)
         {
-            subMeshMaterials[submeshName] = matPath;
+            subMeshMaterials[submeshName] = matRef;
         }
 
-        void setDefaultMaterial(const std::string& matPath)
+        void setDefaultMaterial(const asset::AssetRef& matRef)
         {
-            defaultMaterial = matPath;
+            defaultMaterialRef = matRef;
         }
 
-        std::string getMaterialForSubmesh(const std::string& submeshName) const
+        asset::AssetRef getMaterialForSubmesh(const std::string& submeshName) const
         {
             auto it = subMeshMaterials.find(submeshName);
             if (it != subMeshMaterials.end())
             {
                 return it->second;
             }
-            return defaultMaterial;
+            return defaultMaterialRef;
         }
     };
 }

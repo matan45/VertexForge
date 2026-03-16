@@ -3,6 +3,7 @@
 #include "events/EventDispatcher.hpp"
 #include "events/ui/UIEvents.hpp"
 #include "nfd/FileDialog.hpp"
+#include "asset/AssetRef.hpp"
 #include <imgui.h>
 #include <fstream>
 
@@ -187,9 +188,9 @@ namespace windows::details
                 }
 
                 // Icon path (optional)
-                if (!data.options[i].iconPath.empty())
+                if (data.options[i].iconRef.isValid())
                 {
-                    std::string filename = data.options[i].iconPath;
+                    std::string filename = data.options[i].iconRef.resolve();
                     auto lastSlash = filename.find_last_of("/\\");
                     if (lastSlash != std::string::npos)
                         filename = filename.substr(lastSlash + 1);
@@ -209,7 +210,7 @@ namespace windows::details
                         if (file.good())
                         {
                             file.close();
-                            data.options[i].iconPath = path;
+                            data.options[i].iconRef = asset::AssetRef::fromPath(path);
                             changed = true;
                         }
                     }
@@ -217,13 +218,13 @@ namespace windows::details
 
                 ImGui::SameLine();
 
-                bool noIcon = data.options[i].iconPath.empty();
+                bool noIcon = !data.options[i].iconRef.isValid();
                 if (noIcon) ImGui::BeginDisabled();
                 char clearIconId[64];
                 std::snprintf(clearIconId, sizeof(clearIconId), "Clear##OptIconClr%d", i);
                 if (ImGui::Button(clearIconId))
                 {
-                    data.options[i].iconPath = "";
+                    data.options[i].iconRef = asset::AssetRef::invalid();
                     changed = true;
                 }
                 if (noIcon) ImGui::EndDisabled();
@@ -264,7 +265,7 @@ namespace windows::details
             // Add button
             if (ImGui::Button("+ Add Option##UIDropdown"))
             {
-                data.options.push_back({"New Option", ""});
+                data.options.push_back({"New Option", asset::AssetRef{}});
                 changed = true;
             }
 
@@ -372,9 +373,9 @@ namespace windows::details
 
         if (ImGui::TreeNodeEx("Font##UIDropdown"))
         {
-            if (!data.fontPath.empty())
+            if (data.fontRef.isValid())
             {
-                std::string filename = data.fontPath;
+                std::string filename = data.fontRef.resolve();
                 auto lastSlash = filename.find_last_of("/\\");
                 if (lastSlash != std::string::npos)
                     filename = filename.substr(lastSlash + 1);
@@ -396,7 +397,7 @@ namespace windows::details
                     if (file.good())
                     {
                         file.close();
-                        data.fontPath = path;
+                        data.fontRef = asset::AssetRef::fromPath(path);
                         changed = true;
                     }
                 }

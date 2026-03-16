@@ -59,7 +59,7 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <PreprocessorDefinitions>VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1;GLM_FORCE_DEPTH_ZERO_TO_ONE;_CRT_SECURE_NO_WARNINGS;VF_IMPORT_BUILD_DLL;MESHOPTIMIZER_API=__declspec(dllimport);DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\..\dependencies\spdlog\include;..\utilities;..\..\dependencies\stb;..\..\dependencies\dr_libs;..\..\dependencies\tinyexr;..\..\dependencies\assimp\include;..\..\dependencies\assimp\build\include;..\..\dependencies\glm;..\..\dependencies\meshoptimizer\src;..\..\dependencies\v-hacd;..\..\dependencies\freetype\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\..\dependencies\spdlog\include;..\utilities;..\..\dependencies\stb;..\..\dependencies\dr_libs;..\..\dependencies\tinyexr;..\..\dependencies\assimp\include;..\..\dependencies\assimp\build\include;..\..\dependencies\glm;..\..\dependencies\meshoptimizer\src;..\..\dependencies\v-hacd;..\..\dependencies\freetype\include;..\..\dependencies\ispc_texcomp;..\..\dependencies\libogg\include;..\..\dependencies\libogg\build\include;..\..\dependencies\libvorbis\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DebugInformationFormat>EditAndContinue</DebugInformationFormat>
       <Optimization>Disabled</Optimization>
       <AdditionalOptions>/utf-8 /MP %(AdditionalOptions)</AdditionalOptions>
@@ -69,8 +69,8 @@
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>assimp-vc145-mtd.lib;freetyped.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>..\..\dependencies\assimp\build\lib\Debug;..\..\dependencies\freetype\build\Debug;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>assimp-vc145-mtd.lib;freetyped.lib;ogg.lib;vorbis.lib;vorbisenc.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>..\..\dependencies\assimp\build\lib\Debug;..\..\dependencies\freetype\build\Debug;..\..\dependencies\libogg\build\Debug;..\..\dependencies\libvorbis\build\lib\Debug;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <ImportLibrary>..\..\bin\Import\Debug\x64\Import.lib</ImportLibrary>
     </Link>
     <PostBuildEvent>
@@ -84,7 +84,7 @@ IF EXIST ..\..\bin\Import\Debug\x64\Import.dll\ (xcopy /Q /E /Y /I ..\..\bin\Imp
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <PreprocessorDefinitions>VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1;GLM_FORCE_DEPTH_ZERO_TO_ONE;_CRT_SECURE_NO_WARNINGS;VF_IMPORT_BUILD_DLL;MESHOPTIMIZER_API=__declspec(dllimport);NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\..\dependencies\spdlog\include;..\utilities;..\..\dependencies\stb;..\..\dependencies\dr_libs;..\..\dependencies\tinyexr;..\..\dependencies\assimp\include;..\..\dependencies\assimp\build\include;..\..\dependencies\glm;..\..\dependencies\meshoptimizer\src;..\..\dependencies\v-hacd;..\..\dependencies\freetype\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\..\dependencies\spdlog\include;..\utilities;..\..\dependencies\stb;..\..\dependencies\dr_libs;..\..\dependencies\tinyexr;..\..\dependencies\assimp\include;..\..\dependencies\assimp\build\include;..\..\dependencies\glm;..\..\dependencies\meshoptimizer\src;..\..\dependencies\v-hacd;..\..\dependencies\freetype\include;..\..\dependencies\ispc_texcomp;..\..\dependencies\libogg\include;..\..\dependencies\libogg\build\include;..\..\dependencies\libvorbis\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <Optimization>Full</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
@@ -98,8 +98,8 @@ IF EXIST ..\..\bin\Import\Debug\x64\Import.dll\ (xcopy /Q /E /Y /I ..\..\bin\Imp
       <SubSystem>Windows</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalDependencies>assimp-vc145-mt.lib;freetype.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>..\..\dependencies\assimp\build\lib\Release;..\..\dependencies\freetype\build\Release;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>assimp-vc145-mt.lib;freetype.lib;ogg.lib;vorbis.lib;vorbisenc.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>..\..\dependencies\assimp\build\lib\Release;..\..\dependencies\freetype\build\Release;..\..\dependencies\libogg\build\Release;..\..\dependencies\libvorbis\build\lib\Release;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <ImportLibrary>..\..\bin\Import\Release\x64\Import.lib</ImportLibrary>
     </Link>
     <PostBuildEvent>
@@ -131,7 +131,9 @@ IF EXIST ..\..\bin\Import\Release\x64\Import.dll\ (xcopy /Q /E /Y /I ..\..\bin\I
     <ClInclude Include="types\MeshSocketWriter.hpp" />
     <ClInclude Include="types\SDFGenerator.hpp" />
     <ClInclude Include="types\Texture.hpp" />
+    <ClInclude Include="types\TextureCompressor.hpp" />
     <ClInclude Include="types\VHACDCallback.hpp" />
+    <ClInclude Include="types\VorbisEncoder.hpp" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="controllers\Import.cpp" />
@@ -155,6 +157,8 @@ IF EXIST ..\..\bin\Import\Release\x64\Import.dll\ (xcopy /Q /E /Y /I ..\..\bin\I
     <ClCompile Include="types\MeshSocketWriter.cpp" />
     <ClCompile Include="types\SDFGenerator.cpp" />
     <ClCompile Include="types\Texture.cpp" />
+    <ClCompile Include="types\TextureCompressor.cpp" />
+    <ClCompile Include="types\VorbisEncoder.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\utilities\Utilities.vcxproj">
@@ -162,6 +166,9 @@ IF EXIST ..\..\bin\Import\Release\x64\Import.dll\ (xcopy /Q /E /Y /I ..\..\bin\I
     </ProjectReference>
     <ProjectReference Include="..\meshoptimizer.vcxproj">
       <Project>{75046AD2-E1C4-E508-AAFF-2E86167F2AE5}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\ispc_texcomp.vcxproj">
+      <Project>{73EAF6A7-5F4D-864C-08D3-BE02F41452CF}</Project>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

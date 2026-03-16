@@ -6,6 +6,7 @@
 #include "events/audio/AudioEvents.hpp"
 #include "events/audio/AudioBusEvents.hpp"
 #include "nfd/FileDialog.hpp"
+#include "asset/AssetRef.hpp"
 #include <imgui.h>
 #include <fstream>
 #include <cmath>
@@ -117,9 +118,9 @@ namespace windows::details
     {
         bool changed = false;
 
-        if (!audioData.audioFilePath.empty())
+        if (audioData.audioRef.isValid())
         {
-            std::string filename = audioData.audioFilePath;
+            std::string filename = audioData.audioRef.resolve();
             auto lastSlash = filename.find_last_of("/\\");
             if (lastSlash != std::string::npos)
             {
@@ -143,7 +144,7 @@ namespace windows::details
                 if (file.good())
                 {
                     file.close();
-                    audioData.audioFilePath = path;
+                    audioData.audioRef = asset::AssetRef::fromPath(path);
                     changed = true;
                 }
                 else
@@ -154,11 +155,11 @@ namespace windows::details
         }
 
         ImGui::SameLine();
-        bool clearDisabled = audioData.audioFilePath.empty();
+        bool clearDisabled = !audioData.audioRef.isValid();
         ImGui::BeginDisabled(clearDisabled);
         if (ImGui::Button("Clear##Audio3D"))
         {
-            audioData.audioFilePath = "";
+            audioData.audioRef = asset::AssetRef::invalid();
             changed = true;
         }
         ImGui::EndDisabled();
@@ -389,7 +390,7 @@ namespace windows::details
         bool isPaused = hasPreviewHandle && !isCurrentlyPlaying;
 
         // Play button
-        bool canPlay = !audioData.audioFilePath.empty() && !isCurrentlyPlaying;
+        bool canPlay = audioData.audioRef.isValid() && !isCurrentlyPlaying;
         ImGui::BeginDisabled(!canPlay);
         if (ImGui::Button("Play##3D", ImVec2(60, 0)))
         {
@@ -407,7 +408,7 @@ namespace windows::details
                 glm::vec3 position = transformOpt.has_value() ? transformOpt->position : glm::vec3(0.0f);
 
                 events::audio::PlaySound3DCommand playCmd;
-                playCmd.path = audioData.audioFilePath;
+                playCmd.path = audioData.audioRef.resolve();
                 playCmd.position = position;
                 playCmd.params.volume = audioData.volume;
                 playCmd.params.pitch = audioData.pitch;

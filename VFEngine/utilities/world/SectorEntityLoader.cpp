@@ -157,8 +157,8 @@ namespace world
                     if (newEntity.hasComponent<components::MeshComponent>())
                     {
                         const auto& meshComp = newEntity.getComponent<components::MeshComponent>();
-                        meshPath = meshComp.meshPath;
-                        animatorPath = meshComp.animatorPath;
+                        meshPath = meshComp.meshRef.resolve();
+                        animatorPath = meshComp.animatorRef.resolve();
                     }
                     onEntityPostLoad(uuid, meshPath, animatorPath);
                 }

@@ -1,8 +1,37 @@
 #include "SceneSerialization.hpp"
 #include "JsonConverters.hpp"
 #include "../components/Components.hpp"
+#include "../asset/AssetRef.hpp"
 
 namespace serialization {
+
+    // Helper: read an AssetRef from JSON, supporting both new GUID format and legacy path format
+    static asset::AssetRef readAssetRef(const nlohmann::json& j, const std::string& newKey, const std::string& legacyKey = "")
+    {
+        // Try new GUID key first
+        if (auto it = j.find(newKey); it != j.end() && it->is_string())
+        {
+            std::string val = it->get<std::string>();
+            if (!val.empty())
+            {
+                // Detect if it's a hex GUID or a file path
+                bool isPath = val.find('.') != std::string::npos
+                           || val.find('/') != std::string::npos
+                           || val.find('\\') != std::string::npos;
+                return isPath ? asset::AssetRef::fromPath(val) : asset::AssetRef::fromHexString(val);
+            }
+        }
+        // Try legacy path key
+        if (!legacyKey.empty())
+        {
+            if (auto it = j.find(legacyKey); it != j.end() && it->is_string())
+            {
+                std::string val = it->get<std::string>();
+                if (!val.empty()) return asset::AssetRef::fromPath(val);
+            }
+        }
+        return asset::AssetRef::invalid();
+    }
 
     // ---- Canvas ----
 
@@ -51,9 +80,9 @@ namespace serialization {
     json SceneSerialization::serializeUIImage(const components::UIImageComponent& image)
     {
         json j;
-        if (!image.texturePath.empty())
+        if (image.textureRef.isValid())
         {
-            j["texturePath"] = image.texturePath;
+            j["textureRef"] = image.textureRef.toHexString();
         }
         j["colorTint"] = writeVec4(image.colorTint);
         if (!image.renderTextureSourceName.empty())
@@ -78,7 +107,7 @@ namespace serialization {
 
     void SceneSerialization::deserializeUIImage(const json& j, components::UIImageComponent& image)
     {
-        image.texturePath = j.value("texturePath", std::string(""));
+        image.textureRef = readAssetRef(j, "textureRef", "texturePath");
         readVec4(j, "colorTint", image.colorTint);
         image.renderTextureSourceName = j.value("renderTextureSourceName", std::string(""));
         image.renderTextureSource = entt::null; // Resolved post-load

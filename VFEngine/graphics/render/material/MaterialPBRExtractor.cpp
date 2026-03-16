@@ -1,6 +1,7 @@
 #include "MaterialPBRExtractor.hpp"
 #include "material/MaterialManager.hpp"
 #include "resource/ResourceManager.hpp"
+#include "asset/AssetRef.hpp"
 #include <cmath>
 #include <vector>
 
@@ -371,33 +372,33 @@ namespace render::mesh
         // Apply texture overrides
         for (const auto& [slot, texPath] : instance.textureOverrides)
         {
-            if (texPath.empty()) continue;
+            if (!texPath.isValid()) continue;
 
             switch (slot)
             {
             case material::TextureSlot::Albedo:
-                pbr.albedoTexturePath = texPath;
+                pbr.albedoTexturePath = texPath.resolve();
                 break;
             case material::TextureSlot::Normal:
-                pbr.normalTexturePath = texPath;
+                pbr.normalTexturePath = texPath.resolve();
                 break;
             case material::TextureSlot::ORM:
-                pbr.ormTexturePath = texPath;
+                pbr.ormTexturePath = texPath.resolve();
                 break;
             case material::TextureSlot::Metallic:
-                pbr.metallicTexturePath = texPath;
+                pbr.metallicTexturePath = texPath.resolve();
                 break;
             case material::TextureSlot::Roughness:
-                pbr.roughnessTexturePath = texPath;
+                pbr.roughnessTexturePath = texPath.resolve();
                 break;
             case material::TextureSlot::AO:
-                pbr.aoTexturePath = texPath;
+                pbr.aoTexturePath = texPath.resolve();
                 break;
             case material::TextureSlot::Emission:
-                pbr.emissionTexturePath = texPath;
+                pbr.emissionTexturePath = texPath.resolve();
                 break;
             case material::TextureSlot::Height:
-                pbr.heightTexturePath = texPath;
+                pbr.heightTexturePath = texPath.resolve();
                 break;
             default:
                 break;
@@ -420,14 +421,14 @@ namespace render::mesh
         if (material::isInstanceFile(materialOrInstancePath))
         {
             // Load instance data
-            auto instanceData = resource::ResourceManager::loadMaterialInstance(materialOrInstancePath);
-            if (!instanceData || instanceData->parentMaterialPath.empty())
+            auto instanceData = resource::ResourceManager::loadMaterialInstance(asset::AssetRef::fromPath(materialOrInstancePath));
+            if (!instanceData || !instanceData->parentMaterialRef.isValid())
             {
                 return pbr;
             }
 
             // Load parent material
-            auto parentMaterial = resource::ResourceManager::loadMaterial(instanceData->parentMaterialPath);
+            auto parentMaterial = resource::ResourceManager::loadMaterial(instanceData->parentMaterialRef);
             if (!parentMaterial)
             {
                 return pbr;
@@ -440,7 +441,7 @@ namespace render::mesh
         else
         {
             // Regular material
-            auto matData = resource::ResourceManager::loadMaterial(materialOrInstancePath);
+            auto matData = resource::ResourceManager::loadMaterial(asset::AssetRef::fromPath(materialOrInstancePath));
             if (!matData)
             {
                 return pbr;

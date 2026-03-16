@@ -1,6 +1,8 @@
 #include "FileOperationsServiceImpl.hpp"
 #include "../../data/UndoTypes.hpp"
 #include "asset/AssetReferenceScanner.hpp"
+#include "asset/AssetGUID.hpp"
+#include "asset/AssetMetadataSerializer.hpp"
 #include "resource/ResourceManager.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/project/FileOperationsEvents.hpp"
@@ -175,21 +177,21 @@ namespace services
             return result;
         }
 
+        // Move .vfmeta sidecar if it exists
+        auto sourceMeta = asset::AssetMetadataSerializer::getMetaPath(source);
+        if (fs::exists(sourceMeta, ec))
+        {
+            auto destMeta = asset::AssetMetadataSerializer::getMetaPath(dest);
+            fs::rename(sourceMeta, destMeta, ec);
+        }
+
         if (!projRoot.empty())
         {
             auto updateResult = asset::AssetReferenceScanner::updateReferences(sourcePath, dest.string(), projRoot);
             result.updatedReferences = updateResult.updatedFiles;
         }
 
-        // Migrate ResourceManager cache entries
-        if (fs::is_directory(dest))
-        {
-            resource::ResourceManager::migrateCachePrefix(sourcePath, dest.string());
-        }
-        else
-        {
-            resource::ResourceManager::migrateCache(sourcePath, dest.string());
-        }
+        // With GUID-keyed caches, file renames don't invalidate cache entries
 
         if (undoRedoService)
         {
@@ -268,6 +270,20 @@ namespace services
             return result;
         }
 
+        // Create new .vfmeta with new GUID for the copy (copies are distinct assets)
+        auto sourceMeta = asset::AssetMetadataSerializer::getMetaPath(source);
+        if (fs::exists(sourceMeta, ec))
+        {
+            auto originalMeta = asset::AssetMetadataSerializer::load(sourceMeta);
+            if (originalMeta)
+            {
+                asset::AssetMetadata newMeta = *originalMeta;
+                newMeta.guid = asset::AssetGUID::generate();
+                auto destMeta = asset::AssetMetadataSerializer::getMetaPath(dest);
+                asset::AssetMetadataSerializer::save(newMeta, destMeta);
+            }
+        }
+
         if (undoRedoService)
         {
             try
@@ -335,8 +351,16 @@ namespace services
             return result;
         }
 
+        // Also move .vfmeta to trash
+        auto metaPath = asset::AssetMetadataSerializer::getMetaPath(filePath);
+        if (fs::exists(metaPath, ec))
+        {
+            std::string metaTrashPath = generateTrashPath(metaPath.string());
+            fs::rename(metaPath, metaTrashPath, ec);
+        }
+
         // Remove stale ResourceManager cache entries
-        resource::ResourceManager::removeCacheEntry(path);
+        // With GUID-keyed caches, deletions don't need cache cleanup
 
         if (undoRedoService)
         {
@@ -385,7 +409,7 @@ namespace services
             asset::AssetReferenceScanner::updateReferences(sourcePath, destPath, projectRoot);
         }
 
-        resource::ResourceManager::migrateCache(sourcePath, destPath);
+        // With GUID-keyed caches, no migration needed
     }
 
     void MoveFileUndoCommand::undo()
@@ -401,7 +425,7 @@ namespace services
             std::vector<std::pair<std::string, std::string>>(
                 originalRefContents.begin(), originalRefContents.end()));
 
-        resource::ResourceManager::migrateCache(destPath, sourcePath);
+        // With GUID-keyed caches, no migration needed
 
         // Notify UI to refresh
         events::fileops::FileMovedNotification notification;
@@ -471,7 +495,7 @@ namespace services
             throw std::runtime_error("Failed to redo delete: " + ec.message());
         }
 
-        resource::ResourceManager::removeCacheEntry(originalPath);
+        // With GUID-keyed caches, deletions don't need cache cleanup
     }
 
     void DeleteFileUndoCommand::undo()

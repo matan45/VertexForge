@@ -5,6 +5,7 @@
 #include "../../core/Utilities.hpp"
 #include "resource/ResourceManager.hpp"
 #include "resource/Types.hpp"
+#include "asset/AssetRef.hpp"
 #include "print/Log.hpp"
 
 namespace render::text
@@ -168,7 +169,7 @@ namespace render::text
         }
 
         PendingLoad pending;
-        pending.future = resource::ResourceManager::loadFontAsync(fontPath);
+        pending.future = resource::ResourceManager::loadFontAsync(asset::AssetRef::fromPath(fontPath));
         pendingLoads.emplace(fontPath, std::move(pending));
     }
 

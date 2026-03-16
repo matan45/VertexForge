@@ -4,6 +4,7 @@
 #include "events/EventDispatcher.hpp"
 #include "events/ui/UIEvents.hpp"
 #include "nfd/FileDialog.hpp"
+#include "asset/AssetRef.hpp"
 #include <imgui.h>
 #include <fstream>
 
@@ -158,15 +159,15 @@ namespace windows::details
         return changed;
     }
 
-    static bool drawProgressBarTextureSlot(const char* label, std::string& texturePath, const char* uniqueId)
+    static bool drawProgressBarTextureSlot(const char* label, asset::AssetRef& textureRef, const char* uniqueId)
     {
         bool changed = false;
 
         ImGui::Text("%s", label);
 
-        if (!texturePath.empty())
+        if (textureRef.isValid())
         {
-            std::string filename = texturePath;
+            std::string filename = textureRef.resolve();
             auto lastSlash = filename.find_last_of("/\\");
             if (lastSlash != std::string::npos)
             {
@@ -189,7 +190,7 @@ namespace windows::details
                 if (file.good())
                 {
                     file.close();
-                    texturePath = path;
+                    textureRef = asset::AssetRef::fromPath(path);
                     changed = true;
                 }
                 else
@@ -200,13 +201,13 @@ namespace windows::details
         }
 
         ImGui::SameLine();
-        bool wasEmpty = texturePath.empty();
+        bool wasEmpty = !textureRef.isValid();
         if (wasEmpty) ImGui::BeginDisabled();
         char clearId[64];
         std::snprintf(clearId, sizeof(clearId), "Clear##UIPb_%s", uniqueId);
         if (ImGui::Button(clearId))
         {
-            texturePath = "";
+            textureRef = asset::AssetRef::invalid();
             changed = true;
         }
         if (wasEmpty) ImGui::EndDisabled();
@@ -229,7 +230,7 @@ namespace windows::details
             ImGui::TextDisabled("Empty = color only mode");
             ImGui::Spacing();
 
-            changed |= drawProgressBarTextureSlot("Track", data.trackTexture, "track");
+            changed |= drawProgressBarTextureSlot("Track", data.trackTextureRef, "track");
 
             ImGui::TreePop();
         }
@@ -252,7 +253,7 @@ namespace windows::details
             ImGui::TextDisabled("Empty = color only mode");
             ImGui::Spacing();
 
-            changed |= drawProgressBarTextureSlot("Fill", data.fillTexture, "fill");
+            changed |= drawProgressBarTextureSlot("Fill", data.fillTextureRef, "fill");
 
             ImGui::TreePop();
         }

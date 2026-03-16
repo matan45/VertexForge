@@ -152,7 +152,7 @@ namespace controllers::offscreen
                     continue;
 
                 const auto& labelComp = view.get<components::UILabelComponent>(entity);
-                if (labelComp.text.empty() || labelComp.fontPath.empty())
+                if (labelComp.text.empty() || !labelComp.fontRef.isValid())
                     continue;
 
                 const auto* canvas = findCanvasForEntity(registry, entity);
@@ -169,7 +169,7 @@ namespace controllers::offscreen
                 uint8_t stencilDepth = computeStencilDepthForEntity(registry, entity);
 
                 render::ui::UITextRenderData renderData;
-                renderData.fontPath = labelComp.fontPath;
+                renderData.fontPath = labelComp.fontRef.resolve();
                 renderData.text = labelComp.text;
                 renderData.fontSize = labelComp.fontSize * scale;
                 renderData.color = labelComp.color;
@@ -203,7 +203,7 @@ namespace controllers::offscreen
                     continue;
 
                 const auto& tiComp = registry.get<components::UITextInputComponent>(entity);
-                if (tiComp.fontPath.empty())
+                if (!tiComp.fontRef.isValid())
                     continue;
 
                 bool showPlaceholder = tiComp.text.empty()
@@ -239,7 +239,7 @@ namespace controllers::offscreen
 
                 float padding = 4.0f * scale;
                 render::ui::UITextRenderData renderData;
-                renderData.fontPath = tiComp.fontPath;
+                renderData.fontPath = tiComp.fontRef.resolve();
                 renderData.text = displayText;
                 renderData.fontSize = tiComp.fontSize * scale;
                 renderData.color = textColor;
@@ -260,7 +260,7 @@ namespace controllers::offscreen
         std::string findDropdownFont(entt::registry& registry, entt::entity dropdownEntity,
             const components::UIDropdownComponent& comp, float& fontSize)
         {
-            std::string fontPath = comp.fontPath;
+            std::string fontPath = comp.fontRef.resolve();
             fontSize = comp.fontSize;
             if (!fontPath.empty())
                 return fontPath;
@@ -268,7 +268,7 @@ namespace controllers::offscreen
             if (registry.all_of<components::UILabelComponent>(dropdownEntity))
             {
                 const auto& label = registry.get<components::UILabelComponent>(dropdownEntity);
-                fontPath = label.fontPath;
+                fontPath = label.fontRef.resolve();
                 if (fontSize <= 0.0f) fontSize = label.fontSize;
             }
             if (fontPath.empty() && registry.all_of<components::ChildrenComponent>(dropdownEntity))
@@ -278,7 +278,7 @@ namespace controllers::offscreen
                     if (registry.valid(child) && registry.all_of<components::UILabelComponent>(child))
                     {
                         const auto& label = registry.get<components::UILabelComponent>(child);
-                        fontPath = label.fontPath;
+                        fontPath = label.fontRef.resolve();
                         if (fontSize <= 0.0f) fontSize = label.fontSize;
                         break;
                     }
@@ -402,7 +402,7 @@ namespace controllers::offscreen
                 continue;
 
             const auto& imageComp = view.get<components::UIImageComponent>(entity);
-            if (imageComp.texturePath.empty())
+            if (!imageComp.textureRef.isValid())
                 continue;
 
             auto canvasInfo = findCanvasWithEntity(registry, entity);
@@ -424,7 +424,7 @@ namespace controllers::offscreen
                 render::mesh::UICanvasImageRenderData renderData;
                 renderData.modelMatrix = computeCanvasImageModelMatrix(
                     *canvasInfo.canvas, worldTransform.worldMatrix, rectComp);
-                renderData.texturePath = imageComp.texturePath;
+                renderData.texturePath = imageComp.textureRef.resolve();
                 renderData.colorTint = imageComp.colorTint;
                 drawList.push_back(std::move(renderData));
             }
@@ -450,7 +450,7 @@ namespace controllers::offscreen
                     imageComp.border,
                     imageComp.sourceWidth, imageComp.sourceHeight,
                     imageComp.colorTint, glm::vec4(0.0f),
-                    imageComp.texturePath, imageComp.imageType,
+                    imageComp.textureRef.resolve(), imageComp.imageType,
                     sliceData);
 
                 for (const auto& slice : sliceData)
@@ -462,7 +462,7 @@ namespace controllers::offscreen
                     renderData.modelMatrix = computeCanvasSubRectModelMatrix(
                         canvas, worldTransform.worldMatrix,
                         patchCX, patchCY, slice.size.x, slice.size.y);
-                    renderData.texturePath = imageComp.texturePath;
+                    renderData.texturePath = imageComp.textureRef.resolve();
                     renderData.colorTint = imageComp.colorTint;
                     renderData.uvRect = slice.uvRect;
                     drawList.push_back(std::move(renderData));
@@ -497,7 +497,7 @@ namespace controllers::offscreen
                 continue;
 
             const auto& labelComp = view.get<components::UILabelComponent>(entity);
-            if (labelComp.text.empty() || labelComp.fontPath.empty())
+            if (labelComp.text.empty() || !labelComp.fontRef.isValid())
                 continue;
 
             auto canvasInfo = findCanvasWithEntity(registry, entity);
@@ -513,7 +513,7 @@ namespace controllers::offscreen
                 *canvasInfo.canvas, worldTransform.worldMatrix, rectComp, labelComp);
 
             render::text::TextRenderData renderData;
-            renderData.fontPath = labelComp.fontPath;
+            renderData.fontPath = labelComp.fontRef.resolve();
             renderData.text = labelComp.text;
             renderData.worldPosition = params.worldPosition;
             renderData.fontSize = params.worldFontSize;

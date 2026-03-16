@@ -167,7 +167,7 @@ namespace controllers::offscreen
         {
             render::mesh::MeshRenderData renderData;
             renderData.entity = entity;
-            renderData.meshPath = meshComp.meshPath;
+            renderData.meshPath = meshComp.meshRef.resolve();
             renderData.modelMatrix = worldTransform.worldMatrix;
 
             renderData.albedo = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
@@ -183,9 +183,9 @@ namespace controllers::offscreen
             if (registry.all_of<components::MaterialComponent>(entity))
             {
                 const auto& materialComp = registry.get<components::MaterialComponent>(entity);
-                renderData.defaultMaterialPath = materialComp.defaultMaterial;
+                renderData.defaultMaterialPath = materialComp.defaultMaterialRef.resolve();
 
-                const auto* pbrValues = getCachedPBRValues(materialComp.defaultMaterial);
+                const auto* pbrValues = getCachedPBRValues(materialComp.defaultMaterialRef.resolve());
                 if (pbrValues)
                 {
                     renderData.albedo = pbrValues->albedo;
@@ -195,10 +195,10 @@ namespace controllers::offscreen
                     renderData.emission = pbrValues->emission;
                 }
 
-                for (const auto& [submeshName, materialPath] : materialComp.subMeshMaterials)
+                for (const auto& [submeshName, materialRef] : materialComp.subMeshMaterials)
                 {
                     render::mesh::SubMeshMaterialInfo matInfo;
-                    populateMaterialInfo(matInfo, materialPath);
+                    populateMaterialInfo(matInfo, materialRef.resolve());
                     renderData.submeshMaterials[submeshName] = matInfo;
                 }
             }
@@ -303,7 +303,7 @@ namespace controllers::offscreen
                 const auto& meshComp = view.get<components::MeshComponent>(entity);
                 const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
 
-                if (meshComp.meshPath.empty() || !meshPipeline->isMeshLoaded(meshComp.meshPath))
+                if (!meshComp.meshRef.isValid() || !meshPipeline->isMeshLoaded(meshComp.meshRef.resolve()))
                 {
                     continue;
                 }
@@ -337,7 +337,7 @@ namespace controllers::offscreen
                 const auto& meshComp = registry.get<components::MeshComponent>(entity);
                 const auto& worldTransform = registry.get<components::WorldTransformComponent>(entity);
 
-                if (meshComp.meshPath.empty() || !meshPipeline->isMeshLoaded(meshComp.meshPath))
+                if (!meshComp.meshRef.isValid() || !meshPipeline->isMeshLoaded(meshComp.meshRef.resolve()))
                 {
                     continue;
                 }
@@ -363,14 +363,14 @@ namespace controllers::offscreen
                 const auto& meshComp = view.get<components::MeshComponent>(entity);
                 const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
 
-                if (meshComp.meshPath.empty() || !meshPipeline->isMeshLoaded(meshComp.meshPath))
+                if (!meshComp.meshRef.isValid() || !meshPipeline->isMeshLoaded(meshComp.meshRef.resolve()))
                 {
                     continue;
                 }
 
                 if (frustumReady)
                 {
-                    const math::AABB* boundingBox = meshPipeline->getMeshBoundingBox(meshComp.meshPath);
+                    const math::AABB* boundingBox = meshPipeline->getMeshBoundingBox(meshComp.meshRef.resolve());
                     if (boundingBox && !activeFrustum->intersectsAABB(*boundingBox, worldTransform.worldMatrix))
                     {
                         continue;
@@ -433,7 +433,7 @@ namespace controllers::offscreen
             renderData.sizeMode = static_cast<uint32_t>(billboard.sizeMode);
             renderData.entityId = static_cast<uint32_t>(entity);
             renderData.colorTint = billboard.colorTint;
-            renderData.texturePath = billboard.texturePath;
+            renderData.texturePath = billboard.textureRef.resolve();
 
             if (billboard.renderTextureSource != entt::null
                 && registry.valid(billboard.renderTextureSource)
@@ -473,13 +473,13 @@ namespace controllers::offscreen
             const auto& textComp = view.get<components::TextComponent>(entity);
             const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
 
-            if (textComp.fontPath.empty() || textComp.text.empty())
+            if (!textComp.fontRef.isValid() || textComp.text.empty())
             {
                 continue;
             }
 
             render::text::TextRenderData renderData;
-            renderData.fontPath = textComp.fontPath;
+            renderData.fontPath = textComp.fontRef.resolve();
             renderData.text = textComp.text;
             renderData.worldPosition = glm::vec3(worldTransform.worldMatrix[3]);
             renderData.fontSize = textComp.fontSize;
@@ -599,9 +599,9 @@ namespace controllers::offscreen
             renderData.worldMatrix = decalWorldMatrix;
             renderData.inverseWorldMatrix = glm::inverse(decalWorldMatrix);
             renderData.halfExtents = decal.halfExtents;
-            renderData.albedoTexture = decal.albedoTexture;
-            renderData.normalTexture = decal.normalTexture;
-            renderData.ormTexture = decal.ormTexture;
+            renderData.albedoTexture = decal.albedoTextureRef.resolve();
+            renderData.normalTexture = decal.normalTextureRef.resolve();
+            renderData.ormTexture = decal.ormTextureRef.resolve();
             renderData.color = decal.color;
             renderData.angleFadeStart = decal.angleFadeStart;
             renderData.angleFadeEnd = decal.angleFadeEnd;

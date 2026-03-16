@@ -4,6 +4,7 @@
 #include <vector>
 #include <cstdint>
 #include <entt/entt.hpp>
+#include "../asset/AssetRef.hpp"
 
 namespace components
 {
@@ -39,7 +40,7 @@ namespace components
 
     struct UIImageComponent
     {
-        std::string texturePath;
+        asset::AssetRef textureRef;
         glm::vec4 colorTint{1.0f, 1.0f, 1.0f, 1.0f};
         entt::entity renderTextureSource = entt::null;
         std::string renderTextureSourceName;
@@ -134,7 +135,7 @@ namespace components
     struct UILabelComponent
     {
         std::string text = "Label";
-        std::string fontPath;
+        asset::AssetRef fontRef;
         float fontSize = 16.0f;
         FontStyle fontStyle = FontStyle::Normal;
         glm::vec4 color{1.0f, 1.0f, 1.0f, 1.0f};
@@ -162,11 +163,11 @@ namespace components
         glm::vec4 pressedColor{0.7f, 0.7f, 0.7f, 1.0f};
         glm::vec4 disabledColor{0.5f, 0.5f, 0.5f, 0.5f};
 
-        // Per-state texture paths (empty = use color only)
-        std::string normalTexture;
-        std::string hoverTexture;
-        std::string pressedTexture;
-        std::string disabledTexture;
+        // Per-state texture refs (invalid = use color only)
+        asset::AssetRef normalTextureRef;
+        asset::AssetRef hoverTextureRef;
+        asset::AssetRef pressedTextureRef;
+        asset::AssetRef disabledTextureRef;
 
         // Config
         float colorTransitionDuration = 0.1f;
@@ -190,7 +191,7 @@ namespace components
         // Config (serialized)
         std::string text;
         std::string placeholderText = "Enter text...";
-        std::string fontPath;
+        asset::AssetRef fontRef;
         float fontSize = 16.0f;
         glm::vec4 textColor{1.0f, 1.0f, 1.0f, 1.0f};
         glm::vec4 placeholderColor{0.5f, 0.5f, 0.5f, 0.7f};
@@ -244,11 +245,11 @@ namespace components
         glm::vec4 hoveredColor{0.9f, 0.9f, 0.9f, 1.0f};
         glm::vec4 disabledColor{0.5f, 0.5f, 0.5f, 0.5f};
 
-        // Per-state texture paths (empty = use color only)
-        std::string uncheckedTexture;
-        std::string checkedTexture;
-        std::string hoveredTexture;
-        std::string disabledTexture;
+        // Per-state texture refs (invalid = use color only)
+        asset::AssetRef uncheckedTextureRef;
+        asset::AssetRef checkedTextureRef;
+        asset::AssetRef hoveredTextureRef;
+        asset::AssetRef disabledTextureRef;
 
         // Config
         float colorTransitionDuration = 0.1f;
@@ -271,7 +272,7 @@ namespace components
     struct DropdownOption
     {
         std::string text;
-        std::string iconPath; // optional .vfImage path, empty = no icon
+        asset::AssetRef iconRef; // optional .vfImage asset, invalid = no icon
     };
 
     struct UIDropdownComponent
@@ -295,7 +296,7 @@ namespace components
         glm::vec4 itemHoveredColor{0.3f, 0.5f, 0.8f, 0.5f};
 
         // Font settings
-        std::string fontPath;
+        asset::AssetRef fontRef;
         float fontSize = 16.0f;
 
         float colorTransitionDuration = 0.1f;
@@ -359,14 +360,14 @@ namespace components
         glm::vec4 handleHoveredColor{0.9f, 0.9f, 0.9f, 1.0f};
         glm::vec4 handlePressedColor{0.7f, 0.7f, 0.7f, 1.0f};
         glm::vec4 handleDisabledColor{0.5f, 0.5f, 0.5f, 0.5f};
-        std::string handleNormalTexture;
-        std::string handleHoveredTexture;
-        std::string handlePressedTexture;
-        std::string handleDisabledTexture;
+        asset::AssetRef handleNormalTextureRef;
+        asset::AssetRef handleHoveredTextureRef;
+        asset::AssetRef handlePressedTextureRef;
+        asset::AssetRef handleDisabledTextureRef;
 
         // Fill appearance (serialized)
         glm::vec4 fillColor{0.3f, 0.5f, 0.8f, 1.0f};
-        std::string fillTexture;
+        asset::AssetRef fillTextureRef;
 
         // Config (serialized)
         float colorTransitionDuration = 0.1f;
@@ -395,11 +396,11 @@ namespace components
 
         // Track appearance (serialized)
         glm::vec4 trackColor{0.2f, 0.2f, 0.2f, 1.0f};
-        std::string trackTexture;
+        asset::AssetRef trackTextureRef;
 
         // Fill appearance (serialized)
         glm::vec4 fillColor{0.3f, 0.5f, 0.8f, 1.0f};
-        std::string fillTexture;
+        asset::AssetRef fillTextureRef;
 
         // Runtime state (NOT serialized)
         float displayValue = 0.0f;
@@ -467,7 +468,7 @@ namespace components
 
     struct UIMaskComponent
     {
-        std::string maskTexturePath;  // alpha texture used as mask shape
+        asset::AssetRef maskTextureRef;  // alpha texture used as mask shape
         float alphaThreshold = 0.5f;
         bool showMaskGraphic = false; // render the mask shape visually
     };

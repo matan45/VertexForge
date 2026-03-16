@@ -9,6 +9,8 @@
 #include <vfx/VFXShapeConfigLoader.hpp>
 #include <providers/vfx/IVFXPreviewProvider.hpp>
 #include "imgui.h"
+#include "events/EventDispatcher.hpp"
+#include "events/project/ResourceEvents.hpp"
 #include <filesystem>
 #include <algorithm>
 
@@ -72,6 +74,9 @@ namespace windows
         {
             isDirty = false;
             vfLogInfo("VFX saved: {}", vfxPath);
+            events::resource::AssetSavedNotification assetNotif;
+            assetNotif.filePath = vfxPath;
+            events::EventDispatcher::instance().publish(assetNotif);
         }
         else
         {

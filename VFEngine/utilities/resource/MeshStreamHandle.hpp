@@ -17,6 +17,8 @@ namespace resource
         std::streampos fileOffset = 0; // File position where this LOD data starts
         uint32_t vertexCount = 0;
         uint32_t indexCount = 0;
+        uint32_t encodedVertexBlobSize = 0; // 0 = uncompressed
+        uint32_t encodedIndexBlobSize = 0;  // 0 = uncompressed
     };
 
     struct LODMeshletFileInfo
@@ -43,6 +45,7 @@ namespace resource
     {
         FileType headerFileType = FileType::MESH;
         FileVersion version{};
+        uint32_t compressionFlags = 0;
         uint32_t numSubmeshes = 0;
         std::vector<SubmeshStreamInfo> submeshes;
 
@@ -68,8 +71,8 @@ namespace resource
         std::string filePath;
         bool hasMeshlets = false;       // True if file has meshlet data (v0.0.4+)
         bool hasConvexHulls = false;    // True if file has convex hull data (v0.0.5+)
-        bool has64ByteVertices = false; // True if file has 64-byte vertices with bone data (v0.0.7+)
         bool hasSkeleton = false;       // True if file has full skeleton data (v0.0.7+)
+        uint32_t compressionFlags = 0; // Mesh compression flags
         bool hasSockets = false;        // True if file has socket data after skeleton
         std::streampos socketDataOffset = 0; // File position where socket data starts (after skeleton)
         bool hasIKChains = false;       // True if file has IK chain data after sockets
@@ -104,7 +107,7 @@ namespace resource
 
         bool hasConvexData() const { return hasConvexHulls; }
 
-        bool hasBoneData() const { return has64ByteVertices; }
+        bool isCompressed() const { return compressionFlags != 0; }
 
         bool hasSkeletonData() const { return hasSkeleton; }
 
@@ -144,7 +147,6 @@ namespace resource
         static bool readLODFromFile(std::string_view path,
                                     const LODFileInfo& lodInfo,
                                     std::vector<Vertex>& outVertices,
-                                    std::vector<uint32_t>& outIndices,
-                                    bool hasBoneData = false);
+                                    std::vector<uint32_t>& outIndices);
     };
 }

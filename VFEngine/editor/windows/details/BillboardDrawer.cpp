@@ -4,6 +4,7 @@
 #include "events/EventDispatcher.hpp"
 #include "events/project/SceneEvents.hpp"
 #include "nfd/FileDialog.hpp"
+#include "asset/AssetRef.hpp"
 #include <imgui.h>
 #include <fstream>
 
@@ -102,9 +103,9 @@ namespace windows::details
     {
         bool changed = false;
 
-        if (!data.texturePath.empty())
+        if (data.textureRef.isValid())
         {
-            std::string filename = data.texturePath;
+            std::string filename = data.textureRef.resolve();
             auto lastSlash = filename.find_last_of("/\\");
             if (lastSlash != std::string::npos)
             {
@@ -128,7 +129,7 @@ namespace windows::details
                 if (file.good())
                 {
                     file.close();
-                    data.texturePath = path;
+                    data.textureRef = asset::AssetRef::fromPath(path);
                     changed = true;
                 }
                 else
@@ -139,11 +140,11 @@ namespace windows::details
         }
 
         ImGui::SameLine();
-        bool wasEmpty = data.texturePath.empty();
+        bool wasEmpty = !data.textureRef.isValid();
         if (wasEmpty) ImGui::BeginDisabled();
         if (ImGui::Button("Clear##BillboardTex"))
         {
-            data.texturePath = "";
+            data.textureRef = asset::AssetRef::invalid();
             changed = true;
         }
         if (wasEmpty) ImGui::EndDisabled();

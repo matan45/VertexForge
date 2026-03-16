@@ -1,6 +1,8 @@
 #include "MeshStreamHandle.hpp"
+#include "VertexQuantization.hpp"
 #include "../print/Log.hpp"
 #include "EndianUtils.hpp"
+#include <meshoptimizer.h>
 #include <filesystem>
 
 namespace resource
@@ -119,24 +121,68 @@ namespace resource
             return false;
         }
 
-        outVertices.resize(vertexCount);
-        for (uint32_t v = 0; v < vertexCount; ++v)
+        if (compressionFlags != 0)
         {
-            // Position
-            outVertices[v].position.x = endian::readLE<float>(file);
-            outVertices[v].position.y = endian::readLE<float>(file);
-            outVertices[v].position.z = endian::readLE<float>(file);
-            // Normal
-            outVertices[v].normal.x = endian::readLE<float>(file);
-            outVertices[v].normal.y = endian::readLE<float>(file);
-            outVertices[v].normal.z = endian::readLE<float>(file);
-            // TexCoords
-            outVertices[v].texCoords.x = endian::readLE<float>(file);
-            outVertices[v].texCoords.y = endian::readLE<float>(file);
+            // Read AABB
+            quantization::QuantizationAABB aabb;
+            aabb.min.x = endian::readLE<float>(file);
+            aabb.min.y = endian::readLE<float>(file);
+            aabb.min.z = endian::readLE<float>(file);
+            aabb.max.x = endian::readLE<float>(file);
+            aabb.max.y = endian::readLE<float>(file);
+            aabb.max.z = endian::readLE<float>(file);
 
-            // Bone data for v0.0.7+ files
-            if (has64ByteVertices)
+            // Read and decode vertex blob
+            uint32_t vertexBlobSize = endian::readLE<uint32_t>(file);
+            std::vector<unsigned char> vertexBlob(vertexBlobSize);
+            file.read(reinterpret_cast<char*>(vertexBlob.data()), vertexBlobSize);
+
+            std::vector<quantization::CompressedVertex> compressedVerts(vertexCount);
+            int decodeResult = meshopt_decodeVertexBuffer(
+                compressedVerts.data(), vertexCount,
+                sizeof(quantization::CompressedVertex),
+                vertexBlob.data(), vertexBlobSize);
+            if (decodeResult != 0)
             {
+                vfLogError("MeshStreamHandle: meshopt_decodeVertexBuffer failed for LOD {} submesh {}",
+                           lodLevel, submeshIdx);
+                return false;
+            }
+
+            // Dequantize to Vertex
+            quantization::dequantizeVertices(compressedVerts.data(), vertexCount, aabb, outVertices);
+
+            // Read and decode index blob
+            uint32_t indexCount = endian::readLE<uint32_t>(file);
+            uint32_t indexBlobSize = endian::readLE<uint32_t>(file);
+            std::vector<unsigned char> indexBlob(indexBlobSize);
+            file.read(reinterpret_cast<char*>(indexBlob.data()), indexBlobSize);
+
+            outIndices.resize(indexCount);
+            decodeResult = meshopt_decodeIndexBuffer(
+                outIndices.data(), indexCount,
+                indexBlob.data(), indexBlobSize);
+            if (decodeResult != 0)
+            {
+                vfLogError("MeshStreamHandle: meshopt_decodeIndexBuffer failed for LOD {} submesh {}",
+                           lodLevel, submeshIdx);
+                return false;
+            }
+        }
+        else
+        {
+            // Uncompressed path (legacy)
+            outVertices.resize(vertexCount);
+            for (uint32_t v = 0; v < vertexCount; ++v)
+            {
+                outVertices[v].position.x = endian::readLE<float>(file);
+                outVertices[v].position.y = endian::readLE<float>(file);
+                outVertices[v].position.z = endian::readLE<float>(file);
+                outVertices[v].normal.x = endian::readLE<float>(file);
+                outVertices[v].normal.y = endian::readLE<float>(file);
+                outVertices[v].normal.z = endian::readLE<float>(file);
+                outVertices[v].texCoords.x = endian::readLE<float>(file);
+                outVertices[v].texCoords.y = endian::readLE<float>(file);
                 outVertices[v].boneIndices.x = endian::readLE<int32_t>(file);
                 outVertices[v].boneIndices.y = endian::readLE<int32_t>(file);
                 outVertices[v].boneIndices.z = endian::readLE<int32_t>(file);
@@ -146,34 +192,14 @@ namespace resource
                 outVertices[v].boneWeights.z = endian::readLE<float>(file);
                 outVertices[v].boneWeights.w = endian::readLE<float>(file);
             }
-            else
-            {
-                // Default bone data for older file versions
-                outVertices[v].boneIndices = glm::ivec4(-1, -1, -1, -1);
-                outVertices[v].boneWeights = glm::vec4(0.0f, 0.0f, 0.0f, 0.0f);
-            }
 
-            if (file.fail())
-            {
-                vfLogError("MeshStreamHandle: Failed to read vertex {} of LOD {} submesh {}",
-                           v, lodLevel, submeshIdx);
-                return false;
-            }
+            uint32_t indexCount = endian::readLE<uint32_t>(file);
+            endian::readVectorLE<uint32_t>(file, outIndices, indexCount);
         }
-
-        uint32_t indexCount = endian::readLE<uint32_t>(file);
-        if (indexCount != lodInfo.indexCount)
-        {
-            vfLogError("MeshStreamHandle: Index count mismatch at LOD {} of submesh {}",
-                       lodLevel, submeshIdx);
-            return false;
-        }
-
-        endian::readVectorLE<uint32_t>(file, outIndices, indexCount);
 
         if (file.fail())
         {
-            vfLogError("MeshStreamHandle: Failed to read indices of LOD {} submesh {}",
+            vfLogError("MeshStreamHandle: Failed to read LOD {} submesh {}",
                        lodLevel, submeshIdx);
             return false;
         }
@@ -242,8 +268,7 @@ namespace resource
     bool MeshStreamResource::readLODFromFile(std::string_view path,
                                              const LODFileInfo& lodInfo,
                                              std::vector<Vertex>& outVertices,
-                                             std::vector<uint32_t>& outIndices,
-                                             bool hasBoneData)
+                                             std::vector<uint32_t>& outIndices)
     {
         std::ifstream file(std::string(path), std::ios::binary);
         if (!file)
@@ -267,24 +292,67 @@ namespace resource
             return false;
         }
 
-        outVertices.resize(vertexCount);
-        for (uint32_t v = 0; v < vertexCount; ++v)
-        {
-            // Position
-            outVertices[v].position.x = endian::readLE<float>(file);
-            outVertices[v].position.y = endian::readLE<float>(file);
-            outVertices[v].position.z = endian::readLE<float>(file);
-            // Normal
-            outVertices[v].normal.x = endian::readLE<float>(file);
-            outVertices[v].normal.y = endian::readLE<float>(file);
-            outVertices[v].normal.z = endian::readLE<float>(file);
-            // TexCoords
-            outVertices[v].texCoords.x = endian::readLE<float>(file);
-            outVertices[v].texCoords.y = endian::readLE<float>(file);
+        bool isCompressed = (lodInfo.encodedVertexBlobSize > 0);
 
-            // Bone data (v0.0.6+)
-            if (hasBoneData)
+        if (isCompressed)
+        {
+            // Read AABB
+            quantization::QuantizationAABB aabb;
+            aabb.min.x = endian::readLE<float>(file);
+            aabb.min.y = endian::readLE<float>(file);
+            aabb.min.z = endian::readLE<float>(file);
+            aabb.max.x = endian::readLE<float>(file);
+            aabb.max.y = endian::readLE<float>(file);
+            aabb.max.z = endian::readLE<float>(file);
+
+            // Read and decode vertex blob
+            uint32_t vertexBlobSize = endian::readLE<uint32_t>(file);
+            std::vector<unsigned char> vertexBlob(vertexBlobSize);
+            file.read(reinterpret_cast<char*>(vertexBlob.data()), vertexBlobSize);
+
+            std::vector<quantization::CompressedVertex> compressedVerts(vertexCount);
+            int decodeResult = meshopt_decodeVertexBuffer(
+                compressedVerts.data(), vertexCount,
+                sizeof(quantization::CompressedVertex),
+                vertexBlob.data(), vertexBlobSize);
+            if (decodeResult != 0)
             {
+                vfLogError("MeshStreamResource: meshopt_decodeVertexBuffer failed in {}", path);
+                return false;
+            }
+
+            quantization::dequantizeVertices(compressedVerts.data(), vertexCount, aabb, outVertices);
+
+            // Read and decode index blob
+            uint32_t indexCount = endian::readLE<uint32_t>(file);
+            uint32_t indexBlobSize = endian::readLE<uint32_t>(file);
+            std::vector<unsigned char> indexBlob(indexBlobSize);
+            file.read(reinterpret_cast<char*>(indexBlob.data()), indexBlobSize);
+
+            outIndices.resize(indexCount);
+            decodeResult = meshopt_decodeIndexBuffer(
+                outIndices.data(), indexCount,
+                indexBlob.data(), indexBlobSize);
+            if (decodeResult != 0)
+            {
+                vfLogError("MeshStreamResource: meshopt_decodeIndexBuffer failed in {}", path);
+                return false;
+            }
+        }
+        else
+        {
+            // Uncompressed path
+            outVertices.resize(vertexCount);
+            for (uint32_t v = 0; v < vertexCount; ++v)
+            {
+                outVertices[v].position.x = endian::readLE<float>(file);
+                outVertices[v].position.y = endian::readLE<float>(file);
+                outVertices[v].position.z = endian::readLE<float>(file);
+                outVertices[v].normal.x = endian::readLE<float>(file);
+                outVertices[v].normal.y = endian::readLE<float>(file);
+                outVertices[v].normal.z = endian::readLE<float>(file);
+                outVertices[v].texCoords.x = endian::readLE<float>(file);
+                outVertices[v].texCoords.y = endian::readLE<float>(file);
                 outVertices[v].boneIndices.x = endian::readLE<int32_t>(file);
                 outVertices[v].boneIndices.y = endian::readLE<int32_t>(file);
                 outVertices[v].boneIndices.z = endian::readLE<int32_t>(file);
@@ -294,33 +362,14 @@ namespace resource
                 outVertices[v].boneWeights.z = endian::readLE<float>(file);
                 outVertices[v].boneWeights.w = endian::readLE<float>(file);
             }
-            else
-            {
-                // Initialize with defaults for older file versions
-                outVertices[v].boneIndices = glm::ivec4(-1, -1, -1, -1);
-                outVertices[v].boneWeights = glm::vec4(0.0f, 0.0f, 0.0f, 0.0f);
-            }
 
-            if (file.fail())
-            {
-                vfLogError("MeshStreamResource: Failed to read vertex {} in {}", v, path);
-                return false;
-            }
+            uint32_t indexCount = endian::readLE<uint32_t>(file);
+            endian::readVectorLE<uint32_t>(file, outIndices, indexCount);
         }
-
-        uint32_t indexCount = endian::readLE<uint32_t>(file);
-        if (indexCount != lodInfo.indexCount)
-        {
-            vfLogError("MeshStreamResource: Index count mismatch: expected {}, got {} in {}",
-                       lodInfo.indexCount, indexCount, path);
-            return false;
-        }
-
-        endian::readVectorLE<uint32_t>(file, outIndices, indexCount);
 
         if (file.fail())
         {
-            vfLogError("MeshStreamResource: Failed to read indices in {}", path);
+            vfLogError("MeshStreamResource: Failed to read LOD data in {}", path);
             return false;
         }
 

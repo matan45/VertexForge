@@ -1,15 +1,20 @@
 #include "SceneSerialization.hpp"
 #include "../components/Components.hpp"
+#include "../asset/AssetRef.hpp"
 #include "../print/Log.hpp"
-
-static void cleanNullTerminators(std::string& str)
-{
-    if (auto pos = str.find('\0'); pos != std::string::npos)
-        str.resize(pos);
-}
 
 namespace serialization
 {
+    static asset::AssetRef readAssetRef(const json& j, const std::string& key)
+    {
+        if (auto it = j.find(key); it != j.end() && it->is_string())
+        {
+            std::string val = it->get<std::string>();
+            if (!val.empty()) return asset::AssetRef::fromHexString(val);
+        }
+        return asset::AssetRef::invalid();
+    }
+
     json SceneSerialization::serializeTransform(const components::TransformComponent& transform)
     {
         json j;
@@ -37,25 +42,19 @@ namespace serialization
     json SceneSerialization::serializeIBL(const components::IBLComponent& ibl)
     {
         json j;
-        std::string cleanFileName = ibl.fileName;
-        cleanNullTerminators(cleanFileName);
-        j["fileName"] = cleanFileName;
+        j["hdrRef"] = ibl.hdrRef.toHexString();
         return j;
     }
 
     json SceneSerialization::serializeMesh(const components::MeshComponent& mesh)
     {
         json j;
-        std::string cleanPath = mesh.meshPath;
-        cleanNullTerminators(cleanPath);
-        j["meshPath"] = cleanPath;
+        j["meshRef"] = mesh.meshRef.toHexString();
         j["showBoundingBox"] = mesh.showBoundingBox;
 
-        if (!mesh.animatorPath.empty())
+        if (mesh.animatorRef.isValid())
         {
-            std::string cleanAnimatorPath = mesh.animatorPath;
-            cleanNullTerminators(cleanAnimatorPath);
-            j["animatorPath"] = cleanAnimatorPath;
+            j["animatorRef"] = mesh.animatorRef.toHexString();
 
             if (mesh.applyRootMotion)
             {
@@ -110,29 +109,19 @@ namespace serialization
         camera.updateProjectionMatrix();
     }
 
-    std::string SceneSerialization::deserializeIBL(const json& j)
+    asset::AssetRef SceneSerialization::deserializeIBLRef(const json& j)
     {
-        if (auto it = j.find("fileName"); it != j.end() && it->is_string())
-        {
-            return it->get<std::string>();
-        }
-        return "";
+        return readAssetRef(j, "hdrRef");
     }
 
     void SceneSerialization::deserializeMesh(const json& j, components::MeshComponent& mesh)
     {
-        if (auto it = j.find("meshPath"); it != j.end() && it->is_string())
-        {
-            mesh.meshPath = it->get<std::string>();
-        }
+        mesh.meshRef = readAssetRef(j, "meshRef");
         if (auto it = j.find("showBoundingBox"); it != j.end() && it->is_boolean())
         {
             mesh.showBoundingBox = it->get<bool>();
         }
-        if (auto it = j.find("animatorPath"); it != j.end() && it->is_string())
-        {
-            mesh.animatorPath = it->get<std::string>();
-        }
+        mesh.animatorRef = readAssetRef(j, "animatorRef");
         if (auto it = j.find("applyRootMotion"); it != j.end() && it->is_boolean())
         {
             mesh.applyRootMotion = it->get<bool>();
@@ -147,16 +136,12 @@ namespace serialization
     {
         json j;
 
-        std::string cleanDefaultPath = material.defaultMaterial;
-        cleanNullTerminators(cleanDefaultPath);
-        j["defaultMaterial"] = cleanDefaultPath;
+        j["defaultMaterialRef"] = material.defaultMaterialRef.toHexString();
 
         json subMeshMaterialsJson = json::object();
-        for (const auto& [submeshName, matPath] : material.subMeshMaterials)
+        for (const auto& [submeshName, matRef] : material.subMeshMaterials)
         {
-            std::string cleanMatPath = matPath;
-            cleanNullTerminators(cleanMatPath);
-            subMeshMaterialsJson[submeshName] = cleanMatPath;
+            subMeshMaterialsJson[submeshName] = matRef.toHexString();
         }
         j["subMeshMaterials"] = subMeshMaterialsJson;
 
@@ -172,10 +157,7 @@ namespace serialization
 
     void SceneSerialization::deserializeMaterial(const json& j, components::MaterialComponent& material)
     {
-        if (auto it = j.find("defaultMaterial"); it != j.end() && it->is_string())
-        {
-            material.defaultMaterial = it->get<std::string>();
-        }
+        material.defaultMaterialRef = readAssetRef(j, "defaultMaterialRef");
 
         if (auto it = j.find("subMeshMaterials"); it != j.end() && it->is_object())
         {
@@ -184,7 +166,11 @@ namespace serialization
             {
                 if (value.is_string())
                 {
-                    material.subMeshMaterials[key] = value.get<std::string>();
+                    std::string val = value.get<std::string>();
+                    if (!val.empty())
+                    {
+                        material.subMeshMaterials[key] = asset::AssetRef::fromHexString(val);
+                    }
                 }
             }
         }
@@ -263,9 +249,9 @@ namespace serialization
         });
         j["editorOnly"] = billboard.editorOnly;
         j["selectable"] = billboard.selectable;
-        if (!billboard.texturePath.empty())
+        if (billboard.textureRef.isValid())
         {
-            j["texturePath"] = billboard.texturePath;
+            j["textureRef"] = billboard.textureRef.toHexString();
         }
         if (!billboard.renderTextureSourceName.empty())
         {
@@ -292,7 +278,7 @@ namespace serialization
         }
         billboard.editorOnly = j.value("editorOnly", true);
         billboard.selectable = j.value("selectable", true);
-        billboard.texturePath = j.value("texturePath", std::string(""));
+        billboard.textureRef = readAssetRef(j, "textureRef");
         billboard.renderTextureSourceName = j.value("renderTextureSourceName", std::string(""));
         billboard.renderTextureSource = entt::null; // Resolved post-load
 
@@ -306,7 +292,7 @@ namespace serialization
     json SceneSerialization::serializeText(const components::TextComponent& text)
     {
         json j;
-        j["fontPath"] = text.fontPath;
+        j["fontRef"] = text.fontRef.toHexString();
         j["text"] = text.text;
         j["fontSize"] = text.fontSize;
         j["color"] = json::array({text.color.r, text.color.g, text.color.b, text.color.a});
@@ -318,7 +304,7 @@ namespace serialization
 
     void SceneSerialization::deserializeText(const json& j, components::TextComponent& text)
     {
-        text.fontPath = j.value("fontPath", std::string(""));
+        text.fontRef = readAssetRef(j, "fontRef");
         text.text = j.value("text", std::string("Hello World"));
         text.fontSize = j.value("fontSize", 32.0f);
         if (j.contains("color") && j["color"].is_array() && j["color"].size() >= 4)

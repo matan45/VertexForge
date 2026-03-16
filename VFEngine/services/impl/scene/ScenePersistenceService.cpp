@@ -256,10 +256,10 @@ namespace services
             if (root.hasComponent<components::IBLComponent>())
             {
                 const auto& ibl = root.getComponent<components::IBLComponent>();
-                if (!ibl.fileName.empty())
+                if (ibl.hdrRef.isValid())
                 {
                     events::render::SetIBLCommand setIblCmd;
-                    setIblCmd.hdrPath = ibl.fileName;
+                    setIblCmd.hdrPath = ibl.hdrRef.resolve();
                     dispatcher.execute(setIblCmd);
                 }
             }
@@ -267,10 +267,10 @@ namespace services
             if (root.hasComponent<components::NavmeshComponent>())
             {
                 const auto& navmeshComp = root.getComponent<components::NavmeshComponent>();
-                if (!navmeshComp.navmeshPath.empty())
+                if (navmeshComp.navmeshRef.isValid())
                 {
                     events::navmesh::LoadNavmeshCommand loadNavCmd;
-                    loadNavCmd.filePath = navmeshComp.navmeshPath;
+                    loadNavCmd.filePath = navmeshComp.navmeshRef.resolve();
                     dispatcher.execute(loadNavCmd);
                 }
             }
@@ -281,13 +281,13 @@ namespace services
             for (auto entity : meshView)
             {
                 const auto& meshComp = meshView.get<components::MeshComponent>(entity);
-                if (!meshComp.meshPath.empty())
+                if (meshComp.meshRef.isValid())
                 {
                     meshCount++;
                     events::scene::MeshDataChangedNotification meshNotif;
                     meshNotif.entity = internal::toHandle(entity);
-                    meshNotif.meshPath = meshComp.meshPath;
-                    meshNotif.animatorPath = meshComp.animatorPath;
+                    meshNotif.meshPath = meshComp.meshRef.resolve();
+                    meshNotif.animatorPath = meshComp.animatorRef.resolve();
                     dispatcher.publish(meshNotif);
                 }
             }
@@ -406,12 +406,12 @@ namespace services
                 if (entity.hasComponent<components::MeshComponent>())
                 {
                     const auto& meshComp = entity.getComponent<components::MeshComponent>();
-                    if (!meshComp.meshPath.empty())
+                    if (meshComp.meshRef.isValid())
                     {
                         events::scene::MeshDataChangedNotification meshNotif;
                         meshNotif.entity = internal::toHandle(entity.getHandle());
-                        meshNotif.meshPath = meshComp.meshPath;
-                        meshNotif.animatorPath = meshComp.animatorPath;
+                        meshNotif.meshPath = meshComp.meshRef.resolve();
+                        meshNotif.animatorPath = meshComp.animatorRef.resolve();
                         dispatcher.publish(meshNotif);
                     }
                 }

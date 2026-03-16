@@ -1,6 +1,7 @@
 #include "UIInteractionSystem.hpp"
 #include "FramePreparationSystem.hpp"  // for FrameContext
 #include "UICommon.hpp"
+#include "asset/AssetRef.hpp"
 #include "../../render/RenderPassHandler.hpp"
 #include "../../render/ui/UIRenderTypes.hpp"
 #include "scene/EntityRegistry.hpp"
@@ -213,25 +214,25 @@ namespace controllers::offscreen
                 imageComp.colorTint = comp.currentDisplayColor;
 
                 // Texture swap: pick per-state texture if defined
-                const std::string* stateTexture = nullptr;
+                const asset::AssetRef* stateTexture = nullptr;
                 switch (comp.currentState)
                 {
                 case components::UIButtonState::Hovered:
-                    if (!comp.hoverTexture.empty()) stateTexture = &comp.hoverTexture;
+                    if (comp.hoverTextureRef.isValid()) stateTexture = &comp.hoverTextureRef;
                     break;
                 case components::UIButtonState::Pressed:
-                    if (!comp.pressedTexture.empty()) stateTexture = &comp.pressedTexture;
+                    if (comp.pressedTextureRef.isValid()) stateTexture = &comp.pressedTextureRef;
                     break;
                 case components::UIButtonState::Disabled:
-                    if (!comp.disabledTexture.empty()) stateTexture = &comp.disabledTexture;
+                    if (comp.disabledTextureRef.isValid()) stateTexture = &comp.disabledTextureRef;
                     break;
                 default:
-                    if (!comp.normalTexture.empty()) stateTexture = &comp.normalTexture;
+                    if (comp.normalTextureRef.isValid()) stateTexture = &comp.normalTextureRef;
                     break;
                 }
 
                 if (stateTexture)
-                    imageComp.texturePath = *stateTexture;
+                    imageComp.textureRef = *stateTexture;
             }
         }
     }
@@ -467,29 +468,29 @@ namespace controllers::offscreen
                 imageComp.colorTint = comp.currentDisplayColor;
 
                 // Texture swap: pick per-state texture if defined
-                const std::string* stateTexture = nullptr;
+                const asset::AssetRef* stateTexture = nullptr;
                 switch (comp.currentState)
                 {
                 case components::UICheckboxState::Hovered:
-                    if (!comp.hoveredTexture.empty()) stateTexture = &comp.hoveredTexture;
+                    if (comp.hoveredTextureRef.isValid()) stateTexture = &comp.hoveredTextureRef;
                     break;
                 case components::UICheckboxState::Disabled:
-                    if (!comp.disabledTexture.empty()) stateTexture = &comp.disabledTexture;
+                    if (comp.disabledTextureRef.isValid()) stateTexture = &comp.disabledTextureRef;
                     break;
                 default: // Normal - pick based on checked state
                     if (comp.isChecked)
                     {
-                        if (!comp.checkedTexture.empty()) stateTexture = &comp.checkedTexture;
+                        if (comp.checkedTextureRef.isValid()) stateTexture = &comp.checkedTextureRef;
                     }
                     else
                     {
-                        if (!comp.uncheckedTexture.empty()) stateTexture = &comp.uncheckedTexture;
+                        if (comp.uncheckedTextureRef.isValid()) stateTexture = &comp.uncheckedTextureRef;
                     }
                     break;
                 }
 
                 if (stateTexture)
-                    imageComp.texturePath = *stateTexture;
+                    imageComp.textureRef = *stateTexture;
             }
         }
     }

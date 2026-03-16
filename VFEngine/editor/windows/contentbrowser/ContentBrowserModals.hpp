@@ -1,5 +1,6 @@
 #pragma once
 #include "data/EntityHandle.hpp"
+#include <asset/AssetGUID.hpp>
 #include <filesystem>
 #include <string>
 #include <functional>
@@ -38,7 +39,15 @@ namespace windows
         bool showRenameFileModal = false;
 
         bool showDeleteConfirmModal = false;
-        
+
+        bool showReferencesModal = false;
+        asset::AssetGUID referencesGuid;
+        std::string referencesAssetPath;
+
+        bool showDependenciesModal = false;
+        asset::AssetGUID dependenciesGuid;
+        std::string dependenciesAssetPath;
+
         bool showErrorModal = false;
         std::string errorTitle;
         std::string errorMessage;
@@ -73,6 +82,8 @@ namespace windows
         void drawSavePrefabModal(const fs::path& currentPath);
         void drawRenameModal(const fs::path& selectedFile);
         void drawDeleteModal(const fs::path& selectedFile);
+        void drawReferencesModal();
+        void drawDependenciesModal();
         void drawErrorModal();
 
         void createFolder(const fs::path& currentPath, const std::string& name);

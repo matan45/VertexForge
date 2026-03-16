@@ -1,5 +1,6 @@
 #pragma once
 #include "AssetTypes.hpp"
+#include "../asset/AssetGUID.hpp"
 #include <unordered_map>
 #include <vector>
 #include <mutex>
@@ -8,7 +9,7 @@
 
 namespace resource {
 
-	using ReleaseCallback = std::function<void(const std::string& path, AssetType type)>;
+	using ReleaseCallback = std::function<void(const asset::AssetGUID& guid, AssetType type)>;
 
 	class AssetLifecycleManager
 	{
@@ -18,24 +19,22 @@ namespace resource {
 		AssetLifecycleManager(const AssetLifecycleManager&) = delete;
 		AssetLifecycleManager& operator=(const AssetLifecycleManager&) = delete;
 
-		void acquire(const std::string& path, AssetType type, size_t estimatedMemoryBytes = 0);
-		void release(const std::string& path);
+		void acquire(const asset::AssetGUID& guid, AssetType type, size_t estimatedMemoryBytes = 0);
+		void release(const asset::AssetGUID& guid);
 		void tick(float deltaTime);
 
-		void forceRelease(const std::string& path);
+		void forceRelease(const asset::AssetGUID& guid);
 
-		// Dependency tracking: when parentPath is released, childPath is also released.
-		// The child gets an implicit acquire. Multiple parents can share the same child.
-		void addDependency(const std::string& parentPath, const std::string& childPath, AssetType childType);
-		void removeDependencies(const std::string& parentPath);
+		void addDependency(const asset::AssetGUID& parent, const asset::AssetGUID& child, AssetType childType);
+		void removeDependencies(const asset::AssetGUID& parent);
 
 		void setReleaseCallback(ReleaseCallback callback);
 
-		AssetEntry getAssetEntry(const std::string& path) const;
+		AssetEntry getAssetEntry(const asset::AssetGUID& guid) const;
 		std::vector<AssetEntry> getAllAssets() const;
 		std::vector<AssetEntry> getPendingReleases() const;
 
-		bool isTracked(const std::string& path) const;
+		bool isTracked(const asset::AssetGUID& guid) const;
 
 		void clear();
 
@@ -44,13 +43,13 @@ namespace resource {
 		~AssetLifecycleManager() = default;
 
 		struct DependencyInfo {
-			std::string childPath;
+			asset::AssetGUID child;
 			AssetType childType;
 		};
 
-		std::unordered_map<std::string, AssetEntry> registry;
-		std::vector<std::string> pendingReleaseQueue;
-		std::unordered_map<std::string, std::vector<DependencyInfo>> dependencies;
+		std::unordered_map<asset::AssetGUID, AssetEntry, asset::AssetGUID::Hash> registry;
+		std::vector<asset::AssetGUID> pendingReleaseQueue;
+		std::unordered_map<asset::AssetGUID, std::vector<DependencyInfo>, asset::AssetGUID::Hash> dependencies;
 
 		ReleaseCallback releaseCallback;
 

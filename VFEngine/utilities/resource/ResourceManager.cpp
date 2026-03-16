@@ -176,12 +176,12 @@ namespace resource
         return headerType;
     }
 
-    std::future<std::shared_ptr<TextureData>> ResourceManager::loadTextureAsync(std::string_view path)
+    std::future<std::shared_ptr<TextureData>> ResourceManager::loadTextureAsync(const asset::AssetRef& ref)
     {
         return loadResourceAsync<TextureData>(
-            path,
+            ref,
             textureCache,
-            [](std::string_view p) { return TextureResource::loadTexture(p); },
+            [](const std::string& p) { return TextureResource::loadTexture(p); },
             AssetType::Texture,
             [](const TextureData& tex) -> size_t {
                 size_t total = 0;
@@ -192,36 +192,36 @@ namespace resource
             });
     }
 
-    std::future<std::shared_ptr<HDRData>> ResourceManager::loadHDRAsync(std::string_view path)
+    std::future<std::shared_ptr<HDRData>> ResourceManager::loadHDRAsync(const asset::AssetRef& ref)
     {
         return loadResourceAsync<HDRData>(
-            path,
+            ref,
             hdrCache,
-            [](std::string_view p) { return TextureResource::loadHDR(p); },
+            [](const std::string& p) { return TextureResource::loadHDR(p); },
             AssetType::HDR,
             [](const HDRData& hdr) -> size_t {
-                return hdr.pixels.size() * sizeof(float);
+                return hdr.getDataSize();
             });
     }
 
-    std::future<std::shared_ptr<AudioData>> ResourceManager::loadAudioAsync(std::string_view path)
+    std::future<std::shared_ptr<AudioData>> ResourceManager::loadAudioAsync(const asset::AssetRef& ref)
     {
         return loadResourceAsync<AudioData>(
-            path,
+            ref,
             audioCache,
-            [](std::string_view p) { return AudioResource::loadAudio(p); },
+            [](const std::string& p) { return AudioResource::loadAudio(p); },
             AssetType::Audio,
             [](const AudioData& audio) -> size_t {
                 return audio.data.size() * sizeof(short);
             });
     }
 
-    std::future<std::shared_ptr<MeshesData>> ResourceManager::loadMeshAsync(std::string_view path)
+    std::future<std::shared_ptr<MeshesData>> ResourceManager::loadMeshAsync(const asset::AssetRef& ref)
     {
         return loadResourceAsync<MeshesData>(
-            path,
+            ref,
             meshCache,
-            [](std::string_view p) {
+            [](const std::string& p) {
                 return MeshStreamResource::loadAll(p);
             },
             AssetType::Mesh,
@@ -239,27 +239,52 @@ namespace resource
 
     std::future<std::shared_ptr<std::vector<ShaderModel>>> ResourceManager::loadShaderAsync(std::string_view path)
     {
-        return loadResourceAsync<std::vector<ShaderModel>>(
-            path,
-            shaderCache,
-            [](std::string_view p) { return ShaderResource::readShaderFile(p); });
+        if (auto resource = shaderCache[path.data()].lock()) {
+            return make_ready_future(resource);
+        }
+
+        return std::async(std::launch::async, [path = std::string(path)]() -> std::shared_ptr<std::vector<ShaderModel>> {
+            try {
+                if (path.empty()) {
+                    vfLogError("Empty path provided for shader loading");
+                    return nullptr;
+                }
+
+                auto resource = std::make_shared<std::vector<ShaderModel>>(ShaderResource::readShaderFile(path));
+
+                if (resource) {
+                    std::scoped_lock lock(cacheMutex);
+                    shaderCache[path] = resource;
+                }
+
+                return resource;
+            }
+            catch (const std::exception& e) {
+                vfLogError("Exception loading shader '{}': {}", path, e.what());
+                return nullptr;
+            }
+            catch (...) {
+                vfLogError("Unknown exception loading shader: {}", path);
+                return nullptr;
+            }
+        });
     }
 
-    std::future<std::shared_ptr<FontData>> ResourceManager::loadFontAsync(std::string_view path)
+    std::future<std::shared_ptr<FontData>> ResourceManager::loadFontAsync(const asset::AssetRef& ref)
     {
         return loadResourceAsync<FontData>(
-            path,
+            ref,
             fontCache,
-            [](std::string_view p) { return FontResource::loadFont(p); },
+            [](const std::string& p) { return FontResource::loadFont(p); },
             AssetType::Font);
     }
 
-    std::future<std::shared_ptr<AnimationData>> ResourceManager::loadAnimationAsync(std::string_view path)
+    std::future<std::shared_ptr<AnimationData>> ResourceManager::loadAnimationAsync(const asset::AssetRef& ref)
     {
         return loadResourceAsync<AnimationData>(
-            path,
+            ref,
             animationCache,
-            [](std::string_view p) { return AnimationResource::loadAnimation(p); },
+            [](const std::string& p) { return AnimationResource::loadAnimation(p); },
             AssetType::Animation);
     }
 
@@ -272,7 +297,7 @@ namespace resource
     void ResourceManager::cleanUp()
     {
         notifyThread();
-        cleanupCondition.notify_one(); // Notify the cleanup thread to wake up and exit.
+        cleanupCondition.notify_one();
         releaseResources();
     }
 
@@ -304,16 +329,23 @@ namespace resource
         vfLogInfo("All resource caches cleared");
     }
 
-    std::shared_ptr<material::MaterialData> ResourceManager::loadMaterial(std::string_view path)
+    std::shared_ptr<material::MaterialData> ResourceManager::loadMaterial(const asset::AssetRef& ref)
     {
+        auto guid = ref.getGUID();
         {
             std::scoped_lock lock(cacheMutex);
-            auto it = materialCache.find(std::string(path));
+            auto it = materialCache.find(guid);
             if (it != materialCache.end()) {
                 if (auto existing = it->second.lock()) {
                     return existing;
                 }
             }
+        }
+
+        std::string path = ref.resolve();
+        if (path.empty()) {
+            vfLogError("Failed to resolve material AssetRef: {}", guid.toString());
+            return nullptr;
         }
 
         auto result = material::MaterialAsset::load(path);
@@ -326,28 +358,35 @@ namespace resource
 
         {
             std::scoped_lock lock(cacheMutex);
-            materialCache[std::string(path)] = material;
+            materialCache[guid] = material;
         }
 
         return material;
     }
 
-    void ResourceManager::invalidateMaterialCache(std::string_view path)
+    void ResourceManager::invalidateMaterialCache(const asset::AssetRef& ref)
     {
         std::scoped_lock lock(cacheMutex);
-        materialCache.erase(std::string(path));
+        materialCache.erase(ref.getGUID());
     }
 
-    std::shared_ptr<material::MaterialInstanceData> ResourceManager::loadMaterialInstance(std::string_view path)
+    std::shared_ptr<material::MaterialInstanceData> ResourceManager::loadMaterialInstance(const asset::AssetRef& ref)
     {
+        auto guid = ref.getGUID();
         {
             std::scoped_lock lock(cacheMutex);
-            auto it = materialInstanceCache.find(std::string(path));
+            auto it = materialInstanceCache.find(guid);
             if (it != materialInstanceCache.end()) {
                 if (auto existing = it->second.lock()) {
                     return existing;
                 }
             }
+        }
+
+        std::string path = ref.resolve();
+        if (path.empty()) {
+            vfLogError("Failed to resolve material instance AssetRef: {}", guid.toString());
+            return nullptr;
         }
 
         auto result = material::MaterialInstanceAsset::load(path);
@@ -360,28 +399,35 @@ namespace resource
 
         {
             std::scoped_lock lock(cacheMutex);
-            materialInstanceCache[std::string(path)] = instance;
+            materialInstanceCache[guid] = instance;
         }
 
         return instance;
     }
 
-    void ResourceManager::invalidateMaterialInstanceCache(std::string_view path)
+    void ResourceManager::invalidateMaterialInstanceCache(const asset::AssetRef& ref)
     {
         std::scoped_lock lock(cacheMutex);
-        materialInstanceCache.erase(std::string(path));
+        materialInstanceCache.erase(ref.getGUID());
     }
 
-    std::shared_ptr<terrain::TerrainMaterialData> ResourceManager::loadTerrainMaterial(std::string_view path)
+    std::shared_ptr<terrain::TerrainMaterialData> ResourceManager::loadTerrainMaterial(const asset::AssetRef& ref)
     {
+        auto guid = ref.getGUID();
         {
             std::scoped_lock lock(cacheMutex);
-            auto it = terrainMaterialCache.find(std::string(path));
+            auto it = terrainMaterialCache.find(guid);
             if (it != terrainMaterialCache.end()) {
                 if (auto existing = it->second.lock()) {
                     return existing;
                 }
             }
+        }
+
+        std::string path = ref.resolve();
+        if (path.empty()) {
+            vfLogError("Failed to resolve terrain material AssetRef: {}", guid.toString());
+            return nullptr;
         }
 
         auto result = terrain::TerrainMaterialAsset::load(path);
@@ -394,114 +440,35 @@ namespace resource
 
         {
             std::scoped_lock lock(cacheMutex);
-            terrainMaterialCache[std::string(path)] = terrainMat;
+            terrainMaterialCache[guid] = terrainMat;
         }
 
         return terrainMat;
     }
 
-    void ResourceManager::invalidateTerrainMaterialCache(std::string_view path)
+    void ResourceManager::invalidateTerrainMaterialCache(const asset::AssetRef& ref)
     {
         std::scoped_lock lock(cacheMutex);
-        terrainMaterialCache.erase(std::string(path));
+        terrainMaterialCache.erase(ref.getGUID());
     }
 
-    void ResourceManager::migrateCache(const std::string& oldPath, const std::string& newPath)
+    std::shared_ptr<animator::AnimatorData> ResourceManager::loadAnimator(const asset::AssetRef& ref)
     {
-        std::scoped_lock lock(cacheMutex);
-
-        auto migrate = [&](auto& cache) {
-            auto it = cache.find(oldPath);
-            if (it != cache.end())
-            {
-                cache[newPath] = std::move(it->second);
-                cache.erase(it);
-            }
-        };
-
-        migrate(textureCache);
-        migrate(hdrCache);
-        migrate(audioCache);
-        migrate(meshCache);
-        migrate(shaderCache);
-        migrate(materialCache);
-        migrate(materialInstanceCache);
-        migrate(fontCache);
-        migrate(animationCache);
-        migrate(animatorCache);
-        migrate(terrainMaterialCache);
-    }
-
-    void ResourceManager::removeCacheEntry(const std::string& path)
-    {
-        std::scoped_lock lock(cacheMutex);
-
-        textureCache.erase(path);
-        hdrCache.erase(path);
-        audioCache.erase(path);
-        meshCache.erase(path);
-        shaderCache.erase(path);
-        materialCache.erase(path);
-        materialInstanceCache.erase(path);
-        fontCache.erase(path);
-        animationCache.erase(path);
-        animatorCache.erase(path);
-        terrainMaterialCache.erase(path);
-
-        AssetLifecycleManager::instance().forceRelease(path);
-    }
-
-    void ResourceManager::migrateCachePrefix(const std::string& oldPrefix, const std::string& newPrefix)
-    {
-        std::scoped_lock lock(cacheMutex);
-
-        auto migratePrefix = [&](auto& cache) {
-            std::vector<std::pair<std::string, typename std::remove_reference_t<decltype(cache)>::mapped_type>> toInsert;
-            std::vector<std::string> toErase;
-
-            for (auto& [key, value] : cache)
-            {
-                if (key.starts_with(oldPrefix))
-                {
-                    std::string newKey = newPrefix + key.substr(oldPrefix.size());
-                    toInsert.emplace_back(std::move(newKey), std::move(value));
-                    toErase.push_back(key);
-                }
-            }
-
-            for (const auto& key : toErase)
-            {
-                cache.erase(key);
-            }
-            for (auto& [key, value] : toInsert)
-            {
-                cache[std::move(key)] = std::move(value);
-            }
-        };
-
-        migratePrefix(textureCache);
-        migratePrefix(hdrCache);
-        migratePrefix(audioCache);
-        migratePrefix(meshCache);
-        migratePrefix(shaderCache);
-        migratePrefix(materialCache);
-        migratePrefix(materialInstanceCache);
-        migratePrefix(fontCache);
-        migratePrefix(animationCache);
-        migratePrefix(animatorCache);
-        migratePrefix(terrainMaterialCache);
-    }
-
-    std::shared_ptr<animator::AnimatorData> ResourceManager::loadAnimator(std::string_view path)
-    {
+        auto guid = ref.getGUID();
         {
             std::scoped_lock lock(cacheMutex);
-            auto it = animatorCache.find(std::string(path));
+            auto it = animatorCache.find(guid);
             if (it != animatorCache.end()) {
                 if (auto existing = it->second.lock()) {
                     return existing;
                 }
             }
+        }
+
+        std::string path = ref.resolve();
+        if (path.empty()) {
+            vfLogError("Failed to resolve animator AssetRef: {}", guid.toString());
+            return nullptr;
         }
 
         auto result = animator::AnimatorAsset::load(path);
@@ -514,7 +481,7 @@ namespace resource
 
         {
             std::scoped_lock lock(cacheMutex);
-            animatorCache[std::string(path)] = animatorData;
+            animatorCache[guid] = animatorData;
         }
 
         return animatorData;

@@ -30,17 +30,11 @@ namespace resource
 
         hasMeshlets = true;
         hasConvexHulls = true;
-        has64ByteVertices = true;
 
         header.numSubmeshes = endian::readLE<uint32_t>(file);
 
-        {
-            uint32_t skeletonRefLength = endian::readLE<uint32_t>(file);
-            if (skeletonRefLength > 0)
-            {
-                file.seekg(skeletonRefLength, std::ios::cur);
-            }
-        }
+        compressionFlags = endian::readLE<uint32_t>(file);
+        header.compressionFlags = compressionFlags;
 
         if (file.fail())
         {
@@ -102,18 +96,39 @@ namespace resource
                         return false;
                     }
 
-                    size_t vertexSize = 64;
-                    file.seekg(lodInfo.vertexCount * vertexSize, std::ios::cur);
-
-                    lodInfo.indexCount = endian::readLE<uint32_t>(file);
-                    if (lodInfo.indexCount > maxIndexCount)
+                    if (compressionFlags != 0)
                     {
-                        vfLogError("MeshStreamHandle: Index count {} exceeds limit in submesh {} LOD {}",
-                                   lodInfo.indexCount, meshIdx, lodIdx);
-                        return false;
-                    }
+                        // Compressed format: skip AABB (24B) + read vertex blob size + skip blob
+                        file.seekg(24, std::ios::cur); // AABB: 6 floats
+                        lodInfo.encodedVertexBlobSize = endian::readLE<uint32_t>(file);
+                        file.seekg(lodInfo.encodedVertexBlobSize, std::ios::cur);
 
-                    file.seekg(lodInfo.indexCount * sizeof(uint32_t), std::ios::cur);
+                        lodInfo.indexCount = endian::readLE<uint32_t>(file);
+                        if (lodInfo.indexCount > maxIndexCount)
+                        {
+                            vfLogError("MeshStreamHandle: Index count {} exceeds limit in submesh {} LOD {}",
+                                       lodInfo.indexCount, meshIdx, lodIdx);
+                            return false;
+                        }
+
+                        lodInfo.encodedIndexBlobSize = endian::readLE<uint32_t>(file);
+                        file.seekg(lodInfo.encodedIndexBlobSize, std::ios::cur);
+                    }
+                    else
+                    {
+                        // Uncompressed format (legacy — won't be hit with version 1.0.1)
+                        file.seekg(lodInfo.vertexCount * 64, std::ios::cur);
+
+                        lodInfo.indexCount = endian::readLE<uint32_t>(file);
+                        if (lodInfo.indexCount > maxIndexCount)
+                        {
+                            vfLogError("MeshStreamHandle: Index count {} exceeds limit in submesh {} LOD {}",
+                                       lodInfo.indexCount, meshIdx, lodIdx);
+                            return false;
+                        }
+
+                        file.seekg(lodInfo.indexCount * sizeof(uint32_t), std::ios::cur);
+                    }
 
                     if (lodInfo.vertexCount == 0 && lodIdx > 0)
                     {

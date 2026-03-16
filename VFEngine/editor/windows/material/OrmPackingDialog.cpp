@@ -4,6 +4,7 @@
 #include <nfd/FileDialog.hpp>
 #include <events/EventDispatcher.hpp>
 #include <events/project/ResourceEvents.hpp>
+#include "TextureCompressor.hpp"
 #include "imgui.h"
 #include <filesystem>
 
@@ -153,6 +154,31 @@ namespace editor::materialeditor
             }
 
             ImGui::Spacing();
+
+            // Compression settings
+            ImGui::Text("Output Compression:");
+            ImGui::Indent();
+            {
+                const char* modeNames[] = {"Uncompressed", "BC (BC7)"};
+                int modeIndex = static_cast<int>(compressionMode);
+                if (ImGui::Combo("Mode", &modeIndex, modeNames, IM_ARRAYSIZE(modeNames)))
+                {
+                    compressionMode = static_cast<importConfig::TextureCompressionMode>(modeIndex);
+                }
+
+                if (compressionMode != importConfig::TextureCompressionMode::Uncompressed)
+                {
+                    const char* qualityNames[] = {"Fast", "Balanced", "Quality"};
+                    int qualityIndex = static_cast<int>(compressionQuality);
+                    if (ImGui::Combo("Quality", &qualityIndex, qualityNames, IM_ARRAYSIZE(qualityNames)))
+                    {
+                        compressionQuality = static_cast<importConfig::TextureCompressionQuality>(qualityIndex);
+                    }
+                }
+            }
+            ImGui::Unindent();
+
+            ImGui::Spacing();
             ImGui::Separator();
             ImGui::Spacing();
 
@@ -189,6 +215,30 @@ namespace editor::materialeditor
         input.metallicPath = metallicPath;
         input.outputPath = outputPath;
 
+        // Set up compression callback if compression is enabled.
+        // Only quality is captured — mode is only used here to gate whether compression
+        // happens at all. When enabled, ORM textures are always BC7 (LDR data).
+        auto quality = compressionQuality;
+        if (compressionMode != importConfig::TextureCompressionMode::Uncompressed)
+        {
+            input.compressCallback = [quality](resource::TextureData& textureData)
+            {
+                textureData.compressionFormat = resource::TextureCompressionFormat::BC7;
+
+                for (auto& mip : textureData.mipData)
+                {
+                    auto compressed = types::TextureCompressor::compressBC7(
+                        mip.data.data(), mip.width, mip.height, quality);
+
+                    if (!compressed.empty())
+                    {
+                        mip.dataSize = static_cast<uint32_t>(compressed.size());
+                        mip.data = std::move(compressed);
+                    }
+                }
+            };
+        }
+
         auto result = texture::OrmTexturePacker::packORM(
             input,
             [this](float p)
@@ -208,6 +258,8 @@ namespace editor::materialeditor
             services::ImportResult importResult;
             importResult.success = true;
             importResult.sourcePath = result.outputPath;
+            importResult.outputPath = result.outputPath;
+            importResult.assetType = resource::AssetType::Texture;
             notification.results.push_back(importResult);
             events::EventDispatcher::instance().publish(notification);
         }

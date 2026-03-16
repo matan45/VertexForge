@@ -113,6 +113,7 @@
     <ClInclude Include="events\animation\AnimationEventEvents.hpp" />
     <ClInclude Include="events\animation\AnimationPreviewEvents.hpp" />
     <ClInclude Include="events\animation\AnimatorEvents.hpp" />
+    <ClInclude Include="events\asset\AssetDatabaseEvents.hpp" />
     <ClInclude Include="events\audio\AudioBusEvents.hpp" />
     <ClInclude Include="events\audio\AudioEffectEvents.hpp" />
     <ClInclude Include="events\audio\AudioEvents.hpp" />
@@ -182,6 +183,7 @@
     <ClInclude Include="events\world\WorldSectorEvents.hpp" />
     <ClInclude Include="impl\ai\BehaviorTreePlayModeHandler.hpp" />
     <ClInclude Include="impl\ai\BehaviorTreeServiceImpl.hpp" />
+    <ClInclude Include="impl\asset\AssetDatabaseServiceImpl.hpp" />
     <ClInclude Include="impl\audio\AudioServiceImpl.hpp" />
     <ClInclude Include="impl\components\AnimatorComponentService.hpp" />
     <ClInclude Include="impl\components\AudioComponentService.hpp" />
@@ -252,6 +254,7 @@
     <ClInclude Include="impl\world\WorldSectorServiceImpl.hpp" />
     <ClInclude Include="interfaces\ai\IBehaviorTreeService.hpp" />
     <ClInclude Include="interfaces\animation\IAnimationService.hpp" />
+    <ClInclude Include="interfaces\asset\IAssetDatabaseService.hpp" />
     <ClInclude Include="interfaces\audio\IAudioService.hpp" />
     <ClInclude Include="interfaces\editor\IEditorModeService.hpp" />
     <ClInclude Include="interfaces\editor\ISculptModeService.hpp" />
@@ -327,6 +330,7 @@
     <ClCompile Include="events\EventDispatcher.cpp" />
     <ClCompile Include="impl\ai\BehaviorTreePlayModeHandler.cpp" />
     <ClCompile Include="impl\ai\BehaviorTreeServiceImpl.cpp" />
+    <ClCompile Include="impl\asset\AssetDatabaseServiceImpl.cpp" />
     <ClCompile Include="impl\audio\AudioServiceImpl.cpp" />
     <ClCompile Include="impl\components\AnimatorComponentService.cpp" />
     <ClCompile Include="impl\components\AudioComponentService.cpp" />

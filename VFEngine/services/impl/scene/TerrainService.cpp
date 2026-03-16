@@ -100,7 +100,7 @@ namespace services
         data.gridMaxX = comp.gridMaxX;
         data.gridMaxZ = comp.gridMaxZ;
         data.heightmapPath = comp.heightmapPath;
-        data.terrainMaterialPath = comp.terrainMaterialPath;
+        data.terrainMaterialPath = comp.terrainMaterialRef.resolve();
         data.weightMapPath = comp.weightMapPath;
         auto gridIt = terrainGrids.find(entity.id);
         data.tileCount = (gridIt != terrainGrids.end())
@@ -146,9 +146,9 @@ namespace services
         for (auto entity : view)
         {
             const auto& comp = view.get<components::TerrainComponent>(entity);
-            if (!comp.terrainMaterialPath.empty())
+            if (comp.terrainMaterialRef.isValid())
             {
-                return comp.terrainMaterialPath;
+                return comp.terrainMaterialRef.resolve();
             }
         }
         return {};
@@ -209,8 +209,8 @@ namespace services
             if (registry.valid(ent) && registry.all_of<components::TerrainComponent>(ent))
             {
                 const auto& comp = registry.get<components::TerrainComponent>(ent);
-                if (!comp.terrainMaterialPath.empty())
-                    resource::ResourceManager::invalidateTerrainMaterialCache(comp.terrainMaterialPath);
+                if (comp.terrainMaterialRef.isValid())
+                    resource::ResourceManager::invalidateTerrainMaterialCache(comp.terrainMaterialRef);
             }
 
             if (physicsProvider)
@@ -241,8 +241,8 @@ namespace services
             if (registry.valid(ent) && registry.all_of<components::TerrainComponent>(ent))
             {
                 const auto& comp = registry.get<components::TerrainComponent>(ent);
-                if (!comp.terrainMaterialPath.empty())
-                    resource::ResourceManager::invalidateTerrainMaterialCache(comp.terrainMaterialPath);
+                if (comp.terrainMaterialRef.isValid())
+                    resource::ResourceManager::invalidateTerrainMaterialCache(comp.terrainMaterialRef);
             }
         }
 

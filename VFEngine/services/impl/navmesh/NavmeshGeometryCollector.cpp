@@ -81,12 +81,12 @@ namespace services
             const auto& mesh = view.get<components::MeshComponent>(entity);
             const auto& transform = view.get<components::TransformComponent>(entity);
 
-            if (mesh.meshPath.empty())
+            if (!mesh.meshRef.isValid())
             {
                 continue;
             }
 
-            auto meshFuture = resource::ResourceManager::loadMeshAsync(mesh.meshPath);
+            auto meshFuture = resource::ResourceManager::loadMeshAsync(mesh.meshRef);
             auto meshesData = meshFuture.get();
 
             if (!meshesData || meshesData->meshes.empty())
@@ -202,12 +202,12 @@ namespace services
             else if (collider.shape == components::ColliderShape::ConvexMesh ||
                      collider.shape == components::ColliderShape::TriangleMesh)
             {
-                if (collider.meshPath.empty())
+                if (!collider.meshRef.isValid())
                 {
                     continue;
                 }
 
-                auto meshFuture = resource::ResourceManager::loadMeshAsync(collider.meshPath);
+                auto meshFuture = resource::ResourceManager::loadMeshAsync(collider.meshRef);
                 auto meshesData = meshFuture.get();
                 if (!meshesData || meshesData->meshes.empty())
                 {
@@ -340,10 +340,10 @@ namespace services
                 continue;
 
             const auto& mesh = view.get<components::MeshComponent>(entity);
-            if (mesh.meshPath.empty())
+            if (!mesh.meshRef.isValid())
                 continue;
 
-            auto meshFuture = resource::ResourceManager::loadMeshAsync(mesh.meshPath);
+            auto meshFuture = resource::ResourceManager::loadMeshAsync(mesh.meshRef);
             auto meshesData = meshFuture.get();
             if (!meshesData || meshesData->meshes.empty())
                 continue;
@@ -437,10 +437,10 @@ namespace services
             else if (collider.shape == components::ColliderShape::ConvexMesh ||
                      collider.shape == components::ColliderShape::TriangleMesh)
             {
-                if (collider.meshPath.empty())
+                if (!collider.meshRef.isValid())
                     continue;
 
-                auto meshFuture = resource::ResourceManager::loadMeshAsync(collider.meshPath);
+                auto meshFuture = resource::ResourceManager::loadMeshAsync(collider.meshRef);
                 auto meshesData = meshFuture.get();
                 if (!meshesData || meshesData->meshes.empty())
                     continue;

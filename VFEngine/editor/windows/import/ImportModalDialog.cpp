@@ -4,8 +4,27 @@
 #include "files/FileUtils.hpp"
 #include "Import.hpp"
 #include "config/Config.hpp"
+#include <resource/AssetTypes.hpp>
 #include <imgui.h>
 #include <thread>
+
+namespace
+{
+    resource::AssetType importFileTypeToAssetType(const std::string& fileType)
+    {
+        if (fileType == "PNG" || fileType == "JPEG" || fileType == "BMP" || fileType == "TGA")
+            return resource::AssetType::Texture;
+        if (fileType == "HDR" || fileType == "EXR")
+            return resource::AssetType::HDR;
+        if (fileType == "MP3" || fileType == "WAV" || fileType == "OGG")
+            return resource::AssetType::Audio;
+        if (fileType == "OBJ" || fileType == "FBX" || fileType == "DAE" || fileType == "GLTF" || fileType == "GLB")
+            return resource::AssetType::Mesh;
+        if (fileType == "TTF" || fileType == "OTF")
+            return resource::AssetType::Font;
+        return resource::AssetType::COUNT;
+    }
+}
 
 namespace windows
 {
@@ -171,6 +190,85 @@ namespace windows
                 ImGui::PopID();
             }
 
+            // Texture compression settings (shown once for all texture/HDR files)
+            bool hasTextureFiles = false;
+            for (const auto& f : files)
+            {
+                if (files::FileUtils::isTextureFile(f) || files::FileUtils::isHDRFile(f))
+                {
+                    hasTextureFiles = true;
+                    break;
+                }
+            }
+
+            if (hasTextureFiles)
+            {
+                ImGui::Separator();
+                ImGui::Text("Texture Compression:");
+                ImGui::Indent();
+
+                const char* modeNames[] = {"Uncompressed", "BC (BC7/BC6H)"};
+                int modeIndex = static_cast<int>(compressionMode);
+                if (ImGui::Combo("Compression Mode", &modeIndex, modeNames, IM_ARRAYSIZE(modeNames)))
+                {
+                    compressionMode = static_cast<importConfig::TextureCompressionMode>(modeIndex);
+                }
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("BC: Desktop standard (4-8x smaller)");
+
+                if (compressionMode != importConfig::TextureCompressionMode::Uncompressed)
+                {
+                    const char* qualityNames[] = {"Fast", "Balanced", "Quality"};
+                    int qualityIndex = static_cast<int>(compressionQuality);
+                    if (ImGui::Combo("Compression Quality", &qualityIndex, qualityNames, IM_ARRAYSIZE(qualityNames)))
+                    {
+                        compressionQuality = static_cast<importConfig::TextureCompressionQuality>(qualityIndex);
+                    }
+                    if (ImGui::IsItemHovered())
+                        ImGui::SetTooltip("Higher quality = slower import, better visual fidelity");
+                }
+
+                ImGui::Unindent();
+            }
+
+            // Audio compression settings (shown once for all audio files)
+            bool hasAudioFiles = false;
+            for (const auto& f : files)
+            {
+                if (files::FileUtils::isAudioFile(f))
+                {
+                    hasAudioFiles = true;
+                    break;
+                }
+            }
+
+            if (hasAudioFiles)
+            {
+                ImGui::Separator();
+                ImGui::Text("Audio Compression:");
+                ImGui::Indent();
+
+                const char* qualityNames[] = {"Low (~80kbps)", "Medium (~128kbps)", "High (~192kbps)", "Lossless (PCM)"};
+                int qualityIndex = static_cast<int>(audioQuality);
+                if (ImGui::Combo("Audio Quality", &qualityIndex, qualityNames, IM_ARRAYSIZE(qualityNames)))
+                {
+                    audioQuality = static_cast<importConfig::AudioCompressionQuality>(qualityIndex);
+                }
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Vorbis compression quality. Lossless stores raw PCM (no compression)");
+
+                const char* loadTypeNames[] = {"Auto", "Decompress on Load", "Streaming"};
+                int loadTypeIndex = static_cast<int>(audioLoadType);
+                if (ImGui::Combo("Load Type", &loadTypeIndex, loadTypeNames, IM_ARRAYSIZE(loadTypeNames)))
+                {
+                    audioLoadType = static_cast<importConfig::AudioLoadType>(loadTypeIndex);
+                }
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Auto: short audio (<10s) decompresses on load for low latency; long audio streams from disk");
+
+                ImGui::Unindent();
+            }
+
             if (ImGui::Button("Continue"))
             {
                 // Convert to Import controller format
@@ -182,6 +280,10 @@ namespace windows
                     importConfig::ImportConfig config;
                     config.isImageFlipVertically = req.flipVertically;
                     config.meshConfig = meshConfigs[i];
+                    config.compressionMode = compressionMode;
+                    config.compressionQuality = compressionQuality;
+                    config.audioConfig.quality = audioQuality;
+                    config.audioConfig.loadType = audioLoadType;
                     importFiles.emplace_back(req.path, config);
                     filePaths.push_back(req.path);
                 }
@@ -216,6 +318,8 @@ namespace windows
                     {
                         services::ImportResult res;
                         res.sourcePath = fileResult.sourcePath;
+                        res.outputPath = fileResult.outputPath;
+                        res.assetType = importFileTypeToAssetType(fileResult.fileType);
                         res.success = fileResult.success;
                         res.errorMessage = fileResult.errorMessage;
                         completeNotif.results.push_back(res);

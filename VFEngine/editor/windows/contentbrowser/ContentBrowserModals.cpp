@@ -5,6 +5,8 @@
 #include "events/EventDispatcher.hpp"
 #include "events/project/SceneEvents.hpp"
 #include "events/project/FileOperationsEvents.hpp"
+#include "events/asset/AssetDatabaseEvents.hpp"
+#include "events/project/ResourceEvents.hpp"
 #include "../../fileops/AsyncFileOperations.hpp"
 #include <material/MaterialAsset.hpp>
 #include <animator/AnimatorAsset.hpp>
@@ -104,6 +106,18 @@ namespace windows
         }
         drawDeleteModal(selectedFile);
 
+        if (showReferencesModal)
+        {
+            ImGui::OpenPopup("Asset References");
+        }
+        drawReferencesModal();
+
+        if (showDependenciesModal)
+        {
+            ImGui::OpenPopup("Asset Dependencies");
+        }
+        drawDependenciesModal();
+
         if (showErrorModal)
         {
             ImGui::OpenPopup("Error##FileOpsError");
@@ -180,6 +194,39 @@ namespace windows
             {
                 showDeleteConfirmModal = true;
             }
+
+            ImGui::Separator();
+
+            // Asset Database actions
+            if (hasSelection)
+            {
+                std::string selectedPath = StringUtil::wstringToUtf8(selectedFile.wstring());
+                // Try to get GUID, auto-register if not tracked
+                auto ref = asset::AssetRef::fromPath(selectedPath);
+
+                if (ref.isValid())
+                {
+                    if (ImGui::MenuItem("Copy GUID"))
+                    {
+                        ImGui::SetClipboardText(ref.getGUID().toString().c_str());
+                    }
+
+                    if (ImGui::MenuItem("Find References"))
+                    {
+                        showReferencesModal = true;
+                        referencesGuid = ref.getGUID();
+                        referencesAssetPath = selectedPath;
+                    }
+
+                    if (ImGui::MenuItem("Show Dependencies"))
+                    {
+                        showDependenciesModal = true;
+                        dependenciesGuid = ref.getGUID();
+                        dependenciesAssetPath = selectedPath;
+                    }
+                }
+            }
+
             ImGui::EndPopup();
         }
     }
@@ -265,6 +312,9 @@ namespace windows
                     auto defaultMat = material::MaterialAsset::createDefault(newMaterialName);
                     if (material::MaterialAsset::save(pathStr, defaultMat))
                     {
+                        events::resource::AssetSavedNotification assetNotif;
+                        assetNotif.filePath = pathStr;
+                        events::EventDispatcher::instance().publish(assetNotif);
                         if (refreshCallback) refreshCallback();
                     }
                 }
@@ -312,6 +362,9 @@ namespace windows
                     auto defaultAnimator = animator::AnimatorAsset::createDefault(newAnimatorName);
                     if (animator::AnimatorAsset::save(pathStr, defaultAnimator))
                     {
+                        events::resource::AssetSavedNotification assetNotif;
+                        assetNotif.filePath = pathStr;
+                        events::EventDispatcher::instance().publish(assetNotif);
                         if (refreshCallback) refreshCallback();
                     }
                 }
@@ -359,6 +412,9 @@ namespace windows
                     auto defaultVFX = vfx::VFXAsset::createDefault(newVFXName);
                     if (vfx::VFXAsset::save(pathStr, defaultVFX))
                     {
+                        events::resource::AssetSavedNotification assetNotif;
+                        assetNotif.filePath = pathStr;
+                        events::EventDispatcher::instance().publish(assetNotif);
                         if (refreshCallback) refreshCallback();
                     }
                 }
@@ -406,6 +462,9 @@ namespace windows
                     auto defaultMat = terrain::TerrainMaterialAsset::createDefault(newTerrainMaterialName);
                     if (terrain::TerrainMaterialAsset::save(pathStr, defaultMat))
                     {
+                        events::resource::AssetSavedNotification assetNotif;
+                        assetNotif.filePath = pathStr;
+                        events::EventDispatcher::instance().publish(assetNotif);
                         if (refreshCallback) refreshCallback();
                     }
                 }
@@ -453,6 +512,9 @@ namespace windows
                     auto defaultBT = behaviortree::BehaviorTreeAsset::createDefault(newBehaviorTreeName);
                     if (behaviortree::BehaviorTreeAsset::save(pathStr, defaultBT))
                     {
+                        events::resource::AssetSavedNotification assetNotif;
+                        assetNotif.filePath = pathStr;
+                        events::EventDispatcher::instance().publish(assetNotif);
                         if (refreshCallback) refreshCallback();
                     }
                 }
@@ -605,6 +667,102 @@ namespace windows
             {
                 ImGui::CloseCurrentPopup();
                 showDeleteConfirmModal = false;
+            }
+            ImGui::EndPopup();
+        }
+    }
+
+    void ContentBrowserModals::drawReferencesModal()
+    {
+        if (showReferencesModal &&
+            ImGui::BeginPopupModal("Asset References", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        {
+            ImGui::Text("References to: %s", referencesAssetPath.c_str());
+            ImGui::Text("GUID: %s", referencesGuid.toString().c_str());
+            ImGui::Separator();
+
+            auto& dispatcher = events::EventDispatcher::instance();
+            events::assetdb::GetAssetDependentsQuery depsQuery;
+            depsQuery.guid = referencesGuid;
+            auto dependentGuids = dispatcher.query(depsQuery);
+
+            if (dependentGuids.empty())
+            {
+                ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "No assets reference this file.");
+            }
+            else
+            {
+                ImGui::Text("%zu asset(s) reference this file:", dependentGuids.size());
+                ImGui::BeginChild("ReferencesList", ImVec2(500, 200), true);
+                for (const auto& depGuid : dependentGuids)
+                {
+                    events::assetdb::GetAssetPathQuery pathQuery;
+                    pathQuery.guid = depGuid;
+                    auto pathOpt = dispatcher.query(pathQuery);
+                    if (pathOpt)
+                    {
+                        ImGui::BulletText("%s", pathOpt->c_str());
+                    }
+                }
+                ImGui::EndChild();
+            }
+
+            ImGui::Spacing();
+            float buttonWidth = 120.0f;
+            float windowWidth = ImGui::GetWindowWidth();
+            ImGui::SetCursorPosX((windowWidth - buttonWidth) * 0.5f);
+            if (ImGui::Button("Close", ImVec2(buttonWidth, 0)))
+            {
+                ImGui::CloseCurrentPopup();
+                showReferencesModal = false;
+            }
+            ImGui::EndPopup();
+        }
+    }
+
+    void ContentBrowserModals::drawDependenciesModal()
+    {
+        if (showDependenciesModal &&
+            ImGui::BeginPopupModal("Asset Dependencies", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        {
+            ImGui::Text("Dependencies of: %s", dependenciesAssetPath.c_str());
+            ImGui::Text("GUID: %s", dependenciesGuid.toString().c_str());
+            ImGui::Separator();
+
+            auto& dispatcher = events::EventDispatcher::instance();
+            events::assetdb::GetAssetDependenciesQuery depsQuery;
+            depsQuery.guid = dependenciesGuid;
+            auto depGuids = dispatcher.query(depsQuery);
+
+            if (depGuids.empty())
+            {
+                ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "This asset has no dependencies.");
+            }
+            else
+            {
+                ImGui::Text("This asset depends on %zu asset(s):", depGuids.size());
+                ImGui::BeginChild("DependenciesList", ImVec2(500, 200), true);
+                for (const auto& depGuid : depGuids)
+                {
+                    events::assetdb::GetAssetPathQuery pathQuery;
+                    pathQuery.guid = depGuid;
+                    auto pathOpt = dispatcher.query(pathQuery);
+                    if (pathOpt)
+                    {
+                        ImGui::BulletText("%s", pathOpt->c_str());
+                    }
+                }
+                ImGui::EndChild();
+            }
+
+            ImGui::Spacing();
+            float buttonWidth = 120.0f;
+            float windowWidth = ImGui::GetWindowWidth();
+            ImGui::SetCursorPosX((windowWidth - buttonWidth) * 0.5f);
+            if (ImGui::Button("Close", ImVec2(buttonWidth, 0)))
+            {
+                ImGui::CloseCurrentPopup();
+                showDependenciesModal = false;
             }
             ImGui::EndPopup();
         }

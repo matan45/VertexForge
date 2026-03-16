@@ -1,7 +1,9 @@
 #include "print/Log.hpp"
 #include "MeshSerializer.hpp"
 #include "resource/EndianUtils.hpp"
+#include "resource/VertexQuantization.hpp"
 
+#include <meshoptimizer.h>
 #include <algorithm>
 
 namespace
@@ -61,6 +63,49 @@ namespace types
             std::vector<uint32_t> indexChunk(lodMesh.indices.begin() + i, lodMesh.indices.begin() + chunkEnd);
             resource::endian::writeVectorLE<uint32_t>(outFile, indexChunk);
         }
+    }
+
+    void MeshSerializer::writeLODLevelCompressed(std::ofstream& outFile, const LODMeshData& lodMesh) const
+    {
+        uint32_t vertexCount = static_cast<uint32_t>(lodMesh.vertices.size());
+        resource::endian::writeLE<uint32_t>(outFile, vertexCount);
+
+        // Compute and write AABB
+        auto aabb = resource::quantization::computeAABB(lodMesh.vertices);
+        resource::endian::writeLE<float>(outFile, aabb.min.x);
+        resource::endian::writeLE<float>(outFile, aabb.min.y);
+        resource::endian::writeLE<float>(outFile, aabb.min.z);
+        resource::endian::writeLE<float>(outFile, aabb.max.x);
+        resource::endian::writeLE<float>(outFile, aabb.max.y);
+        resource::endian::writeLE<float>(outFile, aabb.max.z);
+
+        // Quantize vertices
+        auto compressed = resource::quantization::quantizeVertices(lodMesh.vertices, aabb);
+
+        // Encode vertex buffer with meshoptimizer
+        size_t vertexBufBound = meshopt_encodeVertexBufferBound(vertexCount, sizeof(resource::quantization::CompressedVertex));
+        std::vector<unsigned char> vertexBlob(vertexBufBound);
+        size_t vertexBlobSize = meshopt_encodeVertexBuffer(
+            vertexBlob.data(), vertexBlob.size(),
+            compressed.data(), vertexCount,
+            sizeof(resource::quantization::CompressedVertex));
+
+        resource::endian::writeLE<uint32_t>(outFile, static_cast<uint32_t>(vertexBlobSize));
+        outFile.write(reinterpret_cast<const char*>(vertexBlob.data()), vertexBlobSize);
+
+        // Write index data
+        uint32_t indexCount = static_cast<uint32_t>(lodMesh.indices.size());
+        resource::endian::writeLE<uint32_t>(outFile, indexCount);
+
+        // Encode index buffer with meshoptimizer
+        size_t indexBufBound = meshopt_encodeIndexBufferBound(indexCount, vertexCount);
+        std::vector<unsigned char> indexBlob(indexBufBound);
+        size_t indexBlobSize = meshopt_encodeIndexBuffer(
+            indexBlob.data(), indexBlob.size(),
+            lodMesh.indices.data(), indexCount);
+
+        resource::endian::writeLE<uint32_t>(outFile, static_cast<uint32_t>(indexBlobSize));
+        outFile.write(reinterpret_cast<const char*>(indexBlob.data()), indexBlobSize);
     }
 
     void MeshSerializer::writeMeshletData(std::ofstream& outFile,

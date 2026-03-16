@@ -1,4 +1,5 @@
 #include "MaterialPreviewController.hpp"
+#include "asset/AssetRef.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/BufferUtilities.hpp"
 #include "../../core/ImageUtilities.hpp"
@@ -228,16 +229,78 @@ namespace controllers
 
         try
         {
-            auto textureData = resource::ResourceManager::loadTextureAsync(path);
+            auto textureData = resource::ResourceManager::loadTextureAsync(asset::AssetRef::fromPath(path));
             auto texturePtr = textureData.get();
-            if (!texturePtr || texturePtr->textureData().empty())
+            if (!texturePtr || texturePtr->mipData.empty())
             {
                 vfLogWarning("Failed to load texture: {}", path);
                 return {};
             }
 
-            auto tex = uploadPixelsToGPU(device, texturePtr->textureData().data(),
-                                          texturePtr->width, texturePtr->height, true);
+            bool isCompressed = (texturePtr->compressionFormat != resource::TextureCompressionFormat::Uncompressed);
+            const auto& mip0 = texturePtr->mipData[0];
+            vk::DeviceSize imageSize = isCompressed ? mip0.dataSize
+                : static_cast<vk::DeviceSize>(mip0.width) * mip0.height * 4;
+
+            // Determine Vulkan format
+            vk::Format format = vk::Format::eR8G8B8A8Srgb;
+            if (isCompressed)
+            {
+                switch (texturePtr->compressionFormat)
+                {
+                    case resource::TextureCompressionFormat::BC7: format = vk::Format::eBc7SrgbBlock; break;
+                    default: break;
+                }
+            }
+
+            PreviewTextureGPU tex{};
+
+            vk::Buffer stagingBuffer;
+            vk::DeviceMemory stagingBufferMemory;
+            core::BufferInfoRequest bufferInfo(device.getLogicalDevice(), device.getPhysicalDevice());
+            bufferInfo.size = imageSize;
+            bufferInfo.usage = vk::BufferUsageFlagBits::eTransferSrc;
+            bufferInfo.properties = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
+            core::BufferUtilities::createBuffer(bufferInfo, stagingBuffer, stagingBufferMemory);
+
+            void* data;
+            static_cast<void>(device.getLogicalDevice().mapMemory(stagingBufferMemory, 0, imageSize, {}, &data));
+            memcpy(data, mip0.data.data(), imageSize);
+            device.getLogicalDevice().unmapMemory(stagingBufferMemory);
+
+            core::ImageInfoRequest imageInfo(device.getLogicalDevice(), device.getPhysicalDevice());
+            imageInfo.width = texturePtr->width;
+            imageInfo.height = texturePtr->height;
+            imageInfo.format = format;
+            imageInfo.tiling = vk::ImageTiling::eOptimal;
+            imageInfo.usage = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled;
+            imageInfo.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
+            core::ImageUtilities::createImage(imageInfo, tex.image, tex.memory);
+
+            uploadStagingToImage(device, stagingBuffer, tex.image, texturePtr->width, texturePtr->height);
+
+            device.getLogicalDevice().destroyBuffer(stagingBuffer);
+            device.getLogicalDevice().freeMemory(stagingBufferMemory);
+
+            // Create image view and sampler
+            core::ImageViewInfoRequest viewReq(device.getLogicalDevice(), tex.image);
+            viewReq.format = format;
+            core::ImageUtilities::createImageView(viewReq, tex.imageView);
+
+            vk::SamplerCreateInfo samplerInfo{};
+            samplerInfo.magFilter = vk::Filter::eLinear;
+            samplerInfo.minFilter = vk::Filter::eLinear;
+            samplerInfo.addressModeU = vk::SamplerAddressMode::eRepeat;
+            samplerInfo.addressModeV = vk::SamplerAddressMode::eRepeat;
+            samplerInfo.addressModeW = vk::SamplerAddressMode::eRepeat;
+            samplerInfo.anisotropyEnable = VK_TRUE;
+            samplerInfo.maxAnisotropy = 16.0f;
+            samplerInfo.borderColor = vk::BorderColor::eIntOpaqueBlack;
+            samplerInfo.mipmapMode = vk::SamplerMipmapMode::eLinear;
+            samplerInfo.maxLod = 0.0f;
+            tex.sampler = device.getLogicalDevice().createSampler(samplerInfo);
+
+            tex.valid = true;
             vfLogInfo("Loaded texture for preview: {}", path);
             return tex;
         }

@@ -5,6 +5,7 @@
 #include "resource/ResourceManager.hpp"
 #include "resource/AssetLifecycleManager.hpp"
 #include "resource/Types.hpp"
+#include "asset/AssetRef.hpp"
 #include "../../core/Texture.hpp"
 #include "../../core/SwapChain.hpp"
 #include "print/Log.hpp"
@@ -86,7 +87,7 @@ namespace render::gpudriven
             return;
         }
 
-        auto materialData = resource::ResourceManager::loadTerrainMaterial(materialPath);
+        auto materialData = resource::ResourceManager::loadTerrainMaterial(asset::AssetRef::fromPath(materialPath));
         if (!materialData)
         {
             return;
@@ -111,9 +112,9 @@ namespace render::gpudriven
                 return bindlessTextures->registerTexture(texPath, view, sampler);
             };
 
-            gpuLayer.albedoTextureIndex = tryRegisterLayerTex(layer.albedoTexturePath);
-            gpuLayer.normalTextureIndex = tryRegisterLayerTex(layer.normalTexturePath);
-            gpuLayer.ormTextureIndex = tryRegisterLayerTex(layer.ormTexturePath);
+            gpuLayer.albedoTextureIndex = tryRegisterLayerTex(layer.albedoTextureRef.resolve());
+            gpuLayer.normalTextureIndex = tryRegisterLayerTex(layer.normalTextureRef.resolve());
+            gpuLayer.ormTextureIndex = tryRegisterLayerTex(layer.ormTextureRef.resolve());
 
             gpuLayer.tilingScale = layer.tilingScale;
             gpuLayer.roughness = layer.roughness;
@@ -127,9 +128,9 @@ namespace render::gpudriven
             for (uint8_t i = 0; i < materialData->activeLayerCount; ++i)
             {
                 const auto& layer = materialData->layers[i];
-                texPaths.push_back(layer.albedoTexturePath);
-                texPaths.push_back(layer.normalTexturePath);
-                texPaths.push_back(layer.ormTexturePath);
+                texPaths.push_back(layer.albedoTextureRef.resolve());
+                texPaths.push_back(layer.normalTextureRef.resolve());
+                texPaths.push_back(layer.ormTextureRef.resolve());
             }
             registerTextureDependencies(materialPath, texPaths);
         }

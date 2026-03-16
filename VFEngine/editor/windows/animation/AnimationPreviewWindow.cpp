@@ -3,6 +3,7 @@
 #include "imgui.h"
 #include "resource/ResourceManager.hpp"
 #include "resource/MeshStreamHandle.hpp"
+#include "asset/AssetRef.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/animation/AnimationPreviewEvents.hpp"
 #include <filesystem>
@@ -261,7 +262,7 @@ namespace windows
         loadingInProgress.store(true);
         loadingStatus = "Loading animation file...";
 
-        loadFuture = resource::ResourceManager::loadAnimationAsync(animationPath);
+        loadFuture = resource::ResourceManager::loadAnimationAsync(asset::AssetRef::fromPath(animationPath));
     }
 
     void AnimationPreviewWindow::updateAsyncLoading()

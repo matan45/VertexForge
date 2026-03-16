@@ -34,10 +34,26 @@ struct FileExtension
     inline static const std::string terrainWeights = "vfTerrainWeights";
     inline static const std::string terrain = "vfTerrain";
     inline static const std::string water = "vfWater";
+    inline static const std::string assetMeta = "vfmeta";
 };
 
 namespace importConfig
 {
+    // Texture compression mode
+    enum class TextureCompressionMode
+    {
+        Uncompressed,
+        BC     // BC7 for LDR, BC6H for HDR (desktop standard)
+    };
+
+    // Texture compression quality
+    enum class TextureCompressionQuality
+    {
+        Fast,
+        Balanced,
+        Quality
+    };
+
     // Quality preset for V-HACD convex decomposition
     enum class VHACDPreset
     {
@@ -62,10 +78,36 @@ namespace importConfig
         bool shrinkWrap = true;  // Snap hull vertices to original mesh surface
     };
 
+    // Audio compression quality for Vorbis encoding
+    enum class AudioCompressionQuality
+    {
+        Low,       // ~80kbps
+        Medium,    // ~128kbps
+        High,      // ~192kbps
+        Lossless   // Raw PCM (no compression)
+    };
+
+    // Audio load type strategy
+    enum class AudioLoadType
+    {
+        Auto,              // < 10s = DecompressOnLoad, >= 10s = Streaming
+        DecompressOnLoad,  // Decode fully on load (good for SFX)
+        Streaming          // Stream from disk (good for music)
+    };
+
+    struct AudioImportConfig
+    {
+        AudioCompressionQuality quality = AudioCompressionQuality::Medium;
+        AudioLoadType loadType = AudioLoadType::Auto;
+    };
+
     struct ImportConfig
     {
         bool isImageFlipVertically = false;
         MeshImportConfig meshConfig;
+        TextureCompressionMode compressionMode = TextureCompressionMode::BC;
+        TextureCompressionQuality compressionQuality = TextureCompressionQuality::Balanced;
+        AudioImportConfig audioConfig;
     };
 
     struct ImportFiles

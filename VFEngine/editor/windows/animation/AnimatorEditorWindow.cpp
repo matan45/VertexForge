@@ -1,6 +1,8 @@
 #include "print/Log.hpp"
 #include "AnimatorEditorWindow.hpp"
 #include "animator/AnimatorAsset.hpp"
+#include "events/EventDispatcher.hpp"
+#include "events/project/ResourceEvents.hpp"
 #include "imgui.h"
 #include <filesystem>
 
@@ -56,6 +58,9 @@ namespace windows
         {
             isDirty = false;
             vfLogInfo("Saved animator: {}", animatorPath);
+            events::resource::AssetSavedNotification assetNotif;
+            assetNotif.filePath = animatorPath;
+            events::EventDispatcher::instance().publish(assetNotif);
         }
         else
         {

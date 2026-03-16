@@ -9,6 +9,7 @@
 #include "resource/ResourceManager.hpp"
 #include "resource/AssetLifecycleManager.hpp"
 #include "resource/Types.hpp"
+#include "asset/AssetRef.hpp"
 #include "material/MaterialInstanceTypes.hpp"
 #include "../../core/SwapChain.hpp"
 #include "components/Components.hpp"
@@ -335,7 +336,7 @@ namespace render::gpudriven
                 }
             }
 
-            if (meshComp.animatorPath.empty())
+            if (!meshComp.animatorRef.isValid())
             {
                 continue;
             }
@@ -343,7 +344,7 @@ namespace render::gpudriven
             animation::AnimatorStateMachine* animator = animatorSystem.getAnimator(entity);
             if (!animator)
             {
-                animatorSystem.initializeEntityAnimator(entity, meshComp.animatorPath);
+                animatorSystem.initializeEntityAnimator(entity, meshComp.animatorRef.resolve());
                 animator = animatorSystem.getAnimator(entity);
                 if (!animator)
                 {
@@ -526,27 +527,27 @@ namespace render::gpudriven
 
         if (material::isInstanceFile(materialPath))
         {
-            auto instanceData = resource::ResourceManager::loadMaterialInstance(materialPath);
-            if (!instanceData || instanceData->parentMaterialPath.empty())
+            auto instanceData = resource::ResourceManager::loadMaterialInstance(asset::AssetRef::fromPath(materialPath));
+            if (!instanceData || !instanceData->parentMaterialRef.isValid())
             {
                 vfLogWarning("GPUDrivenRenderer: Failed to load material instance: {}", materialPath);
                 return false;
             }
 
-            auto parentMatData = resource::ResourceManager::loadMaterial(instanceData->parentMaterialPath);
+            auto parentMatData = resource::ResourceManager::loadMaterial(instanceData->parentMaterialRef);
             if (!parentMatData)
             {
                 vfLogWarning("GPUDrivenRenderer: Failed to load parent material: {}",
-                              instanceData->parentMaterialPath);
+                              instanceData->parentMaterialRef.resolve());
                 return false;
             }
-            materials.loaded[instanceData->parentMaterialPath] = parentMatData;
+            materials.loaded[instanceData->parentMaterialRef.resolve()] = parentMatData;
 
             pbrValues = mesh::MaterialPBRExtractor::extractPBRFromInstance(*instanceData, *parentMatData);
         }
         else
         {
-            auto matData = resource::ResourceManager::loadMaterial(materialPath);
+            auto matData = resource::ResourceManager::loadMaterial(asset::AssetRef::fromPath(materialPath));
             if (!matData)
             {
                 vfLogWarning("GPUDrivenRenderer: Failed to load material: {}", materialPath);
@@ -625,14 +626,15 @@ namespace render::gpudriven
                                                          const std::vector<std::string>& texturePaths)
     {
         auto& lifecycle = resource::AssetLifecycleManager::instance();
-        if (!lifecycle.isTracked(materialPath))
+        auto matGUID = asset::AssetRef::fromPath(materialPath).getGUID();
+        if (!lifecycle.isTracked(matGUID))
         {
-            lifecycle.acquire(materialPath, resource::AssetType::Material);
+            lifecycle.acquire(matGUID, resource::AssetType::Material);
         }
         for (const auto& texPath : texturePaths)
         {
             if (!texPath.empty())
-                lifecycle.addDependency(materialPath, texPath, resource::AssetType::Texture);
+                lifecycle.addDependency(matGUID, asset::AssetRef::fromPath(texPath).getGUID(), resource::AssetType::Texture);
         }
     }
 }

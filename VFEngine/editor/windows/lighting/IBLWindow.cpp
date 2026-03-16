@@ -3,6 +3,7 @@
 #include "events/project/SceneEvents.hpp"
 #include "events/render/RenderEvents.hpp"
 #include "string/StringUtil.hpp"
+#include "asset/AssetRef.hpp"
 #include <imgui.h>
 
 namespace windows
@@ -27,13 +28,14 @@ namespace windows
             events::scene::GetIBLDataQuery iblQuery;
             iblQuery.entity = rootHandle;
             auto iblData = dispatcher.query(iblQuery);
-            if (iblData.has_value() && !iblData->fileName.empty())
+            if (iblData.has_value() && iblData->hdrRef.isValid())
             {
                 // Update local state from scene if different
                 std::string currentPath = StringUtil::wstringToUtf8(selectedIBLFile.wstring());
-                if (currentPath != iblData->fileName)
+                std::string iblPath = iblData->hdrRef.resolve();
+                if (currentPath != iblPath)
                 {
-                    selectedIBLFile = iblData->fileName;
+                    selectedIBLFile = iblPath;
                 }
             }
 
@@ -49,7 +51,7 @@ namespace windows
                 // Update IBL component on root entity via event system
                 events::scene::SetIBLDataCommand iblCmd;
                 iblCmd.entity = rootHandle;
-                iblCmd.iblData.fileName = filePath;
+                iblCmd.iblData.hdrRef = asset::AssetRef::fromPath(filePath);
                 dispatcher.execute(iblCmd);
             }
 

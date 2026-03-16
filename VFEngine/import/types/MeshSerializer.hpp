@@ -9,6 +9,8 @@ namespace types
     public:
         void writeLODLevel(std::ofstream& outFile, const LODMeshData& lodMesh) const;
 
+        void writeLODLevelCompressed(std::ofstream& outFile, const LODMeshData& lodMesh) const;
+
         void writeMeshletData(std::ofstream& outFile,
                               const std::array<MeshletBuildResult, resource::LOD_LEVEL_COUNT>& meshletResults) const;
 

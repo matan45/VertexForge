@@ -1,6 +1,7 @@
 #include "print/Log.hpp"
 #include "Import.hpp"
 #include "threading/JobSystem.hpp"
+#include <filesystem>
 #include <future>
 #include <algorithm>
 #include "../pipeline/stages/FileValidationStage.hpp"
@@ -12,6 +13,27 @@ namespace controllers
 {
     namespace
     {
+        std::string deriveOutputPath(const pipeline::ImportContext& ctx)
+        {
+            std::string ext;
+            std::string ft = ctx.fileType;
+
+            if (ft == "PNG" || ft == "JPEG" || ft == "BMP" || ft == "TGA")
+                ext = FileExtension::textrue;
+            else if (ft == "HDR" || ft == "EXR")
+                ext = FileExtension::hdr;
+            else if (ft == "MP3" || ft == "WAV" || ft == "OGG")
+                ext = FileExtension::audio;
+            else if (ft == "OBJ" || ft == "FBX" || ft == "DAE" || ft == "GLTF" || ft == "GLB")
+                ext = FileExtension::mesh;
+            else if (ft == "TTF" || ft == "OTF")
+                ext = FileExtension::font;
+
+            if (ext.empty()) return {};
+
+            return (std::filesystem::path(ctx.location) / (ctx.fileName + "." + ext)).string();
+        }
+
         ImportFileResult handleFileSuccess(const pipeline::ImportContext& ctx,
                                            ImportProgressCallback& progressCallback,
                                            uint32_t completed, uint32_t totalFiles)
@@ -19,6 +41,8 @@ namespace controllers
             ImportFileResult fileResult;
             fileResult.success = true;
             fileResult.fileName = ctx.fileName;
+            fileResult.outputPath = deriveOutputPath(ctx);
+            fileResult.fileType = ctx.fileType;
             vfLogInfo("Successfully processed: {}", ctx.file.path);
 
             if (progressCallback)

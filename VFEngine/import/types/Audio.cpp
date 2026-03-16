@@ -1,6 +1,8 @@
 #include "print/Log.hpp"
 #include "Audio.hpp"
+#include "VorbisEncoder.hpp"
 #include "resource/EndianUtils.hpp"
+#include "resource/VorbisDecoder.hpp"
 
 #include <vector>
 #include <fstream>
@@ -10,7 +12,6 @@
 #include <dr_mp3.h>
 #define DR_WAV_IMPLEMENTATION
 #include <dr_wav.h>
-#include <stb_vorbis.c>
 
 
 namespace types
@@ -38,7 +39,7 @@ namespace types
         if (decoded.data.empty())
             return;
 
-        if (progressCallback) progressCallback(0.7f);
+        if (progressCallback) progressCallback(0.5f);
 
         resource::AudioData audioData;
         audioData.headerFileType = resource::FileType::AUDIO;
@@ -46,7 +47,59 @@ namespace types
         audioData.channels = decoded.channels;
         audioData.frames = decoded.frames;
         audioData.totalDurationInSeconds = decoded.totalDurationInSeconds;
-        audioData.data = std::move(decoded.data);
+
+        const auto& audioConfig = file.config.audioConfig;
+
+        // Determine compression format
+        if (audioConfig.quality == importConfig::AudioCompressionQuality::Lossless)
+        {
+            audioData.compressionFormat = resource::AudioCompressionFormat::PCM;
+            audioData.data = std::move(decoded.data);
+        }
+        else
+        {
+            // Encode to Vorbis
+            float vorbisQuality = VorbisEncoder::qualityToFloat(static_cast<int>(audioConfig.quality));
+            auto compressed = VorbisEncoder::encode(decoded.data.data(),
+                                                     decoded.data.size(),
+                                                     decoded.channels,
+                                                     decoded.sampleRate,
+                                                     vorbisQuality);
+            if (compressed.empty())
+            {
+                vfLogWarning("Vorbis encoding failed, falling back to PCM");
+                audioData.compressionFormat = resource::AudioCompressionFormat::PCM;
+                audioData.data = std::move(decoded.data);
+            }
+            else
+            {
+                audioData.compressionFormat = resource::AudioCompressionFormat::Vorbis;
+                audioData.compressedData = std::move(compressed);
+                vfLogInfo("Vorbis compression: {} -> {} bytes ({:.1f}x)",
+                          decoded.data.size() * sizeof(short),
+                          audioData.compressedData.size(),
+                          static_cast<float>(decoded.data.size() * sizeof(short)) /
+                          static_cast<float>(audioData.compressedData.size()));
+            }
+        }
+
+        if (progressCallback) progressCallback(0.7f);
+
+        // Determine load type
+        if (audioConfig.loadType == importConfig::AudioLoadType::Auto)
+        {
+            audioData.loadType = (decoded.totalDurationInSeconds < 10)
+                ? resource::AudioLoadType::DecompressOnLoad
+                : resource::AudioLoadType::Streaming;
+        }
+        else if (audioConfig.loadType == importConfig::AudioLoadType::DecompressOnLoad)
+        {
+            audioData.loadType = resource::AudioLoadType::DecompressOnLoad;
+        }
+        else
+        {
+            audioData.loadType = resource::AudioLoadType::Streaming;
+        }
 
         saveToFile(location, fileName, audioData);
 
@@ -57,27 +110,36 @@ namespace types
     {
         DecodedAudio result;
 
-        int error;
-        stb_vorbis* vorbis = stb_vorbis_open_filename(path.data(), &error, nullptr);
-        if (!vorbis)
+        // Read the file into memory, then use VorbisDecoder
+        std::ifstream inFile(path.data(), std::ios::binary | std::ios::ate);
+        if (!inFile)
         {
-            vfLogError("Failed to load Ogg Vorbis file: {}", path);
+            vfLogError("Failed to open Ogg Vorbis file: {}", path);
             return result;
         }
 
-        stb_vorbis_info info = stb_vorbis_get_info(vorbis);
-        result.sampleRate = info.sample_rate;
-        result.channels = info.channels;
+        auto fileSize = inFile.tellg();
+        inFile.seekg(0, std::ios::beg);
 
-        int frames = stb_vorbis_stream_length_in_samples(vorbis);
-        int totalSamples = frames * info.channels;
-        result.frames = frames;
-        result.totalDurationInSeconds = static_cast<uint32_t>(stb_vorbis_stream_length_in_seconds(vorbis));
+        std::vector<uint8_t> fileData(static_cast<size_t>(fileSize));
+        inFile.read(reinterpret_cast<char*>(fileData.data()), fileSize);
+        inFile.close();
 
-        result.data.resize(totalSamples);
-        stb_vorbis_get_samples_short_interleaved(vorbis, info.channels, result.data.data(), totalSamples);
+        uint32_t channels = 0, sampleRate = 0;
+        if (!resource::VorbisDecoder::decode(fileData.data(), fileData.size(),
+                                              result.data, channels, sampleRate))
+        {
+            vfLogError("Failed to decode Ogg Vorbis file: {}", path);
+            return result;
+        }
 
-        stb_vorbis_close(vorbis);
+        result.sampleRate = sampleRate;
+        result.channels = channels;
+        result.frames = static_cast<uint32_t>(result.data.size() / channels);
+        result.totalDurationInSeconds = (sampleRate > 0)
+            ? static_cast<uint32_t>(result.frames / sampleRate)
+            : 0;
+
         return result;
     }
 
@@ -146,14 +208,29 @@ namespace types
         resource::endian::writeLE<uint32_t>(outFile, Version::minor);
         resource::endian::writeLE<uint32_t>(outFile, Version::patch);
 
+        // New fields: compression format and load type
+        resource::endian::writeLE<uint8_t>(outFile, static_cast<uint8_t>(audioData.compressionFormat));
+        resource::endian::writeLE<uint8_t>(outFile, static_cast<uint8_t>(audioData.loadType));
+
         resource::endian::writeLE<uint32_t>(outFile, audioData.sampleRate);
         resource::endian::writeLE<uint32_t>(outFile, audioData.channels);
         resource::endian::writeLE<uint32_t>(outFile, audioData.frames);
         resource::endian::writeLE<uint32_t>(outFile, audioData.totalDurationInSeconds);
 
-        auto dataSize = static_cast<uint32_t>(audioData.data.size() * sizeof(short));
-        resource::endian::writeLE<uint32_t>(outFile, dataSize);
-        resource::endian::writeVectorLE<short>(outFile, audioData.data);
+        if (audioData.compressionFormat == resource::AudioCompressionFormat::Vorbis)
+        {
+            // Write compressed Vorbis data as raw bytes (opaque blob)
+            auto dataSize = static_cast<uint32_t>(audioData.compressedData.size());
+            resource::endian::writeLE<uint32_t>(outFile, dataSize);
+            outFile.write(reinterpret_cast<const char*>(audioData.compressedData.data()), dataSize);
+        }
+        else
+        {
+            // Write PCM data with endian conversion
+            auto dataSize = static_cast<uint32_t>(audioData.data.size() * sizeof(short));
+            resource::endian::writeLE<uint32_t>(outFile, dataSize);
+            resource::endian::writeVectorLE<short>(outFile, audioData.data);
+        }
 
         outFile.close();
     }

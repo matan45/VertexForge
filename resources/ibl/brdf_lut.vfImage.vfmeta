@@ -1,0 +1,7 @@
+{
+  "formatVersion": 1,
+  "guid": "61546602c756ae30",
+  "importSource": "generated:brdf_lut",
+  "importTimestamp": "2026-03-16 14:00:22",
+  "type": "Texture"
+}

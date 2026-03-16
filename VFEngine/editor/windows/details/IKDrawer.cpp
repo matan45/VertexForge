@@ -111,10 +111,10 @@ namespace windows::details
             return;
 
         const auto& meshComp = registry.get<components::MeshComponent>(entity);
-        if (meshComp.meshPath.empty())
+        if (!meshComp.meshRef.isValid())
             return;
 
-        auto stream = resource::MeshStreamResource::openStream(meshComp.meshPath);
+        auto stream = resource::MeshStreamResource::openStream(meshComp.meshRef.resolve());
         if (!stream || !stream->hasSkeletonData())
             return;
 

@@ -96,7 +96,7 @@ def create_atlas():
             print(f"  [{index}] ERROR loading {icon_path}: {e}")
 
     # Save atlas
-    output_path = "atlasIcons.png"
+    output_path = "viewPortAtlasIcons.png"
     atlas.save(output_path, 'PNG')
     print(f"\nAtlas saved to: {output_path}")
     print("Now convert to .vfImage using your import tool.")

@@ -4,6 +4,8 @@
 #include "types/AudioEffectTypes.hpp"
 #include "types/PhysicsAnimationTypes.hpp"
 #include <rendertexture/RenderTextureTypes.hpp>
+#include <asset/AssetRef.hpp>
+#include <resource/AssetTypes.hpp>
 #include <glm/glm.hpp>
 #include <string>
 #include <vector>
@@ -40,18 +42,18 @@ namespace services
 
     struct IBLData
     {
-        std::string fileName;
+        asset::AssetRef hdrRef;
     };
 
     struct NavmeshRootData
     {
-        std::string navmeshPath;
+        asset::AssetRef navmeshRef;
     };
 
     struct MeshData
     {
-        std::string meshPath;
-        std::string animatorPath; // Path to .vfAnimator file (optional)
+        asset::AssetRef meshRef;
+        asset::AssetRef animatorRef; // .vfAnimator asset (optional)
         bool showBoundingBox = false;
         bool applyRootMotion = false;
         float maxDrawDistance = 0.0f; // 0 = use category default from render config
@@ -66,8 +68,8 @@ namespace services
 
     struct MaterialData
     {
-        std::string defaultMaterial; // .vfMat path for unmapped submeshes
-        std::map<std::string, std::string> subMeshMaterials; // submesh NAME -> .vfMat path
+        asset::AssetRef defaultMaterialRef; // .vfMat asset for unmapped submeshes
+        std::map<std::string, asset::AssetRef> subMeshMaterials; // submesh NAME -> .vfMat asset
         std::map<std::string, float> parameterOverrides; // Runtime parameter tweaks
     };
 
@@ -125,6 +127,8 @@ namespace services
     struct ImportResult
     {
         std::string sourcePath;
+        std::string outputPath;
+        resource::AssetType assetType = resource::AssetType::COUNT;
         bool success = false;
         std::string errorMessage;
     };
@@ -164,7 +168,7 @@ namespace services
     // Audio component data structs
     struct AudioSource2DData
     {
-        std::string audioFilePath;
+        asset::AssetRef audioRef;
         float volume = 1.0f;
         float pitch = 1.0f;
         bool loop = false;
@@ -173,7 +177,7 @@ namespace services
 
     struct AudioSource3DData
     {
-        std::string audioFilePath;
+        asset::AssetRef audioRef;
         float volume = 1.0f;
         float pitch = 1.0f;
         bool loop = false;
@@ -212,7 +216,7 @@ namespace services
         glm::vec3 size{1.0f};
         float height = 2.0f;
         glm::vec3 offset{0.0f};
-        std::string meshPath;
+        asset::AssetRef meshRef;
         bool isTrigger = false;
         uint8_t collisionLayer = 1;
         float friction = 0.5f;
@@ -235,7 +239,7 @@ namespace services
 
     struct PhysicsAnimationComponentData
     {
-        std::string physicsAnimationPath;
+        asset::AssetRef physicsAnimationRef;
         types::PhysicsAnimationMode defaultMode = types::PhysicsAnimationMode::Animated;
         uint8_t collisionLayer = 1;
         std::vector<types::BoneBodyMapping> boneBodyMappings;
@@ -244,7 +248,7 @@ namespace services
 
     struct VFXData
     {
-        std::string vfxPath; // Path to .vfVFX asset file
+        asset::AssetRef vfxRef; // .vfVFX asset
         bool autoPlay = true; // Auto-start when play mode begins
         bool loop = true; // Loop the VFX effect
     };
@@ -262,7 +266,7 @@ namespace services
 
     struct BillboardData
     {
-        std::string texturePath; // Path to .vfImage file
+        asset::AssetRef textureRef; // .vfImage asset
         glm::vec2 size{1.0f, 1.0f};
         glm::vec4 colorTint{1.0f, 1.0f, 1.0f, 1.0f};
         EntityHandle renderTextureSource;
@@ -272,9 +276,9 @@ namespace services
     struct DecalData
     {
         glm::vec3 halfExtents{0.5f, 0.5f, 0.1f};
-        std::string albedoTexture;
-        std::string normalTexture;
-        std::string ormTexture;
+        asset::AssetRef albedoTextureRef;
+        asset::AssetRef normalTextureRef;
+        asset::AssetRef ormTextureRef;
         glm::vec4 color{1.0f, 1.0f, 1.0f, 1.0f};
         float angleFadeStart = 0.7f;
         float angleFadeEnd = 0.3f;
@@ -286,7 +290,7 @@ namespace services
 
     struct TextData
     {
-        std::string fontPath;
+        asset::AssetRef fontRef;
         std::string text = "Hello World";
         float fontSize = 32.0f;
         glm::vec4 color{1.0f, 1.0f, 1.0f, 1.0f};
@@ -339,7 +343,7 @@ namespace services
 
     struct UIImageData
     {
-        std::string texturePath;
+        asset::AssetRef textureRef;
         glm::vec4 colorTint{1.0f, 1.0f, 1.0f, 1.0f};
         EntityHandle renderTextureSource;
         std::string renderTextureSourceName;
@@ -371,7 +375,7 @@ namespace services
     struct UILabelData
     {
         std::string text = "Label";
-        std::string fontPath;
+        asset::AssetRef fontRef;
         float fontSize = 16.0f;
         uint8_t fontStyle = 0;              // 0=Normal, 1=Bold, 2=Italic, 3=BoldItalic
         glm::vec4 color{1.0f, 1.0f, 1.0f, 1.0f};
@@ -391,11 +395,11 @@ namespace services
         glm::vec4 pressedColor{0.7f, 0.7f, 0.7f, 1.0f};
         glm::vec4 disabledColor{0.5f, 0.5f, 0.5f, 0.5f};
 
-        // Per-state texture paths (empty = use color only)
-        std::string normalTexture;
-        std::string hoverTexture;
-        std::string pressedTexture;
-        std::string disabledTexture;
+        // Per-state textures (empty = use color only)
+        asset::AssetRef normalTextureRef;
+        asset::AssetRef hoverTextureRef;
+        asset::AssetRef pressedTextureRef;
+        asset::AssetRef disabledTextureRef;
 
         // Config
         float colorTransitionDuration = 0.1f;
@@ -410,7 +414,7 @@ namespace services
         // Config
         std::string text;
         std::string placeholderText = "Enter text...";
-        std::string fontPath;
+        asset::AssetRef fontRef;
         float fontSize = 16.0f;
         glm::vec4 textColor{1.0f, 1.0f, 1.0f, 1.0f};
         glm::vec4 placeholderColor{0.5f, 0.5f, 0.5f, 0.7f};
@@ -451,10 +455,10 @@ namespace services
         glm::vec4 disabledColor{0.5f, 0.5f, 0.5f, 0.5f};
 
         // Per-state textures
-        std::string uncheckedTexture;
-        std::string checkedTexture;
-        std::string hoveredTexture;
-        std::string disabledTexture;
+        asset::AssetRef uncheckedTextureRef;
+        asset::AssetRef checkedTextureRef;
+        asset::AssetRef hoveredTextureRef;
+        asset::AssetRef disabledTextureRef;
 
         // Config
         float colorTransitionDuration = 0.1f;
@@ -468,7 +472,7 @@ namespace services
     struct DropdownOptionData
     {
         std::string text;
-        std::string iconPath; // empty = no icon
+        asset::AssetRef iconRef; // empty = no icon
     };
 
     struct UIDropdownData
@@ -492,7 +496,7 @@ namespace services
         glm::vec4 itemHoveredColor{0.3f, 0.5f, 0.8f, 0.5f};
 
         // Font
-        std::string fontPath;
+        asset::AssetRef fontRef;
         float fontSize = 16.0f;
 
         float colorTransitionDuration = 0.1f;
@@ -526,14 +530,14 @@ namespace services
         glm::vec4 handleHoveredColor{0.9f, 0.9f, 0.9f, 1.0f};
         glm::vec4 handlePressedColor{0.7f, 0.7f, 0.7f, 1.0f};
         glm::vec4 handleDisabledColor{0.5f, 0.5f, 0.5f, 0.5f};
-        std::string handleNormalTexture;
-        std::string handleHoveredTexture;
-        std::string handlePressedTexture;
-        std::string handleDisabledTexture;
+        asset::AssetRef handleNormalTextureRef;
+        asset::AssetRef handleHoveredTextureRef;
+        asset::AssetRef handlePressedTextureRef;
+        asset::AssetRef handleDisabledTextureRef;
 
         // Fill appearance
         glm::vec4 fillColor{0.3f, 0.5f, 0.8f, 1.0f};
-        std::string fillTexture;
+        asset::AssetRef fillTextureRef;
 
         // Config
         float colorTransitionDuration = 0.1f;
@@ -559,11 +563,11 @@ namespace services
 
         // Track appearance
         glm::vec4 trackColor{0.2f, 0.2f, 0.2f, 1.0f};
-        std::string trackTexture;
+        asset::AssetRef trackTextureRef;
 
         // Fill appearance
         glm::vec4 fillColor{0.3f, 0.5f, 0.8f, 1.0f};
-        std::string fillTexture;
+        asset::AssetRef fillTextureRef;
 
         // Runtime
         float displayValue = 0.0f;
@@ -573,7 +577,7 @@ namespace services
 
     struct UIMaskData
     {
-        std::string maskTexturePath;
+        asset::AssetRef maskTextureRef;
         float alphaThreshold = 0.5f;
         bool showMaskGraphic = false;
     };

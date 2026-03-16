@@ -55,3 +55,9 @@
 [submodule "dependencies/enkiTS"]
 	path = dependencies/enkiTS
 	url = https://github.com/dougbinks/enkiTS.git
+[submodule "dependencies/libogg"]
+	path = dependencies/libogg
+	url = https://github.com/xiph/ogg.git
+[submodule "dependencies/libvorbis"]
+	path = dependencies/libvorbis
+	url = https://github.com/xiph/vorbis.git

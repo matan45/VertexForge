@@ -1,6 +1,7 @@
 #include "MergedMeshBuffer.hpp"
 #include "../../mesh/MeshTypes.hpp"
 #include "resource/ResourceManager.hpp"
+#include "asset/AssetRef.hpp"
 #include "print/Log.hpp"
 #include "threading/JobSystem.hpp"
 #include <material/MaterialInstanceTypes.hpp>
@@ -145,16 +146,16 @@ namespace render::gpudriven
             {
                 // Sequential-only path: the parallel phase pre-populates
                 // instanceToParentCache so this branch is never taken concurrently.
-                auto instanceData = resource::ResourceManager::loadMaterialInstance(materialPath);
-                if (instanceData && !instanceData->parentMaterialPath.empty())
+                auto instanceData = resource::ResourceManager::loadMaterialInstance(asset::AssetRef::fromPath(materialPath));
+                if (instanceData && instanceData->parentMaterialRef.isValid())
                 {
-                    effectiveMaterialPath = instanceData->parentMaterialPath;
+                    effectiveMaterialPath = instanceData->parentMaterialRef.resolve();
                     instanceToParentCache[materialPath] = effectiveMaterialPath;
                 }
             }
         }
 
-        auto matData = resource::ResourceManager::loadMaterial(effectiveMaterialPath);
+        auto matData = resource::ResourceManager::loadMaterial(asset::AssetRef::fromPath(effectiveMaterialPath));
         if (matData)
         {
             const auto* outputNode = matData->graph.findOutputNode();
@@ -416,10 +417,10 @@ namespace render::gpudriven
                     {
                         if (instanceToParentCache.find(materialPath) == instanceToParentCache.end())
                         {
-                            auto instanceData = resource::ResourceManager::loadMaterialInstance(materialPath);
-                            if (instanceData && !instanceData->parentMaterialPath.empty())
+                            auto instanceData = resource::ResourceManager::loadMaterialInstance(asset::AssetRef::fromPath(materialPath));
+                            if (instanceData && instanceData->parentMaterialRef.isValid())
                             {
-                                instanceToParentCache[materialPath] = instanceData->parentMaterialPath;
+                                instanceToParentCache[materialPath] = instanceData->parentMaterialRef.resolve();
                             }
                         }
                     }

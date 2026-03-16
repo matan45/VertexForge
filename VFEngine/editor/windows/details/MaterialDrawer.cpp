@@ -4,6 +4,7 @@
 #include "events/project/SceneEvents.hpp"
 #include "events/render/MaterialEvents.hpp"
 #include "nfd/FileDialog.hpp"
+#include "asset/AssetRef.hpp"
 #include "resource/MeshStreamHandle.hpp"
 #include <imgui.h>
 
@@ -17,7 +18,7 @@ namespace windows::details
         meshDataQuery.entity = handle;
         auto meshDataOpt = dispatcher.query(meshDataQuery);
 
-        if (!meshDataOpt.has_value() || meshDataOpt->meshPath.empty())
+        if (!meshDataOpt.has_value() || !meshDataOpt->meshRef.isValid())
         {
             return;
         }
@@ -62,7 +63,7 @@ namespace windows::details
             ImGui::Separator();
             ImGui::Spacing();
 
-            drawSubmeshMaterials(handle, meshDataOpt->meshPath, *matOpt);
+            drawSubmeshMaterials(handle, meshDataOpt->meshRef.resolve(), *matOpt);
 
             ImGui::Unindent(10.0f);
         }
@@ -88,7 +89,8 @@ namespace windows::details
         auto& dispatcher = events::EventDispatcher::instance();
 
         ImGui::Text("Default Material:");
-        std::string defaultMatDisplay = matData.defaultMaterial.empty() ? "(None)" : matData.defaultMaterial;
+        std::string defaultMatResolved = matData.defaultMaterialRef.resolve();
+        std::string defaultMatDisplay = !matData.defaultMaterialRef.isValid() ? "(None)" : defaultMatResolved;
         if (defaultMatDisplay.length() > 35)
         {
             defaultMatDisplay = "..." + defaultMatDisplay.substr(defaultMatDisplay.length() - 32);
@@ -144,7 +146,7 @@ namespace windows::details
             {
                 const std::string& submeshName = submeshNames[i];
                 auto it = matData.subMeshMaterials.find(submeshName);
-                std::string currentMat = (it != matData.subMeshMaterials.end()) ? it->second : "";
+                std::string currentMat = (it != matData.subMeshMaterials.end()) ? it->second.resolve() : "";
 
                 drawSubmeshEntry(handle, submeshName, currentMat, static_cast<int>(i));
             }

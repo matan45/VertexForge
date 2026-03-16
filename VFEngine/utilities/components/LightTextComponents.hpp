@@ -2,6 +2,7 @@
 #include <glm/glm.hpp>
 #include <string>
 #include <cstdint>
+#include "../asset/AssetRef.hpp"
 
 namespace components
 {
@@ -32,7 +33,7 @@ namespace components
 
     struct TextComponent
     {
-        std::string fontPath;
+        asset::AssetRef fontRef;
         std::string text = "Hello World";
         float fontSize = 32.0f;
         glm::vec4 color{1.0f, 1.0f, 1.0f, 1.0f};

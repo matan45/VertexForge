@@ -441,13 +441,13 @@ namespace animation
             return it->second != nullptr;
         }
 
-        if (animState->animationPath.empty())
+        if (!animState->animationRef.isValid())
         {
             loadedAnimations[stateId] = nullptr;
             return false;
         }
 
-        const resource::AnimationData* animData = animationLoadCallback(animState->animationPath);
+        const resource::AnimationData* animData = animationLoadCallback(animState->animationRef.resolve());
         loadedAnimations[stateId] = animData;
 
         return animData != nullptr;
@@ -460,9 +460,9 @@ namespace animation
 
         for (const auto& entry : animState.blendTree->entries)
         {
-            if (!entry.animationPath.empty())
+            if (entry.animationRef.isValid())
             {
-                animationLoadCallback(entry.animationPath);
+                animationLoadCallback(entry.animationRef.resolve());
             }
         }
     }
@@ -476,9 +476,9 @@ namespace animation
             {
                 for (const auto& entry : animState->blendTree->entries)
                 {
-                    if (!entry.animationPath.empty() && animationLoadCallback)
+                    if (entry.animationRef.isValid() && animationLoadCallback)
                     {
-                        const resource::AnimationData* data = animationLoadCallback(entry.animationPath);
+                        const resource::AnimationData* data = animationLoadCallback(entry.animationRef.resolve());
                         if (data)
                         {
                             float tps = data->ticksPerSecond > 0.0f ? data->ticksPerSecond : 24.0f;

@@ -9,6 +9,8 @@
 #include <material/MaterialManager.hpp>
 #include <material/MaterialInstanceTypes.hpp>
 #include <resource/ResourceManager.hpp>
+#include <resource/AssetTypes.hpp>
+#include <asset/AssetRef.hpp>
 #include "imgui.h"
 #include "events/EventDispatcher.hpp"
 #include "events/render/MaterialEvents.hpp"
@@ -56,7 +58,7 @@ namespace windows
 
     void MaterialEditorWindow::loadMaterial()
     {
-        materialData = resource::ResourceManager::loadMaterial(materialPath);
+        materialData = resource::ResourceManager::loadMaterial(asset::AssetRef::fromPath(materialPath));
 
         if (!materialData)
         {
@@ -92,6 +94,10 @@ namespace windows
             events::material::MaterialFileSavedNotification notification;
             notification.materialPath = materialPath;
             events::EventDispatcher::instance().publish(notification);
+
+            events::resource::AssetSavedNotification assetNotif;
+            assetNotif.filePath = materialPath;
+            events::EventDispatcher::instance().publish(assetNotif);
 
             // Note: updateFromGraph is already called in compileMaterial() above,
             // so we don't need to call it again here. Calling it twice can cause
@@ -275,7 +281,12 @@ namespace windows
             if (instance)
             {
                 events::resource::ImportCompletedNotification notification;
-                notification.results.push_back({instancePath, true, ""});
+                services::ImportResult res;
+                res.sourcePath = instancePath;
+                res.outputPath = instancePath;
+                res.assetType = resource::AssetType::MaterialInstance;
+                res.success = true;
+                notification.results.push_back(res);
                 events::EventDispatcher::instance().publish(notification);
             }
         }

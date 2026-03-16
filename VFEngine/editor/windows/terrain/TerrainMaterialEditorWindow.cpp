@@ -4,7 +4,9 @@
 #include <resource/ResourceManager.hpp>
 #include "events/EventDispatcher.hpp"
 #include "events/terrain/TerrainEvents.hpp"
+#include "events/project/ResourceEvents.hpp"
 #include "nfd/FileDialog.hpp"
+#include "asset/AssetRef.hpp"
 #include "imgui.h"
 #include <filesystem>
 #include <fstream>
@@ -23,7 +25,7 @@ namespace windows
 
     void TerrainMaterialEditorWindow::loadMaterial()
     {
-        materialData = resource::ResourceManager::loadTerrainMaterial(materialPath);
+        materialData = resource::ResourceManager::loadTerrainMaterial(asset::AssetRef::fromPath(materialPath));
 
         if (!materialData)
         {
@@ -44,6 +46,9 @@ namespace windows
         {
             isDirty = false;
             vfLogInfo("Terrain material saved: {}", materialPath);
+            events::resource::AssetSavedNotification assetNotif;
+            assetNotif.filePath = materialPath;
+            events::EventDispatcher::instance().publish(assetNotif);
         }
         else
         {
@@ -268,8 +273,8 @@ namespace windows
                 {
                     ImGui::Text("Albedo:");
                     ImGui::SameLine();
-                    std::string displayPath = layer.albedoTexturePath.empty() ? "(None)" :
-                        std::filesystem::path(layer.albedoTexturePath).filename().string();
+                    std::string displayPath = !layer.albedoTextureRef.isValid() ? "(None)" :
+                        std::filesystem::path(layer.albedoTextureRef.resolve()).filename().string();
                     ImGui::TextDisabled("%s", displayPath.c_str());
 
                     ImGui::SameLine();
@@ -285,16 +290,16 @@ namespace windows
                             selectedPath.erase(
                                 std::remove(selectedPath.begin(), selectedPath.end(), '\0'),
                                 selectedPath.end());
-                            layer.albedoTexturePath = selectedPath;
+                            layer.albedoTextureRef = asset::AssetRef::fromPath(selectedPath);
                             onChanged();
                         }
                     }
-                    if (!layer.albedoTexturePath.empty())
+                    if (layer.albedoTextureRef.isValid())
                     {
                         ImGui::SameLine();
                         if (ImGui::SmallButton("X##albedo"))
                         {
-                            layer.albedoTexturePath.clear();
+                            layer.albedoTextureRef = asset::AssetRef::invalid();
                             onChanged();
                         }
                     }
@@ -303,8 +308,8 @@ namespace windows
                 {
                     ImGui::Text("Normal:");
                     ImGui::SameLine();
-                    std::string displayPath = layer.normalTexturePath.empty() ? "(None)" :
-                        std::filesystem::path(layer.normalTexturePath).filename().string();
+                    std::string displayPath = !layer.normalTextureRef.isValid() ? "(None)" :
+                        std::filesystem::path(layer.normalTextureRef.resolve()).filename().string();
                     ImGui::TextDisabled("%s", displayPath.c_str());
 
                     ImGui::SameLine();
@@ -320,16 +325,16 @@ namespace windows
                             selectedPath.erase(
                                 std::remove(selectedPath.begin(), selectedPath.end(), '\0'),
                                 selectedPath.end());
-                            layer.normalTexturePath = selectedPath;
+                            layer.normalTextureRef = asset::AssetRef::fromPath(selectedPath);
                             onChanged();
                         }
                     }
-                    if (!layer.normalTexturePath.empty())
+                    if (layer.normalTextureRef.isValid())
                     {
                         ImGui::SameLine();
                         if (ImGui::SmallButton("X##normal"))
                         {
-                            layer.normalTexturePath.clear();
+                            layer.normalTextureRef = asset::AssetRef::invalid();
                             onChanged();
                         }
                     }
@@ -338,8 +343,8 @@ namespace windows
                 {
                     ImGui::Text("ORM:");
                     ImGui::SameLine();
-                    std::string displayPath = layer.ormTexturePath.empty() ? "(None)" :
-                        std::filesystem::path(layer.ormTexturePath).filename().string();
+                    std::string displayPath = !layer.ormTextureRef.isValid() ? "(None)" :
+                        std::filesystem::path(layer.ormTextureRef.resolve()).filename().string();
                     ImGui::TextDisabled("%s", displayPath.c_str());
 
                     ImGui::SameLine();
@@ -355,22 +360,22 @@ namespace windows
                             selectedPath.erase(
                                 std::remove(selectedPath.begin(), selectedPath.end(), '\0'),
                                 selectedPath.end());
-                            layer.ormTexturePath = selectedPath;
+                            layer.ormTextureRef = asset::AssetRef::fromPath(selectedPath);
                             onChanged();
                         }
                     }
-                    if (!layer.ormTexturePath.empty())
+                    if (layer.ormTextureRef.isValid())
                     {
                         ImGui::SameLine();
                         if (ImGui::SmallButton("X##orm"))
                         {
-                            layer.ormTexturePath.clear();
+                            layer.ormTextureRef = asset::AssetRef::invalid();
                             onChanged();
                         }
                     }
                 }
 
-                if (layer.ormTexturePath.empty())
+                if (!layer.ormTextureRef.isValid())
                 {
                     if (ImGui::DragFloat("Roughness", &layer.roughness, 0.01f, 0.0f, 1.0f))
                     {

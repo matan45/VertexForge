@@ -4,6 +4,7 @@
 #include "events/EventDispatcher.hpp"
 #include "events/ui/UIEvents.hpp"
 #include "nfd/FileDialog.hpp"
+#include "asset/AssetRef.hpp"
 #include <imgui.h>
 #include <fstream>
 
@@ -135,15 +136,15 @@ namespace windows::details
         return changed;
     }
 
-    static bool drawTextureSlot(const char* label, std::string& texturePath, const char* uniqueId)
+    static bool drawTextureSlot(const char* label, asset::AssetRef& textureRef, const char* uniqueId)
     {
         bool changed = false;
 
         ImGui::Text("%s", label);
 
-        if (!texturePath.empty())
+        if (textureRef.isValid())
         {
-            std::string filename = texturePath;
+            std::string filename = textureRef.resolve();
             auto lastSlash = filename.find_last_of("/\\");
             if (lastSlash != std::string::npos)
             {
@@ -166,7 +167,7 @@ namespace windows::details
                 if (file.good())
                 {
                     file.close();
-                    texturePath = path;
+                    textureRef = asset::AssetRef::fromPath(path);
                     changed = true;
                 }
                 else
@@ -177,13 +178,13 @@ namespace windows::details
         }
 
         ImGui::SameLine();
-        bool wasEmpty = texturePath.empty();
+        bool wasEmpty = !textureRef.isValid();
         if (wasEmpty) ImGui::BeginDisabled();
         char clearId[64];
         std::snprintf(clearId, sizeof(clearId), "Clear##UIBtn_%s", uniqueId);
         if (ImGui::Button(clearId))
         {
-            texturePath = "";
+            textureRef = asset::AssetRef::invalid();
             changed = true;
         }
         if (wasEmpty) ImGui::EndDisabled();
@@ -200,10 +201,10 @@ namespace windows::details
             ImGui::TextDisabled("Empty = color only mode");
             ImGui::Spacing();
 
-            changed |= drawTextureSlot("Normal", data.normalTexture, "normal");
-            changed |= drawTextureSlot("Hover", data.hoverTexture, "hover");
-            changed |= drawTextureSlot("Pressed", data.pressedTexture, "pressed");
-            changed |= drawTextureSlot("Disabled", data.disabledTexture, "disabled");
+            changed |= drawTextureSlot("Normal", data.normalTextureRef, "normal");
+            changed |= drawTextureSlot("Hover", data.hoverTextureRef, "hover");
+            changed |= drawTextureSlot("Pressed", data.pressedTextureRef, "pressed");
+            changed |= drawTextureSlot("Disabled", data.disabledTextureRef, "disabled");
 
             ImGui::TreePop();
         }

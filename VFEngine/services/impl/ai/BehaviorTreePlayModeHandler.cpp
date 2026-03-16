@@ -93,7 +93,7 @@ namespace services
         for (auto entity : view)
         {
             auto& bt = view.get<components::BehaviorTreeComponent>(entity);
-            if (bt.behaviorTreePath.empty() || !bt.enabled)
+            if (!bt.behaviorTreeRef.isValid() || !bt.enabled)
             {
                 continue;
             }
@@ -110,7 +110,7 @@ namespace services
 
             auto handle = internal::toHandle(entity);
 
-            if (provider->attachTree(handle, bt.behaviorTreePath))
+            if (provider->attachTree(handle, bt.behaviorTreeRef.resolve()))
             {
                 bt.isInitialized = true;
                 ++attached;

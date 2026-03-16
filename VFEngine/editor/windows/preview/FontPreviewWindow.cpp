@@ -1,5 +1,6 @@
 #include "FontPreviewWindow.hpp"
 #include "resource/ResourceManager.hpp"
+#include "asset/AssetRef.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/render/RenderEvents.hpp"
 #include "math/MathHelper.hpp"
@@ -182,7 +183,7 @@ namespace windows
                 return result;
             }
 
-            auto fontFuture = resource::ResourceManager::loadFontAsync(path);
+            auto fontFuture = resource::ResourceManager::loadFontAsync(asset::AssetRef::fromPath(path));
             auto fontPtr = fontFuture.get();
             if (!fontPtr)
             {

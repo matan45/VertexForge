@@ -7,6 +7,7 @@
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/render/MaterialEvents.hpp"
 #include "resource/AssetLifecycleManager.hpp"
+#include <asset/AssetRef.hpp>
 
 namespace services {
 
@@ -37,9 +38,9 @@ namespace services {
         if (sceneEntity.hasComponent<components::MaterialComponent>()) {
             auto& comp = sceneEntity.getComponent<components::MaterialComponent>();
             auto& lifecycle = resource::AssetLifecycleManager::instance();
-            if (!comp.defaultMaterial.empty()) lifecycle.release(comp.defaultMaterial);
-            for (const auto& [name, path] : comp.subMeshMaterials) {
-                if (!path.empty()) lifecycle.release(path);
+            if (comp.defaultMaterialRef.isValid()) lifecycle.release(comp.defaultMaterialRef.getGUID());
+            for (const auto& [name, ref] : comp.subMeshMaterials) {
+                if (ref.isValid()) lifecycle.release(ref.getGUID());
             }
             sceneEntity.removeComponent<components::MaterialComponent>();
             return true;
@@ -70,7 +71,7 @@ namespace services {
 
         const auto& comp = sceneEntity.getComponent<components::MaterialComponent>();
         MaterialData data;
-        data.defaultMaterial = comp.defaultMaterial;
+        data.defaultMaterialRef = comp.defaultMaterialRef;
         data.subMeshMaterials = comp.subMeshMaterials;
         data.parameterOverrides = comp.parameterOverrides;
         return data;
@@ -90,30 +91,30 @@ namespace services {
         auto& comp = sceneEntity.getComponent<components::MaterialComponent>();
         auto& lifecycle = resource::AssetLifecycleManager::instance();
         // Release old materials that are changing
-        if (!comp.defaultMaterial.empty() && comp.defaultMaterial != material.defaultMaterial) {
-            lifecycle.release(comp.defaultMaterial);
+        if (comp.defaultMaterialRef.isValid() && comp.defaultMaterialRef != material.defaultMaterialRef) {
+            lifecycle.release(comp.defaultMaterialRef.getGUID());
         }
-        for (const auto& [name, path] : comp.subMeshMaterials) {
-            if (!path.empty()) {
+        for (const auto& [name, ref] : comp.subMeshMaterials) {
+            if (ref.isValid()) {
                 auto it = material.subMeshMaterials.find(name);
-                if (it == material.subMeshMaterials.end() || it->second != path) {
-                    lifecycle.release(path);
+                if (it == material.subMeshMaterials.end() || it->second != ref) {
+                    lifecycle.release(ref.getGUID());
                 }
             }
         }
         // Acquire new materials
-        if (!material.defaultMaterial.empty() && material.defaultMaterial != comp.defaultMaterial) {
-            lifecycle.acquire(material.defaultMaterial, resource::AssetType::Material);
+        if (material.defaultMaterialRef.isValid() && material.defaultMaterialRef != comp.defaultMaterialRef) {
+            lifecycle.acquire(material.defaultMaterialRef.getGUID(), resource::AssetType::Material);
         }
-        for (const auto& [name, path] : material.subMeshMaterials) {
-            if (!path.empty()) {
+        for (const auto& [name, ref] : material.subMeshMaterials) {
+            if (ref.isValid()) {
                 auto it = comp.subMeshMaterials.find(name);
-                if (it == comp.subMeshMaterials.end() || it->second != path) {
-                    lifecycle.acquire(path, resource::AssetType::Material);
+                if (it == comp.subMeshMaterials.end() || it->second != ref) {
+                    lifecycle.acquire(ref.getGUID(), resource::AssetType::Material);
                 }
             }
         }
-        comp.defaultMaterial = material.defaultMaterial;
+        comp.defaultMaterialRef = material.defaultMaterialRef;
         comp.subMeshMaterials = material.subMeshMaterials;
         comp.parameterOverrides = material.parameterOverrides;
         return true;
@@ -132,13 +133,14 @@ namespace services {
 
         auto& comp = sceneEntity.getComponent<components::MaterialComponent>();
         auto& lifecycle = resource::AssetLifecycleManager::instance();
-        if (!comp.defaultMaterial.empty() && comp.defaultMaterial != materialPath) {
-            lifecycle.release(comp.defaultMaterial);
+        auto newRef = asset::AssetRef::fromPath(materialPath);
+        if (comp.defaultMaterialRef.isValid() && comp.defaultMaterialRef != newRef) {
+            lifecycle.release(comp.defaultMaterialRef.getGUID());
         }
-        if (!materialPath.empty() && materialPath != comp.defaultMaterial) {
-            lifecycle.acquire(materialPath, resource::AssetType::Material);
+        if (newRef.isValid() && newRef != comp.defaultMaterialRef) {
+            lifecycle.acquire(newRef.getGUID(), resource::AssetType::Material);
         }
-        comp.setDefaultMaterial(materialPath);
+        comp.setDefaultMaterial(newRef);
         return true;
     }
 
@@ -155,17 +157,18 @@ namespace services {
 
         auto& comp = sceneEntity.getComponent<components::MaterialComponent>();
         auto& lifecycle = resource::AssetLifecycleManager::instance();
+        auto newRef = asset::AssetRef::fromPath(materialPath);
         auto it = comp.subMeshMaterials.find(submeshName);
-        if (it != comp.subMeshMaterials.end() && !it->second.empty() && it->second != materialPath) {
-            lifecycle.release(it->second);
+        if (it != comp.subMeshMaterials.end() && it->second.isValid() && it->second != newRef) {
+            lifecycle.release(it->second.getGUID());
         }
         if (materialPath.empty()) {
             comp.subMeshMaterials.erase(submeshName);
         } else {
-            bool isNew = (it == comp.subMeshMaterials.end() || it->second != materialPath);
-            comp.setSubMeshMaterial(submeshName, materialPath);
+            bool isNew = (it == comp.subMeshMaterials.end() || it->second != newRef);
+            comp.setSubMeshMaterial(submeshName, newRef);
             if (isNew) {
-                lifecycle.acquire(materialPath, resource::AssetType::Material);
+                lifecycle.acquire(newRef.getGUID(), resource::AssetType::Material);
             }
         }
         return true;
@@ -183,7 +186,7 @@ namespace services {
         }
 
         const auto& comp = sceneEntity.getComponent<components::MaterialComponent>();
-        return comp.getMaterialForSubmesh(submeshName);
+        return comp.getMaterialForSubmesh(submeshName).resolve();
     }
 
     std::map<std::string, std::string> MaterialComponentService::getAllSubMeshMaterials(EntityHandle entity) const {
@@ -198,7 +201,11 @@ namespace services {
         }
 
         const auto& comp = sceneEntity.getComponent<components::MaterialComponent>();
-        return comp.subMeshMaterials;
+        std::map<std::string, std::string> result;
+        for (const auto& [name, ref] : comp.subMeshMaterials) {
+            result[name] = ref.resolve();
+        }
+        return result;
     }
 
     void MaterialComponentService::registerEventHandlers(events::EventDispatcher& dispatcher) {
