@@ -143,6 +143,73 @@ namespace services {
         if (!inputController) return;
 
         inputController->update();
+        publishInputNotifications();
+    }
+
+    void InputServiceImpl::publishInputNotifications() {
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        // Gather current modifier state
+        bool shiftDown = inputController->isKeyDown(340) || inputController->isKeyDown(344);
+        bool ctrlDown = inputController->isKeyDown(341) || inputController->isKeyDown(345);
+        bool altDown = inputController->isKeyDown(342) || inputController->isKeyDown(346);
+        glm::vec2 mousePos = inputController->getMousePosition();
+
+        // Key press notifications
+        std::vector<int> keys;
+        inputController->getJustPressedKeys(keys);
+        for (int key : keys) {
+            events::input::KeyPressedNotification notif;
+            notif.keyCode = key;
+            notif.shiftDown = shiftDown;
+            notif.ctrlDown = ctrlDown;
+            notif.altDown = altDown;
+            notif.mouseX = mousePos.x;
+            notif.mouseY = mousePos.y;
+            dispatcher.publish(notif);
+        }
+
+        // Key release notifications
+        keys.clear();
+        inputController->getJustReleasedKeys(keys);
+        for (int key : keys) {
+            events::input::KeyReleasedNotification notif;
+            notif.keyCode = key;
+            notif.shiftDown = shiftDown;
+            notif.ctrlDown = ctrlDown;
+            notif.altDown = altDown;
+            notif.mouseX = mousePos.x;
+            notif.mouseY = mousePos.y;
+            dispatcher.publish(notif);
+        }
+
+        // Mouse button press notifications
+        std::vector<int> buttons;
+        inputController->getJustPressedMouseButtons(buttons);
+        for (int btn : buttons) {
+            events::input::MouseButtonPressedNotification notif;
+            notif.button = btn;
+            notif.shiftDown = shiftDown;
+            notif.ctrlDown = ctrlDown;
+            notif.altDown = altDown;
+            notif.mouseX = mousePos.x;
+            notif.mouseY = mousePos.y;
+            dispatcher.publish(notif);
+        }
+
+        // Mouse button release notifications
+        buttons.clear();
+        inputController->getJustReleasedMouseButtons(buttons);
+        for (int btn : buttons) {
+            events::input::MouseButtonReleasedNotification notif;
+            notif.button = btn;
+            notif.shiftDown = shiftDown;
+            notif.ctrlDown = ctrlDown;
+            notif.altDown = altDown;
+            notif.mouseX = mousePos.x;
+            notif.mouseY = mousePos.y;
+            dispatcher.publish(notif);
+        }
     }
 
     bool InputServiceImpl::isInputCapturedByUI() const {

@@ -78,24 +78,44 @@ namespace events::input {
 
     struct KeyPressedNotification : INotification {
         int keyCode;
+        bool shiftDown;
+        bool ctrlDown;
+        bool altDown;
+        float mouseX;
+        float mouseY;
 
         std::string_view getName() const override { return "KeyPressed"; }
     };
 
     struct KeyReleasedNotification : INotification {
         int keyCode;
+        bool shiftDown;
+        bool ctrlDown;
+        bool altDown;
+        float mouseX;
+        float mouseY;
 
         std::string_view getName() const override { return "KeyReleased"; }
     };
 
     struct MouseButtonPressedNotification : INotification {
         int button;
+        bool shiftDown;
+        bool ctrlDown;
+        bool altDown;
+        float mouseX;
+        float mouseY;
 
         std::string_view getName() const override { return "MouseButtonPressed"; }
     };
 
     struct MouseButtonReleasedNotification : INotification {
         int button;
+        bool shiftDown;
+        bool ctrlDown;
+        bool altDown;
+        float mouseX;
+        float mouseY;
 
         std::string_view getName() const override { return "MouseButtonReleased"; }
     };

@@ -45,6 +45,8 @@ namespace services {
         bool isInputCapturedByUI() const override;
 
     private:
+       void publishInputNotifications();
+
        std::unique_ptr<window::InputController> inputController;
     };
 

@@ -3,6 +3,7 @@
 #include <GLFW/glfw3.h>
 #include <unordered_map>
 #include <string>
+#include <vector>
 
 namespace window
 {
@@ -52,6 +53,9 @@ namespace window
         static constexpr int MAX_MOUSE_BUTTONS = GLFW_MOUSE_BUTTON_LAST + 1;
         bool wasKeyDown[MAX_KEYS]{};
         bool keyPressed[MAX_KEYS]{};
+        bool keyReleased[MAX_KEYS]{};
+        bool mouseButtonPressed[MAX_MOUSE_BUTTONS]{};
+        bool mouseButtonReleased[MAX_MOUSE_BUTTONS]{};
 
     public:
         explicit InputController(Window* window);
@@ -71,6 +75,7 @@ namespace window
 
         // Mouse State
         bool isMouseButtonDown(int button) const;
+        bool isMouseButtonPressed(int button) const;
         bool isMouseButtonReleased(int button) const;
         bool isDoubleClick(int button) const;
         glm::vec2 getMousePosition() const;
@@ -79,6 +84,11 @@ namespace window
         glm::vec2 getScrollDelta() const;
 
         void update();
+
+        void getJustPressedKeys(std::vector<int>& outKeys) const;
+        void getJustReleasedKeys(std::vector<int>& outKeys) const;
+        void getJustPressedMouseButtons(std::vector<int>& outButtons) const;
+        void getJustReleasedMouseButtons(std::vector<int>& outButtons) const;
 
         Window* getWindow() const { return window; }
 

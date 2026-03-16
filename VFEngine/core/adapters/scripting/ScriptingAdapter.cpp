@@ -10,6 +10,7 @@
 #include "ScriptSocketEventBridge.hpp"
 #include "ScriptVFXEventBridge.hpp"
 #include "ScriptNavigationEventBridge.hpp"
+#include "ScriptInputEventBridge.hpp"
 #include "NativeAPIRegistry.hpp"
 #include "CoroutineManager.hpp"
 #include "ScriptCommunicationManager.hpp"
@@ -87,12 +88,16 @@ namespace core
             navigationEventBridge = std::make_unique<ScriptNavigationEventBridge>(
                 interpreter.get(), instanceToInterfaces, instanceToObject, instanceToEntity);
 
+            inputEventBridge = std::make_unique<ScriptInputEventBridge>(
+                interpreter.get(), instanceToInterfaces, instanceToObject, instanceToEntity);
+
             physicsEventBridge->subscribeAll();
             uiEventBridge->subscribeAll();
             animationEventBridge->subscribeAll();
             socketEventBridge->subscribeAll();
             vfxEventBridge->subscribeAll();
             navigationEventBridge->subscribeAll();
+            inputEventBridge->subscribeAll();
 
             initialized = true;
             return true;
@@ -110,6 +115,7 @@ namespace core
     {
         if (!initialized) return;
 
+        if (inputEventBridge) inputEventBridge->unsubscribeAll();
         if (navigationEventBridge) navigationEventBridge->unsubscribeAll();
         if (vfxEventBridge) vfxEventBridge->unsubscribeAll();
         if (socketEventBridge) socketEventBridge->unsubscribeAll();
@@ -319,7 +325,7 @@ namespace core
             instanceToObject[instanceId] = std::any(instance);
 
             // Cache implemented interfaces for collision/trigger/UI callbacks
-            static constexpr std::array<const char*, 14> kCheckedInterfaces = {
+            static constexpr std::array<const char*, 15> kCheckedInterfaces = {
                 "ICollisionListener", "ITriggerListener",
                 "IUIButtonListener", "IUITextInputListener", "IUICheckboxListener",
                 "IUIDropdownListener", "IUITabsListener", "IUISliderListener",
@@ -327,7 +333,8 @@ namespace core
                 "IAnimationEventListener",
                 "ISocketAttachmentListener",
                 "IVFXEventListener",
-                "INavigationEventListener"
+                "INavigationEventListener",
+                "IInputEventListener"
             };
 
             std::unordered_set<std::string> interfaces;

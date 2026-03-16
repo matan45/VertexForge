@@ -20,6 +20,7 @@ namespace core
     class ScriptSocketEventBridge;
     class ScriptVFXEventBridge;
     class ScriptNavigationEventBridge;
+    class ScriptInputEventBridge;
 
     class CoroutineManager;
     class ScriptCommunicationManager;
@@ -36,6 +37,7 @@ namespace core
         std::unique_ptr<ScriptSocketEventBridge> socketEventBridge;
         std::unique_ptr<ScriptVFXEventBridge> vfxEventBridge;
         std::unique_ptr<ScriptNavigationEventBridge> navigationEventBridge;
+        std::unique_ptr<ScriptInputEventBridge> inputEventBridge;
         std::unique_ptr<ScriptCommunicationManager> communicationManager;
 
         std::unordered_map<uint64_t, std::string> instanceToClassName;
