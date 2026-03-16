@@ -7,6 +7,8 @@
 #include <resource/AssetTypes.hpp>
 #include <imgui.h>
 #include <thread>
+#include <filesystem>
+#include <algorithm>
 
 namespace
 {
@@ -231,6 +233,46 @@ namespace windows
                 ImGui::Unindent();
             }
 
+            // Audio compression settings (shown once for all audio files)
+            bool hasAudioFiles = false;
+            for (const auto& f : files)
+            {
+                auto ext = std::filesystem::path(f).extension().string();
+                std::transform(ext.begin(), ext.end(), ext.begin(), ::toupper);
+                if (ext == ".WAV" || ext == ".OGG" || ext == ".MP3")
+                {
+                    hasAudioFiles = true;
+                    break;
+                }
+            }
+
+            if (hasAudioFiles)
+            {
+                ImGui::Separator();
+                ImGui::Text("Audio Compression:");
+                ImGui::Indent();
+
+                const char* qualityNames[] = {"Low (~80kbps)", "Medium (~128kbps)", "High (~192kbps)", "Lossless (PCM)"};
+                int qualityIndex = static_cast<int>(audioQuality);
+                if (ImGui::Combo("Audio Quality", &qualityIndex, qualityNames, IM_ARRAYSIZE(qualityNames)))
+                {
+                    audioQuality = static_cast<importConfig::AudioCompressionQuality>(qualityIndex);
+                }
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Vorbis compression quality. Lossless stores raw PCM (no compression)");
+
+                const char* loadTypeNames[] = {"Auto", "Decompress on Load", "Streaming"};
+                int loadTypeIndex = static_cast<int>(audioLoadType);
+                if (ImGui::Combo("Load Type", &loadTypeIndex, loadTypeNames, IM_ARRAYSIZE(loadTypeNames)))
+                {
+                    audioLoadType = static_cast<importConfig::AudioLoadType>(loadTypeIndex);
+                }
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Auto: short audio (<10s) decompresses on load for low latency; long audio streams from disk");
+
+                ImGui::Unindent();
+            }
+
             if (ImGui::Button("Continue"))
             {
                 // Convert to Import controller format
@@ -244,6 +286,8 @@ namespace windows
                     config.meshConfig = meshConfigs[i];
                     config.compressionMode = compressionMode;
                     config.compressionQuality = compressionQuality;
+                    config.audioConfig.quality = audioQuality;
+                    config.audioConfig.loadType = audioLoadType;
                     importFiles.emplace_back(req.path, config);
                     filePaths.push_back(req.path);
                 }

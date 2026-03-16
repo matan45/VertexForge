@@ -159,7 +159,10 @@ project "Import"
 	  "dependencies/meshoptimizer/src",  -- meshoptimizer for LOD generation
 	  "dependencies/v-hacd",             -- V-HACD for convex decomposition
 	  "dependencies/freetype/include",   -- FreeType headers
-	  "dependencies/ispc_texcomp"        -- ISPCTextureCompressor (BC7/BC6H)
+	  "dependencies/ispc_texcomp",       -- ISPCTextureCompressor (BC7/BC6H)
+	  "dependencies/libogg/include",       -- Ogg container format (for Vorbis encoding)
+	  "dependencies/libogg/build/include", -- Ogg generated config headers
+	  "dependencies/libvorbis/include"   -- Vorbis audio compression (encoding at import)
    }
 
    defines { "_CRT_SECURE_NO_WARNINGS", "VF_IMPORT_BUILD_DLL", "MESHOPTIMIZER_API=__declspec(dllimport)" }
@@ -170,8 +173,13 @@ project "Import"
    filter "configurations:Debug"
       defines { "DEBUG" }
       symbols "On"
-      libdirs { "dependencies/assimp/build/lib/Debug", "dependencies/freetype/build/Debug" }
-      links { "assimp-vc145-mtd.lib", "freetyped.lib" }
+      libdirs {
+         "dependencies/assimp/build/lib/Debug",
+         "dependencies/freetype/build/Debug",
+         "dependencies/libogg/build/Debug",
+         "dependencies/libvorbis/build/lib/Debug"
+      }
+      links { "assimp-vc145-mtd.lib", "freetyped.lib", "ogg.lib", "vorbis.lib", "vorbisenc.lib" }
 
       -- Copy DLLs to Editor output directory (Import is Editor-only)
       postbuildcommands {
@@ -184,8 +192,13 @@ project "Import"
    filter "configurations:Release"
       defines { "NDEBUG" }
       optimize "On"
-      libdirs { "dependencies/assimp/build/lib/Release", "dependencies/freetype/build/Release" }
-      links { "assimp-vc145-mt.lib", "freetype.lib" }
+      libdirs {
+         "dependencies/assimp/build/lib/Release",
+         "dependencies/freetype/build/Release",
+         "dependencies/libogg/build/Release",
+         "dependencies/libvorbis/build/lib/Release"
+      }
+      links { "assimp-vc145-mt.lib", "freetype.lib", "ogg.lib", "vorbis.lib", "vorbisenc.lib" }
 
       -- Copy DLLs to Editor output directory (Import is Editor-only)
       postbuildcommands {
@@ -297,7 +310,8 @@ project "Utilities"
 	  "dependencies/entt/single_include",
 	  "dependencies/json/single_include",
 	  "dependencies/meshoptimizer/src",  -- meshoptimizer for terrain meshlet generation
-	  "dependencies/enkiTS/src"          -- enkiTS task scheduler
+	  "dependencies/enkiTS/src",         -- enkiTS task scheduler
+	  "dependencies/stb"                 -- stb_vorbis for runtime Vorbis decoding
    }
 
    links { "spdLog", "meshoptimizer", "enkiTS" }

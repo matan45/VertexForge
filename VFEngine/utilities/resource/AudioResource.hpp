@@ -5,18 +5,22 @@
 #include <memory>
 #include "Types.hpp"
 
+// Forward-declare stb_vorbis to avoid header pollution
+struct stb_vorbis;
 
 namespace resource {
-	
+
 	struct AudioStreamHeader {
 		uint32_t sampleRate = 0;
 		uint32_t channels = 0;
 		uint32_t frames = 0;
 		uint32_t totalDurationSeconds = 0;
 		uint32_t dataSize = 0;
-		std::streampos dataStartOffset = 0;  // Position in file where PCM data begins
+		AudioCompressionFormat compressionFormat = AudioCompressionFormat::PCM;
+		AudioLoadType loadType = AudioLoadType::DecompressOnLoad;
+		std::streampos dataStartOffset = 0;  // Position in file where data begins
 	};
-	
+
 	class AudioStreamHandle {
 	private:
 		friend class AudioResource;
@@ -24,6 +28,10 @@ namespace resource {
 		std::ifstream file;
 		AudioStreamHeader header;
 		size_t currentSamplePosition = 0;
+
+		// Vorbis streaming state
+		std::vector<uint8_t> vorbisBuffer;   // Holds compressed data in memory
+		stb_vorbis* vorbisHandle = nullptr;   // stb_vorbis decoder handle
 
 		bool seekToSample(size_t sampleIndex);
 		size_t getTotalSamples() const { return header.frames * header.channels; }
@@ -37,7 +45,7 @@ namespace resource {
 		AudioStreamHandle(AudioStreamHandle&& other) noexcept;
 		AudioStreamHandle& operator=(AudioStreamHandle&& other) noexcept;
 
-		bool isOpen() const { return file.is_open(); }
+		bool isOpen() const;
 		size_t readSamples(std::vector<short>& buffer, size_t sampleCount);
 		bool seekToTime(float seconds);
 		void reset();
@@ -53,7 +61,7 @@ namespace resource {
 
 	public:
 		static AudioData loadAudio(std::string_view path);
-		
+
 		static std::unique_ptr<AudioStreamHandle> openStream(std::string_view path);
 	};
 

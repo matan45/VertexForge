@@ -21,6 +21,18 @@ namespace resource
         BC6H = 2
     };
 
+    enum class AudioCompressionFormat : uint8_t
+    {
+        PCM = 0,
+        Vorbis = 1
+    };
+
+    enum class AudioLoadType : uint8_t
+    {
+        DecompressOnLoad = 0,
+        Streaming = 1
+    };
+
     enum class ShaderType :uint8_t
     {
         VERTEX,
@@ -186,11 +198,14 @@ namespace resource
     {
         FileType headerFileType = FileType::AUDIO;
         FileVersion version{};
+        AudioCompressionFormat compressionFormat = AudioCompressionFormat::PCM;
+        AudioLoadType loadType = AudioLoadType::DecompressOnLoad;
         uint32_t totalDurationInSeconds = 0;
         uint32_t channels = 0;
         uint32_t sampleRate = 0;
         uint32_t frames = 0;
-        std::vector<short> data;
+        std::vector<short> data;               // PCM samples (populated after decode)
+        std::vector<uint8_t> compressedData;   // Vorbis compressed data (for serialization)
     };
 
     struct SkeletonInfo
