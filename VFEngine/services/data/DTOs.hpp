@@ -4,6 +4,7 @@
 #include "types/AudioEffectTypes.hpp"
 #include "types/PhysicsAnimationTypes.hpp"
 #include <rendertexture/RenderTextureTypes.hpp>
+#include <resource/AssetTypes.hpp>
 #include <glm/glm.hpp>
 #include <string>
 #include <vector>
@@ -125,6 +126,8 @@ namespace services
     struct ImportResult
     {
         std::string sourcePath;
+        std::string outputPath;
+        resource::AssetType assetType = resource::AssetType::COUNT;
         bool success = false;
         std::string errorMessage;
     };

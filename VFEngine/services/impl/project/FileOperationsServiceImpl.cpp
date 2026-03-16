@@ -1,6 +1,8 @@
 #include "FileOperationsServiceImpl.hpp"
 #include "../../data/UndoTypes.hpp"
 #include "asset/AssetReferenceScanner.hpp"
+#include "asset/AssetGUID.hpp"
+#include "asset/AssetMetadataSerializer.hpp"
 #include "resource/ResourceManager.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/project/FileOperationsEvents.hpp"
@@ -175,6 +177,14 @@ namespace services
             return result;
         }
 
+        // Move .vfmeta sidecar if it exists
+        auto sourceMeta = asset::AssetMetadataSerializer::getMetaPath(source);
+        if (fs::exists(sourceMeta, ec))
+        {
+            auto destMeta = asset::AssetMetadataSerializer::getMetaPath(dest);
+            fs::rename(sourceMeta, destMeta, ec);
+        }
+
         if (!projRoot.empty())
         {
             auto updateResult = asset::AssetReferenceScanner::updateReferences(sourcePath, dest.string(), projRoot);
@@ -268,6 +278,20 @@ namespace services
             return result;
         }
 
+        // Create new .vfmeta with new GUID for the copy (copies are distinct assets)
+        auto sourceMeta = asset::AssetMetadataSerializer::getMetaPath(source);
+        if (fs::exists(sourceMeta, ec))
+        {
+            auto originalMeta = asset::AssetMetadataSerializer::load(sourceMeta);
+            if (originalMeta)
+            {
+                asset::AssetMetadata newMeta = *originalMeta;
+                newMeta.guid = asset::AssetGUID::generate();
+                auto destMeta = asset::AssetMetadataSerializer::getMetaPath(dest);
+                asset::AssetMetadataSerializer::save(newMeta, destMeta);
+            }
+        }
+
         if (undoRedoService)
         {
             try
@@ -333,6 +357,14 @@ namespace services
             result.success = false;
             result.errorMessage = "Failed to delete file: " + ec.message();
             return result;
+        }
+
+        // Also move .vfmeta to trash
+        auto metaPath = asset::AssetMetadataSerializer::getMetaPath(filePath);
+        if (fs::exists(metaPath, ec))
+        {
+            std::string metaTrashPath = generateTrashPath(metaPath.string());
+            fs::rename(metaPath, metaTrashPath, ec);
         }
 
         // Remove stale ResourceManager cache entries

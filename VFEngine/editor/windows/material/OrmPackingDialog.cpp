@@ -208,6 +208,8 @@ namespace editor::materialeditor
             services::ImportResult importResult;
             importResult.success = true;
             importResult.sourcePath = result.outputPath;
+            importResult.outputPath = result.outputPath;
+            importResult.assetType = resource::AssetType::Texture;
             notification.results.push_back(importResult);
             events::EventDispatcher::instance().publish(notification);
         }

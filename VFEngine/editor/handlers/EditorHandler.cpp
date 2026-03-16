@@ -40,6 +40,7 @@
 #include "impl/ai/BehaviorTreeServiceImpl.hpp"
 #include "impl/ai/BehaviorTreePlayModeHandler.hpp"
 #include "impl/lifecycle/AssetLifecycleServiceImpl.hpp"
+#include "impl/asset/AssetDatabaseServiceImpl.hpp"
 #include "impl/world/WorldSectorServiceImpl.hpp"
 #include "impl/vegetation/GrassServiceImpl.hpp"
 #include "impl/vegetation/VegetationBrushServiceImpl.hpp"
@@ -341,6 +342,7 @@ namespace handlers
         undoRedoService = std::make_shared<services::UndoRedoServiceImpl>();
         fileOperationsService = std::make_shared<services::FileOperationsServiceImpl>(undoRedoService);
         projectService = std::make_shared<services::ProjectServiceImpl>();
+        assetDatabaseService = std::make_shared<services::AssetDatabaseServiceImpl>();
         renderTextureService = std::make_shared<services::RenderTextureServiceImpl>(
             bootstrap->getRenderTextureProvider()
         );
@@ -532,6 +534,7 @@ namespace handlers
             navmeshService->registerEventHandlers();
         }
         projectService->registerEventHandlers();
+        assetDatabaseService->registerEventHandlers();
         terrainService->registerEventHandlers();
         waterService->registerEventHandlers();
         sculptModeService->registerEventHandlers();

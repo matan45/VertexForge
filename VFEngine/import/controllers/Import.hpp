@@ -24,6 +24,8 @@ namespace controllers
     {
         std::string sourcePath;
         std::string fileName;
+        std::string outputPath;
+        std::string fileType;
         bool success = false;
         std::string errorMessage;
     };

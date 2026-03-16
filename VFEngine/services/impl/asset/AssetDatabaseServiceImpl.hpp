@@ -1,0 +1,30 @@
+#pragma once
+#include "../../interfaces/asset/IAssetDatabaseService.hpp"
+#include "../../events/EventDispatcher.hpp"
+#include <resource/AssetTypes.hpp>
+#include <vector>
+
+namespace services
+{
+    class AssetDatabaseServiceImpl : public IAssetDatabaseService
+    {
+    public:
+        AssetDatabaseServiceImpl() = default;
+        ~AssetDatabaseServiceImpl() override;
+
+        void registerEventHandlers() override;
+
+    private:
+        void onProjectLoaded(const std::string& projectFilePath);
+        void onProjectClosed();
+        void onFileMoved(const std::string& oldPath, const std::string& newPath);
+        void onFileDeleted(const std::string& path);
+        void onImportCompleted(const std::string& outputPath, resource::AssetType type,
+                               const std::string& sourcePath);
+        void onAssetSaved(const std::string& filePath);
+        bool rebuildDatabase();
+        std::string getProjectRoot() const;
+
+        std::vector<events::SubscriptionToken> subscriptions;
+    };
+}

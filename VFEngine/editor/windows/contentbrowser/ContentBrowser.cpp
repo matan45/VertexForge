@@ -499,6 +499,12 @@ namespace windows
                     continue;
                 }
 
+                // Hide .vfmeta sidecar files and asset database index from the content browser
+                if (entry.path().extension() == ".vfmeta" || filename == "assetdb.json")
+                {
+                    continue;
+                }
+
                 Asset asset;
                 asset.path = StringUtil::wstringToUtf8(entry.path().wstring());
                 asset.name = StringUtil::wstringToUtf8(entry.path().filename().wstring());
