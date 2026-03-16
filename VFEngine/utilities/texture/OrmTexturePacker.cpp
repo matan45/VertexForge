@@ -127,9 +127,9 @@ namespace texture
 
                 // ORM: R=AO, G=Roughness, B=Metallic, A=255
                 // BGRA order for .vfImage format (TGAReader swaps B<->R when loading)
-                ormMip.data[outIdx + 0] = metallic;
+                ormMip.data[outIdx + 0] = ao;
                 ormMip.data[outIdx + 1] = roughness;
-                ormMip.data[outIdx + 2] = ao;
+                ormMip.data[outIdx + 2] = metallic;
                 ormMip.data[outIdx + 3] = 255;
             }
 
