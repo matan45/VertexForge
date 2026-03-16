@@ -5,6 +5,34 @@
 
 namespace serialization {
 
+    // Helper: read an AssetRef from JSON, supporting both new GUID format and legacy path format
+    static asset::AssetRef readAssetRef(const nlohmann::json& j, const std::string& newKey, const std::string& legacyKey = "")
+    {
+        // Try new GUID key first
+        if (auto it = j.find(newKey); it != j.end() && it->is_string())
+        {
+            std::string val = it->get<std::string>();
+            if (!val.empty())
+            {
+                // Detect if it's a hex GUID or a file path
+                bool isPath = val.find('.') != std::string::npos
+                           || val.find('/') != std::string::npos
+                           || val.find('\\') != std::string::npos;
+                return isPath ? asset::AssetRef::fromPath(val) : asset::AssetRef::fromHexString(val);
+            }
+        }
+        // Try legacy path key
+        if (!legacyKey.empty())
+        {
+            if (auto it = j.find(legacyKey); it != j.end() && it->is_string())
+            {
+                std::string val = it->get<std::string>();
+                if (!val.empty()) return asset::AssetRef::fromPath(val);
+            }
+        }
+        return asset::AssetRef::invalid();
+    }
+
     // ---- Label ----
 
     json SceneSerialization::serializeUILabel(const components::UILabelComponent& label)
@@ -33,7 +61,7 @@ namespace serialization {
     void SceneSerialization::deserializeUILabel(const json& j, components::UILabelComponent& label)
     {
         label.text = j.value("text", std::string("Label"));
-        label.fontRef = asset::AssetRef::fromHexString(j.value("fontRef", ""));
+        label.fontRef = readAssetRef(j, "fontRef", "fontPath");
         label.fontSize = j.value("fontSize", 16.0f);
         label.fontStyle = stringToFontStyle(j.value("fontStyle", "normal"));
         readVec4(j, "color", label.color);

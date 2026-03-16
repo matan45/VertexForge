@@ -4,6 +4,34 @@
 
 namespace serialization
 {
+    // Helper: read an AssetRef from JSON, supporting both new GUID format and legacy path format
+    static asset::AssetRef readAssetRef(const nlohmann::json& j, const std::string& newKey, const std::string& legacyKey = "")
+    {
+        // Try new GUID key first
+        if (auto it = j.find(newKey); it != j.end() && it->is_string())
+        {
+            std::string val = it->get<std::string>();
+            if (!val.empty())
+            {
+                // Detect if it's a hex GUID or a file path
+                bool isPath = val.find('.') != std::string::npos
+                           || val.find('/') != std::string::npos
+                           || val.find('\\') != std::string::npos;
+                return isPath ? asset::AssetRef::fromPath(val) : asset::AssetRef::fromHexString(val);
+            }
+        }
+        // Try legacy path key
+        if (!legacyKey.empty())
+        {
+            if (auto it = j.find(legacyKey); it != j.end() && it->is_string())
+            {
+                std::string val = it->get<std::string>();
+                if (!val.empty()) return asset::AssetRef::fromPath(val);
+            }
+        }
+        return asset::AssetRef::invalid();
+    }
+
     json SceneSerialization::serializeDecal(const components::DecalComponent& decal)
     {
         json j;
@@ -34,9 +62,9 @@ namespace serialization
             decal.halfExtents = glm::vec3((*it)[0].get<float>(), (*it)[1].get<float>(), (*it)[2].get<float>());
         }
 
-        decal.albedoTextureRef = asset::AssetRef::fromHexString(j.value("albedoTextureRef", ""));
-        decal.normalTextureRef = asset::AssetRef::fromHexString(j.value("normalTextureRef", ""));
-        decal.ormTextureRef = asset::AssetRef::fromHexString(j.value("ormTextureRef", ""));
+        decal.albedoTextureRef = readAssetRef(j, "albedoTextureRef", "albedoTexture");
+        decal.normalTextureRef = readAssetRef(j, "normalTextureRef", "normalTexture");
+        decal.ormTextureRef = readAssetRef(j, "ormTextureRef", "ormTexture");
 
         if (auto it = j.find("color"); it != j.end() && it->is_array() && it->size() >= 4)
         {

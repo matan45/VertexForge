@@ -182,10 +182,10 @@ namespace serialization
 
         if (componentsJson.contains("ibl"))
         {
-            std::string iblFileName = SceneSerialization::deserializeIBL(componentsJson["ibl"]);
-            if (!iblFileName.empty())
+            auto iblRef = SceneSerialization::deserializeIBLRef(componentsJson["ibl"]);
+            if (iblRef.isValid())
             {
-                entity.addOrReplaceComponent<components::IBLComponent>().hdrRef = asset::AssetRef::fromPath(iblFileName);
+                entity.addOrReplaceComponent<components::IBLComponent>().hdrRef = iblRef;
             }
         }
 

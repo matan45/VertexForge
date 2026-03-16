@@ -5,6 +5,34 @@
 
 namespace serialization
 {
+    // Helper: read an AssetRef from JSON, supporting both new GUID format and legacy path format
+    static asset::AssetRef readAssetRef(const nlohmann::json& j, const std::string& newKey, const std::string& legacyKey = "")
+    {
+        // Try new GUID key first
+        if (auto it = j.find(newKey); it != j.end() && it->is_string())
+        {
+            std::string val = it->get<std::string>();
+            if (!val.empty())
+            {
+                // Detect if it's a hex GUID or a file path
+                bool isPath = val.find('.') != std::string::npos
+                           || val.find('/') != std::string::npos
+                           || val.find('\\') != std::string::npos;
+                return isPath ? asset::AssetRef::fromPath(val) : asset::AssetRef::fromHexString(val);
+            }
+        }
+        // Try legacy path key
+        if (!legacyKey.empty())
+        {
+            if (auto it = j.find(legacyKey); it != j.end() && it->is_string())
+            {
+                std::string val = it->get<std::string>();
+                if (!val.empty()) return asset::AssetRef::fromPath(val);
+            }
+        }
+        return asset::AssetRef::invalid();
+    }
+
     json SceneSerialization::serializeAudioSource2D(const components::AudioSource2DComponent& audioSource)
     {
         json j;
@@ -18,7 +46,7 @@ namespace serialization
 
     void SceneSerialization::deserializeAudioSource2D(const json& j, components::AudioSource2DComponent& audioSource)
     {
-        audioSource.audioRef = asset::AssetRef::fromHexString(j.value("audioRef", ""));
+        audioSource.audioRef = readAssetRef(j, "audioRef", "audioFilePath");
         if (auto it = j.find("volume"); it != j.end() && it->is_number())
         {
             audioSource.volume = it->get<float>();
@@ -64,7 +92,7 @@ namespace serialization
 
     void SceneSerialization::deserializeAudioSource3D(const json& j, components::AudioSource3DComponent& audioSource)
     {
-        audioSource.audioRef = asset::AssetRef::fromHexString(j.value("audioRef", ""));
+        audioSource.audioRef = readAssetRef(j, "audioRef", "audioFilePath");
         if (auto it = j.find("volume"); it != j.end() && it->is_number())
         {
             audioSource.volume = it->get<float>();
@@ -208,7 +236,7 @@ namespace serialization
             for (const auto& entryJson : j["scripts"])
             {
                 components::ScriptEntry entry;
-                entry.scriptRef = asset::AssetRef::fromHexString(entryJson.value("scriptRef", ""));
+                entry.scriptRef = readAssetRef(entryJson, "scriptRef", "scriptPath");
                 if (entryJson.contains("enabled") && entryJson["enabled"].is_boolean())
                 {
                     entry.enabled = entryJson["enabled"].get<bool>();
@@ -292,7 +320,7 @@ namespace serialization
         {
             collider.offset = glm::vec3((*it)[0].get<float>(), (*it)[1].get<float>(), (*it)[2].get<float>());
         }
-        collider.meshRef = asset::AssetRef::fromHexString(j.value("meshRef", ""));
+        collider.meshRef = readAssetRef(j, "meshRef", "meshPath");
         if (auto it = j.find("isTrigger"); it != j.end() && it->is_boolean())
         {
             collider.isTrigger = it->get<bool>();
@@ -439,7 +467,7 @@ namespace serialization
     {
         auto& config = physAnim.config;
 
-        physAnim.physicsAnimationRef = asset::AssetRef::fromHexString(j.value("physicsAnimationRef", ""));
+        physAnim.physicsAnimationRef = readAssetRef(j, "physicsAnimationRef", "physicsAnimationPath");
 
         if (auto it = j.find("defaultMode"); it != j.end() && it->is_string())
         {
@@ -522,7 +550,7 @@ namespace serialization
 
     void SceneSerialization::deserializeVFX(const json& j, components::VFXComponent& vfx)
     {
-        vfx.vfxRef = asset::AssetRef::fromHexString(j.value("vfxRef", ""));
+        vfx.vfxRef = readAssetRef(j, "vfxRef", "vfxPath");
         if (auto it = j.find("autoPlay"); it != j.end() && it->is_boolean())
         {
             vfx.autoPlay = it->get<bool>();
@@ -756,7 +784,7 @@ namespace serialization
 
     void SceneSerialization::deserializeBehaviorTree(const json& j, components::BehaviorTreeComponent& bt)
     {
-        bt.behaviorTreeRef = asset::AssetRef::fromHexString(j.value("behaviorTreeRef", ""));
+        bt.behaviorTreeRef = readAssetRef(j, "behaviorTreeRef", "behaviorTreePath");
         if (auto it = j.find("enabled"); it != j.end() && it->is_boolean())
         {
             bt.enabled = it->get<bool>();
@@ -774,6 +802,6 @@ namespace serialization
 
     void SceneSerialization::deserializeNavmesh(const json& j, components::NavmeshComponent& navmesh)
     {
-        navmesh.navmeshRef = asset::AssetRef::fromHexString(j.value("navmeshRef", ""));
+        navmesh.navmeshRef = readAssetRef(j, "navmeshRef", "navmeshPath");
     }
 }

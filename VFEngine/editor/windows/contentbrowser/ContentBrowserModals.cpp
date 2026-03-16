@@ -202,26 +202,27 @@ namespace windows
             if (hasSelection)
             {
                 std::string selectedPath = StringUtil::wstringToUtf8(selectedFile.wstring());
-                auto guidOpt = asset::AssetDatabase::instance().getGUID(selectedPath);
+                // Try to get GUID, auto-register if not tracked
+                auto ref = asset::AssetRef::fromPath(selectedPath);
 
-                if (guidOpt)
+                if (ref.isValid())
                 {
                     if (ImGui::MenuItem("Copy GUID"))
                     {
-                        ImGui::SetClipboardText(guidOpt->toString().c_str());
+                        ImGui::SetClipboardText(ref.getGUID().toString().c_str());
                     }
 
                     if (ImGui::MenuItem("Find References"))
                     {
                         showReferencesModal = true;
-                        referencesGuid = *guidOpt;
+                        referencesGuid = ref.getGUID();
                         referencesAssetPath = selectedPath;
                     }
 
                     if (ImGui::MenuItem("Show Dependencies"))
                     {
                         showDependenciesModal = true;
-                        dependenciesGuid = *guidOpt;
+                        dependenciesGuid = ref.getGUID();
                         dependenciesAssetPath = selectedPath;
                     }
                 }
