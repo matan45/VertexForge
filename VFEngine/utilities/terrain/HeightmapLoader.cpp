@@ -82,8 +82,14 @@ namespace terrain
         (void)channels;
         (void)mipLevels;
 
+        // Read compression format byte (added by VK-914 texture compression)
+        uint8_t compressionFormat = resource::endian::readLE<uint8_t>(file);
+        (void)compressionFormat;
+
         uint32_t mipWidth = resource::endian::readLE<uint32_t>(file);
         uint32_t mipHeight = resource::endian::readLE<uint32_t>(file);
+        uint32_t dataSize = resource::endian::readLE<uint32_t>(file);
+        (void)dataSize;
 
         if (mipWidth != width || mipHeight != height)
         {
