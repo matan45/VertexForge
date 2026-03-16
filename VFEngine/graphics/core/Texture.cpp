@@ -13,6 +13,47 @@
 
 namespace core
 {
+    // Resolve TextureCompressionFormat to Vulkan format
+    static vk::Format resolveVulkanFormat(resource::TextureCompressionFormat compression, vk::Format uncompressedFormat)
+    {
+        switch (compression)
+        {
+            case resource::TextureCompressionFormat::BC7:
+            {
+                // Map sRGB vs Unorm based on the original format
+                if (uncompressedFormat == vk::Format::eR8G8B8A8Srgb ||
+                    uncompressedFormat == vk::Format::eB8G8R8A8Srgb)
+                    return vk::Format::eBc7SrgbBlock;
+                return vk::Format::eBc7UnormBlock;
+            }
+            case resource::TextureCompressionFormat::BC6H:
+                return vk::Format::eBc6HUfloatBlock;
+            case resource::TextureCompressionFormat::ASTC_4x4:
+            {
+                if (uncompressedFormat == vk::Format::eR8G8B8A8Srgb ||
+                    uncompressedFormat == vk::Format::eB8G8R8A8Srgb)
+                    return vk::Format::eAstc4x4SrgbBlock;
+                return vk::Format::eAstc4x4UnormBlock;
+            }
+            case resource::TextureCompressionFormat::ASTC_6x6:
+            {
+                if (uncompressedFormat == vk::Format::eR8G8B8A8Srgb ||
+                    uncompressedFormat == vk::Format::eB8G8R8A8Srgb)
+                    return vk::Format::eAstc6x6SrgbBlock;
+                return vk::Format::eAstc6x6UnormBlock;
+            }
+            case resource::TextureCompressionFormat::ASTC_8x8:
+            {
+                if (uncompressedFormat == vk::Format::eR8G8B8A8Srgb ||
+                    uncompressedFormat == vk::Format::eB8G8R8A8Srgb)
+                    return vk::Format::eAstc8x8SrgbBlock;
+                return vk::Format::eAstc8x8UnormBlock;
+            }
+            default:
+                return uncompressedFormat;
+        }
+    }
+
     Texture::Texture(Device& device) : device{device}
     {
         vk::CommandPoolCreateInfo poolInfo{};
@@ -105,7 +146,7 @@ namespace core
         auto textureData = resource::ResourceManager::loadHDRAsync(asset::AssetRef::fromPath(std::string(filePath)));
         auto texturePtr = textureData.get();
 
-        if (!texturePtr || texturePtr->pixels.empty())
+        if (!texturePtr || texturePtr->mipData.empty())
         {
             vfLogError("Failed to load HDR texture from: {}", filePath);
             return;
@@ -114,223 +155,16 @@ namespace core
         imageData.height = texturePtr->height;
         imageData.width = texturePtr->width;
         imageData.numbersOfChannels = texturePtr->numbersOfChannels;
-
-        vk::DeviceSize dataSize = texturePtr->getDataSize();
-
-        vk::Buffer stagingBuffer;
-        vk::DeviceMemory stagingBufferMemory;
-
-        BufferInfoRequest bufferInfo(device.getLogicalDevice(), device.getPhysicalDevice());
-        bufferInfo.size = dataSize;
-        bufferInfo.usage = vk::BufferUsageFlagBits::eTransferSrc;
-        bufferInfo.properties = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
-        BufferUtilities::createBuffer(bufferInfo, stagingBuffer, stagingBufferMemory);
-
-        // Copy pixel data to staging buffer
-        void* data;
-        if (vk::Result result = device.getLogicalDevice().mapMemory(stagingBufferMemory, 0, dataSize, {}, &data);
-            result != vk::Result::eSuccess)
-        {
-            vfLogError("failed to map memory");
-            device.getLogicalDevice().destroyBuffer(stagingBuffer);
-            device.getLogicalDevice().freeMemory(stagingBufferMemory);
-            return;
-        }
-        memcpy(data, texturePtr->pixels.data(), dataSize);
-        device.getLogicalDevice().unmapMemory(stagingBufferMemory);
-
-        // Create image (single mip level)
-        ImageInfoRequest imageInfo(device.getLogicalDevice(), device.getPhysicalDevice());
-        imageInfo.width = texturePtr->width;
-        imageInfo.height = texturePtr->height;
-        imageInfo.format = vk::Format::eR32G32B32A32Sfloat;
-        imageInfo.tiling = vk::ImageTiling::eOptimal;
-        imageInfo.usage = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled;
-        imageInfo.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-        ImageUtilities::createImage(imageInfo, image, imageMemory);
-
-        // Transition to transfer destination
-        vk::UniqueCommandBuffer commandTransitionA = core::Utilities::beginSingleTimeCommands(
-            device.getLogicalDevice(), commandPool.get());
-        ImageUtilities::transitionImageLayout(commandTransitionA.get(), image, vk::ImageLayout::eUndefined,
-                                              vk::ImageLayout::eTransferDstOptimal, vk::ImageAspectFlagBits::eColor);
-        Utilities::endSingleTimeCommands(device.getGraphicsQueue(), commandTransitionA);
-
-        // Copy staging buffer to image
-        {
-            vk::UniqueCommandBuffer copyCommand = core::Utilities::beginSingleTimeCommands(
-                device.getLogicalDevice(), commandPool.get());
-
-            vk::BufferImageCopy region{};
-            region.bufferOffset = 0;
-            region.bufferRowLength = 0;
-            region.bufferImageHeight = 0;
-            region.imageSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
-            region.imageSubresource.mipLevel = 0;
-            region.imageSubresource.baseArrayLayer = 0;
-            region.imageSubresource.layerCount = 1;
-            region.imageOffset = vk::Offset3D{0, 0, 0};
-            region.imageExtent = vk::Extent3D{texturePtr->width, texturePtr->height, 1};
-
-            copyCommand.get().copyBufferToImage(
-                stagingBuffer,
-                image,
-                vk::ImageLayout::eTransferDstOptimal,
-                1, &region
-            );
-
-            core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), copyCommand);
-        }
-
-        // Transition to shader read
-        vk::UniqueCommandBuffer commandTransitionB = core::Utilities::beginSingleTimeCommands(
-            device.getLogicalDevice(), commandPool.get());
-        ImageUtilities::transitionImageLayout(commandTransitionB.get(), image, vk::ImageLayout::eTransferDstOptimal,
-                                              vk::ImageLayout::eShaderReadOnlyOptimal, vk::ImageAspectFlagBits::eColor);
-        Utilities::endSingleTimeCommands(device.getGraphicsQueue(), commandTransitionB);
-
-        device.getLogicalDevice().destroyBuffer(stagingBuffer);
-        device.getLogicalDevice().freeMemory(stagingBufferMemory);
-
-        texturePtr->releaseCPUData();
-
-        createSampler(1); // Single mip level
-
-        core::ImageViewInfoRequest imageViewRequest(device.getLogicalDevice(), image);
-        imageViewRequest.format = vk::Format::eR32G32B32A32Sfloat;
-        imageViewRequest.mipLevels = 1;
-        ImageUtilities::createImageView(imageViewRequest, imageView);
-        if (isEditor)
-        {
-            isEditorTexture = true;
-            descriptorSet = ImGui_ImplVulkan_AddTexture(sampler, imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-        }
-    }
-
-    void Texture::loadHDRFromData(const resource::HDRData& hdrData, bool isEditor)
-    {
-        if (hdrData.pixels.empty())
-        {
-            vfLogError("HDR data is empty");
-            return;
-        }
-
-        imageData.height = hdrData.height;
-        imageData.width = hdrData.width;
-        imageData.numbersOfChannels = hdrData.numbersOfChannels;
-
-        vk::DeviceSize dataSize = hdrData.getDataSize();
-
-        vk::Buffer stagingBuffer;
-        vk::DeviceMemory stagingBufferMemory;
-
-        BufferInfoRequest bufferInfo(device.getLogicalDevice(), device.getPhysicalDevice());
-        bufferInfo.size = dataSize;
-        bufferInfo.usage = vk::BufferUsageFlagBits::eTransferSrc;
-        bufferInfo.properties = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
-        BufferUtilities::createBuffer(bufferInfo, stagingBuffer, stagingBufferMemory);
-
-        // Copy pixel data to staging buffer
-        void* data;
-        if (vk::Result result = device.getLogicalDevice().mapMemory(stagingBufferMemory, 0, dataSize, {}, &data);
-            result != vk::Result::eSuccess)
-        {
-            vfLogError("failed to map memory");
-            device.getLogicalDevice().destroyBuffer(stagingBuffer);
-            device.getLogicalDevice().freeMemory(stagingBufferMemory);
-            return;
-        }
-        memcpy(data, hdrData.pixels.data(), dataSize);
-        device.getLogicalDevice().unmapMemory(stagingBufferMemory);
-
-        // Create image (single mip level)
-        ImageInfoRequest imageInfo(device.getLogicalDevice(), device.getPhysicalDevice());
-        imageInfo.width = hdrData.width;
-        imageInfo.height = hdrData.height;
-        imageInfo.format = vk::Format::eR32G32B32A32Sfloat;
-        imageInfo.tiling = vk::ImageTiling::eOptimal;
-        imageInfo.usage = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled;
-        imageInfo.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-        ImageUtilities::createImage(imageInfo, image, imageMemory);
-
-        // Transition to transfer destination
-        vk::UniqueCommandBuffer commandTransitionA = core::Utilities::beginSingleTimeCommands(
-            device.getLogicalDevice(), commandPool.get());
-        ImageUtilities::transitionImageLayout(commandTransitionA.get(), image, vk::ImageLayout::eUndefined,
-                                              vk::ImageLayout::eTransferDstOptimal, vk::ImageAspectFlagBits::eColor);
-        Utilities::endSingleTimeCommands(device.getGraphicsQueue(), commandTransitionA);
-
-        // Copy staging buffer to image
-        {
-            vk::UniqueCommandBuffer copyCommand = core::Utilities::beginSingleTimeCommands(
-                device.getLogicalDevice(), commandPool.get());
-
-            vk::BufferImageCopy region{};
-            region.bufferOffset = 0;
-            region.bufferRowLength = 0;
-            region.bufferImageHeight = 0;
-            region.imageSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
-            region.imageSubresource.mipLevel = 0;
-            region.imageSubresource.baseArrayLayer = 0;
-            region.imageSubresource.layerCount = 1;
-            region.imageOffset = vk::Offset3D{0, 0, 0};
-            region.imageExtent = vk::Extent3D{hdrData.width, hdrData.height, 1};
-
-            copyCommand.get().copyBufferToImage(
-                stagingBuffer,
-                image,
-                vk::ImageLayout::eTransferDstOptimal,
-                1, &region
-            );
-
-            core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), copyCommand);
-        }
-
-        // Transition to shader read
-        vk::UniqueCommandBuffer commandTransitionB = core::Utilities::beginSingleTimeCommands(
-            device.getLogicalDevice(), commandPool.get());
-        ImageUtilities::transitionImageLayout(commandTransitionB.get(), image, vk::ImageLayout::eTransferDstOptimal,
-                                              vk::ImageLayout::eShaderReadOnlyOptimal, vk::ImageAspectFlagBits::eColor);
-        Utilities::endSingleTimeCommands(device.getGraphicsQueue(), commandTransitionB);
-
-        device.getLogicalDevice().destroyBuffer(stagingBuffer);
-        device.getLogicalDevice().freeMemory(stagingBufferMemory);
-
-        createSampler(1); // Single mip level
-
-        core::ImageViewInfoRequest imageViewRequest(device.getLogicalDevice(), image);
-        imageViewRequest.format = vk::Format::eR32G32B32A32Sfloat;
-        imageViewRequest.mipLevels = 1;
-        ImageUtilities::createImageView(imageViewRequest, imageView);
-
-        if (isEditor)
-        {
-            isEditorTexture = true;
-            descriptorSet = ImGui_ImplVulkan_AddTexture(sampler, imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-        }
-    }
-
-    void Texture::loadTextureFromFile(std::string_view filePath, vk::Format format, bool isEditor)
-    {
-        auto textureData = resource::ResourceManager::loadTextureAsync(asset::AssetRef::fromPath(std::string(filePath)));
-        auto texturePtr = textureData.get();
-
-        if (!texturePtr || texturePtr->mipData.empty())
-        {
-            vfLogError("Failed to load texture from: {}", filePath);
-            return;
-        }
-
-        imageData.height = texturePtr->height;
-        imageData.width = texturePtr->width;
-        imageData.numbersOfChannels = texturePtr->numbersOfChannels;
         imageData.mipLevels = texturePtr->mipLevels;
 
-        // Calculate total staging buffer size for all mip levels
+        bool isCompressed = (texturePtr->compressionFormat != resource::TextureCompressionFormat::Uncompressed);
+        vk::Format hdrFormat = resolveVulkanFormat(texturePtr->compressionFormat, vk::Format::eR32G32B32A32Sfloat);
+
+        // Calculate total staging buffer size using dataSize
         vk::DeviceSize totalSize = 0;
         for (const auto& mip : texturePtr->mipData)
         {
-            totalSize += static_cast<vk::DeviceSize>(mip.width) * mip.height * 4 * sizeof(unsigned char);
+            totalSize += mip.dataSize;
         }
 
         vk::Buffer stagingBuffer;
@@ -356,7 +190,281 @@ namespace core
         vk::DeviceSize offset = 0;
         for (const auto& mip : texturePtr->mipData)
         {
-            size_t mipSize = static_cast<size_t>(mip.width) * mip.height * 4;
+            memcpy(static_cast<char*>(data) + offset, mip.data.data(), mip.dataSize);
+            offset += mip.dataSize;
+        }
+        device.getLogicalDevice().unmapMemory(stagingBufferMemory);
+
+        // Create image with all mip levels
+        ImageInfoRequest imageInfo(device.getLogicalDevice(), device.getPhysicalDevice());
+        imageInfo.width = texturePtr->width;
+        imageInfo.height = texturePtr->height;
+        imageInfo.mipLevels = texturePtr->mipLevels;
+        imageInfo.format = hdrFormat;
+        imageInfo.tiling = vk::ImageTiling::eOptimal;
+        imageInfo.usage = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled;
+        imageInfo.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
+        ImageUtilities::createImage(imageInfo, image, imageMemory);
+
+        // Transition all mip levels to transfer destination
+        vk::UniqueCommandBuffer commandTransitionA = core::Utilities::beginSingleTimeCommands(
+            device.getLogicalDevice(), commandPool.get());
+        ImageUtilities::transitionImageLayout(commandTransitionA.get(), image, vk::ImageLayout::eUndefined,
+                                              vk::ImageLayout::eTransferDstOptimal, vk::ImageAspectFlagBits::eColor,
+                                              1, texturePtr->mipLevels);
+        Utilities::endSingleTimeCommands(device.getGraphicsQueue(), commandTransitionA);
+
+        // Copy each mip level from staging buffer to image
+        {
+            vk::UniqueCommandBuffer copyCommand = core::Utilities::beginSingleTimeCommands(
+                device.getLogicalDevice(), commandPool.get());
+
+            std::vector<vk::BufferImageCopy> regions;
+            regions.reserve(texturePtr->mipLevels);
+            offset = 0;
+
+            for (uint32_t level = 0; level < texturePtr->mipLevels; ++level)
+            {
+                const auto& mip = texturePtr->mipData[level];
+
+                vk::BufferImageCopy region{};
+                region.bufferOffset = offset;
+                region.bufferRowLength = 0;
+                region.bufferImageHeight = 0;
+                region.imageSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+                region.imageSubresource.mipLevel = level;
+                region.imageSubresource.baseArrayLayer = 0;
+                region.imageSubresource.layerCount = 1;
+                region.imageOffset = vk::Offset3D{0, 0, 0};
+                region.imageExtent = vk::Extent3D{mip.width, mip.height, 1};
+
+                regions.push_back(region);
+                offset += mip.dataSize;
+            }
+
+            copyCommand.get().copyBufferToImage(
+                stagingBuffer,
+                image,
+                vk::ImageLayout::eTransferDstOptimal,
+                regions
+            );
+
+            core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), copyCommand);
+        }
+
+        // Transition to shader read
+        vk::UniqueCommandBuffer commandTransitionB = core::Utilities::beginSingleTimeCommands(
+            device.getLogicalDevice(), commandPool.get());
+        ImageUtilities::transitionImageLayout(commandTransitionB.get(), image, vk::ImageLayout::eTransferDstOptimal,
+                                              vk::ImageLayout::eShaderReadOnlyOptimal, vk::ImageAspectFlagBits::eColor,
+                                              1, texturePtr->mipLevels);
+        Utilities::endSingleTimeCommands(device.getGraphicsQueue(), commandTransitionB);
+
+        device.getLogicalDevice().destroyBuffer(stagingBuffer);
+        device.getLogicalDevice().freeMemory(stagingBufferMemory);
+
+        texturePtr->releaseCPUData();
+
+        createSampler(texturePtr->mipLevels);
+
+        core::ImageViewInfoRequest imageViewRequest(device.getLogicalDevice(), image);
+        imageViewRequest.format = hdrFormat;
+        imageViewRequest.mipLevels = texturePtr->mipLevels;
+        ImageUtilities::createImageView(imageViewRequest, imageView);
+        if (isEditor)
+        {
+            isEditorTexture = true;
+            descriptorSet = ImGui_ImplVulkan_AddTexture(sampler, imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+            createPerMipViews(hdrFormat);
+        }
+    }
+
+    void Texture::loadHDRFromData(const resource::HDRData& hdrData, bool isEditor)
+    {
+        if (hdrData.mipData.empty())
+        {
+            vfLogError("HDR data is empty");
+            return;
+        }
+
+        imageData.height = hdrData.height;
+        imageData.width = hdrData.width;
+        imageData.numbersOfChannels = hdrData.numbersOfChannels;
+        imageData.mipLevels = hdrData.mipLevels;
+
+        bool isCompressed = (hdrData.compressionFormat != resource::TextureCompressionFormat::Uncompressed);
+        vk::Format hdrFormat = resolveVulkanFormat(hdrData.compressionFormat, vk::Format::eR32G32B32A32Sfloat);
+
+        // Calculate total staging buffer size
+        vk::DeviceSize totalSize = 0;
+        for (const auto& mip : hdrData.mipData)
+        {
+            totalSize += mip.dataSize;
+        }
+
+        vk::Buffer stagingBuffer;
+        vk::DeviceMemory stagingBufferMemory;
+
+        BufferInfoRequest bufferInfo(device.getLogicalDevice(), device.getPhysicalDevice());
+        bufferInfo.size = totalSize;
+        bufferInfo.usage = vk::BufferUsageFlagBits::eTransferSrc;
+        bufferInfo.properties = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
+        BufferUtilities::createBuffer(bufferInfo, stagingBuffer, stagingBufferMemory);
+
+        // Copy all mip levels to staging buffer
+        void* data;
+        if (vk::Result result = device.getLogicalDevice().mapMemory(stagingBufferMemory, 0, totalSize, {}, &data);
+            result != vk::Result::eSuccess)
+        {
+            vfLogError("failed to map memory");
+            device.getLogicalDevice().destroyBuffer(stagingBuffer);
+            device.getLogicalDevice().freeMemory(stagingBufferMemory);
+            return;
+        }
+
+        vk::DeviceSize offset = 0;
+        for (const auto& mip : hdrData.mipData)
+        {
+            memcpy(static_cast<char*>(data) + offset, mip.data.data(), mip.dataSize);
+            offset += mip.dataSize;
+        }
+        device.getLogicalDevice().unmapMemory(stagingBufferMemory);
+
+        // Create image with all mip levels
+        ImageInfoRequest imageInfo(device.getLogicalDevice(), device.getPhysicalDevice());
+        imageInfo.width = hdrData.width;
+        imageInfo.height = hdrData.height;
+        imageInfo.mipLevels = hdrData.mipLevels;
+        imageInfo.format = hdrFormat;
+        imageInfo.tiling = vk::ImageTiling::eOptimal;
+        imageInfo.usage = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled;
+        imageInfo.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
+        ImageUtilities::createImage(imageInfo, image, imageMemory);
+
+        // Transition to transfer destination
+        vk::UniqueCommandBuffer commandTransitionA = core::Utilities::beginSingleTimeCommands(
+            device.getLogicalDevice(), commandPool.get());
+        ImageUtilities::transitionImageLayout(commandTransitionA.get(), image, vk::ImageLayout::eUndefined,
+                                              vk::ImageLayout::eTransferDstOptimal, vk::ImageAspectFlagBits::eColor,
+                                              1, hdrData.mipLevels);
+        Utilities::endSingleTimeCommands(device.getGraphicsQueue(), commandTransitionA);
+
+        // Copy each mip level
+        {
+            vk::UniqueCommandBuffer copyCommand = core::Utilities::beginSingleTimeCommands(
+                device.getLogicalDevice(), commandPool.get());
+
+            std::vector<vk::BufferImageCopy> regions;
+            regions.reserve(hdrData.mipLevels);
+            offset = 0;
+
+            for (uint32_t level = 0; level < hdrData.mipLevels; ++level)
+            {
+                const auto& mip = hdrData.mipData[level];
+
+                vk::BufferImageCopy region{};
+                region.bufferOffset = offset;
+                region.bufferRowLength = 0;
+                region.bufferImageHeight = 0;
+                region.imageSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+                region.imageSubresource.mipLevel = level;
+                region.imageSubresource.baseArrayLayer = 0;
+                region.imageSubresource.layerCount = 1;
+                region.imageOffset = vk::Offset3D{0, 0, 0};
+                region.imageExtent = vk::Extent3D{mip.width, mip.height, 1};
+
+                regions.push_back(region);
+                offset += mip.dataSize;
+            }
+
+            copyCommand.get().copyBufferToImage(
+                stagingBuffer,
+                image,
+                vk::ImageLayout::eTransferDstOptimal,
+                regions
+            );
+
+            core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), copyCommand);
+        }
+
+        // Transition to shader read
+        vk::UniqueCommandBuffer commandTransitionB = core::Utilities::beginSingleTimeCommands(
+            device.getLogicalDevice(), commandPool.get());
+        ImageUtilities::transitionImageLayout(commandTransitionB.get(), image, vk::ImageLayout::eTransferDstOptimal,
+                                              vk::ImageLayout::eShaderReadOnlyOptimal, vk::ImageAspectFlagBits::eColor,
+                                              1, hdrData.mipLevels);
+        Utilities::endSingleTimeCommands(device.getGraphicsQueue(), commandTransitionB);
+
+        device.getLogicalDevice().destroyBuffer(stagingBuffer);
+        device.getLogicalDevice().freeMemory(stagingBufferMemory);
+
+        createSampler(hdrData.mipLevels);
+
+        core::ImageViewInfoRequest imageViewRequest(device.getLogicalDevice(), image);
+        imageViewRequest.format = hdrFormat;
+        imageViewRequest.mipLevels = hdrData.mipLevels;
+        ImageUtilities::createImageView(imageViewRequest, imageView);
+
+        if (isEditor)
+        {
+            isEditorTexture = true;
+            descriptorSet = ImGui_ImplVulkan_AddTexture(sampler, imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+            createPerMipViews(hdrFormat);
+        }
+    }
+
+    void Texture::loadTextureFromFile(std::string_view filePath, vk::Format format, bool isEditor)
+    {
+        auto textureData = resource::ResourceManager::loadTextureAsync(asset::AssetRef::fromPath(std::string(filePath)));
+        auto texturePtr = textureData.get();
+
+        if (!texturePtr || texturePtr->mipData.empty())
+        {
+            vfLogError("Failed to load texture from: {}", filePath);
+            return;
+        }
+
+        imageData.height = texturePtr->height;
+        imageData.width = texturePtr->width;
+        imageData.numbersOfChannels = texturePtr->numbersOfChannels;
+        imageData.mipLevels = texturePtr->mipLevels;
+
+        // Resolve format based on compression
+        vk::Format resolvedFormat = resolveVulkanFormat(texturePtr->compressionFormat, format);
+
+        // Calculate total staging buffer size using dataSize
+        vk::DeviceSize totalSize = 0;
+        for (const auto& mip : texturePtr->mipData)
+        {
+            totalSize += mip.dataSize > 0 ? mip.dataSize
+                : static_cast<vk::DeviceSize>(mip.width) * mip.height * 4;
+        }
+
+        vk::Buffer stagingBuffer;
+        vk::DeviceMemory stagingBufferMemory;
+
+        BufferInfoRequest bufferInfo(device.getLogicalDevice(), device.getPhysicalDevice());
+        bufferInfo.size = totalSize;
+        bufferInfo.usage = vk::BufferUsageFlagBits::eTransferSrc;
+        bufferInfo.properties = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
+        BufferUtilities::createBuffer(bufferInfo, stagingBuffer, stagingBufferMemory);
+
+        // Copy all mip levels to staging buffer
+        void* data;
+        if (vk::Result result = device.getLogicalDevice().mapMemory(stagingBufferMemory, 0, totalSize, {}, &data);
+            result != vk::Result::eSuccess)
+        {
+            vfLogError("failed to map memory");
+            device.getLogicalDevice().destroyBuffer(stagingBuffer);
+            device.getLogicalDevice().freeMemory(stagingBufferMemory);
+            return;
+        }
+
+        vk::DeviceSize offset = 0;
+        for (const auto& mip : texturePtr->mipData)
+        {
+            size_t mipSize = mip.dataSize > 0 ? mip.dataSize
+                : static_cast<size_t>(mip.width) * mip.height * 4;
             memcpy(static_cast<char*>(data) + offset, mip.data.data(), mipSize);
             offset += mipSize;
         }
@@ -367,7 +475,7 @@ namespace core
         imageInfo.width = texturePtr->width;
         imageInfo.height = texturePtr->height;
         imageInfo.mipLevels = texturePtr->mipLevels;
-        imageInfo.format = format;
+        imageInfo.format = resolvedFormat;
         imageInfo.tiling = vk::ImageTiling::eOptimal;
         imageInfo.usage = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled;
         imageInfo.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
@@ -406,7 +514,8 @@ namespace core
                 region.imageExtent = vk::Extent3D(mip.width, mip.height, 1);
 
                 regions.push_back(region);
-                offset += static_cast<vk::DeviceSize>(mip.width) * mip.height * 4;
+                offset += mip.dataSize > 0 ? mip.dataSize
+                    : static_cast<vk::DeviceSize>(mip.width) * mip.height * 4;
             }
 
             copyCommand.get().copyBufferToImage(
@@ -431,19 +540,18 @@ namespace core
         device.getLogicalDevice().freeMemory(stagingBufferMemory);
 
         // Release CPU mip data now that it's uploaded to GPU
-        // This frees ~33% memory overhead for large textures
         texturePtr->releaseCPUData();
 
         createSampler(texturePtr->mipLevels);
         core::ImageViewInfoRequest imageViewRequest(device.getLogicalDevice(), image);
-        imageViewRequest.format = format;
+        imageViewRequest.format = resolvedFormat;
         imageViewRequest.mipLevels = texturePtr->mipLevels;
         ImageUtilities::createImageView(imageViewRequest, imageView);
         if (isEditor)
         {
             isEditorTexture = true;
             descriptorSet = ImGui_ImplVulkan_AddTexture(sampler, imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-            createPerMipViews(format);
+            createPerMipViews(resolvedFormat);
         }
     }
 
@@ -460,11 +568,15 @@ namespace core
         imageData.numbersOfChannels = textureData.numbersOfChannels;
         imageData.mipLevels = textureData.mipLevels;
 
-        // Calculate total staging buffer size for all mip levels
+        // Resolve format based on compression
+        vk::Format resolvedFormat = resolveVulkanFormat(textureData.compressionFormat, format);
+
+        // Calculate total staging buffer size using dataSize
         vk::DeviceSize totalSize = 0;
         for (const auto& mip : textureData.mipData)
         {
-            totalSize += static_cast<vk::DeviceSize>(mip.width) * mip.height * 4 * sizeof(unsigned char);
+            totalSize += mip.dataSize > 0 ? mip.dataSize
+                : static_cast<vk::DeviceSize>(mip.width) * mip.height * 4;
         }
 
         vk::Buffer stagingBuffer;
@@ -490,7 +602,8 @@ namespace core
         vk::DeviceSize offset = 0;
         for (const auto& mip : textureData.mipData)
         {
-            size_t mipSize = static_cast<size_t>(mip.width) * mip.height * 4;
+            size_t mipSize = mip.dataSize > 0 ? mip.dataSize
+                : static_cast<size_t>(mip.width) * mip.height * 4;
             memcpy(static_cast<char*>(data) + offset, mip.data.data(), mipSize);
             offset += mipSize;
         }
@@ -501,7 +614,7 @@ namespace core
         imageInfo.width = textureData.width;
         imageInfo.height = textureData.height;
         imageInfo.mipLevels = textureData.mipLevels;
-        imageInfo.format = format;
+        imageInfo.format = resolvedFormat;
         imageInfo.tiling = vk::ImageTiling::eOptimal;
         imageInfo.usage = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled;
         imageInfo.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
@@ -538,7 +651,8 @@ namespace core
             region.imageExtent = vk::Extent3D(mip.width, mip.height, 1);
 
             regions.push_back(region);
-            offset += static_cast<vk::DeviceSize>(mip.width) * mip.height * 4;
+            offset += mip.dataSize > 0 ? mip.dataSize
+                : static_cast<vk::DeviceSize>(mip.width) * mip.height * 4;
         }
 
         copyCommand.get().copyBufferToImage(
@@ -549,7 +663,7 @@ namespace core
         );
 
         core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), copyCommand);
-        
+
         // Transition all mip levels to shader read
         vk::UniqueCommandBuffer commandTransitionB = core::Utilities::beginSingleTimeCommands(
             device.getLogicalDevice(), commandPool.get());
@@ -563,14 +677,14 @@ namespace core
 
         createSampler(textureData.mipLevels);
         core::ImageViewInfoRequest imageViewRequest(device.getLogicalDevice(), image);
-        imageViewRequest.format = format;
+        imageViewRequest.format = resolvedFormat;
         imageViewRequest.mipLevels = textureData.mipLevels;
         ImageUtilities::createImageView(imageViewRequest, imageView);
         if (isEditor)
         {
             isEditorTexture = true;
             descriptorSet = ImGui_ImplVulkan_AddTexture(sampler, imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-            createPerMipViews(format);
+            createPerMipViews(resolvedFormat);
         }
     }
 

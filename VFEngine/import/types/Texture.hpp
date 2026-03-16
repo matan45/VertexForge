@@ -28,8 +28,17 @@ namespace types
                                    const resource::HDRData& hdrData) const;
 
         void generateMipmaps(resource::TextureData& textureData) const;
+        void generateHDRMipmaps(std::vector<float>& basePixels, uint32_t width, uint32_t height,
+                                resource::HDRData& hdrData) const;
 
         resource::MipLevelData generateMipLevel(const resource::MipLevelData& source) const;
+
+        void compressTextureMips(resource::TextureData& textureData,
+                                 importConfig::TextureCompressionMode mode,
+                                 importConfig::TextureCompressionQuality quality) const;
+        void compressHDRMips(resource::HDRData& hdrData,
+                             importConfig::TextureCompressionMode mode,
+                             importConfig::TextureCompressionQuality quality) const;
 
         void convertTo4Channels(unsigned char* inputData, int width, int height, int inputChannels,
             std::vector<unsigned char>& outputData);

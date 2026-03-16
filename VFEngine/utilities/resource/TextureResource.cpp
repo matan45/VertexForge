@@ -76,6 +76,12 @@ namespace resource
             return {};
         }
 
+        // Read compression format
+        uint8_t compressionByte = endian::readLE<uint8_t>(inFile);
+        textureData.compressionFormat = static_cast<TextureCompressionFormat>(compressionByte);
+
+        bool isCompressed = (textureData.compressionFormat != TextureCompressionFormat::Uncompressed);
+
         textureData.mipData.reserve(textureData.mipLevels);
 
         for (uint32_t level = 0; level < textureData.mipLevels; ++level)
@@ -83,9 +89,21 @@ namespace resource
             MipLevelData mipLevel;
             mipLevel.width = endian::readLE<uint32_t>(inFile);
             mipLevel.height = endian::readLE<uint32_t>(inFile);
+            mipLevel.dataSize = endian::readLE<uint32_t>(inFile);
 
-            // Read pixel data for this mip level
-            TGAReader::readTGA(inFile, mipLevel.width, mipLevel.height, mipLevel.data);
+            if (isCompressed)
+            {
+                // Read compressed data directly (no BGRA swap needed)
+                mipLevel.data.resize(mipLevel.dataSize);
+                inFile.read(reinterpret_cast<char*>(mipLevel.data.data()), mipLevel.dataSize);
+            }
+            else
+            {
+                // Read pixel data with BGRA->RGBA swap
+                TGAReader::readTGA(inFile, mipLevel.width, mipLevel.height, mipLevel.data);
+                mipLevel.dataSize = static_cast<uint32_t>(mipLevel.data.size());
+            }
+
             textureData.mipData.push_back(std::move(mipLevel));
         }
 
@@ -123,8 +141,26 @@ namespace resource
         hdrData.width = endian::readLE<uint32_t>(inFile);
         hdrData.height = endian::readLE<uint32_t>(inFile);
         hdrData.numbersOfChannels = endian::readLE<uint32_t>(inFile);
+        hdrData.mipLevels = endian::readLE<uint32_t>(inFile);
 
-        HDRReader::readHDR(inFile, hdrData.width, hdrData.height, hdrData.numbersOfChannels, hdrData.pixels);
+        // Read compression format
+        uint8_t compressionByte = endian::readLE<uint8_t>(inFile);
+        hdrData.compressionFormat = static_cast<TextureCompressionFormat>(compressionByte);
+
+        hdrData.mipData.reserve(hdrData.mipLevels);
+
+        for (uint32_t level = 0; level < hdrData.mipLevels; ++level)
+        {
+            MipLevelData mipLevel;
+            mipLevel.width = endian::readLE<uint32_t>(inFile);
+            mipLevel.height = endian::readLE<uint32_t>(inFile);
+            mipLevel.dataSize = endian::readLE<uint32_t>(inFile);
+
+            mipLevel.data.resize(mipLevel.dataSize);
+            inFile.read(reinterpret_cast<char*>(mipLevel.data.data()), mipLevel.dataSize);
+
+            hdrData.mipData.push_back(std::move(mipLevel));
+        }
 
         inFile.close();
 

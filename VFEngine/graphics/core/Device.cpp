@@ -226,6 +226,7 @@ namespace core
         vk::PhysicalDeviceFeatures deviceFeatures{};
         deviceFeatures.samplerAnisotropy = VK_TRUE;
         deviceFeatures.independentBlend = VK_TRUE;
+        deviceFeatures.textureCompressionBC = VK_TRUE;
 
         // required for gl_BaseInstance in shaders
         vk::PhysicalDeviceVulkan11Features vulkan11Features{};
@@ -340,6 +341,12 @@ namespace core
         const bool extensionsSupported = checkDeviceExtensionSupport(device);
         const vk::PhysicalDeviceFeatures supportedFeatures = device.getFeatures();
         const vk::PhysicalDeviceProperties deviceProperties = device.getProperties();
+
+        if (!supportedFeatures.textureCompressionBC)
+        {
+            vfLogWarning("Device {} does not support BC texture compression",
+                         static_cast<const char*>(deviceProperties.deviceName));
+        }
 
         return indices.isComplete() &&
             extensionsSupported &&

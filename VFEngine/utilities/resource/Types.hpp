@@ -14,6 +14,16 @@
 
 namespace resource
 {
+    enum class TextureCompressionFormat : uint8_t
+    {
+        Uncompressed = 0,
+        BC7 = 1,
+        BC6H = 2,
+        ASTC_4x4 = 3,
+        ASTC_6x6 = 4,
+        ASTC_8x8 = 5
+    };
+
     enum class ShaderType :uint8_t
     {
         VERTEX,
@@ -46,6 +56,7 @@ namespace resource
     {
         uint32_t width = 0;
         uint32_t height = 0;
+        uint32_t dataSize = 0; // Explicit byte count (for compressed data; 0 = use width*height*4)
         std::vector<unsigned char> data;
     };
 
@@ -57,8 +68,9 @@ namespace resource
         uint32_t height = 0;
         uint32_t numbersOfChannels = 0;
         uint32_t mipLevels = 1;
+        TextureCompressionFormat compressionFormat = TextureCompressionFormat::Uncompressed;
         std::vector<MipLevelData> mipData;
-        
+
         const std::vector<unsigned char>& textureData() const {
             static std::vector<unsigned char> empty;
             return mipData.empty() ? empty : mipData[0].data;
@@ -79,17 +91,27 @@ namespace resource
         uint32_t width = 0;
         uint32_t height = 0;
         uint32_t numbersOfChannels = 0;
-        std::vector<float> pixels;
+        uint32_t mipLevels = 1;
+        TextureCompressionFormat compressionFormat = TextureCompressionFormat::Uncompressed;
+        std::vector<MipLevelData> mipData;
 
         [[nodiscard]] size_t getDataSize() const
         {
-            return pixels.size() * sizeof(float);
+            size_t total = 0;
+            for (const auto& mip : mipData)
+            {
+                total += mip.dataSize > 0 ? mip.dataSize : mip.data.size();
+            }
+            return total;
         }
 
         void releaseCPUData()
         {
-            pixels.clear();
-            pixels.shrink_to_fit();
+            for (auto& mip : mipData)
+            {
+                mip.data.clear();
+                mip.data.shrink_to_fit();
+            }
         }
     };
 

@@ -200,7 +200,7 @@ namespace resource
             [](const std::string& p) { return TextureResource::loadHDR(p); },
             AssetType::HDR,
             [](const HDRData& hdr) -> size_t {
-                return hdr.pixels.size() * sizeof(float);
+                return hdr.getDataSize();
             });
     }
 

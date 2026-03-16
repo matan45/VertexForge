@@ -97,15 +97,19 @@ namespace window {
 		try {
 			auto iconData = resource::ResourceManager::loadTextureAsync(asset::AssetRef::fromPath(std::string(iconPath)));
 			auto dataPtr = iconData.get();
-			if (!dataPtr || dataPtr->textureData().empty()) {
+			if (!dataPtr || dataPtr->mipData.empty()) {
 				vfLogError("Failed to load window icon: {}", iconPath);
+				return;
+			}
+			if (dataPtr->compressionFormat != resource::TextureCompressionFormat::Uncompressed) {
+				vfLogError("Window icon must be uncompressed (re-import with Uncompressed mode): {}", iconPath);
 				return;
 			}
 
 			GLFWimage icon;
 			icon.width = static_cast<int>(dataPtr->width);
 			icon.height = static_cast<int>(dataPtr->height);
-			icon.pixels = const_cast<unsigned char*>(dataPtr->textureData().data());
+			icon.pixels = const_cast<unsigned char*>(dataPtr->mipData[0].data.data());
 
 			glfwSetWindowIcon(window, 1, &icon);
 		} catch (const std::exception& e) {

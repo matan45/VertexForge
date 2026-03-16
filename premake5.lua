@@ -158,12 +158,14 @@ project "Import"
 	  "dependencies/glm",
 	  "dependencies/meshoptimizer/src",  -- meshoptimizer for LOD generation
 	  "dependencies/v-hacd",             -- V-HACD for convex decomposition
-	  "dependencies/freetype/include"    -- FreeType headers
+	  "dependencies/freetype/include",   -- FreeType headers
+	  "dependencies/ispc_texcomp",       -- ISPCTextureCompressor (BC7/BC6H)
+	  "dependencies/astc-encoder/Source" -- astc-encoder (ASTC)
    }
 
    defines { "_CRT_SECURE_NO_WARNINGS", "VF_IMPORT_BUILD_DLL", "MESHOPTIMIZER_API=__declspec(dllimport)" }
 
-   links { "Utilities", "meshoptimizer" }
+   links { "Utilities", "meshoptimizer", "ispc_texcomp", "astc_encoder" }
 
    -- Debug configuration
    filter "configurations:Debug"
@@ -727,6 +729,60 @@ project "enkiTS"
 
    includedirs {
       "dependencies/enkiTS/src"
+   }
+
+   defines { "_CRT_SECURE_NO_WARNINGS" }
+
+   filter "configurations:Debug"
+      defines { "DEBUG" }
+      symbols "On"
+
+   filter "configurations:Release"
+      defines { "NDEBUG" }
+      optimize "On"
+
+
+-- Project: ISPCTextureCompressor (BC7/BC6H GPU texture compression)
+project "ispc_texcomp"
+   kind "StaticLib"
+   language "C++"
+   cppdialect "C++17"
+   targetdir "bin/%{prj.name}/%{cfg.buildcfg}/%{cfg.platform}"
+
+   files {
+      "dependencies/ispc_texcomp/ispc_texcomp.h",
+      "dependencies/ispc_texcomp/ispc_texcomp.cpp"
+   }
+
+   includedirs {
+      "dependencies/ispc_texcomp"
+   }
+
+   defines { "_CRT_SECURE_NO_WARNINGS" }
+
+   filter "configurations:Debug"
+      defines { "DEBUG" }
+      symbols "On"
+
+   filter "configurations:Release"
+      defines { "NDEBUG" }
+      optimize "On"
+
+
+-- Project: astc-encoder (ASTC texture compression)
+project "astc_encoder"
+   kind "StaticLib"
+   language "C++"
+   cppdialect "C++17"
+   targetdir "bin/%{prj.name}/%{cfg.buildcfg}/%{cfg.platform}"
+
+   files {
+      "dependencies/astc-encoder/Source/astcenc.h",
+      "dependencies/astc-encoder/Source/astcenc.cpp"
+   }
+
+   includedirs {
+      "dependencies/astc-encoder/Source"
    }
 
    defines { "_CRT_SECURE_NO_WARNINGS" }

@@ -190,6 +190,47 @@ namespace windows
                 ImGui::PopID();
             }
 
+            // Texture compression settings (shown once for all texture/HDR files)
+            bool hasTextureFiles = false;
+            for (const auto& f : files)
+            {
+                if (files::FileUtils::isTextureFile(f) || files::FileUtils::isHDRFile(f))
+                {
+                    hasTextureFiles = true;
+                    break;
+                }
+            }
+
+            if (hasTextureFiles)
+            {
+                ImGui::Separator();
+                ImGui::Text("Texture Compression:");
+                ImGui::Indent();
+
+                const char* modeNames[] = {"Uncompressed", "BC (BC7/BC6H)", "ASTC"};
+                int modeIndex = static_cast<int>(compressionMode);
+                if (ImGui::Combo("Compression Mode", &modeIndex, modeNames, IM_ARRAYSIZE(modeNames)))
+                {
+                    compressionMode = static_cast<importConfig::TextureCompressionMode>(modeIndex);
+                }
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("BC: Desktop standard (4-8x smaller). ASTC: Mobile/cross-platform");
+
+                if (compressionMode != importConfig::TextureCompressionMode::Uncompressed)
+                {
+                    const char* qualityNames[] = {"Fast", "Balanced", "Quality"};
+                    int qualityIndex = static_cast<int>(compressionQuality);
+                    if (ImGui::Combo("Compression Quality", &qualityIndex, qualityNames, IM_ARRAYSIZE(qualityNames)))
+                    {
+                        compressionQuality = static_cast<importConfig::TextureCompressionQuality>(qualityIndex);
+                    }
+                    if (ImGui::IsItemHovered())
+                        ImGui::SetTooltip("Higher quality = slower import, better visual fidelity");
+                }
+
+                ImGui::Unindent();
+            }
+
             if (ImGui::Button("Continue"))
             {
                 // Convert to Import controller format
@@ -201,6 +242,8 @@ namespace windows
                     importConfig::ImportConfig config;
                     config.isImageFlipVertically = req.flipVertically;
                     config.meshConfig = meshConfigs[i];
+                    config.compressionMode = compressionMode;
+                    config.compressionQuality = compressionQuality;
                     importFiles.emplace_back(req.path, config);
                     filePaths.push_back(req.path);
                 }

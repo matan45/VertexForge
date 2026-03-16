@@ -59,7 +59,7 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <PreprocessorDefinitions>VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1;GLM_FORCE_DEPTH_ZERO_TO_ONE;_CRT_SECURE_NO_WARNINGS;VF_IMPORT_BUILD_DLL;MESHOPTIMIZER_API=__declspec(dllimport);DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\..\dependencies\spdlog\include;..\utilities;..\..\dependencies\stb;..\..\dependencies\dr_libs;..\..\dependencies\tinyexr;..\..\dependencies\assimp\include;..\..\dependencies\assimp\build\include;..\..\dependencies\glm;..\..\dependencies\meshoptimizer\src;..\..\dependencies\v-hacd;..\..\dependencies\freetype\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\..\dependencies\spdlog\include;..\utilities;..\..\dependencies\stb;..\..\dependencies\dr_libs;..\..\dependencies\tinyexr;..\..\dependencies\assimp\include;..\..\dependencies\assimp\build\include;..\..\dependencies\glm;..\..\dependencies\meshoptimizer\src;..\..\dependencies\v-hacd;..\..\dependencies\freetype\include;..\..\dependencies\ispc_texcomp;..\..\dependencies\astc-encoder\Source;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DebugInformationFormat>EditAndContinue</DebugInformationFormat>
       <Optimization>Disabled</Optimization>
       <AdditionalOptions>/utf-8 /MP %(AdditionalOptions)</AdditionalOptions>
@@ -84,7 +84,7 @@ IF EXIST ..\..\bin\Import\Debug\x64\Import.dll\ (xcopy /Q /E /Y /I ..\..\bin\Imp
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <PreprocessorDefinitions>VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1;GLM_FORCE_DEPTH_ZERO_TO_ONE;_CRT_SECURE_NO_WARNINGS;VF_IMPORT_BUILD_DLL;MESHOPTIMIZER_API=__declspec(dllimport);NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\..\dependencies\spdlog\include;..\utilities;..\..\dependencies\stb;..\..\dependencies\dr_libs;..\..\dependencies\tinyexr;..\..\dependencies\assimp\include;..\..\dependencies\assimp\build\include;..\..\dependencies\glm;..\..\dependencies\meshoptimizer\src;..\..\dependencies\v-hacd;..\..\dependencies\freetype\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\..\dependencies\spdlog\include;..\utilities;..\..\dependencies\stb;..\..\dependencies\dr_libs;..\..\dependencies\tinyexr;..\..\dependencies\assimp\include;..\..\dependencies\assimp\build\include;..\..\dependencies\glm;..\..\dependencies\meshoptimizer\src;..\..\dependencies\v-hacd;..\..\dependencies\freetype\include;..\..\dependencies\ispc_texcomp;..\..\dependencies\astc-encoder\Source;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <Optimization>Full</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
@@ -131,6 +131,7 @@ IF EXIST ..\..\bin\Import\Release\x64\Import.dll\ (xcopy /Q /E /Y /I ..\..\bin\I
     <ClInclude Include="types\MeshSocketWriter.hpp" />
     <ClInclude Include="types\SDFGenerator.hpp" />
     <ClInclude Include="types\Texture.hpp" />
+    <ClInclude Include="types\TextureCompressor.hpp" />
     <ClInclude Include="types\VHACDCallback.hpp" />
   </ItemGroup>
   <ItemGroup>
@@ -155,6 +156,7 @@ IF EXIST ..\..\bin\Import\Release\x64\Import.dll\ (xcopy /Q /E /Y /I ..\..\bin\I
     <ClCompile Include="types\MeshSocketWriter.cpp" />
     <ClCompile Include="types\SDFGenerator.cpp" />
     <ClCompile Include="types\Texture.cpp" />
+    <ClCompile Include="types\TextureCompressor.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\utilities\Utilities.vcxproj">
@@ -162,6 +164,12 @@ IF EXIST ..\..\bin\Import\Release\x64\Import.dll\ (xcopy /Q /E /Y /I ..\..\bin\I
     </ProjectReference>
     <ProjectReference Include="..\meshoptimizer.vcxproj">
       <Project>{75046AD2-E1C4-E508-AAFF-2E86167F2AE5}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\ispc_texcomp.vcxproj">
+      <Project>{73EAF6A7-5F4D-864C-08D3-BE02F41452CF}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\astc_encoder.vcxproj">
+      <Project>{6F8465C1-5BE7-F465-046D-2D1CF0AEC0E8}</Project>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

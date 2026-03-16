@@ -1,5 +1,6 @@
 #include "print/Log.hpp"
 #include "Texture.hpp"
+#include "TextureCompressor.hpp"
 #include "../controllers/files/FileUtils.hpp"
 #include "config/Config.hpp"
 #include "resource/EndianUtils.hpp"
@@ -21,6 +22,8 @@
 #include <fstream>
 #include <bit>
 #include <filesystem>
+#include <algorithm>
+#include <cstring>
 
 
 namespace types
@@ -37,7 +40,7 @@ namespace types
 		{
 			stbi_set_flip_vertically_on_load(true);
 		}
-		
+
 		int width;
 		int height;
 		int channels;
@@ -50,23 +53,24 @@ namespace types
 			vfLogError("Failed to load texture: {}", file.path.data());
 			return;
 		}
-		
-		if (progressCallback) progressCallback(0.2f);
-		
+
+		if (progressCallback) progressCallback(0.15f);
+
 		textureData.width = static_cast<uint32_t>(width);
 		textureData.height = static_cast<uint32_t>(height);
 		textureData.numbersOfChannels = channels;
-		
+
 		std::vector<unsigned char> rgbaData;
 		convertTo4Channels(imageData, width, height, channels, rgbaData);
-		
+
 		textureData.mipData.push_back({
 			static_cast<uint32_t>(width),
 			static_cast<uint32_t>(height),
+			0,
 			std::move(rgbaData)
 		});
-		
-		if (progressCallback) progressCallback(0.4f);
+
+		if (progressCallback) progressCallback(0.3f);
 
 		if (file.config.isImageFlipVertically)
 		{
@@ -74,13 +78,18 @@ namespace types
 		}
 
 		stbi_image_free(imageData);
-		
+
 		generateMipmaps(textureData);
-		
-		if (progressCallback) progressCallback(0.7f);
+
+		if (progressCallback) progressCallback(0.5f);
+
+		// Compress mips
+		compressTextureMips(textureData, file.config.compressionMode, file.config.compressionQuality);
+
+		if (progressCallback) progressCallback(0.85f);
 
 		saveToFileTextureWithMips(fileName, location, textureData);
-		
+
 		if (progressCallback) progressCallback(1.0f);
 	}
 
@@ -125,7 +134,7 @@ namespace types
 			return;
 		}
 
-		if (progressCallback) progressCallback(0.3f);
+		if (progressCallback) progressCallback(0.2f);
 
 		if (file.config.isImageFlipVertically)
 		{
@@ -137,11 +146,21 @@ namespace types
 		hdrData.width = static_cast<uint32_t>(width);
 		hdrData.height = static_cast<uint32_t>(height);
 		hdrData.numbersOfChannels = 4;
-		hdrData.pixels = convertToRGBA32F(imageData, width, height, channels);
 
+		auto pixels = convertToRGBA32F(imageData, width, height, channels);
 		stbi_image_free(imageData);
 
-		if (progressCallback) progressCallback(0.7f);
+		if (progressCallback) progressCallback(0.35f);
+
+		// Generate HDR mipmaps
+		generateHDRMipmaps(pixels, hdrData.width, hdrData.height, hdrData);
+
+		if (progressCallback) progressCallback(0.5f);
+
+		// Compress HDR mips
+		compressHDRMips(hdrData, file.config.compressionMode, file.config.compressionQuality);
+
+		if (progressCallback) progressCallback(0.85f);
 
 		saveToFileHDRWithMips(fileName, location, hdrData);
 
@@ -175,7 +194,7 @@ namespace types
 			return;
 		}
 
-		if (progressCallback) progressCallback(0.2f);
+		if (progressCallback) progressCallback(0.15f);
 
 		EXRImage exrImage;
 		InitEXRImage(&exrImage);
@@ -189,7 +208,7 @@ namespace types
 			return;
 		}
 
-		if (progressCallback) progressCallback(0.3f);
+		if (progressCallback) progressCallback(0.2f);
 
 		float* out;
 		int width;
@@ -205,7 +224,7 @@ namespace types
 			return;
 		}
 
-		if (progressCallback) progressCallback(0.4f);
+		if (progressCallback) progressCallback(0.3f);
 
 		if (file.config.isImageFlipVertically)
 		{
@@ -219,25 +238,34 @@ namespace types
 		hdrData.numbersOfChannels = 4;
 
 		size_t pixelCount = static_cast<size_t>(width) * height * 4;
-		hdrData.pixels.resize(pixelCount);
-		std::memcpy(hdrData.pixels.data(), out, pixelCount * sizeof(float));
+		std::vector<float> pixels(pixelCount);
+		std::memcpy(pixels.data(), out, pixelCount * sizeof(float));
 
 		free(out);
 		FreeEXRImage(&exrImage);
 		FreeEXRHeader(&exrHeader);
 
-		if (progressCallback) progressCallback(0.5f);
+		if (progressCallback) progressCallback(0.4f);
+
+		// Generate HDR mipmaps
+		generateHDRMipmaps(pixels, hdrData.width, hdrData.height, hdrData);
+
+		if (progressCallback) progressCallback(0.55f);
+
+		// Compress HDR mips
+		compressHDRMips(hdrData, file.config.compressionMode, file.config.compressionQuality);
+
+		if (progressCallback) progressCallback(0.85f);
 
 		saveToFileHDRWithMips(fileName, location, hdrData);
 
 		if (progressCallback) progressCallback(1.0f);
 	}
-	
+
 
 	void Texture::saveToFileTextureWithMips(std::string_view fileName, std::string_view location,
 		const resource::TextureData& textureData) const
 	{
-		// Open the file in binary mode
 		std::filesystem::path newFileLocation = std::filesystem::path(location) / (std::string(fileName) + "." +
 			FileExtension::textrue);
 		std::ofstream outFile(newFileLocation, std::ios::binary);
@@ -248,8 +276,7 @@ namespace types
 			return;
 		}
 
-		// Write header, version, and dimensions (endian-safe)
-		// Version 0.0.3 format includes mipmap support
+		// Write header
 		resource::endian::writeLE<uint8_t>(outFile, static_cast<uint8_t>(textureData.headerFileType));
 		resource::endian::writeLE<uint32_t>(outFile, Version::major);
 		resource::endian::writeLE<uint32_t>(outFile, Version::minor);
@@ -258,17 +285,27 @@ namespace types
 		resource::endian::writeLE<uint32_t>(outFile, textureData.height);
 		resource::endian::writeLE<uint32_t>(outFile, textureData.numbersOfChannels);
 		resource::endian::writeLE<uint32_t>(outFile, textureData.mipLevels);
+		resource::endian::writeLE<uint8_t>(outFile, static_cast<uint8_t>(textureData.compressionFormat));
 
 		// Write each mip level
 		for (const auto& mip : textureData.mipData)
 		{
 			resource::endian::writeLE<uint32_t>(outFile, mip.width);
 			resource::endian::writeLE<uint32_t>(outFile, mip.height);
-			// Write pixel data in BGRA format (TGA-style)
-			TGAWriter::writeTGA(outFile, mip.data);
+			resource::endian::writeLE<uint32_t>(outFile, mip.dataSize);
+
+			if (textureData.compressionFormat != resource::TextureCompressionFormat::Uncompressed)
+			{
+				// Write compressed data directly (no BGRA swap)
+				outFile.write(reinterpret_cast<const char*>(mip.data.data()), mip.dataSize);
+			}
+			else
+			{
+				// Write pixel data in BGRA format (TGA-style)
+				TGAWriter::writeTGA(outFile, mip.data);
+			}
 		}
 
-		// Close the file
 		outFile.close();
 	}
 
@@ -285,8 +322,7 @@ namespace types
 			return;
 		}
 
-		// Write HDR header, version, and dimensions (endian-safe)
-		// Version 0.0.3 format includes mipmap support
+		// Write HDR header
 		resource::endian::writeLE<uint8_t>(outFile, static_cast<uint8_t>(hdrData.headerFileType));
 		resource::endian::writeLE<uint32_t>(outFile, Version::major);
 		resource::endian::writeLE<uint32_t>(outFile, Version::minor);
@@ -294,16 +330,23 @@ namespace types
 		resource::endian::writeLE<uint32_t>(outFile, hdrData.width);
 		resource::endian::writeLE<uint32_t>(outFile, hdrData.height);
 		resource::endian::writeLE<uint32_t>(outFile, hdrData.numbersOfChannels);
+		resource::endian::writeLE<uint32_t>(outFile, hdrData.mipLevels);
+		resource::endian::writeLE<uint8_t>(outFile, static_cast<uint8_t>(hdrData.compressionFormat));
 
-		// Write pixel data (endian-safe)
-		for (float pixel : hdrData.pixels)
+		// Write each mip level
+		for (const auto& mip : hdrData.mipData)
 		{
-			resource::endian::writeLE<float>(outFile, pixel);
+			resource::endian::writeLE<uint32_t>(outFile, mip.width);
+			resource::endian::writeLE<uint32_t>(outFile, mip.height);
+			resource::endian::writeLE<uint32_t>(outFile, mip.dataSize);
+
+			// Write data directly (compressed or raw bytes)
+			outFile.write(reinterpret_cast<const char*>(mip.data.data()), mip.dataSize);
 		}
 
 		outFile.close();
 	}
-	
+
 	void Texture::generateMipmaps(resource::TextureData& textureData) const
 	{
 		if (textureData.mipData.empty())
@@ -343,6 +386,187 @@ namespace types
 			auto newMip = generateMipLevel(sourceMip);
 			textureData.mipData.push_back(std::move(newMip));
 		}
+	}
+
+	void Texture::generateHDRMipmaps(std::vector<float>& basePixels, uint32_t width, uint32_t height,
+		resource::HDRData& hdrData) const
+	{
+		// Store base level as MipLevelData (raw float bytes)
+		{
+			resource::MipLevelData baseMip;
+			baseMip.width = width;
+			baseMip.height = height;
+			size_t byteSize = static_cast<size_t>(width) * height * 4 * sizeof(float);
+			baseMip.dataSize = static_cast<uint32_t>(byteSize);
+			baseMip.data.resize(byteSize);
+			std::memcpy(baseMip.data.data(), basePixels.data(), byteSize);
+			hdrData.mipData.push_back(std::move(baseMip));
+		}
+
+		// Calculate mip levels (same policy as LDR)
+		constexpr uint32_t minMipDimension = 512;
+		uint32_t minDimension = std::min(width, height);
+
+		if (minDimension <= minMipDimension)
+		{
+			hdrData.mipLevels = 1;
+			return;
+		}
+
+		hdrData.mipLevels = 1;
+		uint32_t dim = minDimension;
+		while (dim > minMipDimension)
+		{
+			dim /= 2;
+			hdrData.mipLevels++;
+		}
+
+		// Generate HDR mipmaps using float-precision box filter
+		for (uint32_t level = 1; level < hdrData.mipLevels; ++level)
+		{
+			const auto& srcMip = hdrData.mipData[level - 1];
+			uint32_t srcW = srcMip.width;
+			uint32_t srcH = srcMip.height;
+			const float* srcPixels = reinterpret_cast<const float*>(srcMip.data.data());
+
+			uint32_t dstW = std::max(1u, srcW / 2);
+			uint32_t dstH = std::max(1u, srcH / 2);
+
+			resource::MipLevelData dstMip;
+			dstMip.width = dstW;
+			dstMip.height = dstH;
+			size_t byteSize = static_cast<size_t>(dstW) * dstH * 4 * sizeof(float);
+			dstMip.dataSize = static_cast<uint32_t>(byteSize);
+			dstMip.data.resize(byteSize);
+			float* dstPixels = reinterpret_cast<float*>(dstMip.data.data());
+
+			// 2x2 box filter in float precision
+			for (uint32_t y = 0; y < dstH; ++y)
+			{
+				for (uint32_t x = 0; x < dstW; ++x)
+				{
+					uint32_t sx0 = std::min(x * 2, srcW - 1);
+					uint32_t sy0 = std::min(y * 2, srcH - 1);
+					uint32_t sx1 = std::min(x * 2 + 1, srcW - 1);
+					uint32_t sy1 = std::min(y * 2 + 1, srcH - 1);
+
+					size_t i00 = (static_cast<size_t>(sy0) * srcW + sx0) * 4;
+					size_t i10 = (static_cast<size_t>(sy0) * srcW + sx1) * 4;
+					size_t i01 = (static_cast<size_t>(sy1) * srcW + sx0) * 4;
+					size_t i11 = (static_cast<size_t>(sy1) * srcW + sx1) * 4;
+
+					size_t dstIdx = (static_cast<size_t>(y) * dstW + x) * 4;
+					for (int c = 0; c < 4; ++c)
+					{
+						dstPixels[dstIdx + c] = (srcPixels[i00 + c] + srcPixels[i10 + c] +
+							srcPixels[i01 + c] + srcPixels[i11 + c]) * 0.25f;
+					}
+				}
+			}
+
+			hdrData.mipData.push_back(std::move(dstMip));
+		}
+	}
+
+	void Texture::compressTextureMips(resource::TextureData& textureData,
+		importConfig::TextureCompressionMode mode,
+		importConfig::TextureCompressionQuality quality) const
+	{
+		if (mode == importConfig::TextureCompressionMode::Uncompressed)
+		{
+			textureData.compressionFormat = resource::TextureCompressionFormat::Uncompressed;
+			return;
+		}
+
+		resource::TextureCompressionFormat format;
+		if (mode == importConfig::TextureCompressionMode::BC)
+		{
+			format = resource::TextureCompressionFormat::BC7;
+		}
+		else // ASTC
+		{
+			format = resource::TextureCompressionFormat::ASTC_4x4;
+		}
+
+		textureData.compressionFormat = format;
+
+		for (auto& mip : textureData.mipData)
+		{
+			std::vector<unsigned char> compressed;
+
+			if (format == resource::TextureCompressionFormat::BC7)
+			{
+				compressed = TextureCompressor::compressBC7(
+					mip.data.data(), mip.width, mip.height, quality);
+			}
+			else
+			{
+				uint32_t blockX, blockY;
+				TextureCompressor::getBlockDimensions(format, blockX, blockY);
+				compressed = TextureCompressor::compressASTC(
+					mip.data.data(), mip.width, mip.height, blockX, blockY, quality);
+			}
+
+			if (!compressed.empty())
+			{
+				mip.dataSize = static_cast<uint32_t>(compressed.size());
+				mip.data = std::move(compressed);
+			}
+			else
+			{
+				vfLogError("Texture compression failed for mip {}x{}", mip.width, mip.height);
+				textureData.compressionFormat = resource::TextureCompressionFormat::Uncompressed;
+				return;
+			}
+		}
+
+		vfLogInfo("Compressed texture {}x{} to {} ({} mips)",
+			textureData.width, textureData.height,
+			format == resource::TextureCompressionFormat::BC7 ? "BC7" : "ASTC",
+			textureData.mipLevels);
+	}
+
+	void Texture::compressHDRMips(resource::HDRData& hdrData,
+		importConfig::TextureCompressionMode mode,
+		importConfig::TextureCompressionQuality quality) const
+	{
+		if (mode == importConfig::TextureCompressionMode::Uncompressed)
+		{
+			hdrData.compressionFormat = resource::TextureCompressionFormat::Uncompressed;
+			return;
+		}
+
+		// BC6H for HDR data (ASTC HDR not supported in this path)
+		if (mode == importConfig::TextureCompressionMode::ASTC)
+		{
+			vfLogWarning("ASTC HDR compression not supported, falling back to BC6H");
+		}
+
+		hdrData.compressionFormat = resource::TextureCompressionFormat::BC6H;
+
+		for (auto& mip : hdrData.mipData)
+		{
+			// mip.data contains raw float32 RGBA pixels
+			const float* floatData = reinterpret_cast<const float*>(mip.data.data());
+
+			auto compressed = TextureCompressor::compressBC6H(
+				floatData, mip.width, mip.height, quality);
+
+			if (!compressed.empty())
+			{
+				mip.dataSize = static_cast<uint32_t>(compressed.size());
+				mip.data = std::move(compressed);
+			}
+			else
+			{
+				vfLogError("BC6H compression failed for HDR mip {}x{}", mip.width, mip.height);
+				hdrData.compressionFormat = resource::TextureCompressionFormat::Uncompressed;
+				return;
+			}
+		}
+
+		vfLogInfo("Compressed HDR {}x{} to BC6H ({} mips)",
+			hdrData.width, hdrData.height, hdrData.mipLevels);
 	}
 
 	// Generate a single mip level using 2x2 box filter (RGBA8)
@@ -387,7 +611,7 @@ namespace types
 
 		return result;
 	}
-	
+
 
 	void Texture::convertTo4Channels(unsigned char* inputData, int width, int height, int inputChannels, std::vector<unsigned char>& outputData)
 	{

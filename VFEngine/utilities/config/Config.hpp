@@ -6,7 +6,7 @@
 struct Version
 {
     static constexpr uint32_t major = 1;
-    static constexpr uint32_t minor = 0;
+    static constexpr uint32_t minor = 1;
     static constexpr uint32_t patch = 0;
 };
 
@@ -39,6 +39,22 @@ struct FileExtension
 
 namespace importConfig
 {
+    // Texture compression mode
+    enum class TextureCompressionMode
+    {
+        Uncompressed,
+        BC,    // BC7 for LDR, BC6H for HDR (desktop standard)
+        ASTC   // ASTC for mobile/cross-platform
+    };
+
+    // Texture compression quality
+    enum class TextureCompressionQuality
+    {
+        Fast,
+        Balanced,
+        Quality
+    };
+
     // Quality preset for V-HACD convex decomposition
     enum class VHACDPreset
     {
@@ -67,6 +83,8 @@ namespace importConfig
     {
         bool isImageFlipVertically = false;
         MeshImportConfig meshConfig;
+        TextureCompressionMode compressionMode = TextureCompressionMode::BC;
+        TextureCompressionQuality compressionQuality = TextureCompressionQuality::Balanced;
     };
 
     struct ImportFiles

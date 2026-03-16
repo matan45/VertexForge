@@ -260,12 +260,27 @@ namespace texture
 
             uint32_t mipLevels = static_cast<uint32_t>(ormTexture.mipData.size());
             resource::endian::writeLE<uint32_t>(file, mipLevels);
+            resource::endian::writeLE<uint8_t>(file, static_cast<uint8_t>(ormTexture.compressionFormat));
+
+            bool isCompressed = (ormTexture.compressionFormat != resource::TextureCompressionFormat::Uncompressed);
 
             for (const auto& mip : ormTexture.mipData)
             {
                 resource::endian::writeLE<uint32_t>(file, mip.width);
                 resource::endian::writeLE<uint32_t>(file, mip.height);
-                file.write(reinterpret_cast<const char*>(mip.data.data()), mip.data.size());
+                uint32_t dataSize = mip.dataSize > 0 ? mip.dataSize : static_cast<uint32_t>(mip.data.size());
+                resource::endian::writeLE<uint32_t>(file, dataSize);
+
+                if (isCompressed)
+                {
+                    // Write compressed data directly
+                    file.write(reinterpret_cast<const char*>(mip.data.data()), dataSize);
+                }
+                else
+                {
+                    // Write uncompressed pixel data
+                    file.write(reinterpret_cast<const char*>(mip.data.data()), mip.data.size());
+                }
             }
 
             file.close();
@@ -315,6 +330,22 @@ namespace texture
         const OrmPackInput& input,
         std::string& errorMessage)
     {
+        // ORM packing requires uncompressed pixel access — compressed textures cannot be sampled on CPU
+        if (hasAo && aoData && aoData->compressionFormat != resource::TextureCompressionFormat::Uncompressed)
+        {
+            errorMessage = "AO texture is compressed (BC7/ASTC). Re-import as Uncompressed for ORM packing: " + input.aoPath;
+            return false;
+        }
+        if (hasRoughness && roughnessData && roughnessData->compressionFormat != resource::TextureCompressionFormat::Uncompressed)
+        {
+            errorMessage = "Roughness texture is compressed. Re-import as Uncompressed for ORM packing: " + input.roughnessPath;
+            return false;
+        }
+        if (hasMetallic && metallicData && metallicData->compressionFormat != resource::TextureCompressionFormat::Uncompressed)
+        {
+            errorMessage = "Metallic texture is compressed. Re-import as Uncompressed for ORM packing: " + input.metallicPath;
+            return false;
+        }
         if (hasAo && (!aoData || aoData->textureData().empty()))
         {
             errorMessage = "Failed to load AO texture: " + input.aoPath;
@@ -438,7 +469,7 @@ namespace texture
 
         return packORMFromData(
             aoData.get(), roughnessData.get(), metallicData.get(),
-            input.outputPath, progressCallback);
+            input.outputPath, progressCallback, input.compressCallback);
     }
 
     // ============================================================================
@@ -449,7 +480,8 @@ namespace texture
         const resource::TextureData* roughnessTexture,
         const resource::TextureData* metallicTexture,
         const std::string& outputPath,
-        OrmPackProgressCallback progressCallback)
+        OrmPackProgressCallback progressCallback,
+        TextureCompressCallback compressCallback)
     {
         OrmPackResult result;
 
@@ -479,7 +511,15 @@ namespace texture
                                           aoTexture, roughnessTexture, metallicTexture,
                                           mipRefs, progressCallback);
 
-        if (progressCallback) progressCallback(0.9f);
+        if (progressCallback) progressCallback(0.85f);
+
+        // Compress the ORM texture if a compression callback was provided
+        if (compressCallback)
+        {
+            compressCallback(ormTexture);
+        }
+
+        if (progressCallback) progressCallback(0.95f);
 
         if (!serializeToFile(ormTexture, outputPath, result.errorMessage))
         {
