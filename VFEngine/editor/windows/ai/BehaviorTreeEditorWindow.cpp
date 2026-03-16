@@ -1,4 +1,6 @@
 #include "BehaviorTreeEditorWindow.hpp"
+#include "events/EventDispatcher.hpp"
+#include "events/project/ResourceEvents.hpp"
 #include <imgui.h>
 #include <filesystem>
 #include <array>
@@ -60,6 +62,9 @@ namespace editor::windows
         if (BehaviorTreeAsset::save(treePath, *treeData))
         {
             isDirty = false;
+            events::resource::AssetSavedNotification assetNotif;
+            assetNotif.filePath = treePath;
+            events::EventDispatcher::instance().publish(assetNotif);
         }
     }
 

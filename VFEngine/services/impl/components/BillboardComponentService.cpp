@@ -92,7 +92,7 @@ namespace services {
         }
 
         BillboardData data;
-        data.texturePath = comp.texturePath;
+        data.textureRef = comp.textureRef;
         data.size = comp.size;
         data.colorTint = comp.colorTint;
         if (comp.renderTextureSource != entt::null)
@@ -119,7 +119,7 @@ namespace services {
             return false;
         }
 
-        comp.texturePath = billboardData.texturePath;
+        comp.textureRef = billboardData.textureRef;
         comp.size = billboardData.size;
         comp.colorTint = billboardData.colorTint;
         comp.renderTextureSourceName = billboardData.renderTextureSourceName;

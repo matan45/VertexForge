@@ -9,11 +9,11 @@ namespace resource {
 		return inst;
 	}
 
-	void AssetLifecycleManager::acquire(const std::string& path, AssetType type, size_t estimatedMemoryBytes)
+	void AssetLifecycleManager::acquire(const asset::AssetGUID& guid, AssetType type, size_t estimatedMemoryBytes)
 	{
 		std::scoped_lock lock(registryMutex);
 
-		auto it = registry.find(path);
+		auto it = registry.find(guid);
 		if (it != registry.end()) {
 			auto& entry = it->second;
 			entry.refCount++;
@@ -22,7 +22,7 @@ namespace resource {
 				entry.state = AssetState::Active;
 				entry.graceTimeRemaining = 0.0f;
 
-				std::erase(pendingReleaseQueue, path);
+				std::erase(pendingReleaseQueue, guid);
 			}
 
 			if (estimatedMemoryBytes > 0) {
@@ -31,21 +31,21 @@ namespace resource {
 		}
 		else {
 			AssetEntry entry;
-			entry.path = path;
+			entry.guid = guid;
 			entry.type = type;
 			entry.state = AssetState::Active;
 			entry.refCount = 1;
 			entry.estimatedMemoryBytes = estimatedMemoryBytes;
 			entry.graceTimeRemaining = 0.0f;
-			registry[path] = std::move(entry);
+			registry[guid] = std::move(entry);
 		}
 	}
 
-	void AssetLifecycleManager::release(const std::string& path)
+	void AssetLifecycleManager::release(const asset::AssetGUID& guid)
 	{
 		std::scoped_lock lock(registryMutex);
 
-		auto it = registry.find(path);
+		auto it = registry.find(guid);
 		if (it == registry.end()) {
 			return;
 		}
@@ -60,23 +60,23 @@ namespace resource {
 		if (entry.refCount == 0) {
 			entry.state = AssetState::PendingRelease;
 			entry.graceTimeRemaining = gracePeriodSeconds;
-			pendingReleaseQueue.push_back(path);
+			pendingReleaseQueue.push_back(guid);
 		}
 	}
 
 	void AssetLifecycleManager::tick(float deltaTime)
 	{
-		std::vector<std::pair<std::string, AssetType>> toNotify;
-		std::vector<std::vector<std::string>> dependencyChildren;
+		std::vector<std::pair<asset::AssetGUID, AssetType>> toNotify;
+		std::vector<std::vector<asset::AssetGUID>> dependencyChildren;
 
 		{
 			std::scoped_lock lock(registryMutex);
 
 			uint32_t releasedThisFrame = 0;
-			std::vector<std::string> toRelease;
+			std::vector<asset::AssetGUID> toRelease;
 
-			for (auto& path : pendingReleaseQueue) {
-				auto it = registry.find(path);
+			for (auto& guid : pendingReleaseQueue) {
+				auto it = registry.find(guid);
 				if (it == registry.end() || it->second.state != AssetState::PendingRelease) {
 					continue;
 				}
@@ -84,27 +84,26 @@ namespace resource {
 				it->second.graceTimeRemaining -= deltaTime;
 
 				if (it->second.graceTimeRemaining <= 0.0f) {
-					toRelease.push_back(path);
+					toRelease.push_back(guid);
 				}
 			}
 
-			for (const auto& path : toRelease) {
+			for (const auto& guid : toRelease) {
 				if (releasedThisFrame >= maxReleasesPerFrame) {
 					break;
 				}
 
-				auto it = registry.find(path);
+				auto it = registry.find(guid);
 				if (it != registry.end()) {
-					toNotify.emplace_back(path, it->second.type);
+					toNotify.emplace_back(guid, it->second.type);
 					registry.erase(it);
 					releasedThisFrame++;
 
-					// Collect dependency children inside the lock to avoid TOCTOU race
-					std::vector<std::string> children;
-					auto depIt = dependencies.find(path);
+					std::vector<asset::AssetGUID> children;
+					auto depIt = dependencies.find(guid);
 					if (depIt != dependencies.end()) {
 						for (const auto& dep : depIt->second) {
-							children.push_back(dep.childPath);
+							children.push_back(dep.child);
 						}
 						dependencies.erase(depIt);
 					}
@@ -112,20 +111,18 @@ namespace resource {
 				}
 			}
 
-			std::erase_if(pendingReleaseQueue, [this](const std::string& path) {
-				return !registry.contains(path) || registry[path].state != AssetState::PendingRelease;
+			std::erase_if(pendingReleaseQueue, [this](const asset::AssetGUID& guid) {
+				return !registry.contains(guid) || registry[guid].state != AssetState::PendingRelease;
 			});
 		}
 
-		// Invoke callback and cascade dependencies outside the lock
 		for (size_t i = 0; i < toNotify.size(); ++i) {
-			const auto& [path, type] = toNotify[i];
+			const auto& [guid, type] = toNotify[i];
 
 			if (releaseCallback) {
-				releaseCallback(path, type);
+				releaseCallback(guid, type);
 			}
 
-			// Release children collected while lock was held
 			if (i < dependencyChildren.size()) {
 				for (const auto& child : dependencyChildren[i]) {
 					release(child);
@@ -134,78 +131,75 @@ namespace resource {
 		}
 	}
 
-	void AssetLifecycleManager::forceRelease(const std::string& path)
+	void AssetLifecycleManager::forceRelease(const asset::AssetGUID& guid)
 	{
-		std::string releasePath;
+		asset::AssetGUID releaseGuid;
 		AssetType releaseType{};
 
 		{
 			std::scoped_lock lock(registryMutex);
 
-			auto it = registry.find(path);
+			auto it = registry.find(guid);
 			if (it == registry.end()) {
 				return;
 			}
 
-			releasePath = path;
+			releaseGuid = guid;
 			releaseType = it->second.type;
 			registry.erase(it);
-			std::erase(pendingReleaseQueue, path);
+			std::erase(pendingReleaseQueue, guid);
 		}
 
 		if (releaseCallback) {
-			releaseCallback(releasePath, releaseType);
+			releaseCallback(releaseGuid, releaseType);
 		}
-		removeDependencies(releasePath);
+		removeDependencies(releaseGuid);
 	}
 
-	void AssetLifecycleManager::addDependency(const std::string& parentPath, const std::string& childPath, AssetType childType)
+	void AssetLifecycleManager::addDependency(const asset::AssetGUID& parent, const asset::AssetGUID& child, AssetType childType)
 	{
 		std::scoped_lock lock(registryMutex);
 
-		auto& deps = dependencies[parentPath];
+		auto& deps = dependencies[parent];
 		for (const auto& dep : deps) {
-			if (dep.childPath == childPath) return; // Already registered
+			if (dep.child == child) return;
 		}
-		deps.push_back({childPath, childType});
+		deps.push_back({child, childType});
 
-		// Implicitly acquire the child
-		auto it = registry.find(childPath);
+		auto it = registry.find(child);
 		if (it != registry.end()) {
 			it->second.refCount++;
 			if (it->second.state == AssetState::PendingRelease) {
 				it->second.state = AssetState::Active;
 				it->second.graceTimeRemaining = 0.0f;
-				std::erase(pendingReleaseQueue, childPath);
+				std::erase(pendingReleaseQueue, child);
 			}
 		}
 		else {
 			AssetEntry entry;
-			entry.path = childPath;
+			entry.guid = child;
 			entry.type = childType;
 			entry.state = AssetState::Active;
 			entry.refCount = 1;
-			registry[childPath] = std::move(entry);
+			registry[child] = std::move(entry);
 		}
 	}
 
-	void AssetLifecycleManager::removeDependencies(const std::string& parentPath)
+	void AssetLifecycleManager::removeDependencies(const asset::AssetGUID& parent)
 	{
-		// Collect children to release outside lock
-		std::vector<std::string> childPaths;
+		std::vector<asset::AssetGUID> childGuids;
 		{
 			std::scoped_lock lock(registryMutex);
-			auto it = dependencies.find(parentPath);
+			auto it = dependencies.find(parent);
 			if (it == dependencies.end()) return;
 
 			for (const auto& dep : it->second) {
-				childPaths.push_back(dep.childPath);
+				childGuids.push_back(dep.child);
 			}
 			dependencies.erase(it);
 		}
 
-		// Release each child (release() takes its own lock)
-		for (const auto& child : childPaths) {
+		for (const auto& child : childGuids) {
 			release(child);
 		}
 	}
@@ -216,11 +210,11 @@ namespace resource {
 		releaseCallback = std::move(callback);
 	}
 
-	AssetEntry AssetLifecycleManager::getAssetEntry(const std::string& path) const
+	AssetEntry AssetLifecycleManager::getAssetEntry(const asset::AssetGUID& guid) const
 	{
 		std::scoped_lock lock(registryMutex);
 
-		auto it = registry.find(path);
+		auto it = registry.find(guid);
 		if (it != registry.end()) {
 			return it->second;
 		}
@@ -233,7 +227,7 @@ namespace resource {
 
 		std::vector<AssetEntry> result;
 		result.reserve(registry.size());
-		for (const auto& [path, entry] : registry) {
+		for (const auto& [guid, entry] : registry) {
 			result.push_back(entry);
 		}
 		return result;
@@ -244,8 +238,8 @@ namespace resource {
 		std::scoped_lock lock(registryMutex);
 
 		std::vector<AssetEntry> result;
-		for (const auto& path : pendingReleaseQueue) {
-			auto it = registry.find(path);
+		for (const auto& guid : pendingReleaseQueue) {
+			auto it = registry.find(guid);
 			if (it != registry.end() && it->second.state == AssetState::PendingRelease) {
 				result.push_back(it->second);
 			}
@@ -253,10 +247,10 @@ namespace resource {
 		return result;
 	}
 
-	bool AssetLifecycleManager::isTracked(const std::string& path) const
+	bool AssetLifecycleManager::isTracked(const asset::AssetGUID& guid) const
 	{
 		std::scoped_lock lock(registryMutex);
-		return registry.contains(path);
+		return registry.contains(guid);
 	}
 
 	void AssetLifecycleManager::clear()

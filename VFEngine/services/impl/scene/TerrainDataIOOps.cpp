@@ -36,7 +36,7 @@ namespace services
         entt::entity ent = internal::fromHandle(EntityHandle{terrainEntityId});
         if (registry.valid(ent) && registry.all_of<components::TerrainComponent>(ent))
         {
-            materialPath = registry.get<components::TerrainComponent>(ent).terrainMaterialPath;
+            materialPath = registry.get<components::TerrainComponent>(ent).terrainMaterialRef.resolve();
         }
 
         std::unordered_map<terrain::TileCoord, terrain::TileWeightMapData, terrain::TileCoordHash> tileWeights;

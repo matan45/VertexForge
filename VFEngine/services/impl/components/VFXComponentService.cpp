@@ -65,7 +65,7 @@ namespace services {
 
         const auto& comp = sceneEntity.getComponent<components::VFXComponent>();
         VFXData data;
-        data.vfxPath = comp.vfxPath;
+        data.vfxRef = comp.vfxRef;
         data.autoPlay = comp.autoPlay;
         data.loop = comp.loop;
         return data;
@@ -83,7 +83,7 @@ namespace services {
         }
 
         auto& comp = sceneEntity.getComponent<components::VFXComponent>();
-        comp.vfxPath = vfxData.vfxPath;
+        comp.vfxRef = vfxData.vfxRef;
         comp.autoPlay = vfxData.autoPlay;
         comp.loop = vfxData.loop;
         return true;

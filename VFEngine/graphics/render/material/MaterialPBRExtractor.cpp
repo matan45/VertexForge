@@ -1,6 +1,7 @@
 #include "MaterialPBRExtractor.hpp"
 #include "material/MaterialManager.hpp"
 #include "resource/ResourceManager.hpp"
+#include "asset/AssetRef.hpp"
 #include <cmath>
 #include <vector>
 
@@ -420,14 +421,14 @@ namespace render::mesh
         if (material::isInstanceFile(materialOrInstancePath))
         {
             // Load instance data
-            auto instanceData = resource::ResourceManager::loadMaterialInstance(materialOrInstancePath);
+            auto instanceData = resource::ResourceManager::loadMaterialInstance(asset::AssetRef::fromPath(materialOrInstancePath));
             if (!instanceData || instanceData->parentMaterialPath.empty())
             {
                 return pbr;
             }
 
             // Load parent material
-            auto parentMaterial = resource::ResourceManager::loadMaterial(instanceData->parentMaterialPath);
+            auto parentMaterial = resource::ResourceManager::loadMaterial(asset::AssetRef::fromPath(instanceData->parentMaterialPath));
             if (!parentMaterial)
             {
                 return pbr;
@@ -440,7 +441,7 @@ namespace render::mesh
         else
         {
             // Regular material
-            auto matData = resource::ResourceManager::loadMaterial(materialOrInstancePath);
+            auto matData = resource::ResourceManager::loadMaterial(asset::AssetRef::fromPath(materialOrInstancePath));
             if (!matData)
             {
                 return pbr;

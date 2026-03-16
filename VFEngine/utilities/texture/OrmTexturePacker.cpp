@@ -1,6 +1,7 @@
 #include "OrmTexturePacker.hpp"
 #include "../resource/ResourceManager.hpp"
 #include "../resource/EndianUtils.hpp"
+#include "../asset/AssetRef.hpp"
 #include "../config/Config.hpp"
 #include <filesystem>
 #include <fstream>
@@ -292,9 +293,9 @@ namespace texture
         std::future<std::shared_ptr<resource::TextureData>> roughnessFuture;
         std::future<std::shared_ptr<resource::TextureData>> metallicFuture;
 
-        if (hasAo) aoFuture = resource::ResourceManager::loadTextureAsync(input.aoPath);
-        if (hasRoughness) roughnessFuture = resource::ResourceManager::loadTextureAsync(input.roughnessPath);
-        if (hasMetallic) metallicFuture = resource::ResourceManager::loadTextureAsync(input.metallicPath);
+        if (hasAo) aoFuture = resource::ResourceManager::loadTextureAsync(asset::AssetRef::fromPath(input.aoPath));
+        if (hasRoughness) roughnessFuture = resource::ResourceManager::loadTextureAsync(asset::AssetRef::fromPath(input.roughnessPath));
+        if (hasMetallic) metallicFuture = resource::ResourceManager::loadTextureAsync(asset::AssetRef::fromPath(input.metallicPath));
 
         if (progressCallback) progressCallback(0.1f);
 

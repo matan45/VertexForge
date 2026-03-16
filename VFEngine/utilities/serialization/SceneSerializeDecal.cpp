@@ -1,5 +1,6 @@
 #include "SceneSerialization.hpp"
 #include "../components/Components.hpp"
+#include "../asset/AssetRef.hpp"
 
 namespace serialization
 {
@@ -8,12 +9,12 @@ namespace serialization
         json j;
         j["halfExtents"] = json::array({decal.halfExtents.x, decal.halfExtents.y, decal.halfExtents.z});
 
-        if (!decal.albedoTexture.empty())
-            j["albedoTexture"] = decal.albedoTexture;
-        if (!decal.normalTexture.empty())
-            j["normalTexture"] = decal.normalTexture;
-        if (!decal.ormTexture.empty())
-            j["ormTexture"] = decal.ormTexture;
+        if (decal.albedoTextureRef.isValid())
+            j["albedoTextureRef"] = decal.albedoTextureRef.toHexString();
+        if (decal.normalTextureRef.isValid())
+            j["normalTextureRef"] = decal.normalTextureRef.toHexString();
+        if (decal.ormTextureRef.isValid())
+            j["ormTextureRef"] = decal.ormTextureRef.toHexString();
 
         j["color"] = json::array({decal.color.r, decal.color.g, decal.color.b, decal.color.a});
         j["angleFadeStart"] = decal.angleFadeStart;
@@ -33,20 +34,9 @@ namespace serialization
             decal.halfExtents = glm::vec3((*it)[0].get<float>(), (*it)[1].get<float>(), (*it)[2].get<float>());
         }
 
-        if (auto it = j.find("albedoTexture"); it != j.end() && it->is_string())
-        {
-            decal.albedoTexture = it->get<std::string>();
-        }
-
-        if (auto it = j.find("normalTexture"); it != j.end() && it->is_string())
-        {
-            decal.normalTexture = it->get<std::string>();
-        }
-
-        if (auto it = j.find("ormTexture"); it != j.end() && it->is_string())
-        {
-            decal.ormTexture = it->get<std::string>();
-        }
+        decal.albedoTextureRef = asset::AssetRef::fromHexString(j.value("albedoTextureRef", ""));
+        decal.normalTextureRef = asset::AssetRef::fromHexString(j.value("normalTextureRef", ""));
+        decal.ormTextureRef = asset::AssetRef::fromHexString(j.value("ormTextureRef", ""));
 
         if (auto it = j.find("color"); it != j.end() && it->is_array() && it->size() >= 4)
         {

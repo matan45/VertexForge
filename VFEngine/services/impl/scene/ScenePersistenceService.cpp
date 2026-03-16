@@ -256,10 +256,10 @@ namespace services
             if (root.hasComponent<components::IBLComponent>())
             {
                 const auto& ibl = root.getComponent<components::IBLComponent>();
-                if (!ibl.fileName.empty())
+                if (ibl.hdrRef.isValid())
                 {
                     events::render::SetIBLCommand setIblCmd;
-                    setIblCmd.hdrPath = ibl.fileName;
+                    setIblCmd.hdrPath = ibl.hdrRef.resolve();
                     dispatcher.execute(setIblCmd);
                 }
             }
@@ -267,10 +267,10 @@ namespace services
             if (root.hasComponent<components::NavmeshComponent>())
             {
                 const auto& navmeshComp = root.getComponent<components::NavmeshComponent>();
-                if (!navmeshComp.navmeshPath.empty())
+                if (navmeshComp.navmeshRef.isValid())
                 {
                     events::navmesh::LoadNavmeshCommand loadNavCmd;
-                    loadNavCmd.filePath = navmeshComp.navmeshPath;
+                    loadNavCmd.filePath = navmeshComp.navmeshRef.resolve();
                     dispatcher.execute(loadNavCmd);
                 }
             }

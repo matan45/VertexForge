@@ -3,6 +3,7 @@
 #include "MaterialAsset.hpp"
 #include "MaterialInstanceAsset.hpp"
 #include "../resource/ResourceManager.hpp"
+#include "../asset/AssetRef.hpp"
 #include <algorithm>
 
 namespace material {
@@ -15,8 +16,8 @@ namespace material {
     bool MaterialManager::reloadMaterial(std::string_view path) {
         std::string pathStr(path);
 
-        resource::ResourceManager::invalidateMaterialCache(path);
-        auto material = resource::ResourceManager::loadMaterial(path);
+        resource::ResourceManager::invalidateMaterialCache(asset::AssetRef::fromPath(std::string(path)));
+        auto material = resource::ResourceManager::loadMaterial(asset::AssetRef::fromPath(std::string(path)));
         if (!material) {
             vfLogError("Failed to reload material: {}", path);
             return false;
@@ -40,7 +41,7 @@ namespace material {
         // Invalidate cache so other systems reload fresh data when needed.
         // Don't reload immediately - this avoids file system race conditions
         // where the read might get stale data before the write fully flushes.
-        resource::ResourceManager::invalidateMaterialCache(path);
+        resource::ResourceManager::invalidateMaterialCache(asset::AssetRef::fromPath(std::string(path)));
 
         notifyMaterialChanged(pathStr);
         notifyInstancesOfParentChange(pathStr);
@@ -102,14 +103,14 @@ namespace material {
         const std::string& parentPath,
         std::string_view savePath)
     {
-        auto parentMaterial = resource::ResourceManager::loadMaterial(parentPath);
+        auto parentMaterial = resource::ResourceManager::loadMaterial(asset::AssetRef::fromPath(parentPath));
         if (!parentMaterial) {
             vfLogError("Cannot create instance: parent material not found: {}", parentPath);
             return nullptr;
         }
 
         auto instance = std::make_shared<MaterialInstanceData>(
-            MaterialInstanceAsset::createDefault(name, parentPath));
+            MaterialInstanceAsset::createDefault(name, asset::AssetRef::fromPath(parentPath)));
 
         if (!savePath.empty()) {
             if (!MaterialInstanceAsset::save(savePath, *instance)) {
@@ -130,8 +131,8 @@ namespace material {
 
         std::string pathStr(path);
 
-        resource::ResourceManager::invalidateMaterialInstanceCache(path);
-        registerInstance(pathStr, instance.parentMaterialPath);
+        resource::ResourceManager::invalidateMaterialInstanceCache(asset::AssetRef::fromPath(std::string(path)));
+        registerInstance(pathStr, instance.parentMaterialRef.resolve());
 
         notifyMaterialChanged(pathStr);
 
@@ -141,13 +142,13 @@ namespace material {
     bool MaterialManager::reloadInstance(std::string_view path) {
         std::string pathStr(path);
 
-        resource::ResourceManager::invalidateMaterialInstanceCache(path);
-        auto instance = resource::ResourceManager::loadMaterialInstance(path);
+        resource::ResourceManager::invalidateMaterialInstanceCache(asset::AssetRef::fromPath(std::string(path)));
+        auto instance = resource::ResourceManager::loadMaterialInstance(asset::AssetRef::fromPath(std::string(path)));
         if (!instance) {
             vfLogError("Failed to reload material instance: {}", path);
             return false;
         }
-        registerInstance(pathStr, instance->parentMaterialPath);
+        registerInstance(pathStr, instance->parentMaterialRef.resolve());
 
         notifyMaterialChanged(pathStr);
 
@@ -220,7 +221,7 @@ namespace material {
         }
 
         for (const auto& instancePath : instances) {
-            resource::ResourceManager::invalidateMaterialInstanceCache(instancePath);
+            resource::ResourceManager::invalidateMaterialInstanceCache(asset::AssetRef::fromPath(instancePath));
             notifyMaterialChanged(instancePath);
         }
     }

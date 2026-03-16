@@ -92,7 +92,7 @@ namespace scene
             }
 
             const auto& meshComp = registry.get<components::MeshComponent>(entity);
-            if (meshComp.meshPath.empty())
+            if (!meshComp.meshRef.isValid())
             {
                 continue;
             }
@@ -100,7 +100,7 @@ namespace scene
             const math::AABB* localAABB = nullptr;
             if (meshBoundsCallback)
             {
-                localAABB = meshBoundsCallback(meshComp.meshPath);
+                localAABB = meshBoundsCallback(meshComp.meshRef.resolve());
             }
 
             if (!localAABB || !localAABB->isValid())
@@ -189,7 +189,7 @@ namespace scene
             }
 
             const auto& meshComp = view.get<components::MeshComponent>(entity);
-            if (meshComp.meshPath.empty())
+            if (!meshComp.meshRef.isValid())
             {
                 continue;
             }
@@ -199,7 +199,7 @@ namespace scene
             const math::AABB* localAABB = nullptr;
             if (meshBoundsCallback)
             {
-                localAABB = meshBoundsCallback(meshComp.meshPath);
+                localAABB = meshBoundsCallback(meshComp.meshRef.resolve());
             }
 
             if (!localAABB || !localAABB->isValid())
@@ -233,7 +233,7 @@ namespace scene
             }
 
             const auto& meshComp = view.get<components::MeshComponent>(entity);
-            if (meshComp.meshPath.empty())
+            if (!meshComp.meshRef.isValid())
             {
                 continue;
             }
@@ -243,7 +243,7 @@ namespace scene
             const math::AABB* localAABB = nullptr;
             if (meshBoundsCallback)
             {
-                localAABB = meshBoundsCallback(meshComp.meshPath);
+                localAABB = meshBoundsCallback(meshComp.meshRef.resolve());
             }
 
             if (!localAABB || !localAABB->isValid())

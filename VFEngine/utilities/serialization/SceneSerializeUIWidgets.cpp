@@ -1,6 +1,7 @@
 #include "SceneSerialization.hpp"
 #include "JsonConverters.hpp"
 #include "../components/Components.hpp"
+#include "../asset/AssetRef.hpp"
 
 namespace serialization {
 
@@ -13,9 +14,9 @@ namespace serialization {
         {
             j["text"] = label.text;
         }
-        if (!label.fontPath.empty())
+        if (label.fontRef.isValid())
         {
-            j["fontPath"] = label.fontPath;
+            j["fontRef"] = label.fontRef.toHexString();
         }
         j["fontSize"] = label.fontSize;
         j["fontStyle"] = fontStyleToString(label.fontStyle);
@@ -32,7 +33,7 @@ namespace serialization {
     void SceneSerialization::deserializeUILabel(const json& j, components::UILabelComponent& label)
     {
         label.text = j.value("text", std::string("Label"));
-        label.fontPath = j.value("fontPath", std::string(""));
+        label.fontRef = asset::AssetRef::fromHexString(j.value("fontRef", ""));
         label.fontSize = j.value("fontSize", 16.0f);
         label.fontStyle = stringToFontStyle(j.value("fontStyle", "normal"));
         readVec4(j, "color", label.color);
@@ -55,21 +56,21 @@ namespace serialization {
         j["pressedColor"] = writeVec4(button.pressedColor);
         j["disabledColor"] = writeVec4(button.disabledColor);
 
-        if (!button.normalTexture.empty())
+        if (button.normalTextureRef.isValid())
         {
-            j["normalTexture"] = button.normalTexture;
+            j["normalTextureRef"] = button.normalTextureRef.toHexString();
         }
-        if (!button.hoverTexture.empty())
+        if (button.hoverTextureRef.isValid())
         {
-            j["hoverTexture"] = button.hoverTexture;
+            j["hoverTextureRef"] = button.hoverTextureRef.toHexString();
         }
-        if (!button.pressedTexture.empty())
+        if (button.pressedTextureRef.isValid())
         {
-            j["pressedTexture"] = button.pressedTexture;
+            j["pressedTextureRef"] = button.pressedTextureRef.toHexString();
         }
-        if (!button.disabledTexture.empty())
+        if (button.disabledTextureRef.isValid())
         {
-            j["disabledTexture"] = button.disabledTexture;
+            j["disabledTextureRef"] = button.disabledTextureRef.toHexString();
         }
 
         j["colorTransitionDuration"] = button.colorTransitionDuration;
@@ -85,10 +86,10 @@ namespace serialization {
         readVec4(j, "pressedColor", button.pressedColor);
         readVec4(j, "disabledColor", button.disabledColor);
 
-        button.normalTexture = j.value("normalTexture", std::string(""));
-        button.hoverTexture = j.value("hoverTexture", std::string(""));
-        button.pressedTexture = j.value("pressedTexture", std::string(""));
-        button.disabledTexture = j.value("disabledTexture", std::string(""));
+        button.normalTextureRef = asset::AssetRef::fromHexString(j.value("normalTextureRef", ""));
+        button.hoverTextureRef = asset::AssetRef::fromHexString(j.value("hoverTextureRef", ""));
+        button.pressedTextureRef = asset::AssetRef::fromHexString(j.value("pressedTextureRef", ""));
+        button.disabledTextureRef = asset::AssetRef::fromHexString(j.value("disabledTextureRef", ""));
 
         button.colorTransitionDuration = j.value("colorTransitionDuration", 0.1f);
         button.interactable = j.value("interactable", true);
@@ -103,9 +104,9 @@ namespace serialization {
         j["text"] = textInput.text;
         j["placeholderText"] = textInput.placeholderText;
 
-        if (!textInput.fontPath.empty())
+        if (textInput.fontRef.isValid())
         {
-            j["fontPath"] = textInput.fontPath;
+            j["fontRef"] = textInput.fontRef.toHexString();
         }
 
         j["fontSize"] = textInput.fontSize;
@@ -132,7 +133,7 @@ namespace serialization {
     {
         textInput.text = j.value("text", std::string(""));
         textInput.placeholderText = j.value("placeholderText", std::string("Enter text..."));
-        textInput.fontPath = j.value("fontPath", std::string(""));
+        textInput.fontRef = asset::AssetRef::fromHexString(j.value("fontRef", ""));
         textInput.fontSize = j.value("fontSize", 16.0f);
 
         readVec4(j, "textColor", textInput.textColor);
@@ -172,21 +173,21 @@ namespace serialization {
         j["hoveredColor"] = writeVec4(checkbox.hoveredColor);
         j["disabledColor"] = writeVec4(checkbox.disabledColor);
 
-        if (!checkbox.uncheckedTexture.empty())
+        if (checkbox.uncheckedTextureRef.isValid())
         {
-            j["uncheckedTexture"] = checkbox.uncheckedTexture;
+            j["uncheckedTextureRef"] = checkbox.uncheckedTextureRef.toHexString();
         }
-        if (!checkbox.checkedTexture.empty())
+        if (checkbox.checkedTextureRef.isValid())
         {
-            j["checkedTexture"] = checkbox.checkedTexture;
+            j["checkedTextureRef"] = checkbox.checkedTextureRef.toHexString();
         }
-        if (!checkbox.hoveredTexture.empty())
+        if (checkbox.hoveredTextureRef.isValid())
         {
-            j["hoveredTexture"] = checkbox.hoveredTexture;
+            j["hoveredTextureRef"] = checkbox.hoveredTextureRef.toHexString();
         }
-        if (!checkbox.disabledTexture.empty())
+        if (checkbox.disabledTextureRef.isValid())
         {
-            j["disabledTexture"] = checkbox.disabledTexture;
+            j["disabledTextureRef"] = checkbox.disabledTextureRef.toHexString();
         }
 
         j["colorTransitionDuration"] = checkbox.colorTransitionDuration;
@@ -207,10 +208,10 @@ namespace serialization {
         readVec4(j, "hoveredColor", checkbox.hoveredColor);
         readVec4(j, "disabledColor", checkbox.disabledColor);
 
-        checkbox.uncheckedTexture = j.value("uncheckedTexture", std::string(""));
-        checkbox.checkedTexture = j.value("checkedTexture", std::string(""));
-        checkbox.hoveredTexture = j.value("hoveredTexture", std::string(""));
-        checkbox.disabledTexture = j.value("disabledTexture", std::string(""));
+        checkbox.uncheckedTextureRef = asset::AssetRef::fromHexString(j.value("uncheckedTextureRef", ""));
+        checkbox.checkedTextureRef = asset::AssetRef::fromHexString(j.value("checkedTextureRef", ""));
+        checkbox.hoveredTextureRef = asset::AssetRef::fromHexString(j.value("hoveredTextureRef", ""));
+        checkbox.disabledTextureRef = asset::AssetRef::fromHexString(j.value("disabledTextureRef", ""));
 
         checkbox.colorTransitionDuration = j.value("colorTransitionDuration", 0.1f);
         checkbox.interactable = j.value("interactable", true);
@@ -230,9 +231,9 @@ namespace serialization {
         {
             json optJson;
             optJson["text"] = opt.text;
-            if (!opt.iconPath.empty())
+            if (opt.iconRef.isValid())
             {
-                optJson["iconPath"] = opt.iconPath;
+                optJson["iconRef"] = opt.iconRef.toHexString();
             }
             optionsArr.push_back(optJson);
         }
@@ -252,9 +253,9 @@ namespace serialization {
         j["itemNormalColor"] = writeVec4(dropdown.itemNormalColor);
         j["itemHoveredColor"] = writeVec4(dropdown.itemHoveredColor);
 
-        if (!dropdown.fontPath.empty())
+        if (dropdown.fontRef.isValid())
         {
-            j["fontPath"] = dropdown.fontPath;
+            j["fontRef"] = dropdown.fontRef.toHexString();
         }
         j["fontSize"] = dropdown.fontSize;
 
@@ -272,7 +273,7 @@ namespace serialization {
             {
                 components::DropdownOption opt;
                 opt.text = optJson.value("text", std::string(""));
-                opt.iconPath = optJson.value("iconPath", std::string(""));
+                opt.iconRef = asset::AssetRef::fromHexString(optJson.value("iconRef", ""));
                 dropdown.options.push_back(opt);
             }
         }
@@ -290,7 +291,7 @@ namespace serialization {
         readVec4(j, "itemNormalColor", dropdown.itemNormalColor);
         readVec4(j, "itemHoveredColor", dropdown.itemHoveredColor);
 
-        dropdown.fontPath = j.value("fontPath", std::string(""));
+        dropdown.fontRef = asset::AssetRef::fromHexString(j.value("fontRef", ""));
         dropdown.fontSize = j.value("fontSize", 16.0f);
         dropdown.colorTransitionDuration = j.value("colorTransitionDuration", 0.1f);
 
@@ -357,13 +358,13 @@ namespace serialization {
         j["handlePressedColor"] = writeVec4(slider.handlePressedColor);
         j["handleDisabledColor"] = writeVec4(slider.handleDisabledColor);
 
-        if (!slider.handleNormalTexture.empty()) j["handleNormalTexture"] = slider.handleNormalTexture;
-        if (!slider.handleHoveredTexture.empty()) j["handleHoveredTexture"] = slider.handleHoveredTexture;
-        if (!slider.handlePressedTexture.empty()) j["handlePressedTexture"] = slider.handlePressedTexture;
-        if (!slider.handleDisabledTexture.empty()) j["handleDisabledTexture"] = slider.handleDisabledTexture;
+        if (slider.handleNormalTextureRef.isValid()) j["handleNormalTextureRef"] = slider.handleNormalTextureRef.toHexString();
+        if (slider.handleHoveredTextureRef.isValid()) j["handleHoveredTextureRef"] = slider.handleHoveredTextureRef.toHexString();
+        if (slider.handlePressedTextureRef.isValid()) j["handlePressedTextureRef"] = slider.handlePressedTextureRef.toHexString();
+        if (slider.handleDisabledTextureRef.isValid()) j["handleDisabledTextureRef"] = slider.handleDisabledTextureRef.toHexString();
 
         j["fillColor"] = writeVec4(slider.fillColor);
-        if (!slider.fillTexture.empty()) j["fillTexture"] = slider.fillTexture;
+        if (slider.fillTextureRef.isValid()) j["fillTextureRef"] = slider.fillTextureRef.toHexString();
 
         j["colorTransitionDuration"] = slider.colorTransitionDuration;
         j["interactable"] = slider.interactable;
@@ -391,13 +392,13 @@ namespace serialization {
         readVec4(j, "handlePressedColor", slider.handlePressedColor);
         readVec4(j, "handleDisabledColor", slider.handleDisabledColor);
 
-        slider.handleNormalTexture = j.value("handleNormalTexture", std::string(""));
-        slider.handleHoveredTexture = j.value("handleHoveredTexture", std::string(""));
-        slider.handlePressedTexture = j.value("handlePressedTexture", std::string(""));
-        slider.handleDisabledTexture = j.value("handleDisabledTexture", std::string(""));
+        slider.handleNormalTextureRef = asset::AssetRef::fromHexString(j.value("handleNormalTextureRef", ""));
+        slider.handleHoveredTextureRef = asset::AssetRef::fromHexString(j.value("handleHoveredTextureRef", ""));
+        slider.handlePressedTextureRef = asset::AssetRef::fromHexString(j.value("handlePressedTextureRef", ""));
+        slider.handleDisabledTextureRef = asset::AssetRef::fromHexString(j.value("handleDisabledTextureRef", ""));
 
         readVec4(j, "fillColor", slider.fillColor);
-        slider.fillTexture = j.value("fillTexture", std::string(""));
+        slider.fillTextureRef = asset::AssetRef::fromHexString(j.value("fillTextureRef", ""));
 
         slider.colorTransitionDuration = j.value("colorTransitionDuration", 0.1f);
         slider.interactable = j.value("interactable", true);
@@ -427,10 +428,10 @@ namespace serialization {
         j["interpolationSpeed"] = pb.interpolationSpeed;
 
         j["trackColor"] = writeVec4(pb.trackColor);
-        if (!pb.trackTexture.empty()) j["trackTexture"] = pb.trackTexture;
+        if (pb.trackTextureRef.isValid()) j["trackTextureRef"] = pb.trackTextureRef.toHexString();
 
         j["fillColor"] = writeVec4(pb.fillColor);
-        if (!pb.fillTexture.empty()) j["fillTexture"] = pb.fillTexture;
+        if (pb.fillTextureRef.isValid()) j["fillTextureRef"] = pb.fillTextureRef.toHexString();
 
         return j;
     }
@@ -452,10 +453,10 @@ namespace serialization {
         pb.interpolationSpeed = j.value("interpolationSpeed", 5.0f);
 
         readVec4(j, "trackColor", pb.trackColor);
-        pb.trackTexture = j.value("trackTexture", std::string(""));
+        pb.trackTextureRef = asset::AssetRef::fromHexString(j.value("trackTextureRef", ""));
 
         readVec4(j, "fillColor", pb.fillColor);
-        pb.fillTexture = j.value("fillTexture", std::string(""));
+        pb.fillTextureRef = asset::AssetRef::fromHexString(j.value("fillTextureRef", ""));
 
         pb.displayValue = pb.value;
         pb.completedFired = (pb.value >= pb.maxValue);
@@ -647,7 +648,7 @@ namespace serialization {
     json SceneSerialization::serializeUIMask(const components::UIMaskComponent& mask)
     {
         json j;
-        j["maskTexturePath"] = mask.maskTexturePath;
+        j["maskTextureRef"] = mask.maskTextureRef.toHexString();
         j["alphaThreshold"] = mask.alphaThreshold;
         j["showMaskGraphic"] = mask.showMaskGraphic;
         return j;
@@ -655,8 +656,7 @@ namespace serialization {
 
     void SceneSerialization::deserializeUIMask(const json& j, components::UIMaskComponent& mask)
     {
-        if (j.contains("maskTexturePath"))
-            mask.maskTexturePath = j["maskTexturePath"].get<std::string>();
+        mask.maskTextureRef = asset::AssetRef::fromHexString(j.value("maskTextureRef", ""));
         if (j.contains("alphaThreshold"))
             mask.alphaThreshold = j["alphaThreshold"].get<float>();
         if (j.contains("showMaskGraphic"))

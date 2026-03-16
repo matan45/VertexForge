@@ -185,7 +185,7 @@ namespace serialization
             std::string iblFileName = SceneSerialization::deserializeIBL(componentsJson["ibl"]);
             if (!iblFileName.empty())
             {
-                entity.addOrReplaceComponent<components::IBLComponent>().fileName = iblFileName;
+                entity.addOrReplaceComponent<components::IBLComponent>().hdrRef = asset::AssetRef::fromPath(iblFileName);
             }
         }
 

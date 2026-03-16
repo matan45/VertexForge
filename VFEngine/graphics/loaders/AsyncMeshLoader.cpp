@@ -1,6 +1,7 @@
 #include "AsyncMeshLoader.hpp"
 #include "../render/mesh/StaticMeshPipeline.hpp"
 #include "resource/ResourceManager.hpp"
+#include "asset/AssetRef.hpp"
 #include "math/Frustum.hpp"
 #include "print/Log.hpp"
 #include <chrono>
@@ -23,7 +24,7 @@ namespace loaders
         pending->progress = 0.0f;
         pending->statusMessage = "Loading mesh from disk...";
         
-        pending->cpuDataFuture = resource::ResourceManager::loadMeshAsync(meshPath);
+        pending->cpuDataFuture = resource::ResourceManager::loadMeshAsync(asset::AssetRef::fromPath(meshPath));
 
         pendingLoads[meshPath] = std::move(pending);
 

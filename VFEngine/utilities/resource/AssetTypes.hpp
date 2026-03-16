@@ -1,4 +1,5 @@
 #pragma once
+#include "../asset/AssetGUID.hpp"
 #include <cstdint>
 #include <string>
 #include <chrono>
@@ -53,7 +54,7 @@ namespace resource {
 
 	struct AssetEntry
 	{
-		std::string path;
+		asset::AssetGUID guid;
 		AssetType type = AssetType::Texture;
 		AssetState state = AssetState::Active;
 		uint32_t refCount = 0;

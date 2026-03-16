@@ -3,6 +3,7 @@
 #include <string>
 #include <cstdint>
 #include "../types/PhysicsTypes.hpp"
+#include "../asset/AssetRef.hpp"
 
 namespace components
 {
@@ -16,7 +17,7 @@ namespace components
         glm::vec3 size{1.0f};
         float height = 2.0f;
         glm::vec3 offset{0.0f};
-        std::string meshPath;
+        asset::AssetRef meshRef;
 
         bool isTrigger = false;
         uint8_t collisionLayer = 1;

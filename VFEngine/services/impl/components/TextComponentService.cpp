@@ -68,7 +68,7 @@ namespace services {
         const auto& comp = sceneEntity.getComponent<components::TextComponent>();
 
         TextData data;
-        data.fontPath = comp.fontPath;
+        data.fontRef = comp.fontRef;
         data.text = comp.text;
         data.fontSize = comp.fontSize;
         data.color = comp.color;
@@ -90,7 +90,7 @@ namespace services {
         }
 
         auto& comp = sceneEntity.getComponent<components::TextComponent>();
-        comp.fontPath = textData.fontPath;
+        comp.fontRef = textData.fontRef;
         comp.text = textData.text;
         comp.fontSize = textData.fontSize;
         comp.color = textData.color;

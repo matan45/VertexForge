@@ -1,6 +1,7 @@
 #include "SceneSerialization.hpp"
 #include "JsonConverters.hpp"
 #include "../components/Components.hpp"
+#include "../asset/AssetRef.hpp"
 
 namespace serialization {
 
@@ -51,9 +52,9 @@ namespace serialization {
     json SceneSerialization::serializeUIImage(const components::UIImageComponent& image)
     {
         json j;
-        if (!image.texturePath.empty())
+        if (image.textureRef.isValid())
         {
-            j["texturePath"] = image.texturePath;
+            j["textureRef"] = image.textureRef.toHexString();
         }
         j["colorTint"] = writeVec4(image.colorTint);
         if (!image.renderTextureSourceName.empty())
@@ -78,7 +79,7 @@ namespace serialization {
 
     void SceneSerialization::deserializeUIImage(const json& j, components::UIImageComponent& image)
     {
-        image.texturePath = j.value("texturePath", std::string(""));
+        image.textureRef = asset::AssetRef::fromHexString(j.value("textureRef", ""));
         readVec4(j, "colorTint", image.colorTint);
         image.renderTextureSourceName = j.value("renderTextureSourceName", std::string(""));
         image.renderTextureSource = entt::null; // Resolved post-load

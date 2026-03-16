@@ -112,7 +112,7 @@ namespace services
                 {
                     events::scripting::DetachScriptCommand cmd;
                     cmd.entity = handle;
-                    cmd.scriptPath = entry.scriptPath;
+                    cmd.scriptPath = entry.scriptRef.resolve();
                     dispatcher.execute(cmd);
                 }
             }
@@ -209,23 +209,23 @@ namespace services
             {
                 auto& origIBL = orig.getComponent<components::IBLComponent>();
                 auto& newIBL = newEntity.addComponent<components::IBLComponent>();
-                newIBL.fileName = origIBL.fileName;
+                newIBL.hdrRef = origIBL.hdrRef;
             }
 
             if (orig.hasComponent<components::MeshComponent>())
             {
                 auto& origMesh = orig.getComponent<components::MeshComponent>();
                 auto& newMesh = newEntity.addComponent<components::MeshComponent>();
-                newMesh.meshPath = origMesh.meshPath;
-                newMesh.animatorPath = origMesh.animatorPath;
+                newMesh.meshRef = origMesh.meshRef;
+                newMesh.animatorRef = origMesh.animatorRef;
                 newMesh.showBoundingBox = origMesh.showBoundingBox;
 
-                if (!newMesh.meshPath.empty())
+                if (newMesh.meshRef.isValid())
                 {
                     events::scene::MeshDataChangedNotification meshNotif;
                     meshNotif.entity = newHandle;
-                    meshNotif.meshPath = newMesh.meshPath;
-                    meshNotif.animatorPath = newMesh.animatorPath;
+                    meshNotif.meshPath = newMesh.meshRef.resolve();
+                    meshNotif.animatorPath = newMesh.animatorRef.resolve();
                     dispatcher.publish(meshNotif);
                 }
             }
@@ -234,7 +234,7 @@ namespace services
             {
                 auto& origMat = orig.getComponent<components::MaterialComponent>();
                 auto& newMat = newEntity.addComponent<components::MaterialComponent>();
-                newMat.defaultMaterial = origMat.defaultMaterial;
+                newMat.defaultMaterialRef = origMat.defaultMaterialRef;
                 newMat.subMeshMaterials = origMat.subMeshMaterials;
                 newMat.parameterOverrides = origMat.parameterOverrides;
             }
@@ -243,7 +243,7 @@ namespace services
             {
                 auto& origAudio = orig.getComponent<components::AudioSource2DComponent>();
                 auto& newAudio = newEntity.addComponent<components::AudioSource2DComponent>();
-                newAudio.audioFilePath = origAudio.audioFilePath;
+                newAudio.audioRef = origAudio.audioRef;
                 newAudio.volume = origAudio.volume;
                 newAudio.pitch = origAudio.pitch;
                 newAudio.loop = origAudio.loop;
@@ -253,7 +253,7 @@ namespace services
             {
                 auto& origAudio = orig.getComponent<components::AudioSource3DComponent>();
                 auto& newAudio = newEntity.addComponent<components::AudioSource3DComponent>();
-                newAudio.audioFilePath = origAudio.audioFilePath;
+                newAudio.audioRef = origAudio.audioRef;
                 newAudio.volume = origAudio.volume;
                 newAudio.pitch = origAudio.pitch;
                 newAudio.loop = origAudio.loop;
@@ -269,7 +269,7 @@ namespace services
                 {
                     events::scripting::AttachScriptCommand cmd;
                     cmd.entity = newHandle;
-                    cmd.data.scriptPath = entry.scriptPath;
+                    cmd.data.scriptPath = entry.scriptRef.resolve();
                     cmd.data.enabled = entry.enabled;
                     dispatcher.execute(cmd);
                 }
@@ -283,7 +283,7 @@ namespace services
                 newCollider.size = origCollider.size;
                 newCollider.height = origCollider.height;
                 newCollider.offset = origCollider.offset;
-                newCollider.meshPath = origCollider.meshPath;
+                newCollider.meshRef = origCollider.meshRef;
                 newCollider.isTrigger = origCollider.isTrigger;
                 newCollider.collisionLayer = origCollider.collisionLayer;
                 newCollider.friction = origCollider.friction;
@@ -341,7 +341,7 @@ namespace services
             {
                 auto& origVFX = orig.getComponent<components::VFXComponent>();
                 auto& newVFX = newEntity.addComponent<components::VFXComponent>();
-                newVFX.vfxPath = origVFX.vfxPath;
+                newVFX.vfxRef = origVFX.vfxRef;
                 newVFX.autoPlay = origVFX.autoPlay;
                 newVFX.loop = origVFX.loop;
             }
@@ -350,7 +350,7 @@ namespace services
             {
                 auto& origAnim = orig.getComponent<components::AnimatorComponent>();
                 auto& newAnim = newEntity.addComponent<components::AnimatorComponent>();
-                newAnim.animatorPath = origAnim.animatorPath;
+                newAnim.animatorRef = origAnim.animatorRef;
             }
 
             if (orig.hasComponent<components::BillboardComponent>())

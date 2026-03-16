@@ -1,5 +1,6 @@
 #include "Window.hpp"
 #include "resource/ResourceManager.hpp"
+#include "asset/AssetRef.hpp"
 #include "resource/PathResolver.hpp"
 #include "print/Log.hpp"
 #include <filesystem>
@@ -94,7 +95,7 @@ namespace window {
 
 	void Window::setWindowIcon(std::string_view iconPath) {
 		try {
-			auto iconData = resource::ResourceManager::loadTextureAsync(iconPath);
+			auto iconData = resource::ResourceManager::loadTextureAsync(asset::AssetRef::fromPath(std::string(iconPath)));
 			auto dataPtr = iconData.get();
 			if (!dataPtr || dataPtr->textureData().empty()) {
 				vfLogError("Failed to load window icon: {}", iconPath);

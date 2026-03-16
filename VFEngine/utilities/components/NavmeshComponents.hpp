@@ -1,12 +1,13 @@
 #pragma once
 #include <glm/glm.hpp>
 #include <string>
+#include "../asset/AssetRef.hpp"
 
 namespace components
 {
     struct NavmeshComponent
     {
-        std::string navmeshPath;
+        asset::AssetRef navmeshRef;
     };
 
     struct NavmeshAgentComponent

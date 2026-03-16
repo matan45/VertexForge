@@ -7,6 +7,7 @@
 #include <optional>
 #include <cstdint>
 #include <glm/glm.hpp>
+#include "../asset/AssetRef.hpp"
 #include "AnimationEventTypes.hpp"
 #include "AnimationLayerTypes.hpp"
 #include "BlendTreeTypes.hpp"
@@ -51,7 +52,7 @@ namespace animator
     {
         uint32_t id = 0;
         std::string name;
-        std::string animationPath;  // Path to .vfAnim file
+        asset::AssetRef animationRef;  // Reference to .vfAnim asset
         float playbackSpeed = 1.0f;
         bool loop = true;
 
@@ -107,7 +108,7 @@ namespace animator
         LayerBlendMode blendMode = LayerBlendMode::Override;
         LayerSourceMode sourceMode = LayerSourceMode::StateMachine;
         std::string boneMaskName;
-        std::string directClipPath;
+        asset::AssetRef directClipRef;
         bool directClipLoop = true;
         float directClipSpeed = 1.0f;
         AdditiveReferencePose additiveRefPose = AdditiveReferencePose::FirstFrame;

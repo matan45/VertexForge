@@ -1,22 +1,14 @@
 #include "SceneSerialization.hpp"
 #include "JsonConverters.hpp"
 #include "../components/Components.hpp"
-
-// Helper to clean null terminators from strings
-static void cleanNullTerminators(std::string& str)
-{
-    if (auto pos = str.find('\0'); pos != std::string::npos)
-        str.resize(pos);
-}
+#include "../asset/AssetRef.hpp"
 
 namespace serialization
 {
     json SceneSerialization::serializeAudioSource2D(const components::AudioSource2DComponent& audioSource)
     {
         json j;
-        std::string cleanPath = audioSource.audioFilePath;
-        cleanNullTerminators(cleanPath);
-        j["audioFilePath"] = cleanPath;
+        j["audioRef"] = audioSource.audioRef.toHexString();
         j["volume"] = audioSource.volume;
         j["pitch"] = audioSource.pitch;
         j["loop"] = audioSource.loop;
@@ -26,10 +18,7 @@ namespace serialization
 
     void SceneSerialization::deserializeAudioSource2D(const json& j, components::AudioSource2DComponent& audioSource)
     {
-        if (auto it = j.find("audioFilePath"); it != j.end() && it->is_string())
-        {
-            audioSource.audioFilePath = it->get<std::string>();
-        }
+        audioSource.audioRef = asset::AssetRef::fromHexString(j.value("audioRef", ""));
         if (auto it = j.find("volume"); it != j.end() && it->is_number())
         {
             audioSource.volume = it->get<float>();
@@ -54,9 +43,7 @@ namespace serialization
     json SceneSerialization::serializeAudioSource3D(const components::AudioSource3DComponent& audioSource)
     {
         json j;
-        std::string cleanPath = audioSource.audioFilePath;
-        cleanNullTerminators(cleanPath);
-        j["audioFilePath"] = cleanPath;
+        j["audioRef"] = audioSource.audioRef.toHexString();
         j["volume"] = audioSource.volume;
         j["pitch"] = audioSource.pitch;
         j["loop"] = audioSource.loop;
@@ -77,10 +64,7 @@ namespace serialization
 
     void SceneSerialization::deserializeAudioSource3D(const json& j, components::AudioSource3DComponent& audioSource)
     {
-        if (auto it = j.find("audioFilePath"); it != j.end() && it->is_string())
-        {
-            audioSource.audioFilePath = it->get<std::string>();
-        }
+        audioSource.audioRef = asset::AssetRef::fromHexString(j.value("audioRef", ""));
         if (auto it = j.find("volume"); it != j.end() && it->is_number())
         {
             audioSource.volume = it->get<float>();
@@ -208,9 +192,7 @@ namespace serialization
         for (const auto& entry : script.scripts)
         {
             json entryJson;
-            std::string cleanPath = entry.scriptPath;
-            cleanNullTerminators(cleanPath);
-            entryJson["scriptPath"] = cleanPath;
+            entryJson["scriptRef"] = entry.scriptRef.toHexString();
             entryJson["enabled"] = entry.enabled;
             scriptsArray.push_back(entryJson);
         }
@@ -226,10 +208,7 @@ namespace serialization
             for (const auto& entryJson : j["scripts"])
             {
                 components::ScriptEntry entry;
-                if (entryJson.contains("scriptPath") && entryJson["scriptPath"].is_string())
-                {
-                    entry.scriptPath = entryJson["scriptPath"].get<std::string>();
-                }
+                entry.scriptRef = asset::AssetRef::fromHexString(entryJson.value("scriptRef", ""));
                 if (entryJson.contains("enabled") && entryJson["enabled"].is_boolean())
                 {
                     entry.enabled = entryJson["enabled"].get<bool>();
@@ -287,9 +266,7 @@ namespace serialization
         j["size"] = json::array({collider.size.x, collider.size.y, collider.size.z});
         j["height"] = collider.height;
         j["offset"] = json::array({collider.offset.x, collider.offset.y, collider.offset.z});
-        std::string cleanPath = collider.meshPath;
-        cleanNullTerminators(cleanPath);
-        j["meshPath"] = cleanPath;
+        j["meshRef"] = collider.meshRef.toHexString();
         j["isTrigger"] = collider.isTrigger;
         j["collisionLayer"] = collider.collisionLayer;
         j["friction"] = collider.friction;
@@ -315,10 +292,7 @@ namespace serialization
         {
             collider.offset = glm::vec3((*it)[0].get<float>(), (*it)[1].get<float>(), (*it)[2].get<float>());
         }
-        if (auto it = j.find("meshPath"); it != j.end() && it->is_string())
-        {
-            collider.meshPath = it->get<std::string>();
-        }
+        collider.meshRef = asset::AssetRef::fromHexString(j.value("meshRef", ""));
         if (auto it = j.find("isTrigger"); it != j.end() && it->is_boolean())
         {
             collider.isTrigger = it->get<bool>();
@@ -420,8 +394,8 @@ namespace serialization
         json j;
         const auto& config = physAnim.config;
 
-        if (!physAnim.physicsAnimationPath.empty())
-            j["physicsAnimationPath"] = physAnim.physicsAnimationPath;
+        if (physAnim.physicsAnimationRef.isValid())
+            j["physicsAnimationRef"] = physAnim.physicsAnimationRef.toHexString();
 
         j["defaultMode"] = physicsAnimationModeToString(config.defaultMode);
         j["collisionLayer"] = config.collisionLayer;
@@ -465,10 +439,7 @@ namespace serialization
     {
         auto& config = physAnim.config;
 
-        if (auto it = j.find("physicsAnimationPath"); it != j.end() && it->is_string())
-        {
-            physAnim.physicsAnimationPath = it->get<std::string>();
-        }
+        physAnim.physicsAnimationRef = asset::AssetRef::fromHexString(j.value("physicsAnimationRef", ""));
 
         if (auto it = j.find("defaultMode"); it != j.end() && it->is_string())
         {
@@ -543,9 +514,7 @@ namespace serialization
     json SceneSerialization::serializeVFX(const components::VFXComponent& vfx)
     {
         json j;
-        std::string cleanPath = vfx.vfxPath;
-        cleanNullTerminators(cleanPath);
-        j["vfxPath"] = cleanPath;
+        j["vfxRef"] = vfx.vfxRef.toHexString();
         j["autoPlay"] = vfx.autoPlay;
         j["loop"] = vfx.loop;
         return j;
@@ -553,10 +522,7 @@ namespace serialization
 
     void SceneSerialization::deserializeVFX(const json& j, components::VFXComponent& vfx)
     {
-        if (auto it = j.find("vfxPath"); it != j.end() && it->is_string())
-        {
-            vfx.vfxPath = it->get<std::string>();
-        }
+        vfx.vfxRef = asset::AssetRef::fromHexString(j.value("vfxRef", ""));
         if (auto it = j.find("autoPlay"); it != j.end() && it->is_boolean())
         {
             vfx.autoPlay = it->get<bool>();
@@ -783,19 +749,14 @@ namespace serialization
     json SceneSerialization::serializeBehaviorTree(const components::BehaviorTreeComponent& bt)
     {
         json j;
-        std::string cleanPath = bt.behaviorTreePath;
-        cleanNullTerminators(cleanPath);
-        j["behaviorTreePath"] = cleanPath;
+        j["behaviorTreeRef"] = bt.behaviorTreeRef.toHexString();
         j["enabled"] = bt.enabled;
         return j;
     }
 
     void SceneSerialization::deserializeBehaviorTree(const json& j, components::BehaviorTreeComponent& bt)
     {
-        if (auto it = j.find("behaviorTreePath"); it != j.end() && it->is_string())
-        {
-            bt.behaviorTreePath = it->get<std::string>();
-        }
+        bt.behaviorTreeRef = asset::AssetRef::fromHexString(j.value("behaviorTreeRef", ""));
         if (auto it = j.find("enabled"); it != j.end() && it->is_boolean())
         {
             bt.enabled = it->get<bool>();
@@ -807,15 +768,12 @@ namespace serialization
     json SceneSerialization::serializeNavmesh(const components::NavmeshComponent& navmesh)
     {
         json j;
-        j["navmeshPath"] = navmesh.navmeshPath;
+        j["navmeshRef"] = navmesh.navmeshRef.toHexString();
         return j;
     }
 
     void SceneSerialization::deserializeNavmesh(const json& j, components::NavmeshComponent& navmesh)
     {
-        if (auto it = j.find("navmeshPath"); it != j.end() && it->is_string())
-        {
-            navmesh.navmeshPath = it->get<std::string>();
-        }
+        navmesh.navmeshRef = asset::AssetRef::fromHexString(j.value("navmeshRef", ""));
     }
 }

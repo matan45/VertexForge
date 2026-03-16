@@ -4,6 +4,7 @@
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
 #include "resource/ResourceManager.hpp"
+#include "asset/AssetRef.hpp"
 #include "threading/JobSystem.hpp"
 #include "../../services/events/project/SceneEvents.hpp"
 #include "../../services/events/editor/EditorModeEvents.hpp"
@@ -91,9 +92,9 @@ namespace animation
                 for (auto entity : view)
                 {
                     const auto& meshComp = view.get<components::MeshComponent>(entity);
-                    if (!meshComp.animatorPath.empty() && !hasAnimator(entity))
+                    if (meshComp.animatorRef.isValid() && !hasAnimator(entity))
                     {
-                        pendingInitQueue.push_back({entity, meshComp.animatorPath});
+                        pendingInitQueue.push_back({entity, meshComp.animatorRef.resolve()});
                     }
                 }
             });
@@ -338,7 +339,7 @@ namespace animation
             std::string animatorPath;
             if (registry.all_of<components::AnimatorComponent>(candidate.entity))
             {
-                animatorPath = registry.get<components::AnimatorComponent>(candidate.entity).animatorPath;
+                animatorPath = registry.get<components::AnimatorComponent>(candidate.entity).animatorRef.resolve();
             }
 
             if (animatorPath.empty())
@@ -512,8 +513,8 @@ namespace animation
         if (registry.all_of<components::MeshComponent>(entity))
         {
             const auto& meshComp = registry.get<components::MeshComponent>(entity);
-            if (!meshComp.meshPath.empty())
-                skeleton = dataCache.loadSkeleton(meshComp.meshPath);
+            if (meshComp.meshRef.isValid())
+                skeleton = dataCache.loadSkeleton(meshComp.meshRef.resolve());
         }
 
         if (skeleton)
@@ -543,7 +544,7 @@ namespace animation
             if (registry.all_of<components::AnimatorComponent>(entity))
             {
                 auto& animComp = registry.get<components::AnimatorComponent>(entity);
-                if (animComp.animatorPath == animatorPath && animComp.isInitialized)
+                if (animComp.animatorRef.resolve() == animatorPath && animComp.isInitialized)
                 {
                     return;
                 }
@@ -564,7 +565,7 @@ namespace animation
         if (registry.all_of<components::MeshComponent>(entity))
         {
             const auto& meshComp = registry.get<components::MeshComponent>(entity);
-            meshPath = meshComp.meshPath;
+            meshPath = meshComp.meshRef.resolve();
             if (!meshPath.empty())
             {
                 skeleton = dataCache.loadSkeleton(meshPath);
@@ -598,7 +599,7 @@ namespace animation
 
         auto& animComp = registry.get<components::AnimatorComponent>(entity);
         animComp.stateMachine = rawPtr->getBaseStateMachine();
-        animComp.animatorPath = animatorPath;
+        animComp.animatorRef = asset::AssetRef::fromPath(animatorPath);
         animComp.isInitialized = true;
 
         if (registry.all_of<components::MeshComponent>(entity))
@@ -623,7 +624,7 @@ namespace animation
         {
             auto& animComp = registry.get<components::AnimatorComponent>(entity);
             animComp.stateMachine = nullptr;
-            animComp.animatorPath.clear();
+            animComp.animatorRef = asset::AssetRef::invalid();
             animComp.isInitialized = false;
         }
     }
@@ -674,11 +675,11 @@ namespace animation
         {
             const auto& meshComp = view.get<components::MeshComponent>(entity);
 
-            if (!meshComp.animatorPath.empty())
+            if (meshComp.animatorRef.isValid())
             {
                 if (!hasAnimator(entity))
                 {
-                    initializeEntityAnimator(entity, meshComp.animatorPath);
+                    initializeEntityAnimator(entity, meshComp.animatorRef.resolve());
                 }
             }
             else

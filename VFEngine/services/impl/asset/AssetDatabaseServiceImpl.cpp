@@ -261,6 +261,31 @@ namespace services
     {
         auto& db = asset::AssetDatabase::instance();
         auto guidOpt = db.getGUID(filePath);
+
+        if (!guidOpt)
+        {
+            // New asset created in editor (material, animator, VFX, etc.) — register it
+            resource::AssetType type = asset::AssetDatabaseMigrator::detectAssetTypeFromPath(filePath);
+            if (type != resource::AssetType::COUNT)
+            {
+                auto guid = db.registerAsset(filePath, type);
+
+                asset::AssetMetadata metadata;
+                metadata.guid = guid;
+                metadata.type = type;
+                auto metaPath = asset::AssetMetadataSerializer::getMetaPath(filePath);
+                asset::AssetMetadataSerializer::save(metadata, metaPath);
+
+                guidOpt = guid;
+
+                events::assetdb::AssetRegisteredNotification notification;
+                notification.guid = guid;
+                notification.path = filePath;
+                notification.type = type;
+                events::EventDispatcher::instance().publish(notification);
+            }
+        }
+
         if (!guidOpt) return;
 
         // Re-scan dependencies for this asset

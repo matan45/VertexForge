@@ -4,13 +4,14 @@
 #include <cstdint>
 #include <string>
 #include <vector>
+#include "../asset/AssetRef.hpp"
 
 namespace components
 {
     struct PhysicsAnimationComponent
     {
         // Config data (serialized)
-        std::string physicsAnimationPath;
+        asset::AssetRef physicsAnimationRef;
         types::PhysicsAnimationConfig config;
 
         // Runtime state (transient, NOT serialized)

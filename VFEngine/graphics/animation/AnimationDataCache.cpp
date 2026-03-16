@@ -4,6 +4,7 @@
 #include "components/Components.hpp"
 #include "resource/ResourceManager.hpp"
 #include "resource/MeshStreamHandle.hpp"
+#include "asset/AssetRef.hpp"
 #include <unordered_set>
 
 namespace animation
@@ -21,7 +22,7 @@ namespace animation
             return it->second;
         }
 
-        auto data = resource::ResourceManager::loadAnimator(path);
+        auto data = resource::ResourceManager::loadAnimator(asset::AssetRef::fromPath(path));
         if (!data)
         {
             vfLogError("[AnimationDataCache] Failed to load animator: {}", path);
@@ -45,7 +46,7 @@ namespace animation
             return it->second.get();
         }
 
-        auto future = resource::ResourceManager::loadAnimationAsync(path);
+        auto future = resource::ResourceManager::loadAnimationAsync(asset::AssetRef::fromPath(path));
         auto animData = future.get();
 
         if (!animData)
@@ -133,18 +134,18 @@ namespace animation
             if (registry.valid(entity) && registry.all_of<components::AnimatorComponent>(entity))
             {
                 const auto& animComp = registry.get<components::AnimatorComponent>(entity);
-                if (!animComp.animatorPath.empty())
+                if (animComp.animatorRef.isValid())
                 {
-                    usedAnimatorPaths.insert(animComp.animatorPath);
+                    usedAnimatorPaths.insert(animComp.animatorRef.resolve());
                 }
             }
 
             if (registry.valid(entity) && registry.all_of<components::MeshComponent>(entity))
             {
                 const auto& meshComp = registry.get<components::MeshComponent>(entity);
-                if (!meshComp.meshPath.empty())
+                if (meshComp.meshRef.isValid())
                 {
-                    usedMeshPaths.insert(meshComp.meshPath);
+                    usedMeshPaths.insert(meshComp.meshRef.resolve());
                 }
             }
 
@@ -153,9 +154,9 @@ namespace animation
             {
                 for (const auto& state : animData->graph.states)
                 {
-                    if (!state.animationPath.empty())
+                    if (state.animationRef.isValid())
                     {
-                        usedAnimationPaths.insert(state.animationPath);
+                        usedAnimationPaths.insert(state.animationRef.resolve());
                     }
                 }
             }

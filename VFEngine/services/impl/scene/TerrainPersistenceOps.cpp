@@ -286,7 +286,7 @@ namespace services
         bool result = terrain::TerrainSerializer::save(
             path, *gridIt->second, tileConfig,
             boundsMinX, boundsMinZ, boundsMaxX, boundsMaxZ,
-            comp.terrainMaterialPath, physicsConfig, streamingConfig);
+            comp.terrainMaterialRef.resolve(), physicsConfig, streamingConfig);
 
         if (result)
         {

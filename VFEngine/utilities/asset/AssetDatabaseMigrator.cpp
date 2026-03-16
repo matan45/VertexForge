@@ -29,6 +29,13 @@ namespace asset
         return resource::AssetType::COUNT;
     }
 
+    resource::AssetType AssetDatabaseMigrator::detectAssetTypeFromPath(const std::string& filePath)
+    {
+        std::string ext = std::filesystem::path(filePath).extension().string();
+        std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+        return detectAssetType(ext);
+    }
+
     AssetDatabaseMigrator::MigrationResult AssetDatabaseMigrator::migrateProject(const std::string& projectRoot)
     {
         MigrationResult result;

@@ -158,7 +158,7 @@ namespace controllers::offscreen
             float alphaThreshold = 0.0f)
         {
             const auto& imageComp = registry.get<components::UIImageComponent>(entity);
-            if (imageComp.texturePath.empty() && imageComp.colorTint.a < 0.01f)
+            if (!imageComp.textureRef.isValid() && imageComp.colorTint.a < 0.01f)
                 return;
 
             const auto& rectComp = registry.get<components::UIRectComponent>(entity);
@@ -187,7 +187,7 @@ namespace controllers::offscreen
                     scissor = it->second.scissorRect;
             }
 
-            std::string effectiveTexturePath = imageComp.texturePath;
+            std::string effectiveTexturePath = imageComp.textureRef.resolve();
             if (imageComp.renderTextureSource != entt::null
                 && registry.valid(imageComp.renderTextureSource)
                 && registry.all_of<components::RenderTextureComponent>(imageComp.renderTextureSource))
@@ -317,9 +317,9 @@ namespace controllers::offscreen
 
                 // Emit mask shape → StencilOp::Write
                 bool showGraphic = maskComp.showMaskGraphic;
-                std::string maskTex = maskComp.maskTexturePath.empty()
-                    ? "__white_1x1__" : maskComp.maskTexturePath;
-                float threshold = maskComp.maskTexturePath.empty()
+                std::string maskTex = !maskComp.maskTextureRef.isValid()
+                    ? "__white_1x1__" : maskComp.maskTextureRef.resolve();
+                float threshold = !maskComp.maskTextureRef.isValid()
                     ? 0.0f : maskComp.alphaThreshold;
 
                 emitMaskRect(registry, entity, effectiveScrollAncestor, canvas, ctx,

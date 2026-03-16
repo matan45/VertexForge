@@ -82,7 +82,7 @@ namespace services
                 break;
 
             case components::ColliderShape::ConvexMesh:
-                if (collider.meshPath.empty())
+                if (!collider.meshRef.isValid())
                 {
                     return fmt::format("Entity '{}': ConvexMesh collider has no mesh path specified",
                         entityName);
@@ -90,7 +90,7 @@ namespace services
                 break;
 
             case components::ColliderShape::TriangleMesh:
-                if (collider.meshPath.empty())
+                if (!collider.meshRef.isValid())
                 {
                     return fmt::format("Entity '{}': TriangleMesh collider has no mesh path specified",
                         entityName);
@@ -218,24 +218,24 @@ namespace services
                     break;
                 case components::ColliderShape::ConvexMesh:
                     colData.shape = ColliderData::Shape::ConvexMesh;
-                    if (!collider.meshPath.empty())
+                    if (collider.meshRef.isValid())
                     {
-                        colData.meshPath = collider.meshPath;
+                        colData.meshPath = collider.meshRef.resolve();
                     }
                     else if (registry.all_of<components::MeshComponent>(entity))
                     {
-                        colData.meshPath = registry.get<components::MeshComponent>(entity).meshPath;
+                        colData.meshPath = registry.get<components::MeshComponent>(entity).meshRef.resolve();
                     }
                     break;
                 case components::ColliderShape::TriangleMesh:
                     colData.shape = ColliderData::Shape::TriangleMesh;
-                    if (!collider.meshPath.empty())
+                    if (collider.meshRef.isValid())
                     {
-                        colData.meshPath = collider.meshPath;
+                        colData.meshPath = collider.meshRef.resolve();
                     }
                     else if (registry.all_of<components::MeshComponent>(entity))
                     {
-                        colData.meshPath = registry.get<components::MeshComponent>(entity).meshPath;
+                        colData.meshPath = registry.get<components::MeshComponent>(entity).meshRef.resolve();
                     }
                     break;
                 }
@@ -299,24 +299,24 @@ namespace services
                 break;
             case components::ColliderShape::ConvexMesh:
                 colData.shape = ColliderData::Shape::ConvexMesh;
-                if (!collider.meshPath.empty())
+                if (collider.meshRef.isValid())
                 {
-                    colData.meshPath = collider.meshPath;
+                    colData.meshPath = collider.meshRef.resolve();
                 }
                 else if (registry.all_of<components::MeshComponent>(entity))
                 {
-                    colData.meshPath = registry.get<components::MeshComponent>(entity).meshPath;
+                    colData.meshPath = registry.get<components::MeshComponent>(entity).meshRef.resolve();
                 }
                 break;
             case components::ColliderShape::TriangleMesh:
                 colData.shape = ColliderData::Shape::TriangleMesh;
-                if (!collider.meshPath.empty())
+                if (collider.meshRef.isValid())
                 {
-                    colData.meshPath = collider.meshPath;
+                    colData.meshPath = collider.meshRef.resolve();
                 }
                 else if (registry.all_of<components::MeshComponent>(entity))
                 {
-                    colData.meshPath = registry.get<components::MeshComponent>(entity).meshPath;
+                    colData.meshPath = registry.get<components::MeshComponent>(entity).meshRef.resolve();
                 }
                 break;
             }
@@ -510,9 +510,9 @@ namespace services
         for (auto entity : view)
         {
             const auto& meshComp = view.get<components::MeshComponent>(entity);
-            if (meshComp.meshPath.empty() || meshComp.animatorPath.empty())
+            if (!meshComp.meshRef.isValid() || !meshComp.animatorRef.isValid())
                 continue;
-            entries.push_back({entity, meshComp.meshPath});
+            entries.push_back({entity, meshComp.meshRef.resolve()});
         }
 
         // Phase 1: parallel skeleton loading

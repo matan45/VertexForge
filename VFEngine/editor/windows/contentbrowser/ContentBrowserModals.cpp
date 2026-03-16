@@ -6,6 +6,7 @@
 #include "events/project/SceneEvents.hpp"
 #include "events/project/FileOperationsEvents.hpp"
 #include "events/asset/AssetDatabaseEvents.hpp"
+#include "events/project/ResourceEvents.hpp"
 #include "../../fileops/AsyncFileOperations.hpp"
 #include <material/MaterialAsset.hpp>
 #include <animator/AnimatorAsset.hpp>
@@ -311,6 +312,9 @@ namespace windows
                     auto defaultMat = material::MaterialAsset::createDefault(newMaterialName);
                     if (material::MaterialAsset::save(pathStr, defaultMat))
                     {
+                        events::resource::AssetSavedNotification assetNotif;
+                        assetNotif.filePath = pathStr;
+                        events::EventDispatcher::instance().publish(assetNotif);
                         if (refreshCallback) refreshCallback();
                     }
                 }
@@ -358,6 +362,9 @@ namespace windows
                     auto defaultAnimator = animator::AnimatorAsset::createDefault(newAnimatorName);
                     if (animator::AnimatorAsset::save(pathStr, defaultAnimator))
                     {
+                        events::resource::AssetSavedNotification assetNotif;
+                        assetNotif.filePath = pathStr;
+                        events::EventDispatcher::instance().publish(assetNotif);
                         if (refreshCallback) refreshCallback();
                     }
                 }
@@ -405,6 +412,9 @@ namespace windows
                     auto defaultVFX = vfx::VFXAsset::createDefault(newVFXName);
                     if (vfx::VFXAsset::save(pathStr, defaultVFX))
                     {
+                        events::resource::AssetSavedNotification assetNotif;
+                        assetNotif.filePath = pathStr;
+                        events::EventDispatcher::instance().publish(assetNotif);
                         if (refreshCallback) refreshCallback();
                     }
                 }
@@ -452,6 +462,9 @@ namespace windows
                     auto defaultMat = terrain::TerrainMaterialAsset::createDefault(newTerrainMaterialName);
                     if (terrain::TerrainMaterialAsset::save(pathStr, defaultMat))
                     {
+                        events::resource::AssetSavedNotification assetNotif;
+                        assetNotif.filePath = pathStr;
+                        events::EventDispatcher::instance().publish(assetNotif);
                         if (refreshCallback) refreshCallback();
                     }
                 }
@@ -499,6 +512,9 @@ namespace windows
                     auto defaultBT = behaviortree::BehaviorTreeAsset::createDefault(newBehaviorTreeName);
                     if (behaviortree::BehaviorTreeAsset::save(pathStr, defaultBT))
                     {
+                        events::resource::AssetSavedNotification assetNotif;
+                        assetNotif.filePath = pathStr;
+                        events::EventDispatcher::instance().publish(assetNotif);
                         if (refreshCallback) refreshCallback();
                     }
                 }

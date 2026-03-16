@@ -25,7 +25,7 @@ namespace services {
 
         auto& comp = sceneEntity.getComponent<components::IBLComponent>();
         IBLData data;
-        data.fileName = comp.fileName;
+        data.hdrRef = comp.hdrRef;
 
         return data;
     }
@@ -39,10 +39,10 @@ namespace services {
         scene::Entity sceneEntity(internal::fromHandle(entity));
         if (sceneEntity.hasComponent<components::IBLComponent>()) {
             auto& comp = sceneEntity.getComponent<components::IBLComponent>();
-            comp.fileName = ibl.fileName;
+            comp.hdrRef = ibl.hdrRef;
         }
         else {
-            sceneEntity.addComponent<components::IBLComponent>(ibl.fileName);
+            sceneEntity.addComponent<components::IBLComponent>(ibl.hdrRef);
         }
 
         return true;

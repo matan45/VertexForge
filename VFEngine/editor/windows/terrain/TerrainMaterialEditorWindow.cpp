@@ -4,6 +4,7 @@
 #include <resource/ResourceManager.hpp>
 #include "events/EventDispatcher.hpp"
 #include "events/terrain/TerrainEvents.hpp"
+#include "events/project/ResourceEvents.hpp"
 #include "nfd/FileDialog.hpp"
 #include "imgui.h"
 #include <filesystem>
@@ -44,6 +45,9 @@ namespace windows
         {
             isDirty = false;
             vfLogInfo("Terrain material saved: {}", materialPath);
+            events::resource::AssetSavedNotification assetNotif;
+            assetNotif.filePath = materialPath;
+            events::EventDispatcher::instance().publish(assetNotif);
         }
         else
         {

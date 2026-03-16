@@ -27,10 +27,10 @@ namespace core
             return nullptr;
 
         const auto& meshComp = registry.get<components::MeshComponent>(entity);
-        if (meshComp.meshPath.empty())
+        if (!meshComp.meshRef.isValid())
             return nullptr;
 
-        return animation::RuntimeAnimatorSystem::instance().loadSkeleton(meshComp.meshPath);
+        return animation::RuntimeAnimatorSystem::instance().loadSkeleton(meshComp.meshRef.resolve());
     }
 
     bool SocketAdapter::attachToSocket(services::EntityHandle childEntity, services::EntityHandle parentEntity,

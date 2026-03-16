@@ -1,6 +1,7 @@
 #pragma once
 
 #include "MaterialTypes.hpp"
+#include "../asset/AssetRef.hpp"
 #include <glm/glm.hpp>
 #include <string>
 #include <map>
@@ -16,9 +17,9 @@ namespace material
         std::string uuid;
         std::string name;
 
-        std::string parentMaterialPath;
+        asset::AssetRef parentMaterialRef;
 
-        std::map<TextureSlot, std::string> textureOverrides;
+        std::map<TextureSlot, asset::AssetRef> textureOverrides;
 
         // Overridden PBR scalar values
         std::optional<glm::vec4> albedoOverride;
@@ -34,21 +35,21 @@ namespace material
             return textureOverrides.contains(slot);
         }
 
-        std::string getTextureOverride(TextureSlot slot) const
+        asset::AssetRef getTextureOverride(TextureSlot slot) const
         {
             auto it = textureOverrides.find(slot);
-            return (it != textureOverrides.end()) ? it->second : "";
+            return (it != textureOverrides.end()) ? it->second : asset::AssetRef::invalid();
         }
 
-        void setTextureOverride(TextureSlot slot, const std::string& path)
+        void setTextureOverride(TextureSlot slot, const asset::AssetRef& ref)
         {
-            if (path.empty())
+            if (!ref.isValid())
             {
                 textureOverrides.erase(slot);
             }
             else
             {
-                textureOverrides[slot] = path;
+                textureOverrides[slot] = ref;
             }
         }
 

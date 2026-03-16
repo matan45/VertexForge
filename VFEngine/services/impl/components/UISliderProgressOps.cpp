@@ -87,12 +87,12 @@ namespace services {
         data.handleHoveredColor = comp.handleHoveredColor;
         data.handlePressedColor = comp.handlePressedColor;
         data.handleDisabledColor = comp.handleDisabledColor;
-        data.handleNormalTexture = comp.handleNormalTexture;
-        data.handleHoveredTexture = comp.handleHoveredTexture;
-        data.handlePressedTexture = comp.handlePressedTexture;
-        data.handleDisabledTexture = comp.handleDisabledTexture;
+        data.handleNormalTextureRef = comp.handleNormalTextureRef;
+        data.handleHoveredTextureRef = comp.handleHoveredTextureRef;
+        data.handlePressedTextureRef = comp.handlePressedTextureRef;
+        data.handleDisabledTextureRef = comp.handleDisabledTextureRef;
         data.fillColor = comp.fillColor;
-        data.fillTexture = comp.fillTexture;
+        data.fillTextureRef = comp.fillTextureRef;
         data.colorTransitionDuration = comp.colorTransitionDuration;
         data.interactable = comp.interactable;
         data.currentState = static_cast<uint8_t>(comp.currentState);
@@ -123,12 +123,12 @@ namespace services {
         comp.handleHoveredColor = sliderData.handleHoveredColor;
         comp.handlePressedColor = sliderData.handlePressedColor;
         comp.handleDisabledColor = sliderData.handleDisabledColor;
-        comp.handleNormalTexture = sliderData.handleNormalTexture;
-        comp.handleHoveredTexture = sliderData.handleHoveredTexture;
-        comp.handlePressedTexture = sliderData.handlePressedTexture;
-        comp.handleDisabledTexture = sliderData.handleDisabledTexture;
+        comp.handleNormalTextureRef = sliderData.handleNormalTextureRef;
+        comp.handleHoveredTextureRef = sliderData.handleHoveredTextureRef;
+        comp.handlePressedTextureRef = sliderData.handlePressedTextureRef;
+        comp.handleDisabledTextureRef = sliderData.handleDisabledTextureRef;
         comp.fillColor = sliderData.fillColor;
-        comp.fillTexture = sliderData.fillTexture;
+        comp.fillTextureRef = sliderData.fillTextureRef;
         comp.colorTransitionDuration = sliderData.colorTransitionDuration;
         comp.interactable = sliderData.interactable;
         return true;
@@ -248,9 +248,9 @@ namespace services {
         data.smoothInterpolation = comp.smoothInterpolation;
         data.interpolationSpeed = comp.interpolationSpeed;
         data.trackColor = comp.trackColor;
-        data.trackTexture = comp.trackTexture;
+        data.trackTextureRef = comp.trackTextureRef;
         data.fillColor = comp.fillColor;
-        data.fillTexture = comp.fillTexture;
+        data.fillTextureRef = comp.fillTextureRef;
         data.displayValue = comp.displayValue;
         return data;
     }
@@ -275,9 +275,9 @@ namespace services {
         comp.smoothInterpolation = progressBarData.smoothInterpolation;
         comp.interpolationSpeed = progressBarData.interpolationSpeed;
         comp.trackColor = progressBarData.trackColor;
-        comp.trackTexture = progressBarData.trackTexture;
+        comp.trackTextureRef = progressBarData.trackTextureRef;
         comp.fillColor = progressBarData.fillColor;
-        comp.fillTexture = progressBarData.fillTexture;
+        comp.fillTextureRef = progressBarData.fillTextureRef;
         return true;
     }
 

@@ -18,6 +18,9 @@ namespace asset
 
         static MigrationResult migrateProject(const std::string& projectRoot);
 
+        // Detect asset type from file path (using extension)
+        static resource::AssetType detectAssetTypeFromPath(const std::string& filePath);
+
     private:
         static resource::AssetType detectAssetType(const std::string& extension);
     };

@@ -64,9 +64,9 @@ namespace services {
         const auto& comp = sceneEntity.getComponent<components::DecalComponent>();
         DecalData data;
         data.halfExtents = comp.halfExtents;
-        data.albedoTexture = comp.albedoTexture;
-        data.normalTexture = comp.normalTexture;
-        data.ormTexture = comp.ormTexture;
+        data.albedoTextureRef = comp.albedoTextureRef;
+        data.normalTextureRef = comp.normalTextureRef;
+        data.ormTextureRef = comp.ormTextureRef;
         data.color = comp.color;
         data.angleFadeStart = comp.angleFadeStart;
         data.angleFadeEnd = comp.angleFadeEnd;
@@ -90,9 +90,9 @@ namespace services {
 
         auto& comp = sceneEntity.getComponent<components::DecalComponent>();
         comp.halfExtents = decalData.halfExtents;
-        comp.albedoTexture = decalData.albedoTexture;
-        comp.normalTexture = decalData.normalTexture;
-        comp.ormTexture = decalData.ormTexture;
+        comp.albedoTextureRef = decalData.albedoTextureRef;
+        comp.normalTextureRef = decalData.normalTextureRef;
+        comp.ormTextureRef = decalData.ormTextureRef;
         comp.color = decalData.color;
         comp.angleFadeStart = decalData.angleFadeStart;
         comp.angleFadeEnd = std::min(decalData.angleFadeEnd, decalData.angleFadeStart - 0.001f);

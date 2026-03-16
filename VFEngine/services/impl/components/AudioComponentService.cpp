@@ -40,8 +40,8 @@ namespace services {
         scene::Entity sceneEntity(internal::fromHandle(entity));
         if (sceneEntity.hasComponent<components::AudioSource2DComponent>()) {
             auto& comp = sceneEntity.getComponent<components::AudioSource2DComponent>();
-            if (!comp.audioFilePath.empty()) {
-                resource::AssetLifecycleManager::instance().release(comp.audioFilePath);
+            if (comp.audioRef.isValid()) {
+                resource::AssetLifecycleManager::instance().release(comp.audioRef.getGUID());
             }
             sceneEntity.removeComponent<components::AudioSource2DComponent>();
             if (!sceneEntity.hasComponent<components::AudioSource3DComponent>()) {
@@ -75,7 +75,7 @@ namespace services {
 
         const auto& comp = sceneEntity.getComponent<components::AudioSource2DComponent>();
         AudioSource2DData data;
-        data.audioFilePath = comp.audioFilePath;
+        data.audioRef = comp.audioRef;
         data.volume = comp.volume;
         data.pitch = comp.pitch;
         data.loop = comp.loop;
@@ -96,16 +96,16 @@ namespace services {
 
         auto& comp = sceneEntity.getComponent<components::AudioSource2DComponent>();
         auto& lifecycle = resource::AssetLifecycleManager::instance();
-        if (!comp.audioFilePath.empty() && comp.audioFilePath != audioData.audioFilePath) {
-            lifecycle.release(comp.audioFilePath);
+        if (comp.audioRef.isValid() && comp.audioRef != audioData.audioRef) {
+            lifecycle.release(comp.audioRef.getGUID());
         }
-        comp.audioFilePath = audioData.audioFilePath;
+        comp.audioRef = audioData.audioRef;
         comp.volume = audioData.volume;
         comp.pitch = audioData.pitch;
         comp.loop = audioData.loop;
         comp.busName = audioData.busName;
-        if (!audioData.audioFilePath.empty()) {
-            lifecycle.acquire(audioData.audioFilePath, resource::AssetType::Audio);
+        if (audioData.audioRef.isValid()) {
+            lifecycle.acquire(audioData.audioRef.getGUID(), resource::AssetType::Audio);
         }
         return true;
     }
@@ -136,8 +136,8 @@ namespace services {
         scene::Entity sceneEntity(internal::fromHandle(entity));
         if (sceneEntity.hasComponent<components::AudioSource3DComponent>()) {
             auto& comp = sceneEntity.getComponent<components::AudioSource3DComponent>();
-            if (!comp.audioFilePath.empty()) {
-                resource::AssetLifecycleManager::instance().release(comp.audioFilePath);
+            if (comp.audioRef.isValid()) {
+                resource::AssetLifecycleManager::instance().release(comp.audioRef.getGUID());
             }
             sceneEntity.removeComponent<components::AudioSource3DComponent>();
             if (!sceneEntity.hasComponent<components::AudioSource2DComponent>()) {
@@ -171,7 +171,7 @@ namespace services {
 
         const auto& comp = sceneEntity.getComponent<components::AudioSource3DComponent>();
         AudioSource3DData data;
-        data.audioFilePath = comp.audioFilePath;
+        data.audioRef = comp.audioRef;
         data.volume = comp.volume;
         data.pitch = comp.pitch;
         data.loop = comp.loop;
@@ -203,10 +203,10 @@ namespace services {
 
         auto& comp = sceneEntity.getComponent<components::AudioSource3DComponent>();
         auto& lifecycle = resource::AssetLifecycleManager::instance();
-        if (!comp.audioFilePath.empty() && comp.audioFilePath != audioData.audioFilePath) {
-            lifecycle.release(comp.audioFilePath);
+        if (comp.audioRef.isValid() && comp.audioRef != audioData.audioRef) {
+            lifecycle.release(comp.audioRef.getGUID());
         }
-        comp.audioFilePath = audioData.audioFilePath;
+        comp.audioRef = audioData.audioRef;
         comp.volume = audioData.volume;
         comp.pitch = audioData.pitch;
         comp.loop = audioData.loop;
@@ -222,8 +222,8 @@ namespace services {
         comp.outerConeGain = audioData.outerConeGain;
         comp.showDebugCone = audioData.showDebugCone;
         comp.busName = audioData.busName;
-        if (!audioData.audioFilePath.empty()) {
-            lifecycle.acquire(audioData.audioFilePath, resource::AssetType::Audio);
+        if (audioData.audioRef.isValid()) {
+            lifecycle.acquire(audioData.audioRef.getGUID(), resource::AssetType::Audio);
         }
         return true;
     }

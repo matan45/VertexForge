@@ -5,6 +5,7 @@
 #include "terrain/TerrainGrid.hpp"
 #include "terrain/TerrainTypes.hpp"
 #include "resource/AssetLifecycleManager.hpp"
+#include <asset/AssetRef.hpp>
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/terrain/TerrainEvents.hpp"
@@ -221,12 +222,13 @@ namespace services
                     auto& lifecycle = resource::AssetLifecycleManager::instance();
 
                     // Release old terrain material
-                    if (!comp.terrainMaterialPath.empty() && comp.terrainMaterialPath != cmd.materialPath)
+                    auto newRef = asset::AssetRef::fromPath(cmd.materialPath);
+                    if (comp.terrainMaterialRef.isValid() && comp.terrainMaterialRef != newRef)
                     {
-                        lifecycle.release(comp.terrainMaterialPath);
+                        lifecycle.release(comp.terrainMaterialRef.getGUID());
                     }
 
-                    comp.terrainMaterialPath = cmd.materialPath;
+                    comp.terrainMaterialRef = newRef;
 
                     // Acquire new terrain material
                     if (!cmd.materialPath.empty())

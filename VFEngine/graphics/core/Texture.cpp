@@ -6,6 +6,7 @@
 #include "Utilities.hpp"
 #include "resource/ResourceManager.hpp"
 #include "resource/Types.hpp"
+#include "asset/AssetRef.hpp"
 #include "print/Log.hpp"
 #include <imgui_impl_vulkan.h>
 #include <vector>
@@ -101,7 +102,7 @@ namespace core
 
     void Texture::loadHDRFromFile(std::string_view filePath, bool isEditor)
     {
-        auto textureData = resource::ResourceManager::loadHDRAsync(filePath);
+        auto textureData = resource::ResourceManager::loadHDRAsync(asset::AssetRef::fromPath(std::string(filePath)));
         auto texturePtr = textureData.get();
 
         if (!texturePtr || texturePtr->pixels.empty())
@@ -311,7 +312,7 @@ namespace core
 
     void Texture::loadTextureFromFile(std::string_view filePath, vk::Format format, bool isEditor)
     {
-        auto textureData = resource::ResourceManager::loadTextureAsync(filePath);
+        auto textureData = resource::ResourceManager::loadTextureAsync(asset::AssetRef::fromPath(std::string(filePath)));
         auto texturePtr = textureData.get();
 
         if (!texturePtr || texturePtr->mipData.empty())

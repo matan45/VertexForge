@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 #include <glm/glm.hpp>
+#include "../asset/AssetRef.hpp"
 
 namespace animator
 {
@@ -14,7 +15,7 @@ namespace animator
 
     struct BlendTreeEntry
     {
-        std::string animationPath;
+        asset::AssetRef animationRef;
         float threshold = 0.0f;       // For 1D blend trees
         glm::vec2 position{0.0f};     // For 2D blend trees
     };

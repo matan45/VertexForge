@@ -26,8 +26,8 @@ namespace services {
 
         auto& comp = sceneEntity.getComponent<components::MeshComponent>();
         MeshData data;
-        data.meshPath = comp.meshPath;
-        data.animatorPath = comp.animatorPath;
+        data.meshRef = comp.meshRef;
+        data.animatorRef = comp.animatorRef;
         data.showBoundingBox = comp.showBoundingBox;
         data.applyRootMotion = comp.applyRootMotion;
         data.maxDrawDistance = comp.maxDrawDistance;
@@ -48,23 +48,23 @@ namespace services {
             auto& comp = sceneEntity.getComponent<components::MeshComponent>();
 
             // Release old assets
-            if (!comp.meshPath.empty() && comp.meshPath != mesh.meshPath) {
-                lifecycle.release(comp.meshPath);
+            if (comp.meshRef.isValid() && comp.meshRef != mesh.meshRef) {
+                lifecycle.release(comp.meshRef.getGUID());
             }
-            if (!comp.animatorPath.empty() && comp.animatorPath != mesh.animatorPath) {
-                lifecycle.release(comp.animatorPath);
+            if (comp.animatorRef.isValid() && comp.animatorRef != mesh.animatorRef) {
+                lifecycle.release(comp.animatorRef.getGUID());
             }
 
-            comp.meshPath = mesh.meshPath;
-            comp.animatorPath = mesh.animatorPath;
+            comp.meshRef = mesh.meshRef;
+            comp.animatorRef = mesh.animatorRef;
             comp.showBoundingBox = mesh.showBoundingBox;
             comp.applyRootMotion = mesh.applyRootMotion;
             comp.maxDrawDistance = mesh.maxDrawDistance;
         }
         else {
             auto& comp = sceneEntity.addComponent<components::MeshComponent>();
-            comp.meshPath = mesh.meshPath;
-            comp.animatorPath = mesh.animatorPath;
+            comp.meshRef = mesh.meshRef;
+            comp.animatorRef = mesh.animatorRef;
             comp.showBoundingBox = mesh.showBoundingBox;
             comp.applyRootMotion = mesh.applyRootMotion;
             comp.maxDrawDistance = mesh.maxDrawDistance;
@@ -77,18 +77,18 @@ namespace services {
         }
 
         // Acquire new assets
-        if (!mesh.meshPath.empty()) {
-            lifecycle.acquire(mesh.meshPath, resource::AssetType::Mesh);
+        if (mesh.meshRef.isValid()) {
+            lifecycle.acquire(mesh.meshRef.getGUID(), resource::AssetType::Mesh);
         }
-        if (!mesh.animatorPath.empty()) {
-            lifecycle.acquire(mesh.animatorPath, resource::AssetType::Animator);
+        if (mesh.animatorRef.isValid()) {
+            lifecycle.acquire(mesh.animatorRef.getGUID(), resource::AssetType::Animator);
         }
 
         // Publish notification to allow preloading of mesh assets and animator cleanup
         events::scene::MeshDataChangedNotification notification;
         notification.entity = entity;
-        notification.meshPath = mesh.meshPath;
-        notification.animatorPath = mesh.animatorPath;
+        notification.meshPath = mesh.meshRef.resolve();
+        notification.animatorPath = mesh.animatorRef.resolve();
         events::EventDispatcher::instance().publish(notification);
 
         return true;
@@ -119,11 +119,11 @@ namespace services {
         if (sceneEntity.hasComponent<components::MeshComponent>()) {
             auto& comp = sceneEntity.getComponent<components::MeshComponent>();
             auto& lifecycle = resource::AssetLifecycleManager::instance();
-            if (!comp.meshPath.empty()) {
-                lifecycle.release(comp.meshPath);
+            if (comp.meshRef.isValid()) {
+                lifecycle.release(comp.meshRef.getGUID());
             }
-            if (!comp.animatorPath.empty()) {
-                lifecycle.release(comp.animatorPath);
+            if (comp.animatorRef.isValid()) {
+                lifecycle.release(comp.animatorRef.getGUID());
             }
 
             sceneEntity.removeComponent<components::MeshComponent>();

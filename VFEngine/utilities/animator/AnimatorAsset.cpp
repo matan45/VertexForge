@@ -1,5 +1,6 @@
 #include "AnimatorAsset.hpp"
 #include "../print/Log.hpp"
+#include "../asset/AssetRef.hpp"
 #include <nlohmann/json.hpp>
 #include <fstream>
 #include <filesystem>
@@ -84,7 +85,7 @@ namespace animator
         for (const auto& entry : blendTree.entries)
         {
             json entryJ;
-            entryJ["animationPath"] = entry.animationPath;
+            entryJ["animationRef"] = entry.animationRef.toHexString();
             if (blendTree.type == BlendTreeType::BlendTree1D)
             {
                 entryJ["threshold"] = entry.threshold;
@@ -112,7 +113,7 @@ namespace animator
             for (const auto& entryJson : j["entries"])
             {
                 BlendTreeEntry entry;
-                entry.animationPath = entryJson.value("animationPath", "");
+                entry.animationRef = asset::AssetRef::fromHexString(entryJson.value("animationRef", ""));
                 entry.threshold = entryJson.value("threshold", 0.0f);
                 if (entryJson.contains("position") && entryJson["position"].is_array()
                     && entryJson["position"].size() >= 2)
@@ -131,7 +132,7 @@ namespace animator
         json j;
         j["id"] = state.id;
         j["name"] = state.name;
-        j["animationPath"] = state.animationPath;
+        j["animationRef"] = state.animationRef.toHexString();
         j["playbackSpeed"] = state.playbackSpeed;
         j["loop"] = state.loop;
         j["position"] = json::array({state.position.x, state.position.y});
@@ -166,7 +167,7 @@ namespace animator
         AnimatorState state;
         state.id = j.value("id", 0u);
         state.name = j.value("name", "");
-        state.animationPath = j.value("animationPath", "");
+        state.animationRef = asset::AssetRef::fromHexString(j.value("animationRef", ""));
         state.playbackSpeed = j.value("playbackSpeed", 1.0f);
         state.loop = j.value("loop", true);
 
@@ -471,7 +472,7 @@ namespace animator
 
         if (layer.sourceMode == LayerSourceMode::DirectClip)
         {
-            j["directClipPath"] = layer.directClipPath;
+            j["directClipRef"] = layer.directClipRef.toHexString();
             j["directClipLoop"] = layer.directClipLoop;
             j["directClipSpeed"] = layer.directClipSpeed;
         }
@@ -498,7 +499,7 @@ namespace animator
         layer.blendMode = stringToLayerBlendMode(j.value("blendMode", "Override"));
         layer.sourceMode = stringToLayerSourceMode(j.value("sourceMode", "StateMachine"));
         layer.boneMaskName = j.value("boneMask", "");
-        layer.directClipPath = j.value("directClipPath", "");
+        layer.directClipRef = asset::AssetRef::fromHexString(j.value("directClipRef", ""));
         layer.directClipLoop = j.value("directClipLoop", true);
         layer.directClipSpeed = j.value("directClipSpeed", 1.0f);
         layer.additiveRefPose = stringToAdditiveReferencePose(j.value("additiveRefPose", "FirstFrame"));

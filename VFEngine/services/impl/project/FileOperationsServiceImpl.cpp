@@ -191,15 +191,7 @@ namespace services
             result.updatedReferences = updateResult.updatedFiles;
         }
 
-        // Migrate ResourceManager cache entries
-        if (fs::is_directory(dest))
-        {
-            resource::ResourceManager::migrateCachePrefix(sourcePath, dest.string());
-        }
-        else
-        {
-            resource::ResourceManager::migrateCache(sourcePath, dest.string());
-        }
+        // With GUID-keyed caches, file renames don't invalidate cache entries
 
         if (undoRedoService)
         {
@@ -368,7 +360,7 @@ namespace services
         }
 
         // Remove stale ResourceManager cache entries
-        resource::ResourceManager::removeCacheEntry(path);
+        // With GUID-keyed caches, deletions don't need cache cleanup
 
         if (undoRedoService)
         {
@@ -417,7 +409,7 @@ namespace services
             asset::AssetReferenceScanner::updateReferences(sourcePath, destPath, projectRoot);
         }
 
-        resource::ResourceManager::migrateCache(sourcePath, destPath);
+        // With GUID-keyed caches, no migration needed
     }
 
     void MoveFileUndoCommand::undo()
@@ -433,7 +425,7 @@ namespace services
             std::vector<std::pair<std::string, std::string>>(
                 originalRefContents.begin(), originalRefContents.end()));
 
-        resource::ResourceManager::migrateCache(destPath, sourcePath);
+        // With GUID-keyed caches, no migration needed
 
         // Notify UI to refresh
         events::fileops::FileMovedNotification notification;
@@ -503,7 +495,7 @@ namespace services
             throw std::runtime_error("Failed to redo delete: " + ec.message());
         }
 
-        resource::ResourceManager::removeCacheEntry(originalPath);
+        // With GUID-keyed caches, deletions don't need cache cleanup
     }
 
     void DeleteFileUndoCommand::undo()

@@ -12,6 +12,7 @@
 #include "../../data/EntityConversion.hpp"
 #include "../../../utilities/scene/EntityRegistry.hpp"
 #include "../../../utilities/math/TransformUtils.hpp"
+#include <asset/AssetRef.hpp>
 #include <glm/gtc/constants.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <cmath>
@@ -286,7 +287,7 @@ namespace services
             dispatcher.execute(meshCmd);
 
             MeshData meshData;
-            meshData.meshPath = entry.meshPath;
+            meshData.meshRef = asset::AssetRef::fromPath(entry.meshPath);
             events::scene::SetMeshDataCommand meshDataCmd;
             meshDataCmd.entity = entity;
             meshDataCmd.meshData = meshData;

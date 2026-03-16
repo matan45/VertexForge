@@ -47,21 +47,21 @@ namespace controllers::offscreen::ui_screenspace
                 : 0.0f;
             normalizedValue = std::max(0.0f, std::min(1.0f, normalizedValue));
 
-            std::string fillTex = sliderComp.fillTexture.empty() ? whiteTex : sliderComp.fillTexture;
+            std::string fillTex = !sliderComp.fillTextureRef.isValid() ? whiteTex : sliderComp.fillTextureRef.resolve();
             std::string handleTex = whiteTex;
             switch (sliderComp.currentState)
             {
             case components::UISliderState::Hovered:
-                handleTex = sliderComp.handleHoveredTexture.empty() ? whiteTex : sliderComp.handleHoveredTexture;
+                handleTex = !sliderComp.handleHoveredTextureRef.isValid() ? whiteTex : sliderComp.handleHoveredTextureRef.resolve();
                 break;
             case components::UISliderState::Pressed:
-                handleTex = sliderComp.handlePressedTexture.empty() ? whiteTex : sliderComp.handlePressedTexture;
+                handleTex = !sliderComp.handlePressedTextureRef.isValid() ? whiteTex : sliderComp.handlePressedTextureRef.resolve();
                 break;
             case components::UISliderState::Disabled:
-                handleTex = sliderComp.handleDisabledTexture.empty() ? whiteTex : sliderComp.handleDisabledTexture;
+                handleTex = !sliderComp.handleDisabledTextureRef.isValid() ? whiteTex : sliderComp.handleDisabledTextureRef.resolve();
                 break;
             default:
-                handleTex = sliderComp.handleNormalTexture.empty() ? whiteTex : sliderComp.handleNormalTexture;
+                handleTex = !sliderComp.handleNormalTextureRef.isValid() ? whiteTex : sliderComp.handleNormalTextureRef.resolve();
                 break;
             }
 
@@ -166,7 +166,7 @@ namespace controllers::offscreen::ui_screenspace
                 : 0.0f;
             normalizedValue = std::max(0.0f, std::min(1.0f, normalizedValue));
 
-            std::string trackTex = pbComp.trackTexture.empty() ? whiteTex : pbComp.trackTexture;
+            std::string trackTex = !pbComp.trackTextureRef.isValid() ? whiteTex : pbComp.trackTextureRef.resolve();
             {
                 render::ui::UIImageRenderData track;
                 track.texturePath = trackTex;
@@ -177,7 +177,7 @@ namespace controllers::offscreen::ui_screenspace
                 drawList.push_back(std::move(track));
             }
 
-            std::string fillTex = pbComp.fillTexture.empty() ? whiteTex : pbComp.fillTexture;
+            std::string fillTex = !pbComp.fillTextureRef.isValid() ? whiteTex : pbComp.fillTextureRef.resolve();
             if (normalizedValue > 0.0f)
             {
                 if (pbComp.orientation == components::UISliderOrientation::Horizontal)
@@ -337,7 +337,7 @@ namespace controllers::offscreen::ui_screenspace
             return;
 
         const auto& tiComp = registry.get<components::UITextInputComponent>(focusedEntity);
-        if (tiComp.currentState != components::UITextInputState::Focused || tiComp.fontPath.empty())
+        if (tiComp.currentState != components::UITextInputState::Focused || !tiComp.fontRef.isValid())
             return;
 
         const auto& rectComp = registry.get<components::UIRectComponent>(focusedEntity);
@@ -562,8 +562,8 @@ namespace controllers::offscreen::ui_screenspace
         if (registry.all_of<components::UIImageComponent>(dragEntity))
         {
             const auto& imageComp = registry.get<components::UIImageComponent>(dragEntity);
-            if (!imageComp.texturePath.empty())
-                ghostTexture = imageComp.texturePath;
+            if (imageComp.textureRef.isValid())
+                ghostTexture = imageComp.textureRef.resolve();
             ghostTint = imageComp.colorTint;
             ghostTint.a *= dragComp.ghostOpacity;
         }

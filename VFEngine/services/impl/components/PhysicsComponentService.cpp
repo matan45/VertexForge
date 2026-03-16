@@ -82,7 +82,7 @@ namespace services
         data.size = comp.size;
         data.height = comp.height;
         data.offset = comp.offset;
-        data.meshPath = comp.meshPath;
+        data.meshRef = comp.meshRef;
         data.isTrigger = comp.isTrigger;
         data.collisionLayer = comp.collisionLayer;
         data.friction = comp.friction;
@@ -109,7 +109,7 @@ namespace services
         comp.size = colliderData.size;
         comp.height = colliderData.height;
         comp.offset = colliderData.offset;
-        comp.meshPath = colliderData.meshPath;
+        comp.meshRef = colliderData.meshRef;
         comp.isTrigger = colliderData.isTrigger;
         comp.collisionLayer = colliderData.collisionLayer;
         comp.friction = colliderData.friction;
@@ -286,7 +286,7 @@ namespace services
 
         const auto& comp = sceneEntity.getComponent<components::PhysicsAnimationComponent>();
         PhysicsAnimationComponentData data;
-        data.physicsAnimationPath = comp.physicsAnimationPath;
+        data.physicsAnimationRef = comp.physicsAnimationRef;
         data.defaultMode = comp.config.defaultMode;
         data.collisionLayer = comp.config.collisionLayer;
         data.boneBodyMappings = comp.config.boneBodyMappings;
@@ -309,7 +309,7 @@ namespace services
         }
 
         auto& comp = sceneEntity.getComponent<components::PhysicsAnimationComponent>();
-        comp.physicsAnimationPath = data.physicsAnimationPath;
+        comp.physicsAnimationRef = data.physicsAnimationRef;
         comp.config.defaultMode = data.defaultMode;
         comp.config.collisionLayer = data.collisionLayer;
         comp.config.boneBodyMappings = data.boneBodyMappings;

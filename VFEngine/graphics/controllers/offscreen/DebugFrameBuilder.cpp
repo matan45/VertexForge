@@ -272,10 +272,10 @@ namespace controllers::offscreen
             if (colliderComp.shape == components::ColliderShape::ConvexMesh ||
                 colliderComp.shape == components::ColliderShape::TriangleMesh)
             {
-                if (!colliderComp.meshPath.empty())
-                    renderData.meshPath = colliderComp.meshPath;
+                if (colliderComp.meshRef.isValid())
+                    renderData.meshPath = colliderComp.meshRef.resolve();
                 else if (registry.all_of<components::MeshComponent>(entity))
-                    renderData.meshPath = registry.get<components::MeshComponent>(entity).meshPath;
+                    renderData.meshPath = registry.get<components::MeshComponent>(entity).meshRef.resolve();
             }
 
             renderData.bodyType = registry.all_of<components::RigidBodyComponent>(entity)

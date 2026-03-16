@@ -1,6 +1,7 @@
 #include "MaterialInstanceAsset.hpp"
 #include "../print/Log.hpp"
 #include "../uuid/UUID.hpp"
+#include "../asset/AssetRef.hpp"
 #include <nlohmann/json.hpp>
 #include <fstream>
 #include <filesystem>
@@ -55,22 +56,22 @@ namespace material
         return TextureSlot::Albedo; // Default fallback
     }
 
-    json MaterialInstanceAsset::serializeTextureOverrides(const std::map<TextureSlot, std::string>& overrides)
+    json MaterialInstanceAsset::serializeTextureOverrides(const std::map<TextureSlot, asset::AssetRef>& overrides)
     {
         json j = json::object();
-        for (const auto& [slot, path] : overrides)
+        for (const auto& [slot, ref] : overrides)
         {
-            if (!path.empty())
+            if (ref.isValid())
             {
-                j[textureSlotToString(slot)] = path;
+                j[textureSlotToString(slot)] = ref.toHexString();
             }
         }
         return j;
     }
 
-    std::map<TextureSlot, std::string> MaterialInstanceAsset::deserializeTextureOverrides(const json& j)
+    std::map<TextureSlot, asset::AssetRef> MaterialInstanceAsset::deserializeTextureOverrides(const json& j)
     {
-        std::map<TextureSlot, std::string> overrides;
+        std::map<TextureSlot, asset::AssetRef> overrides;
         if (!j.is_object()) return overrides;
 
         for (auto& [key, value] : j.items())
@@ -78,10 +79,14 @@ namespace material
             if (value.is_string())
             {
                 TextureSlot slot = stringToTextureSlot(key);
-                std::string path = value.get<std::string>();
-                if (!path.empty())
+                std::string hexStr = value.get<std::string>();
+                if (!hexStr.empty())
                 {
-                    overrides[slot] = path;
+                    auto ref = asset::AssetRef::fromHexString(hexStr);
+                    if (ref.isValid())
+                    {
+                        overrides[slot] = ref;
+                    }
                 }
             }
         }
@@ -161,17 +166,24 @@ namespace material
             // Basic properties
             instance.uuid = j.value("uuid", std::to_string(uuid::UUID().getValue()));
             instance.name = j.value("name", "Unnamed Instance");
-            instance.parentMaterialPath = j.value("parentMaterial", "");
-
-            // Validate parent path
-            if (instance.parentMaterialPath.empty())
+            std::string parentRefStr = j.value("parentMaterialRef", "");
+            if (parentRefStr.empty())
             {
                 vfLogError("Material instance '{}' has no parent material specified", path);
                 return std::nullopt;
             }
+            instance.parentMaterialRef = asset::AssetRef::fromHexString(parentRefStr);
+
+            // Validate parent ref
+            if (!instance.parentMaterialRef.isValid())
+            {
+                vfLogError("Material instance '{}' has invalid parent material ref", path);
+                return std::nullopt;
+            }
 
             // Validate parent is not an instance (no nested instances)
-            if (isInstanceFile(instance.parentMaterialPath))
+            std::string parentResolvedPath = instance.parentMaterialRef.resolve();
+            if (isInstanceFile(parentResolvedPath))
             {
                 vfLogError("Material instance '{}' cannot have another instance as parent", path);
                 return std::nullopt;
@@ -246,7 +258,7 @@ namespace material
         j["type"] = "MaterialInstance";
         j["uuid"] = instance.uuid;
         j["name"] = instance.name;
-        j["parentMaterial"] = instance.parentMaterialPath;
+        j["parentMaterialRef"] = instance.parentMaterialRef.toHexString();
 
         // Texture overrides
         if (!instance.textureOverrides.empty())
@@ -331,12 +343,12 @@ namespace material
         }
     }
 
-    MaterialInstanceData MaterialInstanceAsset::createDefault(const std::string& name, const std::string& parentPath)
+    MaterialInstanceData MaterialInstanceAsset::createDefault(const std::string& name, const asset::AssetRef& parentRef)
     {
         MaterialInstanceData instance;
         instance.uuid = std::to_string(uuid::UUID().getValue());
         instance.name = name;
-        instance.parentMaterialPath = parentPath;
+        instance.parentMaterialRef = parentRef;
         // No overrides by default - inherit everything from parent
         return instance;
     }

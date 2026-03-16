@@ -106,6 +106,7 @@
     <ClInclude Include="asset\AssetGUID.hpp" />
     <ClInclude Include="asset\AssetMetadata.hpp" />
     <ClInclude Include="asset\AssetMetadataSerializer.hpp" />
+    <ClInclude Include="asset\AssetRef.hpp" />
     <ClInclude Include="asset\AssetReferenceScanner.hpp" />
     <ClInclude Include="asset\DependencyScanner.hpp" />
     <ClInclude Include="behaviortree\BehaviorTreeAsset.hpp" />
@@ -261,6 +262,7 @@
     <ClCompile Include="asset\AssetDatabase.cpp" />
     <ClCompile Include="asset\AssetDatabaseMigrator.cpp" />
     <ClCompile Include="asset\AssetMetadataSerializer.cpp" />
+    <ClCompile Include="asset\AssetRef.cpp" />
     <ClCompile Include="asset\AssetReferenceScanner.cpp" />
     <ClCompile Include="asset\DependencyScanner.cpp" />
     <ClCompile Include="behaviortree\BehaviorTreeAsset.cpp" />

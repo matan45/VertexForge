@@ -1,6 +1,7 @@
 #include "TerrainMaterialAsset.hpp"
 #include "../print/Log.hpp"
 #include "../uuid/UUID.hpp"
+#include "../asset/AssetRef.hpp"
 #include <nlohmann/json.hpp>
 #include <fstream>
 #include <filesystem>
@@ -126,9 +127,9 @@ namespace terrain
                         {
                             auto& layer = material.layers[i];
                             layer.name = layerJson.value("name", "Layer " + std::to_string(i));
-                            layer.albedoTexturePath = layerJson.value("albedoTexturePath", "");
-                            layer.normalTexturePath = layerJson.value("normalTexturePath", "");
-                            layer.ormTexturePath = layerJson.value("ormTexturePath", "");
+                            layer.albedoTextureRef = asset::AssetRef::fromHexString(layerJson.value("albedoTextureRef", ""));
+                            layer.normalTextureRef = asset::AssetRef::fromHexString(layerJson.value("normalTextureRef", ""));
+                            layer.ormTextureRef = asset::AssetRef::fromHexString(layerJson.value("ormTextureRef", ""));
                             layer.tilingScale = layerJson.value("tilingScale", 1.0f);
                             layer.roughness = layerJson.value("roughness", 0.9f);
                             layer.metallic = layerJson.value("metallic", 0.0f);
@@ -190,9 +191,9 @@ namespace terrain
             const auto& layer = material.layers[i];
             json layerJson;
             layerJson["name"] = layer.name;
-            layerJson["albedoTexturePath"] = layer.albedoTexturePath;
-            layerJson["normalTexturePath"] = layer.normalTexturePath;
-            layerJson["ormTexturePath"] = layer.ormTexturePath;
+            layerJson["albedoTextureRef"] = layer.albedoTextureRef.toHexString();
+            layerJson["normalTextureRef"] = layer.normalTextureRef.toHexString();
+            layerJson["ormTextureRef"] = layer.ormTextureRef.toHexString();
             layerJson["tilingScale"] = layer.tilingScale;
             layerJson["roughness"] = layer.roughness;
             layerJson["metallic"] = layer.metallic;

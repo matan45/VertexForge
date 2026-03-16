@@ -1,6 +1,7 @@
 #pragma once
 #include <memory>
 #include "../print/Log.hpp"
+#include "../asset/AssetRef.hpp"
 #include <unordered_map>
 #include <string>
 #include <future>
@@ -24,17 +25,17 @@ namespace resource {
 	class ResourceManager
 	{
 	private:
-		inline static std::unordered_map<std::string, std::weak_ptr<TextureData>> textureCache;
-		inline static std::unordered_map<std::string, std::weak_ptr<HDRData>> hdrCache;
-		inline static std::unordered_map<std::string, std::weak_ptr<AudioData>> audioCache;
-		inline static std::unordered_map<std::string, std::weak_ptr<MeshesData>> meshCache;
+		inline static std::unordered_map<asset::AssetGUID, std::weak_ptr<TextureData>, asset::AssetGUID::Hash> textureCache;
+		inline static std::unordered_map<asset::AssetGUID, std::weak_ptr<HDRData>, asset::AssetGUID::Hash> hdrCache;
+		inline static std::unordered_map<asset::AssetGUID, std::weak_ptr<AudioData>, asset::AssetGUID::Hash> audioCache;
+		inline static std::unordered_map<asset::AssetGUID, std::weak_ptr<MeshesData>, asset::AssetGUID::Hash> meshCache;
 		inline static std::unordered_map<std::string, std::weak_ptr<std::vector<ShaderModel>>> shaderCache;
-		inline static std::unordered_map<std::string, std::weak_ptr<material::MaterialData>> materialCache;
-		inline static std::unordered_map<std::string, std::weak_ptr<material::MaterialInstanceData>> materialInstanceCache;
-		inline static std::unordered_map<std::string, std::weak_ptr<FontData>> fontCache;
-		inline static std::unordered_map<std::string, std::weak_ptr<AnimationData>> animationCache;
-		inline static std::unordered_map<std::string, std::weak_ptr<animator::AnimatorData>> animatorCache;
-		inline static std::unordered_map<std::string, std::weak_ptr<terrain::TerrainMaterialData>> terrainMaterialCache;
+		inline static std::unordered_map<asset::AssetGUID, std::weak_ptr<material::MaterialData>, asset::AssetGUID::Hash> materialCache;
+		inline static std::unordered_map<asset::AssetGUID, std::weak_ptr<material::MaterialInstanceData>, asset::AssetGUID::Hash> materialInstanceCache;
+		inline static std::unordered_map<asset::AssetGUID, std::weak_ptr<FontData>, asset::AssetGUID::Hash> fontCache;
+		inline static std::unordered_map<asset::AssetGUID, std::weak_ptr<AnimationData>, asset::AssetGUID::Hash> animationCache;
+		inline static std::unordered_map<asset::AssetGUID, std::weak_ptr<animator::AnimatorData>, asset::AssetGUID::Hash> animatorCache;
+		inline static std::unordered_map<asset::AssetGUID, std::weak_ptr<terrain::TerrainMaterialData>, asset::AssetGUID::Hash> terrainMaterialCache;
 
 		inline static std::mutex cacheMutex;
 		inline static std::jthread cleanupThread;
@@ -43,31 +44,28 @@ namespace resource {
 
 	public:
 		static FileType readHeaderFile(const fs::path& filePath);
-		static std::future <std::shared_ptr<TextureData>> loadTextureAsync(std::string_view path);
-		static std::future <std::shared_ptr<HDRData>> loadHDRAsync(std::string_view path);
-		static std::future <std::shared_ptr<AudioData>> loadAudioAsync(std::string_view path);
-		static std::future <std::shared_ptr<MeshesData>> loadMeshAsync(std::string_view path);
-		static std::future <std::shared_ptr<std::vector<ShaderModel>>> loadShaderAsync(std::string_view path);
-		static std::future<std::shared_ptr<FontData>> loadFontAsync(std::string_view path);
-		static std::future<std::shared_ptr<AnimationData>> loadAnimationAsync(std::string_view path);
 
-		static std::shared_ptr<material::MaterialData> loadMaterial(std::string_view path);
+		// Asset-based loading (GUID-keyed)
+		static std::future<std::shared_ptr<TextureData>> loadTextureAsync(const asset::AssetRef& ref);
+		static std::future<std::shared_ptr<HDRData>> loadHDRAsync(const asset::AssetRef& ref);
+		static std::future<std::shared_ptr<AudioData>> loadAudioAsync(const asset::AssetRef& ref);
+		static std::future<std::shared_ptr<MeshesData>> loadMeshAsync(const asset::AssetRef& ref);
+		static std::future<std::shared_ptr<FontData>> loadFontAsync(const asset::AssetRef& ref);
+		static std::future<std::shared_ptr<AnimationData>> loadAnimationAsync(const asset::AssetRef& ref);
 
-		static std::shared_ptr<material::MaterialInstanceData> loadMaterialInstance(std::string_view path);
+		// Shader loading (path-based, internal engine resources)
+		static std::future<std::shared_ptr<std::vector<ShaderModel>>> loadShaderAsync(std::string_view path);
 
-		static std::shared_ptr<animator::AnimatorData> loadAnimator(std::string_view path);
-
-		static std::shared_ptr<terrain::TerrainMaterialData> loadTerrainMaterial(std::string_view path);
+		// Synchronous asset loading
+		static std::shared_ptr<material::MaterialData> loadMaterial(const asset::AssetRef& ref);
+		static std::shared_ptr<material::MaterialInstanceData> loadMaterialInstance(const asset::AssetRef& ref);
+		static std::shared_ptr<animator::AnimatorData> loadAnimator(const asset::AssetRef& ref);
+		static std::shared_ptr<terrain::TerrainMaterialData> loadTerrainMaterial(const asset::AssetRef& ref);
 
 		// Invalidate cache entries (for reload support)
-		static void invalidateMaterialCache(std::string_view path);
-		static void invalidateMaterialInstanceCache(std::string_view path);
-		static void invalidateTerrainMaterialCache(std::string_view path);
-
-		// Cache migration (for file move/rename/delete)
-		static void migrateCache(const std::string& oldPath, const std::string& newPath);
-		static void removeCacheEntry(const std::string& path);
-		static void migrateCachePrefix(const std::string& oldPrefix, const std::string& newPrefix);
+		static void invalidateMaterialCache(const asset::AssetRef& ref);
+		static void invalidateMaterialInstanceCache(const asset::AssetRef& ref);
+		static void invalidateTerrainMaterialCache(const asset::AssetRef& ref);
 
 		static void init();
 		static void cleanUp();
@@ -80,8 +78,8 @@ namespace resource {
 
 		template <typename T, typename LoaderFunc, typename MemoryEstimator = std::nullptr_t>
 		static std::future<std::shared_ptr<T>> loadResourceAsync(
-			std::string_view path,
-			std::unordered_map<std::string, std::weak_ptr<T>>& cache,
+			const asset::AssetRef& ref,
+			std::unordered_map<asset::AssetGUID, std::weak_ptr<T>, asset::AssetGUID::Hash>& cache,
 			LoaderFunc loader,
 			AssetType assetType = AssetType::COUNT,
 			MemoryEstimator memEstimator = nullptr);
@@ -95,32 +93,40 @@ namespace resource {
 	};
 
 	template<typename T, typename LoaderFunc, typename MemoryEstimator>
-	inline std::future<std::shared_ptr<T>> ResourceManager::loadResourceAsync(std::string_view path, std::unordered_map<std::string, std::weak_ptr<T>>& cache, LoaderFunc loader, AssetType assetType, MemoryEstimator memEstimator)
+	inline std::future<std::shared_ptr<T>> ResourceManager::loadResourceAsync(
+		const asset::AssetRef& ref,
+		std::unordered_map<asset::AssetGUID, std::weak_ptr<T>, asset::AssetGUID::Hash>& cache,
+		LoaderFunc loader, AssetType assetType, MemoryEstimator memEstimator)
 	{
-		if (auto resource = cache[path.data()].lock()) {
+		auto guid = ref.getGUID();
+		if (!guid.isValid()) {
+			vfLogError("Invalid AssetRef provided for resource loading");
+			return make_ready_future(std::shared_ptr<T>(nullptr));
+		}
+
+		if (auto resource = cache[guid].lock()) {
 			return make_ready_future(resource);
 		}
 
-		return std::async(std::launch::async, [path = std::string(path), loader, &cache, assetType, memEstimator]() -> std::shared_ptr<T> {
-			try {
-				// Validate path before processing
-				if (path.empty()) {
-					vfLogError("Empty path provided for resource loading");
-					return nullptr;
-				}
+		std::string path = ref.resolve();
+		if (path.empty()) {
+			vfLogError("Failed to resolve AssetRef GUID: {}", guid.toString());
+			return make_ready_future(std::shared_ptr<T>(nullptr));
+		}
 
+		return std::async(std::launch::async, [path = std::move(path), guid, loader, &cache, assetType, memEstimator]() -> std::shared_ptr<T> {
+			try {
 				auto resource = std::make_shared<T>(loader(path));
 
-				// Only cache if resource was successfully loaded
 				if (resource) {
 					std::scoped_lock lock(cacheMutex);
-					cache[path] = resource;
+					cache[guid] = resource;
 					if (assetType != AssetType::COUNT) {
 						size_t memBytes = 0;
 						if constexpr (!std::is_null_pointer_v<MemoryEstimator>) {
 							memBytes = memEstimator(*resource);
 						}
-						AssetLifecycleManager::instance().acquire(path, assetType, memBytes);
+						AssetLifecycleManager::instance().acquire(guid, assetType, memBytes);
 					}
 				}
 
@@ -137,5 +143,3 @@ namespace resource {
 			});
 	}
 }
-
-

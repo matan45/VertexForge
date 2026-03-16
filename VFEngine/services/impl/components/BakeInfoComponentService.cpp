@@ -43,7 +43,7 @@ namespace services {
 
         auto& comp = sceneEntity.getComponent<components::NavmeshComponent>();
         NavmeshRootData data;
-        data.navmeshPath = comp.navmeshPath;
+        data.navmeshRef = comp.navmeshRef;
         return data;
     }
 

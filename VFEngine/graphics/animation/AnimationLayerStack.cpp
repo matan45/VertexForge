@@ -53,9 +53,9 @@ namespace animation
                     runtime.clipSpeed = layerData.directClipSpeed;
                     runtime.clipTime = 0.0f;
 
-                    if (!layerData.directClipPath.empty() && loadCallback)
+                    if (layerData.directClipRef.isValid() && loadCallback)
                     {
-                        runtime.directClipData = loadCallback(layerData.directClipPath);
+                        runtime.directClipData = loadCallback(layerData.directClipRef.resolve());
                         if (runtime.directClipData && skeleton)
                         {
                             runtime.directClipEvaluator.loadAnimation(*runtime.directClipData, *skeleton);
@@ -195,9 +195,9 @@ namespace animation
             if (graph)
             {
                 const auto* defaultState = graph->findStateById(graph->defaultStateId);
-                if (defaultState && !defaultState->animationPath.empty() && animationLoadCallback)
+                if (defaultState && defaultState->animationRef.isValid() && animationLoadCallback)
                 {
-                    clipData = animationLoadCallback(defaultState->animationPath);
+                    clipData = animationLoadCallback(defaultState->animationRef.resolve());
                 }
             }
         }

@@ -240,7 +240,7 @@ namespace services {
         const auto& comp = sceneEntity.getComponent<components::UIImageComponent>();
 
         UIImageData data;
-        data.texturePath = comp.texturePath;
+        data.textureRef = comp.textureRef;
         data.colorTint = comp.colorTint;
         if (comp.renderTextureSource != entt::null)
             data.renderTextureSource = EntityHandle{static_cast<uint64_t>(comp.renderTextureSource)};
@@ -266,7 +266,7 @@ namespace services {
         }
 
         auto& comp = sceneEntity.getComponent<components::UIImageComponent>();
-        comp.texturePath = imageData.texturePath;
+        comp.textureRef = imageData.textureRef;
         comp.colorTint = imageData.colorTint;
         comp.renderTextureSourceName = imageData.renderTextureSourceName;
         comp.imageType = static_cast<components::UIImageType>(imageData.imageType);

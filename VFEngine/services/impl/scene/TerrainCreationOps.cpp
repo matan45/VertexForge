@@ -149,8 +149,8 @@ namespace services
             return false;
 
         const auto& comp = registry.get<components::TerrainComponent>(entity);
-        if (!comp.terrainMaterialPath.empty())
-            resource::ResourceManager::invalidateTerrainMaterialCache(comp.terrainMaterialPath);
+        if (comp.terrainMaterialRef.isValid())
+            resource::ResourceManager::invalidateTerrainMaterialCache(comp.terrainMaterialRef);
 
         if (physicsProvider)
             physicsProvider->removeTerrainCollider(terrainEntity);

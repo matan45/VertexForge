@@ -4,6 +4,7 @@
 #include <vector>
 #include <array>
 #include <cstdint>
+#include "../asset/AssetRef.hpp"
 
 namespace components
 {
@@ -20,7 +21,7 @@ namespace components
         int32_t gridMaxZ = 0;
 
         std::string heightmapPath;
-        std::string terrainMaterialPath;
+        asset::AssetRef terrainMaterialRef;
         std::string weightMapPath;
 
         bool isActive = true;

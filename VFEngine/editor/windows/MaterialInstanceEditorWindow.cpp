@@ -6,6 +6,7 @@
 #include "events/EventDispatcher.hpp"
 #include "events/render/PreviewEvents.hpp"
 #include "events/render/MaterialEvents.hpp"
+#include "events/project/ResourceEvents.hpp"
 #include "time/Timer.hpp"
 #include "nfd/FileDialog.hpp"
 #include <imgui.h>
@@ -87,6 +88,10 @@ namespace windows
             events::material::MaterialFileSavedNotification notification;
             notification.materialPath = instancePath;
             events::EventDispatcher::instance().publish(notification);
+
+            events::resource::AssetSavedNotification assetNotif;
+            assetNotif.filePath = instancePath;
+            events::EventDispatcher::instance().publish(assetNotif);
         }
     }
 

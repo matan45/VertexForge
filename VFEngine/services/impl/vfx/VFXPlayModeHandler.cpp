@@ -144,7 +144,7 @@ namespace services
             auto& vfxComp = view.get<components::VFXComponent>(entity);
             const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
 
-            if (vfxComp.vfxPath.empty())
+            if (!vfxComp.vfxRef.isValid())
             {
                 continue;
             }
@@ -159,7 +159,7 @@ namespace services
             }
 
             events::vfxruntime::CreateVFXInstanceCommand createCmd;
-            createCmd.params.vfxAssetPath = vfxComp.vfxPath;
+            createCmd.params.vfxAssetPath = vfxComp.vfxRef.resolve();
             createCmd.params.worldTransform = worldTransform.worldMatrix;
             createCmd.params.loop = vfxComp.loop;
             createCmd.params.entityId = static_cast<uint32_t>(entity);
@@ -238,7 +238,7 @@ namespace services
             auto& vfxComp = view.get<components::VFXComponent>(entity);
             const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
 
-            if (vfxComp.vfxPath.empty())
+            if (!vfxComp.vfxRef.isValid())
                 continue;
 
             if (registry.all_of<components::NameComponent>(entity))
@@ -250,7 +250,7 @@ namespace services
 
             PendingStreamCreate pending;
             pending.entity = handle;
-            pending.vfxPath = vfxComp.vfxPath;
+            pending.vfxPath = vfxComp.vfxRef.resolve();
             pending.worldTransform = worldTransform.worldMatrix;
             pending.loop = vfxComp.loop;
             pending.priority = vfxComp.priority;

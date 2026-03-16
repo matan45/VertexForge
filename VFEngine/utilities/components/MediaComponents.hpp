@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <entt/entt.hpp>
 #include "../../services/data/ScriptTypes.hpp"
+#include "../asset/AssetRef.hpp"
 #include "../animator/SocketTypes.hpp"
 #include "../types/AudioEffectTypes.hpp"
 
@@ -45,7 +46,7 @@ namespace components
         bool editorOnly = true;
         bool selectable = true;
 
-        std::string texturePath; // Path to .vfImage file (empty = use atlas icon)
+        asset::AssetRef textureRef; // .vfImage asset (invalid = use atlas icon)
 
         entt::entity renderTextureSource = entt::null;
         std::string renderTextureSourceName;
@@ -76,7 +77,7 @@ namespace components
 
     struct AudioSource2DComponent
     {
-        std::string audioFilePath;
+        asset::AssetRef audioRef;
         float volume = 1.0f;
         float pitch = 1.0f;
         bool loop = false;
@@ -89,7 +90,7 @@ namespace components
 
     struct AudioSource3DComponent
     {
-        std::string audioFilePath;
+        asset::AssetRef audioRef;
         float volume = 1.0f;
         float pitch = 1.0f;
         bool loop = false;
@@ -115,7 +116,7 @@ namespace components
 
     struct ScriptEntry
     {
-        std::string scriptPath;
+        asset::AssetRef scriptRef;
         bool enabled = true;
 
         bool started = false;
@@ -128,33 +129,33 @@ namespace components
     {
         std::vector<ScriptEntry> scripts;
 
-        ScriptEntry* findByPath(const std::string& path)
+        ScriptEntry* findByRef(const asset::AssetRef& ref)
         {
             for (auto& entry : scripts)
             {
-                if (entry.scriptPath == path) return &entry;
+                if (entry.scriptRef == ref) return &entry;
             }
             return nullptr;
         }
 
-        const ScriptEntry* findByPath(const std::string& path) const
+        const ScriptEntry* findByRef(const asset::AssetRef& ref) const
         {
             for (const auto& entry : scripts)
             {
-                if (entry.scriptPath == path) return &entry;
+                if (entry.scriptRef == ref) return &entry;
             }
             return nullptr;
         }
 
-        bool hasScript(const std::string& path) const
+        bool hasScript(const asset::AssetRef& ref) const
         {
-            return findByPath(path) != nullptr;
+            return findByRef(ref) != nullptr;
         }
 
-        bool removeByPath(const std::string& path)
+        bool removeByRef(const asset::AssetRef& ref)
         {
             auto it = std::remove_if(scripts.begin(), scripts.end(),
-                                     [&path](const ScriptEntry& e) { return e.scriptPath == path; });
+                                     [&ref](const ScriptEntry& e) { return e.scriptRef == ref; });
             if (it != scripts.end())
             {
                 scripts.erase(it, scripts.end());
@@ -167,14 +168,14 @@ namespace components
     struct AnimatorComponent
     {
         void* stateMachine = nullptr;
-        std::string animatorPath;
+        asset::AssetRef animatorRef;
         bool isInitialized = false;
         bool applyRootMotion = false;
     };
 
     struct VFXComponent
     {
-        std::string vfxPath;
+        asset::AssetRef vfxRef;
         bool autoPlay = true;
         bool loop = true;
         uint8_t priority = 2; // 0=Critical, 1=High, 2=Normal, 3=Low
@@ -202,7 +203,7 @@ namespace components
 
     struct BehaviorTreeComponent
     {
-        std::string behaviorTreePath;
+        asset::AssetRef behaviorTreeRef;
         bool isInitialized = false;
         bool enabled = true;
     };

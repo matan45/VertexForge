@@ -1,4 +1,5 @@
 #include "MaterialPreviewController.hpp"
+#include "asset/AssetRef.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/BufferUtilities.hpp"
 #include "../../core/ImageUtilities.hpp"
@@ -228,7 +229,7 @@ namespace controllers
 
         try
         {
-            auto textureData = resource::ResourceManager::loadTextureAsync(path);
+            auto textureData = resource::ResourceManager::loadTextureAsync(asset::AssetRef::fromPath(path));
             auto texturePtr = textureData.get();
             if (!texturePtr || texturePtr->textureData().empty())
             {

@@ -33,9 +33,9 @@ namespace core
         if (registry.all_of<components::MeshComponent>(*resolved))
         {
             const auto& meshComp = registry.get<components::MeshComponent>(*resolved);
-            if (!meshComp.meshPath.empty())
+            if (meshComp.meshRef.isValid())
             {
-                auto stream = resource::MeshStreamResource::openStream(meshComp.meshPath);
+                auto stream = resource::MeshStreamResource::openStream(meshComp.meshRef.resolve());
                 if (stream && stream->hasSkeletonData())
                 {
                     resource::SkeletonData skeleton;
@@ -43,7 +43,7 @@ namespace core
                     {
                         ikComp.chains = skeleton.ikChains;
                         vfLogInfo("[IKAdapter] Auto-loaded {} IK chains from mesh: {}",
-                                   ikComp.chains.size(), meshComp.meshPath);
+                                   ikComp.chains.size(), meshComp.meshRef.resolve());
                     }
                 }
             }

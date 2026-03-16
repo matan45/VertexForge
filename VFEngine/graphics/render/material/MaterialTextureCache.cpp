@@ -5,6 +5,7 @@
 #include "../../core/ImageUtilities.hpp"
 #include "material/MaterialTypes.hpp"
 #include "resource/AssetLifecycleManager.hpp"
+#include "asset/AssetRef.hpp"
 #include "print/Log.hpp"
 
 namespace render::mesh
@@ -155,14 +156,15 @@ namespace render::mesh
 
         // Register texture dependencies so textures stay alive while material is tracked
         auto& lifecycle = resource::AssetLifecycleManager::instance();
-        if (lifecycle.isTracked(materialPath))
+        auto matGUID = asset::AssetRef::fromPath(materialPath).getGUID();
+        if (lifecycle.isTracked(matGUID))
         {
             for (int i = 0; i < material::MAX_MATERIAL_TEXTURES; ++i)
             {
                 const std::string& path = textures.getPath(i);
                 if (!path.empty())
                 {
-                    lifecycle.addDependency(materialPath, path, resource::AssetType::Texture);
+                    lifecycle.addDependency(matGUID, asset::AssetRef::fromPath(path).getGUID(), resource::AssetType::Texture);
                 }
             }
         }
