@@ -549,6 +549,8 @@ namespace controllers::offscreen
         // registry.view() internally calls assure<T>() which WRITES to the storage map
         // if the type hasn't been seen yet. Two parallel jobs both triggering assure()
         // for different types corrupts the internal storage map (EnTT is not thread-safe).
+        // Note: this function is only called from the main thread (render prep path),
+        // so a plain bool is safe here.
         static bool storageAssured = false;
         if (!storageAssured)
         {

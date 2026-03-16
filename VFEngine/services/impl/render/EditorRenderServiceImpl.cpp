@@ -41,12 +41,11 @@ namespace services
 
         // Skip render preparation during scene transitions to prevent
         // race condition with entity destruction (registry is not thread-safe).
-        // Clear the flag so the NEXT frame renders normally — this ensures one full
-        // frame is skipped after restoreSnapshot(), giving LevelHandler::update()
-        // a chance to add WorldTransformComponent to restored entities.
-        if (scene::EntityRegistry::isSceneTransitioning())
+        // consumeTransitionSkip() decrements an internal counter each call and
+        // auto-clears the flag when it expires, so even if this code path isn't
+        // reached (e.g. viewport hidden), the flag won't stay stuck forever.
+        if (scene::EntityRegistry::consumeTransitionSkip())
         {
-            scene::EntityRegistry::setSceneTransitioning(false);
             return lastViewportHandle;
         }
 

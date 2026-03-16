@@ -181,6 +181,7 @@ namespace resource
         return loadResourceAsync<TextureData>(
             ref,
             textureCache,
+            pendingTextureLoads,
             [](const std::string& p) { return TextureResource::loadTexture(p); },
             AssetType::Texture,
             [](const TextureData& tex) -> size_t {
@@ -197,6 +198,7 @@ namespace resource
         return loadResourceAsync<HDRData>(
             ref,
             hdrCache,
+            pendingHDRLoads,
             [](const std::string& p) { return TextureResource::loadHDR(p); },
             AssetType::HDR,
             [](const HDRData& hdr) -> size_t {
@@ -209,6 +211,7 @@ namespace resource
         return loadResourceAsync<AudioData>(
             ref,
             audioCache,
+            pendingAudioLoads,
             [](const std::string& p) { return AudioResource::loadAudio(p); },
             AssetType::Audio,
             [](const AudioData& audio) -> size_t {
@@ -221,6 +224,7 @@ namespace resource
         return loadResourceAsync<MeshesData>(
             ref,
             meshCache,
+            pendingMeshLoads,
             [](const std::string& p) {
                 return MeshStreamResource::loadAll(p);
             },
@@ -239,46 +243,76 @@ namespace resource
 
     std::future<std::shared_ptr<std::vector<ShaderModel>>> ResourceManager::loadShaderAsync(std::string_view path)
     {
+        std::string key(path);
+
         {
             std::scoped_lock lock(cacheMutex);
-            auto it = shaderCache.find(std::string(path));
-            if (it != shaderCache.end()) {
-                if (auto resource = it->second.lock()) {
+            auto cacheIt = shaderCache.find(key);
+            if (cacheIt != shaderCache.end()) {
+                if (auto resource = cacheIt->second.lock()) {
                     return make_ready_future(resource);
                 }
+            }
+
+            auto pendingIt = pendingShaderLoads.find(key);
+            if (pendingIt != pendingShaderLoads.end()) {
+                return std::async(std::launch::deferred, [sf = pendingIt->second]() mutable {
+                    return sf.get();
+                });
             }
         }
 
         pendingAsyncOps.fetch_add(1, std::memory_order_relaxed);
-        return std::async(std::launch::async, [path = std::string(path)]() -> std::shared_ptr<std::vector<ShaderModel>> {
+        std::shared_future<std::shared_ptr<std::vector<ShaderModel>>> sharedFuture = std::async(std::launch::async,
+            [key]() -> std::shared_ptr<std::vector<ShaderModel>> {
             struct AsyncGuard { ~AsyncGuard() { pendingAsyncOps.fetch_sub(1, std::memory_order_release); } } guard;
             try {
                 if (shuttingDown.load(std::memory_order_acquire)) {
-                    return nullptr;
-                }
-
-                if (path.empty()) {
-                    vfLogError("Empty path provided for shader loading");
-                    return nullptr;
-                }
-
-                auto resource = std::make_shared<std::vector<ShaderModel>>(ShaderResource::readShaderFile(path));
-
-                if (resource && !shuttingDown.load(std::memory_order_acquire)) {
                     std::scoped_lock lock(cacheMutex);
-                    shaderCache[path] = resource;
+                    pendingShaderLoads.erase(key);
+                    return nullptr;
+                }
+
+                if (key.empty()) {
+                    vfLogError("Empty path provided for shader loading");
+                    std::scoped_lock lock(cacheMutex);
+                    pendingShaderLoads.erase(key);
+                    return nullptr;
+                }
+
+                auto resource = std::make_shared<std::vector<ShaderModel>>(ShaderResource::readShaderFile(key));
+
+                {
+                    std::scoped_lock lock(cacheMutex);
+                    pendingShaderLoads.erase(key);
+                    if (resource && !shuttingDown.load(std::memory_order_acquire)) {
+                        shaderCache[key] = resource;
+                    }
                 }
 
                 return resource;
             }
             catch (const std::exception& e) {
-                vfLogError("Exception loading shader '{}': {}", path, e.what());
+                std::scoped_lock lock(cacheMutex);
+                pendingShaderLoads.erase(key);
+                vfLogError("Exception loading shader '{}': {}", key, e.what());
                 return nullptr;
             }
             catch (...) {
-                vfLogError("Unknown exception loading shader: {}", path);
+                std::scoped_lock lock(cacheMutex);
+                pendingShaderLoads.erase(key);
+                vfLogError("Unknown exception loading shader: {}", key);
                 return nullptr;
             }
+        }).share();
+
+        {
+            std::scoped_lock lock(cacheMutex);
+            pendingShaderLoads[key] = sharedFuture;
+        }
+
+        return std::async(std::launch::deferred, [sf = std::move(sharedFuture)]() mutable {
+            return sf.get();
         });
     }
 
@@ -287,6 +321,7 @@ namespace resource
         return loadResourceAsync<FontData>(
             ref,
             fontCache,
+            pendingFontLoads,
             [](const std::string& p) { return FontResource::loadFont(p); },
             AssetType::Font);
     }
@@ -296,6 +331,7 @@ namespace resource
         return loadResourceAsync<AnimationData>(
             ref,
             animationCache,
+            pendingAnimationLoads,
             [](const std::string& p) { return AnimationResource::loadAnimation(p); },
             AssetType::Animation);
     }
@@ -353,6 +389,14 @@ namespace resource
         animationCache.clear();
         animatorCache.clear();
         terrainMaterialCache.clear();
+
+        pendingTextureLoads.clear();
+        pendingHDRLoads.clear();
+        pendingAudioLoads.clear();
+        pendingMeshLoads.clear();
+        pendingFontLoads.clear();
+        pendingAnimationLoads.clear();
+        pendingShaderLoads.clear();
 
         AssetLifecycleManager::instance().clear();
 
