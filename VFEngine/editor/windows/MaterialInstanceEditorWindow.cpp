@@ -407,15 +407,17 @@ namespace windows
         ImGui::PushID(static_cast<int>(slot));
 
         bool hasOverride = instanceData && instanceData->isTextureOverridden(slot);
-        std::string currentPath = hasOverride ? instanceData->getTextureOverride(slot) : parentTexture;
+        auto overrideRef = hasOverride ? instanceData->getTextureOverride(slot) : asset::AssetRef::invalid();
+        std::string currentPath = hasOverride && overrideRef.isValid() ? overrideRef.resolve() : parentTexture;
 
         bool overrideEnabled = hasOverride;
         if (ImGui::Checkbox("##TexOverride", &overrideEnabled))
         {
             if (overrideEnabled)
             {
-                std::string initialPath = parentTexture.empty() ? " " : parentTexture;
-                instanceData->textureOverrides[slot] = initialPath;
+                instanceData->textureOverrides[slot] = parentTexture.empty()
+                    ? asset::AssetRef::invalid()
+                    : asset::AssetRef::fromPath(parentTexture);
             }
             else
             {
