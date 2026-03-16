@@ -1,4 +1,5 @@
 #include "TerrainSerializer.hpp"
+#include "TerrainCompression.hpp"
 #include "../print/Log.hpp"
 #include "TerrainGrid.hpp"
 #include "../resource/EndianUtils.hpp"
@@ -97,7 +98,14 @@ namespace terrain
             return false;
         uint32_t heightCount = static_cast<uint32_t>(tile.heightData.size());
         writeLE(file, heightCount);
-        writeVectorLE(file, tile.heightData);
+
+        // Compressed: quantize heights to uint16
+        auto heightParams = compression::computeHeightRange(tile.heightData);
+        writeLE(file, heightParams.minH);
+        writeLE(file, heightParams.maxH);
+        auto quantizedHeights = compression::quantizeHeights(tile.heightData, heightParams);
+        writeVectorLE(file, quantizedHeights);
+
         uint64_t afterHeight = 0;
         if (!safeTellp(file, afterHeight))
             return false;
@@ -118,12 +126,16 @@ namespace terrain
             {
                 if (ch < tile.weightMap.layerWeights.size())
                 {
-                    writeVectorLE(file, tile.weightMap.layerWeights[ch]);
+                    // Compressed: quantize weights to uint8
+                    auto quantizedWeights = compression::quantizeWeights(tile.weightMap.layerWeights[ch]);
+                    file.write(reinterpret_cast<const char*>(quantizedWeights.data()),
+                               static_cast<std::streamsize>(quantizedWeights.size()));
                 }
                 else
                 {
-                    std::vector<float> zeros(tile.weightMap.getTexelCount(), 0.0f);
-                    writeVectorLE(file, zeros);
+                    std::vector<uint8_t> zeros(tile.weightMap.getTexelCount(), 0);
+                    file.write(reinterpret_cast<const char*>(zeros.data()),
+                               static_cast<std::streamsize>(zeros.size()));
                 }
             }
         }
@@ -292,7 +304,14 @@ namespace terrain
 
             file.seekg(static_cast<std::streamoff>(entry.heightDataOffset));
             uint32_t heightCount = readLE<uint32_t>(file);
-            readVectorLE(file, outHeights, heightCount);
+
+            // Compressed: read min/max + uint16 quantized heights, dequantize
+            compression::HeightQuantizationParams params;
+            params.minH = readLE<float>(file);
+            params.maxH = readLE<float>(file);
+            std::vector<uint16_t> quantized;
+            readVectorLE(file, quantized, heightCount);
+            outHeights = compression::dequantizeHeights(quantized, params);
 
             if (!file.good())
             {
@@ -314,7 +333,7 @@ namespace terrain
                                                        const TerrainPhysicsConfig& physicsConfig,
                                                        const TerrainStreamingConfig& streamingConfig)
     {
-        TerrainFormatFlags flags = TerrainFormatFlags::NONE;
+        TerrainFormatFlags flags = TerrainFormatFlags::HAS_COMPRESSED_DATA;
 
         auto allTiles = grid.getAllTiles();
 

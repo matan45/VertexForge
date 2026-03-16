@@ -195,6 +195,7 @@
     <ClInclude Include="terrain\HoleBrushApplicator.hpp" />
     <ClInclude Include="terrain\HoleBrushTypes.hpp" />
     <ClInclude Include="terrain\PaintBrushTypes.hpp" />
+    <ClInclude Include="terrain\TerrainCompression.hpp" />
     <ClInclude Include="terrain\TerrainFileCache.hpp" />
     <ClInclude Include="terrain\TerrainGrid.hpp" />
     <ClInclude Include="terrain\TerrainHitResult.hpp" />

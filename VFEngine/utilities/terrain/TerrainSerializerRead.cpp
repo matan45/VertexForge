@@ -1,4 +1,5 @@
 #include "TerrainSerializer.hpp"
+#include "TerrainCompression.hpp"
 #include "../print/Log.hpp"
 #include "TerrainGrid.hpp"
 #include "../resource/EndianUtils.hpp"
@@ -335,7 +336,11 @@ namespace terrain
             outWeights.layerWeights.resize(WEIGHT_CHANNELS);
             for (uint8_t ch = 0; ch < WEIGHT_CHANNELS; ++ch)
             {
-                readVectorLE(file, outWeights.layerWeights[ch], texelCount);
+                // Compressed: read uint8 weights and dequantize to float
+                std::vector<uint8_t> quantized(texelCount);
+                file.read(reinterpret_cast<char*>(quantized.data()),
+                          static_cast<std::streamsize>(texelCount));
+                outWeights.layerWeights[ch] = compression::dequantizeWeights(quantized);
             }
 
             if (!file.good())

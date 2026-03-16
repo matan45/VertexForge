@@ -17,7 +17,7 @@ namespace terrain
 
     static constexpr std::array<char, 4> TERRAIN_MAGIC = {'V', 'F', 'T', 'R'};
     static constexpr uint32_t TERRAIN_FORMAT_VERSION_MAJOR = 2;
-    static constexpr uint32_t TERRAIN_FORMAT_VERSION_MINOR = 0;
+    static constexpr uint32_t TERRAIN_FORMAT_VERSION_MINOR = 1;
     static constexpr uint32_t TERRAIN_FORMAT_VERSION_PATCH = 0;
     static constexpr uint32_t MAX_REASONABLE_TERRAIN_TILES = 10000;
 
@@ -29,6 +29,7 @@ namespace terrain
         HAS_MESHLET_CACHE = 1 << 2,
         HAS_HOLE_MASK     = 1 << 3,
         HAS_STREAMING_CONFIG = 1 << 4,
+        HAS_COMPRESSED_DATA  = 1 << 5,
     };
 
     inline TerrainFormatFlags operator|(TerrainFormatFlags a, TerrainFormatFlags b)
