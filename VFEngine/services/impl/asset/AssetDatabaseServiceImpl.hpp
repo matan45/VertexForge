@@ -25,6 +25,6 @@ namespace services
         bool rebuildDatabase();
         std::string getProjectRoot() const;
 
-        std::vector<events::SubscriptionToken> subscriptions;
+        std::vector<::events::SubscriptionToken> subscriptions;
     };
 }
