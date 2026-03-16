@@ -103,6 +103,14 @@ namespace services {
         // Check if input is currently captured by ImGui
         virtual bool isInputCapturedByUI() const = 0;
 
+        // Enable/disable input and cursor
+        virtual void setKeyboardEnabled(bool enabled) = 0;
+        virtual void setMouseEnabled(bool enabled) = 0;
+        virtual void setCursorVisible(bool visible) = 0;
+        virtual bool isKeyboardEnabled() const = 0;
+        virtual bool isMouseEnabled() const = 0;
+        virtual bool isCursorVisible() const = 0;
+
     };
 
 }

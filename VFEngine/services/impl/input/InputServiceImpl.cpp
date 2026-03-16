@@ -1,7 +1,9 @@
 #include "InputServiceImpl.hpp"
 #include "../../Window/controllers/InputController.hpp"
+#include "../../Window/window/Window.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/project/ApplicationEvents.hpp"
+#include <GLFW/glfw3.h>
 #include <imgui.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -10,22 +12,23 @@
 namespace services {
 
     InputServiceImpl::InputServiceImpl(window::Window* window)
-        : inputController(std::make_unique<window::InputController>(window)) {}
+        : inputController(std::make_unique<window::InputController>(window))
+        , windowPtr(window) {}
 
     InputServiceImpl::~InputServiceImpl() = default;
 
     bool InputServiceImpl::isKeyDown(int keyCode) const {
-        if (!inputController) return false;
+        if (!inputController || !keyboardEnabled) return false;
         return inputController->isKeyDown(keyCode);
     }
 
     bool InputServiceImpl::isKeyReleased(int keyCode) const {
-        if (!inputController) return false;
+        if (!inputController || !keyboardEnabled) return false;
         return inputController->isKeyReleased(keyCode);
     }
 
     bool InputServiceImpl::isKeyPressed(int keyCode) const {
-        if (!inputController) return false;
+        if (!inputController || !keyboardEnabled) return false;
         return inputController->isKeyPressed(keyCode);
     }
 
@@ -47,22 +50,22 @@ namespace services {
     }
 
     bool InputServiceImpl::isMouseButtonDown(int button) const {
-        if (!inputController) return false;
+        if (!inputController || !mouseEnabled) return false;
         return inputController->isMouseButtonDown(button);
     }
 
     bool InputServiceImpl::isMouseButtonPressed(int button) const {
-        if (!inputController) return false;
+        if (!inputController || !mouseEnabled) return false;
         return inputController->isMouseButtonPressed(button);
     }
 
     bool InputServiceImpl::isMouseButtonReleased(int button) const {
-        if (!inputController) return false;
+        if (!inputController || !mouseEnabled) return false;
         return inputController->isMouseButtonReleased(button);
     }
 
     bool InputServiceImpl::isDoubleClick(int button) const {
-        if (!inputController) return false;
+        if (!inputController || !mouseEnabled) return false;
         return inputController->isDoubleClick(button);
     }
 
@@ -222,6 +225,29 @@ namespace services {
         return io.WantCaptureKeyboard || io.WantCaptureMouse;
     }
 
+    void InputServiceImpl::setKeyboardEnabled(bool enabled) {
+        keyboardEnabled = enabled;
+    }
+
+    void InputServiceImpl::setMouseEnabled(bool enabled) {
+        mouseEnabled = enabled;
+    }
+
+    void InputServiceImpl::setCursorVisible(bool visible) {
+        cursorVisible = visible;
+        if (windowPtr) {
+            GLFWwindow* glfw = windowPtr->getWindowPtr();
+            if (glfw) {
+                glfwSetInputMode(glfw, GLFW_CURSOR,
+                    visible ? GLFW_CURSOR_NORMAL : GLFW_CURSOR_HIDDEN);
+            }
+        }
+    }
+
+    bool InputServiceImpl::isKeyboardEnabled() const { return keyboardEnabled; }
+    bool InputServiceImpl::isMouseEnabled() const { return mouseEnabled; }
+    bool InputServiceImpl::isCursorVisible() const { return cursorVisible; }
+
     void InputServiceImpl::registerEventHandlers() {
         auto& dispatcher = events::EventDispatcher::instance();
 
@@ -289,6 +315,36 @@ namespace services {
         dispatcher.registerCommandHandler<events::input::SetClipboardTextCommand>(
             [this](const events::input::SetClipboardTextCommand& cmd) {
                 setClipboardText(cmd.text);
+            });
+
+        dispatcher.registerCommandHandler<events::input::SetKeyboardEnabledCommand>(
+            [this](const events::input::SetKeyboardEnabledCommand& cmd) {
+                setKeyboardEnabled(cmd.enabled);
+            });
+
+        dispatcher.registerCommandHandler<events::input::SetMouseEnabledCommand>(
+            [this](const events::input::SetMouseEnabledCommand& cmd) {
+                setMouseEnabled(cmd.enabled);
+            });
+
+        dispatcher.registerCommandHandler<events::input::SetCursorVisibleCommand>(
+            [this](const events::input::SetCursorVisibleCommand& cmd) {
+                setCursorVisible(cmd.visible);
+            });
+
+        dispatcher.registerQueryHandler<events::input::IsKeyboardEnabledQuery>(
+            [this](const events::input::IsKeyboardEnabledQuery&) {
+                return isKeyboardEnabled();
+            });
+
+        dispatcher.registerQueryHandler<events::input::IsMouseEnabledQuery>(
+            [this](const events::input::IsMouseEnabledQuery&) {
+                return isMouseEnabled();
+            });
+
+        dispatcher.registerQueryHandler<events::input::IsCursorVisibleQuery>(
+            [this](const events::input::IsCursorVisibleQuery&) {
+                return isCursorVisible();
             });
     }
 

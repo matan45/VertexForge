@@ -79,6 +79,37 @@ namespace events::input {
     };
 
     // ============================================
+    // COMMANDS - Input control
+    // ============================================
+
+    struct SetKeyboardEnabledCommand : ICommand<void> {
+        bool enabled;
+        std::string_view getName() const override { return "SetKeyboardEnabled"; }
+    };
+
+    struct SetMouseEnabledCommand : ICommand<void> {
+        bool enabled;
+        std::string_view getName() const override { return "SetMouseEnabled"; }
+    };
+
+    struct SetCursorVisibleCommand : ICommand<void> {
+        bool visible;
+        std::string_view getName() const override { return "SetCursorVisible"; }
+    };
+
+    struct IsKeyboardEnabledQuery : IQuery<bool> {
+        std::string_view getName() const override { return "IsKeyboardEnabled"; }
+    };
+
+    struct IsMouseEnabledQuery : IQuery<bool> {
+        std::string_view getName() const override { return "IsMouseEnabled"; }
+    };
+
+    struct IsCursorVisibleQuery : IQuery<bool> {
+        std::string_view getName() const override { return "IsCursorVisible"; }
+    };
+
+    // ============================================
     // NOTIFICATIONS - State change broadcasts
     // ============================================
 

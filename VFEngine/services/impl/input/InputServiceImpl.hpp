@@ -45,10 +45,21 @@ namespace services {
         void update() override;
         bool isInputCapturedByUI() const override;
 
+        void setKeyboardEnabled(bool enabled) override;
+        void setMouseEnabled(bool enabled) override;
+        void setCursorVisible(bool visible) override;
+        bool isKeyboardEnabled() const override;
+        bool isMouseEnabled() const override;
+        bool isCursorVisible() const override;
+
     private:
        void publishInputNotifications();
 
        std::unique_ptr<window::InputController> inputController;
+       window::Window* windowPtr = nullptr;
+       bool keyboardEnabled = true;
+       bool mouseEnabled = true;
+       bool cursorVisible = true;
     };
 
 }
