@@ -1,6 +1,7 @@
 #include "AudioBufferManager.hpp"
 #include "AudioSystem.hpp"
 #include "resource/ResourceManager.hpp"
+#include "asset/AssetRef.hpp"
 #include "print/Log.hpp"
 
 namespace core::audio
@@ -19,7 +20,7 @@ namespace core::audio
             return existingBuffer.value();
         }
 
-        auto audioFuture = resource::ResourceManager::loadAudioAsync(path);
+        auto audioFuture = resource::ResourceManager::loadAudioAsync(asset::AssetRef::fromPath(std::string(path)));
         auto audioData = audioFuture.get();
 
         if (!audioData || audioData->data.empty())

@@ -1,5 +1,6 @@
 #include "AnimatorPropertiesPanel.hpp"
 #include "nfd/FileDialog.hpp"
+#include "asset/AssetRef.hpp"
 #include "imgui.h"
 #include <filesystem>
 #include <cstring>
@@ -109,9 +110,9 @@ namespace windows::animation
         }
 
         ImGui::Text("Animation:");
-        if (!state->animationPath.empty())
+        if (state->animationRef.isValid())
         {
-            fs::path animPath(state->animationPath);
+            fs::path animPath(state->animationRef.resolve());
             ImGui::SameLine();
             ImGui::TextColored(ImVec4(0.7f, 0.9f, 0.7f, 1.0f), "%s", animPath.filename().string().c_str());
         }
@@ -123,17 +124,17 @@ namespace windows::animation
                 {{L"VF Animation Files (*.vfAnim)", L"*.vfAnim"}});
             if (!path.empty())
             {
-                state->animationPath = path;
+                state->animationRef = asset::AssetRef::fromPath(path);
                 isDirty = true;
             }
         }
 
-        if (!state->animationPath.empty())
+        if (state->animationRef.isValid())
         {
             ImGui::SameLine();
             if (ImGui::Button("Clear##Animation"))
             {
-                state->animationPath.clear();
+                state->animationRef = asset::AssetRef::invalid();
                 isDirty = true;
             }
         }
@@ -441,9 +442,9 @@ namespace windows::animation
                                                        animator::BlendTreeType type,
                                                        bool& isDirty)
     {
-        if (!entry.animationPath.empty())
+        if (entry.animationRef.isValid())
         {
-            fs::path animPath(entry.animationPath);
+            fs::path animPath(entry.animationRef.resolve());
             ImGui::Text("%s", animPath.filename().string().c_str());
         }
         else
@@ -459,7 +460,7 @@ namespace windows::animation
                 {{L"VF Animation Files (*.vfAnim)", L"*.vfAnim"}});
             if (!path.empty())
             {
-                entry.animationPath = path;
+                entry.animationRef = asset::AssetRef::fromPath(path);
                 isDirty = true;
             }
         }

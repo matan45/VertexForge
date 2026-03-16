@@ -37,7 +37,7 @@ namespace windows::details {
         if (isOpen)
         {
             ImGui::Indent(10.0f);
-            ImGui::Text("File: %s", dataOpt->navmeshPath.c_str());
+            ImGui::Text("File: %s", dataOpt->navmeshRef.resolve().c_str());
             ImGui::Unindent(10.0f);
         }
 

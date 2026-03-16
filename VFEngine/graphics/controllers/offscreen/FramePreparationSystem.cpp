@@ -195,10 +195,10 @@ namespace controllers::offscreen
                     renderData.emission = pbrValues->emission;
                 }
 
-                for (const auto& [submeshName, materialPath] : materialComp.subMeshMaterials)
+                for (const auto& [submeshName, materialRef] : materialComp.subMeshMaterials)
                 {
                     render::mesh::SubMeshMaterialInfo matInfo;
-                    populateMaterialInfo(matInfo, materialPath);
+                    populateMaterialInfo(matInfo, materialRef.resolve());
                     renderData.submeshMaterials[submeshName] = matInfo;
                 }
             }

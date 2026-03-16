@@ -7,6 +7,7 @@
 #include "terrain/TerrainTypes.hpp"
 #include "terrain/TerrainWeightMapAsset.hpp"
 #include "vegetation/VegetationSerializer.hpp"
+#include <asset/AssetRef.hpp>
 #include "../../data/EntityConversion.hpp"
 #include <filesystem>
 #include <format>
@@ -73,7 +74,7 @@ namespace services
             entt::entity ent = internal::fromHandle(EntityHandle{terrainEntityId});
             if (registry.valid(ent) && registry.all_of<components::TerrainComponent>(ent))
             {
-                registry.get<components::TerrainComponent>(ent).terrainMaterialPath = materialPath;
+                registry.get<components::TerrainComponent>(ent).terrainMaterialRef = asset::AssetRef::fromPath(materialPath);
                 syncWeightMapLayerCount(terrainEntityId, materialPath);
             }
         }

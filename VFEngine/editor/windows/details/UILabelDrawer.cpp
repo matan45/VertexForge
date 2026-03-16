@@ -4,6 +4,7 @@
 #include "events/EventDispatcher.hpp"
 #include "events/ui/UIEvents.hpp"
 #include "nfd/FileDialog.hpp"
+#include "asset/AssetRef.hpp"
 #include <imgui.h>
 #include <fstream>
 #include <cstring>
@@ -127,9 +128,9 @@ namespace windows::details
     {
         bool changed = false;
 
-        if (!data.fontPath.empty())
+        if (data.fontRef.isValid())
         {
-            std::string filename = data.fontPath;
+            std::string filename = data.fontRef.resolve();
             auto lastSlash = filename.find_last_of("/\\");
             if (lastSlash != std::string::npos)
             {
@@ -153,7 +154,7 @@ namespace windows::details
                 if (file.good())
                 {
                     file.close();
-                    data.fontPath = path;
+                    data.fontRef = asset::AssetRef::fromPath(path);
                     changed = true;
                 }
                 else
@@ -164,11 +165,11 @@ namespace windows::details
         }
 
         ImGui::SameLine();
-        bool wasEmpty = data.fontPath.empty();
+        bool wasEmpty = !data.fontRef.isValid();
         if (wasEmpty) ImGui::BeginDisabled();
         if (ImGui::Button("Clear##UILabelFont"))
         {
-            data.fontPath = "";
+            data.fontRef = asset::AssetRef::invalid();
             changed = true;
         }
         if (wasEmpty) ImGui::EndDisabled();

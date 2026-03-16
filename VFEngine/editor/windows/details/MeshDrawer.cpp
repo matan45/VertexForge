@@ -4,6 +4,7 @@
 #include "events/EventDispatcher.hpp"
 #include "events/project/SceneEvents.hpp"
 #include "nfd/FileDialog.hpp"
+#include "asset/AssetRef.hpp"
 #include <imgui.h>
 #include <fstream>
 
@@ -40,17 +41,17 @@ namespace windows::details
         {
             ImGui::Indent(10.0f);
 
-            drawMeshPath(meshOpt->meshPath);
+            drawMeshPath(meshOpt->meshRef.resolve());
             drawSelectMeshButton(handle, *meshOpt);
 
             ImGui::Spacing();
             ImGui::Separator();
             ImGui::Spacing();
 
-            drawAnimatorPath(meshOpt->animatorPath);
+            drawAnimatorPath(meshOpt->animatorRef.resolve());
             drawAnimatorButtons(handle, *meshOpt);
 
-            if (!meshOpt->animatorPath.empty())
+            if (meshOpt->animatorRef.isValid())
             {
                 drawRootMotionCheckbox(handle, *meshOpt);
             }
@@ -136,8 +137,8 @@ namespace windows::details
             auto& dispatcher = events::EventDispatcher::instance();
             events::scene::SetMeshDataCommand cmd;
             cmd.entity = handle;
-            cmd.meshData.meshPath = path;
-            cmd.meshData.animatorPath = currentData.animatorPath;
+            cmd.meshData.meshRef = asset::AssetRef::fromPath(path);
+            cmd.meshData.animatorRef = currentData.animatorRef;
             cmd.meshData.showBoundingBox = currentData.showBoundingBox;
             cmd.meshData.applyRootMotion = currentData.applyRootMotion;
             cmd.meshData.maxDrawDistance = currentData.maxDrawDistance;
@@ -184,8 +185,8 @@ namespace windows::details
                     auto& dispatcher = events::EventDispatcher::instance();
                     events::scene::SetMeshDataCommand cmd;
                     cmd.entity = handle;
-                    cmd.meshData.meshPath = currentData.meshPath;
-                    cmd.meshData.animatorPath = path;
+                    cmd.meshData.meshRef = currentData.meshRef;
+                    cmd.meshData.animatorRef = asset::AssetRef::fromPath(path);
                     cmd.meshData.showBoundingBox = currentData.showBoundingBox;
                     cmd.meshData.applyRootMotion = currentData.applyRootMotion;
                     cmd.meshData.maxDrawDistance = currentData.maxDrawDistance;
@@ -198,7 +199,7 @@ namespace windows::details
             }
         }
 
-        if (!currentData.animatorPath.empty())
+        if (currentData.animatorRef.isValid())
         {
             ImGui::SameLine();
             if (ImGui::Button("Clear##Animator"))
@@ -206,8 +207,8 @@ namespace windows::details
                 auto& dispatcher = events::EventDispatcher::instance();
                 events::scene::SetMeshDataCommand cmd;
                 cmd.entity = handle;
-                cmd.meshData.meshPath = currentData.meshPath;
-                cmd.meshData.animatorPath = "";  // Clear animator
+                cmd.meshData.meshRef = currentData.meshRef;
+                cmd.meshData.animatorRef = asset::AssetRef::invalid();  // Clear animator
                 cmd.meshData.showBoundingBox = currentData.showBoundingBox;
                 cmd.meshData.applyRootMotion = false;  // Reset when clearing animator
                 cmd.meshData.maxDrawDistance = currentData.maxDrawDistance;
@@ -224,8 +225,8 @@ namespace windows::details
             auto& dispatcher = events::EventDispatcher::instance();
             events::scene::SetMeshDataCommand cmd;
             cmd.entity = handle;
-            cmd.meshData.meshPath = currentData.meshPath;
-            cmd.meshData.animatorPath = currentData.animatorPath;
+            cmd.meshData.meshRef = currentData.meshRef;
+            cmd.meshData.animatorRef = currentData.animatorRef;
             cmd.meshData.showBoundingBox = currentData.showBoundingBox;
             cmd.meshData.applyRootMotion = applyRootMotion;
             cmd.meshData.maxDrawDistance = currentData.maxDrawDistance;
@@ -241,8 +242,8 @@ namespace windows::details
             auto& dispatcher = events::EventDispatcher::instance();
             events::scene::SetMeshDataCommand cmd;
             cmd.entity = handle;
-            cmd.meshData.meshPath = currentData.meshPath;
-            cmd.meshData.animatorPath = currentData.animatorPath;
+            cmd.meshData.meshRef = currentData.meshRef;
+            cmd.meshData.animatorRef = currentData.animatorRef;
             cmd.meshData.showBoundingBox = showBoundingBox;
             cmd.meshData.applyRootMotion = currentData.applyRootMotion;
             cmd.meshData.maxDrawDistance = currentData.maxDrawDistance;
@@ -258,8 +259,8 @@ namespace windows::details
             auto& dispatcher = events::EventDispatcher::instance();
             events::scene::SetMeshDataCommand cmd;
             cmd.entity = handle;
-            cmd.meshData.meshPath = currentData.meshPath;
-            cmd.meshData.animatorPath = currentData.animatorPath;
+            cmd.meshData.meshRef = currentData.meshRef;
+            cmd.meshData.animatorRef = currentData.animatorRef;
             cmd.meshData.showBoundingBox = currentData.showBoundingBox;
             cmd.meshData.applyRootMotion = currentData.applyRootMotion;
             cmd.meshData.maxDrawDistance = maxDrawDist;

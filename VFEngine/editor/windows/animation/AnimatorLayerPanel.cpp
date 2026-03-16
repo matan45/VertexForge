@@ -1,4 +1,5 @@
 #include "AnimatorLayerPanel.hpp"
+#include "asset/AssetRef.hpp"
 #include "imgui.h"
 #include <algorithm>
 
@@ -124,13 +125,16 @@ namespace windows::animation
 
             if (layer.sourceMode == animator::LayerSourceMode::DirectClip)
             {
-                char clipBuf[256];
-                std::strncpy(clipBuf, layer.directClipPath.c_str(), sizeof(clipBuf) - 1);
-                clipBuf[sizeof(clipBuf) - 1] = '\0';
-                if (ImGui::InputText("Clip Path", clipBuf, sizeof(clipBuf)))
                 {
-                    layer.directClipPath = clipBuf;
-                    isDirty = true;
+                    std::string clipPathStr = layer.directClipRef.resolve();
+                    char clipBuf[256];
+                    std::strncpy(clipBuf, clipPathStr.c_str(), sizeof(clipBuf) - 1);
+                    clipBuf[sizeof(clipBuf) - 1] = '\0';
+                    if (ImGui::InputText("Clip Path", clipBuf, sizeof(clipBuf)))
+                    {
+                        layer.directClipRef = asset::AssetRef::fromPath(std::string(clipBuf));
+                        isDirty = true;
+                    }
                 }
 
                 if (ImGui::Checkbox("Loop", &layer.directClipLoop))

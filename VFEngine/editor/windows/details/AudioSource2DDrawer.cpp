@@ -6,6 +6,7 @@
 #include "events/audio/AudioEvents.hpp"
 #include "events/audio/AudioBusEvents.hpp"
 #include "nfd/FileDialog.hpp"
+#include "asset/AssetRef.hpp"
 #include <imgui.h>
 #include <fstream>
 
@@ -108,9 +109,9 @@ namespace windows::details
     {
         bool changed = false;
 
-        if (!audioData.audioFilePath.empty())
+        if (audioData.audioRef.isValid())
         {
-            std::string filename = audioData.audioFilePath;
+            std::string filename = audioData.audioRef.resolve();
             auto lastSlash = filename.find_last_of("/\\");
             if (lastSlash != std::string::npos)
             {
@@ -134,7 +135,7 @@ namespace windows::details
                 if (file.good())
                 {
                     file.close();
-                    audioData.audioFilePath = path;
+                    audioData.audioRef = asset::AssetRef::fromPath(path);
                     changed = true;
                 }
                 else
@@ -145,11 +146,11 @@ namespace windows::details
         }
 
         ImGui::SameLine();
-        bool clearDisabled = audioData.audioFilePath.empty();
+        bool clearDisabled = !audioData.audioRef.isValid();
         ImGui::BeginDisabled(clearDisabled);
         if (ImGui::Button("Clear##Audio2D"))
         {
-            audioData.audioFilePath = "";
+            audioData.audioRef = asset::AssetRef::invalid();
             changed = true;
         }
         ImGui::EndDisabled();
@@ -236,7 +237,7 @@ namespace windows::details
         bool isPaused = hasPreviewHandle && !isCurrentlyPlaying;
 
         // Play button
-        bool canPlay = !audioData.audioFilePath.empty() && !isCurrentlyPlaying;
+        bool canPlay = audioData.audioRef.isValid() && !isCurrentlyPlaying;
         if (!canPlay) ImGui::BeginDisabled();
         if (ImGui::Button("Play##2D", ImVec2(60, 0)))
         {
@@ -249,7 +250,7 @@ namespace windows::details
             else
             {
                 events::audio::PlayStreamingSoundCommand playCmd;
-                playCmd.path = audioData.audioFilePath;
+                playCmd.path = audioData.audioRef.resolve();
                 playCmd.params.volume = audioData.volume;
                 playCmd.params.pitch = audioData.pitch;
                 playCmd.params.loop = audioData.loop;

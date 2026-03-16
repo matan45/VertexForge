@@ -1,6 +1,7 @@
 #include "AssetLifecycleWindow.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/lifecycle/AssetLifecycleEvents.hpp"
+#include "asset/AssetRef.hpp"
 #include "imgui.h"
 #include <algorithm>
 
@@ -118,17 +119,19 @@ namespace windows
                     continue;
                 }
 
+                std::string assetPath = asset::AssetRef::fromGUID(asset.guid).resolve();
+
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();
 
-                auto lastSlash = asset.path.find_last_of("/\\");
+                auto lastSlash = assetPath.find_last_of("/\\");
                 const char* displayPath = (lastSlash != std::string::npos)
-                                              ? asset.path.c_str() + lastSlash + 1
-                                              : asset.path.c_str();
+                                              ? assetPath.c_str() + lastSlash + 1
+                                              : assetPath.c_str();
                 ImGui::TextUnformatted(displayPath);
                 if (ImGui::IsItemHovered())
                 {
-                    ImGui::SetTooltip("%s", asset.path.c_str());
+                    ImGui::SetTooltip("%s", assetPath.c_str());
                 }
 
                 ImGui::TableNextColumn();
@@ -164,11 +167,11 @@ namespace windows
                 }
 
                 ImGui::TableNextColumn();
-                ImGui::PushID(asset.path.c_str());
+                ImGui::PushID(assetPath.c_str());
                 if (ImGui::SmallButton("Force Free"))
                 {
                     events::lifecycle::ForceReleaseAssetCommand cmd;
-                    cmd.path = asset.path;
+                    cmd.path = assetPath;
                     events::EventDispatcher::instance().execute(cmd);
                     refreshTimer = REFRESH_INTERVAL; // trigger refresh next frame
                 }
@@ -201,17 +204,19 @@ namespace windows
 
             for (const auto& asset : cachedPending)
             {
+                std::string pendingPath = asset::AssetRef::fromGUID(asset.guid).resolve();
+
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();
 
-                auto lastSlash = asset.path.find_last_of("/\\");
+                auto lastSlash = pendingPath.find_last_of("/\\");
                 const char* displayPath = (lastSlash != std::string::npos)
-                                              ? asset.path.c_str() + lastSlash + 1
-                                              : asset.path.c_str();
+                                              ? pendingPath.c_str() + lastSlash + 1
+                                              : pendingPath.c_str();
                 ImGui::TextUnformatted(displayPath);
                 if (ImGui::IsItemHovered())
                 {
-                    ImGui::SetTooltip("%s", asset.path.c_str());
+                    ImGui::SetTooltip("%s", pendingPath.c_str());
                 }
 
                 ImGui::TableNextColumn();
@@ -225,11 +230,11 @@ namespace windows
                 ImGui::TextColored(color, "%.1f", remaining);
 
                 ImGui::TableNextColumn();
-                ImGui::PushID(asset.path.c_str());
+                ImGui::PushID(pendingPath.c_str());
                 if (ImGui::SmallButton("Force Free"))
                 {
                     events::lifecycle::ForceReleaseAssetCommand cmd;
-                    cmd.path = asset.path;
+                    cmd.path = pendingPath;
                     events::EventDispatcher::instance().execute(cmd);
                     refreshTimer = REFRESH_INTERVAL;
                 }

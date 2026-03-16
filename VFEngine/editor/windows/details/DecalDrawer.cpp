@@ -3,6 +3,7 @@
 #include "events/EventDispatcher.hpp"
 #include "events/scene/ComponentMediaEvents.hpp"
 #include "nfd/FileDialog.hpp"
+#include "asset/AssetRef.hpp"
 #include <imgui.h>
 #include <fstream>
 
@@ -114,13 +115,13 @@ namespace windows::details
         return changed;
     }
 
-    bool DecalDrawer::drawTextureSlot(const char* label, const char* emptyText, std::string& texturePath)
+    bool DecalDrawer::drawTextureSlot(const char* label, const char* emptyText, asset::AssetRef& textureRef)
     {
         bool changed = false;
 
-        if (!texturePath.empty())
+        if (textureRef.isValid())
         {
-            std::string filename = texturePath;
+            std::string filename = textureRef.resolve();
             auto lastSlash = filename.find_last_of("/\\");
             if (lastSlash != std::string::npos)
                 filename = filename.substr(lastSlash + 1);
@@ -139,16 +140,16 @@ namespace windows::details
                 {{L"VF Image Files (*.vfImage)", L"*.vfImage"}});
             if (!path.empty())
             {
-                texturePath = path;
+                textureRef = asset::AssetRef::fromPath(path);
                 changed = true;
             }
         }
         ImGui::SameLine();
-        if (!texturePath.empty())
+        if (textureRef.isValid())
         {
             if (ImGui::Button("Clear##Decal"))
             {
-                texturePath = "";
+                textureRef = asset::AssetRef::invalid();
                 changed = true;
             }
         }
@@ -161,11 +162,11 @@ namespace windows::details
     {
         bool changed = false;
 
-        changed |= drawTextureSlot("Albedo", "No albedo texture", data.albedoTexture);
+        changed |= drawTextureSlot("Albedo", "No albedo texture", data.albedoTextureRef);
         ImGui::Spacing();
-        changed |= drawTextureSlot("Normal", "No normal map", data.normalTexture);
+        changed |= drawTextureSlot("Normal", "No normal map", data.normalTextureRef);
         ImGui::Spacing();
-        changed |= drawTextureSlot("ORM", "No ORM texture", data.ormTexture);
+        changed |= drawTextureSlot("ORM", "No ORM texture", data.ormTextureRef);
 
         return changed;
     }

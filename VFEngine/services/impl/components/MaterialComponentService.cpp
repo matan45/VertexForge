@@ -157,17 +157,18 @@ namespace services {
 
         auto& comp = sceneEntity.getComponent<components::MaterialComponent>();
         auto& lifecycle = resource::AssetLifecycleManager::instance();
+        auto newRef = asset::AssetRef::fromPath(materialPath);
         auto it = comp.subMeshMaterials.find(submeshName);
-        if (it != comp.subMeshMaterials.end() && !it->second.empty() && it->second != materialPath) {
-            lifecycle.release(it->second);
+        if (it != comp.subMeshMaterials.end() && it->second.isValid() && it->second != newRef) {
+            lifecycle.release(it->second.getGUID());
         }
         if (materialPath.empty()) {
             comp.subMeshMaterials.erase(submeshName);
         } else {
-            bool isNew = (it == comp.subMeshMaterials.end() || it->second != materialPath);
-            comp.setSubMeshMaterial(submeshName, materialPath);
+            bool isNew = (it == comp.subMeshMaterials.end() || it->second != newRef);
+            comp.setSubMeshMaterial(submeshName, newRef);
             if (isNew) {
-                lifecycle.acquire(materialPath, resource::AssetType::Material);
+                lifecycle.acquire(newRef.getGUID(), resource::AssetType::Material);
             }
         }
         return true;
@@ -185,7 +186,7 @@ namespace services {
         }
 
         const auto& comp = sceneEntity.getComponent<components::MaterialComponent>();
-        return comp.getMaterialForSubmesh(submeshName);
+        return comp.getMaterialForSubmesh(submeshName).resolve();
     }
 
     std::map<std::string, std::string> MaterialComponentService::getAllSubMeshMaterials(EntityHandle entity) const {
@@ -200,7 +201,11 @@ namespace services {
         }
 
         const auto& comp = sceneEntity.getComponent<components::MaterialComponent>();
-        return comp.subMeshMaterials;
+        std::map<std::string, std::string> result;
+        for (const auto& [name, ref] : comp.subMeshMaterials) {
+            result[name] = ref.resolve();
+        }
+        return result;
     }
 
     void MaterialComponentService::registerEventHandlers(events::EventDispatcher& dispatcher) {

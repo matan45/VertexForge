@@ -3,6 +3,7 @@
 #include "events/EventDispatcher.hpp"
 #include "events/ui/UIEvents.hpp"
 #include "nfd/FileDialog.hpp"
+#include "asset/AssetRef.hpp"
 #include <imgui.h>
 
 namespace windows::details
@@ -41,9 +42,9 @@ namespace windows::details
             ImGui::Spacing();
 
             // Display current texture
-            if (!data.maskTexturePath.empty())
+            if (data.maskTextureRef.isValid())
             {
-                std::string filename = data.maskTexturePath;
+                std::string filename = data.maskTextureRef.resolve();
                 auto lastSlash = filename.find_last_of("/\\");
                 if (lastSlash != std::string::npos)
                     filename = filename.substr(lastSlash + 1);
@@ -61,17 +62,17 @@ namespace windows::details
                     {{L"VF Image Files (*.vfImage)", L"*.vfImage"}});
                 if (!path.empty())
                 {
-                    data.maskTexturePath = path;
+                    data.maskTextureRef = asset::AssetRef::fromPath(path);
                     changed = true;
                 }
             }
 
             ImGui::SameLine();
-            bool noTex = data.maskTexturePath.empty();
+            bool noTex = !data.maskTextureRef.isValid();
             if (noTex) ImGui::BeginDisabled();
             if (ImGui::Button("Clear##UIMaskTex"))
             {
-                data.maskTexturePath = "";
+                data.maskTextureRef = asset::AssetRef::invalid();
                 changed = true;
             }
             if (noTex) ImGui::EndDisabled();

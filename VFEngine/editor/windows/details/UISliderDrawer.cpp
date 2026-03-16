@@ -4,6 +4,7 @@
 #include "events/EventDispatcher.hpp"
 #include "events/ui/UIEvents.hpp"
 #include "nfd/FileDialog.hpp"
+#include "asset/AssetRef.hpp"
 #include <imgui.h>
 #include <fstream>
 
@@ -167,15 +168,15 @@ namespace windows::details
         return changed;
     }
 
-    static bool drawSliderTextureSlot(const char* label, std::string& texturePath, const char* uniqueId)
+    static bool drawSliderTextureSlot(const char* label, asset::AssetRef& textureRef, const char* uniqueId)
     {
         bool changed = false;
 
         ImGui::Text("%s", label);
 
-        if (!texturePath.empty())
+        if (textureRef.isValid())
         {
-            std::string filename = texturePath;
+            std::string filename = textureRef.resolve();
             auto lastSlash = filename.find_last_of("/\\");
             if (lastSlash != std::string::npos)
             {
@@ -198,7 +199,7 @@ namespace windows::details
                 if (file.good())
                 {
                     file.close();
-                    texturePath = path;
+                    textureRef = asset::AssetRef::fromPath(path);
                     changed = true;
                 }
                 else
@@ -209,13 +210,13 @@ namespace windows::details
         }
 
         ImGui::SameLine();
-        bool wasEmpty = texturePath.empty();
+        bool wasEmpty = !textureRef.isValid();
         if (wasEmpty) ImGui::BeginDisabled();
         char clearId[64];
         std::snprintf(clearId, sizeof(clearId), "Clear##UISld_%s", uniqueId);
         if (ImGui::Button(clearId))
         {
-            texturePath = "";
+            textureRef = asset::AssetRef::invalid();
             changed = true;
         }
         if (wasEmpty) ImGui::EndDisabled();
@@ -265,10 +266,10 @@ namespace windows::details
             ImGui::TextDisabled("Empty = color only mode");
             ImGui::Spacing();
 
-            changed |= drawSliderTextureSlot("Normal", data.handleNormalTexture, "handleNormal");
-            changed |= drawSliderTextureSlot("Hovered", data.handleHoveredTexture, "handleHovered");
-            changed |= drawSliderTextureSlot("Pressed", data.handlePressedTexture, "handlePressed");
-            changed |= drawSliderTextureSlot("Disabled", data.handleDisabledTexture, "handleDisabled");
+            changed |= drawSliderTextureSlot("Normal", data.handleNormalTextureRef, "handleNormal");
+            changed |= drawSliderTextureSlot("Hovered", data.handleHoveredTextureRef, "handleHovered");
+            changed |= drawSliderTextureSlot("Pressed", data.handlePressedTextureRef, "handlePressed");
+            changed |= drawSliderTextureSlot("Disabled", data.handleDisabledTextureRef, "handleDisabled");
 
             ImGui::TreePop();
         }
@@ -291,7 +292,7 @@ namespace windows::details
             ImGui::TextDisabled("Empty = color only mode");
             ImGui::Spacing();
 
-            changed |= drawSliderTextureSlot("Fill", data.fillTexture, "fill");
+            changed |= drawSliderTextureSlot("Fill", data.fillTextureRef, "fill");
 
             ImGui::TreePop();
         }

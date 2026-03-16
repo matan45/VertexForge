@@ -4,6 +4,7 @@
 #include "events/EventDispatcher.hpp"
 #include "events/project/SceneEvents.hpp"
 #include "nfd/FileDialog.hpp"
+#include "asset/AssetRef.hpp"
 #include <imgui.h>
 #include <fstream>
 
@@ -97,9 +98,9 @@ namespace windows::details
     {
         bool changed = false;
 
-        if (!vfxData.vfxPath.empty())
+        if (vfxData.vfxRef.isValid())
         {
-            std::string filename = vfxData.vfxPath;
+            std::string filename = vfxData.vfxRef.resolve();
             auto lastSlash = filename.find_last_of("/\\");
             if (lastSlash != std::string::npos)
             {
@@ -123,7 +124,7 @@ namespace windows::details
                 if (file.good())
                 {
                     file.close();
-                    vfxData.vfxPath = path;
+                    vfxData.vfxRef = asset::AssetRef::fromPath(path);
                     changed = true;
                 }
                 else
@@ -134,11 +135,11 @@ namespace windows::details
         }
 
         ImGui::SameLine();
-        bool wasEmpty = vfxData.vfxPath.empty();
+        bool wasEmpty = !vfxData.vfxRef.isValid();
         if (wasEmpty) ImGui::BeginDisabled();
         if (ImGui::Button("Clear##VFX"))
         {
-            vfxData.vfxPath = "";
+            vfxData.vfxRef = asset::AssetRef::invalid();
             changed = true;
         }
         if (wasEmpty) ImGui::EndDisabled();

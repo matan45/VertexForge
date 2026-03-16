@@ -3,6 +3,7 @@
 #include "events/EventDispatcher.hpp"
 #include "events/ui/UIEvents.hpp"
 #include "nfd/FileDialog.hpp"
+#include "asset/AssetRef.hpp"
 #include <imgui.h>
 #include <fstream>
 
@@ -150,9 +151,9 @@ namespace windows::details
 
         if (ImGui::TreeNodeEx("Font", ImGuiTreeNodeFlags_DefaultOpen))
         {
-            if (!data.fontPath.empty())
+            if (data.fontRef.isValid())
             {
-                std::string filename = data.fontPath;
+                std::string filename = data.fontRef.resolve();
                 auto lastSlash = filename.find_last_of("/\\");
                 if (lastSlash != std::string::npos)
                     filename = filename.substr(lastSlash + 1);
@@ -174,7 +175,7 @@ namespace windows::details
                     if (file.good())
                     {
                         file.close();
-                        data.fontPath = path;
+                        data.fontRef = asset::AssetRef::fromPath(path);
                         changed = true;
                     }
                 }

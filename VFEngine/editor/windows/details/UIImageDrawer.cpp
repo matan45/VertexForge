@@ -4,6 +4,7 @@
 #include "events/EventDispatcher.hpp"
 #include "events/ui/UIEvents.hpp"
 #include "nfd/FileDialog.hpp"
+#include "asset/AssetRef.hpp"
 #include <imgui.h>
 #include <fstream>
 
@@ -101,9 +102,9 @@ namespace windows::details
     {
         bool changed = false;
 
-        if (!data.texturePath.empty())
+        if (data.textureRef.isValid())
         {
-            std::string filename = data.texturePath;
+            std::string filename = data.textureRef.resolve();
             auto lastSlash = filename.find_last_of("/\\");
             if (lastSlash != std::string::npos)
             {
@@ -140,7 +141,7 @@ namespace windows::details
                     else
                     {
                         file.close();
-                        data.texturePath = path;
+                        data.textureRef = asset::AssetRef::fromPath(path);
                         data.sourceWidth = w;
                         data.sourceHeight = h;
                         changed = true;
@@ -154,11 +155,11 @@ namespace windows::details
         }
 
         ImGui::SameLine();
-        bool wasEmpty = data.texturePath.empty();
+        bool wasEmpty = !data.textureRef.isValid();
         if (wasEmpty) ImGui::BeginDisabled();
         if (ImGui::Button("Clear##UIImageTex"))
         {
-            data.texturePath = "";
+            data.textureRef = asset::AssetRef::invalid();
             data.sourceWidth = 0;
             data.sourceHeight = 0;
             changed = true;
@@ -202,11 +203,12 @@ namespace windows::details
             // Auto-detect dimensions if texture exists but dimensions are missing (old scenes)
             // Only attempt the read once per texture path to avoid file I/O every frame
             static std::string lastAutoReadPath;
-            if ((data.sourceWidth == 0 || data.sourceHeight == 0) && !data.texturePath.empty()
-                && data.texturePath != lastAutoReadPath)
+            std::string resolvedTexPath = data.textureRef.resolve();
+            if ((data.sourceWidth == 0 || data.sourceHeight == 0) && data.textureRef.isValid()
+                && resolvedTexPath != lastAutoReadPath)
             {
-                lastAutoReadPath = data.texturePath;
-                std::ifstream texFile(data.texturePath, std::ios::binary);
+                lastAutoReadPath = resolvedTexPath;
+                std::ifstream texFile(resolvedTexPath, std::ios::binary);
                 if (texFile.good())
                 {
                     texFile.seekg(13, std::ios::beg);

@@ -527,27 +527,27 @@ namespace render::gpudriven
 
         if (material::isInstanceFile(materialPath))
         {
-            auto instanceData = resource::ResourceManager::loadMaterialInstance(materialPath);
-            if (!instanceData || instanceData->parentMaterialPath.empty())
+            auto instanceData = resource::ResourceManager::loadMaterialInstance(asset::AssetRef::fromPath(materialPath));
+            if (!instanceData || instanceData->parentMaterialRef.resolve().empty())
             {
                 vfLogWarning("GPUDrivenRenderer: Failed to load material instance: {}", materialPath);
                 return false;
             }
 
-            auto parentMatData = resource::ResourceManager::loadMaterial(instanceData->parentMaterialPath);
+            auto parentMatData = resource::ResourceManager::loadMaterial(instanceData->parentMaterialRef);
             if (!parentMatData)
             {
                 vfLogWarning("GPUDrivenRenderer: Failed to load parent material: {}",
-                              instanceData->parentMaterialPath);
+                              instanceData->parentMaterialRef.resolve());
                 return false;
             }
-            materials.loaded[instanceData->parentMaterialPath] = parentMatData;
+            materials.loaded[instanceData->parentMaterialRef.resolve()] = parentMatData;
 
             pbrValues = mesh::MaterialPBRExtractor::extractPBRFromInstance(*instanceData, *parentMatData);
         }
         else
         {
-            auto matData = resource::ResourceManager::loadMaterial(materialPath);
+            auto matData = resource::ResourceManager::loadMaterial(asset::AssetRef::fromPath(materialPath));
             if (!matData)
             {
                 vfLogWarning("GPUDrivenRenderer: Failed to load material: {}", materialPath);

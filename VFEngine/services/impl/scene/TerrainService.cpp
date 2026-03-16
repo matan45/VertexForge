@@ -209,8 +209,8 @@ namespace services
             if (registry.valid(ent) && registry.all_of<components::TerrainComponent>(ent))
             {
                 const auto& comp = registry.get<components::TerrainComponent>(ent);
-                if (!comp.terrainMaterialPath.empty())
-                    resource::ResourceManager::invalidateTerrainMaterialCache(comp.terrainMaterialPath);
+                if (comp.terrainMaterialRef.isValid())
+                    resource::ResourceManager::invalidateTerrainMaterialCache(comp.terrainMaterialRef);
             }
 
             if (physicsProvider)
@@ -241,8 +241,8 @@ namespace services
             if (registry.valid(ent) && registry.all_of<components::TerrainComponent>(ent))
             {
                 const auto& comp = registry.get<components::TerrainComponent>(ent);
-                if (!comp.terrainMaterialPath.empty())
-                    resource::ResourceManager::invalidateTerrainMaterialCache(comp.terrainMaterialPath);
+                if (comp.terrainMaterialRef.isValid())
+                    resource::ResourceManager::invalidateTerrainMaterialCache(comp.terrainMaterialRef);
             }
         }
 

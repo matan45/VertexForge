@@ -47,7 +47,7 @@ namespace windows::details {
         if (isOpen)
         {
             ImGui::Indent(10.0f);
-            ImGui::Text("File: %s", iblOpt->fileName.c_str());
+            ImGui::Text("File: %s", iblOpt->hdrRef.resolve().c_str());
             ImGui::Unindent(10.0f);
         }
 

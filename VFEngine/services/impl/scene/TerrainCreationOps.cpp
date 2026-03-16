@@ -11,6 +11,7 @@
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/terrain/TerrainEvents.hpp"
+#include <asset/AssetRef.hpp>
 #include <algorithm>
 
 namespace services
@@ -92,7 +93,7 @@ namespace services
         terrainComp.gridMaxX = maxX;
         terrainComp.gridMaxZ = maxZ;
         terrainComp.heightmapPath = config.heightmapPath;
-        terrainComp.terrainMaterialPath = config.terrainMaterialPath;
+        terrainComp.terrainMaterialRef = asset::AssetRef::fromPath(config.terrainMaterialPath);
         terrainComp.weightMapPath = config.weightMapPath;
         terrainComp.isActive = true;
         terrainComp.isDirty = false;

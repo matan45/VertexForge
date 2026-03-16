@@ -42,7 +42,7 @@ namespace services {
         if (!sceneEntity.hasComponent<components::UIMaskComponent>()) return std::nullopt;
         const auto& comp = sceneEntity.getComponent<components::UIMaskComponent>();
         UIMaskData data;
-        data.maskTexturePath = comp.maskTexturePath;
+        data.maskTextureRef = comp.maskTextureRef;
         data.alphaThreshold = comp.alphaThreshold;
         data.showMaskGraphic = comp.showMaskGraphic;
         return data;
@@ -54,7 +54,7 @@ namespace services {
         scene::Entity sceneEntity(internal::fromHandle(entity));
         if (!sceneEntity.hasComponent<components::UIMaskComponent>()) return false;
         auto& comp = sceneEntity.getComponent<components::UIMaskComponent>();
-        comp.maskTexturePath = data.maskTexturePath;
+        comp.maskTextureRef = data.maskTextureRef;
         comp.alphaThreshold = data.alphaThreshold;
         comp.showMaskGraphic = data.showMaskGraphic;
         return true;

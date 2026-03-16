@@ -5,6 +5,7 @@
 #include "events/terrain/TerrainEvents.hpp"
 #include "terrain/PaintBrushTypes.hpp"
 #include "resource/ResourceManager.hpp"
+#include "asset/AssetRef.hpp"
 #include "nfd/FileDialog.hpp"
 #include <imgui.h>
 #include <algorithm>
@@ -54,7 +55,7 @@ namespace windows
         if (terrainData->terrainMaterialPath != materialPath)
         {
             materialPath = terrainData->terrainMaterialPath;
-            materialData = resource::ResourceManager::loadTerrainMaterial(materialPath);
+            materialData = resource::ResourceManager::loadTerrainMaterial(asset::AssetRef::fromPath(materialPath));
         }
     }
 
@@ -231,7 +232,7 @@ namespace windows
                     dispatcher.execute(cmd);
 
                     materialPath = selectedPath;
-                    materialData = resource::ResourceManager::loadTerrainMaterial(materialPath);
+                    materialData = resource::ResourceManager::loadTerrainMaterial(asset::AssetRef::fromPath(materialPath));
                 }
             }
         }

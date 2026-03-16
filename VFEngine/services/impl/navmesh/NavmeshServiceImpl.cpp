@@ -13,6 +13,7 @@
 #include "navigation/NavmeshSerializer.hpp"
 #include "resource/ResourceManager.hpp"
 #include "resource/Types.hpp"
+#include <asset/AssetRef.hpp>
 #include "threading/JobSystem.hpp"
 #include <cassert>
 
@@ -332,7 +333,7 @@ namespace services
             {
                 auto rootEntity = internal::fromHandle(rootHandle);
                 registry.emplace_or_replace<components::NavmeshComponent>(rootEntity,
-                    components::NavmeshComponent{filePath});
+                    components::NavmeshComponent{asset::AssetRef::fromPath(filePath)});
             }
 
             events::resource::AssetSavedNotification notif;

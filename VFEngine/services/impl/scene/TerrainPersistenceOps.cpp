@@ -10,6 +10,7 @@
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/terrain/TerrainEvents.hpp"
+#include <asset/AssetRef.hpp>
 
 namespace services
 {
@@ -376,7 +377,7 @@ namespace services
         terrainComp.gridMinZ = header.gridMinZ;
         terrainComp.gridMaxX = header.gridMaxX;
         terrainComp.gridMaxZ = header.gridMaxZ;
-        terrainComp.terrainMaterialPath = header.materialPath;
+        terrainComp.terrainMaterialRef = asset::AssetRef::fromPath(header.materialPath);
         terrainComp.isActive = true;
         terrainComp.isDirty = false;
         terrainComp.activeTileCount = header.tileCount;

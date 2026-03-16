@@ -6,6 +6,7 @@
 #include "../../../services/data/EntityConversion.hpp"
 #include "components/Components.hpp"
 #include "nfd/FileDialog.hpp"
+#include "asset/AssetRef.hpp"
 #include <imgui.h>
 
 namespace windows::details
@@ -29,7 +30,8 @@ namespace windows::details
 
             // Tree path display (read-only text, like material drawer)
             ImGui::Text("Tree:");
-            std::string display = bt.behaviorTreePath.empty() ? "(None)" : bt.behaviorTreePath;
+            std::string resolvedPath = bt.behaviorTreeRef.resolve();
+            std::string display = !bt.behaviorTreeRef.isValid() ? "(None)" : resolvedPath;
             if (display.length() > 35)
             {
                 display = "..." + display.substr(display.length() - 32);
@@ -46,7 +48,7 @@ namespace windows::details
                 std::string path = fileDialog.openFileDialog(BT_FILE_TYPES);
                 if (!path.empty())
                 {
-                    bt.behaviorTreePath = path;
+                    bt.behaviorTreeRef = asset::AssetRef::fromPath(path);
                 }
             }
 
@@ -60,7 +62,7 @@ namespace windows::details
                     events::EventDispatcher::instance().execute(cmd);
                     bt.isInitialized = false;
                 }
-                bt.behaviorTreePath.clear();
+                bt.behaviorTreeRef = asset::AssetRef::invalid();
             }
 
             if (ImGui::Checkbox("Enabled", &bt.enabled))

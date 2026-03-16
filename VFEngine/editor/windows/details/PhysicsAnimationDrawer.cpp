@@ -5,6 +5,7 @@
 #include "events/scene/ComponentPhysicsLightEvents.hpp"
 #include "types/PhysicsAnimationTypes.hpp"
 #include "nfd/FileDialog.hpp"
+#include "asset/AssetRef.hpp"
 #include "physics/PhysicsAnimationAsset.hpp"
 #include <imgui.h>
 
@@ -46,7 +47,7 @@ namespace windows::details
 
             drawFilePicker(handle, data, changed);
 
-            if (!data.physicsAnimationPath.empty())
+            if (data.physicsAnimationRef.isValid())
             {
                 ImGui::Spacing();
                 drawConfigSummary(data);
@@ -99,9 +100,9 @@ namespace windows::details
                                                  services::PhysicsAnimationComponentData& data,
                                                  bool& changed)
     {
-        if (!data.physicsAnimationPath.empty())
+        if (data.physicsAnimationRef.isValid())
         {
-            std::string filename = data.physicsAnimationPath;
+            std::string filename = data.physicsAnimationRef.resolve();
             auto lastSlash = filename.find_last_of("/\\");
             if (lastSlash != std::string::npos)
             {
@@ -110,7 +111,7 @@ namespace windows::details
             ImGui::Text("Config: %s", filename.c_str());
             if (ImGui::IsItemHovered())
             {
-                ImGui::SetTooltip("%s", data.physicsAnimationPath.c_str());
+                ImGui::SetTooltip("%s", data.physicsAnimationRef.resolve().c_str());
             }
         }
         else
@@ -130,7 +131,7 @@ namespace windows::details
                 if (configOpt.has_value())
                 {
                     const auto& config = *configOpt;
-                    data.physicsAnimationPath = path;
+                    data.physicsAnimationRef = asset::AssetRef::fromPath(path);
                     data.defaultMode = config.defaultMode;
                     data.collisionLayer = config.collisionLayer;
                     data.boneBodyMappings = config.boneBodyMappings;
@@ -144,12 +145,12 @@ namespace windows::details
             }
         }
 
-        if (!data.physicsAnimationPath.empty())
+        if (data.physicsAnimationRef.isValid())
         {
             ImGui::SameLine();
             if (ImGui::Button("Clear"))
             {
-                data.physicsAnimationPath.clear();
+                data.physicsAnimationRef = asset::AssetRef::invalid();
                 data.defaultMode = types::PhysicsAnimationMode::Animated;
                 data.collisionLayer = 1;
                 data.boneBodyMappings.clear();

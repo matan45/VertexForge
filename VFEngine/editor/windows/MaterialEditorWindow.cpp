@@ -10,6 +10,7 @@
 #include <material/MaterialInstanceTypes.hpp>
 #include <resource/ResourceManager.hpp>
 #include <resource/AssetTypes.hpp>
+#include <asset/AssetRef.hpp>
 #include "imgui.h"
 #include "events/EventDispatcher.hpp"
 #include "events/render/MaterialEvents.hpp"
@@ -57,7 +58,7 @@ namespace windows
 
     void MaterialEditorWindow::loadMaterial()
     {
-        materialData = resource::ResourceManager::loadMaterial(materialPath);
+        materialData = resource::ResourceManager::loadMaterial(asset::AssetRef::fromPath(materialPath));
 
         if (!materialData)
         {

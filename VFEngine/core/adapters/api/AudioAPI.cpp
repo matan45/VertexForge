@@ -60,7 +60,7 @@ namespace core::api
                         return value::Value(static_cast<int64_t>(0));
 
                     auto& audioComp = registry.get<components::AudioSource2DComponent>(*entity);
-                    if (audioComp.audioFilePath.empty())
+                    if (!audioComp.audioRef.isValid())
                         return value::Value(static_cast<int64_t>(0));
 
                     if (audioComp.activeHandle != 0)
@@ -71,7 +71,7 @@ namespace core::api
                     }
 
                     events::audio::PlayStreamingSoundCommand cmd;
-                    cmd.path = audioComp.audioFilePath;
+                    cmd.path = audioComp.audioRef.resolve();
                     cmd.params.volume = audioComp.volume;
                     cmd.params.pitch = audioComp.pitch;
                     cmd.params.loop = audioComp.loop;
@@ -96,7 +96,7 @@ namespace core::api
                         return value::Value(static_cast<int64_t>(0));
 
                     auto& audioComp = registry.get<components::AudioSource3DComponent>(*entity);
-                    if (audioComp.audioFilePath.empty())
+                    if (!audioComp.audioRef.isValid())
                         return value::Value(static_cast<int64_t>(0));
 
                     glm::vec3 position(0.0f);
@@ -114,7 +114,7 @@ namespace core::api
                     }
 
                     events::audio::PlaySound3DCommand cmd;
-                    cmd.path = audioComp.audioFilePath;
+                    cmd.path = audioComp.audioRef.resolve();
                     cmd.position = position;
                     cmd.params.volume = audioComp.volume;
                     cmd.params.pitch = audioComp.pitch;

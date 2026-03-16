@@ -9,6 +9,7 @@
 #include "scene/EntityRegistry.hpp"
 #include "scene/Entity.hpp"
 #include "components/Components.hpp"
+#include "asset/AssetRef.hpp"
 
 namespace services {
 
@@ -37,10 +38,10 @@ namespace services {
 	void AssetLifecycleServiceImpl::setupReleaseCallback()
 	{
 		resource::AssetLifecycleManager::instance().setReleaseCallback(
-			[](const std::string& path, resource::AssetType type)
+			[](const asset::AssetGUID& guid, resource::AssetType type)
 			{
 				events::lifecycle::AssetReleaseReadyNotification notification;
-				notification.path = path;
+				notification.path = asset::AssetRef::fromGUID(guid).resolve();
 				notification.type = type;
 				events::EventDispatcher::instance().publish(notification);
 			});
@@ -53,7 +54,7 @@ namespace services {
 		dispatcher.registerCommandHandler<events::lifecycle::ForceReleaseAssetCommand>(
 			[](const events::lifecycle::ForceReleaseAssetCommand& cmd)
 			{
-				resource::AssetLifecycleManager::instance().forceRelease(cmd.path);
+				resource::AssetLifecycleManager::instance().forceRelease(asset::AssetRef::fromPath(std::string(cmd.path)).getGUID());
 			});
 
 		dispatcher.registerQueryHandler<events::lifecycle::QueryAssetStatsQuery>(
@@ -71,7 +72,7 @@ namespace services {
 		dispatcher.registerQueryHandler<events::lifecycle::QueryAssetEntryQuery>(
 			[](const events::lifecycle::QueryAssetEntryQuery& query)
 			{
-				return resource::AssetLifecycleManager::instance().getAssetEntry(query.path);
+				return resource::AssetLifecycleManager::instance().getAssetEntry(asset::AssetRef::fromPath(std::string(query.path)).getGUID());
 			});
 
 		sceneClearedSubscription = dispatcher.subscribe<events::scene::SceneClearedNotification>(

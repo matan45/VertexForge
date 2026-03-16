@@ -281,13 +281,13 @@ namespace services
             for (auto entity : meshView)
             {
                 const auto& meshComp = meshView.get<components::MeshComponent>(entity);
-                if (!meshComp.meshPath.empty())
+                if (meshComp.meshRef.isValid())
                 {
                     meshCount++;
                     events::scene::MeshDataChangedNotification meshNotif;
                     meshNotif.entity = internal::toHandle(entity);
-                    meshNotif.meshPath = meshComp.meshPath;
-                    meshNotif.animatorPath = meshComp.animatorPath;
+                    meshNotif.meshPath = meshComp.meshRef.resolve();
+                    meshNotif.animatorPath = meshComp.animatorRef.resolve();
                     dispatcher.publish(meshNotif);
                 }
             }
@@ -406,12 +406,12 @@ namespace services
                 if (entity.hasComponent<components::MeshComponent>())
                 {
                     const auto& meshComp = entity.getComponent<components::MeshComponent>();
-                    if (!meshComp.meshPath.empty())
+                    if (meshComp.meshRef.isValid())
                     {
                         events::scene::MeshDataChangedNotification meshNotif;
                         meshNotif.entity = internal::toHandle(entity.getHandle());
-                        meshNotif.meshPath = meshComp.meshPath;
-                        meshNotif.animatorPath = meshComp.animatorPath;
+                        meshNotif.meshPath = meshComp.meshRef.resolve();
+                        meshNotif.animatorPath = meshComp.animatorRef.resolve();
                         dispatcher.publish(meshNotif);
                     }
                 }

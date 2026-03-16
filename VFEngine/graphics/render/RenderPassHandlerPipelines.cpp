@@ -11,6 +11,7 @@
 #include "ui/UITextPipeline.hpp"
 #include "ui/UITextRenderTypes.hpp"
 #include "resource/ResourceManager.hpp"
+#include "asset/AssetRef.hpp"
 #include "material/MaterialTypes.hpp"
 #include <queue>
 #include <unordered_set>
@@ -336,10 +337,10 @@ namespace render
 
         if (material::isInstanceFile(materialPath))
         {
-            auto instanceData = resource::ResourceManager::loadMaterialInstance(materialPath);
-            if (instanceData && !instanceData->parentMaterialPath.empty())
+            auto instanceData = resource::ResourceManager::loadMaterialInstance(asset::AssetRef::fromPath(materialPath));
+            if (instanceData && !instanceData->parentMaterialRef.resolve().empty())
             {
-                parentPath = instanceData->parentMaterialPath;
+                parentPath = instanceData->parentMaterialRef.resolve();
             }
             else
             {
@@ -347,7 +348,7 @@ namespace render
             }
         }
 
-        auto matData = resource::ResourceManager::loadMaterial(parentPath);
+        auto matData = resource::ResourceManager::loadMaterial(asset::AssetRef::fromPath(parentPath));
         if (!matData)
         {
             return false;

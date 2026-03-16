@@ -231,9 +231,9 @@ namespace services
                     comp.terrainMaterialRef = newRef;
 
                     // Acquire new terrain material
-                    if (!cmd.materialPath.empty())
+                    if (newRef.isValid())
                     {
-                        lifecycle.acquire(cmd.materialPath, resource::AssetType::Material);
+                        lifecycle.acquire(newRef.getGUID(), resource::AssetType::Material);
                     }
 
                     syncWeightMapLayerCount(cmd.terrainEntity.id, cmd.materialPath);

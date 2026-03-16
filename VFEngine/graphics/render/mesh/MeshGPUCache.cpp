@@ -3,6 +3,7 @@
 #include "../../core/BufferUtilities.hpp"
 #include "../../core/TransferManager.hpp"
 #include "resource/ResourceManager.hpp"
+#include "asset/AssetRef.hpp"
 #include "print/Log.hpp"
 
 namespace render::mesh
@@ -161,7 +162,7 @@ namespace render::mesh
             return pathStr;
         }
 
-        auto meshFuture = resource::ResourceManager::loadMeshAsync(meshPath);
+        auto meshFuture = resource::ResourceManager::loadMeshAsync(asset::AssetRef::fromPath(std::string(meshPath)));
         auto meshesDataPtr = meshFuture.get();
 
         if (!meshesDataPtr || meshesDataPtr->meshes.empty())

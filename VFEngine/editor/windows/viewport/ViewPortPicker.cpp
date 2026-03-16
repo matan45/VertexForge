@@ -134,13 +134,14 @@ namespace windows
             const auto& meshComp = view.get<components::MeshComponent>(entity);
             const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
 
-            if (meshComp.meshPath.empty())
+            if (!meshComp.meshRef.isValid())
             {
                 continue;
             }
 
+            std::string meshPath = meshComp.meshRef.resolve();
             events::render::GetMeshBoundingBoxQuery query;
-            query.meshPath = meshComp.meshPath;
+            query.meshPath = meshPath;
             auto bounds = dispatcher.query(query);
 
             if (!bounds.has_value())
@@ -154,7 +155,7 @@ namespace windows
             MeshPickData pickData;
             pickData.entity = services::internal::toHandle(entity);
             pickData.worldAABB = worldAABB;
-            pickData.meshPath = meshComp.meshPath;
+            pickData.meshPath = meshPath;
 
             cachedMeshHits.push_back(pickData);
         }

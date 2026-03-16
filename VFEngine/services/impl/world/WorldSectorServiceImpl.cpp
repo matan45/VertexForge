@@ -133,8 +133,8 @@ namespace services
                         cmd.collider.isTrigger = collider.isTrigger;
                         cmd.collider.offset = collider.offset;
                         cmd.collider.collisionLayer = collider.collisionLayer;
-                        if (!collider.meshPath.empty())
-                            cmd.collider.meshPath = collider.meshPath;
+                        if (collider.meshRef.isValid())
+                            cmd.collider.meshPath = collider.meshRef.resolve();
                         else if (!meshPath.empty())
                             cmd.collider.meshPath = meshPath;
                     }
@@ -166,8 +166,8 @@ namespace services
                     cmd.collider.isTrigger = collider.isTrigger;
                     cmd.collider.offset = collider.offset;
                     cmd.collider.collisionLayer = collider.collisionLayer;
-                    if (!collider.meshPath.empty())
-                        cmd.collider.meshPath = collider.meshPath;
+                    if (collider.meshRef.isValid())
+                        cmd.collider.meshPath = collider.meshRef.resolve();
                     else if (!meshPath.empty())
                         cmd.collider.meshPath = meshPath;
 

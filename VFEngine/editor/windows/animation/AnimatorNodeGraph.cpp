@@ -165,9 +165,9 @@ namespace windows::animation
                 ? "[Blend 1D]" : "[Blend 2D]";
             ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.3f, 1.0f), "%s", btLabel);
         }
-        else if (!state.animationPath.empty())
+        else if (state.animationRef.isValid())
         {
-            fs::path animPath(state.animationPath);
+            fs::path animPath(state.animationRef.resolve());
             ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "%s", animPath.filename().string().c_str());
         }
         ImGui::EndGroup();

@@ -9,6 +9,7 @@
 #include "events/project/ResourceEvents.hpp"
 #include "time/Timer.hpp"
 #include "nfd/FileDialog.hpp"
+#include <asset/AssetRef.hpp>
 #include <imgui.h>
 #include <glm/glm.hpp>
 #include <filesystem>
@@ -51,7 +52,7 @@ namespace windows
     {
         if (material::MaterialManager::instance().reloadInstance(instancePath))
         {
-            instanceData = resource::ResourceManager::loadMaterialInstance(instancePath);
+            instanceData = resource::ResourceManager::loadMaterialInstance(asset::AssetRef::fromPath(instancePath));
         }
 
         if (!instanceData)
@@ -63,9 +64,9 @@ namespace windows
 
     void MaterialInstanceEditorWindow::loadParent()
     {
-        if (instanceData && !instanceData->parentMaterialPath.empty())
+        if (instanceData && instanceData->parentMaterialRef.isValid())
         {
-            parentMaterial = resource::ResourceManager::loadMaterial(instanceData->parentMaterialPath);
+            parentMaterial = resource::ResourceManager::loadMaterial(instanceData->parentMaterialRef);
             if (parentMaterial)
             {
                 parentPBR = material::MaterialGraphHelper::extractPBRFromGraph(*parentMaterial);
@@ -309,12 +310,13 @@ namespace windows
     void MaterialInstanceEditorWindow::drawParentInfo()
     {
         ImGui::Text("Parent Material:");
-        if (instanceData && !instanceData->parentMaterialPath.empty())
+        if (instanceData && instanceData->parentMaterialRef.isValid())
         {
-            fs::path parentPath(instanceData->parentMaterialPath);
+            std::string parentMatPath = instanceData->parentMaterialRef.resolve();
+            fs::path parentPath(parentMatPath);
             ImGui::TextColored(ImVec4(0.7f, 0.9f, 0.7f, 1.0f), "%s", parentPath.filename().string().c_str());
             ImGui::SameLine();
-            ImGui::TextDisabled("(%s)", instanceData->parentMaterialPath.c_str());
+            ImGui::TextDisabled("(%s)", parentMatPath.c_str());
         }
         else
         {
@@ -449,7 +451,7 @@ namespace windows
             std::string selectedPath = fileDialog.openFileDialog(filters);
             if (!selectedPath.empty())
             {
-                instanceData->textureOverrides[slot] = selectedPath;
+                instanceData->textureOverrides[slot] = asset::AssetRef::fromPath(selectedPath);
                 changed = true;
             }
         }
@@ -604,8 +606,8 @@ namespace windows
         {
             if (instanceData->isTextureOverridden(slot))
             {
-                std::string path = instanceData->getTextureOverride(slot);
-                if (path != " " && !path.empty()) return path;
+                auto ref = instanceData->getTextureOverride(slot);
+                if (ref.isValid()) return ref.resolve();
             }
             return parentPath;
         };
