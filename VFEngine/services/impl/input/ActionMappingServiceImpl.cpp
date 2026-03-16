@@ -3,14 +3,12 @@
 #include "../../events/input/ActionMappingEvents.hpp"
 #include "../../events/input/InputEvents.hpp"
 #include "../../events/project/ResourceEvents.hpp"
-#include <nlohmann/json.hpp>
-#include <fstream>
+#include "../../serialization/InputMappingSerialization.hpp"
+#include <glm/glm.hpp>
 #include <algorithm>
 
 #include "print/Log.hpp"
 namespace services {
-
-    using json = nlohmann::json;
 
     namespace {
         // Check if required modifier keys are currently held
@@ -198,101 +196,149 @@ namespace services {
     }
 
     // ============================================
+    // 1D Axis
+    // ============================================
+
+    void ActionMappingServiceImpl::registerAxis1D(const std::string& name,
+                                                    const std::string& positiveAction,
+                                                    const std::string& negativeAction) {
+        if (axes1D.find(name) != axes1D.end()) {
+            vfLogWarning("[ActionMapping] 1D axis '{}' already registered", name);
+            return;
+        }
+        axes1D[name] = Axis1DDefinition{name, positiveAction, negativeAction};
+    }
+
+    void ActionMappingServiceImpl::unregisterAxis1D(const std::string& name) {
+        axes1D.erase(name);
+    }
+
+    float ActionMappingServiceImpl::getAxis1DValue(const std::string& name) const {
+        auto it = axes1D.find(name);
+        if (it == axes1D.end()) return 0.0f;
+
+        bool pos = isActionDown(it->second.positiveAction);
+        bool neg = isActionDown(it->second.negativeAction);
+        if (pos == neg) return 0.0f;
+        return pos ? 1.0f : -1.0f;
+    }
+
+    std::vector<std::string> ActionMappingServiceImpl::getAllAxis1DNames() const {
+        std::vector<std::string> names;
+        names.reserve(axes1D.size());
+        for (const auto& [name, _] : axes1D) {
+            names.push_back(name);
+        }
+        return names;
+    }
+
+    std::optional<Axis1DDefinition> ActionMappingServiceImpl::getAxis1DDefinition(const std::string& name) const {
+        auto it = axes1D.find(name);
+        if (it == axes1D.end()) return std::nullopt;
+        return it->second;
+    }
+
+    // ============================================
+    // 2D Axis
+    // ============================================
+
+    void ActionMappingServiceImpl::registerAxis2D(const std::string& name,
+                                                    const std::string& upAction,
+                                                    const std::string& downAction,
+                                                    const std::string& leftAction,
+                                                    const std::string& rightAction,
+                                                    bool normalize) {
+        if (axes2D.find(name) != axes2D.end()) {
+            vfLogWarning("[ActionMapping] 2D axis '{}' already registered", name);
+            return;
+        }
+        axes2D[name] = Axis2DDefinition{name, upAction, downAction, leftAction, rightAction, normalize};
+    }
+
+    void ActionMappingServiceImpl::unregisterAxis2D(const std::string& name) {
+        axes2D.erase(name);
+    }
+
+    glm::vec2 ActionMappingServiceImpl::getAxis2DValue(const std::string& name) const {
+        auto it = axes2D.find(name);
+        if (it == axes2D.end()) return glm::vec2(0.0f);
+
+        const auto& def = it->second;
+        float x = 0.0f, y = 0.0f;
+        if (isActionDown(def.rightAction)) x += 1.0f;
+        if (isActionDown(def.leftAction))  x -= 1.0f;
+        if (isActionDown(def.upAction))    y += 1.0f;
+        if (isActionDown(def.downAction))  y -= 1.0f;
+
+        glm::vec2 result(x, y);
+        if (def.normalize && glm::length(result) > 1.0f) {
+            result = glm::normalize(result);
+        }
+        return result;
+    }
+
+    std::vector<std::string> ActionMappingServiceImpl::getAllAxis2DNames() const {
+        std::vector<std::string> names;
+        names.reserve(axes2D.size());
+        for (const auto& [name, _] : axes2D) {
+            names.push_back(name);
+        }
+        return names;
+    }
+
+    std::optional<Axis2DDefinition> ActionMappingServiceImpl::getAxis2DDefinition(const std::string& name) const {
+        auto it = axes2D.find(name);
+        if (it == axes2D.end()) return std::nullopt;
+        return it->second;
+    }
+
+    // ============================================
     // Persistence
     // ============================================
 
     bool ActionMappingServiceImpl::saveBindings(const std::string& filePath) {
-        try {
-            json root;
-            root["schemaVersion"] = "1.0";
+        serialization::InputMappingData data;
+        for (const auto& [name, entry] : actions) {
+            data.actions[name] = {entry.currentBindings};
+        }
+        data.axes1D = axes1D;
+        data.axes2D = axes2D;
 
-            json bindingsJson = json::object();
-            for (const auto& [name, entry] : actions) {
-                // Only save actions whose bindings differ from defaults
-                if (entry.currentBindings != entry.defaultBindings) {
-                    json arr = json::array();
-                    for (const auto& binding : entry.currentBindings) {
-                        json b;
-                        b["type"] = binding.type == BindingType::Key ? "key" : "mouseButton";
-                        b["code"] = binding.code;
-                        if (binding.requireShift) b["shift"] = true;
-                        if (binding.requireCtrl) b["ctrl"] = true;
-                        if (binding.requireAlt) b["alt"] = true;
-                        arr.push_back(b);
-                    }
-                    bindingsJson[name] = arr;
-                }
-            }
-            root["actionBindings"] = bindingsJson;
-
-            std::ofstream file(filePath);
-            if (!file.is_open()) {
-                vfLogError("[ActionMapping] Failed to open file for writing: {}", filePath);
-                return false;
-            }
-            file << root.dump(2);
-            file.close();
-
-            // Notify asset database so it generates a .vfmeta sidecar
+        bool ok = serialization::InputMappingSerialization::save(data, filePath);
+        if (ok) {
             events::resource::AssetSavedNotification notif;
             notif.filePath = filePath;
             events::EventDispatcher::instance().publish(notif);
-
-            vfLogInfo("[ActionMapping] Saved bindings to: {}", filePath);
-            return true;
-        } catch (const std::exception& e) {
-            vfLogError("[ActionMapping] Failed to save bindings: {}", e.what());
-            return false;
         }
+        return ok;
     }
 
     bool ActionMappingServiceImpl::loadBindings(const std::string& filePath) {
-        try {
-            std::ifstream file(filePath);
-            if (!file.is_open()) {
-                vfLogWarning("[ActionMapping] Bindings file not found: {}", filePath);
-                return false;
-            }
-
-            json root = json::parse(file);
-
-            if (!root.contains("actionBindings") || !root["actionBindings"].is_object()) {
-                vfLogError("[ActionMapping] Invalid bindings file format");
-                return false;
-            }
-
-            for (auto& [actionName, bindingsArr] : root["actionBindings"].items()) {
-                if (!bindingsArr.is_array()) continue;
-
-                std::vector<InputBinding> bindings;
-                for (const auto& b : bindingsArr) {
-                    if (!b.contains("type") || !b.contains("code")) continue;
-
-                    InputBinding binding;
-                    std::string typeStr = b["type"].get<std::string>();
-                    binding.type = (typeStr == "key") ? BindingType::Key : BindingType::MouseButton;
-                    binding.code = b["code"].get<int>();
-                    binding.requireShift = b.value("shift", false);
-                    binding.requireCtrl = b.value("ctrl", false);
-                    binding.requireAlt = b.value("alt", false);
-                    bindings.push_back(binding);
-                }
-
-                auto it = actions.find(actionName);
-                if (it != actions.end()) {
-                    it->second.currentBindings = bindings;
-                } else {
-                    // Cache for later when the action gets registered
-                    pendingOverrides[actionName] = bindings;
-                }
-            }
-
-            vfLogInfo("[ActionMapping] Loaded bindings from: {}", filePath);
-            return true;
-        } catch (const std::exception& e) {
-            vfLogError("[ActionMapping] Failed to load bindings: {}", e.what());
+        serialization::InputMappingData data;
+        if (!serialization::InputMappingSerialization::load(filePath, data)) {
             return false;
         }
+
+        for (auto& [actionName, actionData] : data.actions) {
+            auto it = actions.find(actionName);
+            if (it != actions.end()) {
+                it->second.currentBindings = actionData.bindings;
+            } else {
+                ActionEntry entry;
+                entry.currentBindings = actionData.bindings;
+                entry.defaultBindings = actionData.bindings;
+                actions[actionName] = std::move(entry);
+            }
+        }
+
+        for (auto& [name, def] : data.axes1D) {
+            axes1D[name] = def;
+        }
+        for (auto& [name, def] : data.axes2D) {
+            axes2D[name] = def;
+        }
+
+        return true;
     }
 
     // ============================================
@@ -372,6 +418,59 @@ namespace services {
         dispatcher.registerCommandHandler<events::input::LoadActionBindingsCommand>(
             [this](const events::input::LoadActionBindingsCommand& cmd) {
                 return loadBindings(cmd.filePath);
+            });
+
+        // Axis queries
+        dispatcher.registerQueryHandler<events::input::GetAxis1DValueQuery>(
+            [this](const events::input::GetAxis1DValueQuery& query) {
+                return getAxis1DValue(query.axisName);
+            });
+
+        dispatcher.registerQueryHandler<events::input::GetAxis2DValueQuery>(
+            [this](const events::input::GetAxis2DValueQuery& query) {
+                return getAxis2DValue(query.axisName);
+            });
+
+        dispatcher.registerQueryHandler<events::input::GetAllAxis1DNamesQuery>(
+            [this](const events::input::GetAllAxis1DNamesQuery&) {
+                return getAllAxis1DNames();
+            });
+
+        dispatcher.registerQueryHandler<events::input::GetAllAxis2DNamesQuery>(
+            [this](const events::input::GetAllAxis2DNamesQuery&) {
+                return getAllAxis2DNames();
+            });
+
+        dispatcher.registerQueryHandler<events::input::GetAxis1DDefinitionQuery>(
+            [this](const events::input::GetAxis1DDefinitionQuery& query) {
+                return getAxis1DDefinition(query.axisName);
+            });
+
+        dispatcher.registerQueryHandler<events::input::GetAxis2DDefinitionQuery>(
+            [this](const events::input::GetAxis2DDefinitionQuery& query) {
+                return getAxis2DDefinition(query.axisName);
+            });
+
+        // Axis commands
+        dispatcher.registerCommandHandler<events::input::RegisterAxis1DCommand>(
+            [this](const events::input::RegisterAxis1DCommand& cmd) {
+                registerAxis1D(cmd.axisName, cmd.positiveAction, cmd.negativeAction);
+            });
+
+        dispatcher.registerCommandHandler<events::input::RegisterAxis2DCommand>(
+            [this](const events::input::RegisterAxis2DCommand& cmd) {
+                registerAxis2D(cmd.axisName, cmd.upAction, cmd.downAction,
+                               cmd.leftAction, cmd.rightAction, cmd.normalize);
+            });
+
+        dispatcher.registerCommandHandler<events::input::UnregisterAxis1DCommand>(
+            [this](const events::input::UnregisterAxis1DCommand& cmd) {
+                unregisterAxis1D(cmd.axisName);
+            });
+
+        dispatcher.registerCommandHandler<events::input::UnregisterAxis2DCommand>(
+            [this](const events::input::UnregisterAxis2DCommand& cmd) {
+                unregisterAxis2D(cmd.axisName);
             });
     }
 

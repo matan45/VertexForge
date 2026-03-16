@@ -14,7 +14,7 @@ namespace windows
         ~InputActionMappingWindow() override = default;
 
         void draw() override;
-        void show() { visible = true; needsRefresh = true; }
+        void show() { visible = true; }
 
     private:
         struct ActionEntry
@@ -25,16 +25,40 @@ namespace windows
             bool isModified = false;
         };
 
+        struct Axis1DEntry
+        {
+            std::string name;
+            std::string positiveAction;
+            std::string negativeAction;
+        };
+
+        struct Axis2DEntry
+        {
+            std::string name;
+            std::string upAction;
+            std::string downAction;
+            std::string leftAction;
+            std::string rightAction;
+            bool normalize = true;
+        };
+
         bool visible = false;
-        bool needsRefresh = true;
         bool waitingForKey = false;
         int captureActionIndex = -1;
         char newActionName[128] = {};
+        char newAxis1DName[128] = {};
+        char newAxis2DName[128] = {};
         nfd::FileDialog fileDialog;
         std::vector<ActionEntry> entries;
+        std::vector<Axis1DEntry> axis1DEntries;
+        std::vector<Axis2DEntry> axis2DEntries;
+        std::vector<std::string> actionNames;
 
         void refresh();
         void drawActionEntry(int index);
+        void drawAxis1DSection();
+        void drawAxis2DSection();
+        bool drawActionCombo(const char* label, std::string& current);
         const char* getKeyName(int keyCode) const;
         const char* getMouseButtonName(int button) const;
         std::string getBindingDisplayName(const services::InputBinding& binding) const;

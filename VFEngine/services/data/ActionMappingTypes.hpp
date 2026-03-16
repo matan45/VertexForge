@@ -33,4 +33,19 @@ namespace services {
         std::vector<InputBinding> bindings;
     };
 
+    struct Axis1DDefinition {
+        std::string name;
+        std::string positiveAction;  // +1
+        std::string negativeAction;  // -1
+    };
+
+    struct Axis2DDefinition {
+        std::string name;
+        std::string upAction;     // +Y
+        std::string downAction;   // -Y
+        std::string leftAction;   // -X
+        std::string rightAction;  // +X
+        bool normalize = true;
+    };
+
 }

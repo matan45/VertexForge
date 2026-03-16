@@ -329,6 +329,7 @@
     <ClInclude Include="providers\vegetation\IVegetationRenderProvider.hpp" />
     <ClInclude Include="providers\vfx\IVFXPreviewProvider.hpp" />
     <ClInclude Include="providers\vfx\IVFXRuntimeProvider.hpp" />
+    <ClInclude Include="serialization\InputMappingSerialization.hpp" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="events\EventDispatcher.cpp" />
@@ -429,6 +430,7 @@
     <ClCompile Include="impl\world\WorldSectorPersistenceOps.cpp" />
     <ClCompile Include="impl\world\WorldSectorServiceImpl.cpp" />
     <ClCompile Include="impl\world\WorldSectorStreamingOps.cpp" />
+    <ClCompile Include="serialization\InputMappingSerialization.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\utilities\Utilities.vcxproj">

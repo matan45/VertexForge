@@ -26,6 +26,7 @@
 #include "../api/CoroutineAPI.hpp"
 #include "../api/ScriptCommunicationAPI.hpp"
 #include "../api/InputActionAPI.hpp"
+#include "../api/InputAxisAPI.hpp"
 
 #include "print/Log.hpp"
 namespace core
@@ -84,6 +85,7 @@ namespace core
         api::CoroutineAPI::registerAPI(interpreter);
         api::ScriptCommunicationAPI::registerAPI(interpreter);
         api::InputActionAPI::registerAPI(interpreter);
+        api::InputAxisAPI::registerAPI(interpreter);
 
         vfLogInfo("[NativeAPIRegistry] Registered native engine APIs");
     }

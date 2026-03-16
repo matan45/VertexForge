@@ -1,5 +1,6 @@
 #pragma once
 #include "../../interfaces/input/IActionMappingService.hpp"
+#include <glm/vec2.hpp>
 #include <unordered_map>
 #include <string>
 #include <vector>
@@ -35,6 +36,25 @@ namespace services {
         bool saveBindings(const std::string& filePath) override;
         bool loadBindings(const std::string& filePath) override;
 
+        void registerAxis1D(const std::string& name,
+                             const std::string& positiveAction,
+                             const std::string& negativeAction) override;
+        void unregisterAxis1D(const std::string& name) override;
+        float getAxis1DValue(const std::string& name) const override;
+        std::vector<std::string> getAllAxis1DNames() const override;
+        std::optional<Axis1DDefinition> getAxis1DDefinition(const std::string& name) const override;
+
+        void registerAxis2D(const std::string& name,
+                             const std::string& upAction,
+                             const std::string& downAction,
+                             const std::string& leftAction,
+                             const std::string& rightAction,
+                             bool normalize = true) override;
+        void unregisterAxis2D(const std::string& name) override;
+        glm::vec2 getAxis2DValue(const std::string& name) const override;
+        std::vector<std::string> getAllAxis2DNames() const override;
+        std::optional<Axis2DDefinition> getAxis2DDefinition(const std::string& name) const override;
+
     private:
         struct ActionEntry {
             std::vector<InputBinding> currentBindings;
@@ -45,6 +65,8 @@ namespace services {
 
         std::unordered_map<std::string, ActionEntry> actions;
         std::unordered_map<std::string, std::vector<InputBinding>> pendingOverrides;
+        std::unordered_map<std::string, Axis1DDefinition> axes1D;
+        std::unordered_map<std::string, Axis2DDefinition> axes2D;
     };
 
 }

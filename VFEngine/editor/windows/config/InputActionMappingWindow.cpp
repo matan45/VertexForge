@@ -75,9 +75,14 @@ namespace windows
     void InputActionMappingWindow::refresh()
     {
         entries.clear();
+        axis1DEntries.clear();
+        axis2DEntries.clear();
         auto& dispatcher = events::EventDispatcher::instance();
 
         auto names = dispatcher.query(events::input::GetAllActionNamesQuery{});
+        actionNames = names;
+        std::sort(actionNames.begin(), actionNames.end());
+
         for (const auto& name : names)
         {
             events::input::GetActionBindingsQuery query;
@@ -92,6 +97,47 @@ namespace windows
 
         std::sort(entries.begin(), entries.end(),
             [](const ActionEntry& a, const ActionEntry& b) { return a.name < b.name; });
+
+        // Load 1D axes
+        auto axis1DNames = dispatcher.query(events::input::GetAllAxis1DNamesQuery{});
+        for (const auto& name : axis1DNames)
+        {
+            events::input::GetAxis1DDefinitionQuery q;
+            q.axisName = name;
+            auto def = dispatcher.query(q);
+            if (def.has_value())
+            {
+                Axis1DEntry e;
+                e.name = def->name;
+                e.positiveAction = def->positiveAction;
+                e.negativeAction = def->negativeAction;
+                axis1DEntries.push_back(std::move(e));
+            }
+        }
+        std::sort(axis1DEntries.begin(), axis1DEntries.end(),
+            [](const Axis1DEntry& a, const Axis1DEntry& b) { return a.name < b.name; });
+
+        // Load 2D axes
+        auto axis2DNames = dispatcher.query(events::input::GetAllAxis2DNamesQuery{});
+        for (const auto& name : axis2DNames)
+        {
+            events::input::GetAxis2DDefinitionQuery q;
+            q.axisName = name;
+            auto def = dispatcher.query(q);
+            if (def.has_value())
+            {
+                Axis2DEntry e;
+                e.name = def->name;
+                e.upAction = def->upAction;
+                e.downAction = def->downAction;
+                e.leftAction = def->leftAction;
+                e.rightAction = def->rightAction;
+                e.normalize = def->normalize;
+                axis2DEntries.push_back(std::move(e));
+            }
+        }
+        std::sort(axis2DEntries.begin(), axis2DEntries.end(),
+            [](const Axis2DEntry& a, const Axis2DEntry& b) { return a.name < b.name; });
     }
 
     void InputActionMappingWindow::draw()
@@ -99,25 +145,17 @@ namespace windows
         if (!visible)
             return;
 
-        if (needsRefresh)
-        {
-            refresh();
-            needsRefresh = false;
-        }
+        refresh();
 
         ImGui::SetNextWindowSize(ImVec2(550, 450), ImGuiCond_FirstUseEver);
         if (ImGui::Begin("Input Action Mapping", &visible))
         {
             // Toolbar
-            if (ImGui::Button("Refresh"))
-                needsRefresh = true;
-
-            ImGui::SameLine();
             if (ImGui::Button("Reset All"))
             {
                 auto& dispatcher = events::EventDispatcher::instance();
                 dispatcher.execute(events::input::ResetAllActionBindingsCommand{});
-                needsRefresh = true;
+                refresh();
             }
 
             ImGui::SameLine();
@@ -149,7 +187,7 @@ namespace windows
                     events::input::LoadActionBindingsCommand cmd;
                     cmd.filePath = loadPath;
                     dispatcher.execute(cmd);
-                    needsRefresh = true;
+                    refresh();
                 }
             }
 
@@ -170,7 +208,7 @@ namespace windows
                     cmd.actionName = name;
                     dispatcher.execute(cmd);
                     newActionName[0] = '\0';
-                    needsRefresh = true;
+                    refresh();
                 }
             }
 
@@ -241,7 +279,7 @@ namespace windows
                                 cmd.actionName = entries[captureActionIndex].name;
                                 cmd.binding = binding;
                                 dispatcher.execute(cmd);
-                                needsRefresh = true;
+                                refresh();
                             }
                             waitingForKey = false;
                             captureActionIndex = -1;
@@ -271,7 +309,7 @@ namespace windows
                                     cmd.actionName = entries[captureActionIndex].name;
                                     cmd.binding = binding;
                                     dispatcher.execute(cmd);
-                                    needsRefresh = true;
+                                    refresh();
                                 }
                                 waitingForKey = false;
                                 captureActionIndex = -1;
@@ -289,6 +327,14 @@ namespace windows
                     drawActionEntry(i);
                 }
             }
+
+            ImGui::Separator();
+            ImGui::Spacing();
+            drawAxis1DSection();
+
+            ImGui::Separator();
+            ImGui::Spacing();
+            drawAxis2DSection();
         }
         ImGui::End();
     }
@@ -311,7 +357,7 @@ namespace windows
             events::input::UnregisterActionCommand cmd;
             cmd.actionName = entry.name;
             dispatcher.execute(cmd);
-            needsRefresh = true;
+            refresh();
         }
         ImGui::PopStyleColor(2);
         if (ImGui::IsItemHovered())
@@ -336,7 +382,7 @@ namespace windows
                     cmd.actionName = entry.name;
                     cmd.binding = entry.bindings[i];
                     dispatcher.execute(cmd);
-                    needsRefresh = true;
+                    refresh();
                 }
                 if (ImGui::IsItemHovered())
                     ImGui::SetTooltip("Remove this binding");
@@ -365,7 +411,7 @@ namespace windows
                     events::input::ResetActionBindingsCommand cmd;
                     cmd.actionName = entry.name;
                     dispatcher.execute(cmd);
-                    needsRefresh = true;
+                    refresh();
                 }
             }
 
@@ -374,6 +420,213 @@ namespace windows
         }
 
         ImGui::PopID();
+    }
+
+    bool InputActionMappingWindow::drawActionCombo(const char* label, std::string& current)
+    {
+        bool changed = false;
+        int selectedIdx = -1;
+        for (int i = 0; i < static_cast<int>(actionNames.size()); ++i)
+        {
+            if (actionNames[i] == current)
+            {
+                selectedIdx = i;
+                break;
+            }
+        }
+
+        const char* preview = selectedIdx >= 0 ? actionNames[selectedIdx].c_str() : "(none)";
+        if (ImGui::BeginCombo(label, preview))
+        {
+            for (int i = 0; i < static_cast<int>(actionNames.size()); ++i)
+            {
+                bool isSelected = (i == selectedIdx);
+                if (ImGui::Selectable(actionNames[i].c_str(), isSelected))
+                {
+                    current = actionNames[i];
+                    changed = true;
+                }
+                if (isSelected)
+                    ImGui::SetItemDefaultFocus();
+            }
+            ImGui::EndCombo();
+        }
+        return changed;
+    }
+
+    void InputActionMappingWindow::drawAxis1DSection()
+    {
+        if (ImGui::CollapsingHeader("1D Axes", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            ImGui::Indent(16.0f);
+
+            // Create new 1D axis
+            ImGui::SetNextItemWidth(150.0f);
+            ImGui::InputTextWithHint("##newaxis1d", "Axis name...", newAxis1DName, sizeof(newAxis1DName));
+            ImGui::SameLine();
+            if (ImGui::Button("+ New 1D Axis"))
+            {
+                std::string name(newAxis1DName);
+                if (!name.empty())
+                {
+                    auto& dispatcher = events::EventDispatcher::instance();
+                    events::input::RegisterAxis1DCommand cmd;
+                    cmd.axisName = name;
+                    dispatcher.execute(cmd);
+                    newAxis1DName[0] = '\0';
+                    refresh();
+                }
+            }
+
+            ImGui::Spacing();
+
+            for (int i = 0; i < static_cast<int>(axis1DEntries.size()); ++i)
+            {
+                auto& entry = axis1DEntries[i];
+                ImGui::PushID(("axis1d_" + entry.name).c_str());
+
+                ImGui::Text("%s", entry.name.c_str());
+                ImGui::SameLine(ImGui::GetContentRegionAvail().x + ImGui::GetCursorPosX() - 25.0f);
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.6f, 0.15f, 0.15f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.2f, 0.2f, 1.0f));
+                if (ImGui::SmallButton("Del"))
+                {
+                    auto& dispatcher = events::EventDispatcher::instance();
+                    events::input::UnregisterAxis1DCommand cmd;
+                    cmd.axisName = entry.name;
+                    dispatcher.execute(cmd);
+                    refresh();
+                }
+                ImGui::PopStyleColor(2);
+
+                ImGui::Indent(16.0f);
+                ImGui::SetNextItemWidth(200.0f);
+                if (drawActionCombo("Positive (+1)##pos", entry.positiveAction))
+                {
+                    // Re-register with updated actions
+                    auto& dispatcher = events::EventDispatcher::instance();
+                    events::input::UnregisterAxis1DCommand unreg;
+                    unreg.axisName = entry.name;
+                    dispatcher.execute(unreg);
+                    events::input::RegisterAxis1DCommand reg;
+                    reg.axisName = entry.name;
+                    reg.positiveAction = entry.positiveAction;
+                    reg.negativeAction = entry.negativeAction;
+                    dispatcher.execute(reg);
+                }
+
+                ImGui::SetNextItemWidth(200.0f);
+                if (drawActionCombo("Negative (-1)##neg", entry.negativeAction))
+                {
+                    auto& dispatcher = events::EventDispatcher::instance();
+                    events::input::UnregisterAxis1DCommand unreg;
+                    unreg.axisName = entry.name;
+                    dispatcher.execute(unreg);
+                    events::input::RegisterAxis1DCommand reg;
+                    reg.axisName = entry.name;
+                    reg.positiveAction = entry.positiveAction;
+                    reg.negativeAction = entry.negativeAction;
+                    dispatcher.execute(reg);
+                }
+                ImGui::Unindent(16.0f);
+
+                ImGui::Spacing();
+                ImGui::PopID();
+            }
+
+            if (axis1DEntries.empty())
+                ImGui::TextDisabled("No 1D axes defined.");
+
+            ImGui::Unindent(16.0f);
+        }
+    }
+
+    void InputActionMappingWindow::drawAxis2DSection()
+    {
+        if (ImGui::CollapsingHeader("2D Axes", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            ImGui::Indent(16.0f);
+
+            // Create new 2D axis
+            ImGui::SetNextItemWidth(150.0f);
+            ImGui::InputTextWithHint("##newaxis2d", "Axis name...", newAxis2DName, sizeof(newAxis2DName));
+            ImGui::SameLine();
+            if (ImGui::Button("+ New 2D Axis"))
+            {
+                std::string name(newAxis2DName);
+                if (!name.empty())
+                {
+                    auto& dispatcher = events::EventDispatcher::instance();
+                    events::input::RegisterAxis2DCommand cmd;
+                    cmd.axisName = name;
+                    cmd.normalize = true;
+                    dispatcher.execute(cmd);
+                    newAxis2DName[0] = '\0';
+                    refresh();
+                }
+            }
+
+            ImGui::Spacing();
+
+            for (int i = 0; i < static_cast<int>(axis2DEntries.size()); ++i)
+            {
+                auto& entry = axis2DEntries[i];
+                ImGui::PushID(("axis2d_" + entry.name).c_str());
+
+                ImGui::Text("%s", entry.name.c_str());
+                ImGui::SameLine(ImGui::GetContentRegionAvail().x + ImGui::GetCursorPosX() - 25.0f);
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.6f, 0.15f, 0.15f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.2f, 0.2f, 1.0f));
+                if (ImGui::SmallButton("Del"))
+                {
+                    auto& dispatcher = events::EventDispatcher::instance();
+                    events::input::UnregisterAxis2DCommand cmd;
+                    cmd.axisName = entry.name;
+                    dispatcher.execute(cmd);
+                    refresh();
+                }
+                ImGui::PopStyleColor(2);
+
+                ImGui::Indent(16.0f);
+
+                auto reregister = [&]()
+                {
+                    auto& dispatcher = events::EventDispatcher::instance();
+                    events::input::UnregisterAxis2DCommand unreg;
+                    unreg.axisName = entry.name;
+                    dispatcher.execute(unreg);
+                    events::input::RegisterAxis2DCommand reg;
+                    reg.axisName = entry.name;
+                    reg.upAction = entry.upAction;
+                    reg.downAction = entry.downAction;
+                    reg.leftAction = entry.leftAction;
+                    reg.rightAction = entry.rightAction;
+                    reg.normalize = entry.normalize;
+                    dispatcher.execute(reg);
+                };
+
+                ImGui::SetNextItemWidth(200.0f);
+                if (drawActionCombo("Up (+Y)##up", entry.upAction)) reregister();
+                ImGui::SetNextItemWidth(200.0f);
+                if (drawActionCombo("Down (-Y)##down", entry.downAction)) reregister();
+                ImGui::SetNextItemWidth(200.0f);
+                if (drawActionCombo("Left (-X)##left", entry.leftAction)) reregister();
+                ImGui::SetNextItemWidth(200.0f);
+                if (drawActionCombo("Right (+X)##right", entry.rightAction)) reregister();
+
+                if (ImGui::Checkbox("Normalize", &entry.normalize)) reregister();
+
+                ImGui::Unindent(16.0f);
+
+                ImGui::Spacing();
+                ImGui::PopID();
+            }
+
+            if (axis2DEntries.empty())
+                ImGui::TextDisabled("No 2D axes defined.");
+
+            ImGui::Unindent(16.0f);
+        }
     }
 
     std::string InputActionMappingWindow::getBindingDisplayName(const services::InputBinding& binding) const

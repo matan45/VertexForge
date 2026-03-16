@@ -1,5 +1,7 @@
 #pragma once
 #include "../../data/ActionMappingTypes.hpp"
+#include <glm/vec2.hpp>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -38,6 +40,27 @@ namespace services {
         // Persistence
         virtual bool saveBindings(const std::string& filePath) = 0;
         virtual bool loadBindings(const std::string& filePath) = 0;
+
+        // 1D Axis
+        virtual void registerAxis1D(const std::string& name,
+                                     const std::string& positiveAction,
+                                     const std::string& negativeAction) = 0;
+        virtual void unregisterAxis1D(const std::string& name) = 0;
+        virtual float getAxis1DValue(const std::string& name) const = 0;
+        virtual std::vector<std::string> getAllAxis1DNames() const = 0;
+        virtual std::optional<Axis1DDefinition> getAxis1DDefinition(const std::string& name) const = 0;
+
+        // 2D Axis
+        virtual void registerAxis2D(const std::string& name,
+                                     const std::string& upAction,
+                                     const std::string& downAction,
+                                     const std::string& leftAction,
+                                     const std::string& rightAction,
+                                     bool normalize = true) = 0;
+        virtual void unregisterAxis2D(const std::string& name) = 0;
+        virtual glm::vec2 getAxis2DValue(const std::string& name) const = 0;
+        virtual std::vector<std::string> getAllAxis2DNames() const = 0;
+        virtual std::optional<Axis2DDefinition> getAxis2DDefinition(const std::string& name) const = 0;
     };
 
 }
