@@ -39,9 +39,12 @@ namespace services
             return ViewportTextureHandle{};
         }
 
-        // Skip all render preparation during scene transitions to prevent
-        // race condition with entity destruction (registry is not thread-safe)
-        if (scene::EntityRegistry::isSceneTransitioning())
+        // Skip render preparation during scene transitions to prevent
+        // race condition with entity destruction (registry is not thread-safe).
+        // consumeTransitionSkip() decrements an internal counter each call and
+        // auto-clears the flag when it expires, so even if this code path isn't
+        // reached (e.g. viewport hidden), the flag won't stay stuck forever.
+        if (scene::EntityRegistry::consumeTransitionSkip())
         {
             return lastViewportHandle;
         }

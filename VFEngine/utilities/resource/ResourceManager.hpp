@@ -22,6 +22,9 @@ namespace fs = std::filesystem;
 #include "AssetLifecycleManager.hpp"
 
 namespace resource {
+	template <typename Key, typename T, typename Hash = std::hash<Key>>
+	using PendingLoadMap = std::unordered_map<Key, std::shared_future<std::shared_ptr<T>>, Hash>;
+
 	class ResourceManager
 	{
 	private:
@@ -37,10 +40,22 @@ namespace resource {
 		inline static std::unordered_map<asset::AssetGUID, std::weak_ptr<animator::AnimatorData>, asset::AssetGUID::Hash> animatorCache;
 		inline static std::unordered_map<asset::AssetGUID, std::weak_ptr<terrain::TerrainMaterialData>, asset::AssetGUID::Hash> terrainMaterialCache;
 
+		// In-flight async loads — second caller for the same resource subscribes
+		// to the existing shared_future instead of launching a duplicate load.
+		inline static PendingLoadMap<asset::AssetGUID, TextureData, asset::AssetGUID::Hash> pendingTextureLoads;
+		inline static PendingLoadMap<asset::AssetGUID, HDRData, asset::AssetGUID::Hash> pendingHDRLoads;
+		inline static PendingLoadMap<asset::AssetGUID, AudioData, asset::AssetGUID::Hash> pendingAudioLoads;
+		inline static PendingLoadMap<asset::AssetGUID, MeshesData, asset::AssetGUID::Hash> pendingMeshLoads;
+		inline static PendingLoadMap<asset::AssetGUID, FontData, asset::AssetGUID::Hash> pendingFontLoads;
+		inline static PendingLoadMap<asset::AssetGUID, AnimationData, asset::AssetGUID::Hash> pendingAnimationLoads;
+		inline static PendingLoadMap<std::string, std::vector<ShaderModel>> pendingShaderLoads;
+
 		inline static std::mutex cacheMutex;
 		inline static std::jthread cleanupThread;
 		inline static std::condition_variable cleanupCondition;
 		inline static std::atomic<bool> running;
+		inline static std::atomic<bool> shuttingDown{ false };
+		inline static std::atomic<int32_t> pendingAsyncOps{ 0 };
 
 	public:
 		static FileType readHeaderFile(const fs::path& filePath);
@@ -80,6 +95,7 @@ namespace resource {
 		static std::future<std::shared_ptr<T>> loadResourceAsync(
 			const asset::AssetRef& ref,
 			std::unordered_map<asset::AssetGUID, std::weak_ptr<T>, asset::AssetGUID::Hash>& cache,
+			PendingLoadMap<asset::AssetGUID, T, asset::AssetGUID::Hash>& pendingLoads,
 			LoaderFunc loader,
 			AssetType assetType = AssetType::COUNT,
 			MemoryEstimator memEstimator = nullptr);
@@ -96,6 +112,7 @@ namespace resource {
 	inline std::future<std::shared_ptr<T>> ResourceManager::loadResourceAsync(
 		const asset::AssetRef& ref,
 		std::unordered_map<asset::AssetGUID, std::weak_ptr<T>, asset::AssetGUID::Hash>& cache,
+		PendingLoadMap<asset::AssetGUID, T, asset::AssetGUID::Hash>& pendingLoads,
 		LoaderFunc loader, AssetType assetType, MemoryEstimator memEstimator)
 	{
 		auto guid = ref.getGUID();
@@ -104,8 +121,24 @@ namespace resource {
 			return make_ready_future(std::shared_ptr<T>(nullptr));
 		}
 
-		if (auto resource = cache[guid].lock()) {
-			return make_ready_future(resource);
+		{
+			std::scoped_lock lock(cacheMutex);
+
+			// Check completed cache first
+			auto cacheIt = cache.find(guid);
+			if (cacheIt != cache.end()) {
+				if (auto resource = cacheIt->second.lock()) {
+					return make_ready_future(resource);
+				}
+			}
+
+			// Subscribe to an already in-flight load instead of launching a duplicate
+			auto pendingIt = pendingLoads.find(guid);
+			if (pendingIt != pendingLoads.end()) {
+				return std::async(std::launch::deferred, [sf = pendingIt->second]() mutable {
+					return sf.get();
+				});
+			}
 		}
 
 		std::string path = ref.resolve();
@@ -114,32 +147,57 @@ namespace resource {
 			return make_ready_future(std::shared_ptr<T>(nullptr));
 		}
 
-		return std::async(std::launch::async, [path = std::move(path), guid, loader, &cache, assetType, memEstimator]() -> std::shared_ptr<T> {
+		pendingAsyncOps.fetch_add(1, std::memory_order_relaxed);
+		std::shared_future<std::shared_ptr<T>> sharedFuture = std::async(std::launch::async,
+			[path = std::move(path), guid, loader, &cache, &pendingLoads, assetType, memEstimator]() -> std::shared_ptr<T> {
+			struct AsyncGuard { ~AsyncGuard() { pendingAsyncOps.fetch_sub(1, std::memory_order_release); } } guard;
 			try {
+				if (shuttingDown.load(std::memory_order_acquire)) {
+					std::scoped_lock lock(cacheMutex);
+					pendingLoads.erase(guid);
+					return nullptr;
+				}
+
 				auto resource = std::make_shared<T>(loader(path));
 
-				if (resource) {
+				{
 					std::scoped_lock lock(cacheMutex);
-					cache[guid] = resource;
-					if (assetType != AssetType::COUNT) {
-						size_t memBytes = 0;
-						if constexpr (!std::is_null_pointer_v<MemoryEstimator>) {
-							memBytes = memEstimator(*resource);
+					pendingLoads.erase(guid);
+					if (resource && !shuttingDown.load(std::memory_order_acquire)) {
+						cache[guid] = resource;
+						if (assetType != AssetType::COUNT) {
+							size_t memBytes = 0;
+							if constexpr (!std::is_null_pointer_v<MemoryEstimator>) {
+								memBytes = memEstimator(*resource);
+							}
+							AssetLifecycleManager::instance().acquire(guid, assetType, memBytes);
 						}
-						AssetLifecycleManager::instance().acquire(guid, assetType, memBytes);
 					}
 				}
 
 				return resource;
 			}
 			catch (const std::exception& e) {
+				std::scoped_lock lock(cacheMutex);
+				pendingLoads.erase(guid);
 				vfLogError("Exception loading resource '{}': {}", path, e.what());
 				return nullptr;
 			}
 			catch (...) {
+				std::scoped_lock lock(cacheMutex);
+				pendingLoads.erase(guid);
 				vfLogError("Unknown exception loading resource: {}", path);
 				return nullptr;
 			}
-			});
+			}).share();
+
+		{
+			std::scoped_lock lock(cacheMutex);
+			pendingLoads[guid] = sharedFuture;
+		}
+
+		return std::async(std::launch::deferred, [sf = std::move(sharedFuture)]() mutable {
+			return sf.get();
+		});
 	}
 }

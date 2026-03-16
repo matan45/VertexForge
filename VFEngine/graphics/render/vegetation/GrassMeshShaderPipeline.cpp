@@ -86,6 +86,12 @@ namespace render::vegetation
         vk::Device vkDevice = devicePtr->getLogicalDevice();
         vkDevice.waitIdle();
 
+        if (grassShader)
+        {
+            grassShader->cleanUp();
+            grassShader.reset();
+        }
+
         if (graphicsPipeline)
         {
             vkDevice.destroyPipeline(graphicsPipeline);
