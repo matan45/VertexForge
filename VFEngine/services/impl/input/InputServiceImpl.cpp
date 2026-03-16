@@ -1,7 +1,7 @@
 #include "InputServiceImpl.hpp"
 #include "../../Window/controllers/InputController.hpp"
-#include "../../Window/window/Window.hpp"
 #include "../../events/EventDispatcher.hpp"
+#include "input/KeyCodes.hpp"
 #include "../../events/project/ApplicationEvents.hpp"
 #include <GLFW/glfw3.h>
 #include <imgui.h>
@@ -12,8 +12,7 @@
 namespace services {
 
     InputServiceImpl::InputServiceImpl(window::Window* window)
-        : inputController(std::make_unique<window::InputController>(window))
-        , windowPtr(window) {}
+        : inputController(std::make_unique<window::InputController>(window)) {}
 
     InputServiceImpl::~InputServiceImpl() = default;
 
@@ -157,16 +156,14 @@ namespace services {
     void InputServiceImpl::publishInputNotifications() {
         auto& dispatcher = events::EventDispatcher::instance();
 
-        // Gather current modifier state
-        bool shiftDown = inputController->isKeyDown(340) || inputController->isKeyDown(344);
-        bool ctrlDown = inputController->isKeyDown(341) || inputController->isKeyDown(345);
-        bool altDown = inputController->isKeyDown(342) || inputController->isKeyDown(346);
+        bool shiftDown = inputController->isKeyDown(input::Key::LeftShift) || inputController->isKeyDown(input::Key::RightShift);
+        bool ctrlDown = inputController->isKeyDown(input::Key::LeftControl) || inputController->isKeyDown(input::Key::RightControl);
+        bool altDown = inputController->isKeyDown(input::Key::LeftAlt) || inputController->isKeyDown(input::Key::RightAlt);
         glm::vec2 mousePos = inputController->getMousePosition();
 
-        // Key press notifications
-        std::vector<int> keys;
-        inputController->getJustPressedKeys(keys);
-        for (int key : keys) {
+        notifKeyBuffer.clear();
+        inputController->getJustPressedKeys(notifKeyBuffer);
+        for (int key : notifKeyBuffer) {
             events::input::KeyPressedNotification notif;
             notif.keyCode = key;
             notif.shiftDown = shiftDown;
@@ -177,10 +174,9 @@ namespace services {
             dispatcher.publish(notif);
         }
 
-        // Key release notifications
-        keys.clear();
-        inputController->getJustReleasedKeys(keys);
-        for (int key : keys) {
+        notifKeyBuffer.clear();
+        inputController->getJustReleasedKeys(notifKeyBuffer);
+        for (int key : notifKeyBuffer) {
             events::input::KeyReleasedNotification notif;
             notif.keyCode = key;
             notif.shiftDown = shiftDown;
@@ -191,10 +187,9 @@ namespace services {
             dispatcher.publish(notif);
         }
 
-        // Mouse button press notifications
-        std::vector<int> buttons;
-        inputController->getJustPressedMouseButtons(buttons);
-        for (int btn : buttons) {
+        notifButtonBuffer.clear();
+        inputController->getJustPressedMouseButtons(notifButtonBuffer);
+        for (int btn : notifButtonBuffer) {
             events::input::MouseButtonPressedNotification notif;
             notif.button = btn;
             notif.shiftDown = shiftDown;
@@ -205,10 +200,9 @@ namespace services {
             dispatcher.publish(notif);
         }
 
-        // Mouse button release notifications
-        buttons.clear();
-        inputController->getJustReleasedMouseButtons(buttons);
-        for (int btn : buttons) {
+        notifButtonBuffer.clear();
+        inputController->getJustReleasedMouseButtons(notifButtonBuffer);
+        for (int btn : notifButtonBuffer) {
             events::input::MouseButtonReleasedNotification notif;
             notif.button = btn;
             notif.shiftDown = shiftDown;
@@ -235,12 +229,8 @@ namespace services {
 
     void InputServiceImpl::setCursorVisible(bool visible) {
         cursorVisible = visible;
-        if (windowPtr) {
-            GLFWwindow* glfw = windowPtr->getWindowPtr();
-            if (glfw) {
-                glfwSetInputMode(glfw, GLFW_CURSOR,
-                    visible ? GLFW_CURSOR_NORMAL : GLFW_CURSOR_HIDDEN);
-            }
+        if (inputController) {
+            inputController->setCursorMode(visible ? GLFW_CURSOR_NORMAL : GLFW_CURSOR_HIDDEN);
         }
     }
 

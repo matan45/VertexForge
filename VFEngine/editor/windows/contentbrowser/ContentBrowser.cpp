@@ -281,7 +281,6 @@ namespace windows
                 else if (selectedType == AssetType::InputMapping)
                 {
                     events::application::OpenInputMappingWindowNotification notif;
-                    notif.filePath = StringUtil::wstringToUtf8(selectedFile.wstring());
                     events::EventDispatcher::instance().publish(notif);
                 }
                 else if (selectedType != AssetType::Navmesh && selectedType != AssetType::PhysAnim)

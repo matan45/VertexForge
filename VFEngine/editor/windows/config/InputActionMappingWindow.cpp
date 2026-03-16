@@ -3,76 +3,29 @@
 #include "events/input/ActionMappingEvents.hpp"
 #include "events/input/InputContextEvents.hpp"
 #include "events/input/InputEvents.hpp"
+#include "input/KeyCodes.hpp"
 #include <imgui.h>
-
-// GLFW key constants (avoid direct GLFW header dependency in editor)
-namespace {
-    constexpr int VF_KEY_SPACE = 32;
-    constexpr int VF_KEY_APOSTROPHE = 39;
-    constexpr int VF_KEY_COMMA = 44;
-    constexpr int VF_KEY_MINUS = 45;
-    constexpr int VF_KEY_PERIOD = 46;
-    constexpr int VF_KEY_SLASH = 47;
-    constexpr int VF_KEY_0 = 48; constexpr int VF_KEY_1 = 49; constexpr int VF_KEY_2 = 50;
-    constexpr int VF_KEY_3 = 51; constexpr int VF_KEY_4 = 52; constexpr int VF_KEY_5 = 53;
-    constexpr int VF_KEY_6 = 54; constexpr int VF_KEY_7 = 55; constexpr int VF_KEY_8 = 56;
-    constexpr int VF_KEY_9 = 57;
-    constexpr int VF_KEY_SEMICOLON = 59;
-    constexpr int VF_KEY_EQUAL = 61;
-    constexpr int VF_KEY_A = 65; constexpr int VF_KEY_B = 66; constexpr int VF_KEY_C = 67;
-    constexpr int VF_KEY_D = 68; constexpr int VF_KEY_E = 69; constexpr int VF_KEY_F = 70;
-    constexpr int VF_KEY_G = 71; constexpr int VF_KEY_H = 72; constexpr int VF_KEY_I = 73;
-    constexpr int VF_KEY_J = 74; constexpr int VF_KEY_K = 75; constexpr int VF_KEY_L = 76;
-    constexpr int VF_KEY_M = 77; constexpr int VF_KEY_N = 78; constexpr int VF_KEY_O = 79;
-    constexpr int VF_KEY_P = 80; constexpr int VF_KEY_Q = 81; constexpr int VF_KEY_R = 82;
-    constexpr int VF_KEY_S = 83; constexpr int VF_KEY_T = 84; constexpr int VF_KEY_U = 85;
-    constexpr int VF_KEY_V = 86; constexpr int VF_KEY_W = 87; constexpr int VF_KEY_X = 88;
-    constexpr int VF_KEY_Y = 89; constexpr int VF_KEY_Z = 90;
-    constexpr int VF_KEY_LEFT_BRACKET = 91;
-    constexpr int VF_KEY_BACKSLASH = 92;
-    constexpr int VF_KEY_RIGHT_BRACKET = 93;
-    constexpr int VF_KEY_GRAVE_ACCENT = 96;
-    constexpr int VF_KEY_ESCAPE = 256;
-    constexpr int VF_KEY_ENTER = 257;
-    constexpr int VF_KEY_TAB = 258;
-    constexpr int VF_KEY_BACKSPACE = 259;
-    constexpr int VF_KEY_INSERT = 260;
-    constexpr int VF_KEY_DELETE = 261;
-    constexpr int VF_KEY_RIGHT = 262;
-    constexpr int VF_KEY_LEFT = 263;
-    constexpr int VF_KEY_DOWN = 264;
-    constexpr int VF_KEY_UP = 265;
-    constexpr int VF_KEY_PAGE_UP = 266;
-    constexpr int VF_KEY_PAGE_DOWN = 267;
-    constexpr int VF_KEY_HOME = 268;
-    constexpr int VF_KEY_END = 269;
-    constexpr int VF_KEY_CAPS_LOCK = 280;
-    constexpr int VF_KEY_SCROLL_LOCK = 281;
-    constexpr int VF_KEY_NUM_LOCK = 282;
-    constexpr int VF_KEY_PRINT_SCREEN = 283;
-    constexpr int VF_KEY_PAUSE = 284;
-    constexpr int VF_KEY_F1 = 290; constexpr int VF_KEY_F2 = 291; constexpr int VF_KEY_F3 = 292;
-    constexpr int VF_KEY_F4 = 293; constexpr int VF_KEY_F5 = 294; constexpr int VF_KEY_F6 = 295;
-    constexpr int VF_KEY_F7 = 296; constexpr int VF_KEY_F8 = 297; constexpr int VF_KEY_F9 = 298;
-    constexpr int VF_KEY_F10 = 299; constexpr int VF_KEY_F11 = 300; constexpr int VF_KEY_F12 = 301;
-    constexpr int VF_KEY_LEFT_SHIFT = 340;
-    constexpr int VF_KEY_LEFT_CONTROL = 341;
-    constexpr int VF_KEY_LEFT_ALT = 342;
-    constexpr int VF_KEY_LEFT_SUPER = 343;
-    constexpr int VF_KEY_RIGHT_SHIFT = 344;
-    constexpr int VF_KEY_RIGHT_CONTROL = 345;
-    constexpr int VF_KEY_RIGHT_ALT = 346;
-    constexpr int VF_KEY_RIGHT_SUPER = 347;
-    constexpr int VF_KEY_MENU = 348;
-    constexpr int VF_KEY_LAST = 348;
-    constexpr int VF_MOUSE_BUTTON_LEFT = 0;
-    constexpr int VF_MOUSE_BUTTON_RIGHT = 1;
-    constexpr int VF_MOUSE_BUTTON_MIDDLE = 2;
-    constexpr int VF_MOUSE_BUTTON_LAST = 7;
-}
 
 namespace windows
 {
+    InputActionMappingWindow::InputActionMappingWindow()
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+        mappingChangedToken = dispatcher.subscribe<events::input::ActionMappingChangedNotification>(
+            [this](const events::input::ActionMappingChangedNotification&)
+            {
+                needsRefresh = true;
+            });
+    }
+
+    InputActionMappingWindow::~InputActionMappingWindow()
+    {
+        if (mappingChangedToken.isValid())
+        {
+            events::EventDispatcher::instance().unsubscribe(mappingChangedToken);
+        }
+    }
+
     void InputActionMappingWindow::refresh()
     {
         entries.clear();
@@ -154,7 +107,11 @@ namespace windows
         if (!visible)
             return;
 
-        refresh();
+        if (needsRefresh)
+        {
+            refresh();
+            needsRefresh = false;
+        }
 
         ImGui::SetNextWindowSize(ImVec2(550, 450), ImGuiCond_FirstUseEver);
         if (ImGui::Begin("Input Action Mapping", &visible))
@@ -164,7 +121,7 @@ namespace windows
             {
                 auto& dispatcher = events::EventDispatcher::instance();
                 dispatcher.execute(events::input::ResetAllActionBindingsCommand{});
-                refresh();
+                needsRefresh = true;
             }
 
             ImGui::SameLine();
@@ -196,7 +153,7 @@ namespace windows
                     events::input::LoadActionBindingsCommand cmd;
                     cmd.filePath = loadPath;
                     dispatcher.execute(cmd);
-                    refresh();
+                    needsRefresh = true;
                 }
             }
 
@@ -220,7 +177,7 @@ namespace windows
                     cmd.context = selectedContextFilter != "All" ? selectedContextFilter : "Default";
                     dispatcher.execute(cmd);
                     newActionName[0] = '\0';
-                    refresh();
+                    needsRefresh = true;
                 }
             }
 
@@ -238,12 +195,12 @@ namespace windows
                 {
                     // Show which modifiers are held
                     auto& dispatcher = events::EventDispatcher::instance();
-                    events::input::IsKeyDownQuery shiftQ; shiftQ.keyCode = VF_KEY_LEFT_SHIFT;
-                    events::input::IsKeyDownQuery shiftQ2; shiftQ2.keyCode = VF_KEY_RIGHT_SHIFT;
-                    events::input::IsKeyDownQuery ctrlQ; ctrlQ.keyCode = VF_KEY_LEFT_CONTROL;
-                    events::input::IsKeyDownQuery ctrlQ2; ctrlQ2.keyCode = VF_KEY_RIGHT_CONTROL;
-                    events::input::IsKeyDownQuery altQ; altQ.keyCode = VF_KEY_LEFT_ALT;
-                    events::input::IsKeyDownQuery altQ2; altQ2.keyCode = VF_KEY_RIGHT_ALT;
+                    events::input::IsKeyDownQuery shiftQ; shiftQ.keyCode = input::Key::LeftShift;
+                    events::input::IsKeyDownQuery shiftQ2; shiftQ2.keyCode = input::Key::RightShift;
+                    events::input::IsKeyDownQuery ctrlQ; ctrlQ.keyCode = input::Key::LeftControl;
+                    events::input::IsKeyDownQuery ctrlQ2; ctrlQ2.keyCode = input::Key::RightControl;
+                    events::input::IsKeyDownQuery altQ; altQ.keyCode = input::Key::LeftAlt;
+                    events::input::IsKeyDownQuery altQ2; altQ2.keyCode = input::Key::RightAlt;
                     bool shiftHeld = dispatcher.query(shiftQ) || dispatcher.query(shiftQ2);
                     bool ctrlHeld = dispatcher.query(ctrlQ) || dispatcher.query(ctrlQ2);
                     bool altHeld = dispatcher.query(altQ) || dispatcher.query(altQ2);
@@ -266,12 +223,12 @@ namespace windows
                     }
 
                     // Capture keyboard (skip modifier keys themselves)
-                    for (int key = VF_KEY_SPACE; key <= VF_KEY_LAST; ++key)
+                    for (int key = input::Key::Space; key <= input::Key::Last; ++key)
                     {
                         // Don't capture modifier keys as the primary key
-                        if (key == VF_KEY_LEFT_SHIFT || key == VF_KEY_RIGHT_SHIFT ||
-                            key == VF_KEY_LEFT_CONTROL || key == VF_KEY_RIGHT_CONTROL ||
-                            key == VF_KEY_LEFT_ALT || key == VF_KEY_RIGHT_ALT)
+                        if (key == input::Key::LeftShift || key == input::Key::RightShift ||
+                            key == input::Key::LeftControl || key == input::Key::RightControl ||
+                            key == input::Key::LeftAlt || key == input::Key::RightAlt)
                             continue;
 
                         events::input::IsKeyPressedQuery query;
@@ -291,7 +248,7 @@ namespace windows
                                 cmd.actionName = entries[captureActionIndex].name;
                                 cmd.binding = binding;
                                 dispatcher.execute(cmd);
-                                refresh();
+                                needsRefresh = true;
                             }
                             waitingForKey = false;
                             captureActionIndex = -1;
@@ -302,7 +259,7 @@ namespace windows
                     // Capture mouse buttons
                     if (waitingForKey)
                     {
-                        for (int btn = 0; btn <= VF_MOUSE_BUTTON_LAST; ++btn)
+                        for (int btn = 0; btn <= input::Mouse::Last; ++btn)
                         {
                             events::input::IsMouseButtonPressedQuery query;
                             query.button = btn;
@@ -321,7 +278,7 @@ namespace windows
                                     cmd.actionName = entries[captureActionIndex].name;
                                     cmd.binding = binding;
                                     dispatcher.execute(cmd);
-                                    refresh();
+                                    needsRefresh = true;
                                 }
                                 waitingForKey = false;
                                 captureActionIndex = -1;
@@ -379,7 +336,7 @@ namespace windows
             events::input::UnregisterActionCommand cmd;
             cmd.actionName = entry.name;
             dispatcher.execute(cmd);
-            refresh();
+            needsRefresh = true;
         }
         ImGui::PopStyleColor(2);
         if (ImGui::IsItemHovered())
@@ -415,7 +372,7 @@ namespace windows
                     cmd.actionName = entry.name;
                     cmd.binding = entry.bindings[i];
                     dispatcher.execute(cmd);
-                    refresh();
+                    needsRefresh = true;
                 }
                 if (ImGui::IsItemHovered())
                     ImGui::SetTooltip("Remove this binding");
@@ -444,7 +401,7 @@ namespace windows
                     events::input::ResetActionBindingsCommand cmd;
                     cmd.actionName = entry.name;
                     dispatcher.execute(cmd);
-                    refresh();
+                    needsRefresh = true;
                 }
             }
 
@@ -507,7 +464,7 @@ namespace windows
                     cmd.axisName = name;
                     dispatcher.execute(cmd);
                     newAxis1DName[0] = '\0';
-                    refresh();
+                    needsRefresh = true;
                 }
             }
 
@@ -528,7 +485,7 @@ namespace windows
                     events::input::UnregisterAxis1DCommand cmd;
                     cmd.axisName = entry.name;
                     dispatcher.execute(cmd);
-                    refresh();
+                    needsRefresh = true;
                 }
                 ImGui::PopStyleColor(2);
 
@@ -595,7 +552,7 @@ namespace windows
                     cmd.normalize = true;
                     dispatcher.execute(cmd);
                     newAxis2DName[0] = '\0';
-                    refresh();
+                    needsRefresh = true;
                 }
             }
 
@@ -616,7 +573,7 @@ namespace windows
                     events::input::UnregisterAxis2DCommand cmd;
                     cmd.axisName = entry.name;
                     dispatcher.execute(cmd);
-                    refresh();
+                    needsRefresh = true;
                 }
                 ImGui::PopStyleColor(2);
 
@@ -736,7 +693,7 @@ namespace windows
                     cmd.blocking = true;
                     dispatcher.execute(cmd);
                     newContextName[0] = '\0';
-                    refresh();
+                    needsRefresh = true;
                 }
             }
 
@@ -784,7 +741,7 @@ namespace windows
                         events::input::RemoveContextCommand cmd;
                         cmd.contextName = ctxName;
                         dispatcher.execute(cmd);
-                        refresh();
+                        needsRefresh = true;
                     }
                     ImGui::PopStyleColor(2);
                 }
@@ -816,84 +773,80 @@ namespace windows
         }
     }
 
-    const char* InputActionMappingWindow::getKeyName(int keyCode) const
+    std::string InputActionMappingWindow::getKeyName(int keyCode) const
     {
         switch (keyCode)
         {
-        case VF_KEY_SPACE: return "Space";
-        case VF_KEY_APOSTROPHE: return "'";
-        case VF_KEY_COMMA: return ",";
-        case VF_KEY_MINUS: return "-";
-        case VF_KEY_PERIOD: return ".";
-        case VF_KEY_SLASH: return "/";
-        case VF_KEY_0: return "0"; case VF_KEY_1: return "1"; case VF_KEY_2: return "2";
-        case VF_KEY_3: return "3"; case VF_KEY_4: return "4"; case VF_KEY_5: return "5";
-        case VF_KEY_6: return "6"; case VF_KEY_7: return "7"; case VF_KEY_8: return "8";
-        case VF_KEY_9: return "9";
-        case VF_KEY_SEMICOLON: return ";";
-        case VF_KEY_EQUAL: return "=";
-        case VF_KEY_A: return "A"; case VF_KEY_B: return "B"; case VF_KEY_C: return "C";
-        case VF_KEY_D: return "D"; case VF_KEY_E: return "E"; case VF_KEY_F: return "F";
-        case VF_KEY_G: return "G"; case VF_KEY_H: return "H"; case VF_KEY_I: return "I";
-        case VF_KEY_J: return "J"; case VF_KEY_K: return "K"; case VF_KEY_L: return "L";
-        case VF_KEY_M: return "M"; case VF_KEY_N: return "N"; case VF_KEY_O: return "O";
-        case VF_KEY_P: return "P"; case VF_KEY_Q: return "Q"; case VF_KEY_R: return "R";
-        case VF_KEY_S: return "S"; case VF_KEY_T: return "T"; case VF_KEY_U: return "U";
-        case VF_KEY_V: return "V"; case VF_KEY_W: return "W"; case VF_KEY_X: return "X";
-        case VF_KEY_Y: return "Y"; case VF_KEY_Z: return "Z";
-        case VF_KEY_LEFT_BRACKET: return "["; case VF_KEY_BACKSLASH: return "\\";
-        case VF_KEY_RIGHT_BRACKET: return "]"; case VF_KEY_GRAVE_ACCENT: return "`";
-        case VF_KEY_ESCAPE: return "Escape";
-        case VF_KEY_ENTER: return "Enter";
-        case VF_KEY_TAB: return "Tab";
-        case VF_KEY_BACKSPACE: return "Backspace";
-        case VF_KEY_INSERT: return "Insert";
-        case VF_KEY_DELETE: return "Delete";
-        case VF_KEY_RIGHT: return "Right"; case VF_KEY_LEFT: return "Left";
-        case VF_KEY_DOWN: return "Down"; case VF_KEY_UP: return "Up";
-        case VF_KEY_PAGE_UP: return "PageUp"; case VF_KEY_PAGE_DOWN: return "PageDown";
-        case VF_KEY_HOME: return "Home"; case VF_KEY_END: return "End";
-        case VF_KEY_CAPS_LOCK: return "CapsLock";
-        case VF_KEY_SCROLL_LOCK: return "ScrollLock";
-        case VF_KEY_NUM_LOCK: return "NumLock";
-        case VF_KEY_PRINT_SCREEN: return "PrintScreen";
-        case VF_KEY_PAUSE: return "Pause";
-        case VF_KEY_F1: return "F1"; case VF_KEY_F2: return "F2"; case VF_KEY_F3: return "F3";
-        case VF_KEY_F4: return "F4"; case VF_KEY_F5: return "F5"; case VF_KEY_F6: return "F6";
-        case VF_KEY_F7: return "F7"; case VF_KEY_F8: return "F8"; case VF_KEY_F9: return "F9";
-        case VF_KEY_F10: return "F10"; case VF_KEY_F11: return "F11"; case VF_KEY_F12: return "F12";
-        case VF_KEY_LEFT_SHIFT: return "Left Shift";
-        case VF_KEY_LEFT_CONTROL: return "Left Ctrl";
-        case VF_KEY_LEFT_ALT: return "Left Alt";
-        case VF_KEY_LEFT_SUPER: return "Left Super";
-        case VF_KEY_RIGHT_SHIFT: return "Right Shift";
-        case VF_KEY_RIGHT_CONTROL: return "Right Ctrl";
-        case VF_KEY_RIGHT_ALT: return "Right Alt";
-        case VF_KEY_RIGHT_SUPER: return "Right Super";
-        case VF_KEY_MENU: return "Menu";
+        case input::Key::Space: return "Space";
+        case input::Key::Apostrophe: return "'";
+        case input::Key::Comma: return ",";
+        case input::Key::Minus: return "-";
+        case input::Key::Period: return ".";
+        case input::Key::Slash: return "/";
+        case input::Key::Num0: return "0"; case input::Key::Num1: return "1"; case input::Key::Num2: return "2";
+        case input::Key::Num3: return "3"; case input::Key::Num4: return "4"; case input::Key::Num5: return "5";
+        case input::Key::Num6: return "6"; case input::Key::Num7: return "7"; case input::Key::Num8: return "8";
+        case input::Key::Num9: return "9";
+        case input::Key::Semicolon: return ";";
+        case input::Key::Equal: return "=";
+        case input::Key::A: return "A"; case input::Key::B: return "B"; case input::Key::C: return "C";
+        case input::Key::D: return "D"; case input::Key::E: return "E"; case input::Key::F: return "F";
+        case input::Key::G: return "G"; case input::Key::H: return "H"; case input::Key::I: return "I";
+        case input::Key::J: return "J"; case input::Key::K: return "K"; case input::Key::L: return "L";
+        case input::Key::M: return "M"; case input::Key::N: return "N"; case input::Key::O: return "O";
+        case input::Key::P: return "P"; case input::Key::Q: return "Q"; case input::Key::R: return "R";
+        case input::Key::S: return "S"; case input::Key::T: return "T"; case input::Key::U: return "U";
+        case input::Key::V: return "V"; case input::Key::W: return "W"; case input::Key::X: return "X";
+        case input::Key::Y: return "Y"; case input::Key::Z: return "Z";
+        case input::Key::LeftBracket: return "["; case input::Key::Backslash: return "\\";
+        case input::Key::RightBracket: return "]"; case input::Key::GraveAccent: return "`";
+        case input::Key::Escape: return "Escape";
+        case input::Key::Enter: return "Enter";
+        case input::Key::Tab: return "Tab";
+        case input::Key::Backspace: return "Backspace";
+        case input::Key::Insert: return "Insert";
+        case input::Key::Delete: return "Delete";
+        case input::Key::Right: return "Right"; case input::Key::Left: return "Left";
+        case input::Key::Down: return "Down"; case input::Key::Up: return "Up";
+        case input::Key::PageUp: return "PageUp"; case input::Key::PageDown: return "PageDown";
+        case input::Key::Home: return "Home"; case input::Key::End: return "End";
+        case input::Key::CapsLock: return "CapsLock";
+        case input::Key::ScrollLock: return "ScrollLock";
+        case input::Key::NumLock: return "NumLock";
+        case input::Key::PrintScreen: return "PrintScreen";
+        case input::Key::Pause: return "Pause";
+        case input::Key::F1: return "F1"; case input::Key::F2: return "F2"; case input::Key::F3: return "F3";
+        case input::Key::F4: return "F4"; case input::Key::F5: return "F5"; case input::Key::F6: return "F6";
+        case input::Key::F7: return "F7"; case input::Key::F8: return "F8"; case input::Key::F9: return "F9";
+        case input::Key::F10: return "F10"; case input::Key::F11: return "F11"; case input::Key::F12: return "F12";
+        case input::Key::LeftShift: return "Left Shift";
+        case input::Key::LeftControl: return "Left Ctrl";
+        case input::Key::LeftAlt: return "Left Alt";
+        case input::Key::LeftSuper: return "Left Super";
+        case input::Key::RightShift: return "Right Shift";
+        case input::Key::RightControl: return "Right Ctrl";
+        case input::Key::RightAlt: return "Right Alt";
+        case input::Key::RightSuper: return "Right Super";
+        case input::Key::Menu: return "Menu";
         default:
         {
-            static char buf[16];
-            snprintf(buf, sizeof(buf), "Key %d", keyCode);
-            return buf;
+            return "Key " + std::to_string(keyCode);
         }
         }
     }
 
-    const char* InputActionMappingWindow::getMouseButtonName(int button) const
+    std::string InputActionMappingWindow::getMouseButtonName(int button) const
     {
         switch (button)
         {
-        case VF_MOUSE_BUTTON_LEFT: return "Left";
-        case VF_MOUSE_BUTTON_RIGHT: return "Right";
-        case VF_MOUSE_BUTTON_MIDDLE: return "Middle";
+        case input::Mouse::Left: return "Left";
+        case input::Mouse::Right: return "Right";
+        case input::Mouse::Middle: return "Middle";
         case 3: return "Button 4";
         case 4: return "Button 5";
         default:
         {
-            static char buf[16];
-            snprintf(buf, sizeof(buf), "Button %d", button);
-            return buf;
+            return "Button " + std::to_string(button);
         }
         }
     }

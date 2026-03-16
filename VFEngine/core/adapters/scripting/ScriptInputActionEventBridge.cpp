@@ -53,6 +53,12 @@ namespace core
                 onKeyOrButtonEvent(notif.button, false, false, notif.shiftDown, notif.ctrlDown, notif.altDown);
             }));
 
+        tokens.push_back(dispatcher.subscribe<::events::input::ActionMappingChangedNotification>(
+            [this](const ::events::input::ActionMappingChangedNotification&)
+            {
+                bindingCacheDirty = true;
+            }));
+
         vfLogInfo("[ScriptInputActionEventBridge] Subscribed to input action events");
     }
 
@@ -68,19 +74,12 @@ namespace core
         vfLogInfo("[ScriptInputActionEventBridge] Unsubscribed from input action events");
     }
 
-    void ScriptInputActionEventBridge::onKeyOrButtonEvent(
-        int code, bool isKey, bool isPressed, bool shiftDown, bool ctrlDown, bool altDown)
+    void ScriptInputActionEventBridge::rebuildBindingCache()
     {
+        bindingCache.clear();
         auto& dispatcher = ::events::EventDispatcher::instance();
 
         auto actionNames = dispatcher.query(::events::input::GetAllActionNamesQuery{});
-
-        ::services::BindingType bindingType = isKey
-            ? ::services::BindingType::Key
-            : ::services::BindingType::MouseButton;
-
-        const char* methodName = isPressed ? "onActionPressed" : "onActionReleased";
-
         for (const auto& actionName : actionNames)
         {
             ::events::input::GetActionBindingsQuery query;
@@ -89,17 +88,34 @@ namespace core
 
             for (const auto& binding : bindings)
             {
-                if (binding.type != bindingType || binding.code != code)
-                    continue;
-
-                // Check modifier requirements
-                if (binding.requireShift && !shiftDown) continue;
-                if (binding.requireCtrl && !ctrlDown) continue;
-                if (binding.requireAlt && !altDown) continue;
-
-                dispatchActionEvent(methodName, actionName);
-                break;
+                int cacheKey = (static_cast<int>(binding.type) << 16) | binding.code;
+                bindingCache[cacheKey].push_back({actionName, binding.requireShift, binding.requireCtrl, binding.requireAlt});
             }
+        }
+        bindingCacheDirty = false;
+    }
+
+    void ScriptInputActionEventBridge::onKeyOrButtonEvent(
+        int code, bool isKey, bool isPressed, bool shiftDown, bool ctrlDown, bool altDown)
+    {
+        if (bindingCacheDirty) rebuildBindingCache();
+
+        int bindingType = isKey ? static_cast<int>(::services::BindingType::Key)
+                                : static_cast<int>(::services::BindingType::MouseButton);
+        int key = (bindingType << 16) | code;
+
+        auto it = bindingCache.find(key);
+        if (it == bindingCache.end()) return;
+
+        const char* methodName = isPressed ? "onActionPressed" : "onActionReleased";
+
+        for (const auto& cached : it->second)
+        {
+            if (cached.requireShift && !shiftDown) continue;
+            if (cached.requireCtrl && !ctrlDown) continue;
+            if (cached.requireAlt && !altDown) continue;
+
+            dispatchActionEvent(methodName, cached.actionName);
         }
     }
 

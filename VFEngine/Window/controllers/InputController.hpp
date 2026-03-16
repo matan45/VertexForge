@@ -91,6 +91,7 @@ namespace window
         void getJustReleasedMouseButtons(std::vector<int>& outButtons) const;
 
         Window* getWindow() const { return window; }
+        void setCursorMode(int mode) { if (glfwWindow) glfwSetInputMode(glfwWindow, GLFW_CURSOR, mode); }
 
         void onScroll(double xoffset, double yoffset);
 

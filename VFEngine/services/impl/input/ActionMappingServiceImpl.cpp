@@ -5,6 +5,7 @@
 #include "../../events/input/InputEvents.hpp"
 #include "../../events/project/ResourceEvents.hpp"
 #include "../../serialization/InputMappingSerialization.hpp"
+#include "input/KeyCodes.hpp"
 #include <glm/glm.hpp>
 #include <algorithm>
 
@@ -12,25 +13,30 @@
 namespace services {
 
     namespace {
-        // Check if required modifier keys are currently held
         bool areModifiersHeld(const services::InputBinding& binding,
                               events::EventDispatcher& dispatcher) {
             if (binding.requireShift) {
-                events::input::IsKeyDownQuery q1; q1.keyCode = 340; // Left Shift
-                events::input::IsKeyDownQuery q2; q2.keyCode = 344; // Right Shift
+                events::input::IsKeyDownQuery q1; q1.keyCode = input::Key::LeftShift;
+                events::input::IsKeyDownQuery q2; q2.keyCode = input::Key::RightShift;
                 if (!dispatcher.query(q1) && !dispatcher.query(q2)) return false;
             }
             if (binding.requireCtrl) {
-                events::input::IsKeyDownQuery q1; q1.keyCode = 341; // Left Ctrl
-                events::input::IsKeyDownQuery q2; q2.keyCode = 345; // Right Ctrl
+                events::input::IsKeyDownQuery q1; q1.keyCode = input::Key::LeftControl;
+                events::input::IsKeyDownQuery q2; q2.keyCode = input::Key::RightControl;
                 if (!dispatcher.query(q1) && !dispatcher.query(q2)) return false;
             }
             if (binding.requireAlt) {
-                events::input::IsKeyDownQuery q1; q1.keyCode = 342; // Left Alt
-                events::input::IsKeyDownQuery q2; q2.keyCode = 346; // Right Alt
+                events::input::IsKeyDownQuery q1; q1.keyCode = input::Key::LeftAlt;
+                events::input::IsKeyDownQuery q2; q2.keyCode = input::Key::RightAlt;
                 if (!dispatcher.query(q1) && !dispatcher.query(q2)) return false;
             }
             return true;
+        }
+    }
+
+    namespace {
+        void publishMappingChanged() {
+            events::EventDispatcher::instance().publish(events::input::ActionMappingChangedNotification{});
         }
     }
 
@@ -157,21 +163,15 @@ namespace services {
         entry.defaultBindings = defaultBindings;
         entry.currentBindings = defaultBindings;
         entry.context = context;
-
-        // Apply pending overrides from a previously loaded bindings file
-        auto pendingIt = pendingOverrides.find(actionName);
-        if (pendingIt != pendingOverrides.end()) {
-            entry.currentBindings = pendingIt->second;
-            pendingOverrides.erase(pendingIt);
-        }
-
         actions[actionName] = std::move(entry);
+        publishMappingChanged();
     }
 
     void ActionMappingServiceImpl::setActionContext(const std::string& actionName, const std::string& context) {
         auto it = actions.find(actionName);
         if (it == actions.end()) return;
         it->second.context = context;
+        publishMappingChanged();
     }
 
     // ============================================
@@ -180,6 +180,7 @@ namespace services {
 
     void ActionMappingServiceImpl::unregisterAction(const std::string& actionName) {
         actions.erase(actionName);
+        publishMappingChanged();
     }
 
     // ============================================
@@ -196,6 +197,7 @@ namespace services {
         auto& bindings = it->second.currentBindings;
         if (std::find(bindings.begin(), bindings.end(), binding) == bindings.end()) {
             bindings.push_back(binding);
+            publishMappingChanged();
         }
     }
 
@@ -205,6 +207,7 @@ namespace services {
 
         auto& bindings = it->second.currentBindings;
         bindings.erase(std::remove(bindings.begin(), bindings.end(), binding), bindings.end());
+        publishMappingChanged();
     }
 
     void ActionMappingServiceImpl::setBindings(const std::string& actionName,
@@ -215,18 +218,21 @@ namespace services {
             return;
         }
         it->second.currentBindings = bindings;
+        publishMappingChanged();
     }
 
     void ActionMappingServiceImpl::resetBindings(const std::string& actionName) {
         auto it = actions.find(actionName);
         if (it == actions.end()) return;
         it->second.currentBindings = it->second.defaultBindings;
+        publishMappingChanged();
     }
 
     void ActionMappingServiceImpl::resetAllBindings() {
         for (auto& [name, entry] : actions) {
             entry.currentBindings = entry.defaultBindings;
         }
+        publishMappingChanged();
     }
 
     // ============================================
@@ -236,10 +242,6 @@ namespace services {
     void ActionMappingServiceImpl::registerAxis1D(const std::string& name,
                                                     const std::string& positiveAction,
                                                     const std::string& negativeAction) {
-        if (axes1D.find(name) != axes1D.end()) {
-            vfLogWarning("[ActionMapping] 1D axis '{}' already registered", name);
-            return;
-        }
         axes1D[name] = Axis1DDefinition{name, positiveAction, negativeAction};
     }
 
@@ -282,10 +284,6 @@ namespace services {
                                                     const std::string& leftAction,
                                                     const std::string& rightAction,
                                                     bool normalize) {
-        if (axes2D.find(name) != axes2D.end()) {
-            vfLogWarning("[ActionMapping] 2D axis '{}' already registered", name);
-            return;
-        }
         axes2D[name] = Axis2DDefinition{name, upAction, downAction, leftAction, rightAction, normalize};
     }
 
@@ -385,6 +383,7 @@ namespace services {
             axes2D[name] = def;
         }
 
+        publishMappingChanged();
         return true;
     }
 

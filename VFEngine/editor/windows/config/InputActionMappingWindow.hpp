@@ -1,6 +1,7 @@
 #pragma once
 #include "imguiHandler/ImguiWindow.hpp"
 #include "data/ActionMappingTypes.hpp"
+#include "events/EventDispatcher.hpp"
 #include "nfd/FileDialog.hpp"
 #include <vector>
 #include <string>
@@ -10,11 +11,11 @@ namespace windows
     class InputActionMappingWindow : public controllers::imguiHandler::ImguiWindow
     {
     public:
-        InputActionMappingWindow() = default;
-        ~InputActionMappingWindow() override = default;
+        InputActionMappingWindow();
+        ~InputActionMappingWindow() override;
 
         void draw() override;
-        void show() { visible = true; }
+        void show() { visible = true; needsRefresh = true; }
 
     private:
         struct ActionEntry
@@ -22,8 +23,6 @@ namespace windows
             std::string name;
             std::string context;
             std::vector<services::InputBinding> bindings;
-            std::vector<services::InputBinding> defaultBindings;
-            bool isModified = false;
         };
 
         struct Axis1DEntry
@@ -44,6 +43,8 @@ namespace windows
         };
 
         bool visible = false;
+        bool needsRefresh = true;
+        events::SubscriptionToken mappingChangedToken;
         bool waitingForKey = false;
         int captureActionIndex = -1;
         char newActionName[128] = {};
@@ -66,8 +67,8 @@ namespace windows
         void drawContextFilter();
         bool drawActionCombo(const char* label, std::string& current);
         bool drawContextCombo(const char* label, std::string& current);
-        const char* getKeyName(int keyCode) const;
-        const char* getMouseButtonName(int button) const;
+        std::string getKeyName(int keyCode) const;
+        std::string getMouseButtonName(int button) const;
         std::string getBindingDisplayName(const services::InputBinding& binding) const;
     };
 }

@@ -136,7 +136,17 @@ namespace windows::details
                 {
                     ImGui::SameLine();
                     ImGui::SetNextItemWidth(60.0f);
-                    ImGui::InputInt("##Priority", &entry->inputPriority, 0, 0);
+                    if (ImGui::InputInt("##Priority", &entry->inputPriority, 0, 0))
+                    {
+                        // Propagate to running instance if loaded
+                        if (entry->instanceId != 0)
+                        {
+                            events::scripting::SetInstancePriorityCommand cmd;
+                            cmd.instanceId = entry->instanceId;
+                            cmd.priority = entry->inputPriority;
+                            dispatcher.execute(cmd);
+                        }
+                    }
                     if (ImGui::IsItemHovered())
                     {
                         ImGui::SetTooltip("Input Priority (higher = handles input first)");

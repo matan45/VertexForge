@@ -199,4 +199,12 @@ namespace events::input {
         std::string_view getName() const override { return "ClearConsumedActions"; }
     };
 
+    // ============================================
+    // NOTIFICATIONS - Mapping change broadcasts
+    // ============================================
+
+    struct ActionMappingChangedNotification : INotification {
+        std::string_view getName() const override { return "ActionMappingChanged"; }
+    };
+
 }

@@ -117,6 +117,16 @@ namespace services
                 }
             });
 
+        // === Instance Priority ===
+        dispatcher.registerCommandHandler<events::scripting::SetInstancePriorityCommand>(
+            [this](const events::scripting::SetInstancePriorityCommand& cmd)
+            {
+                if (scriptingProvider)
+                {
+                    scriptingProvider->setInstancePriority(cmd.instanceId, cmd.priority);
+                }
+            });
+
         // === Mode Change Subscription ===
         dispatcher.subscribe<events::editor::EditorModeChangedNotification>(
             [this](const events::editor::EditorModeChangedNotification& notification)
@@ -342,20 +352,14 @@ namespace services
     {
         auto& dispatcher = ::events::EventDispatcher::instance();
 
-        // Clear per-frame action consumption
-        dispatcher.execute(events::input::ClearConsumedActionsCommand{});
+        // Clear per-frame action consumption (guard against handler being unregistered during shutdown)
+        try { dispatcher.execute(events::input::ClearConsumedActionsCommand{}); }
+        catch (...) {}
 
         auto& registry = scene::EntityRegistry::getRegistry();
         auto view = registry.view<components::ScriptComponent>();
 
-        // Collect all active script entries for priority sorting
-        struct ScriptUpdateEntry
-        {
-            entt::entity entity;
-            components::ScriptEntry* entry;
-            int priority;
-        };
-        std::vector<ScriptUpdateEntry> updateList;
+        cachedUpdateList.clear();
 
         for (auto entity : view)
         {
@@ -403,18 +407,18 @@ namespace services
                     }
                 }
 
-                updateList.push_back({entity, &entry, entry.inputPriority});
+                cachedUpdateList.push_back({entity, &entry, entry.inputPriority});
             }
         }
 
         // Sort by priority descending (higher priority scripts execute first)
-        std::stable_sort(updateList.begin(), updateList.end(),
+        std::stable_sort(cachedUpdateList.begin(), cachedUpdateList.end(),
             [](const ScriptUpdateEntry& a, const ScriptUpdateEntry& b)
             {
                 return a.priority > b.priority;
             });
 
-        for (auto& [entity, entry, priority] : updateList)
+        for (auto& [entity, entry, priority] : cachedUpdateList)
         {
             scriptingProvider->callOnUpdate(entry->instanceId, deltaTime);
         }

@@ -87,11 +87,9 @@ namespace services {
             bool active = false;
         };
 
-        bool checkBinding(const InputBinding& binding, bool (*queryKey)(int), bool (*queryMouse)(int)) const;
         bool isActionContextActive(const std::string& contextName) const;
 
         std::unordered_map<std::string, ActionEntry> actions;
-        std::unordered_map<std::string, std::vector<InputBinding>> pendingOverrides;
         std::unordered_map<std::string, Axis1DDefinition> axes1D;
         std::unordered_map<std::string, Axis2DDefinition> axes2D;
         std::vector<std::string> contextStack;

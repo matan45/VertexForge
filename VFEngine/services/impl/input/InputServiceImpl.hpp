@@ -56,7 +56,8 @@ namespace services {
        void publishInputNotifications();
 
        std::unique_ptr<window::InputController> inputController;
-       window::Window* windowPtr = nullptr;
+       std::vector<int> notifKeyBuffer;
+       std::vector<int> notifButtonBuffer;
        bool keyboardEnabled = true;
        bool mouseEnabled = true;
        bool cursorVisible = true;

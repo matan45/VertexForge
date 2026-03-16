@@ -54,7 +54,6 @@ namespace events::application {
     };
 
     struct OpenInputMappingWindowNotification : INotification {
-        std::string filePath;
         std::string_view getName() const override { return "OpenInputMappingWindow"; }
     };
 

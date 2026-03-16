@@ -72,4 +72,11 @@ namespace events::scripting {
         std::string_view getName() const override { return "RegisterNativeScriptFunction"; }
     };
 
+    struct SetInstancePriorityCommand : ICommand<> {
+        uint64_t instanceId;
+        int priority;
+
+        std::string_view getName() const override { return "SetInstancePriority"; }
+    };
+
 }
