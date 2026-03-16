@@ -179,5 +179,30 @@ namespace core::api
                 cmd.filePath = path;
                 return value::Value(dispatcher.execute(cmd));
             });
+
+        // _native_inputaction_consume(actionName) -> void
+        interpreter->registerNativeFunction("_native_inputaction_consume",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                if (args.empty()) return value::Value(std::monostate{});
+                std::string name = extractString(args[0], "_native_inputaction_consume");
+
+                events::input::ConsumeActionCommand cmd;
+                cmd.actionName = name;
+                dispatcher.execute(cmd);
+                return value::Value(std::monostate{});
+            });
+
+        // _native_inputaction_isConsumed(actionName) -> bool
+        interpreter->registerNativeFunction("_native_inputaction_isConsumed",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                if (args.empty()) return value::Value(false);
+                std::string name = extractString(args[0], "_native_inputaction_isConsumed");
+
+                events::input::IsActionConsumedQuery query;
+                query.actionName = name;
+                return value::Value(dispatcher.query(query));
+            });
     }
 }

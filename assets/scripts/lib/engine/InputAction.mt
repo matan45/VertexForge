@@ -77,4 +77,14 @@ public class InputAction {
     public static function load(String filePath): bool {
         return _native_inputaction_load(filePath);
     }
+
+    // Consume an action so lower-priority scripts don't see it this frame
+    public static function consume(String actionName): void {
+        _native_inputaction_consume(actionName);
+    }
+
+    // Check if an action has been consumed this frame
+    public static function isConsumed(String actionName): bool {
+        return _native_inputaction_isConsumed(actionName);
+    }
 }

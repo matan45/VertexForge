@@ -79,6 +79,11 @@ namespace services {
         virtual bool isContextActive(const std::string& name) const = 0;
         virtual std::vector<std::string> getContextActions(const std::string& name) const = 0;
         virtual std::string getActionContext(const std::string& actionName) const = 0;
+
+        // Action consumption
+        virtual void consumeAction(const std::string& actionName) = 0;
+        virtual bool isActionConsumed(const std::string& actionName) const = 0;
+        virtual void clearConsumedActions() = 0;
     };
 
 }

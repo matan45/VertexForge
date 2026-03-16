@@ -61,6 +61,7 @@ namespace services {
         auto it = actions.find(actionName);
         if (it == actions.end()) return false;
         if (!isActionContextActive(it->second.context)) return false;
+        if (consumedActions.count(actionName)) return false;
 
         auto& dispatcher = events::EventDispatcher::instance();
         for (const auto& binding : it->second.currentBindings) {
@@ -83,6 +84,7 @@ namespace services {
         auto it = actions.find(actionName);
         if (it == actions.end()) return false;
         if (!isActionContextActive(it->second.context)) return false;
+        if (consumedActions.count(actionName)) return false;
 
         auto& dispatcher = events::EventDispatcher::instance();
         for (const auto& binding : it->second.currentBindings) {
@@ -105,6 +107,7 @@ namespace services {
         auto it = actions.find(actionName);
         if (it == actions.end()) return false;
         if (!isActionContextActive(it->second.context)) return false;
+        if (consumedActions.count(actionName)) return false;
 
         auto& dispatcher = events::EventDispatcher::instance();
         for (const auto& binding : it->second.currentBindings) {
@@ -383,6 +386,22 @@ namespace services {
         }
 
         return true;
+    }
+
+    // ============================================
+    // Action consumption
+    // ============================================
+
+    void ActionMappingServiceImpl::consumeAction(const std::string& actionName) {
+        consumedActions.insert(actionName);
+    }
+
+    bool ActionMappingServiceImpl::isActionConsumed(const std::string& actionName) const {
+        return consumedActions.count(actionName) > 0;
+    }
+
+    void ActionMappingServiceImpl::clearConsumedActions() {
+        consumedActions.clear();
     }
 
     // ============================================
@@ -672,6 +691,22 @@ namespace services {
         dispatcher.registerQueryHandler<events::input::GetActionContextQuery>(
             [this](const events::input::GetActionContextQuery& query) {
                 return getActionContext(query.actionName);
+            });
+
+        // Consumption
+        dispatcher.registerCommandHandler<events::input::ConsumeActionCommand>(
+            [this](const events::input::ConsumeActionCommand& cmd) {
+                consumeAction(cmd.actionName);
+            });
+
+        dispatcher.registerQueryHandler<events::input::IsActionConsumedQuery>(
+            [this](const events::input::IsActionConsumedQuery& query) {
+                return isActionConsumed(query.actionName);
+            });
+
+        dispatcher.registerCommandHandler<events::input::ClearConsumedActionsCommand>(
+            [this](const events::input::ClearConsumedActionsCommand&) {
+                clearConsumedActions();
             });
     }
 

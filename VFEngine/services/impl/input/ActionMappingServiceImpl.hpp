@@ -2,6 +2,7 @@
 #include "../../interfaces/input/IActionMappingService.hpp"
 #include <glm/vec2.hpp>
 #include <unordered_map>
+#include <unordered_set>
 #include <string>
 #include <vector>
 
@@ -70,6 +71,10 @@ namespace services {
         std::vector<std::string> getContextActions(const std::string& name) const override;
         std::string getActionContext(const std::string& actionName) const override;
 
+        void consumeAction(const std::string& actionName) override;
+        bool isActionConsumed(const std::string& actionName) const override;
+        void clearConsumedActions() override;
+
     private:
         struct ActionEntry {
             std::vector<InputBinding> currentBindings;
@@ -91,6 +96,7 @@ namespace services {
         std::unordered_map<std::string, Axis2DDefinition> axes2D;
         std::vector<std::string> contextStack;
         std::unordered_map<std::string, ContextState> contexts;
+        std::unordered_set<std::string> consumedActions;
     };
 
 }

@@ -46,6 +46,7 @@ namespace core
         std::unordered_map<std::string, std::string> pathToClassName;
         std::unordered_map<uint64_t, std::unordered_set<std::string>> instanceToInterfaces;
         std::unordered_map<uint64_t, ::services::ScriptPlaybackState> instanceToPlaybackState;
+        std::unordered_map<uint64_t, int> instanceToPriority;
 
         mutable std::optional<::services::ScriptError> lastError;
 
@@ -96,6 +97,7 @@ namespace core
                                           const std::vector<std::any>& args = {}) override;
 
         void playVFX(uint64_t instanceId) override;
+        void setInstancePriority(uint64_t instanceId, int priority) override;
 
         std::optional<::services::ScriptError> getLastError() const override;
         void clearError() override;

@@ -3,6 +3,7 @@
 #include "../../events/scripting/ScriptingEvents.hpp"
 #include "../../events/editor/EditorModeEvents.hpp"
 #include "../../events/project/ProjectEvents.hpp"
+#include "../../events/input/ActionMappingEvents.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "scene/EntityRegistry.hpp"
@@ -10,6 +11,7 @@
 #include <asset/AssetRef.hpp>
 #include <cassert>
 #include <filesystem>
+#include <algorithm>
 
 namespace services
 {
@@ -333,42 +335,45 @@ namespace services
 
     void ScriptingServiceImpl::updateScripts(float deltaTime)
     {
-        auto& registry = scene::EntityRegistry::getRegistry();
+        auto& dispatcher = ::events::EventDispatcher::instance();
 
-        // Iterate all entities with ScriptComponent
+        // Clear per-frame action consumption
+        dispatcher.execute(events::input::ClearConsumedActionsCommand{});
+
+        auto& registry = scene::EntityRegistry::getRegistry();
         auto view = registry.view<components::ScriptComponent>();
+
+        // Collect all active script entries for priority sorting
+        struct ScriptUpdateEntry
+        {
+            entt::entity entity;
+            components::ScriptEntry* entry;
+            int priority;
+        };
+        std::vector<ScriptUpdateEntry> updateList;
 
         for (auto entity : view)
         {
-            // Skip inactive entities
             if (registry.all_of<components::NameComponent>(entity))
             {
                 const auto& nameComp = registry.get<components::NameComponent>(entity);
-                if (!nameComp.isActive)
-                {
-                    continue;
-                }
+                if (!nameComp.isActive) continue;
             }
 
             auto& scriptComp = view.get<components::ScriptComponent>(entity);
-
-            // Update each script on this entity
             for (auto& entry : scriptComp.scripts)
             {
-                if (!entry.enabled)
-                {
-                    continue;
-                }
+                if (!entry.enabled) continue;
 
-                // If instanceId is 0, script needs to be loaded (e.g., after scene restore)
+                // Load script if needed
                 if (entry.instanceId == 0 && entry.scriptRef.isValid())
                 {
                     auto info = scriptingProvider->loadScript(entry.scriptRef.resolve(), toHandle(entity));
                     if (info.has_value())
                     {
                         entry.instanceId = info->instanceId;
-                        // Auto-start script: set to Playing and call playScript
                         entry.playbackState = ScriptPlaybackState::Playing;
+                        scriptingProvider->setInstancePriority(entry.instanceId, entry.inputPriority);
                         scriptingProvider->playVFX(entry.instanceId);
                     }
                     else
@@ -377,14 +382,12 @@ namespace services
                     }
                 }
 
-                // For backwards compatibility: if script loaded but playback state is Stopped, start it
                 if (!entry.started && entry.playbackState == ScriptPlaybackState::Stopped)
                 {
                     entry.playbackState = ScriptPlaybackState::Playing;
                     scriptingProvider->playVFX(entry.instanceId);
                 }
 
-                // Track started state (set when playScript calls onStart)
                 if (entry.playbackState == ScriptPlaybackState::Playing && !entry.started)
                 {
                     entry.started = true;
@@ -394,9 +397,20 @@ namespace services
                     }
                 }
 
-                // Call onUpdate - the provider will check playback state internally
-                scriptingProvider->callOnUpdate(entry.instanceId, deltaTime);
+                updateList.push_back({entity, &entry, entry.inputPriority});
             }
+        }
+
+        // Sort by priority descending (higher priority scripts execute first)
+        std::stable_sort(updateList.begin(), updateList.end(),
+            [](const ScriptUpdateEntry& a, const ScriptUpdateEntry& b)
+            {
+                return a.priority > b.priority;
+            });
+
+        for (auto& [entity, entry, priority] : updateList)
+        {
+            scriptingProvider->callOnUpdate(entry->instanceId, deltaTime);
         }
 
         scriptingProvider->tickCoroutines(deltaTime);

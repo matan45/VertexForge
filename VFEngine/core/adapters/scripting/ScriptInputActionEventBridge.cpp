@@ -6,6 +6,7 @@
 #include "events/input/InputEvents.hpp"
 #include "events/input/ActionMappingEvents.hpp"
 #include "data/ActionMappingTypes.hpp"
+#include <algorithm>
 
 #include "print/Log.hpp"
 namespace core
@@ -14,11 +15,13 @@ namespace core
         ::services::ScriptInterpreter* interpreter,
         const std::unordered_map<uint64_t, std::unordered_set<std::string>>& instanceToInterfaces,
         std::unordered_map<uint64_t, std::any>& instanceToObject,
-        const std::unordered_map<uint64_t, ::services::EntityHandle>& instanceToEntity)
+        const std::unordered_map<uint64_t, ::services::EntityHandle>& instanceToEntity,
+        const std::unordered_map<uint64_t, int>& instanceToPriority)
         : interpreter(interpreter)
         , instanceToInterfaces(instanceToInterfaces)
         , instanceToObject(instanceToObject)
         , instanceToEntity(instanceToEntity)
+        , instanceToPriority(instanceToPriority)
     {
     }
 
@@ -103,24 +106,64 @@ namespace core
     void ScriptInputActionEventBridge::dispatchActionEvent(
         const char* methodName, const std::string& actionName)
     {
+        // Check if already consumed
+        auto& dispatcher = ::events::EventDispatcher::instance();
+        ::events::input::IsActionConsumedQuery consumedQuery;
+        consumedQuery.actionName = actionName;
+        if (dispatcher.query(consumedQuery)) return;
+
         const std::string requiredInterface = "IInputActionListener";
+
+        // Collect eligible instances with priority
+        struct DispatchEntry
+        {
+            uint64_t instanceId;
+            int priority;
+        };
+        std::vector<DispatchEntry> entries;
 
         for (const auto& [instanceId, interfaces] : instanceToInterfaces)
         {
             if (interfaces.find(requiredInterface) == interfaces.end())
                 continue;
+            if (instanceToObject.find(instanceId) == instanceToObject.end())
+                continue;
+            if (instanceToEntity.find(instanceId) == instanceToEntity.end())
+                continue;
 
+            int priority = 0;
+            auto prioIt = instanceToPriority.find(instanceId);
+            if (prioIt != instanceToPriority.end()) priority = prioIt->second;
+            entries.push_back({instanceId, priority});
+        }
+
+        // Sort by priority descending (higher priority dispatched first)
+        std::sort(entries.begin(), entries.end(),
+            [](const DispatchEntry& a, const DispatchEntry& b)
+            {
+                return a.priority > b.priority;
+            });
+
+        for (const auto& [instanceId, priority] : entries)
+        {
             auto objIt = instanceToObject.find(instanceId);
-            if (objIt == instanceToObject.end()) continue;
-
             auto entityIt = instanceToEntity.find(instanceId);
-            if (entityIt == instanceToEntity.end()) continue;
 
             try
             {
                 NativeAPIRegistry::setCurrentEntity(entityIt->second);
+                NativeAPIRegistry::setCurrentInstanceId(instanceId);
                 auto& instance = std::any_cast<value::Value&>(objIt->second);
-                interpreter->callMethod(instance, methodName, {value::Value(actionName)});
+                auto result = interpreter->callMethod(instance, methodName, {value::Value(actionName)});
+
+                // If callback returns true, consume the action and stop propagation
+                if (std::holds_alternative<bool>(result) && std::get<bool>(result))
+                {
+                    ::events::input::ConsumeActionCommand cmd;
+                    cmd.actionName = actionName;
+                    dispatcher.execute(cmd);
+                    return;
+                }
             }
             catch (const std::exception& e)
             {

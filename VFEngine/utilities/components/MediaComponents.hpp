@@ -118,6 +118,7 @@ namespace components
     {
         asset::AssetRef scriptRef;
         bool enabled = true;
+        int inputPriority = 0;
 
         bool started = false;
         uint64_t instanceId = 0;

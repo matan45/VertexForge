@@ -22,7 +22,8 @@ namespace core
             ::services::ScriptInterpreter* interpreter,
             const std::unordered_map<uint64_t, std::unordered_set<std::string>>& instanceToInterfaces,
             std::unordered_map<uint64_t, std::any>& instanceToObject,
-            const std::unordered_map<uint64_t, ::services::EntityHandle>& instanceToEntity);
+            const std::unordered_map<uint64_t, ::services::EntityHandle>& instanceToEntity,
+            const std::unordered_map<uint64_t, int>& instanceToPriority);
 
         void subscribeAll();
         void unsubscribeAll();
@@ -36,6 +37,7 @@ namespace core
         const std::unordered_map<uint64_t, std::unordered_set<std::string>>& instanceToInterfaces;
         std::unordered_map<uint64_t, std::any>& instanceToObject;
         const std::unordered_map<uint64_t, ::services::EntityHandle>& instanceToEntity;
+        const std::unordered_map<uint64_t, int>& instanceToPriority;
 
         std::vector<::events::SubscriptionToken> tokens;
     };

@@ -89,7 +89,7 @@ namespace core
                 interpreter.get(), instanceToInterfaces, instanceToObject, instanceToEntity);
 
             inputActionEventBridge = std::make_unique<ScriptInputActionEventBridge>(
-                interpreter.get(), instanceToInterfaces, instanceToObject, instanceToEntity);
+                interpreter.get(), instanceToInterfaces, instanceToObject, instanceToEntity, instanceToPriority);
 
             physicsEventBridge->subscribeAll();
             uiEventBridge->subscribeAll();
@@ -345,6 +345,7 @@ namespace core
             }
             instanceToInterfaces[instanceId] = std::move(interfaces);
             instanceToPlaybackState[instanceId] = services::ScriptPlaybackState::Stopped;
+            instanceToPriority[instanceId] = 0;
 
             services::ScriptInstanceInfo info;
             info.instanceId = instanceId;
@@ -384,6 +385,7 @@ namespace core
             instanceToObject.erase(instanceId);
             instanceToInterfaces.erase(instanceId);
             instanceToPlaybackState.erase(instanceId);
+            instanceToPriority.erase(instanceId);
         }
     }
 
@@ -404,6 +406,7 @@ namespace core
         instanceToObject.clear();
         instanceToInterfaces.clear();
         instanceToPlaybackState.clear();
+        instanceToPriority.clear();
         nextInstanceId = 1;
         vfLogInfo("[ScriptingAdapter] All scripts unloaded, instance counter reset");
     }
@@ -637,6 +640,11 @@ namespace core
             callOnStart(instanceId);
         state = services::ScriptPlaybackState::Playing;
         vfLogInfo("[ScriptingAdapter] Script {} now playing", instanceId);
+    }
+
+    void ScriptingAdapter::setInstancePriority(uint64_t instanceId, int priority)
+    {
+        instanceToPriority[instanceId] = priority;
     }
 
     std::optional<services::ScriptError> ScriptingAdapter::getLastError() const

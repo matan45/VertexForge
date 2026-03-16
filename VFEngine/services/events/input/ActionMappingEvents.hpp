@@ -179,4 +179,24 @@ namespace events::input {
         std::string_view getName() const override { return "UnregisterAxis2D"; }
     };
 
+    // ============================================
+    // COMMANDS/QUERIES - Action consumption
+    // ============================================
+
+    struct ConsumeActionCommand : ICommand<void> {
+        std::string actionName;
+
+        std::string_view getName() const override { return "ConsumeAction"; }
+    };
+
+    struct IsActionConsumedQuery : IQuery<bool> {
+        std::string actionName;
+
+        std::string_view getName() const override { return "IsActionConsumed"; }
+    };
+
+    struct ClearConsumedActionsCommand : ICommand<void> {
+        std::string_view getName() const override { return "ClearConsumedActions"; }
+    };
+
 }
