@@ -215,25 +215,6 @@ namespace editor::materialeditor
         input.metallicPath = metallicPath;
         input.outputPath = outputPath;
 
-        // Set up decompress callback for compressed input textures
-        input.decompressCallback = [](resource::TextureData& textureData)
-        {
-            if (textureData.compressionFormat == resource::TextureCompressionFormat::BC7 &&
-                !textureData.mipData.empty())
-            {
-                auto& mip = textureData.mipData[0];
-                auto decompressed = types::TextureCompressor::decompressBC7(
-                    mip.data.data(), mip.width, mip.height);
-
-                if (!decompressed.empty())
-                {
-                    mip.data = std::move(decompressed);
-                    mip.dataSize = static_cast<uint32_t>(mip.data.size());
-                    textureData.compressionFormat = resource::TextureCompressionFormat::Uncompressed;
-                }
-            }
-        };
-
         // Set up compression callback if compression is enabled
         auto mode = compressionMode;
         auto quality = compressionQuality;

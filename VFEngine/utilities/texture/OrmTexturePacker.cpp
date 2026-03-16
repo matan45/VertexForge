@@ -278,8 +278,12 @@ namespace texture
                 }
                 else
                 {
-                    // Write uncompressed pixel data
-                    file.write(reinterpret_cast<const char*>(mip.data.data()), mip.data.size());
+                    // Write uncompressed pixel data in BGRA format (TGA-style, matching standard loader)
+                    for (size_t i = 0; i < mip.data.size(); i += 4)
+                    {
+                        uint8_t bgra[4] = { mip.data[i + 2], mip.data[i + 1], mip.data[i], mip.data[i + 3] };
+                        file.write(reinterpret_cast<const char*>(bgra), 4);
+                    }
                 }
             }
 
@@ -320,26 +324,6 @@ namespace texture
     }
 
     // ============================================================================
-    // Helper: Decompress compressed textures for CPU pixel access
-    // ============================================================================
-    static void decompressIfNeeded(
-        bool hasAo, bool hasRoughness, bool hasMetallic,
-        std::shared_ptr<resource::TextureData>& aoData,
-        std::shared_ptr<resource::TextureData>& roughnessData,
-        std::shared_ptr<resource::TextureData>& metallicData,
-        const TextureDecompressCallback& decompressCallback)
-    {
-        if (!decompressCallback) return;
-
-        if (hasAo && aoData && aoData->compressionFormat != resource::TextureCompressionFormat::Uncompressed)
-            decompressCallback(*aoData);
-        if (hasRoughness && roughnessData && roughnessData->compressionFormat != resource::TextureCompressionFormat::Uncompressed)
-            decompressCallback(*roughnessData);
-        if (hasMetallic && metallicData && metallicData->compressionFormat != resource::TextureCompressionFormat::Uncompressed)
-            decompressCallback(*metallicData);
-    }
-
-    // ============================================================================
     // Helper: Validate loaded texture data
     // ============================================================================
     static bool validateLoadedTextures(
@@ -350,20 +334,20 @@ namespace texture
         const OrmPackInput& input,
         std::string& errorMessage)
     {
-        // After decompression attempt, check if any textures are still compressed
+        // ORM packing requires uncompressed pixel access — source textures must be imported as Uncompressed
         if (hasAo && aoData && aoData->compressionFormat != resource::TextureCompressionFormat::Uncompressed)
         {
-            errorMessage = "AO texture is compressed and could not be decompressed: " + input.aoPath;
+            errorMessage = "AO texture is compressed (BC7). Re-import as Uncompressed for ORM packing: " + input.aoPath;
             return false;
         }
         if (hasRoughness && roughnessData && roughnessData->compressionFormat != resource::TextureCompressionFormat::Uncompressed)
         {
-            errorMessage = "Roughness texture is compressed and could not be decompressed: " + input.roughnessPath;
+            errorMessage = "Roughness texture is compressed (BC7). Re-import as Uncompressed for ORM packing: " + input.roughnessPath;
             return false;
         }
         if (hasMetallic && metallicData && metallicData->compressionFormat != resource::TextureCompressionFormat::Uncompressed)
         {
-            errorMessage = "Metallic texture is compressed and could not be decompressed: " + input.metallicPath;
+            errorMessage = "Metallic texture is compressed (BC7). Re-import as Uncompressed for ORM packing: " + input.metallicPath;
             return false;
         }
         if (hasAo && (!aoData || aoData->textureData().empty()))
@@ -475,12 +459,6 @@ namespace texture
 
         loadTextures(input, hasAo, hasRoughness, hasMetallic,
                      aoData, roughnessData, metallicData, progressCallback);
-
-        if (progressCallback) progressCallback(0.4f);
-
-        // Decompress any compressed input textures for CPU pixel access
-        decompressIfNeeded(hasAo, hasRoughness, hasMetallic,
-                          aoData, roughnessData, metallicData, input.decompressCallback);
 
         if (progressCallback) progressCallback(0.5f);
 

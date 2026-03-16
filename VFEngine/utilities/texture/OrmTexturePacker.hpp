@@ -17,10 +17,6 @@ namespace texture
     // Callback for compressing a TextureData in-place after ORM channel packing
     using TextureCompressCallback = std::function<void(resource::TextureData& textureData)>;
 
-    // Callback for decompressing a compressed TextureData in-place before pixel access
-    // Returns decompressed RGBA8 data for the base mip, restoring pixel-readable state
-    using TextureDecompressCallback = std::function<void(resource::TextureData& textureData)>;
-
     // Input paths for ORM packing - all optional
     // At least one texture must be provided to determine output dimensions
     struct OrmPackInput {
@@ -29,7 +25,6 @@ namespace texture
         std::string metallicPath;   // Optional - defaults to 0 (non-metallic)
         std::string outputPath;     // Required
         TextureCompressCallback compressCallback;     // Optional - compresses output before saving
-        TextureDecompressCallback decompressCallback;  // Optional - decompresses inputs for pixel access
     };
 
     class OrmTexturePacker
