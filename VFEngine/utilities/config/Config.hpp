@@ -6,7 +6,7 @@
 struct Version
 {
     static constexpr uint32_t major = 1;
-    static constexpr uint32_t minor = 1;
+    static constexpr uint32_t minor = 0;
     static constexpr uint32_t patch = 0;
 };
 
