@@ -11,11 +11,13 @@ namespace serialization
         struct ActionData
         {
             std::vector<services::InputBinding> bindings;
+            std::string context = "Default";
         };
 
         std::unordered_map<std::string, ActionData> actions;
         std::unordered_map<std::string, services::Axis1DDefinition> axes1D;
         std::unordered_map<std::string, services::Axis2DDefinition> axes2D;
+        std::unordered_map<std::string, services::InputContextDefinition> contexts;
     };
 
     class InputMappingSerialization

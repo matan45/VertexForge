@@ -9,7 +9,8 @@ namespace services {
 
     class ActionMappingServiceImpl : public IActionMappingService {
     public:
-        ActionMappingServiceImpl() = default;
+        ActionMappingServiceImpl();
+
         ~ActionMappingServiceImpl() override = default;
 
         void registerEventHandlers() override;
@@ -22,8 +23,10 @@ namespace services {
         std::vector<std::string> getAllActionNames() const override;
 
         void registerAction(const std::string& actionName,
-                             const std::vector<InputBinding>& defaultBindings) override;
+                             const std::vector<InputBinding>& defaultBindings,
+                             const std::string& context = "Default") override;
 
+        void setActionContext(const std::string& actionName, const std::string& context) override;
         void unregisterAction(const std::string& actionName) override;
 
         void addBinding(const std::string& actionName, const InputBinding& binding) override;
@@ -55,18 +58,39 @@ namespace services {
         std::vector<std::string> getAllAxis2DNames() const override;
         std::optional<Axis2DDefinition> getAxis2DDefinition(const std::string& name) const override;
 
+        void createContext(const std::string& name, bool blocking = true) override;
+        void removeContext(const std::string& name) override;
+        void pushContext(const std::string& name) override;
+        void popContext(const std::string& name = "") override;
+        void setContextBlocking(const std::string& name, bool blocking) override;
+
+        std::vector<std::string> getActiveContexts() const override;
+        std::vector<std::string> getAllContextNames() const override;
+        bool isContextActive(const std::string& name) const override;
+        std::vector<std::string> getContextActions(const std::string& name) const override;
+        std::string getActionContext(const std::string& actionName) const override;
+
     private:
         struct ActionEntry {
             std::vector<InputBinding> currentBindings;
             std::vector<InputBinding> defaultBindings;
+            std::string context = "Default";
+        };
+
+        struct ContextState {
+            InputContextDefinition definition;
+            bool active = false;
         };
 
         bool checkBinding(const InputBinding& binding, bool (*queryKey)(int), bool (*queryMouse)(int)) const;
+        bool isActionContextActive(const std::string& contextName) const;
 
         std::unordered_map<std::string, ActionEntry> actions;
         std::unordered_map<std::string, std::vector<InputBinding>> pendingOverrides;
         std::unordered_map<std::string, Axis1DDefinition> axes1D;
         std::unordered_map<std::string, Axis2DDefinition> axes2D;
+        std::vector<std::string> contextStack;
+        std::unordered_map<std::string, ContextState> contexts;
     };
 
 }

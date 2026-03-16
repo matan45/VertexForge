@@ -1,6 +1,7 @@
 #include "InputActionMappingWindow.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/input/ActionMappingEvents.hpp"
+#include "events/input/InputContextEvents.hpp"
 #include "events/input/InputEvents.hpp"
 #include <imgui.h>
 
@@ -83,14 +84,22 @@ namespace windows
         actionNames = names;
         std::sort(actionNames.begin(), actionNames.end());
 
+        contextNames = dispatcher.query(events::input::GetAllContextNamesQuery{});
+        std::sort(contextNames.begin(), contextNames.end());
+
         for (const auto& name : names)
         {
-            events::input::GetActionBindingsQuery query;
-            query.actionName = name;
-            auto bindings = dispatcher.query(query);
+            events::input::GetActionBindingsQuery bQuery;
+            bQuery.actionName = name;
+            auto bindings = dispatcher.query(bQuery);
+
+            events::input::GetActionContextQuery cQuery;
+            cQuery.actionName = name;
+            auto ctx = dispatcher.query(cQuery);
 
             ActionEntry entry;
             entry.name = name;
+            entry.context = ctx;
             entry.bindings = bindings;
             entries.push_back(std::move(entry));
         }
@@ -194,8 +203,10 @@ namespace windows
             ImGui::Separator();
             ImGui::Spacing();
 
+            drawContextFilter();
+
             // Create new action
-            ImGui::SetNextItemWidth(200.0f);
+            ImGui::SetNextItemWidth(150.0f);
             ImGui::InputTextWithHint("##newaction", "Action name...", newActionName, sizeof(newActionName));
             ImGui::SameLine();
             if (ImGui::Button("+ New Action"))
@@ -206,6 +217,7 @@ namespace windows
                     auto& dispatcher = events::EventDispatcher::instance();
                     events::input::RegisterActionCommand cmd;
                     cmd.actionName = name;
+                    cmd.context = selectedContextFilter != "All" ? selectedContextFilter : "Default";
                     dispatcher.execute(cmd);
                     newActionName[0] = '\0';
                     refresh();
@@ -324,6 +336,8 @@ namespace windows
 
                 for (int i = 0; i < static_cast<int>(entries.size()); ++i)
                 {
+                    if (selectedContextFilter != "All" && entries[i].context != selectedContextFilter)
+                        continue;
                     drawActionEntry(i);
                 }
             }
@@ -335,6 +349,10 @@ namespace windows
             ImGui::Separator();
             ImGui::Spacing();
             drawAxis2DSection();
+
+            ImGui::Separator();
+            ImGui::Spacing();
+            drawContextSection();
         }
         ImGui::End();
     }
@@ -344,7 +362,11 @@ namespace windows
         auto& entry = entries[index];
         ImGui::PushID(entry.name.c_str());
 
-        bool headerOpen = ImGui::CollapsingHeader(entry.name.c_str(),
+        std::string headerLabel = entry.name;
+        if (entry.context != "Default")
+            headerLabel += "  [" + entry.context + "]";
+
+        bool headerOpen = ImGui::CollapsingHeader(headerLabel.c_str(),
             ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
 
         // Delete action button on the right
@@ -366,6 +388,17 @@ namespace windows
         if (headerOpen)
         {
             ImGui::Indent(16.0f);
+
+            // Context selector
+            ImGui::SetNextItemWidth(150.0f);
+            if (drawContextCombo("Context##actionctx", entry.context))
+            {
+                auto& dispatcher = events::EventDispatcher::instance();
+                events::input::SetActionContextCommand cmd;
+                cmd.actionName = entry.name;
+                cmd.context = entry.context;
+                dispatcher.execute(cmd);
+            }
 
             // List current bindings
             for (int i = 0; i < static_cast<int>(entry.bindings.size()); ++i)
@@ -624,6 +657,143 @@ namespace windows
 
             if (axis2DEntries.empty())
                 ImGui::TextDisabled("No 2D axes defined.");
+
+            ImGui::Unindent(16.0f);
+        }
+    }
+
+    void InputActionMappingWindow::drawContextFilter()
+    {
+        ImGui::Text("Context:");
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(150.0f);
+        if (ImGui::BeginCombo("##contextfilter", selectedContextFilter.c_str()))
+        {
+            if (ImGui::Selectable("All", selectedContextFilter == "All"))
+                selectedContextFilter = "All";
+            for (const auto& ctx : contextNames)
+            {
+                bool selected = (ctx == selectedContextFilter);
+                if (ImGui::Selectable(ctx.c_str(), selected))
+                    selectedContextFilter = ctx;
+                if (selected)
+                    ImGui::SetItemDefaultFocus();
+            }
+            ImGui::EndCombo();
+        }
+        ImGui::Spacing();
+    }
+
+    bool InputActionMappingWindow::drawContextCombo(const char* label, std::string& current)
+    {
+        bool changed = false;
+        int selectedIdx = -1;
+        for (int i = 0; i < static_cast<int>(contextNames.size()); ++i)
+        {
+            if (contextNames[i] == current)
+            {
+                selectedIdx = i;
+                break;
+            }
+        }
+
+        const char* preview = selectedIdx >= 0 ? contextNames[selectedIdx].c_str() : "Default";
+        if (ImGui::BeginCombo(label, preview))
+        {
+            for (int i = 0; i < static_cast<int>(contextNames.size()); ++i)
+            {
+                bool isSelected = (i == selectedIdx);
+                if (ImGui::Selectable(contextNames[i].c_str(), isSelected))
+                {
+                    current = contextNames[i];
+                    changed = true;
+                }
+                if (isSelected)
+                    ImGui::SetItemDefaultFocus();
+            }
+            ImGui::EndCombo();
+        }
+        return changed;
+    }
+
+    void InputActionMappingWindow::drawContextSection()
+    {
+        if (ImGui::CollapsingHeader("Contexts", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            ImGui::Indent(16.0f);
+
+            ImGui::SetNextItemWidth(150.0f);
+            ImGui::InputTextWithHint("##newcontext", "Context name...", newContextName, sizeof(newContextName));
+            ImGui::SameLine();
+            if (ImGui::Button("+ New Context"))
+            {
+                std::string name(newContextName);
+                if (!name.empty())
+                {
+                    auto& dispatcher = events::EventDispatcher::instance();
+                    events::input::CreateContextCommand cmd;
+                    cmd.contextName = name;
+                    cmd.blocking = true;
+                    dispatcher.execute(cmd);
+                    newContextName[0] = '\0';
+                    refresh();
+                }
+            }
+
+            ImGui::Spacing();
+
+            for (const auto& ctxName : contextNames)
+            {
+                ImGui::PushID(("ctx_" + ctxName).c_str());
+
+                auto& dispatcher = events::EventDispatcher::instance();
+                events::input::IsContextActiveQuery activeQ;
+                activeQ.contextName = ctxName;
+                bool active = dispatcher.query(activeQ);
+
+                ImGui::Text("%s", ctxName.c_str());
+                if (ctxName != "Default")
+                {
+                    ImGui::SameLine();
+                    if (active)
+                    {
+                        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 0.2f, 1.0f));
+                        if (ImGui::SmallButton("Active"))
+                        {
+                            events::input::PopContextCommand cmd;
+                            cmd.contextName = ctxName;
+                            dispatcher.execute(cmd);
+                        }
+                        ImGui::PopStyleColor();
+                    }
+                    else
+                    {
+                        if (ImGui::SmallButton("Inactive"))
+                        {
+                            events::input::PushContextCommand cmd;
+                            cmd.contextName = ctxName;
+                            dispatcher.execute(cmd);
+                        }
+                    }
+
+                    ImGui::SameLine(ImGui::GetContentRegionAvail().x + ImGui::GetCursorPosX() - 25.0f);
+                    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.6f, 0.15f, 0.15f, 1.0f));
+                    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.2f, 0.2f, 1.0f));
+                    if (ImGui::SmallButton("Del"))
+                    {
+                        events::input::RemoveContextCommand cmd;
+                        cmd.contextName = ctxName;
+                        dispatcher.execute(cmd);
+                        refresh();
+                    }
+                    ImGui::PopStyleColor(2);
+                }
+
+                ImGui::PopID();
+            }
+
+            if (contextNames.empty())
+                ImGui::TextDisabled("No contexts defined.");
 
             ImGui::Unindent(16.0f);
         }

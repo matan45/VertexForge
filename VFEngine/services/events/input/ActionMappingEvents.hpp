@@ -47,8 +47,16 @@ namespace events::input {
     struct RegisterActionCommand : ICommand<void> {
         std::string actionName;
         std::vector<services::InputBinding> defaultBindings;
+        std::string context = "Default";
 
         std::string_view getName() const override { return "RegisterAction"; }
+    };
+
+    struct SetActionContextCommand : ICommand<void> {
+        std::string actionName;
+        std::string context;
+
+        std::string_view getName() const override { return "SetActionContext"; }
     };
 
     struct UnregisterActionCommand : ICommand<void> {

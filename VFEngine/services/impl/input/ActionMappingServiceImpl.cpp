@@ -1,6 +1,7 @@
 #include "ActionMappingServiceImpl.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/input/ActionMappingEvents.hpp"
+#include "../../events/input/InputContextEvents.hpp"
 #include "../../events/input/InputEvents.hpp"
 #include "../../events/project/ResourceEvents.hpp"
 #include "../../serialization/InputMappingSerialization.hpp"
@@ -33,6 +34,25 @@ namespace services {
         }
     }
 
+    ActionMappingServiceImpl::ActionMappingServiceImpl() {
+        contexts["Default"] = {{"Default", false}, true};
+        contextStack.push_back("Default");
+    }
+
+    // ============================================
+    // Context filtering
+    // ============================================
+
+    bool ActionMappingServiceImpl::isActionContextActive(const std::string& contextName) const {
+        for (auto it = contextStack.rbegin(); it != contextStack.rend(); ++it) {
+            auto ctxIt = contexts.find(*it);
+            if (ctxIt == contexts.end() || !ctxIt->second.active) continue;
+            if (*it == contextName) return true;
+            if (ctxIt->second.definition.blocking) return false;
+        }
+        return false;
+    }
+
     // ============================================
     // Action state queries
     // ============================================
@@ -40,6 +60,7 @@ namespace services {
     bool ActionMappingServiceImpl::isActionDown(const std::string& actionName) const {
         auto it = actions.find(actionName);
         if (it == actions.end()) return false;
+        if (!isActionContextActive(it->second.context)) return false;
 
         auto& dispatcher = events::EventDispatcher::instance();
         for (const auto& binding : it->second.currentBindings) {
@@ -61,6 +82,7 @@ namespace services {
     bool ActionMappingServiceImpl::isActionPressed(const std::string& actionName) const {
         auto it = actions.find(actionName);
         if (it == actions.end()) return false;
+        if (!isActionContextActive(it->second.context)) return false;
 
         auto& dispatcher = events::EventDispatcher::instance();
         for (const auto& binding : it->second.currentBindings) {
@@ -82,6 +104,7 @@ namespace services {
     bool ActionMappingServiceImpl::isActionReleased(const std::string& actionName) const {
         auto it = actions.find(actionName);
         if (it == actions.end()) return false;
+        if (!isActionContextActive(it->second.context)) return false;
 
         auto& dispatcher = events::EventDispatcher::instance();
         for (const auto& binding : it->second.currentBindings) {
@@ -123,12 +146,14 @@ namespace services {
     // ============================================
 
     void ActionMappingServiceImpl::registerAction(const std::string& actionName,
-                                                    const std::vector<InputBinding>& defaultBindings) {
+                                                    const std::vector<InputBinding>& defaultBindings,
+                                                    const std::string& context) {
         if (actions.find(actionName) != actions.end()) return;
 
         ActionEntry entry;
         entry.defaultBindings = defaultBindings;
         entry.currentBindings = defaultBindings;
+        entry.context = context;
 
         // Apply pending overrides from a previously loaded bindings file
         auto pendingIt = pendingOverrides.find(actionName);
@@ -138,6 +163,12 @@ namespace services {
         }
 
         actions[actionName] = std::move(entry);
+    }
+
+    void ActionMappingServiceImpl::setActionContext(const std::string& actionName, const std::string& context) {
+        auto it = actions.find(actionName);
+        if (it == actions.end()) return;
+        it->second.context = context;
     }
 
     // ============================================
@@ -299,10 +330,14 @@ namespace services {
     bool ActionMappingServiceImpl::saveBindings(const std::string& filePath) {
         serialization::InputMappingData data;
         for (const auto& [name, entry] : actions) {
-            data.actions[name] = {entry.currentBindings};
+            data.actions[name] = {entry.currentBindings, entry.context};
         }
         data.axes1D = axes1D;
         data.axes2D = axes2D;
+        for (const auto& [name, state] : contexts) {
+            if (name == "Default") continue;
+            data.contexts[name] = state.definition;
+        }
 
         bool ok = serialization::InputMappingSerialization::save(data, filePath);
         if (ok) {
@@ -319,14 +354,23 @@ namespace services {
             return false;
         }
 
+        // Load contexts
+        for (auto& [name, def] : data.contexts) {
+            if (contexts.find(name) == contexts.end()) {
+                contexts[name] = {def, false};
+            }
+        }
+
         for (auto& [actionName, actionData] : data.actions) {
             auto it = actions.find(actionName);
             if (it != actions.end()) {
                 it->second.currentBindings = actionData.bindings;
+                it->second.context = actionData.context;
             } else {
                 ActionEntry entry;
                 entry.currentBindings = actionData.bindings;
                 entry.defaultBindings = actionData.bindings;
+                entry.context = actionData.context;
                 actions[actionName] = std::move(entry);
             }
         }
@@ -339,6 +383,106 @@ namespace services {
         }
 
         return true;
+    }
+
+    // ============================================
+    // Context management
+    // ============================================
+
+    void ActionMappingServiceImpl::createContext(const std::string& name, bool blocking) {
+        if (contexts.find(name) != contexts.end()) {
+            vfLogWarning("[ActionMapping] Context '{}' already exists", name);
+            return;
+        }
+        contexts[name] = {InputContextDefinition{name, blocking}, false};
+    }
+
+    void ActionMappingServiceImpl::removeContext(const std::string& name) {
+        if (name == "Default") {
+            vfLogWarning("[ActionMapping] Cannot remove Default context");
+            return;
+        }
+        contexts.erase(name);
+        contextStack.erase(std::remove(contextStack.begin(), contextStack.end(), name), contextStack.end());
+    }
+
+    void ActionMappingServiceImpl::pushContext(const std::string& name) {
+        auto it = contexts.find(name);
+        if (it == contexts.end()) {
+            vfLogWarning("[ActionMapping] Cannot push unknown context '{}'", name);
+            return;
+        }
+        // Remove if already on stack, then push to top
+        contextStack.erase(std::remove(contextStack.begin(), contextStack.end(), name), contextStack.end());
+        contextStack.push_back(name);
+        it->second.active = true;
+    }
+
+    void ActionMappingServiceImpl::popContext(const std::string& name) {
+        if (name.empty()) {
+            // Pop topmost non-Default context
+            for (auto it = contextStack.rbegin(); it != contextStack.rend(); ++it) {
+                if (*it != "Default") {
+                    auto ctxIt = contexts.find(*it);
+                    if (ctxIt != contexts.end()) ctxIt->second.active = false;
+                    contextStack.erase(std::next(it).base());
+                    return;
+                }
+            }
+            return;
+        }
+        if (name == "Default") return;
+        auto ctxIt = contexts.find(name);
+        if (ctxIt != contexts.end()) ctxIt->second.active = false;
+        contextStack.erase(std::remove(contextStack.begin(), contextStack.end(), name), contextStack.end());
+    }
+
+    void ActionMappingServiceImpl::setContextBlocking(const std::string& name, bool blocking) {
+        auto it = contexts.find(name);
+        if (it == contexts.end()) return;
+        it->second.definition.blocking = blocking;
+    }
+
+    std::vector<std::string> ActionMappingServiceImpl::getActiveContexts() const {
+        std::vector<std::string> result;
+        for (const auto& name : contextStack) {
+            auto it = contexts.find(name);
+            if (it != contexts.end() && it->second.active) {
+                result.push_back(name);
+            }
+        }
+        return result;
+    }
+
+    std::vector<std::string> ActionMappingServiceImpl::getAllContextNames() const {
+        std::vector<std::string> names;
+        names.reserve(contexts.size());
+        for (const auto& [name, _] : contexts) {
+            names.push_back(name);
+        }
+        return names;
+    }
+
+    bool ActionMappingServiceImpl::isContextActive(const std::string& name) const {
+        auto it = contexts.find(name);
+        if (it == contexts.end()) return false;
+        return it->second.active;
+    }
+
+    std::vector<std::string> ActionMappingServiceImpl::getContextActions(const std::string& name) const {
+        std::vector<std::string> result;
+        for (const auto& [actionName, entry] : actions) {
+            if (entry.context == name) {
+                result.push_back(actionName);
+            }
+        }
+        return result;
+    }
+
+    std::string ActionMappingServiceImpl::getActionContext(const std::string& actionName) const {
+        auto it = actions.find(actionName);
+        if (it == actions.end()) return "";
+        return it->second.context;
     }
 
     // ============================================
@@ -377,7 +521,12 @@ namespace services {
         // Commands
         dispatcher.registerCommandHandler<events::input::RegisterActionCommand>(
             [this](const events::input::RegisterActionCommand& cmd) {
-                registerAction(cmd.actionName, cmd.defaultBindings);
+                registerAction(cmd.actionName, cmd.defaultBindings, cmd.context);
+            });
+
+        dispatcher.registerCommandHandler<events::input::SetActionContextCommand>(
+            [this](const events::input::SetActionContextCommand& cmd) {
+                setActionContext(cmd.actionName, cmd.context);
             });
 
         dispatcher.registerCommandHandler<events::input::UnregisterActionCommand>(
@@ -471,6 +620,58 @@ namespace services {
         dispatcher.registerCommandHandler<events::input::UnregisterAxis2DCommand>(
             [this](const events::input::UnregisterAxis2DCommand& cmd) {
                 unregisterAxis2D(cmd.axisName);
+            });
+
+        // Context commands
+        dispatcher.registerCommandHandler<events::input::CreateContextCommand>(
+            [this](const events::input::CreateContextCommand& cmd) {
+                createContext(cmd.contextName, cmd.blocking);
+            });
+
+        dispatcher.registerCommandHandler<events::input::RemoveContextCommand>(
+            [this](const events::input::RemoveContextCommand& cmd) {
+                removeContext(cmd.contextName);
+            });
+
+        dispatcher.registerCommandHandler<events::input::PushContextCommand>(
+            [this](const events::input::PushContextCommand& cmd) {
+                pushContext(cmd.contextName);
+            });
+
+        dispatcher.registerCommandHandler<events::input::PopContextCommand>(
+            [this](const events::input::PopContextCommand& cmd) {
+                popContext(cmd.contextName);
+            });
+
+        dispatcher.registerCommandHandler<events::input::SetContextBlockingCommand>(
+            [this](const events::input::SetContextBlockingCommand& cmd) {
+                setContextBlocking(cmd.contextName, cmd.blocking);
+            });
+
+        // Context queries
+        dispatcher.registerQueryHandler<events::input::GetActiveContextsQuery>(
+            [this](const events::input::GetActiveContextsQuery&) {
+                return getActiveContexts();
+            });
+
+        dispatcher.registerQueryHandler<events::input::GetAllContextNamesQuery>(
+            [this](const events::input::GetAllContextNamesQuery&) {
+                return getAllContextNames();
+            });
+
+        dispatcher.registerQueryHandler<events::input::IsContextActiveQuery>(
+            [this](const events::input::IsContextActiveQuery& query) {
+                return isContextActive(query.contextName);
+            });
+
+        dispatcher.registerQueryHandler<events::input::GetContextActionsQuery>(
+            [this](const events::input::GetContextActionsQuery& query) {
+                return getContextActions(query.contextName);
+            });
+
+        dispatcher.registerQueryHandler<events::input::GetActionContextQuery>(
+            [this](const events::input::GetActionContextQuery& query) {
+                return getActionContext(query.actionName);
             });
     }
 

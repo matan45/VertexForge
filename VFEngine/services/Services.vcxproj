@@ -123,6 +123,7 @@
     <ClInclude Include="events\editor\SculptModeEvents.hpp" />
     <ClInclude Include="events\editor\UndoRedoEvents.hpp" />
     <ClInclude Include="events\input\ActionMappingEvents.hpp" />
+    <ClInclude Include="events\input\InputContextEvents.hpp" />
     <ClInclude Include="events\input\InputEvents.hpp" />
     <ClInclude Include="events\lifecycle\AssetLifecycleEvents.hpp" />
     <ClInclude Include="events\meshbrush\MeshBrushEvents.hpp" />

@@ -27,6 +27,7 @@
 #include "../api/ScriptCommunicationAPI.hpp"
 #include "../api/InputActionAPI.hpp"
 #include "../api/InputAxisAPI.hpp"
+#include "../api/InputContextAPI.hpp"
 
 #include "print/Log.hpp"
 namespace core
@@ -86,6 +87,7 @@ namespace core
         api::ScriptCommunicationAPI::registerAPI(interpreter);
         api::InputActionAPI::registerAPI(interpreter);
         api::InputAxisAPI::registerAPI(interpreter);
+        api::InputContextAPI::registerAPI(interpreter);
 
         vfLogInfo("[NativeAPIRegistry] Registered native engine APIs");
     }

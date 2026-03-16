@@ -33,6 +33,11 @@ namespace services {
         std::vector<InputBinding> bindings;
     };
 
+    struct InputContextDefinition {
+        std::string name;
+        bool blocking = true;
+    };
+
     struct Axis1DDefinition {
         std::string name;
         std::string positiveAction;  // +1

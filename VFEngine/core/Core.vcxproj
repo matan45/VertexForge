@@ -118,6 +118,7 @@
     <ClInclude Include="adapters\api\InputAPI.hpp" />
     <ClInclude Include="adapters\api\InputActionAPI.hpp" />
     <ClInclude Include="adapters\api\InputAxisAPI.hpp" />
+    <ClInclude Include="adapters\api\InputContextAPI.hpp" />
     <ClInclude Include="adapters\api\LightAPI.hpp" />
     <ClInclude Include="adapters\api\LogAPI.hpp" />
     <ClInclude Include="adapters\api\NativeHelpers.hpp" />
@@ -232,6 +233,7 @@
     <ClCompile Include="adapters\api\InputAPI.cpp" />
     <ClCompile Include="adapters\api\InputActionAPI.cpp" />
     <ClCompile Include="adapters\api\InputAxisAPI.cpp" />
+    <ClCompile Include="adapters\api\InputContextAPI.cpp" />
     <ClCompile Include="adapters\api\LightAPI.cpp" />
     <ClCompile Include="adapters\api\LogAPI.cpp" />
     <ClCompile Include="adapters\api\NavmeshAPI.cpp" />

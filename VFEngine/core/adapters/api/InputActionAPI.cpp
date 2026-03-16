@@ -72,6 +72,31 @@ namespace core::api
                 return value::Value(std::monostate{});
             });
 
+        // _native_inputaction_registerInContext(actionName, context, bindingType, code) -> void
+        interpreter->registerNativeFunction("_native_inputaction_registerInContext",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                if (args.size() < 4) return value::Value(std::monostate{});
+                std::string name = extractString(args[0], "_native_inputaction_registerInContext");
+                std::string context = extractString(args[1], "_native_inputaction_registerInContext");
+                int type = static_cast<int>(extractInt64(args[2]));
+                int code = static_cast<int>(extractInt64(args[3]));
+
+                services::InputBinding binding;
+                binding.type = static_cast<services::BindingType>(type);
+                binding.code = code;
+                binding.requireShift = args.size() > 4 ? extractBool(args[4]) : false;
+                binding.requireCtrl = args.size() > 5 ? extractBool(args[5]) : false;
+                binding.requireAlt = args.size() > 6 ? extractBool(args[6]) : false;
+
+                events::input::RegisterActionCommand cmd;
+                cmd.actionName = name;
+                cmd.context = context;
+                cmd.defaultBindings.push_back(binding);
+                dispatcher.execute(cmd);
+                return value::Value(std::monostate{});
+            });
+
         // _native_inputaction_addBinding(actionName, bindingType, code, [shift, ctrl, alt]) -> void
         interpreter->registerNativeFunction("_native_inputaction_addBinding",
             [&dispatcher](const std::vector<value::Value>& args) -> value::Value

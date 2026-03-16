@@ -24,7 +24,11 @@ namespace services {
 
         // Action registration
         virtual void registerAction(const std::string& actionName,
-                                     const std::vector<InputBinding>& defaultBindings) = 0;
+                                     const std::vector<InputBinding>& defaultBindings,
+                                     const std::string& context = "Default") = 0;
+
+        // Action context
+        virtual void setActionContext(const std::string& actionName, const std::string& context) = 0;
 
         // Action removal
         virtual void unregisterAction(const std::string& actionName) = 0;
@@ -61,6 +65,20 @@ namespace services {
         virtual glm::vec2 getAxis2DValue(const std::string& name) const = 0;
         virtual std::vector<std::string> getAllAxis2DNames() const = 0;
         virtual std::optional<Axis2DDefinition> getAxis2DDefinition(const std::string& name) const = 0;
+
+        // Context management
+        virtual void createContext(const std::string& name, bool blocking = true) = 0;
+        virtual void removeContext(const std::string& name) = 0;
+        virtual void pushContext(const std::string& name) = 0;
+        virtual void popContext(const std::string& name = "") = 0;
+        virtual void setContextBlocking(const std::string& name, bool blocking) = 0;
+
+        // Context queries
+        virtual std::vector<std::string> getActiveContexts() const = 0;
+        virtual std::vector<std::string> getAllContextNames() const = 0;
+        virtual bool isContextActive(const std::string& name) const = 0;
+        virtual std::vector<std::string> getContextActions(const std::string& name) const = 0;
+        virtual std::string getActionContext(const std::string& actionName) const = 0;
     };
 
 }

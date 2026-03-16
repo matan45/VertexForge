@@ -33,6 +33,11 @@ public class InputAction {
         _native_inputaction_register(actionName, bindingType, code);
     }
 
+    // Register a new action in a specific input context
+    public static function registerInContext(String actionName, String context, int bindingType, int code): void {
+        _native_inputaction_registerInContext(actionName, context, bindingType, code);
+    }
+
     // Register a new action with a combo binding (e.g., Shift+W)
     public static function registerCombo(String actionName, int bindingType, int code, bool shift, bool ctrl, bool alt): void {
         _native_inputaction_register(actionName, bindingType, code, shift, ctrl, alt);

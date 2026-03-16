@@ -20,6 +20,7 @@ namespace windows
         struct ActionEntry
         {
             std::string name;
+            std::string context;
             std::vector<services::InputBinding> bindings;
             std::vector<services::InputBinding> defaultBindings;
             bool isModified = false;
@@ -48,17 +49,23 @@ namespace windows
         char newActionName[128] = {};
         char newAxis1DName[128] = {};
         char newAxis2DName[128] = {};
+        char newContextName[128] = {};
+        std::string selectedContextFilter = "All";
         nfd::FileDialog fileDialog;
         std::vector<ActionEntry> entries;
         std::vector<Axis1DEntry> axis1DEntries;
         std::vector<Axis2DEntry> axis2DEntries;
         std::vector<std::string> actionNames;
+        std::vector<std::string> contextNames;
 
         void refresh();
         void drawActionEntry(int index);
         void drawAxis1DSection();
         void drawAxis2DSection();
+        void drawContextSection();
+        void drawContextFilter();
         bool drawActionCombo(const char* label, std::string& current);
+        bool drawContextCombo(const char* label, std::string& current);
         const char* getKeyName(int keyCode) const;
         const char* getMouseButtonName(int button) const;
         std::string getBindingDisplayName(const services::InputBinding& binding) const;

@@ -11,11 +11,23 @@ namespace serialization
     {
         try {
             json root;
-            root["schemaVersion"] = "1.0";
+            root["schemaVersion"] = "2.0";
+
+            // Contexts
+            json contextsJson = json::object();
+            for (const auto& [name, def] : data.contexts) {
+                json c;
+                c["blocking"] = def.blocking;
+                contextsJson[name] = c;
+            }
+            root["contexts"] = contextsJson;
 
             // Actions
             json actionsJson = json::object();
             for (const auto& [name, action] : data.actions) {
+                json actionObj;
+                actionObj["context"] = action.context;
+
                 json arr = json::array();
                 for (const auto& binding : action.bindings) {
                     json b;
@@ -26,7 +38,8 @@ namespace serialization
                     if (binding.requireAlt) b["alt"] = true;
                     arr.push_back(b);
                 }
-                actionsJson[name] = arr;
+                actionObj["bindings"] = arr;
+                actionsJson[name] = actionObj;
             }
             root["actionBindings"] = actionsJson;
 
@@ -69,6 +82,24 @@ namespace serialization
         }
     }
 
+    namespace {
+        void parseBindings(const json& bindingsArr, std::vector<services::InputBinding>& outBindings)
+        {
+            for (const auto& b : bindingsArr) {
+                if (!b.contains("type") || !b.contains("code")) continue;
+
+                services::InputBinding binding;
+                std::string typeStr = b["type"].get<std::string>();
+                binding.type = (typeStr == "key") ? services::BindingType::Key : services::BindingType::MouseButton;
+                binding.code = b["code"].get<int>();
+                binding.requireShift = b.value("shift", false);
+                binding.requireCtrl = b.value("ctrl", false);
+                binding.requireAlt = b.value("alt", false);
+                outBindings.push_back(binding);
+            }
+        }
+    }
+
     bool InputMappingSerialization::load(const std::string& filePath, InputMappingData& outData)
     {
         try {
@@ -85,23 +116,36 @@ namespace serialization
                 return false;
             }
 
-            // Actions
-            for (auto& [actionName, bindingsArr] : root["actionBindings"].items()) {
-                if (!bindingsArr.is_array()) continue;
+            std::string version = root.value("schemaVersion", "1.0");
 
-                InputMappingData::ActionData action;
-                for (const auto& b : bindingsArr) {
-                    if (!b.contains("type") || !b.contains("code")) continue;
-
-                    services::InputBinding binding;
-                    std::string typeStr = b["type"].get<std::string>();
-                    binding.type = (typeStr == "key") ? services::BindingType::Key : services::BindingType::MouseButton;
-                    binding.code = b["code"].get<int>();
-                    binding.requireShift = b.value("shift", false);
-                    binding.requireCtrl = b.value("ctrl", false);
-                    binding.requireAlt = b.value("alt", false);
-                    action.bindings.push_back(binding);
+            // Contexts (v2.0+)
+            if (root.contains("contexts") && root["contexts"].is_object()) {
+                for (auto& [ctxName, ctxObj] : root["contexts"].items()) {
+                    if (!ctxObj.is_object()) continue;
+                    services::InputContextDefinition def;
+                    def.name = ctxName;
+                    def.blocking = ctxObj.value("blocking", true);
+                    outData.contexts[ctxName] = def;
                 }
+            }
+
+            // Actions
+            for (auto& [actionName, actionVal] : root["actionBindings"].items()) {
+                InputMappingData::ActionData action;
+
+                if (actionVal.is_object()) {
+                    // v2.0 format: { "context": "...", "bindings": [...] }
+                    action.context = actionVal.value("context", "Default");
+                    if (actionVal.contains("bindings") && actionVal["bindings"].is_array()) {
+                        parseBindings(actionVal["bindings"], action.bindings);
+                    }
+                } else if (actionVal.is_array()) {
+                    // v1.0 format: [...]
+                    parseBindings(actionVal, action.bindings);
+                } else {
+                    continue;
+                }
+
                 outData.actions[actionName] = std::move(action);
             }
 
