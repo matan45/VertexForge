@@ -4,10 +4,11 @@
 #include <cstdint>
 #include "config/Config.hpp"
 #include "resource/Types.hpp"
+#include "../ImportExport.hpp"
 
 namespace types
 {
-    class TextureCompressor
+    class VF_IMPORT_API TextureCompressor
     {
     public:
         // Compress RGBA8 data to BC7
