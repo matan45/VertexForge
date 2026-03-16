@@ -26,6 +26,7 @@
 #include "config/VolumetricFogConfigWindow.hpp"
 #include "config/LightStreamingDebugWindow.hpp"
 #include "PluginManagerWindow.hpp"
+#include "config/InputActionMappingWindow.hpp"
 #include "MainMenuBar.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/terrain/TerrainEvents.hpp"
@@ -68,11 +69,13 @@ namespace windows
         VolumetricFogConfigWindow volumetricFogConfigWindow;
         LightStreamingDebugWindow lightStreamingDebugWindow;
         PluginManagerWindow pluginManagerWindow;
+        InputActionMappingWindow inputActionMappingWindow;
         MainMenuBar menuBar;
 
         events::SubscriptionToken sceneClearedToken;
         events::SubscriptionToken sceneLoadedToken;
         events::SubscriptionToken openImportDialogToken;
+        events::SubscriptionToken openInputMappingToken;
 
     public:
         explicit MainImguiWindow();

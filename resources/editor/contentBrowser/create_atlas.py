@@ -59,6 +59,7 @@ ICON_FILES = {
     18: "sea",              # physics animation
     19: "ai-tree",              # physics animation
     20: "plugin",              # physics animation
+    21: "input"             # physics animation
 }
 
 def find_icon_file(base_name):

@@ -41,6 +41,12 @@ namespace events::input {
         std::string_view getName() const override { return "IsKeyReleased"; }
     };
 
+    struct IsMouseButtonPressedQuery : IQuery<bool> {
+        int button;
+
+        std::string_view getName() const override { return "IsMouseButtonPressed"; }
+    };
+
     struct IsMouseButtonReleasedQuery : IQuery<bool> {
         int button;
 

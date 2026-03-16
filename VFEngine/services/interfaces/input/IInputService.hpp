@@ -63,6 +63,9 @@ namespace services {
         // Check if a mouse button is currently pressed
         virtual bool isMouseButtonDown(int button) const = 0;
 
+        // Check if a mouse button was just pressed this frame (rising-edge detection)
+        virtual bool isMouseButtonPressed(int button) const = 0;
+
         // Check if a mouse button was just released this frame
         virtual bool isMouseButtonReleased(int button) const = 0;
 

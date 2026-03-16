@@ -15,10 +15,10 @@ namespace services
 
 namespace core
 {
-    class ScriptInputEventBridge
+    class ScriptInputActionEventBridge
     {
     public:
-        ScriptInputEventBridge(
+        ScriptInputActionEventBridge(
             ::services::ScriptInterpreter* interpreter,
             const std::unordered_map<uint64_t, std::unordered_set<std::string>>& instanceToInterfaces,
             std::unordered_map<uint64_t, std::any>& instanceToObject,
@@ -28,8 +28,9 @@ namespace core
         void unsubscribeAll();
 
     private:
-        void dispatchToAllListeners(const char* methodName,
-                                     const std::vector<value::Value>& args);
+        void onKeyOrButtonEvent(int code, bool isKey, bool isPressed,
+                                bool shiftDown, bool ctrlDown, bool altDown);
+        void dispatchActionEvent(const char* methodName, const std::string& actionName);
 
         ::services::ScriptInterpreter* interpreter;
         const std::unordered_map<uint64_t, std::unordered_set<std::string>>& instanceToInterfaces;

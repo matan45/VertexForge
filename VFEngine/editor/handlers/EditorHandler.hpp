@@ -6,6 +6,7 @@
 #include "interfaces/project/ISceneService.hpp"
 #include "interfaces/render/IEditorRenderService.hpp"
 #include "interfaces/input/IInputService.hpp"
+#include "interfaces/input/IActionMappingService.hpp"
 #include "interfaces/editor/IWindowStateService.hpp"
 #include "interfaces/render/IPreviewService.hpp"
 #include "interfaces/editor/IEditorModeService.hpp"
@@ -82,6 +83,7 @@ namespace handlers {
 		std::shared_ptr<services::ISceneService> sceneService;
 		std::shared_ptr<services::IEditorRenderService> renderService;
 		std::shared_ptr<services::IInputService> inputService;
+		std::shared_ptr<services::IActionMappingService> actionMappingService;
 		std::shared_ptr<services::IWindowStateService> windowStateService;
 		std::shared_ptr<services::IPreviewService> previewService;
 		std::shared_ptr<services::IEditorModeService> editorModeService;

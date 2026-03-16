@@ -27,6 +27,7 @@ namespace services {
 
         // Mouse State
         bool isMouseButtonDown(int button) const override;
+        bool isMouseButtonPressed(int button) const override;
         bool isMouseButtonReleased(int button) const override;
         bool isDoubleClick(int button) const override;
         glm::vec2 getMousePosition() const override;

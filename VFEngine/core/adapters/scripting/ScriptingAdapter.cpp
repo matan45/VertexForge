@@ -10,7 +10,7 @@
 #include "ScriptSocketEventBridge.hpp"
 #include "ScriptVFXEventBridge.hpp"
 #include "ScriptNavigationEventBridge.hpp"
-#include "ScriptInputEventBridge.hpp"
+#include "ScriptInputActionEventBridge.hpp"
 #include "NativeAPIRegistry.hpp"
 #include "CoroutineManager.hpp"
 #include "ScriptCommunicationManager.hpp"
@@ -88,7 +88,7 @@ namespace core
             navigationEventBridge = std::make_unique<ScriptNavigationEventBridge>(
                 interpreter.get(), instanceToInterfaces, instanceToObject, instanceToEntity);
 
-            inputEventBridge = std::make_unique<ScriptInputEventBridge>(
+            inputActionEventBridge = std::make_unique<ScriptInputActionEventBridge>(
                 interpreter.get(), instanceToInterfaces, instanceToObject, instanceToEntity);
 
             physicsEventBridge->subscribeAll();
@@ -97,7 +97,7 @@ namespace core
             socketEventBridge->subscribeAll();
             vfxEventBridge->subscribeAll();
             navigationEventBridge->subscribeAll();
-            inputEventBridge->subscribeAll();
+            inputActionEventBridge->subscribeAll();
 
             initialized = true;
             return true;
@@ -115,7 +115,7 @@ namespace core
     {
         if (!initialized) return;
 
-        if (inputEventBridge) inputEventBridge->unsubscribeAll();
+        if (inputActionEventBridge) inputActionEventBridge->unsubscribeAll();
         if (navigationEventBridge) navigationEventBridge->unsubscribeAll();
         if (vfxEventBridge) vfxEventBridge->unsubscribeAll();
         if (socketEventBridge) socketEventBridge->unsubscribeAll();
@@ -334,7 +334,7 @@ namespace core
                 "ISocketAttachmentListener",
                 "IVFXEventListener",
                 "INavigationEventListener",
-                "IInputEventListener"
+                "IInputActionListener"
             };
 
             std::unordered_set<std::string> interfaces;

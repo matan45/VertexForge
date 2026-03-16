@@ -27,6 +27,7 @@ namespace windows
         Water,
         BehaviorTree,
         Plugin,
+        InputMapping,
         Other
     };
 
@@ -52,7 +53,8 @@ namespace windows
         PhysAnim = 17,
         Water = 18,
         BehaviorTree = 19,
-        Plugin = 20
+        Plugin = 20,
+        InputMapping = 21
     };
 
     struct Asset

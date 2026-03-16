@@ -51,6 +51,11 @@ namespace services {
         return inputController->isMouseButtonDown(button);
     }
 
+    bool InputServiceImpl::isMouseButtonPressed(int button) const {
+        if (!inputController) return false;
+        return inputController->isMouseButtonPressed(button);
+    }
+
     bool InputServiceImpl::isMouseButtonReleased(int button) const {
         if (!inputController) return false;
         return inputController->isMouseButtonReleased(button);
@@ -249,6 +254,11 @@ namespace services {
         dispatcher.registerQueryHandler<events::input::IsKeyReleasedQuery>(
             [this](const events::input::IsKeyReleasedQuery& query) {
                 return isKeyReleased(query.keyCode);
+            });
+
+        dispatcher.registerQueryHandler<events::input::IsMouseButtonPressedQuery>(
+            [this](const events::input::IsMouseButtonPressedQuery& query) {
+                return isMouseButtonPressed(query.button);
             });
 
         dispatcher.registerQueryHandler<events::input::IsMouseButtonReleasedQuery>(

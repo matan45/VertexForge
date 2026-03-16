@@ -5,6 +5,7 @@
 #include "impl/project/SceneServiceImpl.hpp"
 #include "impl/render/EditorRenderServiceImpl.hpp"
 #include "impl/input/InputServiceImpl.hpp"
+#include "impl/input/ActionMappingServiceImpl.hpp"
 #include "impl/editor/WindowStateServiceImpl.hpp"
 #include "impl/render/PreviewServiceImpl.hpp"
 #include "impl/editor/EditorModeServiceImpl.hpp"
@@ -281,6 +282,7 @@ namespace handlers
         sculptModeService.reset();
         editorModeService.reset();
         windowStateService.reset();
+        actionMappingService.reset();
         inputService.reset();
 
         controllers::Import::shutdown();
@@ -331,6 +333,7 @@ namespace handlers
             bootstrap->getPostProcessProvider()
         );
         inputService = std::make_shared<services::InputServiceImpl>(bootstrap->getWindow());
+        actionMappingService = std::make_shared<services::ActionMappingServiceImpl>();
         windowStateService = std::make_shared<services::WindowStateServiceImpl>(bootstrap->getWindow());
         previewService = std::make_shared<services::PreviewServiceImpl>(
             bootstrap->getMaterialPreviewProvider(),
@@ -517,6 +520,7 @@ namespace handlers
         sceneService->registerEventHandlers();
         renderService->registerEventHandlers();
         inputService->registerEventHandlers();
+        actionMappingService->registerEventHandlers();
         windowStateService->registerEventHandlers();
         previewService->registerEventHandlers();
         editorModeService->registerEventHandlers();
