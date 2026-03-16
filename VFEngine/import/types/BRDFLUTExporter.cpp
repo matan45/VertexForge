@@ -4,9 +4,12 @@
 #include "resource/Types.hpp"
 #include "config/Config.hpp"
 #include "threading/JobSystem.hpp"
+#include "asset/AssetMetadata.hpp"
+#include "asset/AssetMetadataSerializer.hpp"
 
 #include <glm/glm.hpp>
 #include <cmath>
+#include <chrono>
 #include <fstream>
 #include <filesystem>
 #include <algorithm>
@@ -171,13 +174,38 @@ namespace types
         resource::endian::writeLE<uint32_t>(outFile, 4u);
         resource::endian::writeLE<uint32_t>(outFile, 1u);
 
-        // Mip 0 header
+        // Compression format: Uncompressed
+        resource::endian::writeLE<uint8_t>(outFile, static_cast<uint8_t>(resource::TextureCompressionFormat::Uncompressed));
+
+        // Mip 0: width, height, dataSize, pixels
         resource::endian::writeLE<uint32_t>(outFile, LUT_SIZE);
         resource::endian::writeLE<uint32_t>(outFile, LUT_SIZE);
+        resource::endian::writeLE<uint32_t>(outFile, static_cast<uint32_t>(pixelData.size()));
 
         outFile.write(reinterpret_cast<const char*>(pixelData.data()), pixelData.size());
 
         outFile.close();
         vfLogInfo("BRDF LUT saved to: {}", outputPath);
+
+        // Create .vfmeta sidecar so the content browser can identify this asset
+        auto metaPath = asset::AssetMetadataSerializer::getMetaPath(outputPath);
+        if (!std::filesystem::exists(metaPath))
+        {
+            asset::AssetMetadata metadata;
+            metadata.guid = asset::AssetGUID::generate();
+            metadata.type = resource::AssetType::Texture;
+            metadata.importSourcePath = "generated:brdf_lut";
+
+            auto now = std::chrono::system_clock::now();
+            auto time = std::chrono::system_clock::to_time_t(now);
+            std::tm tm{};
+            localtime_s(&tm, &time);
+            char buf[32];
+            std::strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", &tm);
+            metadata.importTimestamp = buf;
+
+            asset::AssetMetadataSerializer::save(metadata, metaPath);
+            vfLogInfo("BRDF LUT metadata saved to: {}", metaPath.string());
+        }
     }
 }
