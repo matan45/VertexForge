@@ -175,6 +175,7 @@
     <ClInclude Include="resource\ShaderResource.hpp" />
     <ClInclude Include="resource\TextureResource.hpp" />
     <ClInclude Include="resource\Types.hpp" />
+    <ClInclude Include="resource\VertexQuantization.hpp" />
     <ClInclude Include="resource\VorbisDecoder.hpp" />
     <ClInclude Include="scene\Entity.hpp" />
     <ClInclude Include="scene\EntityRegistry.hpp" />

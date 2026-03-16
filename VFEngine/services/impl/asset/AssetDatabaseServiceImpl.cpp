@@ -9,6 +9,9 @@
 #include "asset/DependencyScanner.hpp"
 #include "print/Log.hpp"
 #include <filesystem>
+#include <chrono>
+#include <sstream>
+#include <iomanip>
 
 namespace fs = std::filesystem;
 
@@ -247,6 +250,15 @@ namespace services
         metadata.guid = guid;
         metadata.type = type;
         metadata.importSourcePath = sourcePath;
+        {
+            auto now = std::chrono::system_clock::now();
+            auto time = std::chrono::system_clock::to_time_t(now);
+            std::tm tm{};
+            localtime_s(&tm, &time);
+            std::ostringstream oss;
+            oss << std::put_time(&tm, "%Y-%m-%d %H:%M:%S");
+            metadata.importTimestamp = oss.str();
+        }
         auto metaPath = asset::AssetMetadataSerializer::getMetaPath(outputPath);
         asset::AssetMetadataSerializer::save(metadata, metaPath);
 
