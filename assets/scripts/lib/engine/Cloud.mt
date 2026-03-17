@@ -24,6 +24,20 @@ public class Cloud {
     }
 
     // ============================================
+    // Color
+    // ============================================
+
+    // Tint the cloud color RGB (default: 1,1,1 = white)
+    // Use warm tones for sunset, grey for overcast
+    public static function setColorTint(float r, float g, float b): void {
+        _native_cloud_setColorTint(r, g, b);
+    }
+
+    public static function getColorTint(): float[] {
+        return _native_cloud_getColorTint();
+    }
+
+    // ============================================
     // Cloud Layer (altitude in meters)
     // ============================================
 

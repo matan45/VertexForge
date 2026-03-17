@@ -59,6 +59,22 @@ namespace core::api
                 { s.cloudMaxAltitude = extractFloat(args[0]); });
             });
 
+        // ── Color ──
+
+        interpreter->registerNativeFunction("_native_cloud_setColorTint",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                return modifyCloud(dispatcher, [&](render::cloud::CloudSettings& s)
+                { s.cloudColorTint = glm::vec3(extractFloat(args[0]), extractFloat(args[1]), extractFloat(args[2])); });
+            });
+
+        interpreter->registerNativeFunction("_native_cloud_getColorTint",
+            [&dispatcher](const std::vector<value::Value>&) -> value::Value
+            {
+                auto s = dispatcher.query(events::cloud::GetCloudSettingsQuery{});
+                return makeVec3Array(s.cloudColorTint);
+            });
+
         // ── Density & Coverage ──
 
         interpreter->registerNativeFunction("_native_cloud_setDensity",

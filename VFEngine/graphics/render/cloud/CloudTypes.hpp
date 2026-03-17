@@ -23,5 +23,6 @@ namespace render::cloud
         glm::vec4 temporalParams;    // x=blendFactor, y=frameIndex, z=0, w=0
         glm::vec4 atmosphereParams;  // x=planetRadius, y=atmosphereRadius, z=0, w=0
         glm::vec4 marchParams;       // x=maxSteps, y=lightSteps, z=0, w=0
+        glm::vec4 cloudColorTint;    // xyz=tint RGB, w=0
     };
 }

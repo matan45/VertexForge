@@ -746,7 +746,8 @@ namespace serialization
                 {"ambientIntensity", s.ambientIntensity},
                 {"temporalBlendFactor", s.temporalBlendFactor},
                 {"maxMarchSteps", s.maxMarchSteps},
-                {"lightMarchSteps", s.lightMarchSteps}
+                {"lightMarchSteps", s.lightMarchSteps},
+                {"cloudColorTint", {s.cloudColorTint.x, s.cloudColorTint.y, s.cloudColorTint.z}}
             };
         }
 
@@ -796,6 +797,12 @@ namespace serialization
                 s.maxMarchSteps = std::clamp(c["maxMarchSteps"].get<uint32_t>(), 16u, 256u);
             if (c.contains("lightMarchSteps") && c["lightMarchSteps"].is_number_unsigned())
                 s.lightMarchSteps = std::clamp(c["lightMarchSteps"].get<uint32_t>(), 2u, 16u);
+            if (c.contains("cloudColorTint") && c["cloudColorTint"].is_array() && c["cloudColorTint"].size() == 3)
+            {
+                s.cloudColorTint.x = std::clamp(c["cloudColorTint"][0].get<float>(), 0.0f, 2.0f);
+                s.cloudColorTint.y = std::clamp(c["cloudColorTint"][1].get<float>(), 0.0f, 2.0f);
+                s.cloudColorTint.z = std::clamp(c["cloudColorTint"][2].get<float>(), 0.0f, 2.0f);
+            }
         }
 
     } // anonymous namespace

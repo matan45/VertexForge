@@ -169,6 +169,7 @@ namespace render::cloud
         params.temporalParams = glm::vec4(settings.temporalBlendFactor, static_cast<float>(frameIndex % 16), 0.0f, 0.0f);
         params.marchParams = glm::vec4(static_cast<float>(settings.maxMarchSteps),
                                         static_cast<float>(settings.lightMarchSteps), 0.0f, 0.0f);
+        params.cloudColorTint = glm::vec4(settings.cloudColorTint, 0.0f);
 
         return params;
     }

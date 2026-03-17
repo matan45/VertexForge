@@ -112,13 +112,23 @@ float getHeightFraction(float altitude, float cloudMinAlt, float cloudMaxAlt)
 // Height-dependent density gradient based on cloud type (stratus=0, cumulus=1)
 float heightGradient(float heightFrac, float cloudType)
 {
-    // Stratus: thin flat layer
-    float stratus = smoothstep(0.0, 0.1, heightFrac) * smoothstep(0.4, 0.2, heightFrac);
+    // Stratus: thin flat layer, concentrated at bottom
+    float stratus = smoothstep(0.0, 0.05, heightFrac) * smoothstep(0.35, 0.15, heightFrac);
 
-    // Cumulus: tall rounded shape
-    float cumulus = smoothstep(0.0, 0.15, heightFrac) * smoothstep(1.0, 0.6, heightFrac);
+    // Stratocumulus: slightly taller
+    float stratocumulus = smoothstep(0.0, 0.08, heightFrac) * smoothstep(0.6, 0.3, heightFrac);
 
-    return mix(stratus, cumulus, cloudType);
+    // Cumulus: tall puffy shape, flat base, rounded top
+    float cumulus = smoothstep(0.0, 0.1, heightFrac) * smoothstep(1.0, 0.4, heightFrac);
+    // Boost density in the lower-middle for puffy base
+    cumulus *= 1.0 + 0.5 * smoothstep(0.1, 0.3, heightFrac) * smoothstep(0.6, 0.3, heightFrac);
+
+    // Blend based on type: 0=stratus, 0.5=stratocumulus, 1=cumulus
+    float t = cloudType;
+    if (t < 0.5)
+        return mix(stratus, stratocumulus, t * 2.0);
+    else
+        return mix(stratocumulus, cumulus, (t - 0.5) * 2.0);
 }
 
 // ──────────────────────────────────────────────────────────────

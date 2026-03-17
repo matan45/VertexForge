@@ -51,6 +51,7 @@ namespace windows
             isDirty |= ImGui::SliderFloat("Global Density", &settings.globalDensity, 0.0f, 1.0f);
             isDirty |= ImGui::SliderFloat("Global Coverage", &settings.globalCoverage, 0.0f, 1.0f);
             isDirty |= ImGui::SliderFloat("Cloud Type", &settings.cloudType, 0.0f, 1.0f, "%.2f (Stratus-Cumulus)");
+            isDirty |= ImGui::ColorEdit3("Cloud Color", &settings.cloudColorTint.x);
         }
     }
 

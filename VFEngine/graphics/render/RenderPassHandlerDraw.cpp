@@ -97,6 +97,13 @@ namespace render
                 }
             }
 
+            // Feed sun color from atmosphere settings
+            if (atmospherePipeline && atmospherePipeline->isInitialized())
+            {
+                auto atmosSettings = atmospherePipeline->getSettings();
+                cloudPipeline->setSunIrradiance(atmosSettings.sunIrradiance);
+            }
+
             cloudPipeline->dispatchCompute(commandBuffer);
             cloudPipeline->renderComposite(commandBuffer, imageIndex);
         }

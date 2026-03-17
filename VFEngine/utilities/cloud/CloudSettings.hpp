@@ -1,4 +1,5 @@
 #pragma once
+#include <glm/glm.hpp>
 #include <cstdint>
 
 namespace render::cloud
@@ -25,6 +26,9 @@ namespace render::cloud
         // Wind
         float windSpeed = 25.0f;             // m/s
         float windDirectionDeg = 45.0f;
+
+        // Color tint (multiplied with sun lighting)
+        glm::vec3 cloudColorTint{1.0f, 1.0f, 1.0f};
 
         // Lighting
         float lightAbsorption = 0.75f;

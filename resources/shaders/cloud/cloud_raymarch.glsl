@@ -27,6 +27,7 @@ layout(set = 0, binding = 5) uniform CloudParams {
     vec4 temporalParams;    // x=blendFactor, y=frameIndex, z=0, w=0
     vec4 atmosphereParams;  // x=planetRadius, y=atmosphereRadius
     vec4 marchParams;       // x=maxSteps, y=lightSteps
+    vec4 cloudColorTint;    // xyz=tint RGB
 } params;
 
 #include "cloud_common.glsl"
@@ -190,15 +191,20 @@ void main()
     float planetRadius = params.cloudLayer.w;
     vec3 planetCenter = vec3(0.0, -planetRadius, 0.0);
 
-    // Fade out rays pointing below the horizon
+    // Skip rays that can't reach the cloud layer
     vec3 surfaceNormal = normalize(rayOrigin - planetCenter);
     float horizonDot = dot(rayDir, surfaceNormal);
-    if (horizonDot < -0.3)
+    float cameraAltitude = length(rayOrigin - planetCenter) - planetRadius;
+
+    // Below cloud layer: only rays going upward can see clouds
+    // Above cloud layer: rays going downward can also see clouds
+    float minDot = (cameraAltitude < params.cloudLayer.x) ? -0.01 : -0.5;
+    if (horizonDot < minDot)
     {
         imageStore(cloudResult, texel, vec4(0.0, 0.0, 0.0, 1.0));
         return;
     }
-    float horizonFade = smoothstep(-0.3, 0.0, horizonDot);
+    float horizonFade = smoothstep(minDot, minDot + 0.05, horizonDot);
 
     // Intersect ray with cloud layer spheres
     float innerRadius = planetRadius + params.cloudLayer.x;
@@ -208,7 +214,6 @@ void main()
     vec2 outerHit = raySphereIntersect(rayOrigin, rayDir, planetCenter, outerRadius);
 
     // Determine march start/end
-    float cameraAltitude = length(rayOrigin - planetCenter) - planetRadius;
     float marchStart, marchEnd;
 
     if (cameraAltitude < params.cloudLayer.x)
@@ -288,10 +293,30 @@ void main()
 
             // Light march towards sun
             float lightDensity = lightMarch(samplePos, heightFrac);
-            float lightTransmittance = beerLambert(lightDensity, params.lightParams.x);
+            float absorption = params.lightParams.x;
 
-            // Powder effect
-            float powder = powderEffect(density * stepSize, cosTheta);
+            // Beer-Lambert with powder effect for direct light
+            float beer = exp(-lightDensity * absorption);
+            float powder = 1.0 - exp(-lightDensity * absorption * 2.0);
+            float lightTransmittance = max(beer, powder * 0.07);
+
+            // Multi-scattering approximation (Wrenninge/Schneider method)
+            // Each bounce: extinction halves, contribution halves
+            // This brightens thick cloud interiors instead of going dark
+            vec3 multiScatterLight = vec3(0.0);
+            float msExtinction = 1.0;
+            float msEccentricity = 1.0;
+            for (int ms = 0; ms < 3; ms++)
+            {
+                float msPhase = dualLobePhase(cosTheta,
+                    params.lightParams.y * msEccentricity,
+                    params.lightParams.z * msEccentricity,
+                    params.lightParams.w);
+                float msBeer = exp(-lightDensity * absorption * msExtinction);
+                multiScatterLight += vec3(msPhase * msBeer * msExtinction);
+                msExtinction *= 0.5;
+                msEccentricity *= 0.5; // each bounce becomes more isotropic
+            }
 
             // Sample atmosphere transmittance for sun at this altitude
             float cosZenith = dot(normalize(samplePos - planetCenter), sunDir);
@@ -304,19 +329,21 @@ void main()
                     altitude, cosZenith);
             }
 
-            // Scattering contribution
-            float sigmaE = density * params.lightParams.x; // extinction coefficient
-            float sigmaS = sigmaE * 0.9;                   // scattering coeff (albedo ~0.9)
-
-            // Sun irradiance is in atmosphere units - scale up for cloud illumination
+            // Sun illumination with multi-scattering
             vec3 sunColor = params.lightColor.xyz * 6.0;
-            vec3 sunLight = sunColor * sunTransmittance * lightTransmittance * powder * phase;
+            vec3 directSun = sunColor * sunTransmittance * multiScatterLight;
 
-            // Ambient: sky light on clouds (multi-scattering approximation)
-            vec3 ambient = sunColor * params.lightColor.w * (0.6 + 0.4 * heightFrac);
-            vec3 lightIntensity = sunLight + ambient;
+            // Ambient: sky light from all directions
+            // Brighter at cloud tops, darker/bluer at bases
+            vec3 skyColor = sunColor * vec3(0.4, 0.5, 0.7); // blue-tinted sky ambient
+            vec3 groundBounce = sunColor * vec3(0.15, 0.12, 0.1); // warm ground bounce
+            vec3 ambient = mix(groundBounce, skyColor, heightFrac) * params.lightColor.w;
+
+            vec3 lightIntensity = directSun + ambient;
 
             // Energy-conserving integration
+            float sigmaE = density * absorption;
+            float sigmaS = sigmaE * 0.9; // scattering albedo ~0.9
             float stepExtinction = sigmaE * stepSize;
             float stepTransmittance = exp(-stepExtinction);
             vec3 stepScattering = sigmaS * lightIntensity * (1.0 - stepTransmittance) / max(sigmaE, 0.0001);
@@ -338,6 +365,15 @@ void main()
             t += inCloud ? fineStep : coarseStep;
         }
     }
+
+    // Apply color tint
+    scattering *= params.cloudColorTint.xyz;
+
+    // Distance fade: distant clouds fade out (atmosphere handles the haze)
+    float marchDist = max(t - marchStart, 0.0);
+    float distanceFade = exp(-marchDist * 0.00003);
+    scattering *= mix(distanceFade, 1.0, 0.3); // keep 30% minimum
+    transmittance = mix(1.0, transmittance, mix(distanceFade, 1.0, 0.3));
 
     // Apply horizon fade
     scattering *= horizonFade;

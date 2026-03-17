@@ -19,27 +19,28 @@ void main()
 
     vec2 uv = vec2(texel) / 1024.0;
 
-    // Large-scale coverage: big cloud formations using low-frequency Worley
-    // Worley creates distinct cell-like patches (natural cloud grouping)
-    float largeCells = 1.0 - worleyNoise3D(vec3(uv * 3.0, 0.0));    // ~3 big cells
-    float medCells   = 1.0 - worleyNoise3D(vec3(uv * 6.0, 0.5));    // ~6 medium cells
-    float smallCells  = 1.0 - worleyNoise3D(vec3(uv * 12.0, 1.0));   // finer detail
+    // Multi-octave Perlin FBM with large spatial features
+    // Low frequency = big cloud formations, high frequency = small details
+    float n1 = perlinNoise3D(vec3(uv * 4.0, 0.0));          // very large patches
+    float n2 = perlinNoise3D(vec3(uv * 8.0, 1.7));           // medium patches
+    float n3 = perlinNoise3D(vec3(uv * 16.0, 3.1));          // small detail
+    float n4 = perlinNoise3D(vec3(uv * 32.0, 5.3));          // fine detail
 
-    // Combine: large blobs with medium/small variation
-    float coverage = largeCells * 0.6 + medCells * 0.25 + smallCells * 0.15;
+    float coverage = n1 * 0.5 + n2 * 0.25 + n3 * 0.15 + n4 * 0.1;
 
-    // Add Perlin for organic edges
-    float perlinDetail = perlinNoise3D(vec3(uv * 8.0, 2.0));
-    coverage = coverage * 0.8 + perlinDetail * 0.2;
+    // Add Worley for clumpy cloud edges (inverted = peaks at cell centers)
+    float worley = 1.0 - worleyNoise3D(vec3(uv * 6.0, 7.0));
+    coverage = coverage * 0.6 + worley * 0.4;
 
-    // Increase contrast: push values away from 0.5
-    coverage = smoothstep(0.25, 0.75, coverage);
+    // Boost contrast to create clear sky vs cloudy areas
+    // Remap from ~[0.3, 0.7] to [0, 1]
+    coverage = clamp((coverage - 0.3) * 2.5, 0.0, 1.0);
 
-    // Cloud type: large-scale variation (stratus in some areas, cumulus in others)
-    float cloudType = 1.0 - worleyNoise3D(vec3(uv * 2.0 + vec2(50.0), 3.0));
-    cloudType = smoothstep(0.3, 0.7, cloudType);
+    // Cloud type: separate noise layer
+    float cloudType = perlinNoise3D(vec3(uv * 3.0 + vec2(42.0, 17.0), 9.0));
+    cloudType = clamp(cloudType, 0.0, 1.0);
 
-    // Precipitation: derived from high coverage areas
+    // Precipitation: only in thick cloud areas
     float precipitation = smoothstep(0.7, 0.95, coverage);
 
     imageStore(weatherMap, texel, vec4(coverage, cloudType, precipitation, 1.0));
