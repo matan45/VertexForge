@@ -570,11 +570,11 @@ namespace render::gpudriven
 
         bool registered = false;
 
-        auto tryRegister = [&](const std::string& texPath)
+        auto tryRegister = [&](const std::string& texPath, vk::Format format = vk::Format::eR8G8B8A8Unorm)
         {
             if (texPath.empty()) return;
 
-            if (!materials.textureCache->loadTexture(texPath))
+            if (!materials.textureCache->loadTexture(texPath, format))
             {
                 return;
             }
@@ -589,13 +589,13 @@ namespace render::gpudriven
             }
         };
 
-        tryRegister(pbrValues.albedoTexturePath);
+        tryRegister(pbrValues.albedoTexturePath, vk::Format::eR8G8B8A8Srgb);
         tryRegister(pbrValues.normalTexturePath);
         tryRegister(pbrValues.ormTexturePath);
         tryRegister(pbrValues.metallicTexturePath);
         tryRegister(pbrValues.roughnessTexturePath);
         tryRegister(pbrValues.aoTexturePath);
-        tryRegister(pbrValues.emissionTexturePath);
+        tryRegister(pbrValues.emissionTexturePath, vk::Format::eR8G8B8A8Srgb);
         tryRegister(pbrValues.heightTexturePath);
 
         if (registered)

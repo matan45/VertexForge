@@ -56,6 +56,23 @@ namespace render::volumetric
     class VolumetricPipeline;
 }
 
+namespace render::gi
+{
+    class SSGIPipeline;
+}
+
+namespace render::atmosphere
+{
+    class AtmospherePipeline;
+    struct AtmosphereSettings;
+}
+
+namespace render::cloud
+{
+    class CloudPipeline;
+    struct CloudSettings;
+}
+
 namespace render
 {
     class ClearColor;
@@ -114,6 +131,9 @@ namespace render
         std::unique_ptr<gpudriven::TerrainRaycastPipeline> terrainRaycastPipeline;
         std::unique_ptr<postprocess::PostProcessPipeline> postProcessPipeline;
         std::unique_ptr<volumetric::VolumetricFogComposite> volumetricFogComposite;
+        std::unique_ptr<gi::SSGIPipeline> ssgiPipeline;
+        std::unique_ptr<atmosphere::AtmospherePipeline> atmospherePipeline;
+        std::unique_ptr<cloud::CloudPipeline> cloudPipeline;
         std::unique_ptr<transparency::WBOITPipeline> wboitPipeline;
         bool wboitEnabled = true;
 
@@ -343,6 +363,20 @@ namespace render
         void initVolumetricFogComposite(volumetric::VolumetricPipeline* volPipeline);
         void resetVolumetricFogComposite();
         volumetric::VolumetricFogComposite* getVolumetricFogComposite() const { return volumetricFogComposite.get(); }
+
+        void initSSGI();
+        void resetSSGI();
+        gi::SSGIPipeline* getSSGIPipeline() const { return ssgiPipeline.get(); }
+
+        void initAtmosphere();
+        void resetAtmosphere();
+        void applyAtmosphereSettings(const atmosphere::AtmosphereSettings& settings);
+        atmosphere::AtmospherePipeline* getAtmospherePipeline() const { return atmospherePipeline.get(); }
+
+        void initCloud();
+        void resetCloud();
+        void applyCloudSettings(const cloud::CloudSettings& settings);
+        cloud::CloudPipeline* getCloudPipeline() const { return cloudPipeline.get(); }
 
         void cleanUp() const;
 

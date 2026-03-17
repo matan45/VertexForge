@@ -1,42 +1,15 @@
 #include "SceneSerialization.hpp"
+#include "AssetRefSerializationHelper.hpp"
 #include "JsonConverters.hpp"
 #include "../components/Components.hpp"
-#include "../asset/AssetRef.hpp"
 
 namespace serialization
 {
-    // Helper: read an AssetRef from JSON, supporting both new GUID format and legacy path format
-    static asset::AssetRef readAssetRef(const nlohmann::json& j, const std::string& newKey, const std::string& legacyKey = "")
-    {
-        // Try new GUID key first
-        if (auto it = j.find(newKey); it != j.end() && it->is_string())
-        {
-            std::string val = it->get<std::string>();
-            if (!val.empty())
-            {
-                // Detect if it's a hex GUID or a file path
-                bool isPath = val.find('.') != std::string::npos
-                           || val.find('/') != std::string::npos
-                           || val.find('\\') != std::string::npos;
-                return isPath ? asset::AssetRef::fromPath(val) : asset::AssetRef::fromHexString(val);
-            }
-        }
-        // Try legacy path key
-        if (!legacyKey.empty())
-        {
-            if (auto it = j.find(legacyKey); it != j.end() && it->is_string())
-            {
-                std::string val = it->get<std::string>();
-                if (!val.empty()) return asset::AssetRef::fromPath(val);
-            }
-        }
-        return asset::AssetRef::invalid();
-    }
 
     json SceneSerialization::serializeAudioSource2D(const components::AudioSource2DComponent& audioSource)
     {
         json j;
-        j["audioRef"] = audioSource.audioRef.toHexString();
+        writeAssetRef(j, "audioRef", audioSource.audioRef);
         j["volume"] = audioSource.volume;
         j["pitch"] = audioSource.pitch;
         j["loop"] = audioSource.loop;
@@ -71,7 +44,7 @@ namespace serialization
     json SceneSerialization::serializeAudioSource3D(const components::AudioSource3DComponent& audioSource)
     {
         json j;
-        j["audioRef"] = audioSource.audioRef.toHexString();
+        writeAssetRef(j, "audioRef", audioSource.audioRef);
         j["volume"] = audioSource.volume;
         j["pitch"] = audioSource.pitch;
         j["loop"] = audioSource.loop;
@@ -220,7 +193,7 @@ namespace serialization
         for (const auto& entry : script.scripts)
         {
             json entryJson;
-            entryJson["scriptRef"] = entry.scriptRef.toHexString();
+            writeAssetRef(entryJson, "scriptRef", entry.scriptRef);
             entryJson["enabled"] = entry.enabled;
             scriptsArray.push_back(entryJson);
         }
@@ -294,7 +267,7 @@ namespace serialization
         j["size"] = json::array({collider.size.x, collider.size.y, collider.size.z});
         j["height"] = collider.height;
         j["offset"] = json::array({collider.offset.x, collider.offset.y, collider.offset.z});
-        j["meshRef"] = collider.meshRef.toHexString();
+        writeAssetRef(j, "meshRef", collider.meshRef);
         j["isTrigger"] = collider.isTrigger;
         j["collisionLayer"] = collider.collisionLayer;
         j["friction"] = collider.friction;
@@ -423,7 +396,7 @@ namespace serialization
         const auto& config = physAnim.config;
 
         if (physAnim.physicsAnimationRef.isValid())
-            j["physicsAnimationRef"] = physAnim.physicsAnimationRef.toHexString();
+            writeAssetRef(j, "physicsAnimationRef", physAnim.physicsAnimationRef);
 
         j["defaultMode"] = physicsAnimationModeToString(config.defaultMode);
         j["collisionLayer"] = config.collisionLayer;
@@ -542,7 +515,7 @@ namespace serialization
     json SceneSerialization::serializeVFX(const components::VFXComponent& vfx)
     {
         json j;
-        j["vfxRef"] = vfx.vfxRef.toHexString();
+        writeAssetRef(j, "vfxRef", vfx.vfxRef);
         j["autoPlay"] = vfx.autoPlay;
         j["loop"] = vfx.loop;
         return j;
@@ -777,7 +750,7 @@ namespace serialization
     json SceneSerialization::serializeBehaviorTree(const components::BehaviorTreeComponent& bt)
     {
         json j;
-        j["behaviorTreeRef"] = bt.behaviorTreeRef.toHexString();
+        writeAssetRef(j, "behaviorTreeRef", bt.behaviorTreeRef);
         j["enabled"] = bt.enabled;
         return j;
     }
@@ -796,7 +769,7 @@ namespace serialization
     json SceneSerialization::serializeNavmesh(const components::NavmeshComponent& navmesh)
     {
         json j;
-        j["navmeshRef"] = navmesh.navmeshRef.toHexString();
+        writeAssetRef(j, "navmeshRef", navmesh.navmeshRef);
         return j;
     }
 

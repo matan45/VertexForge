@@ -102,17 +102,17 @@ namespace render::gpudriven
             TerrainLayerGPUData& gpuLayer = terrain.layerData[i];
             gpuLayer = {};
 
-            auto tryRegisterLayerTex = [&](const std::string& texPath) -> uint32_t
+            auto tryRegisterLayerTex = [&](const std::string& texPath, vk::Format format = vk::Format::eR8G8B8A8Unorm) -> uint32_t
             {
                 if (texPath.empty()) return 0;
-                if (!materials.textureCache->loadTexture(texPath)) return 0;
+                if (!materials.textureCache->loadTexture(texPath, format)) return 0;
                 vk::ImageView view = materials.textureCache->getViewForPath(texPath);
                 vk::Sampler sampler = materials.textureCache->getSamplerForPath(texPath);
                 if (!view || !sampler) return 0;
                 return bindlessTextures->registerTexture(texPath, view, sampler);
             };
 
-            gpuLayer.albedoTextureIndex = tryRegisterLayerTex(layer.albedoTextureRef.resolve());
+            gpuLayer.albedoTextureIndex = tryRegisterLayerTex(layer.albedoTextureRef.resolve(), vk::Format::eR8G8B8A8Srgb);
             gpuLayer.normalTextureIndex = tryRegisterLayerTex(layer.normalTextureRef.resolve());
             gpuLayer.ormTextureIndex = tryRegisterLayerTex(layer.ormTextureRef.resolve());
 

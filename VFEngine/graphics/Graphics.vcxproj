@@ -162,10 +162,18 @@
     <ClInclude Include="render\OffScreenViewPort.hpp" />
     <ClInclude Include="render\RenderPassHandler.hpp" />
     <ClInclude Include="render\RenderTextureViewPort.hpp" />
+    <ClInclude Include="render\atmosphere\AtmospherePipeline.hpp" />
+    <ClInclude Include="render\atmosphere\AtmosphereTypes.hpp" />
     <ClInclude Include="render\billboard\BillboardAtlasManager.hpp" />
     <ClInclude Include="render\billboard\BillboardBufferManager.hpp" />
     <ClInclude Include="render\billboard\BillboardPipeline.hpp" />
     <ClInclude Include="render\billboard\BillboardTypes.hpp" />
+    <ClInclude Include="render\cloud\CloudComposite.hpp" />
+    <ClInclude Include="render\cloud\CloudNoise.hpp" />
+    <ClInclude Include="render\cloud\CloudPipeline.hpp" />
+    <ClInclude Include="render\cloud\CloudRayMarch.hpp" />
+    <ClInclude Include="render\cloud\CloudTemporal.hpp" />
+    <ClInclude Include="render\cloud\CloudTypes.hpp" />
     <ClInclude Include="render\common\QuadBufferManager.hpp" />
     <ClInclude Include="render\decal\DecalPipeline.hpp" />
     <ClInclude Include="render\gi\AccelerationStructureManager.hpp" />
@@ -175,6 +183,7 @@
     <ClInclude Include="render\gi\ProbeTracePipeline.hpp" />
     <ClInclude Include="render\gi\ProbeUpdatePipeline.hpp" />
     <ClInclude Include="render\gi\RadianceCascadeManager.hpp" />
+    <ClInclude Include="render\gi\SSGIPipeline.hpp" />
     <ClInclude Include="render\gpudriven\FreeListAllocator.hpp" />
     <ClInclude Include="render\gpudriven\GPUDrivenCameraBuffer.hpp" />
     <ClInclude Include="render\gpudriven\GPUDrivenRenderer.hpp" />
@@ -389,9 +398,15 @@
     <ClCompile Include="render\RenderPassHandlerDraw.cpp" />
     <ClCompile Include="render\RenderPassHandlerPipelines.cpp" />
     <ClCompile Include="render\RenderTextureViewPort.cpp" />
+    <ClCompile Include="render\atmosphere\AtmospherePipeline.cpp" />
     <ClCompile Include="render\billboard\BillboardAtlasManager.cpp" />
     <ClCompile Include="render\billboard\BillboardBufferManager.cpp" />
     <ClCompile Include="render\billboard\BillboardPipeline.cpp" />
+    <ClCompile Include="render\cloud\CloudComposite.cpp" />
+    <ClCompile Include="render\cloud\CloudNoise.cpp" />
+    <ClCompile Include="render\cloud\CloudPipeline.cpp" />
+    <ClCompile Include="render\cloud\CloudRayMarch.cpp" />
+    <ClCompile Include="render\cloud\CloudTemporal.cpp" />
     <ClCompile Include="render\decal\DecalPipeline.cpp" />
     <ClCompile Include="render\gi\AccelerationStructureManager.cpp" />
     <ClCompile Include="render\gi\GIDebugRenderer.cpp" />
@@ -399,6 +414,7 @@
     <ClCompile Include="render\gi\ProbeTracePipeline.cpp" />
     <ClCompile Include="render\gi\ProbeUpdatePipeline.cpp" />
     <ClCompile Include="render\gi\RadianceCascadeManager.cpp" />
+    <ClCompile Include="render\gi\SSGIPipeline.cpp" />
     <ClCompile Include="render\gpudriven\GPUDrivenCameraBuffer.cpp" />
     <ClCompile Include="render\gpudriven\GPUDrivenRenderer.cpp" />
     <ClCompile Include="render\gpudriven\GPUDrivenRendererBillboard.cpp" />
@@ -549,7 +565,21 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="..\..\resources\shaders\animation\bone_evaluate.glsl" />
+    <None Include="..\..\resources\shaders\atmosphere\aerial_perspective_lut.glsl" />
+    <None Include="..\..\resources\shaders\atmosphere\atmosphere_common.glsl" />
+    <None Include="..\..\resources\shaders\atmosphere\atmosphere_composite.glsl" />
+    <None Include="..\..\resources\shaders\atmosphere\atmosphere_params.glsl" />
+    <None Include="..\..\resources\shaders\atmosphere\atmosphere_sky.glsl" />
+    <None Include="..\..\resources\shaders\atmosphere\multiscatter_lut.glsl" />
+    <None Include="..\..\resources\shaders\atmosphere\skyview_lut.glsl" />
+    <None Include="..\..\resources\shaders\atmosphere\transmittance_lut.glsl" />
     <None Include="..\..\resources\shaders\billboard\billboard.glsl" />
+    <None Include="..\..\resources\shaders\cloud\cloud_common.glsl" />
+    <None Include="..\..\resources\shaders\cloud\cloud_composite.glsl" />
+    <None Include="..\..\resources\shaders\cloud\cloud_noise_gen.glsl" />
+    <None Include="..\..\resources\shaders\cloud\cloud_raymarch.glsl" />
+    <None Include="..\..\resources\shaders\cloud\cloud_temporal.glsl" />
+    <None Include="..\..\resources\shaders\cloud\cloud_weather_gen.glsl" />
     <None Include="..\..\resources\shaders\common\camera_types.glsl" />
     <None Include="..\..\resources\shaders\common\cluster_culling.glsl" />
     <None Include="..\..\resources\shaders\common\gi_sampling.glsl" />
@@ -564,6 +594,10 @@
     <None Include="..\..\resources\shaders\gi\gi_debug_probe.glsl" />
     <None Include="..\..\resources\shaders\gi\probe_trace.glsl" />
     <None Include="..\..\resources\shaders\gi\probe_update.glsl" />
+    <None Include="..\..\resources\shaders\gi\ssgi_composite.glsl" />
+    <None Include="..\..\resources\shaders\gi\ssgi_denoise.glsl" />
+    <None Include="..\..\resources\shaders\gi\ssgi_temporal.glsl" />
+    <None Include="..\..\resources\shaders\gi\ssgi_trace.glsl" />
     <None Include="..\..\resources\shaders\gpudriven\frag_billboard.glsl" />
     <None Include="..\..\resources\shaders\gpudriven\gpu_cull_lod.glsl" />
     <None Include="..\..\resources\shaders\gpudriven\mesh_billboard.glsl" />

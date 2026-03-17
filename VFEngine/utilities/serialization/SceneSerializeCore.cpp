@@ -1,52 +1,9 @@
 #include "SceneSerialization.hpp"
+#include "AssetRefSerializationHelper.hpp"
 #include "../components/Components.hpp"
-#include "../asset/AssetRef.hpp"
-#include "../print/Log.hpp"
 
 namespace serialization
 {
-    static void writeAssetRef(json& j, const std::string& key, const asset::AssetRef& ref)
-    {
-        j[key] = ref.toHexString();
-        // Also store resolved path as fallback for GUID migration
-        const std::string& path = ref.resolve();
-        if (!path.empty())
-        {
-            j[key + "Path"] = path;
-        }
-    }
-
-    static asset::AssetRef readAssetRef(const json& j, const std::string& key)
-    {
-        if (auto it = j.find(key); it != j.end() && it->is_string())
-        {
-            std::string val = it->get<std::string>();
-            if (!val.empty())
-            {
-                auto ref = asset::AssetRef::fromHexString(val);
-                // Check if GUID resolves; if not, fall back to stored path
-                if (ref.isValid() && ref.resolve().empty())
-                {
-                    std::string pathKey = key + "Path";
-                    if (auto pathIt = j.find(pathKey); pathIt != j.end() && pathIt->is_string())
-                    {
-                        std::string fallbackPath = pathIt->get<std::string>();
-                        if (!fallbackPath.empty())
-                        {
-                            auto pathRef = asset::AssetRef::fromPath(fallbackPath);
-                            if (pathRef.isValid())
-                            {
-                                return pathRef;
-                            }
-                        }
-                    }
-                }
-                return ref;
-            }
-        }
-        return asset::AssetRef::invalid();
-    }
-
     json SceneSerialization::serializeTransform(const components::TransformComponent& transform)
     {
         json j;
@@ -173,7 +130,9 @@ namespace serialization
         json subMeshMaterialsJson = json::object();
         for (const auto& [submeshName, matRef] : material.subMeshMaterials)
         {
-            subMeshMaterialsJson[submeshName] = matRef.toHexString();
+            json smJson;
+            writeAssetRef(smJson, "ref", matRef);
+            subMeshMaterialsJson[submeshName] = smJson;
         }
         j["subMeshMaterials"] = subMeshMaterialsJson;
 
@@ -196,12 +155,23 @@ namespace serialization
             material.subMeshMaterials.clear();
             for (auto& [key, value] : it->items())
             {
-                if (value.is_string())
+                if (value.is_object())
                 {
+                    // New format: {"ref": "guid", "refPath": "path"}
+                    material.subMeshMaterials[key] = readAssetRef(value, "ref");
+                }
+                else if (value.is_string())
+                {
+                    // Legacy format: plain hex string
                     std::string val = value.get<std::string>();
                     if (!val.empty())
                     {
-                        material.subMeshMaterials[key] = asset::AssetRef::fromHexString(val);
+                        bool isPath = val.find('.') != std::string::npos
+                                   || val.find('/') != std::string::npos
+                                   || val.find('\\') != std::string::npos;
+                        material.subMeshMaterials[key] = isPath
+                            ? asset::AssetRef::fromPath(val)
+                            : asset::AssetRef::fromHexString(val);
                     }
                 }
             }

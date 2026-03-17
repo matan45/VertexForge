@@ -34,6 +34,15 @@ namespace render::gi
         uint32_t farFieldRaysPerUpdate = 32;  // Fewer rays for far-field (cheaper)
         float farFieldUpdateRate = 0.1f;      // 10% probes updated per frame (slower)
 
+        // Screen-Space GI (supplements probe-based GI with high-frequency local bounces)
+        bool ssgiEnabled = false;
+        float ssgiIntensity = 0.5f;
+        float ssgiRadius = 2.0f;
+        float ssgiMaxDistance = 100.0f;
+        int ssgiSampleCount = 8;
+        float ssgiTemporalBlend = 0.1f;
+        bool ssgiHalfResolution = true;
+
         bool showProbes = false;
         bool showCascadeBounds = false;
         bool showProbeValidity = false;
@@ -58,6 +67,9 @@ namespace render::gi
                 s.farFieldEnabled = true;
                 s.farFieldCascadeCount = 1;
                 s.farFieldMaxDistance = 500.0f;
+                s.ssgiEnabled = true;
+                s.ssgiSampleCount = 8;
+                s.ssgiHalfResolution = true;
                 break;
             case GIQuality::Ultra:
                 s.probeSpacing = 2.0f;
@@ -65,6 +77,9 @@ namespace render::gi
                 s.farFieldEnabled = true;
                 s.farFieldCascadeCount = 2;
                 s.farFieldMaxDistance = 1000.0f;
+                s.ssgiEnabled = true;
+                s.ssgiSampleCount = 12;
+                s.ssgiHalfResolution = false;
                 break;
             }
 
@@ -91,13 +106,16 @@ namespace render::gi
         bool isFarField = false;              // Far-field cascades use fewer rays and update slower
     };
 
-    // SH coefficients for irradiance (L0 + L1 = 4 coefficients, RGB = 12 floats)
+    // SH coefficients for irradiance (L0 + L1 + L2 = 9 coefficients per channel)
+    // Each channel uses 3 x vec4: [L0,L1y,L1z,L1x], [L2_-2,L2_-1,L2_0,L2_1], [L2_2,pad,pad,pad]
     struct alignas(16) ProbeData
     {
-        glm::vec4 shCoeffs[3];  // 3 x vec4 = L0.r,L1x.r,L1y.r,L1z.r / same for g,b
-        glm::vec4 validity;     // x=weight(0-1), y=age, z=hitBackface%, w=reserved
+        glm::vec4 shR[3];   // Red channel: 9 SH coefficients in 3 vec4
+        glm::vec4 shG[3];   // Green channel
+        glm::vec4 shB[3];   // Blue channel
+        glm::vec4 validity;  // x=weight(0-1), y=age, z=hitBackface%, w=reserved
     };
-    static_assert(sizeof(ProbeData) == 64, "ProbeData must be 64 bytes");
+    static_assert(sizeof(ProbeData) == 160, "ProbeData must be 160 bytes");
 
     struct alignas(16) GPUCascadeInfo
     {
@@ -116,6 +134,25 @@ namespace render::gi
         float temporalBlend;
         float frameRandom;
         uint32_t frameIndex;
+    };
+
+    struct alignas(16) SSGIParamsUBO
+    {
+        glm::mat4 projection;
+        glm::mat4 inverseProjection;
+        glm::mat4 view;
+        glm::mat4 inverseView;
+        glm::mat4 prevViewProjection;
+        glm::vec4 params;           // radius, maxDistance, intensity, temporalBlend
+        glm::vec2 resolution;
+        glm::vec2 texelSize;
+        float nearPlane;
+        float farPlane;
+        uint32_t sampleCount;
+        uint32_t frameIndex;
+        uint32_t historyValid;
+        uint32_t halfResolution;
+        float padding[2];
     };
 
     struct GIDebugStats

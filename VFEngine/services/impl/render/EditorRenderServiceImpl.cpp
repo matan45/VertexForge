@@ -3,7 +3,12 @@
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/editor/EditorModeEvents.hpp"
 #include "../../events/render/PostProcessEvents.hpp"
+#include "../../events/render/AtmosphereEvents.hpp"
+#include "../../events/render/CloudEvents.hpp"
+#include "../../events/scene/EntityTransformEvents.hpp"
+#include "../../events/scene/ComponentPhysicsLightEvents.hpp"
 #include "scene/EntityRegistry.hpp"
+#include "components/Components.hpp"
 #include <filesystem>
 
 namespace services
@@ -228,6 +233,8 @@ namespace services
         registerCullingHandlers(dispatcher);
         registerTerrainRenderHandlers(dispatcher);
         registerPostProcessHandlers(dispatcher);
+        registerAtmosphereHandlers(dispatcher);
+        registerCloudHandlers(dispatcher);
 
         meshDataChangedToken = dispatcher.subscribe<events::scene::MeshDataChangedNotification>(
             [this](const events::scene::MeshDataChangedNotification& notification)
@@ -728,6 +735,128 @@ namespace services
             [this](const events::postprocess::GetPostProcessEnabledQuery&)
             {
                 return postProcessProvider ? postProcessProvider->isPostProcessEnabled() : true;
+            });
+    }
+
+    void EditorRenderServiceImpl::registerAtmosphereHandlers(events::EventDispatcher& dispatcher)
+    {
+        dispatcher.registerCommandHandler<events::atmosphere::ApplyAtmosphereSettingsCommand>(
+            [this](const events::atmosphere::ApplyAtmosphereSettingsCommand& cmd)
+            {
+                if (offScreenProvider)
+                {
+                    offScreenProvider->applyAtmosphereSettings(cmd.settings);
+                }
+
+                // Reset stale handle if entity was deleted (e.g. scene clear)
+                if (autoCreatedSunEntity.isValid())
+                {
+                    auto& registry = scene::EntityRegistry::getRegistry();
+                    auto entity = static_cast<entt::entity>(static_cast<uint32_t>(autoCreatedSunEntity.id));
+                    if (!registry.valid(entity))
+                    {
+                        autoCreatedSunEntity = {};
+                    }
+                }
+
+                // Auto-create a directional light ("Sun") if enabling and none exists
+                if (cmd.settings.enabled)
+                {
+                    auto& registry = scene::EntityRegistry::getRegistry();
+                    auto dirLightView = registry.view<components::DirectionalLightComponent>();
+                    if (dirLightView.begin() == dirLightView.end())
+                    {
+                        auto& disp = events::EventDispatcher::instance();
+
+                        events::scene::CreateEntityCommand createCmd;
+                        createCmd.name = "Sun";
+                        auto handle = disp.execute(createCmd);
+
+                        events::scene::AddDirectionalLightComponentCommand addLight;
+                        addLight.entity = handle;
+                        disp.execute(addLight);
+
+                        // Rotate to match fallback elevation (45 deg down from zenith)
+                        events::scene::SetTransformCommand xformCmd;
+                        xformCmd.entity = handle;
+                        xformCmd.transform.position = {0.0f, 0.0f, 0.0f};
+                        xformCmd.transform.rotation = {-cmd.settings.sunElevation, cmd.settings.sunAzimuth, 0.0f};
+                        xformCmd.transform.scale = {1.0f, 1.0f, 1.0f};
+                        disp.execute(xformCmd);
+
+                        autoCreatedSunEntity = handle;
+                    }
+                }
+                // Remove auto-created Sun when disabling
+                else if (autoCreatedSunEntity.isValid())
+                {
+                    auto& disp = events::EventDispatcher::instance();
+                    events::scene::DeleteEntityCommand deleteCmd;
+                    deleteCmd.entity = autoCreatedSunEntity;
+                    disp.execute(deleteCmd);
+                    autoCreatedSunEntity = {};
+                }
+            });
+
+        dispatcher.registerQueryHandler<events::atmosphere::GetAtmosphereSettingsQuery>(
+            [this](const events::atmosphere::GetAtmosphereSettingsQuery&)
+            {
+                return offScreenProvider
+                           ? offScreenProvider->getAtmosphereSettings()
+                           : render::atmosphere::AtmosphereSettings{};
+            });
+
+        dispatcher.registerCommandHandler<events::atmosphere::SetAtmosphereEnabledCommand>(
+            [this](const events::atmosphere::SetAtmosphereEnabledCommand& cmd)
+            {
+                if (offScreenProvider)
+                {
+                    auto settings = offScreenProvider->getAtmosphereSettings();
+                    settings.enabled = cmd.enabled;
+                    offScreenProvider->applyAtmosphereSettings(settings);
+                }
+            });
+
+        dispatcher.registerQueryHandler<events::atmosphere::GetAtmosphereEnabledQuery>(
+            [this](const events::atmosphere::GetAtmosphereEnabledQuery&)
+            {
+                return offScreenProvider ? offScreenProvider->getAtmosphereSettings().enabled : false;
+            });
+    }
+
+    void EditorRenderServiceImpl::registerCloudHandlers(events::EventDispatcher& dispatcher)
+    {
+        dispatcher.registerCommandHandler<events::cloud::ApplyCloudSettingsCommand>(
+            [this](const events::cloud::ApplyCloudSettingsCommand& cmd)
+            {
+                if (offScreenProvider)
+                {
+                    offScreenProvider->applyCloudSettings(cmd.settings);
+                }
+            });
+
+        dispatcher.registerQueryHandler<events::cloud::GetCloudSettingsQuery>(
+            [this](const events::cloud::GetCloudSettingsQuery&)
+            {
+                return offScreenProvider ? offScreenProvider->getCloudSettings()
+                                         : render::cloud::CloudSettings{};
+            });
+
+        dispatcher.registerCommandHandler<events::cloud::SetCloudEnabledCommand>(
+            [this](const events::cloud::SetCloudEnabledCommand& cmd)
+            {
+                if (offScreenProvider)
+                {
+                    auto settings = offScreenProvider->getCloudSettings();
+                    settings.enabled = cmd.enabled;
+                    offScreenProvider->applyCloudSettings(settings);
+                }
+            });
+
+        dispatcher.registerQueryHandler<events::cloud::GetCloudEnabledQuery>(
+            [this](const events::cloud::GetCloudEnabledQuery&)
+            {
+                return offScreenProvider ? offScreenProvider->getCloudSettings().enabled : false;
             });
     }
 

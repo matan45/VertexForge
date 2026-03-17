@@ -8,6 +8,9 @@
 #include "../render/postprocess/PostProcessPipeline.hpp"
 #include "../render/volumetric/VolumetricFogComposite.hpp"
 #include "../render/gi/RadianceCascadeManager.hpp"
+#include "../render/gi/SSGIPipeline.hpp"
+#include "atmosphere/AtmosphereSettings.hpp"
+#include "cloud/CloudSettings.hpp"
 #include "../render/gi/GIDebugRenderer.hpp"
 #include "offscreen/CullingStatsCollector.hpp"
 #include "offscreen/CameraController.hpp"
@@ -529,6 +532,40 @@ namespace controllers
         }
     }
 
+    // ── Atmosphere Settings ─────────────────────────────────
+
+    void OffScreenController::applyAtmosphereSettings(const render::atmosphere::AtmosphereSettings& settings)
+    {
+        currentAtmosphereSettings = settings;
+
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (!renderHandler) return;
+
+        renderHandler->applyAtmosphereSettings(settings);
+    }
+
+    render::atmosphere::AtmosphereSettings OffScreenController::getAtmosphereSettings() const
+    {
+        return currentAtmosphereSettings;
+    }
+
+    // ── Cloud Settings ──────────────────────────────────────
+
+    void OffScreenController::applyCloudSettings(const render::cloud::CloudSettings& settings)
+    {
+        currentCloudSettings = settings;
+
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (!renderHandler) return;
+
+        renderHandler->applyCloudSettings(settings);
+    }
+
+    render::cloud::CloudSettings OffScreenController::getCloudSettings() const
+    {
+        return currentCloudSettings;
+    }
+
     // ── GI Settings ──────────────────────────────────────────
 
     void OffScreenController::applyGISettings(const render::gi::GISettings& settings)
@@ -540,6 +577,20 @@ namespace controllers
         if (gpu)
         {
             gpu->applyGISettings(settings);
+        }
+
+        // SSGI pipeline lifecycle: init/reset based on GI+SSGI enabled state
+        if (settings.enabled && settings.ssgiEnabled)
+        {
+            renderHandler->initSSGI();
+            if (auto* ssgi = renderHandler->getSSGIPipeline())
+            {
+                ssgi->updateSettings(settings);
+            }
+        }
+        else
+        {
+            renderHandler->resetSSGI();
         }
     }
 

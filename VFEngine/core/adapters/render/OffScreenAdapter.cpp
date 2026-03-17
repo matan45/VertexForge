@@ -411,6 +411,26 @@ namespace core {
         }
     }
 
+    void OffScreenAdapter::applyAtmosphereSettings(const render::atmosphere::AtmosphereSettings& settings) {
+        if (offScreen) {
+            offScreen->applyAtmosphereSettings(settings);
+        }
+    }
+
+    render::atmosphere::AtmosphereSettings OffScreenAdapter::getAtmosphereSettings() const {
+        return offScreen ? offScreen->getAtmosphereSettings() : render::atmosphere::AtmosphereSettings{};
+    }
+
+    void OffScreenAdapter::applyCloudSettings(const render::cloud::CloudSettings& settings) {
+        if (offScreen) {
+            offScreen->applyCloudSettings(settings);
+        }
+    }
+
+    render::cloud::CloudSettings OffScreenAdapter::getCloudSettings() const {
+        return offScreen ? offScreen->getCloudSettings() : render::cloud::CloudSettings{};
+    }
+
     void OffScreenAdapter::setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider) {
         if (offScreen) {
             offScreen->setVFXRuntimeProvider(provider);

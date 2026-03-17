@@ -7,6 +7,8 @@
 #include "terrain/BrushTypes.hpp"
 #include "postprocess/PostProcessTypes.hpp"
 #include "../render/gi/GITypes.hpp"
+#include "atmosphere/AtmosphereSettings.hpp"
+#include "cloud/CloudSettings.hpp"
 #include "../render/lighting/LightStreamManager.hpp"
 #include "../render/tools/ImmediateDebugTypes.hpp"
 #include "../../services/providers/render/IDecalRenderProvider.hpp"
@@ -93,6 +95,8 @@ namespace controllers
         glm::vec2 uiViewportPanelSize{0.0f, 0.0f};
         postprocess::PostProcessSettings currentPostProcessSettings;
         postprocess::VolumetricQuality activeVolumetricQuality = postprocess::VolumetricQuality::Medium;
+        render::atmosphere::AtmosphereSettings currentAtmosphereSettings;
+        render::cloud::CloudSettings currentCloudSettings;
 
     public:
         explicit OffScreenController();
@@ -247,6 +251,14 @@ namespace controllers
         void setGIShowProbes(bool show);
         void setGIShowCascadeBounds(bool show);
         void setGIShowProbeValidity(bool show);
+
+        // Atmosphere settings
+        void applyAtmosphereSettings(const render::atmosphere::AtmosphereSettings& settings);
+        render::atmosphere::AtmosphereSettings getAtmosphereSettings() const;
+
+        // Cloud settings
+        void applyCloudSettings(const render::cloud::CloudSettings& settings);
+        render::cloud::CloudSettings getCloudSettings() const;
 
         // Light streaming settings
         void setLightStreamingConfig(const render::lighting::LightStreamingConfig& config);

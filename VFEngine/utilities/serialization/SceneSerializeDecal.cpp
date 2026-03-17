@@ -1,36 +1,9 @@
 #include "SceneSerialization.hpp"
+#include "AssetRefSerializationHelper.hpp"
 #include "../components/Components.hpp"
-#include "../asset/AssetRef.hpp"
 
 namespace serialization
 {
-    // Helper: read an AssetRef from JSON, supporting both new GUID format and legacy path format
-    static asset::AssetRef readAssetRef(const nlohmann::json& j, const std::string& newKey, const std::string& legacyKey = "")
-    {
-        // Try new GUID key first
-        if (auto it = j.find(newKey); it != j.end() && it->is_string())
-        {
-            std::string val = it->get<std::string>();
-            if (!val.empty())
-            {
-                // Detect if it's a hex GUID or a file path
-                bool isPath = val.find('.') != std::string::npos
-                           || val.find('/') != std::string::npos
-                           || val.find('\\') != std::string::npos;
-                return isPath ? asset::AssetRef::fromPath(val) : asset::AssetRef::fromHexString(val);
-            }
-        }
-        // Try legacy path key
-        if (!legacyKey.empty())
-        {
-            if (auto it = j.find(legacyKey); it != j.end() && it->is_string())
-            {
-                std::string val = it->get<std::string>();
-                if (!val.empty()) return asset::AssetRef::fromPath(val);
-            }
-        }
-        return asset::AssetRef::invalid();
-    }
 
     json SceneSerialization::serializeDecal(const components::DecalComponent& decal)
     {
@@ -38,11 +11,11 @@ namespace serialization
         j["halfExtents"] = json::array({decal.halfExtents.x, decal.halfExtents.y, decal.halfExtents.z});
 
         if (decal.albedoTextureRef.isValid())
-            j["albedoTextureRef"] = decal.albedoTextureRef.toHexString();
+            writeAssetRef(j, "albedoTextureRef", decal.albedoTextureRef);
         if (decal.normalTextureRef.isValid())
-            j["normalTextureRef"] = decal.normalTextureRef.toHexString();
+            writeAssetRef(j, "normalTextureRef", decal.normalTextureRef);
         if (decal.ormTextureRef.isValid())
-            j["ormTextureRef"] = decal.ormTextureRef.toHexString();
+            writeAssetRef(j, "ormTextureRef", decal.ormTextureRef);
 
         j["color"] = json::array({decal.color.r, decal.color.g, decal.color.b, decal.color.a});
         j["angleFadeStart"] = decal.angleFadeStart;

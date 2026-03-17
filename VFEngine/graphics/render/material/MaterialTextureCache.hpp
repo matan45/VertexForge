@@ -110,7 +110,7 @@ namespace render::mesh
 
         void cleanUp();
 
-        bool loadTexture(const std::string& path);
+        bool loadTexture(const std::string& path, vk::Format format = vk::Format::eR8G8B8A8Unorm);
 
         vk::DescriptorSet getOrCreateMaterialDescriptorSet(
             const std::string& materialPath,

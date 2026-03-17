@@ -109,10 +109,12 @@
     <ClInclude Include="asset\AssetRef.hpp" />
     <ClInclude Include="asset\AssetReferenceScanner.hpp" />
     <ClInclude Include="asset\DependencyScanner.hpp" />
+    <ClInclude Include="atmosphere\AtmosphereSettings.hpp" />
     <ClInclude Include="behaviortree\BehaviorTreeAsset.hpp" />
     <ClInclude Include="behaviortree\BehaviorTreeRuntime.hpp" />
     <ClInclude Include="behaviortree\BehaviorTreeTypes.hpp" />
     <ClInclude Include="behaviortree\Blackboard.hpp" />
+    <ClInclude Include="cloud\CloudSettings.hpp" />
     <ClInclude Include="components\Components.hpp" />
     <ClInclude Include="components\ControllerComponents.hpp" />
     <ClInclude Include="components\CoreComponents.hpp" />
@@ -185,6 +187,7 @@
     <ClInclude Include="scene\LightBVH.hpp" />
     <ClInclude Include="scene\SceneBVH.hpp" />
     <ClInclude Include="scene\SceneGraphSystem.hpp" />
+    <ClInclude Include="serialization\AssetRefSerializationHelper.hpp" />
     <ClInclude Include="serialization\JsonConverters.hpp" />
     <ClInclude Include="serialization\PrefabSerialization.hpp" />
     <ClInclude Include="serialization\ProjectSerialization.hpp" />

@@ -152,7 +152,7 @@ void main() {
     float alpha = pc.albedo.a;
     if (hasTexture(SLOT_ALBEDO)) {
         vec4 albedoSample = texture(u_Textures[SLOT_ALBEDO], fragTexCoord);
-        albedo = pow(albedoSample.rgb, vec3(2.2));
+        albedo = albedoSample.rgb;
         alpha = albedoSample.a;
     }
 
@@ -222,16 +222,14 @@ void main() {
 
     vec3 emissive = vec3(0.0);
     if (hasTexture(SLOT_EMISSION)) {
-        emissive = pow(texture(u_Textures[SLOT_EMISSION], fragTexCoord).rgb, vec3(2.2)) * pc.emission;
+        emissive = texture(u_Textures[SLOT_EMISSION], fragTexCoord).rgb * pc.emission;
     } else {
         emissive = albedo * pc.emission;
     }
 
     vec3 color = ambient + emissive;
 
-    color = color / (color + vec3(1.0));
-
-    color = pow(color, vec3(1.0/2.2));
+    // Tonemapping and gamma handled by post-process pipeline
 
     outColor = vec4(color, alpha);
 }

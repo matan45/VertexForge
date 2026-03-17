@@ -27,6 +27,8 @@ namespace windows
         menuBar.setAnimationDebugWindow(&animationDebugWindow);
         menuBar.setGIConfigWindow(&giConfigWindow);
         menuBar.setVolumetricFogConfigWindow(&volumetricFogConfigWindow);
+        menuBar.setAtmosphereConfigWindow(&atmosphereConfigWindow);
+        menuBar.setCloudConfigWindow(&cloudConfigWindow);
         menuBar.setLightStreamingDebugWindow(&lightStreamingDebugWindow);
         menuBar.setPluginManagerWindow(&pluginManagerWindow);
         menuBar.setInputActionMappingWindow(&inputActionMappingWindow);
@@ -57,6 +59,8 @@ namespace windows
             {
                 postProcessConfigWindow.notifySceneLoaded();
                 volumetricFogConfigWindow.notifySceneLoaded();
+                atmosphereConfigWindow.notifySceneLoaded();
+                cloudConfigWindow.notifySceneLoaded();
                 giConfigWindow.notifySceneLoaded();
                 lightStreamingDebugWindow.notifySceneLoaded();
             });
@@ -116,6 +120,8 @@ namespace windows
             meshBrushToolPanel.draw();
             giConfigWindow.draw();
             volumetricFogConfigWindow.draw();
+            atmosphereConfigWindow.draw();
+            cloudConfigWindow.draw();
             lightStreamingDebugWindow.draw();
             pluginManagerWindow.draw();
             inputActionMappingWindow.draw();

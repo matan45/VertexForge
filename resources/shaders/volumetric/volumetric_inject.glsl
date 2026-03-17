@@ -329,7 +329,7 @@ void main() {
     float sigmaT = sigmaS + sigmaA;
     float anisotropy = scatterParams.z;
 
-    vec3 viewDir = normalize(cameraPosition.xyz - worldPos);
+    vec3 viewDir = normalize(worldPos - cameraPosition.xyz);
     vec3 inScattered = vec3(0.0);
 
     float ambientIntensity = ambientParams.x;

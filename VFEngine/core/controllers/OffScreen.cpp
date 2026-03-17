@@ -521,6 +521,30 @@ namespace controllers {
 		}
 	}
 
+	// ── Atmosphere Settings ──────────────────────────────────
+
+	void OffScreen::applyAtmosphereSettings(const render::atmosphere::AtmosphereSettings& settings)
+	{
+		offScreenController->applyAtmosphereSettings(settings);
+	}
+
+	render::atmosphere::AtmosphereSettings OffScreen::getAtmosphereSettings() const
+	{
+		return offScreenController->getAtmosphereSettings();
+	}
+
+	// ── Cloud Settings ──────────────────────────────────────
+
+	void OffScreen::applyCloudSettings(const render::cloud::CloudSettings& settings)
+	{
+		offScreenController->applyCloudSettings(settings);
+	}
+
+	render::cloud::CloudSettings OffScreen::getCloudSettings() const
+	{
+		return offScreenController->getCloudSettings();
+	}
+
 	// ── GI Settings ──────────────────────────────────────────
 
 	void OffScreen::applyGISettings(const render::gi::GISettings& settings)

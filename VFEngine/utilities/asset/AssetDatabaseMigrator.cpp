@@ -28,6 +28,8 @@ namespace asset
         if (ext == ".vfnavmesh")       return resource::AssetType::Navmesh;
         if (ext == ".vfinputmapping") return resource::AssetType::InputMapping;
         if (ext == ".vfterrain")      return resource::AssetType::Terrain;
+        if (ext == ".vfterrainmat")   return resource::AssetType::TerrainMaterial;
+        if (ext == ".vfbehaviortree") return resource::AssetType::BehaviorTree;
         return resource::AssetType::COUNT;
     }
 
@@ -47,7 +49,7 @@ namespace asset
             ".vfmat", ".vfmatinstance", ".vfanimator", ".vfvfx",
             ".vffont", ".vfscene", ".vfprefab", ".vfterrain",
             ".vfterrainmat", ".vfwater", ".vfnavmesh", ".vfimposter",
-            ".vfinputmapping"
+            ".vfinputmapping", ".vfbehaviortree"
         };
 
         try

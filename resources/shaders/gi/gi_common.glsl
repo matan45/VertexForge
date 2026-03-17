@@ -1,13 +1,19 @@
 #ifndef GI_COMMON_GLSL
 #define GI_COMMON_GLSL
 
-// Spherical Harmonics (L0 + L1 = 4 coefficients per channel)
-// ProbeData: 3 x vec4 (R, G, B SH coefficients) + validity vec4
+// Spherical Harmonics (L0 + L1 + L2 = 9 coefficients per channel)
+// ProbeData: 9 x vec4 (3 per R, G, B channel) + validity vec4
 
 struct ProbeData {
-    vec4 shR;       // L0, L1x, L1y, L1z for Red
-    vec4 shG;       // L0, L1x, L1y, L1z for Green
-    vec4 shB;       // L0, L1x, L1y, L1z for Blue
+    vec4 shR0;      // R: L0, L1y, L1z, L1x
+    vec4 shR1;      // R: L2_-2, L2_-1, L2_0, L2_1
+    vec4 shR2;      // R: L2_2, pad, pad, pad
+    vec4 shG0;      // G: L0, L1y, L1z, L1x
+    vec4 shG1;      // G: L2_-2, L2_-1, L2_0, L2_1
+    vec4 shG2;      // G: L2_2, pad, pad, pad
+    vec4 shB0;      // B: L0, L1y, L1z, L1x
+    vec4 shB1;      // B: L2_-2, L2_-1, L2_0, L2_1
+    vec4 shB2;      // B: L2_2, pad, pad, pad
     vec4 validity;  // x=weight, y=age, z=backfaceHitRatio, w=reserved
 };
 
@@ -16,34 +22,61 @@ struct CascadeInfo {
     ivec4 gridDimsOffset;    // xyz = grid dimensions, w = probeOffset
 };
 
-// SH basis functions (band 0 and band 1)
-const float SH_C0 = 0.282095;   // 1 / (2*sqrt(PI))
-const float SH_C1 = 0.488603;   // sqrt(3) / (2*sqrt(PI))
+// SH basis constants (bands 0, 1, and 2)
+const float SH_C0  = 0.282095;   // 1 / (2*sqrt(PI))
+const float SH_C1  = 0.488603;   // sqrt(3) / (2*sqrt(PI))
+const float SH_C2  = 1.092548;   // sqrt(15 / (4*PI))  — Y2,-2, Y2,-1, Y2,1
+const float SH_C20 = 0.315392;   // sqrt(5 / (16*PI))  — Y2,0
+const float SH_C22 = 0.546274;   // sqrt(15 / (16*PI)) — Y2,2
 
-vec4 shBasis(vec3 dir) {
-    return vec4(
+// Compute L2 SH basis for a direction
+// b0 = [Y00, Y1,-1, Y10, Y11]  (L0 + L1)
+// b1 = [Y2,-2, Y2,-1, Y20, Y21] (L2 part 1)
+// b2 = Y2,2                      (L2 part 2)
+void shBasisL2(vec3 d, out vec4 b0, out vec4 b1, out float b2) {
+    b0 = vec4(
         SH_C0,
-        SH_C1 * dir.y,
-        SH_C1 * dir.z,
-        SH_C1 * dir.x
+        SH_C1 * d.y,
+        SH_C1 * d.z,
+        SH_C1 * d.x
     );
+    b1 = vec4(
+        SH_C2  * d.x * d.y,
+        SH_C2  * d.y * d.z,
+        SH_C20 * (3.0 * d.z * d.z - 1.0),
+        SH_C2  * d.x * d.z
+    );
+    b2 = SH_C22 * (d.x * d.x - d.y * d.y);
 }
 
 vec3 evaluateSH(ProbeData probe, vec3 normal) {
-    vec4 basis = shBasis(normal);
+    vec4 b0; vec4 b1; float b2;
+    shBasisL2(normal, b0, b1, b2);
     return vec3(
-        dot(probe.shR, basis),
-        dot(probe.shG, basis),
-        dot(probe.shB, basis)
+        dot(probe.shR0, b0) + dot(probe.shR1, b1) + probe.shR2.x * b2,
+        dot(probe.shG0, b0) + dot(probe.shG1, b1) + probe.shG2.x * b2,
+        dot(probe.shB0, b0) + dot(probe.shB1, b1) + probe.shB2.x * b2
     );
 }
 
-void accumulateSH(inout vec4 shR, inout vec4 shG, inout vec4 shB,
+void accumulateSH(inout vec4 shR0, inout vec4 shR1, inout vec4 shR2,
+                  inout vec4 shG0, inout vec4 shG1, inout vec4 shG2,
+                  inout vec4 shB0, inout vec4 shB1, inout vec4 shB2,
                   vec3 direction, vec3 radiance) {
-    vec4 basis = shBasis(direction);
-    shR += basis * radiance.r;
-    shG += basis * radiance.g;
-    shB += basis * radiance.b;
+    vec4 b0; vec4 b1; float b2;
+    shBasisL2(direction, b0, b1, b2);
+
+    vec4 b2v = vec4(b2, 0.0, 0.0, 0.0);
+
+    shR0 += b0  * radiance.r;
+    shR1 += b1  * radiance.r;
+    shR2 += b2v * radiance.r;
+    shG0 += b0  * radiance.g;
+    shG1 += b1  * radiance.g;
+    shG2 += b2v * radiance.g;
+    shB0 += b0  * radiance.b;
+    shB1 += b1  * radiance.b;
+    shB2 += b2v * radiance.b;
 }
 
 ivec3 probeIndexToGrid(uint probeIndex, ivec3 gridDims) {

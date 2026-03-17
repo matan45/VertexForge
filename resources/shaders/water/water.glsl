@@ -355,8 +355,7 @@ void main() {
         color = mix(color, foamColor, foam * 0.6);
     }
 
-    color = color / (color + vec3(1.0));
-    color = pow(color, vec3(1.0 / 2.2));
+    // Tonemapping and gamma handled by post-process pipeline
 
     if ((fragFlags & WATER_FLAG_SELECTED) != 0u)
     {

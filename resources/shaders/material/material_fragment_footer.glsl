@@ -1,5 +1,5 @@
 
-    vec3 albedo_linear = pow(mat_albedo, vec3(2.2));
+    vec3 albedo_linear = mat_albedo;
 
     vec3 N = normalize(fragNormal);
     vec3 V = normalize(camera.cameraPos - fragWorldPos);
@@ -24,7 +24,7 @@
 
     vec4 parallaxAlbedo = texture(u_Textures[TEX_SLOT_ALBEDO], parallaxUV);
     if (parallaxAlbedo.a > 0.01) {
-        albedo_linear = pow(parallaxAlbedo.rgb, vec3(2.2));
+        albedo_linear = parallaxAlbedo.rgb;
     }
 
     vec4 parallaxNormal = texture(u_Textures[TEX_SLOT_NORMAL], parallaxUV);
@@ -60,7 +60,7 @@
 
     vec3 ambient = (kD * diffuse + specular) * mat_ao;
 
-    vec3 emission_linear = pow(mat_emissionColor, vec3(2.2)) * mat_emissionStrength;
+    vec3 emission_linear = mat_emissionColor * mat_emissionStrength;
 
     vec3 color = ambient + emission_linear;
 

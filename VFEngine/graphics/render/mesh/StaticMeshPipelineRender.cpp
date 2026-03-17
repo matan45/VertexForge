@@ -386,7 +386,7 @@ namespace render::mesh
             ExtractedPBRValues pbr = MaterialPBRExtractor::extractPBRFromMaterial(*matData);
 
             if (!pbr.albedoTexturePath.empty())
-                textureCache->loadTexture(pbr.albedoTexturePath);
+                textureCache->loadTexture(pbr.albedoTexturePath, vk::Format::eR8G8B8A8Srgb);
             if (!pbr.normalTexturePath.empty())
                 textureCache->loadTexture(pbr.normalTexturePath);
             if (!pbr.ormTexturePath.empty())
@@ -398,7 +398,7 @@ namespace render::mesh
             if (!pbr.aoTexturePath.empty())
                 textureCache->loadTexture(pbr.aoTexturePath);
             if (!pbr.emissionTexturePath.empty())
-                textureCache->loadTexture(pbr.emissionTexturePath);
+                textureCache->loadTexture(pbr.emissionTexturePath, vk::Format::eR8G8B8A8Srgb);
             if (!pbr.heightTexturePath.empty())
                 textureCache->loadTexture(pbr.heightTexturePath);
         };

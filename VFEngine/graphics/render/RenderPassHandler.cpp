@@ -15,9 +15,12 @@
 #include "gpudriven/terrain/TerrainRaycastPipeline.hpp"
 #include "postprocess/PostProcessPipeline.hpp"
 #include "volumetric/VolumetricFogComposite.hpp"
+#include "gi/SSGIPipeline.hpp"
 #include "transparency/WBOITPipeline.hpp"
 #include "decal/DecalPipeline.hpp"
 #include "volumetric/VolumetricPipeline.hpp"
+#include "atmosphere/AtmospherePipeline.hpp"
+#include "cloud/CloudPipeline.hpp"
 #include "material/MaterialTextureCache.hpp"
 #include "../../services/providers/vfx/IVFXRuntimeProvider.hpp"
 #include "../../services/providers/terrain/ITerrainRenderProvider.hpp"
@@ -177,6 +180,107 @@ namespace render
         }
 
         volumetricFogComposite->init(volPipeline);
+    }
+
+    void RenderPassHandler::initSSGI()
+    {
+        if (ssgiPipeline && ssgiPipeline->isInitialized())
+            return;
+
+        if (!ssgiPipeline)
+        {
+            ssgiPipeline = std::make_unique<gi::SSGIPipeline>(
+                device, swapChain, offscreenResources);
+        }
+
+        ssgiPipeline->init();
+    }
+
+    void RenderPassHandler::resetSSGI()
+    {
+        if (ssgiPipeline)
+        {
+            ssgiPipeline->cleanup();
+            ssgiPipeline.reset();
+        }
+    }
+
+    void RenderPassHandler::initAtmosphere()
+    {
+        if (atmospherePipeline && atmospherePipeline->isInitialized())
+            return;
+
+        if (!atmospherePipeline)
+        {
+            atmospherePipeline = std::make_unique<atmosphere::AtmospherePipeline>(
+                device, swapChain, offscreenResources);
+        }
+
+        atmospherePipeline->init();
+    }
+
+    void RenderPassHandler::resetAtmosphere()
+    {
+        if (atmospherePipeline)
+        {
+            atmospherePipeline->cleanup();
+            atmospherePipeline.reset();
+        }
+    }
+
+    void RenderPassHandler::applyAtmosphereSettings(const atmosphere::AtmosphereSettings& settings)
+    {
+        if (settings.enabled)
+        {
+            initAtmosphere();
+        }
+
+        if (atmospherePipeline)
+        {
+            atmospherePipeline->updateSettings(settings);
+        }
+    }
+
+    void RenderPassHandler::initCloud()
+    {
+        if (cloudPipeline && cloudPipeline->isInitialized())
+            return;
+
+        if (!cloudPipeline)
+        {
+            cloudPipeline = std::make_unique<cloud::CloudPipeline>(
+                device, swapChain, offscreenResources);
+        }
+
+        // Wire atmosphere pipeline for transmittance LUT access
+        if (atmospherePipeline)
+        {
+            cloudPipeline->setAtmospherePipeline(atmospherePipeline.get());
+        }
+
+        cloudPipeline->init();
+    }
+
+    void RenderPassHandler::resetCloud()
+    {
+        if (cloudPipeline)
+        {
+            cloudPipeline->cleanup();
+            cloudPipeline.reset();
+        }
+    }
+
+    void RenderPassHandler::applyCloudSettings(const cloud::CloudSettings& settings)
+    {
+        if (settings.enabled)
+        {
+            initCloud();
+        }
+
+        if (cloudPipeline)
+        {
+            cloudPipeline->updateSettings(settings);
+        }
     }
 
     void RenderPassHandler::reinitMeshPipelineWithDefaults()
@@ -516,6 +620,21 @@ namespace render
             volumetricFogComposite->recreate();
         }
 
+        if (ssgiPipeline && ssgiPipeline->isInitialized())
+        {
+            ssgiPipeline->recreate();
+        }
+
+        if (atmospherePipeline && atmospherePipeline->isInitialized())
+        {
+            atmospherePipeline->recreate();
+        }
+
+        if (cloudPipeline && cloudPipeline->isInitialized())
+        {
+            cloudPipeline->recreate();
+        }
+
         if (wboitPipeline && wboitPipeline->isInitialized())
         {
             wboitPipeline->recreate();
@@ -598,6 +717,21 @@ namespace render
         if (volumetricFogComposite)
         {
             volumetricFogComposite->cleanup();
+        }
+
+        if (ssgiPipeline)
+        {
+            ssgiPipeline->cleanup();
+        }
+
+        if (atmospherePipeline)
+        {
+            atmospherePipeline->cleanup();
+        }
+
+        if (cloudPipeline)
+        {
+            cloudPipeline->cleanup();
         }
 
         if (postProcessPipeline)

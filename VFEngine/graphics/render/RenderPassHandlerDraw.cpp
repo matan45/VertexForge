@@ -1,5 +1,5 @@
-#include "print/Log.hpp"
 #include "RenderPassHandler.hpp"
+#include "print/Log.hpp"
 #include "decal/DecalPipeline.hpp"
 #include "../core/SwapChain.hpp"
 #include "../core/Device.hpp"
@@ -18,6 +18,9 @@
 #include "gpudriven/terrain/TerrainRaycastPipeline.hpp"
 #include "postprocess/PostProcessPipeline.hpp"
 #include "volumetric/VolumetricFogComposite.hpp"
+#include "gi/SSGIPipeline.hpp"
+#include "atmosphere/AtmospherePipeline.hpp"
+#include "cloud/CloudPipeline.hpp"
 #include "transparency/WBOITPipeline.hpp"
 #include "../../services/providers/vfx/IVFXRuntimeProvider.hpp"
 #include "../../services/providers/terrain/ITerrainRenderProvider.hpp"
@@ -51,7 +54,60 @@ namespace render
     void RenderPassHandler::draw(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const
     {
         clearColor->recordCommandBuffer(commandBuffer, imageIndex);
-        iblRenderer->recordCommandBuffer(commandBuffer, imageIndex);
+
+        if (atmospherePipeline && atmospherePipeline->isEnabled())
+        {
+            atmospherePipeline->setCameraData(currentView, currentProjection,
+                                               currentCameraPosition,
+                                               currentNearPlane, currentFarPlane);
+
+            // Feed sun direction from directional light if available
+            if (gpuDrivenRendererInitialized)
+            {
+                auto* lbm = gpuDrivenRenderer->getLightBufferManager();
+                auto sunDir = lbm->getFirstDirectionalLightDirection();
+                if (sunDir)
+                {
+                    atmospherePipeline->setSunDirection(*sunDir);
+                }
+            }
+
+            atmospherePipeline->dispatchCompute(commandBuffer);
+            atmospherePipeline->renderSky(commandBuffer, imageIndex);
+        }
+        else
+        {
+            iblRenderer->recordCommandBuffer(commandBuffer, imageIndex);
+        }
+
+        // Cloud compute (raymarch + temporal reprojection)
+        if (cloudPipeline && cloudPipeline->isEnabled())
+        {
+            cloudPipeline->setCameraData(currentView, currentProjection,
+                                          currentCameraPosition,
+                                          currentNearPlane, currentFarPlane,
+                                          currentTime);
+
+            if (gpuDrivenRendererInitialized)
+            {
+                auto* lbm = gpuDrivenRenderer->getLightBufferManager();
+                auto sunDir = lbm->getFirstDirectionalLightDirection();
+                if (sunDir)
+                {
+                    cloudPipeline->setSunDirection(*sunDir);
+                }
+            }
+
+            // Feed sun color from atmosphere settings
+            if (atmospherePipeline && atmospherePipeline->isInitialized())
+            {
+                auto atmosSettings = atmospherePipeline->getSettings();
+                cloudPipeline->setSunIrradiance(atmosSettings.sunIrradiance);
+            }
+
+            cloudPipeline->dispatchCompute(commandBuffer);
+            cloudPipeline->renderComposite(commandBuffer, imageIndex);
+        }
 
         drawSceneMeshes(commandBuffer, imageIndex);
 
@@ -60,10 +116,24 @@ namespace render
         drawOverlays(commandBuffer, imageIndex);
         executeOcclusionPasses(commandBuffer);
 
+        if (atmospherePipeline && atmospherePipeline->isEnabled())
+        {
+            atmospherePipeline->renderComposite(commandBuffer, imageIndex);
+        }
+
         if (volumetricFogComposite && volumetricFogComposite->isInitialized())
         {
             volumetricFogComposite->setCameraData(currentNearPlane, currentFarPlane);
             volumetricFogComposite->execute(commandBuffer, imageIndex);
+        }
+
+        if (ssgiPipeline && ssgiPipeline->isInitialized())
+        {
+            ssgiPipeline->setCameraData(currentView, currentProjection,
+                                         currentCameraPosition,
+                                         currentNearPlane, currentFarPlane,
+                                         taaFrameIndex);
+            ssgiPipeline->execute(commandBuffer, imageIndex);
         }
 
         executeRenderHooks(plugin::RenderPassHookPoint::PrePostProcess, commandBuffer, imageIndex);
