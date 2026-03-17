@@ -37,8 +37,8 @@ void main()
     vec2 screenUV = (vec2(texelCoord.xy) + 0.5) / vec2(lutSize.xy);
     float depthFrac = (float(texelCoord.z) + 0.5) / float(lutSize.z);
 
-    // Reconstruct view ray from screen UV
-    vec2 ndc = screenUV * 2.0 - 1.0;
+    // Reconstruct view ray from screen UV (flip Y for Vulkan)
+    vec2 ndc = vec2(screenUV.x * 2.0 - 1.0, 1.0 - screenUV.y * 2.0);
     vec4 clipFar  = params.invViewProjection * vec4(ndc, 0.0, 1.0);
     vec4 clipNear = params.invViewProjection * vec4(ndc, 1.0, 1.0);
     vec3 viewDir = normalize(clipFar.xyz / clipFar.w - clipNear.xyz / clipNear.w);

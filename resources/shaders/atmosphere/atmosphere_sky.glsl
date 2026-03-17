@@ -23,7 +23,8 @@ layout(std140, set = 0, binding = 2) uniform AtmosphereParams {
 void main()
 {
     // Reconstruct view direction from screen UV via inverse VP
-    vec2 ndc = texCoord * 2.0 - 1.0;
+    // Flip Y for Vulkan (projection matrix negates Y)
+    vec2 ndc = vec2(texCoord.x * 2.0 - 1.0, 1.0 - texCoord.y * 2.0);
     vec4 clipFar  = params.invViewProjection * vec4(ndc, 0.0, 1.0);
     vec4 clipNear = params.invViewProjection * vec4(ndc, 1.0, 1.0);
     vec3 viewDir = normalize(clipFar.xyz / clipFar.w - clipNear.xyz / clipNear.w);
@@ -38,18 +39,13 @@ void main()
     vec2 skyUV = directionToSkyViewUV(viewDir, up, altitude, pRadius, aRadius);
     vec3 skyColor = texture(skyViewLUT, clamp(skyUV, vec2(0.001), vec2(0.999))).rgb;
 
-    // Fallback: if LUT is empty, show procedural gradient
-    float luminance = dot(skyColor, vec3(0.2126, 0.7152, 0.0722));
-    if (luminance < 0.0001)
+    // For below-horizon, fade ground contribution to avoid hard edge
+    float cosZ = dot(viewDir, up);
+    if (cosZ < 0.0)
     {
-        float cosZ = dot(viewDir, up);
-        vec3 zenith  = vec3(0.15, 0.3, 0.8);
-        vec3 horizon = vec3(0.7, 0.5, 0.3);
-        vec3 ground  = vec3(0.1, 0.08, 0.06);
-        if (cosZ > 0.0)
-            skyColor = mix(horizon, zenith, cosZ);
-        else
-            skyColor = mix(horizon, ground, -cosZ);
+        // Smoothly blend to darker ground below horizon
+        float fade = smoothstep(-0.1, 0.0, cosZ);
+        skyColor *= fade;
     }
 
     // Sun disk

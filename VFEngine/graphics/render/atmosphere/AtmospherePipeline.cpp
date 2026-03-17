@@ -123,8 +123,11 @@ namespace render::atmosphere
         auto& dev = device.getLogicalDevice();
         currentExtent = swapChain.getSwapchainExtent();
 
-        // Recreate framebuffers and depth view
-        cleanupGraphicsPipelines();
+        // Destroy only pipelines (not layouts — they don't depend on swapchain)
+        auto& devRef = device.getLogicalDevice();
+        if (skyRendererPipeline) { devRef.destroyPipeline(skyRendererPipeline); skyRendererPipeline = nullptr; }
+        if (compositePipeline) { devRef.destroyPipeline(compositePipeline); compositePipeline = nullptr; }
+
         cleanupSkyFramebuffers();
         cleanupCompositeFramebuffers();
 
