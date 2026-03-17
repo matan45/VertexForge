@@ -120,9 +120,9 @@ namespace render::cloud
 
         // --- Write descriptors ---
         vk::DescriptorImageInfo resultImgInfo{nullptr, resultView, vk::ImageLayout::eGeneral};
-        vk::DescriptorImageInfo shapeNoiseInfo{noiseSampler, shapeNoiseView, vk::ImageLayout::eShaderReadOnlyOptimal};
-        vk::DescriptorImageInfo detailNoiseInfo{noiseSampler, detailNoiseView, vk::ImageLayout::eShaderReadOnlyOptimal};
-        vk::DescriptorImageInfo weatherMapInfo{noiseSampler, weatherMapView, vk::ImageLayout::eShaderReadOnlyOptimal};
+        vk::DescriptorImageInfo shapeNoiseInfo{noiseSampler, shapeNoiseView, vk::ImageLayout::eGeneral};
+        vk::DescriptorImageInfo detailNoiseInfo{noiseSampler, detailNoiseView, vk::ImageLayout::eGeneral};
+        vk::DescriptorImageInfo weatherMapInfo{noiseSampler, weatherMapView, vk::ImageLayout::eGeneral};
         vk::DescriptorImageInfo transmittanceInfo{lutSampler, transmittanceView, vk::ImageLayout::eGeneral};
         vk::DescriptorBufferInfo bufInfo{paramsBuffer, 0, sizeof(GPUCloudParams)};
 
@@ -258,9 +258,9 @@ namespace render::cloud
 
         // Update descriptors with new result image and (possibly updated) external views
         vk::DescriptorImageInfo resultImgInfo{nullptr, resultView, vk::ImageLayout::eGeneral};
-        vk::DescriptorImageInfo shapeNoiseInfo{noiseSampler, shapeNoiseView, vk::ImageLayout::eShaderReadOnlyOptimal};
-        vk::DescriptorImageInfo detailNoiseInfo{noiseSampler, detailNoiseView, vk::ImageLayout::eShaderReadOnlyOptimal};
-        vk::DescriptorImageInfo weatherMapInfo{noiseSampler, weatherMapView, vk::ImageLayout::eShaderReadOnlyOptimal};
+        vk::DescriptorImageInfo shapeNoiseInfo{noiseSampler, shapeNoiseView, vk::ImageLayout::eGeneral};
+        vk::DescriptorImageInfo detailNoiseInfo{noiseSampler, detailNoiseView, vk::ImageLayout::eGeneral};
+        vk::DescriptorImageInfo weatherMapInfo{noiseSampler, weatherMapView, vk::ImageLayout::eGeneral};
         vk::DescriptorImageInfo transmittanceInfo{lutSampler, transmittanceView, vk::ImageLayout::eGeneral};
         vk::DescriptorBufferInfo bufInfoDesc{paramsBuffer, 0, sizeof(GPUCloudParams)};
 

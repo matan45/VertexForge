@@ -1,4 +1,5 @@
-#version 460
+#type COMPUTE
+#version 460 core
 #extension GL_GOOGLE_include_directive : require
 // Cloud temporal reprojection compute shader
 // Blends current frame cloud result with reprojected history

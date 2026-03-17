@@ -12,8 +12,8 @@ namespace render::cloud
         float cloudMaxAltitude = 4000.0f;
 
         // Density & coverage
-        float globalDensity = 0.3f;          // [0, 1]
-        float globalCoverage = 0.5f;         // [0, 1]
+        float globalDensity = 0.5f;          // [0, 1]
+        float globalCoverage = 0.65f;        // [0, 1]
         float cloudType = 0.5f;              // [0, 1] stratus(0) to cumulus(1)
 
         // Noise shaping

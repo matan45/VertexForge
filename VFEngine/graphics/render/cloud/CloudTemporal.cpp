@@ -320,8 +320,8 @@ namespace render::cloud
             0, nullptr
         );
 
-        uint32_t groupsX = (halfExtent.width + 7) / 8;
-        uint32_t groupsY = (halfExtent.height + 7) / 8;
+        uint32_t groupsX = (halfExtent.width + 15) / 16;
+        uint32_t groupsY = (halfExtent.height + 15) / 16;
         cmd.dispatch(groupsX, groupsY, 1);
 
         // Post-dispatch memory barrier for history image writes

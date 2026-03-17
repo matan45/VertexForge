@@ -729,6 +729,11 @@ namespace render
             atmospherePipeline->cleanup();
         }
 
+        if (cloudPipeline)
+        {
+            cloudPipeline->cleanup();
+        }
+
         if (postProcessPipeline)
         {
             postProcessPipeline->cleanup();

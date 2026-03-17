@@ -1,4 +1,5 @@
-#version 460
+#type COMPUTE
+#version 460 core
 #extension GL_GOOGLE_include_directive : require
 // Weather map generation compute shader
 // Generates 2D weather map (1024x1024, RGBA8)

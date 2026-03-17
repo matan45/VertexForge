@@ -1,4 +1,5 @@
-#version 460
+#type COMPUTE
+#version 460 core
 #extension GL_GOOGLE_include_directive : require
 // Cloud ray march compute shader - half resolution
 // Marches rays through cloud layer, accumulates scattering and transmittance
@@ -96,10 +97,13 @@ float sampleCloudDensity(vec3 worldPos, float heightFrac, bool detailPass)
     // Build shape-frequency noise
     float shapeFBM = shapeNoise.g * 0.625 + shapeNoise.b * 0.25 + shapeNoise.a * 0.125;
     float shapeValue = remap(shapeNoise.r, shapeFBM - 1.0, 1.0, 0.0, 1.0);
+    shapeValue = clamp(shapeValue, 0.0, 1.0);
 
     // Apply height gradient and coverage
     float density = shapeValue * gradient;
-    density = remap(density, 1.0 - coverage, 1.0, 0.0, 1.0);
+    // Coverage controls the density threshold: higher coverage = more cloud
+    float coverageThreshold = 1.0 - coverage;
+    density = smoothstep(coverageThreshold, coverageThreshold + 0.2, density);
     density = max(density, 0.0);
 
     if (density < 0.01)
@@ -183,6 +187,14 @@ void main()
     // Planet center (camera is on surface, planet center below)
     float planetRadius = params.cloudLayer.w;
     vec3 planetCenter = vec3(0.0, -planetRadius, 0.0);
+
+    // Skip rays pointing below the horizon
+    vec3 surfaceNormal = normalize(rayOrigin - planetCenter);
+    if (dot(rayDir, surfaceNormal) < -0.01)
+    {
+        imageStore(cloudResult, texel, vec4(0.0, 0.0, 0.0, 1.0));
+        return;
+    }
 
     // Intersect ray with cloud layer spheres
     float innerRadius = planetRadius + params.cloudLayer.x;

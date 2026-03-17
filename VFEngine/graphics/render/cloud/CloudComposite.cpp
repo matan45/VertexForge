@@ -148,7 +148,7 @@ namespace render::cloud
 
         // --- Update descriptor set ---
         {
-            vk::DescriptorImageInfo cloudInfo{cloudSampler, cloudResultView, vk::ImageLayout::eShaderReadOnlyOptimal};
+            vk::DescriptorImageInfo cloudInfo{cloudSampler, cloudResultView, vk::ImageLayout::eGeneral};
             vk::DescriptorImageInfo depthInfo{sampler, depthOnlyImageView, vk::ImageLayout::eDepthStencilReadOnlyOptimal};
 
             std::array<vk::WriteDescriptorSet, 2> writes{};
@@ -378,7 +378,7 @@ namespace render::cloud
             allocInfo.pSetLayouts = &dsLayout;
             descriptorSet = dev.allocateDescriptorSets(allocInfo)[0];
 
-            vk::DescriptorImageInfo cloudInfo{cloudSampler, cloudResultView, vk::ImageLayout::eShaderReadOnlyOptimal};
+            vk::DescriptorImageInfo cloudInfo{cloudSampler, cloudResultView, vk::ImageLayout::eGeneral};
             vk::DescriptorImageInfo depthInfo{sampler, depthOnlyImageView, vk::ImageLayout::eDepthStencilReadOnlyOptimal};
 
             std::array<vk::WriteDescriptorSet, 2> writes{};

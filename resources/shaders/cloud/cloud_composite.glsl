@@ -32,7 +32,6 @@ void main()
     vec4 cloud = texture(cloudTexture, texCoord);
     vec3 cloudScattering = cloud.rgb;
     float cloudTransmittance = cloud.a;
-
     // Sample scene depth
     float depth = texture(depthTexture, texCoord).r;
 
