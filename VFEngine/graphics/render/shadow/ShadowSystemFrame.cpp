@@ -305,6 +305,9 @@ namespace render::shadow
     void ShadowSystem::buildPageRenderList()
     {
         pageRenderList.clear();
+        lastCacheStats.totalPages = 0;
+        lastCacheStats.renderedPages = 0;
+        lastCacheStats.cachedPages = 0;
 
         for (auto& [entityId, data] : lightShadowData)
         {
@@ -317,11 +320,18 @@ namespace render::shadow
             if (data.vsmPhysicalTiles.empty())
                 continue;
 
+            // Ensure dirty vector is sized
+            uint32_t totalPages = data.vsmPagesX * data.vsmPagesY;
+            if (data.vsmPageDirty.size() != totalPages)
+                data.vsmPageDirty.resize(totalPages, true);
+
             if (data.type == ShadowMapType::DirectionalCSM)
             {
-                // For CSM, each cascade has its own page grid section
-                uint32_t pagesPerCascade = data.vsmPagesX; // pagesX = pagesPerCascade
+                uint32_t pagesPerCascade = data.vsmPagesX;
                 uint32_t cascadeCount = data.settings.cascadeCount;
+
+                // CSM cascades are camera-dependent — always dirty when camera moves
+                bool csmDirty = cameraMovedThisFrame;
 
                 for (uint32_t cascade = 0; cascade < cascadeCount && cascade < data.views.size(); ++cascade)
                 {
@@ -329,7 +339,6 @@ namespace render::shadow
                     if (view.cached)
                         continue;
 
-                    // Pages for this cascade are in rows [cascade * pagesPerCascade .. (cascade+1) * pagesPerCascade)
                     for (uint32_t py = 0; py < pagesPerCascade; ++py)
                     {
                         for (uint32_t px = 0; px < pagesPerCascade; ++px)
@@ -342,7 +351,15 @@ namespace render::shadow
                             if (physTile == vsm::INVALID_TILE)
                                 continue;
 
-                            // Compute crop matrix for this page within the cascade
+                            ++lastCacheStats.totalPages;
+
+                            // Phase 3: skip clean pages (cached) unless CSM needs update
+                            if (!csmDirty && !data.vsmPageDirty[pageIdx])
+                            {
+                                ++lastCacheStats.cachedPages;
+                                continue;
+                            }
+
                             glm::mat4 cropMatrix = vsm::computePageCropMatrix(px, py, pagesPerCascade, pagesPerCascade);
                             glm::mat4 cropVP = cropMatrix * view.viewProjectionMatrix;
 
@@ -353,6 +370,10 @@ namespace render::shadow
                             entry.slopeBias = view.slopeBias;
                             entry.normalBias = view.normalBias;
                             pageRenderList.push_back(entry);
+                            ++lastCacheStats.renderedPages;
+
+                            // Mark page as clean after adding to render list
+                            data.vsmPageDirty[pageIdx] = false;
                         }
                     }
                 }
@@ -379,6 +400,15 @@ namespace render::shadow
                         if (physTile == vsm::INVALID_TILE)
                             continue;
 
+                        ++lastCacheStats.totalPages;
+
+                        // Phase 3: skip clean pages for static spot/dir2D lights
+                        if (!data.vsmPageDirty[pageIdx])
+                        {
+                            ++lastCacheStats.cachedPages;
+                            continue;
+                        }
+
                         glm::mat4 cropMatrix = vsm::computePageCropMatrix(px, py, data.vsmPagesX, data.vsmPagesY);
                         glm::mat4 cropVP = cropMatrix * view.viewProjectionMatrix;
 
@@ -389,6 +419,10 @@ namespace render::shadow
                         entry.slopeBias = view.slopeBias;
                         entry.normalBias = view.normalBias;
                         pageRenderList.push_back(entry);
+                        ++lastCacheStats.renderedPages;
+
+                        // Mark page as clean after adding to render list
+                        data.vsmPageDirty[pageIdx] = false;
                     }
                 }
             }
@@ -405,6 +439,11 @@ namespace render::shadow
             return;
 
         ++frameCounter;
+
+        // Phase 3: Detect camera movement for CSM caching
+        cameraMovedThisFrame = (cameraView != lastCameraView || cameraProjection != lastCameraProjection);
+        lastCameraView = cameraView;
+        lastCameraProjection = cameraProjection;
 
         directionalShadowViews.clear();
         pointShadowViews.clear();
@@ -631,6 +670,112 @@ namespace render::shadow
         needsUpdate = true;
 
         globalSoftShadows = shadowSettings.softShadows;
+    }
+
+    // ============================================================
+    // Phase 3: Scene Change Notifications
+    // ============================================================
+
+    void ShadowSystem::notifyObjectMoved(uint32_t entityId, const glm::vec3& position, float radius)
+    {
+        // Mark pages dirty for all lights whose frustum overlaps the object's bounding sphere
+        for (auto& [lightEntityId, data] : lightShadowData)
+        {
+            bool anyPageDirtied = false;
+
+            if (data.usesVSM() && !data.vsmPhysicalTiles.empty())
+            {
+                if (data.type == ShadowMapType::DirectionalCSM)
+                {
+                    uint32_t pagesPerCascade = data.vsmPagesX;
+                    for (uint32_t cascade = 0; cascade < data.settings.cascadeCount && cascade < data.views.size(); ++cascade)
+                    {
+                        const auto& view = data.views[cascade];
+                        glm::vec4 lsPos = view.viewProjectionMatrix * glm::vec4(position, 1.0f);
+                        if (lsPos.w <= 0.0f) continue;
+
+                        glm::vec3 ndc = glm::vec3(lsPos) / lsPos.w;
+                        glm::vec2 uv = glm::vec2(ndc) * 0.5f + 0.5f;
+
+                        float uvRadius = radius / (2.0f * lsPos.w) * static_cast<float>(pagesPerCascade);
+                        int minPX = std::max(0, static_cast<int>((uv.x - uvRadius) * pagesPerCascade));
+                        int maxPX = std::min(static_cast<int>(pagesPerCascade) - 1, static_cast<int>((uv.x + uvRadius) * pagesPerCascade));
+                        int minPY = std::max(0, static_cast<int>((uv.y - uvRadius) * pagesPerCascade));
+                        int maxPY = std::min(static_cast<int>(pagesPerCascade) - 1, static_cast<int>((uv.y + uvRadius) * pagesPerCascade));
+
+                        for (int py = minPY; py <= maxPY; ++py)
+                        {
+                            for (int px = minPX; px <= maxPX; ++px)
+                            {
+                                uint32_t pageIdx = (cascade * pagesPerCascade + py) * pagesPerCascade + px;
+                                if (pageIdx < data.vsmPageDirty.size())
+                                {
+                                    data.vsmPageDirty[pageIdx] = true;
+                                    anyPageDirtied = true;
+                                }
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    if (!data.views.empty())
+                    {
+                        const auto& view = data.views[0];
+                        glm::vec4 lsPos = view.viewProjectionMatrix * glm::vec4(position, 1.0f);
+                        if (lsPos.w > 0.0f)
+                        {
+                            glm::vec3 ndc = glm::vec3(lsPos) / lsPos.w;
+                            if (glm::abs(ndc.x) <= 1.5f && glm::abs(ndc.y) <= 1.5f)
+                            {
+                                for (size_t i = 0; i < data.vsmPageDirty.size(); ++i)
+                                    data.vsmPageDirty[i] = true;
+                                anyPageDirtied = true;
+                            }
+                        }
+                    }
+                }
+            }
+            else if (data.type == ShadowMapType::PointCube)
+            {
+                // Point light cubemap: check if object is within light radius
+                if (!data.views.empty())
+                {
+                    glm::vec3 lightPos = glm::vec3(data.views[0].lightPosition);
+                    float dist = glm::distance(lightPos, position);
+                    if (dist < data.settings.farPlane + radius)
+                        anyPageDirtied = true;
+                }
+            }
+
+            // Reset view-level cache so dirty pages actually get re-rendered
+            if (anyPageDirtied)
+            {
+                data.shadowCached = false;
+                data.renderedFrameCount = 0;
+                for (auto& view : data.views)
+                    view.cached = false;
+                needsUpdate = true;
+            }
+        }
+    }
+
+    void ShadowSystem::notifySceneChanged()
+    {
+        // Mark ALL pages dirty across all lights and reset view-level cache
+        for (auto& [entityId, data] : lightShadowData)
+        {
+            // Reset page-level dirty flags
+            for (size_t i = 0; i < data.vsmPageDirty.size(); ++i)
+                data.vsmPageDirty[i] = true;
+
+            // Reset view-level cache so pages actually get re-rendered
+            data.shadowCached = false;
+            data.renderedFrameCount = 0;
+            for (auto& view : data.views)
+                view.cached = false;
+        }
+        needsUpdate = true;
     }
 
     // ============================================================

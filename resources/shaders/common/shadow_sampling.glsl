@@ -46,6 +46,9 @@ const vec2 poissonDisk[32] = vec2[](
 // VSM Page Table Lookup
 // ============================================================
 vec2 vsmLookupPhysicalUV(ShadowData sd, vec2 uv, out bool valid) {
+    // Clamp UV to valid range (matches old atlas clamping behavior)
+    uv = clamp(uv, vec2(0.0), vec2(0.999));
+
     ivec2 pageCoord = ivec2(uv * vec2(sd.pageTableInfo.xy));
     pageCoord = clamp(pageCoord, ivec2(0), sd.pageTableInfo.xy - 1);
 
@@ -191,15 +194,20 @@ float sampleVSMShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal) {
     vec3 biasedPos = worldPos + worldNormal * sd.biasParams.z * 0.3;
     vec4 lsPos = sd.viewProjection * vec4(biasedPos, 1.0);
 
-    if (lsPos.w <= 0.0) return 1.0;
+    // For orthographic projections (directional lights), w is always 1.0
+    // For perspective (spot), reject behind-camera pixels
+    if (sd.pageTableInfo.w == 1 && lsPos.w <= 0.0) return 1.0;
 
-    vec3 ndc = lsPos.xyz / lsPos.w;
+    float w = max(lsPos.w, 0.0001);
+    vec3 ndc = lsPos.xyz / w;
 
-    if (any(greaterThan(abs(ndc.xy), vec2(1.0)))) return 1.0;
-
-    // Compute page coordinates
     vec2 uv = ndc.xy * 0.5 + 0.5;
     float receiverDepth = clamp(ndc.z, 0.0, 1.0);
+
+    // For spot lights, reject pixels outside frustum
+    if (sd.pageTableInfo.w == 1) {
+        if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) return 1.0;
+    }
 
     // Look up page table
     bool valid;

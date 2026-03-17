@@ -204,19 +204,8 @@ namespace windows
 
     void RenderConfigWindow::drawShadowLODSection()
     {
-        ImGui::Separator();
-        ImGui::Text("Shadow LOD");
-        ImGui::Spacing();
-
-        if (ImGui::Checkbox("Enable Shadow LOD", &settings.shadowLOD.enabled))
-        {
-            isDirty = true;
-        }
-        if (ImGui::IsItemHovered())
-        {
-            ImGui::SetTooltip("Enable distance-based shadow LOD.\n"
-                              "VSM handles LOD through virtual pages automatically.");
-        }
+        // Shadow LOD is handled automatically by VSM page-based allocation
+        // No user-facing controls needed
     }
 
     void RenderConfigWindow::drawShadowDebugSection()
@@ -285,25 +274,31 @@ namespace windows
                                shadowStats.spotLightCount);
         }
 
-        // Shadow cache stats for static lights
+        // Shadow cache stats
+        ImGui::Spacing();
+        ImGui::Text("Shadow Cache");
         if (shadowStats.totalStaticLights > 0)
         {
-            ImGui::Spacing();
-            ImGui::Text("Shadow Cache");
             ImGui::Text("  Static lights: %u", shadowStats.totalStaticLights);
-            ImGui::Text("  Cached: %u  Rendered: %u  Skipped: %u",
+            ImGui::Text("  View cache: %u cached, %u rendered, %u skipped",
                        shadowStats.cachedShadowMaps,
                        shadowStats.renderedThisFrame,
                        shadowStats.skippedThisFrame);
+        }
 
-            if (shadowStats.activeShadowCasters > 0)
-            {
-                float cacheRatio = static_cast<float>(shadowStats.skippedThisFrame) /
-                    static_cast<float>(shadowStats.skippedThisFrame + shadowStats.renderedThisFrame);
-                ImVec4 cacheColor = cacheRatio > 0.5f ? ImVec4(0.3f, 1, 0.3f, 1)
+        // Page-level cache stats (Phase 3)
+        if (shadowStats.totalPages > 0)
+        {
+            ImGui::Text("  Pages: %u total, %u rendered, %u cached",
+                       shadowStats.totalPages,
+                       shadowStats.renderedPages,
+                       shadowStats.cachedPages);
+
+            float pageCacheRatio = static_cast<float>(shadowStats.cachedPages) /
+                static_cast<float>(shadowStats.totalPages);
+            ImVec4 cacheColor = pageCacheRatio > 0.5f ? ImVec4(0.3f, 1, 0.3f, 1)
                                                       : ImVec4(1, 0.8f, 0.2f, 1);
-                ImGui::TextColored(cacheColor, "  Cache hit: %.0f%%", cacheRatio * 100.0f);
-            }
+            ImGui::TextColored(cacheColor, "  Page cache hit: %.0f%%", pageCacheRatio * 100.0f);
         }
     }
 

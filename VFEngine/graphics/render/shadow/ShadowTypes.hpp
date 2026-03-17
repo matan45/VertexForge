@@ -148,6 +148,7 @@ namespace render::shadow
         uint32_t vsmPageTableOffset = 0;
         std::vector<uint32_t> vsmPhysicalTiles;
         std::vector<uint32_t> vsmPageLastUsedFrame; // per-page frame counter for eviction
+        std::vector<bool> vsmPageDirty;             // per-page dirty flag for incremental rendering
 
         void invalidate()
         {
@@ -167,6 +168,11 @@ namespace render::shadow
             for (auto& view : views)
             {
                 view.cached = false;
+            }
+            // Mark all VSM pages dirty for re-rendering
+            for (size_t i = 0; i < vsmPageDirty.size(); ++i)
+            {
+                vsmPageDirty[i] = true;
             }
         }
 

@@ -117,6 +117,9 @@ namespace controllers
         stats.cachedShadowMaps = cacheStats.cachedShadowMaps;
         stats.renderedThisFrame = cacheStats.renderedThisFrame;
         stats.skippedThisFrame = cacheStats.skippedThisFrame;
+        stats.totalPages = cacheStats.totalPages;
+        stats.renderedPages = cacheStats.renderedPages;
+        stats.cachedPages = cacheStats.cachedPages;
 
         return stats;
     }

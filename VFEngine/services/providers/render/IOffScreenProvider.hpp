@@ -143,6 +143,11 @@ namespace services {
         uint32_t cachedShadowMaps = 0;
         uint32_t renderedThisFrame = 0;
         uint32_t skippedThisFrame = 0;
+
+        // Page-level cache stats (Phase 3)
+        uint32_t totalPages = 0;
+        uint32_t renderedPages = 0;
+        uint32_t cachedPages = 0;
     };
 
     class IOffScreenProvider {
