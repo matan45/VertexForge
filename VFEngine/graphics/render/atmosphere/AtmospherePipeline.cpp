@@ -517,7 +517,7 @@ namespace render::atmosphere
         if (!paramsBufferMapped) return;
 
         glm::vec3 sunDir = hasSunOverride
-            ? glm::normalize(sunDirectionOverride)  // use directional light direction directly
+            ? glm::normalize(-sunDirectionOverride)  // negate: light shines toward surface, atmosphere needs direction toward sun
             : sunDirectionFromAngles(settings.sunAzimuth, settings.sunElevation);
         glm::mat4 vp = cachedProjection * cachedView;
 
