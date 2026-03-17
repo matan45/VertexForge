@@ -206,10 +206,11 @@ float sampleVSMShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal) {
     vec2 physicalUV = vsmLookupPhysicalUV(sd, uv, valid);
     if (!valid) return 1.0; // unmapped page = fully lit
 
-    bool filterEnabled = sd.pcssParams.z > 0.5;
-    if (!filterEnabled) {
-        return texture(physicalPoolShadow, vec3(physicalUV, receiverDepth));
-    }
+    // DEBUG: return 0.5 to verify page lookup works (remove after debugging)
+    // return 0.5;
+
+    // Hard shadow comparison (no PCSS for Phase 1 debugging)
+    return texture(physicalPoolShadow, vec3(physicalUV, receiverDepth));
 
     // PCSS: blocker search
     float lightSize = sd.pcssParams.x;

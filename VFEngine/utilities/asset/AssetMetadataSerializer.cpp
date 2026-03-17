@@ -98,6 +98,7 @@ namespace asset
         if (str == "Skeleton")         return resource::AssetType::Skeleton;
         if (str == "Navmesh")          return resource::AssetType::Navmesh;
         if (str == "InputMapping")     return resource::AssetType::InputMapping;
+        if (str == "Terrain")          return resource::AssetType::Terrain;
         return resource::AssetType::COUNT;
     }
 }

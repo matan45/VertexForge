@@ -77,6 +77,7 @@ namespace render::shadow
         [[nodiscard]] vk::DescriptorSet getShadowTextureDescSet() const { return shadowTextureDescSet; }
 
         [[nodiscard]] bool isInitialized() const { return initialized; }
+        [[nodiscard]] vk::Buffer getShadowDataBuffer() const { return shadowDataBuffer; }
 
     private:
         void createShadowDataBuffer();

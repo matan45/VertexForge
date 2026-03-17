@@ -71,19 +71,26 @@ namespace render::shadow::vsm
     };
 
     // Compute the crop matrix that zooms into a specific page region
+    // Compute a crop matrix that zooms into a specific page of the virtual shadow map.
+    // When applied as cropMatrix * lightVP, the resulting projection covers only the
+    // region of the page (pageX, pageY) out of (pagesX, pagesY) total pages.
+    // The page region in NDC is [2*px/N - 1, 2*(px+1)/N - 1], and the crop
+    // scales and translates this to fill [-1, 1].
     inline glm::mat4 computePageCropMatrix(uint32_t pageX, uint32_t pageY, uint32_t pagesX, uint32_t pagesY)
     {
-        float scaleX = static_cast<float>(pagesX);
-        float scaleY = static_cast<float>(pagesY);
-        float offsetX = -1.0f + (2.0f * static_cast<float>(pageX) + 1.0f) / scaleX;
-        float offsetY = -1.0f + (2.0f * static_cast<float>(pageY) + 1.0f) / scaleY;
+        float sx = static_cast<float>(pagesX);
+        float sy = static_cast<float>(pagesY);
 
-        // Scale and translate NDC to zoom into the page region
+        // Center of this page in NDC
+        float cx = (2.0f * (static_cast<float>(pageX) + 0.5f) / sx) - 1.0f;
+        float cy = (2.0f * (static_cast<float>(pageY) + 0.5f) / sy) - 1.0f;
+
+        // Scale NDC so this page fills [-1,1], then translate center to origin
         glm::mat4 crop(1.0f);
-        crop[0][0] = scaleX;
-        crop[1][1] = scaleY;
-        crop[3][0] = -offsetX * scaleX;
-        crop[3][1] = -offsetY * scaleY;
+        crop[0][0] = sx;
+        crop[1][1] = sy;
+        crop[3][0] = -cx * sx;
+        crop[3][1] = -cy * sy;
         return crop;
     }
 }

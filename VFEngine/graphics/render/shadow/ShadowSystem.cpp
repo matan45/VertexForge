@@ -39,6 +39,11 @@ namespace render::shadow
 
         passRecorder = std::make_unique<ShadowPassRecorder>(device);
 
+        // Initialize feedback pipeline
+        feedbackPipeline = std::make_unique<VSMFeedbackPipeline>(device);
+        uint32_t maxFeedbackEntries = vsm::MAX_VSM_LIGHTS * vsm::PAGES_PER_SIDE * vsm::PAGES_PER_SIDE;
+        feedbackPipeline->init(maxFeedbackEntries);
+
         // Bind page table buffer to GPU data manager
         gpuDataManager->setPageTableBuffer(pageTable->getBuffer(), pageTable->getBufferSize());
 
@@ -71,6 +76,12 @@ namespace render::shadow
         {
             gpuDataManager->cleanup();
             gpuDataManager.reset();
+        }
+
+        if (feedbackPipeline)
+        {
+            feedbackPipeline->cleanup();
+            feedbackPipeline.reset();
         }
 
         passRecorder.reset();
@@ -287,17 +298,16 @@ namespace render::shadow
             return false;
 
         // Determine page grid size based on light type
+        // Phase 1: use 1 page per cascade/view (no subdivision) for performance
+        // Each page = 1 physical tile (128x128). Phase 2 feedback subdivides further.
         uint32_t pagesX, pagesY;
         if (data.type == ShadowMapType::DirectionalCSM)
         {
-            // Each cascade gets its own page grid
-            // Use a reasonable grid that maps to the virtual resolution
-            // For Phase 1 brute-force: allocate a fixed grid per cascade
-            uint32_t pagesPerCascade = std::max(1u, data.settings.resolution / vsm::PAGE_SIZE);
+            // 1 page per cascade = 1 tile per cascade
+            uint32_t pagesPerCascade = 1;
             pagesX = pagesPerCascade;
             pagesY = pagesPerCascade;
 
-            // Allocate pages for each cascade
             for (size_t i = 0; i < data.views.size(); ++i)
             {
                 auto& view = data.views[i];
@@ -305,14 +315,14 @@ namespace render::shadow
                 view.type = data.type;
             }
 
-            // Total pages = cascadeCount * pagesPerCascade^2
-            // For simplicity in Phase 1, we allocate a single block covering all cascades
+            // Total: 1 page per cascade, stacked vertically
             pagesX = pagesPerCascade;
             pagesY = pagesPerCascade * data.settings.cascadeCount;
         }
         else if (data.type == ShadowMapType::Spot2D || data.type == ShadowMapType::Directional2D)
         {
-            uint32_t pages = std::max(1u, data.settings.resolution / vsm::PAGE_SIZE);
+            // 1 page for spot/directional2D
+            uint32_t pages = 1;
             pagesX = pages;
             pagesY = pages;
 
@@ -361,6 +371,8 @@ namespace render::shadow
         data.vsmPagesY = pagesY;
         data.vsmPageTableOffset = offset;
         data.vsmLightIndex = nextVSMLightIndex++;
+        // Initialize with a future frame so pages survive warmup/eviction
+        data.vsmPageLastUsedFrame.resize(totalPages, frameCounter + EVICTION_THRESHOLD + 30);
 
         return true;
     }

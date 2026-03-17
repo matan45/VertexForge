@@ -225,7 +225,8 @@ namespace render::shadow
             dependencies[0].srcStageMask = vk::PipelineStageFlagBits::eFragmentShader;
             dependencies[0].dstStageMask = vk::PipelineStageFlagBits::eEarlyFragmentTests;
             dependencies[0].srcAccessMask = vk::AccessFlagBits::eShaderRead;
-            dependencies[0].dstAccessMask = vk::AccessFlagBits::eDepthStencilAttachmentWrite;
+            dependencies[0].dstAccessMask = vk::AccessFlagBits::eDepthStencilAttachmentRead |
+                                             vk::AccessFlagBits::eDepthStencilAttachmentWrite;
             dependencies[0].dependencyFlags = vk::DependencyFlagBits::eByRegion;
 
             dependencies[1].srcSubpass = 0;

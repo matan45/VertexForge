@@ -9,6 +9,7 @@
 #include "ShadowGPUDataManager.hpp"
 #include "ShadowPassRecorder.hpp"
 #include "TerrainShadowPipeline.hpp"
+#include "VSMFeedbackPipeline.hpp"
 #include "types/RenderSettings.hpp"
 #include <vulkan/vulkan.hpp>
 #include <memory>
@@ -45,6 +46,13 @@ namespace render
             std::unique_ptr<TerrainShadowPipeline> terrainShadowPipeline;
             std::unique_ptr<ShadowGPUDataManager> gpuDataManager;
             std::unique_ptr<ShadowPassRecorder> passRecorder;
+            std::unique_ptr<VSMFeedbackPipeline> feedbackPipeline;
+
+            // Feedback state
+            std::vector<uint32_t> prevFrameFeedback;
+            bool feedbackEnabled = false; // Disabled by default; Phase 1 uses brute-force allocation
+            bool feedbackHasResults = false;
+            static constexpr uint32_t EVICTION_THRESHOLD = 8; // frames before freeing unused page
 
             std::unordered_map<uint32_t, LightShadowData> lightShadowData;
 
@@ -163,7 +171,17 @@ namespace render
 
             [[nodiscard]] std::vector<ShadowDebugInfo> getShadowDebugInfo() const;
 
+            // GPU Feedback (Phase 2)
+            void dispatchFeedback(vk::CommandBuffer cmd, vk::ImageView depthView,
+                                  const glm::mat4& invViewProjection,
+                                  uint32_t screenWidth, uint32_t screenHeight);
+            void copyFeedbackToStaging(vk::CommandBuffer cmd);
+            void markFeedbackReady();
+            void readBackFeedback();
+            [[nodiscard]] bool isFeedbackEnabled() const { return feedbackEnabled && initialized; }
+
         private:
+            void applyFeedbackAllocations();
             bool allocateVSMPages(LightShadowData& data);
             void freeVSMPages(LightShadowData& data);
 

@@ -521,7 +521,32 @@ namespace render::shadow
         }
 
         collectShadowViewsForGPU(visibleLightIds);
+
+        // Apply feedback-driven page allocation (uses previous frame's results)
+        applyFeedbackAllocations();
+
         buildPageRenderList();
+
+        if (frameCounter % 300 == 1)
+        {
+            vfLogInfo("VSM: {} page render entries, {} dir views, {} spot views, {} point views, {} lights",
+                      pageRenderList.size(), directionalShadowViews.size(),
+                      spotShadowViews.size(), pointShadowViews.size(), lightShadowData.size());
+            for (const auto& [entityId, data] : lightShadowData)
+            {
+                if (data.usesVSM())
+                {
+                    uint32_t allocatedPages = 0;
+                    for (auto t : data.vsmPhysicalTiles)
+                        if (t != vsm::INVALID_TILE) ++allocatedPages;
+                    vfLogInfo("  Light {} type={} pages={}x{} allocated={}/{} ptOffset={}",
+                              entityId, static_cast<int>(data.type),
+                              data.vsmPagesX, data.vsmPagesY,
+                              allocatedPages, data.vsmPhysicalTiles.size(),
+                              data.vsmPageTableOffset);
+                }
+            }
+        }
     }
 
     void ShadowSystem::uploadToGPU(vk::CommandBuffer cmd)
@@ -627,5 +652,152 @@ namespace render::shadow
         needsUpdate = true;
 
         globalSoftShadows = shadowSettings.softShadows;
+    }
+
+    // ============================================================
+    // GPU Feedback (Phase 2)
+    // ============================================================
+
+    void ShadowSystem::dispatchFeedback(vk::CommandBuffer cmd, vk::ImageView depthView,
+                                         const glm::mat4& invViewProjection,
+                                         uint32_t screenWidth, uint32_t screenHeight)
+    {
+        if (!feedbackEnabled || !feedbackPipeline || !feedbackPipeline->isInitialized() || !gpuDataManager)
+            return;
+
+        // Clear feedback buffer first
+        feedbackPipeline->clearFeedbackBuffer(cmd);
+
+        // Count VSM lights (exclude point lights)
+        uint32_t vsmLightCount = static_cast<uint32_t>(
+            directionalShadowViews.size() + spotShadowViews.size()
+        );
+
+        // Total shadow views = all views uploaded to GPU
+        uint32_t totalViews = static_cast<uint32_t>(
+            directionalShadowViews.size() + pointShadowViews.size() + spotShadowViews.size()
+        );
+
+        if (totalViews == 0)
+            return;
+
+        // The shadow data buffer contains all views in order [dir][point][spot]
+        // The feedback shader iterates all and skips point lights (lightType == 2)
+        vk::DeviceSize shadowDataSize = sizeof(vsm::GPUVSMLight) * totalViews;
+
+        feedbackPipeline->dispatch(cmd, depthView,
+            gpuDataManager->getShadowDataBuffer(), shadowDataSize,
+            totalViews, invViewProjection, screenWidth, screenHeight);
+    }
+
+    void ShadowSystem::copyFeedbackToStaging(vk::CommandBuffer cmd)
+    {
+        if (!feedbackPipeline || !feedbackPipeline->isInitialized())
+            return;
+
+        feedbackPipeline->copyResultsToStaging(cmd);
+    }
+
+    void ShadowSystem::markFeedbackReady()
+    {
+        if (feedbackPipeline)
+            feedbackPipeline->markResultsReady();
+    }
+
+    void ShadowSystem::readBackFeedback()
+    {
+        if (!feedbackPipeline || !feedbackEnabled)
+            return;
+
+        if (feedbackPipeline->getReadbackState() != FeedbackReadbackState::Ready)
+            return;
+
+        // Read back the used portion of the feedback buffer
+        uint32_t usedEntries = 0;
+        for (const auto& [entityId, data] : lightShadowData)
+        {
+            if (data.usesVSM())
+            {
+                uint32_t end = data.vsmPageTableOffset + data.vsmPagesX * data.vsmPagesY;
+                if (end > usedEntries)
+                    usedEntries = end;
+            }
+        }
+
+        if (usedEntries == 0)
+            return;
+
+        prevFrameFeedback = feedbackPipeline->readbackResults(usedEntries);
+        feedbackHasResults = !prevFrameFeedback.empty();
+    }
+
+    void ShadowSystem::applyFeedbackAllocations()
+    {
+        if (!feedbackEnabled || !feedbackHasResults || prevFrameFeedback.empty())
+            return;
+
+        // Don't evict pages during warmup period (allow feedback to stabilize)
+        static constexpr uint32_t WARMUP_FRAMES = 30;
+        bool allowEviction = frameCounter > WARMUP_FRAMES;
+
+        if (!tilePool || !pageTable)
+            return;
+
+        for (auto& [entityId, data] : lightShadowData)
+        {
+            if (!data.usesVSM())
+                continue;
+
+            uint32_t totalPages = data.vsmPagesX * data.vsmPagesY;
+            if (totalPages == 0)
+                continue;
+
+            // Ensure tracking vectors are sized
+            if (data.vsmPhysicalTiles.size() != totalPages)
+                data.vsmPhysicalTiles.resize(totalPages, vsm::INVALID_TILE);
+            if (data.vsmPageLastUsedFrame.size() != totalPages)
+                data.vsmPageLastUsedFrame.resize(totalPages, 0);
+
+            for (uint32_t i = 0; i < totalPages; ++i)
+            {
+                uint32_t feedbackIdx = data.vsmPageTableOffset + i;
+                if (feedbackIdx >= prevFrameFeedback.size())
+                    continue;
+
+                bool pageNeeded = prevFrameFeedback[feedbackIdx] > 0;
+
+                if (pageNeeded)
+                {
+                    data.vsmPageLastUsedFrame[i] = frameCounter;
+
+                    // Allocate physical tile if not already allocated
+                    if (data.vsmPhysicalTiles[i] == vsm::INVALID_TILE)
+                    {
+                        uint32_t tile = tilePool->allocateTile();
+                        if (tile != vsm::INVALID_TILE)
+                        {
+                            data.vsmPhysicalTiles[i] = tile;
+                            uint32_t px = i % data.vsmPagesX;
+                            uint32_t py = i / data.vsmPagesX;
+                            pageTable->mapPage(data.vsmPageTableOffset, px, py, data.vsmPagesX, tile);
+                        }
+                    }
+                }
+                else
+                {
+                    // Page not needed - check eviction threshold (only after warmup)
+                    if (allowEviction &&
+                        data.vsmPhysicalTiles[i] != vsm::INVALID_TILE &&
+                        frameCounter - data.vsmPageLastUsedFrame[i] > EVICTION_THRESHOLD)
+                    {
+                        tilePool->freeTile(data.vsmPhysicalTiles[i]);
+                        uint32_t px = i % data.vsmPagesX;
+                        uint32_t py = i / data.vsmPagesX;
+                        pageTable->unmapPage(data.vsmPageTableOffset, px, py, data.vsmPagesX);
+                        data.vsmPhysicalTiles[i] = vsm::INVALID_TILE;
+                    }
+                }
+            }
+        }
     }
 }

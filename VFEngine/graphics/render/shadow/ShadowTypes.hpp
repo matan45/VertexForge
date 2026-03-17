@@ -147,6 +147,7 @@ namespace render::shadow
         uint32_t vsmPagesY = 0;
         uint32_t vsmPageTableOffset = 0;
         std::vector<uint32_t> vsmPhysicalTiles;
+        std::vector<uint32_t> vsmPageLastUsedFrame; // per-page frame counter for eviction
 
         void invalidate()
         {
