@@ -9,37 +9,7 @@ layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
 layout(rgba16f, set = 0, binding = 0) uniform writeonly image2D transmittanceLUT;
 
 layout(std140, set = 0, binding = 1) uniform AtmosphereParams {
-    float planetRadius;
-    float atmosphereRadius;
-    float pad0[2];
-
-    vec4 rayleighScattering;  // xyz = scattering, w = densityExpScale
-
-    float mieScattering;
-    float mieAbsorption;
-    float mieAnisotropy;
-    float mieDensityExpScale;
-
-    vec4 ozoneAbsorption;     // xyz = absorption, w = centerAlt
-    float ozoneWidth;
-    float pad1[3];
-
-    vec4 sunIrradiance;
-    vec4 sunDirection;
-    vec4 groundAlbedo;
-    vec4 cameraPosition;
-
-    mat4 invViewProjection;
-    mat4 viewProjection;
-
-    float nearPlane;
-    float farPlane;
-    float aerialMaxDist;
-    float aerialIntensity;
-
-    uint screenWidth;
-    uint screenHeight;
-    float pad2[2];
+#include "atmosphere_params.glsl"
 } params;
 
 void main()
@@ -53,16 +23,16 @@ void main()
     vec2 uv = (vec2(texelCoord) + 0.5) / vec2(lutSize);
 
     float altitude, cosZenith;
-    transmittanceLUTUVToParams(params.planetRadius, params.atmosphereRadius,
+    transmittanceLUTUVToParams(params.planetParams.x, params.planetParams.y,
                                 uv, altitude, cosZenith);
 
     const int NUM_SAMPLES = 40;
     vec3 opticalDepth = computeOpticalDepth(
-        params.planetRadius, params.atmosphereRadius,
+        params.planetParams.x, params.planetParams.y,
         altitude, cosZenith,
         params.rayleighScattering.xyz, params.rayleighScattering.w,
-        params.mieScattering, params.mieAbsorption, params.mieDensityExpScale,
-        params.ozoneAbsorption.xyz, params.ozoneAbsorption.w, params.ozoneWidth,
+        params.mieParams.x, params.mieParams.y, params.mieParams.w,
+        params.ozoneAbsorption.xyz, params.ozoneAbsorption.w, params.ozoneParams.x,
         NUM_SAMPLES);
 
     vec3 transmittance = exp(-opticalDepth);

@@ -30,17 +30,14 @@ void main()
 {
     float rawDepth = texture(depthTexture, texCoord).r;
 
-    // Skip sky pixels (depth = 1.0 in reverse-Z, or 0.0 in forward-Z)
-    // Forward-Z: sky at 1.0
+    // Skip sky pixels
     if (rawDepth >= 0.9999)
     {
-        outColor = vec4(0.0, 0.0, 0.0, 1.0); // no scattering, full transmittance
+        outColor = vec4(0.0, 0.0, 0.0, 1.0);
         return;
     }
 
     float linearZ = linearizeDepth(rawDepth, params.nearPlane, params.farPlane);
-
-    // Map linear depth to LUT Z coordinate (square root for better distribution)
     float depthFrac = clamp(sqrt(linearZ / params.aerialMaxDist), 0.0, 1.0);
 
     vec4 aerial = texture(aerialPerspectiveLUT, vec3(texCoord, depthFrac));
