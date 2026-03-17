@@ -552,7 +552,7 @@ void main() {
 
     if (isValidTexture(albedoIdx)) {
         vec4 albedoSample = textureGrad(bindlessTextures[nonuniformEXT(albedoIdx)], texCoords, texDx, texDy);
-        albedo = pow(albedoSample.rgb, vec3(2.2));
+        albedo = albedoSample.rgb;
         alpha = albedoSample.a;
     }
 
@@ -672,7 +672,7 @@ void main() {
 
     vec3 emissive = vec3(0.0);
     if (isValidTexture(emissionIdx)) {
-        emissive = pow(textureGrad(bindlessTextures[nonuniformEXT(emissionIdx)], texCoords, texDx, texDy).rgb, vec3(2.2)) * emissionMultiplier;
+        emissive = textureGrad(bindlessTextures[nonuniformEXT(emissionIdx)], texCoords, texDx, texDy).rgb * emissionMultiplier;
     } else {
         emissive = albedo * emissionMultiplier;
     }

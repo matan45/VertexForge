@@ -34,7 +34,11 @@ namespace render::gi
         vk::DeviceMemory ssgiAccumMemory;
         vk::ImageView ssgiAccumImageView;
 
-        vk::Image ssgiDenoisedImage;
+        vk::Image ssgiDenoiseHorizImage;  // Horizontal blur output
+        vk::DeviceMemory ssgiDenoiseHorizMemory;
+        vk::ImageView ssgiDenoiseHorizImageView;
+
+        vk::Image ssgiDenoisedImage;  // Vertical blur output (final)
         vk::DeviceMemory ssgiDenoisedMemory;
         vk::ImageView ssgiDenoisedImageView;
 
@@ -53,6 +57,7 @@ namespace render::gi
         // Framebuffers
         vk::Framebuffer traceFramebuffer;
         vk::Framebuffer temporalFramebuffer;
+        vk::Framebuffer denoiseHorizFramebuffer;
         vk::Framebuffer denoiseFramebuffer;
         std::vector<vk::Framebuffer> compositeFramebuffers;
 
@@ -95,7 +100,8 @@ namespace render::gi
         vk::DescriptorSet temporalSet0;
         std::array<vk::DescriptorSet, 2> temporalSet1PerHistory; // per history buffer
 
-        vk::DescriptorSet denoiseSet0;
+        vk::DescriptorSet denoiseHorizSet0;  // reads ssgiAccum
+        vk::DescriptorSet denoiseSet0;      // reads ssgiDenoiseHoriz
 
         vk::DescriptorSet compositeSet0;
 
@@ -109,12 +115,13 @@ namespace render::gi
         vk::DeviceMemory paramsBufferMemory;
         void* paramsBufferMapped = nullptr;
 
-        // Push constants for denoise pass
+        // Push constants for denoise pass (separable bilateral blur)
         struct DenoisePushConstants
         {
             glm::vec2 texelSize;
             float nearPlane;
             float farPlane;
+            glm::vec2 direction;  // (1,0) horizontal, (0,1) vertical
         };
 
         // Push constants for composite pass

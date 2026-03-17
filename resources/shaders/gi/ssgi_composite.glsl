@@ -10,9 +10,8 @@
 layout(location = 0) in vec2 texCoord;
 layout(location = 0) out vec4 outColor;
 
-layout(set = 0, binding = 0) uniform sampler2D sceneColorTexture;
-layout(set = 1, binding = 0) uniform sampler2D ssgiTexture;
-layout(set = 1, binding = 1) uniform sampler2D depthTexture;
+layout(set = 0, binding = 0) uniform sampler2D ssgiTexture;
+layout(set = 0, binding = 1) uniform sampler2D depthTexture;
 
 layout(push_constant) uniform PushConstants {
     float intensity;
@@ -56,8 +55,6 @@ vec3 bilateralUpsample(vec2 uv)
 
 void main()
 {
-    vec3 sceneColor = texture(sceneColorTexture, texCoord).rgb;
-
     vec3 ssgi;
     if (halfResolution != 0u)
     {
@@ -68,6 +65,6 @@ void main()
         ssgi = texture(ssgiTexture, texCoord).rgb;
     }
 
-    vec3 finalColor = sceneColor + ssgi * intensity;
-    outColor = vec4(finalColor, 1.0);
+    // Output SSGI contribution only — hardware additive blending adds to scene color
+    outColor = vec4(ssgi * intensity, 0.0);
 }

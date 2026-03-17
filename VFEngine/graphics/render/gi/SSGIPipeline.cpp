@@ -238,6 +238,19 @@ namespace render::gi
             uint32_t readIdx = currentHistoryIdx;
             uint32_t writeIdx = 1 - currentHistoryIdx;
 
+            // On first frame, transition both history images from undefined to shader read
+            if (!historyValid)
+            {
+                for (uint32_t i = 0; i < 2; i++)
+                {
+                    core::ImageUtilities::transitionImageLayout(commandBuffer,
+                        ssgiHistoryImages[i],
+                        vk::ImageLayout::eUndefined,
+                        vk::ImageLayout::eShaderReadOnlyOptimal,
+                        vk::ImageAspectFlagBits::eColor);
+                }
+            }
+
             vk::ClearValue clearValue{};
             clearValue.color = vk::ClearColorValue{std::array<float, 4>{0.0f, 0.0f, 0.0f, 0.0f}};
 
@@ -304,7 +317,40 @@ namespace render::gi
             historyValid = true;
         }
 
-        // ---- Pass 3: Denoise ----
+        // ---- Pass 3a: Denoise Horizontal ----
+        {
+            vk::ClearValue clearValue{};
+            clearValue.color = vk::ClearColorValue{std::array<float, 4>{0.0f, 0.0f, 0.0f, 0.0f}};
+
+            vk::RenderPassBeginInfo rpBegin{};
+            rpBegin.renderPass = denoiseRenderPass;
+            rpBegin.framebuffer = denoiseHorizFramebuffer;
+            rpBegin.renderArea.offset = vk::Offset2D{0, 0};
+            rpBegin.renderArea.extent = traceExtent;
+            rpBegin.clearValueCount = 1;
+            rpBegin.pClearValues = &clearValue;
+
+            DenoisePushConstants denoisePush{};
+            denoisePush.texelSize = glm::vec2(1.0f / static_cast<float>(traceExtent.width),
+                                               1.0f / static_cast<float>(traceExtent.height));
+            denoisePush.nearPlane = cachedNear;
+            denoisePush.farPlane = cachedFar;
+            denoisePush.direction = glm::vec2(1.0f, 0.0f);
+
+            commandBuffer.beginRenderPass(rpBegin, vk::SubpassContents::eInline);
+            commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, denoisePipeline);
+            commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
+                denoisePipelineLayout, 0, denoiseHorizSet0, nullptr);
+            commandBuffer.pushConstants(denoisePipelineLayout,
+                vk::ShaderStageFlagBits::eFragment, 0,
+                sizeof(DenoisePushConstants), &denoisePush);
+            commandBuffer.draw(3, 1, 0, 0);
+            commandBuffer.endRenderPass();
+        }
+
+        // ssgiDenoiseHorizImage is now in eShaderReadOnlyOptimal
+
+        // ---- Pass 3b: Denoise Vertical ----
         {
             vk::ClearValue clearValue{};
             clearValue.color = vk::ClearColorValue{std::array<float, 4>{0.0f, 0.0f, 0.0f, 0.0f}};
@@ -322,6 +368,7 @@ namespace render::gi
                                                1.0f / static_cast<float>(traceExtent.height));
             denoisePush.nearPlane = cachedNear;
             denoisePush.farPlane = cachedFar;
+            denoisePush.direction = glm::vec2(0.0f, 1.0f);
 
             commandBuffer.beginRenderPass(rpBegin, vk::SubpassContents::eInline);
             commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, denoisePipeline);
@@ -491,7 +538,11 @@ namespace render::gi
         createImageAndView(ssgiAccumImage, ssgiAccumMemory, ssgiAccumImageView,
                            traceExtent, SSGI_FORMAT);
 
-        // Denoised output (same res as trace)
+        // Horizontal blur intermediate (same res as trace)
+        createImageAndView(ssgiDenoiseHorizImage, ssgiDenoiseHorizMemory, ssgiDenoiseHorizImageView,
+                           traceExtent, SSGI_FORMAT);
+
+        // Denoised output / vertical blur (same res as trace)
         createImageAndView(ssgiDenoisedImage, ssgiDenoisedMemory, ssgiDenoisedImageView,
                            traceExtent, SSGI_FORMAT);
 
@@ -710,15 +761,31 @@ namespace render::gi
 
     void SSGIPipeline::createDenoiseFramebuffer()
     {
-        vk::FramebufferCreateInfo fbInfo{};
-        fbInfo.renderPass = denoiseRenderPass;
-        fbInfo.attachmentCount = 1;
-        fbInfo.pAttachments = &ssgiDenoisedImageView;
-        fbInfo.width = traceExtent.width;
-        fbInfo.height = traceExtent.height;
-        fbInfo.layers = 1;
+        // Horizontal blur → ssgiDenoiseHorizImage
+        {
+            vk::FramebufferCreateInfo fbInfo{};
+            fbInfo.renderPass = denoiseRenderPass;
+            fbInfo.attachmentCount = 1;
+            fbInfo.pAttachments = &ssgiDenoiseHorizImageView;
+            fbInfo.width = traceExtent.width;
+            fbInfo.height = traceExtent.height;
+            fbInfo.layers = 1;
 
-        denoiseFramebuffer = device.getLogicalDevice().createFramebuffer(fbInfo);
+            denoiseHorizFramebuffer = device.getLogicalDevice().createFramebuffer(fbInfo);
+        }
+
+        // Vertical blur → ssgiDenoisedImage
+        {
+            vk::FramebufferCreateInfo fbInfo{};
+            fbInfo.renderPass = denoiseRenderPass;
+            fbInfo.attachmentCount = 1;
+            fbInfo.pAttachments = &ssgiDenoisedImageView;
+            fbInfo.width = traceExtent.width;
+            fbInfo.height = traceExtent.height;
+            fbInfo.layers = 1;
+
+            denoiseFramebuffer = device.getLogicalDevice().createFramebuffer(fbInfo);
+        }
     }
 
     void SSGIPipeline::createCompositeFramebuffers()
@@ -876,15 +943,15 @@ namespace render::gi
 
         std::array<vk::DescriptorPoolSize, 2> poolSizes{};
         poolSizes[0].type = vk::DescriptorType::eCombinedImageSampler;
-        poolSizes[0].descriptorCount = imageCount + 10;
+        poolSizes[0].descriptorCount = imageCount + 12;
 
         poolSizes[1].type = vk::DescriptorType::eUniformBuffer;
         poolSizes[1].descriptorCount = 3;
 
-        // Total sets: imageCount + 1 + 1 + 2 + 1 + 1 = imageCount + 6
+        // Total sets: imageCount(trace0) + 1(trace1) + 1(temp0) + 2(temp1) + 2(denoise) + 1(composite)
         vk::DescriptorPoolCreateInfo poolInfo{};
         poolInfo.flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet;
-        poolInfo.maxSets = imageCount + 6;
+        poolInfo.maxSets = imageCount + 7;
         poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
         poolInfo.pPoolSizes = poolSizes.data();
 
@@ -940,7 +1007,17 @@ namespace render::gi
             temporalSet1PerHistory[1] = sets[1];
         }
 
-        // Allocate denoise set0
+        // Allocate denoise horizontal set0 (reads ssgiAccum)
+        {
+            vk::DescriptorSetAllocateInfo allocInfo{};
+            allocInfo.descriptorPool = descriptorPool;
+            allocInfo.descriptorSetCount = 1;
+            allocInfo.pSetLayouts = &denoiseSet0Layout;
+
+            denoiseHorizSet0 = dev.allocateDescriptorSets(allocInfo)[0];
+        }
+
+        // Allocate denoise vertical set0 (reads ssgiDenoiseHoriz)
         {
             vk::DescriptorSetAllocateInfo allocInfo{};
             allocInfo.descriptorPool = descriptorPool;
@@ -1063,18 +1140,41 @@ namespace render::gi
             writes.push_back(wUbo);
         }
 
-        // ---- Denoise Set0: ssgiAccum (binding 0) + depth (binding 1) ----
+        // ---- Denoise Horizontal Set0: ssgiAccum (binding 0) + depth (binding 1) ----
         vk::DescriptorImageInfo ssgiAccumInfo{};
         ssgiAccumInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
         ssgiAccumInfo.imageView = ssgiAccumImageView;
         ssgiAccumInfo.sampler = sampler;
         {
             vk::WriteDescriptorSet w0{};
-            w0.dstSet = denoiseSet0;
+            w0.dstSet = denoiseHorizSet0;
             w0.dstBinding = 0;
             w0.descriptorType = vk::DescriptorType::eCombinedImageSampler;
             w0.descriptorCount = 1;
             w0.pImageInfo = &ssgiAccumInfo;
+            writes.push_back(w0);
+
+            vk::WriteDescriptorSet w1{};
+            w1.dstSet = denoiseHorizSet0;
+            w1.dstBinding = 1;
+            w1.descriptorType = vk::DescriptorType::eCombinedImageSampler;
+            w1.descriptorCount = 1;
+            w1.pImageInfo = &depthImageInfo;
+            writes.push_back(w1);
+        }
+
+        // ---- Denoise Vertical Set0: ssgiDenoiseHoriz (binding 0) + depth (binding 1) ----
+        vk::DescriptorImageInfo ssgiDenoiseHorizInfo{};
+        ssgiDenoiseHorizInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+        ssgiDenoiseHorizInfo.imageView = ssgiDenoiseHorizImageView;
+        ssgiDenoiseHorizInfo.sampler = sampler;
+        {
+            vk::WriteDescriptorSet w0{};
+            w0.dstSet = denoiseSet0;
+            w0.dstBinding = 0;
+            w0.descriptorType = vk::DescriptorType::eCombinedImageSampler;
+            w0.descriptorCount = 1;
+            w0.pImageInfo = &ssgiDenoiseHorizInfo;
             writes.push_back(w0);
 
             vk::WriteDescriptorSet w1{};
@@ -1317,6 +1417,7 @@ namespace render::gi
     {
         destroyImageAndView(ssgiRawImage, ssgiRawMemory, ssgiRawImageView);
         destroyImageAndView(ssgiAccumImage, ssgiAccumMemory, ssgiAccumImageView);
+        destroyImageAndView(ssgiDenoiseHorizImage, ssgiDenoiseHorizMemory, ssgiDenoiseHorizImageView);
         destroyImageAndView(ssgiDenoisedImage, ssgiDenoisedMemory, ssgiDenoisedImageView);
 
         for (uint32_t i = 0; i < 2; ++i)
@@ -1340,6 +1441,7 @@ namespace render::gi
 
         destroyFb(traceFramebuffer);
         destroyFb(temporalFramebuffer);
+        destroyFb(denoiseHorizFramebuffer);
         destroyFb(denoiseFramebuffer);
 
         for (auto& fb : compositeFramebuffers)

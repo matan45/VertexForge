@@ -8,6 +8,7 @@
 #include "../render/postprocess/PostProcessPipeline.hpp"
 #include "../render/volumetric/VolumetricFogComposite.hpp"
 #include "../render/gi/RadianceCascadeManager.hpp"
+#include "../render/gi/SSGIPipeline.hpp"
 #include "../render/gi/GIDebugRenderer.hpp"
 #include "offscreen/CullingStatsCollector.hpp"
 #include "offscreen/CameraController.hpp"

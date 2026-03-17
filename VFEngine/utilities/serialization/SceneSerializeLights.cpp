@@ -1,7 +1,7 @@
 #include "SceneSerialization.hpp"
+#include "AssetRefSerializationHelper.hpp"
 #include "JsonConverters.hpp"
 #include "../components/Components.hpp"
-#include "../asset/AssetRef.hpp"
 
 namespace serialization
 {
@@ -138,7 +138,7 @@ namespace serialization
         j["heightmapPath"] = cleanPath;
         if (terrain.terrainMaterialRef.isValid())
         {
-            j["terrainMaterialRef"] = terrain.terrainMaterialRef.toHexString();
+            writeAssetRef(j, "terrainMaterialRef", terrain.terrainMaterialRef);
         }
         if (!terrain.weightMapPath.empty())
         {
@@ -178,7 +178,7 @@ namespace serialization
         // lodDistances ignored (GPU-only LOD selection)
         if (auto it = j.find("heightmapPath"); it != j.end() && it->is_string())
             terrain.heightmapPath = it->get<std::string>();
-        terrain.terrainMaterialRef = asset::AssetRef::fromHexString(j.value("terrainMaterialRef", ""));
+        terrain.terrainMaterialRef = readAssetRef(j, "terrainMaterialRef");
         if (auto it = j.find("weightMapPath"); it != j.end() && it->is_string())
             terrain.weightMapPath = it->get<std::string>();
         if (auto it = j.find("savePath"); it != j.end() && it->is_string())

@@ -150,7 +150,11 @@ namespace render::mesh
             const std::string& path = textures.getPath(i);
             if (!path.empty())
             {
-                loadTexture(path);
+                // Color textures (albedo, emission) use sRGB format for automatic gamma conversion;
+                // data textures (normal, ORM, metallic, roughness, AO, height) use linear Unorm
+                bool isSrgbSlot = (i == 0 || i == 6); // 0=albedo, 6=emission
+                vk::Format slotFormat = isSrgbSlot ? vk::Format::eR8G8B8A8Srgb : vk::Format::eR8G8B8A8Unorm;
+                loadTexture(path, slotFormat);
             }
         }
 
@@ -396,7 +400,7 @@ namespace render::mesh
         vfLogInfo("MaterialTextureCache: Unloaded texture '{}'", path);
     }
 
-    bool MaterialTextureCache::loadTexture(const std::string& path)
+    bool MaterialTextureCache::loadTexture(const std::string& path, vk::Format format)
     {
         if (path.empty()) return false;
         if (textureCache.contains(path)) return true;
@@ -409,7 +413,7 @@ namespace render::mesh
         auto texture = std::make_unique<core::Texture>(device);
         try
         {
-            texture->loadTextureFromFile(path, vk::Format::eR8G8B8A8Unorm, false);
+            texture->loadTextureFromFile(path, format, false);
         }
         catch (const std::exception& e)
         {
