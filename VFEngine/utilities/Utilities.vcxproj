@@ -185,6 +185,7 @@
     <ClInclude Include="scene\LightBVH.hpp" />
     <ClInclude Include="scene\SceneBVH.hpp" />
     <ClInclude Include="scene\SceneGraphSystem.hpp" />
+    <ClInclude Include="serialization\AssetRefSerializationHelper.hpp" />
     <ClInclude Include="serialization\JsonConverters.hpp" />
     <ClInclude Include="serialization\PrefabSerialization.hpp" />
     <ClInclude Include="serialization\ProjectSerialization.hpp" />
