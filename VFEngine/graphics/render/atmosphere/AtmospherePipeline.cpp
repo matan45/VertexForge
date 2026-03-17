@@ -1,10 +1,4 @@
 #include "AtmospherePipeline.hpp"
-
-// Windows defines MemoryBarrier as a macro - undefine it to use vk::MemoryBarrier
-#ifdef MemoryBarrier
-#undef MemoryBarrier
-#endif
-
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
 #include "../../core/Shader.hpp"
@@ -14,6 +8,11 @@
 #include "../../core/MemoryUtilities.hpp"
 #include <cstring>
 #include <glm/gtc/matrix_inverse.hpp>
+
+// Windows defines MemoryBarrier as a macro - undefine it to use vk::MemoryBarrier
+#ifdef MemoryBarrier
+#undef MemoryBarrier
+#endif
 
 namespace render::atmosphere
 {
