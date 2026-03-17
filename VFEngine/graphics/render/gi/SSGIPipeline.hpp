@@ -30,10 +30,6 @@ namespace render::gi
         vk::DeviceMemory ssgiRawMemory;
         vk::ImageView ssgiRawImageView;
 
-        vk::Image ssgiAccumImage;
-        vk::DeviceMemory ssgiAccumMemory;
-        vk::ImageView ssgiAccumImageView;
-
         vk::Image ssgiDenoiseHorizImage;  // Horizontal blur output
         vk::DeviceMemory ssgiDenoiseHorizMemory;
         vk::ImageView ssgiDenoiseHorizImageView;
@@ -56,7 +52,7 @@ namespace render::gi
 
         // Framebuffers
         vk::Framebuffer traceFramebuffer;
-        vk::Framebuffer temporalFramebuffer;
+        std::array<vk::Framebuffer, 2> temporalFramebuffers{};
         vk::Framebuffer denoiseHorizFramebuffer;
         vk::Framebuffer denoiseFramebuffer;
         std::vector<vk::Framebuffer> compositeFramebuffers;
@@ -100,7 +96,7 @@ namespace render::gi
         vk::DescriptorSet temporalSet0;
         std::array<vk::DescriptorSet, 2> temporalSet1PerHistory; // per history buffer
 
-        vk::DescriptorSet denoiseHorizSet0;  // reads ssgiAccum
+        std::array<vk::DescriptorSet, 2> denoiseHorizSet0PerHistory;  // reads ssgiHistory[i]
         vk::DescriptorSet denoiseSet0;      // reads ssgiDenoiseHoriz
 
         vk::DescriptorSet compositeSet0;

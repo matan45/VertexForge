@@ -256,7 +256,7 @@ namespace render::gi
 
             vk::RenderPassBeginInfo rpBegin{};
             rpBegin.renderPass = temporalRenderPass;
-            rpBegin.framebuffer = temporalFramebuffer;
+            rpBegin.framebuffer = temporalFramebuffers[writeIdx];
             rpBegin.renderArea.offset = vk::Offset2D{0, 0};
             rpBegin.renderArea.extent = traceExtent;
             rpBegin.clearValueCount = 1;
@@ -271,49 +271,7 @@ namespace render::gi
             commandBuffer.draw(3, 1, 0, 0);
             commandBuffer.endRenderPass();
 
-            // ssgiAccumImage is now in eShaderReadOnlyOptimal
-
-            // Copy ssgiAccumImage to ssgiHistory[writeIdx]
-            // TODO(PERF): Eliminate this copy by double-buffering the temporal framebuffer
-            //             (render directly into history[writeIdx] instead of accum+copy).
-            // Transition ssgiAccumImage: eShaderReadOnlyOptimal -> eTransferSrcOptimal
-            core::ImageUtilities::transitionImageLayout(commandBuffer,
-                ssgiAccumImage,
-                vk::ImageLayout::eShaderReadOnlyOptimal,
-                vk::ImageLayout::eTransferSrcOptimal,
-                vk::ImageAspectFlagBits::eColor);
-
-            // Transition history[writeIdx]: eShaderReadOnlyOptimal -> eTransferDstOptimal
-            core::ImageUtilities::transitionImageLayout(commandBuffer,
-                ssgiHistoryImages[writeIdx],
-                vk::ImageLayout::eShaderReadOnlyOptimal,
-                vk::ImageLayout::eTransferDstOptimal,
-                vk::ImageAspectFlagBits::eColor);
-
-            vk::ImageCopy copyRegion{};
-            copyRegion.srcSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
-            copyRegion.srcSubresource.layerCount = 1;
-            copyRegion.dstSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
-            copyRegion.dstSubresource.layerCount = 1;
-            copyRegion.extent = vk::Extent3D{traceExtent.width, traceExtent.height, 1};
-
-            commandBuffer.copyImage(
-                ssgiAccumImage, vk::ImageLayout::eTransferSrcOptimal,
-                ssgiHistoryImages[writeIdx], vk::ImageLayout::eTransferDstOptimal,
-                copyRegion);
-
-            // Transition both back to eShaderReadOnlyOptimal
-            core::ImageUtilities::transitionImageLayout(commandBuffer,
-                ssgiAccumImage,
-                vk::ImageLayout::eTransferSrcOptimal,
-                vk::ImageLayout::eShaderReadOnlyOptimal,
-                vk::ImageAspectFlagBits::eColor);
-
-            core::ImageUtilities::transitionImageLayout(commandBuffer,
-                ssgiHistoryImages[writeIdx],
-                vk::ImageLayout::eTransferDstOptimal,
-                vk::ImageLayout::eShaderReadOnlyOptimal,
-                vk::ImageAspectFlagBits::eColor);
+            // ssgiHistory[writeIdx] is now in eShaderReadOnlyOptimal (from render pass finalLayout)
 
             currentHistoryIdx = writeIdx;
             historyValid = true;
@@ -342,7 +300,7 @@ namespace render::gi
             commandBuffer.beginRenderPass(rpBegin, vk::SubpassContents::eInline);
             commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, denoisePipeline);
             commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
-                denoisePipelineLayout, 0, denoiseHorizSet0, nullptr);
+                denoisePipelineLayout, 0, denoiseHorizSet0PerHistory[currentHistoryIdx], nullptr);
             commandBuffer.pushConstants(denoisePipelineLayout,
                 vk::ShaderStageFlagBits::eFragment, 0,
                 sizeof(DenoisePushConstants), &denoisePush);
@@ -534,10 +492,6 @@ namespace render::gi
     {
         // Trace output (may be half-res)
         createImageAndView(ssgiRawImage, ssgiRawMemory, ssgiRawImageView,
-                           traceExtent, SSGI_FORMAT);
-
-        // Temporal accumulation output (same res as trace)
-        createImageAndView(ssgiAccumImage, ssgiAccumMemory, ssgiAccumImageView,
                            traceExtent, SSGI_FORMAT);
 
         // Horizontal blur intermediate (same res as trace)
@@ -750,15 +704,18 @@ namespace render::gi
 
     void SSGIPipeline::createTemporalFramebuffer()
     {
-        vk::FramebufferCreateInfo fbInfo{};
-        fbInfo.renderPass = temporalRenderPass;
-        fbInfo.attachmentCount = 1;
-        fbInfo.pAttachments = &ssgiAccumImageView;
-        fbInfo.width = traceExtent.width;
-        fbInfo.height = traceExtent.height;
-        fbInfo.layers = 1;
+        for (uint32_t i = 0; i < 2; ++i)
+        {
+            vk::FramebufferCreateInfo fbInfo{};
+            fbInfo.renderPass = temporalRenderPass;
+            fbInfo.attachmentCount = 1;
+            fbInfo.pAttachments = &ssgiHistoryImageViews[i];
+            fbInfo.width = traceExtent.width;
+            fbInfo.height = traceExtent.height;
+            fbInfo.layers = 1;
 
-        temporalFramebuffer = device.getLogicalDevice().createFramebuffer(fbInfo);
+            temporalFramebuffers[i] = device.getLogicalDevice().createFramebuffer(fbInfo);
+        }
     }
 
     void SSGIPipeline::createDenoiseFramebuffer()
@@ -938,9 +895,10 @@ namespace render::gi
         // Count descriptor needs:
         // Trace: imageCount sets with 1 sampler each (set0) + 1 set with 1 sampler + 1 UBO (set1)
         // Temporal: 1 set with 1 sampler (set0) + 2 sets with 2 samplers + 1 UBO each (set1 per history)
-        // Denoise: 1 set with 2 samplers (set0)
-        // Composite: 1 set with 2 samplers (set0)
-        // Total samplers: imageCount + 1 + 1 + 2*2 + 2 + 2 = imageCount + 10
+        // Denoise horiz: 2 sets with 2 samplers each (per history)
+        // Denoise vert: 1 set with 2 samplers
+        // Composite: 1 set with 2 samplers
+        // Total samplers: imageCount + 1 + 1 + 2*2 + 2*2 + 2 + 2 = imageCount + 12
         // Total UBOs: 1 + 2 = 3
 
         std::array<vk::DescriptorPoolSize, 2> poolSizes{};
@@ -950,10 +908,10 @@ namespace render::gi
         poolSizes[1].type = vk::DescriptorType::eUniformBuffer;
         poolSizes[1].descriptorCount = 3;
 
-        // Total sets: imageCount(trace0) + 1(trace1) + 1(temp0) + 2(temp1) + 2(denoise) + 1(composite)
+        // Total sets: imageCount(trace0) + 1(trace1) + 1(temp0) + 2(temp1) + 2(denoiseHoriz) + 1(denoiseVert) + 1(composite)
         vk::DescriptorPoolCreateInfo poolInfo{};
         poolInfo.flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet;
-        poolInfo.maxSets = imageCount + 7;
+        poolInfo.maxSets = imageCount + 8;
         poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
         poolInfo.pPoolSizes = poolSizes.data();
 
@@ -1009,14 +967,17 @@ namespace render::gi
             temporalSet1PerHistory[1] = sets[1];
         }
 
-        // Allocate denoise horizontal set0 (reads ssgiAccum)
+        // Allocate denoise horizontal set0 per history (reads ssgiHistory[i])
         {
+            std::array<vk::DescriptorSetLayout, 2> layouts = {denoiseSet0Layout, denoiseSet0Layout};
             vk::DescriptorSetAllocateInfo allocInfo{};
             allocInfo.descriptorPool = descriptorPool;
-            allocInfo.descriptorSetCount = 1;
-            allocInfo.pSetLayouts = &denoiseSet0Layout;
+            allocInfo.descriptorSetCount = 2;
+            allocInfo.pSetLayouts = layouts.data();
 
-            denoiseHorizSet0 = dev.allocateDescriptorSets(allocInfo)[0];
+            auto sets = dev.allocateDescriptorSets(allocInfo);
+            denoiseHorizSet0PerHistory[0] = sets[0];
+            denoiseHorizSet0PerHistory[1] = sets[1];
         }
 
         // Allocate denoise vertical set0 (reads ssgiDenoiseHoriz)
@@ -1142,22 +1103,24 @@ namespace render::gi
             writes.push_back(wUbo);
         }
 
-        // ---- Denoise Horizontal Set0: ssgiAccum (binding 0) + depth (binding 1) ----
-        vk::DescriptorImageInfo ssgiAccumInfo{};
-        ssgiAccumInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-        ssgiAccumInfo.imageView = ssgiAccumImageView;
-        ssgiAccumInfo.sampler = sampler;
+        // ---- Denoise Horizontal Set0 per history: ssgiHistory[i] (binding 0) + depth (binding 1) ----
+        std::array<vk::DescriptorImageInfo, 2> denoiseHistoryInfos{};
+        for (uint32_t i = 0; i < 2; ++i)
         {
+            denoiseHistoryInfos[i].imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+            denoiseHistoryInfos[i].imageView = ssgiHistoryImageViews[i];
+            denoiseHistoryInfos[i].sampler = sampler;
+
             vk::WriteDescriptorSet w0{};
-            w0.dstSet = denoiseHorizSet0;
+            w0.dstSet = denoiseHorizSet0PerHistory[i];
             w0.dstBinding = 0;
             w0.descriptorType = vk::DescriptorType::eCombinedImageSampler;
             w0.descriptorCount = 1;
-            w0.pImageInfo = &ssgiAccumInfo;
+            w0.pImageInfo = &denoiseHistoryInfos[i];
             writes.push_back(w0);
 
             vk::WriteDescriptorSet w1{};
-            w1.dstSet = denoiseHorizSet0;
+            w1.dstSet = denoiseHorizSet0PerHistory[i];
             w1.dstBinding = 1;
             w1.descriptorType = vk::DescriptorType::eCombinedImageSampler;
             w1.descriptorCount = 1;
@@ -1418,7 +1381,6 @@ namespace render::gi
     void SSGIPipeline::cleanupIntermediateImages()
     {
         destroyImageAndView(ssgiRawImage, ssgiRawMemory, ssgiRawImageView);
-        destroyImageAndView(ssgiAccumImage, ssgiAccumMemory, ssgiAccumImageView);
         destroyImageAndView(ssgiDenoiseHorizImage, ssgiDenoiseHorizMemory, ssgiDenoiseHorizImageView);
         destroyImageAndView(ssgiDenoisedImage, ssgiDenoisedMemory, ssgiDenoisedImageView);
 
@@ -1442,7 +1404,10 @@ namespace render::gi
         };
 
         destroyFb(traceFramebuffer);
-        destroyFb(temporalFramebuffer);
+        for (auto& fb : temporalFramebuffers)
+        {
+            destroyFb(fb);
+        }
         destroyFb(denoiseHorizFramebuffer);
         destroyFb(denoiseFramebuffer);
 
