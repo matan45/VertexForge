@@ -82,9 +82,15 @@ float sampleCloudDensity(vec3 worldPos, float heightFrac, bool detailPass)
     float weatherCoverage = weather.r;
     float weatherType = weather.g;
 
-    // Apply global coverage
-    float coverage = clamp(weatherCoverage * params.cloudDensity.y, 0.0, 1.0);
-    if (coverage < 0.01)
+    // Coverage: weather map determines WHERE clouds exist,
+    // globalCoverage acts as a threshold on the weather map
+    // Low globalCoverage = only highest-coverage weather areas produce clouds (fewer clouds)
+    // High globalCoverage = most weather areas produce clouds (more clouds)
+    float coverageThreshold = 1.0 - params.cloudDensity.y;
+    float localCoverage = max(weatherCoverage - coverageThreshold, 0.0) / max(params.cloudDensity.y, 0.001);
+    localCoverage = clamp(localCoverage, 0.0, 1.0);
+
+    if (localCoverage < 0.01)
         return 0.0;
 
     // Height gradient
@@ -99,10 +105,9 @@ float sampleCloudDensity(vec3 worldPos, float heightFrac, bool detailPass)
     float shapeValue = remap(shapeNoise.r, shapeFBM - 1.0, 1.0, 0.0, 1.0);
     shapeValue = clamp(shapeValue, 0.0, 1.0);
 
-    // Apply height gradient and coverage
-    float baseCloud = shapeValue * gradient;
-    float density = max(baseCloud - (1.0 - coverage), 0.0) / max(coverage, 0.001);
-    density = clamp(density, 0.0, 1.0);
+    // Apply height gradient and local coverage
+    float baseCloud = shapeValue * gradient * localCoverage;
+    float density = clamp(baseCloud, 0.0, 1.0);
 
     if (density < 0.01)
         return 0.0;
@@ -188,12 +193,12 @@ void main()
     // Fade out rays pointing below the horizon
     vec3 surfaceNormal = normalize(rayOrigin - planetCenter);
     float horizonDot = dot(rayDir, surfaceNormal);
-    if (horizonDot < -0.1)
+    if (horizonDot < -0.3)
     {
         imageStore(cloudResult, texel, vec4(0.0, 0.0, 0.0, 1.0));
         return;
     }
-    float horizonFade = smoothstep(-0.1, 0.05, horizonDot);
+    float horizonFade = smoothstep(-0.3, 0.0, horizonDot);
 
     // Intersect ray with cloud layer spheres
     float innerRadius = planetRadius + params.cloudLayer.x;

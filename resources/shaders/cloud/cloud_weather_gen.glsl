@@ -18,26 +18,29 @@ void main()
         return;
 
     vec2 uv = vec2(texel) / 1024.0;
-    vec3 p = vec3(uv * 20.0, 0.0);
 
-    // Coverage: Perlin FBM at multiple scales
-    float coverage = 0.0;
-    float amp = 0.5;
-    float freq = 1.0;
-    for (int i = 0; i < 5; ++i)
-    {
-        coverage += perlinNoise3D(p * freq) * amp;
-        freq *= 2.0;
-        amp *= 0.5;
-    }
-    coverage = clamp(coverage, 0.0, 1.0);
+    // Large-scale coverage: big cloud formations using low-frequency Worley
+    // Worley creates distinct cell-like patches (natural cloud grouping)
+    float largeCells = 1.0 - worleyNoise3D(vec3(uv * 3.0, 0.0));    // ~3 big cells
+    float medCells   = 1.0 - worleyNoise3D(vec3(uv * 6.0, 0.5));    // ~6 medium cells
+    float smallCells  = 1.0 - worleyNoise3D(vec3(uv * 12.0, 1.0));   // finer detail
 
-    // Cloud type: smoother, lower frequency
-    float cloudType = perlinNoise3D(p * 0.5 + vec3(100.0));
-    cloudType = clamp(cloudType * 0.8 + 0.1, 0.0, 1.0);
+    // Combine: large blobs with medium/small variation
+    float coverage = largeCells * 0.6 + medCells * 0.25 + smallCells * 0.15;
 
-    // Precipitation: derived from coverage
-    float precipitation = smoothstep(0.6, 0.9, coverage);
+    // Add Perlin for organic edges
+    float perlinDetail = perlinNoise3D(vec3(uv * 8.0, 2.0));
+    coverage = coverage * 0.8 + perlinDetail * 0.2;
+
+    // Increase contrast: push values away from 0.5
+    coverage = smoothstep(0.25, 0.75, coverage);
+
+    // Cloud type: large-scale variation (stratus in some areas, cumulus in others)
+    float cloudType = 1.0 - worleyNoise3D(vec3(uv * 2.0 + vec2(50.0), 3.0));
+    cloudType = smoothstep(0.3, 0.7, cloudType);
+
+    // Precipitation: derived from high coverage areas
+    float precipitation = smoothstep(0.7, 0.95, coverage);
 
     imageStore(weatherMap, texel, vec4(coverage, cloudType, precipitation, 1.0));
 }

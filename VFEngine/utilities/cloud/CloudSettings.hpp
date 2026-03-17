@@ -34,7 +34,7 @@ namespace render::cloud
         float ambientIntensity = 0.8f;
 
         // Performance
-        float temporalBlendFactor = 0.95f;
+        float temporalBlendFactor = 0.8f;
         uint32_t maxMarchSteps = 96;
         uint32_t lightMarchSteps = 6;
     };

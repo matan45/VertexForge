@@ -28,6 +28,8 @@
 #include "../api/InputActionAPI.hpp"
 #include "../api/InputAxisAPI.hpp"
 #include "../api/InputContextAPI.hpp"
+#include "../api/AtmosphereAPI.hpp"
+#include "../api/CloudAPI.hpp"
 
 #include "print/Log.hpp"
 namespace core
@@ -88,6 +90,8 @@ namespace core
         api::InputActionAPI::registerAPI(interpreter);
         api::InputAxisAPI::registerAPI(interpreter);
         api::InputContextAPI::registerAPI(interpreter);
+        api::AtmosphereAPI::registerAPI(interpreter);
+        api::CloudAPI::registerAPI(interpreter);
 
         vfLogInfo("[NativeAPIRegistry] Registered native engine APIs");
     }

@@ -103,9 +103,11 @@
     <ClInclude Include="adapters\animation\AnimationPreviewAdapter.hpp" />
     <ClInclude Include="adapters\animation\AnimatorAdapter.hpp" />
     <ClInclude Include="adapters\api\AnimatorAPI.hpp" />
+    <ClInclude Include="adapters\api\AtmosphereAPI.hpp" />
     <ClInclude Include="adapters\api\AudioAPI.hpp" />
     <ClInclude Include="adapters\api\BehaviorTreeAPI.hpp" />
     <ClInclude Include="adapters\api\CameraAPI.hpp" />
+    <ClInclude Include="adapters\api\CloudAPI.hpp" />
     <ClInclude Include="adapters\api\ControllerAPI.hpp" />
     <ClInclude Include="adapters\api\CoroutineAPI.hpp" />
     <ClInclude Include="adapters\api\DebugDrawAPI.hpp" />
@@ -218,9 +220,11 @@
     <ClCompile Include="adapters\animation\AnimationPreviewAdapter.cpp" />
     <ClCompile Include="adapters\animation\AnimatorAdapter.cpp" />
     <ClCompile Include="adapters\api\AnimatorAPI.cpp" />
+    <ClCompile Include="adapters\api\AtmosphereAPI.cpp" />
     <ClCompile Include="adapters\api\AudioAPI.cpp" />
     <ClCompile Include="adapters\api\BehaviorTreeAPI.cpp" />
     <ClCompile Include="adapters\api\CameraAPI.cpp" />
+    <ClCompile Include="adapters\api\CloudAPI.cpp" />
     <ClCompile Include="adapters\api\ControllerAPI.cpp" />
     <ClCompile Include="adapters\api\CoroutineAPI.cpp" />
     <ClCompile Include="adapters\api\DebugDrawAPI.cpp" />

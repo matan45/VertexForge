@@ -32,10 +32,19 @@ void main()
     vec4 cloud = texture(cloudTexture, texCoord);
     vec3 cloudScattering = cloud.rgb;
     float cloudTransmittance = cloud.a;
-    // Sample scene depth
+    // Depth masking: only occlude clouds if real geometry is closer than cloud layer
     float depth = texture(depthTexture, texCoord).r;
+    if (depth < 1)
+    {
+        float linearDepth = linearizeDepth(depth, pc.nearPlane, pc.farPlane);
+        if (linearDepth > pc.cloudMinAlt)
+        {
+            float cloudFade = smoothstep(pc.cloudMinAlt * 0.3, pc.cloudMinAlt, linearDepth);
+            cloudScattering *= cloudFade;
+            cloudTransmittance = mix(1.0, cloudTransmittance, cloudFade);
+        }
+    }
 
-   
     // Blend: scene * transmittance + scattering (premultiplied alpha)
-    outColor = vec4(cloudScattering * 10.0, cloudTransmittance < 0.99 ? 0.8 : 0.0);
+    outColor = vec4(cloudScattering, 1.0 - cloudTransmittance);
 }
