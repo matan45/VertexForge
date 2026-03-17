@@ -26,6 +26,7 @@ namespace render::shadow
         vk::ImageView atlasImageView;
         vk::Sampler atlasSampler;
         vk::Sampler comparisonSampler;
+        vk::Sampler depthSampler;
 
         vk::DescriptorSetLayout descriptorSetLayout;
         vk::DescriptorPool descriptorPool;
@@ -80,6 +81,7 @@ namespace render::shadow
         [[nodiscard]] vk::Image getAtlasImage() const { return atlasImage; }
         [[nodiscard]] vk::ImageView getAtlasImageView() const { return atlasImageView; }
         [[nodiscard]] vk::Sampler getComparisonSampler() const { return comparisonSampler; }
+        [[nodiscard]] vk::Sampler getDepthSampler() const { return depthSampler; }
         [[nodiscard]] vk::DescriptorSetLayout getDescriptorSetLayout() const { return descriptorSetLayout; }
         [[nodiscard]] vk::DescriptorSet getDescriptorSet() const { return descriptorSet; }
         [[nodiscard]] vk::Format getDepthFormat() const { return depthFormat; }

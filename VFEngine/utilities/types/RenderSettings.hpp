@@ -21,13 +21,6 @@ namespace types
         Practical
     };
 
-    enum class PCFKernelSize : uint8_t
-    {
-        x1 = 0, // 1x1 - Hard shadows
-        x3 = 2, // 3x3
-        x5 = 4 // 5x5
-    };
-
     struct ShadowAtlasConfig
     {
         uint32_t atlasSize = 4096;
@@ -89,9 +82,8 @@ namespace types
         float slopeBias = 1.5f;
         float normalBias = 0.02f;
 
-        // PCF
-        PCFKernelSize pcfKernelSize = PCFKernelSize::x3;
-        bool softShadowsEnabled = true;
+        // PCSS
+        bool softShadows = true;
 
         // 0.0 = lighter shadows, 1.0 = darker shadows
         float shadowIntensity = 0.5f;

@@ -113,6 +113,11 @@ namespace render::shadow
             logicalDevice.destroySampler(comparisonSampler);
             comparisonSampler = nullptr;
         }
+        if (depthSampler)
+        {
+            logicalDevice.destroySampler(depthSampler);
+            depthSampler = nullptr;
+        }
         if (atlasSampler)
         {
             logicalDevice.destroySampler(atlasSampler);
@@ -189,6 +194,12 @@ namespace render::shadow
         comparisonInfo.compareOp = vk::CompareOp::eLessOrEqual;
 
         comparisonSampler = logicalDevice.createSampler(comparisonInfo);
+
+        vk::SamplerCreateInfo depthInfo = samplerInfo;
+        depthInfo.magFilter = vk::Filter::eNearest;
+        depthInfo.minFilter = vk::Filter::eNearest;
+
+        depthSampler = logicalDevice.createSampler(depthInfo);
     }
 
     void ShadowAtlasManager::createDescriptorResources()

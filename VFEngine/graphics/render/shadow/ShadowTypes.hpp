@@ -42,14 +42,6 @@ namespace render::shadow
         Spot2D
     };
 
-    enum class ShadowFilterMode : uint8_t
-    {
-        None = 0,
-        PCF,
-        PCSS,
-        VSM
-    };
-
     enum class ShadowQuality : uint8_t
     {
         Off = 0,
@@ -113,7 +105,6 @@ namespace render::shadow
     struct ShadowSettings
     {
         uint32_t resolution = ShadowConstants::DEFAULT_SPOT_RESOLUTION;
-        ShadowFilterMode filterMode = ShadowFilterMode::PCF;
         ShadowQuality quality = ShadowQuality::High;
 
         float depthBias = ShadowConstants::DEFAULT_DEPTH_BIAS;
@@ -126,7 +117,7 @@ namespace render::shadow
         uint32_t cascadeCount = ShadowConstants::DEFAULT_CSM_CASCADES;
         float cascadeSplitLambda = 0.75f;
 
-        float softness = 1.0f;
+        float lightSize = 1.0f;
 
         bool enabled = true;
         bool castShadows = true;
@@ -151,8 +142,7 @@ namespace render::shadow
 
         float texelSize = 1.0f / static_cast<float>(ShadowConstants::RESOLUTION_HIGH);
 
-        uint8_t pcfKernelRadius = 2;
-        float pcfSoftness = 1.0f;
+        float lightSize = 1.0f;
         bool filterEnabled = true;
 
         uint32_t entityId = 0;
@@ -217,7 +207,7 @@ namespace render::shadow
         glm::vec4 atlasViewport;
         glm::vec4 biasParams;    // x=depthBias, y=slopeBias, z=normalBias, w=texelSize
         glm::vec4 rangeParams;   // x=near, y=far, z=cascadeCount, w=cascadeIndex
-        glm::vec4 pcfParams;     // x=kernelRadius, y=softness, z=filterEnabled, w=cubeMapIndex
+        glm::vec4 pcssParams;    // x=lightSize, y=searchRadius, z=filterEnabled, w=cubeMapIndex
     };
     static_assert(sizeof(GPUShadowData) == 128, "GPUShadowData must be 128 bytes");
 

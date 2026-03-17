@@ -51,25 +51,6 @@ namespace serialization
             return types::CascadeSplitMode::Practical;
         }
 
-        std::string pcfKernelSizeToStr(types::PCFKernelSize size)
-        {
-            switch (size)
-            {
-            case types::PCFKernelSize::x1: return "x1";
-            case types::PCFKernelSize::x3: return "x3";
-            case types::PCFKernelSize::x5: return "x5";
-            default: return "x3";
-            }
-        }
-
-        types::PCFKernelSize strToPCFKernelSize(const std::string& str)
-        {
-            if (str == "x1") return types::PCFKernelSize::x1;
-            if (str == "x3") return types::PCFKernelSize::x3;
-            if (str == "x5") return types::PCFKernelSize::x5;
-            return types::PCFKernelSize::x3;
-        }
-
         // ---- Enum/string conversions for postprocess ----
 
         std::string toneMappingModeToStr(postprocess::ToneMappingMode mode)
@@ -554,10 +535,8 @@ namespace serialization
                 settings.slopeBias = shadows["slopeBias"].get<float>();
             if (shadows.contains("normalBias") && shadows["normalBias"].is_number())
                 settings.normalBias = shadows["normalBias"].get<float>();
-            if (shadows.contains("pcfKernelSize") && shadows["pcfKernelSize"].is_string())
-                settings.pcfKernelSize = strToPCFKernelSize(shadows["pcfKernelSize"].get<std::string>());
-            if (shadows.contains("softShadowsEnabled") && shadows["softShadowsEnabled"].is_boolean())
-                settings.softShadowsEnabled = shadows["softShadowsEnabled"].get<bool>();
+            if (shadows.contains("softShadows") && shadows["softShadows"].is_boolean())
+                settings.softShadows = shadows["softShadows"].get<bool>();
             if (shadows.contains("shadowIntensity") && shadows["shadowIntensity"].is_number())
                 settings.shadowIntensity = shadows["shadowIntensity"].get<float>();
         }
@@ -666,8 +645,7 @@ namespace serialization
             {"shadowBias", settings.shadows.shadowBias},
             {"slopeBias", settings.shadows.slopeBias},
             {"normalBias", settings.shadows.normalBias},
-            {"pcfKernelSize", pcfKernelSizeToStr(settings.shadows.pcfKernelSize)},
-            {"softShadowsEnabled", settings.shadows.softShadowsEnabled},
+            {"softShadows", settings.shadows.softShadows},
             {"shadowIntensity", settings.shadows.shadowIntensity}
         };
 

@@ -116,17 +116,22 @@ struct ShadowData {
     vec4 atlasViewport;
     vec4 biasParams;    // x = depthBias, y = slopeBias, z = normalBias, w = texelSize
     vec4 rangeParams;   // x = near, y = far, z = cascadeCount, w = cascadeIndex
-    vec4 pcfParams;     // x = kernelRadius, y = softness, z = filterEnabled, w = cubeMapIndex
+    vec4 pcssParams;    // x = lightSize, y = searchRadius, z = filterEnabled, w = cubeMapIndex
 };
 
 layout(std430, set = 4, binding = 0) readonly buffer ShadowDataBuffer {
     ShadowData shadowData[];
 };
 
-// Set 5: Shadow Textures
+// Set 5: Shadow Textures (comparison samplers)
 layout(set = 5, binding = 0) uniform sampler2DShadow shadowAtlas;
 layout(set = 5, binding = 1) uniform sampler2DArrayShadow shadowCascades;
 layout(set = 5, binding = 2) uniform samplerCubeShadow shadowCubes[];
+
+// Set 5: Depth samplers (PCSS blocker search - not used in volumetrics, declared for layout compatibility)
+layout(set = 5, binding = 3) uniform sampler2D shadowAtlasDepth;
+layout(set = 5, binding = 4) uniform sampler2DArray shadowCascadesDepth;
+layout(set = 5, binding = 5) uniform samplerCube shadowCubesDepth[];
 
 // Shadow constants (must match ShadowTypes.hpp)
 const int MAX_SHADOW_VIEWS = 272;

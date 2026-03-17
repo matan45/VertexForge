@@ -41,6 +41,8 @@ namespace render::shadow
 
         vk::Sampler comparisonSampler;
         vk::Sampler cubeComparisonSampler;
+        vk::Sampler depthSampler;
+        vk::Sampler cubeDepthSampler;
 
         std::unique_ptr<ShadowDepthArray> placeholderArray;
         std::unique_ptr<ShadowCubeMap> placeholderCube;
@@ -70,6 +72,8 @@ namespace render::shadow
 
         [[nodiscard]] vk::Sampler getComparisonSampler() const { return comparisonSampler; }
         [[nodiscard]] vk::Sampler getCubeComparisonSampler() const { return cubeComparisonSampler; }
+        [[nodiscard]] vk::Sampler getDepthSampler() const { return depthSampler; }
+        [[nodiscard]] vk::Sampler getCubeDepthSampler() const { return cubeDepthSampler; }
         [[nodiscard]] vk::ImageView getPlaceholderArrayView() const;
         [[nodiscard]] vk::ImageView getPlaceholderCubeView() const;
 

@@ -38,4 +38,20 @@ namespace render::shadow
         samplerInfo.compareOp = vk::CompareOp::eLessOrEqual;
         return device.createSampler(samplerInfo);
     }
+
+    vk::Sampler ShadowSamplers::createDepthSampler(vk::Device device)
+    {
+        auto samplerInfo = createBaseSamplerInfo();
+        samplerInfo.magFilter = vk::Filter::eNearest;
+        samplerInfo.minFilter = vk::Filter::eNearest;
+        return device.createSampler(samplerInfo);
+    }
+
+    vk::Sampler ShadowSamplers::createCubeDepthSampler(vk::Device device)
+    {
+        auto samplerInfo = createBaseSamplerInfo();
+        samplerInfo.magFilter = vk::Filter::eNearest;
+        samplerInfo.minFilter = vk::Filter::eNearest;
+        return device.createSampler(samplerInfo);
+    }
 }

@@ -178,36 +178,13 @@ namespace windows
         ImGui::Text("Shadow Filtering");
         ImGui::Spacing();
 
-        const char* kernelItems[] = {"1x1 (Hard)", "3x3", "5x5"};
-        int kernelIdx = 0;
-        switch (settings.shadows.pcfKernelSize)
-        {
-            case types::PCFKernelSize::x1: kernelIdx = 0; break;
-            case types::PCFKernelSize::x3: kernelIdx = 1; break;
-            case types::PCFKernelSize::x5: kernelIdx = 2; break;
-        }
-        if (ImGui::Combo("PCF Kernel", &kernelIdx, kernelItems, 3))
-        {
-            switch (kernelIdx)
-            {
-                case 0: settings.shadows.pcfKernelSize = types::PCFKernelSize::x1; break;
-                case 1: settings.shadows.pcfKernelSize = types::PCFKernelSize::x3; break;
-                case 2: settings.shadows.pcfKernelSize = types::PCFKernelSize::x5; break;
-            }
-            isDirty = true;
-        }
-        if (ImGui::IsItemHovered())
-        {
-            ImGui::SetTooltip("PCF kernel size for soft shadow edges.\nLarger = softer but slower.");
-        }
-
-        if (ImGui::Checkbox("Soft Shadows", &settings.shadows.softShadowsEnabled))
+        if (ImGui::Checkbox("Soft Shadows (PCSS)", &settings.shadows.softShadows))
         {
             isDirty = true;
         }
         if (ImGui::IsItemHovered())
         {
-            ImGui::SetTooltip("Enable/disable PCF shadow filtering globally.");
+            ImGui::SetTooltip("Enable/disable PCSS contact-hardening soft shadows globally.\nWhen off, hard shadows are used (single tap).");
         }
 
         ImGui::Separator();

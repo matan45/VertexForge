@@ -180,7 +180,14 @@ void main() {
 #include "../common/gpu_types.glsl"
 #include "../common/camera_types.glsl"
 #include "../common/lighting_functions.glsl"
-#include "../common/shadow_sampling.glsl"
+// ShadowData struct defined inline (terrain has custom bias scaling in shadow functions)
+struct ShadowData {
+    mat4 viewProjection;
+    vec4 atlasViewport;
+    vec4 biasParams;
+    vec4 rangeParams;
+    vec4 pcssParams;
+};
 #include "../common/cluster_culling.glsl"
 #include "../common/gi_sampling.glsl"
 
@@ -298,9 +305,15 @@ layout(std430, set = 9, binding = 0) readonly buffer ShadowDataBuffer {
     ShadowData shadowDataArray[];
 };
 
+// Comparison samplers
 layout(set = 10, binding = 0) uniform sampler2DShadow shadowAtlas;
 layout(set = 10, binding = 1) uniform sampler2DArrayShadow shadowCascades;
 layout(set = 10, binding = 2) uniform samplerCubeShadow shadowCubes[];
+
+// Depth samplers (PCSS blocker search)
+layout(set = 10, binding = 3) uniform sampler2D shadowAtlasDepth;
+layout(set = 10, binding = 4) uniform sampler2DArray shadowCascadesDepth;
+layout(set = 10, binding = 5) uniform samplerCube shadowCubesDepth[];
 
 const int MAX_SHADOW_VIEWS = 272;
 const int MAX_POINT_SHADOW_CUBES = 32;
@@ -313,6 +326,47 @@ float getTerrainNormalBiasScale() {
     if (pc.shadowLOD < 1.5) return 8.0;
     if (pc.shadowLOD < 2.5) return 12.0;
     return 3.0;
+}
+
+// Poisson disk for PCSS (terrain uses same disk as common shadow_sampling)
+const int TERRAIN_PCSS_SAMPLES = 32;
+const vec2 terrainPoissonDisk[32] = vec2[](
+    vec2(-0.9465, -0.1428), vec2(-0.7431,  0.5944), vec2(-0.4490,  0.1400),
+    vec2(-0.1596,  0.8917), vec2( 0.0483, -0.6390), vec2( 0.3865,  0.5373),
+    vec2(-0.5828, -0.5543), vec2( 0.7440, -0.0125), vec2( 0.1567,  0.1295),
+    vec2(-0.3358, -0.8774), vec2( 0.5748,  0.7881), vec2(-0.8075, -0.3264),
+    vec2( 0.9259, -0.3580), vec2(-0.1516,  0.4303), vec2( 0.3695, -0.3368),
+    vec2(-0.6178,  0.3236), vec2( 0.8120, -0.6570), vec2(-0.2714, -0.3483),
+    vec2( 0.5923,  0.2277), vec2(-0.4712,  0.7690), vec2( 0.1874, -0.9303),
+    vec2( 0.9502,  0.3050), vec2(-0.9073,  0.2284), vec2( 0.2816,  0.9280),
+    vec2(-0.6336, -0.1427), vec2( 0.4862, -0.7428), vec2(-0.0982, -0.1554),
+    vec2( 0.7040,  0.5315), vec2(-0.4047, -0.6178), vec2( 0.0955,  0.5551),
+    vec2(-0.7975,  0.0159), vec2( 0.3573, -0.0547)
+);
+
+vec2 terrainBlockerSearch2D(vec2 uv, float receiverDepth, float searchRadius, vec4 viewport) {
+    float blockerSum = 0.0;
+    int blockerCount = 0;
+    for (int i = 0; i < TERRAIN_PCSS_SAMPLES; ++i) {
+        vec2 sampleUV = clamp(uv + terrainPoissonDisk[i] * searchRadius, viewport.xy, viewport.xy + viewport.zw);
+        float depth = texture(shadowAtlasDepth, sampleUV).r;
+        if (depth < receiverDepth) {
+            blockerSum += depth;
+            blockerCount++;
+        }
+    }
+    if (blockerCount == 0) return vec2(-1.0, 0.0);
+    return vec2(blockerSum / float(blockerCount), float(blockerCount));
+}
+
+float terrainPcssFilter2D(vec3 projCoords, float penumbraWidth, float texelSize, vec4 viewport) {
+    float filterRadius = max(penumbraWidth * texelSize, texelSize);
+    float shadow = 0.0;
+    for (int i = 0; i < TERRAIN_PCSS_SAMPLES; ++i) {
+        vec2 sampleUV = clamp(projCoords.xy + terrainPoissonDisk[i] * filterRadius, viewport.xy, viewport.xy + viewport.zw);
+        shadow += texture(shadowAtlas, vec3(sampleUV, projCoords.z));
+    }
+    return shadow / float(TERRAIN_PCSS_SAMPLES);
 }
 
 float sampleSpotShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal) {
@@ -330,29 +384,19 @@ float sampleSpotShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal) {
     if (projCoords.z > 1.0 || projCoords.z < 0.0) return 1.0;
     if (any(lessThan(projCoords.xy, vec2(0.0))) || any(greaterThan(projCoords.xy, vec2(1.0)))) return 1.0;
 
-    bool filterEnabled = sd.pcfParams.z > 0.5;
-    int kernelSize = int(sd.pcfParams.x);
-
-    if (!filterEnabled || kernelSize == 0) {
+    bool filterEnabled = sd.pcssParams.z > 0.5;
+    if (!filterEnabled) {
         return texture(shadowAtlas, vec3(projCoords.xy, projCoords.z));
     }
 
-    float shadow = 0.0;
-    float texelSize = sd.biasParams.w;
-    float softness = sd.pcfParams.y;
-    float spread = texelSize * softness;
-    int sampleCount = 0;
-    int size = kernelSize + 1;
-    float halfSize = float(size) * 0.5;
+    float lightSize = sd.pcssParams.x;
+    float searchRadius = sd.pcssParams.y;
+    vec2 blockerResult = terrainBlockerSearch2D(projCoords.xy, projCoords.z, searchRadius, sd.atlasViewport);
+    if (blockerResult.x < 0.0) return 1.0;
+    if (blockerResult.y >= float(TERRAIN_PCSS_SAMPLES)) return 0.0;
 
-    for (int x = 0; x < size; ++x) {
-        for (int y = 0; y < size; ++y) {
-            vec2 offset = (vec2(float(x), float(y)) - halfSize + 0.5) * spread;
-            shadow += texture(shadowAtlas, vec3(projCoords.xy + offset, projCoords.z));
-            sampleCount++;
-        }
-    }
-    return shadow / float(sampleCount);
+    float penumbra = lightSize * (projCoords.z - blockerResult.x) / blockerResult.x;
+    return terrainPcssFilter2D(projCoords, penumbra, sd.biasParams.w, sd.atlasViewport);
 }
 
 float sampleCascadeShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal) {
@@ -371,27 +415,19 @@ float sampleCascadeShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal) {
     projCoords.xy = sd.atlasViewport.xy + texCoords * sd.atlasViewport.zw;
     projCoords.z = clamp(projCoords.z, 0.0, 1.0);
 
-    bool filterEnabled = sd.pcfParams.z > 0.5;
-    int kernelSize = int(sd.pcfParams.x);
-
-    if (!filterEnabled || kernelSize == 0) {
+    bool filterEnabled = sd.pcssParams.z > 0.5;
+    if (!filterEnabled) {
         return texture(shadowAtlas, vec3(projCoords.xy, projCoords.z));
     }
 
-    float shadow = 0.0;
-    float spread = sd.biasParams.w * sd.pcfParams.y;
-    int sampleCount = 0;
-    int size = kernelSize + 1;
-    float halfSize = float(size) * 0.5;
+    float lightSize = sd.pcssParams.x;
+    float searchRadius = sd.pcssParams.y;
+    vec2 blockerResult = terrainBlockerSearch2D(projCoords.xy, projCoords.z, searchRadius, sd.atlasViewport);
+    if (blockerResult.x < 0.0) return 1.0;
+    if (blockerResult.y >= float(TERRAIN_PCSS_SAMPLES)) return 0.0;
 
-    for (int x = 0; x < size; ++x) {
-        for (int y = 0; y < size; ++y) {
-            vec2 offset = (vec2(float(x), float(y)) - halfSize + 0.5) * spread;
-            shadow += texture(shadowAtlas, vec3(projCoords.xy + offset, projCoords.z));
-            sampleCount++;
-        }
-    }
-    return shadow / float(sampleCount);
+    float penumbra = lightSize * (projCoords.z - blockerResult.x) / blockerResult.x;
+    return terrainPcssFilter2D(projCoords, penumbra, sd.biasParams.w, sd.atlasViewport);
 }
 
 float sampleDirectionalShadow(int baseShadowIndex, vec3 worldPos, vec3 worldNormal, float viewZ) {
@@ -439,7 +475,7 @@ float samplePointShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal,
 
     ShadowData sd = shadowDataArray[shadowIndex];
 
-    int cubeMapIndex = int(sd.pcfParams.w);
+    int cubeMapIndex = int(sd.pcssParams.w);
     if (cubeMapIndex < 0 || cubeMapIndex >= MAX_POINT_SHADOW_CUBES) return 1.0;
 
     float near = sd.rangeParams.x;
@@ -458,36 +494,46 @@ float samplePointShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal,
     float viewSpaceZ = linearDepth * majorComponent;
     float perspectiveDepth = (far * (viewSpaceZ - near)) / (viewSpaceZ * (far - near));
 
-    bool filterEnabled = sd.pcfParams.z > 0.5;
-    int kernelSize = int(sd.pcfParams.x);
-
-    if (!filterEnabled || kernelSize == 0) {
+    bool filterEnabled = sd.pcssParams.z > 0.5;
+    if (!filterEnabled) {
         return texture(shadowCubes[nonuniformEXT(cubeMapIndex)], vec4(sampleDir, perspectiveDepth));
     }
-
-    float softness = sd.pcfParams.y;
-    float spread = softness * 0.01;
 
     vec3 tangent = abs(sampleDir.x) < 0.9 ? vec3(1.0, 0.0, 0.0) : vec3(0.0, 1.0, 0.0);
     vec3 bitangent = normalize(cross(sampleDir, tangent));
     tangent = normalize(cross(bitangent, sampleDir));
 
-    float shadow = 0.0;
-    int sampleCount = 0;
-    int size = kernelSize + 1;
-    float halfSize = float(size) * 0.5;
-
-    for (int x = 0; x < size; ++x) {
-        for (int y = 0; y < size; ++y) {
-            float fx = float(x) - halfSize + 0.5;
-            float fy = float(y) - halfSize + 0.5;
-            vec3 offset = tangent * fx * spread + bitangent * fy * spread;
-            vec3 offsetDir = normalize(sampleDir + offset);
-            shadow += texture(shadowCubes[nonuniformEXT(cubeMapIndex)], vec4(offsetDir, perspectiveDepth));
-            sampleCount++;
+    // PCSS blocker search on cubemap
+    float lightSize = sd.pcssParams.x;
+    float searchRadius = sd.pcssParams.y;
+    float blockerSum = 0.0;
+    int blockerCount = 0;
+    for (int i = 0; i < TERRAIN_PCSS_SAMPLES; ++i) {
+        vec3 offset = tangent * terrainPoissonDisk[i].x * searchRadius +
+                      bitangent * terrainPoissonDisk[i].y * searchRadius;
+        vec3 offsetDir = normalize(sampleDir + offset);
+        float depth = texture(shadowCubesDepth[nonuniformEXT(cubeMapIndex)], offsetDir).r;
+        if (depth < perspectiveDepth) {
+            blockerSum += depth;
+            blockerCount++;
         }
     }
-    return shadow / float(sampleCount);
+
+    if (blockerCount == 0) return 1.0;
+    if (blockerCount >= TERRAIN_PCSS_SAMPLES) return 0.0;
+
+    float avgBlockerDepth = blockerSum / float(blockerCount);
+    float penumbra = lightSize * (perspectiveDepth - avgBlockerDepth) / avgBlockerDepth;
+    float filterRadius = max(penumbra * 0.01, 0.001);
+
+    float shadow = 0.0;
+    for (int i = 0; i < TERRAIN_PCSS_SAMPLES; ++i) {
+        vec3 offset = tangent * terrainPoissonDisk[i].x * filterRadius +
+                      bitangent * terrainPoissonDisk[i].y * filterRadius;
+        vec3 offsetDir = normalize(sampleDir + offset);
+        shadow += texture(shadowCubes[nonuniformEXT(cubeMapIndex)], vec4(offsetDir, perspectiveDepth));
+    }
+    return shadow / float(TERRAIN_PCSS_SAMPLES);
 }
 
 void main() {

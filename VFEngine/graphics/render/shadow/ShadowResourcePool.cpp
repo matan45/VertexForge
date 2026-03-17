@@ -50,12 +50,24 @@ namespace render::shadow
         const auto& logicalDevice = device.getLogicalDevice();
         comparisonSampler = ShadowSamplers::createComparisonSampler(logicalDevice);
         cubeComparisonSampler = ShadowSamplers::createCubeComparisonSampler(logicalDevice);
+        depthSampler = ShadowSamplers::createDepthSampler(logicalDevice);
+        cubeDepthSampler = ShadowSamplers::createCubeDepthSampler(logicalDevice);
     }
 
     void ShadowResourcePool::cleanupSamplers()
     {
         const auto& logicalDevice = device.getLogicalDevice();
 
+        if (cubeDepthSampler)
+        {
+            logicalDevice.destroySampler(cubeDepthSampler);
+            cubeDepthSampler = nullptr;
+        }
+        if (depthSampler)
+        {
+            logicalDevice.destroySampler(depthSampler);
+            depthSampler = nullptr;
+        }
         if (cubeComparisonSampler)
         {
             logicalDevice.destroySampler(cubeComparisonSampler);

@@ -53,8 +53,7 @@ namespace render
 
             bool shadowsEnabled = true;
             ShadowQuality globalQuality = ShadowQuality::High;
-            uint8_t globalPcfKernel = 1;
-            bool globalSoftShadowsEnabled = true;
+            bool globalSoftShadows = true;
             float globalDepthBias = 0.005f;
             float globalSlopeBias = 1.5f;
             float globalNormalBias = 0.02f;

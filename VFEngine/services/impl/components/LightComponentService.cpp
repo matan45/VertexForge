@@ -125,6 +125,7 @@ namespace services {
         DirectionalLightData data;
         data.color = comp.color;
         data.intensity = comp.intensity;
+        data.lightSize = comp.lightSize;
         data.showGizmo = comp.showGizmo;
         return data;
     }
@@ -147,6 +148,7 @@ namespace services {
         auto& comp = sceneEntity.getComponent<components::DirectionalLightComponent>();
         comp.color = validateColor(lightData.color);
         comp.intensity = lightData.intensity;
+        comp.lightSize = lightData.lightSize;
         comp.showGizmo = lightData.showGizmo;
 
         events::lighting::LightDataChangedNotification notification;
@@ -191,6 +193,7 @@ namespace services {
         data.color = comp.color;
         data.intensity = comp.intensity;
         data.radius = comp.radius;
+        data.lightSize = comp.lightSize;
         data.showGizmo = comp.showGizmo;
         return data;
     }
@@ -217,6 +220,7 @@ namespace services {
         comp.color = validateColor(lightData.color);
         comp.intensity = lightData.intensity;
         comp.radius = lightData.radius;
+        comp.lightSize = lightData.lightSize;
         comp.showGizmo = lightData.showGizmo;
 
         events::lighting::LightDataChangedNotification notification;
@@ -263,6 +267,7 @@ namespace services {
         data.innerAngle = comp.innerAngle;
         data.outerAngle = comp.outerAngle;
         data.range = comp.range;
+        data.lightSize = comp.lightSize;
         data.showGizmo = comp.showGizmo;
         return data;
     }
@@ -294,6 +299,7 @@ namespace services {
         comp.innerAngle = lightData.innerAngle;
         comp.outerAngle = lightData.outerAngle;
         comp.range = lightData.range;
+        comp.lightSize = lightData.lightSize;
         comp.showGizmo = lightData.showGizmo;
 
         events::lighting::LightDataChangedNotification notification;

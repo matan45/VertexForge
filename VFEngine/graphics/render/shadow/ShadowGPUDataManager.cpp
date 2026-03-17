@@ -183,7 +183,9 @@ namespace render::shadow
     {
         const auto& logicalDevice = device.getLogicalDevice();
 
-        std::array<vk::DescriptorSetLayoutBinding, 3> bindings{};
+        // Bindings 0-2: comparison samplers (for final shadow filtering)
+        // Bindings 3-5: depth samplers (for PCSS blocker search)
+        std::array<vk::DescriptorSetLayoutBinding, 6> bindings{};
 
         bindings[0].binding = 0;
         bindings[0].descriptorType = vk::DescriptorType::eCombinedImageSampler;
@@ -200,14 +202,33 @@ namespace render::shadow
         bindings[2].descriptorCount = ShadowConstants::MAX_POINT_SHADOW_CASTERS;
         bindings[2].stageFlags = vk::ShaderStageFlagBits::eFragment | vk::ShaderStageFlagBits::eCompute;
 
+        // PCSS blocker search depth samplers (same images, non-comparison samplers)
+        bindings[3].binding = 3;
+        bindings[3].descriptorType = vk::DescriptorType::eCombinedImageSampler;
+        bindings[3].descriptorCount = 1;
+        bindings[3].stageFlags = vk::ShaderStageFlagBits::eFragment | vk::ShaderStageFlagBits::eCompute;
+
+        bindings[4].binding = 4;
+        bindings[4].descriptorType = vk::DescriptorType::eCombinedImageSampler;
+        bindings[4].descriptorCount = 1;
+        bindings[4].stageFlags = vk::ShaderStageFlagBits::eFragment | vk::ShaderStageFlagBits::eCompute;
+
+        bindings[5].binding = 5;
+        bindings[5].descriptorType = vk::DescriptorType::eCombinedImageSampler;
+        bindings[5].descriptorCount = ShadowConstants::MAX_POINT_SHADOW_CASTERS;
+        bindings[5].stageFlags = vk::ShaderStageFlagBits::eFragment | vk::ShaderStageFlagBits::eCompute;
+
         vk::DescriptorSetLayoutCreateInfo layoutInfo{};
         layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
         layoutInfo.pBindings = bindings.data();
 
-        std::array<vk::DescriptorBindingFlags, 3> bindingFlags{};
+        std::array<vk::DescriptorBindingFlags, 6> bindingFlags{};
         bindingFlags[0] = {};
         bindingFlags[1] = {};
         bindingFlags[2] = vk::DescriptorBindingFlagBits::ePartiallyBound;
+        bindingFlags[3] = {};
+        bindingFlags[4] = {};
+        bindingFlags[5] = vk::DescriptorBindingFlagBits::ePartiallyBound;
 
         vk::DescriptorSetLayoutBindingFlagsCreateInfo bindingFlagsInfo{};
         bindingFlagsInfo.bindingCount = static_cast<uint32_t>(bindingFlags.size());
@@ -218,7 +239,7 @@ namespace render::shadow
 
         std::array<vk::DescriptorPoolSize, 1> poolSizes{};
         poolSizes[0].type = vk::DescriptorType::eCombinedImageSampler;
-        poolSizes[0].descriptorCount = 2 + ShadowConstants::MAX_POINT_SHADOW_CASTERS;
+        poolSizes[0].descriptorCount = 2 * (2 + ShadowConstants::MAX_POINT_SHADOW_CASTERS);
 
         vk::DescriptorPoolCreateInfo poolInfo{};
         poolInfo.maxSets = 1;
@@ -262,11 +283,19 @@ namespace render::shadow
         const auto& logicalDevice = device.getLogicalDevice();
         std::vector<vk::WriteDescriptorSet> writes;
 
+        // Comparison samplers (bindings 0-2)
         std::vector<vk::DescriptorImageInfo> atlasInfos(1);
         std::vector<vk::DescriptorImageInfo> csmInfos(1);
         std::vector<vk::DescriptorImageInfo> cubeInfos;
         cubeInfos.reserve(ShadowConstants::MAX_POINT_SHADOW_CASTERS);
 
+        // Depth samplers for PCSS blocker search (bindings 3-5)
+        std::vector<vk::DescriptorImageInfo> atlasDepthInfos(1);
+        std::vector<vk::DescriptorImageInfo> csmDepthInfos(1);
+        std::vector<vk::DescriptorImageInfo> cubeDepthInfos;
+        cubeDepthInfos.reserve(ShadowConstants::MAX_POINT_SHADOW_CASTERS);
+
+        // Binding 0: Atlas comparison sampler
         atlasInfos[0].sampler = atlasManager->getComparisonSampler();
         atlasInfos[0].imageView = atlasManager->getAtlasImageView();
         atlasInfos[0].imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
@@ -280,6 +309,21 @@ namespace render::shadow
         atlasWrite.pImageInfo = atlasInfos.data();
         writes.push_back(atlasWrite);
 
+        // Binding 3: Atlas depth sampler (same image, non-comparison)
+        atlasDepthInfos[0].sampler = atlasManager->getDepthSampler();
+        atlasDepthInfos[0].imageView = atlasManager->getAtlasImageView();
+        atlasDepthInfos[0].imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+
+        vk::WriteDescriptorSet atlasDepthWrite{};
+        atlasDepthWrite.dstSet = shadowTextureDescSet;
+        atlasDepthWrite.dstBinding = 3;
+        atlasDepthWrite.dstArrayElement = 0;
+        atlasDepthWrite.descriptorType = vk::DescriptorType::eCombinedImageSampler;
+        atlasDepthWrite.descriptorCount = 1;
+        atlasDepthWrite.pImageInfo = atlasDepthInfos.data();
+        writes.push_back(atlasDepthWrite);
+
+        // Find CSM array view
         vk::ImageView csmArrayView = resourcePool->getPlaceholderArrayView();
         for (const auto& [entityId, data] : lightShadowData)
         {
@@ -296,6 +340,7 @@ namespace render::shadow
             }
         }
 
+        // Binding 1: CSM comparison sampler
         csmInfos[0].sampler = resourcePool->getComparisonSampler();
         csmInfos[0].imageView = csmArrayView;
         csmInfos[0].imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
@@ -309,6 +354,21 @@ namespace render::shadow
         csmWrite.pImageInfo = csmInfos.data();
         writes.push_back(csmWrite);
 
+        // Binding 4: CSM depth sampler (same image, non-comparison)
+        csmDepthInfos[0].sampler = resourcePool->getDepthSampler();
+        csmDepthInfos[0].imageView = csmArrayView;
+        csmDepthInfos[0].imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+
+        vk::WriteDescriptorSet csmDepthWrite{};
+        csmDepthWrite.dstSet = shadowTextureDescSet;
+        csmDepthWrite.dstBinding = 4;
+        csmDepthWrite.dstArrayElement = 0;
+        csmDepthWrite.descriptorType = vk::DescriptorType::eCombinedImageSampler;
+        csmDepthWrite.descriptorCount = 1;
+        csmDepthWrite.pImageInfo = csmDepthInfos.data();
+        writes.push_back(csmDepthWrite);
+
+        // Collect cube maps
         uint32_t cubeIndex = 0;
         for (const auto& [entityId, data] : lightShadowData)
         {
@@ -333,6 +393,13 @@ namespace render::shadow
             cubeInfo.imageView = cube->getCubeView();
             cubeInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
             cubeInfos.push_back(cubeInfo);
+
+            vk::DescriptorImageInfo cubeDepthInfo{};
+            cubeDepthInfo.sampler = resourcePool->getCubeDepthSampler();
+            cubeDepthInfo.imageView = cube->getCubeView();
+            cubeDepthInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+            cubeDepthInfos.push_back(cubeDepthInfo);
+
             ++cubeIndex;
         }
 
@@ -346,9 +413,16 @@ namespace render::shadow
                 placeholderInfo.imageView = placeholderCubeView;
                 placeholderInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
                 cubeInfos.push_back(placeholderInfo);
+
+                vk::DescriptorImageInfo placeholderDepthInfo{};
+                placeholderDepthInfo.sampler = resourcePool->getCubeDepthSampler();
+                placeholderDepthInfo.imageView = placeholderCubeView;
+                placeholderDepthInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+                cubeDepthInfos.push_back(placeholderDepthInfo);
             }
         }
 
+        // Binding 2: Cube comparison samplers
         if (!cubeInfos.empty())
         {
             vk::WriteDescriptorSet cubeWrite{};
@@ -359,6 +433,19 @@ namespace render::shadow
             cubeWrite.descriptorCount = static_cast<uint32_t>(cubeInfos.size());
             cubeWrite.pImageInfo = cubeInfos.data();
             writes.push_back(cubeWrite);
+        }
+
+        // Binding 5: Cube depth samplers
+        if (!cubeDepthInfos.empty())
+        {
+            vk::WriteDescriptorSet cubeDepthWrite{};
+            cubeDepthWrite.dstSet = shadowTextureDescSet;
+            cubeDepthWrite.dstBinding = 5;
+            cubeDepthWrite.dstArrayElement = 0;
+            cubeDepthWrite.descriptorType = vk::DescriptorType::eCombinedImageSampler;
+            cubeDepthWrite.descriptorCount = static_cast<uint32_t>(cubeDepthInfos.size());
+            cubeDepthWrite.pImageInfo = cubeDepthInfos.data();
+            writes.push_back(cubeDepthWrite);
         }
 
         if (!writes.empty())
@@ -425,9 +512,10 @@ namespace render::shadow
                     }
                 }
 
-                gpu.pcfParams = glm::vec4(
-                    static_cast<float>(view.pcfKernelRadius),
-                    view.pcfSoftness,
+                float searchRadius = view.lightSize * view.texelSize * 20.0f;
+                gpu.pcssParams = glm::vec4(
+                    view.lightSize,
+                    searchRadius,
                     view.filterEnabled ? 1.0f : 0.0f,
                     cubeMapIndex
                 );

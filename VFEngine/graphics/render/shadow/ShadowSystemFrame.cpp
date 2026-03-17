@@ -209,9 +209,8 @@ namespace render::shadow
                         viewCopy.slopeBias = data.settings.slopeBias;
                         viewCopy.normalBias = data.settings.normalBias;
                         viewCopy.texelSize = texelSize;
-                        viewCopy.pcfKernelRadius = globalPcfKernel;
-                        viewCopy.pcfSoftness = data.settings.softness;
-                        viewCopy.filterEnabled = globalSoftShadowsEnabled;
+                        viewCopy.lightSize = data.settings.lightSize;
+                        viewCopy.filterEnabled = globalSoftShadows;
 
                         if (!directionalIndices.contains(entityId))
                             directionalIndices[entityId] = static_cast<int32_t>(directionalShadowViews.size());
@@ -239,9 +238,8 @@ namespace render::shadow
                         viewCopy.slopeBias = data.settings.slopeBias;
                         viewCopy.normalBias = data.settings.normalBias;
                         viewCopy.texelSize = texelSize;
-                        viewCopy.pcfKernelRadius = globalPcfKernel;
-                        viewCopy.pcfSoftness = data.settings.softness;
-                        viewCopy.filterEnabled = globalSoftShadowsEnabled;
+                        viewCopy.lightSize = data.settings.lightSize;
+                        viewCopy.filterEnabled = globalSoftShadows;
 
                         if (!directionalIndices.contains(entityId))
                             directionalIndices[entityId] = static_cast<int32_t>(directionalShadowViews.size());
@@ -264,9 +262,8 @@ namespace render::shadow
                         viewCopy.slopeBias = data.settings.slopeBias;
                         viewCopy.normalBias = data.settings.normalBias;
                         viewCopy.texelSize = texelSize;
-                        viewCopy.pcfKernelRadius = globalPcfKernel;
-                        viewCopy.pcfSoftness = data.settings.softness;
-                        viewCopy.filterEnabled = globalSoftShadowsEnabled;
+                        viewCopy.lightSize = data.settings.lightSize;
+                        viewCopy.filterEnabled = globalSoftShadows;
 
                         if (!spotIndices.contains(entityId))
                             spotIndices[entityId] = static_cast<int32_t>(spotShadowViews.size());
@@ -288,9 +285,8 @@ namespace render::shadow
                     viewCopy.slopeBias = data.settings.slopeBias;
                     viewCopy.normalBias = data.settings.normalBias;
                     viewCopy.texelSize = texelSize;
-                    viewCopy.pcfKernelRadius = globalPcfKernel;
-                    viewCopy.pcfSoftness = data.settings.softness;
-                    viewCopy.filterEnabled = globalSoftShadowsEnabled;
+                    viewCopy.lightSize = data.settings.lightSize;
+                    viewCopy.filterEnabled = globalSoftShadows;
                     viewCopy.entityId = entityId;
 
                     pointIndices[entityId] = static_cast<int32_t>(pointShadowViews.size());
@@ -666,8 +662,7 @@ namespace render::shadow
             passRecorder->resetAtlasFirstUse();
         needsUpdate = true;
 
-        globalPcfKernel = static_cast<uint8_t>(shadowSettings.pcfKernelSize);
-        globalSoftShadowsEnabled = shadowSettings.softShadowsEnabled;
+        globalSoftShadows = shadowSettings.softShadows;
 
         // Apply shadow LOD settings
         shadowLODConfig.enabled = settings.shadowLOD.enabled;
