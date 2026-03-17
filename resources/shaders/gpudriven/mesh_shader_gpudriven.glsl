@@ -316,18 +316,19 @@ layout(std430, set = 9, binding = 0) readonly buffer ShadowDataBuffer {
     ShadowData shadowData[];
 };
 
-// Comparison samplers (shadow filtering)
-layout(set = 10, binding = 0) uniform sampler2DShadow shadowAtlas;
-layout(set = 10, binding = 1) uniform sampler2DArrayShadow shadowCascades;
-layout(set = 10, binding = 2) uniform samplerCubeShadow shadowCubes[];
+layout(std430, set = 9, binding = 1) readonly buffer PageTableBuffer {
+    uint pageTable[];
+};
 
-// Depth samplers (PCSS blocker search)
-layout(set = 10, binding = 3) uniform sampler2D shadowAtlasDepth;
-layout(set = 10, binding = 4) uniform sampler2DArray shadowCascadesDepth;
-layout(set = 10, binding = 5) uniform samplerCube shadowCubesDepth[];
+// Comparison samplers (shadow filtering)
+layout(set = 10, binding = 0) uniform sampler2DShadow physicalPoolShadow;
+layout(set = 10, binding = 1) uniform sampler2D physicalPoolDepth;
+layout(set = 10, binding = 2) uniform samplerCubeShadow shadowCubes[32];
+layout(set = 10, binding = 3) uniform samplerCube shadowCubesDepth[32];
 
 // PCSS sampling functions
 #define SHADOW_BUFFER shadowData
+#define PAGE_TABLE pageTable
 #include "../common/shadow_sampling.glsl"
 
 const float LIGHTING_PI = 3.14159265359;

@@ -98,13 +98,9 @@ namespace controllers
         if (!shadowSystem)
             return stats;
 
-        auto* atlasManager = shadowSystem->getAtlasManager();
-        if (atlasManager)
-        {
-            stats.atlasWidth = atlasManager->getAtlasWidth();
-            stats.atlasHeight = atlasManager->getAtlasHeight();
-            stats.atlasUtilization = atlasManager->getAtlasUtilization();
-        }
+        stats.atlasWidth = 8192;  // VSM physical pool dimensions
+        stats.atlasHeight = 8192;
+        stats.atlasUtilization = shadowSystem->getPoolUtilization();
 
         stats.activeShadowCasters = shadowSystem->getActiveShadowCasterCount();
         stats.activeShadowViews = shadowSystem->getActiveShadowViewCount();
@@ -113,9 +109,7 @@ namespace controllers
         stats.pointLightCount = static_cast<uint32_t>(shadowSystem->getPointShadowViews().size());
         stats.spotLightCount = static_cast<uint32_t>(shadowSystem->getSpotShadowViews().size());
 
-        auto quality = static_cast<types::ShadowQuality>(shadowSystem->getGlobalQuality());
-        auto atlasConfig = types::ShadowAtlasConfig::fromQuality(quality);
-        stats.pointResolution = atlasConfig.pointResolution;
+        stats.pointResolution = 512;
 
         // Shadow cache stats
         auto cacheStats = shadowSystem->getShadowCacheStats();

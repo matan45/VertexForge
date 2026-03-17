@@ -7,16 +7,24 @@
 // Requires before #include:
 //   #define SHADOW_BUFFER <name>     e.g. shadowData
 //   Sampler declarations for:
-//     sampler2DShadow  shadowAtlas          (binding 0)
-//     sampler2DArrayShadow shadowCascades   (binding 1)
-//     samplerCubeShadow shadowCubes[]       (binding 2)
-//     sampler2D  shadowAtlasDepth           (binding 3)
-//     sampler2DArray shadowCascadesDepth    (binding 4)
-//     samplerCube shadowCubesDepth[]        (binding 5)
+//     sampler2DShadow  physicalPoolShadow    (binding 0)
+//     sampler2D        physicalPoolDepth     (binding 1)
+//     samplerCubeShadow shadowCubes[]        (binding 2)
+//     samplerCube shadowCubesDepth[]         (binding 3)
 // ============================================================
 
 const int MAX_SHADOW_VIEWS = 272;
 const int MAX_POINT_SHADOW_CUBES = 32;
+
+// VSM Constants
+const uint PAGE_SIZE = 128u;
+const uint PHYSICAL_POOL_DIM = 8192u;
+const uint PAGE_ENTRY_VALID_BIT = 0x80000000u;
+const uint PAGE_ENTRY_X_MASK = 0x3Fu;
+const uint PAGE_ENTRY_Y_SHIFT = 6u;
+const uint PAGE_ENTRY_Y_MASK = 0x3Fu;
+const float POOL_DIM_F = float(PHYSICAL_POOL_DIM);
+const float PAGE_SIZE_F = float(PAGE_SIZE);
 
 // 32-sample Poisson disk for PCSS sampling
 const int PCSS_SAMPLE_COUNT = 32;
@@ -35,38 +43,38 @@ const vec2 poissonDisk[32] = vec2[](
 );
 
 // ============================================================
-// PCSS Blocker Search - 2D Atlas
+// VSM Page Table Lookup
 // ============================================================
-vec2 blockerSearch2D(vec2 uv, float receiverDepth, float searchRadius, vec4 viewport) {
-    // Small depth bias to reject self-shadowing artifacts
-    float biasedReceiverDepth = receiverDepth - 0.002;
-    float blockerSum = 0.0;
-    int blockerCount = 0;
+vec2 vsmLookupPhysicalUV(ShadowData sd, vec2 uv, out bool valid) {
+    ivec2 pageCoord = ivec2(uv * vec2(sd.pageTableInfo.xy));
+    pageCoord = clamp(pageCoord, ivec2(0), sd.pageTableInfo.xy - 1);
 
-    for (int i = 0; i < PCSS_SAMPLE_COUNT; ++i) {
-        vec2 offset = poissonDisk[i] * searchRadius;
-        vec2 sampleUV = uv + offset;
+    uint entryIdx = uint(sd.pageTableInfo.z) + uint(pageCoord.y * sd.pageTableInfo.x + pageCoord.x);
+    uint pageEntry = PAGE_TABLE[entryIdx];
 
-        // Clamp to atlas viewport
-        sampleUV = clamp(sampleUV, viewport.xy, viewport.xy + viewport.zw);
-
-        float depth = texture(shadowAtlasDepth, sampleUV).r;
-        if (depth < biasedReceiverDepth) {
-            blockerSum += depth;
-            blockerCount++;
-        }
+    if ((pageEntry & PAGE_ENTRY_VALID_BIT) == 0u) {
+        valid = false;
+        return vec2(0.0);
     }
 
-    if (blockerCount == 0)
-        return vec2(-1.0, 0.0); // No blockers
+    valid = true;
 
-    return vec2(blockerSum / float(blockerCount), float(blockerCount));
+    uint tileX = pageEntry & PAGE_ENTRY_X_MASK;
+    uint tileY = (pageEntry >> PAGE_ENTRY_Y_SHIFT) & PAGE_ENTRY_Y_MASK;
+
+    // UV within the page [0,1]
+    vec2 pageUV = fract(uv * vec2(sd.pageTableInfo.xy));
+
+    // Physical UV in the pool texture
+    vec2 physicalUV = (vec2(float(tileX), float(tileY)) + pageUV) * (PAGE_SIZE_F / POOL_DIM_F);
+    return physicalUV;
 }
 
 // ============================================================
-// PCSS Blocker Search - Cascade Array
+// PCSS Blocker Search - VSM Physical Pool
 // ============================================================
-vec2 blockerSearchCascade(vec2 uv, float layer, float receiverDepth, float searchRadius) {
+vec2 blockerSearchVSM(ShadowData sd, vec2 uv, float receiverDepth, float searchRadius) {
+    float biasedReceiverDepth = receiverDepth - 0.002;
     float blockerSum = 0.0;
     int blockerCount = 0;
 
@@ -74,8 +82,12 @@ vec2 blockerSearchCascade(vec2 uv, float layer, float receiverDepth, float searc
         vec2 offset = poissonDisk[i] * searchRadius;
         vec2 sampleUV = clamp(uv + offset, 0.0, 1.0);
 
-        float depth = texture(shadowCascadesDepth, vec3(sampleUV, layer)).r;
-        if (depth < receiverDepth) {
+        bool sampleValid;
+        vec2 physUV = vsmLookupPhysicalUV(sd, sampleUV, sampleValid);
+        if (!sampleValid) continue;
+
+        float depth = texture(physicalPoolDepth, physUV).r;
+        if (depth < biasedReceiverDepth) {
             blockerSum += depth;
             blockerCount++;
         }
@@ -119,27 +131,38 @@ vec2 blockerSearchCube(int cubeMapIndex, vec3 sampleDir, float receiverDepth,
 // ============================================================
 float estimatePenumbra(float receiverDepth, float avgBlockerDepth, float lightSize) {
     float penumbra = lightSize * (receiverDepth - avgBlockerDepth) / avgBlockerDepth;
-    return min(penumbra, 30.0); // Clamp max penumbra to prevent extreme blur
+    return min(penumbra, 30.0);
 }
 
 // ============================================================
-// PCSS Filter - 2D Atlas (variable-width Poisson PCF)
+// PCSS Filter - VSM Physical Pool
 // ============================================================
-float pcssFilter2D(vec3 projCoords, float penumbraWidth, float texelSize, vec4 viewport) {
+float pcssFilterVSM(ShadowData sd, vec2 uv, float receiverDepth, float penumbraWidth, float texelSize) {
     float filterRadius = max(penumbraWidth * texelSize, texelSize);
     float shadow = 0.0;
+    int validSamples = 0;
 
     for (int i = 0; i < PCSS_SAMPLE_COUNT; ++i) {
         vec2 offset = poissonDisk[i] * filterRadius;
-        vec2 sampleUV = clamp(projCoords.xy + offset, viewport.xy, viewport.xy + viewport.zw);
-        shadow += texture(shadowAtlas, vec3(sampleUV, projCoords.z));
+        vec2 sampleUV = clamp(uv + offset, 0.0, 1.0);
+
+        bool sampleValid;
+        vec2 physUV = vsmLookupPhysicalUV(sd, sampleUV, sampleValid);
+        if (!sampleValid) {
+            shadow += 1.0; // unmapped = lit
+            ++validSamples;
+            continue;
+        }
+
+        shadow += texture(physicalPoolShadow, vec3(physUV, receiverDepth));
+        ++validSamples;
     }
 
-    return shadow / float(PCSS_SAMPLE_COUNT);
+    return validSamples > 0 ? shadow / float(validSamples) : 1.0;
 }
 
 // ============================================================
-// PCSS Filter - Cubemap (variable-width Poisson)
+// PCSS Filter - Cubemap
 // ============================================================
 float pcssFilterCube(int cubeMapIndex, vec3 sampleDir, float perspectiveDepth,
                      float penumbraWidth, vec3 tangent, vec3 bitangent) {
@@ -157,81 +180,65 @@ float pcssFilterCube(int cubeMapIndex, vec3 sampleDir, float perspectiveDepth,
 }
 
 // ============================================================
-// Spot Light Shadow (PCSS)
+// VSM Shadow Sampling (Spot + Directional cascade)
 // ============================================================
-float sampleSpotShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal) {
+float sampleVSMShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal) {
     if (shadowIndex < 0 || shadowIndex >= MAX_SHADOW_VIEWS) return 1.0;
 
     ShadowData sd = SHADOW_BUFFER[shadowIndex];
 
-    // Use reduced normal bias for PCSS to minimize shadow-mesh gap
+    // Normal bias
     vec3 biasedPos = worldPos + worldNormal * sd.biasParams.z * 0.3;
-    vec4 lightSpacePos = sd.viewProjection * vec4(biasedPos, 1.0);
-    vec3 projCoords = lightSpacePos.xyz / lightSpacePos.w;
+    vec4 lsPos = sd.viewProjection * vec4(biasedPos, 1.0);
 
-    projCoords.xy = projCoords.xy * 0.5 + 0.5;
-    projCoords.xy = sd.atlasViewport.xy + projCoords.xy * sd.atlasViewport.zw;
+    if (lsPos.w <= 0.0) return 1.0;
 
-    if (projCoords.z > 1.0 || projCoords.z < 0.0) return 1.0;
-    if (any(lessThan(projCoords.xy, vec2(0.0))) || any(greaterThan(projCoords.xy, vec2(1.0)))) return 1.0;
+    vec3 ndc = lsPos.xyz / lsPos.w;
+
+    if (any(greaterThan(abs(ndc.xy), vec2(1.0)))) return 1.0;
+
+    // Compute page coordinates
+    vec2 uv = ndc.xy * 0.5 + 0.5;
+    float receiverDepth = clamp(ndc.z, 0.0, 1.0);
+
+    // Look up page table
+    bool valid;
+    vec2 physicalUV = vsmLookupPhysicalUV(sd, uv, valid);
+    if (!valid) return 1.0; // unmapped page = fully lit
 
     bool filterEnabled = sd.pcssParams.z > 0.5;
     if (!filterEnabled) {
-        return texture(shadowAtlas, vec3(projCoords.xy, projCoords.z));
+        return texture(physicalPoolShadow, vec3(physicalUV, receiverDepth));
     }
 
     // PCSS: blocker search
     float lightSize = sd.pcssParams.x;
     float searchRadius = sd.pcssParams.y;
-    vec2 blockerResult = blockerSearch2D(projCoords.xy, projCoords.z, searchRadius, sd.atlasViewport);
-
-    if (blockerResult.x < 0.0) return 1.0; // No blockers - fully lit
-    if (blockerResult.y >= float(PCSS_SAMPLE_COUNT)) return 0.0; // All blocked
-
-    // Penumbra estimation and variable filter
-    float penumbra = estimatePenumbra(projCoords.z, blockerResult.x, lightSize);
-    return pcssFilter2D(projCoords, penumbra, sd.biasParams.w, sd.atlasViewport);
-}
-
-// ============================================================
-// Cascade Shadow (PCSS) - used by directional lights
-// ============================================================
-float sampleCascadeShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal) {
-    if (shadowIndex < 0 || shadowIndex >= MAX_SHADOW_VIEWS) return 1.0;
-
-    ShadowData sd = SHADOW_BUFFER[shadowIndex];
-
-    // Use reduced normal bias for PCSS to minimize shadow-mesh gap
-    vec3 biasedPos = worldPos + worldNormal * sd.biasParams.z * 0.3;
-    vec4 lightSpacePos = sd.viewProjection * vec4(biasedPos, 1.0);
-
-    if (lightSpacePos.w <= 0.0) return 1.0;
-
-    vec3 projCoords = lightSpacePos.xyz / lightSpacePos.w;
-    vec2 texCoords = projCoords.xy * 0.5 + 0.5;
-    texCoords = clamp(texCoords, 0.0, 1.0);
-    projCoords.xy = sd.atlasViewport.xy + texCoords * sd.atlasViewport.zw;
-    projCoords.z = clamp(projCoords.z, 0.0, 1.0);
-
-    bool filterEnabled = sd.pcssParams.z > 0.5;
-    if (!filterEnabled) {
-        return texture(shadowAtlas, vec3(projCoords.xy, projCoords.z));
-    }
-
-    // PCSS: blocker search
-    float lightSize = sd.pcssParams.x;
-    float searchRadius = sd.pcssParams.y;
-    vec2 blockerResult = blockerSearch2D(projCoords.xy, projCoords.z, searchRadius, sd.atlasViewport);
+    vec2 blockerResult = blockerSearchVSM(sd, uv, receiverDepth, searchRadius);
 
     if (blockerResult.x < 0.0) return 1.0;
     if (blockerResult.y >= float(PCSS_SAMPLE_COUNT)) return 0.0;
 
-    float penumbra = estimatePenumbra(projCoords.z, blockerResult.x, lightSize);
-    return pcssFilter2D(projCoords, penumbra, sd.biasParams.w, sd.atlasViewport);
+    float penumbra = estimatePenumbra(receiverDepth, blockerResult.x, lightSize);
+    return pcssFilterVSM(sd, uv, receiverDepth, penumbra, sd.biasParams.w);
 }
 
 // ============================================================
-// Directional Shadow (CSM with cascade selection + PCSS)
+// Spot Light Shadow
+// ============================================================
+float sampleSpotShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal) {
+    return sampleVSMShadow(shadowIndex, worldPos, worldNormal);
+}
+
+// ============================================================
+// Cascade Shadow (single cascade)
+// ============================================================
+float sampleCascadeShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal) {
+    return sampleVSMShadow(shadowIndex, worldPos, worldNormal);
+}
+
+// ============================================================
+// Directional Shadow (CSM with cascade selection)
 // ============================================================
 float sampleDirectionalShadow(int baseShadowIndex, vec3 worldPos, vec3 worldNormal, float viewZ) {
     if (baseShadowIndex < 0 || baseShadowIndex >= MAX_SHADOW_VIEWS) return 1.0;
@@ -256,12 +263,12 @@ float sampleDirectionalShadow(int baseShadowIndex, vec3 worldPos, vec3 worldNorm
     int shadowIndex = baseShadowIndex + cascadeIdx;
     float cascadeFar = SHADOW_BUFFER[shadowIndex].rangeParams.y;
 
-    float shadow = sampleCascadeShadow(shadowIndex, worldPos, worldNormal);
+    float shadow = sampleVSMShadow(shadowIndex, worldPos, worldNormal);
 
     // Cascade blending
     float blendZoneStart = cascadeFar * 0.9;
     if (viewZ > blendZoneStart && cascadeIdx < cascadeCount - 1) {
-        float nextShadow = sampleCascadeShadow(shadowIndex + 1, worldPos, worldNormal);
+        float nextShadow = sampleVSMShadow(shadowIndex + 1, worldPos, worldNormal);
         float blendFactor = smoothstep(blendZoneStart, cascadeFar, viewZ);
         shadow = mix(shadow, nextShadow, blendFactor);
     }
@@ -275,7 +282,7 @@ float sampleDirectionalShadow(int baseShadowIndex, vec3 worldPos, vec3 worldNorm
 }
 
 // ============================================================
-// Point Light Shadow (Cubemap PCSS)
+// Point Light Shadow (Cubemap PCSS - unchanged)
 // ============================================================
 float samplePointShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal, vec3 lightPos, float lightRadius) {
     if (shadowIndex < 0 || shadowIndex >= MAX_SHADOW_VIEWS) return 1.0;
@@ -306,12 +313,12 @@ float samplePointShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal, vec3 l
         return texture(shadowCubes[nonuniformEXT(cubeMapIndex)], vec4(sampleDir, perspectiveDepth));
     }
 
-    // Build tangent frame for sampling offsets
+    // Build tangent frame
     vec3 tangent = abs(sampleDir.x) < 0.9 ? vec3(1.0, 0.0, 0.0) : vec3(0.0, 1.0, 0.0);
     vec3 bitangent = normalize(cross(sampleDir, tangent));
     tangent = normalize(cross(bitangent, sampleDir));
 
-    // PCSS: blocker search
+    // PCSS
     float lightSize = sd.pcssParams.x;
     float searchRadius = sd.pcssParams.y;
     vec2 blockerResult = blockerSearchCube(cubeMapIndex, sampleDir, perspectiveDepth,

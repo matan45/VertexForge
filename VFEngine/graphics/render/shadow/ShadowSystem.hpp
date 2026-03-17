@@ -1,7 +1,9 @@
 #pragma once
 
 #include "ShadowTypes.hpp"
-#include "ShadowAtlasManager.hpp"
+#include "VSMTypes.hpp"
+#include "VSMPhysicalTilePool.hpp"
+#include "VSMPageTable.hpp"
 #include "ShadowResourcePool.hpp"
 #include "ShadowPassPipeline.hpp"
 #include "ShadowGPUDataManager.hpp"
@@ -36,7 +38,8 @@ namespace render
 
             static constexpr float FRAME_BUDGET_WARNING_MS = 16.0f;
 
-            std::unique_ptr<ShadowAtlasManager> atlasManager;
+            std::unique_ptr<VSMPhysicalTilePool> tilePool;
+            std::unique_ptr<VSMPageTable> pageTable;
             std::unique_ptr<ShadowResourcePool> resourcePool;
             std::unique_ptr<ShadowPassPipeline> shadowPassPipeline;
             std::unique_ptr<TerrainShadowPipeline> terrainShadowPipeline;
@@ -51,6 +54,9 @@ namespace render
 
             std::unordered_map<uint32_t, int32_t> entityToShadowIndex;
 
+            // VSM page render list (built each frame)
+            std::vector<shadow::PageRenderEntry> pageRenderList;
+
             bool shadowsEnabled = true;
             ShadowQuality globalQuality = ShadowQuality::High;
             bool globalSoftShadows = true;
@@ -60,12 +66,13 @@ namespace render
             uint8_t globalCascadeCount = 4;
             types::CascadeSplitMode globalCascadeSplitMode = types::CascadeSplitMode::Practical;
 
-            ShadowLODConfig shadowLODConfig;
-            std::unordered_map<uint32_t, uint32_t> currentShadowResolutions; // entityId -> current resolution
-
             bool initialized = false;
             bool needsUpdate = true;
+            bool poolFirstUse = true;
             uint32_t frameCounter = 0;
+
+            // VSM light index counter
+            uint32_t nextVSMLightIndex = 0;
 
             struct ShadowCacheStats
             {
@@ -75,7 +82,6 @@ namespace render
                 uint32_t skippedThisFrame = 0;
             };
 
-            // Shadow cache stats for current frame
             mutable ShadowCacheStats lastCacheStats{};
 
             lighting::GPULightBufferManager* lightBufferManager = nullptr;
@@ -133,8 +139,6 @@ namespace render
             [[nodiscard]] uint8_t getGlobalCascadeCount() const { return globalCascadeCount; }
 
             void applyRenderSettings(const types::RenderSettings& settings);
-            void applyShadowLODSettings(const ShadowLODConfig& config);
-            void updateShadowLOD(const glm::vec3& cameraPosition);
 
             // Shadow caching for static lights
             void invalidateStaticShadow(uint32_t entityId);
@@ -145,9 +149,9 @@ namespace render
 
             [[nodiscard]] uint32_t getActiveShadowCasterCount() const;
             [[nodiscard]] uint32_t getActiveShadowViewCount() const;
-            [[nodiscard]] float getAtlasUtilization() const;
+            [[nodiscard]] float getPoolUtilization() const;
 
-            [[nodiscard]] ShadowAtlasManager* getAtlasManager() const { return atlasManager.get(); }
+            [[nodiscard]] VSMPhysicalTilePool* getTilePool() const { return tilePool.get(); }
             [[nodiscard]] bool isInitialized() const { return initialized; }
 
             void setLightBufferManager(lighting::GPULightBufferManager* manager) { lightBufferManager = manager; }
@@ -160,8 +164,8 @@ namespace render
             [[nodiscard]] std::vector<ShadowDebugInfo> getShadowDebugInfo() const;
 
         private:
-            bool allocateShadowMaps(LightShadowData& data);
-            void freeShadowMaps(LightShadowData& data);
+            bool allocateVSMPages(LightShadowData& data);
+            void freeVSMPages(LightShadowData& data);
 
             void updatePointCubeShadowMatrices(LightShadowData& data, uint32_t entityId);
             void updatePointCubeShadowMatricesFromData(LightShadowData& data,
@@ -178,8 +182,7 @@ namespace render
                                                        const glm::mat4& cameraView, const glm::mat4& cameraProjection,
                                                        float cameraNear, float cameraFar);
             void collectShadowViewsForGPU(const std::unordered_set<uint32_t>* visibleLightIds);
-            void handleAtlasResize(const types::RenderSettings& settings,
-                                   const types::ShadowAtlasConfig& atlasConfig);
+            void buildPageRenderList();
         };
     }
 }

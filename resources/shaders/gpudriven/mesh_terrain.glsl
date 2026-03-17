@@ -180,14 +180,7 @@ void main() {
 #include "../common/gpu_types.glsl"
 #include "../common/camera_types.glsl"
 #include "../common/lighting_functions.glsl"
-// ShadowData struct defined inline (terrain has custom bias scaling in shadow functions)
-struct ShadowData {
-    mat4 viewProjection;
-    vec4 atlasViewport;
-    vec4 biasParams;
-    vec4 rangeParams;
-    vec4 pcssParams;
-};
+#include "../common/shadow_sampling_types.glsl"
 #include "../common/cluster_culling.glsl"
 #include "../common/gi_sampling.glsl"
 
@@ -305,18 +298,15 @@ layout(std430, set = 9, binding = 0) readonly buffer ShadowDataBuffer {
     ShadowData shadowDataArray[];
 };
 
+layout(std430, set = 9, binding = 1) readonly buffer PageTableBuffer {
+    uint pageTableTerrain[];
+};
+
 // Comparison samplers
-layout(set = 10, binding = 0) uniform sampler2DShadow shadowAtlas;
-layout(set = 10, binding = 1) uniform sampler2DArrayShadow shadowCascades;
-layout(set = 10, binding = 2) uniform samplerCubeShadow shadowCubes[];
-
-// Depth samplers (PCSS blocker search)
-layout(set = 10, binding = 3) uniform sampler2D shadowAtlasDepth;
-layout(set = 10, binding = 4) uniform sampler2DArray shadowCascadesDepth;
-layout(set = 10, binding = 5) uniform samplerCube shadowCubesDepth[];
-
-const int MAX_SHADOW_VIEWS = 272;
-const int MAX_POINT_SHADOW_CUBES = 32;
+layout(set = 10, binding = 0) uniform sampler2DShadow physicalPoolShadow;
+layout(set = 10, binding = 1) uniform sampler2D physicalPoolDepth;
+layout(set = 10, binding = 2) uniform samplerCubeShadow shadowCubes[32];
+layout(set = 10, binding = 3) uniform samplerCube shadowCubesDepth[32];
 
 // Terrain needs higher normal bias than regular meshes to avoid self-shadow artifacts
 // Bias scales with shadow LOD to compensate for geometry mismatch between shadow and render LODs
@@ -328,218 +318,33 @@ float getTerrainNormalBiasScale() {
     return 3.0;
 }
 
-// Poisson disk for PCSS (terrain uses same disk as common shadow_sampling)
-const int TERRAIN_PCSS_SAMPLES = 32;
-const vec2 terrainPoissonDisk[32] = vec2[](
-    vec2(-0.9465, -0.1428), vec2(-0.7431,  0.5944), vec2(-0.4490,  0.1400),
-    vec2(-0.1596,  0.8917), vec2( 0.0483, -0.6390), vec2( 0.3865,  0.5373),
-    vec2(-0.5828, -0.5543), vec2( 0.7440, -0.0125), vec2( 0.1567,  0.1295),
-    vec2(-0.3358, -0.8774), vec2( 0.5748,  0.7881), vec2(-0.8075, -0.3264),
-    vec2( 0.9259, -0.3580), vec2(-0.1516,  0.4303), vec2( 0.3695, -0.3368),
-    vec2(-0.6178,  0.3236), vec2( 0.8120, -0.6570), vec2(-0.2714, -0.3483),
-    vec2( 0.5923,  0.2277), vec2(-0.4712,  0.7690), vec2( 0.1874, -0.9303),
-    vec2( 0.9502,  0.3050), vec2(-0.9073,  0.2284), vec2( 0.2816,  0.9280),
-    vec2(-0.6336, -0.1427), vec2( 0.4862, -0.7428), vec2(-0.0982, -0.1554),
-    vec2( 0.7040,  0.5315), vec2(-0.4047, -0.6178), vec2( 0.0955,  0.5551),
-    vec2(-0.7975,  0.0159), vec2( 0.3573, -0.0547)
-);
+#define SHADOW_BUFFER shadowDataArray
+#define PAGE_TABLE pageTableTerrain
+#include "../common/shadow_sampling.glsl"
 
-vec2 terrainBlockerSearch2D(vec2 uv, float receiverDepth, float searchRadius, vec4 viewport) {
-    // Bias threshold to reject self-shadow artifacts from LOD mismatch
-    // Terrain shadow map may be rendered at different LOD than visible geometry
-    float biasThreshold = receiverDepth - 0.005 * getTerrainNormalBiasScale();
-
-    float blockerSum = 0.0;
-    int blockerCount = 0;
-    for (int i = 0; i < TERRAIN_PCSS_SAMPLES; ++i) {
-        vec2 sampleUV = clamp(uv + terrainPoissonDisk[i] * searchRadius, viewport.xy, viewport.xy + viewport.zw);
-        float depth = texture(shadowAtlasDepth, sampleUV).r;
-        if (depth < biasThreshold) {
-            blockerSum += depth;
-            blockerCount++;
-        }
-    }
-    if (blockerCount == 0) return vec2(-1.0, 0.0);
-    return vec2(blockerSum / float(blockerCount), float(blockerCount));
+// Terrain-specific shadow wrappers that apply terrain bias scaling
+float sampleTerrainSpotShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal) {
+    // Apply terrain-specific normal bias scaling before delegating to VSM sampling
+    vec3 biasedNormal = worldNormal * getTerrainNormalBiasScale();
+    return sampleVSMShadow(shadowIndex, worldPos, biasedNormal);
 }
 
-float terrainPcssFilter2D(vec3 projCoords, float penumbraWidth, float texelSize, vec4 viewport) {
-    float filterRadius = max(penumbraWidth * texelSize, texelSize);
-    float shadow = 0.0;
-    for (int i = 0; i < TERRAIN_PCSS_SAMPLES; ++i) {
-        vec2 sampleUV = clamp(projCoords.xy + terrainPoissonDisk[i] * filterRadius, viewport.xy, viewport.xy + viewport.zw);
-        shadow += texture(shadowAtlas, vec3(sampleUV, projCoords.z));
-    }
-    return shadow / float(TERRAIN_PCSS_SAMPLES);
+float sampleTerrainCascadeShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal) {
+    vec3 biasedNormal = worldNormal * getTerrainNormalBiasScale();
+    return sampleVSMShadow(shadowIndex, worldPos, biasedNormal);
 }
 
-float sampleSpotShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal) {
-    if (shadowIndex < 0 || shadowIndex >= MAX_SHADOW_VIEWS) return 1.0;
-
-    ShadowData sd = shadowDataArray[shadowIndex];
-
-    vec3 biasedPos = worldPos + worldNormal * sd.biasParams.z * getTerrainNormalBiasScale();
-    vec4 lightSpacePos = sd.viewProjection * vec4(biasedPos, 1.0);
-    vec3 projCoords = lightSpacePos.xyz / lightSpacePos.w;
-
-    projCoords.xy = projCoords.xy * 0.5 + 0.5;
-    projCoords.xy = sd.atlasViewport.xy + projCoords.xy * sd.atlasViewport.zw;
-
-    if (projCoords.z > 1.0 || projCoords.z < 0.0) return 1.0;
-    if (any(lessThan(projCoords.xy, vec2(0.0))) || any(greaterThan(projCoords.xy, vec2(1.0)))) return 1.0;
-
-    bool filterEnabled = sd.pcssParams.z > 0.5;
-    if (!filterEnabled) {
-        return texture(shadowAtlas, vec3(projCoords.xy, projCoords.z));
-    }
-
-    float lightSize = sd.pcssParams.x;
-    float searchRadius = sd.pcssParams.y;
-    vec2 blockerResult = terrainBlockerSearch2D(projCoords.xy, projCoords.z, searchRadius, sd.atlasViewport);
-    if (blockerResult.x < 0.0) return 1.0;
-    if (blockerResult.y >= float(TERRAIN_PCSS_SAMPLES)) return 0.0;
-
-    float penumbra = lightSize * (projCoords.z - blockerResult.x) / blockerResult.x;
-    penumbra = min(penumbra, 20.0);
-    return terrainPcssFilter2D(projCoords, penumbra, sd.biasParams.w, sd.atlasViewport);
+float sampleTerrainDirectionalShadow(int baseShadowIndex, vec3 worldPos, vec3 worldNormal, float viewZ) {
+    // Apply terrain-specific normal bias scaling before delegating to VSM sampling
+    vec3 biasedNormal = worldNormal * getTerrainNormalBiasScale();
+    return sampleDirectionalShadow(baseShadowIndex, worldPos, biasedNormal, viewZ);
 }
 
-float sampleCascadeShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal) {
-    if (shadowIndex < 0 || shadowIndex >= MAX_SHADOW_VIEWS) return 1.0;
-
-    ShadowData sd = shadowDataArray[shadowIndex];
-
-    vec3 biasedPos = worldPos + worldNormal * sd.biasParams.z * getTerrainNormalBiasScale();
-    vec4 lightSpacePos = sd.viewProjection * vec4(biasedPos, 1.0);
-
-    if (lightSpacePos.w <= 0.0) return 1.0;
-
-    vec3 projCoords = lightSpacePos.xyz / lightSpacePos.w;
-    vec2 texCoords = projCoords.xy * 0.5 + 0.5;
-    texCoords = clamp(texCoords, 0.0, 1.0);
-    projCoords.xy = sd.atlasViewport.xy + texCoords * sd.atlasViewport.zw;
-    projCoords.z = clamp(projCoords.z, 0.0, 1.0);
-
-    bool filterEnabled = sd.pcssParams.z > 0.5;
-    if (!filterEnabled) {
-        return texture(shadowAtlas, vec3(projCoords.xy, projCoords.z));
-    }
-
-    float lightSize = sd.pcssParams.x;
-    float searchRadius = sd.pcssParams.y;
-    vec2 blockerResult = terrainBlockerSearch2D(projCoords.xy, projCoords.z, searchRadius, sd.atlasViewport);
-    if (blockerResult.x < 0.0) return 1.0;
-    if (blockerResult.y >= float(TERRAIN_PCSS_SAMPLES)) return 0.0;
-
-    float penumbra = lightSize * (projCoords.z - blockerResult.x) / blockerResult.x;
-    penumbra = min(penumbra, 20.0);
-    return terrainPcssFilter2D(projCoords, penumbra, sd.biasParams.w, sd.atlasViewport);
-}
-
-float sampleDirectionalShadow(int baseShadowIndex, vec3 worldPos, vec3 worldNormal, float viewZ) {
-    if (baseShadowIndex < 0 || baseShadowIndex >= MAX_SHADOW_VIEWS) return 1.0;
-
-    int cascadeCount = int(shadowDataArray[baseShadowIndex].rangeParams.z);
-    cascadeCount = clamp(cascadeCount, 1, 4);
-
-    if (baseShadowIndex + cascadeCount > MAX_SHADOW_VIEWS) {
-        cascadeCount = MAX_SHADOW_VIEWS - baseShadowIndex;
-        if (cascadeCount <= 0) return 1.0;
-    }
-
-    int cascadeIdx = 0;
-    for (int i = 0; i < cascadeCount; ++i) {
-        if (viewZ < shadowDataArray[baseShadowIndex + i].rangeParams.y) {
-            cascadeIdx = i;
-            break;
-        }
-        cascadeIdx = i;
-    }
-
-    int shadowIndex = baseShadowIndex + cascadeIdx;
-    float cascadeFar = shadowDataArray[shadowIndex].rangeParams.y;
-
-    float shadow = sampleCascadeShadow(shadowIndex, worldPos, worldNormal);
-
-    float blendZoneStart = cascadeFar * 0.9;
-    if (viewZ > blendZoneStart && cascadeIdx < cascadeCount - 1) {
-        float nextShadow = sampleCascadeShadow(shadowIndex + 1, worldPos, worldNormal);
-        float blendFactor = smoothstep(blendZoneStart, cascadeFar, viewZ);
-        shadow = mix(shadow, nextShadow, blendFactor);
-    }
-
-    float maxDistance = shadowDataArray[baseShadowIndex + cascadeCount - 1].rangeParams.y;
-    float fadeStart = maxDistance * 0.85;
-    float fadeFactor = 1.0 - smoothstep(fadeStart, maxDistance, viewZ);
-
-    return mix(1.0, shadow, fadeFactor);
-}
-
-float samplePointShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal,
-                        vec3 lightPos, float lightRadius) {
-    if (shadowIndex < 0 || shadowIndex >= MAX_SHADOW_VIEWS) return 1.0;
-
-    ShadowData sd = shadowDataArray[shadowIndex];
-
-    int cubeMapIndex = int(sd.pcssParams.w);
-    if (cubeMapIndex < 0 || cubeMapIndex >= MAX_POINT_SHADOW_CUBES) return 1.0;
-
-    float near = sd.rangeParams.x;
-    float far = sd.rangeParams.y;
-    vec3 lightToFrag = worldPos - lightPos;
-    float linearDepth = length(lightToFrag);
-
-    if (linearDepth >= far) return 1.0;
-
-    vec3 biasedPos = worldPos + worldNormal * sd.biasParams.z * getTerrainNormalBiasScale();
-    lightToFrag = biasedPos - lightPos;
-    linearDepth = length(lightToFrag);
-    vec3 sampleDir = normalize(lightToFrag);
-
-    float majorComponent = max(abs(sampleDir.x), max(abs(sampleDir.y), abs(sampleDir.z)));
-    float viewSpaceZ = linearDepth * majorComponent;
-    float perspectiveDepth = (far * (viewSpaceZ - near)) / (viewSpaceZ * (far - near));
-
-    bool filterEnabled = sd.pcssParams.z > 0.5;
-    if (!filterEnabled) {
-        return texture(shadowCubes[nonuniformEXT(cubeMapIndex)], vec4(sampleDir, perspectiveDepth));
-    }
-
-    vec3 tangent = abs(sampleDir.x) < 0.9 ? vec3(1.0, 0.0, 0.0) : vec3(0.0, 1.0, 0.0);
-    vec3 bitangent = normalize(cross(sampleDir, tangent));
-    tangent = normalize(cross(bitangent, sampleDir));
-
-    // PCSS blocker search on cubemap
-    float lightSize = sd.pcssParams.x;
-    float searchRadius = sd.pcssParams.y;
-    float blockerSum = 0.0;
-    int blockerCount = 0;
-    for (int i = 0; i < TERRAIN_PCSS_SAMPLES; ++i) {
-        vec3 offset = tangent * terrainPoissonDisk[i].x * searchRadius +
-                      bitangent * terrainPoissonDisk[i].y * searchRadius;
-        vec3 offsetDir = normalize(sampleDir + offset);
-        float depth = texture(shadowCubesDepth[nonuniformEXT(cubeMapIndex)], offsetDir).r;
-        if (depth < perspectiveDepth) {
-            blockerSum += depth;
-            blockerCount++;
-        }
-    }
-
-    if (blockerCount == 0) return 1.0;
-    if (blockerCount >= TERRAIN_PCSS_SAMPLES) return 0.0;
-
-    float avgBlockerDepth = blockerSum / float(blockerCount);
-    float penumbra = lightSize * (perspectiveDepth - avgBlockerDepth) / avgBlockerDepth;
-    float filterRadius = max(penumbra * 0.01, 0.001);
-
-    float shadow = 0.0;
-    for (int i = 0; i < TERRAIN_PCSS_SAMPLES; ++i) {
-        vec3 offset = tangent * terrainPoissonDisk[i].x * filterRadius +
-                      bitangent * terrainPoissonDisk[i].y * filterRadius;
-        vec3 offsetDir = normalize(sampleDir + offset);
-        shadow += texture(shadowCubes[nonuniformEXT(cubeMapIndex)], vec4(offsetDir, perspectiveDepth));
-    }
-    return shadow / float(TERRAIN_PCSS_SAMPLES);
+float sampleTerrainPointShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal,
+                               vec3 lightPos, float lightRadius) {
+    // Apply terrain-specific normal bias scaling before delegating to VSM sampling
+    vec3 biasedNormal = worldNormal * getTerrainNormalBiasScale();
+    return samplePointShadow(shadowIndex, worldPos, biasedNormal, lightPos, lightRadius);
 }
 
 void main() {
@@ -588,8 +393,8 @@ void main() {
             uint lightIdx = lightIndexList[lightOffset + i];
             PointLight light = pointLights[lightIdx];
 
-            float shadow = samplePointShadow(light.shadowIndex, fragWorldPos, N,
-                                             light.position, light.radius);
+            float shadow = sampleTerrainPointShadow(light.shadowIndex, fragWorldPos, N,
+                                                    light.position, light.radius);
 
             // Weight shadow contribution to ambient by attenuation
             // so edge-of-radius precision artifacts don't darken ambient
@@ -607,7 +412,7 @@ void main() {
             uint lightIdx = extractLightIndex(packedIdx);
             SpotLight light = spotLights[lightIdx];
 
-            float shadow = sampleSpotShadow(light.shadowIndex, fragWorldPos, N);
+            float shadow = sampleTerrainSpotShadow(light.shadowIndex, fragWorldPos, N);
 
             float spotDist = length(light.position - fragWorldPos);
             float spotAtten = physicalAttenuation(spotDist, light.range);
@@ -624,7 +429,7 @@ void main() {
 
         float shadow = 1.0;
         if (light.shadowIndex >= 0) {
-            shadow = sampleDirectionalShadow(light.shadowIndex, fragWorldPos, N, linearZ);
+            shadow = sampleTerrainDirectionalShadow(light.shadowIndex, fragWorldPos, N, linearZ);
         }
         minShadow = min(minShadow, shadow);
 

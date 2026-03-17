@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ShadowTypes.hpp"
+#include "VSMTypes.hpp"
 #include <vulkan/vulkan.hpp>
 #include <vector>
 #include <unordered_map>
@@ -12,7 +13,7 @@ namespace core
 
 namespace render::shadow
 {
-    class ShadowAtlasManager;
+    class VSMPhysicalTilePool;
     class ShadowResourcePool;
 
     class ShadowGPUDataManager
@@ -20,21 +21,27 @@ namespace render::shadow
     private:
         core::Device& device;
 
+        // Shadow data SSBO (GPUVSMLight array)
         vk::Buffer shadowDataBuffer;
         vk::DeviceMemory shadowDataMemory;
         vk::Buffer shadowDataStagingBuffer;
         vk::DeviceMemory shadowDataStagingMemory;
         void* shadowDataMapped = nullptr;
 
-        vk::DescriptorSetLayout shadowDataLayout;
+        // Page table SSBO descriptor (actual buffer owned by VSMPageTable)
+        vk::DescriptorSetLayout shadowDataLayout;  // set 9: binding 0 = VSMLight[], binding 1 = pageTable[]
         vk::DescriptorPool shadowDataPool;
         vk::DescriptorSet shadowDataDescSet;
 
-        vk::DescriptorSetLayout shadowTextureLayout;
+        vk::DescriptorSetLayout shadowTextureLayout; // set 10
         vk::DescriptorPool shadowTexturePool;
         vk::DescriptorSet shadowTextureDescSet;
 
-        std::vector<GPUShadowData> gpuShadowData;
+        std::vector<vsm::GPUVSMLight> gpuShadowData;
+
+        // Reference to page table buffer for descriptor binding
+        vk::Buffer pageTableBufferRef;
+        vk::DeviceSize pageTableBufferSize = 0;
 
         bool initialized = false;
 
@@ -48,6 +55,8 @@ namespace render::shadow
         void init();
         void cleanup();
 
+        void setPageTableBuffer(vk::Buffer buffer, vk::DeviceSize size);
+
         void buildGPUShadowData(
             const std::vector<ShadowView>& directionalViews,
             const std::vector<ShadowView>& pointViews,
@@ -58,7 +67,7 @@ namespace render::shadow
         void uploadToGPU(vk::CommandBuffer cmd);
 
         void updateShadowTextureDescriptor(
-            ShadowAtlasManager* atlasManager,
+            VSMPhysicalTilePool* tilePool,
             ShadowResourcePool* resourcePool,
             const std::unordered_map<uint32_t, LightShadowData>& lightShadowData);
 
@@ -68,7 +77,6 @@ namespace render::shadow
         [[nodiscard]] vk::DescriptorSet getShadowTextureDescSet() const { return shadowTextureDescSet; }
 
         [[nodiscard]] bool isInitialized() const { return initialized; }
-        [[nodiscard]] const std::vector<GPUShadowData>& getGPUShadowData() const { return gpuShadowData; }
 
     private:
         void createShadowDataBuffer();

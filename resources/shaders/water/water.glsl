@@ -190,17 +190,16 @@ layout(std430, set = 5, binding = 1) readonly buffer ClusterLightIndexListBuffer
 
 layout(std430, set = 6, binding = 0) readonly buffer ShadowDataBuffer { ShadowData shadowDataArray[]; };
 
-// Comparison samplers (shadow filtering)
-layout(set = 7, binding = 0) uniform sampler2DShadow shadowAtlas;
-layout(set = 7, binding = 1) uniform sampler2DArrayShadow shadowCascades;
-layout(set = 7, binding = 2) uniform samplerCubeShadow shadowCubes[];
+layout(std430, set = 6, binding = 1) readonly buffer PageTableBuffer { uint pageTableData[]; };
 
-// Depth samplers (PCSS blocker search)
-layout(set = 7, binding = 3) uniform sampler2D shadowAtlasDepth;
-layout(set = 7, binding = 4) uniform sampler2DArray shadowCascadesDepth;
-layout(set = 7, binding = 5) uniform samplerCube shadowCubesDepth[];
+// Comparison samplers (shadow filtering)
+layout(set = 7, binding = 0) uniform sampler2DShadow physicalPoolShadow;
+layout(set = 7, binding = 1) uniform sampler2D physicalPoolDepth;
+layout(set = 7, binding = 2) uniform samplerCubeShadow shadowCubes[32];
+layout(set = 7, binding = 3) uniform samplerCube shadowCubesDepth[32];
 
 #define SHADOW_BUFFER shadowDataArray
+#define PAGE_TABLE pageTableData
 #include "../common/shadow_sampling.glsl"
 
 layout(set = 8, binding = 0) uniform sampler2D frag_oceanDisplacementMap;
