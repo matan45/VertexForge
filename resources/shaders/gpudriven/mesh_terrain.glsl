@@ -345,12 +345,16 @@ const vec2 terrainPoissonDisk[32] = vec2[](
 );
 
 vec2 terrainBlockerSearch2D(vec2 uv, float receiverDepth, float searchRadius, vec4 viewport) {
+    // Bias threshold to reject self-shadow artifacts from LOD mismatch
+    // Terrain shadow map may be rendered at different LOD than visible geometry
+    float biasThreshold = receiverDepth - 0.005 * getTerrainNormalBiasScale();
+
     float blockerSum = 0.0;
     int blockerCount = 0;
     for (int i = 0; i < TERRAIN_PCSS_SAMPLES; ++i) {
         vec2 sampleUV = clamp(uv + terrainPoissonDisk[i] * searchRadius, viewport.xy, viewport.xy + viewport.zw);
         float depth = texture(shadowAtlasDepth, sampleUV).r;
-        if (depth < receiverDepth) {
+        if (depth < biasThreshold) {
             blockerSum += depth;
             blockerCount++;
         }
@@ -396,6 +400,7 @@ float sampleSpotShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal) {
     if (blockerResult.y >= float(TERRAIN_PCSS_SAMPLES)) return 0.0;
 
     float penumbra = lightSize * (projCoords.z - blockerResult.x) / blockerResult.x;
+    penumbra = min(penumbra, 20.0);
     return terrainPcssFilter2D(projCoords, penumbra, sd.biasParams.w, sd.atlasViewport);
 }
 
@@ -427,6 +432,7 @@ float sampleCascadeShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal) {
     if (blockerResult.y >= float(TERRAIN_PCSS_SAMPLES)) return 0.0;
 
     float penumbra = lightSize * (projCoords.z - blockerResult.x) / blockerResult.x;
+    penumbra = min(penumbra, 20.0);
     return terrainPcssFilter2D(projCoords, penumbra, sd.biasParams.w, sd.atlasViewport);
 }
 

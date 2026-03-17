@@ -1,14 +1,7 @@
 #ifndef SHADOW_SAMPLING_GLSL
 #define SHADOW_SAMPLING_GLSL
 
-// Shadow Data Structure (must match GPUShadowData in ShadowTypes.hpp - 128 bytes)
-struct ShadowData {
-    mat4 viewProjection;
-    vec4 atlasViewport;
-    vec4 biasParams;    // x=depthBias, y=slopeBias, z=normalBias, w=texelSize
-    vec4 rangeParams;   // x=near, y=far, z=cascadeCount, w=cascadeIndex
-    vec4 pcssParams;    // x=lightSize, y=searchRadius, z=filterEnabled, w=cubeMapIndex
-};
+#include "shadow_sampling_types.glsl"
 
 // ============================================================
 // Requires before #include:
@@ -45,6 +38,8 @@ const vec2 poissonDisk[32] = vec2[](
 // PCSS Blocker Search - 2D Atlas
 // ============================================================
 vec2 blockerSearch2D(vec2 uv, float receiverDepth, float searchRadius, vec4 viewport) {
+    // Small depth bias to reject self-shadowing artifacts
+    float biasedReceiverDepth = receiverDepth - 0.002;
     float blockerSum = 0.0;
     int blockerCount = 0;
 
@@ -56,7 +51,7 @@ vec2 blockerSearch2D(vec2 uv, float receiverDepth, float searchRadius, vec4 view
         sampleUV = clamp(sampleUV, viewport.xy, viewport.xy + viewport.zw);
 
         float depth = texture(shadowAtlasDepth, sampleUV).r;
-        if (depth < receiverDepth) {
+        if (depth < biasedReceiverDepth) {
             blockerSum += depth;
             blockerCount++;
         }
@@ -97,6 +92,7 @@ vec2 blockerSearchCascade(vec2 uv, float layer, float receiverDepth, float searc
 // ============================================================
 vec2 blockerSearchCube(int cubeMapIndex, vec3 sampleDir, float receiverDepth,
                        float searchRadius, vec3 tangent, vec3 bitangent) {
+    float biasedReceiverDepth = receiverDepth - 0.002;
     float blockerSum = 0.0;
     int blockerCount = 0;
 
@@ -106,7 +102,7 @@ vec2 blockerSearchCube(int cubeMapIndex, vec3 sampleDir, float receiverDepth,
         vec3 offsetDir = normalize(sampleDir + offset);
 
         float depth = texture(shadowCubesDepth[nonuniformEXT(cubeMapIndex)], offsetDir).r;
-        if (depth < receiverDepth) {
+        if (depth < biasedReceiverDepth) {
             blockerSum += depth;
             blockerCount++;
         }
@@ -122,7 +118,8 @@ vec2 blockerSearchCube(int cubeMapIndex, vec3 sampleDir, float receiverDepth,
 // Penumbra Estimation
 // ============================================================
 float estimatePenumbra(float receiverDepth, float avgBlockerDepth, float lightSize) {
-    return lightSize * (receiverDepth - avgBlockerDepth) / avgBlockerDepth;
+    float penumbra = lightSize * (receiverDepth - avgBlockerDepth) / avgBlockerDepth;
+    return min(penumbra, 30.0); // Clamp max penumbra to prevent extreme blur
 }
 
 // ============================================================
@@ -167,7 +164,8 @@ float sampleSpotShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal) {
 
     ShadowData sd = SHADOW_BUFFER[shadowIndex];
 
-    vec3 biasedPos = worldPos + worldNormal * sd.biasParams.z;
+    // Use reduced normal bias for PCSS to minimize shadow-mesh gap
+    vec3 biasedPos = worldPos + worldNormal * sd.biasParams.z * 0.3;
     vec4 lightSpacePos = sd.viewProjection * vec4(biasedPos, 1.0);
     vec3 projCoords = lightSpacePos.xyz / lightSpacePos.w;
 
@@ -203,7 +201,8 @@ float sampleCascadeShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal) {
 
     ShadowData sd = SHADOW_BUFFER[shadowIndex];
 
-    vec3 biasedPos = worldPos + worldNormal * sd.biasParams.z;
+    // Use reduced normal bias for PCSS to minimize shadow-mesh gap
+    vec3 biasedPos = worldPos + worldNormal * sd.biasParams.z * 0.3;
     vec4 lightSpacePos = sd.viewProjection * vec4(biasedPos, 1.0);
 
     if (lightSpacePos.w <= 0.0) return 1.0;

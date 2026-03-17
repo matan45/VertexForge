@@ -186,6 +186,8 @@ layout(std140, set = 4, binding = 0) uniform ClusterParamsUBO { ClusterGridParam
 layout(std430, set = 5, binding = 0) readonly buffer ClusterLightGridBuffer { ClusterLightData clusterLightGrid[]; };
 layout(std430, set = 5, binding = 1) readonly buffer ClusterLightIndexListBuffer { uint lightIndexList[]; };
 
+#include "../common/shadow_sampling_types.glsl"
+
 layout(std430, set = 6, binding = 0) readonly buffer ShadowDataBuffer { ShadowData shadowDataArray[]; };
 
 // Comparison samplers (shadow filtering)

@@ -309,6 +309,9 @@ layout(std430, set = 8, binding = 1) readonly buffer ClusterLightIndexListBuffer
     uint lightIndexList[];
 };
 
+// ShadowData struct (must be before SSBO declaration)
+#include "../common/shadow_sampling_types.glsl"
+
 layout(std430, set = 9, binding = 0) readonly buffer ShadowDataBuffer {
     ShadowData shadowData[];
 };
@@ -323,6 +326,7 @@ layout(set = 10, binding = 3) uniform sampler2D shadowAtlasDepth;
 layout(set = 10, binding = 4) uniform sampler2DArray shadowCascadesDepth;
 layout(set = 10, binding = 5) uniform samplerCube shadowCubesDepth[];
 
+// PCSS sampling functions
 #define SHADOW_BUFFER shadowData
 #include "../common/shadow_sampling.glsl"
 

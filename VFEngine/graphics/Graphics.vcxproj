@@ -556,6 +556,7 @@
     <None Include="..\..\resources\shaders\common\lighting_functions.glsl" />
     <None Include="..\..\resources\shaders\common\lod_crossfade.glsl" />
     <None Include="..\..\resources\shaders\common\shadow_sampling.glsl" />
+    <None Include="..\..\resources\shaders\common\shadow_sampling_types.glsl" />
     <None Include="..\..\resources\shaders\common\volumetric_common.glsl" />
     <None Include="..\..\resources\shaders\decal\decal.glsl" />
     <None Include="..\..\resources\shaders\gi\gi_common.glsl" />
