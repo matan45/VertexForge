@@ -557,6 +557,7 @@
     <None Include="..\..\resources\shaders\atmosphere\aerial_perspective_lut.glsl" />
     <None Include="..\..\resources\shaders\atmosphere\atmosphere_common.glsl" />
     <None Include="..\..\resources\shaders\atmosphere\atmosphere_composite.glsl" />
+    <None Include="..\..\resources\shaders\atmosphere\atmosphere_params.glsl" />
     <None Include="..\..\resources\shaders\atmosphere\atmosphere_sky.glsl" />
     <None Include="..\..\resources\shaders\atmosphere\multiscatter_lut.glsl" />
     <None Include="..\..\resources\shaders\atmosphere\skyview_lut.glsl" />

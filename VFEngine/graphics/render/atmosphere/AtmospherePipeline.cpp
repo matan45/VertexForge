@@ -519,15 +519,11 @@ namespace render::atmosphere
         glm::mat4 vp = cachedProjection * cachedView;
 
         AtmosphereGPUParams gpu{};
-        gpu.planetRadius = settings.planetRadius;
-        gpu.atmosphereRadius = settings.atmosphereRadius;
+        gpu.planetParams = glm::vec4(settings.planetRadius, settings.atmosphereRadius, 0.0f, 0.0f);
         gpu.rayleighScattering = glm::vec4(settings.rayleighScattering, settings.rayleighDensityExpScale);
-        gpu.mieScattering = settings.mieScattering;
-        gpu.mieAbsorption = settings.mieAbsorption;
-        gpu.mieAnisotropy = settings.mieAnisotropy;
-        gpu.mieDensityExpScale = settings.mieDensityExpScale;
+        gpu.mieParams = glm::vec4(settings.mieScattering, settings.mieAbsorption, settings.mieAnisotropy, settings.mieDensityExpScale);
         gpu.ozoneAbsorption = glm::vec4(settings.ozoneAbsorption, settings.ozoneCenterAlt);
-        gpu.ozoneWidth = settings.ozoneWidth;
+        gpu.ozoneParams = glm::vec4(settings.ozoneWidth, 0.0f, 0.0f, 0.0f);
         gpu.sunIrradiance = glm::vec4(settings.sunIrradiance, settings.sunAngularRadius);
         gpu.sunDirection = glm::vec4(sunDir, 0.0f);
         gpu.groundAlbedo = glm::vec4(settings.groundAlbedo, 0.0f);
@@ -538,12 +534,8 @@ namespace render::atmosphere
 
         gpu.invViewProjection = glm::inverse(vp);
         gpu.viewProjection = vp;
-        gpu.nearPlane = cachedNear;
-        gpu.farPlane = cachedFar;
-        gpu.aerialMaxDist = settings.aerialMaxDist;
-        gpu.aerialIntensity = settings.aerialIntensity;
-        gpu.screenWidth = currentExtent.width;
-        gpu.screenHeight = currentExtent.height;
+        gpu.screenParams = glm::vec4(cachedNear, cachedFar, settings.aerialMaxDist, settings.aerialIntensity);
+        gpu.screenSize = glm::uvec4(currentExtent.width, currentExtent.height, 0, 0);
 
         std::memcpy(paramsBufferMapped, &gpu, sizeof(gpu));
     }
