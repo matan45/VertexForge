@@ -100,26 +100,23 @@ float sampleCloudDensity(vec3 worldPos, float heightFrac, bool detailPass)
     shapeValue = clamp(shapeValue, 0.0, 1.0);
 
     // Apply height gradient and coverage
-    float density = shapeValue * gradient;
-    // Coverage controls the density threshold: higher coverage = more cloud
-    float coverageThreshold = 1.0 - coverage;
-    density = smoothstep(coverageThreshold, coverageThreshold + 0.2, density);
-    density = max(density, 0.0);
+    float baseCloud = shapeValue * gradient;
+    float density = max(baseCloud - (1.0 - coverage), 0.0) / max(coverage, 0.001);
+    density = clamp(density, 0.0, 1.0);
 
     if (density < 0.01)
         return 0.0;
 
     // Detail noise (high frequency erosion) - only for fine march steps
-    if (detailPass)
+    if (detailPass && density > 0.01)
     {
         vec3 detailUV = samplePos * params.cloudShaping.y;
         vec4 detailNoise = texture(detailNoiseTex, detailUV);
-        float detailFBM = detailNoise.a; // pre-computed FBM
+        float detailFBM = detailNoise.a;
 
-        // Erode based on height (more erosion at top)
-        float erosion = mix(detailFBM, 1.0 - detailFBM, clamp(heightFrac * 2.0, 0.0, 1.0));
-        density = remap(density, erosion * params.cloudShaping.z, 1.0, 0.0, 1.0);
-        density = max(density, 0.0);
+        // Erode edges (stronger at top of cloud)
+        float erosionAmount = mix(0.2, 0.6, clamp(heightFrac, 0.0, 1.0)) * params.cloudShaping.z;
+        density = max(density - detailFBM * erosionAmount, 0.0);
     }
 
     return density * params.cloudDensity.x;
@@ -188,13 +185,15 @@ void main()
     float planetRadius = params.cloudLayer.w;
     vec3 planetCenter = vec3(0.0, -planetRadius, 0.0);
 
-    // Skip rays pointing below the horizon
+    // Fade out rays pointing below the horizon
     vec3 surfaceNormal = normalize(rayOrigin - planetCenter);
-    if (dot(rayDir, surfaceNormal) < -0.01)
+    float horizonDot = dot(rayDir, surfaceNormal);
+    if (horizonDot < -0.1)
     {
         imageStore(cloudResult, texel, vec4(0.0, 0.0, 0.0, 1.0));
         return;
     }
+    float horizonFade = smoothstep(-0.1, 0.05, horizonDot);
 
     // Intersect ray with cloud layer spheres
     float innerRadius = planetRadius + params.cloudLayer.x;
@@ -301,16 +300,23 @@ void main()
             }
 
             // Scattering contribution
-            vec3 sunLight = params.lightColor.xyz * sunTransmittance * lightTransmittance * powder * phase;
-            vec3 ambient = params.lightColor.xyz * params.lightColor.w * heightFrac;
-            vec3 luminance = (sunLight + ambient) * density;
+            float sigmaE = density * params.lightParams.x; // extinction coefficient
+            float sigmaS = sigmaE * 0.9;                   // scattering coeff (albedo ~0.9)
 
-            // Integrate
-            float extinction = density * params.lightParams.x * stepSize;
-            float stepTransmittance = exp(-extinction);
-            vec3 integScattering = luminance * (1.0 - stepTransmittance) / max(density * params.lightParams.x, 0.001);
+            // Sun irradiance is in atmosphere units - scale up for cloud illumination
+            vec3 sunColor = params.lightColor.xyz * 6.0;
+            vec3 sunLight = sunColor * sunTransmittance * lightTransmittance * powder * phase;
 
-            scattering += transmittance * integScattering;
+            // Ambient: sky light on clouds (multi-scattering approximation)
+            vec3 ambient = sunColor * params.lightColor.w * (0.6 + 0.4 * heightFrac);
+            vec3 lightIntensity = sunLight + ambient;
+
+            // Energy-conserving integration
+            float stepExtinction = sigmaE * stepSize;
+            float stepTransmittance = exp(-stepExtinction);
+            vec3 stepScattering = sigmaS * lightIntensity * (1.0 - stepTransmittance) / max(sigmaE, 0.0001);
+
+            scattering += transmittance * stepScattering;
             transmittance *= stepTransmittance;
 
             if (transmittance < 0.01)
@@ -327,6 +333,10 @@ void main()
             t += inCloud ? fineStep : coarseStep;
         }
     }
+
+    // Apply horizon fade
+    scattering *= horizonFade;
+    transmittance = mix(1.0, transmittance, horizonFade);
 
     imageStore(cloudResult, texel, vec4(scattering, transmittance));
 }

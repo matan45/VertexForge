@@ -35,17 +35,7 @@ void main()
     // Sample scene depth
     float depth = texture(depthTexture, texCoord).r;
 
-    // If geometry is in front of cloud layer, skip cloud rendering
-    if (depth < 1.0)
-    {
-        float linearDepth = linearizeDepth(depth, pc.nearPlane, pc.farPlane);
-
-        // Fade clouds behind near geometry smoothly
-        float cloudFade = smoothstep(0.0, pc.cloudMinAlt * 0.5, linearDepth);
-        cloudScattering *= cloudFade;
-        cloudTransmittance = mix(1.0, cloudTransmittance, cloudFade);
-    }
-
+   
     // Blend: scene * transmittance + scattering (premultiplied alpha)
-    outColor = vec4(cloudScattering, 1.0 - cloudTransmittance);
+    outColor = vec4(cloudScattering * 10.0, cloudTransmittance < 0.99 ? 0.8 : 0.0);
 }

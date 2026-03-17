@@ -12,8 +12,8 @@ namespace render::cloud
         float cloudMaxAltitude = 4000.0f;
 
         // Density & coverage
-        float globalDensity = 0.5f;          // [0, 1]
-        float globalCoverage = 0.65f;        // [0, 1]
+        float globalDensity = 0.8f;          // [0, 1]
+        float globalCoverage = 0.6f;         // [0, 1]
         float cloudType = 0.5f;              // [0, 1] stratus(0) to cumulus(1)
 
         // Noise shaping
@@ -31,7 +31,7 @@ namespace render::cloud
         float phaseForward = 0.8f;           // HG forward lobe
         float phaseBackward = -0.3f;         // HG backward lobe
         float phaseBlend = 0.5f;
-        float ambientIntensity = 0.3f;
+        float ambientIntensity = 0.8f;
 
         // Performance
         float temporalBlendFactor = 0.95f;
