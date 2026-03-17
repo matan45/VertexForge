@@ -175,6 +175,7 @@
     <ClInclude Include="render\gi\ProbeTracePipeline.hpp" />
     <ClInclude Include="render\gi\ProbeUpdatePipeline.hpp" />
     <ClInclude Include="render\gi\RadianceCascadeManager.hpp" />
+    <ClInclude Include="render\gi\SSGIPipeline.hpp" />
     <ClInclude Include="render\gpudriven\FreeListAllocator.hpp" />
     <ClInclude Include="render\gpudriven\GPUDrivenCameraBuffer.hpp" />
     <ClInclude Include="render\gpudriven\GPUDrivenRenderer.hpp" />
@@ -399,6 +400,7 @@
     <ClCompile Include="render\gi\ProbeTracePipeline.cpp" />
     <ClCompile Include="render\gi\ProbeUpdatePipeline.cpp" />
     <ClCompile Include="render\gi\RadianceCascadeManager.cpp" />
+    <ClCompile Include="render\gi\SSGIPipeline.cpp" />
     <ClCompile Include="render\gpudriven\GPUDrivenCameraBuffer.cpp" />
     <ClCompile Include="render\gpudriven\GPUDrivenRenderer.cpp" />
     <ClCompile Include="render\gpudriven\GPUDrivenRendererBillboard.cpp" />
@@ -564,6 +566,10 @@
     <None Include="..\..\resources\shaders\gi\gi_debug_probe.glsl" />
     <None Include="..\..\resources\shaders\gi\probe_trace.glsl" />
     <None Include="..\..\resources\shaders\gi\probe_update.glsl" />
+    <None Include="..\..\resources\shaders\gi\ssgi_composite.glsl" />
+    <None Include="..\..\resources\shaders\gi\ssgi_denoise.glsl" />
+    <None Include="..\..\resources\shaders\gi\ssgi_temporal.glsl" />
+    <None Include="..\..\resources\shaders\gi\ssgi_trace.glsl" />
     <None Include="..\..\resources\shaders\gpudriven\frag_billboard.glsl" />
     <None Include="..\..\resources\shaders\gpudriven\gpu_cull_lod.glsl" />
     <None Include="..\..\resources\shaders\gpudriven\mesh_billboard.glsl" />

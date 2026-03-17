@@ -699,6 +699,30 @@ namespace serialization
 
         j["postProcess"] = serializePostProcessSettings(settings.postProcess);
 
+        j["gi"] = {
+            {"enabled", settings.gi.enabled},
+            {"quality", static_cast<int>(settings.gi.quality)},
+            {"probeSpacing", settings.gi.probeSpacing},
+            {"cascadeMultiplier", settings.gi.cascadeMultiplier},
+            {"probeRaysPerUpdate", settings.gi.probeRaysPerUpdate},
+            {"temporalBlendFactor", settings.gi.temporalBlendFactor},
+            {"probeUpdateRate", settings.gi.probeUpdateRate},
+            {"maxProbeDistance", settings.gi.maxProbeDistance},
+            {"farFieldEnabled", settings.gi.farFieldEnabled},
+            {"farFieldMaxDistance", settings.gi.farFieldMaxDistance},
+            {"farFieldCascadeCount", settings.gi.farFieldCascadeCount},
+            {"farFieldProbeSpacing", settings.gi.farFieldProbeSpacing},
+            {"farFieldRaysPerUpdate", settings.gi.farFieldRaysPerUpdate},
+            {"farFieldUpdateRate", settings.gi.farFieldUpdateRate},
+            {"ssgiEnabled", settings.gi.ssgiEnabled},
+            {"ssgiIntensity", settings.gi.ssgiIntensity},
+            {"ssgiRadius", settings.gi.ssgiRadius},
+            {"ssgiMaxDistance", settings.gi.ssgiMaxDistance},
+            {"ssgiSampleCount", settings.gi.ssgiSampleCount},
+            {"ssgiTemporalBlend", settings.gi.ssgiTemporalBlend},
+            {"ssgiHalfResolution", settings.gi.ssgiHalfResolution}
+        };
+
         j["vfxLOD"] = {
             {"lod0Distance", settings.vfxLOD.lod0Distance},
             {"lod1Distance", settings.vfxLOD.lod1Distance},
@@ -735,6 +759,54 @@ namespace serialization
         deserializeDistanceCullingSettings(j, settings.distanceCulling);
         deserializeTransparencySettings(j, settings.transparency);
         deserializeTerrainRenderSettings(j, settings.terrain);
+
+        if (j.contains("gi") && j["gi"].is_object())
+        {
+            const auto& g = j["gi"];
+            auto& gi = settings.gi;
+            if (g.contains("enabled") && g["enabled"].is_boolean())
+                gi.enabled = g["enabled"].get<bool>();
+            if (g.contains("quality") && g["quality"].is_number_integer())
+                gi.quality = static_cast<render::gi::GIQuality>(std::clamp(g["quality"].get<int>(), 0, 3));
+            if (g.contains("probeSpacing") && g["probeSpacing"].is_number())
+                gi.probeSpacing = g["probeSpacing"].get<float>();
+            if (g.contains("cascadeMultiplier") && g["cascadeMultiplier"].is_number())
+                gi.cascadeMultiplier = g["cascadeMultiplier"].get<float>();
+            if (g.contains("probeRaysPerUpdate") && g["probeRaysPerUpdate"].is_number_unsigned())
+                gi.probeRaysPerUpdate = g["probeRaysPerUpdate"].get<uint32_t>();
+            if (g.contains("temporalBlendFactor") && g["temporalBlendFactor"].is_number())
+                gi.temporalBlendFactor = g["temporalBlendFactor"].get<float>();
+            if (g.contains("probeUpdateRate") && g["probeUpdateRate"].is_number())
+                gi.probeUpdateRate = g["probeUpdateRate"].get<float>();
+            if (g.contains("maxProbeDistance") && g["maxProbeDistance"].is_number())
+                gi.maxProbeDistance = g["maxProbeDistance"].get<float>();
+            if (g.contains("farFieldEnabled") && g["farFieldEnabled"].is_boolean())
+                gi.farFieldEnabled = g["farFieldEnabled"].get<bool>();
+            if (g.contains("farFieldMaxDistance") && g["farFieldMaxDistance"].is_number())
+                gi.farFieldMaxDistance = g["farFieldMaxDistance"].get<float>();
+            if (g.contains("farFieldCascadeCount") && g["farFieldCascadeCount"].is_number_unsigned())
+                gi.farFieldCascadeCount = g["farFieldCascadeCount"].get<uint32_t>();
+            if (g.contains("farFieldProbeSpacing") && g["farFieldProbeSpacing"].is_number())
+                gi.farFieldProbeSpacing = g["farFieldProbeSpacing"].get<float>();
+            if (g.contains("farFieldRaysPerUpdate") && g["farFieldRaysPerUpdate"].is_number_unsigned())
+                gi.farFieldRaysPerUpdate = g["farFieldRaysPerUpdate"].get<uint32_t>();
+            if (g.contains("farFieldUpdateRate") && g["farFieldUpdateRate"].is_number())
+                gi.farFieldUpdateRate = g["farFieldUpdateRate"].get<float>();
+            if (g.contains("ssgiEnabled") && g["ssgiEnabled"].is_boolean())
+                gi.ssgiEnabled = g["ssgiEnabled"].get<bool>();
+            if (g.contains("ssgiIntensity") && g["ssgiIntensity"].is_number())
+                gi.ssgiIntensity = g["ssgiIntensity"].get<float>();
+            if (g.contains("ssgiRadius") && g["ssgiRadius"].is_number())
+                gi.ssgiRadius = g["ssgiRadius"].get<float>();
+            if (g.contains("ssgiMaxDistance") && g["ssgiMaxDistance"].is_number())
+                gi.ssgiMaxDistance = g["ssgiMaxDistance"].get<float>();
+            if (g.contains("ssgiSampleCount") && g["ssgiSampleCount"].is_number_integer())
+                gi.ssgiSampleCount = std::clamp(g["ssgiSampleCount"].get<int>(), 4, 16);
+            if (g.contains("ssgiTemporalBlend") && g["ssgiTemporalBlend"].is_number())
+                gi.ssgiTemporalBlend = g["ssgiTemporalBlend"].get<float>();
+            if (g.contains("ssgiHalfResolution") && g["ssgiHalfResolution"].is_boolean())
+                gi.ssgiHalfResolution = g["ssgiHalfResolution"].get<bool>();
+        }
 
         if (j.contains("postProcess") && j["postProcess"].is_object())
         {

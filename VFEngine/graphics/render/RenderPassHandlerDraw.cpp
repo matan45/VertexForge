@@ -18,6 +18,7 @@
 #include "gpudriven/terrain/TerrainRaycastPipeline.hpp"
 #include "postprocess/PostProcessPipeline.hpp"
 #include "volumetric/VolumetricFogComposite.hpp"
+#include "gi/SSGIPipeline.hpp"
 #include "transparency/WBOITPipeline.hpp"
 #include "../../services/providers/vfx/IVFXRuntimeProvider.hpp"
 #include "../../services/providers/terrain/ITerrainRenderProvider.hpp"
@@ -64,6 +65,15 @@ namespace render
         {
             volumetricFogComposite->setCameraData(currentNearPlane, currentFarPlane);
             volumetricFogComposite->execute(commandBuffer, imageIndex);
+        }
+
+        if (ssgiPipeline && ssgiPipeline->isInitialized())
+        {
+            ssgiPipeline->setCameraData(currentView, currentProjection,
+                                         currentCameraPosition,
+                                         currentNearPlane, currentFarPlane,
+                                         taaFrameIndex);
+            ssgiPipeline->execute(commandBuffer, imageIndex);
         }
 
         executeRenderHooks(plugin::RenderPassHookPoint::PrePostProcess, commandBuffer, imageIndex);

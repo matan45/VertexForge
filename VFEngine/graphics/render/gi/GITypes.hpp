@@ -34,6 +34,15 @@ namespace render::gi
         uint32_t farFieldRaysPerUpdate = 32;  // Fewer rays for far-field (cheaper)
         float farFieldUpdateRate = 0.1f;      // 10% probes updated per frame (slower)
 
+        // Screen-Space GI (supplements probe-based GI with high-frequency local bounces)
+        bool ssgiEnabled = false;
+        float ssgiIntensity = 0.5f;
+        float ssgiRadius = 2.0f;
+        float ssgiMaxDistance = 100.0f;
+        int ssgiSampleCount = 8;
+        float ssgiTemporalBlend = 0.1f;
+        bool ssgiHalfResolution = true;
+
         bool showProbes = false;
         bool showCascadeBounds = false;
         bool showProbeValidity = false;
@@ -58,6 +67,9 @@ namespace render::gi
                 s.farFieldEnabled = true;
                 s.farFieldCascadeCount = 1;
                 s.farFieldMaxDistance = 500.0f;
+                s.ssgiEnabled = true;
+                s.ssgiSampleCount = 8;
+                s.ssgiHalfResolution = true;
                 break;
             case GIQuality::Ultra:
                 s.probeSpacing = 2.0f;
@@ -65,6 +77,9 @@ namespace render::gi
                 s.farFieldEnabled = true;
                 s.farFieldCascadeCount = 2;
                 s.farFieldMaxDistance = 1000.0f;
+                s.ssgiEnabled = true;
+                s.ssgiSampleCount = 12;
+                s.ssgiHalfResolution = false;
                 break;
             }
 
@@ -119,6 +134,25 @@ namespace render::gi
         float temporalBlend;
         float frameRandom;
         uint32_t frameIndex;
+    };
+
+    struct alignas(16) SSGIParamsUBO
+    {
+        glm::mat4 projection;
+        glm::mat4 inverseProjection;
+        glm::mat4 view;
+        glm::mat4 inverseView;
+        glm::mat4 prevViewProjection;
+        glm::vec4 params;           // radius, maxDistance, intensity, temporalBlend
+        glm::vec2 resolution;
+        glm::vec2 texelSize;
+        float nearPlane;
+        float farPlane;
+        uint32_t sampleCount;
+        uint32_t frameIndex;
+        uint32_t historyValid;
+        uint32_t halfResolution;
+        float padding[2];
     };
 
     struct GIDebugStats

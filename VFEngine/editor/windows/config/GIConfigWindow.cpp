@@ -20,6 +20,7 @@ namespace windows
         {
             drawQualitySection();
             drawProbeSection();
+            drawSSGISection();
             drawDebugSection();
             drawStatsSection();
 
@@ -86,6 +87,33 @@ namespace windows
                 isDirty = true;
             if (ImGui::SliderFloat("Max Probe Distance", &settings.maxProbeDistance, 50.0f, 500.0f))
                 isDirty = true;
+        }
+    }
+
+    void GIConfigWindow::drawSSGISection()
+    {
+        if (!settings.enabled) return;
+
+        if (ImGui::CollapsingHeader("Screen-Space GI"))
+        {
+            if (ImGui::Checkbox("Enable SSGI", &settings.ssgiEnabled))
+                isDirty = true;
+
+            if (settings.ssgiEnabled)
+            {
+                if (ImGui::DragFloat("Intensity##ssgi", &settings.ssgiIntensity, 0.01f, 0.0f, 2.0f, "%.2f"))
+                    isDirty = true;
+                if (ImGui::DragFloat("Radius##ssgi", &settings.ssgiRadius, 0.1f, 0.5f, 10.0f, "%.1f"))
+                    isDirty = true;
+                if (ImGui::DragFloat("Max Distance##ssgi", &settings.ssgiMaxDistance, 1.0f, 10.0f, 500.0f, "%.0f"))
+                    isDirty = true;
+                if (ImGui::SliderInt("Sample Count##ssgi", &settings.ssgiSampleCount, 4, 16))
+                    isDirty = true;
+                if (ImGui::DragFloat("Temporal Blend##ssgi", &settings.ssgiTemporalBlend, 0.01f, 0.05f, 0.5f, "%.2f"))
+                    isDirty = true;
+                if (ImGui::Checkbox("Half Resolution##ssgi", &settings.ssgiHalfResolution))
+                    isDirty = true;
+            }
         }
     }
 

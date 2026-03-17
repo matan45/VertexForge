@@ -56,6 +56,11 @@ namespace render::volumetric
     class VolumetricPipeline;
 }
 
+namespace render::gi
+{
+    class SSGIPipeline;
+}
+
 namespace render
 {
     class ClearColor;
@@ -114,6 +119,7 @@ namespace render
         std::unique_ptr<gpudriven::TerrainRaycastPipeline> terrainRaycastPipeline;
         std::unique_ptr<postprocess::PostProcessPipeline> postProcessPipeline;
         std::unique_ptr<volumetric::VolumetricFogComposite> volumetricFogComposite;
+        std::unique_ptr<gi::SSGIPipeline> ssgiPipeline;
         std::unique_ptr<transparency::WBOITPipeline> wboitPipeline;
         bool wboitEnabled = true;
 
@@ -343,6 +349,10 @@ namespace render
         void initVolumetricFogComposite(volumetric::VolumetricPipeline* volPipeline);
         void resetVolumetricFogComposite();
         volumetric::VolumetricFogComposite* getVolumetricFogComposite() const { return volumetricFogComposite.get(); }
+
+        void initSSGI();
+        void resetSSGI();
+        gi::SSGIPipeline* getSSGIPipeline() const { return ssgiPipeline.get(); }
 
         void cleanUp() const;
 

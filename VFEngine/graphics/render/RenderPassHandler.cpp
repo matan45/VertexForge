@@ -15,6 +15,7 @@
 #include "gpudriven/terrain/TerrainRaycastPipeline.hpp"
 #include "postprocess/PostProcessPipeline.hpp"
 #include "volumetric/VolumetricFogComposite.hpp"
+#include "gi/SSGIPipeline.hpp"
 #include "transparency/WBOITPipeline.hpp"
 #include "decal/DecalPipeline.hpp"
 #include "volumetric/VolumetricPipeline.hpp"
@@ -177,6 +178,29 @@ namespace render
         }
 
         volumetricFogComposite->init(volPipeline);
+    }
+
+    void RenderPassHandler::initSSGI()
+    {
+        if (ssgiPipeline && ssgiPipeline->isInitialized())
+            return;
+
+        if (!ssgiPipeline)
+        {
+            ssgiPipeline = std::make_unique<gi::SSGIPipeline>(
+                device, swapChain, offscreenResources);
+        }
+
+        ssgiPipeline->init();
+    }
+
+    void RenderPassHandler::resetSSGI()
+    {
+        if (ssgiPipeline)
+        {
+            ssgiPipeline->cleanup();
+            ssgiPipeline.reset();
+        }
     }
 
     void RenderPassHandler::reinitMeshPipelineWithDefaults()
@@ -516,6 +540,11 @@ namespace render
             volumetricFogComposite->recreate();
         }
 
+        if (ssgiPipeline && ssgiPipeline->isInitialized())
+        {
+            ssgiPipeline->recreate();
+        }
+
         if (wboitPipeline && wboitPipeline->isInitialized())
         {
             wboitPipeline->recreate();
@@ -598,6 +627,11 @@ namespace render
         if (volumetricFogComposite)
         {
             volumetricFogComposite->cleanup();
+        }
+
+        if (ssgiPipeline)
+        {
+            ssgiPipeline->cleanup();
         }
 
         if (postProcessPipeline)

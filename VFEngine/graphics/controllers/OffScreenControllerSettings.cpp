@@ -541,6 +541,20 @@ namespace controllers
         {
             gpu->applyGISettings(settings);
         }
+
+        // SSGI pipeline management
+        if (settings.enabled && settings.ssgiEnabled)
+        {
+            renderHandler->initSSGI();
+            if (auto* ssgi = renderHandler->getSSGIPipeline())
+            {
+                ssgi->updateSettings(settings);
+            }
+        }
+        else
+        {
+            renderHandler->resetSSGI();
+        }
     }
 
     render::gi::GISettings OffScreenController::getGISettings() const
