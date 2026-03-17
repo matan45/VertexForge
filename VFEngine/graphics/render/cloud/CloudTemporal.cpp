@@ -195,7 +195,6 @@ namespace render::cloud
             return;
 
         auto& dev = device.getLogicalDevice();
-        dev.waitIdle();
 
         if (pipeline)
         {

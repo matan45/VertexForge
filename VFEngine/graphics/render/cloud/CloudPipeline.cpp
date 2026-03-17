@@ -7,6 +7,9 @@
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
 #include "../../core/OffScreen.hpp"
+#include "../../core/ImageUtilities.hpp"
+#include "../../core/BufferUtilities.hpp"
+#include "../../core/MemoryUtilities.hpp"
 #include <cstring>
 #include <glm/gtc/matrix_inverse.hpp>
 
@@ -27,15 +30,71 @@ namespace render::cloud
         cleanup();
     }
 
+    void CloudPipeline::createFallbackTexture()
+    {
+        auto& dev = device.getLogicalDevice();
+        auto& physDev = device.getPhysicalDevice();
+
+        // 1x1 white RGBA16F image
+        vk::ImageCreateInfo imgInfo{};
+        imgInfo.imageType = vk::ImageType::e2D;
+        imgInfo.extent = vk::Extent3D{1, 1, 1};
+        imgInfo.mipLevels = 1;
+        imgInfo.arrayLayers = 1;
+        imgInfo.format = vk::Format::eR16G16B16A16Sfloat;
+        imgInfo.tiling = vk::ImageTiling::eOptimal;
+        imgInfo.initialLayout = vk::ImageLayout::eUndefined;
+        imgInfo.usage = vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst;
+        imgInfo.samples = vk::SampleCountFlagBits::e1;
+        fallbackImage = dev.createImage(imgInfo);
+
+        auto memReqs = dev.getImageMemoryRequirements(fallbackImage);
+        vk::MemoryAllocateInfo allocInfo{};
+        allocInfo.allocationSize = memReqs.size;
+        allocInfo.memoryTypeIndex = core::MemoryUtilities::findMemoryType(
+            physDev, memReqs.memoryTypeBits, vk::MemoryPropertyFlagBits::eDeviceLocal);
+        fallbackMemory = dev.allocateMemory(allocInfo);
+        dev.bindImageMemory(fallbackImage, fallbackMemory, 0);
+
+        core::ImageViewInfoRequest viewReq(dev, fallbackImage);
+        viewReq.format = vk::Format::eR16G16B16A16Sfloat;
+        core::ImageUtilities::createImageView(viewReq, fallbackView);
+
+        // Upload white pixel (1,1,1,1)
+        uint16_t whitePixel[4] = {0x3C00, 0x3C00, 0x3C00, 0x3C00}; // half-float 1.0
+        core::ImageUtilities::uploadStagedPixelData(device, fallbackImage,
+            whitePixel, sizeof(whitePixel), 1, 1);
+
+        // Sampler
+        vk::SamplerCreateInfo sampInfo{};
+        sampInfo.magFilter = vk::Filter::eLinear;
+        sampInfo.minFilter = vk::Filter::eLinear;
+        sampInfo.addressModeU = vk::SamplerAddressMode::eClampToEdge;
+        sampInfo.addressModeV = vk::SamplerAddressMode::eClampToEdge;
+        fallbackSampler = dev.createSampler(sampInfo);
+    }
+
+    void CloudPipeline::destroyFallbackTexture()
+    {
+        auto& dev = device.getLogicalDevice();
+        if (fallbackSampler) { dev.destroySampler(fallbackSampler); fallbackSampler = nullptr; }
+        if (fallbackView) { dev.destroyImageView(fallbackView); fallbackView = nullptr; }
+        if (fallbackImage) { dev.destroyImage(fallbackImage); fallbackImage = nullptr; }
+        if (fallbackMemory) { dev.freeMemory(fallbackMemory); fallbackMemory = nullptr; }
+    }
+
     void CloudPipeline::init()
     {
+        // Create fallback texture for when atmosphere is not available
+        createFallbackTexture();
+
         // Create noise textures
         cloudNoise = std::make_unique<CloudNoise>(device);
         cloudNoise->init();
 
-        // Get transmittance LUT from atmosphere if available
-        vk::ImageView transmittanceView{};
-        vk::Sampler lutSampler{};
+        // Get transmittance LUT from atmosphere, or use fallback
+        vk::ImageView transmittanceView = fallbackView;
+        vk::Sampler lutSampler = fallbackSampler;
         if (atmospherePipeline && atmospherePipeline->isInitialized())
         {
             transmittanceView = atmospherePipeline->getTransmittanceView();
@@ -68,12 +127,12 @@ namespace render::cloud
         if (!initialized)
             return;
 
-        device.getLogicalDevice().waitIdle();
-
         if (cloudComposite) { cloudComposite->cleanup(); cloudComposite.reset(); }
         if (cloudTemporal) { cloudTemporal->cleanup(); cloudTemporal.reset(); }
         if (cloudRayMarch) { cloudRayMarch->cleanup(); cloudRayMarch.reset(); }
         if (cloudNoise) { cloudNoise->cleanup(); cloudNoise.reset(); }
+
+        destroyFallbackTexture();
 
         initialized = false;
     }
@@ -82,10 +141,8 @@ namespace render::cloud
     {
         if (!initialized) return;
 
-        device.getLogicalDevice().waitIdle();
-
-        vk::ImageView transmittanceView{};
-        vk::Sampler lutSampler{};
+        vk::ImageView transmittanceView = fallbackView;
+        vk::Sampler lutSampler = fallbackSampler;
         if (atmospherePipeline && atmospherePipeline->isInitialized())
         {
             transmittanceView = atmospherePipeline->getTransmittanceView();
@@ -115,10 +172,16 @@ namespace render::cloud
         {
             init();
         }
+        else if (!enabled && wasEnabled && initialized)
+        {
+            device.getLogicalDevice().waitIdle();
+            cleanup();
+        }
     }
 
     void CloudPipeline::setCameraData(const glm::mat4& view, const glm::mat4& projection,
-                                       const glm::vec3& cameraPos, float nearPlane, float farPlane)
+                                       const glm::vec3& cameraPos, float nearPlane, float farPlane,
+                                       float time)
     {
         prevViewProjection = cachedProjection * cachedView;
         cachedView = view;
@@ -126,6 +189,7 @@ namespace render::cloud
         cachedCameraPos = cameraPos;
         cachedNear = nearPlane;
         cachedFar = farPlane;
+        cachedTime = time;
     }
 
     GPUCloudParams CloudPipeline::buildGPUParams() const
@@ -153,7 +217,7 @@ namespace render::cloud
         // Wind direction from degrees
         float windRad = glm::radians(settings.windDirectionDeg);
         glm::vec3 windDir = glm::vec3(std::cos(windRad), 0.0f, std::sin(windRad));
-        float timeOffset = static_cast<float>(frameIndex) * 0.016f; // approximate
+        float timeOffset = cachedTime;
         params.windParams = glm::vec4(windDir * settings.windSpeed, timeOffset);
 
         params.lightParams = glm::vec4(settings.lightAbsorption, settings.phaseForward, settings.phaseBackward, settings.phaseBlend);

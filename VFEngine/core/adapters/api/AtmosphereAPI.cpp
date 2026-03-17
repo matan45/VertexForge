@@ -10,6 +10,9 @@ namespace core::api
 {
     namespace
     {
+        // Note: each setter does a full query+apply cycle. For batch updates,
+        // scripts should modify multiple properties then call a single apply.
+        // This matches the pattern used by PostProcessAPI and other engine APIs.
         template<typename Mutator>
         value::Value modifyAtmosphere(events::EventDispatcher& dispatcher, Mutator&& mutator)
         {

@@ -1,7 +1,7 @@
 #include "CloudConfigWindow.hpp"
-#include "../../../services/events/EventDispatcher.hpp"
-#include "../../../services/events/render/CloudEvents.hpp"
-#include "../../../services/events/scene/ComponentPhysicsLightEvents.hpp"
+#include "events/EventDispatcher.hpp"
+#include "events/render/CloudEvents.hpp"
+#include "events/scene/ComponentPhysicsLightEvents.hpp"
 #include <imgui.h>
 
 namespace windows

@@ -579,7 +579,7 @@ namespace controllers
             gpu->applyGISettings(settings);
         }
 
-        // SSGI pipeline management
+        // SSGI pipeline lifecycle: init/reset based on GI+SSGI enabled state
         if (settings.enabled && settings.ssgiEnabled)
         {
             renderHandler->initSSGI();

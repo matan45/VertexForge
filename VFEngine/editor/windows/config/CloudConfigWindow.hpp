@@ -22,8 +22,8 @@ namespace windows
         void drawPerformanceSection();
 
     public:
-        void show() { visible = true; }
-        void notifySceneLoaded() { settingsLoaded = false; }
+        void show() { visible = true; settingsLoaded = false; }
+        void notifySceneLoaded() { settingsLoaded = false; isDirty = false; }
         void draw();
         bool isVisible() const { return visible; }
     };

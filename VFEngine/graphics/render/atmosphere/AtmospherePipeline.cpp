@@ -69,9 +69,9 @@ namespace render::atmosphere
         cleanupSkyFramebuffers();
         cleanupCompositeFramebuffers();
 
-        // Destroy render passes
+        // Destroy render pass (composite shares sky's render pass)
+        compositeRenderPass = nullptr;
         if (skyRenderPass) { dev.destroyRenderPass(skyRenderPass); skyRenderPass = nullptr; }
-        if (compositeRenderPass) { dev.destroyRenderPass(compositeRenderPass); compositeRenderPass = nullptr; }
 
         // Destroy LUT images
         destroyImage(transmittanceImage, transmittanceMemory, transmittanceView);
@@ -124,9 +124,8 @@ namespace render::atmosphere
         currentExtent = swapChain.getSwapchainExtent();
 
         // Destroy only pipelines (not layouts — they don't depend on swapchain)
-        auto& devRef = device.getLogicalDevice();
-        if (skyRendererPipeline) { devRef.destroyPipeline(skyRendererPipeline); skyRendererPipeline = nullptr; }
-        if (compositePipeline) { devRef.destroyPipeline(compositePipeline); compositePipeline = nullptr; }
+        if (skyRendererPipeline) { dev.destroyPipeline(skyRendererPipeline); skyRendererPipeline = nullptr; }
+        if (compositePipeline) { dev.destroyPipeline(compositePipeline); compositePipeline = nullptr; }
 
         cleanupSkyFramebuffers();
         cleanupCompositeFramebuffers();
@@ -137,12 +136,12 @@ namespace render::atmosphere
         if (skyRendererDSPool) { dev.destroyDescriptorPool(skyRendererDSPool); skyRendererDSPool = nullptr; }
         if (compositeDSPool) { dev.destroyDescriptorPool(compositeDSPool); compositeDSPool = nullptr; }
 
+        compositeRenderPass = nullptr;
         if (skyRenderPass) { dev.destroyRenderPass(skyRenderPass); skyRenderPass = nullptr; }
-        if (compositeRenderPass) { dev.destroyRenderPass(compositeRenderPass); compositeRenderPass = nullptr; }
 
         createSkyRenderPass();
         createSkyFramebuffers();
-        createCompositeRenderPass();
+        createCompositeRenderPass(); // shares skyRenderPass
         createCompositeFramebuffers();
         createDepthOnlyView();
 
@@ -531,8 +530,11 @@ namespace render::atmosphere
         gpu.sunDirection = glm::vec4(sunDir, 0.0f);
         gpu.groundAlbedo = glm::vec4(settings.groundAlbedo, 0.0f);
 
-        // Camera altitude above planet surface (assume Y-up, planet center at origin for atmosphere)
-        float altitude = std::max(cachedCameraPos.y, 1.0f); // minimum 1m above "surface"
+        // Camera altitude above planet surface.
+        // Assumes Y=0 is ground level (planet surface). Scenes with ground at different Y
+        // will compute incorrect altitude — a groundLevelY offset in AtmosphereSettings
+        // would fix this if needed. Minimum 1m to avoid degenerate LUT sampling.
+        float altitude = std::max(cachedCameraPos.y, 1.0f);
         gpu.cameraPosition = glm::vec4(cachedCameraPos, altitude);
 
         gpu.invViewProjection = glm::inverse(vp);
@@ -891,36 +893,8 @@ namespace render::atmosphere
 
     void AtmospherePipeline::createCompositeRenderPass()
     {
-        vk::AttachmentDescription colorAttachment{};
-        colorAttachment.format = swapChain.getSwapchainImageFormat();
-        colorAttachment.samples = vk::SampleCountFlagBits::e1;
-        colorAttachment.loadOp = vk::AttachmentLoadOp::eLoad;
-        colorAttachment.storeOp = vk::AttachmentStoreOp::eStore;
-        colorAttachment.stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
-        colorAttachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
-        colorAttachment.initialLayout = vk::ImageLayout::eColorAttachmentOptimal;
-        colorAttachment.finalLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-
-        vk::AttachmentReference colorRef{0, vk::ImageLayout::eColorAttachmentOptimal};
-        vk::SubpassDescription subpass{};
-        subpass.pipelineBindPoint = vk::PipelineBindPoint::eGraphics;
-        subpass.colorAttachmentCount = 1;
-        subpass.pColorAttachments = &colorRef;
-
-        vk::SubpassDependency dep{};
-        dep.srcSubpass = VK_SUBPASS_EXTERNAL;
-        dep.dstSubpass = 0;
-        dep.srcStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
-        dep.srcAccessMask = vk::AccessFlagBits::eColorAttachmentWrite;
-        dep.dstStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
-        dep.dstAccessMask = vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite;
-
-        vk::RenderPassCreateInfo rpInfo{};
-        rpInfo.attachmentCount = 1; rpInfo.pAttachments = &colorAttachment;
-        rpInfo.subpassCount = 1; rpInfo.pSubpasses = &subpass;
-        rpInfo.dependencyCount = 1; rpInfo.pDependencies = &dep;
-
-        compositeRenderPass = device.getLogicalDevice().createRenderPass(rpInfo);
+        // Composite render pass is identical to sky render pass — share it
+        compositeRenderPass = skyRenderPass;
     }
 
     void AtmospherePipeline::createCompositeFramebuffers()

@@ -33,7 +33,7 @@ namespace render::gi
     {
         currentExtent = swapChain.getSwapchainExtent();
         traceExtent = ssgiHalfResolution
-            ? vk::Extent2D{currentExtent.width / 2, currentExtent.height / 2}
+            ? vk::Extent2D{std::max(currentExtent.width / 2, 1u), std::max(currentExtent.height / 2, 1u)}
             : currentExtent;
 
         createSampler();
@@ -147,7 +147,7 @@ namespace render::gi
         auto& dev = device.getLogicalDevice();
         currentExtent = swapChain.getSwapchainExtent();
         traceExtent = ssgiHalfResolution
-            ? vk::Extent2D{currentExtent.width / 2, currentExtent.height / 2}
+            ? vk::Extent2D{std::max(currentExtent.width / 2, 1u), std::max(currentExtent.height / 2, 1u)}
             : currentExtent;
 
         cleanupPipelines();
@@ -274,6 +274,8 @@ namespace render::gi
             // ssgiAccumImage is now in eShaderReadOnlyOptimal
 
             // Copy ssgiAccumImage to ssgiHistory[writeIdx]
+            // TODO(PERF): Eliminate this copy by double-buffering the temporal framebuffer
+            //             (render directly into history[writeIdx] instead of accum+copy).
             // Transition ssgiAccumImage: eShaderReadOnlyOptimal -> eTransferSrcOptimal
             core::ImageUtilities::transitionImageLayout(commandBuffer,
                 ssgiAccumImage,

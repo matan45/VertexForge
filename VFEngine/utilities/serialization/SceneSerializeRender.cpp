@@ -681,7 +681,10 @@ namespace serialization
                 s.rayleighScattering.z = a["rayleighScattering"][2].get<float>();
             }
             if (a.contains("rayleighDensityExpScale") && a["rayleighDensityExpScale"].is_number())
-                s.rayleighDensityExpScale = a["rayleighDensityExpScale"].get<float>();
+            {
+                float v = a["rayleighDensityExpScale"].get<float>();
+                s.rayleighDensityExpScale = (v == 0.0f) ? -1.0f / 8000.0f : v; // guard against zero from corrupted files
+            }
             if (a.contains("mieScattering") && a["mieScattering"].is_number())
                 s.mieScattering = a["mieScattering"].get<float>();
             if (a.contains("mieAbsorption") && a["mieAbsorption"].is_number())
@@ -689,7 +692,10 @@ namespace serialization
             if (a.contains("mieAnisotropy") && a["mieAnisotropy"].is_number())
                 s.mieAnisotropy = std::clamp(a["mieAnisotropy"].get<float>(), -1.0f, 1.0f);
             if (a.contains("mieDensityExpScale") && a["mieDensityExpScale"].is_number())
-                s.mieDensityExpScale = a["mieDensityExpScale"].get<float>();
+            {
+                float v = a["mieDensityExpScale"].get<float>();
+                s.mieDensityExpScale = (v == 0.0f) ? -1.0f / 1200.0f : v;
+            }
             if (a.contains("ozoneAbsorption") && a["ozoneAbsorption"].is_array() && a["ozoneAbsorption"].size() == 3)
             {
                 s.ozoneAbsorption.x = a["ozoneAbsorption"][0].get<float>();

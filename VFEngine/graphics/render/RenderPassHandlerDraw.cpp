@@ -85,7 +85,8 @@ namespace render
         {
             cloudPipeline->setCameraData(currentView, currentProjection,
                                           currentCameraPosition,
-                                          currentNearPlane, currentFarPlane);
+                                          currentNearPlane, currentFarPlane,
+                                          currentTime);
 
             if (gpuDrivenRendererInitialized)
             {
