@@ -109,6 +109,7 @@
     <ClInclude Include="asset\AssetRef.hpp" />
     <ClInclude Include="asset\AssetReferenceScanner.hpp" />
     <ClInclude Include="asset\DependencyScanner.hpp" />
+    <ClInclude Include="atmosphere\AtmosphereSettings.hpp" />
     <ClInclude Include="behaviortree\BehaviorTreeAsset.hpp" />
     <ClInclude Include="behaviortree\BehaviorTreeRuntime.hpp" />
     <ClInclude Include="behaviortree\BehaviorTreeTypes.hpp" />

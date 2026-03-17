@@ -2,6 +2,7 @@
 #include <cstdint>
 #include "../postprocess/PostProcessTypes.hpp"
 #include "../../graphics/render/gi/GITypes.hpp"
+#include "../atmosphere/AtmosphereSettings.hpp"
 
 namespace types
 {
@@ -136,6 +137,7 @@ namespace types
         VFXLODSettings vfxLOD;
         AnimationLODSettings animationLOD;
         render::gi::GISettings gi;
+        render::atmosphere::AtmosphereSettings atmosphere;
 
         static RenderSettings createDefault()
         {

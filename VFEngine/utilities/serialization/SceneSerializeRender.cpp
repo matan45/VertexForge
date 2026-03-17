@@ -635,6 +635,95 @@ namespace serialization
             if (dc.contains("shadowDistanceMultiplier") && dc["shadowDistanceMultiplier"].is_number())
                 settings.shadowDistanceMultiplier = dc["shadowDistanceMultiplier"].get<float>();
         }
+        // ---- Atmosphere helpers ----
+
+        json serializeAtmosphere(const render::atmosphere::AtmosphereSettings& s)
+        {
+            return {
+                {"enabled", s.enabled},
+                {"planetRadius", s.planetRadius},
+                {"atmosphereRadius", s.atmosphereRadius},
+                {"rayleighScattering", {s.rayleighScattering.x, s.rayleighScattering.y, s.rayleighScattering.z}},
+                {"rayleighDensityExpScale", s.rayleighDensityExpScale},
+                {"mieScattering", s.mieScattering},
+                {"mieAbsorption", s.mieAbsorption},
+                {"mieAnisotropy", s.mieAnisotropy},
+                {"mieDensityExpScale", s.mieDensityExpScale},
+                {"ozoneAbsorption", {s.ozoneAbsorption.x, s.ozoneAbsorption.y, s.ozoneAbsorption.z}},
+                {"ozoneCenterAlt", s.ozoneCenterAlt},
+                {"ozoneWidth", s.ozoneWidth},
+                {"sunIrradiance", {s.sunIrradiance.x, s.sunIrradiance.y, s.sunIrradiance.z}},
+                {"sunAngularRadius", s.sunAngularRadius},
+                {"sunAzimuth", s.sunAzimuth},
+                {"sunElevation", s.sunElevation},
+                {"groundAlbedo", {s.groundAlbedo.x, s.groundAlbedo.y, s.groundAlbedo.z}},
+                {"aerialMaxDist", s.aerialMaxDist},
+                {"aerialIntensity", s.aerialIntensity}
+            };
+        }
+
+        void deserializeAtmosphere(const json& j, render::atmosphere::AtmosphereSettings& s)
+        {
+            if (!j.contains("atmosphere") || !j["atmosphere"].is_object())
+                return;
+            const auto& a = j["atmosphere"];
+
+            if (a.contains("enabled") && a["enabled"].is_boolean())
+                s.enabled = a["enabled"].get<bool>();
+            if (a.contains("planetRadius") && a["planetRadius"].is_number())
+                s.planetRadius = a["planetRadius"].get<float>();
+            if (a.contains("atmosphereRadius") && a["atmosphereRadius"].is_number())
+                s.atmosphereRadius = a["atmosphereRadius"].get<float>();
+            if (a.contains("rayleighScattering") && a["rayleighScattering"].is_array() && a["rayleighScattering"].size() == 3)
+            {
+                s.rayleighScattering.x = a["rayleighScattering"][0].get<float>();
+                s.rayleighScattering.y = a["rayleighScattering"][1].get<float>();
+                s.rayleighScattering.z = a["rayleighScattering"][2].get<float>();
+            }
+            if (a.contains("rayleighDensityExpScale") && a["rayleighDensityExpScale"].is_number())
+                s.rayleighDensityExpScale = a["rayleighDensityExpScale"].get<float>();
+            if (a.contains("mieScattering") && a["mieScattering"].is_number())
+                s.mieScattering = a["mieScattering"].get<float>();
+            if (a.contains("mieAbsorption") && a["mieAbsorption"].is_number())
+                s.mieAbsorption = a["mieAbsorption"].get<float>();
+            if (a.contains("mieAnisotropy") && a["mieAnisotropy"].is_number())
+                s.mieAnisotropy = std::clamp(a["mieAnisotropy"].get<float>(), -1.0f, 1.0f);
+            if (a.contains("mieDensityExpScale") && a["mieDensityExpScale"].is_number())
+                s.mieDensityExpScale = a["mieDensityExpScale"].get<float>();
+            if (a.contains("ozoneAbsorption") && a["ozoneAbsorption"].is_array() && a["ozoneAbsorption"].size() == 3)
+            {
+                s.ozoneAbsorption.x = a["ozoneAbsorption"][0].get<float>();
+                s.ozoneAbsorption.y = a["ozoneAbsorption"][1].get<float>();
+                s.ozoneAbsorption.z = a["ozoneAbsorption"][2].get<float>();
+            }
+            if (a.contains("ozoneCenterAlt") && a["ozoneCenterAlt"].is_number())
+                s.ozoneCenterAlt = a["ozoneCenterAlt"].get<float>();
+            if (a.contains("ozoneWidth") && a["ozoneWidth"].is_number())
+                s.ozoneWidth = a["ozoneWidth"].get<float>();
+            if (a.contains("sunIrradiance") && a["sunIrradiance"].is_array() && a["sunIrradiance"].size() == 3)
+            {
+                s.sunIrradiance.x = a["sunIrradiance"][0].get<float>();
+                s.sunIrradiance.y = a["sunIrradiance"][1].get<float>();
+                s.sunIrradiance.z = a["sunIrradiance"][2].get<float>();
+            }
+            if (a.contains("sunAngularRadius") && a["sunAngularRadius"].is_number())
+                s.sunAngularRadius = a["sunAngularRadius"].get<float>();
+            if (a.contains("sunAzimuth") && a["sunAzimuth"].is_number())
+                s.sunAzimuth = a["sunAzimuth"].get<float>();
+            if (a.contains("sunElevation") && a["sunElevation"].is_number())
+                s.sunElevation = std::clamp(a["sunElevation"].get<float>(), -90.0f, 90.0f);
+            if (a.contains("groundAlbedo") && a["groundAlbedo"].is_array() && a["groundAlbedo"].size() == 3)
+            {
+                s.groundAlbedo.x = std::clamp(a["groundAlbedo"][0].get<float>(), 0.0f, 1.0f);
+                s.groundAlbedo.y = std::clamp(a["groundAlbedo"][1].get<float>(), 0.0f, 1.0f);
+                s.groundAlbedo.z = std::clamp(a["groundAlbedo"][2].get<float>(), 0.0f, 1.0f);
+            }
+            if (a.contains("aerialMaxDist") && a["aerialMaxDist"].is_number())
+                s.aerialMaxDist = std::max(a["aerialMaxDist"].get<float>(), 1000.0f);
+            if (a.contains("aerialIntensity") && a["aerialIntensity"].is_number())
+                s.aerialIntensity = std::clamp(a["aerialIntensity"].get<float>(), 0.0f, 5.0f);
+        }
+
     } // anonymous namespace
 
     // ---- Render Settings ----
@@ -740,6 +829,8 @@ namespace serialization
             {"lod2Interval", settings.animationLOD.lod2Interval},
             {"maxStreamingInitPerFrame", settings.animationLOD.maxStreamingInitPerFrame}
         };
+
+        j["atmosphere"] = serializeAtmosphere(settings.atmosphere);
 
         return j;
     }
@@ -850,6 +941,8 @@ namespace serialization
             if (al.contains("maxStreamingInitPerFrame") && al["maxStreamingInitPerFrame"].is_number_unsigned())
                 settings.animationLOD.maxStreamingInitPerFrame = al["maxStreamingInitPerFrame"].get<uint32_t>();
         }
+
+        deserializeAtmosphere(j, settings.atmosphere);
     }
 
     // ---- Post-Process Settings ----

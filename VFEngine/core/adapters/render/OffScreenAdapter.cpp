@@ -411,6 +411,16 @@ namespace core {
         }
     }
 
+    void OffScreenAdapter::applyAtmosphereSettings(const render::atmosphere::AtmosphereSettings& settings) {
+        if (offScreen) {
+            offScreen->applyAtmosphereSettings(settings);
+        }
+    }
+
+    render::atmosphere::AtmosphereSettings OffScreenAdapter::getAtmosphereSettings() const {
+        return offScreen ? offScreen->getAtmosphereSettings() : render::atmosphere::AtmosphereSettings{};
+    }
+
     void OffScreenAdapter::setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider) {
         if (offScreen) {
             offScreen->setVFXRuntimeProvider(provider);

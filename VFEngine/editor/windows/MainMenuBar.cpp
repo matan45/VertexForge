@@ -14,6 +14,7 @@
 #include "config/NavmeshWindow.hpp"
 #include "config/GIConfigWindow.hpp"
 #include "config/VolumetricFogConfigWindow.hpp"
+#include "config/AtmosphereConfigWindow.hpp"
 #include "config/LightStreamingDebugWindow.hpp"
 #include "AssetLifecycleWindow.hpp"
 #include "WorldSectorWindow.hpp"
@@ -268,6 +269,13 @@ namespace windows
                 if (volumetricFogConfigWindow)
                 {
                     volumetricFogConfigWindow->show();
+                }
+            }
+            else if (ImGui::MenuItem("Atmosphere"))
+            {
+                if (atmosphereConfigWindow)
+                {
+                    atmosphereConfigWindow->show();
                 }
             }
             else if (ImGui::MenuItem("Global Illumination"))

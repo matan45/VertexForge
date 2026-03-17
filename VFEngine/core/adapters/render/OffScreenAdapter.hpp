@@ -120,5 +120,8 @@ namespace core
         void setTerrainShadowLOD(uint32_t lod) override;
 
         void setUIViewportOffset(const glm::vec2& offset, const glm::vec2& panelSize) override;
+
+        void applyAtmosphereSettings(const render::atmosphere::AtmosphereSettings& settings) override;
+        render::atmosphere::AtmosphereSettings getAtmosphereSettings() const override;
     };
 }

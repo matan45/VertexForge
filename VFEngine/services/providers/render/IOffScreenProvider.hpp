@@ -242,6 +242,9 @@ namespace services {
         virtual void setTerrainShadowLOD(uint32_t lod) = 0;
 
         virtual void setUIViewportOffset(const glm::vec2& offset, const glm::vec2& panelSize) = 0;
+
+        virtual void applyAtmosphereSettings(const render::atmosphere::AtmosphereSettings& settings) = 0;
+        virtual render::atmosphere::AtmosphereSettings getAtmosphereSettings() const = 0;
     };
 
 }

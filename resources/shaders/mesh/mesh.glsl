@@ -229,9 +229,7 @@ void main() {
 
     vec3 color = ambient + emissive;
 
-    color = color / (color + vec3(1.0));
-
-    color = pow(color, vec3(1.0/2.2));
+    // Tonemapping and gamma handled by post-process pipeline
 
     outColor = vec4(color, alpha);
 }

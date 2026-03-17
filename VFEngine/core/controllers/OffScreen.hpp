@@ -12,6 +12,7 @@
 #include "terrain/BrushTypes.hpp"
 #include "postprocess/PostProcessTypes.hpp"
 #include "../../graphics/render/gi/GITypes.hpp"
+#include "atmosphere/AtmosphereSettings.hpp"
 #include "../../graphics/render/lighting/LightStreamManager.hpp"
 #include "data/RenderHookTypes.hpp"
 #include "../../graphics/render/tools/ImmediateDebugTypes.hpp"
@@ -155,6 +156,10 @@ namespace controllers
         postprocess::PostProcessSettings getPostProcessSettings() const;
         void setPostProcessEnabled(bool enabled);
         bool isPostProcessEnabled() const;
+
+        // Atmosphere settings
+        void applyAtmosphereSettings(const render::atmosphere::AtmosphereSettings& settings);
+        render::atmosphere::AtmosphereSettings getAtmosphereSettings() const;
 
         // GI settings
         void applyGISettings(const render::gi::GISettings& settings);

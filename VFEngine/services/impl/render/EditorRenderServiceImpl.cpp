@@ -3,6 +3,7 @@
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/editor/EditorModeEvents.hpp"
 #include "../../events/render/PostProcessEvents.hpp"
+#include "../../events/render/AtmosphereEvents.hpp"
 #include "scene/EntityRegistry.hpp"
 #include <filesystem>
 
@@ -228,6 +229,7 @@ namespace services
         registerCullingHandlers(dispatcher);
         registerTerrainRenderHandlers(dispatcher);
         registerPostProcessHandlers(dispatcher);
+        registerAtmosphereHandlers(dispatcher);
 
         meshDataChangedToken = dispatcher.subscribe<events::scene::MeshDataChangedNotification>(
             [this](const events::scene::MeshDataChangedNotification& notification)
@@ -728,6 +730,43 @@ namespace services
             [this](const events::postprocess::GetPostProcessEnabledQuery&)
             {
                 return postProcessProvider ? postProcessProvider->isPostProcessEnabled() : true;
+            });
+    }
+
+    void EditorRenderServiceImpl::registerAtmosphereHandlers(events::EventDispatcher& dispatcher)
+    {
+        dispatcher.registerCommandHandler<events::atmosphere::ApplyAtmosphereSettingsCommand>(
+            [this](const events::atmosphere::ApplyAtmosphereSettingsCommand& cmd)
+            {
+                if (offScreenProvider)
+                {
+                    offScreenProvider->applyAtmosphereSettings(cmd.settings);
+                }
+            });
+
+        dispatcher.registerQueryHandler<events::atmosphere::GetAtmosphereSettingsQuery>(
+            [this](const events::atmosphere::GetAtmosphereSettingsQuery&)
+            {
+                return offScreenProvider
+                           ? offScreenProvider->getAtmosphereSettings()
+                           : render::atmosphere::AtmosphereSettings{};
+            });
+
+        dispatcher.registerCommandHandler<events::atmosphere::SetAtmosphereEnabledCommand>(
+            [this](const events::atmosphere::SetAtmosphereEnabledCommand& cmd)
+            {
+                if (offScreenProvider)
+                {
+                    auto settings = offScreenProvider->getAtmosphereSettings();
+                    settings.enabled = cmd.enabled;
+                    offScreenProvider->applyAtmosphereSettings(settings);
+                }
+            });
+
+        dispatcher.registerQueryHandler<events::atmosphere::GetAtmosphereEnabledQuery>(
+            [this](const events::atmosphere::GetAtmosphereEnabledQuery&)
+            {
+                return offScreenProvider ? offScreenProvider->getAtmosphereSettings().enabled : false;
             });
     }
 

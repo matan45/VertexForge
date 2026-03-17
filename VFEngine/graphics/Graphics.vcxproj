@@ -162,6 +162,8 @@
     <ClInclude Include="render\OffScreenViewPort.hpp" />
     <ClInclude Include="render\RenderPassHandler.hpp" />
     <ClInclude Include="render\RenderTextureViewPort.hpp" />
+    <ClInclude Include="render\atmosphere\AtmospherePipeline.hpp" />
+    <ClInclude Include="render\atmosphere\AtmosphereTypes.hpp" />
     <ClInclude Include="render\billboard\BillboardAtlasManager.hpp" />
     <ClInclude Include="render\billboard\BillboardBufferManager.hpp" />
     <ClInclude Include="render\billboard\BillboardPipeline.hpp" />
@@ -390,6 +392,7 @@
     <ClCompile Include="render\RenderPassHandlerDraw.cpp" />
     <ClCompile Include="render\RenderPassHandlerPipelines.cpp" />
     <ClCompile Include="render\RenderTextureViewPort.cpp" />
+    <ClCompile Include="render\atmosphere\AtmospherePipeline.cpp" />
     <ClCompile Include="render\billboard\BillboardAtlasManager.cpp" />
     <ClCompile Include="render\billboard\BillboardBufferManager.cpp" />
     <ClCompile Include="render\billboard\BillboardPipeline.cpp" />
@@ -551,6 +554,13 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="..\..\resources\shaders\animation\bone_evaluate.glsl" />
+    <None Include="..\..\resources\shaders\atmosphere\aerial_perspective_lut.glsl" />
+    <None Include="..\..\resources\shaders\atmosphere\atmosphere_common.glsl" />
+    <None Include="..\..\resources\shaders\atmosphere\atmosphere_composite.glsl" />
+    <None Include="..\..\resources\shaders\atmosphere\atmosphere_sky.glsl" />
+    <None Include="..\..\resources\shaders\atmosphere\multiscatter_lut.glsl" />
+    <None Include="..\..\resources\shaders\atmosphere\skyview_lut.glsl" />
+    <None Include="..\..\resources\shaders\atmosphere\transmittance_lut.glsl" />
     <None Include="..\..\resources\shaders\billboard\billboard.glsl" />
     <None Include="..\..\resources\shaders\common\camera_types.glsl" />
     <None Include="..\..\resources\shaders\common\cluster_culling.glsl" />

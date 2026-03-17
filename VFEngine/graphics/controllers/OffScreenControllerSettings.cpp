@@ -9,6 +9,7 @@
 #include "../render/volumetric/VolumetricFogComposite.hpp"
 #include "../render/gi/RadianceCascadeManager.hpp"
 #include "../render/gi/SSGIPipeline.hpp"
+#include "atmosphere/AtmosphereSettings.hpp"
 #include "../render/gi/GIDebugRenderer.hpp"
 #include "offscreen/CullingStatsCollector.hpp"
 #include "offscreen/CameraController.hpp"
@@ -528,6 +529,23 @@ namespace controllers
         {
             handler->clearAdditionalWaterFrustums();
         }
+    }
+
+    // ── Atmosphere Settings ─────────────────────────────────
+
+    void OffScreenController::applyAtmosphereSettings(const render::atmosphere::AtmosphereSettings& settings)
+    {
+        currentAtmosphereSettings = settings;
+
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (!renderHandler) return;
+
+        renderHandler->applyAtmosphereSettings(settings);
+    }
+
+    render::atmosphere::AtmosphereSettings OffScreenController::getAtmosphereSettings() const
+    {
+        return currentAtmosphereSettings;
     }
 
     // ── GI Settings ──────────────────────────────────────────

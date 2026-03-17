@@ -70,5 +70,6 @@ namespace services
         void registerCullingHandlers(events::EventDispatcher& dispatcher);
         void registerTerrainRenderHandlers(events::EventDispatcher& dispatcher);
         void registerPostProcessHandlers(events::EventDispatcher& dispatcher);
+        void registerAtmosphereHandlers(events::EventDispatcher& dispatcher);
     };
 }

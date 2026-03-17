@@ -35,7 +35,6 @@ void main()
     vec3 dir = normalize(localPos);
 
     vec3 envColor = texture(environmentMap, dir).rgb;
-    envColor = pow(envColor, vec3(1.0/2.2));
     FragColor = vec4(envColor, 1.0);
 
 }

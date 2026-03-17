@@ -19,6 +19,7 @@
 #include "transparency/WBOITPipeline.hpp"
 #include "decal/DecalPipeline.hpp"
 #include "volumetric/VolumetricPipeline.hpp"
+#include "atmosphere/AtmospherePipeline.hpp"
 #include "material/MaterialTextureCache.hpp"
 #include "../../services/providers/vfx/IVFXRuntimeProvider.hpp"
 #include "../../services/providers/terrain/ITerrainRenderProvider.hpp"
@@ -200,6 +201,42 @@ namespace render
         {
             ssgiPipeline->cleanup();
             ssgiPipeline.reset();
+        }
+    }
+
+    void RenderPassHandler::initAtmosphere()
+    {
+        if (atmospherePipeline && atmospherePipeline->isInitialized())
+            return;
+
+        if (!atmospherePipeline)
+        {
+            atmospherePipeline = std::make_unique<atmosphere::AtmospherePipeline>(
+                device, swapChain, offscreenResources);
+        }
+
+        atmospherePipeline->init();
+    }
+
+    void RenderPassHandler::resetAtmosphere()
+    {
+        if (atmospherePipeline)
+        {
+            atmospherePipeline->cleanup();
+            atmospherePipeline.reset();
+        }
+    }
+
+    void RenderPassHandler::applyAtmosphereSettings(const atmosphere::AtmosphereSettings& settings)
+    {
+        if (settings.enabled)
+        {
+            initAtmosphere();
+        }
+
+        if (atmospherePipeline)
+        {
+            atmospherePipeline->updateSettings(settings);
         }
     }
 
@@ -545,6 +582,11 @@ namespace render
             ssgiPipeline->recreate();
         }
 
+        if (atmospherePipeline && atmospherePipeline->isInitialized())
+        {
+            atmospherePipeline->recreate();
+        }
+
         if (wboitPipeline && wboitPipeline->isInitialized())
         {
             wboitPipeline->recreate();
@@ -632,6 +674,11 @@ namespace render
         if (ssgiPipeline)
         {
             ssgiPipeline->cleanup();
+        }
+
+        if (atmospherePipeline)
+        {
+            atmospherePipeline->cleanup();
         }
 
         if (postProcessPipeline)

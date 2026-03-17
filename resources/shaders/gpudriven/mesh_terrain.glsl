@@ -454,9 +454,6 @@ void main() {
 
     vec3 color = ambient + directLighting + giContribution + mat_emission;
 
-    color = color / (color + vec3(1.0));
-    color = pow(color, vec3(1.0/2.2));
-
     uint viewModeValue = pc.viewMode & 0xFFu;
 
     if (viewModeValue == 1u) {

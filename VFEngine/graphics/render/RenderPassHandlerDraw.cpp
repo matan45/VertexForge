@@ -19,6 +19,7 @@
 #include "postprocess/PostProcessPipeline.hpp"
 #include "volumetric/VolumetricFogComposite.hpp"
 #include "gi/SSGIPipeline.hpp"
+#include "atmosphere/AtmospherePipeline.hpp"
 #include "transparency/WBOITPipeline.hpp"
 #include "../../services/providers/vfx/IVFXRuntimeProvider.hpp"
 #include "../../services/providers/terrain/ITerrainRenderProvider.hpp"
@@ -52,7 +53,19 @@ namespace render
     void RenderPassHandler::draw(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const
     {
         clearColor->recordCommandBuffer(commandBuffer, imageIndex);
-        iblRenderer->recordCommandBuffer(commandBuffer, imageIndex);
+
+        if (atmospherePipeline && atmospherePipeline->isEnabled())
+        {
+            atmospherePipeline->setCameraData(currentView, currentProjection,
+                                               currentCameraPosition,
+                                               currentNearPlane, currentFarPlane);
+            atmospherePipeline->dispatchCompute(commandBuffer);
+            atmospherePipeline->renderSky(commandBuffer, imageIndex);
+        }
+        else
+        {
+            iblRenderer->recordCommandBuffer(commandBuffer, imageIndex);
+        }
 
         drawSceneMeshes(commandBuffer, imageIndex);
 
@@ -60,6 +73,11 @@ namespace render
 
         drawOverlays(commandBuffer, imageIndex);
         executeOcclusionPasses(commandBuffer);
+
+        if (atmospherePipeline && atmospherePipeline->isEnabled())
+        {
+            atmospherePipeline->renderComposite(commandBuffer, imageIndex);
+        }
 
         if (volumetricFogComposite && volumetricFogComposite->isInitialized())
         {
