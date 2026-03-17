@@ -298,15 +298,18 @@ namespace render::shadow
             return false;
 
         // Determine page grid size based on light type
-        // Phase 1: use 1 page per cascade/view (no subdivision) for performance
-        // Each page = 1 physical tile (128x128). Phase 2 feedback subdivides further.
+        // Phase 1: limit pages per cascade for performance
+        // Each page = 1 physical tile (128x128). More pages = better quality but more draws.
+        static constexpr uint32_t MAX_PAGES_PER_CASCADE = 4; // 4×4 = 512×512 effective per cascade
         uint32_t pagesX, pagesY;
         if (data.type == ShadowMapType::DirectionalCSM)
         {
-            // 1 page per cascade = 1 tile per cascade
-            uint32_t pagesPerCascade = 1;
+            uint32_t pagesPerCascade = std::clamp(data.settings.resolution / vsm::PAGE_SIZE, 1u, MAX_PAGES_PER_CASCADE);
             pagesX = pagesPerCascade;
             pagesY = pagesPerCascade;
+
+            // Update resolution to match actual rendered size (fixes texel snapping)
+            data.settings.resolution = pagesPerCascade * vsm::PAGE_SIZE;
 
             for (size_t i = 0; i < data.views.size(); ++i)
             {
@@ -315,14 +318,13 @@ namespace render::shadow
                 view.type = data.type;
             }
 
-            // Total: 1 page per cascade, stacked vertically
             pagesX = pagesPerCascade;
             pagesY = pagesPerCascade * data.settings.cascadeCount;
         }
         else if (data.type == ShadowMapType::Spot2D || data.type == ShadowMapType::Directional2D)
         {
-            // 1 page for spot/directional2D
-            uint32_t pages = 1;
+            uint32_t pages = std::clamp(data.settings.resolution / vsm::PAGE_SIZE, 1u, MAX_PAGES_PER_CASCADE);
+            data.settings.resolution = pages * vsm::PAGE_SIZE;
             pagesX = pages;
             pagesY = pages;
 
@@ -372,7 +374,7 @@ namespace render::shadow
         data.vsmPageTableOffset = offset;
         data.vsmLightIndex = nextVSMLightIndex++;
         // Initialize with a future frame so pages survive warmup/eviction
-        data.vsmPageLastUsedFrame.resize(totalPages, frameCounter + EVICTION_THRESHOLD + 30);
+        data.vsmPageLastUsedFrame.resize(totalPages, frameCounter + EVICTION_THRESHOLD + 120);
 
         return true;
     }

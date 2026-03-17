@@ -1,7 +1,7 @@
 #ifndef SHADOW_SAMPLING_TYPES_GLSL
 #define SHADOW_SAMPLING_TYPES_GLSL
 
-// VSM Light Data Structure (must match GPUVSMLight in VSMTypes.hpp - 144 bytes)
+// VSM Light Data Structure (must match GPUVSMLight in VSMTypes.hpp - 128 bytes)
 struct ShadowData {
     mat4 viewProjection;
     vec4 biasParams;      // x=depthBias, y=slopeBias, z=normalBias, w=texelSize

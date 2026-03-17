@@ -50,9 +50,9 @@ namespace render
 
             // Feedback state
             std::vector<uint32_t> prevFrameFeedback;
-            bool feedbackEnabled = false; // Disabled by default; Phase 1 uses brute-force allocation
+            bool feedbackEnabled = true;
             bool feedbackHasResults = false;
-            static constexpr uint32_t EVICTION_THRESHOLD = 8; // frames before freeing unused page
+            static constexpr uint32_t EVICTION_THRESHOLD = 60; // frames before freeing unused page (~1 second at 60fps)
 
             std::unordered_map<uint32_t, LightShadowData> lightShadowData;
 

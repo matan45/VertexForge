@@ -526,27 +526,6 @@ namespace render::shadow
         applyFeedbackAllocations();
 
         buildPageRenderList();
-
-        if (frameCounter % 300 == 1)
-        {
-            vfLogInfo("VSM: {} page render entries, {} dir views, {} spot views, {} point views, {} lights",
-                      pageRenderList.size(), directionalShadowViews.size(),
-                      spotShadowViews.size(), pointShadowViews.size(), lightShadowData.size());
-            for (const auto& [entityId, data] : lightShadowData)
-            {
-                if (data.usesVSM())
-                {
-                    uint32_t allocatedPages = 0;
-                    for (auto t : data.vsmPhysicalTiles)
-                        if (t != vsm::INVALID_TILE) ++allocatedPages;
-                    vfLogInfo("  Light {} type={} pages={}x{} allocated={}/{} ptOffset={}",
-                              entityId, static_cast<int>(data.type),
-                              data.vsmPagesX, data.vsmPagesY,
-                              allocatedPages, data.vsmPhysicalTiles.size(),
-                              data.vsmPageTableOffset);
-                }
-            }
-        }
     }
 
     void ShadowSystem::uploadToGPU(vk::CommandBuffer cmd)
@@ -737,7 +716,7 @@ namespace render::shadow
             return;
 
         // Don't evict pages during warmup period (allow feedback to stabilize)
-        static constexpr uint32_t WARMUP_FRAMES = 30;
+        static constexpr uint32_t WARMUP_FRAMES = 120; // ~2 seconds at 60fps
         bool allowEviction = frameCounter > WARMUP_FRAMES;
 
         if (!tilePool || !pageTable)
