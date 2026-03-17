@@ -8,9 +8,15 @@
 #ifdef GI_ENABLED
 
 struct GIProbeData {
-    vec4 shR;
-    vec4 shG;
-    vec4 shB;
+    vec4 shR0;
+    vec4 shR1;
+    vec4 shR2;
+    vec4 shG0;
+    vec4 shG1;
+    vec4 shG2;
+    vec4 shB0;
+    vec4 shB1;
+    vec4 shB2;
     vec4 validity;
 };
 
@@ -31,16 +37,32 @@ layout(set = 11, binding = 1) readonly buffer GICascadeBuffer {
     GICascadeInfo giCascades[];
 };
 
-// SH basis evaluation
-const float GI_SH_C0 = 0.282095;
-const float GI_SH_C1 = 0.488603;
+// SH basis constants (L0 + L1 + L2)
+const float GI_SH_C0  = 0.282095;
+const float GI_SH_C1  = 0.488603;
+const float GI_SH_C2  = 1.092548;
+const float GI_SH_C20 = 0.315392;
+const float GI_SH_C22 = 0.546274;
 
 vec3 evaluateGISH(GIProbeData probe, vec3 normal) {
-    vec4 basis = vec4(GI_SH_C0, GI_SH_C1 * normal.y, GI_SH_C1 * normal.z, GI_SH_C1 * normal.x);
+    vec4 b0 = vec4(
+        GI_SH_C0,
+        GI_SH_C1 * normal.y,
+        GI_SH_C1 * normal.z,
+        GI_SH_C1 * normal.x
+    );
+    vec4 b1 = vec4(
+        GI_SH_C2  * normal.x * normal.y,
+        GI_SH_C2  * normal.y * normal.z,
+        GI_SH_C20 * (3.0 * normal.z * normal.z - 1.0),
+        GI_SH_C2  * normal.x * normal.z
+    );
+    float b2 = GI_SH_C22 * (normal.x * normal.x - normal.y * normal.y);
+
     return max(vec3(
-        dot(probe.shR, basis),
-        dot(probe.shG, basis),
-        dot(probe.shB, basis)
+        dot(probe.shR0, b0) + dot(probe.shR1, b1) + probe.shR2.x * b2,
+        dot(probe.shG0, b0) + dot(probe.shG1, b1) + probe.shG2.x * b2,
+        dot(probe.shB0, b0) + dot(probe.shB1, b1) + probe.shB2.x * b2
     ), vec3(0.0));
 }
 

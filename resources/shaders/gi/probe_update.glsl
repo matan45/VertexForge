@@ -48,9 +48,15 @@ void main() {
     const float INV_GAMMA = 1.0 / GAMMA;
 
     ProbeData encoded;
-    encoded.shR = sign(traceResult.shR) * pow(abs(traceResult.shR), vec4(INV_GAMMA));
-    encoded.shG = sign(traceResult.shG) * pow(abs(traceResult.shG), vec4(INV_GAMMA));
-    encoded.shB = sign(traceResult.shB) * pow(abs(traceResult.shB), vec4(INV_GAMMA));
+    encoded.shR0 = sign(traceResult.shR0) * pow(abs(traceResult.shR0), vec4(INV_GAMMA));
+    encoded.shR1 = sign(traceResult.shR1) * pow(abs(traceResult.shR1), vec4(INV_GAMMA));
+    encoded.shR2 = sign(traceResult.shR2) * pow(abs(traceResult.shR2), vec4(INV_GAMMA));
+    encoded.shG0 = sign(traceResult.shG0) * pow(abs(traceResult.shG0), vec4(INV_GAMMA));
+    encoded.shG1 = sign(traceResult.shG1) * pow(abs(traceResult.shG1), vec4(INV_GAMMA));
+    encoded.shG2 = sign(traceResult.shG2) * pow(abs(traceResult.shG2), vec4(INV_GAMMA));
+    encoded.shB0 = sign(traceResult.shB0) * pow(abs(traceResult.shB0), vec4(INV_GAMMA));
+    encoded.shB1 = sign(traceResult.shB1) * pow(abs(traceResult.shB1), vec4(INV_GAMMA));
+    encoded.shB2 = sign(traceResult.shB2) * pow(abs(traceResult.shB2), vec4(INV_GAMMA));
     encoded.validity = traceResult.validity;
 
     // Probe validity check: if too many backface hits, mark as invalid

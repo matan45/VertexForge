@@ -91,13 +91,16 @@ namespace render::gi
         bool isFarField = false;              // Far-field cascades use fewer rays and update slower
     };
 
-    // SH coefficients for irradiance (L0 + L1 = 4 coefficients, RGB = 12 floats)
+    // SH coefficients for irradiance (L0 + L1 + L2 = 9 coefficients per channel)
+    // Each channel uses 3 x vec4: [L0,L1y,L1z,L1x], [L2_-2,L2_-1,L2_0,L2_1], [L2_2,pad,pad,pad]
     struct alignas(16) ProbeData
     {
-        glm::vec4 shCoeffs[3];  // 3 x vec4 = L0.r,L1x.r,L1y.r,L1z.r / same for g,b
-        glm::vec4 validity;     // x=weight(0-1), y=age, z=hitBackface%, w=reserved
+        glm::vec4 shR[3];   // Red channel: 9 SH coefficients in 3 vec4
+        glm::vec4 shG[3];   // Green channel
+        glm::vec4 shB[3];   // Blue channel
+        glm::vec4 validity;  // x=weight(0-1), y=age, z=hitBackface%, w=reserved
     };
-    static_assert(sizeof(ProbeData) == 64, "ProbeData must be 64 bytes");
+    static_assert(sizeof(ProbeData) == 160, "ProbeData must be 160 bytes");
 
     struct alignas(16) GPUCascadeInfo
     {

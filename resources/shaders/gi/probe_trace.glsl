@@ -192,9 +192,9 @@ void main() {
 
     vec3 probePos = probeWorldPosition(localProbeIndex, cascade);
 
-    vec4 newShR = vec4(0.0);
-    vec4 newShG = vec4(0.0);
-    vec4 newShB = vec4(0.0);
+    vec4 newShR0 = vec4(0.0); vec4 newShR1 = vec4(0.0); vec4 newShR2 = vec4(0.0);
+    vec4 newShG0 = vec4(0.0); vec4 newShG1 = vec4(0.0); vec4 newShG2 = vec4(0.0);
+    vec4 newShB0 = vec4(0.0); vec4 newShB1 = vec4(0.0); vec4 newShB2 = vec4(0.0);
     float validHits = 0.0;
     float backfaceHits = 0.0;
 
@@ -268,21 +268,30 @@ void main() {
         hit = true;
 #endif
 
-        accumulateSH(newShR, newShG, newShB, rayDir, radiance);
+        accumulateSH(newShR0, newShR1, newShR2,
+                     newShG0, newShG1, newShG2,
+                     newShB0, newShB1, newShB2,
+                     rayDir, radiance);
         if (hit) validHits += 1.0;
     }
 
     // Normalize: integrate over sphere (4*PI solid angle)
     float invRays = 4.0 * 3.14159265 / max(float(raysPerProbe), 1.0);
-    newShR *= invRays;
-    newShG *= invRays;
-    newShB *= invRays;
+    newShR0 *= invRays; newShR1 *= invRays; newShR2 *= invRays;
+    newShG0 *= invRays; newShG1 *= invRays; newShG2 *= invRays;
+    newShB0 *= invRays; newShB1 *= invRays; newShB2 *= invRays;
 
     // Clamp SH coefficients to prevent energy blowup
     const float MAX_SH = 10.0;
-    newShR = clamp(newShR, vec4(-MAX_SH), vec4(MAX_SH));
-    newShG = clamp(newShG, vec4(-MAX_SH), vec4(MAX_SH));
-    newShB = clamp(newShB, vec4(-MAX_SH), vec4(MAX_SH));
+    newShR0 = clamp(newShR0, vec4(-MAX_SH), vec4(MAX_SH));
+    newShR1 = clamp(newShR1, vec4(-MAX_SH), vec4(MAX_SH));
+    newShR2 = clamp(newShR2, vec4(-MAX_SH), vec4(MAX_SH));
+    newShG0 = clamp(newShG0, vec4(-MAX_SH), vec4(MAX_SH));
+    newShG1 = clamp(newShG1, vec4(-MAX_SH), vec4(MAX_SH));
+    newShG2 = clamp(newShG2, vec4(-MAX_SH), vec4(MAX_SH));
+    newShB0 = clamp(newShB0, vec4(-MAX_SH), vec4(MAX_SH));
+    newShB1 = clamp(newShB1, vec4(-MAX_SH), vec4(MAX_SH));
+    newShB2 = clamp(newShB2, vec4(-MAX_SH), vec4(MAX_SH));
 
     ProbeData prevProbe = probeDataRead[globalProbeIndex];
     float blend = temporalBlend;
@@ -293,9 +302,15 @@ void main() {
     }
 
     ProbeData result;
-    result.shR = mix(newShR, prevProbe.shR, blend);
-    result.shG = mix(newShG, prevProbe.shG, blend);
-    result.shB = mix(newShB, prevProbe.shB, blend);
+    result.shR0 = mix(newShR0, prevProbe.shR0, blend);
+    result.shR1 = mix(newShR1, prevProbe.shR1, blend);
+    result.shR2 = mix(newShR2, prevProbe.shR2, blend);
+    result.shG0 = mix(newShG0, prevProbe.shG0, blend);
+    result.shG1 = mix(newShG1, prevProbe.shG1, blend);
+    result.shG2 = mix(newShG2, prevProbe.shG2, blend);
+    result.shB0 = mix(newShB0, prevProbe.shB0, blend);
+    result.shB1 = mix(newShB1, prevProbe.shB1, blend);
+    result.shB2 = mix(newShB2, prevProbe.shB2, blend);
 
     result.validity.x = mix(validHits / max(float(raysPerProbe), 1.0), prevProbe.validity.x, blend);
     result.validity.y = prevProbe.validity.y + 1.0; // Age
