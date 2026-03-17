@@ -143,6 +143,7 @@
     <ClInclude Include="events\project\SceneEvents.hpp" />
     <ClInclude Include="events\render\AtmosphereEvents.hpp" />
     <ClInclude Include="events\render\BillboardEvents.hpp" />
+    <ClInclude Include="events\render\CloudEvents.hpp" />
     <ClInclude Include="events\render\DebugDrawEvents.hpp" />
     <ClInclude Include="events\render\DecalEvents.hpp" />
     <ClInclude Include="events\render\GIEvents.hpp" />

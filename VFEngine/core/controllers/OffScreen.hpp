@@ -161,6 +161,10 @@ namespace controllers
         void applyAtmosphereSettings(const render::atmosphere::AtmosphereSettings& settings);
         render::atmosphere::AtmosphereSettings getAtmosphereSettings() const;
 
+        // Cloud settings
+        void applyCloudSettings(const render::cloud::CloudSettings& settings);
+        render::cloud::CloudSettings getCloudSettings() const;
+
         // GI settings
         void applyGISettings(const render::gi::GISettings& settings);
         render::gi::GISettings getGISettings() const;

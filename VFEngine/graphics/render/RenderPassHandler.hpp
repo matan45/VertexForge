@@ -67,6 +67,12 @@ namespace render::atmosphere
     struct AtmosphereSettings;
 }
 
+namespace render::cloud
+{
+    class CloudPipeline;
+    struct CloudSettings;
+}
+
 namespace render
 {
     class ClearColor;
@@ -127,6 +133,7 @@ namespace render
         std::unique_ptr<volumetric::VolumetricFogComposite> volumetricFogComposite;
         std::unique_ptr<gi::SSGIPipeline> ssgiPipeline;
         std::unique_ptr<atmosphere::AtmospherePipeline> atmospherePipeline;
+        std::unique_ptr<cloud::CloudPipeline> cloudPipeline;
         std::unique_ptr<transparency::WBOITPipeline> wboitPipeline;
         bool wboitEnabled = true;
 
@@ -365,6 +372,11 @@ namespace render
         void resetAtmosphere();
         void applyAtmosphereSettings(const atmosphere::AtmosphereSettings& settings);
         atmosphere::AtmospherePipeline* getAtmospherePipeline() const { return atmospherePipeline.get(); }
+
+        void initCloud();
+        void resetCloud();
+        void applyCloudSettings(const cloud::CloudSettings& settings);
+        cloud::CloudPipeline* getCloudPipeline() const { return cloudPipeline.get(); }
 
         void cleanUp() const;
 

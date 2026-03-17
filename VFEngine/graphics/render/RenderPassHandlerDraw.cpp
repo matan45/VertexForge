@@ -20,6 +20,7 @@
 #include "volumetric/VolumetricFogComposite.hpp"
 #include "gi/SSGIPipeline.hpp"
 #include "atmosphere/AtmospherePipeline.hpp"
+#include "cloud/CloudPipeline.hpp"
 #include "transparency/WBOITPipeline.hpp"
 #include "../../services/providers/vfx/IVFXRuntimeProvider.hpp"
 #include "../../services/providers/terrain/ITerrainRenderProvider.hpp"
@@ -77,6 +78,27 @@ namespace render
         else
         {
             iblRenderer->recordCommandBuffer(commandBuffer, imageIndex);
+        }
+
+        // Cloud compute (raymarch + temporal reprojection)
+        if (cloudPipeline && cloudPipeline->isEnabled())
+        {
+            cloudPipeline->setCameraData(currentView, currentProjection,
+                                          currentCameraPosition,
+                                          currentNearPlane, currentFarPlane);
+
+            if (gpuDrivenRendererInitialized)
+            {
+                auto* lbm = gpuDrivenRenderer->getLightBufferManager();
+                auto sunDir = lbm->getFirstDirectionalLightDirection();
+                if (sunDir)
+                {
+                    cloudPipeline->setSunDirection(*sunDir);
+                }
+            }
+
+            cloudPipeline->dispatchCompute(commandBuffer);
+            cloudPipeline->renderComposite(commandBuffer, imageIndex);
         }
 
         drawSceneMeshes(commandBuffer, imageIndex);

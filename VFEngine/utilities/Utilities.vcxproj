@@ -114,6 +114,7 @@
     <ClInclude Include="behaviortree\BehaviorTreeRuntime.hpp" />
     <ClInclude Include="behaviortree\BehaviorTreeTypes.hpp" />
     <ClInclude Include="behaviortree\Blackboard.hpp" />
+    <ClInclude Include="cloud\CloudSettings.hpp" />
     <ClInclude Include="components\Components.hpp" />
     <ClInclude Include="components\ControllerComponents.hpp" />
     <ClInclude Include="components\CoreComponents.hpp" />

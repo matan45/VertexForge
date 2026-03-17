@@ -15,6 +15,7 @@
 #include "config/GIConfigWindow.hpp"
 #include "config/VolumetricFogConfigWindow.hpp"
 #include "config/AtmosphereConfigWindow.hpp"
+#include "config/CloudConfigWindow.hpp"
 #include "config/LightStreamingDebugWindow.hpp"
 #include "AssetLifecycleWindow.hpp"
 #include "WorldSectorWindow.hpp"
@@ -276,6 +277,13 @@ namespace windows
                 if (atmosphereConfigWindow)
                 {
                     atmosphereConfigWindow->show();
+                }
+            }
+            else if (ImGui::MenuItem("Clouds"))
+            {
+                if (cloudConfigWindow)
+                {
+                    cloudConfigWindow->show();
                 }
             }
             else if (ImGui::MenuItem("Global Illumination"))

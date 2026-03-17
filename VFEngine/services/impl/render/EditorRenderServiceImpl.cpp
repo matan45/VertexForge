@@ -4,6 +4,7 @@
 #include "../../events/editor/EditorModeEvents.hpp"
 #include "../../events/render/PostProcessEvents.hpp"
 #include "../../events/render/AtmosphereEvents.hpp"
+#include "../../events/render/CloudEvents.hpp"
 #include "../../events/scene/EntityTransformEvents.hpp"
 #include "../../events/scene/ComponentPhysicsLightEvents.hpp"
 #include "scene/EntityRegistry.hpp"
@@ -233,6 +234,7 @@ namespace services
         registerTerrainRenderHandlers(dispatcher);
         registerPostProcessHandlers(dispatcher);
         registerAtmosphereHandlers(dispatcher);
+        registerCloudHandlers(dispatcher);
 
         meshDataChangedToken = dispatcher.subscribe<events::scene::MeshDataChangedNotification>(
             [this](const events::scene::MeshDataChangedNotification& notification)
@@ -819,6 +821,42 @@ namespace services
             [this](const events::atmosphere::GetAtmosphereEnabledQuery&)
             {
                 return offScreenProvider ? offScreenProvider->getAtmosphereSettings().enabled : false;
+            });
+    }
+
+    void EditorRenderServiceImpl::registerCloudHandlers(events::EventDispatcher& dispatcher)
+    {
+        dispatcher.registerCommandHandler<events::cloud::ApplyCloudSettingsCommand>(
+            [this](const events::cloud::ApplyCloudSettingsCommand& cmd)
+            {
+                if (offScreenProvider)
+                {
+                    offScreenProvider->applyCloudSettings(cmd.settings);
+                }
+            });
+
+        dispatcher.registerQueryHandler<events::cloud::GetCloudSettingsQuery>(
+            [this](const events::cloud::GetCloudSettingsQuery&)
+            {
+                return offScreenProvider ? offScreenProvider->getCloudSettings()
+                                         : render::cloud::CloudSettings{};
+            });
+
+        dispatcher.registerCommandHandler<events::cloud::SetCloudEnabledCommand>(
+            [this](const events::cloud::SetCloudEnabledCommand& cmd)
+            {
+                if (offScreenProvider)
+                {
+                    auto settings = offScreenProvider->getCloudSettings();
+                    settings.enabled = cmd.enabled;
+                    offScreenProvider->applyCloudSettings(settings);
+                }
+            });
+
+        dispatcher.registerQueryHandler<events::cloud::GetCloudEnabledQuery>(
+            [this](const events::cloud::GetCloudEnabledQuery&)
+            {
+                return offScreenProvider ? offScreenProvider->getCloudSettings().enabled : false;
             });
     }
 

@@ -20,6 +20,7 @@
 #include "decal/DecalPipeline.hpp"
 #include "volumetric/VolumetricPipeline.hpp"
 #include "atmosphere/AtmospherePipeline.hpp"
+#include "cloud/CloudPipeline.hpp"
 #include "material/MaterialTextureCache.hpp"
 #include "../../services/providers/vfx/IVFXRuntimeProvider.hpp"
 #include "../../services/providers/terrain/ITerrainRenderProvider.hpp"
@@ -237,6 +238,48 @@ namespace render
         if (atmospherePipeline)
         {
             atmospherePipeline->updateSettings(settings);
+        }
+    }
+
+    void RenderPassHandler::initCloud()
+    {
+        if (cloudPipeline && cloudPipeline->isInitialized())
+            return;
+
+        if (!cloudPipeline)
+        {
+            cloudPipeline = std::make_unique<cloud::CloudPipeline>(
+                device, swapChain, offscreenResources);
+        }
+
+        // Wire atmosphere pipeline for transmittance LUT access
+        if (atmospherePipeline)
+        {
+            cloudPipeline->setAtmospherePipeline(atmospherePipeline.get());
+        }
+
+        cloudPipeline->init();
+    }
+
+    void RenderPassHandler::resetCloud()
+    {
+        if (cloudPipeline)
+        {
+            cloudPipeline->cleanup();
+            cloudPipeline.reset();
+        }
+    }
+
+    void RenderPassHandler::applyCloudSettings(const cloud::CloudSettings& settings)
+    {
+        if (settings.enabled)
+        {
+            initCloud();
+        }
+
+        if (cloudPipeline)
+        {
+            cloudPipeline->updateSettings(settings);
         }
     }
 
@@ -585,6 +628,11 @@ namespace render
         if (atmospherePipeline && atmospherePipeline->isInitialized())
         {
             atmospherePipeline->recreate();
+        }
+
+        if (cloudPipeline && cloudPipeline->isInitialized())
+        {
+            cloudPipeline->recreate();
         }
 
         if (wboitPipeline && wboitPipeline->isInitialized())

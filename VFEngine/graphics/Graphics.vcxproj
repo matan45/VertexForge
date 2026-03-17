@@ -168,6 +168,12 @@
     <ClInclude Include="render\billboard\BillboardBufferManager.hpp" />
     <ClInclude Include="render\billboard\BillboardPipeline.hpp" />
     <ClInclude Include="render\billboard\BillboardTypes.hpp" />
+    <ClInclude Include="render\cloud\CloudComposite.hpp" />
+    <ClInclude Include="render\cloud\CloudNoise.hpp" />
+    <ClInclude Include="render\cloud\CloudPipeline.hpp" />
+    <ClInclude Include="render\cloud\CloudRayMarch.hpp" />
+    <ClInclude Include="render\cloud\CloudTemporal.hpp" />
+    <ClInclude Include="render\cloud\CloudTypes.hpp" />
     <ClInclude Include="render\common\QuadBufferManager.hpp" />
     <ClInclude Include="render\decal\DecalPipeline.hpp" />
     <ClInclude Include="render\gi\AccelerationStructureManager.hpp" />
@@ -396,6 +402,11 @@
     <ClCompile Include="render\billboard\BillboardAtlasManager.cpp" />
     <ClCompile Include="render\billboard\BillboardBufferManager.cpp" />
     <ClCompile Include="render\billboard\BillboardPipeline.cpp" />
+    <ClCompile Include="render\cloud\CloudComposite.cpp" />
+    <ClCompile Include="render\cloud\CloudNoise.cpp" />
+    <ClCompile Include="render\cloud\CloudPipeline.cpp" />
+    <ClCompile Include="render\cloud\CloudRayMarch.cpp" />
+    <ClCompile Include="render\cloud\CloudTemporal.cpp" />
     <ClCompile Include="render\decal\DecalPipeline.cpp" />
     <ClCompile Include="render\gi\AccelerationStructureManager.cpp" />
     <ClCompile Include="render\gi\GIDebugRenderer.cpp" />
@@ -563,6 +574,12 @@
     <None Include="..\..\resources\shaders\atmosphere\skyview_lut.glsl" />
     <None Include="..\..\resources\shaders\atmosphere\transmittance_lut.glsl" />
     <None Include="..\..\resources\shaders\billboard\billboard.glsl" />
+    <None Include="..\..\resources\shaders\cloud\cloud_common.glsl" />
+    <None Include="..\..\resources\shaders\cloud\cloud_composite.glsl" />
+    <None Include="..\..\resources\shaders\cloud\cloud_noise_gen.glsl" />
+    <None Include="..\..\resources\shaders\cloud\cloud_raymarch.glsl" />
+    <None Include="..\..\resources\shaders\cloud\cloud_temporal.glsl" />
+    <None Include="..\..\resources\shaders\cloud\cloud_weather_gen.glsl" />
     <None Include="..\..\resources\shaders\common\camera_types.glsl" />
     <None Include="..\..\resources\shaders\common\cluster_culling.glsl" />
     <None Include="..\..\resources\shaders\common\gi_sampling.glsl" />

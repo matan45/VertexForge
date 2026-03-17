@@ -159,6 +159,7 @@
     <ClInclude Include="windows\audio\AudioMixerWindow.hpp" />
     <ClInclude Include="windows\config\AtmosphereConfigWindow.hpp" />
     <ClInclude Include="windows\config\AudioConfigWindow.hpp" />
+    <ClInclude Include="windows\config\CloudConfigWindow.hpp" />
     <ClInclude Include="windows\config\CullingStatsWindow.hpp" />
     <ClInclude Include="windows\config\EditorCameraWindow.hpp" />
     <ClInclude Include="windows\config\GIConfigWindow.hpp" />
@@ -312,6 +313,7 @@
     <ClCompile Include="windows\audio\AudioMixerWindow.cpp" />
     <ClCompile Include="windows\config\AtmosphereConfigWindow.cpp" />
     <ClCompile Include="windows\config\AudioConfigWindow.cpp" />
+    <ClCompile Include="windows\config\CloudConfigWindow.cpp" />
     <ClCompile Include="windows\config\CullingStatsWindow.cpp" />
     <ClCompile Include="windows\config\EditorCameraWindow.cpp" />
     <ClCompile Include="windows\config\GIConfigWindow.cpp" />

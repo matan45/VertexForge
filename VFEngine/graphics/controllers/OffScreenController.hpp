@@ -8,6 +8,7 @@
 #include "postprocess/PostProcessTypes.hpp"
 #include "../render/gi/GITypes.hpp"
 #include "atmosphere/AtmosphereSettings.hpp"
+#include "cloud/CloudSettings.hpp"
 #include "../render/lighting/LightStreamManager.hpp"
 #include "../render/tools/ImmediateDebugTypes.hpp"
 #include "../../services/providers/render/IDecalRenderProvider.hpp"
@@ -95,6 +96,7 @@ namespace controllers
         postprocess::PostProcessSettings currentPostProcessSettings;
         postprocess::VolumetricQuality activeVolumetricQuality = postprocess::VolumetricQuality::Medium;
         render::atmosphere::AtmosphereSettings currentAtmosphereSettings;
+        render::cloud::CloudSettings currentCloudSettings;
 
     public:
         explicit OffScreenController();
@@ -253,6 +255,10 @@ namespace controllers
         // Atmosphere settings
         void applyAtmosphereSettings(const render::atmosphere::AtmosphereSettings& settings);
         render::atmosphere::AtmosphereSettings getAtmosphereSettings() const;
+
+        // Cloud settings
+        void applyCloudSettings(const render::cloud::CloudSettings& settings);
+        render::cloud::CloudSettings getCloudSettings() const;
 
         // Light streaming settings
         void setLightStreamingConfig(const render::lighting::LightStreamingConfig& config);

@@ -159,6 +159,10 @@ namespace render::atmosphere
         [[nodiscard]] bool isEnabled() const { return enabled && initialized; }
         [[nodiscard]] bool isInitialized() const { return initialized; }
 
+        // Expose transmittance LUT for cloud lighting
+        [[nodiscard]] vk::ImageView getTransmittanceView() const { return transmittanceView; }
+        [[nodiscard]] vk::Sampler getLUTSampler() const { return lutSampler; }
+
     private:
         void createSampler();
         void createParamsBuffer();

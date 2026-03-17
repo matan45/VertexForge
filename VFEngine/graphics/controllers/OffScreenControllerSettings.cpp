@@ -10,6 +10,7 @@
 #include "../render/gi/RadianceCascadeManager.hpp"
 #include "../render/gi/SSGIPipeline.hpp"
 #include "atmosphere/AtmosphereSettings.hpp"
+#include "cloud/CloudSettings.hpp"
 #include "../render/gi/GIDebugRenderer.hpp"
 #include "offscreen/CullingStatsCollector.hpp"
 #include "offscreen/CameraController.hpp"
@@ -546,6 +547,23 @@ namespace controllers
     render::atmosphere::AtmosphereSettings OffScreenController::getAtmosphereSettings() const
     {
         return currentAtmosphereSettings;
+    }
+
+    // ── Cloud Settings ──────────────────────────────────────
+
+    void OffScreenController::applyCloudSettings(const render::cloud::CloudSettings& settings)
+    {
+        currentCloudSettings = settings;
+
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (!renderHandler) return;
+
+        renderHandler->applyCloudSettings(settings);
+    }
+
+    render::cloud::CloudSettings OffScreenController::getCloudSettings() const
+    {
+        return currentCloudSettings;
     }
 
     // ── GI Settings ──────────────────────────────────────────

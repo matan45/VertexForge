@@ -724,6 +724,80 @@ namespace serialization
                 s.aerialIntensity = std::clamp(a["aerialIntensity"].get<float>(), 0.0f, 5.0f);
         }
 
+        json serializeCloud(const render::cloud::CloudSettings& s)
+        {
+            return {
+                {"enabled", s.enabled},
+                {"cloudMinAltitude", s.cloudMinAltitude},
+                {"cloudMaxAltitude", s.cloudMaxAltitude},
+                {"globalDensity", s.globalDensity},
+                {"globalCoverage", s.globalCoverage},
+                {"cloudType", s.cloudType},
+                {"shapeScale", s.shapeScale},
+                {"detailScale", s.detailScale},
+                {"erosionStrength", s.erosionStrength},
+                {"curlStrength", s.curlStrength},
+                {"windSpeed", s.windSpeed},
+                {"windDirectionDeg", s.windDirectionDeg},
+                {"lightAbsorption", s.lightAbsorption},
+                {"phaseForward", s.phaseForward},
+                {"phaseBackward", s.phaseBackward},
+                {"phaseBlend", s.phaseBlend},
+                {"ambientIntensity", s.ambientIntensity},
+                {"temporalBlendFactor", s.temporalBlendFactor},
+                {"maxMarchSteps", s.maxMarchSteps},
+                {"lightMarchSteps", s.lightMarchSteps}
+            };
+        }
+
+        void deserializeCloud(const json& j, render::cloud::CloudSettings& s)
+        {
+            if (!j.contains("cloud") || !j["cloud"].is_object())
+                return;
+            const auto& c = j["cloud"];
+
+            if (c.contains("enabled") && c["enabled"].is_boolean())
+                s.enabled = c["enabled"].get<bool>();
+            if (c.contains("cloudMinAltitude") && c["cloudMinAltitude"].is_number())
+                s.cloudMinAltitude = c["cloudMinAltitude"].get<float>();
+            if (c.contains("cloudMaxAltitude") && c["cloudMaxAltitude"].is_number())
+                s.cloudMaxAltitude = c["cloudMaxAltitude"].get<float>();
+            if (c.contains("globalDensity") && c["globalDensity"].is_number())
+                s.globalDensity = std::clamp(c["globalDensity"].get<float>(), 0.0f, 1.0f);
+            if (c.contains("globalCoverage") && c["globalCoverage"].is_number())
+                s.globalCoverage = std::clamp(c["globalCoverage"].get<float>(), 0.0f, 1.0f);
+            if (c.contains("cloudType") && c["cloudType"].is_number())
+                s.cloudType = std::clamp(c["cloudType"].get<float>(), 0.0f, 1.0f);
+            if (c.contains("shapeScale") && c["shapeScale"].is_number())
+                s.shapeScale = c["shapeScale"].get<float>();
+            if (c.contains("detailScale") && c["detailScale"].is_number())
+                s.detailScale = c["detailScale"].get<float>();
+            if (c.contains("erosionStrength") && c["erosionStrength"].is_number())
+                s.erosionStrength = std::clamp(c["erosionStrength"].get<float>(), 0.0f, 1.0f);
+            if (c.contains("curlStrength") && c["curlStrength"].is_number())
+                s.curlStrength = std::clamp(c["curlStrength"].get<float>(), 0.0f, 1.0f);
+            if (c.contains("windSpeed") && c["windSpeed"].is_number())
+                s.windSpeed = c["windSpeed"].get<float>();
+            if (c.contains("windDirectionDeg") && c["windDirectionDeg"].is_number())
+                s.windDirectionDeg = c["windDirectionDeg"].get<float>();
+            if (c.contains("lightAbsorption") && c["lightAbsorption"].is_number())
+                s.lightAbsorption = std::clamp(c["lightAbsorption"].get<float>(), 0.0f, 2.0f);
+            if (c.contains("phaseForward") && c["phaseForward"].is_number())
+                s.phaseForward = std::clamp(c["phaseForward"].get<float>(), 0.0f, 1.0f);
+            if (c.contains("phaseBackward") && c["phaseBackward"].is_number())
+                s.phaseBackward = std::clamp(c["phaseBackward"].get<float>(), -1.0f, 0.0f);
+            if (c.contains("phaseBlend") && c["phaseBlend"].is_number())
+                s.phaseBlend = std::clamp(c["phaseBlend"].get<float>(), 0.0f, 1.0f);
+            if (c.contains("ambientIntensity") && c["ambientIntensity"].is_number())
+                s.ambientIntensity = std::clamp(c["ambientIntensity"].get<float>(), 0.0f, 2.0f);
+            if (c.contains("temporalBlendFactor") && c["temporalBlendFactor"].is_number())
+                s.temporalBlendFactor = std::clamp(c["temporalBlendFactor"].get<float>(), 0.0f, 1.0f);
+            if (c.contains("maxMarchSteps") && c["maxMarchSteps"].is_number_unsigned())
+                s.maxMarchSteps = std::clamp(c["maxMarchSteps"].get<uint32_t>(), 16u, 256u);
+            if (c.contains("lightMarchSteps") && c["lightMarchSteps"].is_number_unsigned())
+                s.lightMarchSteps = std::clamp(c["lightMarchSteps"].get<uint32_t>(), 2u, 16u);
+        }
+
     } // anonymous namespace
 
     // ---- Render Settings ----
@@ -831,6 +905,7 @@ namespace serialization
         };
 
         j["atmosphere"] = serializeAtmosphere(settings.atmosphere);
+        j["cloud"] = serializeCloud(settings.cloud);
 
         return j;
     }
@@ -943,6 +1018,7 @@ namespace serialization
         }
 
         deserializeAtmosphere(j, settings.atmosphere);
+        deserializeCloud(j, settings.cloud);
     }
 
     // ---- Post-Process Settings ----

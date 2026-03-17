@@ -123,5 +123,8 @@ namespace core
 
         void applyAtmosphereSettings(const render::atmosphere::AtmosphereSettings& settings) override;
         render::atmosphere::AtmosphereSettings getAtmosphereSettings() const override;
+
+        void applyCloudSettings(const render::cloud::CloudSettings& settings) override;
+        render::cloud::CloudSettings getCloudSettings() const override;
     };
 }

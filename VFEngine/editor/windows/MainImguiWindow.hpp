@@ -25,6 +25,7 @@
 #include "config/GIConfigWindow.hpp"
 #include "config/VolumetricFogConfigWindow.hpp"
 #include "config/AtmosphereConfigWindow.hpp"
+#include "config/CloudConfigWindow.hpp"
 #include "config/LightStreamingDebugWindow.hpp"
 #include "PluginManagerWindow.hpp"
 #include "config/InputActionMappingWindow.hpp"
@@ -69,6 +70,7 @@ namespace windows
         GIConfigWindow giConfigWindow;
         VolumetricFogConfigWindow volumetricFogConfigWindow;
         AtmosphereConfigWindow atmosphereConfigWindow;
+        CloudConfigWindow cloudConfigWindow;
         LightStreamingDebugWindow lightStreamingDebugWindow;
         PluginManagerWindow pluginManagerWindow;
         InputActionMappingWindow inputActionMappingWindow;

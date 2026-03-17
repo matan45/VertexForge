@@ -73,5 +73,6 @@ namespace services
         void registerTerrainRenderHandlers(events::EventDispatcher& dispatcher);
         void registerPostProcessHandlers(events::EventDispatcher& dispatcher);
         void registerAtmosphereHandlers(events::EventDispatcher& dispatcher);
+        void registerCloudHandlers(events::EventDispatcher& dispatcher);
     };
 }

@@ -16,6 +16,7 @@
 #include "../../events/audio/AudioSettingsEvents.hpp"
 #include "../../events/render/PostProcessEvents.hpp"
 #include "../../events/render/AtmosphereEvents.hpp"
+#include "../../events/render/CloudEvents.hpp"
 #include "../../events/navmesh/NavmeshEvents.hpp"
 #include <functional>
 #include <fstream>
@@ -137,6 +138,10 @@ namespace services
         events::atmosphere::ApplyAtmosphereSettingsCommand atmosphereCmd;
         atmosphereCmd.settings = sceneGraph->getRenderSettings().atmosphere;
         dispatcher.execute(atmosphereCmd);
+
+        events::cloud::ApplyCloudSettingsCommand cloudCmd;
+        cloudCmd.settings = sceneGraph->getRenderSettings().cloud;
+        dispatcher.execute(cloudCmd);
 
         if (entityStateService)
         {
@@ -347,6 +352,14 @@ namespace services
             events::postprocess::ApplyPostProcessSettingsCommand postProcessCmd;
             postProcessCmd.settings = sceneGraph->getRenderSettings().postProcess;
             dispatcher.execute(postProcessCmd);
+
+            events::atmosphere::ApplyAtmosphereSettingsCommand atmosphereCmd;
+            atmosphereCmd.settings = sceneGraph->getRenderSettings().atmosphere;
+            dispatcher.execute(atmosphereCmd);
+
+            events::cloud::ApplyCloudSettingsCommand cloudCmd;
+            cloudCmd.settings = sceneGraph->getRenderSettings().cloud;
+            dispatcher.execute(cloudCmd);
 
             events::scene::SceneLoadedNotification notification;
             notification.scenePath = filePath;

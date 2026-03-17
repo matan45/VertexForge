@@ -245,6 +245,9 @@ namespace services {
 
         virtual void applyAtmosphereSettings(const render::atmosphere::AtmosphereSettings& settings) = 0;
         virtual render::atmosphere::AtmosphereSettings getAtmosphereSettings() const = 0;
+
+        virtual void applyCloudSettings(const render::cloud::CloudSettings& settings) = 0;
+        virtual render::cloud::CloudSettings getCloudSettings() const = 0;
     };
 
 }
