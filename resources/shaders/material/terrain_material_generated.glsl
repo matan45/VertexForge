@@ -1,6 +1,6 @@
 // Generated terrain material shader code
 // Generated terrain material code
-// Per-tile palette: 4 channels with runtime indirection into palette of 2 layer(s)
+// Per-tile palette: 4 channels with runtime indirection into palette of 1 layer(s)
 vec3 ls_Albedo = vec3(0.0);
 vec3 ls_Normal = vec3(0.0);
 float ls_Roughness = 0.0;

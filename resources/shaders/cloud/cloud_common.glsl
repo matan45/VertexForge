@@ -132,6 +132,30 @@ float heightGradient(float heightFrac, float cloudType)
 }
 
 // ──────────────────────────────────────────────────────────────
+// Curl noise (divergence-free turbulence displacement)
+// ──────────────────────────────────────────────────────────────
+
+vec3 curlNoise(vec3 p)
+{
+    float e = 0.1;
+
+    // Partial derivatives of noise via finite differences
+    float nx0 = perlinNoise3D(p + vec3(e, 0, 0));
+    float nx1 = perlinNoise3D(p - vec3(e, 0, 0));
+    float ny0 = perlinNoise3D(p + vec3(0, e, 0));
+    float ny1 = perlinNoise3D(p - vec3(0, e, 0));
+    float nz0 = perlinNoise3D(p + vec3(0, 0, e));
+    float nz1 = perlinNoise3D(p - vec3(0, 0, e));
+
+    // Curl = cross product of gradient
+    float dydz = (ny0 - ny1) - (nz0 - nz1);
+    float dzdx = (nz0 - nz1) - (nx0 - nx1);
+    float dxdy = (nx0 - nx1) - (ny0 - ny1);
+
+    return vec3(dydz, dzdx, dxdy) / (2.0 * e);
+}
+
+// ──────────────────────────────────────────────────────────────
 // Ray-sphere intersection
 // ──────────────────────────────────────────────────────────────
 

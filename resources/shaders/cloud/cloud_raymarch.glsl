@@ -116,7 +116,18 @@ float sampleCloudDensity(vec3 worldPos, float heightFrac, bool detailPass)
     // Detail noise (high frequency erosion) - only for fine march steps
     if (detailPass && density > 0.01)
     {
-        vec3 detailUV = samplePos * params.cloudShaping.y;
+        // Curl noise distortion: warps the detail sample position
+        // Creates turbulent, swirly shapes at cloud edges
+        float curlStrength = params.cloudShaping.w;
+        vec3 curlOffset = vec3(0.0);
+        if (curlStrength > 0.01)
+        {
+            curlOffset = curlNoise(samplePos * params.cloudShaping.y * 0.5) * curlStrength * 300.0;
+            // Stronger curl at cloud tops where turbulence is greater
+            curlOffset *= (0.3 + 0.7 * heightFrac);
+        }
+
+        vec3 detailUV = (samplePos + curlOffset) * params.cloudShaping.y;
         vec4 detailNoise = texture(detailNoiseTex, detailUV);
         float detailFBM = detailNoise.a;
 
