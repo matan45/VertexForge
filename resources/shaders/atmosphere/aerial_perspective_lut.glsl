@@ -37,11 +37,10 @@ void main()
     vec2 screenUV = (vec2(texelCoord.xy) + 0.5) / vec2(lutSize.xy);
     float depthFrac = (float(texelCoord.z) + 0.5) / float(lutSize.z);
 
-    // Reconstruct view ray from screen UV
+    // Reconstruct view ray: unproject screen pixel to world, subtract camera pos
     vec2 ndc = screenUV * 2.0 - 1.0;
-    vec4 clipFar  = params.invViewProjection * vec4(ndc, 0.0, 1.0);
-    vec4 clipNear = params.invViewProjection * vec4(ndc, 1.0, 1.0);
-    vec3 viewDir = normalize(clipFar.xyz / clipFar.w - clipNear.xyz / clipNear.w);
+    vec4 worldTarget = params.invViewProjection * vec4(ndc, 0.0, 1.0);
+    vec3 viewDir = normalize(worldTarget.xyz / worldTarget.w - params.cameraPosition.xyz);
 
     float maxDist = params.screenParams.z; // aerialMaxDist
     float rayDist = depthFrac * depthFrac * maxDist;

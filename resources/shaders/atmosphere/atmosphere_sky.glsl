@@ -22,11 +22,10 @@ layout(std140, set = 0, binding = 2) uniform AtmosphereParams {
 
 void main()
 {
-    // Reconstruct view direction from screen UV via inverse VP
+    // Reconstruct view direction: unproject screen pixel to world, subtract camera pos
     vec2 ndc = texCoord * 2.0 - 1.0;
-    vec4 clipFar  = params.invViewProjection * vec4(ndc, 0.0, 1.0);
-    vec4 clipNear = params.invViewProjection * vec4(ndc, 1.0, 1.0);
-    vec3 viewDir = normalize(clipFar.xyz / clipFar.w - clipNear.xyz / clipNear.w);
+    vec4 worldTarget = params.invViewProjection * vec4(ndc, 0.0, 1.0);
+    vec3 viewDir = normalize(worldTarget.xyz / worldTarget.w - params.cameraPosition.xyz);
 
     float altitude = params.cameraPosition.w;
     float pRadius = params.planetParams.x;
