@@ -421,6 +421,12 @@ namespace render::mesh
             return false;
         }
 
+        if (!texture->getImageView())
+        {
+            vfLogWarning("Failed to load texture '{}': image view is null after load", path);
+            return false;
+        }
+
         const auto& imgData = texture->getImageData();
         vfLogInfo("Loaded material texture: {} ({}x{}, {} mip levels)", path,
                    imgData.width, imgData.height, imgData.mipLevels);
