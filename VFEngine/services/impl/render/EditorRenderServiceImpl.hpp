@@ -5,6 +5,7 @@
 #include "../../providers/render/IOffScreenProvider.hpp"
 #include "../../providers/render/IEditorTextureProvider.hpp"
 #include "../../providers/render/IPostProcessProvider.hpp"
+#include "../../data/EntityHandle.hpp"
 #include <unordered_map>
 
 namespace events
@@ -30,6 +31,7 @@ namespace services
         std::unordered_map<void*, EditorTextureHandle> loadedTextures;
         events::SubscriptionToken meshDataChangedToken;
         events::SubscriptionToken editorModeChangedToken;
+        EntityHandle autoCreatedSunEntity;  // tracks auto-created Sun for cleanup
 
     public:
         explicit EditorRenderServiceImpl(IOffScreenProvider* offScreenProvider,

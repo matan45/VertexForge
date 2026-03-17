@@ -746,6 +746,17 @@ namespace services
                     offScreenProvider->applyAtmosphereSettings(cmd.settings);
                 }
 
+                // Reset stale handle if entity was deleted (e.g. scene clear)
+                if (autoCreatedSunEntity.isValid())
+                {
+                    auto& registry = scene::EntityRegistry::getRegistry();
+                    auto entity = static_cast<entt::entity>(static_cast<uint32_t>(autoCreatedSunEntity.id));
+                    if (!registry.valid(entity))
+                    {
+                        autoCreatedSunEntity = {};
+                    }
+                }
+
                 // Auto-create a directional light ("Sun") if enabling and none exists
                 if (cmd.settings.enabled)
                 {
@@ -770,7 +781,18 @@ namespace services
                         xformCmd.transform.rotation = {-cmd.settings.sunElevation, cmd.settings.sunAzimuth, 0.0f};
                         xformCmd.transform.scale = {1.0f, 1.0f, 1.0f};
                         disp.execute(xformCmd);
+
+                        autoCreatedSunEntity = handle;
                     }
+                }
+                // Remove auto-created Sun when disabling
+                else if (autoCreatedSunEntity.isValid())
+                {
+                    auto& disp = events::EventDispatcher::instance();
+                    events::scene::DeleteEntityCommand deleteCmd;
+                    deleteCmd.entity = autoCreatedSunEntity;
+                    disp.execute(deleteCmd);
+                    autoCreatedSunEntity = {};
                 }
             });
 
