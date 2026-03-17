@@ -159,13 +159,16 @@ namespace windows
         if (ImGui::DragFloat3("Irradiance", &settings.sunIrradiance.x, 0.01f, 0.0f, 10.0f, "%.4f"))
             isDirty = true;
 
-        if (ImGui::SliderFloat("Azimuth", &settings.sunAzimuth, 0.0f, 360.0f, "%.1f deg"))
+        ImGui::TextDisabled("Sun direction is driven by the Directional Light in the scene.");
+        ImGui::Spacing();
+
+        if (ImGui::DragFloat("Azimuth (fallback)", &settings.sunAzimuth, 1.0f, 0.0f, 360.0f, "%.1f deg"))
             isDirty = true;
 
-        if (ImGui::SliderFloat("Elevation", &settings.sunElevation, -10.0f, 90.0f, "%.1f deg"))
+        if (ImGui::DragFloat("Elevation (fallback)", &settings.sunElevation, 0.5f, -10.0f, 90.0f, "%.1f deg"))
             isDirty = true;
         if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("Sun angle above horizon. Low values produce sunset/sunrise colors.");
+            ImGui::SetTooltip("Used when no directional light is present in the scene.");
 
         float angRadDeg = glm::degrees(settings.sunAngularRadius);
         if (ImGui::DragFloat("Angular Radius", &angRadDeg, 0.01f, 0.01f, 5.0f, "%.3f deg"))

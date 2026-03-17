@@ -337,6 +337,21 @@ namespace render::atmosphere
     {
         if (!initialized || !enabled) return;
 
+        // Transition all LUT images from UNDEFINED to GENERAL on first use
+        if (needsInitialTransition)
+        {
+            auto transitionToGeneral = [&](vk::Image image) {
+                core::ImageUtilities::transitionImageLayout(cmd, image,
+                    vk::ImageLayout::eUndefined, vk::ImageLayout::eGeneral,
+                    vk::ImageAspectFlagBits::eColor);
+            };
+            transitionToGeneral(transmittanceImage);
+            transitionToGeneral(multiScatterImage);
+            transitionToGeneral(skyViewImage);
+            transitionToGeneral(aerialImage);
+            needsInitialTransition = false;
+        }
+
         updateParamsBuffer();
 
         // Memory barrier: ensure params are visible
@@ -498,7 +513,9 @@ namespace render::atmosphere
     {
         if (!paramsBufferMapped) return;
 
-        glm::vec3 sunDir = sunDirectionFromAngles(settings.sunAzimuth, settings.sunElevation);
+        glm::vec3 sunDir = hasSunOverride
+            ? glm::normalize(-sunDirectionOverride)  // directional light points AT surface; atmosphere wants direction TO sun
+            : sunDirectionFromAngles(settings.sunAzimuth, settings.sunElevation);
         glm::mat4 vp = cachedProjection * cachedView;
 
         AtmosphereGPUParams gpu{};

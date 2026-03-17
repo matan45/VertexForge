@@ -51,31 +51,27 @@ layout(std140, set = 0, binding = 2) uniform AtmosphereParams {
 
 void main()
 {
-    // Reconstruct world-space view direction from screen UV
+    // DEBUG: pure gradient - no LUT, no atmosphere math
+    // Reconstruct view direction from screen UV via inverse VP
     vec2 ndc = texCoord * 2.0 - 1.0;
-    vec4 worldPos = params.invViewProjection * vec4(ndc, 0.0, 1.0);
-    vec3 viewDir = normalize(worldPos.xyz / worldPos.w - params.cameraPosition.xyz);
+    vec4 clipFar  = params.invViewProjection * vec4(ndc, 0.0, 1.0);
+    vec4 clipNear = params.invViewProjection * vec4(ndc, 1.0, 1.0);
+    vec3 viewDir = normalize(clipFar.xyz / clipFar.w - clipNear.xyz / clipNear.w);
 
-    float altitude = params.cameraPosition.w;
     vec3 up = vec3(0.0, 1.0, 0.0);
-    vec3 sunDir = normalize(params.sunDirection.xyz);
+    float cosZ = dot(viewDir, up);
 
-    // Sample sky-view LUT
-    vec2 skyUV = directionToSkyViewUV(viewDir, up, altitude, params.planetRadius, params.atmosphereRadius);
-    vec3 skyColor = texture(skyViewLUT, clamp(skyUV, vec2(0.001), vec2(0.999))).rgb;
+    // Blue at top, orange at horizon, dark below
+    float t = cosZ * 0.5 + 0.5; // remap [-1,1] to [0,1]
+    vec3 zenith  = vec3(0.15, 0.3, 0.8);
+    vec3 horizon = vec3(0.8, 0.55, 0.3);
+    vec3 ground  = vec3(0.1, 0.08, 0.06);
 
-    // Sun disk
-    float cosAngle = dot(viewDir, sunDir);
-    float sunAngularRadius = params.sunIrradiance.w;
-    if (cosAngle > cos(sunAngularRadius))
-    {
-        // Smooth edge
-        float edge = smoothstep(cos(sunAngularRadius * 1.1), cos(sunAngularRadius * 0.9), cosAngle);
-        float cosZenith = dot(up, sunDir);
-        vec3 transToSun = sampleTransmittanceLUT(transmittanceLUT,
-            params.planetRadius, params.atmosphereRadius, altitude, cosZenith);
-        skyColor += params.sunIrradiance.xyz * transToSun * edge;
-    }
+    vec3 color;
+    if (cosZ > 0.0)
+        color = mix(horizon, zenith, cosZ);
+    else
+        color = mix(horizon, ground, -cosZ);
 
-    outColor = vec4(skyColor, 1.0);
+    outColor = vec4(color, 1.0);
 }

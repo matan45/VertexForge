@@ -4,7 +4,10 @@
 #include "../../events/editor/EditorModeEvents.hpp"
 #include "../../events/render/PostProcessEvents.hpp"
 #include "../../events/render/AtmosphereEvents.hpp"
+#include "../../events/scene/EntityTransformEvents.hpp"
+#include "../../events/scene/ComponentPhysicsLightEvents.hpp"
 #include "scene/EntityRegistry.hpp"
+#include "components/Components.hpp"
 #include <filesystem>
 
 namespace services
@@ -741,6 +744,33 @@ namespace services
                 if (offScreenProvider)
                 {
                     offScreenProvider->applyAtmosphereSettings(cmd.settings);
+                }
+
+                // Auto-create a directional light ("Sun") if enabling and none exists
+                if (cmd.settings.enabled)
+                {
+                    auto& registry = scene::EntityRegistry::getRegistry();
+                    auto dirLightView = registry.view<components::DirectionalLightComponent>();
+                    if (dirLightView.begin() == dirLightView.end())
+                    {
+                        auto& disp = events::EventDispatcher::instance();
+
+                        events::scene::CreateEntityCommand createCmd;
+                        createCmd.name = "Sun";
+                        auto handle = disp.execute(createCmd);
+
+                        events::scene::AddDirectionalLightComponentCommand addLight;
+                        addLight.entity = handle;
+                        disp.execute(addLight);
+
+                        // Rotate to match fallback elevation (45 deg down from zenith)
+                        events::scene::SetTransformCommand xformCmd;
+                        xformCmd.entity = handle;
+                        xformCmd.transform.position = {0.0f, 0.0f, 0.0f};
+                        xformCmd.transform.rotation = {-cmd.settings.sunElevation, cmd.settings.sunAzimuth, 0.0f};
+                        xformCmd.transform.scale = {1.0f, 1.0f, 1.0f};
+                        disp.execute(xformCmd);
+                    }
                 }
             });
 

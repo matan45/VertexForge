@@ -35,6 +35,7 @@ namespace render::atmosphere
         bool enabled = false;
         bool initialized = false;
         bool paramsDirty = true;
+        bool needsInitialTransition = true;
 
         // GPU params UBO
         vk::Buffer paramsBuffer;
@@ -121,6 +122,8 @@ namespace render::atmosphere
         glm::vec3 cachedCameraPos{0.0f};
         float cachedNear = 0.1f;
         float cachedFar = 1000.0f;
+        glm::vec3 sunDirectionOverride{0.0f, 1.0f, 0.0f};
+        bool hasSunOverride = false;
 
     public:
         AtmospherePipeline(core::Device& device, core::SwapChain& swapChain,
@@ -139,6 +142,9 @@ namespace render::atmosphere
 
         void setCameraData(const glm::mat4& view, const glm::mat4& projection,
                            const glm::vec3& cameraPos, float nearPlane, float farPlane);
+
+        // Override sun direction from directional light (takes priority over azimuth/elevation)
+        void setSunDirection(const glm::vec3& dir) { sunDirectionOverride = dir; hasSunOverride = true; }
 
         // Dispatch all compute LUTs
         void dispatchCompute(const vk::CommandBuffer& cmd);

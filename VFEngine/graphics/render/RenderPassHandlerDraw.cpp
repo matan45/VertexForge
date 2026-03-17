@@ -59,6 +59,18 @@ namespace render
             atmospherePipeline->setCameraData(currentView, currentProjection,
                                                currentCameraPosition,
                                                currentNearPlane, currentFarPlane);
+
+            // Feed sun direction from directional light if available
+            if (gpuDrivenRendererInitialized)
+            {
+                auto* lbm = gpuDrivenRenderer->getLightBufferManager();
+                auto sunDir = lbm->getFirstDirectionalLightDirection();
+                if (sunDir)
+                {
+                    atmospherePipeline->setSunDirection(*sunDir);
+                }
+            }
+
             atmospherePipeline->dispatchCompute(commandBuffer);
             atmospherePipeline->renderSky(commandBuffer, imageIndex);
         }
