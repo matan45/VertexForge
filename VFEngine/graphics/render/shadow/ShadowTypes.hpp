@@ -42,14 +42,8 @@ namespace render::shadow
         Ultra
     };
 
-    enum class ShadowResourceType : uint8_t
-    {
-        Cube = 0
-    };
-
     struct ShadowResourceHandle
     {
-        ShadowResourceType resourceType = ShadowResourceType::Cube;
         uint32_t resourceIndex = std::numeric_limits<uint32_t>::max();
         uint32_t layerOrFace = 0;
 
@@ -60,12 +54,9 @@ namespace render::shadow
 
         void invalidate()
         {
-            resourceType = ShadowResourceType::Cube;
             resourceIndex = std::numeric_limits<uint32_t>::max();
             layerOrFace = 0;
         }
-
-        [[nodiscard]] bool isCube() const { return resourceType == ShadowResourceType::Cube; }
     };
 
     struct ShadowSettings

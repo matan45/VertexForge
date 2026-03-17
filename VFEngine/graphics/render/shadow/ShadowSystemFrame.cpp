@@ -353,7 +353,7 @@ namespace render::shadow
 
                             ++lastCacheStats.totalPages;
 
-                            // Phase 3: skip clean pages (cached) unless CSM needs update
+                            // Skip clean pages unless CSM needs update (camera moved)
                             if (!csmDirty && !data.vsmPageDirty[pageIdx])
                             {
                                 ++lastCacheStats.cachedPages;
@@ -402,7 +402,7 @@ namespace render::shadow
 
                         ++lastCacheStats.totalPages;
 
-                        // Phase 3: skip clean pages for static spot/dir2D lights
+                        // Skip clean pages for static spot/directional2D lights
                         if (!data.vsmPageDirty[pageIdx])
                         {
                             ++lastCacheStats.cachedPages;
@@ -440,10 +440,13 @@ namespace render::shadow
 
         ++frameCounter;
 
-        // Phase 3: Detect camera movement for CSM caching
-        cameraMovedThisFrame = (cameraView != lastCameraView || cameraProjection != lastCameraProjection);
-        lastCameraView = cameraView;
-        lastCameraProjection = cameraProjection;
+        // Detect camera movement for CSM page caching (epsilon-based)
+        glm::vec3 cameraPosition = -glm::vec3(cameraView[3]) * glm::mat3(cameraView);
+        glm::vec3 cameraForward = -glm::vec3(cameraView[0][2], cameraView[1][2], cameraView[2][2]);
+        cameraMovedThisFrame = glm::distance(cameraPosition, lastCameraPosition) > CAMERA_MOVE_EPSILON
+                            || glm::distance(cameraForward, lastCameraForward) > CAMERA_MOVE_EPSILON;
+        lastCameraPosition = cameraPosition;
+        lastCameraForward = cameraForward;
 
         directionalShadowViews.clear();
         pointShadowViews.clear();
@@ -630,7 +633,6 @@ namespace render::shadow
         const auto& shadowSettings = settings.shadows;
 
         shadowsEnabled = shadowSettings.enabled;
-        needsUpdate = true;
         globalDepthBias = shadowSettings.shadowBias;
         globalSlopeBias = shadowSettings.slopeBias;
         globalNormalBias = shadowSettings.normalBias;
@@ -673,92 +675,8 @@ namespace render::shadow
     }
 
     // ============================================================
-    // Phase 3: Scene Change Notifications
+    // Scene Change Notifications
     // ============================================================
-
-    void ShadowSystem::notifyObjectMoved(uint32_t entityId, const glm::vec3& position, float radius)
-    {
-        // Mark pages dirty for all lights whose frustum overlaps the object's bounding sphere
-        for (auto& [lightEntityId, data] : lightShadowData)
-        {
-            bool anyPageDirtied = false;
-
-            if (data.usesVSM() && !data.vsmPhysicalTiles.empty())
-            {
-                if (data.type == ShadowMapType::DirectionalCSM)
-                {
-                    uint32_t pagesPerCascade = data.vsmPagesX;
-                    for (uint32_t cascade = 0; cascade < data.settings.cascadeCount && cascade < data.views.size(); ++cascade)
-                    {
-                        const auto& view = data.views[cascade];
-                        glm::vec4 lsPos = view.viewProjectionMatrix * glm::vec4(position, 1.0f);
-                        if (lsPos.w <= 0.0f) continue;
-
-                        glm::vec3 ndc = glm::vec3(lsPos) / lsPos.w;
-                        glm::vec2 uv = glm::vec2(ndc) * 0.5f + 0.5f;
-
-                        float uvRadius = radius / (2.0f * lsPos.w) * static_cast<float>(pagesPerCascade);
-                        int minPX = std::max(0, static_cast<int>((uv.x - uvRadius) * pagesPerCascade));
-                        int maxPX = std::min(static_cast<int>(pagesPerCascade) - 1, static_cast<int>((uv.x + uvRadius) * pagesPerCascade));
-                        int minPY = std::max(0, static_cast<int>((uv.y - uvRadius) * pagesPerCascade));
-                        int maxPY = std::min(static_cast<int>(pagesPerCascade) - 1, static_cast<int>((uv.y + uvRadius) * pagesPerCascade));
-
-                        for (int py = minPY; py <= maxPY; ++py)
-                        {
-                            for (int px = minPX; px <= maxPX; ++px)
-                            {
-                                uint32_t pageIdx = (cascade * pagesPerCascade + py) * pagesPerCascade + px;
-                                if (pageIdx < data.vsmPageDirty.size())
-                                {
-                                    data.vsmPageDirty[pageIdx] = true;
-                                    anyPageDirtied = true;
-                                }
-                            }
-                        }
-                    }
-                }
-                else
-                {
-                    if (!data.views.empty())
-                    {
-                        const auto& view = data.views[0];
-                        glm::vec4 lsPos = view.viewProjectionMatrix * glm::vec4(position, 1.0f);
-                        if (lsPos.w > 0.0f)
-                        {
-                            glm::vec3 ndc = glm::vec3(lsPos) / lsPos.w;
-                            if (glm::abs(ndc.x) <= 1.5f && glm::abs(ndc.y) <= 1.5f)
-                            {
-                                for (size_t i = 0; i < data.vsmPageDirty.size(); ++i)
-                                    data.vsmPageDirty[i] = true;
-                                anyPageDirtied = true;
-                            }
-                        }
-                    }
-                }
-            }
-            else if (data.type == ShadowMapType::PointCube)
-            {
-                // Point light cubemap: check if object is within light radius
-                if (!data.views.empty())
-                {
-                    glm::vec3 lightPos = glm::vec3(data.views[0].lightPosition);
-                    float dist = glm::distance(lightPos, position);
-                    if (dist < data.settings.farPlane + radius)
-                        anyPageDirtied = true;
-                }
-            }
-
-            // Reset view-level cache so dirty pages actually get re-rendered
-            if (anyPageDirtied)
-            {
-                data.shadowCached = false;
-                data.renderedFrameCount = 0;
-                for (auto& view : data.views)
-                    view.cached = false;
-                needsUpdate = true;
-            }
-        }
-    }
 
     void ShadowSystem::notifySceneChanged()
     {

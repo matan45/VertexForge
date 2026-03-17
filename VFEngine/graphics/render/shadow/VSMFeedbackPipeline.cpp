@@ -236,7 +236,6 @@ namespace render::shadow
         allocInfo.pSetLayouts = &descriptorSetLayout;
         descriptorSet = device.getLogicalDevice().allocateDescriptorSets(allocInfo)[0];
 
-        needsDescriptorUpdate = true;
     }
 
     void VSMFeedbackPipeline::clearFeedbackBuffer(vk::CommandBuffer cmd)
@@ -288,8 +287,8 @@ namespace render::shadow
             std::memcpy(mapped.data(), &params, sizeof(FeedbackParams));
         }
 
-        // Update descriptor set
-        if (needsDescriptorUpdate || true) // always update since depthView may change
+        // Update descriptor set — depth view can change per frame (resize, etc.)
+        // so we always update. The needsDescriptorUpdate flag is not needed here.
         {
             vk::DescriptorImageInfo depthInfo{};
             depthInfo.sampler = depthSampler;
@@ -338,7 +337,6 @@ namespace render::shadow
             writes[3].pBufferInfo = &paramsInfo;
 
             device.getLogicalDevice().updateDescriptorSets(writes, {});
-            needsDescriptorUpdate = false;
         }
 
         // Dispatch compute shader

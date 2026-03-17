@@ -298,7 +298,7 @@ namespace render::shadow
             return false;
 
         // Determine page grid size based on light type
-        // Phase 1: limit pages per cascade for performance
+        // Limit pages per cascade to balance quality vs draw call count
         // Each page = 1 physical tile (128x128). More pages = better quality but more draws.
         // Page counts: balance quality vs draw call count
         // Each page = 1 full indirect draw. Total draws = sum of all pages across all lights.
@@ -309,8 +309,6 @@ namespace render::shadow
         if (data.type == ShadowMapType::DirectionalCSM)
         {
             uint32_t pagesPerCascade = std::clamp(data.settings.resolution / vsm::PAGE_SIZE, 1u, MAX_DIR_PAGES);
-            pagesX = pagesPerCascade;
-            pagesY = pagesPerCascade;
 
             // Update resolution to match actual rendered size (fixes texel snapping)
             data.settings.resolution = pagesPerCascade * vsm::PAGE_SIZE;
@@ -322,6 +320,7 @@ namespace render::shadow
                 view.type = data.type;
             }
 
+            // pagesX = per-cascade width, pagesY = all cascades stacked vertically
             pagesX = pagesPerCascade;
             pagesY = pagesPerCascade * data.settings.cascadeCount;
         }

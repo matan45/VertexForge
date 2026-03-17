@@ -202,11 +202,6 @@ namespace windows
         }
     }
 
-    void RenderConfigWindow::drawShadowLODSection()
-    {
-        // Shadow LOD is handled automatically by VSM page-based allocation
-        // No user-facing controls needed
-    }
 
     void RenderConfigWindow::drawShadowDebugSection()
     {
@@ -320,7 +315,6 @@ namespace windows
                 drawShadowCSMSettings();
                 drawShadowBiasSettings();
                 drawShadowFilterSettings();
-                drawShadowLODSection();
             }
 
             drawShadowDebugSection();

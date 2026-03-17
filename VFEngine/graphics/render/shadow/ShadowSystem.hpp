@@ -79,10 +79,11 @@ namespace render
             bool poolFirstUse = true;
             uint32_t frameCounter = 0;
 
-            // Phase 3: Camera tracking for CSM caching
-            glm::mat4 lastCameraView{1.0f};
-            glm::mat4 lastCameraProjection{1.0f};
+            // Camera tracking for CSM page caching
+            glm::vec3 lastCameraPosition{0.0f};
+            glm::vec3 lastCameraForward{0.0f, 0.0f, -1.0f};
             bool cameraMovedThisFrame = true;
+            static constexpr float CAMERA_MOVE_EPSILON = 0.001f;
 
             // VSM light index counter
             uint32_t nextVSMLightIndex = 0;
@@ -93,7 +94,7 @@ namespace render
                 uint32_t cachedShadowMaps = 0;
                 uint32_t renderedThisFrame = 0;
                 uint32_t skippedThisFrame = 0;
-                // Phase 3: page-level stats
+                // Page-level cache stats
                 uint32_t totalPages = 0;
                 uint32_t renderedPages = 0;
                 uint32_t cachedPages = 0;
@@ -162,9 +163,8 @@ namespace render
             void invalidateAllStaticShadows();
             void updateStaticFlags();
 
-            // Phase 3: Scene change notification — marks affected shadow pages dirty
-            void notifyObjectMoved(uint32_t entityId, const glm::vec3& position, float radius);
-            void notifySceneChanged(); // marks ALL pages dirty (e.g., object added/removed)
+            // Scene change notification — marks ALL shadow pages dirty
+            void notifySceneChanged();
 
             [[nodiscard]] ShadowCacheStats getShadowCacheStats() const;
 

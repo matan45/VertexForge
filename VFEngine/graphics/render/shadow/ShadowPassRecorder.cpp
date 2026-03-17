@@ -215,6 +215,10 @@ namespace render::shadow
                     }
                 }
 
+                // Terrain dispatch per page — the terrain task shader frustum-culls
+                // against the crop VP, so most tiles are rejected for narrow pages.
+                // Dispatch overhead is higher than old per-view approach but geometry
+                // cost is comparable due to tighter culling.
                 if (hasTerrainShadows)
                 {
                     constexpr float terrainBiasScale = 4.0f;

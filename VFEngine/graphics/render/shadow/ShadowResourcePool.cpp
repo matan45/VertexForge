@@ -94,7 +94,6 @@ namespace render::shadow
     ShadowResourceHandle ShadowResourcePool::allocateCube(uint32_t size)
     {
         ShadowResourceHandle handle;
-        handle.resourceType = ShadowResourceType::Cube;
         handle.layerOrFace = 0;
 
         auto cubeMap = std::make_unique<ShadowCubeMap>(device);
@@ -126,7 +125,6 @@ namespace render::shadow
         if (!handle.isValid())
             return;
 
-        if (handle.isCube())
         {
             if (handle.resourceIndex < cubeMaps.size() && cubeMaps[handle.resourceIndex].allocated)
             {
@@ -184,7 +182,7 @@ namespace render::shadow
 
     ShadowCubeMap* ShadowResourcePool::getCube(const ShadowResourceHandle& handle)
     {
-        if (!handle.isValid() || !handle.isCube())
+        if (!handle.isValid())
             return nullptr;
 
         if (handle.resourceIndex >= cubeMaps.size())
@@ -199,7 +197,7 @@ namespace render::shadow
 
     const ShadowCubeMap* ShadowResourcePool::getCube(const ShadowResourceHandle& handle) const
     {
-        if (!handle.isValid() || !handle.isCube())
+        if (!handle.isValid())
             return nullptr;
 
         if (handle.resourceIndex >= cubeMaps.size())

@@ -62,7 +62,6 @@ namespace render::shadow
         uint32_t totalFeedbackEntries = 0;
         FeedbackReadbackState readbackState = FeedbackReadbackState::Idle;
         bool initialized = false;
-        bool needsDescriptorUpdate = true;
 
     public:
         explicit VSMFeedbackPipeline(core::Device& device);

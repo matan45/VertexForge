@@ -98,8 +98,8 @@ namespace controllers
         if (!shadowSystem)
             return stats;
 
-        stats.atlasWidth = 8192;  // VSM physical pool dimensions
-        stats.atlasHeight = 8192;
+        stats.atlasWidth = render::shadow::vsm::PHYSICAL_POOL_DIM;
+        stats.atlasHeight = render::shadow::vsm::PHYSICAL_POOL_DIM;
         stats.atlasUtilization = shadowSystem->getPoolUtilization();
 
         stats.activeShadowCasters = shadowSystem->getActiveShadowCasterCount();
@@ -109,7 +109,7 @@ namespace controllers
         stats.pointLightCount = static_cast<uint32_t>(shadowSystem->getPointShadowViews().size());
         stats.spotLightCount = static_cast<uint32_t>(shadowSystem->getSpotShadowViews().size());
 
-        stats.pointResolution = 512;
+        stats.pointResolution = render::shadow::vsm::PAGE_SIZE;
 
         // Shadow cache stats
         auto cacheStats = shadowSystem->getShadowCacheStats();
