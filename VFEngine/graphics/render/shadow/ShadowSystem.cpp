@@ -25,8 +25,11 @@ namespace render::shadow
             return;
         }
 
-        atlasManager = std::make_unique<ShadowAtlasManager>(device);
-        atlasManager->init();
+        tilePool = std::make_unique<VSMPhysicalTilePool>(device);
+        tilePool->init();
+
+        pageTable = std::make_unique<VSMPageTable>(device);
+        pageTable->init();
 
         resourcePool = std::make_unique<ShadowResourcePool>(device);
         resourcePool->init();
@@ -36,42 +39,15 @@ namespace render::shadow
 
         passRecorder = std::make_unique<ShadowPassRecorder>(device);
 
-        // Transition atlas image to shader-read-optimal for initial binding
-        // (will be transitioned to depth attachment during shadow pass if needed)
-        {
-            const auto& logicalDevice = device.getLogicalDevice();
-            auto cmd = core::Utilities::beginSingleTimeCommands(logicalDevice, device.getStagingCommandPool());
+        // Initialize feedback pipeline
+        feedbackPipeline = std::make_unique<VSMFeedbackPipeline>(device);
+        uint32_t maxFeedbackEntries = vsm::MAX_VSM_LIGHTS * vsm::PAGES_PER_SIDE * vsm::PAGES_PER_SIDE;
+        feedbackPipeline->init(maxFeedbackEntries);
 
-            vk::ImageMemoryBarrier barrier{};
-            barrier.srcAccessMask = {};
-            barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
-            barrier.oldLayout = vk::ImageLayout::eUndefined;
-            barrier.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-            barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-            barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-            barrier.image = atlasManager->getAtlasImage();
-            barrier.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eDepth;
-            barrier.subresourceRange.baseMipLevel = 0;
-            barrier.subresourceRange.levelCount = 1;
-            barrier.subresourceRange.baseArrayLayer = 0;
-            barrier.subresourceRange.layerCount = 1;
+        // Bind page table buffer to GPU data manager
+        gpuDataManager->setPageTableBuffer(pageTable->getBuffer(), pageTable->getBufferSize());
 
-            cmd->pipelineBarrier(
-                vk::PipelineStageFlagBits::eTopOfPipe,
-                vk::PipelineStageFlagBits::eFragmentShader,
-                {},
-                0, nullptr,
-                0, nullptr,
-                1, &barrier
-            );
-
-            core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), cmd, nullptr);
-
-            // Mark atlas as no longer in undefined state so shadow pass uses correct transition
-            passRecorder->resetAtlasFirstUse();
-        }
-
-        gpuDataManager->updateShadowTextureDescriptor(atlasManager.get(), resourcePool.get(), lightShadowData);
+        gpuDataManager->updateShadowTextureDescriptor(tilePool.get(), resourcePool.get(), lightShadowData);
 
         initialized = true;
     }
@@ -102,12 +78,19 @@ namespace render::shadow
             gpuDataManager.reset();
         }
 
+        if (feedbackPipeline)
+        {
+            feedbackPipeline->cleanup();
+            feedbackPipeline.reset();
+        }
+
         passRecorder.reset();
 
         lightShadowData.clear();
         directionalShadowViews.clear();
         pointShadowViews.clear();
         spotShadowViews.clear();
+        pageRenderList.clear();
 
         if (resourcePool)
         {
@@ -115,10 +98,16 @@ namespace render::shadow
             resourcePool.reset();
         }
 
-        if (atlasManager)
+        if (pageTable)
         {
-            atlasManager->cleanup();
-            atlasManager.reset();
+            pageTable->cleanup();
+            pageTable.reset();
+        }
+
+        if (tilePool)
+        {
+            tilePool->cleanup();
+            tilePool.reset();
         }
 
         initialized = false;
@@ -142,12 +131,12 @@ namespace render::shadow
 
         shadowPassPipeline = std::make_unique<ShadowPassPipeline>(device);
         shadowPassPipeline->init(perDrawLayout, meshletDataLayout, vertexDataLayout, boneMatrixLayout,
-                                 atlasManager->getDepthFormat());
+                                 tilePool->getDepthFormat());
 
         shadowPassPipeline->createFramebuffer(
-            atlasManager->getAtlasImageView(),
-            atlasManager->getAtlasWidth(),
-            atlasManager->getAtlasHeight()
+            tilePool->getPoolImageView(),
+            vsm::PHYSICAL_POOL_DIM,
+            vsm::PHYSICAL_POOL_DIM
         );
     }
 
@@ -191,8 +180,7 @@ namespace render::shadow
 
         terrainShadowPipeline = std::make_unique<TerrainShadowPipeline>(device);
         terrainShadowPipeline->init(terrainDataLayout, terrainMeshletLayout, terrainVertexLayout,
-                                     shadowPassPipeline->getRenderPass());
-
+                                     tilePool->getRenderPass());
     }
 
     bool ShadowSystem::registerLight(uint32_t entityId, ShadowMapType type, const ShadowSettings& settings)
@@ -239,10 +227,36 @@ namespace render::shadow
 
         data.views.resize(viewCount);
 
-        if (!allocateShadowMaps(data))
+        // Allocate resources based on type
+        if (type == ShadowMapType::PointCube)
         {
-            vfLogError("ShadowSystem: Failed to allocate shadow maps for light {}", entityId);
-            return false;
+            // Point lights still use cubemaps
+            if (!resourcePool || !resourcePool->isInitialized())
+                return false;
+
+            ShadowResourceHandle handle = resourcePool->allocateCube(settings.resolution);
+            if (!handle.isValid())
+            {
+                vfLogError("ShadowSystem: Failed to allocate point cube map {}x{}", settings.resolution, settings.resolution);
+                return false;
+            }
+
+            data.resourceHandle = handle;
+            for (size_t i = 0; i < data.views.size(); ++i)
+            {
+                auto& view = data.views[i];
+                view.type = ShadowMapType::PointCube;
+                view.layer = static_cast<uint32_t>(i);
+            }
+        }
+        else
+        {
+            // VSM page-based allocation for directional and spot lights
+            if (!allocateVSMPages(data))
+            {
+                vfLogError("ShadowSystem: Failed to allocate VSM pages for light {}", entityId);
+                return false;
+            }
         }
 
         lightShadowData[entityId] = std::move(data);
@@ -260,9 +274,137 @@ namespace render::shadow
             return;
         }
 
-        freeShadowMaps(it->second);
+        auto& data = it->second;
+
+        if (data.type == ShadowMapType::PointCube)
+        {
+            if (data.resourceHandle.isValid() && resourcePool)
+            {
+                resourcePool->free(data.resourceHandle);
+            }
+        }
+        else
+        {
+            freeVSMPages(data);
+        }
+
         lightShadowData.erase(it);
         needsUpdate = true;
+    }
+
+    bool ShadowSystem::allocateVSMPages(LightShadowData& data)
+    {
+        if (!tilePool || !pageTable)
+            return false;
+
+        // Determine page grid size based on light type
+        // Limit pages per cascade to balance quality vs draw call count
+        // Each page = 1 physical tile (128x128). More pages = better quality but more draws.
+        // Page counts: balance quality vs draw call count
+        // Each page = 1 full indirect draw. Total draws = sum of all pages across all lights.
+        static constexpr uint32_t MAX_DIR_PAGES = 4;  // 4×4 = 512×512 per cascade, 64 draws for 4 cascades
+        static constexpr uint32_t MAX_SPOT_PAGES = 2;  // 2×2 = 256×256 per spot, 4 draws per spot
+
+        uint32_t pagesX, pagesY;
+        if (data.type == ShadowMapType::DirectionalCSM)
+        {
+            uint32_t pagesPerCascade = std::clamp(data.settings.resolution / vsm::PAGE_SIZE, 1u, MAX_DIR_PAGES);
+
+            // Update resolution to match actual rendered size (fixes texel snapping)
+            data.settings.resolution = pagesPerCascade * vsm::PAGE_SIZE;
+
+            for (size_t i = 0; i < data.views.size(); ++i)
+            {
+                auto& view = data.views[i];
+                view.cascadeIndex = static_cast<uint16_t>(i);
+                view.type = data.type;
+            }
+
+            // pagesX = per-cascade width, pagesY = all cascades stacked vertically
+            pagesX = pagesPerCascade;
+            pagesY = pagesPerCascade * data.settings.cascadeCount;
+        }
+        else if (data.type == ShadowMapType::Spot2D || data.type == ShadowMapType::Directional2D)
+        {
+            uint32_t pages = std::clamp(data.settings.resolution / vsm::PAGE_SIZE, 1u, MAX_SPOT_PAGES);
+            data.settings.resolution = pages * vsm::PAGE_SIZE;
+            pagesX = pages;
+            pagesY = pages;
+
+            if (!data.views.empty())
+            {
+                data.views[0].cascadeIndex = 0;
+                data.views[0].type = data.type;
+            }
+        }
+        else
+        {
+            return false;
+        }
+
+        // Allocate page table block
+        uint32_t offset = pageTable->allocateBlock(pagesX, pagesY);
+        if (offset == vsm::INVALID_TILE)
+            return false;
+
+        // Allocate physical tiles for all pages (brute-force Phase 1)
+        uint32_t totalPages = pagesX * pagesY;
+        data.vsmPhysicalTiles.resize(totalPages);
+
+        for (uint32_t i = 0; i < totalPages; ++i)
+        {
+            uint32_t tile = tilePool->allocateTile();
+            if (tile == vsm::INVALID_TILE)
+            {
+                // Rollback
+                for (uint32_t j = 0; j < i; ++j)
+                    tilePool->freeTile(data.vsmPhysicalTiles[j]);
+                pageTable->freeBlock(offset, pagesX, pagesY);
+                data.vsmPhysicalTiles.clear();
+                vfLogError("ShadowSystem: Ran out of physical tiles, allocated {}/{}", i, totalPages);
+                return false;
+            }
+            data.vsmPhysicalTiles[i] = tile;
+
+            // Map in page table
+            uint32_t pageX = i % pagesX;
+            uint32_t pageY = i / pagesX;
+            pageTable->mapPage(offset, pageX, pageY, pagesX, tile);
+        }
+
+        data.vsmPagesX = pagesX;
+        data.vsmPagesY = pagesY;
+        data.vsmPageTableOffset = offset;
+        data.vsmLightIndex = nextVSMLightIndex++;
+        // Initialize with a future frame so pages survive warmup/eviction
+        data.vsmPageLastUsedFrame.resize(totalPages, frameCounter + EVICTION_THRESHOLD + 120);
+        data.vsmPageDirty.resize(totalPages, true); // all pages dirty initially
+
+        return true;
+    }
+
+    void ShadowSystem::freeVSMPages(LightShadowData& data)
+    {
+        if (!tilePool || !pageTable)
+            return;
+
+        // Free physical tiles
+        for (uint32_t tile : data.vsmPhysicalTiles)
+        {
+            if (tile != vsm::INVALID_TILE)
+                tilePool->freeTile(tile);
+        }
+        data.vsmPhysicalTiles.clear();
+
+        // Free page table block
+        if (data.vsmPagesX > 0 && data.vsmPagesY > 0)
+        {
+            pageTable->freeBlock(data.vsmPageTableOffset, data.vsmPagesX, data.vsmPagesY);
+        }
+
+        data.vsmPagesX = 0;
+        data.vsmPagesY = 0;
+        data.vsmPageTableOffset = 0;
     }
 
     void ShadowSystem::setDeletionQueue(core::DeferredDeletionQueue* queue)
@@ -311,7 +453,6 @@ namespace render::shadow
                 data.isStatic = false;
             }
 
-            // If static status changed, invalidate cache
             if (wasStatic != data.isStatic)
             {
                 data.invalidateCache();
@@ -334,137 +475,6 @@ namespace render::shadow
             return it->second;
 
         return -1;
-    }
-
-    bool ShadowSystem::allocateShadowMaps(LightShadowData& data)
-    {
-        uint32_t resolution = data.settings.resolution;
-
-        switch (data.type)
-        {
-        case ShadowMapType::Spot2D:
-        case ShadowMapType::Directional2D:
-            {
-                if (!atlasManager || !atlasManager->isInitialized())
-                    return false;
-
-                for (size_t i = 0; i < data.views.size(); ++i)
-                {
-                    auto& view = data.views[i];
-
-                    ShadowMapHandle handle = atlasManager->allocate(
-                        resolution, resolution,
-                        data.type,
-                        static_cast<uint32_t>(i)
-                    );
-
-                    if (!handle.isValid())
-                    {
-                        // Rollback previous allocations
-                        for (size_t j = 0; j < i; ++j)
-                        {
-                            atlasManager->free(data.views[j].handle);
-                            data.views[j].handle.invalidate();
-                        }
-                        return false;
-                    }
-
-                    view.handle = handle;
-                    view.handle.cascadeIndex = static_cast<uint16_t>(i);
-                    view.atlasViewport = atlasManager->getNormalizedViewport(handle);
-                }
-                return true;
-            }
-
-        case ShadowMapType::DirectionalCSM:
-            {
-                if (!atlasManager || !atlasManager->isInitialized())
-                {
-                    vfLogError("ShadowSystem: Atlas manager not available for CSM allocation");
-                    return false;
-                }
-
-                for (size_t i = 0; i < data.views.size(); ++i)
-                {
-                    auto& view = data.views[i];
-
-                    ShadowMapHandle handle = atlasManager->allocate(
-                        resolution, resolution,
-                        ShadowMapType::DirectionalCSM,
-                        static_cast<uint32_t>(i)
-                    );
-
-                    if (!handle.isValid())
-                    {
-                        // Rollback previous allocations
-                        for (size_t j = 0; j < i; ++j)
-                        {
-                            atlasManager->free(data.views[j].handle);
-                            data.views[j].handle.invalidate();
-                        }
-                        vfLogError("ShadowSystem: Failed to allocate CSM cascade {} in atlas", i);
-                        return false;
-                    }
-
-                    view.handle = handle;
-                    view.handle.cascadeIndex = static_cast<uint16_t>(i);
-                    view.atlasViewport = atlasManager->getNormalizedViewport(handle);
-                }
-
-                return true;
-            }
-
-        case ShadowMapType::PointCube:
-            {
-                if (!resourcePool || !resourcePool->isInitialized())
-                    return false;
-
-                ShadowResourceHandle handle = resourcePool->allocateCube(resolution);
-
-                if (!handle.isValid())
-                {
-                    vfLogError("ShadowSystem: Failed to allocate point cube map {}x{}", resolution, resolution);
-                    return false;
-                }
-
-                data.resourceHandle = handle;
-
-                for (size_t i = 0; i < data.views.size(); ++i)
-                {
-                    auto& view = data.views[i];
-                    view.handle.type = ShadowMapType::PointCube;
-                    view.handle.layer = static_cast<uint32_t>(i);
-                    // For cubes, atlasViewport.w stores the face index
-                    view.atlasViewport = glm::vec4(0.0f, 0.0f, 1.0f, static_cast<float>(i));
-                }
-
-                return true;
-            }
-
-        default:
-            return false;
-        }
-    }
-
-    void ShadowSystem::freeShadowMaps(LightShadowData& data)
-    {
-        if (data.resourceHandle.isValid() && resourcePool)
-        {
-            resourcePool->free(data.resourceHandle);
-            data.resourceHandle.invalidate();
-        }
-
-        if (atlasManager)
-        {
-            for (auto& view : data.views)
-            {
-                if (view.handle.isValid() && data.usesAtlas())
-                {
-                    atlasManager->free(view.handle);
-                    view.handle.invalidate();
-                }
-            }
-        }
     }
 
     vk::DescriptorSetLayout ShadowSystem::getShadowDataLayout() const
@@ -507,9 +517,9 @@ namespace render::shadow
         );
     }
 
-    float ShadowSystem::getAtlasUtilization() const
+    float ShadowSystem::getPoolUtilization() const
     {
-        return atlasManager ? atlasManager->getAtlasUtilization() : 0.0f;
+        return tilePool ? tilePool->getUtilization() : 0.0f;
     }
 
     std::vector<ShadowDebugInfo> ShadowSystem::getShadowDebugInfo() const

@@ -421,6 +421,67 @@ namespace render
         {
             dispatchTerrainRaycast(commandBuffer);
         }
+
+        // VSM Feedback pass - dispatch after depth is available
+        if (gpuDrivenRendererInitialized && gpuDrivenRenderer->getShadowSystem() &&
+            gpuDrivenRenderer->getShadowSystem()->isFeedbackEnabled())
+        {
+            auto* shadowSystem = gpuDrivenRenderer->getShadowSystem();
+            auto extent = swapChain.getSwapchainExtent();
+            glm::mat4 invVP = glm::inverse(currentProjection * currentView);
+
+            // Transition depth to shader-read for feedback compute
+            {
+                vk::ImageMemoryBarrier toShaderRead{};
+                toShaderRead.oldLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
+                toShaderRead.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+                toShaderRead.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                toShaderRead.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                toShaderRead.image = offscreenResources.depthImage.depthImage;
+                toShaderRead.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eDepth
+                    | vk::ImageAspectFlagBits::eStencil;
+                toShaderRead.subresourceRange.baseMipLevel = 0;
+                toShaderRead.subresourceRange.levelCount = 1;
+                toShaderRead.subresourceRange.baseArrayLayer = 0;
+                toShaderRead.subresourceRange.layerCount = 1;
+                toShaderRead.srcAccessMask = vk::AccessFlagBits::eDepthStencilAttachmentWrite;
+                toShaderRead.dstAccessMask = vk::AccessFlagBits::eShaderRead;
+
+                commandBuffer.pipelineBarrier(
+                    vk::PipelineStageFlagBits::eLateFragmentTests,
+                    vk::PipelineStageFlagBits::eComputeShader,
+                    {}, {}, {}, toShaderRead);
+            }
+
+            shadowSystem->dispatchFeedback(commandBuffer,
+                offscreenResources.depthImage.depthImageView,
+                invVP, extent.width, extent.height);
+            shadowSystem->copyFeedbackToStaging(commandBuffer);
+
+            // Transition depth back to attachment layout
+            {
+                vk::ImageMemoryBarrier toAttachment{};
+                toAttachment.oldLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+                toAttachment.newLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
+                toAttachment.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                toAttachment.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                toAttachment.image = offscreenResources.depthImage.depthImage;
+                toAttachment.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eDepth
+                    | vk::ImageAspectFlagBits::eStencil;
+                toAttachment.subresourceRange.baseMipLevel = 0;
+                toAttachment.subresourceRange.levelCount = 1;
+                toAttachment.subresourceRange.baseArrayLayer = 0;
+                toAttachment.subresourceRange.layerCount = 1;
+                toAttachment.srcAccessMask = vk::AccessFlagBits::eShaderRead;
+                toAttachment.dstAccessMask = vk::AccessFlagBits::eDepthStencilAttachmentRead
+                    | vk::AccessFlagBits::eDepthStencilAttachmentWrite;
+
+                commandBuffer.pipelineBarrier(
+                    vk::PipelineStageFlagBits::eComputeShader,
+                    vk::PipelineStageFlagBits::eEarlyFragmentTests,
+                    {}, {}, {}, toAttachment);
+            }
+        }
     }
 
     void RenderPassHandler::dispatchTerrainRaycast(const vk::CommandBuffer& commandBuffer) const

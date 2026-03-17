@@ -27,6 +27,7 @@ namespace asset
         if (ext == ".vffont")          return resource::AssetType::Font;
         if (ext == ".vfnavmesh")       return resource::AssetType::Navmesh;
         if (ext == ".vfinputmapping") return resource::AssetType::InputMapping;
+        if (ext == ".vfterrain")      return resource::AssetType::Terrain;
         return resource::AssetType::COUNT;
     }
 

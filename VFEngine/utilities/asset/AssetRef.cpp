@@ -20,12 +20,24 @@ namespace asset
         resource::AssetType type = AssetDatabaseMigrator::detectAssetTypeFromPath(path);
         if (type != resource::AssetType::COUNT)
         {
+            // Check if .vfmeta already exists (may have importSource/importTimestamp)
+            auto metaPath = AssetMetadataSerializer::getMetaPath(path);
+            auto existingMeta = AssetMetadataSerializer::load(metaPath);
+
+            if (existingMeta.has_value())
+            {
+                // Reuse existing GUID and register in database without overwriting meta
+                AssetDatabase::instance().registerAssetWithGUID(
+                    existingMeta->guid, path, existingMeta->type);
+                vfLogInfo("Auto-registered untracked asset from existing meta: {}", path);
+                return AssetRef(existingMeta->guid);
+            }
+
             auto guid = AssetDatabase::instance().registerAsset(path, type);
 
             AssetMetadata metadata;
             metadata.guid = guid;
             metadata.type = type;
-            auto metaPath = AssetMetadataSerializer::getMetaPath(path);
             AssetMetadataSerializer::save(metadata, metaPath);
 
             vfLogInfo("Auto-registered untracked asset: {}", path);

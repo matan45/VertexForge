@@ -51,25 +51,6 @@ namespace serialization
             return types::CascadeSplitMode::Practical;
         }
 
-        std::string pcfKernelSizeToStr(types::PCFKernelSize size)
-        {
-            switch (size)
-            {
-            case types::PCFKernelSize::x1: return "x1";
-            case types::PCFKernelSize::x3: return "x3";
-            case types::PCFKernelSize::x5: return "x5";
-            default: return "x3";
-            }
-        }
-
-        types::PCFKernelSize strToPCFKernelSize(const std::string& str)
-        {
-            if (str == "x1") return types::PCFKernelSize::x1;
-            if (str == "x3") return types::PCFKernelSize::x3;
-            if (str == "x5") return types::PCFKernelSize::x5;
-            return types::PCFKernelSize::x3;
-        }
-
         // ---- Enum/string conversions for postprocess ----
 
         std::string toneMappingModeToStr(postprocess::ToneMappingMode mode)
@@ -554,12 +535,16 @@ namespace serialization
                 settings.slopeBias = shadows["slopeBias"].get<float>();
             if (shadows.contains("normalBias") && shadows["normalBias"].is_number())
                 settings.normalBias = shadows["normalBias"].get<float>();
-            if (shadows.contains("pcfKernelSize") && shadows["pcfKernelSize"].is_string())
-                settings.pcfKernelSize = strToPCFKernelSize(shadows["pcfKernelSize"].get<std::string>());
-            if (shadows.contains("softShadowsEnabled") && shadows["softShadowsEnabled"].is_boolean())
-                settings.softShadowsEnabled = shadows["softShadowsEnabled"].get<bool>();
+            if (shadows.contains("softShadows") && shadows["softShadows"].is_boolean())
+                settings.softShadows = shadows["softShadows"].get<bool>();
             if (shadows.contains("shadowIntensity") && shadows["shadowIntensity"].is_number())
                 settings.shadowIntensity = shadows["shadowIntensity"].get<float>();
+            if (shadows.contains("directionalResolution") && shadows["directionalResolution"].is_number_unsigned())
+                settings.directionalResolution = shadows["directionalResolution"].get<uint32_t>();
+            if (shadows.contains("spotResolution") && shadows["spotResolution"].is_number_unsigned())
+                settings.spotResolution = shadows["spotResolution"].get<uint32_t>();
+            if (shadows.contains("pointResolution") && shadows["pointResolution"].is_number_unsigned())
+                settings.pointResolution = shadows["pointResolution"].get<uint32_t>();
         }
 
         void deserializeCullingSettings(const json& j, types::CullingSettings& settings)
@@ -666,9 +651,11 @@ namespace serialization
             {"shadowBias", settings.shadows.shadowBias},
             {"slopeBias", settings.shadows.slopeBias},
             {"normalBias", settings.shadows.normalBias},
-            {"pcfKernelSize", pcfKernelSizeToStr(settings.shadows.pcfKernelSize)},
-            {"softShadowsEnabled", settings.shadows.softShadowsEnabled},
-            {"shadowIntensity", settings.shadows.shadowIntensity}
+            {"softShadows", settings.shadows.softShadows},
+            {"shadowIntensity", settings.shadows.shadowIntensity},
+            {"directionalResolution", settings.shadows.directionalResolution},
+            {"spotResolution", settings.shadows.spotResolution},
+            {"pointResolution", settings.shadows.pointResolution}
         };
 
         j["culling"] = {
@@ -699,16 +686,7 @@ namespace serialization
         };
 
         j["shadowLOD"] = {
-            {"enabled", settings.shadowLOD.enabled},
-            {"tier0Distance", settings.shadowLOD.tier0Distance},
-            {"tier1Distance", settings.shadowLOD.tier1Distance},
-            {"tier2Distance", settings.shadowLOD.tier2Distance},
-            {"tier0Resolution", settings.shadowLOD.tier0Resolution},
-            {"tier1Resolution", settings.shadowLOD.tier1Resolution},
-            {"tier2Resolution", settings.shadowLOD.tier2Resolution},
-            {"staticTier0Distance", settings.shadowLOD.staticTier0Distance},
-            {"staticTier1Distance", settings.shadowLOD.staticTier1Distance},
-            {"staticTier2Distance", settings.shadowLOD.staticTier2Distance}
+            {"enabled", settings.shadowLOD.enabled}
         };
 
         j["terrain"] = {
@@ -751,24 +729,6 @@ namespace serialization
             const auto& sl = j["shadowLOD"];
             if (sl.contains("enabled") && sl["enabled"].is_boolean())
                 settings.shadowLOD.enabled = sl["enabled"].get<bool>();
-            if (sl.contains("tier0Distance") && sl["tier0Distance"].is_number())
-                settings.shadowLOD.tier0Distance = sl["tier0Distance"].get<float>();
-            if (sl.contains("tier1Distance") && sl["tier1Distance"].is_number())
-                settings.shadowLOD.tier1Distance = sl["tier1Distance"].get<float>();
-            if (sl.contains("tier2Distance") && sl["tier2Distance"].is_number())
-                settings.shadowLOD.tier2Distance = sl["tier2Distance"].get<float>();
-            if (sl.contains("tier0Resolution") && sl["tier0Resolution"].is_number_unsigned())
-                settings.shadowLOD.tier0Resolution = sl["tier0Resolution"].get<uint32_t>();
-            if (sl.contains("tier1Resolution") && sl["tier1Resolution"].is_number_unsigned())
-                settings.shadowLOD.tier1Resolution = sl["tier1Resolution"].get<uint32_t>();
-            if (sl.contains("tier2Resolution") && sl["tier2Resolution"].is_number_unsigned())
-                settings.shadowLOD.tier2Resolution = sl["tier2Resolution"].get<uint32_t>();
-            if (sl.contains("staticTier0Distance") && sl["staticTier0Distance"].is_number())
-                settings.shadowLOD.staticTier0Distance = sl["staticTier0Distance"].get<float>();
-            if (sl.contains("staticTier1Distance") && sl["staticTier1Distance"].is_number())
-                settings.shadowLOD.staticTier1Distance = sl["staticTier1Distance"].get<float>();
-            if (sl.contains("staticTier2Distance") && sl["staticTier2Distance"].is_number())
-                settings.shadowLOD.staticTier2Distance = sl["staticTier2Distance"].get<float>();
         }
 
         deserializeCullingSettings(j, settings.culling);

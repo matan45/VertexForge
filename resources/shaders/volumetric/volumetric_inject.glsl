@@ -111,22 +111,34 @@ layout(std430, set = 3, binding = 1) readonly buffer ClusterLightIndexListBuffer
 };
 
 // Set 4: Shadow Data
-struct ShadowData {
-    mat4 viewProjection;
-    vec4 atlasViewport;
-    vec4 biasParams;    // x = depthBias, y = slopeBias, z = normalBias, w = texelSize
-    vec4 rangeParams;   // x = near, y = far, z = cascadeCount, w = cascadeIndex
-    vec4 pcfParams;     // x = kernelRadius, y = softness, z = filterEnabled, w = cubeMapIndex
-};
+#include "../common/shadow_sampling_types.glsl"
 
 layout(std430, set = 4, binding = 0) readonly buffer ShadowDataBuffer {
     ShadowData shadowData[];
 };
 
+layout(std430, set = 4, binding = 1) readonly buffer PageTableBuffer {
+    uint pageTableVol[];
+};
+
 // Set 5: Shadow Textures
-layout(set = 5, binding = 0) uniform sampler2DShadow shadowAtlas;
-layout(set = 5, binding = 1) uniform sampler2DArrayShadow shadowCascades;
-layout(set = 5, binding = 2) uniform samplerCubeShadow shadowCubes[];
+layout(set = 5, binding = 0) uniform sampler2DShadow physicalPoolShadow;
+layout(set = 5, binding = 1) uniform sampler2D physicalPoolDepth;
+layout(set = 5, binding = 2) uniform samplerCubeShadow shadowCubes[32];
+layout(set = 5, binding = 3) uniform samplerCube shadowCubesDepth[32];
+
+// VSM Page Table constants and lookup
+#define SHADOW_BUFFER shadowData
+#define PAGE_TABLE pageTableVol
+
+const uint PAGE_SIZE = 128u;
+const uint PHYSICAL_POOL_DIM = 8192u;
+const uint PAGE_ENTRY_VALID_BIT = 0x80000000u;
+const uint PAGE_ENTRY_X_MASK = 0x3Fu;
+const uint PAGE_ENTRY_Y_SHIFT = 6u;
+const uint PAGE_ENTRY_Y_MASK = 0x3Fu;
+const float POOL_DIM_F = float(PHYSICAL_POOL_DIM);
+const float PAGE_SIZE_F = float(PAGE_SIZE);
 
 // Shadow constants (must match ShadowTypes.hpp)
 const int MAX_SHADOW_VIEWS = 272;
@@ -198,6 +210,28 @@ uint froxelToClusterIndex(ivec3 froxelCoord, uvec3 volDims) {
            slice * clusterParams.gridDimensions.x * clusterParams.gridDimensions.y;
 }
 
+vec2 vsmLookupPhysicalUVVol(ShadowData sd, vec2 uv, out bool valid) {
+    ivec2 pageCoord = ivec2(uv * vec2(sd.pageTableInfo.xy));
+    pageCoord = clamp(pageCoord, ivec2(0), sd.pageTableInfo.xy - 1);
+
+    uint entryIdx = uint(sd.pageTableInfo.z) + uint(pageCoord.y * sd.pageTableInfo.x + pageCoord.x);
+    uint pageEntry = PAGE_TABLE[entryIdx];
+
+    if ((pageEntry & PAGE_ENTRY_VALID_BIT) == 0u) {
+        valid = false;
+        return vec2(0.0);
+    }
+
+    valid = true;
+
+    uint tileX = pageEntry & PAGE_ENTRY_X_MASK;
+    uint tileY = (pageEntry >> PAGE_ENTRY_Y_SHIFT) & PAGE_ENTRY_Y_MASK;
+
+    vec2 pageUV = fract(uv * vec2(sd.pageTableInfo.xy));
+    vec2 physicalUV = (vec2(float(tileX), float(tileY)) + pageUV) * (PAGE_SIZE_F / POOL_DIM_F);
+    return physicalUV;
+}
+
 float sampleCascadeShadowSimple(int shadowIndex, vec3 worldPos) {
     if (shadowIndex < 0 || shadowIndex >= MAX_SHADOW_VIEWS) return 1.0;
 
@@ -206,13 +240,17 @@ float sampleCascadeShadowSimple(int shadowIndex, vec3 worldPos) {
     vec4 lightSpacePos = sd.viewProjection * vec4(worldPos, 1.0);
     if (lightSpacePos.w <= 0.0) return 1.0;
 
-    vec3 projCoords = lightSpacePos.xyz / lightSpacePos.w;
-    vec2 texCoords = projCoords.xy * 0.5 + 0.5;
-    texCoords = clamp(texCoords, 0.0, 1.0);
-    projCoords.xy = sd.atlasViewport.xy + texCoords * sd.atlasViewport.zw;
-    projCoords.z = clamp(projCoords.z, 0.0, 1.0);
+    vec3 ndc = lightSpacePos.xyz / lightSpacePos.w;
+    if (any(greaterThan(abs(ndc.xy), vec2(1.0)))) return 1.0;
 
-    return texture(shadowAtlas, vec3(projCoords.xy, projCoords.z));
+    vec2 uv = ndc.xy * 0.5 + 0.5;
+    float receiverDepth = clamp(ndc.z, 0.0, 1.0);
+
+    bool valid;
+    vec2 physicalUV = vsmLookupPhysicalUVVol(sd, uv, valid);
+    if (!valid) return 1.0;
+
+    return texture(physicalPoolShadow, vec3(physicalUV, receiverDepth));
 }
 
 float sampleDirectionalShadowVolumetric(int baseShadowIndex, vec3 worldPos, float viewZ) {

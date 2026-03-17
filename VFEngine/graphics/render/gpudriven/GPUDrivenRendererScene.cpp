@@ -91,7 +91,17 @@ namespace render::gpudriven
         updateClusterGrid(projection, nearPlane, farPlane);
         updatePipelineDescriptors();
 
-        stats.totalObjects = mergedBuffer->getObjectCount();
+        // Phase 3: Detect scene changes for shadow page invalidation
+        uint32_t currentObjectCount = mergedBuffer->getObjectCount();
+        if (shadowSystem && shadowSystem->isInitialized())
+        {
+            if (currentObjectCount != stats.totalObjects)
+            {
+                shadowSystem->notifySceneChanged();
+            }
+        }
+
+        stats.totalObjects = currentObjectCount;
     }
 
     void GPUDrivenRenderer::updateCameraForRTT(const RTTCameraParams& params)

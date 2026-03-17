@@ -21,60 +21,6 @@ namespace types
         Practical
     };
 
-    enum class PCFKernelSize : uint8_t
-    {
-        x1 = 0, // 1x1 - Hard shadows
-        x3 = 2, // 3x3
-        x5 = 4 // 5x5
-    };
-
-    struct ShadowAtlasConfig
-    {
-        uint32_t atlasSize = 4096;
-        uint32_t directionalResolution = 2048;
-        uint32_t spotResolution = 1024;
-        uint32_t pointResolution = 512;
-
-        static ShadowAtlasConfig fromQuality(ShadowQuality quality)
-        {
-            ShadowAtlasConfig config;
-            switch (quality)
-            {
-            case ShadowQuality::Off:
-                config.atlasSize = 0;
-                config.directionalResolution = 0;
-                config.spotResolution = 0;
-                config.pointResolution = 0;
-                break;
-            case ShadowQuality::Low:
-                config.atlasSize = 2048;
-                config.directionalResolution = 512;
-                config.spotResolution = 256;
-                config.pointResolution = 256;
-                break;
-            case ShadowQuality::Medium:
-                config.atlasSize = 4096;
-                config.directionalResolution = 1024;
-                config.spotResolution = 512;
-                config.pointResolution = 512;
-                break;
-            case ShadowQuality::High:
-                config.atlasSize = 4096;
-                config.directionalResolution = 2048;
-                config.spotResolution = 1024;
-                config.pointResolution = 512;
-                break;
-            case ShadowQuality::Ultra:
-                config.atlasSize = 8192;
-                config.directionalResolution = 4096;
-                config.spotResolution = 2048;
-                config.pointResolution = 1024;
-                break;
-            }
-            return config;
-        }
-    };
-
     struct ShadowSettings
     {
         bool enabled = true;
@@ -89,14 +35,16 @@ namespace types
         float slopeBias = 1.5f;
         float normalBias = 0.02f;
 
-        // PCF
-        PCFKernelSize pcfKernelSize = PCFKernelSize::x3;
-        bool softShadowsEnabled = true;
+        // PCSS
+        bool softShadows = true;
 
         // 0.0 = lighter shadows, 1.0 = darker shadows
         float shadowIntensity = 0.5f;
 
-        ShadowAtlasConfig atlas;
+        // VSM resolution (directional virtual map pages)
+        uint32_t directionalResolution = 2048;
+        uint32_t spotResolution = 1024;
+        uint32_t pointResolution = 512;
     };
 
     struct CullingSettings
@@ -161,20 +109,7 @@ namespace types
 
     struct ShadowLODSettings
     {
-        bool enabled = true;
-        float tier0Distance = 30.0f;   // < 30m  -> 2048
-        float tier1Distance = 80.0f;   // < 80m  -> 1024
-        float tier2Distance = 150.0f;  // < 150m -> 512
-        // > 150m -> no shadow
-
-        uint32_t tier0Resolution = 2048;
-        uint32_t tier1Resolution = 1024;
-        uint32_t tier2Resolution = 512;
-
-        // Tighter tiers for static lights (cached shadows)
-        float staticTier0Distance = 20.0f;
-        float staticTier1Distance = 50.0f;
-        float staticTier2Distance = 100.0f;
+        bool enabled = false; // Disabled by default with VSM (page-based allocation handles this)
     };
 
     struct LightStreamingSettings

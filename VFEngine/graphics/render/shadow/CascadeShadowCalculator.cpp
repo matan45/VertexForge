@@ -211,13 +211,20 @@ namespace render::shadow
         }
 
         // Step 9: Use SPHERE-BASED stable XY bounds instead of tight AABB
-        // This prevents scale changes when the frustum rotates
-        float stableExtent = radius;
+        // This prevents scale changes when the frustum rotates.
+        // 10% margin compensates for texel snapping offsets that can shift the
+        // frustum center by up to half a texel, which at coarser VSM page
+        // resolutions (e.g. 512px) is enough to clip shadow casters at edges.
+        float stableExtent = radius * 1.1f;
 
         // Step 10: Stabilize Z range to prevent depth precision shifts during movement
         // Quantize Z bounds to reduce frame-to-frame variation
         float zRange = maxZ - minZ;
-        float zExtension = std::max(zRange * 2.0f, 500.0f);
+        // Extend Z far behind the camera frustum to capture shadow casters that
+        // are between the light source and the visible scene. 3× the frustum depth
+        // and a minimum of 800 units prevents shadows from disappearing when the
+        // camera views objects from the opposite side of the light direction.
+        float zExtension = std::max(zRange * 3.0f, 800.0f);
 
         // Quantize Z bounds to large steps (10 unit increments) for stability
         // This prevents shadow acne/peter-panning changes as camera moves

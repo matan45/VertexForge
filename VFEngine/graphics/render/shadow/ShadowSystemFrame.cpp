@@ -49,7 +49,7 @@ namespace render::shadow
             view.nearPlane = nearPlane;
             view.farPlane = farPlane;
             view.lightPosition = glm::vec4(lightPosition, 1.0f);
-            view.handle.layer = face;
+            view.layer = face;
 
             view.depthBias = data.settings.depthBias;
             view.slopeBias = data.settings.slopeBias;
@@ -169,7 +169,7 @@ namespace render::shadow
             view.nearPlane = cascadeNear;
             view.farPlane = cascadeFar;
             view.lightDirection = glm::vec4(lightDirection, 0.0f);
-            view.handle.cascadeIndex = static_cast<uint16_t>(i);
+            view.cascadeIndex = static_cast<uint16_t>(i);
 
             view.depthBias = data.settings.depthBias;
             view.slopeBias = data.settings.slopeBias;
@@ -200,18 +200,14 @@ namespace render::shadow
                     float texelSize = 1.0f / static_cast<float>(data.settings.resolution);
                     for (const auto& view : data.views)
                     {
-                        if (!view.handle.isValid())
-                            continue;
-
                         ShadowView viewCopy = view;
                         viewCopy.entityId = entityId;
                         viewCopy.depthBias = data.settings.depthBias;
                         viewCopy.slopeBias = data.settings.slopeBias;
                         viewCopy.normalBias = data.settings.normalBias;
                         viewCopy.texelSize = texelSize;
-                        viewCopy.pcfKernelRadius = globalPcfKernel;
-                        viewCopy.pcfSoftness = data.settings.softness;
-                        viewCopy.filterEnabled = globalSoftShadowsEnabled;
+                        viewCopy.lightSize = data.settings.lightSize;
+                        viewCopy.filterEnabled = globalSoftShadows;
 
                         if (!directionalIndices.contains(entityId))
                             directionalIndices[entityId] = static_cast<int32_t>(directionalShadowViews.size());
@@ -227,11 +223,6 @@ namespace render::shadow
                     for (size_t i = 0; i < data.views.size(); ++i)
                     {
                         const auto& view = data.views[i];
-                        if (!view.handle.isValid())
-                        {
-                            vfLogWarning("ShadowSystem: CSM cascade {} has invalid handle", i);
-                            continue;
-                        }
 
                         ShadowView viewCopy = view;
                         viewCopy.entityId = entityId;
@@ -239,9 +230,8 @@ namespace render::shadow
                         viewCopy.slopeBias = data.settings.slopeBias;
                         viewCopy.normalBias = data.settings.normalBias;
                         viewCopy.texelSize = texelSize;
-                        viewCopy.pcfKernelRadius = globalPcfKernel;
-                        viewCopy.pcfSoftness = data.settings.softness;
-                        viewCopy.filterEnabled = globalSoftShadowsEnabled;
+                        viewCopy.lightSize = data.settings.lightSize;
+                        viewCopy.filterEnabled = globalSoftShadows;
 
                         if (!directionalIndices.contains(entityId))
                             directionalIndices[entityId] = static_cast<int32_t>(directionalShadowViews.size());
@@ -255,18 +245,14 @@ namespace render::shadow
                     float texelSize = 1.0f / static_cast<float>(data.settings.resolution);
                     for (const auto& view : data.views)
                     {
-                        if (!view.handle.isValid())
-                            continue;
-
                         ShadowView viewCopy = view;
                         viewCopy.entityId = entityId;
                         viewCopy.depthBias = data.settings.depthBias;
                         viewCopy.slopeBias = data.settings.slopeBias;
                         viewCopy.normalBias = data.settings.normalBias;
                         viewCopy.texelSize = texelSize;
-                        viewCopy.pcfKernelRadius = globalPcfKernel;
-                        viewCopy.pcfSoftness = data.settings.softness;
-                        viewCopy.filterEnabled = globalSoftShadowsEnabled;
+                        viewCopy.lightSize = data.settings.lightSize;
+                        viewCopy.filterEnabled = globalSoftShadows;
 
                         if (!spotIndices.contains(entityId))
                             spotIndices[entityId] = static_cast<int32_t>(spotShadowViews.size());
@@ -288,9 +274,8 @@ namespace render::shadow
                     viewCopy.slopeBias = data.settings.slopeBias;
                     viewCopy.normalBias = data.settings.normalBias;
                     viewCopy.texelSize = texelSize;
-                    viewCopy.pcfKernelRadius = globalPcfKernel;
-                    viewCopy.pcfSoftness = data.settings.softness;
-                    viewCopy.filterEnabled = globalSoftShadowsEnabled;
+                    viewCopy.lightSize = data.settings.lightSize;
+                    viewCopy.filterEnabled = globalSoftShadows;
                     viewCopy.entityId = entityId;
 
                     pointIndices[entityId] = static_cast<int32_t>(pointShadowViews.size());
@@ -317,6 +302,133 @@ namespace render::shadow
             entityToShadowIndex[entityId] = spotOffset + localIdx;
     }
 
+    void ShadowSystem::buildPageRenderList()
+    {
+        pageRenderList.clear();
+        lastCacheStats.totalPages = 0;
+        lastCacheStats.renderedPages = 0;
+        lastCacheStats.cachedPages = 0;
+
+        for (auto& [entityId, data] : lightShadowData)
+        {
+            if (!data.settings.enabled || !data.settings.castShadows)
+                continue;
+
+            if (data.type == ShadowMapType::PointCube)
+                continue; // Point lights use cubemaps, not VSM pages
+
+            if (data.vsmPhysicalTiles.empty())
+                continue;
+
+            // Ensure dirty vector is sized
+            uint32_t totalPages = data.vsmPagesX * data.vsmPagesY;
+            if (data.vsmPageDirty.size() != totalPages)
+                data.vsmPageDirty.resize(totalPages, true);
+
+            if (data.type == ShadowMapType::DirectionalCSM)
+            {
+                uint32_t pagesPerCascade = data.vsmPagesX;
+                uint32_t cascadeCount = data.settings.cascadeCount;
+
+                // CSM cascades are camera-dependent — always dirty when camera moves
+                bool csmDirty = cameraMovedThisFrame;
+
+                for (uint32_t cascade = 0; cascade < cascadeCount && cascade < data.views.size(); ++cascade)
+                {
+                    const auto& view = data.views[cascade];
+                    if (view.cached)
+                        continue;
+
+                    for (uint32_t py = 0; py < pagesPerCascade; ++py)
+                    {
+                        for (uint32_t px = 0; px < pagesPerCascade; ++px)
+                        {
+                            uint32_t pageIdx = (cascade * pagesPerCascade + py) * pagesPerCascade + px;
+                            if (pageIdx >= data.vsmPhysicalTiles.size())
+                                continue;
+
+                            uint32_t physTile = data.vsmPhysicalTiles[pageIdx];
+                            if (physTile == vsm::INVALID_TILE)
+                                continue;
+
+                            ++lastCacheStats.totalPages;
+
+                            // Skip clean pages unless CSM needs update (camera moved)
+                            if (!csmDirty && !data.vsmPageDirty[pageIdx])
+                            {
+                                ++lastCacheStats.cachedPages;
+                                continue;
+                            }
+
+                            glm::mat4 cropMatrix = vsm::computePageCropMatrix(px, py, pagesPerCascade, pagesPerCascade);
+                            glm::mat4 cropVP = cropMatrix * view.viewProjectionMatrix;
+
+                            PageRenderEntry entry;
+                            entry.physicalTileIndex = physTile;
+                            entry.cropViewProjection = cropVP;
+                            entry.depthBias = view.depthBias;
+                            entry.slopeBias = view.slopeBias;
+                            entry.normalBias = view.normalBias;
+                            pageRenderList.push_back(entry);
+                            ++lastCacheStats.renderedPages;
+
+                            // Mark page as clean after adding to render list
+                            data.vsmPageDirty[pageIdx] = false;
+                        }
+                    }
+                }
+            }
+            else
+            {
+                // Spot or Directional2D - single view
+                if (data.views.empty())
+                    continue;
+
+                const auto& view = data.views[0];
+                if (view.cached)
+                    continue;
+
+                for (uint32_t py = 0; py < data.vsmPagesY; ++py)
+                {
+                    for (uint32_t px = 0; px < data.vsmPagesX; ++px)
+                    {
+                        uint32_t pageIdx = py * data.vsmPagesX + px;
+                        if (pageIdx >= data.vsmPhysicalTiles.size())
+                            continue;
+
+                        uint32_t physTile = data.vsmPhysicalTiles[pageIdx];
+                        if (physTile == vsm::INVALID_TILE)
+                            continue;
+
+                        ++lastCacheStats.totalPages;
+
+                        // Skip clean pages for static spot/directional2D lights
+                        if (!data.vsmPageDirty[pageIdx])
+                        {
+                            ++lastCacheStats.cachedPages;
+                            continue;
+                        }
+
+                        glm::mat4 cropMatrix = vsm::computePageCropMatrix(px, py, data.vsmPagesX, data.vsmPagesY);
+                        glm::mat4 cropVP = cropMatrix * view.viewProjectionMatrix;
+
+                        PageRenderEntry entry;
+                        entry.physicalTileIndex = physTile;
+                        entry.cropViewProjection = cropVP;
+                        entry.depthBias = view.depthBias;
+                        entry.slopeBias = view.slopeBias;
+                        entry.normalBias = view.normalBias;
+                        pageRenderList.push_back(entry);
+                        ++lastCacheStats.renderedPages;
+
+                        // Mark page as clean after adding to render list
+                        data.vsmPageDirty[pageIdx] = false;
+                    }
+                }
+            }
+        }
+    }
+
     void ShadowSystem::beginFrame(const glm::mat4& cameraView,
                                   const glm::mat4& cameraProjection,
                                   float cameraNear,
@@ -328,19 +440,26 @@ namespace render::shadow
 
         ++frameCounter;
 
+        // Detect camera movement for CSM page caching (epsilon-based)
+        glm::vec3 cameraPosition = -glm::vec3(cameraView[3]) * glm::mat3(cameraView);
+        glm::vec3 cameraForward = -glm::vec3(cameraView[0][2], cameraView[1][2], cameraView[2][2]);
+        cameraMovedThisFrame = glm::distance(cameraPosition, lastCameraPosition) > CAMERA_MOVE_EPSILON
+                            || glm::distance(cameraForward, lastCameraForward) > CAMERA_MOVE_EPSILON;
+        lastCameraPosition = cameraPosition;
+        lastCameraForward = cameraForward;
+
         directionalShadowViews.clear();
         pointShadowViews.clear();
         spotShadowViews.clear();
         entityToShadowIndex.clear();
+        pageRenderList.clear();
 
-        // Sync static flags from ECS (handles checkbox toggles in editor)
+        // Sync static flags from ECS
         updateStaticFlags();
 
         // Reset per-frame cache stats
         lastCacheStats = {};
 
-        // Pre-collect entity data on main thread (EnTT registry is not thread-safe),
-        // then dispatch pure computation in parallel.
         auto& registry = scene::EntityRegistry::getRegistry();
 
         struct PointLightRef { LightShadowData* data; glm::mat4 worldMatrix; float radius; };
@@ -360,15 +479,12 @@ namespace render::shadow
             if (!registry.valid(entity) || !registry.all_of<components::WorldTransformComponent>(entity))
                 continue;
 
-            // Track static light stats
             if (data.isStatic)
                 ++lastCacheStats.totalStaticLights;
 
             // Skip matrix computation for cached static point/spot lights
-            // (Directional CSM always needs update because cascades depend on camera position)
             if (data.isStatic && data.shadowCached && data.type != ShadowMapType::DirectionalCSM)
             {
-                // Mark all views as cached so the recorder skips them
                 for (auto& view : data.views)
                     view.cached = true;
 
@@ -402,7 +518,6 @@ namespace render::shadow
                 directionalLights.push_back({&data, worldMatrix});
             }
 
-            // Mark views as not cached (will be rendered this frame)
             for (auto& view : data.views)
                 view.cached = false;
             ++lastCacheStats.renderedThisFrame;
@@ -432,8 +547,6 @@ namespace render::shadow
         f3.get();
 
         // Mark static point/spot lights as cached after matrices are computed
-        // Require at least 2 rendered frames before caching, so the shadow map
-        // is fully rendered (first frame may have incomplete state)
         for (auto& [entityId, data] : lightShadowData)
         {
             if (data.isStatic && !data.shadowCached &&
@@ -450,6 +563,11 @@ namespace render::shadow
         }
 
         collectShadowViewsForGPU(visibleLightIds);
+
+        // Apply feedback-driven page allocation (uses previous frame's results)
+        applyFeedbackAllocations();
+
+        buildPageRenderList();
     }
 
     void ShadowSystem::uploadToGPU(vk::CommandBuffer cmd)
@@ -478,7 +596,12 @@ namespace render::shadow
             lightShadowData, entityToCubeIndex);
 
         gpuDataManager->uploadToGPU(cmd);
-        gpuDataManager->updateShadowTextureDescriptor(atlasManager.get(), resourcePool.get(), lightShadowData);
+
+        // Upload page table
+        if (pageTable)
+            pageTable->uploadToGPU(cmd);
+
+        gpuDataManager->updateShadowTextureDescriptor(tilePool.get(), resourcePool.get(), lightShadowData);
 
         needsUpdate = false;
     }
@@ -491,105 +614,12 @@ namespace render::shadow
             return;
 
         passRecorder->recordShadowPass(cmd, params, terrainParams,
-            atlasManager.get(), resourcePool.get(),
+            tilePool.get(), resourcePool.get(),
             shadowPassPipeline.get(), terrainShadowPipeline.get(),
-            directionalShadowViews, spotShadowViews, lightShadowData, shadowsEnabled);
-    }
+            pageRenderList, lightShadowData, shadowsEnabled, poolFirstUse);
 
-    void ShadowSystem::handleAtlasResize(const types::RenderSettings& settings,
-                                          const types::ShadowAtlasConfig& atlasConfig)
-    {
-        auto resizeStartTime = std::chrono::high_resolution_clock::now();
-        const auto& shadowSettings = settings.shadows;
-
-        struct LightRegInfo
-        {
-            uint32_t entityId;
-            ShadowMapType type;
-            ShadowSettings settings;
-        };
-        std::vector<LightRegInfo> existingLights;
-
-        for (const auto& [entityId, data] : lightShadowData)
-        {
-            existingLights.push_back({entityId, data.type, data.settings});
-        }
-
-        for (auto& [entityId, data] : lightShadowData)
-        {
-            freeShadowMaps(data);
-        }
-
-        lightShadowData.clear();
-
-        auto resizeResult = atlasManager->applyQualitySettings(atlasConfig);
-        if (!resizeResult.success)
-        {
-            vfLogError("ShadowSystem: Atlas resize failed");
-            return;
-        }
-
-        if (shadowPassPipeline && shadowPassPipeline->isInitialized())
-        {
-            shadowPassPipeline->createFramebuffer(
-                atlasManager->getAtlasImageView(),
-                atlasManager->getAtlasWidth(),
-                atlasManager->getAtlasHeight()
-            );
-        }
-
-        uint32_t registeredCount = 0;
-        uint32_t failedCount = 0;
-
-        for (const auto& info : existingLights)
-        {
-            ShadowSettings newSettings = info.settings;
-
-            switch (info.type)
-            {
-            case ShadowMapType::DirectionalCSM:
-            case ShadowMapType::Directional2D:
-                newSettings.resolution = atlasConfig.directionalResolution;
-                break;
-            case ShadowMapType::Spot2D:
-                newSettings.resolution = atlasConfig.spotResolution;
-                break;
-            case ShadowMapType::PointCube:
-                newSettings.resolution = atlasConfig.pointResolution;
-                break;
-            default:
-                break;
-            }
-
-            newSettings.cascadeCount = shadowSettings.cascadeCount;
-            newSettings.depthBias = shadowSettings.shadowBias;
-            newSettings.slopeBias = shadowSettings.slopeBias;
-            newSettings.normalBias = shadowSettings.normalBias;
-
-            if (registerLight(info.entityId, info.type, newSettings))
-            {
-                ++registeredCount;
-            }
-            else
-            {
-                ++failedCount;
-                vfLogWarning("ShadowSystem: Failed to re-register light {} after resize", info.entityId);
-            }
-        }
-
-        if (failedCount > 0)
-        {
-            vfLogWarning("ShadowSystem: Re-registered {}/{} lights after atlas resize ({} failed)",
-                         registeredCount, existingLights.size(), failedCount);
-        }
-
-        auto resizeEndTime = std::chrono::high_resolution_clock::now();
-        float resizeMs = std::chrono::duration<float, std::milli>(resizeEndTime - resizeStartTime).count();
-        if (resizeMs > FRAME_BUDGET_WARNING_MS)
-        {
-            vfLogWarning("ShadowSystem: Atlas resize took {:.1f}ms (exceeds {:.0f}ms frame budget)",
-                         resizeMs, FRAME_BUDGET_WARNING_MS);
-        }
+        if (shadowsEnabled)
+            poolFirstUse = false;
     }
 
     void ShadowSystem::applyRenderSettings(const types::RenderSettings& settings)
@@ -603,7 +633,6 @@ namespace render::shadow
         const auto& shadowSettings = settings.shadows;
 
         shadowsEnabled = shadowSettings.enabled;
-        needsUpdate = true;
         globalDepthBias = shadowSettings.shadowBias;
         globalSlopeBias = shadowSettings.slopeBias;
         globalNormalBias = shadowSettings.normalBias;
@@ -613,145 +642,202 @@ namespace render::shadow
         if (!shadowSettings.enabled || shadowSettings.quality == types::ShadowQuality::Off)
             return;
 
-        types::ShadowAtlasConfig atlasConfig = shadowSettings.atlas;
-        if (atlasConfig.atlasSize == 0)
-        {
-            atlasConfig = types::ShadowAtlasConfig::fromQuality(shadowSettings.quality);
-        }
+        globalQuality = static_cast<ShadowQuality>(shadowSettings.quality);
 
-        bool needsResize = atlasManager &&
-        (atlasManager->getAtlasWidth() != atlasConfig.atlasSize ||
-            atlasManager->getAtlasHeight() != atlasConfig.atlasSize);
-
-        if (needsResize)
+        // Update all lights' bias settings and cascade count
+        for (auto& [entityId, data] : lightShadowData)
         {
-            handleAtlasResize(settings, atlasConfig);
-        }
-        else
-        {
-            globalQuality = static_cast<ShadowQuality>(shadowSettings.quality);
+            data.settings.depthBias = shadowSettings.shadowBias;
+            data.settings.slopeBias = shadowSettings.slopeBias;
+            data.settings.normalBias = shadowSettings.normalBias;
 
-            for (auto& [entityId, data] : lightShadowData)
+            if (data.type == ShadowMapType::DirectionalCSM &&
+                data.settings.cascadeCount != shadowSettings.cascadeCount)
             {
-                data.settings.depthBias = shadowSettings.shadowBias;
-                data.settings.slopeBias = shadowSettings.slopeBias;
-                data.settings.normalBias = shadowSettings.normalBias;
+                // Free and reallocate with new cascade count
+                if (data.usesVSM())
+                    freeVSMPages(data);
 
-                if (data.type == ShadowMapType::DirectionalCSM &&
-                    data.settings.cascadeCount != shadowSettings.cascadeCount)
-                {
-                    auto cascadeStartTime = std::chrono::high_resolution_clock::now();
+                data.settings.cascadeCount = shadowSettings.cascadeCount;
+                data.views.resize(shadowSettings.cascadeCount);
 
-                    freeShadowMaps(data);
-                    data.settings.cascadeCount = shadowSettings.cascadeCount;
-                    data.views.resize(shadowSettings.cascadeCount);
-                    allocateShadowMaps(data);
+                if (data.usesVSM())
+                    allocateVSMPages(data);
+            }
 
-                    auto cascadeEndTime = std::chrono::high_resolution_clock::now();
-                    float cascadeMs = std::chrono::duration<float, std::milli>(cascadeEndTime - cascadeStartTime).
-                        count();
-                    if (cascadeMs > FRAME_BUDGET_WARNING_MS)
-                    {
-                        vfLogWarning(
-                            "ShadowSystem: Cascade reallocation for light {} took {:.1f}ms (exceeds frame budget)",
-                            entityId, cascadeMs);
-                    }
-                }
+            data.settingsDirty = true;
+        }
 
-                data.settingsDirty = true;
+        poolFirstUse = true;
+        needsUpdate = true;
+
+        globalSoftShadows = shadowSettings.softShadows;
+    }
+
+    // ============================================================
+    // Scene Change Notifications
+    // ============================================================
+
+    void ShadowSystem::notifySceneChanged()
+    {
+        // Mark ALL pages dirty across all lights and reset view-level cache
+        for (auto& [entityId, data] : lightShadowData)
+        {
+            // Reset page-level dirty flags
+            for (size_t i = 0; i < data.vsmPageDirty.size(); ++i)
+                data.vsmPageDirty[i] = true;
+
+            // Reset view-level cache so pages actually get re-rendered
+            data.shadowCached = false;
+            data.renderedFrameCount = 0;
+            for (auto& view : data.views)
+                view.cached = false;
+        }
+        needsUpdate = true;
+    }
+
+    // ============================================================
+    // GPU Feedback (Phase 2)
+    // ============================================================
+
+    void ShadowSystem::dispatchFeedback(vk::CommandBuffer cmd, vk::ImageView depthView,
+                                         const glm::mat4& invViewProjection,
+                                         uint32_t screenWidth, uint32_t screenHeight)
+    {
+        if (!feedbackEnabled || !feedbackPipeline || !feedbackPipeline->isInitialized() || !gpuDataManager)
+            return;
+
+        // Clear feedback buffer first
+        feedbackPipeline->clearFeedbackBuffer(cmd);
+
+        // Count VSM lights (exclude point lights)
+        uint32_t vsmLightCount = static_cast<uint32_t>(
+            directionalShadowViews.size() + spotShadowViews.size()
+        );
+
+        // Total shadow views = all views uploaded to GPU
+        uint32_t totalViews = static_cast<uint32_t>(
+            directionalShadowViews.size() + pointShadowViews.size() + spotShadowViews.size()
+        );
+
+        if (totalViews == 0)
+            return;
+
+        // The shadow data buffer contains all views in order [dir][point][spot]
+        // The feedback shader iterates all and skips point lights (lightType == 2)
+        vk::DeviceSize shadowDataSize = sizeof(vsm::GPUVSMLight) * totalViews;
+
+        feedbackPipeline->dispatch(cmd, depthView,
+            gpuDataManager->getShadowDataBuffer(), shadowDataSize,
+            totalViews, invViewProjection, screenWidth, screenHeight);
+    }
+
+    void ShadowSystem::copyFeedbackToStaging(vk::CommandBuffer cmd)
+    {
+        if (!feedbackPipeline || !feedbackPipeline->isInitialized())
+            return;
+
+        feedbackPipeline->copyResultsToStaging(cmd);
+    }
+
+    void ShadowSystem::markFeedbackReady()
+    {
+        if (feedbackPipeline)
+            feedbackPipeline->markResultsReady();
+    }
+
+    void ShadowSystem::readBackFeedback()
+    {
+        if (!feedbackPipeline || !feedbackEnabled)
+            return;
+
+        if (feedbackPipeline->getReadbackState() != FeedbackReadbackState::Ready)
+            return;
+
+        // Read back the used portion of the feedback buffer
+        uint32_t usedEntries = 0;
+        for (const auto& [entityId, data] : lightShadowData)
+        {
+            if (data.usesVSM())
+            {
+                uint32_t end = data.vsmPageTableOffset + data.vsmPagesX * data.vsmPagesY;
+                if (end > usedEntries)
+                    usedEntries = end;
             }
         }
 
-        if (passRecorder)
-            passRecorder->resetAtlasFirstUse();
-        needsUpdate = true;
-
-        globalPcfKernel = static_cast<uint8_t>(shadowSettings.pcfKernelSize);
-        globalSoftShadowsEnabled = shadowSettings.softShadowsEnabled;
-
-        // Apply shadow LOD settings
-        shadowLODConfig.enabled = settings.shadowLOD.enabled;
-        shadowLODConfig.tier0Distance = settings.shadowLOD.tier0Distance;
-        shadowLODConfig.tier1Distance = settings.shadowLOD.tier1Distance;
-        shadowLODConfig.tier2Distance = settings.shadowLOD.tier2Distance;
-        shadowLODConfig.tier0Resolution = settings.shadowLOD.tier0Resolution;
-        shadowLODConfig.tier1Resolution = settings.shadowLOD.tier1Resolution;
-        shadowLODConfig.tier2Resolution = settings.shadowLOD.tier2Resolution;
-        shadowLODConfig.staticTier0Distance = settings.shadowLOD.staticTier0Distance;
-        shadowLODConfig.staticTier1Distance = settings.shadowLOD.staticTier1Distance;
-        shadowLODConfig.staticTier2Distance = settings.shadowLOD.staticTier2Distance;
-    }
-
-    void ShadowSystem::applyShadowLODSettings(const ShadowLODConfig& config)
-    {
-        shadowLODConfig = config;
-    }
-
-    void ShadowSystem::updateShadowLOD(const glm::vec3& cameraPosition)
-    {
-        if (!initialized || !shadowLODConfig.enabled)
-        {
+        if (usedEntries == 0)
             return;
-        }
 
-        auto& registry = scene::EntityRegistry::getRegistry();
+        prevFrameFeedback = feedbackPipeline->readbackResults(usedEntries);
+        feedbackHasResults = !prevFrameFeedback.empty();
+    }
+
+    void ShadowSystem::applyFeedbackAllocations()
+    {
+        if (!feedbackEnabled || !feedbackHasResults || prevFrameFeedback.empty())
+            return;
+
+        // Don't evict pages during warmup period (allow feedback to stabilize)
+        static constexpr uint32_t WARMUP_FRAMES = 120; // ~2 seconds at 60fps
+        bool allowEviction = frameCounter > WARMUP_FRAMES;
+
+        if (!tilePool || !pageTable)
+            return;
 
         for (auto& [entityId, data] : lightShadowData)
         {
-            if (data.type == ShadowMapType::DirectionalCSM)
-            {
-                continue; // Directional lights always keep their resolution
-            }
-
-            auto entity = static_cast<entt::entity>(entityId);
-            if (!registry.valid(entity) || !registry.all_of<components::WorldTransformComponent>(entity))
-            {
+            if (!data.usesVSM())
                 continue;
-            }
 
-            const auto& transform = registry.get<components::WorldTransformComponent>(entity);
-            glm::vec3 lightPos = glm::vec3(transform.worldMatrix[3]);
-            float distance = glm::distance(cameraPosition, lightPos);
+            uint32_t totalPages = data.vsmPagesX * data.vsmPagesY;
+            if (totalPages == 0)
+                continue;
 
-            uint32_t desiredResolution = data.isStatic
-                ? shadowLODConfig.getResolutionForStaticLight(distance)
-                : shadowLODConfig.getResolutionForDistance(distance);
-            bool shouldHaveShadow = data.isStatic
-                ? shadowLODConfig.shouldStaticHaveShadow(distance)
-                : shadowLODConfig.shouldHaveShadow(distance);
+            // Ensure tracking vectors are sized
+            if (data.vsmPhysicalTiles.size() != totalPages)
+                data.vsmPhysicalTiles.resize(totalPages, vsm::INVALID_TILE);
+            if (data.vsmPageLastUsedFrame.size() != totalPages)
+                data.vsmPageLastUsedFrame.resize(totalPages, 0);
 
-            auto currentResIt = currentShadowResolutions.find(entityId);
-            uint32_t currentRes = (currentResIt != currentShadowResolutions.end())
-                ? currentResIt->second : data.settings.resolution;
-
-            // Track initial resolution so first LOD pass can trigger a change
-            if (currentResIt == currentShadowResolutions.end() && data.resourceHandle.isValid())
+            for (uint32_t i = 0; i < totalPages; ++i)
             {
-                currentShadowResolutions[entityId] = currentRes;
-            }
+                uint32_t feedbackIdx = data.vsmPageTableOffset + i;
+                if (feedbackIdx >= prevFrameFeedback.size())
+                    continue;
 
-            if (!shouldHaveShadow && data.resourceHandle.isValid())
-            {
-                // Light too far, remove shadow
-                freeShadowMaps(data);
-                currentShadowResolutions.erase(entityId);
-                needsUpdate = true;
-            }
-            else if (shouldHaveShadow && desiredResolution != currentRes)
-            {
-                // Resolution change needed
-                if (data.resourceHandle.isValid())
+                bool pageNeeded = prevFrameFeedback[feedbackIdx] > 0;
+
+                if (pageNeeded)
                 {
-                    freeShadowMaps(data);
+                    data.vsmPageLastUsedFrame[i] = frameCounter;
+
+                    // Allocate physical tile if not already allocated
+                    if (data.vsmPhysicalTiles[i] == vsm::INVALID_TILE)
+                    {
+                        uint32_t tile = tilePool->allocateTile();
+                        if (tile != vsm::INVALID_TILE)
+                        {
+                            data.vsmPhysicalTiles[i] = tile;
+                            uint32_t px = i % data.vsmPagesX;
+                            uint32_t py = i / data.vsmPagesX;
+                            pageTable->mapPage(data.vsmPageTableOffset, px, py, data.vsmPagesX, tile);
+                        }
+                    }
                 }
-
-                data.settings.resolution = desiredResolution;
-                if (allocateShadowMaps(data))
+                else
                 {
-                    currentShadowResolutions[entityId] = desiredResolution;
-                    data.settingsDirty = true;
-                    data.invalidateCache(); // Force re-render at new resolution
-                    needsUpdate = true;
+                    // Page not needed - check eviction threshold (only after warmup)
+                    if (allowEviction &&
+                        data.vsmPhysicalTiles[i] != vsm::INVALID_TILE &&
+                        frameCounter - data.vsmPageLastUsedFrame[i] > EVICTION_THRESHOLD)
+                    {
+                        tilePool->freeTile(data.vsmPhysicalTiles[i]);
+                        uint32_t px = i % data.vsmPagesX;
+                        uint32_t py = i / data.vsmPagesX;
+                        pageTable->unmapPage(data.vsmPageTableOffset, px, py, data.vsmPagesX);
+                        data.vsmPhysicalTiles[i] = vsm::INVALID_TILE;
+                    }
                 }
             }
         }

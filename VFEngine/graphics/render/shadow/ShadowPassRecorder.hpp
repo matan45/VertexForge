@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ShadowTypes.hpp"
+#include "VSMTypes.hpp"
 #include <vulkan/vulkan.hpp>
 #include <vector>
 #include <unordered_map>
@@ -12,10 +13,11 @@ namespace core
 
 namespace render::shadow
 {
-    class ShadowAtlasManager;
+    class VSMPhysicalTilePool;
     class ShadowResourcePool;
     class ShadowPassPipeline;
     class TerrainShadowPipeline;
+
     struct ShadowPassParams
     {
         vk::DescriptorSet perDrawDataDescSet;
@@ -28,16 +30,24 @@ namespace render::shadow
         uint32_t batchCount;
         uint32_t commandsPerSection;
         uint32_t shaderGroupCount;
-        uint32_t transparentGroupIndex;  // Shader group index for transparent objects (skip in shadows)
+        uint32_t transparentGroupIndex;
         uint32_t drawCountStructSize;
+    };
+
+    // Page render entry from ShadowSystem
+    struct PageRenderEntry
+    {
+        uint32_t physicalTileIndex;
+        glm::mat4 cropViewProjection;
+        float depthBias;
+        float slopeBias;
+        float normalBias;
     };
 
     class ShadowPassRecorder
     {
     private:
         core::Device& device;
-        bool atlasFirstUse = true;
-        bool hasCachedAtlasTiles = false;  // True after first frame with cached static shadows
 
     public:
         explicit ShadowPassRecorder(core::Device& device);
@@ -50,16 +60,14 @@ namespace render::shadow
             vk::CommandBuffer cmd,
             const ShadowPassParams& params,
             const TerrainShadowPassParams* terrainParams,
-            ShadowAtlasManager* atlasManager,
+            VSMPhysicalTilePool* tilePool,
             ShadowResourcePool* resourcePool,
             ShadowPassPipeline* shadowPassPipeline,
             TerrainShadowPipeline* terrainShadowPipeline,
-            const std::vector<ShadowView>& directionalShadowViews,
-            const std::vector<ShadowView>& spotShadowViews,
+            const std::vector<PageRenderEntry>& pageRenderList,
             std::unordered_map<uint32_t, LightShadowData>& lightShadowData,
-            bool shadowsEnabled);
-
-        void resetAtlasFirstUse() { atlasFirstUse = true; hasCachedAtlasTiles = false; }
+            bool shadowsEnabled,
+            bool poolFirstUse);
 
     private:
         void renderPointLightCubeShadows(

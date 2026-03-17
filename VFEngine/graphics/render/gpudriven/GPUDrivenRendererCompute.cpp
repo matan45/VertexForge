@@ -253,10 +253,7 @@ namespace render::gpudriven
         dispatchVolumetricFog(cmd);
         dispatchGIProbeUpdate(cmd);
 
-        if (shadowSystem && shadowSystem->isInitialized())
-        {
-            shadowSystem->updateShadowLOD(cachedCamera.position);
-        }
+        // VSM page-based allocation - no per-frame LOD update needed
 
         if (lightStreamManager)
         {

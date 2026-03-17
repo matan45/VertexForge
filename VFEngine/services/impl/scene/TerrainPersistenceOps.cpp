@@ -10,7 +10,14 @@
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/terrain/TerrainEvents.hpp"
+#include "../../events/project/ResourceEvents.hpp"
 #include <asset/AssetRef.hpp>
+#include <asset/AssetDatabase.hpp>
+#include <asset/AssetMetadata.hpp>
+#include <asset/AssetMetadataSerializer.hpp>
+#include <chrono>
+#include <sstream>
+#include <iomanip>
 
 namespace services
 {
@@ -317,6 +324,40 @@ namespace services
                     auto cache = std::make_shared<terrain::TerrainFileCache>(path, newHeader, newIndex, newIndexOffset);
                     fileCaches[terrainEntityId] = cache;
                     gridIt->second->setFileCache(cache);
+                }
+            }
+
+            // Create or update .vfmeta sidecar
+            {
+                auto& db = asset::AssetDatabase::instance();
+                auto metaPath = asset::AssetMetadataSerializer::getMetaPath(path);
+                auto existingMeta = asset::AssetMetadataSerializer::load(metaPath);
+
+                asset::AssetMetadata metadata;
+                if (existingMeta.has_value())
+                {
+                    metadata.guid = existingMeta->guid;
+                }
+                else
+                {
+                    metadata.guid = asset::AssetGUID::generate();
+                }
+                metadata.type = resource::AssetType::Terrain;
+                metadata.importSourcePath = path;
+                {
+                    auto now = std::chrono::system_clock::now();
+                    auto time = std::chrono::system_clock::to_time_t(now);
+                    std::tm tm{};
+                    localtime_s(&tm, &time);
+                    std::ostringstream oss;
+                    oss << std::put_time(&tm, "%Y-%m-%d %H:%M:%S");
+                    metadata.importTimestamp = oss.str();
+                }
+                asset::AssetMetadataSerializer::save(metadata, metaPath);
+
+                if (!db.getGUID(path).has_value())
+                {
+                    db.registerAssetWithGUID(metadata.guid, path, resource::AssetType::Terrain);
                 }
             }
 

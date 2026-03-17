@@ -41,6 +41,15 @@ namespace services
                 metadata.guid = guid;
                 metadata.type = cmd.type;
                 metadata.importSourcePath = cmd.importSource;
+                {
+                    auto now = std::chrono::system_clock::now();
+                    auto time = std::chrono::system_clock::to_time_t(now);
+                    std::tm tm{};
+                    localtime_s(&tm, &time);
+                    std::ostringstream oss;
+                    oss << std::put_time(&tm, "%Y-%m-%d %H:%M:%S");
+                    metadata.importTimestamp = oss.str();
+                }
                 auto metaPath = asset::AssetMetadataSerializer::getMetaPath(cmd.path);
                 asset::AssetMetadataSerializer::save(metadata, metaPath);
 
@@ -237,30 +246,43 @@ namespace services
     {
         auto& db = asset::AssetDatabase::instance();
 
-        // Check if already registered
+        // Check if already registered in the in-memory database
         if (db.getGUID(outputPath).has_value())
         {
             return;
         }
 
-        auto guid = db.registerAsset(outputPath, type, sourcePath);
-
-        // Create .vfmeta sidecar
-        asset::AssetMetadata metadata;
-        metadata.guid = guid;
-        metadata.type = type;
-        metadata.importSourcePath = sourcePath;
-        {
-            auto now = std::chrono::system_clock::now();
-            auto time = std::chrono::system_clock::to_time_t(now);
-            std::tm tm{};
-            localtime_s(&tm, &time);
-            std::ostringstream oss;
-            oss << std::put_time(&tm, "%Y-%m-%d %H:%M:%S");
-            metadata.importTimestamp = oss.str();
-        }
+        // The import lib may have already created the .vfmeta sidecar with
+        // importSource and importTimestamp. Load it to reuse the same GUID.
         auto metaPath = asset::AssetMetadataSerializer::getMetaPath(outputPath);
-        asset::AssetMetadataSerializer::save(metadata, metaPath);
+        auto existingMeta = asset::AssetMetadataSerializer::load(metaPath);
+
+        asset::AssetGUID guid;
+        if (existingMeta.has_value())
+        {
+            guid = existingMeta->guid;
+            db.registerAssetWithGUID(guid, outputPath, type, sourcePath);
+        }
+        else
+        {
+            guid = db.registerAsset(outputPath, type, sourcePath);
+
+            // Create .vfmeta sidecar (fallback if import lib didn't create one)
+            asset::AssetMetadata metadata;
+            metadata.guid = guid;
+            metadata.type = type;
+            metadata.importSourcePath = sourcePath;
+            {
+                auto now = std::chrono::system_clock::now();
+                auto time = std::chrono::system_clock::to_time_t(now);
+                std::tm tm{};
+                localtime_s(&tm, &time);
+                std::ostringstream oss;
+                oss << std::put_time(&tm, "%Y-%m-%d %H:%M:%S");
+                metadata.importTimestamp = oss.str();
+            }
+            asset::AssetMetadataSerializer::save(metadata, metaPath);
+        }
 
         events::assetdb::AssetRegisteredNotification notification;
         notification.guid = guid;
@@ -280,13 +302,35 @@ namespace services
             resource::AssetType type = asset::AssetDatabaseMigrator::detectAssetTypeFromPath(filePath);
             if (type != resource::AssetType::COUNT)
             {
-                auto guid = db.registerAsset(filePath, type);
-
-                asset::AssetMetadata metadata;
-                metadata.guid = guid;
-                metadata.type = type;
+                // Check if .vfmeta already exists to preserve GUID and importSource/importTimestamp
                 auto metaPath = asset::AssetMetadataSerializer::getMetaPath(filePath);
-                asset::AssetMetadataSerializer::save(metadata, metaPath);
+                auto existingMeta = asset::AssetMetadataSerializer::load(metaPath);
+
+                asset::AssetGUID guid;
+                if (existingMeta.has_value())
+                {
+                    guid = existingMeta->guid;
+                    db.registerAssetWithGUID(guid, filePath,
+                        existingMeta->type != resource::AssetType::COUNT ? existingMeta->type : type);
+                }
+                else
+                {
+                    guid = db.registerAsset(filePath, type);
+
+                    asset::AssetMetadata metadata;
+                    metadata.guid = guid;
+                    metadata.type = type;
+                    {
+                        auto now = std::chrono::system_clock::now();
+                        auto time = std::chrono::system_clock::to_time_t(now);
+                        std::tm tm{};
+                        localtime_s(&tm, &time);
+                        std::ostringstream oss;
+                        oss << std::put_time(&tm, "%Y-%m-%d %H:%M:%S");
+                        metadata.importTimestamp = oss.str();
+                    }
+                    asset::AssetMetadataSerializer::save(metadata, metaPath);
+                }
 
                 guidOpt = guid;
 

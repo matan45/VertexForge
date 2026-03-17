@@ -23,6 +23,7 @@ namespace resource {
 		Skeleton = 12,
 		Navmesh = 13,
 		InputMapping = 14,
+		Terrain = 15,
 		COUNT
 	};
 
@@ -43,6 +44,7 @@ namespace resource {
 		case AssetType::Skeleton:         return "Skeleton";
 		case AssetType::Navmesh:          return "Navmesh";
 		case AssetType::InputMapping:     return "InputMapping";
+		case AssetType::Terrain:          return "Terrain";
 		default:                          return "Unknown";
 		}
 	}

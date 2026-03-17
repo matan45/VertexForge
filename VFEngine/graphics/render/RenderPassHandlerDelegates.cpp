@@ -38,6 +38,14 @@ namespace render
         if (gpuDrivenRenderer && gpuDrivenRendererInitialized)
         {
             gpuDrivenRenderer->readBackLightOcclusionResults();
+
+            // VSM feedback readback (1-frame latency, same sync point)
+            auto* shadowSystem = gpuDrivenRenderer->getShadowSystem();
+            if (shadowSystem && shadowSystem->isFeedbackEnabled())
+            {
+                shadowSystem->markFeedbackReady();
+                shadowSystem->readBackFeedback();
+            }
         }
     }
 

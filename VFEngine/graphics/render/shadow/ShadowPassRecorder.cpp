@@ -1,5 +1,5 @@
 #include "ShadowPassRecorder.hpp"
-#include "ShadowAtlasManager.hpp"
+#include "VSMPhysicalTilePool.hpp"
 #include "ShadowResourcePool.hpp"
 #include "ShadowPassPipeline.hpp"
 #include "TerrainShadowPipeline.hpp"
@@ -17,51 +17,24 @@ namespace render::shadow
         vk::CommandBuffer cmd,
         const ShadowPassParams& params,
         const TerrainShadowPassParams* terrainParams,
-        ShadowAtlasManager* atlasManager,
+        VSMPhysicalTilePool* tilePool,
         ShadowResourcePool* resourcePool,
         ShadowPassPipeline* shadowPassPipeline,
         TerrainShadowPipeline* terrainShadowPipeline,
-        const std::vector<ShadowView>& directionalShadowViews,
-        const std::vector<ShadowView>& spotShadowViews,
+        const std::vector<PageRenderEntry>& pageRenderList,
         std::unordered_map<uint32_t, LightShadowData>& lightShadowData,
-        bool shadowsEnabled)
+        bool shadowsEnabled,
+        bool poolFirstUse)
     {
-        if (!shadowsEnabled || !shadowPassPipeline || !shadowPassPipeline->isInitialized())
-        {
-            vfLogWarning("ShadowPassRecorder::recordShadowPass: Not ready (enabled={}, pipeline={}, init={})",
-                         shadowsEnabled, shadowPassPipeline != nullptr,
-                         shadowPassPipeline ? shadowPassPipeline->isInitialized() : false);
+        if (!shadowsEnabled || !shadowPassPipeline || !shadowPassPipeline->isInitialized() || !tilePool)
             return;
-        }
 
         bool hasTerrainShadows = terrainParams != nullptr &&
                                   terrainParams->tileCount > 0 &&
                                   terrainShadowPipeline != nullptr &&
                                   terrainShadowPipeline->isInitialized();
 
-        // Collect only non-cached views for rendering
-        std::vector<const ShadowView*> allViews;
-        bool hasAnyCachedAtlasViews = false;
-        for (const auto& view : spotShadowViews)
-        {
-            if (view.cached)
-            {
-                hasAnyCachedAtlasViews = true;
-                continue;
-            }
-            allViews.push_back(&view);
-        }
-        for (const auto& view : directionalShadowViews)
-        {
-            if (view.cached)
-            {
-                hasAnyCachedAtlasViews = true;
-                continue;
-            }
-            allViews.push_back(&view);
-        }
-
-        bool hasAtlasViews = !allViews.empty() || hasAnyCachedAtlasViews;
+        bool hasPageViews = !pageRenderList.empty();
         bool hasPointShadows = false;
         for (const auto& [entityId, data] : lightShadowData)
         {
@@ -74,7 +47,7 @@ namespace render::shadow
             }
         }
 
-        if (!hasAtlasViews && !hasPointShadows)
+        if (!hasPageViews && !hasPointShadows)
             return;
 
         bool hasMeshBatches = params.batchCount > 0 &&
@@ -85,19 +58,17 @@ namespace render::shadow
         if (!hasMeshBatches && !hasTerrainShadows)
             return;
 
-        if (hasAtlasViews)
+        // Render VSM page-based shadows into the physical tile pool
+        if (hasPageViews)
         {
-            // Determine if we should use the eLoad render pass (preserves cached tiles)
-            // or the eClear render pass (clears everything on first use)
-            bool useLoadPass = hasCachedAtlasTiles && hasAnyCachedAtlasViews && !atlasFirstUse;
-
+            // Transition pool image for rendering
             {
                 vk::ImageMemoryBarrier barrier{};
                 barrier.dstAccessMask = vk::AccessFlagBits::eDepthStencilAttachmentWrite;
                 barrier.newLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
                 barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
                 barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-                barrier.image = atlasManager->getAtlasImage();
+                barrier.image = tilePool->getPoolImage();
                 barrier.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eDepth;
                 barrier.subresourceRange.baseMipLevel = 0;
                 barrier.subresourceRange.levelCount = 1;
@@ -105,7 +76,7 @@ namespace render::shadow
                 barrier.subresourceRange.layerCount = 1;
 
                 vk::PipelineStageFlags srcStage;
-                if (atlasFirstUse)
+                if (poolFirstUse)
                 {
                     barrier.srcAccessMask = {};
                     barrier.oldLayout = vk::ImageLayout::eUndefined;
@@ -118,12 +89,6 @@ namespace render::shadow
                     srcStage = vk::PipelineStageFlagBits::eFragmentShader;
                 }
 
-                if (useLoadPass)
-                {
-                    barrier.dstAccessMask = vk::AccessFlagBits::eDepthStencilAttachmentRead |
-                                             vk::AccessFlagBits::eDepthStencilAttachmentWrite;
-                }
-
                 cmd.pipelineBarrier(
                     srcStage,
                     vk::PipelineStageFlagBits::eEarlyFragmentTests,
@@ -134,145 +99,146 @@ namespace render::shadow
                 );
             }
 
+            // Use eLoad render pass to preserve cached tiles (clear individual tiles via clearAttachments)
+            bool useLoadPass = !poolFirstUse;
+
             vk::ClearValue clearValue{};
             clearValue.depthStencil = vk::ClearDepthStencilValue{1.0f, 0};
 
             vk::RenderPassBeginInfo renderPassInfo{};
             if (useLoadPass)
             {
-                renderPassInfo.renderPass = shadowPassPipeline->getRenderPassLoad();
-                renderPassInfo.framebuffer = shadowPassPipeline->getFramebufferLoad();
+                renderPassInfo.renderPass = tilePool->getRenderPassLoad();
+                renderPassInfo.framebuffer = tilePool->getFramebufferLoad();
+                renderPassInfo.clearValueCount = 0;
+                renderPassInfo.pClearValues = nullptr;
             }
             else
             {
-                renderPassInfo.renderPass = shadowPassPipeline->getRenderPass();
-                renderPassInfo.framebuffer = shadowPassPipeline->getFramebuffer();
+                renderPassInfo.renderPass = tilePool->getRenderPass();
+                renderPassInfo.framebuffer = tilePool->getFramebuffer();
+                renderPassInfo.clearValueCount = 1;
+                renderPassInfo.pClearValues = &clearValue;
             }
             renderPassInfo.renderArea.offset = vk::Offset2D{0, 0};
             renderPassInfo.renderArea.extent = vk::Extent2D{
-                atlasManager->getAtlasWidth(), atlasManager->getAtlasHeight()
+                vsm::PHYSICAL_POOL_DIM, vsm::PHYSICAL_POOL_DIM
             };
-            renderPassInfo.clearValueCount = useLoadPass ? 0 : 1;
-            renderPassInfo.pClearValues = useLoadPass ? nullptr : &clearValue;
 
             cmd.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
 
-            if (hasMeshBatches || hasTerrainShadows)
+            if (hasMeshBatches)
             {
-                if (hasMeshBatches)
-                {
-                    cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, shadowPassPipeline->getPipeline());
+                cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, shadowPassPipeline->getPipeline());
 
-                    std::array<vk::DescriptorSet, 5> descriptorSets = {
-                        params.perDrawDataDescSet,
-                        params.meshletDataDescSet,
-                        params.vertexDataDescSet,
-                        params.boneMatrixDescSet,
-                        params.cameraDescSet
-                    };
-                    cmd.bindDescriptorSets(
-                        vk::PipelineBindPoint::eGraphics,
-                        shadowPassPipeline->getPipelineLayout(),
-                        0,
-                        static_cast<uint32_t>(descriptorSets.size()),
-                        descriptorSets.data(),
-                        0, nullptr
-                    );
+                std::array<vk::DescriptorSet, 5> descriptorSets = {
+                    params.perDrawDataDescSet,
+                    params.meshletDataDescSet,
+                    params.vertexDataDescSet,
+                    params.boneMatrixDescSet,
+                    params.cameraDescSet
+                };
+                cmd.bindDescriptorSets(
+                    vk::PipelineBindPoint::eGraphics,
+                    shadowPassPipeline->getPipelineLayout(),
+                    0,
+                    static_cast<uint32_t>(descriptorSets.size()),
+                    descriptorSets.data(),
+                    0, nullptr
+                );
+            }
+
+            for (const auto& page : pageRenderList)
+            {
+                vk::Viewport viewport = tilePool->getTileViewport(page.physicalTileIndex);
+                cmd.setViewport(0, 1, &viewport);
+
+                vk::Rect2D scissor = tilePool->getTileScissor(page.physicalTileIndex);
+                cmd.setScissor(0, 1, &scissor);
+
+                // Clear just this tile's region when using eLoad pass
+                if (useLoadPass)
+                {
+                    vk::ClearAttachment clearAttach{};
+                    clearAttach.aspectMask = vk::ImageAspectFlagBits::eDepth;
+                    clearAttach.clearValue.depthStencil = vk::ClearDepthStencilValue{1.0f, 0};
+
+                    vk::ClearRect clearRect{};
+                    clearRect.rect = scissor;
+                    clearRect.baseArrayLayer = 0;
+                    clearRect.layerCount = 1;
+
+                    cmd.clearAttachments(1, &clearAttach, 1, &clearRect);
                 }
 
-                for (const auto* view : allViews)
+                cmd.setDepthBias(page.depthBias, 0.0f, page.slopeBias);
+
+                if (hasMeshBatches)
                 {
-                    if (!view->handle.isValid())
+                    ShadowPushConstants pc{};
+                    pc.lightViewProjection = page.cropViewProjection;
+                    pc.baseDrawIndex = 0;
+                    pc.depthBias = page.depthBias;
+                    pc.slopeBias = page.slopeBias;
+                    pc.normalBias = page.normalBias;
+
+                    for (uint32_t shaderGroup = 0; shaderGroup < params.shaderGroupCount; ++shaderGroup)
                     {
-                        vfLogWarning("ShadowPassRecorder: Skipping view with invalid handle");
-                        continue;
-                    }
+                        if (shaderGroup == params.transparentGroupIndex) continue;
 
-                    vk::Viewport viewport = atlasManager->getPixelViewport(view->handle);
-                    cmd.setViewport(0, 1, &viewport);
-
-                    vk::Rect2D scissor = atlasManager->getScissorRect(view->handle);
-                    cmd.setScissor(0, 1, &scissor);
-
-                    // When using eLoad pass, clear only this tile's region before rendering
-                    if (useLoadPass)
-                    {
-                        vk::ClearAttachment clearAttach{};
-                        clearAttach.aspectMask = vk::ImageAspectFlagBits::eDepth;
-                        clearAttach.clearValue.depthStencil = vk::ClearDepthStencilValue{1.0f, 0};
-
-                        vk::ClearRect clearRect{};
-                        clearRect.rect = scissor;
-                        clearRect.baseArrayLayer = 0;
-                        clearRect.layerCount = 1;
-
-                        cmd.clearAttachments(1, &clearAttach, 1, &clearRect);
-                    }
-
-                    cmd.setDepthBias(view->depthBias, 0.0f, view->slopeBias);
-
-                    if (hasMeshBatches)
-                    {
-                        ShadowPushConstants pc{};
-                        pc.lightViewProjection = view->viewProjectionMatrix;
-                        pc.baseDrawIndex = 0;
-                        pc.depthBias = view->depthBias;
-                        pc.slopeBias = view->slopeBias;
-                        pc.normalBias = view->normalBias;
-
-                        for (uint32_t shaderGroup = 0; shaderGroup < params.shaderGroupCount; ++shaderGroup)
+                        for (uint32_t batch = 0; batch < params.batchCount; ++batch)
                         {
-                            if (shaderGroup == params.transparentGroupIndex) continue;
+                            uint32_t sectionIndex = batch * params.shaderGroupCount + shaderGroup;
+                            pc.baseDrawIndex = sectionIndex * params.commandsPerSection;
 
-                            for (uint32_t batch = 0; batch < params.batchCount; ++batch)
-                            {
-                                uint32_t sectionIndex = batch * params.shaderGroupCount + shaderGroup;
-                                pc.baseDrawIndex = sectionIndex * params.commandsPerSection;
+                            cmd.pushConstants(
+                                shadowPassPipeline->getPipelineLayout(),
+                                vk::ShaderStageFlagBits::eTaskEXT | vk::ShaderStageFlagBits::eMeshEXT,
+                                0,
+                                sizeof(ShadowPushConstants),
+                                &pc
+                            );
 
-                                cmd.pushConstants(
-                                    shadowPassPipeline->getPipelineLayout(),
-                                    vk::ShaderStageFlagBits::eTaskEXT | vk::ShaderStageFlagBits::eMeshEXT,
-                                    0,
-                                    sizeof(ShadowPushConstants),
-                                    &pc
-                                );
+                            vk::DeviceSize commandOffset = sectionIndex * params.commandsPerSection * sizeof(
+                                vk::DrawMeshTasksIndirectCommandEXT);
+                            vk::DeviceSize countOffset = sectionIndex * params.drawCountStructSize;
 
-                                vk::DeviceSize commandOffset = sectionIndex * params.commandsPerSection * sizeof(
-                                    vk::DrawMeshTasksIndirectCommandEXT);
-                                vk::DeviceSize countOffset = sectionIndex * params.drawCountStructSize;
-
-                                cmd.drawMeshTasksIndirectCountEXT(
-                                    params.drawCommandBuffer,
-                                    commandOffset,
-                                    params.drawCountBuffer,
-                                    countOffset,
-                                    params.commandsPerSection,
-                                    sizeof(vk::DrawMeshTasksIndirectCommandEXT)
-                                );
-                            }
+                            cmd.drawMeshTasksIndirectCountEXT(
+                                params.drawCommandBuffer,
+                                commandOffset,
+                                params.drawCountBuffer,
+                                countOffset,
+                                params.commandsPerSection,
+                                sizeof(vk::DrawMeshTasksIndirectCommandEXT)
+                            );
                         }
                     }
+                }
 
-                    if (hasTerrainShadows)
-                    {
-                        constexpr float terrainBiasScale = 4.0f;
-                        terrainShadowPipeline->dispatch(
-                            cmd,
-                            terrainParams->terrainDataDescSet,
-                            terrainParams->terrainMeshletDescSet,
-                            terrainParams->terrainVertexDescSet,
-                            view->viewProjectionMatrix,
-                            terrainParams->tileCount,
-                            terrainParams->shadowLOD,
-                            view->depthBias * terrainBiasScale,
-                            view->slopeBias * terrainBiasScale
-                        );
-                    }
+                // Terrain dispatch per page — the terrain task shader frustum-culls
+                // against the crop VP, so most tiles are rejected for narrow pages.
+                // Dispatch overhead is higher than old per-view approach but geometry
+                // cost is comparable due to tighter culling.
+                if (hasTerrainShadows)
+                {
+                    constexpr float terrainBiasScale = 4.0f;
+                    terrainShadowPipeline->dispatch(
+                        cmd,
+                        terrainParams->terrainDataDescSet,
+                        terrainParams->terrainMeshletDescSet,
+                        terrainParams->terrainVertexDescSet,
+                        page.cropViewProjection,
+                        terrainParams->tileCount,
+                        terrainParams->shadowLOD,
+                        page.depthBias * terrainBiasScale,
+                        page.slopeBias * terrainBiasScale
+                    );
                 }
             }
 
             cmd.endRenderPass();
 
+            // Transition back to shader read
             {
                 vk::ImageMemoryBarrier barrier{};
                 barrier.srcAccessMask = vk::AccessFlagBits::eDepthStencilAttachmentWrite;
@@ -281,7 +247,7 @@ namespace render::shadow
                 barrier.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
                 barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
                 barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-                barrier.image = atlasManager->getAtlasImage();
+                barrier.image = tilePool->getPoolImage();
                 barrier.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eDepth;
                 barrier.subresourceRange.baseMipLevel = 0;
                 barrier.subresourceRange.levelCount = 1;
@@ -297,11 +263,6 @@ namespace render::shadow
                     1, &barrier
                 );
             }
-
-            atlasFirstUse = false;
-            // Track that we have cached atlas tiles for next frame
-            if (hasAnyCachedAtlasViews)
-                hasCachedAtlasTiles = true;
         }
 
         renderPointLightCubeShadows(cmd, params, terrainParams, resourcePool,
@@ -337,7 +298,6 @@ namespace render::shadow
                 !data.resourceHandle.isValid())
                 continue;
 
-            // Skip cached static point light shadows
             if (data.isStatic && data.shadowCached)
                 continue;
 

@@ -1,9 +1,14 @@
 #include "print/Log.hpp"
 #include "Import.hpp"
 #include "threading/JobSystem.hpp"
+#include "asset/AssetGUID.hpp"
+#include "asset/AssetMetadata.hpp"
+#include "asset/AssetMetadataSerializer.hpp"
 #include <filesystem>
 #include <future>
 #include <algorithm>
+#include <chrono>
+#include <ctime>
 #include "../pipeline/stages/FileValidationStage.hpp"
 #include "../pipeline/stages/HeaderReadingStage.hpp"
 #include "../pipeline/stages/FileTypeDetectionStage.hpp"
@@ -34,6 +39,48 @@ namespace controllers
             return (std::filesystem::path(ctx.location) / (ctx.fileName + "." + ext)).string();
         }
 
+        resource::AssetType fileTypeToAssetType(const std::string& ft)
+        {
+            if (ft == "PNG" || ft == "JPEG" || ft == "BMP" || ft == "TGA")
+                return resource::AssetType::Texture;
+            if (ft == "HDR" || ft == "EXR")
+                return resource::AssetType::HDR;
+            if (ft == "MP3" || ft == "WAV" || ft == "OGG")
+                return resource::AssetType::Audio;
+            if (ft == "OBJ" || ft == "FBX" || ft == "DAE" || ft == "GLTF" || ft == "GLB")
+                return resource::AssetType::Mesh;
+            if (ft == "TTF" || ft == "OTF")
+                return resource::AssetType::Font;
+            return resource::AssetType::COUNT;
+        }
+
+        void createVfMeta(const std::string& outputPath, const std::string& sourcePath,
+                          resource::AssetType assetType)
+        {
+            auto metaPath = asset::AssetMetadataSerializer::getMetaPath(outputPath);
+            if (std::filesystem::exists(metaPath))
+                return;
+
+            asset::AssetMetadata metadata;
+            metadata.guid = asset::AssetGUID::generate();
+            metadata.type = assetType;
+            metadata.importSourcePath = sourcePath;
+
+            auto now = std::chrono::system_clock::now();
+            auto time = std::chrono::system_clock::to_time_t(now);
+            std::tm tm{};
+#ifdef _WIN32
+            localtime_s(&tm, &time);
+#else
+            localtime_r(&time, &tm);
+#endif
+            char buf[32];
+            std::strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", &tm);
+            metadata.importTimestamp = buf;
+
+            asset::AssetMetadataSerializer::save(metadata, metaPath);
+        }
+
         ImportFileResult handleFileSuccess(const pipeline::ImportContext& ctx,
                                            ImportProgressCallback& progressCallback,
                                            uint32_t completed, uint32_t totalFiles)
@@ -41,9 +88,20 @@ namespace controllers
             ImportFileResult fileResult;
             fileResult.success = true;
             fileResult.fileName = ctx.fileName;
+            fileResult.sourcePath = ctx.file.path;
             fileResult.outputPath = deriveOutputPath(ctx);
             fileResult.fileType = ctx.fileType;
             vfLogInfo("Successfully processed: {}", ctx.file.path);
+
+            // Create .vfmeta sidecar with importSource and importTimestamp
+            if (!fileResult.outputPath.empty())
+            {
+                resource::AssetType assetType = fileTypeToAssetType(ctx.fileType);
+                if (assetType != resource::AssetType::COUNT)
+                {
+                    createVfMeta(fileResult.outputPath, ctx.file.path, assetType);
+                }
+            }
 
             if (progressCallback)
             {

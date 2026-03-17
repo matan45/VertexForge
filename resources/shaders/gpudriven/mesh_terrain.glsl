@@ -180,7 +180,7 @@ void main() {
 #include "../common/gpu_types.glsl"
 #include "../common/camera_types.glsl"
 #include "../common/lighting_functions.glsl"
-#include "../common/shadow_sampling.glsl"
+#include "../common/shadow_sampling_types.glsl"
 #include "../common/cluster_culling.glsl"
 #include "../common/gi_sampling.glsl"
 
@@ -298,12 +298,15 @@ layout(std430, set = 9, binding = 0) readonly buffer ShadowDataBuffer {
     ShadowData shadowDataArray[];
 };
 
-layout(set = 10, binding = 0) uniform sampler2DShadow shadowAtlas;
-layout(set = 10, binding = 1) uniform sampler2DArrayShadow shadowCascades;
-layout(set = 10, binding = 2) uniform samplerCubeShadow shadowCubes[];
+layout(std430, set = 9, binding = 1) readonly buffer PageTableBuffer {
+    uint pageTableTerrain[];
+};
 
-const int MAX_SHADOW_VIEWS = 272;
-const int MAX_POINT_SHADOW_CUBES = 32;
+// Comparison samplers
+layout(set = 10, binding = 0) uniform sampler2DShadow physicalPoolShadow;
+layout(set = 10, binding = 1) uniform sampler2D physicalPoolDepth;
+layout(set = 10, binding = 2) uniform samplerCubeShadow shadowCubes[32];
+layout(set = 10, binding = 3) uniform samplerCube shadowCubesDepth[32];
 
 // Terrain needs higher normal bias than regular meshes to avoid self-shadow artifacts
 // Bias scales with shadow LOD to compensate for geometry mismatch between shadow and render LODs
@@ -315,179 +318,33 @@ float getTerrainNormalBiasScale() {
     return 3.0;
 }
 
-float sampleSpotShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal) {
-    if (shadowIndex < 0 || shadowIndex >= MAX_SHADOW_VIEWS) return 1.0;
+#define SHADOW_BUFFER shadowDataArray
+#define PAGE_TABLE pageTableTerrain
+#include "../common/shadow_sampling.glsl"
 
-    ShadowData sd = shadowDataArray[shadowIndex];
-
-    vec3 biasedPos = worldPos + worldNormal * sd.biasParams.z * getTerrainNormalBiasScale();
-    vec4 lightSpacePos = sd.viewProjection * vec4(biasedPos, 1.0);
-    vec3 projCoords = lightSpacePos.xyz / lightSpacePos.w;
-
-    projCoords.xy = projCoords.xy * 0.5 + 0.5;
-    projCoords.xy = sd.atlasViewport.xy + projCoords.xy * sd.atlasViewport.zw;
-
-    if (projCoords.z > 1.0 || projCoords.z < 0.0) return 1.0;
-    if (any(lessThan(projCoords.xy, vec2(0.0))) || any(greaterThan(projCoords.xy, vec2(1.0)))) return 1.0;
-
-    bool filterEnabled = sd.pcfParams.z > 0.5;
-    int kernelSize = int(sd.pcfParams.x);
-
-    if (!filterEnabled || kernelSize == 0) {
-        return texture(shadowAtlas, vec3(projCoords.xy, projCoords.z));
-    }
-
-    float shadow = 0.0;
-    float texelSize = sd.biasParams.w;
-    float softness = sd.pcfParams.y;
-    float spread = texelSize * softness;
-    int sampleCount = 0;
-    int size = kernelSize + 1;
-    float halfSize = float(size) * 0.5;
-
-    for (int x = 0; x < size; ++x) {
-        for (int y = 0; y < size; ++y) {
-            vec2 offset = (vec2(float(x), float(y)) - halfSize + 0.5) * spread;
-            shadow += texture(shadowAtlas, vec3(projCoords.xy + offset, projCoords.z));
-            sampleCount++;
-        }
-    }
-    return shadow / float(sampleCount);
+// Terrain-specific shadow wrappers that apply terrain bias scaling
+float sampleTerrainSpotShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal) {
+    // Apply terrain-specific normal bias scaling before delegating to VSM sampling
+    vec3 biasedNormal = worldNormal * getTerrainNormalBiasScale();
+    return sampleVSMShadow(shadowIndex, worldPos, biasedNormal);
 }
 
-float sampleCascadeShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal) {
-    if (shadowIndex < 0 || shadowIndex >= MAX_SHADOW_VIEWS) return 1.0;
-
-    ShadowData sd = shadowDataArray[shadowIndex];
-
-    vec3 biasedPos = worldPos + worldNormal * sd.biasParams.z * getTerrainNormalBiasScale();
-    vec4 lightSpacePos = sd.viewProjection * vec4(biasedPos, 1.0);
-
-    if (lightSpacePos.w <= 0.0) return 1.0;
-
-    vec3 projCoords = lightSpacePos.xyz / lightSpacePos.w;
-    vec2 texCoords = projCoords.xy * 0.5 + 0.5;
-    texCoords = clamp(texCoords, 0.0, 1.0);
-    projCoords.xy = sd.atlasViewport.xy + texCoords * sd.atlasViewport.zw;
-    projCoords.z = clamp(projCoords.z, 0.0, 1.0);
-
-    bool filterEnabled = sd.pcfParams.z > 0.5;
-    int kernelSize = int(sd.pcfParams.x);
-
-    if (!filterEnabled || kernelSize == 0) {
-        return texture(shadowAtlas, vec3(projCoords.xy, projCoords.z));
-    }
-
-    float shadow = 0.0;
-    float spread = sd.biasParams.w * sd.pcfParams.y;
-    int sampleCount = 0;
-    int size = kernelSize + 1;
-    float halfSize = float(size) * 0.5;
-
-    for (int x = 0; x < size; ++x) {
-        for (int y = 0; y < size; ++y) {
-            vec2 offset = (vec2(float(x), float(y)) - halfSize + 0.5) * spread;
-            shadow += texture(shadowAtlas, vec3(projCoords.xy + offset, projCoords.z));
-            sampleCount++;
-        }
-    }
-    return shadow / float(sampleCount);
+float sampleTerrainCascadeShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal) {
+    vec3 biasedNormal = worldNormal * getTerrainNormalBiasScale();
+    return sampleVSMShadow(shadowIndex, worldPos, biasedNormal);
 }
 
-float sampleDirectionalShadow(int baseShadowIndex, vec3 worldPos, vec3 worldNormal, float viewZ) {
-    if (baseShadowIndex < 0 || baseShadowIndex >= MAX_SHADOW_VIEWS) return 1.0;
-
-    int cascadeCount = int(shadowDataArray[baseShadowIndex].rangeParams.z);
-    cascadeCount = clamp(cascadeCount, 1, 4);
-
-    if (baseShadowIndex + cascadeCount > MAX_SHADOW_VIEWS) {
-        cascadeCount = MAX_SHADOW_VIEWS - baseShadowIndex;
-        if (cascadeCount <= 0) return 1.0;
-    }
-
-    int cascadeIdx = 0;
-    for (int i = 0; i < cascadeCount; ++i) {
-        if (viewZ < shadowDataArray[baseShadowIndex + i].rangeParams.y) {
-            cascadeIdx = i;
-            break;
-        }
-        cascadeIdx = i;
-    }
-
-    int shadowIndex = baseShadowIndex + cascadeIdx;
-    float cascadeFar = shadowDataArray[shadowIndex].rangeParams.y;
-
-    float shadow = sampleCascadeShadow(shadowIndex, worldPos, worldNormal);
-
-    float blendZoneStart = cascadeFar * 0.9;
-    if (viewZ > blendZoneStart && cascadeIdx < cascadeCount - 1) {
-        float nextShadow = sampleCascadeShadow(shadowIndex + 1, worldPos, worldNormal);
-        float blendFactor = smoothstep(blendZoneStart, cascadeFar, viewZ);
-        shadow = mix(shadow, nextShadow, blendFactor);
-    }
-
-    float maxDistance = shadowDataArray[baseShadowIndex + cascadeCount - 1].rangeParams.y;
-    float fadeStart = maxDistance * 0.85;
-    float fadeFactor = 1.0 - smoothstep(fadeStart, maxDistance, viewZ);
-
-    return mix(1.0, shadow, fadeFactor);
+float sampleTerrainDirectionalShadow(int baseShadowIndex, vec3 worldPos, vec3 worldNormal, float viewZ) {
+    // Apply terrain-specific normal bias scaling before delegating to VSM sampling
+    vec3 biasedNormal = worldNormal * getTerrainNormalBiasScale();
+    return sampleDirectionalShadow(baseShadowIndex, worldPos, biasedNormal, viewZ);
 }
 
-float samplePointShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal,
-                        vec3 lightPos, float lightRadius) {
-    if (shadowIndex < 0 || shadowIndex >= MAX_SHADOW_VIEWS) return 1.0;
-
-    ShadowData sd = shadowDataArray[shadowIndex];
-
-    int cubeMapIndex = int(sd.pcfParams.w);
-    if (cubeMapIndex < 0 || cubeMapIndex >= MAX_POINT_SHADOW_CUBES) return 1.0;
-
-    float near = sd.rangeParams.x;
-    float far = sd.rangeParams.y;
-    vec3 lightToFrag = worldPos - lightPos;
-    float linearDepth = length(lightToFrag);
-
-    if (linearDepth >= far) return 1.0;
-
-    vec3 biasedPos = worldPos + worldNormal * sd.biasParams.z * getTerrainNormalBiasScale();
-    lightToFrag = biasedPos - lightPos;
-    linearDepth = length(lightToFrag);
-    vec3 sampleDir = normalize(lightToFrag);
-
-    float majorComponent = max(abs(sampleDir.x), max(abs(sampleDir.y), abs(sampleDir.z)));
-    float viewSpaceZ = linearDepth * majorComponent;
-    float perspectiveDepth = (far * (viewSpaceZ - near)) / (viewSpaceZ * (far - near));
-
-    bool filterEnabled = sd.pcfParams.z > 0.5;
-    int kernelSize = int(sd.pcfParams.x);
-
-    if (!filterEnabled || kernelSize == 0) {
-        return texture(shadowCubes[nonuniformEXT(cubeMapIndex)], vec4(sampleDir, perspectiveDepth));
-    }
-
-    float softness = sd.pcfParams.y;
-    float spread = softness * 0.01;
-
-    vec3 tangent = abs(sampleDir.x) < 0.9 ? vec3(1.0, 0.0, 0.0) : vec3(0.0, 1.0, 0.0);
-    vec3 bitangent = normalize(cross(sampleDir, tangent));
-    tangent = normalize(cross(bitangent, sampleDir));
-
-    float shadow = 0.0;
-    int sampleCount = 0;
-    int size = kernelSize + 1;
-    float halfSize = float(size) * 0.5;
-
-    for (int x = 0; x < size; ++x) {
-        for (int y = 0; y < size; ++y) {
-            float fx = float(x) - halfSize + 0.5;
-            float fy = float(y) - halfSize + 0.5;
-            vec3 offset = tangent * fx * spread + bitangent * fy * spread;
-            vec3 offsetDir = normalize(sampleDir + offset);
-            shadow += texture(shadowCubes[nonuniformEXT(cubeMapIndex)], vec4(offsetDir, perspectiveDepth));
-            sampleCount++;
-        }
-    }
-    return shadow / float(sampleCount);
+float sampleTerrainPointShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal,
+                               vec3 lightPos, float lightRadius) {
+    // Apply terrain-specific normal bias scaling before delegating to VSM sampling
+    vec3 biasedNormal = worldNormal * getTerrainNormalBiasScale();
+    return samplePointShadow(shadowIndex, worldPos, biasedNormal, lightPos, lightRadius);
 }
 
 void main() {
@@ -536,8 +393,8 @@ void main() {
             uint lightIdx = lightIndexList[lightOffset + i];
             PointLight light = pointLights[lightIdx];
 
-            float shadow = samplePointShadow(light.shadowIndex, fragWorldPos, N,
-                                             light.position, light.radius);
+            float shadow = sampleTerrainPointShadow(light.shadowIndex, fragWorldPos, N,
+                                                    light.position, light.radius);
 
             // Weight shadow contribution to ambient by attenuation
             // so edge-of-radius precision artifacts don't darken ambient
@@ -555,7 +412,7 @@ void main() {
             uint lightIdx = extractLightIndex(packedIdx);
             SpotLight light = spotLights[lightIdx];
 
-            float shadow = sampleSpotShadow(light.shadowIndex, fragWorldPos, N);
+            float shadow = sampleTerrainSpotShadow(light.shadowIndex, fragWorldPos, N);
 
             float spotDist = length(light.position - fragWorldPos);
             float spotAtten = physicalAttenuation(spotDist, light.range);
@@ -572,7 +429,7 @@ void main() {
 
         float shadow = 1.0;
         if (light.shadowIndex >= 0) {
-            shadow = sampleDirectionalShadow(light.shadowIndex, fragWorldPos, N, linearZ);
+            shadow = sampleTerrainDirectionalShadow(light.shadowIndex, fragWorldPos, N, linearZ);
         }
         minShadow = min(minShadow, shadow);
 

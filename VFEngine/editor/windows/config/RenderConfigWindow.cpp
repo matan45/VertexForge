@@ -109,7 +109,6 @@ namespace windows
         if (ImGui::Combo("Quality", &currentQuality, qualityItems, 5))
         {
             settings.shadows.quality = static_cast<types::ShadowQuality>(currentQuality);
-            settings.shadows.atlas = types::ShadowAtlasConfig::fromQuality(settings.shadows.quality);
             isDirty = true;
         }
         if (ImGui::IsItemHovered())
@@ -178,36 +177,13 @@ namespace windows
         ImGui::Text("Shadow Filtering");
         ImGui::Spacing();
 
-        const char* kernelItems[] = {"1x1 (Hard)", "3x3", "5x5"};
-        int kernelIdx = 0;
-        switch (settings.shadows.pcfKernelSize)
-        {
-            case types::PCFKernelSize::x1: kernelIdx = 0; break;
-            case types::PCFKernelSize::x3: kernelIdx = 1; break;
-            case types::PCFKernelSize::x5: kernelIdx = 2; break;
-        }
-        if (ImGui::Combo("PCF Kernel", &kernelIdx, kernelItems, 3))
-        {
-            switch (kernelIdx)
-            {
-                case 0: settings.shadows.pcfKernelSize = types::PCFKernelSize::x1; break;
-                case 1: settings.shadows.pcfKernelSize = types::PCFKernelSize::x3; break;
-                case 2: settings.shadows.pcfKernelSize = types::PCFKernelSize::x5; break;
-            }
-            isDirty = true;
-        }
-        if (ImGui::IsItemHovered())
-        {
-            ImGui::SetTooltip("PCF kernel size for soft shadow edges.\nLarger = softer but slower.");
-        }
-
-        if (ImGui::Checkbox("Soft Shadows", &settings.shadows.softShadowsEnabled))
+        if (ImGui::Checkbox("Soft Shadows (PCSS)", &settings.shadows.softShadows))
         {
             isDirty = true;
         }
         if (ImGui::IsItemHovered())
         {
-            ImGui::SetTooltip("Enable/disable PCF shadow filtering globally.");
+            ImGui::SetTooltip("Enable/disable PCSS contact-hardening soft shadows globally.\nWhen off, hard shadows are used (single tap).");
         }
 
         ImGui::Separator();
@@ -226,72 +202,6 @@ namespace windows
         }
     }
 
-    void RenderConfigWindow::drawShadowLODSection()
-    {
-        ImGui::Separator();
-        ImGui::Text("Shadow LOD");
-        ImGui::Spacing();
-
-        if (ImGui::Checkbox("Enable Shadow LOD", &settings.shadowLOD.enabled))
-        {
-            isDirty = true;
-        }
-        if (ImGui::IsItemHovered())
-        {
-            ImGui::SetTooltip("Adjusts shadow map resolution based on distance to camera.\n"
-                              "Closer lights get higher resolution, distant lights get lower.");
-        }
-
-        if (settings.shadowLOD.enabled)
-        {
-            ImGui::Text("Dynamic Light Tiers");
-            if (ImGui::DragFloat("Tier 0 Distance##dyn", &settings.shadowLOD.tier0Distance, 1.0f, 5.0f, 200.0f, "%.0f m"))
-                isDirty = true;
-            if (ImGui::DragFloat("Tier 1 Distance##dyn", &settings.shadowLOD.tier1Distance, 1.0f, 10.0f, 500.0f, "%.0f m"))
-                isDirty = true;
-            if (ImGui::DragFloat("Tier 2 Distance##dyn", &settings.shadowLOD.tier2Distance, 1.0f, 20.0f, 1000.0f, "%.0f m"))
-                isDirty = true;
-            if (ImGui::IsItemHovered())
-            {
-                ImGui::SetTooltip("Beyond Tier 2 distance, shadows are removed entirely.");
-            }
-
-            ImGui::Spacing();
-            ImGui::Text("Resolutions");
-
-            const char* resOptions[] = { "256", "512", "1024", "2048", "4096" };
-            uint32_t resValues[] = { 256, 512, 1024, 2048, 4096 };
-
-            auto resCombo = [&](const char* label, uint32_t& resolution) {
-                int current = 1; // default to 512
-                for (int i = 0; i < 5; ++i) {
-                    if (resValues[i] == resolution) { current = i; break; }
-                }
-                if (ImGui::Combo(label, &current, resOptions, 5)) {
-                    resolution = resValues[current];
-                    isDirty = true;
-                }
-            };
-
-            resCombo("Tier 0 Resolution", settings.shadowLOD.tier0Resolution);
-            resCombo("Tier 1 Resolution", settings.shadowLOD.tier1Resolution);
-            resCombo("Tier 2 Resolution", settings.shadowLOD.tier2Resolution);
-
-            ImGui::Spacing();
-            ImGui::Text("Static Light Tiers");
-            if (ImGui::DragFloat("Tier 0 Distance##static", &settings.shadowLOD.staticTier0Distance, 1.0f, 5.0f, 200.0f, "%.0f m"))
-                isDirty = true;
-            if (ImGui::DragFloat("Tier 1 Distance##static", &settings.shadowLOD.staticTier1Distance, 1.0f, 10.0f, 500.0f, "%.0f m"))
-                isDirty = true;
-            if (ImGui::DragFloat("Tier 2 Distance##static", &settings.shadowLOD.staticTier2Distance, 1.0f, 20.0f, 1000.0f, "%.0f m"))
-                isDirty = true;
-            if (ImGui::IsItemHovered())
-            {
-                ImGui::SetTooltip("Static lights use tighter distance tiers.\n"
-                                  "Their shadows are cached, so lower resolution saves atlas space.");
-            }
-        }
-    }
 
     void RenderConfigWindow::drawShadowDebugSection()
     {
@@ -328,25 +238,25 @@ namespace windows
 
         if (shadowStats.atlasWidth > 0)
         {
-            ImGui::Text("Atlas: %ux%u", shadowStats.atlasWidth, shadowStats.atlasHeight);
+            ImGui::Text("Pool Dimensions: %ux%u", shadowStats.atlasWidth, shadowStats.atlasHeight);
 
-            ImGui::Text("Utilization:");
+            ImGui::Text("Pool Utilization:");
             ImGui::SameLine();
             ImGui::ProgressBar(shadowStats.atlasUtilization, ImVec2(-1, 0),
                 (std::to_string(static_cast<int>(shadowStats.atlasUtilization * 100)) + "%%").c_str());
 
-            float atlasMB = (shadowStats.atlasWidth * shadowStats.atlasHeight * 4) / (1024.0f * 1024.0f);
+            float poolMB = (shadowStats.atlasWidth * shadowStats.atlasHeight * 4) / (1024.0f * 1024.0f);
 
             uint32_t pointRes = shadowStats.pointResolution;
             float cubeMB = shadowStats.pointLightCount * 6 * pointRes * pointRes * 4 / (1024.0f * 1024.0f);
 
-            float totalMB = atlasMB + cubeMB;
-            ImGui::Text("Est. VRAM: %.1f MB (Atlas: %.1f, Cubes: %.1f)",
-                       totalMB, atlasMB, cubeMB);
+            float totalMB = poolMB + cubeMB;
+            ImGui::Text("Pool VRAM: %.1f MB (Pool: %.1f, Cubes: %.1f)",
+                       totalMB, poolMB, cubeMB);
         }
         else
         {
-            ImGui::TextDisabled("No shadow atlas allocated");
+            ImGui::TextDisabled("No shadow pool allocated");
         }
 
         if (shadowStats.activeShadowCasters > 0)
@@ -359,25 +269,31 @@ namespace windows
                                shadowStats.spotLightCount);
         }
 
-        // Shadow cache stats for static lights
+        // Shadow cache stats
+        ImGui::Spacing();
+        ImGui::Text("Shadow Cache");
         if (shadowStats.totalStaticLights > 0)
         {
-            ImGui::Spacing();
-            ImGui::Text("Shadow Cache");
             ImGui::Text("  Static lights: %u", shadowStats.totalStaticLights);
-            ImGui::Text("  Cached: %u  Rendered: %u  Skipped: %u",
+            ImGui::Text("  View cache: %u cached, %u rendered, %u skipped",
                        shadowStats.cachedShadowMaps,
                        shadowStats.renderedThisFrame,
                        shadowStats.skippedThisFrame);
+        }
 
-            if (shadowStats.activeShadowCasters > 0)
-            {
-                float cacheRatio = static_cast<float>(shadowStats.skippedThisFrame) /
-                    static_cast<float>(shadowStats.skippedThisFrame + shadowStats.renderedThisFrame);
-                ImVec4 cacheColor = cacheRatio > 0.5f ? ImVec4(0.3f, 1, 0.3f, 1)
+        // Page-level cache stats (Phase 3)
+        if (shadowStats.totalPages > 0)
+        {
+            ImGui::Text("  Pages: %u total, %u rendered, %u cached",
+                       shadowStats.totalPages,
+                       shadowStats.renderedPages,
+                       shadowStats.cachedPages);
+
+            float pageCacheRatio = static_cast<float>(shadowStats.cachedPages) /
+                static_cast<float>(shadowStats.totalPages);
+            ImVec4 cacheColor = pageCacheRatio > 0.5f ? ImVec4(0.3f, 1, 0.3f, 1)
                                                       : ImVec4(1, 0.8f, 0.2f, 1);
-                ImGui::TextColored(cacheColor, "  Cache hit: %.0f%%", cacheRatio * 100.0f);
-            }
+            ImGui::TextColored(cacheColor, "  Page cache hit: %.0f%%", pageCacheRatio * 100.0f);
         }
     }
 
@@ -399,7 +315,6 @@ namespace windows
                 drawShadowCSMSettings();
                 drawShadowBiasSettings();
                 drawShadowFilterSettings();
-                drawShadowLODSection();
             }
 
             drawShadowDebugSection();

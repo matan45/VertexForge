@@ -102,6 +102,7 @@ namespace render::lighting
                 settings.depthBias = shadowSystem->getGlobalDepthBias();
                 settings.normalBias = shadowSystem->getGlobalNormalBias();
                 settings.cascadeCount = shadowSystem->getGlobalCascadeCount();
+                settings.lightSize = light.lightSize;
                 settings.enabled = true;
                 settings.castShadows = true;
                 pendingShadow.push_back({entityId, shadow::ShadowMapType::DirectionalCSM, settings});
@@ -168,6 +169,7 @@ namespace render::lighting
                 settings.depthBias = shadowSystem->getGlobalDepthBias();
                 settings.normalBias = shadowSystem->getGlobalNormalBias();
                 settings.farPlane = light.radius;
+                settings.lightSize = light.lightSize;
                 settings.enabled = true;
                 settings.castShadows = true;
                 pendingShadow.push_back({entityId, shadow::ShadowMapType::PointCube, settings});
@@ -244,6 +246,7 @@ namespace render::lighting
                 settings.depthBias = shadowSystem->getGlobalDepthBias();
                 settings.normalBias = shadowSystem->getGlobalNormalBias();
                 settings.farPlane = light.range;
+                settings.lightSize = light.lightSize;
                 settings.enabled = true;
                 settings.castShadows = true;
                 pendingShadow.push_back({entityId, shadow::ShadowMapType::Spot2D, settings});

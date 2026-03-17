@@ -5,12 +5,44 @@
 
 namespace serialization
 {
+    static void writeAssetRef(json& j, const std::string& key, const asset::AssetRef& ref)
+    {
+        j[key] = ref.toHexString();
+        // Also store resolved path as fallback for GUID migration
+        const std::string& path = ref.resolve();
+        if (!path.empty())
+        {
+            j[key + "Path"] = path;
+        }
+    }
+
     static asset::AssetRef readAssetRef(const json& j, const std::string& key)
     {
         if (auto it = j.find(key); it != j.end() && it->is_string())
         {
             std::string val = it->get<std::string>();
-            if (!val.empty()) return asset::AssetRef::fromHexString(val);
+            if (!val.empty())
+            {
+                auto ref = asset::AssetRef::fromHexString(val);
+                // Check if GUID resolves; if not, fall back to stored path
+                if (ref.isValid() && ref.resolve().empty())
+                {
+                    std::string pathKey = key + "Path";
+                    if (auto pathIt = j.find(pathKey); pathIt != j.end() && pathIt->is_string())
+                    {
+                        std::string fallbackPath = pathIt->get<std::string>();
+                        if (!fallbackPath.empty())
+                        {
+                            auto pathRef = asset::AssetRef::fromPath(fallbackPath);
+                            if (pathRef.isValid())
+                            {
+                                return pathRef;
+                            }
+                        }
+                    }
+                }
+                return ref;
+            }
         }
         return asset::AssetRef::invalid();
     }
@@ -42,19 +74,19 @@ namespace serialization
     json SceneSerialization::serializeIBL(const components::IBLComponent& ibl)
     {
         json j;
-        j["hdrRef"] = ibl.hdrRef.toHexString();
+        writeAssetRef(j, "hdrRef", ibl.hdrRef);
         return j;
     }
 
     json SceneSerialization::serializeMesh(const components::MeshComponent& mesh)
     {
         json j;
-        j["meshRef"] = mesh.meshRef.toHexString();
+        writeAssetRef(j, "meshRef", mesh.meshRef);
         j["showBoundingBox"] = mesh.showBoundingBox;
 
         if (mesh.animatorRef.isValid())
         {
-            j["animatorRef"] = mesh.animatorRef.toHexString();
+            writeAssetRef(j, "animatorRef", mesh.animatorRef);
 
             if (mesh.applyRootMotion)
             {
@@ -136,7 +168,7 @@ namespace serialization
     {
         json j;
 
-        j["defaultMaterialRef"] = material.defaultMaterialRef.toHexString();
+        writeAssetRef(j, "defaultMaterialRef", material.defaultMaterialRef);
 
         json subMeshMaterialsJson = json::object();
         for (const auto& [submeshName, matRef] : material.subMeshMaterials)
@@ -251,7 +283,7 @@ namespace serialization
         j["selectable"] = billboard.selectable;
         if (billboard.textureRef.isValid())
         {
-            j["textureRef"] = billboard.textureRef.toHexString();
+            writeAssetRef(j, "textureRef", billboard.textureRef);
         }
         if (!billboard.renderTextureSourceName.empty())
         {
@@ -292,7 +324,7 @@ namespace serialization
     json SceneSerialization::serializeText(const components::TextComponent& text)
     {
         json j;
-        j["fontRef"] = text.fontRef.toHexString();
+        writeAssetRef(j, "fontRef", text.fontRef);
         j["text"] = text.text;
         j["fontSize"] = text.fontSize;
         j["color"] = json::array({text.color.r, text.color.g, text.color.b, text.color.a});

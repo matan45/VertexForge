@@ -1,5 +1,4 @@
 #include "ShadowResourcePool.hpp"
-#include "ShadowSamplers.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/Utilities.hpp"
 #include "../../core/DeferredDeletionQueue.hpp"
@@ -48,60 +47,53 @@ namespace render::shadow
     void ShadowResourcePool::createSamplers()
     {
         const auto& logicalDevice = device.getLogicalDevice();
-        comparisonSampler = ShadowSamplers::createComparisonSampler(logicalDevice);
-        cubeComparisonSampler = ShadowSamplers::createCubeComparisonSampler(logicalDevice);
+
+        vk::SamplerCreateInfo samplerInfo{};
+        samplerInfo.magFilter = vk::Filter::eLinear;
+        samplerInfo.minFilter = vk::Filter::eLinear;
+        samplerInfo.mipmapMode = vk::SamplerMipmapMode::eNearest;
+        samplerInfo.addressModeU = vk::SamplerAddressMode::eClampToBorder;
+        samplerInfo.addressModeV = vk::SamplerAddressMode::eClampToBorder;
+        samplerInfo.addressModeW = vk::SamplerAddressMode::eClampToBorder;
+        samplerInfo.mipLodBias = 0.0f;
+        samplerInfo.anisotropyEnable = VK_FALSE;
+        samplerInfo.maxAnisotropy = 1.0f;
+        samplerInfo.compareEnable = VK_TRUE;
+        samplerInfo.compareOp = vk::CompareOp::eLessOrEqual;
+        samplerInfo.minLod = 0.0f;
+        samplerInfo.maxLod = 0.0f;
+        samplerInfo.borderColor = vk::BorderColor::eFloatOpaqueWhite;
+        samplerInfo.unnormalizedCoordinates = VK_FALSE;
+
+        cubeComparisonSampler = logicalDevice.createSampler(samplerInfo);
+
+        samplerInfo.magFilter = vk::Filter::eNearest;
+        samplerInfo.minFilter = vk::Filter::eNearest;
+        samplerInfo.compareEnable = VK_FALSE;
+        samplerInfo.compareOp = vk::CompareOp::eNever;
+
+        cubeDepthSampler = logicalDevice.createSampler(samplerInfo);
     }
 
     void ShadowResourcePool::cleanupSamplers()
     {
         const auto& logicalDevice = device.getLogicalDevice();
 
+        if (cubeDepthSampler)
+        {
+            logicalDevice.destroySampler(cubeDepthSampler);
+            cubeDepthSampler = nullptr;
+        }
         if (cubeComparisonSampler)
         {
             logicalDevice.destroySampler(cubeComparisonSampler);
             cubeComparisonSampler = nullptr;
         }
-        if (comparisonSampler)
-        {
-            logicalDevice.destroySampler(comparisonSampler);
-            comparisonSampler = nullptr;
-        }
-    }
-
-    ShadowResourceHandle ShadowResourcePool::allocateArray(uint32_t width, uint32_t height, uint32_t layers)
-    {
-        ShadowResourceHandle handle;
-        handle.resourceType = ShadowResourceType::Array;
-        handle.layerOrFace = 0;
-
-        auto depthArray = std::make_unique<ShadowDepthArray>(device);
-        depthArray->init(width, height, layers);
-
-        uint32_t index;
-        if (!freeArrayIndices.empty())
-        {
-            index = freeArrayIndices.back();
-            freeArrayIndices.pop_back();
-            depthArrays[index].resource = std::move(depthArray);
-            depthArrays[index].allocated = true;
-        }
-        else
-        {
-            index = static_cast<uint32_t>(depthArrays.size());
-            ArrayEntry entry;
-            entry.resource = std::move(depthArray);
-            entry.allocated = true;
-            depthArrays.push_back(std::move(entry));
-        }
-
-        handle.resourceIndex = index;
-        return handle;
     }
 
     ShadowResourceHandle ShadowResourcePool::allocateCube(uint32_t size)
     {
         ShadowResourceHandle handle;
-        handle.resourceType = ShadowResourceType::Cube;
         handle.layerOrFace = 0;
 
         auto cubeMap = std::make_unique<ShadowCubeMap>(device);
@@ -133,35 +125,6 @@ namespace render::shadow
         if (!handle.isValid())
             return;
 
-        if (handle.isArray())
-        {
-            if (handle.resourceIndex < depthArrays.size() && depthArrays[handle.resourceIndex].allocated)
-            {
-                if (deletionQueue)
-                {
-                    auto extracted = depthArrays[handle.resourceIndex].resource->extractResources();
-                    std::vector<vk::ImageView> views;
-                    views.reserve(extracted.layerViews.size() + 1);
-                    if (extracted.arrayView)
-                        views.push_back(extracted.arrayView);
-                    for (auto view : extracted.layerViews)
-                    {
-                        if (view)
-                            views.push_back(view);
-                    }
-                    deletionQueue->queueImage(extracted.image, extracted.memory, views);
-                }
-                else
-                {
-                    depthArrays[handle.resourceIndex].resource->cleanup();
-                }
-
-                depthArrays[handle.resourceIndex].resource.reset();
-                depthArrays[handle.resourceIndex].allocated = false;
-                freeArrayIndices.push_back(handle.resourceIndex);
-            }
-        }
-        else if (handle.isCube())
         {
             if (handle.resourceIndex < cubeMaps.size() && cubeMaps[handle.resourceIndex].allocated)
             {
@@ -204,18 +167,6 @@ namespace render::shadow
 
     void ShadowResourcePool::freeAll()
     {
-        for (auto& entry : depthArrays)
-        {
-            if (entry.allocated && entry.resource)
-            {
-                entry.resource->cleanup();
-                entry.resource.reset();
-                entry.allocated = false;
-            }
-        }
-        depthArrays.clear();
-        freeArrayIndices.clear();
-
         for (auto& entry : cubeMaps)
         {
             if (entry.allocated && entry.resource)
@@ -229,39 +180,9 @@ namespace render::shadow
         freeCubeIndices.clear();
     }
 
-    ShadowDepthArray* ShadowResourcePool::getArray(const ShadowResourceHandle& handle)
-    {
-        if (!handle.isValid() || !handle.isArray())
-            return nullptr;
-
-        if (handle.resourceIndex >= depthArrays.size())
-            return nullptr;
-
-        auto& entry = depthArrays[handle.resourceIndex];
-        if (!entry.allocated || !entry.resource)
-            return nullptr;
-
-        return entry.resource.get();
-    }
-
-    const ShadowDepthArray* ShadowResourcePool::getArray(const ShadowResourceHandle& handle) const
-    {
-        if (!handle.isValid() || !handle.isArray())
-            return nullptr;
-
-        if (handle.resourceIndex >= depthArrays.size())
-            return nullptr;
-
-        const auto& entry = depthArrays[handle.resourceIndex];
-        if (!entry.allocated || !entry.resource)
-            return nullptr;
-
-        return entry.resource.get();
-    }
-
     ShadowCubeMap* ShadowResourcePool::getCube(const ShadowResourceHandle& handle)
     {
-        if (!handle.isValid() || !handle.isCube())
+        if (!handle.isValid())
             return nullptr;
 
         if (handle.resourceIndex >= cubeMaps.size())
@@ -276,7 +197,7 @@ namespace render::shadow
 
     const ShadowCubeMap* ShadowResourcePool::getCube(const ShadowResourceHandle& handle) const
     {
-        if (!handle.isValid() || !handle.isCube())
+        if (!handle.isValid())
             return nullptr;
 
         if (handle.resourceIndex >= cubeMaps.size())
@@ -287,17 +208,6 @@ namespace render::shadow
             return nullptr;
 
         return entry.resource.get();
-    }
-
-    uint32_t ShadowResourcePool::getActiveArrayCount() const
-    {
-        uint32_t count = 0;
-        for (const auto& entry : depthArrays)
-        {
-            if (entry.allocated)
-                ++count;
-        }
-        return count;
     }
 
     uint32_t ShadowResourcePool::getActiveCubeCount() const
@@ -313,37 +223,11 @@ namespace render::shadow
 
     void ShadowResourcePool::createPlaceholderResources()
     {
-        placeholderArray = std::make_unique<ShadowDepthArray>(device);
-        placeholderArray->init(1, 1, 1);
-
         placeholderCube = std::make_unique<ShadowCubeMap>(device);
         placeholderCube->init(1);
 
         const auto& logicalDevice = device.getLogicalDevice();
         auto cmd = core::Utilities::beginSingleTimeCommands(logicalDevice, device.getStagingCommandPool());
-
-        vk::ImageMemoryBarrier barrier{};
-        barrier.srcAccessMask = {};
-        barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
-        barrier.oldLayout = vk::ImageLayout::eUndefined;
-        barrier.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        barrier.image = placeholderArray->getImage();
-        barrier.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eDepth;
-        barrier.subresourceRange.baseMipLevel = 0;
-        barrier.subresourceRange.levelCount = 1;
-        barrier.subresourceRange.baseArrayLayer = 0;
-        barrier.subresourceRange.layerCount = 1;
-
-        cmd->pipelineBarrier(
-            vk::PipelineStageFlagBits::eTopOfPipe,
-            vk::PipelineStageFlagBits::eFragmentShader,
-            {},
-            0, nullptr,
-            0, nullptr,
-            1, &barrier
-        );
 
         vk::ImageMemoryBarrier cubeBarrier{};
         cubeBarrier.srcAccessMask = {};
@@ -373,25 +257,11 @@ namespace render::shadow
 
     void ShadowResourcePool::cleanupPlaceholders()
     {
-        if (placeholderArray)
-        {
-            placeholderArray->cleanup();
-            placeholderArray.reset();
-        }
         if (placeholderCube)
         {
             placeholderCube->cleanup();
             placeholderCube.reset();
         }
-    }
-
-    vk::ImageView ShadowResourcePool::getPlaceholderArrayView() const
-    {
-        if (placeholderArray && placeholderArray->isInitialized())
-        {
-            return placeholderArray->getArrayView();
-        }
-        return nullptr;
     }
 
     vk::ImageView ShadowResourcePool::getPlaceholderCubeView() const
