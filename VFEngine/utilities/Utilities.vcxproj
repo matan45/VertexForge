@@ -219,6 +219,7 @@
     <ClInclude Include="threading\JobSystem.hpp" />
     <ClInclude Include="threading\TaskGraph.hpp" />
     <ClInclude Include="threading\TaskGraphBuilder.hpp" />
+    <ClInclude Include="threading\TaskGraphImpl.hpp" />
     <ClInclude Include="threading\TaskProfiler.hpp" />
     <ClInclude Include="time\Clock.hpp" />
     <ClInclude Include="time\Timer.hpp" />
