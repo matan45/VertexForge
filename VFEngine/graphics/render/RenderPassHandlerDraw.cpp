@@ -414,17 +414,19 @@ namespace render
         {
             // Read previous frame's displacement data for CPU-side physics
             gpuDrivenRenderer->readbackOceanDisplacement();
-            // Ocean FFT compute runs on async compute queue when active
-            if (!asyncComputeActive)
-            {
-                gpuDrivenRenderer->dispatchOceanFFT(commandBuffer, currentTime);
-            }
+            // Ocean FFT always on graphics queue — output textures are read by water render
+            // in the same frame (layout transition from GENERAL to SHADER_READ_ONLY_OPTIMAL)
+            gpuDrivenRenderer->dispatchOceanFFT(commandBuffer, currentTime);
         }
 
         vk::DescriptorSet iblDescriptorSet = meshPipeline->getIBLDescriptorSet(imageIndex);
 
         bool useParallel = parallelSceneRecording && sceneThreadPoolManager &&
                            sceneThreadPoolManager->getThreadCount() > 1;
+
+        // Compute WBOIT state once (used by both parallel and inline paths, and post-pass)
+        bool wboitActive = wboitEnabled && wboitPipeline && wboitPipeline->isInitialized()
+                           && gpuDrivenRenderer->isWBOITReady();
 
         if (useParallel)
         {
@@ -457,49 +459,53 @@ namespace render
                 sec.setScissor(0, scissor);
             };
 
-            bool useWBOIT = wboitEnabled && wboitPipeline && wboitPipeline->isInitialized()
-                            && gpuDrivenRenderer->isWBOITReady();
             bool hasTerrain = gpuDrivenRenderer->isTerrainRenderingEnabled();
             bool hasGrass = gpuDrivenRenderer->isGrassRenderingEnabled();
             bool hasWater = gpuDrivenRenderer->isWaterRenderingEnabled();
             bool hasBillboards = gpuDrivenRenderer->isBillboardRenderingEnabled();
 
-            // Determine how many secondary buffers we need
-            // Thread 0: opaque + transparent + blend (main mesh draws)
-            // Thread 1: terrain (if enabled)
-            // Thread 2: grass (if enabled)
-            // Thread 3: water + billboards (if enabled)
-            struct SecondaryTask {
-                uint32_t threadIdx;
-                vk::CommandBuffer cmd{nullptr};
-                bool used = false;
-            };
+            // Secondary command buffers for parallel draw groups:
+            //   Thread 0: opaque + transparent + blend + custom shaders + debug
+            //   Thread 1: terrain (if enabled)
+            //   Thread 2: grass (if enabled)
+            //   Thread 3: water + billboards (if enabled)
+            vk::CommandBuffer meshCmd{nullptr};
+            vk::CommandBuffer terrainCmd{nullptr};
+            vk::CommandBuffer grassCmd{nullptr};
+            vk::CommandBuffer waterCmd{nullptr};
 
-            SecondaryTask meshTask{0};
-            SecondaryTask terrainTask{1};
-            SecondaryTask grassTask{2};
-            SecondaryTask waterTask{3};
-
-            // Submit parallel jobs for independent draw groups
+            // Mesh task is always submitted (opaque meshes always exist when we reach this path)
             auto meshFuture = threading::JobSystem::instance().submit([&]() {
-                meshTask.cmd = sceneThreadPoolManager->getSecondary(0, frameIndex);
-                setupSecondary(meshTask.cmd);
-                gpuDrivenRenderer->renderDraw(meshTask.cmd, iblDescriptorSet);
-                if (!useWBOIT) gpuDrivenRenderer->renderTransparentDraw(meshTask.cmd, iblDescriptorSet);
-                gpuDrivenRenderer->renderBlendDraw(meshTask.cmd, iblDescriptorSet);
-                meshTask.cmd.end();
-                meshTask.used = true;
+                meshCmd = sceneThreadPoolManager->getSecondary(0, frameIndex);
+                setupSecondary(meshCmd);
+                gpuDrivenRenderer->renderDraw(meshCmd, iblDescriptorSet);
+                if (!wboitActive) gpuDrivenRenderer->renderTransparentDraw(meshCmd, iblDescriptorSet);
+                gpuDrivenRenderer->renderBlendDraw(meshCmd, iblDescriptorSet);
+
+                // Custom shaders, GI debug, debug renderer — folded into mesh secondary
+                // to avoid an extra render pass transition
+                if (hasCustomShaderMeshes)
+                {
+                    meshPipeline->renderMeshList(meshCmd, imageIndex, customShaderMeshDrawList, currentFrustum);
+                }
+                gpuDrivenRenderer->renderGIDebug(meshCmd, currentProjection * currentView);
+                if (debugRendererPtr)
+                {
+                    debugRendererPtr->render(meshCmd, combinedMeshDrawList, currentView, currentProjection,
+                        [this](const std::string& meshId) { return meshPipeline->getMesh(meshId); });
+                }
+
+                meshCmd.end();
             }, threading::JobPriority::HIGH);
 
             std::future<void> terrainFuture;
             if (hasTerrain)
             {
                 terrainFuture = threading::JobSystem::instance().submit([&]() {
-                    terrainTask.cmd = sceneThreadPoolManager->getSecondary(1, frameIndex);
-                    setupSecondary(terrainTask.cmd);
-                    gpuDrivenRenderer->renderTerrainDraw(terrainTask.cmd, iblDescriptorSet);
-                    terrainTask.cmd.end();
-                    terrainTask.used = true;
+                    terrainCmd = sceneThreadPoolManager->getSecondary(1, frameIndex);
+                    setupSecondary(terrainCmd);
+                    gpuDrivenRenderer->renderTerrainDraw(terrainCmd, iblDescriptorSet);
+                    terrainCmd.end();
                 }, threading::JobPriority::HIGH);
             }
 
@@ -507,11 +513,10 @@ namespace render
             if (hasGrass)
             {
                 grassFuture = threading::JobSystem::instance().submit([&]() {
-                    grassTask.cmd = sceneThreadPoolManager->getSecondary(2, frameIndex);
-                    setupSecondary(grassTask.cmd);
-                    gpuDrivenRenderer->renderGrassDraw(grassTask.cmd, iblDescriptorSet);
-                    grassTask.cmd.end();
-                    grassTask.used = true;
+                    grassCmd = sceneThreadPoolManager->getSecondary(2, frameIndex);
+                    setupSecondary(grassCmd);
+                    gpuDrivenRenderer->renderGrassDraw(grassCmd, iblDescriptorSet);
+                    grassCmd.end();
                 }, threading::JobPriority::HIGH);
             }
 
@@ -519,12 +524,11 @@ namespace render
             if (hasWater || hasBillboards)
             {
                 waterFuture = threading::JobSystem::instance().submit([&]() {
-                    waterTask.cmd = sceneThreadPoolManager->getSecondary(3, frameIndex);
-                    setupSecondary(waterTask.cmd);
-                    if (hasWater) gpuDrivenRenderer->renderWaterDraw(waterTask.cmd, iblDescriptorSet);
-                    if (hasBillboards) gpuDrivenRenderer->renderBillboardDraw(waterTask.cmd, iblDescriptorSet);
-                    waterTask.cmd.end();
-                    waterTask.used = true;
+                    waterCmd = sceneThreadPoolManager->getSecondary(3, frameIndex);
+                    setupSecondary(waterCmd);
+                    if (hasWater) gpuDrivenRenderer->renderWaterDraw(waterCmd, iblDescriptorSet);
+                    if (hasBillboards) gpuDrivenRenderer->renderBillboardDraw(waterCmd, iblDescriptorSet);
+                    waterCmd.end();
                 }, threading::JobPriority::HIGH);
             }
 
@@ -539,58 +543,21 @@ namespace render
 
             std::vector<vk::CommandBuffer> secondaries;
             secondaries.reserve(4);
-            if (meshTask.used) secondaries.push_back(meshTask.cmd);
-            if (terrainTask.used) secondaries.push_back(terrainTask.cmd);
-            if (grassTask.used) secondaries.push_back(grassTask.cmd);
-            if (waterTask.used) secondaries.push_back(waterTask.cmd);
+            secondaries.push_back(meshCmd); // Always present
+            if (terrainCmd) secondaries.push_back(terrainCmd);
+            if (grassCmd) secondaries.push_back(grassCmd);
+            if (waterCmd) secondaries.push_back(waterCmd);
 
-            if (!secondaries.empty())
-            {
-                commandBuffer.executeCommands(
-                    static_cast<uint32_t>(secondaries.size()),
-                    secondaries.data()
-                );
-            }
+            commandBuffer.executeCommands(
+                static_cast<uint32_t>(secondaries.size()),
+                secondaries.data()
+            );
 
             auto sceneRecordEnd = std::chrono::high_resolution_clock::now();
             lastSceneRecordingUs = std::chrono::duration<float, std::micro>(sceneRecordEnd - sceneRecordStart).count();
             lastSceneSecondaryCount = static_cast<uint32_t>(secondaries.size());
 
-            // Custom shaders, GI debug, debug renderer need inline — end secondary pass first
             meshPipeline->endRenderPass(commandBuffer);
-
-            // Record remaining items inline in a new render pass (eLoad to preserve)
-            if (hasCustomShaderMeshes || debugRendererPtr || gpuDrivenRenderer)
-            {
-                bool needsInlinePass = hasCustomShaderMeshes ||
-                    (gpuDrivenRenderer && gpuDrivenRenderer->getGISettings().showProbes) ||
-                    (debugRendererPtr && debugRendererPtr->hasItemsToRender());
-
-                if (needsInlinePass)
-                {
-                    meshPipeline->beginRenderPass(commandBuffer, imageIndex);
-
-                    vk::Viewport vp{0.0f, 0.0f,
-                        static_cast<float>(extent.width), static_cast<float>(extent.height),
-                        0.0f, 1.0f};
-                    commandBuffer.setViewport(0, vp);
-                    vk::Rect2D sc{{0, 0}, extent};
-                    commandBuffer.setScissor(0, sc);
-
-                    if (hasCustomShaderMeshes)
-                    {
-                        meshPipeline->renderMeshList(commandBuffer, imageIndex, customShaderMeshDrawList, currentFrustum);
-                    }
-                    gpuDrivenRenderer->renderGIDebug(commandBuffer, currentProjection * currentView);
-                    if (debugRendererPtr)
-                    {
-                        debugRendererPtr->render(commandBuffer, combinedMeshDrawList, currentView, currentProjection,
-                            [this](const std::string& meshId) { return meshPipeline->getMesh(meshId); });
-                    }
-
-                    meshPipeline->endRenderPass(commandBuffer);
-                }
-            }
         }
         else
         {
@@ -607,9 +574,7 @@ namespace render
 
             gpuDrivenRenderer->renderDraw(commandBuffer, iblDescriptorSet);
 
-            bool useWBOIT = wboitEnabled && wboitPipeline && wboitPipeline->isInitialized()
-                            && gpuDrivenRenderer->isWBOITReady();
-            if (!useWBOIT)
+            if (!wboitActive)
             {
                 gpuDrivenRenderer->renderTransparentDraw(commandBuffer, iblDescriptorSet);
             }
@@ -641,10 +606,7 @@ namespace render
                 meshPipeline->renderMeshList(commandBuffer, imageIndex, customShaderMeshDrawList, currentFrustum);
             }
 
-            if (gpuDrivenRenderer)
-            {
-                gpuDrivenRenderer->renderGIDebug(commandBuffer, currentProjection * currentView);
-            }
+            gpuDrivenRenderer->renderGIDebug(commandBuffer, currentProjection * currentView);
 
             if (debugRendererPtr)
             {
@@ -665,8 +627,6 @@ namespace render
             decalPipeline->render(commandBuffer, imageIndex);
         }
 
-        bool wboitActive = wboitEnabled && wboitPipeline && wboitPipeline->isInitialized()
-                           && gpuDrivenRenderer->isWBOITReady();
         if (wboitActive && gpuDrivenRenderer->hasTransparentObjects())
         {
             wboitPipeline->beginWBOITPass(commandBuffer, imageIndex);
@@ -995,10 +955,7 @@ namespace render
             vfxRuntimeProvider->recordComputeCommands(asyncCmd);
         }
 
-        // Ocean FFT
-        if (oceanFFTInitialized && gpuDrivenRendererInitialized)
-        {
-            gpuDrivenRenderer->dispatchOceanFFT(asyncCmd, currentTime);
-        }
+        // Ocean FFT stays on graphics queue — its output textures are consumed
+        // by water rendering in the same frame (same-frame layout dependency)
     }
 }

@@ -29,9 +29,12 @@ namespace render::shadow
         bool shadowsEnabled,
         bool poolFirstUse)
     {
-        auto recordStart = std::chrono::high_resolution_clock::now();
         if (!shadowsEnabled || !shadowPassPipeline || !shadowPassPipeline->isInitialized() || !tilePool)
+        {
+            lastStats = {};
             return;
+        }
+        auto recordStart = std::chrono::high_resolution_clock::now();
 
         bool hasTerrainShadows = terrainParams != nullptr &&
                                   terrainParams->tileCount > 0 &&
@@ -472,7 +475,10 @@ namespace render::shadow
         uint32_t frameIndex)
     {
         if (!shadowsEnabled || !shadowPassPipeline || !shadowPassPipeline->isInitialized() || !tilePool)
+        {
+            lastStats = {};
             return;
+        }
 
         bool hasTerrainShadows = terrainParams != nullptr &&
                                   terrainParams->tileCount > 0 &&
@@ -589,6 +595,8 @@ namespace render::shadow
             std::vector<vk::CommandBuffer> secondaryBuffers(threadCount, nullptr);
             std::vector<bool> threadUsed(threadCount, false);
 
+            // enkiTS guarantees each concurrent invocation gets a unique threadNum
+            // in range [0, threadCount). Each thread writes only its own slot.
             threading::JobSystem::instance().parallelFor(tileCount,
                 [&](uint32_t begin, uint32_t end, uint32_t threadNum) {
                     vk::CommandBuffer secondary = threadPoolManager->getSecondary(threadNum, frameIndex);

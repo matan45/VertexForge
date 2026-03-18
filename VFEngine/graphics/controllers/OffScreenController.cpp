@@ -65,8 +65,10 @@ namespace controllers
         // Wire async compute to the viewport
         offScreen->setAsyncComputeManager(asyncComputeManager.get());
 
-        // Initialize per-thread command pools for parallel scene recording
-        // Need at least 4 threads for mesh/terrain/grass/water parallel groups
+        // Per-thread command pools for parallel scene recording (mesh/terrain/grass/water groups).
+        // These are separate from ShadowSystem's ThreadCommandPoolManager which manages
+        // its own pools for VSM tile recording. Both use the same JobSystem thread pool
+        // but never overlap (shadow recording completes before scene recording starts).
         sceneThreadPoolManager = std::make_unique<core::ThreadCommandPoolManager>();
         uint32_t sceneThreads = std::max(4u, threading::JobSystem::instance().getThreadCount());
         sceneThreadPoolManager->init(device, sceneThreads);

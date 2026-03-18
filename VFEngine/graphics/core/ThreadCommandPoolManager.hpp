@@ -1,14 +1,13 @@
 #pragma once
 #define VULKAN_HPP_DISPATCH_LOADER_DYNAMIC 1
 #include <vulkan/vulkan.hpp>
+#include "RenderManager.hpp" // for MAX_FRAMES_IN_FLIGHT
 #include <vector>
 #include <array>
 
 namespace core
 {
     class Device;
-
-    constexpr uint32_t THREAD_POOL_FRAMES = 2; // Must match MAX_FRAMES_IN_FLIGHT
 
     class ThreadCommandPoolManager
     {
@@ -18,7 +17,7 @@ namespace core
         struct ThreadPool
         {
             vk::UniqueCommandPool commandPool;
-            std::array<vk::UniqueCommandBuffer, THREAD_POOL_FRAMES> secondaryBuffers;
+            std::array<vk::UniqueCommandBuffer, MAX_FRAMES_IN_FLIGHT> secondaryBuffers;
         };
 
         std::vector<ThreadPool> threadPools;

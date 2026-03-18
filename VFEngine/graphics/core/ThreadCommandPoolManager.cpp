@@ -40,12 +40,12 @@ namespace core
             vk::CommandBufferAllocateInfo allocInfo{};
             allocInfo.commandPool = threadPools[t].commandPool.get();
             allocInfo.level = vk::CommandBufferLevel::eSecondary;
-            allocInfo.commandBufferCount = THREAD_POOL_FRAMES;
+            allocInfo.commandBufferCount = MAX_FRAMES_IN_FLIGHT;
 
             try
             {
                 auto buffers = device->getLogicalDevice().allocateCommandBuffersUnique(allocInfo);
-                for (uint32_t f = 0; f < THREAD_POOL_FRAMES; f++)
+                for (uint32_t f = 0; f < MAX_FRAMES_IN_FLIGHT; f++)
                 {
                     threadPools[t].secondaryBuffers[f] = std::move(buffers[f]);
                 }
@@ -57,7 +57,7 @@ namespace core
             }
         }
 
-        vfLogInfo("ThreadCommandPoolManager initialized: {} threads, {} frames", threadCount, THREAD_POOL_FRAMES);
+        vfLogInfo("ThreadCommandPoolManager initialized: {} threads, {} frames", threadCount, MAX_FRAMES_IN_FLIGHT);
     }
 
     void ThreadCommandPoolManager::cleanUp()
@@ -76,7 +76,7 @@ namespace core
 
     void ThreadCommandPoolManager::resetFrame(uint32_t frameIndex)
     {
-        uint32_t fi = frameIndex % THREAD_POOL_FRAMES;
+        uint32_t fi = frameIndex % MAX_FRAMES_IN_FLIGHT;
 
         for (uint32_t t = 0; t < threadCount; t++)
         {
@@ -87,7 +87,7 @@ namespace core
 
     vk::CommandBuffer ThreadCommandPoolManager::getSecondary(uint32_t threadNum, uint32_t frameIndex)
     {
-        uint32_t fi = frameIndex % THREAD_POOL_FRAMES;
+        uint32_t fi = frameIndex % MAX_FRAMES_IN_FLIGHT;
         return threadPools[threadNum].secondaryBuffers[fi].get();
     }
 }

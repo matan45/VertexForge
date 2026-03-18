@@ -615,7 +615,9 @@ namespace render::shadow
         if (!passRecorder)
             return;
 
-        // Use parallel recording when enough tiles to justify thread overhead
+        // Below this threshold, thread launch/join overhead exceeds per-tile recording cost.
+        // Each tile records ~5-10 Vulkan calls (viewport, scissor, bias, push constants, draw).
+        // At 5+ tiles the parallelFor work-stealing amortizes the overhead.
         constexpr uint32_t PARALLEL_TILE_THRESHOLD = 5;
         uint32_t frameIndex = core::RenderManager::getImageIndex();
 

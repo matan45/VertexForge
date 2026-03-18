@@ -286,7 +286,7 @@ namespace controllers
     private:
         std::unique_ptr<render::gpudriven::BrushComputePipeline> brushComputePipeline;
         std::unique_ptr<core::AsyncComputeManager> asyncComputeManager;
+        // Scene recording pools (separate from ShadowSystem's pools for VSM tiles)
         std::unique_ptr<core::ThreadCommandPoolManager> sceneThreadPoolManager;
-        mutable services::GPUPipelineStatus cachedPipelineStatus{};
     };
 }
