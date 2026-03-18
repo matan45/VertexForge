@@ -31,7 +31,6 @@ namespace resource
     class TextureStreamHandle
     {
     private:
-        std::ifstream file;
         TextureStreamHeader header;
         std::string filePath;
         mutable std::mutex fileMutex;
@@ -56,7 +55,7 @@ namespace resource
         bool readMipRange(uint32_t fromLevel, uint32_t toLevel, std::vector<MipLevelData>& out);
 
     private:
-        bool parseHeader();
+        bool parseHeader(std::ifstream& file);
     };
 
     class TextureStreamResource

@@ -306,6 +306,11 @@ namespace controllers {
 		offScreenController->setLODSelectionEnabled(enabled);
 	}
 
+	void OffScreen::setLODCrossfadeEnabled(bool enabled)
+	{
+		offScreenController->setLODCrossfadeEnabled(enabled);
+	}
+
 	void OffScreen::setMeshletFrustumCullingEnabled(bool enabled)
 	{
 		offScreenController->setMeshletFrustumCullingEnabled(enabled);

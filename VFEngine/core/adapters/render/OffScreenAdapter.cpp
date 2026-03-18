@@ -321,6 +321,12 @@ namespace core {
         }
     }
 
+    void OffScreenAdapter::setLODCrossfadeEnabled(bool enabled) {
+        if (offScreen) {
+            offScreen->setLODCrossfadeEnabled(enabled);
+        }
+    }
+
     void OffScreenAdapter::setMeshletFrustumCullingEnabled(bool enabled) {
         if (offScreen) {
             offScreen->setMeshletFrustumCullingEnabled(enabled);

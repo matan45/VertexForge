@@ -5,14 +5,10 @@
 
 namespace resource
 {
-    TextureStreamHandle::~TextureStreamHandle()
-    {
-        close();
-    }
+    TextureStreamHandle::~TextureStreamHandle() = default;
 
     TextureStreamHandle::TextureStreamHandle(TextureStreamHandle&& other) noexcept
-        : file(std::move(other.file)),
-          header(std::move(other.header)),
+        : header(std::move(other.header)),
           filePath(std::move(other.filePath))
     {
     }
@@ -21,8 +17,6 @@ namespace resource
     {
         if (this != &other)
         {
-            close();
-            file = std::move(other.file);
             header = std::move(other.header);
             filePath = std::move(other.filePath);
         }
@@ -32,16 +26,20 @@ namespace resource
     bool TextureStreamHandle::openStream(std::string_view path)
     {
         filePath = std::string(path);
-        file.open(filePath, std::ios::binary);
+
+        // Open file temporarily to parse header and record mip offsets, then close.
+        // The file is re-opened on demand for each readMipLevel call to avoid
+        // holding OS file descriptors for potentially thousands of textures.
+        std::ifstream file(filePath, std::ios::binary);
         if (!file)
         {
             vfLogError("TextureStreamHandle: Failed to open file: {}", filePath);
             return false;
         }
 
-        if (!parseHeader())
+        if (!parseHeader(file))
         {
-            close();
+            filePath.clear();
             return false;
         }
 
@@ -50,15 +48,11 @@ namespace resource
 
     void TextureStreamHandle::close()
     {
-        if (file.is_open())
-        {
-            file.close();
-        }
         header = {};
         filePath.clear();
     }
 
-    bool TextureStreamHandle::parseHeader()
+    bool TextureStreamHandle::parseHeader(std::ifstream& file)
     {
         // Read file type byte
         uint8_t headerFileType = endian::readLE<uint8_t>(file);
@@ -152,9 +146,17 @@ namespace resource
 
         std::lock_guard lock(fileMutex);
 
+        // Open file on demand — avoids holding OS file descriptors indefinitely
+        std::ifstream file(filePath, std::ios::binary);
+        if (!file)
+        {
+            vfLogError("TextureStreamHandle: Failed to re-open file for mip read: {}", filePath);
+            return false;
+        }
+
         const auto& mipInfo = header.mipInfos[level];
 
-        // Seek to the mip's file position (skip the 12-byte per-mip header)
+        // Seek to the mip's file position
         file.seekg(mipInfo.fileOffset);
         if (!file)
         {

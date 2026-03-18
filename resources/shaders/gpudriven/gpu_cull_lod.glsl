@@ -320,7 +320,7 @@ void main() {
         meshletCount = meshletLodData.y;
         baseVertexOffset = meshletLodData.z;
     } else {
-        if (camera.enableLODSelection != 0u) {
+        if (camera.enableLODSelection != LOD_SELECTION_DISABLED) {
             vec4 viewSphere = camera.view * vec4(worldSphere.xyz, 1.0);
             viewSphere.w = worldSphere.w;
             screenPixelsCrossfade = projectSphereToScreen(viewSphere, camera.projection, camera.screenParams.xy);
@@ -407,7 +407,7 @@ void main() {
     perDrawData[globalDrawIndex].iblSpecular = obj.iblParams.y;
     // Pack LOD level (bits 0-7) and crossfade alpha (bits 8-15)
     uint packedLodLevel = lodLevel;
-    if (camera.enableLODSelection == 2u && !isInstanced) {
+    if (camera.enableLODSelection == LOD_SELECTION_WITH_CROSSFADE && !isInstanced) {
         uint crossfadeByte = computeCrossfadeByte(screenPixelsCrossfade, obj.lodThresholds, camera.globalLodBias, lodLevel);
         packedLodLevel = lodLevel | (crossfadeByte << 8u);
     }

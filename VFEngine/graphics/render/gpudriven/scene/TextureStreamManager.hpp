@@ -13,6 +13,7 @@
 #include <future>
 #include <memory>
 #include <mutex>
+#include <set>
 
 namespace core
 {
@@ -99,6 +100,9 @@ namespace render::gpudriven
 
         vk::CommandPool commandPool;
 
+        // Track in-flight async reads to prevent duplicate submissions
+        std::set<std::pair<std::string, uint32_t>> inFlightReads;
+
         uint64_t currentFrame = 0;
         size_t currentVRAMUsage = 0;
 
@@ -128,6 +132,12 @@ namespace render::gpudriven
         // Check if a texture is registered for streaming
         bool isRegistered(const std::string& path) const;
 
+        // Update the minimum distance to camera for a texture (call per-object per-frame)
+        void updateTextureDistance(const std::string& path, float distance);
+
+        // Reset all texture distances to max before per-frame distance updates
+        void resetDistances();
+
         const TextureStreamStats& getStats() const { return stats; }
 
         void clear();
@@ -141,9 +151,6 @@ namespace render::gpudriven
 
         // Create a sampler with the specified minLod
         vk::Sampler createMipClampedSampler(uint32_t minLod, uint32_t maxLod);
-
-        // Upload a single mip level to an existing image
-        void uploadMipToImage(StreamableTexture& tex, uint32_t mipLevel, const resource::MipLevelData& mipData);
 
         // Update the sampler and bindless descriptor after mip upload
         void updateSamplerAndDescriptor(StreamableTexture& tex);

@@ -277,9 +277,14 @@ namespace render::gpudriven
                 break;
             }
 
+            // Track all allocated slots so we can free them all on failure
+            std::vector<uint32_t> allocatedSlots;
+            allocatedSlots.push_back(slot);
+
             // Build GPUObjectData for each submesh
             const auto& registeredMeshes = buffer.getRegisteredMeshes();
             bool foundMesh = false;
+            bool allocationFailed = false;
             for (const auto& meshInfo : registeredMeshes)
             {
                 if (meshInfo.meshPath != meshPath) continue;
@@ -296,8 +301,13 @@ namespace render::gpudriven
                     {
                         // Need additional slots for extra submeshes
                         uint32_t extraSlot = buffer.allocateObjectSlot();
-                        if (extraSlot == FreeListAllocator::ALLOCATION_FAILED) break;
+                        if (extraSlot == FreeListAllocator::ALLOCATION_FAILED)
+                        {
+                            allocationFailed = true;
+                            break;
+                        }
                         slot = extraSlot;
+                        allocatedSlots.push_back(slot);
                     }
                     firstSubmesh = false;
 
@@ -398,8 +408,11 @@ namespace render::gpudriven
                 break;
             }
 
-            if (!foundMesh) {
-                buffer.freeObjectSlot(slot);
+            if (!foundMesh || allocationFailed) {
+                for (uint32_t allocSlot : allocatedSlots)
+                {
+                    buffer.freeObjectSlot(allocSlot);
+                }
                 continue;
             }
 

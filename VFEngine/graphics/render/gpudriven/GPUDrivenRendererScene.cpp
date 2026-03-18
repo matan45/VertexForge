@@ -38,10 +38,43 @@ namespace render::gpudriven
         updateMeshStreaming(opaqueObjects, cameraPosition);
         registerSceneMaterialTextures(opaqueObjects);
 
-        // Update texture mip streaming
+        // Update texture mip streaming distances and state
         if (textureStreamManager)
         {
             static uint64_t textureStreamFrame = 0;
+
+            // Compute min distance from camera to each streamed texture
+            textureStreamManager->resetDistances();
+            for (const auto& meshRender : opaqueObjects)
+            {
+                glm::vec3 objPos = glm::vec3(meshRender.modelMatrix[3]);
+                float dist = glm::length(objPos - cameraPosition);
+
+                auto updateTexDist = [&](const std::string& matPath)
+                {
+                    if (matPath.empty()) return;
+                    auto it = materials.pbrCache.find(matPath);
+                    if (it == materials.pbrCache.end()) return;
+                    const auto& pbr = it->second;
+                    const std::string* paths[] = {
+                        &pbr.albedoTexturePath, &pbr.normalTexturePath, &pbr.ormTexturePath,
+                        &pbr.metallicTexturePath, &pbr.roughnessTexturePath, &pbr.aoTexturePath,
+                        &pbr.emissionTexturePath, &pbr.heightTexturePath
+                    };
+                    for (const auto* p : paths)
+                    {
+                        if (!p->empty())
+                            textureStreamManager->updateTextureDistance(*p, dist);
+                    }
+                };
+
+                updateTexDist(meshRender.defaultMaterialPath);
+                for (const auto& [name, subMat] : meshRender.submeshMaterials)
+                {
+                    updateTexDist(subMat.materialPath);
+                }
+            }
+
             textureStreamManager->update(cameraPosition, textureStreamFrame++);
         }
 

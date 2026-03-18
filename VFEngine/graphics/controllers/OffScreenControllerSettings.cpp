@@ -250,6 +250,15 @@ namespace controllers
         }
     }
 
+    void OffScreenController::setLODCrossfadeEnabled(bool enabled)
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (renderHandler)
+        {
+            renderHandler->setLODCrossfadeEnabled(enabled);
+        }
+    }
+
     void OffScreenController::setMeshletFrustumCullingEnabled(bool enabled)
     {
         auto* renderHandler = offScreen->getRenderPassHandler();

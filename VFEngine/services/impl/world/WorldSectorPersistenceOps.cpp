@@ -88,19 +88,25 @@ namespace services
                 std::vector<std::pair<uint64_t, entt::entity>> meshEntities;
                 std::vector<uint32_t> lightEntityIds;
 
+                // Build UUID -> entity lookup map once (O(N)), then resolve each UUID in O(1)
+                auto uuidView = registry.view<components::UUIDComponent>();
+                std::unordered_map<uint64_t, entt::entity> uuidToEntity;
+                uuidToEntity.reserve(uuidView.size_hint());
+                for (auto ent : uuidView)
+                {
+                    uuidToEntity[uuidView.get<components::UUIDComponent>(ent).id.getValue()] = ent;
+                }
+
                 for (uint64_t uuid : sector.entityUUIDs)
                 {
-                    auto uuidView = registry.view<components::UUIDComponent>();
-                    for (auto ent : uuidView)
+                    auto it = uuidToEntity.find(uuid);
+                    if (it != uuidToEntity.end())
                     {
-                        if (uuidView.get<components::UUIDComponent>(ent).id.getValue() == uuid)
-                        {
-                            if (registry.any_of<components::MeshComponent>(ent))
-                                meshEntities.emplace_back(uuid, ent);
-                            if (registry.any_of<components::PointLightComponent, components::SpotLightComponent>(ent))
-                                lightEntityIds.push_back(static_cast<uint32_t>(ent));
-                            break;
-                        }
+                        auto ent = it->second;
+                        if (registry.any_of<components::MeshComponent>(ent))
+                            meshEntities.emplace_back(uuid, ent);
+                        if (registry.any_of<components::PointLightComponent, components::SpotLightComponent>(ent))
+                            lightEntityIds.push_back(static_cast<uint32_t>(ent));
                     }
                 }
 

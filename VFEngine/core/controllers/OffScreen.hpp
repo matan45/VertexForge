@@ -131,6 +131,7 @@ namespace controllers
         void setFrustumCullingEnabled(bool enabled);
         void setOcclusionCullingEnabled(bool enabled);
         void setLODSelectionEnabled(bool enabled);
+        void setLODCrossfadeEnabled(bool enabled);
         void setMeshletFrustumCullingEnabled(bool enabled);
         void setMeshletBackfaceCullingEnabled(bool enabled);
         void setDistanceCullingEnabled(bool enabled);

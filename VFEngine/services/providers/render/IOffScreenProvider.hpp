@@ -236,6 +236,7 @@ namespace services {
         virtual void setFrustumCullingEnabled(bool enabled) = 0;
         virtual void setOcclusionCullingEnabled(bool enabled) = 0;
         virtual void setLODSelectionEnabled(bool enabled) = 0;
+        virtual void setLODCrossfadeEnabled(bool enabled) = 0;
         virtual void setMeshletFrustumCullingEnabled(bool enabled) = 0;
         virtual void setMeshletBackfaceCullingEnabled(bool enabled) = 0;
 

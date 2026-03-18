@@ -29,6 +29,11 @@ namespace render::gpudriven
     constexpr uint32_t CULL_WORKGROUP_SIZE = 64;
     constexpr uint32_t INVALID_TEXTURE_INDEX = 0xFFFFFFFF;
 
+    // enableLODSelection values — must match camera_types.glsl constants
+    constexpr uint32_t LOD_SELECTION_DISABLED       = 0;
+    constexpr uint32_t LOD_SELECTION_ENABLED        = 1;
+    constexpr uint32_t LOD_SELECTION_WITH_CROSSFADE = 2;
+
     constexpr uint32_t MAX_BONES_PER_OBJECT = 128;
     constexpr uint32_t MAX_ANIMATED_OBJECTS = 4096;
     constexpr uint32_t INVALID_BONE_OFFSET = 0xFFFFFFFF;

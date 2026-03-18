@@ -573,6 +573,15 @@ namespace services
                 }
             });
 
+        dispatcher.registerCommandHandler<events::render::SetLODCrossfadeCommand>(
+            [this](const events::render::SetLODCrossfadeCommand& cmd)
+            {
+                if (offScreenProvider)
+                {
+                    offScreenProvider->setLODCrossfadeEnabled(cmd.enabled);
+                }
+            });
+
         dispatcher.registerCommandHandler<events::render::SetMeshletFrustumCullingCommand>(
             [this](const events::render::SetMeshletFrustumCullingCommand& cmd)
             {

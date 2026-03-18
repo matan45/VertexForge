@@ -41,4 +41,9 @@ struct GPUCameraData {
     vec4 categoryDistSq1;   // [decals, 0, 0, shadowMultiplier]
 };
 
+// enableLODSelection values
+const uint LOD_SELECTION_DISABLED       = 0u;
+const uint LOD_SELECTION_ENABLED        = 1u;
+const uint LOD_SELECTION_WITH_CROSSFADE = 2u;
+
 #endif // CAMERA_TYPES_GLSL

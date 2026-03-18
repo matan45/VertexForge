@@ -22,7 +22,18 @@ namespace render::gpudriven {
             return;
         }
 
-        vfLogInfo("BindlessTextureManager: Initializing with max {} textures", MAX_BINDLESS_TEXTURES);
+        // Validate against hardware limits
+        auto limits = device.getPhysicalDevice().getProperties().limits;
+        uint32_t maxSampledImages = limits.maxPerStageDescriptorSampledImages;
+        effectiveMaxTextures = MAX_BINDLESS_TEXTURES;
+        if (effectiveMaxTextures > maxSampledImages)
+        {
+            vfLogWarning("BindlessTextureManager: MAX_BINDLESS_TEXTURES ({}) exceeds device limit ({}), clamping",
+                         effectiveMaxTextures, maxSampledImages);
+            effectiveMaxTextures = maxSampledImages;
+        }
+
+        vfLogInfo("BindlessTextureManager: Initializing with max {} textures", effectiveMaxTextures);
 
         createDescriptorSetLayout();
         createDescriptorPool();
@@ -66,7 +77,7 @@ namespace render::gpudriven {
         vk::DescriptorSetLayoutBinding textureBinding{};
         textureBinding.binding = 0;
         textureBinding.descriptorType = vk::DescriptorType::eCombinedImageSampler;
-        textureBinding.descriptorCount = MAX_BINDLESS_TEXTURES;
+        textureBinding.descriptorCount = effectiveMaxTextures;
         textureBinding.stageFlags = vk::ShaderStageFlagBits::eFragment | vk::ShaderStageFlagBits::eCompute;
         textureBinding.pImmutableSamplers = nullptr;
 
@@ -96,7 +107,7 @@ namespace render::gpudriven {
 
         vk::DescriptorPoolSize poolSize{};
         poolSize.type = vk::DescriptorType::eCombinedImageSampler;
-        poolSize.descriptorCount = MAX_BINDLESS_TEXTURES;
+        poolSize.descriptorCount = effectiveMaxTextures;
 
         vk::DescriptorPoolCreateInfo poolInfo{};
         poolInfo.flags = vk::DescriptorPoolCreateFlagBits::eUpdateAfterBind;
@@ -112,7 +123,7 @@ namespace render::gpudriven {
     {
         vk::Device vkDevice = device.getLogicalDevice();
 
-        uint32_t variableDescCount = MAX_BINDLESS_TEXTURES;
+        uint32_t variableDescCount = effectiveMaxTextures;
 
         vk::DescriptorSetVariableDescriptorCountAllocateInfo variableCountInfo{};
         variableCountInfo.descriptorSetCount = 1;
@@ -163,8 +174,8 @@ namespace render::gpudriven {
             freeIndices.pop_back();
         }
         else {
-            if (nextTextureIndex >= MAX_BINDLESS_TEXTURES) {
-                vfLogError("BindlessTextureManager: Maximum texture count ({}) exceeded", MAX_BINDLESS_TEXTURES);
+            if (nextTextureIndex >= effectiveMaxTextures) {
+                vfLogError("BindlessTextureManager: Maximum texture count ({}) exceeded", effectiveMaxTextures);
                 return INVALID_TEXTURE_INDEX;
             }
             index = nextTextureIndex++;

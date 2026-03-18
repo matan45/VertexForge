@@ -245,6 +245,12 @@ namespace events::render {
         std::string_view getName() const override { return "SetShadowDistanceMultiplier"; }
     };
 
+    struct SetLODCrossfadeCommand : ICommand<> {
+        bool enabled;
+
+        std::string_view getName() const override { return "SetLODCrossfade"; }
+    };
+
     struct SetGlobalLodBiasCommand : ICommand<> {
         float bias;
 

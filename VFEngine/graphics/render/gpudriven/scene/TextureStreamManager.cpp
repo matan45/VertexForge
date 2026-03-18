@@ -7,6 +7,7 @@
 #include "print/Log.hpp"
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 namespace
 {
@@ -83,6 +84,7 @@ namespace render::gpudriven
         }
         pendingReads.clear();
         uploadQueue.clear();
+        inFlightReads.clear();
 
         // Destroy all streamable textures
         for (auto& [path, tex] : textures)
@@ -403,6 +405,7 @@ namespace render::gpudriven
             if (it->wait_for(std::chrono::milliseconds(0)) == std::future_status::ready)
             {
                 auto result = it->get();
+                inFlightReads.erase({result.path, result.mipLevel});
                 if (result.success)
                 {
                     std::lock_guard lock(uploadQueueMutex);
@@ -426,6 +429,16 @@ namespace render::gpudriven
             uploadQueue.clear();
         }
 
+        // Collect valid uploads first, then batch into a single command buffer
+        struct PendingUpload
+        {
+            std::string path;
+            uint32_t mipLevel;
+            resource::MipLevelData mipData;
+        };
+        std::vector<PendingUpload> validUploads;
+        std::vector<TextureMipReadResult> excess;
+
         uint32_t uploads = 0;
         size_t bytesUploaded = 0;
 
@@ -433,115 +446,136 @@ namespace render::gpudriven
         {
             if (uploads >= config.maxUploadsPerFrame || bytesUploaded >= config.maxBytesPerFrame)
             {
-                // Re-queue remaining
-                std::lock_guard lock(uploadQueueMutex);
-                uploadQueue.push_back(std::move(result));
+                excess.push_back(std::move(result));
                 continue;
             }
 
             auto texIt = textures.find(result.path);
-            if (texIt == textures.end())
-            {
-                continue;
-            }
+            if (texIt == textures.end()) continue;
 
             auto& tex = texIt->second;
-
-            // Only upload if this mip is actually needed (mip < current lowest)
-            if (result.mipLevel >= tex.lowestLoadedMip)
-            {
-                continue;
-            }
-
-            uploadMipToImage(tex, result.mipLevel, result.mipData);
-
-            // Update lowest loaded mip
-            tex.lowestLoadedMip = result.mipLevel;
-            updateSamplerAndDescriptor(tex);
+            if (result.mipLevel >= tex.lowestLoadedMip) continue;
 
             bytesUploaded += result.mipData.dataSize;
             uploads++;
+            validUploads.push_back({result.path, result.mipLevel, std::move(result.mipData)});
+        }
+
+        // Re-queue excess in a single lock
+        if (!excess.empty())
+        {
+            std::lock_guard lock(uploadQueueMutex);
+            for (auto& e : excess)
+            {
+                uploadQueue.push_back(std::move(e));
+            }
+        }
+
+        if (!validUploads.empty())
+        {
+            // Ensure staging buffer can hold the largest single mip
+            size_t maxMipSize = 0;
+            size_t totalSize = 0;
+            for (const auto& up : validUploads)
+            {
+                maxMipSize = std::max(maxMipSize, static_cast<size_t>(up.mipData.dataSize));
+                totalSize += up.mipData.dataSize;
+            }
+            if (totalSize > stagingBufferSize)
+            {
+                createStagingBuffer(totalSize * 2);
+            }
+
+            vk::Device vkDevice = device.getLogicalDevice();
+
+            // Record all uploads into a single command buffer
+            vk::CommandBufferAllocateInfo cmdAllocInfo{};
+            cmdAllocInfo.level = vk::CommandBufferLevel::ePrimary;
+            cmdAllocInfo.commandPool = commandPool;
+            cmdAllocInfo.commandBufferCount = 1;
+            auto cmdBuffers = vkDevice.allocateCommandBuffers(cmdAllocInfo);
+            vk::CommandBuffer cmd = cmdBuffers[0];
+
+            vk::CommandBufferBeginInfo beginInfo{};
+            beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
+            cmd.begin(beginInfo);
+
+            // Copy all mip data into staging buffer at sequential offsets
+            size_t stagingOffset = 0;
+            for (const auto& up : validUploads)
+            {
+                memcpy(static_cast<char*>(stagingMapped) + stagingOffset,
+                       up.mipData.data.data(), up.mipData.dataSize);
+
+                auto texIt = textures.find(up.path);
+                auto& tex = texIt->second;
+
+                // Transition mip to transfer dst
+                vk::ImageMemoryBarrier barrier{};
+                barrier.oldLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+                barrier.newLayout = vk::ImageLayout::eTransferDstOptimal;
+                barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                barrier.image = tex.image;
+                barrier.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
+                barrier.subresourceRange.baseMipLevel = up.mipLevel;
+                barrier.subresourceRange.levelCount = 1;
+                barrier.subresourceRange.baseArrayLayer = 0;
+                barrier.subresourceRange.layerCount = 1;
+                barrier.srcAccessMask = vk::AccessFlagBits::eShaderRead;
+                barrier.dstAccessMask = vk::AccessFlagBits::eTransferWrite;
+
+                cmd.pipelineBarrier(vk::PipelineStageFlagBits::eFragmentShader,
+                                    vk::PipelineStageFlagBits::eTransfer,
+                                    {}, nullptr, nullptr, barrier);
+
+                vk::BufferImageCopy copyRegion{};
+                copyRegion.bufferOffset = static_cast<vk::DeviceSize>(stagingOffset);
+                copyRegion.imageSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+                copyRegion.imageSubresource.mipLevel = up.mipLevel;
+                copyRegion.imageSubresource.baseArrayLayer = 0;
+                copyRegion.imageSubresource.layerCount = 1;
+                copyRegion.imageExtent = vk::Extent3D{up.mipData.width, up.mipData.height, 1};
+
+                cmd.copyBufferToImage(stagingBuffer, tex.image,
+                                      vk::ImageLayout::eTransferDstOptimal, copyRegion);
+
+                // Transition back to shader read
+                barrier.oldLayout = vk::ImageLayout::eTransferDstOptimal;
+                barrier.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+                barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
+                barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
+
+                cmd.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer,
+                                    vk::PipelineStageFlagBits::eFragmentShader,
+                                    {}, nullptr, nullptr, barrier);
+
+                stagingOffset += up.mipData.dataSize;
+            }
+
+            cmd.end();
+
+            // Single submit + single waitIdle for all uploads this frame
+            vk::SubmitInfo submitInfo{};
+            submitInfo.commandBufferCount = 1;
+            submitInfo.pCommandBuffers = &cmd;
+            device.getGraphicsQueue().submit(submitInfo);
+            device.getGraphicsQueue().waitIdle();
+
+            vkDevice.freeCommandBuffers(commandPool, cmd);
+
+            // Update sampler/descriptors after all uploads complete
+            for (const auto& up : validUploads)
+            {
+                auto texIt = textures.find(up.path);
+                auto& tex = texIt->second;
+                tex.lowestLoadedMip = up.mipLevel;
+                updateSamplerAndDescriptor(tex);
+            }
         }
 
         stats.uploadsThisFrame = uploads;
         stats.bytesUploadedThisFrame = bytesUploaded;
-    }
-
-    void TextureStreamManager::uploadMipToImage(StreamableTexture& tex, uint32_t mipLevel,
-                                                 const resource::MipLevelData& mipData)
-    {
-        vk::Device vkDevice = device.getLogicalDevice();
-
-        // Ensure staging buffer is large enough
-        if (mipData.dataSize > stagingBufferSize)
-        {
-            createStagingBuffer(mipData.dataSize * 2);
-        }
-
-        memcpy(stagingMapped, mipData.data.data(), mipData.dataSize);
-
-        // Record command buffer
-        vk::CommandBufferAllocateInfo cmdAllocInfo{};
-        cmdAllocInfo.level = vk::CommandBufferLevel::ePrimary;
-        cmdAllocInfo.commandPool = commandPool;
-        cmdAllocInfo.commandBufferCount = 1;
-        auto cmdBuffers = vkDevice.allocateCommandBuffers(cmdAllocInfo);
-        vk::CommandBuffer cmd = cmdBuffers[0];
-
-        vk::CommandBufferBeginInfo beginInfo{};
-        beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
-        cmd.begin(beginInfo);
-
-        // Transition this specific mip level to transfer dst
-        vk::ImageMemoryBarrier barrier{};
-        barrier.oldLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-        barrier.newLayout = vk::ImageLayout::eTransferDstOptimal;
-        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        barrier.image = tex.image;
-        barrier.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
-        barrier.subresourceRange.baseMipLevel = mipLevel;
-        barrier.subresourceRange.levelCount = 1;
-        barrier.subresourceRange.baseArrayLayer = 0;
-        barrier.subresourceRange.layerCount = 1;
-        barrier.srcAccessMask = vk::AccessFlagBits::eShaderRead;
-        barrier.dstAccessMask = vk::AccessFlagBits::eTransferWrite;
-
-        cmd.pipelineBarrier(vk::PipelineStageFlagBits::eFragmentShader,
-                            vk::PipelineStageFlagBits::eTransfer,
-                            {}, nullptr, nullptr, barrier);
-
-        // Copy
-        vk::BufferImageCopy copyRegion{};
-        copyRegion.bufferOffset = 0;
-        copyRegion.imageSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
-        copyRegion.imageSubresource.mipLevel = mipLevel;
-        copyRegion.imageSubresource.baseArrayLayer = 0;
-        copyRegion.imageSubresource.layerCount = 1;
-        copyRegion.imageExtent = vk::Extent3D{mipData.width, mipData.height, 1};
-
-        cmd.copyBufferToImage(stagingBuffer, tex.image,
-                              vk::ImageLayout::eTransferDstOptimal, copyRegion);
-
-        // Transition back to shader read
-        barrier.oldLayout = vk::ImageLayout::eTransferDstOptimal;
-        barrier.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-        barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
-        barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
-
-        cmd.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer,
-                            vk::PipelineStageFlagBits::eFragmentShader,
-                            {}, nullptr, nullptr, barrier);
-
-        cmd.end();
-
-        vk::SubmitInfo submitInfo{};
-        submitInfo.commandBufferCount = 1;
-        submitInfo.pCommandBuffers = &cmd;
-        device.getGraphicsQueue().submit(submitInfo);
-        device.getGraphicsQueue().waitIdle();
-
-        vkDevice.freeCommandBuffers(commandPool, cmd);
     }
 
     void TextureStreamManager::updateSamplerAndDescriptor(StreamableTexture& tex)
@@ -565,16 +599,35 @@ namespace render::gpudriven
         }
     }
 
+    void TextureStreamManager::resetDistances()
+    {
+        for (auto& [path, tex] : textures)
+        {
+            tex.distanceToCamera = std::numeric_limits<float>::max();
+        }
+    }
+
+    void TextureStreamManager::updateTextureDistance(const std::string& path, float distance)
+    {
+        auto it = textures.find(path);
+        if (it != textures.end())
+        {
+            it->second.distanceToCamera = std::min(it->second.distanceToCamera, distance);
+        }
+    }
+
     void TextureStreamManager::updatePriorities(const glm::vec3& cameraPos)
     {
         for (auto& [path, tex] : textures)
         {
             tex.lastAccessFrame = currentFrame;
 
-            // Distance is set externally or computed here
-            // For now, we leave distanceToCamera as-is (set during registerSceneMaterialTextures or
-            // by the caller). This is a simplification — a production system would correlate
-            // textures with objects in the scene to get min distance.
+            // If no object updated this texture's distance this frame,
+            // it's not visible — set a large distance so it becomes an eviction candidate.
+            if (tex.distanceToCamera >= std::numeric_limits<float>::max())
+            {
+                tex.distanceToCamera = 10000.0f;
+            }
         }
     }
 
@@ -614,16 +667,17 @@ namespace render::gpudriven
             auto handleIt = streamHandles.find(entry.path);
             if (handleIt == streamHandles.end()) continue;
 
-            // Check if already pending
-            bool alreadyPending = false;
-            for (const auto& pending : pendingReads)
+            // Skip if this (path, mipLevel) is already in-flight
+            auto readKey = std::make_pair(entry.path, nextMip);
+            if (inFlightReads.contains(readKey))
             {
-                // Can't easily check which path the future is for, so skip this check
-                // In production, we'd use a set of (path, mipLevel) pairs
+                continue;
             }
 
             auto* handlePtr = handleIt->second.get();
             std::string pathCopy = entry.path;
+
+            inFlightReads.insert(readKey);
 
             pendingReads.push_back(std::async(std::launch::async,
                 [handlePtr, nextMip, pathCopy]() -> TextureMipReadResult
@@ -683,12 +737,28 @@ namespace render::gpudriven
 
             auto& tex = texIt->second;
 
-            // "Evict" by raising minLod (sampler trick). VRAM stays allocated but mip data
-            // is logically stale. We raise lowestLoadedMip to mark that those mips need
-            // re-streaming if needed again.
+            // "Evict" by raising minLod (sampler trick). VRAM image stays allocated,
+            // but we account for the evicted mips in our budget tracking so the
+            // guard loop converges. The evicted mips are logically stale and will
+            // need re-streaming if the object moves close again.
             uint32_t newLowestMip = tex.totalMipLevels - config.tailMipCount;
             if (newLowestMip > tex.lowestLoadedMip)
             {
+                // Estimate VRAM freed by the evicted mip levels
+                size_t freedBytes = 0;
+                for (uint32_t m = tex.lowestLoadedMip; m < newLowestMip; ++m)
+                {
+                    freedBytes += estimateMipVRAM(tex.width, tex.height, m, tex.format);
+                }
+                if (freedBytes <= currentVRAMUsage)
+                {
+                    currentVRAMUsage -= freedBytes;
+                }
+                else
+                {
+                    currentVRAMUsage = 0;
+                }
+
                 tex.lowestLoadedMip = newLowestMip;
                 updateSamplerAndDescriptor(tex);
                 evictions++;
