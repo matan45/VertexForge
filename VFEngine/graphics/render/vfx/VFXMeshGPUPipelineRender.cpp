@@ -340,6 +340,16 @@ namespace render::vfx
 
         cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
 
+        // Bind lighting descriptor sets (sets 1-3) if available
+        if (lightingAvailable)
+        {
+            std::array<vk::DescriptorSet, 3> lightingSets = {
+                cachedLightBufferSet, cachedClusterGridSet, cachedClusterLightGridSet
+            };
+            cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout,
+                                   1, lightingSets, {});
+        }
+
         vk::DescriptorSet lastBoundSet = nullptr;
 
         for (const auto& [emitterIdx, meshData] : emitterMeshes)

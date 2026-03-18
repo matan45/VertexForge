@@ -130,8 +130,14 @@ namespace render::vfx
         float collisionFriction = 0.1f;
         float collisionLifetimeLoss = 0.0f;
         uint32_t terrainCollisionEnabled = 0;
+
+        // Lighting
+        float lightingInfluence = 0.0f;       // 0 = unlit (default), 1 = fully lit
+        int32_t normalMode = 0;               // 0 = sphere, 1 = view-aligned, 2 = mesh
+        float ambientAmount = 0.3f;           // ambient light contribution
+        float _lightPad0 = 0.0f;
     };
-    static_assert(sizeof(GPUEmitterConfig) == 320, "GPUEmitterConfig must be 320 bytes for GPU alignment");
+    static_assert(sizeof(GPUEmitterConfig) == 336, "GPUEmitterConfig must be 336 bytes for GPU alignment");
     static_assert(offsetof(GPUEmitterConfig, emitDirection) == 0, "GPUEmitterConfig::emitDirection offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, startColor) == 16, "GPUEmitterConfig::startColor offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, spawnRate) == 32, "GPUEmitterConfig::spawnRate offset mismatch");
@@ -172,6 +178,10 @@ namespace render::vfx
     static_assert(offsetof(GPUEmitterConfig, collisionBounce) == 304, "GPUEmitterConfig::collisionBounce offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, collisionFriction) == 308, "GPUEmitterConfig::collisionFriction offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, collisionLifetimeLoss) == 312, "GPUEmitterConfig::collisionLifetimeLoss offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, terrainCollisionEnabled) == 316, "GPUEmitterConfig::terrainCollisionEnabled offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, lightingInfluence) == 320, "GPUEmitterConfig::lightingInfluence offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, normalMode) == 324, "GPUEmitterConfig::normalMode offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, ambientAmount) == 328, "GPUEmitterConfig::ambientAmount offset mismatch");
 
     struct alignas(16) GPUEmitterState
     {

@@ -18,6 +18,9 @@ layout(location = 2) out vec2 fragTexCoord[];
 layout(location = 3) flat out uint fragDrawIndex[];
 layout(location = 4) flat out uint fragMeshletIndex[];
 layout(location = 5) flat out uint fragLodLevel[];
+layout(location = 6) flat out vec4 fragInstanceAlbedo[];
+layout(location = 7) flat out vec4 fragInstancePBR[];
+layout(location = 8) flat out vec4 fragInstanceIBL[];
 
 layout(set = 0, binding = 0) uniform CameraUBO {
     CameraData camera;
@@ -56,6 +59,9 @@ struct MeshletPayload {
     mat4 instanceModelMatrix;
     mat4 instanceNormalMatrix;
     uint instanceLodLevel;
+    vec4 instanceAlbedo;
+    vec4 instancePBR;
+    vec4 instanceIBL;
 };
 
 taskPayloadSharedEXT MeshletPayload payload;
@@ -172,6 +178,9 @@ void main() {
             fragDrawIndex[localVertexIndex] = drawIndex;
             fragMeshletIndex[localVertexIndex] = globalMeshletIndex;
             fragLodLevel[localVertexIndex] = payload.instanceLodLevel;
+            fragInstanceAlbedo[localVertexIndex] = payload.instanceAlbedo;
+            fragInstancePBR[localVertexIndex] = payload.instancePBR;
+            fragInstanceIBL[localVertexIndex] = payload.instanceIBL;
             gl_MeshVerticesEXT[localVertexIndex].gl_Position = viewProjection * worldPos;
         }
     }
@@ -202,6 +211,9 @@ layout(location = 2) in vec2 fragTexCoord;
 layout(location = 3) in flat uint fragDrawIndex;
 layout(location = 4) in flat uint fragMeshletIndex;
 layout(location = 5) in flat uint fragLodLevel;
+layout(location = 6) in flat vec4 fragInstanceAlbedo;
+layout(location = 7) in flat vec4 fragInstancePBR;
+layout(location = 8) in flat vec4 fragInstanceIBL;
 
 layout(location = 0) out vec4 outColor;
 #ifdef WBOIT_ENABLED
@@ -547,8 +559,21 @@ void main() {
     vec2 texDx = dFdx(fragTexCoord);
     vec2 texDy = dFdy(fragTexCoord);
 
-    vec3 albedo = drawData.albedo.rgb;
-    float alpha = drawData.albedo.a;
+    // Per-instance PBR override (when hasOverride flag is set)
+    vec4 matAlbedo = drawData.albedo;
+    vec4 matParams = drawData.materialParams;
+    float matIblDiffuse = drawData.iblDiffuse;
+    float matIblSpecular = drawData.iblSpecular;
+
+    if (fragInstanceIBL.w > 0.5) {
+        matAlbedo = fragInstanceAlbedo;
+        matParams = fragInstancePBR;
+        matIblDiffuse = fragInstanceIBL.x;
+        matIblSpecular = fragInstanceIBL.y;
+    }
+
+    vec3 albedo = matAlbedo.rgb;
+    float alpha = matAlbedo.a;
 
     if (isValidTexture(albedoIdx)) {
         vec4 albedoSample = textureGrad(bindlessTextures[nonuniformEXT(albedoIdx)], texCoords, texDx, texDy);
@@ -568,10 +593,10 @@ void main() {
         alpha *= materialOpacity;
     }
 
-    float metallic = drawData.materialParams.x;
-    float roughness = drawData.materialParams.y;
-    float ao = drawData.materialParams.z;
-    float emission = drawData.materialParams.w;
+    float metallic = matParams.x;
+    float roughness = matParams.y;
+    float ao = matParams.z;
+    float emission = matParams.w;
 
     if (isValidTexture(ormIdx)) {
         vec3 ormValues = unpackORM(textureGrad(bindlessTextures[nonuniformEXT(ormIdx)], texCoords, texDx, texDy));
@@ -614,11 +639,11 @@ void main() {
     vec3 kD = (1.0 - kS) * (1.0 - metallic);
 
     vec3 irradiance = texture(irradianceMap, N).rgb;
-    vec3 diffuse = irradiance * albedo * drawData.iblDiffuse;
+    vec3 diffuse = irradiance * albedo * matIblDiffuse;
 
     vec3 prefilteredColor = textureLod(prefilterMap, R, roughness * MAX_REFLECTION_LOD).rgb;
     vec2 brdf = texture(brdfLUT, vec2(max(dot(N, V), 0.0), roughness)).rg;
-    vec3 specular = prefilteredColor * (F * brdf.x + brdf.y) * drawData.iblSpecular;
+    vec3 specular = prefilteredColor * (F * brdf.x + brdf.y) * matIblSpecular;
 
     vec3 ambient = (kD * diffuse + specular) * ao;
 

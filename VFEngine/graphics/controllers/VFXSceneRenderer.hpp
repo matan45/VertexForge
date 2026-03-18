@@ -142,6 +142,12 @@ namespace controllers
         std::vector<float> terrainHeights;
         bool terrainDirty = true;
 
+        // Cached lighting layouts (set before init, applied when pipelines are created)
+        vk::DescriptorSetLayout cachedLightBufferLayout;
+        vk::DescriptorSetLayout cachedClusterGridLayout;
+        vk::DescriptorSetLayout cachedClusterLightGridLayout;
+        bool hasLightingLayouts = false;
+
     public:
         explicit VFXSceneRenderer(core::Device& device, core::SwapChain& swapChain);
         ~VFXSceneRenderer();
@@ -180,6 +186,13 @@ namespace controllers
 
         size_t getInstanceCount() const { return instances.size(); }
         size_t getTotalParticleCount() const;
+
+        void setLightingLayouts(vk::DescriptorSetLayout lightBufferLayout,
+                                vk::DescriptorSetLayout clusterGridLayout,
+                                vk::DescriptorSetLayout clusterLightGridLayout);
+        void updateLightingDescriptorSets(vk::DescriptorSet lightBufferSet,
+                                          vk::DescriptorSet clusterGridSet,
+                                          vk::DescriptorSet clusterLightGridSet);
 
         void setDistanceCullingEnabled(bool enabled) { distanceCullingEnabled = enabled; }
         void setMaxDrawDistance(float distance) { maxVFXDistSq = distance * distance; }

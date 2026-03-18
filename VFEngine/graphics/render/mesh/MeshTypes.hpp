@@ -192,8 +192,14 @@ namespace render::mesh
         float maxDrawDistance = 0.0f;
 
         // Instance batching: if non-empty, render N instances with different transforms
-        // Material/texture resolution happens once; only modelMatrix varies per instance
-        std::vector<glm::mat4> instanceTransforms;
+        struct InstanceData
+        {
+            glm::mat4 modelMatrix{1.0f};
+            glm::vec4 albedo{1.0f, 1.0f, 1.0f, 1.0f};
+            glm::vec4 pbrParams{0.0f, 0.5f, 1.0f, 0.0f}; // metallic, roughness, ao, emission
+            glm::vec4 iblParams{1.0f, 0.5f, 0.0f, 0.0f};  // iblDiffuse, iblSpecular, alphaCutoff, hasOverride
+        };
+        std::vector<InstanceData> instanceTransforms;
 
         const SubMeshMaterialInfo* getMaterialForSubmesh(const std::string& submeshName) const
         {

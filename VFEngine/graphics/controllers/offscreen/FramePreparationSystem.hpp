@@ -60,6 +60,15 @@ namespace controllers::offscreen
     {
     private:
         std::unordered_map<std::string, render::mesh::ExtractedPBRValues> pbrCache;
+
+        // Cache: material instance path → {parentMaterialPath, hasTextureOverrides}
+        struct InstanceBatchInfo
+        {
+            std::string parentMaterialPath;
+            bool hasTextureOverrides = false;
+        };
+        std::unordered_map<std::string, InstanceBatchInfo> instanceBatchCache;
+
         DebugFrameBuilder debugBuilder;
         UIFrameBuilder uiFrameBuilder;
         UIInteractionSystem uiInteraction;

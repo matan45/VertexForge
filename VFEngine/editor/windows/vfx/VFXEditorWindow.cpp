@@ -205,6 +205,14 @@ namespace windows
         params.events.lifetimeThreshold = std::clamp(
             getFloat(*emitterNode, "eventLifetimeThreshold", vfx::EventDefaults::LIFETIME_THRESHOLD), 0.0f, 1.0f);
 
+        // Lighting
+        params.lightingInfluence = std::clamp(
+            getFloat(*emitterNode, "lightingInfluence", vfx::EmitterDefaults::LIGHTING_INFLUENCE), 0.0f, 1.0f);
+        params.normalMode = std::clamp(
+            getInt(*emitterNode, "normalMode", vfx::EmitterDefaults::NORMAL_MODE), 0, 2);
+        params.ambientAmount = std::clamp(
+            getFloat(*emitterNode, "ambientAmount", vfx::EmitterDefaults::AMBIENT_AMOUNT), 0.0f, 1.0f);
+
         // Collision
         params.collisionEnabled = getBool(*emitterNode, "collisionEnabled", vfx::EmitterDefaults::COLLISION_ENABLED);
         params.collisionBounce = std::clamp(

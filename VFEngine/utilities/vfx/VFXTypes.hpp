@@ -160,6 +160,11 @@ namespace vfx
         inline constexpr float UV_SCROLL_SPEED_U = 0.0f;
         inline constexpr float UV_SCROLL_SPEED_V = 0.0f;
 
+        // Lighting
+        inline constexpr float LIGHTING_INFLUENCE = 0.0f;
+        inline constexpr int NORMAL_MODE = 0;              // 0 = sphere, 1 = view-aligned, 2 = mesh
+        inline constexpr float AMBIENT_AMOUNT = 0.3f;
+
         // Collision
         inline constexpr bool COLLISION_ENABLED = false;
         inline constexpr float COLLISION_BOUNCE = 0.5f;

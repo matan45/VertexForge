@@ -19,8 +19,10 @@ layout(std430, set = 1, binding = 0) readonly buffer PerDrawDataBuffer {
     PerDrawData perDrawData[];
 };
 
+#include "../common/gpu_instance_types.glsl"
+
 layout(std430, set = 1, binding = 1) readonly buffer InstanceTransformBuffer {
-    mat4 instanceTransforms[];
+    GPUInstanceTransform instanceTransforms[];
 };
 
 layout(std430, set = 1, binding = 2) readonly buffer ObjectBuffer {
@@ -56,6 +58,9 @@ struct MeshletPayload {
     mat4 instanceModelMatrix;
     mat4 instanceNormalMatrix;
     uint instanceLodLevel;
+    vec4 instanceAlbedo;
+    vec4 instancePBR;
+    vec4 instanceIBL;
 };
 
 taskPayloadSharedEXT MeshletPayload payload;
@@ -150,7 +155,8 @@ void main() {
 
     if (isInstanced) {
         uint instanceOffset = drawData.instanceData.w;
-        modelMatrix = instanceTransforms[instanceOffset + instanceIndex];
+        GPUInstanceTransform instTransform = instanceTransforms[instanceOffset + instanceIndex];
+        modelMatrix = instTransform.modelMatrix;
 
         GPUObjectData obj = objects[drawData.objectIndex];
 
@@ -165,6 +171,9 @@ void main() {
                     payload.meshletCount = 0;
                     payload.instanceModelMatrix = modelMatrix;
                     payload.instanceNormalMatrix = mat4(1.0);
+                    payload.instanceAlbedo = vec4(0.0);
+                    payload.instancePBR = vec4(0.0);
+                    payload.instanceIBL = vec4(0.0);
                     EmitMeshTasksEXT(0, 1, 1);
                 }
                 return;
@@ -268,6 +277,19 @@ void main() {
         }
         payload.instanceNormalMatrix = mat4(normalMat3);
         payload.instanceLodLevel = actualLodLevel;
+
+        // Per-instance PBR overrides
+        if (isInstanced) {
+            uint instanceOffset = drawData.instanceData.w;
+            GPUInstanceTransform instTransform = instanceTransforms[instanceOffset + instanceIndex];
+            payload.instanceAlbedo = instTransform.albedoOverride;
+            payload.instancePBR = instTransform.pbrOverride;
+            payload.instanceIBL = instTransform.iblOverride;
+        } else {
+            payload.instanceAlbedo = vec4(0.0);
+            payload.instancePBR = vec4(0.0);
+            payload.instanceIBL = vec4(0.0); // hasOverride = 0 → use PerDrawData
+        }
 
         EmitMeshTasksEXT(visibleCount, 1, 1);
     }

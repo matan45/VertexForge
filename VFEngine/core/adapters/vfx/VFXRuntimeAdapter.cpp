@@ -38,6 +38,10 @@ namespace core
             auto& swapChain = *VulkanContext::getSwapChain();
             renderer = std::make_unique<controllers::VFXSceneRenderer>(device, swapChain);
         }
+        if (hasPendingLightingLayouts)
+        {
+            renderer->setLightingLayouts(pendingLightBufferLayout, pendingClusterGridLayout, pendingClusterLightGridLayout);
+        }
         renderer->init(sceneRenderPass);
     }
 
@@ -171,6 +175,28 @@ namespace core
     size_t VFXRuntimeAdapter::getInstanceCount() const
     {
         return renderer ? renderer->getInstanceCount() : 0;
+    }
+
+    void VFXRuntimeAdapter::setLightingLayouts(
+        vk::DescriptorSetLayout lightBufferLayout,
+        vk::DescriptorSetLayout clusterGridLayout,
+        vk::DescriptorSetLayout clusterLightGridLayout)
+    {
+        // Cache in case renderer doesn't exist yet (called before init)
+        pendingLightBufferLayout = lightBufferLayout;
+        pendingClusterGridLayout = clusterGridLayout;
+        pendingClusterLightGridLayout = clusterLightGridLayout;
+        hasPendingLightingLayouts = lightBufferLayout && clusterGridLayout && clusterLightGridLayout;
+
+        if (renderer) renderer->setLightingLayouts(lightBufferLayout, clusterGridLayout, clusterLightGridLayout);
+    }
+
+    void VFXRuntimeAdapter::updateLightingDescriptorSets(
+        vk::DescriptorSet lightBufferSet,
+        vk::DescriptorSet clusterGridSet,
+        vk::DescriptorSet clusterLightGridSet)
+    {
+        if (renderer) renderer->updateLightingDescriptorSets(lightBufferSet, clusterGridSet, clusterLightGridSet);
     }
 
     void VFXRuntimeAdapter::setDistanceCullingEnabled(bool enabled)

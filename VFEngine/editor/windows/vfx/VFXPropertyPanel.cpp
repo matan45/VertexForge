@@ -527,6 +527,70 @@ namespace editor::vfxeditor
             if (disableWidget) ImGui::EndDisabled();
             ImGui::PopID();
         }
+
+        // Lighting subsection
+        ImGui::Spacing();
+        ImGui::Text("Lighting");
+        ImGui::Separator();
+
+        struct LightEntry { const char* key; const char* label; };
+        static constexpr LightEntry lightEntries[] = {
+            {"lightingInfluence",  "Light Influence"},
+            {"ambientAmount",      "Ambient"},
+        };
+
+        for (const auto& entry : lightEntries)
+        {
+            auto it = node.properties.find(entry.key);
+            if (it == node.properties.end()) continue;
+
+            auto& prop = it->second;
+            ImGui::PushID(entry.key);
+
+            if (auto* val = std::get_if<float>(&prop.value))
+            {
+                ImGui::Text("%s", entry.label);
+                ImGui::SameLine(100.0f);
+                ImGui::SetNextItemWidth(inputWidth);
+                if (ImGui::DragFloat("##v", val, 0.01f, 0.0f, 1.0f, "%.2f"))
+                {
+                    notifyChanged();
+                }
+            }
+
+            ImGui::PopID();
+        }
+
+        // Normal mode combo
+        {
+            auto nmIt = node.properties.find("normalMode");
+            if (nmIt != node.properties.end())
+            {
+                if (auto* val = std::get_if<int32_t>(&nmIt->second.value))
+                {
+                    ImGui::Text("Normal Mode");
+                    ImGui::SameLine(100.0f);
+                    ImGui::SetNextItemWidth(inputWidth * 1.5f);
+                    bool isMeshMode = (currentRenderMode == 3);
+                    int maxModes = isMeshMode ? 3 : 2;
+                    const char* normalModes[] = {"Sphere", "View-Aligned", "Mesh"};
+                    int current = std::clamp(*val, 0, maxModes - 1);
+
+                    // Correct stored value if render mode changed away from Mesh
+                    if (current != *val)
+                    {
+                        *val = current;
+                        notifyChanged();
+                    }
+
+                    if (ImGui::Combo("##panel_normalMode", &current, normalModes, maxModes))
+                    {
+                        *val = current;
+                        notifyChanged();
+                    }
+                }
+            }
+        }
     }
 
     void VFXPropertyPanel::drawEventsProperties(vfx::VFXNode& node, float inputWidth)

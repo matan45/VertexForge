@@ -405,6 +405,8 @@ namespace resource
 
     std::shared_ptr<material::MaterialData> ResourceManager::loadMaterial(const asset::AssetRef& ref)
     {
+        if (!ref.isValid()) return nullptr;
+
         auto guid = ref.getGUID();
         {
             std::scoped_lock lock(cacheMutex);
@@ -446,6 +448,8 @@ namespace resource
 
     std::shared_ptr<material::MaterialInstanceData> ResourceManager::loadMaterialInstance(const asset::AssetRef& ref)
     {
+        if (!ref.isValid()) return nullptr;
+
         auto guid = ref.getGUID();
         {
             std::scoped_lock lock(cacheMutex);

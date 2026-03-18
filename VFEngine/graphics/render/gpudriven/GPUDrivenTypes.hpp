@@ -35,11 +35,22 @@ namespace render::gpudriven
 
     constexpr uint32_t MAX_GPU_INSTANCES = 131072;  // Max instance transforms in SSBO
 
+    // Per-instance data for instanced draw calls. Includes PBR override fields so that
+    // entities with different .vfMatInstance scalar overrides (but same parent material)
+    // can be batched into a single draw call.
+    //
+    // Trade-off: 112 bytes vs 64 bytes (mat4 only). The extra 48 bytes per instance
+    // increase GPU memory and bandwidth (~6 MB worst-case at MAX_GPU_INSTANCES).
+    // iblOverride.w acts as a hasOverride flag: 0.0 = use PerDrawData PBR (no overhead
+    // in the shader's common path), 1.0 = use per-instance PBR values.
     struct alignas(16) GPUInstanceTransform
     {
         glm::mat4 modelMatrix;
+        glm::vec4 albedoOverride{1.0f, 1.0f, 1.0f, 1.0f};
+        glm::vec4 pbrOverride{0.0f, 0.5f, 1.0f, 0.0f};   // metallic, roughness, ao, emission
+        glm::vec4 iblOverride{1.0f, 0.5f, 0.0f, 0.0f};   // iblDiffuse, iblSpecular, alphaCutoff, hasOverride
     };
-    static_assert(sizeof(GPUInstanceTransform) == 64);
+    static_assert(sizeof(GPUInstanceTransform) == 112);
 
     constexpr uint32_t SHADER_GROUP_TRANSPARENT = 3;  // Translucent objects (alpha blend / WBOIT)
     constexpr uint32_t SHADER_GROUP_BLEND = 4;        // Additive / Multiply objects

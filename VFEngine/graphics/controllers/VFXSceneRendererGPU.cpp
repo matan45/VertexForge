@@ -43,6 +43,10 @@ namespace controllers
             }
 
             gpuRenderPipeline = std::make_unique<render::vfx::VFXSceneGPUPipeline>(device, swapChain);
+            if (hasLightingLayouts)
+            {
+                gpuRenderPipeline->setLightingLayouts(cachedLightBufferLayout, cachedClusterGridLayout, cachedClusterLightGridLayout);
+            }
             gpuRenderPipeline->init(renderPass);
             if (!gpuRenderPipeline->isInitialized())
             {
@@ -53,6 +57,10 @@ namespace controllers
             
             gpuMeshCache = std::make_unique<render::mesh::MeshGPUCache>(device);
             gpuMeshPipeline = std::make_unique<render::vfx::VFXMeshGPUPipeline>(device, swapChain, *gpuMeshCache);
+            if (hasLightingLayouts)
+            {
+                gpuMeshPipeline->setLightingLayouts(cachedLightBufferLayout, cachedClusterGridLayout, cachedClusterLightGridLayout);
+            }
             gpuMeshPipeline->init(renderPass);
             if (!gpuMeshPipeline->isInitialized())
             {
@@ -468,6 +476,11 @@ namespace controllers
         gpuConfig.collisionFriction = cpuConfig.collisionFriction;
         gpuConfig.collisionLifetimeLoss = cpuConfig.collisionLifetimeLoss;
         gpuConfig.terrainCollisionEnabled = cpuConfig.collisionEnabled ? 1u : 0u;
+
+        // Lighting
+        gpuConfig.lightingInfluence = cpuConfig.lightingInfluence;
+        gpuConfig.normalMode = cpuConfig.normalMode;
+        gpuConfig.ambientAmount = cpuConfig.ambientAmount;
 
         return gpuConfig;
     }
@@ -901,5 +914,41 @@ namespace controllers
             std::remove_if(activeSubEmitters.begin(), activeSubEmitters.end(),
                 [](const SubEmitterInstance& s) { return s.finished; }),
             activeSubEmitters.end());
+    }
+
+    void VFXSceneRenderer::setLightingLayouts(
+        vk::DescriptorSetLayout lightBufferLayout,
+        vk::DescriptorSetLayout clusterGridLayout,
+        vk::DescriptorSetLayout clusterLightGridLayout)
+    {
+        // Cache for pipelines that haven't been created yet
+        cachedLightBufferLayout = lightBufferLayout;
+        cachedClusterGridLayout = clusterGridLayout;
+        cachedClusterLightGridLayout = clusterLightGridLayout;
+        hasLightingLayouts = lightBufferLayout && clusterGridLayout && clusterLightGridLayout;
+
+        if (gpuRenderPipeline)
+        {
+            gpuRenderPipeline->setLightingLayouts(lightBufferLayout, clusterGridLayout, clusterLightGridLayout);
+        }
+        if (gpuMeshPipeline)
+        {
+            gpuMeshPipeline->setLightingLayouts(lightBufferLayout, clusterGridLayout, clusterLightGridLayout);
+        }
+    }
+
+    void VFXSceneRenderer::updateLightingDescriptorSets(
+        vk::DescriptorSet lightBufferSet,
+        vk::DescriptorSet clusterGridSet,
+        vk::DescriptorSet clusterLightGridSet)
+    {
+        if (gpuRenderPipeline)
+        {
+            gpuRenderPipeline->updateLightingDescriptorSets(lightBufferSet, clusterGridSet, clusterLightGridSet);
+        }
+        if (gpuMeshPipeline)
+        {
+            gpuMeshPipeline->updateLightingDescriptorSets(lightBufferSet, clusterGridSet, clusterLightGridSet);
+        }
     }
 }

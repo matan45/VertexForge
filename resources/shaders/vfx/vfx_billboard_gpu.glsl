@@ -9,6 +9,7 @@ layout(location = 1) out vec4 fragColor;
 layout(location = 2) out float fragLifetimeRatio;
 layout(location = 3) out float fragViewDepth;
 layout(location = 4) out float fragGlowIntensity;
+layout(location = 5) out vec3 fragWorldPos;
 
 struct GPUParticle
 {
@@ -81,6 +82,12 @@ struct GPUEmitterConfig
     float collisionFriction;
     float collisionLifetimeLoss;
     uint terrainCollisionEnabled;
+
+    // Lighting
+    float lightingInfluence;
+    uint normalMode;
+    float ambientAmount;
+    float _lightPad0;
 };
 
 const uint FLIPBOOK_RANDOM_START = (1u << 14u);
@@ -124,6 +131,7 @@ void main() {
         fragLifetimeRatio = 1.0;
         fragViewDepth = 0.0;
         fragGlowIntensity = 0.0;
+        fragWorldPos = vec3(0.0);
         return;
     }
 
@@ -210,6 +218,7 @@ void main() {
     fragColor = p.color;
     fragLifetimeRatio = lifetimeRatio;
     fragGlowIntensity = p.glowIntensity;
+    fragWorldPos = vertexPos;
 }
 
 #type FRAGMENT
@@ -220,6 +229,7 @@ layout(location = 1) in vec4 fragColor;
 layout(location = 2) in float fragLifetimeRatio;
 layout(location = 3) in float fragViewDepth;
 layout(location = 4) in float fragGlowIntensity;
+layout(location = 5) in vec3 fragWorldPos;
 
 layout(location = 0) out vec4 outColor;
 
@@ -290,6 +300,12 @@ struct GPUEmitterConfig
     float collisionFriction;
     float collisionLifetimeLoss;
     uint terrainCollisionEnabled;
+
+    // Lighting
+    float lightingInfluence;
+    uint normalMode;
+    float ambientAmount;
+    float _lightPad0;
 };
 
 layout(std430, set = 0, binding = 3) readonly buffer EmitterConfigBuffer {
@@ -297,6 +313,42 @@ layout(std430, set = 0, binding = 3) readonly buffer EmitterConfigBuffer {
 };
 
 layout(binding = 4) uniform sampler2D sceneDepthTexture;
+
+// Lighting types (struct definitions + cluster helpers, no buffer references)
+#include "../common/lighting_functions.glsl"
+#include "../common/cluster_culling.glsl"
+
+// Lighting descriptor sets (shared from main renderer)
+layout(std430, set = 1, binding = 0) readonly buffer DirectionalLightBuffer {
+    DirectionalLight directionalLights[];
+};
+
+layout(std430, set = 1, binding = 1) readonly buffer PointLightBuffer {
+    PointLight pointLights[];
+};
+
+layout(std430, set = 1, binding = 2) readonly buffer SpotLightBuffer {
+    SpotLight spotLights[];
+};
+
+layout(std140, set = 1, binding = 3) uniform LightCountsUBO {
+    LightCounts lightCounts;
+};
+
+layout(std140, set = 2, binding = 0) uniform ClusterParamsUBO {
+    ClusterGridParams clusterParams;
+};
+
+layout(std430, set = 3, binding = 0) readonly buffer ClusterLightGridBuffer {
+    ClusterLightData clusterLightGrid[];
+};
+
+layout(std430, set = 3, binding = 1) readonly buffer ClusterLightIndexListBuffer {
+    uint lightIndexList[];
+};
+
+// VFX lighting evaluation (must come after buffer declarations above)
+#include "vfx_lighting.glsl"
 
 layout(push_constant) uniform PushConstants {
     uint emitterIndex;
@@ -327,7 +379,24 @@ void main() {
         finalColor.a *= softFactor;
     }
 
-    // Glow: additive emissive color
+    // Scene lighting evaluation
+    if (config.lightingInfluence > 0.0 && pc.blendMode != 1u) {
+        vec3 normal;
+        if (config.normalMode == VFX_NORMAL_VIEW_ALIGNED) {
+            normal = -normalize(vec3(camera.view[0][2], camera.view[1][2], camera.view[2][2]));
+        } else {
+            // Sphere normal (default for billboards).
+            // VFX_NORMAL_MESH (2) is only valid for mesh particles; the UI
+            // prevents selecting it on billboard emitters. Sphere is the fallback.
+            normal = computeSphereNormal(fragTexCoord, camera.view);
+        }
+
+        finalColor.rgb = evaluateVFXLighting(
+            finalColor.rgb, normal, fragWorldPos, fragViewDepth,
+            config.ambientAmount, config.lightingInfluence);
+    }
+
+    // Glow: additive emissive color (applied after lighting)
     vec3 glowColor = vec3(pc.glowColorR, pc.glowColorG, pc.glowColorB);
     finalColor.rgb += glowColor * fragGlowIntensity;
 

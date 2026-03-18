@@ -309,6 +309,24 @@ namespace render
             vfxCamera.farPlane = currentFarPlane;
             vfxRuntimeProvider->setCamera(vfxCamera);
             vfxRuntimeProvider->setSceneDepthImageView(offscreenResources.depthImage.depthImageView);
+
+            // Update per-frame lighting descriptor sets for VFX.
+            // Lighting layouts are set once during init (RenderPassHandler::initPipelines),
+            // before VFX pipeline creation. Only descriptor sets need per-frame updates.
+            if (vfxLightingInitialized && gpuDrivenRendererInitialized && gpuDrivenRenderer)
+            {
+                auto* lbm = gpuDrivenRenderer->getLightBufferManager();
+                auto* cgm = gpuDrivenRenderer->getClusterGridManager();
+                auto* lcp = gpuDrivenRenderer->getLightCullingPipeline();
+
+                if (lbm && cgm && lcp)
+                {
+                    vfxRuntimeProvider->updateLightingDescriptorSets(
+                        lbm->getDescriptorSet(),
+                        cgm->getDescriptorSet(),
+                        lcp->getDescriptorSet());
+                }
+            }
         }
 
         bool hasTerrainToRender = gpuDrivenRenderer && gpuDrivenRenderer->isTerrainRenderingEnabled()

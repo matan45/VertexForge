@@ -45,6 +45,14 @@ namespace services
 
         virtual size_t getInstanceCount() const = 0;
 
+        // Lighting resources (shared from main renderer)
+        virtual void setLightingLayouts(vk::DescriptorSetLayout lightBufferLayout,
+                                        vk::DescriptorSetLayout clusterGridLayout,
+                                        vk::DescriptorSetLayout clusterLightGridLayout) = 0;
+        virtual void updateLightingDescriptorSets(vk::DescriptorSet lightBufferSet,
+                                                  vk::DescriptorSet clusterGridSet,
+                                                  vk::DescriptorSet clusterLightGridSet) = 0;
+
         // Distance culling
         virtual void setDistanceCullingEnabled(bool enabled) = 0;
         virtual void setMaxDrawDistance(float distance) = 0;
