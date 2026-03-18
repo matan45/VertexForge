@@ -36,10 +36,6 @@ namespace threading {
 		// Cached topological layers (computed once at build, reused every frame)
 		std::vector<std::vector<uint32_t>> layers;
 
-		// Pre-allocated TaskSets per parallel layer (reused every frame)
-		// Indexed by layer index, only populated for layers with size > 1
-		std::vector<std::vector<std::unique_ptr<enki::TaskSet>>> layerTaskSets;
-
 		// Profiling data - one entry per task (reused across frames)
 		std::vector<TaskProfileEntry> profileData;
 		std::chrono::high_resolution_clock::time_point baseTime;

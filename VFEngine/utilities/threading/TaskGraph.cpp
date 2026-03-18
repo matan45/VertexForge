@@ -45,17 +45,15 @@ namespace threading {
 				entryPtr->threadId = 0;
 			}
 			else {
-				// Multiple tasks - reuse pre-allocated TaskSets
-				auto& taskSets = pImpl->layerTaskSets[layerIdx];
+				// Multiple tasks - dispatch in parallel via enkiTS
+				std::vector<std::unique_ptr<enki::TaskSet>> taskSets(layer.size());
 
 				for (size_t t = 0; t < layer.size(); ++t) {
 					uint32_t idx = layer[t];
 					auto& node = pImpl->nodes[idx];
 					auto* entryPtr = &pImpl->profileData[idx];
 
-					// Reconstruct in-place (TaskSet has deleted operator=  due to atomic members)
-					taskSets[t]->~TaskSet();
-					new (taskSets[t].get()) enki::TaskSet(1,
+					taskSets[t] = std::make_unique<enki::TaskSet>(1,
 						[&fn = node.fn, entryPtr, baseTimePtr](
 							enki::TaskSetPartition, uint32_t threadNum) {
 							auto start = std::chrono::high_resolution_clock::now();

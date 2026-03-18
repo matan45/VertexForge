@@ -168,8 +168,12 @@ namespace threading {
 		}
 
 		// Pre-compute topological layers (cached for every frame's execute())
+		// Note: inDegree was zeroed by topologicalSort(), so recompute from edges
 		{
-			std::vector<uint32_t> layerInDegree = inDegree;
+			std::vector<uint32_t> layerInDegree(nodeCount, 0);
+			for (auto& e : pImpl->edges) {
+				layerInDegree[e.to]++;
+			}
 			std::vector<uint32_t> currentLayer;
 			for (uint32_t i = 0; i < nodeCount; ++i) {
 				if (layerInDegree[i] == 0) currentLayer.push_back(i);
@@ -186,17 +190,6 @@ namespace threading {
 					}
 				}
 				currentLayer = std::move(nextLayer);
-			}
-		}
-
-		// Pre-allocate TaskSets for parallel layers (avoids heap allocation per frame)
-		impl.layerTaskSets.resize(impl.layers.size());
-		for (size_t i = 0; i < impl.layers.size(); ++i) {
-			if (impl.layers[i].size() > 1) {
-				impl.layerTaskSets[i].resize(impl.layers[i].size());
-				for (size_t t = 0; t < impl.layers[i].size(); ++t) {
-					impl.layerTaskSets[i][t] = std::make_unique<enki::TaskSet>();
-				}
 			}
 		}
 
