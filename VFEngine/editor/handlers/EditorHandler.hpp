@@ -39,6 +39,7 @@
 #include "interfaces/render/IBillboardRenderService.hpp"
 #include "interfaces/render/IDecalRenderService.hpp"
 #include "interfaces/render/ILightStreamingService.hpp"
+#include "interfaces/render/IObjectStreamingService.hpp"
 #include "interfaces/render/IGIService.hpp"
 #include "interfaces/ai/IBehaviorTreeService.hpp"
 #include "impl/components/IKComponentService.hpp"
@@ -125,6 +126,7 @@ namespace handlers {
 		std::shared_ptr<services::IBillboardRenderService> billboardRenderService;
 		std::shared_ptr<services::IDecalRenderService> decalRenderService;
 		std::shared_ptr<services::ILightStreamingService> lightStreamingService;
+		std::shared_ptr<services::IObjectStreamingService> objectStreamingService;
 		std::shared_ptr<services::IGIService> giService;
 		std::shared_ptr<services::IBehaviorTreeService> behaviorTreeService;
 		std::unique_ptr<services::BehaviorTreePlayModeHandler> behaviorTreePlayModeHandler;

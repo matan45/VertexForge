@@ -418,7 +418,8 @@ namespace render::gpudriven
             cameraBuffer->getBuffer(),
             batchManager->getCombinedDrawCommandBuffer(),
             batchManager->getCombinedPerDrawDataBuffer(),
-            batchManager->getCombinedDrawCountBuffer()
+            batchManager->getCombinedDrawCountBuffer(),
+            mergedBuffer->getActiveIndexBuffer()
         );
 
         bool hasMeshes = mergedBuffer->getObjectCount() > 0;

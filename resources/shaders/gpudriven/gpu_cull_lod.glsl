@@ -50,6 +50,10 @@ layout(std430, set = 0, binding = 4) buffer DrawCountBuffer {
 
 layout(set = 0, binding = 5) uniform sampler2D hiZTexture;
 
+layout(std430, set = 0, binding = 6) readonly buffer ActiveIndexBuffer {
+    uint activeIndices[];
+};
+
 uvec4 getMeshletLODData(GPUObjectData obj, uint level) {
     switch (level) {
         case 0: return obj.meshletLod0;
@@ -200,11 +204,12 @@ bool hiZOcclusionTest(vec4 worldSphere, mat4 viewProjection, vec2 screenSize, ui
 }
 
 void main() {
-    uint objectIndex = gl_GlobalInvocationID.x;
-    if (objectIndex >= camera.objectCount) {
+    uint threadIndex = gl_GlobalInvocationID.x;
+    if (threadIndex >= camera.objectCount) {
         return;
     }
 
+    uint objectIndex = activeIndices[threadIndex];
     GPUObjectData obj = objects[objectIndex];
 
     uint batchIndex = objectIndex % camera.batchCount;

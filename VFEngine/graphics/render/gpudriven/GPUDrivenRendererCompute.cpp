@@ -507,6 +507,15 @@ namespace render::gpudriven
         lightStreamManager->init(config);
     }
 
+    void GPUDrivenRenderer::initObjectStreaming(const gpudriven::ObjectStreamConfig& config)
+    {
+        if (mergedBuffer)
+        {
+            objectStreamManager = std::make_unique<gpudriven::GPUObjectStreamManager>(*mergedBuffer);
+            objectStreamManager->init(config);
+        }
+    }
+
     void GPUDrivenRenderer::initGI(const gi::GISettings& settings)
     {
         cachedGISettings = settings;

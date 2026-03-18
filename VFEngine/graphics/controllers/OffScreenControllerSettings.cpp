@@ -13,6 +13,7 @@
 #include "cloud/CloudSettings.hpp"
 #include "../render/gi/GIDebugRenderer.hpp"
 #include "offscreen/CullingStatsCollector.hpp"
+#include "scene/EntityRegistry.hpp"
 #include "offscreen/CameraController.hpp"
 #include "offscreen/SceneBVHManager.hpp"
 #include "offscreen/LightBVHManager.hpp"
@@ -717,6 +718,75 @@ namespace controllers
         if (gpu && gpu->getLightStreamManager())
         {
             gpu->getLightStreamManager()->unregisterSectorLights(sectorId);
+        }
+    }
+
+    void OffScreenController::setObjectStreamingConfig(const render::gpudriven::ObjectStreamConfig& config)
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (!renderHandler) return;
+
+        auto* gpu = renderHandler->getGPUDrivenRenderer();
+        if (gpu && gpu->getObjectStreamManager())
+        {
+            gpu->getObjectStreamManager()->setConfig(config);
+        }
+    }
+
+    render::gpudriven::ObjectStreamConfig OffScreenController::getObjectStreamingConfig() const
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (!renderHandler) return {};
+
+        auto* gpu = renderHandler->getGPUDrivenRenderer();
+        if (gpu && gpu->getObjectStreamManager())
+        {
+            return gpu->getObjectStreamManager()->getConfig();
+        }
+        return {};
+    }
+
+    render::gpudriven::ObjectStreamingStats OffScreenController::getObjectStreamingStats() const
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (!renderHandler) return {};
+
+        auto* gpu = renderHandler->getGPUDrivenRenderer();
+        if (gpu && gpu->getObjectStreamManager())
+        {
+            return gpu->getObjectStreamManager()->getStats();
+        }
+        return {};
+    }
+
+    void OffScreenController::registerSectorObjects(
+        uint32_t sectorId,
+        const std::vector<std::pair<uint64_t, entt::entity>>& entities)
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (!renderHandler) return;
+
+        auto* gpu = renderHandler->getGPUDrivenRenderer();
+        if (gpu)
+        {
+            if (!gpu->getObjectStreamManager())
+            {
+                gpu->initObjectStreaming();
+            }
+            auto& registry = scene::EntityRegistry::getRegistry();
+            gpu->getObjectStreamManager()->registerSectorObjects(sectorId, entities, registry);
+        }
+    }
+
+    void OffScreenController::unregisterSectorObjects(uint32_t sectorId)
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (!renderHandler) return;
+
+        auto* gpu = renderHandler->getGPUDrivenRenderer();
+        if (gpu && gpu->getObjectStreamManager())
+        {
+            gpu->getObjectStreamManager()->unregisterSectorObjects(sectorId);
         }
     }
 

@@ -155,6 +155,7 @@
     <ClInclude Include="adapters\render\LightStreamingAdapter.hpp" />
     <ClInclude Include="adapters\render\MaterialPreviewAdapter.hpp" />
     <ClInclude Include="adapters\render\MeshPreviewAdapter.hpp" />
+    <ClInclude Include="adapters\render\ObjectStreamingAdapter.hpp" />
     <ClInclude Include="adapters\render\OffScreenAdapter.hpp" />
     <ClInclude Include="adapters\render\PostProcessAdapter.hpp" />
     <ClInclude Include="adapters\render\RenderHookAdapter.hpp" />
@@ -272,6 +273,7 @@
     <ClCompile Include="adapters\render\LightStreamingAdapter.cpp" />
     <ClCompile Include="adapters\render\MaterialPreviewAdapter.cpp" />
     <ClCompile Include="adapters\render\MeshPreviewAdapter.cpp" />
+    <ClCompile Include="adapters\render\ObjectStreamingAdapter.cpp" />
     <ClCompile Include="adapters\render\OffScreenAdapter.cpp" />
     <ClCompile Include="adapters\render\PostProcessAdapter.cpp" />
     <ClCompile Include="adapters\render\RenderHookAdapter.cpp" />

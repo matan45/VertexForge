@@ -2,6 +2,7 @@
 
 #include "GPUDrivenTypes.hpp"
 #include "scene/MergedMeshBuffer.hpp"
+#include "scene/GPUObjectStreamManager.hpp"
 #include "scene/IndirectBatchManager.hpp"
 #include "scene/BindlessTextureManager.hpp"
 #include "scene/GPUCullLODPipeline.hpp"
@@ -280,6 +281,9 @@ namespace render::gpudriven
         // Light streaming
         std::unique_ptr<lighting::LightStreamManager> lightStreamManager;
 
+        // Object streaming
+        std::unique_ptr<gpudriven::GPUObjectStreamManager> objectStreamManager;
+
         // Global Illumination
         std::unique_ptr<gi::RadianceCascadeManager> giCascadeManager;
         std::unique_ptr<gi::ProbeTracePipeline> giTracePipeline;
@@ -427,6 +431,10 @@ namespace render::gpudriven
         // Light streaming
         lighting::LightStreamManager* getLightStreamManager() const { return lightStreamManager.get(); }
         void initLightStreaming(const lighting::LightStreamingConfig& config = {});
+
+        // Object streaming
+        gpudriven::GPUObjectStreamManager* getObjectStreamManager() const { return objectStreamManager.get(); }
+        void initObjectStreaming(const gpudriven::ObjectStreamConfig& config = {});
 
         // Global Illumination
         void initGI(const gi::GISettings& settings);

@@ -8,6 +8,7 @@
 #include "../../events/world/WorldSectorEvents.hpp"
 #include "../../events/render/DebugDrawEvents.hpp"
 #include "../../events/render/LightStreamingEvents.hpp"
+#include "../../events/render/ObjectStreamingEvents.hpp"
 #include "../../events/scene/ScenePersistenceEvents.hpp"
 #include "../../events/scene/EntityTransformEvents.hpp"
 #include "../../data/EntityConversion.hpp"
@@ -94,6 +95,30 @@ namespace services
                     }
                 }
 
+                // Register sector mesh objects for GPU streaming
+                {
+                    auto& registry = scene::EntityRegistry::getRegistry();
+                    std::vector<std::pair<uint64_t, entt::entity>> meshEntities;
+                    for (uint64_t uuid : sector.entityUUIDs)
+                    {
+                        auto ent = findEntityByUUID(uuid);
+                        if (ent != entt::null)
+                        {
+                            if (registry.any_of<components::MeshComponent>(ent))
+                            {
+                                meshEntities.emplace_back(uuid, ent);
+                            }
+                        }
+                    }
+                    if (!meshEntities.empty())
+                    {
+                        events::render::objectstreaming::RegisterSectorObjectsCommand cmd;
+                        cmd.sectorId = world::sectorCoordToId(sector.coord);
+                        cmd.entities = std::move(meshEntities);
+                        ::events::EventDispatcher::instance().execute(cmd);
+                    }
+                }
+
                 ::events::world::SectorLoadedNotification notif;
                 notif.coord = sector.coord;
                 notif.entityCount = static_cast<uint32_t>(sector.entityUUIDs.size());
@@ -169,7 +194,12 @@ namespace services
 
         sector->state = world::SectorState::Unloading;
 
-        // Unregister sector lights before entities are destroyed
+        // Unregister sector objects and lights before entities are destroyed
+        {
+            events::render::objectstreaming::UnregisterSectorObjectsCommand objCmd;
+            objCmd.sectorId = world::sectorCoordToId(coord);
+            ::events::EventDispatcher::instance().execute(objCmd);
+        }
         {
             events::render::lightstreaming::UnregisterSectorLightsCommand cmd;
             cmd.sectorId = world::sectorCoordToId(coord);

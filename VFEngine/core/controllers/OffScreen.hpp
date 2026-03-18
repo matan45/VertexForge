@@ -14,6 +14,7 @@
 #include "../../graphics/render/gi/GITypes.hpp"
 #include "atmosphere/AtmosphereSettings.hpp"
 #include "../../graphics/render/lighting/LightStreamManager.hpp"
+#include "../../graphics/render/gpudriven/scene/GPUObjectStreamManager.hpp"
 #include "data/RenderHookTypes.hpp"
 #include "../../graphics/render/tools/ImmediateDebugTypes.hpp"
 #include "providers/render/IDecalRenderProvider.hpp"
@@ -179,6 +180,14 @@ namespace controllers
         render::lighting::LightStreamingStats getLightStreamingStats() const;
         void registerSectorLights(uint32_t sectorId, const std::vector<uint32_t>& lightEntityIds);
         void unregisterSectorLights(uint32_t sectorId);
+
+        // Object streaming settings
+        void setObjectStreamingConfig(const render::gpudriven::ObjectStreamConfig& config);
+        render::gpudriven::ObjectStreamConfig getObjectStreamingConfig() const;
+        render::gpudriven::ObjectStreamingStats getObjectStreamingStats() const;
+        void registerSectorObjects(uint32_t sectorId,
+                                   const std::vector<std::pair<uint64_t, entt::entity>>& entities);
+        void unregisterSectorObjects(uint32_t sectorId);
 
         void setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider);
         void setTerrainRenderProvider(services::ITerrainRenderProvider* provider);

@@ -19,7 +19,7 @@ namespace render::gpudriven
         Ready
     };
 
-    constexpr uint32_t MAX_GPU_OBJECTS = 65536;
+    constexpr uint32_t MAX_GPU_OBJECTS = 262144;
     constexpr uint32_t MAX_DRAW_COMMANDS = 700000;
     constexpr uint32_t DEFAULT_BATCH_COUNT = 4;
     constexpr uint32_t MAX_BATCH_COUNT = 8;

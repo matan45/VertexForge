@@ -89,8 +89,9 @@ namespace render::gpudriven
         // binding 3: PerDrawDataBuffer (storage, write-only)
         // binding 4: DrawCountBuffer (storage, read-write for atomics)
         // binding 5: Hi-Z pyramid texture (combined image sampler)
+        // binding 6: ActiveIndexBuffer (storage, read-only)
 
-        std::array<vk::DescriptorSetLayoutBinding, 6> bindings{};
+        std::array<vk::DescriptorSetLayoutBinding, 7> bindings{};
 
         // Binding 0: Object buffer (GPUObjectData[])
         bindings[0].binding = 0;
@@ -127,6 +128,12 @@ namespace render::gpudriven
         bindings[5].descriptorType = vk::DescriptorType::eCombinedImageSampler;
         bindings[5].descriptorCount = 1;
         bindings[5].stageFlags = vk::ShaderStageFlagBits::eCompute;
+
+        // Binding 6: Active-index buffer (uint[])
+        bindings[6].binding = 6;
+        bindings[6].descriptorType = vk::DescriptorType::eStorageBuffer;
+        bindings[6].descriptorCount = 1;
+        bindings[6].stageFlags = vk::ShaderStageFlagBits::eCompute;
 
         vk::DescriptorSetLayoutCreateInfo layoutInfo{};
         layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
@@ -186,7 +193,7 @@ namespace render::gpudriven
         std::array<vk::DescriptorPoolSize, 3> poolSizes{};
 
         poolSizes[0].type = vk::DescriptorType::eStorageBuffer;
-        poolSizes[0].descriptorCount = 4;
+        poolSizes[0].descriptorCount = 5;
 
         poolSizes[1].type = vk::DescriptorType::eUniformBuffer;
         poolSizes[1].descriptorCount = 1;
@@ -223,7 +230,8 @@ namespace render::gpudriven
         vk::Buffer cameraBuffer,
         vk::Buffer drawCommandBuffer,
         vk::Buffer perDrawDataBuffer,
-        vk::Buffer drawCountBuffer)
+        vk::Buffer drawCountBuffer,
+        vk::Buffer activeIndexBuffer)
     {
         // Check if any buffer changed
         if (cachedObjectBuffer == objectBuffer &&
@@ -231,6 +239,7 @@ namespace render::gpudriven
             cachedDrawCommandBuffer == drawCommandBuffer &&
             cachedPerDrawDataBuffer == perDrawDataBuffer &&
             cachedDrawCountBuffer == drawCountBuffer &&
+            cachedActiveIndexBuffer == activeIndexBuffer &&
             !descriptorsNeedUpdate)
         {
             return;
@@ -242,6 +251,7 @@ namespace render::gpudriven
         cachedDrawCommandBuffer = drawCommandBuffer;
         cachedPerDrawDataBuffer = perDrawDataBuffer;
         cachedDrawCountBuffer = drawCountBuffer;
+        cachedActiveIndexBuffer = activeIndexBuffer;
 
         descriptorsNeedUpdate = true;
     }
@@ -292,6 +302,11 @@ namespace render::gpudriven
         drawCountInfo.offset = 0;
         drawCountInfo.range = VK_WHOLE_SIZE; // All batch stats
 
+        vk::DescriptorBufferInfo activeIndexInfo{};
+        activeIndexInfo.buffer = cachedActiveIndexBuffer;
+        activeIndexInfo.offset = 0;
+        activeIndexInfo.range = VK_WHOLE_SIZE;
+
         vk::DescriptorImageInfo hiZInfo{};
         hiZInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
         hiZInfo.imageView = cachedHiZView;
@@ -300,7 +315,7 @@ namespace render::gpudriven
         bool hasHiZ = cachedHiZView && cachedHiZSampler;
 
         std::vector<vk::WriteDescriptorSet> writes;
-        writes.reserve(hasHiZ ? 6 : 5);
+        writes.reserve(hasHiZ ? 7 : 6);
 
         vk::WriteDescriptorSet objectWrite{};
         objectWrite.dstSet = descriptorSet;
@@ -357,6 +372,18 @@ namespace render::gpudriven
             hiZWrite.descriptorType = vk::DescriptorType::eCombinedImageSampler;
             hiZWrite.pImageInfo = &hiZInfo;
             writes.push_back(hiZWrite);
+        }
+
+        if (cachedActiveIndexBuffer)
+        {
+            vk::WriteDescriptorSet activeIndexWrite{};
+            activeIndexWrite.dstSet = descriptorSet;
+            activeIndexWrite.dstBinding = 6;
+            activeIndexWrite.dstArrayElement = 0;
+            activeIndexWrite.descriptorCount = 1;
+            activeIndexWrite.descriptorType = vk::DescriptorType::eStorageBuffer;
+            activeIndexWrite.pBufferInfo = &activeIndexInfo;
+            writes.push_back(activeIndexWrite);
         }
 
         vkDevice.updateDescriptorSets(writes, {});

@@ -197,6 +197,7 @@
     <ClInclude Include="render\gpudriven\scene\BindlessTextureManager.hpp" />
     <ClInclude Include="render\gpudriven\scene\BoneMatrixManager.hpp" />
     <ClInclude Include="render\gpudriven\scene\GPUCullLODPipeline.hpp" />
+    <ClInclude Include="render\gpudriven\scene\GPUObjectStreamManager.hpp" />
     <ClInclude Include="render\gpudriven\scene\IndirectBatchManager.hpp" />
     <ClInclude Include="render\gpudriven\scene\MergedMeshBuffer.hpp" />
     <ClInclude Include="render\gpudriven\scene\MeshShaderPipeline.hpp" />
@@ -434,6 +435,7 @@
     <ClCompile Include="render\gpudriven\scene\BindlessTextureManager.cpp" />
     <ClCompile Include="render\gpudriven\scene\BoneMatrixManager.cpp" />
     <ClCompile Include="render\gpudriven\scene\GPUCullLODPipeline.cpp" />
+    <ClCompile Include="render\gpudriven\scene\GPUObjectStreamManager.cpp" />
     <ClCompile Include="render\gpudriven\scene\IndirectBatchManager.cpp" />
     <ClCompile Include="render\gpudriven\scene\MergedMeshBuffer.cpp" />
     <ClCompile Include="render\gpudriven\scene\MergedMeshBufferScene.cpp" />
