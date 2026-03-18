@@ -38,8 +38,11 @@ namespace render::gpudriven
     struct alignas(16) GPUInstanceTransform
     {
         glm::mat4 modelMatrix;
+        glm::vec4 albedoOverride{1.0f, 1.0f, 1.0f, 1.0f};
+        glm::vec4 pbrOverride{0.0f, 0.5f, 1.0f, 0.0f};   // metallic, roughness, ao, emission
+        glm::vec4 iblOverride{1.0f, 0.5f, 0.0f, 0.0f};   // iblDiffuse, iblSpecular, alphaCutoff, hasOverride
     };
-    static_assert(sizeof(GPUInstanceTransform) == 64);
+    static_assert(sizeof(GPUInstanceTransform) == 112);
 
     constexpr uint32_t SHADER_GROUP_TRANSPARENT = 3;  // Translucent objects (alpha blend / WBOIT)
     constexpr uint32_t SHADER_GROUP_BLEND = 4;        // Additive / Multiply objects

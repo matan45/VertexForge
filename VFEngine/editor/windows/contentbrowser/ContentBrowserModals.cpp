@@ -608,17 +608,19 @@ namespace windows
                     fs::path newPath = selectedFile.parent_path() / (renameFileName + selectedFile.extension().
                         string());
 
-                    std::error_code ec;
                     if (!fs::exists(newPath))
                     {
-                        fs::rename(selectedFile, newPath, ec);
-                        if (!ec)
+                        events::fileops::MoveFileCommand cmd;
+                        cmd.sourcePath = StringUtil::wstringToUtf8(selectedFile.wstring());
+                        cmd.destPath = StringUtil::wstringToUtf8(newPath.wstring());
+                        auto result = events::EventDispatcher::instance().execute(cmd);
+                        if (result.success)
                         {
                             if (refreshCallback) refreshCallback();
                         }
                         else
                         {
-                            vfLogError("Failed to rename file: {}", ec.message());
+                            vfLogError("Failed to rename file: {}", result.errorMessage);
                         }
                     }
                     else

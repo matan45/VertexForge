@@ -24,6 +24,10 @@ namespace render::mesh
                 return nullptr;
             }
             effectivePath = instanceData->parentMaterialRef.resolve();
+            if (effectivePath.empty())
+            {
+                return nullptr;
+            }
         }
 
         // First check cache with shared lock

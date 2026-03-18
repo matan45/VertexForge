@@ -28,8 +28,15 @@ layout(std430, set = 0, binding = 0) readonly buffer PerDrawDataBuffer {
     PerDrawData perDrawData[];
 };
 
+struct GPUInstanceTransform {
+    mat4 modelMatrix;
+    vec4 albedoOverride;
+    vec4 pbrOverride;
+    vec4 iblOverride;
+};
+
 layout(std430, set = 0, binding = 1) readonly buffer InstanceTransformBuffer {
-    mat4 instanceTransforms[];
+    GPUInstanceTransform instanceTransforms[];
 };
 
 layout(std430, set = 0, binding = 2) readonly buffer ObjectBuffer {
@@ -86,7 +93,7 @@ void main() {
     bool isInstanced = (drawData.flags & FLAG_INSTANCED) != 0u && drawData.instanceCount > 1u;
     if (isInstanced) {
         uint instanceOffset = drawData.instanceData.w;
-        modelMatrix = instanceTransforms[instanceOffset + instanceIndex];
+        modelMatrix = instanceTransforms[instanceOffset + instanceIndex].modelMatrix;
     } else {
         modelMatrix = drawData.modelMatrix;
     }
@@ -224,8 +231,15 @@ layout(std430, set = 0, binding = 0) readonly buffer PerDrawDataBuffer {
     PerDrawData perDrawData[];
 };
 
+struct GPUInstanceTransform {
+    mat4 modelMatrix;
+    vec4 albedoOverride;
+    vec4 pbrOverride;
+    vec4 iblOverride;
+};
+
 layout(std430, set = 0, binding = 1) readonly buffer InstanceTransformBuffer {
-    mat4 instanceTransforms[];
+    GPUInstanceTransform instanceTransforms[];
 };
 
 layout(std430, set = 1, binding = 0) readonly buffer MeshletBuffer {

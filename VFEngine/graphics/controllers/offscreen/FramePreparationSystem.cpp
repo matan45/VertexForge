@@ -265,18 +265,66 @@ namespace controllers::offscreen
 
             if (canBatch(entity, renderData))
             {
-                BatchKey key{renderData.meshPath, renderData.defaultMaterialPath,
+                // Resolve material instance to parent for batching (scalar-only overrides)
+                std::string batchMaterialPath = renderData.defaultMaterialPath;
+                bool hasInstancePBR = false;
+                if (material::isInstanceFile(batchMaterialPath))
+                {
+                    auto instanceData = resource::ResourceManager::loadMaterialInstance(
+                        asset::AssetRef::fromPath(batchMaterialPath));
+
+                    if (instanceData && instanceData->parentMaterialRef.isValid()
+                        && instanceData->textureOverrides.empty())
+                    {
+                        std::string parentPath = instanceData->parentMaterialRef.resolve();
+                        if (!parentPath.empty())
+                        {
+                            batchMaterialPath = parentPath;
+                            hasInstancePBR = true;
+                        }
+                    }
+                }
+
+                BatchKey key{renderData.meshPath, batchMaterialPath,
                              hashSubmeshMaterials(renderData.submeshMaterials),
                              renderData.maxDrawDistance};
                 auto it = batchMap.find(key);
                 if (it != batchMap.end())
                 {
-                    meshDrawList[it->second].instanceTransforms.push_back(worldTransform.worldMatrix);
+                    render::mesh::MeshRenderData::InstanceData instData;
+                    instData.modelMatrix = worldTransform.worldMatrix;
+                    if (hasInstancePBR)
+                    {
+                        auto* pbr = getCachedPBRValues(renderData.defaultMaterialPath);
+                        if (pbr)
+                        {
+                            instData.albedo = pbr->albedo;
+                            instData.pbrParams = glm::vec4(pbr->metallic, pbr->roughness, pbr->ao, pbr->emission);
+                            instData.iblParams = glm::vec4(pbr->iblDiffuse, pbr->iblSpecular, pbr->alphaCutoff, 1.0f);
+                        }
+                        else
+                        {
+                            instData.iblParams.w = 0.0f;
+                        }
+                    }
+                    meshDrawList[it->second].instanceTransforms.push_back(instData);
                     return;
                 }
 
                 size_t idx = meshDrawList.size();
-                renderData.instanceTransforms.push_back(worldTransform.worldMatrix);
+                render::mesh::MeshRenderData::InstanceData firstInst;
+                firstInst.modelMatrix = worldTransform.worldMatrix;
+                if (hasInstancePBR)
+                {
+                    auto* pbr = getCachedPBRValues(renderData.defaultMaterialPath);
+                    if (pbr)
+                    {
+                        firstInst.albedo = pbr->albedo;
+                        firstInst.pbrParams = glm::vec4(pbr->metallic, pbr->roughness, pbr->ao, pbr->emission);
+                        firstInst.iblParams = glm::vec4(pbr->iblDiffuse, pbr->iblSpecular, pbr->alphaCutoff, 1.0f);
+                    }
+                }
+                renderData.instanceTransforms.push_back(firstInst);
                 meshDrawList.push_back(std::move(renderData));
                 batchMap[key] = idx;
                 return;

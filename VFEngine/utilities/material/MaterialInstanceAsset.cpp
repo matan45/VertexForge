@@ -63,7 +63,13 @@ namespace material
         {
             if (ref.isValid())
             {
-                j[textureSlotToString(slot)] = ref.toHexString();
+                std::string slotName = textureSlotToString(slot);
+                j[slotName] = ref.toHexString();
+                const std::string& texPath = ref.resolve();
+                if (!texPath.empty())
+                {
+                    j[slotName + "Path"] = texPath;
+                }
             }
         }
         return j;
@@ -76,6 +82,9 @@ namespace material
 
         for (auto& [key, value] : j.items())
         {
+            // Skip path fallback entries
+            if (key.ends_with("Path")) continue;
+
             if (value.is_string())
             {
                 TextureSlot slot = stringToTextureSlot(key);
@@ -83,6 +92,23 @@ namespace material
                 if (!hexStr.empty())
                 {
                     auto ref = asset::AssetRef::fromHexString(hexStr);
+                    // If GUID is valid but can't resolve, try the stored path fallback
+                    if (ref.isValid() && ref.resolve().empty())
+                    {
+                        std::string pathKey = key + "Path";
+                        if (auto pathIt = j.find(pathKey); pathIt != j.end() && pathIt->is_string())
+                        {
+                            std::string fallbackPath = pathIt->get<std::string>();
+                            if (!fallbackPath.empty())
+                            {
+                                auto pathRef = asset::AssetRef::fromPath(fallbackPath);
+                                if (pathRef.isValid())
+                                {
+                                    ref = pathRef;
+                                }
+                            }
+                        }
+                    }
                     if (ref.isValid())
                     {
                         overrides[slot] = ref;
@@ -174,6 +200,20 @@ namespace material
             }
             instance.parentMaterialRef = asset::AssetRef::fromHexString(parentRefStr);
 
+            // If GUID is valid but can't resolve, try the stored path fallback
+            if (instance.parentMaterialRef.isValid() && instance.parentMaterialRef.resolve().empty())
+            {
+                std::string fallbackPath = j.value("parentMaterialRefPath", "");
+                if (!fallbackPath.empty())
+                {
+                    auto pathRef = asset::AssetRef::fromPath(fallbackPath);
+                    if (pathRef.isValid())
+                    {
+                        instance.parentMaterialRef = pathRef;
+                    }
+                }
+            }
+
             // Validate parent ref
             if (!instance.parentMaterialRef.isValid())
             {
@@ -259,6 +299,13 @@ namespace material
         j["uuid"] = instance.uuid;
         j["name"] = instance.name;
         j["parentMaterialRef"] = instance.parentMaterialRef.toHexString();
+        {
+            const std::string& parentPath = instance.parentMaterialRef.resolve();
+            if (!parentPath.empty())
+            {
+                j["parentMaterialRefPath"] = parentPath;
+            }
+        }
 
         // Texture overrides
         if (!instance.textureOverrides.empty())

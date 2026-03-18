@@ -155,6 +155,8 @@ namespace render::gpudriven
             }
         }
 
+        if (effectiveMaterialPath.empty()) return;
+
         auto matData = resource::ResourceManager::loadMaterial(asset::AssetRef::fromPath(effectiveMaterialPath));
         if (matData)
         {
@@ -279,7 +281,7 @@ namespace render::gpudriven
                     populateObjectData(obj, meshRender, submeshLoc, resolvers);
                     obj.entityId = currentObjectCount;
 
-                    obj.modelMatrix = meshRender.instanceTransforms[0];
+                    obj.modelMatrix = meshRender.instanceTransforms[0].modelMatrix;
 
                     std::memcpy(&obj.aabbMax.w, &instanceCount, sizeof(uint32_t));
                     obj.instanceData.w = currentInstanceCount; // instanceOffset
@@ -287,8 +289,11 @@ namespace render::gpudriven
 
                     for (uint32_t i = 0; i < instanceCount; ++i)
                     {
-                        cpuInstanceTransforms[currentInstanceCount + i].modelMatrix =
-                            meshRender.instanceTransforms[i];
+                        auto& inst = cpuInstanceTransforms[currentInstanceCount + i];
+                        inst.modelMatrix = meshRender.instanceTransforms[i].modelMatrix;
+                        inst.albedoOverride = meshRender.instanceTransforms[i].albedo;
+                        inst.pbrOverride = meshRender.instanceTransforms[i].pbrParams;
+                        inst.iblOverride = meshRender.instanceTransforms[i].iblParams;
                     }
                     currentInstanceCount += instanceCount;
 
@@ -370,7 +375,7 @@ namespace render::gpudriven
                     populateObjectData(obj, meshRender, submeshLoc, resolvers);
                     obj.entityId = currentObjectCount;
 
-                    obj.modelMatrix = meshRender.instanceTransforms[0];
+                    obj.modelMatrix = meshRender.instanceTransforms[0].modelMatrix;
 
                     std::memcpy(&obj.aabbMax.w, &instanceCount, sizeof(uint32_t));
                     obj.instanceData.w = currentInstanceCount;
@@ -378,8 +383,11 @@ namespace render::gpudriven
 
                     for (uint32_t i = 0; i < instanceCount; ++i)
                     {
-                        cpuInstanceTransforms[currentInstanceCount + i].modelMatrix =
-                            meshRender.instanceTransforms[i];
+                        auto& inst = cpuInstanceTransforms[currentInstanceCount + i];
+                        inst.modelMatrix = meshRender.instanceTransforms[i].modelMatrix;
+                        inst.albedoOverride = meshRender.instanceTransforms[i].albedo;
+                        inst.pbrOverride = meshRender.instanceTransforms[i].pbrParams;
+                        inst.iblOverride = meshRender.instanceTransforms[i].iblParams;
                     }
                     currentInstanceCount += instanceCount;
 
