@@ -132,24 +132,29 @@ uint selectLOD(float screenPixels, vec4 thresholds, float globalBias) {
 
 // Compute crossfade alpha for LOD transition dithering.
 // Returns 0-255 byte: 0 = fully visible, 255 = fully fading out.
-const float LOD_CROSSFADE_FRACTION = 0.1;
+// Transition zone is just below each LOD boundary — as screenPixels drops
+// toward the boundary, crossfade increases (more dither). Once it crosses
+// the boundary and a coarser LOD is selected, crossfade resets to 0.
+const float LOD_CROSSFADE_FRACTION = 0.04; // 4% of threshold — narrow zone
 
 uint computeCrossfadeByte(float screenPixels, vec4 thresholds, float globalBias, uint selectedLOD) {
     if (selectedLOD >= 3u) return 0u;
 
     float adjustedPixels = screenPixels * pow(2.0, -(thresholds.w + globalBias));
 
+    // Get the boundary for the NEXT coarser LOD (the one we're approaching)
     float boundary;
     if (selectedLOD == 0u) boundary = thresholds.x;
     else if (selectedLOD == 1u) boundary = thresholds.y;
     else boundary = thresholds.z;
 
     float transitionWidth = boundary * LOD_CROSSFADE_FRACTION;
-    float distFromBoundary = adjustedPixels - boundary;
 
-    // Crossfade when approaching the boundary from above (about to switch to coarser LOD)
-    if (distFromBoundary > 0.0 && distFromBoundary < transitionWidth) {
-        float alpha = 1.0 - distFromBoundary / transitionWidth;
+    // adjustedPixels is above boundary (we're at selectedLOD).
+    // As it drops toward boundary, we fade out: alpha goes 0 -> 1.
+    float distAboveBoundary = adjustedPixels - boundary;
+    if (distAboveBoundary >= 0.0 && distAboveBoundary < transitionWidth) {
+        float alpha = 1.0 - distAboveBoundary / transitionWidth; // 0 at top, 1 near boundary
         return uint(clamp(alpha, 0.0, 1.0) * 255.0);
     }
     return 0u;

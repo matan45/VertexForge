@@ -125,7 +125,7 @@ uint selectLODTask(float screenPixels, vec4 thresholds) {
     return 3;
 }
 
-const float LOD_CROSSFADE_FRACTION_TASK = 0.1;
+const float LOD_CROSSFADE_FRACTION_TASK = 0.04;
 
 uint computeCrossfadeByteTask(float screenPixels, vec4 thresholds, uint selectedLOD) {
     if (selectedLOD >= 3u) return 0u;
@@ -138,10 +138,10 @@ uint computeCrossfadeByteTask(float screenPixels, vec4 thresholds, uint selected
     else boundary = thresholds.z;
 
     float transitionWidth = boundary * LOD_CROSSFADE_FRACTION_TASK;
-    float distFromBoundary = adjustedPixels - boundary;
+    float distAboveBoundary = adjustedPixels - boundary;
 
-    if (distFromBoundary > 0.0 && distFromBoundary < transitionWidth) {
-        float alpha = 1.0 - distFromBoundary / transitionWidth;
+    if (distAboveBoundary >= 0.0 && distAboveBoundary < transitionWidth) {
+        float alpha = 1.0 - distAboveBoundary / transitionWidth;
         return uint(clamp(alpha, 0.0, 1.0) * 255.0);
     }
     return 0u;
@@ -301,10 +301,14 @@ void main() {
         payload.instanceNormalMatrix = mat4(normalMat3);
 
         // Pack LOD level (bits 0-7) and crossfade alpha (bits 8-15)
+        // For instanced objects, compute crossfade from screen pixels.
+        // For non-instanced, crossfade is already packed by the compute shader.
         uint packedLod = actualLodLevel;
-        if (isInstanced && camera.enableLODSelection == 2u) {
+        if (isInstanced && instanceScreenPixels > 0.0) {
             uint crossfadeByte = computeCrossfadeByteTask(instanceScreenPixels, objects[drawData.objectIndex].lodThresholds, actualLodLevel);
             packedLod = actualLodLevel | (crossfadeByte << 8u);
+        } else if (!isInstanced) {
+            packedLod = drawData.lodLevel; // Already packed by compute shader
         }
         payload.instanceLodLevel = packedLod;
 
