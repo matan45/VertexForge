@@ -55,6 +55,10 @@ namespace core::audio
         void cleanUp();
         bool isInitialized() const { return initialized; }
 
+        // Thread context transfer: release on main thread, acquire on audio thread
+        void releaseContext();
+        void acquireContext();
+
         std::string getDeviceName() const;
         std::string getVendor() const;
         std::string getVersion() const;

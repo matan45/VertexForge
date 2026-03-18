@@ -180,13 +180,16 @@
     <ClInclude Include="adapters\vfx\VFXRuntimeAdapter.hpp" />
     <ClInclude Include="audio\AudioBufferManager.hpp" />
     <ClInclude Include="audio\AudioBusManager.hpp" />
+    <ClInclude Include="audio\AudioCommandQueue.hpp" />
     <ClInclude Include="audio\AudioController.hpp" />
     <ClInclude Include="audio\AudioEffectManager.hpp" />
     <ClInclude Include="audio\AudioListener.hpp" />
+    <ClInclude Include="audio\AudioPlayParams.hpp" />
     <ClInclude Include="audio\AudioSceneUpdater.hpp" />
     <ClInclude Include="audio\AudioSource.hpp" />
     <ClInclude Include="audio\AudioSourceManager.hpp" />
     <ClInclude Include="audio\AudioSystem.hpp" />
+    <ClInclude Include="audio\AudioThread.hpp" />
     <ClInclude Include="audio\ReverbPresets.hpp" />
     <ClInclude Include="audio\ReverbZoneManager.hpp" />
     <ClInclude Include="audio\StreamingAudioManager.hpp" />
@@ -299,6 +302,7 @@
     <ClCompile Include="adapters\vfx\VFXRuntimeAdapter.cpp" />
     <ClCompile Include="audio\AudioBufferManager.cpp" />
     <ClCompile Include="audio\AudioBusManager.cpp" />
+    <ClCompile Include="audio\AudioCommandQueue.cpp" />
     <ClCompile Include="audio\AudioController.cpp" />
     <ClCompile Include="audio\AudioEffectManager.cpp" />
     <ClCompile Include="audio\AudioListener.cpp" />
@@ -306,6 +310,7 @@
     <ClCompile Include="audio\AudioSource.cpp" />
     <ClCompile Include="audio\AudioSourceManager.cpp" />
     <ClCompile Include="audio\AudioSystem.cpp" />
+    <ClCompile Include="audio\AudioThread.cpp" />
     <ClCompile Include="audio\ReverbPresets.cpp" />
     <ClCompile Include="audio\ReverbZoneManager.cpp" />
     <ClCompile Include="audio\StreamingAudioManager.cpp" />

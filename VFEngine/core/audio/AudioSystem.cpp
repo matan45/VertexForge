@@ -118,6 +118,19 @@ namespace core::audio {
         return true;
     }
 
+    void AudioSystem::releaseContext()
+    {
+        alcMakeContextCurrent(nullptr);
+    }
+
+    void AudioSystem::acquireContext()
+    {
+        if (context)
+        {
+            alcMakeContextCurrent(context);
+        }
+    }
+
     void AudioSystem::cleanUp() {
         if (!initialized) {
             return;

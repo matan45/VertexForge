@@ -7,6 +7,9 @@
 #include "AudioBusManager.hpp"
 #include "AudioEffectManager.hpp"
 #include "ReverbZoneManager.hpp"
+#include "AudioPlayParams.hpp"
+#include "AudioCommandQueue.hpp"
+#include "AudioThread.hpp"
 #include "types/AudioTypes.hpp"
 #include "types/AudioEffectTypes.hpp"
 #include <glm/glm.hpp>
@@ -15,30 +18,6 @@
 #include <chrono>
 
 namespace core::audio {
-
-    struct PlaySoundParams {
-        float volume = 1.0f;
-        float pitch = 1.0f;
-        bool loop = false;
-        bool is3D = false;
-        glm::vec3 position{0.0f};
-        float minDistance = 1.0f;
-        float maxDistance = 100.0f;
-        float rolloffFactor = 1.0f;
-        bool streaming = false;
-
-        bool enableDistanceFilter = false;
-        float filterStartDistance = 10.0f;
-        float filterMaxDistance = 100.0f;
-        float filterIntensity = 1.0f;
-
-        float innerConeAngle = 360.0f;
-        float outerConeAngle = 360.0f;
-        float outerConeGain = 0.0f;
-        glm::vec3 direction{0.0f, 0.0f, -1.0f};
-
-        std::string busName = "Master";
-    };
 
     class AudioController {
     private:
@@ -50,6 +29,9 @@ namespace core::audio {
         std::unique_ptr<AudioBusManager> busManager;
         std::unique_ptr<AudioEffectManager> effectManager;
         std::unique_ptr<ReverbZoneManager> reverbZoneManager;
+
+        std::unique_ptr<AudioCommandQueue> commandQueue;
+        std::unique_ptr<AudioThread> audioThread;
 
         bool initialized = false;
         std::chrono::steady_clock::time_point lastUpdateTime;
