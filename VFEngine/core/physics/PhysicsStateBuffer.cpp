@@ -10,10 +10,11 @@ namespace core::physics
         const auto& entityBodies = registry.getAllEntityBodies();
         auto& bodyInterface = physicsSystem.GetBodyInterfaceNoLock();
 
-        writeBuf->clear();
-        writeBuf->reserve(entityBodies.size());
-        writeIndex.clear();
-        writeIndex.reserve(entityBodies.size());
+        auto& buf = writeBuffer();
+        buf.snapshots.clear();
+        buf.snapshots.reserve(entityBodies.size());
+        buf.index.clear();
+        buf.index.reserve(entityBodies.size());
 
         size_t idx = 0;
         for (const auto& [entityId, bodyId] : entityBodies)
@@ -31,36 +32,38 @@ namespace core::physics
             snapshot.rotation = toGlm(rot);
             snapshot.linearVelocity = toGlm(bodyInterface.GetLinearVelocity(bodyId));
 
-            writeBuf->push_back(snapshot);
-            writeIndex[entityId] = idx++;
+            buf.snapshots.push_back(snapshot);
+            buf.index[entityId] = idx++;
         }
     }
 
     void PhysicsStateBuffer::swap()
     {
-        std::swap(readBuf, writeBuf);
-        std::swap(readIndex, writeIndex);
+        int current = readIdx.load(std::memory_order_acquire);
+        readIdx.store(1 - current, std::memory_order_release);
     }
 
     const PhysicsBodySnapshot* PhysicsStateBuffer::findInReadBuffer(uint64_t entityId) const
     {
-        auto it = readIndex.find(entityId);
-        if (it == readIndex.end()) return nullptr;
-        return &(*readBuf)[it->second];
+        const auto& buf = readBuffer();
+        auto it = buf.index.find(entityId);
+        if (it == buf.index.end()) return nullptr;
+        return &buf.snapshots[it->second];
     }
 
     const PhysicsBodySnapshot* PhysicsStateBuffer::findInWriteBuffer(uint64_t entityId) const
     {
-        auto it = writeIndex.find(entityId);
-        if (it == writeIndex.end()) return nullptr;
-        return &(*writeBuf)[it->second];
+        const auto& buf = writeBuffer();
+        auto it = buf.index.find(entityId);
+        if (it == buf.index.end()) return nullptr;
+        return &buf.snapshots[it->second];
     }
 
     void PhysicsStateBuffer::clear()
     {
-        bufferA.clear();
-        bufferB.clear();
-        readIndex.clear();
-        writeIndex.clear();
+        buffers[0].snapshots.clear();
+        buffers[0].index.clear();
+        buffers[1].snapshots.clear();
+        buffers[1].index.clear();
     }
 }

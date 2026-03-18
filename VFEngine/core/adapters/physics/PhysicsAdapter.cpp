@@ -156,6 +156,9 @@ namespace core
 
     void PhysicsAdapter::update(float deltaTime)
     {
+        // Synchronous compatibility shim: kicks and immediately awaits.
+        // For async overlap, use kickPhysicsStep/syncPhysicsStep separately
+        // via the frame task graph (PhysicsKick / PhysicsSync tasks).
         kickPhysicsStep(deltaTime);
         syncPhysicsStep();
     }

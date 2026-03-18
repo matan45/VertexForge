@@ -12,8 +12,6 @@ namespace threading {
 	{
 		if (!pImpl->scheduler || pImpl->nodes.empty()) return;
 
-		uint32_t nodeCount = static_cast<uint32_t>(pImpl->nodes.size());
-
 		// Record base time for profiling
 		pImpl->baseTime = std::chrono::high_resolution_clock::now();
 
@@ -24,47 +22,12 @@ namespace threading {
 			entry.threadId = 0;
 		}
 
-		// Compute topological layers: tasks at the same layer have all dependencies
-		// in earlier layers and can execute in parallel.
-		std::vector<uint32_t> inDegree(nodeCount, 0);
-		std::vector<std::vector<uint32_t>> reverseAdj(nodeCount); // reverseAdj[i] = tasks i depends on
-
-		for (auto& edge : pImpl->edges) {
-			inDegree[edge.to]++;
-			reverseAdj[edge.to].push_back(edge.from);
-		}
-
-		// Build layers via BFS (Kahn's algorithm layer by layer)
-		std::vector<std::vector<uint32_t>> layers;
-		std::vector<uint32_t> currentLayer;
-
-		for (uint32_t i = 0; i < nodeCount; ++i) {
-			if (inDegree[i] == 0) {
-				currentLayer.push_back(i);
-			}
-		}
-
-		std::vector<uint32_t> tempInDegree = inDegree;
-
-		while (!currentLayer.empty()) {
-			layers.push_back(currentLayer);
-			std::vector<uint32_t> nextLayer;
-
-			for (uint32_t node : currentLayer) {
-				for (uint32_t dep : pImpl->adjacency[node]) {
-					if (--tempInDegree[dep] == 0) {
-						nextLayer.push_back(dep);
-					}
-				}
-			}
-
-			currentLayer = std::move(nextLayer);
-		}
-
-		// Execute each layer: tasks within a layer run in parallel
 		auto* baseTimePtr = &pImpl->baseTime;
 
-		for (auto& layer : layers) {
+		// Execute cached layers (computed once at build time)
+		for (size_t layerIdx = 0; layerIdx < pImpl->layers.size(); ++layerIdx) {
+			auto& layer = pImpl->layers[layerIdx];
+
 			if (layer.size() == 1) {
 				// Single task - execute directly on this thread
 				uint32_t idx = layer[0];
@@ -82,15 +45,17 @@ namespace threading {
 				entryPtr->threadId = 0;
 			}
 			else {
-				// Multiple tasks - dispatch in parallel via enkiTS
-				std::vector<std::unique_ptr<enki::TaskSet>> taskSets(layer.size());
+				// Multiple tasks - reuse pre-allocated TaskSets
+				auto& taskSets = pImpl->layerTaskSets[layerIdx];
 
 				for (size_t t = 0; t < layer.size(); ++t) {
 					uint32_t idx = layer[t];
 					auto& node = pImpl->nodes[idx];
 					auto* entryPtr = &pImpl->profileData[idx];
 
-					taskSets[t] = std::make_unique<enki::TaskSet>(1,
+					// Reconstruct in-place (TaskSet has deleted operator=  due to atomic members)
+					taskSets[t]->~TaskSet();
+					new (taskSets[t].get()) enki::TaskSet(1,
 						[&fn = node.fn, entryPtr, baseTimePtr](
 							enki::TaskSetPartition, uint32_t threadNum) {
 							auto start = std::chrono::high_resolution_clock::now();
@@ -107,12 +72,9 @@ namespace threading {
 						static_cast<uint32_t>(node.priority));
 				}
 
-				// Add all tasks to pipe
 				for (auto& task : taskSets) {
 					pImpl->scheduler->AddTaskSetToPipe(task.get());
 				}
-
-				// Wait for all tasks in this layer to complete
 				for (auto& task : taskSets) {
 					pImpl->scheduler->WaitforTask(task.get());
 				}

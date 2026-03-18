@@ -33,6 +33,10 @@ namespace core::audio {
         std::unique_ptr<AudioCommandQueue> commandQueue;
         std::unique_ptr<AudioThread> audioThread;
 
+        // Pre-generate handles on the main thread for fire-and-forget play commands
+        std::atomic<uint64_t> nextMainThreadHandle{1};
+        AudioHandle generateHandle(bool streaming);
+
         bool initialized = false;
         std::chrono::steady_clock::time_point lastUpdateTime;
     public:

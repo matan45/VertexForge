@@ -59,12 +59,6 @@ namespace threading {
 		return *this;
 	}
 
-	TaskGraphBuilder& TaskGraphBuilder::parallel(std::initializer_list<TaskHandle>)
-	{
-		// Documentation-only: no-dependency is the default
-		return *this;
-	}
-
 	// Topological sort via Kahn's algorithm. Returns empty if cycle detected.
 	static std::vector<uint32_t> topologicalSort(uint32_t nodeCount,
 		const std::vector<EdgeDef>& edges,
@@ -121,9 +115,7 @@ namespace threading {
 			return nullptr;
 		}
 
-		// Get enkiTS scheduler
-		auto* scheduler = static_cast<enki::TaskScheduler*>(
-			JobSystem::instance().getSchedulerPtr());
+		auto* scheduler = JobSystem::instance().getScheduler();
 
 		// Build the TaskGraph - store graph definition for per-frame rebuilding
 		auto graph = std::unique_ptr<TaskGraph>(new TaskGraph());
@@ -172,6 +164,39 @@ namespace threading {
 		for (uint32_t i = 0; i < nodeCount; ++i) {
 			if (adjacency[i].empty()) {
 				impl.leafIndices.push_back(i);
+			}
+		}
+
+		// Pre-compute topological layers (cached for every frame's execute())
+		{
+			std::vector<uint32_t> layerInDegree = inDegree;
+			std::vector<uint32_t> currentLayer;
+			for (uint32_t i = 0; i < nodeCount; ++i) {
+				if (layerInDegree[i] == 0) currentLayer.push_back(i);
+			}
+
+			while (!currentLayer.empty()) {
+				impl.layers.push_back(currentLayer);
+				std::vector<uint32_t> nextLayer;
+				for (uint32_t node : currentLayer) {
+					for (uint32_t dep : adjacency[node]) {
+						if (--layerInDegree[dep] == 0) {
+							nextLayer.push_back(dep);
+						}
+					}
+				}
+				currentLayer = std::move(nextLayer);
+			}
+		}
+
+		// Pre-allocate TaskSets for parallel layers (avoids heap allocation per frame)
+		impl.layerTaskSets.resize(impl.layers.size());
+		for (size_t i = 0; i < impl.layers.size(); ++i) {
+			if (impl.layers[i].size() > 1) {
+				impl.layerTaskSets[i].resize(impl.layers[i].size());
+				for (size_t t = 0; t < impl.layers[i].size(); ++t) {
+					impl.layerTaskSets[i][t] = std::make_unique<enki::TaskSet>();
+				}
 			}
 		}
 

@@ -26,19 +26,20 @@ namespace core::audio
 
     void AudioThread::stop()
     {
-        if (!running.load()) return;
-        running.store(false);
-        commandQueue.notify();
-
+        // ShutdownCmd is the single authority that exits the thread loop.
+        // This method only joins; enqueue ShutdownCmd before calling stop().
         if (thread.joinable())
         {
             thread.join();
         }
+        running.store(false);
         vfLogInfo("AudioThread stopped");
     }
 
-    const AudioStateSnapshot& AudioThread::getSnapshot() const
+    AudioStateSnapshot AudioThread::getSnapshot() const
     {
+        // Return by value to avoid TOCTOU: the caller gets a consistent copy
+        // even if the audio thread flips the index during the caller's reads
         return snapshots[readIndex.load(std::memory_order_acquire)];
     }
 
@@ -66,10 +67,10 @@ namespace core::audio
                 // Check for shutdown
                 if (std::holds_alternative<ShutdownCmd>(cmd))
                 {
-                    // Stop all sources before exiting
                     deps.sourceManager->stopAll();
                     deps.streamingManager->stopAll();
                     deps.audioSystem->releaseContext();
+                    running.store(false, std::memory_order_release);
                     vfLogInfo("AudioThread received shutdown, released context");
                     return;
                 }
@@ -90,10 +91,7 @@ namespace core::audio
             commandQueue.waitForCommands(std::chrono::milliseconds(5));
         }
 
-        // Fallback cleanup if running was set to false without ShutdownCmd
-        deps.sourceManager->stopAll();
-        deps.streamingManager->stopAll();
-        deps.audioSystem->releaseContext();
+        // Loop exited via ShutdownCmd — cleanup already done there
     }
 
     void AudioThread::processCommand(AudioCommand& cmd)
@@ -175,58 +173,66 @@ namespace core::audio
                     }
                 }
                 if (handle != InvalidAudioHandle)
-                    activeHandles.insert(handle);
-                command.result.set_value(handle);
+                {
+                    externalToInternal[command.preAssignedHandle] = handle;
+                    activeHandles.insert(command.preAssignedHandle);
+                }
             }
             else if constexpr (std::is_same_v<T, StopSoundCmd>)
             {
-                if (StreamingAudioManager::isStreamingHandle(command.handle))
+                AudioHandle internal = resolveHandle(command.handle);
+                if (StreamingAudioManager::isStreamingHandle(internal))
                 {
-                    deps.streamingManager->stop(command.handle);
+                    deps.streamingManager->stop(internal);
                 }
                 else
                 {
-                    AudioSource* source = deps.sourceManager->getSource(command.handle);
+                    AudioSource* source = deps.sourceManager->getSource(internal);
                     if (source) source->stop();
                 }
-                deps.busManager->removeSource(command.handle);
-                if (!StreamingAudioManager::isStreamingHandle(command.handle))
+                deps.busManager->removeSource(internal);
+                if (!StreamingAudioManager::isStreamingHandle(internal))
                 {
-                    deps.sourceManager->releaseSource(command.handle);
+                    deps.sourceManager->releaseSource(internal);
                 }
                 activeHandles.erase(command.handle);
+                externalToInternal.erase(command.handle);
             }
             else if constexpr (std::is_same_v<T, PauseSoundCmd>)
             {
-                if (StreamingAudioManager::isStreamingHandle(command.handle))
-                    deps.streamingManager->pause(command.handle);
+                AudioHandle internal = resolveHandle(command.handle);
+                if (StreamingAudioManager::isStreamingHandle(internal))
+                    deps.streamingManager->pause(internal);
                 else
                 {
-                    AudioSource* source = deps.sourceManager->getSource(command.handle);
+                    AudioSource* source = deps.sourceManager->getSource(internal);
                     if (source) source->pause();
                 }
             }
             else if constexpr (std::is_same_v<T, ResumeSoundCmd>)
             {
-                if (StreamingAudioManager::isStreamingHandle(command.handle))
-                    deps.streamingManager->resume(command.handle);
+                AudioHandle internal = resolveHandle(command.handle);
+                if (StreamingAudioManager::isStreamingHandle(internal))
+                    deps.streamingManager->resume(internal);
                 else
                 {
-                    AudioSource* source = deps.sourceManager->getSource(command.handle);
+                    AudioSource* source = deps.sourceManager->getSource(internal);
                     if (source) source->play();
                 }
             }
             else if constexpr (std::is_same_v<T, SetVolumeCmd>)
             {
-                deps.busManager->setSourceUserVolume(command.handle, command.volume);
+                AudioHandle internal = resolveHandle(command.handle);
+                deps.busManager->setSourceUserVolume(internal, command.volume);
             }
             else if constexpr (std::is_same_v<T, SetPitchCmd>)
             {
-                if (StreamingAudioManager::isStreamingHandle(command.handle))
-                    deps.streamingManager->setPitch(command.handle, command.pitch);
+                AudioHandle internal = resolveHandle(command.handle);
+                if (StreamingAudioManager::isStreamingHandle(internal))
+                    deps.streamingManager->setPitch(internal, command.pitch);
                 else
                 {
-                    AudioSource* source = deps.sourceManager->getSource(command.handle);
+                    AudioSource* source = deps.sourceManager->getSource(internal);
                     if (source) source->setPitch(command.pitch);
                 }
             }
@@ -238,19 +244,15 @@ namespace core::audio
             }
             else if constexpr (std::is_same_v<T, SetPlaybackPosCmd>)
             {
-                bool result = false;
-                if (StreamingAudioManager::isStreamingHandle(command.handle))
-                    result = deps.streamingManager->setPlaybackPosition(command.handle, command.seconds);
+                AudioHandle internal = resolveHandle(command.handle);
+                if (StreamingAudioManager::isStreamingHandle(internal))
+                    deps.streamingManager->setPlaybackPosition(internal, command.seconds);
                 else
                 {
-                    AudioSource* source = deps.sourceManager->getSource(command.handle);
+                    AudioSource* source = deps.sourceManager->getSource(internal);
                     if (source)
-                    {
                         source->setPlaybackPosition(command.seconds);
-                        result = true;
-                    }
                 }
-                command.result.set_value(result);
             }
             else if constexpr (std::is_same_v<T, ApplySettingsCmd>)
             {
@@ -274,23 +276,23 @@ namespace core::audio
             }
             else if constexpr (std::is_same_v<T, AddBusEffectCmd>)
             {
-                command.result.set_value(deps.busManager->addBusEffect(command.busName, command.config));
+                deps.busManager->addBusEffect(command.busName, command.config);
             }
             else if constexpr (std::is_same_v<T, RemoveBusEffectCmd>)
             {
-                command.result.set_value(deps.busManager->removeBusEffect(command.busName, command.effectId));
+                deps.busManager->removeBusEffect(command.busName, command.effectId);
             }
             else if constexpr (std::is_same_v<T, UpdateBusEffectCmd>)
             {
-                command.result.set_value(deps.busManager->updateBusEffect(command.busName, command.effectId, command.config));
+                deps.busManager->updateBusEffect(command.busName, command.effectId, command.config);
             }
             else if constexpr (std::is_same_v<T, SetBusEffectEnabledCmd>)
             {
-                command.result.set_value(deps.busManager->setBusEffectEnabled(command.busName, command.effectId, command.enabled));
+                deps.busManager->setBusEffectEnabled(command.busName, command.effectId, command.enabled);
             }
             else if constexpr (std::is_same_v<T, SetBusEffectWetDryCmd>)
             {
-                command.result.set_value(deps.busManager->setBusEffectWetDry(command.busName, command.effectId, command.wetDry));
+                deps.busManager->setBusEffectWetDry(command.busName, command.effectId, command.wetDry);
             }
             else if constexpr (std::is_same_v<T, LoadSnapshotCmd>)
             {
@@ -308,11 +310,23 @@ namespace core::audio
             {
                 deps.bufferManager->unloadBuffer(command.path);
             }
+            else if constexpr (std::is_same_v<T, StopAllCmd>)
+            {
+                deps.sourceManager->stopAll();
+                deps.streamingManager->stopAll();
+                activeHandles.clear();
+            }
             else if constexpr (std::is_same_v<T, ShutdownCmd>)
             {
                 // Handled in threadLoop before processCommand
             }
         }, cmd);
+    }
+
+    AudioHandle AudioThread::resolveHandle(AudioHandle externalHandle) const
+    {
+        auto it = externalToInternal.find(externalHandle);
+        return it != externalToInternal.end() ? it->second : externalHandle;
     }
 
     void AudioThread::publishSnapshot()
@@ -321,21 +335,22 @@ namespace core::audio
         auto& snapshot = snapshots[writeIdx];
         snapshot.sources.clear();
 
-        // Remove handles for sources that finished playing
+        // Build snapshot using external handles (what the main thread knows)
         std::vector<AudioHandle> finished;
-        for (AudioHandle handle : activeHandles)
+        for (AudioHandle extHandle : activeHandles)
         {
+            AudioHandle internal = resolveHandle(extHandle);
             AudioStateSnapshot::SourceState state;
 
-            if (StreamingAudioManager::isStreamingHandle(handle))
+            if (StreamingAudioManager::isStreamingHandle(internal))
             {
-                state.playing = deps.streamingManager->isPlaying(handle);
-                state.playbackPosition = deps.streamingManager->getPlaybackPosition(handle);
-                state.duration = deps.streamingManager->getDuration(handle);
+                state.playing = deps.streamingManager->isPlaying(internal);
+                state.playbackPosition = deps.streamingManager->getPlaybackPosition(internal);
+                state.duration = deps.streamingManager->getDuration(internal);
             }
             else
             {
-                const AudioSource* source = deps.sourceManager->getSource(handle);
+                const AudioSource* source = deps.sourceManager->getSource(internal);
                 if (source)
                 {
                     state.playing = source->isPlaying();
@@ -343,22 +358,23 @@ namespace core::audio
                 }
                 else
                 {
-                    finished.push_back(handle);
+                    finished.push_back(extHandle);
                     continue;
                 }
             }
 
-            snapshot.sources[handle] = state;
+            snapshot.sources[extHandle] = state;
 
             if (!state.playing)
             {
-                finished.push_back(handle);
+                finished.push_back(extHandle);
             }
         }
 
         for (AudioHandle h : finished)
         {
             activeHandles.erase(h);
+            externalToInternal.erase(h);
         }
 
         // Swap read index

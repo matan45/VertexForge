@@ -50,7 +50,7 @@ namespace core::audio
         void start();
         void stop();
 
-        const AudioStateSnapshot& getSnapshot() const;
+        AudioStateSnapshot getSnapshot() const;
 
     private:
         void threadLoop();
@@ -72,6 +72,10 @@ namespace core::audio
 
         // Track active handles for snapshot publishing
         std::unordered_set<AudioHandle> activeHandles;
+
+        // Map pre-assigned (external) handles to internal handles from source/streaming managers
+        std::unordered_map<AudioHandle, AudioHandle> externalToInternal;
+        AudioHandle resolveHandle(AudioHandle externalHandle) const;
 
         std::chrono::steady_clock::time_point lastUpdateTime;
     };

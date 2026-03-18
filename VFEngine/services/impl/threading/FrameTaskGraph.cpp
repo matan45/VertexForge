@@ -76,21 +76,12 @@ namespace services {
 
 		graph->execute();
 
-		// Record profiling data
+		// Record profiling data (TaskProfiler computes frameDurationNs)
 		auto& profileData = graph->getProfileData();
 		threading::TaskProfiler::instance().recordFrame(profileData);
 
-		// Cache latest for queries
-		latestProfile.entries = profileData;
-		uint64_t minStart = UINT64_MAX;
-		uint64_t maxEnd = 0;
-		for (auto& e : profileData) {
-			if (e.endTimeNs > 0) {
-				if (e.startTimeNs < minStart) minStart = e.startTimeNs;
-				if (e.endTimeNs > maxEnd) maxEnd = e.endTimeNs;
-			}
-		}
-		latestProfile.frameDurationNs = (maxEnd > minStart) ? (maxEnd - minStart) : 0;
+		// Use TaskProfiler as single source of truth for frame duration
+		latestProfile = threading::TaskProfiler::instance().getLatestFrame();
 	}
 
 	const threading::FrameProfileSnapshot& FrameTaskGraph::getLatestProfile() const

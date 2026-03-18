@@ -2,7 +2,6 @@
 #include "TaskGraph.hpp"
 
 #include <string_view>
-#include <initializer_list>
 
 namespace threading {
 
@@ -22,9 +21,6 @@ namespace threading {
 
 		// Declare that 'dependent' must run after 'dependency' completes.
 		TaskGraphBuilder& depends(TaskHandle dependent, TaskHandle dependency);
-
-		// Documentation-only: explicitly marks tasks as independent (no-op).
-		TaskGraphBuilder& parallel(std::initializer_list<TaskHandle> tasks);
 
 		// Validate the DAG (cycle detection) and compile into an executable TaskGraph.
 		// Returns nullptr if cycles are detected.

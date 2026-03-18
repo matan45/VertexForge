@@ -7,7 +7,6 @@
 #include <glm/glm.hpp>
 #include <string>
 #include <variant>
-#include <future>
 #include <deque>
 #include <vector>
 #include <mutex>
@@ -20,9 +19,9 @@ namespace core::audio
 
     struct PlaySoundCmd
     {
+        AudioHandle preAssignedHandle = InvalidAudioHandle;
         std::string path;
         PlaySoundParams params;
-        std::promise<AudioHandle> result;
     };
 
     struct StopSoundCmd { AudioHandle handle; };
@@ -42,7 +41,6 @@ namespace core::audio
     {
         AudioHandle handle;
         float seconds;
-        std::promise<bool> result;
     };
 
     struct ApplySettingsCmd { types::AudioSettings settings; };
@@ -56,14 +54,12 @@ namespace core::audio
     {
         std::string busName;
         types::BusEffectConfig config;
-        std::promise<bool> result;
     };
 
     struct RemoveBusEffectCmd
     {
         std::string busName;
         uint32_t effectId;
-        std::promise<bool> result;
     };
 
     struct UpdateBusEffectCmd
@@ -71,7 +67,6 @@ namespace core::audio
         std::string busName;
         uint32_t effectId;
         types::BusEffectConfig config;
-        std::promise<bool> result;
     };
 
     struct SetBusEffectEnabledCmd
@@ -79,7 +74,6 @@ namespace core::audio
         std::string busName;
         uint32_t effectId;
         bool enabled;
-        std::promise<bool> result;
     };
 
     struct SetBusEffectWetDryCmd
@@ -87,13 +81,13 @@ namespace core::audio
         std::string busName;
         uint32_t effectId;
         float wetDry;
-        std::promise<bool> result;
     };
 
     struct LoadSnapshotCmd { std::string name; };
     struct SaveSnapshotCmd { std::string name; };
     struct DeleteSnapshotCmd { std::string name; };
     struct UnloadBufferCmd { std::string path; };
+    struct StopAllCmd {};
     struct ShutdownCmd {};
 
     using AudioCommand = std::variant<
@@ -103,7 +97,7 @@ namespace core::audio
         AddBusEffectCmd, RemoveBusEffectCmd, UpdateBusEffectCmd,
         SetBusEffectEnabledCmd, SetBusEffectWetDryCmd,
         LoadSnapshotCmd, SaveSnapshotCmd, DeleteSnapshotCmd,
-        UnloadBufferCmd, ShutdownCmd
+        UnloadBufferCmd, StopAllCmd, ShutdownCmd
     >;
 
     class AudioCommandQueue

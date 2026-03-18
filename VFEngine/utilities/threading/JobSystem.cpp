@@ -54,7 +54,7 @@ namespace threading {
 		return pImpl->scheduler.GetNumTaskThreads();
 	}
 
-	void* JobSystem::getSchedulerPtr()
+	enki::TaskScheduler* JobSystem::getScheduler()
 	{
 		return &pImpl->scheduler;
 	}

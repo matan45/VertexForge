@@ -142,16 +142,23 @@ namespace core::audio
 
     // === Sound Playback (enqueue commands) ===
 
+    AudioHandle AudioController::generateHandle(bool streaming)
+    {
+        uint64_t id = nextMainThreadHandle.fetch_add(1, std::memory_order_relaxed);
+        return streaming ? (id | StreamingHandleBase) : id;
+    }
+
     AudioHandle AudioController::playSound(const std::string& path, const PlaySoundParams& params)
     {
         if (!initialized || !commandQueue) return InvalidAudioHandle;
 
+        AudioHandle handle = generateHandle(params.streaming);
         PlaySoundCmd cmd;
+        cmd.preAssignedHandle = handle;
         cmd.path = path;
         cmd.params = params;
-        auto future = cmd.result.get_future();
         commandQueue->enqueue(std::move(cmd));
-        return future.get();
+        return handle;
     }
 
     AudioHandle AudioController::playSound3D(const std::string& path, const glm::vec3& position,
@@ -212,8 +219,8 @@ namespace core::audio
 
     void AudioController::stopAll()
     {
-        if (!initialized) return;
-        // Stop all is handled during shutdown via ShutdownCmd
+        if (!initialized || !commandQueue) return;
+        commandQueue->enqueue(StopAllCmd{});
     }
 
     void AudioController::setListenerPosition(const glm::vec3& position, const glm::vec3& forward,
@@ -236,12 +243,8 @@ namespace core::audio
     bool AudioController::setPlaybackPosition(AudioHandle handle, float seconds)
     {
         if (!initialized || !commandQueue) return false;
-        SetPlaybackPosCmd cmd;
-        cmd.handle = handle;
-        cmd.seconds = seconds;
-        auto future = cmd.result.get_future();
-        commandQueue->enqueue(std::move(cmd));
-        return future.get();
+        commandQueue->enqueue(SetPlaybackPosCmd{handle, seconds});
+        return true;
     }
 
     float AudioController::getDuration(AudioHandle handle) const
@@ -340,60 +343,37 @@ namespace core::audio
     bool AudioController::addBusEffect(const std::string& busName, const types::BusEffectConfig& config)
     {
         if (!initialized || !commandQueue) return false;
-        AddBusEffectCmd cmd;
-        cmd.busName = busName;
-        cmd.config = config;
-        auto future = cmd.result.get_future();
-        commandQueue->enqueue(std::move(cmd));
-        return future.get();
+        commandQueue->enqueue(AddBusEffectCmd{busName, config});
+        return true;
     }
 
     bool AudioController::removeBusEffect(const std::string& busName, uint32_t effectId)
     {
         if (!initialized || !commandQueue) return false;
-        RemoveBusEffectCmd cmd;
-        cmd.busName = busName;
-        cmd.effectId = effectId;
-        auto future = cmd.result.get_future();
-        commandQueue->enqueue(std::move(cmd));
-        return future.get();
+        commandQueue->enqueue(RemoveBusEffectCmd{busName, effectId});
+        return true;
     }
 
     bool AudioController::updateBusEffect(const std::string& busName, uint32_t effectId,
                                            const types::BusEffectConfig& config)
     {
         if (!initialized || !commandQueue) return false;
-        UpdateBusEffectCmd cmd;
-        cmd.busName = busName;
-        cmd.effectId = effectId;
-        cmd.config = config;
-        auto future = cmd.result.get_future();
-        commandQueue->enqueue(std::move(cmd));
-        return future.get();
+        commandQueue->enqueue(UpdateBusEffectCmd{busName, effectId, config});
+        return true;
     }
 
     bool AudioController::setBusEffectEnabled(const std::string& busName, uint32_t effectId, bool enabled)
     {
         if (!initialized || !commandQueue) return false;
-        SetBusEffectEnabledCmd cmd;
-        cmd.busName = busName;
-        cmd.effectId = effectId;
-        cmd.enabled = enabled;
-        auto future = cmd.result.get_future();
-        commandQueue->enqueue(std::move(cmd));
-        return future.get();
+        commandQueue->enqueue(SetBusEffectEnabledCmd{busName, effectId, enabled});
+        return true;
     }
 
     bool AudioController::setBusEffectWetDry(const std::string& busName, uint32_t effectId, float wetDry)
     {
         if (!initialized || !commandQueue) return false;
-        SetBusEffectWetDryCmd cmd;
-        cmd.busName = busName;
-        cmd.effectId = effectId;
-        cmd.wetDry = wetDry;
-        auto future = cmd.result.get_future();
-        commandQueue->enqueue(std::move(cmd));
-        return future.get();
+        commandQueue->enqueue(SetBusEffectWetDryCmd{busName, effectId, wetDry});
+        return true;
     }
 
     std::vector<types::BusEffectConfig> AudioController::getBusEffectChain(const std::string& busName) const

@@ -7,6 +7,7 @@
 #include <glm/gtc/quaternion.hpp>
 #include <vector>
 #include <unordered_map>
+#include <atomic>
 #include <cstdint>
 
 namespace core::physics
@@ -22,11 +23,11 @@ namespace core::physics
     class PhysicsStateBuffer
     {
     public:
+        // Called on worker thread after physics step completes
         void capture(const PhysicsBodyRegistry& registry, JPH::PhysicsSystem& physicsSystem);
-        void swap();
 
-        const std::vector<PhysicsBodySnapshot>& getReadBuffer() const { return *readBuf; }
-        const std::vector<PhysicsBodySnapshot>& getWriteBuffer() const { return *writeBuf; }
+        // Called on main thread before kicking async step
+        void swap();
 
         const PhysicsBodySnapshot* findInReadBuffer(uint64_t entityId) const;
         const PhysicsBodySnapshot* findInWriteBuffer(uint64_t entityId) const;
@@ -34,13 +35,18 @@ namespace core::physics
         void clear();
 
     private:
-        std::vector<PhysicsBodySnapshot> bufferA;
-        std::vector<PhysicsBodySnapshot> bufferB;
-        std::vector<PhysicsBodySnapshot>* readBuf = &bufferA;
-        std::vector<PhysicsBodySnapshot>* writeBuf = &bufferB;
+        struct Buffer
+        {
+            std::vector<PhysicsBodySnapshot> snapshots;
+            std::unordered_map<uint64_t, size_t> index;
+        };
 
-        // Fast entity lookup index (rebuilt on capture)
-        std::unordered_map<uint64_t, size_t> readIndex;
-        std::unordered_map<uint64_t, size_t> writeIndex;
+        Buffer buffers[2];
+        std::atomic<int> readIdx{0};  // Atomic index for thread-safe buffer identification
+
+        Buffer& readBuffer() { return buffers[readIdx.load(std::memory_order_acquire)]; }
+        const Buffer& readBuffer() const { return buffers[readIdx.load(std::memory_order_acquire)]; }
+        Buffer& writeBuffer() { return buffers[1 - readIdx.load(std::memory_order_acquire)]; }
+        const Buffer& writeBuffer() const { return buffers[1 - readIdx.load(std::memory_order_acquire)]; }
     };
 }
