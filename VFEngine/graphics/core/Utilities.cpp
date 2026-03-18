@@ -10,7 +10,7 @@ namespace core {
 
 		int i = 0;
 		for (const vk::QueueFamilyProperties& queueFamily : queueFamilies) {
-			
+
 			if (device.getSurfaceSupportKHR(i, surface)) {
 				indices.presentFamily = i;
 			}
@@ -26,7 +26,23 @@ namespace core {
 				indices.transferFamily = i;
 			}
 
+			// Look for a dedicated compute-only queue family (compute but NOT graphics)
+			if ((queueFamily.queueFlags & vk::QueueFlagBits::eCompute) &&
+			    !(queueFamily.queueFlags & vk::QueueFlagBits::eGraphics) &&
+			    !indices.asyncComputeFamily.has_value()) {
+				indices.asyncComputeFamily = i;
+			}
+
 			i++;
+		}
+
+		// If no dedicated compute-only family, try getting a second queue from the graphics+compute family
+		if (!indices.asyncComputeFamily.has_value() && indices.graphicsAndComputeFamily.has_value()) {
+			uint32_t gfxFamily = indices.graphicsAndComputeFamily.value();
+			if (queueFamilies[gfxFamily].queueCount >= 2) {
+				indices.asyncComputeFamily = gfxFamily;
+				indices.asyncComputeUsesSecondQueue = true;
+			}
 		}
 
 		// If no dedicated transfer queue found, fall back to graphics queue for transfers

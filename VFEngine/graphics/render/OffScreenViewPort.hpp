@@ -11,6 +11,7 @@ namespace core
     class Device;
     class SwapChain;
     class CommandPool;
+    class AsyncComputeManager;
 }
 
 namespace render
@@ -32,6 +33,9 @@ namespace render
         core::OffscreenResources offscreenResources;
         std::vector<vk::Fence> inFlightFences;
 
+        // Async compute (non-owning, set by controller)
+        core::AsyncComputeManager* asyncComputeManager = nullptr;
+
     public:
         explicit OffScreenViewPort(core::Device& device, core::SwapChain& swapChain);
         ~OffScreenViewPort();
@@ -51,6 +55,7 @@ namespace render
         terrain::TerrainHitResult getTerrainHitResult() const;
 
         void setBrushOverlayParams(float radius, float falloff, float shape);
+        void setAsyncComputeManager(core::AsyncComputeManager* manager);
 
     private:
         void draw(const vk::CommandBuffer& commandBuffer) const;

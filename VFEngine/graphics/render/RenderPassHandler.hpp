@@ -168,6 +168,7 @@ namespace render
         uint32_t taaFrameIndex = 0;
 
         bool gpuDrivenRendererInitialized = false;
+        bool asyncComputeActive = false;
         glm::vec3 currentCameraPosition{0.0f};
         float currentNearPlane = 0.1f;
         float currentFarPlane = 1000.0f;
@@ -275,6 +276,11 @@ namespace render
 
         gpudriven::GPUDrivenRenderer* getGPUDrivenRenderer() const { return gpuDrivenRenderer.get(); }
         bool isGPUDrivenRendererInitialized() const { return gpuDrivenRendererInitialized; }
+        void setAsyncComputeActive(bool active) { asyncComputeActive = active; }
+
+        // Record all async-eligible compute work into the given command buffer
+        // (light culling, grass, GI, atmosphere, clouds, VFX, ocean FFT)
+        void recordAsyncCompute(vk::CommandBuffer asyncCmd) const;
 
         void setDeletionQueue(core::DeferredDeletionQueue* queue);
         void setGPUDrivenCameraData(const glm::vec3& cameraPos, float nearPlane, float farPlane, float time = 0.0f);

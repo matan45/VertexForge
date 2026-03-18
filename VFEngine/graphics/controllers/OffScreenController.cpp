@@ -2,6 +2,7 @@
 #include "../render/gpudriven/GPUDrivenRenderer.hpp"
 #include "../render/gpudriven/brush/BrushComputePipeline.hpp"
 #include "../core/VulkanContext.hpp"
+#include "../core/AsyncComputeManager.hpp"
 #include "../render/OffScreenViewPort.hpp"
 #include "../render/RenderPassHandler.hpp"
 #include "../render/billboard/BillboardPipeline.hpp"
@@ -53,7 +54,14 @@ namespace controllers
 
     void OffScreenController::init()
     {
+        // Initialize async compute manager before offscreen viewport
+        asyncComputeManager = std::make_unique<core::AsyncComputeManager>(device);
+        asyncComputeManager->init();
+
         offScreen->init();
+
+        // Wire async compute to the viewport
+        offScreen->setAsyncComputeManager(asyncComputeManager.get());
 
         auto* renderHandler = offScreen->getRenderPassHandler();
 
@@ -173,6 +181,12 @@ namespace controllers
         }
 
         offScreen->cleanUp();
+
+        if (asyncComputeManager)
+        {
+            asyncComputeManager->cleanUp();
+            asyncComputeManager.reset();
+        }
     }
 
     void OffScreenController::iblSet(std::string_view iblPath)

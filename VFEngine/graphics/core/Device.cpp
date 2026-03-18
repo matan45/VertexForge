@@ -201,7 +201,8 @@ namespace core
         assert(queueFamilyIndices.isComplete() &&
             "Queue families must be complete - was pickPhysicalDevice() called first?");
 
-        const float queuePriority = 1.0f;
+        // Queue priorities: graphics=1.0, async compute=0.5
+        const std::array<float, 2> queuePriorities = {1.0f, 0.5f};
 
         std::unordered_set<uint32_t> uniqueQueueFamilies;
         uniqueQueueFamilies.insert(queueFamilyIndices.graphicsAndComputeFamily.value());
@@ -213,13 +214,30 @@ namespace core
             uniqueQueueFamilies.insert(queueFamilyIndices.transferFamily.value());
         }
 
+        // Add dedicated async compute family if it's a different family
+        if (queueFamilyIndices.hasDedicatedComputeFamily())
+        {
+            uniqueQueueFamilies.insert(queueFamilyIndices.asyncComputeFamily.value());
+        }
+
         std::vector<vk::DeviceQueueCreateInfo> queueCreateInfos;
         for (uint32_t queueFamily : uniqueQueueFamilies)
         {
             vk::DeviceQueueCreateInfo queueCreateInfo{};
             queueCreateInfo.queueFamilyIndex = queueFamily;
-            queueCreateInfo.queueCount = 1;
-            queueCreateInfo.pQueuePriorities = &queuePriority;
+
+            // Request 2 queues from graphics+compute family when using second queue for async compute
+            if (queueFamily == queueFamilyIndices.graphicsAndComputeFamily.value() &&
+                queueFamilyIndices.asyncComputeUsesSecondQueue)
+            {
+                queueCreateInfo.queueCount = 2;
+                queueCreateInfo.pQueuePriorities = queuePriorities.data();
+            }
+            else
+            {
+                queueCreateInfo.queueCount = 1;
+                queueCreateInfo.pQueuePriorities = queuePriorities.data(); // Uses first element (1.0f)
+            }
             queueCreateInfos.push_back(queueCreateInfo);
         }
 
@@ -241,6 +259,7 @@ namespace core
         vulkan12Features.descriptorBindingVariableDescriptorCount = VK_TRUE;
         vulkan12Features.descriptorBindingSampledImageUpdateAfterBind = VK_TRUE;
         vulkan12Features.bufferDeviceAddress = VK_TRUE; // Required for acceleration structures
+        vulkan12Features.timelineSemaphore = VK_TRUE; // Required for async compute synchronization
         vulkan12Features.pNext = &vulkan11Features;
 
         vk::PhysicalDeviceVulkan13Features vulkan13Features{};
@@ -289,6 +308,30 @@ namespace core
             else
             {
                 transferQueue = graphicsAndComputeQueue;
+            }
+
+            // Get async compute queue
+            if (queueFamilyIndices.hasAsyncComputeQueue())
+            {
+                if (queueFamilyIndices.asyncComputeUsesSecondQueue)
+                {
+                    // Second queue from the same graphics+compute family
+                    asyncComputeQueue = logicalDevice.get().getQueue(
+                        queueFamilyIndices.graphicsAndComputeFamily.value(), 1);
+                }
+                else
+                {
+                    // Dedicated compute-only family
+                    asyncComputeQueue = logicalDevice.get().getQueue(
+                        queueFamilyIndices.asyncComputeFamily.value(), 0);
+                }
+
+                if (debug)
+                {
+                    vfLogInfo("Async compute queue enabled (family={}, dedicated={})",
+                              queueFamilyIndices.asyncComputeFamily.value(),
+                              queueFamilyIndices.hasDedicatedComputeFamily());
+                }
             }
         }
         catch (const vk::SystemError& err)

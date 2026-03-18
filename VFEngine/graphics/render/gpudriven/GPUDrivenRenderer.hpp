@@ -355,6 +355,12 @@ namespace render::gpudriven
 
         void dispatchCompute(vk::CommandBuffer cmd);
 
+        // Split compute dispatch for async compute queue support
+        // Records uploads, light occlusion, object culling, shadows, volumetric fog on graphics queue
+        void dispatchGraphicsCompute(vk::CommandBuffer cmd);
+        // Records light culling, grass compute, GI probe update on async compute queue
+        void dispatchAsyncCompute(vk::CommandBuffer asyncCmd);
+
         void renderDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet,
                         uint32_t screenWidth = 0, uint32_t screenHeight = 0);
         void renderTransparentDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet,

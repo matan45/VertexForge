@@ -71,7 +71,7 @@ namespace core {
 		if (result != vk::Result::eSuccess) {
 			vfLogError("failed to wait for in-flight fence");
 		}
-		
+
 		result = device.getLogicalDevice().acquireNextImageKHR(
 			swapChain.getSwapchain(),
 			UINT64_MAX,
@@ -372,4 +372,3 @@ namespace core {
 	}
 
 }
-

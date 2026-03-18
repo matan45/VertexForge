@@ -72,7 +72,11 @@ namespace render
                 }
             }
 
-            atmospherePipeline->dispatchCompute(commandBuffer);
+            // Compute dispatch runs on async compute queue when active
+            if (!asyncComputeActive)
+            {
+                atmospherePipeline->dispatchCompute(commandBuffer);
+            }
             atmospherePipeline->renderSky(commandBuffer, imageIndex);
         }
         else
@@ -105,7 +109,11 @@ namespace render
                 cloudPipeline->setSunIrradiance(atmosSettings.sunIrradiance);
             }
 
-            cloudPipeline->dispatchCompute(commandBuffer);
+            // Compute dispatch runs on async compute queue when active
+            if (!asyncComputeActive)
+            {
+                cloudPipeline->dispatchCompute(commandBuffer);
+            }
             cloudPipeline->renderComposite(commandBuffer, imageIndex);
         }
 
@@ -353,7 +361,8 @@ namespace render
 
         DebugRenderer* debugRendererPtr = hasDebugItems ? debugRenderer.get() : nullptr;
 
-        if (hasVFX)
+        // VFX compute runs on async compute queue when active
+        if (hasVFX && !asyncComputeActive)
         {
             vfxRuntimeProvider->recordComputeCommands(commandBuffer);
         }
@@ -385,13 +394,27 @@ namespace render
                                                    bool hasVFX) const
     {
         updateGPUDrivenHiZ();
-        gpuDrivenRenderer->dispatchCompute(commandBuffer);
+        if (asyncComputeActive)
+        {
+            // Async compute path: light culling, grass, GI run on async compute queue
+            // Graphics queue handles uploads, object culling, shadows, volumetric fog
+            gpuDrivenRenderer->dispatchGraphicsCompute(commandBuffer);
+        }
+        else
+        {
+            // Single-queue fallback: all compute on graphics queue
+            gpuDrivenRenderer->dispatchCompute(commandBuffer);
+        }
 
         if (oceanFFTInitialized)
         {
             // Read previous frame's displacement data for CPU-side physics
             gpuDrivenRenderer->readbackOceanDisplacement();
-            gpuDrivenRenderer->dispatchOceanFFT(commandBuffer, currentTime);
+            // Ocean FFT compute runs on async compute queue when active
+            if (!asyncComputeActive)
+            {
+                gpuDrivenRenderer->dispatchOceanFFT(commandBuffer, currentTime);
+            }
         }
 
         vk::DescriptorSet iblDescriptorSet = meshPipeline->getIBLDescriptorSet(imageIndex);
@@ -733,6 +756,70 @@ namespace render
             {
                 vfLogError("Plugin render hook error: {}", e.what());
             }
+        }
+    }
+
+    void RenderPassHandler::recordAsyncCompute(vk::CommandBuffer asyncCmd) const
+    {
+        // GPU-driven compute: light culling, grass, GI probes
+        if (gpuDrivenRendererInitialized && gpuDrivenRenderer->isEnabled())
+        {
+            gpuDrivenRenderer->dispatchAsyncCompute(asyncCmd);
+        }
+
+        // Atmosphere compute (LUT generation)
+        // Camera/sun data must be set before dispatch
+        if (atmospherePipeline && atmospherePipeline->isEnabled())
+        {
+            atmospherePipeline->setCameraData(currentView, currentProjection,
+                                               currentCameraPosition,
+                                               currentNearPlane, currentFarPlane);
+            if (gpuDrivenRendererInitialized)
+            {
+                auto* lbm = gpuDrivenRenderer->getLightBufferManager();
+                auto sunDir = lbm->getFirstDirectionalLightDirection();
+                if (sunDir)
+                {
+                    atmospherePipeline->setSunDirection(*sunDir);
+                }
+            }
+            atmospherePipeline->dispatchCompute(asyncCmd);
+        }
+
+        // Cloud compute (raymarch + temporal reprojection)
+        if (cloudPipeline && cloudPipeline->isEnabled())
+        {
+            cloudPipeline->setCameraData(currentView, currentProjection,
+                                          currentCameraPosition,
+                                          currentNearPlane, currentFarPlane,
+                                          currentTime);
+            if (gpuDrivenRendererInitialized)
+            {
+                auto* lbm = gpuDrivenRenderer->getLightBufferManager();
+                auto sunDir = lbm->getFirstDirectionalLightDirection();
+                if (sunDir)
+                {
+                    cloudPipeline->setSunDirection(*sunDir);
+                }
+            }
+            if (atmospherePipeline && atmospherePipeline->isInitialized())
+            {
+                auto atmosSettings = atmospherePipeline->getSettings();
+                cloudPipeline->setSunIrradiance(atmosSettings.sunIrradiance);
+            }
+            cloudPipeline->dispatchCompute(asyncCmd);
+        }
+
+        // VFX/particle compute
+        if (vfxRuntimeProvider)
+        {
+            vfxRuntimeProvider->recordComputeCommands(asyncCmd);
+        }
+
+        // Ocean FFT
+        if (oceanFFTInitialized && gpuDrivenRendererInitialized)
+        {
+            gpuDrivenRenderer->dispatchOceanFFT(asyncCmd, currentTime);
         }
     }
 }

@@ -30,6 +30,7 @@ namespace core
 {
     class Device;
     class SwapChain;
+    class AsyncComputeManager;
 }
 
 namespace render
@@ -282,5 +283,6 @@ namespace controllers
 
     private:
         std::unique_ptr<render::gpudriven::BrushComputePipeline> brushComputePipeline;
+        std::unique_ptr<core::AsyncComputeManager> asyncComputeManager;
     };
 }

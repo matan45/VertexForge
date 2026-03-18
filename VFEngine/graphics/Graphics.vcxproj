@@ -137,6 +137,7 @@
     <ClInclude Include="controllers\preview\MaterialPreviewController.hpp" />
     <ClInclude Include="controllers\preview\MeshPreviewController.hpp" />
     <ClInclude Include="controllers\preview\VFXPreviewController.hpp" />
+    <ClInclude Include="core\AsyncComputeManager.hpp" />
     <ClInclude Include="core\BufferUtilities.hpp" />
     <ClInclude Include="core\CommandPool.hpp" />
     <ClInclude Include="core\DeferredDeletionQueue.hpp" />
@@ -376,6 +377,7 @@
     <ClCompile Include="controllers\preview\MaterialPreviewController.cpp" />
     <ClCompile Include="controllers\preview\MeshPreviewController.cpp" />
     <ClCompile Include="controllers\preview\VFXPreviewController.cpp" />
+    <ClCompile Include="core\AsyncComputeManager.cpp" />
     <ClCompile Include="core\BufferUtilities.cpp" />
     <ClCompile Include="core\CommandPool.cpp" />
     <ClCompile Include="core\DeferredDeletionQueue.cpp" />
