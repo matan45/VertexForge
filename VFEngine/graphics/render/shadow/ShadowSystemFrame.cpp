@@ -1,4 +1,6 @@
 #include "ShadowSystem.hpp"
+#include "../../core/RenderManager.hpp"
+#include "../../core/ThreadCommandPoolManager.hpp"
 #include "CascadeShadowCalculator.hpp"
 #include "PointShadowCalculator.hpp"
 #include "SpotShadowCalculator.hpp"
@@ -613,10 +615,29 @@ namespace render::shadow
         if (!passRecorder)
             return;
 
-        passRecorder->recordShadowPass(cmd, params, terrainParams,
-            tilePool.get(), resourcePool.get(),
-            shadowPassPipeline.get(), terrainShadowPipeline.get(),
-            pageRenderList, lightShadowData, shadowsEnabled, poolFirstUse);
+        // Below this threshold, thread launch/join overhead exceeds per-tile recording cost.
+        // Each tile records ~5-10 Vulkan calls (viewport, scissor, bias, push constants, draw).
+        // At 5+ tiles the parallelFor work-stealing amortizes the overhead.
+        constexpr uint32_t PARALLEL_TILE_THRESHOLD = 5;
+        uint32_t frameIndex = core::RenderManager::getImageIndex();
+
+        if (threadPoolManager && threadPoolManager->getThreadCount() > 1 &&
+            pageRenderList.size() >= PARALLEL_TILE_THRESHOLD)
+        {
+            threadPoolManager->resetFrame(frameIndex);
+            passRecorder->recordShadowPassParallel(cmd, params, terrainParams,
+                tilePool.get(), resourcePool.get(),
+                shadowPassPipeline.get(), terrainShadowPipeline.get(),
+                pageRenderList, lightShadowData, shadowsEnabled, poolFirstUse,
+                threadPoolManager.get(), frameIndex);
+        }
+        else
+        {
+            passRecorder->recordShadowPass(cmd, params, terrainParams,
+                tilePool.get(), resourcePool.get(),
+                shadowPassPipeline.get(), terrainShadowPipeline.get(),
+                pageRenderList, lightShadowData, shadowsEnabled, poolFirstUse);
+        }
 
         if (shadowsEnabled)
             poolFirstUse = false;

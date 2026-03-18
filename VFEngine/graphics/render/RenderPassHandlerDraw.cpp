@@ -3,6 +3,8 @@
 #include "decal/DecalPipeline.hpp"
 #include "../core/SwapChain.hpp"
 #include "../core/Device.hpp"
+#include "../core/ThreadCommandPoolManager.hpp"
+#include "../core/RenderManager.hpp"
 #include "ClearColor.hpp"
 #include "IBL.hpp"
 #include "DebugRenderer.hpp"
@@ -31,6 +33,8 @@
 #include "water/WaterTile.hpp"
 #include "water/OceanFFT.hpp"
 #include "vegetation/WindConfig.hpp"
+#include "threading/JobSystem.hpp"
+#include <chrono>
 
 namespace
 {
@@ -72,7 +76,11 @@ namespace render
                 }
             }
 
-            atmospherePipeline->dispatchCompute(commandBuffer);
+            // Compute dispatch runs on async compute queue when active
+            if (!asyncComputeActive)
+            {
+                atmospherePipeline->dispatchCompute(commandBuffer);
+            }
             atmospherePipeline->renderSky(commandBuffer, imageIndex);
         }
         else
@@ -105,7 +113,11 @@ namespace render
                 cloudPipeline->setSunIrradiance(atmosSettings.sunIrradiance);
             }
 
-            cloudPipeline->dispatchCompute(commandBuffer);
+            // Compute dispatch runs on async compute queue when active
+            if (!asyncComputeActive)
+            {
+                cloudPipeline->dispatchCompute(commandBuffer);
+            }
             cloudPipeline->renderComposite(commandBuffer, imageIndex);
         }
 
@@ -353,7 +365,8 @@ namespace render
 
         DebugRenderer* debugRendererPtr = hasDebugItems ? debugRenderer.get() : nullptr;
 
-        if (hasVFX)
+        // VFX compute runs on async compute queue when active
+        if (hasVFX && !asyncComputeActive)
         {
             vfxRuntimeProvider->recordComputeCommands(commandBuffer);
         }
@@ -385,78 +398,235 @@ namespace render
                                                    bool hasVFX) const
     {
         updateGPUDrivenHiZ();
-        gpuDrivenRenderer->dispatchCompute(commandBuffer);
+        if (asyncComputeActive)
+        {
+            // Async compute path: light culling, grass, GI run on async compute queue
+            // Graphics queue handles uploads, object culling, shadows, volumetric fog
+            gpuDrivenRenderer->dispatchGraphicsCompute(commandBuffer);
+        }
+        else
+        {
+            // Single-queue fallback: all compute on graphics queue
+            gpuDrivenRenderer->dispatchCompute(commandBuffer);
+        }
 
         if (oceanFFTInitialized)
         {
             // Read previous frame's displacement data for CPU-side physics
             gpuDrivenRenderer->readbackOceanDisplacement();
+            // Ocean FFT always on graphics queue — output textures are read by water render
+            // in the same frame (layout transition from GENERAL to SHADER_READ_ONLY_OPTIMAL)
             gpuDrivenRenderer->dispatchOceanFFT(commandBuffer, currentTime);
         }
 
         vk::DescriptorSet iblDescriptorSet = meshPipeline->getIBLDescriptorSet(imageIndex);
-        meshPipeline->beginRenderPass(commandBuffer, imageIndex);
 
-        auto extent = swapChain.getSwapchainExtent();
-        vk::Viewport viewport{0.0f, 0.0f,
-                               static_cast<float>(extent.width), static_cast<float>(extent.height),
-                               0.0f, 1.0f};
-        commandBuffer.setViewport(0, viewport);
-        vk::Rect2D scissor{{0, 0}, extent};
-        commandBuffer.setScissor(0, scissor);
+        bool useParallel = parallelSceneRecording && sceneThreadPoolManager &&
+                           sceneThreadPoolManager->getThreadCount() > 1;
 
-        gpuDrivenRenderer->renderDraw(commandBuffer, iblDescriptorSet);
+        // Compute WBOIT state once (used by both parallel and inline paths, and post-pass)
+        bool wboitActive = wboitEnabled && wboitPipeline && wboitPipeline->isInitialized()
+                           && gpuDrivenRenderer->isWBOITReady();
 
-        bool useWBOIT = wboitEnabled && wboitPipeline && wboitPipeline->isInitialized()
-                        && gpuDrivenRenderer->isWBOITReady();
-        if (!useWBOIT)
+        if (useParallel)
         {
-            gpuDrivenRenderer->renderTransparentDraw(commandBuffer, iblDescriptorSet);
+            // Parallel path: record independent draw groups on worker threads
+            auto sceneRecordStart = std::chrono::high_resolution_clock::now();
+            uint32_t frameIndex = core::RenderManager::getImageIndex();
+            sceneThreadPoolManager->resetFrame(frameIndex);
+
+            vk::RenderPass rp = meshPipeline->getRenderPass();
+            vk::Framebuffer fb = meshPipeline->getFramebuffer(imageIndex);
+            auto extent = swapChain.getSwapchainExtent();
+
+            auto setupSecondary = [&](vk::CommandBuffer sec) {
+                vk::CommandBufferInheritanceInfo inheritance{};
+                inheritance.renderPass = rp;
+                inheritance.subpass = 0;
+                inheritance.framebuffer = fb;
+
+                vk::CommandBufferBeginInfo beginInfo{};
+                beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit |
+                                  vk::CommandBufferUsageFlagBits::eRenderPassContinue;
+                beginInfo.pInheritanceInfo = &inheritance;
+                sec.begin(beginInfo);
+
+                vk::Viewport viewport{0.0f, 0.0f,
+                    static_cast<float>(extent.width), static_cast<float>(extent.height),
+                    0.0f, 1.0f};
+                sec.setViewport(0, viewport);
+                vk::Rect2D scissor{{0, 0}, extent};
+                sec.setScissor(0, scissor);
+            };
+
+            bool hasTerrain = gpuDrivenRenderer->isTerrainRenderingEnabled();
+            bool hasGrass = gpuDrivenRenderer->isGrassRenderingEnabled();
+            bool hasWater = gpuDrivenRenderer->isWaterRenderingEnabled();
+            bool hasBillboards = gpuDrivenRenderer->isBillboardRenderingEnabled();
+
+            // Secondary command buffers for parallel draw groups:
+            //   Thread 0: opaque + transparent + blend (main mesh draws)
+            //   Thread 1: terrain (if enabled)
+            //   Thread 2: grass (if enabled)
+            //   Thread 3: water + billboards (if enabled)
+            //   Thread 4: overlays — custom shaders, GI debug, debug renderer (executed last)
+            vk::CommandBuffer meshCmd{nullptr};
+            vk::CommandBuffer terrainCmd{nullptr};
+            vk::CommandBuffer grassCmd{nullptr};
+            vk::CommandBuffer waterCmd{nullptr};
+            vk::CommandBuffer overlayCmd{nullptr};
+
+            bool hasOverlays = hasCustomShaderMeshes ||
+                (debugRendererPtr && debugRendererPtr->hasItemsToRender());
+
+            // Mesh task is always submitted (opaque meshes always exist when we reach this path)
+            auto meshFuture = threading::JobSystem::instance().submit([&]() {
+                meshCmd = sceneThreadPoolManager->getSecondary(0, frameIndex);
+                setupSecondary(meshCmd);
+                gpuDrivenRenderer->renderDraw(meshCmd, iblDescriptorSet);
+                if (!wboitActive) gpuDrivenRenderer->renderTransparentDraw(meshCmd, iblDescriptorSet);
+                gpuDrivenRenderer->renderBlendDraw(meshCmd, iblDescriptorSet);
+                meshCmd.end();
+            }, threading::JobPriority::HIGH);
+
+            std::future<void> terrainFuture;
+            if (hasTerrain)
+            {
+                terrainFuture = threading::JobSystem::instance().submit([&]() {
+                    terrainCmd = sceneThreadPoolManager->getSecondary(1, frameIndex);
+                    setupSecondary(terrainCmd);
+                    gpuDrivenRenderer->renderTerrainDraw(terrainCmd, iblDescriptorSet);
+                    terrainCmd.end();
+                }, threading::JobPriority::HIGH);
+            }
+
+            std::future<void> grassFuture;
+            if (hasGrass)
+            {
+                grassFuture = threading::JobSystem::instance().submit([&]() {
+                    grassCmd = sceneThreadPoolManager->getSecondary(2, frameIndex);
+                    setupSecondary(grassCmd);
+                    gpuDrivenRenderer->renderGrassDraw(grassCmd, iblDescriptorSet);
+                    grassCmd.end();
+                }, threading::JobPriority::HIGH);
+            }
+
+            std::future<void> waterFuture;
+            if (hasWater || hasBillboards)
+            {
+                waterFuture = threading::JobSystem::instance().submit([&]() {
+                    waterCmd = sceneThreadPoolManager->getSecondary(3, frameIndex);
+                    setupSecondary(waterCmd);
+                    if (hasWater) gpuDrivenRenderer->renderWaterDraw(waterCmd, iblDescriptorSet);
+                    if (hasBillboards) gpuDrivenRenderer->renderBillboardDraw(waterCmd, iblDescriptorSet);
+                    waterCmd.end();
+                }, threading::JobPriority::HIGH);
+            }
+
+            // Wait for all parallel geometry recordings to complete
+            meshFuture.get();
+            if (terrainFuture.valid()) terrainFuture.get();
+            if (grassFuture.valid()) grassFuture.get();
+            if (waterFuture.valid()) waterFuture.get();
+
+            // Record overlays LAST (after all geometry) to ensure correct draw order
+            // Custom shaders, GI debug, and debug renderer must render on top of terrain/grass/water
+            overlayCmd = sceneThreadPoolManager->getSecondary(4, frameIndex);
+            setupSecondary(overlayCmd);
+            if (hasCustomShaderMeshes)
+            {
+                meshPipeline->renderMeshList(overlayCmd, imageIndex, customShaderMeshDrawList, currentFrustum);
+            }
+            gpuDrivenRenderer->renderGIDebug(overlayCmd, currentProjection * currentView);
+            if (debugRendererPtr)
+            {
+                debugRendererPtr->render(overlayCmd, combinedMeshDrawList, currentView, currentProjection,
+                    [this](const std::string& meshId) { return meshPipeline->getMesh(meshId); });
+            }
+            overlayCmd.end();
+
+            // Begin render pass with secondary buffer support and execute in order
+            meshPipeline->beginRenderPassForSecondary(commandBuffer, imageIndex);
+
+            std::vector<vk::CommandBuffer> secondaries;
+            secondaries.reserve(5);
+            secondaries.push_back(meshCmd); // 1. Opaque + transparent + blend
+            if (terrainCmd) secondaries.push_back(terrainCmd);  // 2. Terrain
+            if (grassCmd) secondaries.push_back(grassCmd);      // 3. Grass
+            if (waterCmd) secondaries.push_back(waterCmd);      // 4. Water + billboards
+            secondaries.push_back(overlayCmd);                  // 5. Debug/custom (always last)
+
+            commandBuffer.executeCommands(
+                static_cast<uint32_t>(secondaries.size()),
+                secondaries.data()
+            );
+
+            auto sceneRecordEnd = std::chrono::high_resolution_clock::now();
+            lastSceneRecordingUs = std::chrono::duration<float, std::micro>(sceneRecordEnd - sceneRecordStart).count();
+            lastSceneSecondaryCount = static_cast<uint32_t>(secondaries.size());
+
+            meshPipeline->endRenderPass(commandBuffer);
         }
-
-        // Additive/Multiply always drawn in main pass (commutative, don't need OIT)
-        gpuDrivenRenderer->renderBlendDraw(commandBuffer, iblDescriptorSet);
-
-        if (gpuDrivenRenderer->isTerrainRenderingEnabled())
+        else
         {
-            gpuDrivenRenderer->renderTerrainDraw(commandBuffer, iblDescriptorSet);
-        }
+            // Original inline path
+            meshPipeline->beginRenderPass(commandBuffer, imageIndex);
 
-        if (gpuDrivenRenderer->isGrassRenderingEnabled())
-        {
-            gpuDrivenRenderer->renderGrassDraw(commandBuffer, iblDescriptorSet);
-        }
+            auto extent = swapChain.getSwapchainExtent();
+            vk::Viewport viewport{0.0f, 0.0f,
+                                   static_cast<float>(extent.width), static_cast<float>(extent.height),
+                                   0.0f, 1.0f};
+            commandBuffer.setViewport(0, viewport);
+            vk::Rect2D scissor{{0, 0}, extent};
+            commandBuffer.setScissor(0, scissor);
 
-        if (gpuDrivenRenderer->isWaterRenderingEnabled())
-        {
-            gpuDrivenRenderer->renderWaterDraw(commandBuffer, iblDescriptorSet);
-        }
+            gpuDrivenRenderer->renderDraw(commandBuffer, iblDescriptorSet);
 
-        if (gpuDrivenRenderer->isBillboardRenderingEnabled())
-        {
-            gpuDrivenRenderer->renderBillboardDraw(commandBuffer, iblDescriptorSet);
-        }
+            if (!wboitActive)
+            {
+                gpuDrivenRenderer->renderTransparentDraw(commandBuffer, iblDescriptorSet);
+            }
 
-        if (hasCustomShaderMeshes)
-        {
-            meshPipeline->renderMeshList(commandBuffer, imageIndex, customShaderMeshDrawList, currentFrustum);
-        }
+            gpuDrivenRenderer->renderBlendDraw(commandBuffer, iblDescriptorSet);
 
-        if (gpuDrivenRenderer)
-        {
+            if (gpuDrivenRenderer->isTerrainRenderingEnabled())
+            {
+                gpuDrivenRenderer->renderTerrainDraw(commandBuffer, iblDescriptorSet);
+            }
+
+            if (gpuDrivenRenderer->isGrassRenderingEnabled())
+            {
+                gpuDrivenRenderer->renderGrassDraw(commandBuffer, iblDescriptorSet);
+            }
+
+            if (gpuDrivenRenderer->isWaterRenderingEnabled())
+            {
+                gpuDrivenRenderer->renderWaterDraw(commandBuffer, iblDescriptorSet);
+            }
+
+            if (gpuDrivenRenderer->isBillboardRenderingEnabled())
+            {
+                gpuDrivenRenderer->renderBillboardDraw(commandBuffer, iblDescriptorSet);
+            }
+
+            if (hasCustomShaderMeshes)
+            {
+                meshPipeline->renderMeshList(commandBuffer, imageIndex, customShaderMeshDrawList, currentFrustum);
+            }
+
             gpuDrivenRenderer->renderGIDebug(commandBuffer, currentProjection * currentView);
-        }
 
-        if (debugRendererPtr)
-        {
-            debugRendererPtr->render(commandBuffer, combinedMeshDrawList, currentView, currentProjection,
-                                     [this](const std::string& meshId)
-                                     {
-                                         return meshPipeline->getMesh(meshId);
-                                     });
-        }
+            if (debugRendererPtr)
+            {
+                debugRendererPtr->render(commandBuffer, combinedMeshDrawList, currentView, currentProjection,
+                                         [this](const std::string& meshId)
+                                         {
+                                             return meshPipeline->getMesh(meshId);
+                                         });
+            }
 
-        meshPipeline->endRenderPass(commandBuffer);
+            meshPipeline->endRenderPass(commandBuffer);
+        }
 
         // Decal pass: project decals onto scene geometry
         if (decalRenderingEnabled && decalPipeline && decalPipeline->isInitialized() && decalPipeline->hasDecals())
@@ -465,7 +635,7 @@ namespace render
             decalPipeline->render(commandBuffer, imageIndex);
         }
 
-        if (useWBOIT && gpuDrivenRenderer->hasTransparentObjects())
+        if (wboitActive && gpuDrivenRenderer->hasTransparentObjects())
         {
             wboitPipeline->beginWBOITPass(commandBuffer, imageIndex);
             gpuDrivenRenderer->renderWBOITDraw(commandBuffer, iblDescriptorSet);
@@ -734,5 +904,66 @@ namespace render
                 vfLogError("Plugin render hook error: {}", e.what());
             }
         }
+    }
+
+    void RenderPassHandler::recordAsyncCompute(vk::CommandBuffer asyncCmd) const
+    {
+        // GPU-driven compute: light culling, grass, GI probes
+        if (gpuDrivenRendererInitialized && gpuDrivenRenderer->isEnabled())
+        {
+            gpuDrivenRenderer->dispatchAsyncCompute(asyncCmd);
+        }
+
+        // Atmosphere compute (LUT generation)
+        // Camera/sun data must be set before dispatch
+        if (atmospherePipeline && atmospherePipeline->isEnabled())
+        {
+            atmospherePipeline->setCameraData(currentView, currentProjection,
+                                               currentCameraPosition,
+                                               currentNearPlane, currentFarPlane);
+            if (gpuDrivenRendererInitialized)
+            {
+                auto* lbm = gpuDrivenRenderer->getLightBufferManager();
+                auto sunDir = lbm->getFirstDirectionalLightDirection();
+                if (sunDir)
+                {
+                    atmospherePipeline->setSunDirection(*sunDir);
+                }
+            }
+            atmospherePipeline->dispatchCompute(asyncCmd);
+        }
+
+        // Cloud compute (raymarch + temporal reprojection)
+        if (cloudPipeline && cloudPipeline->isEnabled())
+        {
+            cloudPipeline->setCameraData(currentView, currentProjection,
+                                          currentCameraPosition,
+                                          currentNearPlane, currentFarPlane,
+                                          currentTime);
+            if (gpuDrivenRendererInitialized)
+            {
+                auto* lbm = gpuDrivenRenderer->getLightBufferManager();
+                auto sunDir = lbm->getFirstDirectionalLightDirection();
+                if (sunDir)
+                {
+                    cloudPipeline->setSunDirection(*sunDir);
+                }
+            }
+            if (atmospherePipeline && atmospherePipeline->isInitialized())
+            {
+                auto atmosSettings = atmospherePipeline->getSettings();
+                cloudPipeline->setSunIrradiance(atmosSettings.sunIrradiance);
+            }
+            cloudPipeline->dispatchCompute(asyncCmd);
+        }
+
+        // VFX/particle compute
+        if (vfxRuntimeProvider)
+        {
+            vfxRuntimeProvider->recordComputeCommands(asyncCmd);
+        }
+
+        // Ocean FFT stays on graphics queue — its output textures are consumed
+        // by water rendering in the same frame (same-frame layout dependency)
     }
 }

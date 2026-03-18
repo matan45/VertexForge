@@ -1,9 +1,11 @@
 #include "ShadowSystem.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/Utilities.hpp"
+#include "../../core/ThreadCommandPoolManager.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
 #include "print/Log.hpp"
+#include "threading/JobSystem.hpp"
 
 namespace render::shadow
 {
@@ -49,6 +51,10 @@ namespace render::shadow
 
         gpuDataManager->updateShadowTextureDescriptor(tilePool.get(), resourcePool.get(), lightShadowData);
 
+        // Initialize per-thread command pools for parallel shadow recording
+        threadPoolManager = std::make_unique<core::ThreadCommandPoolManager>();
+        threadPoolManager->init(device, threading::JobSystem::instance().getThreadCount());
+
         initialized = true;
     }
 
@@ -85,6 +91,12 @@ namespace render::shadow
         }
 
         passRecorder.reset();
+
+        if (threadPoolManager)
+        {
+            threadPoolManager->cleanUp();
+            threadPoolManager.reset();
+        }
 
         lightShadowData.clear();
         directionalShadowViews.clear();
@@ -608,5 +620,14 @@ namespace render::shadow
         }
 
         return debugInfos;
+    }
+
+    ShadowRecordingStats ShadowSystem::getShadowRecordingStats() const
+    {
+        if (passRecorder)
+        {
+            return passRecorder->getLastStats();
+        }
+        return {};
     }
 }

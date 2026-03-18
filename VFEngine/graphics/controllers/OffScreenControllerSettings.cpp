@@ -1,6 +1,9 @@
 #include "OffScreenController.hpp"
 #include "../core/VulkanContext.hpp"
 #include "../core/SwapChain.hpp"
+#include "../core/AsyncComputeManager.hpp"
+#include "../core/ThreadCommandPoolManager.hpp"
+#include "../core/Device.hpp"
 #include "../render/OffScreenViewPort.hpp"
 #include "../render/RenderPassHandler.hpp"
 #include "../render/gpudriven/GPUDrivenRenderer.hpp"
@@ -127,6 +130,64 @@ namespace controllers
         stats.cachedPages = cacheStats.cachedPages;
 
         return stats;
+    }
+
+    services::GPUPipelineStatus OffScreenController::getGPUPipelineStatus() const
+    {
+        // Build status from scratch each call — all fields start at zero
+        services::GPUPipelineStatus s;
+        s.asyncComputeEnabled = false;
+        s.parallelShadowRecording = false;
+        s.parallelSceneRecording = false;
+        s.asyncComputeQueueFamily = 0;
+        s.shadowRecordingUs = 0.0f;
+        s.shadowTileCount = 0;
+        s.shadowThreadsUsed = 0;
+        s.sceneRecordingUs = 0.0f;
+        s.sceneSecondaryCount = 0;
+        s.workerThreadCount = 0;
+
+        if (asyncComputeManager)
+        {
+            s.asyncComputeEnabled = asyncComputeManager->isEnabled();
+            if (s.asyncComputeEnabled)
+            {
+                s.asyncComputeQueueFamily = device.getQueueFamilyIndices().asyncComputeFamily.value_or(0);
+            }
+        }
+
+        if (sceneThreadPoolManager)
+        {
+            uint32_t tc = sceneThreadPoolManager->getThreadCount();
+            s.parallelSceneRecording = tc > 1;
+            s.workerThreadCount = tc;
+        }
+
+        auto* rh = offScreen ? offScreen->getRenderPassHandler() : nullptr;
+        if (rh)
+        {
+            s.sceneRecordingUs = rh->getLastSceneRecordingUs();
+            s.sceneSecondaryCount = rh->getLastSceneSecondaryCount();
+
+            if (rh->isGPUDrivenRendererInitialized())
+            {
+                auto* gpu = rh->getGPUDrivenRenderer();
+                if (gpu)
+                {
+                    auto* shadow = gpu->getShadowSystem();
+                    if (shadow)
+                    {
+                        auto ss = shadow->getShadowRecordingStats();
+                        s.parallelShadowRecording = ss.usedParallel;
+                        s.shadowRecordingUs = ss.recordingUs;
+                        s.shadowTileCount = ss.tileCount;
+                        s.shadowThreadsUsed = ss.threadsUsed;
+                    }
+                }
+            }
+        }
+
+        return s;
     }
 
     void OffScreenController::applyPostProcessSettings(const postprocess::PostProcessSettings& settings)

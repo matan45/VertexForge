@@ -464,6 +464,23 @@ namespace render::mesh
         commandBuffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
     }
 
+    void StaticMeshPipeline::beginRenderPassForSecondary(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const
+    {
+        vk::RenderPassBeginInfo renderPassInfo{};
+        renderPassInfo.renderPass = renderPass;
+        renderPassInfo.framebuffer = framebuffers[imageIndex];
+        renderPassInfo.renderArea.offset = vk::Offset2D{0, 0};
+        renderPassInfo.renderArea.extent = swapChain.getSwapchainExtent();
+
+        std::array<vk::ClearValue, 2> clearValues{};
+        clearValues[0].color = vk::ClearColorValue{std::array{0.0f, 0.0f, 0.0f, 1.0f}};
+        clearValues[1].depthStencil = vk::ClearDepthStencilValue{1.0f, 0};
+        renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
+        renderPassInfo.pClearValues = clearValues.data();
+
+        commandBuffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eSecondaryCommandBuffers);
+    }
+
     void StaticMeshPipeline::beginVFXRenderPass(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const
     {
         // Transition depth from attachment-optimal to read-only for VFX sampling

@@ -118,8 +118,12 @@ namespace render::mesh
         MaterialTextureCache& getMaterialTextureCache() { return *textureCache; }
 
         void beginRenderPass(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
+        // Begin render pass with secondary command buffer support for parallel recording
+        void beginRenderPassForSecondary(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
         void beginVFXRenderPass(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
         void endRenderPass(const vk::CommandBuffer& commandBuffer) const;
+
+        vk::Framebuffer getFramebuffer(uint32_t imageIndex) const { return framebuffers[imageIndex]; }
 
         void injectMaterialForPreview(const std::string& materialPath,
                                       std::shared_ptr<material::MaterialData> materialData);

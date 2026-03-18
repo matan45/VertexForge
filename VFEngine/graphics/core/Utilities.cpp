@@ -10,7 +10,7 @@ namespace core {
 
 		int i = 0;
 		for (const vk::QueueFamilyProperties& queueFamily : queueFamilies) {
-			
+
 			if (device.getSurfaceSupportKHR(i, surface)) {
 				indices.presentFamily = i;
 			}
@@ -27,6 +27,27 @@ namespace core {
 			}
 
 			i++;
+		}
+
+		// Prefer a second queue from the graphics+compute family (supports all pipeline stages
+		// including fragment/mesh shader barriers used by async compute dispatches).
+		// Only fall back to a dedicated compute-only family if no second queue is available.
+		if (indices.graphicsAndComputeFamily.has_value()) {
+			uint32_t gfxFamily = indices.graphicsAndComputeFamily.value();
+			if (queueFamilies[gfxFamily].queueCount >= 2) {
+				indices.asyncComputeFamily = gfxFamily;
+				indices.asyncComputeUsesSecondQueue = true;
+			}
+			else {
+				// Fall back to dedicated compute-only family
+				for (int j = 0; j < static_cast<int>(queueFamilies.size()); j++) {
+					if ((queueFamilies[j].queueFlags & vk::QueueFlagBits::eCompute) &&
+					    !(queueFamilies[j].queueFlags & vk::QueueFlagBits::eGraphics)) {
+						indices.asyncComputeFamily = j;
+						break;
+					}
+				}
+			}
 		}
 
 		// If no dedicated transfer queue found, fall back to graphics queue for transfers

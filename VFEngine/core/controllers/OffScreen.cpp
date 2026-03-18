@@ -170,6 +170,11 @@ namespace controllers {
 		return offScreenController->getShadowStats();
 	}
 
+	services::GPUPipelineStatus OffScreen::getGPUPipelineStatus() const
+	{
+		return offScreenController->getGPUPipelineStatus();
+	}
+
 	void OffScreen::setPlayMode(bool playMode)
 	{
 		offScreenController->setPlayMode(playMode);

@@ -2,7 +2,10 @@
 #include "../render/gpudriven/GPUDrivenRenderer.hpp"
 #include "../render/gpudriven/brush/BrushComputePipeline.hpp"
 #include "../core/VulkanContext.hpp"
+#include "../core/AsyncComputeManager.hpp"
+#include "../core/ThreadCommandPoolManager.hpp"
 #include "../render/OffScreenViewPort.hpp"
+#include "threading/JobSystem.hpp"
 #include "../render/RenderPassHandler.hpp"
 #include "../render/billboard/BillboardPipeline.hpp"
 #include "offscreen/IBLController.hpp"
@@ -53,9 +56,28 @@ namespace controllers
 
     void OffScreenController::init()
     {
+        // Initialize async compute manager before offscreen viewport
+        asyncComputeManager = std::make_unique<core::AsyncComputeManager>(device);
+        asyncComputeManager->init();
+
         offScreen->init();
 
+        // Wire async compute to the viewport
+        offScreen->setAsyncComputeManager(asyncComputeManager.get());
+
+        // Per-thread command pools for parallel scene recording (mesh/terrain/grass/water groups).
+        // These are separate from ShadowSystem's ThreadCommandPoolManager which manages
+        // its own pools for VSM tile recording. Both use the same JobSystem thread pool
+        // but never overlap (shadow recording completes before scene recording starts).
+        sceneThreadPoolManager = std::make_unique<core::ThreadCommandPoolManager>();
+        // 5 slots: mesh(0), terrain(1), grass(2), water+billboards(3), overlays(4)
+        uint32_t sceneThreads = std::max(5u, threading::JobSystem::instance().getThreadCount());
+        sceneThreadPoolManager->init(device, sceneThreads);
+
         auto* renderHandler = offScreen->getRenderPassHandler();
+
+        // Enable parallel scene recording
+        renderHandler->setParallelSceneRecording(true, sceneThreadPoolManager.get());
 
         iblController = std::make_unique<offscreen::IBLController>(*renderHandler);
         meshAssetManager = std::make_unique<offscreen::MeshAssetManager>(*renderHandler);
@@ -173,6 +195,18 @@ namespace controllers
         }
 
         offScreen->cleanUp();
+
+        if (sceneThreadPoolManager)
+        {
+            sceneThreadPoolManager->cleanUp();
+            sceneThreadPoolManager.reset();
+        }
+
+        if (asyncComputeManager)
+        {
+            asyncComputeManager->cleanUp();
+            asyncComputeManager.reset();
+        }
     }
 
     void OffScreenController::iblSet(std::string_view iblPath)

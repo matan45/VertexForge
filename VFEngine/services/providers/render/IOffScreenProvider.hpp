@@ -164,6 +164,19 @@ namespace services {
         uint32_t cachedPages = 0;
     };
 
+    struct GPUPipelineStatus {
+        bool asyncComputeEnabled = false;
+        bool parallelShadowRecording = false;
+        bool parallelSceneRecording = false;
+        uint32_t asyncComputeQueueFamily = 0;
+        float shadowRecordingUs = 0.0f;
+        uint32_t shadowTileCount = 0;
+        uint32_t shadowThreadsUsed = 0;
+        float sceneRecordingUs = 0.0f;
+        uint32_t sceneSecondaryCount = 0;
+        uint32_t workerThreadCount = 0;
+    };
+
     class IOffScreenProvider {
     public:
         virtual ~IOffScreenProvider() = default;
@@ -200,6 +213,7 @@ namespace services {
 
         virtual void applyShadowSettings(const types::RenderSettings& settings) = 0;
         virtual ShadowStats getShadowStats() const = 0;
+        virtual GPUPipelineStatus getGPUPipelineStatus() const = 0;
 
         virtual void setPlayMode(bool playMode) = 0;
 

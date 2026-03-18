@@ -22,6 +22,68 @@ namespace windows
             ImGui::Text("Active Camera: %u", stats.activeCameraId);
             ImGui::Separator();
 
+            if (ImGui::CollapsingHeader("GPU Pipeline Status", ImGuiTreeNodeFlags_DefaultOpen))
+            {
+                ImGui::Indent();
+
+                events::render::GetGPUPipelineStatusQuery pipelineQuery;
+                auto p = events::EventDispatcher::instance().query(pipelineQuery);
+
+                // Async Compute
+                ImGui::Text("Async Compute Queue:");
+                ImGui::SameLine();
+                ImGui::TextColored(p.asyncComputeEnabled ? ImVec4(0, 1, 0, 1) : ImVec4(1, 0, 0, 1),
+                                   p.asyncComputeEnabled ? "ACTIVE" : "DISABLED");
+                if (p.asyncComputeEnabled)
+                {
+                    ImGui::SameLine();
+                    ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1), "(family %u)", p.asyncComputeQueueFamily);
+                    ImGui::TextColored(ImVec4(0.6f, 0.8f, 1.0f, 1),
+                        "  Passes: Light Culling, Grass, GI, Atmosphere, Clouds, VFX");
+                }
+
+                ImGui::Separator();
+
+                // Shadow Recording
+                ImGui::Text("Shadow Recording:");
+                ImGui::SameLine();
+                ImGui::TextColored(p.parallelShadowRecording ? ImVec4(0, 1, 0, 1) : ImVec4(0.8f, 0.8f, 0, 1),
+                                   p.parallelShadowRecording ? "PARALLEL" : "INLINE");
+                if (p.shadowTileCount > 0)
+                {
+                    ImGui::Text("  Tiles: %u | Threads: %u | CPU: %.1f us (%.2f ms)",
+                                p.shadowTileCount, p.shadowThreadsUsed,
+                                p.shadowRecordingUs, p.shadowRecordingUs / 1000.0f);
+                    if (p.parallelShadowRecording && p.shadowThreadsUsed > 0)
+                    {
+                        ImGui::Text("  Avg per thread: %.1f us (%u tiles/thread)",
+                                    p.shadowRecordingUs / static_cast<float>(p.shadowThreadsUsed),
+                                    p.shadowTileCount / p.shadowThreadsUsed);
+                    }
+                }
+
+                ImGui::Separator();
+
+                // Scene Recording
+                ImGui::Text("Scene Recording:");
+                ImGui::SameLine();
+                ImGui::TextColored(p.parallelSceneRecording ? ImVec4(0, 1, 0, 1) : ImVec4(0.8f, 0.8f, 0, 1),
+                                   p.parallelSceneRecording ? "PARALLEL" : "INLINE");
+                if (p.parallelSceneRecording && p.sceneSecondaryCount > 0)
+                {
+                    ImGui::Text("  Secondary buffers: %u | CPU: %.1f us (%.2f ms)",
+                                p.sceneSecondaryCount, p.sceneRecordingUs, p.sceneRecordingUs / 1000.0f);
+                    ImGui::TextColored(ImVec4(0.6f, 0.8f, 1.0f, 1),
+                        "  Groups: Meshes, Terrain, Grass, Water+Billboards");
+                }
+
+                ImGui::Separator();
+                ImGui::Text("Worker Threads: %u", p.workerThreadCount);
+
+                ImGui::Unindent();
+            }
+            ImGui::Separator();
+
             if (ImGui::CollapsingHeader("GPU-Driven Rendering", ImGuiTreeNodeFlags_DefaultOpen))
             {
                 ImGui::Indent();

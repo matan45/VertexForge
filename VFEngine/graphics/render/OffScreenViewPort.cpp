@@ -5,6 +5,7 @@
 #include "../core/ImageUtilities.hpp"
 #include "../core/Utilities.hpp"
 #include "../core/RenderManager.hpp"
+#include "../core/AsyncComputeManager.hpp"
 #include "../render/RenderPassHandler.hpp"
 #include "types/CameraTypes.hpp"
 #include <imgui.h>
@@ -67,6 +68,23 @@ namespace render
             preRenderCallback();
         }
 
+        bool useAsyncCompute = asyncComputeManager && asyncComputeManager->isEnabled() && renderPassHandler;
+
+        // Set async compute state on render pass handler
+        if (renderPassHandler)
+        {
+            renderPassHandler->setAsyncComputeActive(useAsyncCompute);
+        }
+
+        uint32_t currentFrame = imageIndex % core::MAX_FRAMES_IN_FLIGHT;
+        
+        if (useAsyncCompute)
+        {
+            vk::CommandBuffer asyncCmd = asyncComputeManager->beginFrame(currentFrame);
+            renderPassHandler->recordAsyncCompute(asyncCmd);
+            asyncComputeManager->submitComputeWork(currentFrame);
+        }
+
         vk::CommandBuffer commandBuffer = commandPool->getCommandBuffer(imageIndex);
         commandBuffer.reset();
 
@@ -76,17 +94,58 @@ namespace render
 
         commandBuffer.end();
 
-        vk::SubmitInfo submitInfo(
-            0, nullptr, nullptr,
-            1, &commandBuffer,
-            0, nullptr
-        );
+        if (useAsyncCompute)
+        {
+            // Graphics submit waits on async compute completion before fragment shading
+            std::array<vk::Semaphore, 1> waitSemaphores = {
+                asyncComputeManager->getComputeTimelineSemaphore()
+            };
+            std::array<vk::PipelineStageFlags, 1> waitStages = {
+                vk::PipelineStageFlagBits::eFragmentShader |
+                vk::PipelineStageFlagBits::eComputeShader |
+                vk::PipelineStageFlagBits::eTaskShaderEXT
+            };
+            std::array<uint64_t, 1> waitValues = {
+                asyncComputeManager->getComputeWaitValue()
+            };
 
-        device.getGraphicsQueue().submit(submitInfo, inFlightFences[imageIndex]);
+            vk::TimelineSemaphoreSubmitInfo timelineInfo{};
+            timelineInfo.waitSemaphoreValueCount = static_cast<uint32_t>(waitValues.size());
+            timelineInfo.pWaitSemaphoreValues = waitValues.data();
+            timelineInfo.signalSemaphoreValueCount = 0;
+            timelineInfo.pSignalSemaphoreValues = nullptr;
+
+            vk::SubmitInfo submitInfo{};
+            submitInfo.pNext = &timelineInfo;
+            submitInfo.waitSemaphoreCount = static_cast<uint32_t>(waitSemaphores.size());
+            submitInfo.pWaitSemaphores = waitSemaphores.data();
+            submitInfo.pWaitDstStageMask = waitStages.data();
+            submitInfo.commandBufferCount = 1;
+            submitInfo.pCommandBuffers = &commandBuffer;
+            submitInfo.signalSemaphoreCount = 0;
+            submitInfo.pSignalSemaphores = nullptr;
+
+            device.getGraphicsQueue().submit(submitInfo, inFlightFences[imageIndex]);
+        }
+        else
+        {
+            vk::SubmitInfo submitInfo(
+                0, nullptr, nullptr,
+                1, &commandBuffer,
+                0, nullptr
+            );
+
+            device.getGraphicsQueue().submit(submitInfo, inFlightFences[imageIndex]);
+        }
 
         device.getGraphicsQueue().waitIdle();
 
         return offscreenResources.colorImages[imageIndex].descriptorSet;
+    }
+
+    void OffScreenViewPort::setAsyncComputeManager(core::AsyncComputeManager* manager)
+    {
+        asyncComputeManager = manager;
     }
 
     void OffScreenViewPort::cleanUp()

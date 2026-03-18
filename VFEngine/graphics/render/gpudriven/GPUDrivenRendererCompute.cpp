@@ -687,4 +687,120 @@ namespace render::gpudriven
         }
     }
 
+    void GPUDrivenRenderer::dispatchGraphicsCompute(vk::CommandBuffer cmd)
+    {
+        if (!initialized || !enabled)
+        {
+            return;
+        }
+
+        if (mergedBuffer) mergedBuffer->flushPendingTransfers();
+        if (meshletBuffer) meshletBuffer->flushPendingTransfers();
+        if (terrain.meshBuffer) terrain.meshBuffer->flushPendingTransfers();
+
+        batchManager->resetAllBatches(cmd);
+
+        if (meshShaderPipeline)
+        {
+            meshShaderPipeline->resetStats(cmd);
+        }
+
+        updateLightCullingState(cmd);
+
+        bool hasMeshObjects = stats.totalObjects > 0;
+        bool hasTerrainTiles = terrain.renderingEnabled && terrain.pipeline &&
+                               terrain.pipeline->getCurrentTileCount() > 0;
+
+        if (!hasMeshObjects && !hasTerrainTiles)
+        {
+            return;
+        }
+
+        if (hasMeshObjects)
+        {
+            if (mergedBuffer->isPersistentMode())
+            {
+                mergedBuffer->uploadDirtyObjects(cmd);
+                mergedBuffer->uploadActiveIndices(cmd);
+            }
+            else
+            {
+                mergedBuffer->uploadObjects(cmd);
+            }
+            if (mergedBuffer->getInstanceCount() > 0)
+            {
+                mergedBuffer->uploadInstances(cmd);
+            }
+        }
+
+        if (boneMatrixManager)
+        {
+            boneMatrixManager->uploadToGPU(cmd);
+        }
+
+        buildAndDispatchLightOcclusion(cmd);
+
+        if (clusterGridManager)
+        {
+            clusterGridManager->uploadToGPU(cmd);
+        }
+
+        // Transfer -> Compute barrier (uploads complete)
+        vk::MemoryBarrier memBarrier{
+            vk::AccessFlagBits::eTransferWrite,
+            vk::AccessFlagBits::eShaderRead | vk::AccessFlagBits::eShaderWrite
+        };
+
+        cmd.pipelineBarrier(
+            vk::PipelineStageFlagBits::eTransfer,
+            vk::PipelineStageFlagBits::eComputeShader,
+            vk::DependencyFlags{},
+            1, &memBarrier,
+            0, nullptr,
+            0, nullptr);
+
+        // Object culling stays on graphics queue (output feeds shadow passes)
+        cullPipeline->dispatch(cmd, stats.totalObjects);
+        batchManager->insertBarriersAfterCompute(cmd);
+
+        recordShadowPasses(cmd, hasMeshObjects, hasTerrainTiles);
+
+        // Volumetric fog stays on graphics queue (depends on shadow maps)
+        dispatchVolumetricFog(cmd);
+
+        if (lightStreamManager)
+        {
+            lightStreamManager->updatePriorities(cachedCamera.position);
+            lightStreamManager->applyBudget();
+        }
+    }
+
+    void GPUDrivenRenderer::dispatchAsyncCompute(vk::CommandBuffer asyncCmd)
+    {
+        if (!initialized || !enabled)
+        {
+            return;
+        }
+
+        // Light culling - independent of object culling, reads uploaded light/cluster buffers
+        if (lightCullingPipeline && lightBufferManager)
+        {
+            lightCullingPipeline->dispatch(
+                asyncCmd,
+                cameraBuffer->getData().view,
+                lightBufferManager->getPointLightCount(),
+                lightBufferManager->getSpotLightCount()
+            );
+        }
+
+        // Grass compute - independent, reads terrain tile data
+        if (vegetation.grassInitialized && vegetation.grassRenderingEnabled)
+        {
+            dispatchGrassCompute(asyncCmd, vegetation.cachedVisibleTiles);
+        }
+
+        // GI probe trace - independent, reads TLAS and writes probes
+        dispatchGIProbeUpdate(asyncCmd);
+    }
+
 }

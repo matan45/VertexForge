@@ -137,6 +137,7 @@
     <ClInclude Include="controllers\preview\MaterialPreviewController.hpp" />
     <ClInclude Include="controllers\preview\MeshPreviewController.hpp" />
     <ClInclude Include="controllers\preview\VFXPreviewController.hpp" />
+    <ClInclude Include="core\AsyncComputeManager.hpp" />
     <ClInclude Include="core\BufferUtilities.hpp" />
     <ClInclude Include="core\CommandPool.hpp" />
     <ClInclude Include="core\DeferredDeletionQueue.hpp" />
@@ -150,6 +151,7 @@
     <ClInclude Include="core\Shader.hpp" />
     <ClInclude Include="core\SwapChain.hpp" />
     <ClInclude Include="core\Texture.hpp" />
+    <ClInclude Include="core\ThreadCommandPoolManager.hpp" />
     <ClInclude Include="core\TransferManager.hpp" />
     <ClInclude Include="core\Utilities.hpp" />
     <ClInclude Include="core\VulkanContext.hpp" />
@@ -376,6 +378,7 @@
     <ClCompile Include="controllers\preview\MaterialPreviewController.cpp" />
     <ClCompile Include="controllers\preview\MeshPreviewController.cpp" />
     <ClCompile Include="controllers\preview\VFXPreviewController.cpp" />
+    <ClCompile Include="core\AsyncComputeManager.cpp" />
     <ClCompile Include="core\BufferUtilities.cpp" />
     <ClCompile Include="core\CommandPool.cpp" />
     <ClCompile Include="core\DeferredDeletionQueue.cpp" />
@@ -387,6 +390,7 @@
     <ClCompile Include="core\Shader.cpp" />
     <ClCompile Include="core\SwapChain.cpp" />
     <ClCompile Include="core\Texture.cpp" />
+    <ClCompile Include="core\ThreadCommandPoolManager.cpp" />
     <ClCompile Include="core\TransferManager.cpp" />
     <ClCompile Include="core\Utilities.cpp" />
     <ClCompile Include="core\VulkanContext.cpp" />

@@ -27,6 +27,7 @@ namespace core
     class Device;
     class SwapChain;
     class DeferredDeletionQueue;
+    class ThreadCommandPoolManager;
 }
 
 namespace render::gpudriven
@@ -168,6 +169,13 @@ namespace render
         uint32_t taaFrameIndex = 0;
 
         bool gpuDrivenRendererInitialized = false;
+        bool asyncComputeActive = false;
+        bool parallelSceneRecording = false;
+        core::ThreadCommandPoolManager* sceneThreadPoolManager = nullptr;
+
+        // Scene recording stats
+        mutable float lastSceneRecordingUs = 0.0f;
+        mutable uint32_t lastSceneSecondaryCount = 0;
         glm::vec3 currentCameraPosition{0.0f};
         float currentNearPlane = 0.1f;
         float currentFarPlane = 1000.0f;
@@ -275,6 +283,18 @@ namespace render
 
         gpudriven::GPUDrivenRenderer* getGPUDrivenRenderer() const { return gpuDrivenRenderer.get(); }
         bool isGPUDrivenRendererInitialized() const { return gpuDrivenRendererInitialized; }
+        void setAsyncComputeActive(bool active) { asyncComputeActive = active; }
+        void setParallelSceneRecording(bool enabled, core::ThreadCommandPoolManager* poolManager = nullptr)
+        {
+            parallelSceneRecording = enabled;
+            sceneThreadPoolManager = poolManager;
+        }
+        float getLastSceneRecordingUs() const { return lastSceneRecordingUs; }
+        uint32_t getLastSceneSecondaryCount() const { return lastSceneSecondaryCount; }
+
+        // Record all async-eligible compute work into the given command buffer
+        // (light culling, grass, GI, atmosphere, clouds, VFX, ocean FFT)
+        void recordAsyncCompute(vk::CommandBuffer asyncCmd) const;
 
         void setDeletionQueue(core::DeferredDeletionQueue* queue);
         void setGPUDrivenCameraData(const glm::vec3& cameraPos, float nearPlane, float farPlane, float time = 0.0f);

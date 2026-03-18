@@ -184,6 +184,10 @@ namespace events::render {
         std::string_view getName() const override { return "GetShadowStats"; }
     };
 
+    struct GetGPUPipelineStatusQuery : IQuery<services::GPUPipelineStatus> {
+        std::string_view getName() const override { return "GetGPUPipelineStatus"; }
+    };
+
     struct SetFrustumCullingCommand : ICommand<> {
         bool enabled;
 

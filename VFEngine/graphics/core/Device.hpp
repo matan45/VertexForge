@@ -67,6 +67,7 @@ namespace core
         vk::Queue presentQueue{nullptr};
         vk::Queue graphicsAndComputeQueue{nullptr};
         vk::Queue transferQueue{nullptr};
+        vk::Queue asyncComputeQueue{nullptr};
 
         QueueFamilyIndices queueFamilyIndices{};
 
@@ -115,6 +116,9 @@ namespace core
         const vk::Queue& getGraphicsQueue() const { return graphicsAndComputeQueue; }
         const vk::Queue& getTransferQueue() const { return transferQueue; }
         bool hasDedicatedTransferQueue() const { return queueFamilyIndices.hasDedicatedTransferQueue(); }
+
+        const vk::Queue& getAsyncComputeQueue() const { return asyncComputeQueue; }
+        bool hasAsyncComputeQueue() const { return queueFamilyIndices.hasAsyncComputeQueue(); }
 
         const vk::CommandPool& getStagingCommandPool() const { return stagingCommandPool.get(); }
 

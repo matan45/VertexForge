@@ -30,6 +30,8 @@ namespace core
 {
     class Device;
     class SwapChain;
+    class AsyncComputeManager;
+    class ThreadCommandPoolManager;
 }
 
 namespace render
@@ -154,6 +156,7 @@ namespace controllers
 
         void applyShadowSettings(const types::RenderSettings& settings);
         services::ShadowStats getShadowStats() const;
+        services::GPUPipelineStatus getGPUPipelineStatus() const;
 
         void setPlayMode(bool playMode);
 
@@ -282,5 +285,8 @@ namespace controllers
 
     private:
         std::unique_ptr<render::gpudriven::BrushComputePipeline> brushComputePipeline;
+        std::unique_ptr<core::AsyncComputeManager> asyncComputeManager;
+        // Scene recording pools (separate from ShadowSystem's pools for VSM tiles)
+        std::unique_ptr<core::ThreadCommandPoolManager> sceneThreadPoolManager;
     };
 }

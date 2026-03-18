@@ -4,7 +4,10 @@
 #include "ShadowPassPipeline.hpp"
 #include "TerrainShadowPipeline.hpp"
 #include "../../core/Device.hpp"
+#include "../../core/ThreadCommandPoolManager.hpp"
 #include "print/Log.hpp"
+#include "threading/JobSystem.hpp"
+#include <chrono>
 
 namespace render::shadow
 {
@@ -27,7 +30,11 @@ namespace render::shadow
         bool poolFirstUse)
     {
         if (!shadowsEnabled || !shadowPassPipeline || !shadowPassPipeline->isInitialized() || !tilePool)
+        {
+            lastStats = {};
             return;
+        }
+        auto recordStart = std::chrono::high_resolution_clock::now();
 
         bool hasTerrainShadows = terrainParams != nullptr &&
                                   terrainParams->tileCount > 0 &&
@@ -265,6 +272,12 @@ namespace render::shadow
             }
         }
 
+        auto recordEnd = std::chrono::high_resolution_clock::now();
+        lastStats.recordingUs = std::chrono::duration<float, std::micro>(recordEnd - recordStart).count();
+        lastStats.tileCount = static_cast<uint32_t>(pageRenderList.size());
+        lastStats.threadsUsed = 0;
+        lastStats.usedParallel = false;
+
         renderPointLightCubeShadows(cmd, params, terrainParams, resourcePool,
                                      shadowPassPipeline, terrainShadowPipeline,
                                      lightShadowData);
@@ -444,5 +457,337 @@ namespace render::shadow
 
             cube->transitionToShaderRead(cmd);
         }
+    }
+
+    void ShadowPassRecorder::recordShadowPassParallel(
+        vk::CommandBuffer primaryCmd,
+        const ShadowPassParams& params,
+        const TerrainShadowPassParams* terrainParams,
+        VSMPhysicalTilePool* tilePool,
+        ShadowResourcePool* resourcePool,
+        ShadowPassPipeline* shadowPassPipeline,
+        TerrainShadowPipeline* terrainShadowPipeline,
+        const std::vector<PageRenderEntry>& pageRenderList,
+        std::unordered_map<uint32_t, LightShadowData>& lightShadowData,
+        bool shadowsEnabled,
+        bool poolFirstUse,
+        core::ThreadCommandPoolManager* threadPoolManager,
+        uint32_t frameIndex)
+    {
+        if (!shadowsEnabled || !shadowPassPipeline || !shadowPassPipeline->isInitialized() || !tilePool)
+        {
+            lastStats = {};
+            return;
+        }
+
+        bool hasTerrainShadows = terrainParams != nullptr &&
+                                  terrainParams->tileCount > 0 &&
+                                  terrainShadowPipeline != nullptr &&
+                                  terrainShadowPipeline->isInitialized();
+
+        bool hasPageViews = !pageRenderList.empty();
+        bool hasPointShadows = false;
+        for (const auto& [entityId, data] : lightShadowData)
+        {
+            if (data.type == ShadowMapType::PointCube &&
+                data.settings.enabled && data.settings.castShadows &&
+                data.resourceHandle.isValid())
+            {
+                hasPointShadows = true;
+                break;
+            }
+        }
+
+        if (!hasPageViews && !hasPointShadows)
+            return;
+
+        bool hasMeshBatches = params.batchCount > 0 &&
+                              params.commandsPerSection > 0 &&
+                              params.drawCommandBuffer &&
+                              params.drawCountBuffer;
+
+        if (!hasMeshBatches && !hasTerrainShadows)
+            return;
+
+        // Render VSM page-based shadows with parallel tile recording
+        if (hasPageViews)
+        {
+            // Transition pool image for rendering (on primary)
+            {
+                vk::ImageMemoryBarrier barrier{};
+                barrier.dstAccessMask = vk::AccessFlagBits::eDepthStencilAttachmentWrite;
+                barrier.newLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
+                barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                barrier.image = tilePool->getPoolImage();
+                barrier.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eDepth;
+                barrier.subresourceRange.baseMipLevel = 0;
+                barrier.subresourceRange.levelCount = 1;
+                barrier.subresourceRange.baseArrayLayer = 0;
+                barrier.subresourceRange.layerCount = 1;
+
+                vk::PipelineStageFlags srcStage;
+                if (poolFirstUse)
+                {
+                    barrier.srcAccessMask = {};
+                    barrier.oldLayout = vk::ImageLayout::eUndefined;
+                    srcStage = vk::PipelineStageFlagBits::eTopOfPipe;
+                }
+                else
+                {
+                    barrier.srcAccessMask = vk::AccessFlagBits::eShaderRead;
+                    barrier.oldLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+                    srcStage = vk::PipelineStageFlagBits::eFragmentShader;
+                }
+
+                primaryCmd.pipelineBarrier(
+                    srcStage,
+                    vk::PipelineStageFlagBits::eEarlyFragmentTests,
+                    {},
+                    0, nullptr,
+                    0, nullptr,
+                    1, &barrier
+                );
+            }
+
+            bool useLoadPass = !poolFirstUse;
+
+            vk::ClearValue clearValue{};
+            clearValue.depthStencil = vk::ClearDepthStencilValue{1.0f, 0};
+
+            vk::RenderPassBeginInfo renderPassInfo{};
+            vk::RenderPass renderPass;
+            vk::Framebuffer framebuffer;
+
+            if (useLoadPass)
+            {
+                renderPass = tilePool->getRenderPassLoad();
+                framebuffer = tilePool->getFramebufferLoad();
+                renderPassInfo.renderPass = renderPass;
+                renderPassInfo.framebuffer = framebuffer;
+                renderPassInfo.clearValueCount = 0;
+                renderPassInfo.pClearValues = nullptr;
+            }
+            else
+            {
+                renderPass = tilePool->getRenderPass();
+                framebuffer = tilePool->getFramebuffer();
+                renderPassInfo.renderPass = renderPass;
+                renderPassInfo.framebuffer = framebuffer;
+                renderPassInfo.clearValueCount = 1;
+                renderPassInfo.pClearValues = &clearValue;
+            }
+            renderPassInfo.renderArea.offset = vk::Offset2D{0, 0};
+            renderPassInfo.renderArea.extent = vk::Extent2D{
+                vsm::PHYSICAL_POOL_DIM, vsm::PHYSICAL_POOL_DIM
+            };
+
+            // Begin render pass with SECONDARY command buffer support
+            primaryCmd.beginRenderPass(renderPassInfo, vk::SubpassContents::eSecondaryCommandBuffers);
+
+            // Record tiles in parallel across worker threads
+            auto recordStart = std::chrono::high_resolution_clock::now();
+
+            uint32_t tileCount = static_cast<uint32_t>(pageRenderList.size());
+            uint32_t threadCount = threadPoolManager->getThreadCount();
+
+            // Collect secondary buffers from each thread (indexed by threadNum)
+            std::vector<vk::CommandBuffer> secondaryBuffers(threadCount, nullptr);
+            std::vector<bool> threadUsed(threadCount, false);
+
+            // enkiTS guarantees each concurrent invocation gets a unique threadNum
+            // in range [0, threadCount). Each thread writes only its own slot.
+            threading::JobSystem::instance().parallelFor(tileCount,
+                [&](uint32_t begin, uint32_t end, uint32_t threadNum) {
+                    vk::CommandBuffer secondary = threadPoolManager->getSecondary(threadNum, frameIndex);
+
+                    // Begin secondary with render pass inheritance
+                    vk::CommandBufferInheritanceInfo inheritance{};
+                    inheritance.renderPass = renderPass;
+                    inheritance.subpass = 0;
+                    inheritance.framebuffer = framebuffer;
+
+                    vk::CommandBufferBeginInfo beginInfo{};
+                    beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit |
+                                     vk::CommandBufferUsageFlagBits::eRenderPassContinue;
+                    beginInfo.pInheritanceInfo = &inheritance;
+                    secondary.begin(beginInfo);
+
+                    // Bind pipeline + descriptors (must rebind per secondary buffer)
+                    if (hasMeshBatches)
+                    {
+                        secondary.bindPipeline(vk::PipelineBindPoint::eGraphics, shadowPassPipeline->getPipeline());
+
+                        std::array<vk::DescriptorSet, 5> descriptorSets = {
+                            params.perDrawDataDescSet,
+                            params.meshletDataDescSet,
+                            params.vertexDataDescSet,
+                            params.boneMatrixDescSet,
+                            params.cameraDescSet
+                        };
+                        secondary.bindDescriptorSets(
+                            vk::PipelineBindPoint::eGraphics,
+                            shadowPassPipeline->getPipelineLayout(),
+                            0,
+                            static_cast<uint32_t>(descriptorSets.size()),
+                            descriptorSets.data(),
+                            0, nullptr
+                        );
+                    }
+
+                    // Record assigned tiles
+                    for (uint32_t i = begin; i < end; ++i)
+                    {
+                        const auto& page = pageRenderList[i];
+
+                        vk::Viewport viewport = tilePool->getTileViewport(page.physicalTileIndex);
+                        secondary.setViewport(0, 1, &viewport);
+
+                        vk::Rect2D scissor = tilePool->getTileScissor(page.physicalTileIndex);
+                        secondary.setScissor(0, 1, &scissor);
+
+                        if (useLoadPass)
+                        {
+                            vk::ClearAttachment clearAttach{};
+                            clearAttach.aspectMask = vk::ImageAspectFlagBits::eDepth;
+                            clearAttach.clearValue.depthStencil = vk::ClearDepthStencilValue{1.0f, 0};
+
+                            vk::ClearRect clearRect{};
+                            clearRect.rect = scissor;
+                            clearRect.baseArrayLayer = 0;
+                            clearRect.layerCount = 1;
+
+                            secondary.clearAttachments(1, &clearAttach, 1, &clearRect);
+                        }
+
+                        secondary.setDepthBias(page.depthBias, 0.0f, page.slopeBias);
+
+                        if (hasMeshBatches)
+                        {
+                            ShadowPushConstants pc{};
+                            pc.lightViewProjection = page.cropViewProjection;
+                            pc.baseDrawIndex = 0;
+                            pc.depthBias = page.depthBias;
+                            pc.slopeBias = page.slopeBias;
+                            pc.normalBias = page.normalBias;
+
+                            for (uint32_t shaderGroup = 0; shaderGroup < params.shaderGroupCount; ++shaderGroup)
+                            {
+                                if (shaderGroup == params.transparentGroupIndex) continue;
+
+                                for (uint32_t batch = 0; batch < params.batchCount; ++batch)
+                                {
+                                    uint32_t sectionIndex = batch * params.shaderGroupCount + shaderGroup;
+                                    pc.baseDrawIndex = sectionIndex * params.commandsPerSection;
+
+                                    secondary.pushConstants(
+                                        shadowPassPipeline->getPipelineLayout(),
+                                        vk::ShaderStageFlagBits::eTaskEXT | vk::ShaderStageFlagBits::eMeshEXT,
+                                        0,
+                                        sizeof(ShadowPushConstants),
+                                        &pc
+                                    );
+
+                                    vk::DeviceSize commandOffset = sectionIndex * params.commandsPerSection * sizeof(
+                                        vk::DrawMeshTasksIndirectCommandEXT);
+                                    vk::DeviceSize countOffset = sectionIndex * params.drawCountStructSize;
+
+                                    secondary.drawMeshTasksIndirectCountEXT(
+                                        params.drawCommandBuffer,
+                                        commandOffset,
+                                        params.drawCountBuffer,
+                                        countOffset,
+                                        params.commandsPerSection,
+                                        sizeof(vk::DrawMeshTasksIndirectCommandEXT)
+                                    );
+                                }
+                            }
+                        }
+
+                        if (hasTerrainShadows)
+                        {
+                            constexpr float terrainBiasScale = 4.0f;
+                            terrainShadowPipeline->dispatch(
+                                secondary,
+                                terrainParams->terrainDataDescSet,
+                                terrainParams->terrainMeshletDescSet,
+                                terrainParams->terrainVertexDescSet,
+                                page.cropViewProjection,
+                                terrainParams->tileCount,
+                                terrainParams->shadowLOD,
+                                page.depthBias * terrainBiasScale,
+                                page.slopeBias * terrainBiasScale
+                            );
+                        }
+                    }
+
+                    secondary.end();
+                    secondaryBuffers[threadNum] = secondary;
+                    threadUsed[threadNum] = true;
+                }, 1  // minBatchSize=1 (each tile has significant draw work)
+            );
+
+            auto recordEnd = std::chrono::high_resolution_clock::now();
+
+            // Assemble secondary buffers into primary (in thread order)
+            std::vector<vk::CommandBuffer> validSecondaries;
+            validSecondaries.reserve(threadCount);
+            uint32_t usedThreads = 0;
+            for (uint32_t t = 0; t < threadCount; t++)
+            {
+                if (threadUsed[t])
+                {
+                    validSecondaries.push_back(secondaryBuffers[t]);
+                    usedThreads++;
+                }
+            }
+
+            if (!validSecondaries.empty())
+            {
+                primaryCmd.executeCommands(
+                    static_cast<uint32_t>(validSecondaries.size()),
+                    validSecondaries.data()
+                );
+            }
+
+            // Update stats
+            lastStats.recordingUs = std::chrono::duration<float, std::micro>(recordEnd - recordStart).count();
+            lastStats.tileCount = tileCount;
+            lastStats.threadsUsed = usedThreads;
+            lastStats.usedParallel = true;
+
+            primaryCmd.endRenderPass();
+
+            // Transition back to shader read
+            {
+                vk::ImageMemoryBarrier barrier{};
+                barrier.srcAccessMask = vk::AccessFlagBits::eDepthStencilAttachmentWrite;
+                barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
+                barrier.oldLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
+                barrier.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+                barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                barrier.image = tilePool->getPoolImage();
+                barrier.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eDepth;
+                barrier.subresourceRange.baseMipLevel = 0;
+                barrier.subresourceRange.levelCount = 1;
+                barrier.subresourceRange.baseArrayLayer = 0;
+                barrier.subresourceRange.layerCount = 1;
+
+                primaryCmd.pipelineBarrier(
+                    vk::PipelineStageFlagBits::eLateFragmentTests,
+                    vk::PipelineStageFlagBits::eFragmentShader,
+                    {},
+                    0, nullptr,
+                    0, nullptr,
+                    1, &barrier
+                );
+            }
+        }
+
+        // Point light cube shadows stay inline (separate render passes per face)
+        renderPointLightCubeShadows(primaryCmd, params, terrainParams, resourcePool,
+                                     shadowPassPipeline, terrainShadowPipeline,
+                                     lightShadowData);
     }
 }
