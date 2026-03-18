@@ -24,92 +24,100 @@ namespace threading {
 			entry.threadId = 0;
 		}
 
-		// Rebuild enkiTS objects each frame (enkiTS Dependency state is not resettable)
-		std::vector<std::unique_ptr<enki::TaskSet>> taskSets(nodeCount);
-		std::vector<std::unique_ptr<enki::LambdaPinnedTask>> pinnedTasks(nodeCount);
+		// Compute topological layers: tasks at the same layer have all dependencies
+		// in earlier layers and can execute in parallel.
+		std::vector<uint32_t> inDegree(nodeCount, 0);
+		std::vector<std::vector<uint32_t>> reverseAdj(nodeCount); // reverseAdj[i] = tasks i depends on
 
-		auto* baseTimePtr = &pImpl->baseTime;
+		for (auto& edge : pImpl->edges) {
+			inDegree[edge.to]++;
+			reverseAdj[edge.to].push_back(edge.from);
+		}
+
+		// Build layers via BFS (Kahn's algorithm layer by layer)
+		std::vector<std::vector<uint32_t>> layers;
+		std::vector<uint32_t> currentLayer;
 
 		for (uint32_t i = 0; i < nodeCount; ++i) {
-			auto& node = pImpl->nodes[i];
-			auto* entryPtr = &pImpl->profileData[i];
+			if (inDegree[i] == 0) {
+				currentLayer.push_back(i);
+			}
+		}
 
-			if (node.pinned) {
-				pinnedTasks[i] = std::make_unique<enki::LambdaPinnedTask>(
-					0u,
-					[&fn = node.fn, entryPtr, baseTimePtr]() {
-						auto start = std::chrono::high_resolution_clock::now();
-						fn();
-						auto end = std::chrono::high_resolution_clock::now();
-						entryPtr->startTimeNs = static_cast<uint64_t>(
-							std::chrono::duration_cast<std::chrono::nanoseconds>(start - *baseTimePtr).count());
-						entryPtr->endTimeNs = static_cast<uint64_t>(
-							std::chrono::duration_cast<std::chrono::nanoseconds>(end - *baseTimePtr).count());
-						entryPtr->threadId = 0;
+		std::vector<uint32_t> tempInDegree = inDegree;
+
+		while (!currentLayer.empty()) {
+			layers.push_back(currentLayer);
+			std::vector<uint32_t> nextLayer;
+
+			for (uint32_t node : currentLayer) {
+				for (uint32_t dep : pImpl->adjacency[node]) {
+					if (--tempInDegree[dep] == 0) {
+						nextLayer.push_back(dep);
 					}
-				);
-				pinnedTasks[i]->m_Priority = static_cast<enki::TaskPriority>(
-					static_cast<uint32_t>(node.priority));
+				}
+			}
+
+			currentLayer = std::move(nextLayer);
+		}
+
+		// Execute each layer: tasks within a layer run in parallel
+		auto* baseTimePtr = &pImpl->baseTime;
+
+		for (auto& layer : layers) {
+			if (layer.size() == 1) {
+				// Single task - execute directly on this thread
+				uint32_t idx = layer[0];
+				auto& node = pImpl->nodes[idx];
+				auto* entryPtr = &pImpl->profileData[idx];
+
+				auto start = std::chrono::high_resolution_clock::now();
+				node.fn();
+				auto end = std::chrono::high_resolution_clock::now();
+
+				entryPtr->startTimeNs = static_cast<uint64_t>(
+					std::chrono::duration_cast<std::chrono::nanoseconds>(start - *baseTimePtr).count());
+				entryPtr->endTimeNs = static_cast<uint64_t>(
+					std::chrono::duration_cast<std::chrono::nanoseconds>(end - *baseTimePtr).count());
+				entryPtr->threadId = 0;
 			}
 			else {
-				taskSets[i] = std::make_unique<enki::TaskSet>(1,
-					[&fn = node.fn, entryPtr, baseTimePtr](
-						enki::TaskSetPartition, uint32_t threadNum) {
-						auto start = std::chrono::high_resolution_clock::now();
-						fn();
-						auto end = std::chrono::high_resolution_clock::now();
-						entryPtr->startTimeNs = static_cast<uint64_t>(
-							std::chrono::duration_cast<std::chrono::nanoseconds>(start - *baseTimePtr).count());
-						entryPtr->endTimeNs = static_cast<uint64_t>(
-							std::chrono::duration_cast<std::chrono::nanoseconds>(end - *baseTimePtr).count());
-						entryPtr->threadId = threadNum;
-					}
-				);
-				taskSets[i]->m_Priority = static_cast<enki::TaskPriority>(
-					static_cast<uint32_t>(node.priority));
+				// Multiple tasks - dispatch in parallel via enkiTS
+				std::vector<std::unique_ptr<enki::TaskSet>> taskSets(layer.size());
+
+				for (size_t t = 0; t < layer.size(); ++t) {
+					uint32_t idx = layer[t];
+					auto& node = pImpl->nodes[idx];
+					auto* entryPtr = &pImpl->profileData[idx];
+
+					taskSets[t] = std::make_unique<enki::TaskSet>(1,
+						[&fn = node.fn, entryPtr, baseTimePtr](
+							enki::TaskSetPartition, uint32_t threadNum) {
+							auto start = std::chrono::high_resolution_clock::now();
+							fn();
+							auto end = std::chrono::high_resolution_clock::now();
+							entryPtr->startTimeNs = static_cast<uint64_t>(
+								std::chrono::duration_cast<std::chrono::nanoseconds>(start - *baseTimePtr).count());
+							entryPtr->endTimeNs = static_cast<uint64_t>(
+								std::chrono::duration_cast<std::chrono::nanoseconds>(end - *baseTimePtr).count());
+							entryPtr->threadId = threadNum;
+						}
+					);
+					taskSets[t]->m_Priority = static_cast<enki::TaskPriority>(
+						static_cast<uint32_t>(node.priority));
+				}
+
+				// Add all tasks to pipe
+				for (auto& task : taskSets) {
+					pImpl->scheduler->AddTaskSetToPipe(task.get());
+				}
+
+				// Wait for all tasks in this layer to complete
+				for (auto& task : taskSets) {
+					pImpl->scheduler->WaitforTask(task.get());
+				}
 			}
 		}
-
-		// Wire enkiTS dependencies
-		std::vector<enki::Dependency> dependencies(pImpl->edges.size());
-		for (size_t e = 0; e < pImpl->edges.size(); ++e) {
-			auto& edge = pImpl->edges[e];
-
-			enki::ICompletable* source = pImpl->nodes[edge.from].pinned
-				? static_cast<enki::ICompletable*>(pinnedTasks[edge.from].get())
-				: static_cast<enki::ICompletable*>(taskSets[edge.from].get());
-
-			enki::ICompletable* target = pImpl->nodes[edge.to].pinned
-				? static_cast<enki::ICompletable*>(pinnedTasks[edge.to].get())
-				: static_cast<enki::ICompletable*>(taskSets[edge.to].get());
-
-			target->SetDependency(dependencies[e], source);
-		}
-
-		// Completion sentinel depends on all leaf tasks
-		enki::TaskSet completionTask(1, [](enki::TaskSetPartition, uint32_t) {});
-		std::vector<enki::Dependency> completionDeps(pImpl->leafIndices.size());
-		for (size_t l = 0; l < pImpl->leafIndices.size(); ++l) {
-			uint32_t leafIdx = pImpl->leafIndices[l];
-			enki::ICompletable* leaf = pImpl->nodes[leafIdx].pinned
-				? static_cast<enki::ICompletable*>(pinnedTasks[leafIdx].get())
-				: static_cast<enki::ICompletable*>(taskSets[leafIdx].get());
-
-			completionTask.SetDependency(completionDeps[l], leaf);
-		}
-
-		// Add root tasks to the scheduler
-		for (uint32_t idx : pImpl->rootIndices) {
-			if (pImpl->nodes[idx].pinned) {
-				pImpl->scheduler->AddPinnedTask(pinnedTasks[idx].get());
-			}
-			else {
-				pImpl->scheduler->AddTaskSetToPipe(taskSets[idx].get());
-			}
-		}
-
-		// Wait for completion (main thread participates in work stealing + pinned tasks)
-		pImpl->scheduler->WaitforTask(&completionTask);
 	}
 
 	const std::vector<TaskProfileEntry>& TaskGraph::getProfileData() const

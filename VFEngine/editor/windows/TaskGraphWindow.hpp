@@ -11,8 +11,9 @@ namespace windows
 	{
 	private:
 		bool visible = false;
+		bool paused = false;
 		float refreshTimer = 0.0f;
-		static constexpr float REFRESH_INTERVAL = 0.1f;
+		static constexpr float REFRESH_INTERVAL = 0.5f;
 
 		// Cached data
 		threading::FrameProfileSnapshot latestFrame;
@@ -20,8 +21,6 @@ namespace windows
 		std::vector<std::string> taskNames;
 		std::vector<std::vector<uint32_t>> adjacency;
 		uint32_t maxThreadId = 0;
-
-		int selectedTab = 0;
 
 	public:
 		TaskGraphWindow() = default;

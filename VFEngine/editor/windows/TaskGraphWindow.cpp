@@ -33,16 +33,37 @@ namespace windows
 	{
 		if (!visible) return;
 
-		refreshTimer += ImGui::GetIO().DeltaTime;
-		if (refreshTimer >= REFRESH_INTERVAL)
+		if (!paused)
 		{
-			refreshData();
-			refreshTimer = 0.0f;
+			refreshTimer += ImGui::GetIO().DeltaTime;
+			if (refreshTimer >= REFRESH_INTERVAL)
+			{
+				refreshData();
+				refreshTimer = 0.0f;
+			}
 		}
 
 		ImGui::SetNextWindowSize(ImVec2(700, 450), ImGuiCond_FirstUseEver);
 		if (ImGui::Begin("Task Graph Profiler", &visible))
 		{
+			// Toolbar
+			if (ImGui::Button(paused ? "Resume" : "Pause"))
+			{
+				paused = !paused;
+			}
+			ImGui::SameLine();
+			if (paused)
+			{
+				ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "PAUSED");
+			}
+			else
+			{
+				float frameDurationMs = static_cast<float>(latestFrame.frameDurationNs) / 1e6f;
+				ImGui::Text("Frame: %.3f ms | Tasks: %zu", frameDurationMs, latestFrame.entries.size());
+			}
+
+			ImGui::Separator();
+
 			if (ImGui::BeginTabBar("TaskGraphTabs"))
 			{
 				if (ImGui::BeginTabItem("Timeline"))
