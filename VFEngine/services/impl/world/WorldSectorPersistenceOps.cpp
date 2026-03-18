@@ -91,7 +91,6 @@ namespace services
                 // Build UUID -> entity lookup map once (O(N)), then resolve each UUID in O(1)
                 auto uuidView = registry.view<components::UUIDComponent>();
                 std::unordered_map<uint64_t, entt::entity> uuidToEntity;
-                uuidToEntity.reserve(uuidView.size_hint());
                 for (auto ent : uuidView)
                 {
                     uuidToEntity[uuidView.get<components::UUIDComponent>(ent).id.getValue()] = ent;
