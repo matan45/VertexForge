@@ -14,6 +14,7 @@
 #include "PhysicsTerrainManager.hpp"
 #include "PhysicsRagdollManager.hpp"
 #include "PhysicsCharacterManager.hpp"
+#include "PhysicsStateBuffer.hpp"
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <memory>
@@ -44,6 +45,7 @@ namespace core::physics
         PhysicsTerrainManager terrainManager;
         PhysicsRagdollManager ragdollManager;
         PhysicsCharacterManager characterManager;
+        PhysicsStateBuffer stateBuffer;
 
         bool initialized = false;
 
@@ -60,6 +62,10 @@ namespace core::physics
 
         void step(float deltaTime, int collisionSteps = 1);
         void processContactEvents();
+
+        void captureState();
+        void swapStateBuffers();
+        const PhysicsStateBuffer& getStateBuffer() const { return stateBuffer; }
 
         void setGravity(const glm::vec3& gravity);
         glm::vec3 getGravity() const;

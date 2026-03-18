@@ -382,10 +382,17 @@ namespace handlers {
             if (windowStateService) windowStateService->update();
         });
 
-        frameTaskGraph->addTask("Physics", [this]() {
+        frameTaskGraph->addTask("PhysicsKick", [this]() {
             if (physicsPlayModeHandler) {
                 float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
-                physicsPlayModeHandler->update(dt);
+                physicsPlayModeHandler->kickUpdate(dt);
+            }
+        });
+
+        frameTaskGraph->addTask("PhysicsSync", [this]() {
+            if (physicsPlayModeHandler) {
+                float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
+                physicsPlayModeHandler->syncUpdate(dt);
             }
         });
 
@@ -442,10 +449,11 @@ namespace handlers {
         });
 
         // Dependencies
-        frameTaskGraph->addDependency("Physics", "Scene");
-        frameTaskGraph->addDependency("Physics", "Input");
-        frameTaskGraph->addDependency("Physics", "WindowState");
-        frameTaskGraph->addDependency("Scripts", "Physics");
+        frameTaskGraph->addDependency("PhysicsKick", "Scene");
+        frameTaskGraph->addDependency("PhysicsKick", "Input");
+        frameTaskGraph->addDependency("PhysicsKick", "WindowState");
+        frameTaskGraph->addDependency("PhysicsSync", "PhysicsKick");
+        frameTaskGraph->addDependency("Scripts", "PhysicsSync");
         frameTaskGraph->addDependency("Controllers", "Scripts");
         frameTaskGraph->addDependency("BehaviorTrees", "Controllers");
         frameTaskGraph->addDependency("RenderTexture", "Scripts");

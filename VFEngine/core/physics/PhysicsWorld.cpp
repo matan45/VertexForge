@@ -127,6 +127,17 @@ namespace core::physics
         if (contactListener) contactListener->processContactEvents();
     }
 
+    void PhysicsWorld::captureState()
+    {
+        if (!initialized || !physicsSystem) return;
+        stateBuffer.capture(bodyRegistry, *physicsSystem);
+    }
+
+    void PhysicsWorld::swapStateBuffers()
+    {
+        stateBuffer.swap();
+    }
+
     void PhysicsWorld::setGravity(const glm::vec3& gravity)
     {
         if (physicsSystem) physicsSystem->SetGravity(toJolt(gravity));

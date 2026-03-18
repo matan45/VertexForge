@@ -542,10 +542,17 @@ namespace handlers
         // === Play-mode simulation tasks ===
         // These check isPlayMode() internally so the graph structure stays fixed
 
-        frameTaskGraph->addTask("Physics", [this]() {
+        frameTaskGraph->addTask("PhysicsKick", [this]() {
             if (editorModeService && editorModeService->isPlayMode() && physicsPlayModeHandler) {
                 float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
-                physicsPlayModeHandler->update(dt);
+                physicsPlayModeHandler->kickUpdate(dt);
+            }
+        });
+
+        frameTaskGraph->addTask("PhysicsSync", [this]() {
+            if (editorModeService && editorModeService->isPlayMode() && physicsPlayModeHandler) {
+                float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
+                physicsPlayModeHandler->syncUpdate(dt);
             }
         });
 
@@ -611,13 +618,16 @@ namespace handlers
         });
 
         // === Dependencies ===
-        // Physics depends on Input and WindowState completing first
-        frameTaskGraph->addDependency("Physics", "Scene");
-        frameTaskGraph->addDependency("Physics", "Input");
-        frameTaskGraph->addDependency("Physics", "WindowState");
+        // PhysicsKick depends on Input and WindowState completing first
+        frameTaskGraph->addDependency("PhysicsKick", "Scene");
+        frameTaskGraph->addDependency("PhysicsKick", "Input");
+        frameTaskGraph->addDependency("PhysicsKick", "WindowState");
 
-        // Scripts must run after Physics
-        frameTaskGraph->addDependency("Scripts", "Physics");
+        // PhysicsSync awaits simulation completion
+        frameTaskGraph->addDependency("PhysicsSync", "PhysicsKick");
+
+        // Scripts must run after PhysicsSync
+        frameTaskGraph->addDependency("Scripts", "PhysicsSync");
 
         // Controllers must run after Scripts
         frameTaskGraph->addDependency("Controllers", "Scripts");

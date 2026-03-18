@@ -1,5 +1,6 @@
 #include "PhysicsAdapter.hpp"
 #include "PhysicsConversions.hpp"
+#include "threading/JobSystem.hpp"
 #include "../../physics/PhysicsShapeFactory.hpp"
 #include "../../services/events/physics/PhysicsEvents.hpp"
 #include "../../services/events/lifecycle/AssetLifecycleEvents.hpp"
@@ -133,6 +134,13 @@ namespace core
 
     void PhysicsAdapter::cleanUp()
     {
+        // Await any in-flight async physics step before cleanup
+        if (asyncStepInFlight && asyncStepFuture.valid())
+        {
+            asyncStepFuture.get();
+            asyncStepInFlight = false;
+        }
+
         physicsAnimationEntities.clear();
         if (physicsWorld)
             physicsWorld->cleanUp();
@@ -148,15 +156,91 @@ namespace core
 
     void PhysicsAdapter::update(float deltaTime)
     {
+        kickPhysicsStep(deltaTime);
+        syncPhysicsStep();
+    }
+
+    void PhysicsAdapter::kickPhysicsStep(float deltaTime)
+    {
         if (!isInitialized()) return;
 
-        fixedTimestep->update(deltaTime, [this](float fixedDt)
-        {
-            physicsWorld->step(fixedDt);
-            if (postStepCallback) postStepCallback(fixedDt);
-        });
+        // Swap buffers: previous write becomes read (previous frame state)
+        physicsWorld->swapStateBuffers();
 
+        asyncStepFuture = threading::JobSystem::instance().submit(
+            [this, deltaTime]() -> physics::FixedTimestepResult
+            {
+                auto result = fixedTimestep->update(deltaTime, [this](float fixedDt)
+                {
+                    physicsWorld->step(fixedDt);
+                });
+
+                // Capture state snapshot while still on worker thread (Jolt sim is done)
+                physicsWorld->captureState();
+                return result;
+            }, threading::JobPriority::HIGH);
+
+        asyncStepInFlight = true;
+    }
+
+    void PhysicsAdapter::syncPhysicsStep()
+    {
+        if (!asyncStepInFlight) return;
+
+        auto result = asyncStepFuture.get();
+        asyncStepInFlight = false;
+        lastStepAlpha = static_cast<float>(result.alpha);
+
+        // Process contact events on main thread
         physicsWorld->processContactEvents();
+
+        // Run script fixedUpdate N times (once per sub-step) for determinism
+        if (postStepCallback && result.stepsTaken > 0)
+        {
+            float fixedDt = static_cast<float>(fixedTimestep->getTimestep());
+            for (int i = 0; i < result.stepsTaken; ++i)
+            {
+                postStepCallback(fixedDt);
+            }
+        }
+    }
+
+    float PhysicsAdapter::getInterpolationAlpha() const
+    {
+        return lastStepAlpha;
+    }
+
+    services::PhysicsTransformSnapshot PhysicsAdapter::getInterpolatedTransform(
+        services::EntityHandle entity) const
+    {
+        services::PhysicsTransformSnapshot result;
+        uint64_t entityId = entity.id;
+
+        const auto& stateBuffer = physicsWorld->getStateBuffer();
+        const auto* curr = stateBuffer.findInWriteBuffer(entityId);
+        const auto* prev = stateBuffer.findInReadBuffer(entityId);
+
+        if (curr && prev)
+        {
+            float alpha = lastStepAlpha;
+            result.position = glm::mix(prev->position, curr->position, alpha);
+            result.rotation = glm::slerp(prev->rotation, curr->rotation, alpha);
+            result.linearVelocity = glm::mix(prev->linearVelocity, curr->linearVelocity, alpha);
+        }
+        else if (curr)
+        {
+            result.position = curr->position;
+            result.rotation = curr->rotation;
+            result.linearVelocity = curr->linearVelocity;
+        }
+        else
+        {
+            // Fallback to live Jolt state
+            result.position = getPosition(entity);
+            result.rotation = getRotation(entity);
+        }
+
+        return result;
     }
 
     void PhysicsAdapter::setPostStepCallback(std::function<void(float)> callback)

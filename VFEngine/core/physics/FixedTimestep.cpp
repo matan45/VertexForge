@@ -3,7 +3,7 @@
 
 namespace core::physics
 {
-    int FixedTimestep::update(double deltaTime, const std::function<void(float)>& physicsStep)
+    FixedTimestepResult FixedTimestep::update(double deltaTime, const std::function<void(float)>& physicsStep)
     {
         deltaTime = std::min(deltaTime, maxAccumulator);
 
@@ -20,6 +20,9 @@ namespace core::physics
             stepsTaken++;
         }
 
-        return stepsTaken;
+        FixedTimestepResult result;
+        result.stepsTaken = stepsTaken;
+        result.alpha = (timestep > 0.0) ? (accumulator / timestep) : 0.0;
+        return result;
     }
 }

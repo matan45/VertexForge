@@ -26,6 +26,13 @@ namespace services
         uint8_t collisionLayer = 0;
     };
 
+    struct PhysicsTransformSnapshot
+    {
+        glm::vec3 position{0.0f};
+        glm::quat rotation{1.0f, 0.0f, 0.0f, 0.0f};
+        glm::vec3 linearVelocity{0.0f};
+    };
+
     class IPhysicsProvider
     {
     public:
@@ -36,6 +43,12 @@ namespace services
         virtual bool isInitialized() const = 0;
         virtual void update(float deltaTime) = 0;
         virtual void setPostStepCallback(std::function<void(float)> callback) = 0;
+
+        // Async physics step: kick starts simulation, sync awaits completion
+        virtual void kickPhysicsStep(float deltaTime) = 0;
+        virtual void syncPhysicsStep() = 0;
+        virtual float getInterpolationAlpha() const = 0;
+        virtual PhysicsTransformSnapshot getInterpolatedTransform(EntityHandle entity) const = 0;
 
         virtual void setGravity(const glm::vec3& gravity) = 0;
         virtual glm::vec3 getGravity() const = 0;

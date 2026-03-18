@@ -212,6 +212,7 @@
     <ClInclude Include="physics\PhysicsRigidBodyManager.hpp" />
     <ClInclude Include="physics\PhysicsShapeFactory.hpp" />
     <ClInclude Include="physics\PhysicsSkeletonConverter.hpp" />
+    <ClInclude Include="physics\PhysicsStateBuffer.hpp" />
     <ClInclude Include="physics\PhysicsTerrainManager.hpp" />
     <ClInclude Include="physics\PhysicsWorld.hpp" />
     <ClInclude Include="physics\RagdollSettingsBuilder.hpp" />
@@ -334,6 +335,7 @@
     <ClCompile Include="physics\PhysicsRigidBodyManager.cpp" />
     <ClCompile Include="physics\PhysicsShapeFactory.cpp" />
     <ClCompile Include="physics\PhysicsSkeletonConverter.cpp" />
+    <ClCompile Include="physics\PhysicsStateBuffer.cpp" />
     <ClCompile Include="physics\PhysicsTerrainManager.cpp" />
     <ClCompile Include="physics\PhysicsWorld.cpp" />
     <ClCompile Include="physics\RagdollSettingsBuilder.cpp" />
