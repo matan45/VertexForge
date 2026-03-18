@@ -583,6 +583,7 @@
     <None Include="..\..\resources\shaders\common\camera_types.glsl" />
     <None Include="..\..\resources\shaders\common\cluster_culling.glsl" />
     <None Include="..\..\resources\shaders\common\gi_sampling.glsl" />
+    <None Include="..\..\resources\shaders\common\gpu_instance_types.glsl" />
     <None Include="..\..\resources\shaders\common\gpu_types.glsl" />
     <None Include="..\..\resources\shaders\common\lighting_functions.glsl" />
     <None Include="..\..\resources\shaders\common\lod_crossfade.glsl" />
