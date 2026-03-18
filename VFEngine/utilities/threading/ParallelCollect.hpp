@@ -1,5 +1,6 @@
 #pragma once
 #include "JobSystem.hpp"
+#include "ParallelView.hpp"
 #include <entt/entt.hpp>
 #include <vector>
 #include <cstdint>
@@ -16,9 +17,10 @@ namespace threading {
 	{
 		auto view = registry.view<Components...>();
 
-		// Materialize entities for indexed access
-		thread_local std::vector<entt::entity> entities;
-		entities.clear();
+		// Materialize entities for indexed access.
+		// NOT thread_local: worker threads must access this via captured reference,
+		// and MSVC may re-evaluate TLS lookup per-thread, giving each worker an empty vector.
+		std::vector<entt::entity> entities;
 		entities.reserve(view.size_hint());
 		for (auto entity : view)
 		{
@@ -28,9 +30,8 @@ namespace threading {
 		uint32_t count = static_cast<uint32_t>(entities.size());
 		if (count == 0) return {};
 
-		// Sequential fallback for small counts
-		constexpr uint32_t PARALLEL_COLLECT_THRESHOLD = 256;
-		if (count < PARALLEL_COLLECT_THRESHOLD)
+		// Sequential fallback for small counts (uses shared threshold from ParallelView.hpp)
+		if (count < PARALLEL_VIEW_THRESHOLD)
 		{
 			std::vector<T> result;
 			result.reserve(count);
@@ -49,7 +50,7 @@ namespace threading {
 		std::vector<std::vector<T>> threadResults(threadCount);
 
 		JobSystem::instance().parallelFor(count,
-			[&](uint32_t begin, uint32_t end, uint32_t threadNum)
+			[&entities, &filter, &transform, &threadResults, threadCount](uint32_t begin, uint32_t end, uint32_t threadNum)
 			{
 				uint32_t slot = threadNum < threadCount ? threadNum : 0;
 				auto& localResults = threadResults[slot];

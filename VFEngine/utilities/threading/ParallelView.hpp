@@ -37,9 +37,8 @@ namespace threading {
 		}
 
 		// Materialize entities into a contiguous vector for indexed parallel access.
-		// Multi-component views use filtered iterators that can't be indexed by offset.
-		thread_local std::vector<entt::entity> entities;
-		entities.clear();
+		// NOT thread_local: worker threads access this via captured reference.
+		std::vector<entt::entity> entities;
 		entities.reserve(view.size_hint());
 		for (auto entity : view)
 		{
@@ -59,7 +58,7 @@ namespace threading {
 		}
 
 		JobSystem::instance().parallelFor(count,
-			[&](uint32_t begin, uint32_t end)
+			[&entities, &func](uint32_t begin, uint32_t end)
 			{
 				for (uint32_t i = begin; i < end; ++i)
 				{
