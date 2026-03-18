@@ -198,7 +198,15 @@ namespace render::gpudriven
 
         if (hasMeshObjects)
         {
-            mergedBuffer->uploadObjects(cmd);
+            if (mergedBuffer->isPersistentMode())
+            {
+                mergedBuffer->uploadDirtyObjects(cmd);
+                mergedBuffer->uploadActiveIndices(cmd);
+            }
+            else
+            {
+                mergedBuffer->uploadObjects(cmd);
+            }
             if (mergedBuffer->getInstanceCount() > 0)
             {
                 mergedBuffer->uploadInstances(cmd);

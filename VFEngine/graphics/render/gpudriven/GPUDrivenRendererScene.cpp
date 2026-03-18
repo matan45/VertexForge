@@ -54,7 +54,33 @@ namespace render::gpudriven
         };
         BoneOffsetResolver boneOffsetResolver = updateAnimationBones();
 
-        mergedBuffer->updateObjects(opaqueObjects, {textureResolver, shaderGroupResolver, boneOffsetResolver, time, cameraPosition});
+        ObjectResolvers resolvers{textureResolver, shaderGroupResolver, boneOffsetResolver, time, cameraPosition};
+
+        bool useStreaming = objectStreamingEnabled && objectStreamManager;
+
+        if (useStreaming)
+        {
+            // Persistent slot mode: stream manager handles slot allocation/eviction
+            if (!mergedBuffer->isPersistentMode())
+            {
+                mergedBuffer->setPersistentMode(true);
+            }
+            auto& registry = scene::EntityRegistry::getRegistry();
+            objectStreamManager->update(cameraPosition, resolvers, registry);
+        }
+        else
+        {
+            // Legacy mode: rebuild entire object buffer each frame
+            if (mergedBuffer->isPersistentMode())
+            {
+                mergedBuffer->setPersistentMode(false);
+            }
+            mergedBuffer->updateObjects(opaqueObjects, resolvers);
+        }
+
+        uint32_t objectCount = useStreaming
+            ? mergedBuffer->getActiveObjectCount()
+            : mergedBuffer->getObjectCount();
 
         CameraUpdateParams cameraParams{
             .view = view,
@@ -63,7 +89,7 @@ namespace render::gpudriven
             .nearPlane = nearPlane,
             .farPlane = farPlane,
             .time = time,
-            .objectCount = mergedBuffer ? mergedBuffer->getObjectCount() : 0,
+            .objectCount = objectCount,
             .hiZMipLevels = hiZMipLevels,
             .frustumCullingEnabled = culling.frustumCullingEnabled,
             .occlusionCullingEnabled = culling.occlusionCullingEnabled,
@@ -92,7 +118,7 @@ namespace render::gpudriven
         updatePipelineDescriptors();
 
         // Phase 3: Detect scene changes for shadow page invalidation
-        uint32_t currentObjectCount = mergedBuffer->getObjectCount();
+        uint32_t currentObjectCount = objectCount;
         if (shadowSystem && shadowSystem->isInitialized())
         {
             if (currentObjectCount != stats.totalObjects)

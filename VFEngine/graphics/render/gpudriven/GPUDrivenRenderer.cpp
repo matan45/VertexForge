@@ -38,6 +38,9 @@ namespace render::gpudriven
         mergedBuffer = std::make_unique<MergedMeshBuffer>(device);
         mergedBuffer->init();
 
+        objectStreamManager = std::make_unique<GPUObjectStreamManager>(*mergedBuffer);
+        objectStreamManager->init();
+
         if (meshStreamingEnabled)
         {
             meshStreamManager = std::make_unique<mesh::MeshStreamManager>(device, *mergedBuffer);
@@ -238,6 +241,7 @@ namespace render::gpudriven
         vkDevice.waitIdle();
 
         cleanupGI();
+        if (objectStreamManager) objectStreamManager->cleanup();
         if (lightStreamManager) lightStreamManager->cleanup();
         if (volumetricPipeline) volumetricPipeline->cleanup();
         if (water.oceanFFT) water.oceanFFT->cleanup();

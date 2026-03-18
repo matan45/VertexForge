@@ -12,6 +12,7 @@ namespace services
     public:
         virtual ~IObjectStreamingProvider() = default;
 
+        virtual void setObjectStreamingEnabled(bool enabled) = 0;
         virtual void setObjectStreamingConfig(const render::gpudriven::ObjectStreamConfig& config) = 0;
         virtual render::gpudriven::ObjectStreamConfig getObjectStreamingConfig() const = 0;
         virtual render::gpudriven::ObjectStreamingStats getObjectStreamingStats() const = 0;

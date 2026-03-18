@@ -721,6 +721,18 @@ namespace controllers
         }
     }
 
+    void OffScreenController::setObjectStreamingEnabled(bool enabled)
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (!renderHandler) return;
+
+        auto* gpu = renderHandler->getGPUDrivenRenderer();
+        if (gpu)
+        {
+            gpu->setObjectStreamingEnabled(enabled);
+        }
+    }
+
     void OffScreenController::setObjectStreamingConfig(const render::gpudriven::ObjectStreamConfig& config)
     {
         auto* renderHandler = offScreen->getRenderPassHandler();
@@ -767,12 +779,8 @@ namespace controllers
         if (!renderHandler) return;
 
         auto* gpu = renderHandler->getGPUDrivenRenderer();
-        if (gpu)
+        if (gpu && gpu->getObjectStreamManager())
         {
-            if (!gpu->getObjectStreamManager())
-            {
-                gpu->initObjectStreaming();
-            }
             auto& registry = scene::EntityRegistry::getRegistry();
             gpu->getObjectStreamManager()->registerSectorObjects(sectorId, entities, registry);
         }

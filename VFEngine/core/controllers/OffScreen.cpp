@@ -604,6 +604,11 @@ namespace controllers {
 		offScreenController->unregisterSectorLights(sectorId);
 	}
 
+	void OffScreen::setObjectStreamingEnabled(bool enabled)
+	{
+		offScreenController->setObjectStreamingEnabled(enabled);
+	}
+
 	void OffScreen::setObjectStreamingConfig(const render::gpudriven::ObjectStreamConfig& config)
 	{
 		offScreenController->setObjectStreamingConfig(config);

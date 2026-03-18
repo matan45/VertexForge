@@ -10,6 +10,12 @@ namespace events::render::objectstreaming
 {
     // ---- Commands ----
 
+    struct SetObjectStreamingEnabledCommand : ::events::ICommand<void>
+    {
+        bool enabled = false;
+        std::string_view getName() const override { return "SetObjectStreamingEnabled"; }
+    };
+
     struct SetObjectStreamingConfigCommand : ::events::ICommand<void>
     {
         ::render::gpudriven::ObjectStreamConfig config;

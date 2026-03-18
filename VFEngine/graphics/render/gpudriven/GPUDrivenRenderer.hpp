@@ -283,6 +283,7 @@ namespace render::gpudriven
 
         // Object streaming
         std::unique_ptr<gpudriven::GPUObjectStreamManager> objectStreamManager;
+        bool objectStreamingEnabled = false;
 
         // Global Illumination
         std::unique_ptr<gi::RadianceCascadeManager> giCascadeManager;
@@ -435,6 +436,8 @@ namespace render::gpudriven
         // Object streaming
         gpudriven::GPUObjectStreamManager* getObjectStreamManager() const { return objectStreamManager.get(); }
         void initObjectStreaming(const gpudriven::ObjectStreamConfig& config = {});
+        void setObjectStreamingEnabled(bool enabled) { objectStreamingEnabled = enabled; }
+        bool isObjectStreamingEnabled() const { return objectStreamingEnabled; }
 
         // Global Illumination
         void initGI(const gi::GISettings& settings);

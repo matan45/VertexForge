@@ -6,6 +6,7 @@
 #include "world/WorldDefinitionSerialization.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/world/WorldSectorEvents.hpp"
+#include "../../events/render/ObjectStreamingEvents.hpp"
 #include "print/Log.hpp"
 #include <filesystem>
 
@@ -41,6 +42,14 @@ namespace services
 
         worldMode = true;
         currentWorldPath = filePath;
+
+        // Enable GPU object streaming if configured
+        if (streamingConfig.enableGPUObjectStreaming)
+        {
+            events::render::objectstreaming::SetObjectStreamingEnabledCommand cmd;
+            cmd.enabled = true;
+            ::events::EventDispatcher::instance().execute(cmd);
+        }
 
         // Tag root entity so the world auto-loads with the scene
         auto& root = sceneGraph->GetRoot();
@@ -126,6 +135,14 @@ namespace services
 
         worldMode = true;
         currentWorldPath = filePath;
+
+        // Enable GPU object streaming if configured
+        if (newDef.streamingConfig.enableGPUObjectStreaming)
+        {
+            events::render::objectstreaming::SetObjectStreamingEnabledCommand cmd;
+            cmd.enabled = true;
+            ::events::EventDispatcher::instance().execute(cmd);
+        }
 
         for (const auto& [coord, sectorPath] : worldDefinition.sectorFilePaths)
         {

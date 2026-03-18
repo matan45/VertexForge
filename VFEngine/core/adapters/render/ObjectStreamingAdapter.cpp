@@ -3,6 +3,14 @@
 
 namespace core::adapters
 {
+    void ObjectStreamingAdapter::setObjectStreamingEnabled(bool enabled)
+    {
+        if (offScreen)
+        {
+            offScreen->setObjectStreamingEnabled(enabled);
+        }
+    }
+
     void ObjectStreamingAdapter::setObjectStreamingConfig(const render::gpudriven::ObjectStreamConfig& config)
     {
         if (offScreen)

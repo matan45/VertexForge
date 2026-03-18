@@ -16,6 +16,13 @@ namespace services
     {
         auto& dispatcher = ::events::EventDispatcher::instance();
 
+        dispatcher.registerCommandHandler<events::render::objectstreaming::SetObjectStreamingEnabledCommand>(
+            [this](const events::render::objectstreaming::SetObjectStreamingEnabledCommand& cmd)
+            {
+                provider->setObjectStreamingEnabled(cmd.enabled);
+            }
+        );
+
         dispatcher.registerCommandHandler<events::render::objectstreaming::SetObjectStreamingConfigCommand>(
             [this](const events::render::objectstreaming::SetObjectStreamingConfigCommand& cmd)
             {

@@ -19,6 +19,7 @@ namespace core::adapters
 
         void setOffScreenController(controllers::OffScreen* controller) { offScreen = controller; }
 
+        void setObjectStreamingEnabled(bool enabled) override;
         void setObjectStreamingConfig(const render::gpudriven::ObjectStreamConfig& config) override;
         render::gpudriven::ObjectStreamConfig getObjectStreamingConfig() const override;
         render::gpudriven::ObjectStreamingStats getObjectStreamingStats() const override;

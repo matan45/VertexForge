@@ -184,6 +184,7 @@ namespace controllers
         void unregisterSectorLights(uint32_t sectorId);
 
         // Object streaming settings
+        void setObjectStreamingEnabled(bool enabled);
         void setObjectStreamingConfig(const render::gpudriven::ObjectStreamConfig& config);
         render::gpudriven::ObjectStreamConfig getObjectStreamingConfig() const;
         render::gpudriven::ObjectStreamingStats getObjectStreamingStats() const;
