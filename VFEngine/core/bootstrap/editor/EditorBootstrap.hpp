@@ -208,5 +208,10 @@ namespace core
         void setFrameCallback(std::function<void()> callback);
         void setPostUpdateCallback(std::function<void()> callback);
         void triggerResize();
+
+        // Get internal frame step functions for task graph orchestration
+        std::function<void()> getSceneGraphUpdateFn() const;
+        std::function<void()> getImguiDrawFn() const;
+        std::function<void()> getRenderFn() const;
     };
 }

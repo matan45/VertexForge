@@ -31,6 +31,21 @@ namespace core {
 	{
 		renderController->init();
 		engineTime::Timer::initialize();
+
+		// Expose internal steps so the task graph can orchestrate the full frame
+		sceneGraphUpdateFn = []() { scene::LevelHandler::update(); };
+
+		if (imguiEnabled) {
+			imguiDrawFn = [this]() {
+				newFrame();
+				editorDraw();
+				endFrame();
+			};
+		}
+
+		renderFn = [this]() {
+			renderController->render();
+		};
 	}
 
 	void MainLoop::run()
@@ -40,26 +55,11 @@ namespace core {
 
 			engineTime::Timer::update();
 
-			// Call frame callback (updates services, publishes events)
+			// The frame callback orchestrates the entire frame pipeline
+			// (service updates, scene graph, post-update, imgui, render)
 			if (frameCallback) {
 				frameCallback();
 			}
-
-			scene::LevelHandler::update();
-
-			// Post-update callback runs after world transforms are computed
-			if (postUpdateCallback) {
-				postUpdateCallback();
-			}
-
-			if (imguiEnabled)
-			{
-				newFrame();
-				editorDraw();
-				endFrame();
-			}
-
-			renderController->render();
 		}
 	}
 

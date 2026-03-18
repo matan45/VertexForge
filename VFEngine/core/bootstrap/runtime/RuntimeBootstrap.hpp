@@ -155,5 +155,8 @@ namespace core
 
         // Trigger window resize handling
         void triggerResize();
+
+        std::function<void()> getSceneGraphUpdateFn() const;
+        std::function<void()> getRenderFn() const;
     };
 }

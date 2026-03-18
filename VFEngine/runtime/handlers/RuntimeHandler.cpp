@@ -80,78 +80,6 @@ namespace handlers {
         bootstrap->setFrameCallback([this]() {
             frameTaskGraph->execute();
         });
-
-        // Post-update callback runs AFTER scene graph update (WorldTransformComponent is valid)
-        bootstrap->setPostUpdateCallback([this]() {
-            // Run script onLateUpdate after world transforms are computed
-            if (scriptingService) {
-                float deltaTime = static_cast<float>(engineTime::Timer::getDeltaTime());
-                scriptingService->lateUpdateScripts(deltaTime);
-            }
-
-            // Ensure cameras are registered before updating them
-            // (updateCamera needs the camera to be registered in the occlusion manager)
-            if (auto* offScreen = bootstrap->getOffScreenProvider()) {
-                offScreen->prepareCameras();
-            }
-
-            // Push primary camera matrices to the render system each frame
-            {
-                auto& registry = scene::EntityRegistry::getRegistry();
-                auto cameraView = registry.view<components::CameraComponent, components::WorldTransformComponent>();
-
-                for (auto entity : cameraView) {
-                    auto& camComp = cameraView.get<components::CameraComponent>(entity);
-                    if (!camComp.isPrimary) continue;
-
-                    auto& worldTransform = cameraView.get<components::WorldTransformComponent>(entity);
-
-                    // Update aspect ratio to match window
-                    if (windowStateService) {
-                        uint32_t w = windowStateService->getWidth();
-                        uint32_t h = windowStateService->getHeight();
-                        if (w > 0 && h > 0) {
-                            float newAspect = static_cast<float>(w) / static_cast<float>(h);
-                            if (std::abs(camComp.aspectRatio - newAspect) > 0.001f) {
-                                camComp.aspectRatio = newAspect;
-                                camComp.updateProjectionMatrix();
-                            }
-                        }
-                    }
-
-                    // Decompose world matrix into position/rotation (same as editor play mode)
-                    auto decomposed = math::decomposeMatrix(worldTransform.worldMatrix);
-                    camComp.updateViewMatrix(decomposed.position, decomposed.rotation);
-                    glm::vec3 cameraPos = decomposed.position;
-
-                    // Push to render system
-                    events::render::UpdateMeshCameraCommand meshCameraCmd;
-                    meshCameraCmd.viewMatrix = camComp.viewMatrix;
-                    meshCameraCmd.projectionMatrix = camComp.projectionMatrix;
-                    meshCameraCmd.cameraPosition = cameraPos;
-                    meshCameraCmd.time = static_cast<float>(engineTime::Timer::getElapsedTime());
-                    events::EventDispatcher::instance().execute(meshCameraCmd);
-
-                    // Broadcast camera position for world sector streaming
-                    events::render::CameraPositionUpdatedNotification camPosNotif;
-                    camPosNotif.position = cameraPos;
-                    events::EventDispatcher::instance().publish(camPosNotif);
-
-                    // Push camera to IBL skybox renderer
-                    events::render::UpdateIBLCameraCommand iblCameraCmd;
-                    iblCameraCmd.viewMatrix = camComp.viewMatrix;
-                    iblCameraCmd.projectionMatrix = camComp.projectionMatrix;
-                    events::EventDispatcher::instance().execute(iblCameraCmd);
-
-                    break; // Only use the first primary camera
-                }
-            }
-
-            // Trigger offscreen scene render (prepares cameras, meshes, then renders)
-            if (renderService) {
-                renderService->getViewportTexture();
-            }
-        });
         
         setupEventSubscriptions();
     }
@@ -522,6 +450,94 @@ namespace handlers {
         frameTaskGraph->addDependency("BehaviorTrees", "Controllers");
         frameTaskGraph->addDependency("RenderTexture", "Scripts");
         frameTaskGraph->addDependency("AudioListener", "Scripts");
+
+        // === Full frame pipeline tasks ===
+
+        auto sceneGraphFn = bootstrap->getSceneGraphUpdateFn();
+        frameTaskGraph->addTask("Transforms", [sceneGraphFn]() {
+            if (sceneGraphFn) sceneGraphFn();
+        });
+
+        frameTaskGraph->addTask("PostUpdate", [this]() {
+            // Late scripts
+            if (scriptingService) {
+                float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
+                scriptingService->lateUpdateScripts(dt);
+            }
+
+            // Camera preparation
+            if (auto* offScreen = bootstrap->getOffScreenProvider()) {
+                offScreen->prepareCameras();
+            }
+
+            // Push primary camera matrices
+            auto& registry = scene::EntityRegistry::getRegistry();
+            auto cameraView = registry.view<components::CameraComponent, components::WorldTransformComponent>();
+
+            for (auto entity : cameraView) {
+                auto& camComp = cameraView.get<components::CameraComponent>(entity);
+                if (!camComp.isPrimary) continue;
+
+                auto& worldTransform = cameraView.get<components::WorldTransformComponent>(entity);
+
+                if (windowStateService) {
+                    uint32_t w = windowStateService->getWidth();
+                    uint32_t h = windowStateService->getHeight();
+                    if (w > 0 && h > 0) {
+                        float newAspect = static_cast<float>(w) / static_cast<float>(h);
+                        if (std::abs(camComp.aspectRatio - newAspect) > 0.001f) {
+                            camComp.aspectRatio = newAspect;
+                            camComp.updateProjectionMatrix();
+                        }
+                    }
+                }
+
+                auto decomposed = math::decomposeMatrix(worldTransform.worldMatrix);
+                camComp.updateViewMatrix(decomposed.position, decomposed.rotation);
+                glm::vec3 cameraPos = decomposed.position;
+
+                events::render::UpdateMeshCameraCommand meshCameraCmd;
+                meshCameraCmd.viewMatrix = camComp.viewMatrix;
+                meshCameraCmd.projectionMatrix = camComp.projectionMatrix;
+                meshCameraCmd.cameraPosition = cameraPos;
+                meshCameraCmd.time = static_cast<float>(engineTime::Timer::getElapsedTime());
+                events::EventDispatcher::instance().execute(meshCameraCmd);
+
+                events::render::CameraPositionUpdatedNotification camPosNotif;
+                camPosNotif.position = cameraPos;
+                events::EventDispatcher::instance().publish(camPosNotif);
+
+                events::render::UpdateIBLCameraCommand iblCameraCmd;
+                iblCameraCmd.viewMatrix = camComp.viewMatrix;
+                iblCameraCmd.projectionMatrix = camComp.projectionMatrix;
+                events::EventDispatcher::instance().execute(iblCameraCmd);
+
+                break;
+            }
+
+            if (renderService) {
+                renderService->getViewportTexture();
+            }
+        });
+
+        auto renderFn = bootstrap->getRenderFn();
+        frameTaskGraph->addTask("Render", [renderFn]() {
+            if (renderFn) renderFn();
+        });
+
+        // Transforms depend on all service updates completing
+        frameTaskGraph->addDependency("Transforms", "BehaviorTrees");
+        frameTaskGraph->addDependency("Transforms", "RenderTexture");
+        frameTaskGraph->addDependency("Transforms", "AudioListener");
+        frameTaskGraph->addDependency("Transforms", "WorldSector");
+        frameTaskGraph->addDependency("Transforms", "AssetLifecycle");
+        frameTaskGraph->addDependency("Transforms", "Plugins");
+
+        // PostUpdate after Transforms
+        frameTaskGraph->addDependency("PostUpdate", "Transforms");
+
+        // Render after PostUpdate
+        frameTaskGraph->addDependency("Render", "PostUpdate");
 
         if (frameTaskGraph->compile()) {
             frameTaskGraph->registerEventHandlers();

@@ -64,4 +64,19 @@ namespace controllers {
 		mainLoop->setBlitSourceProvider(std::move(provider));
 	}
 
+	std::function<void()> CoreInterface::getSceneGraphUpdateFn() const
+	{
+		return mainLoop->getSceneGraphUpdateFn();
+	}
+
+	std::function<void()> CoreInterface::getImguiDrawFn() const
+	{
+		return mainLoop->getImguiDrawFn();
+	}
+
+	std::function<void()> CoreInterface::getRenderFn() const
+	{
+		return mainLoop->getRenderFn();
+	}
+
 };

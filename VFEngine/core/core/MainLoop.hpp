@@ -23,6 +23,11 @@ namespace core {
 		// Post-update callback - called after scene graph update (world transforms computed)
 		std::function<void()> postUpdateCallback;
 
+		// Callbacks to expose MainLoop internals to the task graph
+		std::function<void()> sceneGraphUpdateFn;
+		std::function<void()> imguiDrawFn;
+		std::function<void()> renderFn;
+
 	public:
 		explicit MainLoop(bool imguiEnabled = true);
 		~MainLoop();
@@ -40,6 +45,11 @@ namespace core {
 
 		// Set callback called after scene graph update (world transforms are valid)
 		void setPostUpdateCallback(std::function<void()> callback) { postUpdateCallback = std::move(callback); }
+
+		// Get internal step functions so the task graph can orchestrate the full frame
+		std::function<void()> getSceneGraphUpdateFn() const { return sceneGraphUpdateFn; }
+		std::function<void()> getImguiDrawFn() const { return imguiDrawFn; }
+		std::function<void()> getRenderFn() const { return renderFn; }
 
 		// Set callback to be called on resize (for offscreen resource recreation)
 		void setResizeCallback(std::function<void()> callback);

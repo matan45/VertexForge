@@ -116,23 +116,12 @@ namespace handlers
         }
 
         // Build the frame task graph with dependency-based parallel execution
+        // (must be called after bootstrap->init() so internal functions are available)
         buildFrameTaskGraph();
 
         bootstrap->setFrameCallback([this]()
         {
             frameTaskGraph->execute();
-        });
-
-        bootstrap->setPostUpdateCallback([this]()
-        {
-            if (editorModeService && editorModeService->isPlayMode())
-            {
-                float deltaTime = static_cast<float>(engineTime::Timer::getDeltaTime());
-                if (scriptingService)
-                {
-                    scriptingService->lateUpdateScripts(deltaTime);
-                }
-            }
         });
 
         // Wire script onFixedUpdate to run after each physics sub-step
@@ -642,6 +631,52 @@ namespace handlers
         frameTaskGraph->addDependency("AudioListener", "Scripts");
 
         // WorldSector, AssetLifecycle, Plugins are independent (no dependencies)
+
+        // === Full frame pipeline tasks (sequential after service updates) ===
+
+        // Scene graph transform update
+        auto sceneGraphFn = bootstrap->getSceneGraphUpdateFn();
+        frameTaskGraph->addTask("Transforms", [sceneGraphFn]() {
+            if (sceneGraphFn) sceneGraphFn();
+        });
+
+        // Late script updates (after transforms)
+        frameTaskGraph->addTask("LateScripts", [this]() {
+            if (editorModeService && editorModeService->isPlayMode() && scriptingService) {
+                float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
+                scriptingService->lateUpdateScripts(dt);
+            }
+        });
+
+        // ImGui draw
+        auto imguiDrawFn = bootstrap->getImguiDrawFn();
+        frameTaskGraph->addTask("ImGuiDraw", [imguiDrawFn]() {
+            if (imguiDrawFn) imguiDrawFn();
+        });
+
+        // GPU render
+        auto renderFn = bootstrap->getRenderFn();
+        frameTaskGraph->addTask("Render", [renderFn]() {
+            if (renderFn) renderFn();
+        });
+
+        // Transforms depend on ALL service update tasks completing
+        frameTaskGraph->addDependency("Transforms", "BehaviorTrees");
+        frameTaskGraph->addDependency("Transforms", "VFX");
+        frameTaskGraph->addDependency("Transforms", "RenderTexture");
+        frameTaskGraph->addDependency("Transforms", "AudioListener");
+        frameTaskGraph->addDependency("Transforms", "WorldSector");
+        frameTaskGraph->addDependency("Transforms", "AssetLifecycle");
+        frameTaskGraph->addDependency("Transforms", "Plugins");
+
+        // LateScripts run after Transforms
+        frameTaskGraph->addDependency("LateScripts", "Transforms");
+
+        // ImGui runs after LateScripts
+        frameTaskGraph->addDependency("ImGuiDraw", "LateScripts");
+
+        // Render runs after ImGui
+        frameTaskGraph->addDependency("Render", "ImGuiDraw");
 
         // Compile and register event handlers
         if (frameTaskGraph->compile()) {

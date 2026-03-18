@@ -47,6 +47,11 @@ namespace controllers {
 
 		// Set blit source provider for runtime (offscreen -> swapchain blit)
 		void setBlitSourceProvider(std::function<void*(uint32_t)> provider);
+
+		// Get internal frame step functions for task graph orchestration
+		std::function<void()> getSceneGraphUpdateFn() const;
+		std::function<void()> getImguiDrawFn() const;
+		std::function<void()> getRenderFn() const;
 	};
 }
 
