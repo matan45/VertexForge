@@ -293,7 +293,7 @@ namespace render::vfx
         cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
 
         // Bind lighting descriptor sets (sets 1-3) if available
-        if (lightingAvailable)
+        if (lightingAvailable && cachedLightBufferSet && cachedClusterGridSet && cachedClusterLightGridSet)
         {
             std::array<vk::DescriptorSet, 3> lightingSets = {
                 cachedLightBufferSet, cachedClusterGridSet, cachedClusterLightGridSet

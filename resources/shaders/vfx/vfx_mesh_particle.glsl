@@ -320,15 +320,16 @@ void main() {
 
     // Lighting: use scene lights when available, fallback to hard-coded for unlit
     if (config.lightingInfluence > 0.0 && pc.blendMode != 1u) {
+        const float INV_PI = 0.31830988;
+
         // Scene lighting with clustered lights
         vec3 litColor = finalColor.rgb * config.ambientAmount;
 
-        // Directional lights
+        // Directional lights (Lambertian diffuse with 1/PI normalization)
         for (uint i = 0u; i < lightCounts.directionalCount && i < 4u; i++) {
             float NdotL = max(dot(normal, -directionalLights[i].direction), 0.0);
-            float halfLambert = NdotL * 0.5 + 0.5;
             litColor += finalColor.rgb * directionalLights[i].color *
-                        directionalLights[i].intensity * halfLambert / LIGHT_INTENSITY_SCALE;
+                        directionalLights[i].intensity * NdotL * INV_PI;
         }
 
         // Clustered point lights
@@ -349,7 +350,7 @@ void main() {
 
             float NdotL = max(dot(normal, L), 0.0);
             float atten = physicalAttenuation(dist, light.radius);
-            litColor += finalColor.rgb * light.color * light.intensity * NdotL * atten / LIGHT_INTENSITY_SCALE;
+            litColor += finalColor.rgb * light.color * light.intensity * NdotL * atten * INV_PI;
         }
 
         // Clustered spot lights
@@ -366,7 +367,7 @@ void main() {
             float NdotL = max(dot(normal, L), 0.0);
             float atten = physicalAttenuation(dist, light.range);
             float spotAtten = spotAngleAttenuation(L, light.direction, light.cosInnerAngle, light.cosOuterAngle);
-            litColor += finalColor.rgb * light.color * light.intensity * NdotL * atten * spotAtten / LIGHT_INTENSITY_SCALE;
+            litColor += finalColor.rgb * light.color * light.intensity * NdotL * atten * spotAtten * INV_PI;
         }
 
         finalColor.rgb = mix(finalColor.rgb, litColor, config.lightingInfluence);
