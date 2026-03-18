@@ -137,6 +137,7 @@
     <ClInclude Include="windows\MaterialEditorWindow.hpp" />
     <ClInclude Include="windows\MaterialInstanceEditorWindow.hpp" />
     <ClInclude Include="windows\PluginManagerWindow.hpp" />
+    <ClInclude Include="windows\TaskGraphWindow.hpp" />
     <ClInclude Include="windows\VFXDebugWindow.hpp" />
     <ClInclude Include="windows\WaterEditorWindow.hpp" />
     <ClInclude Include="windows\WorldSectorWindow.hpp" />
@@ -291,6 +292,7 @@
     <ClCompile Include="windows\MaterialEditorWindow.cpp" />
     <ClCompile Include="windows\MaterialInstanceEditorWindow.cpp" />
     <ClCompile Include="windows\PluginManagerWindow.cpp" />
+    <ClCompile Include="windows\TaskGraphWindow.cpp" />
     <ClCompile Include="windows\VFXDebugWindow.cpp" />
     <ClCompile Include="windows\WaterEditorWindow.cpp" />
     <ClCompile Include="windows\WorldSectorWindow.cpp" />

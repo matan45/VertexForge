@@ -217,6 +217,9 @@
     <ClInclude Include="text\TextLayout.hpp" />
     <ClInclude Include="texture\OrmTexturePacker.hpp" />
     <ClInclude Include="threading\JobSystem.hpp" />
+    <ClInclude Include="threading\TaskGraph.hpp" />
+    <ClInclude Include="threading\TaskGraphBuilder.hpp" />
+    <ClInclude Include="threading\TaskProfiler.hpp" />
     <ClInclude Include="time\Clock.hpp" />
     <ClInclude Include="time\Timer.hpp" />
     <ClInclude Include="types\AudioEffectTypes.hpp" />
@@ -346,6 +349,9 @@
     <ClCompile Include="text\TextLayout.cpp" />
     <ClCompile Include="texture\OrmTexturePacker.cpp" />
     <ClCompile Include="threading\JobSystem.cpp" />
+    <ClCompile Include="threading\TaskGraph.cpp" />
+    <ClCompile Include="threading\TaskGraphBuilder.cpp" />
+    <ClCompile Include="threading\TaskProfiler.cpp" />
     <ClCompile Include="time\Timer.cpp" />
     <ClCompile Include="vegetation\VegetationDensityBrushApplicator.cpp" />
     <ClCompile Include="vegetation\VegetationDensityMap.cpp" />

@@ -36,6 +36,7 @@
 #include <filesystem>
 #include "time/Timer.hpp"
 #include "core/PluginManager.hpp"
+#include "impl/threading/FrameTaskGraph.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/CoreComponents.hpp"
 #include "events/render/RenderEvents.hpp"
@@ -73,59 +74,11 @@ namespace handlers {
         pluginManager->loadAll(pluginsDir);
         pluginManager->initializeAll();
 
+        // Build the frame task graph with dependency-based parallel execution
+        buildFrameTaskGraph();
+
         bootstrap->setFrameCallback([this]() {
-            // Process deferred scene loading before other updates
-            if (sceneService) {
-                sceneService->update();
-            }
-
-            if (inputService) {
-                inputService->update();
-            }
-            if (windowStateService) {
-                windowStateService->update();
-            }
-
-            float deltaTime = static_cast<float>(engineTime::Timer::getDeltaTime());
-
-            // Update order: Physics → Scripts → Controller Movement → Audio
-            if (physicsPlayModeHandler) {
-                physicsPlayModeHandler->update(deltaTime);
-            }
-
-            if (scriptingService) {
-                scriptingService->updateScripts(deltaTime);
-            }
-
-            if (controllerService) {
-                controllerService->applyControllerMovement(deltaTime);
-            }
-
-            if (behaviorTreeService) {
-                behaviorTreeService->updateAll(deltaTime);
-            }
-
-            if (renderTexturePlayModeHandler) {
-                renderTexturePlayModeHandler->update(deltaTime);
-            }
-
-            if (audioSceneUpdater) {
-                audioSceneUpdater->updateListenerFromPrimaryCamera();
-            }
-
-            // Update world sector streaming (distance-based entity load/unload)
-            if (worldSectorService) {
-                worldSectorService->update();
-            }
-
-            // Update asset lifecycle manager (deferred releases)
-            if (assetLifecycleService) {
-                assetLifecycleService->update(deltaTime);
-            }
-
-            if (pluginManager) {
-                pluginManager->updateAll(deltaTime);
-            }
+            frameTaskGraph->execute();
         });
 
         // Post-update callback runs AFTER scene graph update (WorldTransformComponent is valid)
@@ -208,6 +161,11 @@ namespace handlers {
     }
 
     void RuntimeHandler::cleanUp() {
+        if (frameTaskGraph) {
+            frameTaskGraph->unregisterEventHandlers();
+            frameTaskGraph.reset();
+        }
+
         pluginManager.reset();
 
         cleanupEventSubscriptions();
@@ -475,6 +433,98 @@ namespace handlers {
         if (resizeSubscription.isValid()) {
             dispatcher.unsubscribe(resizeSubscription);
             resizeSubscription = {};
+        }
+    }
+
+    void RuntimeHandler::buildFrameTaskGraph()
+    {
+        frameTaskGraph = std::make_unique<services::FrameTaskGraph>();
+
+        // Runtime is always in play mode - all tasks are unconditional
+
+        frameTaskGraph->addTask("Scene", [this]() {
+            if (sceneService) sceneService->update();
+        });
+
+        frameTaskGraph->addTask("Input", [this]() {
+            if (inputService) inputService->update();
+        });
+
+        frameTaskGraph->addTask("WindowState", [this]() {
+            if (windowStateService) windowStateService->update();
+        });
+
+        frameTaskGraph->addTask("Physics", [this]() {
+            if (physicsPlayModeHandler) {
+                float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
+                physicsPlayModeHandler->update(dt);
+            }
+        });
+
+        frameTaskGraph->addTask("Scripts", [this]() {
+            if (scriptingService) {
+                float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
+                scriptingService->updateScripts(dt);
+            }
+        });
+
+        frameTaskGraph->addTask("Controllers", [this]() {
+            if (controllerService) {
+                float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
+                controllerService->applyControllerMovement(dt);
+            }
+        });
+
+        frameTaskGraph->addTask("BehaviorTrees", [this]() {
+            if (behaviorTreeService) {
+                float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
+                behaviorTreeService->updateAll(dt);
+            }
+        });
+
+        frameTaskGraph->addTask("RenderTexture", [this]() {
+            if (renderTexturePlayModeHandler) {
+                float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
+                renderTexturePlayModeHandler->update(dt);
+            }
+        });
+
+        frameTaskGraph->addTask("AudioListener", [this]() {
+            if (audioSceneUpdater) {
+                audioSceneUpdater->updateListenerFromPrimaryCamera();
+            }
+        });
+
+        frameTaskGraph->addTask("WorldSector", [this]() {
+            if (worldSectorService) worldSectorService->update();
+        });
+
+        frameTaskGraph->addTask("AssetLifecycle", [this]() {
+            if (assetLifecycleService) {
+                float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
+                assetLifecycleService->update(dt);
+            }
+        });
+
+        frameTaskGraph->addTask("Plugins", [this]() {
+            if (pluginManager) {
+                float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
+                pluginManager->updateAll(dt);
+            }
+        });
+
+        // Dependencies
+        frameTaskGraph->addDependency("Physics", "Scene");
+        frameTaskGraph->addDependency("Physics", "Input");
+        frameTaskGraph->addDependency("Physics", "WindowState");
+        frameTaskGraph->addDependency("Scripts", "Physics");
+        frameTaskGraph->addDependency("Controllers", "Scripts");
+        frameTaskGraph->addDependency("BehaviorTrees", "Controllers");
+        frameTaskGraph->addDependency("RenderTexture", "Scripts");
+        frameTaskGraph->addDependency("AudioListener", "Scripts");
+
+        if (frameTaskGraph->compile()) {
+            frameTaskGraph->registerEventHandlers();
         }
     }
 

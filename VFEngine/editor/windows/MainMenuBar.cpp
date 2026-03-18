@@ -21,6 +21,7 @@
 #include "WorldSectorWindow.hpp"
 #include "VFXDebugWindow.hpp"
 #include "PluginManagerWindow.hpp"
+#include "TaskGraphWindow.hpp"
 #include "config/InputActionMappingWindow.hpp"
 #include "AnimationDebugWindow.hpp"
 #include "events/EventDispatcher.hpp"
@@ -427,6 +428,14 @@ namespace windows
                 if (lightStreamingDebugWindow)
                 {
                     lightStreamingDebugWindow->show();
+                }
+            }
+
+            if (ImGui::MenuItem("Task Graph"))
+            {
+                if (taskGraphWindow)
+                {
+                    taskGraphWindow->show();
                 }
             }
 

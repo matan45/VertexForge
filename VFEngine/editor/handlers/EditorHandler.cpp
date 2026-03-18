@@ -64,6 +64,7 @@
 #include "ExportHandler.hpp"
 #include "core/PluginManager.hpp"
 #include "resource/PathResolver.hpp"
+#include "impl/threading/FrameTaskGraph.hpp"
 #include <filesystem>
 
 namespace handlers
@@ -114,89 +115,12 @@ namespace handlers
             controllers::Import::addCustomStage(std::move(stage));
         }
 
+        // Build the frame task graph with dependency-based parallel execution
+        buildFrameTaskGraph();
+
         bootstrap->setFrameCallback([this]()
         {
-            // Process deferred scene loading before other updates
-            if (sceneService)
-            {
-                sceneService->update();
-            }
-
-            if (inputService)
-            {
-                inputService->update();
-            }
-            if (windowStateService)
-            {
-                windowStateService->update();
-            }
-
-            if (editorModeService && editorModeService->isPlayMode())
-            {
-                float deltaTime = static_cast<float>(engineTime::Timer::getDeltaTime());
-
-                // Update order is critical:
-                // 1. Physics  - steps simulation and syncs transforms to ECS
-                // 2. Scripts  - read input, set moveInput/jump/sprint on controllers
-                // 3. Controller - applies movement from scripts via physics/navmesh/transform
-                // 4. VFX      - updates particle simulations
-                // 5. Audio    - uses final camera/listener positions
-
-                if (physicsPlayModeHandler)
-                {
-                    physicsPlayModeHandler->update(deltaTime);
-                }
-
-                if (scriptingService)
-                {
-                    scriptingService->updateScripts(deltaTime);
-                }
-
-                if (controllerService)
-                {
-                    controllerService->applyControllerMovement(deltaTime);
-                }
-
-                if (behaviorTreeService)
-                {
-                    behaviorTreeService->updateAll(deltaTime);
-                }
-
-                if (vfxPlayModeHandler)
-                {
-                    vfxPlayModeHandler->update(deltaTime);
-                }
-
-                if (renderTexturePlayModeHandler)
-                {
-                    renderTexturePlayModeHandler->update(deltaTime);
-                }
-
-                if (audioSceneUpdater)
-                {
-                    audioSceneUpdater->updateListenerFromPrimaryCamera();
-                }
-            }
-
-            // Update world sector streaming (distance-based entity load/unload)
-            if (worldSectorService)
-            {
-                worldSectorService->update();
-            }
-
-            // Update asset lifecycle manager (deferred releases)
-            if (assetLifecycleService)
-            {
-                float deltaTime = static_cast<float>(engineTime::Timer::getDeltaTime());
-                assetLifecycleService->update(deltaTime);
-            }
-
-            // Update plugins every frame (regardless of play/edit mode)
-            if (pluginManager)
-            {
-                float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
-                pluginManager->updateAll(dt);
-            }
+            frameTaskGraph->execute();
         });
 
         bootstrap->setPostUpdateCallback([this]()
@@ -233,6 +157,11 @@ namespace handlers
 
     void EditorHandler::cleanUp()
     {
+        if (frameTaskGraph) {
+            frameTaskGraph->unregisterEventHandlers();
+            frameTaskGraph.reset();
+        }
+
         pluginManager.reset();
         exportHandler.reset();
 
@@ -600,6 +529,123 @@ namespace handlers
         {
             dispatcher.unsubscribe(resizeSubscription);
             resizeSubscription = {};
+        }
+    }
+
+    void EditorHandler::buildFrameTaskGraph()
+    {
+        frameTaskGraph = std::make_unique<services::FrameTaskGraph>();
+
+        // === Always-run tasks (both edit and play mode) ===
+
+        frameTaskGraph->addTask("Scene", [this]() {
+            if (sceneService) sceneService->update();
+        });
+
+        frameTaskGraph->addTask("Input", [this]() {
+            if (inputService) inputService->update();
+        });
+
+        frameTaskGraph->addTask("WindowState", [this]() {
+            if (windowStateService) windowStateService->update();
+        });
+
+        // === Play-mode simulation tasks ===
+        // These check isPlayMode() internally so the graph structure stays fixed
+
+        frameTaskGraph->addTask("Physics", [this]() {
+            if (editorModeService && editorModeService->isPlayMode() && physicsPlayModeHandler) {
+                float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
+                physicsPlayModeHandler->update(dt);
+            }
+        });
+
+        frameTaskGraph->addTask("Scripts", [this]() {
+            if (editorModeService && editorModeService->isPlayMode() && scriptingService) {
+                float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
+                scriptingService->updateScripts(dt);
+            }
+        });
+
+        frameTaskGraph->addTask("Controllers", [this]() {
+            if (editorModeService && editorModeService->isPlayMode() && controllerService) {
+                float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
+                controllerService->applyControllerMovement(dt);
+            }
+        });
+
+        frameTaskGraph->addTask("BehaviorTrees", [this]() {
+            if (editorModeService && editorModeService->isPlayMode() && behaviorTreeService) {
+                float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
+                behaviorTreeService->updateAll(dt);
+            }
+        });
+
+        frameTaskGraph->addTask("VFX", [this]() {
+            if (editorModeService && editorModeService->isPlayMode() && vfxPlayModeHandler) {
+                float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
+                vfxPlayModeHandler->update(dt);
+            }
+        });
+
+        frameTaskGraph->addTask("RenderTexture", [this]() {
+            if (editorModeService && editorModeService->isPlayMode() && renderTexturePlayModeHandler) {
+                float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
+                renderTexturePlayModeHandler->update(dt);
+            }
+        });
+
+        frameTaskGraph->addTask("AudioListener", [this]() {
+            if (editorModeService && editorModeService->isPlayMode() && audioSceneUpdater) {
+                audioSceneUpdater->updateListenerFromPrimaryCamera();
+            }
+        });
+
+        // === Independent tasks (run every frame, no play-mode gate) ===
+
+        frameTaskGraph->addTask("WorldSector", [this]() {
+            if (worldSectorService) worldSectorService->update();
+        });
+
+        frameTaskGraph->addTask("AssetLifecycle", [this]() {
+            if (assetLifecycleService) {
+                float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
+                assetLifecycleService->update(dt);
+            }
+        });
+
+        frameTaskGraph->addTask("Plugins", [this]() {
+            if (pluginManager) {
+                float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
+                pluginManager->updateAll(dt);
+            }
+        });
+
+        // === Dependencies ===
+        // Physics depends on Input and WindowState completing first
+        frameTaskGraph->addDependency("Physics", "Scene");
+        frameTaskGraph->addDependency("Physics", "Input");
+        frameTaskGraph->addDependency("Physics", "WindowState");
+
+        // Scripts must run after Physics
+        frameTaskGraph->addDependency("Scripts", "Physics");
+
+        // Controllers must run after Scripts
+        frameTaskGraph->addDependency("Controllers", "Scripts");
+
+        // BehaviorTrees run after Controllers
+        frameTaskGraph->addDependency("BehaviorTrees", "Controllers");
+
+        // VFX, RenderTexture, AudioListener can run after Scripts (independent of each other)
+        frameTaskGraph->addDependency("VFX", "Scripts");
+        frameTaskGraph->addDependency("RenderTexture", "Scripts");
+        frameTaskGraph->addDependency("AudioListener", "Scripts");
+
+        // WorldSector, AssetLifecycle, Plugins are independent (no dependencies)
+
+        // Compile and register event handlers
+        if (frameTaskGraph->compile()) {
+            frameTaskGraph->registerEventHandlers();
         }
     }
 }

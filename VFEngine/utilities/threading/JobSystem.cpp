@@ -54,6 +54,11 @@ namespace threading {
 		return pImpl->scheduler.GetNumTaskThreads();
 	}
 
+	void* JobSystem::getSchedulerPtr()
+	{
+		return &pImpl->scheduler;
+	}
+
 	void JobSystem::shutdown()
 	{
 		pImpl->scheduler.WaitforAllAndShutdown();

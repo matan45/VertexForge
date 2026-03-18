@@ -170,6 +170,7 @@
     <ClInclude Include="events\terrain\TerrainEvents.hpp" />
     <ClInclude Include="events\terrain\TerrainRaycastEvents.hpp" />
     <ClInclude Include="events\terrain\WaterEvents.hpp" />
+    <ClInclude Include="events\threading\TaskGraphEvents.hpp" />
     <ClInclude Include="events\ui\UIAnimationEvents.hpp" />
     <ClInclude Include="events\ui\UICanvasRectImageEvents.hpp" />
     <ClInclude Include="events\ui\UIDragDropEvents.hpp" />
@@ -254,6 +255,7 @@
     <ClInclude Include="impl\terrain\PaintBrushServiceImpl.hpp" />
     <ClInclude Include="impl\terrain\PaintModeServiceImpl.hpp" />
     <ClInclude Include="impl\terrain\TerrainRaycastServiceImpl.hpp" />
+    <ClInclude Include="impl\threading\FrameTaskGraph.hpp" />
     <ClInclude Include="impl\vegetation\GrassServiceImpl.hpp" />
     <ClInclude Include="impl\vegetation\VegetationBrushModeServiceImpl.hpp" />
     <ClInclude Include="impl\vegetation\VegetationBrushServiceImpl.hpp" />
@@ -430,6 +432,7 @@
     <ClCompile Include="impl\terrain\PaintBrushServiceImpl.cpp" />
     <ClCompile Include="impl\terrain\PaintModeServiceImpl.cpp" />
     <ClCompile Include="impl\terrain\TerrainRaycastServiceImpl.cpp" />
+    <ClCompile Include="impl\threading\FrameTaskGraph.cpp" />
     <ClCompile Include="impl\vegetation\GrassServiceImpl.cpp" />
     <ClCompile Include="impl\vegetation\VegetationBrushModeServiceImpl.cpp" />
     <ClCompile Include="impl\vegetation\VegetationBrushServiceImpl.cpp" />

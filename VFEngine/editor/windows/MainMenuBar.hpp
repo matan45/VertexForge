@@ -29,6 +29,7 @@ namespace windows
     class LightStreamingDebugWindow;
     class PluginManagerWindow;
     class InputActionMappingWindow;
+    class TaskGraphWindow;
     class MainMenuBar
     {
     private:
@@ -61,6 +62,7 @@ namespace windows
         LightStreamingDebugWindow* lightStreamingDebugWindow = nullptr;
         PluginManagerWindow* pluginManagerWindow = nullptr;
         InputActionMappingWindow* inputActionMappingWindow = nullptr;
+        TaskGraphWindow* taskGraphWindow = nullptr;
     public:
         MainMenuBar();
         ~MainMenuBar();
@@ -163,6 +165,11 @@ namespace windows
         void setInputActionMappingWindow(InputActionMappingWindow* window)
         {
             inputActionMappingWindow = window;
+        }
+
+        void setTaskGraphWindow(TaskGraphWindow* window)
+        {
+            taskGraphWindow = window;
         }
 
     private:
