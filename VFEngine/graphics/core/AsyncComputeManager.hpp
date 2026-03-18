@@ -2,7 +2,6 @@
 #define VULKAN_HPP_DISPATCH_LOADER_DYNAMIC 1
 #include <vulkan/vulkan.hpp>
 #include <array>
-#include <functional>
 
 namespace core
 {
@@ -22,12 +21,10 @@ namespace core
         };
         std::array<FrameResources, ASYNC_COMPUTE_FRAMES> frames;
 
-        // Timeline semaphores for cross-queue synchronization
-        vk::Semaphore computeTimeline{nullptr};  // Async compute signals when work is done
-        vk::Semaphore graphicsTimeline{nullptr};  // Graphics signals when uploads are done
-
+        // Timeline semaphore: async compute signals when work is done
+        // Graphics queue waits on this before fragment shading
+        vk::Semaphore computeTimeline{nullptr};
         uint64_t computeTimelineValue = 0;
-        uint64_t graphicsTimelineValue = 0;
 
         bool enabled = false;
 
@@ -43,20 +40,12 @@ namespace core
         // Begin recording async compute commands for this frame
         vk::CommandBuffer beginFrame(uint32_t frameIndex);
 
-        // End recording and submit async compute work
-        // Waits on graphicsTimeline at waitGraphicsValue before executing
+        // End recording and submit async compute work (no wait — runs immediately)
         void submitComputeWork(uint32_t frameIndex);
-
-        // Called by graphics queue after uploads are done
-        // Returns the timeline value that was signaled
-        uint64_t signalGraphicsReady();
 
         // Get sync info for graphics submit (waits on async compute completion)
         vk::Semaphore getComputeTimelineSemaphore() const { return computeTimeline; }
         uint64_t getComputeWaitValue() const { return computeTimelineValue; }
-
-        vk::Semaphore getGraphicsTimelineSemaphore() const { return graphicsTimeline; }
-        uint64_t getGraphicsWaitValue() const { return graphicsTimelineValue; }
 
         // Wait for async compute from CPU (used during resize/cleanup)
         void waitIdle();

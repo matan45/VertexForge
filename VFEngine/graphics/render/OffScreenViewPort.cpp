@@ -78,11 +78,9 @@ namespace render
 
         uint32_t currentFrame = imageIndex % core::MAX_FRAMES_IN_FLIGHT;
 
-        // Submit async compute work before graphics
+        // Submit async compute work before graphics (runs immediately, no waits)
         if (useAsyncCompute)
         {
-            asyncComputeManager->signalGraphicsReady();
-
             vk::CommandBuffer asyncCmd = asyncComputeManager->beginFrame(currentFrame);
             renderPassHandler->recordAsyncCompute(asyncCmd);
             asyncComputeManager->submitComputeWork(currentFrame);
@@ -99,28 +97,24 @@ namespace render
 
         if (useAsyncCompute)
         {
-            // Graphics submit waits on async compute completion
+            // Graphics submit waits on async compute completion before fragment shading
             std::array<vk::Semaphore, 1> waitSemaphores = {
                 asyncComputeManager->getComputeTimelineSemaphore()
             };
             std::array<vk::PipelineStageFlags, 1> waitStages = {
-                vk::PipelineStageFlagBits::eFragmentShader
+                vk::PipelineStageFlagBits::eFragmentShader |
+                vk::PipelineStageFlagBits::eComputeShader |
+                vk::PipelineStageFlagBits::eTaskShaderEXT
             };
             std::array<uint64_t, 1> waitValues = {
                 asyncComputeManager->getComputeWaitValue()
-            };
-            std::array<uint64_t, 1> signalValues = {
-                asyncComputeManager->getGraphicsWaitValue()
-            };
-            std::array<vk::Semaphore, 1> signalSemaphores = {
-                asyncComputeManager->getGraphicsTimelineSemaphore()
             };
 
             vk::TimelineSemaphoreSubmitInfo timelineInfo{};
             timelineInfo.waitSemaphoreValueCount = static_cast<uint32_t>(waitValues.size());
             timelineInfo.pWaitSemaphoreValues = waitValues.data();
-            timelineInfo.signalSemaphoreValueCount = static_cast<uint32_t>(signalValues.size());
-            timelineInfo.pSignalSemaphoreValues = signalValues.data();
+            timelineInfo.signalSemaphoreValueCount = 0;
+            timelineInfo.pSignalSemaphoreValues = nullptr;
 
             vk::SubmitInfo submitInfo{};
             submitInfo.pNext = &timelineInfo;
@@ -129,8 +123,8 @@ namespace render
             submitInfo.pWaitDstStageMask = waitStages.data();
             submitInfo.commandBufferCount = 1;
             submitInfo.pCommandBuffers = &commandBuffer;
-            submitInfo.signalSemaphoreCount = static_cast<uint32_t>(signalSemaphores.size());
-            submitInfo.pSignalSemaphores = signalSemaphores.data();
+            submitInfo.signalSemaphoreCount = 0;
+            submitInfo.pSignalSemaphores = nullptr;
 
             device.getGraphicsQueue().submit(submitInfo, inFlightFences[imageIndex]);
         }

@@ -58,7 +58,7 @@ namespace core
             }
         }
 
-        // Create timeline semaphores
+        // Create timeline semaphore for compute→graphics synchronization
         vk::SemaphoreTypeCreateInfo timelineCreateInfo{};
         timelineCreateInfo.semaphoreType = vk::SemaphoreType::eTimeline;
         timelineCreateInfo.initialValue = 0;
@@ -69,11 +69,10 @@ namespace core
         try
         {
             computeTimeline = device.getLogicalDevice().createSemaphore(semaphoreInfo);
-            graphicsTimeline = device.getLogicalDevice().createSemaphore(semaphoreInfo);
         }
         catch (const vk::SystemError& err)
         {
-            vfLogError("Failed to create timeline semaphores: {}", err.what());
+            vfLogError("Failed to create timeline semaphore: {}", err.what());
             enabled = false;
             return;
         }
@@ -99,11 +98,6 @@ namespace core
             device.getLogicalDevice().destroySemaphore(computeTimeline);
             computeTimeline = nullptr;
         }
-        if (graphicsTimeline)
-        {
-            device.getLogicalDevice().destroySemaphore(graphicsTimeline);
-            graphicsTimeline = nullptr;
-        }
 
         enabled = false;
     }
@@ -128,26 +122,22 @@ namespace core
 
         computeTimelineValue++;
 
-        // Build timeline semaphore submit info
-        // Wait on graphicsTimeline (uploads done), signal computeTimeline (compute done)
-        std::array<vk::Semaphore, 1> waitSemaphores = {graphicsTimeline};
-        std::array<uint64_t, 1> waitValues = {graphicsTimelineValue};
-        std::array<vk::PipelineStageFlags, 1> waitStages = {vk::PipelineStageFlagBits::eComputeShader};
-
+        // No wait semaphores — async compute runs immediately using
+        // CPU-set uniform data and previous-frame GPU buffers
         std::array<vk::Semaphore, 1> signalSemaphores = {computeTimeline};
         std::array<uint64_t, 1> signalValues = {computeTimelineValue};
 
         vk::TimelineSemaphoreSubmitInfo timelineInfo{};
-        timelineInfo.waitSemaphoreValueCount = static_cast<uint32_t>(waitValues.size());
-        timelineInfo.pWaitSemaphoreValues = waitValues.data();
+        timelineInfo.waitSemaphoreValueCount = 0;
+        timelineInfo.pWaitSemaphoreValues = nullptr;
         timelineInfo.signalSemaphoreValueCount = static_cast<uint32_t>(signalValues.size());
         timelineInfo.pSignalSemaphoreValues = signalValues.data();
 
         vk::SubmitInfo submitInfo{};
         submitInfo.pNext = &timelineInfo;
-        submitInfo.waitSemaphoreCount = static_cast<uint32_t>(waitSemaphores.size());
-        submitInfo.pWaitSemaphores = waitSemaphores.data();
-        submitInfo.pWaitDstStageMask = waitStages.data();
+        submitInfo.waitSemaphoreCount = 0;
+        submitInfo.pWaitSemaphores = nullptr;
+        submitInfo.pWaitDstStageMask = nullptr;
         submitInfo.commandBufferCount = 1;
         vk::CommandBuffer cmd = frame.commandBuffer.get();
         submitInfo.pCommandBuffers = &cmd;
@@ -155,12 +145,6 @@ namespace core
         submitInfo.pSignalSemaphores = signalSemaphores.data();
 
         device.getAsyncComputeQueue().submit(submitInfo);
-    }
-
-    uint64_t AsyncComputeManager::signalGraphicsReady()
-    {
-        graphicsTimelineValue++;
-        return graphicsTimelineValue;
     }
 
     void AsyncComputeManager::waitIdle()
