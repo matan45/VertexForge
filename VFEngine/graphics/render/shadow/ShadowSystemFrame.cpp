@@ -1,4 +1,6 @@
 #include "ShadowSystem.hpp"
+#include "../../core/RenderManager.hpp"
+#include "../../core/ThreadCommandPoolManager.hpp"
 #include "CascadeShadowCalculator.hpp"
 #include "PointShadowCalculator.hpp"
 #include "SpotShadowCalculator.hpp"
@@ -613,10 +615,27 @@ namespace render::shadow
         if (!passRecorder)
             return;
 
-        passRecorder->recordShadowPass(cmd, params, terrainParams,
-            tilePool.get(), resourcePool.get(),
-            shadowPassPipeline.get(), terrainShadowPipeline.get(),
-            pageRenderList, lightShadowData, shadowsEnabled, poolFirstUse);
+        // Use parallel recording when enough tiles to justify thread overhead
+        constexpr uint32_t PARALLEL_TILE_THRESHOLD = 5;
+        uint32_t frameIndex = core::RenderManager::getImageIndex();
+
+        if (threadPoolManager && threadPoolManager->getThreadCount() > 1 &&
+            pageRenderList.size() >= PARALLEL_TILE_THRESHOLD)
+        {
+            threadPoolManager->resetFrame(frameIndex);
+            passRecorder->recordShadowPassParallel(cmd, params, terrainParams,
+                tilePool.get(), resourcePool.get(),
+                shadowPassPipeline.get(), terrainShadowPipeline.get(),
+                pageRenderList, lightShadowData, shadowsEnabled, poolFirstUse,
+                threadPoolManager.get(), frameIndex);
+        }
+        else
+        {
+            passRecorder->recordShadowPass(cmd, params, terrainParams,
+                tilePool.get(), resourcePool.get(),
+                shadowPassPipeline.get(), terrainShadowPipeline.get(),
+                pageRenderList, lightShadowData, shadowsEnabled, poolFirstUse);
+        }
 
         if (shadowsEnabled)
             poolFirstUse = false;

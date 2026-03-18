@@ -9,6 +9,7 @@
 namespace core
 {
     class Device;
+    class ThreadCommandPoolManager;
 }
 
 namespace render::shadow
@@ -68,6 +69,22 @@ namespace render::shadow
             std::unordered_map<uint32_t, LightShadowData>& lightShadowData,
             bool shadowsEnabled,
             bool poolFirstUse);
+
+        // Parallel version: records VSM tiles across worker threads using secondary command buffers
+        void recordShadowPassParallel(
+            vk::CommandBuffer primaryCmd,
+            const ShadowPassParams& params,
+            const TerrainShadowPassParams* terrainParams,
+            VSMPhysicalTilePool* tilePool,
+            ShadowResourcePool* resourcePool,
+            ShadowPassPipeline* shadowPassPipeline,
+            TerrainShadowPipeline* terrainShadowPipeline,
+            const std::vector<PageRenderEntry>& pageRenderList,
+            std::unordered_map<uint32_t, LightShadowData>& lightShadowData,
+            bool shadowsEnabled,
+            bool poolFirstUse,
+            core::ThreadCommandPoolManager* threadPoolManager,
+            uint32_t frameIndex);
 
     private:
         void renderPointLightCubeShadows(

@@ -27,6 +27,7 @@ namespace core
     class Device;
     class SwapChain;
     class DeferredDeletionQueue;
+    class ThreadCommandPoolManager;
 }
 
 namespace render::gpudriven
@@ -169,6 +170,8 @@ namespace render
 
         bool gpuDrivenRendererInitialized = false;
         bool asyncComputeActive = false;
+        bool parallelSceneRecording = false;
+        core::ThreadCommandPoolManager* sceneThreadPoolManager = nullptr;
         glm::vec3 currentCameraPosition{0.0f};
         float currentNearPlane = 0.1f;
         float currentFarPlane = 1000.0f;
@@ -277,6 +280,11 @@ namespace render
         gpudriven::GPUDrivenRenderer* getGPUDrivenRenderer() const { return gpuDrivenRenderer.get(); }
         bool isGPUDrivenRendererInitialized() const { return gpuDrivenRendererInitialized; }
         void setAsyncComputeActive(bool active) { asyncComputeActive = active; }
+        void setParallelSceneRecording(bool enabled, core::ThreadCommandPoolManager* poolManager = nullptr)
+        {
+            parallelSceneRecording = enabled;
+            sceneThreadPoolManager = poolManager;
+        }
 
         // Record all async-eligible compute work into the given command buffer
         // (light culling, grass, GI, atmosphere, clouds, VFX, ocean FFT)

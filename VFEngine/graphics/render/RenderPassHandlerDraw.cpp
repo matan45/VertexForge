@@ -3,6 +3,8 @@
 #include "decal/DecalPipeline.hpp"
 #include "../core/SwapChain.hpp"
 #include "../core/Device.hpp"
+#include "../core/ThreadCommandPoolManager.hpp"
+#include "../core/RenderManager.hpp"
 #include "ClearColor.hpp"
 #include "IBL.hpp"
 #include "DebugRenderer.hpp"
@@ -31,6 +33,7 @@
 #include "water/WaterTile.hpp"
 #include "water/OceanFFT.hpp"
 #include "vegetation/WindConfig.hpp"
+#include "threading/JobSystem.hpp"
 
 namespace
 {
@@ -418,68 +421,236 @@ namespace render
         }
 
         vk::DescriptorSet iblDescriptorSet = meshPipeline->getIBLDescriptorSet(imageIndex);
-        meshPipeline->beginRenderPass(commandBuffer, imageIndex);
 
-        auto extent = swapChain.getSwapchainExtent();
-        vk::Viewport viewport{0.0f, 0.0f,
-                               static_cast<float>(extent.width), static_cast<float>(extent.height),
-                               0.0f, 1.0f};
-        commandBuffer.setViewport(0, viewport);
-        vk::Rect2D scissor{{0, 0}, extent};
-        commandBuffer.setScissor(0, scissor);
+        bool useParallel = parallelSceneRecording && sceneThreadPoolManager &&
+                           sceneThreadPoolManager->getThreadCount() > 1;
 
-        gpuDrivenRenderer->renderDraw(commandBuffer, iblDescriptorSet);
-
-        bool useWBOIT = wboitEnabled && wboitPipeline && wboitPipeline->isInitialized()
-                        && gpuDrivenRenderer->isWBOITReady();
-        if (!useWBOIT)
+        if (useParallel)
         {
-            gpuDrivenRenderer->renderTransparentDraw(commandBuffer, iblDescriptorSet);
+            // Parallel path: record independent draw groups on worker threads
+            uint32_t frameIndex = core::RenderManager::getImageIndex();
+            sceneThreadPoolManager->resetFrame(frameIndex);
+
+            vk::RenderPass rp = meshPipeline->getRenderPass();
+            vk::Framebuffer fb = meshPipeline->getFramebuffer(imageIndex);
+            auto extent = swapChain.getSwapchainExtent();
+
+            auto setupSecondary = [&](vk::CommandBuffer sec) {
+                vk::CommandBufferInheritanceInfo inheritance{};
+                inheritance.renderPass = rp;
+                inheritance.subpass = 0;
+                inheritance.framebuffer = fb;
+
+                vk::CommandBufferBeginInfo beginInfo{};
+                beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit |
+                                  vk::CommandBufferUsageFlagBits::eRenderPassContinue;
+                beginInfo.pInheritanceInfo = &inheritance;
+                sec.begin(beginInfo);
+
+                vk::Viewport viewport{0.0f, 0.0f,
+                    static_cast<float>(extent.width), static_cast<float>(extent.height),
+                    0.0f, 1.0f};
+                sec.setViewport(0, viewport);
+                vk::Rect2D scissor{{0, 0}, extent};
+                sec.setScissor(0, scissor);
+            };
+
+            bool useWBOIT = wboitEnabled && wboitPipeline && wboitPipeline->isInitialized()
+                            && gpuDrivenRenderer->isWBOITReady();
+            bool hasTerrain = gpuDrivenRenderer->isTerrainRenderingEnabled();
+            bool hasGrass = gpuDrivenRenderer->isGrassRenderingEnabled();
+            bool hasWater = gpuDrivenRenderer->isWaterRenderingEnabled();
+            bool hasBillboards = gpuDrivenRenderer->isBillboardRenderingEnabled();
+
+            // Determine how many secondary buffers we need
+            // Thread 0: opaque + transparent + blend (main mesh draws)
+            // Thread 1: terrain (if enabled)
+            // Thread 2: grass (if enabled)
+            // Thread 3: water + billboards (if enabled)
+            struct SecondaryTask {
+                uint32_t threadIdx;
+                vk::CommandBuffer cmd{nullptr};
+                bool used = false;
+            };
+
+            SecondaryTask meshTask{0};
+            SecondaryTask terrainTask{1};
+            SecondaryTask grassTask{2};
+            SecondaryTask waterTask{3};
+
+            // Submit parallel jobs for independent draw groups
+            auto meshFuture = threading::JobSystem::instance().submit([&]() {
+                meshTask.cmd = sceneThreadPoolManager->getSecondary(0, frameIndex);
+                setupSecondary(meshTask.cmd);
+                gpuDrivenRenderer->renderDraw(meshTask.cmd, iblDescriptorSet);
+                if (!useWBOIT) gpuDrivenRenderer->renderTransparentDraw(meshTask.cmd, iblDescriptorSet);
+                gpuDrivenRenderer->renderBlendDraw(meshTask.cmd, iblDescriptorSet);
+                meshTask.cmd.end();
+                meshTask.used = true;
+            }, threading::JobPriority::HIGH);
+
+            std::future<void> terrainFuture;
+            if (hasTerrain)
+            {
+                terrainFuture = threading::JobSystem::instance().submit([&]() {
+                    terrainTask.cmd = sceneThreadPoolManager->getSecondary(1, frameIndex);
+                    setupSecondary(terrainTask.cmd);
+                    gpuDrivenRenderer->renderTerrainDraw(terrainTask.cmd, iblDescriptorSet);
+                    terrainTask.cmd.end();
+                    terrainTask.used = true;
+                }, threading::JobPriority::HIGH);
+            }
+
+            std::future<void> grassFuture;
+            if (hasGrass)
+            {
+                grassFuture = threading::JobSystem::instance().submit([&]() {
+                    grassTask.cmd = sceneThreadPoolManager->getSecondary(2, frameIndex);
+                    setupSecondary(grassTask.cmd);
+                    gpuDrivenRenderer->renderGrassDraw(grassTask.cmd, iblDescriptorSet);
+                    grassTask.cmd.end();
+                    grassTask.used = true;
+                }, threading::JobPriority::HIGH);
+            }
+
+            std::future<void> waterFuture;
+            if (hasWater || hasBillboards)
+            {
+                waterFuture = threading::JobSystem::instance().submit([&]() {
+                    waterTask.cmd = sceneThreadPoolManager->getSecondary(3, frameIndex);
+                    setupSecondary(waterTask.cmd);
+                    if (hasWater) gpuDrivenRenderer->renderWaterDraw(waterTask.cmd, iblDescriptorSet);
+                    if (hasBillboards) gpuDrivenRenderer->renderBillboardDraw(waterTask.cmd, iblDescriptorSet);
+                    waterTask.cmd.end();
+                    waterTask.used = true;
+                }, threading::JobPriority::HIGH);
+            }
+
+            // Wait for all parallel recordings to complete
+            meshFuture.get();
+            if (terrainFuture.valid()) terrainFuture.get();
+            if (grassFuture.valid()) grassFuture.get();
+            if (waterFuture.valid()) waterFuture.get();
+
+            // Begin render pass with secondary buffer support and execute
+            meshPipeline->beginRenderPassForSecondary(commandBuffer, imageIndex);
+
+            std::vector<vk::CommandBuffer> secondaries;
+            secondaries.reserve(4);
+            if (meshTask.used) secondaries.push_back(meshTask.cmd);
+            if (terrainTask.used) secondaries.push_back(terrainTask.cmd);
+            if (grassTask.used) secondaries.push_back(grassTask.cmd);
+            if (waterTask.used) secondaries.push_back(waterTask.cmd);
+
+            if (!secondaries.empty())
+            {
+                commandBuffer.executeCommands(
+                    static_cast<uint32_t>(secondaries.size()),
+                    secondaries.data()
+                );
+            }
+
+            // Custom shaders, GI debug, debug renderer need inline — end secondary pass first
+            meshPipeline->endRenderPass(commandBuffer);
+
+            // Record remaining items inline in a new render pass (eLoad to preserve)
+            if (hasCustomShaderMeshes || debugRendererPtr || gpuDrivenRenderer)
+            {
+                bool needsInlinePass = hasCustomShaderMeshes ||
+                    (gpuDrivenRenderer && gpuDrivenRenderer->getGISettings().showProbes) ||
+                    (debugRendererPtr && debugRendererPtr->hasItemsToRender());
+
+                if (needsInlinePass)
+                {
+                    meshPipeline->beginRenderPass(commandBuffer, imageIndex);
+
+                    vk::Viewport vp{0.0f, 0.0f,
+                        static_cast<float>(extent.width), static_cast<float>(extent.height),
+                        0.0f, 1.0f};
+                    commandBuffer.setViewport(0, vp);
+                    vk::Rect2D sc{{0, 0}, extent};
+                    commandBuffer.setScissor(0, sc);
+
+                    if (hasCustomShaderMeshes)
+                    {
+                        meshPipeline->renderMeshList(commandBuffer, imageIndex, customShaderMeshDrawList, currentFrustum);
+                    }
+                    gpuDrivenRenderer->renderGIDebug(commandBuffer, currentProjection * currentView);
+                    if (debugRendererPtr)
+                    {
+                        debugRendererPtr->render(commandBuffer, combinedMeshDrawList, currentView, currentProjection,
+                            [this](const std::string& meshId) { return meshPipeline->getMesh(meshId); });
+                    }
+
+                    meshPipeline->endRenderPass(commandBuffer);
+                }
+            }
         }
-
-        // Additive/Multiply always drawn in main pass (commutative, don't need OIT)
-        gpuDrivenRenderer->renderBlendDraw(commandBuffer, iblDescriptorSet);
-
-        if (gpuDrivenRenderer->isTerrainRenderingEnabled())
+        else
         {
-            gpuDrivenRenderer->renderTerrainDraw(commandBuffer, iblDescriptorSet);
-        }
+            // Original inline path
+            meshPipeline->beginRenderPass(commandBuffer, imageIndex);
 
-        if (gpuDrivenRenderer->isGrassRenderingEnabled())
-        {
-            gpuDrivenRenderer->renderGrassDraw(commandBuffer, iblDescriptorSet);
-        }
+            auto extent = swapChain.getSwapchainExtent();
+            vk::Viewport viewport{0.0f, 0.0f,
+                                   static_cast<float>(extent.width), static_cast<float>(extent.height),
+                                   0.0f, 1.0f};
+            commandBuffer.setViewport(0, viewport);
+            vk::Rect2D scissor{{0, 0}, extent};
+            commandBuffer.setScissor(0, scissor);
 
-        if (gpuDrivenRenderer->isWaterRenderingEnabled())
-        {
-            gpuDrivenRenderer->renderWaterDraw(commandBuffer, iblDescriptorSet);
-        }
+            gpuDrivenRenderer->renderDraw(commandBuffer, iblDescriptorSet);
 
-        if (gpuDrivenRenderer->isBillboardRenderingEnabled())
-        {
-            gpuDrivenRenderer->renderBillboardDraw(commandBuffer, iblDescriptorSet);
-        }
+            bool useWBOIT = wboitEnabled && wboitPipeline && wboitPipeline->isInitialized()
+                            && gpuDrivenRenderer->isWBOITReady();
+            if (!useWBOIT)
+            {
+                gpuDrivenRenderer->renderTransparentDraw(commandBuffer, iblDescriptorSet);
+            }
 
-        if (hasCustomShaderMeshes)
-        {
-            meshPipeline->renderMeshList(commandBuffer, imageIndex, customShaderMeshDrawList, currentFrustum);
-        }
+            gpuDrivenRenderer->renderBlendDraw(commandBuffer, iblDescriptorSet);
 
-        if (gpuDrivenRenderer)
-        {
-            gpuDrivenRenderer->renderGIDebug(commandBuffer, currentProjection * currentView);
-        }
+            if (gpuDrivenRenderer->isTerrainRenderingEnabled())
+            {
+                gpuDrivenRenderer->renderTerrainDraw(commandBuffer, iblDescriptorSet);
+            }
 
-        if (debugRendererPtr)
-        {
-            debugRendererPtr->render(commandBuffer, combinedMeshDrawList, currentView, currentProjection,
-                                     [this](const std::string& meshId)
-                                     {
-                                         return meshPipeline->getMesh(meshId);
-                                     });
-        }
+            if (gpuDrivenRenderer->isGrassRenderingEnabled())
+            {
+                gpuDrivenRenderer->renderGrassDraw(commandBuffer, iblDescriptorSet);
+            }
 
-        meshPipeline->endRenderPass(commandBuffer);
+            if (gpuDrivenRenderer->isWaterRenderingEnabled())
+            {
+                gpuDrivenRenderer->renderWaterDraw(commandBuffer, iblDescriptorSet);
+            }
+
+            if (gpuDrivenRenderer->isBillboardRenderingEnabled())
+            {
+                gpuDrivenRenderer->renderBillboardDraw(commandBuffer, iblDescriptorSet);
+            }
+
+            if (hasCustomShaderMeshes)
+            {
+                meshPipeline->renderMeshList(commandBuffer, imageIndex, customShaderMeshDrawList, currentFrustum);
+            }
+
+            if (gpuDrivenRenderer)
+            {
+                gpuDrivenRenderer->renderGIDebug(commandBuffer, currentProjection * currentView);
+            }
+
+            if (debugRendererPtr)
+            {
+                debugRendererPtr->render(commandBuffer, combinedMeshDrawList, currentView, currentProjection,
+                                         [this](const std::string& meshId)
+                                         {
+                                             return meshPipeline->getMesh(meshId);
+                                         });
+            }
+
+            meshPipeline->endRenderPass(commandBuffer);
+        }
 
         // Decal pass: project decals onto scene geometry
         if (decalRenderingEnabled && decalPipeline && decalPipeline->isInitialized() && decalPipeline->hasDecals())
@@ -488,7 +659,9 @@ namespace render
             decalPipeline->render(commandBuffer, imageIndex);
         }
 
-        if (useWBOIT && gpuDrivenRenderer->hasTransparentObjects())
+        bool wboitActive = wboitEnabled && wboitPipeline && wboitPipeline->isInitialized()
+                           && gpuDrivenRenderer->isWBOITReady();
+        if (wboitActive && gpuDrivenRenderer->hasTransparentObjects())
         {
             wboitPipeline->beginWBOITPass(commandBuffer, imageIndex);
             gpuDrivenRenderer->renderWBOITDraw(commandBuffer, iblDescriptorSet);

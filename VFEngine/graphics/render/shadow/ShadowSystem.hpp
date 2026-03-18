@@ -21,6 +21,7 @@ namespace core
 {
     class Device;
     class DeferredDeletionQueue;
+    class ThreadCommandPoolManager;
 }
 
 namespace render
@@ -47,6 +48,7 @@ namespace render
             std::unique_ptr<ShadowGPUDataManager> gpuDataManager;
             std::unique_ptr<ShadowPassRecorder> passRecorder;
             std::unique_ptr<VSMFeedbackPipeline> feedbackPipeline;
+            std::unique_ptr<core::ThreadCommandPoolManager> threadPoolManager;
 
             // Feedback state
             std::vector<uint32_t> prevFrameFeedback;

@@ -3,7 +3,9 @@
 #include "../render/gpudriven/brush/BrushComputePipeline.hpp"
 #include "../core/VulkanContext.hpp"
 #include "../core/AsyncComputeManager.hpp"
+#include "../core/ThreadCommandPoolManager.hpp"
 #include "../render/OffScreenViewPort.hpp"
+#include "threading/JobSystem.hpp"
 #include "../render/RenderPassHandler.hpp"
 #include "../render/billboard/BillboardPipeline.hpp"
 #include "offscreen/IBLController.hpp"
@@ -63,7 +65,16 @@ namespace controllers
         // Wire async compute to the viewport
         offScreen->setAsyncComputeManager(asyncComputeManager.get());
 
+        // Initialize per-thread command pools for parallel scene recording
+        // Need at least 4 threads for mesh/terrain/grass/water parallel groups
+        sceneThreadPoolManager = std::make_unique<core::ThreadCommandPoolManager>();
+        uint32_t sceneThreads = std::max(4u, threading::JobSystem::instance().getThreadCount());
+        sceneThreadPoolManager->init(device, sceneThreads);
+
         auto* renderHandler = offScreen->getRenderPassHandler();
+
+        // Enable parallel scene recording
+        renderHandler->setParallelSceneRecording(true, sceneThreadPoolManager.get());
 
         iblController = std::make_unique<offscreen::IBLController>(*renderHandler);
         meshAssetManager = std::make_unique<offscreen::MeshAssetManager>(*renderHandler);
@@ -181,6 +192,12 @@ namespace controllers
         }
 
         offScreen->cleanUp();
+
+        if (sceneThreadPoolManager)
+        {
+            sceneThreadPoolManager->cleanUp();
+            sceneThreadPoolManager.reset();
+        }
 
         if (asyncComputeManager)
         {

@@ -151,6 +151,7 @@
     <ClInclude Include="core\Shader.hpp" />
     <ClInclude Include="core\SwapChain.hpp" />
     <ClInclude Include="core\Texture.hpp" />
+    <ClInclude Include="core\ThreadCommandPoolManager.hpp" />
     <ClInclude Include="core\TransferManager.hpp" />
     <ClInclude Include="core\Utilities.hpp" />
     <ClInclude Include="core\VulkanContext.hpp" />
@@ -389,6 +390,7 @@
     <ClCompile Include="core\Shader.cpp" />
     <ClCompile Include="core\SwapChain.cpp" />
     <ClCompile Include="core\Texture.cpp" />
+    <ClCompile Include="core\ThreadCommandPoolManager.cpp" />
     <ClCompile Include="core\TransferManager.cpp" />
     <ClCompile Include="core\Utilities.cpp" />
     <ClCompile Include="core\VulkanContext.cpp" />

@@ -1,0 +1,93 @@
+#include "ThreadCommandPoolManager.hpp"
+#include "Device.hpp"
+#include "print/Log.hpp"
+
+namespace core
+{
+    void ThreadCommandPoolManager::init(Device& dev, uint32_t numThreads)
+    {
+        device = &dev;
+        threadCount = numThreads;
+
+        if (threadCount == 0)
+        {
+            vfLogWarning("ThreadCommandPoolManager: threadCount is 0, no pools created");
+            return;
+        }
+
+        uint32_t queueFamily = device->getQueueFamilyIndices().graphicsAndComputeFamily.value();
+
+        threadPools.resize(threadCount);
+
+        for (uint32_t t = 0; t < threadCount; t++)
+        {
+            vk::CommandPoolCreateInfo poolInfo{};
+            poolInfo.queueFamilyIndex = queueFamily;
+            poolInfo.flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer |
+                             vk::CommandPoolCreateFlagBits::eTransient;
+
+            try
+            {
+                threadPools[t].commandPool = device->getLogicalDevice().createCommandPoolUnique(poolInfo);
+            }
+            catch (const vk::SystemError& err)
+            {
+                vfLogError("Failed to create thread command pool {}: {}", t, err.what());
+                return;
+            }
+
+            // Allocate secondary command buffers (one per frame-in-flight)
+            vk::CommandBufferAllocateInfo allocInfo{};
+            allocInfo.commandPool = threadPools[t].commandPool.get();
+            allocInfo.level = vk::CommandBufferLevel::eSecondary;
+            allocInfo.commandBufferCount = THREAD_POOL_FRAMES;
+
+            try
+            {
+                auto buffers = device->getLogicalDevice().allocateCommandBuffersUnique(allocInfo);
+                for (uint32_t f = 0; f < THREAD_POOL_FRAMES; f++)
+                {
+                    threadPools[t].secondaryBuffers[f] = std::move(buffers[f]);
+                }
+            }
+            catch (const vk::SystemError& err)
+            {
+                vfLogError("Failed to allocate secondary command buffers for thread {}: {}", t, err.what());
+                return;
+            }
+        }
+
+        vfLogInfo("ThreadCommandPoolManager initialized: {} threads, {} frames", threadCount, THREAD_POOL_FRAMES);
+    }
+
+    void ThreadCommandPoolManager::cleanUp()
+    {
+        for (auto& pool : threadPools)
+        {
+            for (auto& buf : pool.secondaryBuffers)
+            {
+                buf.reset();
+            }
+            pool.commandPool.reset();
+        }
+        threadPools.clear();
+        threadCount = 0;
+    }
+
+    void ThreadCommandPoolManager::resetFrame(uint32_t frameIndex)
+    {
+        uint32_t fi = frameIndex % THREAD_POOL_FRAMES;
+
+        for (uint32_t t = 0; t < threadCount; t++)
+        {
+            // Reset individual secondary buffers for this frame
+            threadPools[t].secondaryBuffers[fi]->reset(vk::CommandBufferResetFlagBits::eReleaseResources);
+        }
+    }
+
+    vk::CommandBuffer ThreadCommandPoolManager::getSecondary(uint32_t threadNum, uint32_t frameIndex)
+    {
+        uint32_t fi = frameIndex % THREAD_POOL_FRAMES;
+        return threadPools[threadNum].secondaryBuffers[fi].get();
+    }
+}
