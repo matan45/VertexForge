@@ -273,8 +273,17 @@ namespace services
             reparentCmd.newParent = groupEntity;
             dispatcher.execute(reparentCmd);
 
+            // Compute local position relative to the group entity's sector center
+            int32_t sx = static_cast<int32_t>(std::floor(candidatePos.x / sectorSize));
+            int32_t sz = static_cast<int32_t>(std::floor(candidatePos.z / sectorSize));
+            glm::vec3 sectorCenter(
+                (static_cast<float>(sx) + 0.5f) * sectorSize,
+                0.0f,
+                (static_cast<float>(sz) + 0.5f) * sectorSize
+            );
+
             TransformData transform;
-            transform.position = candidatePos;
+            transform.position = candidatePos - sectorCenter;
             transform.rotation = rotation;
             transform.scale = glm::vec3(scale);
             events::scene::SetTransformCommand transformCmd;
@@ -408,6 +417,18 @@ namespace services
         events::scene::CreateEntityCommand createCmd;
         createCmd.name = entityName;
         auto entity = dispatcher.execute(createCmd);
+
+        // Position the group entity at the center of its sector in world space
+        TransformData groupTransform;
+        groupTransform.position = glm::vec3(
+            (static_cast<float>(sx) + 0.5f) * sectorSize,
+            0.0f,
+            (static_cast<float>(sz) + 0.5f) * sectorSize
+        );
+        events::scene::SetTransformCommand transformCmd;
+        transformCmd.entity = entity;
+        transformCmd.transform = groupTransform;
+        dispatcher.execute(transformCmd);
 
         groupEntities[key] = entity;
         return entity;

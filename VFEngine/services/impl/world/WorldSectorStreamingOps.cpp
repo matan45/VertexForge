@@ -43,6 +43,7 @@ namespace services
         if (isPlayMode)
         {
             glm::vec3 cameraPos = getPrimaryCameraPosition();
+            
             streamer.update(cameraPos, sectorManager, streamingActions);
 
             for (const auto& action : streamingActions)
@@ -95,21 +96,43 @@ namespace services
                     }
                 }
 
-                // Register sector mesh objects for GPU streaming
+                // Register sector mesh objects for GPU streaming (including sub-entities)
                 {
                     auto& registry = scene::EntityRegistry::getRegistry();
                     std::vector<std::pair<uint64_t, entt::entity>> meshEntities;
+
+                    auto collectMeshEntities = [&](auto&& self, entt::entity ent) -> void
+                    {
+                        if (ent == entt::null || !registry.valid(ent)) return;
+
+                        if (registry.any_of<components::MeshComponent>(ent))
+                        {
+                            auto* uuidComp = registry.try_get<components::UUIDComponent>(ent);
+                            if (uuidComp)
+                            {
+                                meshEntities.emplace_back(uuidComp->id.getValue(), ent);
+                            }
+                        }
+
+                        auto* childrenComp = registry.try_get<components::ChildrenComponent>(ent);
+                        if (childrenComp)
+                        {
+                            for (auto child : childrenComp->children)
+                            {
+                                self(self, child);
+                            }
+                        }
+                    };
+
                     for (uint64_t uuid : sector.entityUUIDs)
                     {
                         auto ent = findEntityByUUID(uuid);
                         if (ent != entt::null)
                         {
-                            if (registry.any_of<components::MeshComponent>(ent))
-                            {
-                                meshEntities.emplace_back(uuid, ent);
-                            }
+                            collectMeshEntities(collectMeshEntities, ent);
                         }
                     }
+
                     if (!meshEntities.empty())
                     {
                         events::render::objectstreaming::RegisterSectorObjectsCommand cmd;

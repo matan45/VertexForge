@@ -1,6 +1,7 @@
 #include "WorldSectorWindow.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/world/WorldSectorEvents.hpp"
+#include "events/render/ObjectStreamingEvents.hpp"
 #include "imgui.h"
 #include "nfd/FileDialog.hpp"
 
@@ -203,6 +204,19 @@ namespace windows
         ImGui::Text("Max Loads/Frame: %d", config.maxLoadsPerFrame);
         ImGui::Text("Max Unloads/Frame: %d", config.maxUnloadsPerFrame);
         ImGui::Text("Max Entities/Frame: %d", config.maxEntitiesPerFrame);
+
+        ImGui::Separator();
+        ImGui::Text("GPU Object Streaming: %s", config.enableGPUObjectStreaming ? "Enabled" : "Disabled");
+
+        if (config.enableGPUObjectStreaming)
+        {
+            auto stats = dispatcher.query(events::render::objectstreaming::GetObjectStreamingStatsQuery{});
+            ImGui::Text("Registered: %u | Active on GPU: %u | Queued: %u",
+                         stats.totalRegistered, stats.activeOnGPU, stats.queuedForUpload);
+            ImGui::Text("Uploads/Frame: %u | Evictions/Frame: %u",
+                         stats.uploadsThisFrame, stats.evictionsThisFrame);
+            ImGui::Text("Slot Utilization: %.1f%%", stats.slotUtilization * 100.0f);
+        }
     }
 
     void WorldSectorWindow::drawCreationWizard()
@@ -216,6 +230,9 @@ namespace windows
             ImGui::Separator();
             ImGui::InputFloat("Load Radius (sectors)", &loadRadius, 1.0f, 2.0f);
             ImGui::InputFloat("Unload Radius (sectors)", &unloadRadius, 1.0f, 2.0f);
+            ImGui::Checkbox("GPU Object Streaming", &gpuObjectStreaming);
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Stream GPU objects in/out based on camera distance.\nReduces GPU memory for large worlds with >65K objects.");
 
             ImGui::Spacing();
             if (ImGui::Button("Create"))
@@ -231,6 +248,7 @@ namespace windows
                     cmd.sectorConfig.tilesPerSector = tilesPerSector;
                     cmd.streamingConfig.loadRadius = loadRadius;
                     cmd.streamingConfig.unloadRadius = unloadRadius;
+                    cmd.streamingConfig.enableGPUObjectStreaming = gpuObjectStreaming;
                     events::EventDispatcher::instance().execute(cmd);
                     showCreationWizard = false;
                 }

@@ -45,6 +45,8 @@ namespace render::mesh
                     const glm::mat4& view,
                     const glm::mat4& projection) const;
 
+        [[nodiscard]] bool hasData() const { return currentVertexCount > 0; }
+
     private:
         void loadShader();
         void createPipeline(vk::RenderPass renderPass);

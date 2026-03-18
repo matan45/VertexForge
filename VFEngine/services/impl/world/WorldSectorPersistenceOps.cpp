@@ -7,6 +7,8 @@
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/world/WorldSectorEvents.hpp"
 #include "../../events/render/ObjectStreamingEvents.hpp"
+#include "../../events/render/LightStreamingEvents.hpp"
+#include "scene/EntityRegistry.hpp"
 #include "print/Log.hpp"
 #include <filesystem>
 
@@ -69,10 +71,49 @@ namespace services
             }
         }
 
-        // Mark all sectors as Loaded since entities are already live in the scene
-        sectorManager.forEachSector([](world::WorldSector& sector)
+        // Mark all sectors as Loaded since entities are already live in the scene,
+        // and register their entities for GPU object/light streaming
+        auto& registry = scene::EntityRegistry::getRegistry();
+        sectorManager.forEachSector([&](world::WorldSector& sector)
         {
             sector.state = world::SectorState::Loaded;
+
+            if (streamingConfig.enableGPUObjectStreaming)
+            {
+                std::vector<std::pair<uint64_t, entt::entity>> meshEntities;
+                std::vector<uint32_t> lightEntityIds;
+
+                for (uint64_t uuid : sector.entityUUIDs)
+                {
+                    auto uuidView = registry.view<components::UUIDComponent>();
+                    for (auto ent : uuidView)
+                    {
+                        if (uuidView.get<components::UUIDComponent>(ent).id.getValue() == uuid)
+                        {
+                            if (registry.any_of<components::MeshComponent>(ent))
+                                meshEntities.emplace_back(uuid, ent);
+                            if (registry.any_of<components::PointLightComponent, components::SpotLightComponent>(ent))
+                                lightEntityIds.push_back(static_cast<uint32_t>(ent));
+                            break;
+                        }
+                    }
+                }
+
+                if (!meshEntities.empty())
+                {
+                    events::render::objectstreaming::RegisterSectorObjectsCommand cmd;
+                    cmd.sectorId = world::sectorCoordToId(sector.coord);
+                    cmd.entities = std::move(meshEntities);
+                    ::events::EventDispatcher::instance().execute(cmd);
+                }
+                if (!lightEntityIds.empty())
+                {
+                    events::render::lightstreaming::RegisterSectorLightsCommand cmd;
+                    cmd.sectorId = world::sectorCoordToId(sector.coord);
+                    cmd.lightEntityIds = std::move(lightEntityIds);
+                    ::events::EventDispatcher::instance().execute(cmd);
+                }
+            }
         });
 
         return saveWorld(filePath);
@@ -179,6 +220,13 @@ namespace services
     {
         if (!worldMode)
             return;
+
+        // Disable GPU object streaming so entities render through the normal path again
+        {
+            events::render::objectstreaming::SetObjectStreamingEnabledCommand cmd;
+            cmd.enabled = false;
+            ::events::EventDispatcher::instance().execute(cmd);
+        }
 
         entityLoader.clear();
         sectorManager.clear();

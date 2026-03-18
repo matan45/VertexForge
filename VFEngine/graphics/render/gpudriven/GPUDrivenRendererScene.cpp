@@ -56,11 +56,11 @@ namespace render::gpudriven
 
         ObjectResolvers resolvers{textureResolver, shaderGroupResolver, boneOffsetResolver, time, cameraPosition};
 
-        bool useStreaming = objectStreamingEnabled && objectStreamManager;
+        bool useStreaming = objectStreamingEnabled && objectStreamManager
+                           && objectStreamManager->getStats().totalRegistered > 0;
 
         if (useStreaming)
         {
-            // Persistent slot mode: stream manager handles slot allocation/eviction
             if (!mergedBuffer->isPersistentMode())
             {
                 mergedBuffer->setPersistentMode(true);
@@ -70,7 +70,6 @@ namespace render::gpudriven
         }
         else
         {
-            // Legacy mode: rebuild entire object buffer each frame
             if (mergedBuffer->isPersistentMode())
             {
                 mergedBuffer->setPersistentMode(false);

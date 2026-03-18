@@ -233,16 +233,22 @@ namespace render::gpudriven
             std::string meshPath = meshComp->meshRef.resolve();
             if (meshPath.empty()) continue;
 
-            // Get submesh location
-            const auto* submeshLoc = buffer.getSubmeshLocation(meshPath, "", 0);
-            if (!submeshLoc || !submeshLoc->hasRenderableLOD()) continue;
-
-            // Allocate GPU slot
-            uint32_t slot = buffer.allocateObjectSlot();
-            if (slot == FreeListAllocator::ALLOCATION_FAILED)
+            // Check if this mesh has any registered submeshes with renderable LODs
+            bool meshReady = false;
+            for (const auto& meshInfo : buffer.getRegisteredMeshes())
             {
-                break; // Buffer full, try next frame after evictions
+                if (meshInfo.meshPath == meshPath && meshInfo.submeshCount > 0)
+                {
+                    for (uint32_t si = 0; si < meshInfo.submeshCount; ++si)
+                    {
+                        const auto* loc = buffer.getSubmeshLocation(
+                            meshPath, meshInfo.submeshes[si].submeshName, si);
+                        if (loc && loc->hasRenderableLOD()) { meshReady = true; break; }
+                    }
+                    break;
+                }
             }
+            if (!meshReady) continue;
 
             // Build MeshRenderData for this entity
             mesh::MeshRenderData renderData;
@@ -264,7 +270,14 @@ namespace render::gpudriven
                 }
             }
 
-            // Build GPUObjectData using MergedMeshBuffer's populate methods
+            // Allocate first GPU slot
+            uint32_t slot = buffer.allocateObjectSlot();
+            if (slot == FreeListAllocator::ALLOCATION_FAILED)
+            {
+                break;
+            }
+
+            // Build GPUObjectData for each submesh
             const auto& registeredMeshes = buffer.getRegisteredMeshes();
             bool foundMesh = false;
             for (const auto& meshInfo : registeredMeshes)
@@ -272,19 +285,21 @@ namespace render::gpudriven
                 if (meshInfo.meshPath != meshPath) continue;
                 foundMesh = true;
 
+                bool firstSubmesh = true;
                 for (uint32_t subIdx = 0; subIdx < meshInfo.submeshCount; ++subIdx)
                 {
                     const auto* subLoc = buffer.getSubmeshLocation(
                         meshPath, meshInfo.submeshes[subIdx].submeshName, subIdx);
                     if (!subLoc || !subLoc->hasRenderableLOD()) continue;
 
-                    if (subIdx > 0)
+                    if (!firstSubmesh)
                     {
                         // Need additional slots for extra submeshes
                         uint32_t extraSlot = buffer.allocateObjectSlot();
                         if (extraSlot == FreeListAllocator::ALLOCATION_FAILED) break;
                         slot = extraSlot;
                     }
+                    firstSubmesh = false;
 
                     GPUObjectData obj{};
                     obj.modelMatrix = renderData.modelMatrix;
