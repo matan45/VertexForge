@@ -156,6 +156,7 @@ namespace controllers
 
         void applyShadowSettings(const types::RenderSettings& settings);
         services::ShadowStats getShadowStats() const;
+        services::GPUPipelineStatus getGPUPipelineStatus() const;
 
         void setPlayMode(bool playMode);
 
@@ -286,5 +287,6 @@ namespace controllers
         std::unique_ptr<render::gpudriven::BrushComputePipeline> brushComputePipeline;
         std::unique_ptr<core::AsyncComputeManager> asyncComputeManager;
         std::unique_ptr<core::ThreadCommandPoolManager> sceneThreadPoolManager;
+        mutable services::GPUPipelineStatus cachedPipelineStatus{};
     };
 }

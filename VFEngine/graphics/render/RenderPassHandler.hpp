@@ -172,6 +172,10 @@ namespace render
         bool asyncComputeActive = false;
         bool parallelSceneRecording = false;
         core::ThreadCommandPoolManager* sceneThreadPoolManager = nullptr;
+
+        // Scene recording stats
+        mutable float lastSceneRecordingUs = 0.0f;
+        mutable uint32_t lastSceneSecondaryCount = 0;
         glm::vec3 currentCameraPosition{0.0f};
         float currentNearPlane = 0.1f;
         float currentFarPlane = 1000.0f;
@@ -285,6 +289,8 @@ namespace render
             parallelSceneRecording = enabled;
             sceneThreadPoolManager = poolManager;
         }
+        float getLastSceneRecordingUs() const { return lastSceneRecordingUs; }
+        uint32_t getLastSceneSecondaryCount() const { return lastSceneSecondaryCount; }
 
         // Record all async-eligible compute work into the given command buffer
         // (light culling, grass, GI, atmosphere, clouds, VFX, ocean FFT)

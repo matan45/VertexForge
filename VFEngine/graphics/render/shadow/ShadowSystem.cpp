@@ -621,4 +621,13 @@ namespace render::shadow
 
         return debugInfos;
     }
+
+    ShadowRecordingStats ShadowSystem::getShadowRecordingStats() const
+    {
+        if (passRecorder)
+        {
+            return passRecorder->getLastStats();
+        }
+        return {};
+    }
 }

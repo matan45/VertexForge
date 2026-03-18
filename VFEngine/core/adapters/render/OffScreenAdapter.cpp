@@ -178,6 +178,10 @@ namespace core {
         return offScreen ? offScreen->getShadowStats() : services::ShadowStats{};
     }
 
+    services::GPUPipelineStatus OffScreenAdapter::getGPUPipelineStatus() const {
+        return offScreen ? offScreen->getGPUPipelineStatus() : services::GPUPipelineStatus{};
+    }
+
     void OffScreenAdapter::setPlayMode(bool playMode) {
         if (offScreen) {
             offScreen->setPlayMode(playMode);

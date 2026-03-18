@@ -66,6 +66,7 @@ namespace core
 
         void applyShadowSettings(const types::RenderSettings& settings) override;
         services::ShadowStats getShadowStats() const override;
+        services::GPUPipelineStatus getGPUPipelineStatus() const override;
 
         void setPlayMode(bool playMode) override;
 

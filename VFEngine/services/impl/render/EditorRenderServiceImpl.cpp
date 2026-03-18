@@ -519,6 +519,12 @@ namespace services
                 return offScreenProvider ? offScreenProvider->getCullingStats() : services::CullingDebugStats{};
             });
 
+        dispatcher.registerQueryHandler<events::render::GetGPUPipelineStatusQuery>(
+            [this](const events::render::GetGPUPipelineStatusQuery&)
+            {
+                return offScreenProvider ? offScreenProvider->getGPUPipelineStatus() : services::GPUPipelineStatus{};
+            });
+
         dispatcher.registerCommandHandler<events::render::ApplyShadowSettingsCommand>(
             [this](const events::render::ApplyShadowSettingsCommand& cmd)
             {

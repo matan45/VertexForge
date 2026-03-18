@@ -7,6 +7,7 @@
 #include "../../core/ThreadCommandPoolManager.hpp"
 #include "print/Log.hpp"
 #include "threading/JobSystem.hpp"
+#include <chrono>
 
 namespace render::shadow
 {
@@ -28,6 +29,7 @@ namespace render::shadow
         bool shadowsEnabled,
         bool poolFirstUse)
     {
+        auto recordStart = std::chrono::high_resolution_clock::now();
         if (!shadowsEnabled || !shadowPassPipeline || !shadowPassPipeline->isInitialized() || !tilePool)
             return;
 
@@ -266,6 +268,12 @@ namespace render::shadow
                 );
             }
         }
+
+        auto recordEnd = std::chrono::high_resolution_clock::now();
+        lastStats.recordingUs = std::chrono::duration<float, std::micro>(recordEnd - recordStart).count();
+        lastStats.tileCount = static_cast<uint32_t>(pageRenderList.size());
+        lastStats.threadsUsed = 0;
+        lastStats.usedParallel = false;
 
         renderPointLightCubeShadows(cmd, params, terrainParams, resourcePool,
                                      shadowPassPipeline, terrainShadowPipeline,
@@ -572,6 +580,8 @@ namespace render::shadow
             primaryCmd.beginRenderPass(renderPassInfo, vk::SubpassContents::eSecondaryCommandBuffers);
 
             // Record tiles in parallel across worker threads
+            auto recordStart = std::chrono::high_resolution_clock::now();
+
             uint32_t tileCount = static_cast<uint32_t>(pageRenderList.size());
             uint32_t threadCount = threadPoolManager->getThreadCount();
 
@@ -709,14 +719,18 @@ namespace render::shadow
                 }, 1  // minBatchSize=1 (each tile has significant draw work)
             );
 
+            auto recordEnd = std::chrono::high_resolution_clock::now();
+
             // Assemble secondary buffers into primary (in thread order)
             std::vector<vk::CommandBuffer> validSecondaries;
             validSecondaries.reserve(threadCount);
+            uint32_t usedThreads = 0;
             for (uint32_t t = 0; t < threadCount; t++)
             {
                 if (threadUsed[t])
                 {
                     validSecondaries.push_back(secondaryBuffers[t]);
+                    usedThreads++;
                 }
             }
 
@@ -727,6 +741,12 @@ namespace render::shadow
                     validSecondaries.data()
                 );
             }
+
+            // Update stats
+            lastStats.recordingUs = std::chrono::duration<float, std::micro>(recordEnd - recordStart).count();
+            lastStats.tileCount = tileCount;
+            lastStats.threadsUsed = usedThreads;
+            lastStats.usedParallel = true;
 
             primaryCmd.endRenderPass();
 

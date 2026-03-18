@@ -34,6 +34,7 @@
 #include "water/OceanFFT.hpp"
 #include "vegetation/WindConfig.hpp"
 #include "threading/JobSystem.hpp"
+#include <chrono>
 
 namespace
 {
@@ -428,6 +429,7 @@ namespace render
         if (useParallel)
         {
             // Parallel path: record independent draw groups on worker threads
+            auto sceneRecordStart = std::chrono::high_resolution_clock::now();
             uint32_t frameIndex = core::RenderManager::getImageIndex();
             sceneThreadPoolManager->resetFrame(frameIndex);
 
@@ -549,6 +551,10 @@ namespace render
                     secondaries.data()
                 );
             }
+
+            auto sceneRecordEnd = std::chrono::high_resolution_clock::now();
+            lastSceneRecordingUs = std::chrono::duration<float, std::micro>(sceneRecordEnd - sceneRecordStart).count();
+            lastSceneSecondaryCount = static_cast<uint32_t>(secondaries.size());
 
             // Custom shaders, GI debug, debug renderer need inline — end secondary pass first
             meshPipeline->endRenderPass(commandBuffer);
