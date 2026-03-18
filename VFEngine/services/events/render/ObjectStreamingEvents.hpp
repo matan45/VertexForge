@@ -1,6 +1,6 @@
 #pragma once
 #include "../EventTypes.hpp"
-#include "../../../graphics/render/gpudriven/scene/GPUObjectStreamManager.hpp"
+#include "../../../graphics/render/gpudriven/scene/GPUObjectStreamTypes.hpp"
 #include <cstdint>
 #include <vector>
 #include <utility>

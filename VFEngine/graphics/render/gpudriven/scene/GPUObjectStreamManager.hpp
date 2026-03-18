@@ -1,23 +1,20 @@
 #pragma once
 
+#include "GPUObjectStreamTypes.hpp"
 #include "../GPUDrivenTypes.hpp"
+#include "../FreeListAllocator.hpp"
 #include <glm/glm.hpp>
 #include <entt/entt.hpp>
 #include <cstdint>
 #include <vector>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 
 namespace render::gpudriven
 {
     class MergedMeshBuffer;
-
-    enum class ObjectStreamState : uint8_t
-    {
-        NotLoaded,
-        Queued,
-        Active
-    };
+    struct ObjectResolvers;
 
     struct ObjectStreamEntry
     {
@@ -31,26 +28,6 @@ namespace render::gpudriven
         uint64_t lastAccessFrame = 0;
         bool isStatic = false;
         glm::vec3 position{0.0f};
-    };
-
-    struct ObjectStreamConfig
-    {
-        uint32_t maxUploadsPerFrame = 64;
-        uint32_t maxEvictionsPerFrame = 32;
-        float evictionThreshold = 0.9f;
-        float evictionTarget = 0.8f;
-        float hysteresisMargin = 0.05f;
-    };
-
-    struct ObjectStreamingStats
-    {
-        uint32_t totalRegistered = 0;
-        uint32_t activeOnGPU = 0;
-        uint32_t queuedForUpload = 0;
-        uint32_t uploadsThisFrame = 0;
-        uint32_t evictionsThisFrame = 0;
-        float slotUtilization = 0.0f;
-        float fragmentation = 0.0f;
     };
 
     class GPUObjectStreamManager

@@ -6,6 +6,8 @@
 #include <vector>
 #include <cstdint>
 #include <optional>
+#include <utility>
+#include <entt/entt.hpp>
 #include "providers/render/IOffScreenProvider.hpp"
 #include "types/CameraTypes.hpp"
 #include "terrain/TerrainHitResult.hpp"
@@ -14,7 +16,7 @@
 #include "../../graphics/render/gi/GITypes.hpp"
 #include "atmosphere/AtmosphereSettings.hpp"
 #include "../../graphics/render/lighting/LightStreamManager.hpp"
-#include "../../graphics/render/gpudriven/scene/GPUObjectStreamManager.hpp"
+#include "../../graphics/render/gpudriven/scene/GPUObjectStreamTypes.hpp"
 #include "data/RenderHookTypes.hpp"
 #include "../../graphics/render/tools/ImmediateDebugTypes.hpp"
 #include "providers/render/IDecalRenderProvider.hpp"

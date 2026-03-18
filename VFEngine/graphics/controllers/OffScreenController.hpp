@@ -10,14 +10,16 @@
 #include "atmosphere/AtmosphereSettings.hpp"
 #include "cloud/CloudSettings.hpp"
 #include "../render/lighting/LightStreamManager.hpp"
-#include "../render/gpudriven/scene/GPUObjectStreamManager.hpp"
+#include "../render/gpudriven/scene/GPUObjectStreamTypes.hpp"
 #include "../render/tools/ImmediateDebugTypes.hpp"
 #include "../../services/providers/render/IDecalRenderProvider.hpp"
 #include <memory>
 #include <string_view>
 #include <string>
 #include <vector>
+#include <utility>
 #include <optional>
+#include <entt/entt.hpp>
 
 namespace events
 {

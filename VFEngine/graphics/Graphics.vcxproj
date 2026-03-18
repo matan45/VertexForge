@@ -198,6 +198,7 @@
     <ClInclude Include="render\gpudriven\scene\BoneMatrixManager.hpp" />
     <ClInclude Include="render\gpudriven\scene\GPUCullLODPipeline.hpp" />
     <ClInclude Include="render\gpudriven\scene\GPUObjectStreamManager.hpp" />
+    <ClInclude Include="render\gpudriven\scene\GPUObjectStreamTypes.hpp" />
     <ClInclude Include="render\gpudriven\scene\IndirectBatchManager.hpp" />
     <ClInclude Include="render\gpudriven\scene\MergedMeshBuffer.hpp" />
     <ClInclude Include="render\gpudriven\scene\MeshShaderPipeline.hpp" />

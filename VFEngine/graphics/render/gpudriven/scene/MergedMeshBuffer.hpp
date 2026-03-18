@@ -200,6 +200,9 @@ namespace render::gpudriven
         void uploadActiveIndices(vk::CommandBuffer cmd);
         uint32_t getActiveObjectCount() const { return activeObjectCount; }
         vk::Buffer getActiveIndexBuffer() const { return activeIndexBuffer; }
+        void mapEntityToSlot(uint64_t entityUUID, uint32_t slot) { entityToSlot[entityUUID] = slot; }
+        void unmapEntitySlot(uint64_t entityUUID) { entityToSlot.erase(entityUUID); }
+        uint32_t getEntitySlotCount() const { return static_cast<uint32_t>(entityToSlot.size()); }
 
         MergedMeshInfo* reserveMesh(const std::string& meshPath,
                                     const resource::MeshStreamHeader& header);

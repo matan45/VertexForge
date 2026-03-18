@@ -97,7 +97,7 @@ namespace render::gpudriven
             if (entryIt->second.gpuSlot != FreeListAllocator::ALLOCATION_FAILED)
             {
                 buffer.freeObjectSlot(entryIt->second.gpuSlot);
-                buffer.entityToSlot.erase(uuid);
+                buffer.unmapEntitySlot(uuid);
                 freedCount++;
             }
 
@@ -153,7 +153,7 @@ namespace render::gpudriven
     void GPUObjectStreamManager::processEvictions()
     {
         uint32_t maxSlots = buffer.getMaxObjectCount();
-        uint32_t activeCount = static_cast<uint32_t>(buffer.entityToSlot.size());
+        uint32_t activeCount = buffer.getEntitySlotCount();
         float utilization = static_cast<float>(activeCount) / static_cast<float>(maxSlots);
 
         if (utilization < config.evictionThreshold) return;
@@ -185,7 +185,7 @@ namespace render::gpudriven
 
             auto& entry = entries[uuid];
             buffer.freeObjectSlot(entry.gpuSlot);
-            buffer.entityToSlot.erase(uuid);
+            buffer.unmapEntitySlot(uuid);
             entry.gpuSlot = FreeListAllocator::ALLOCATION_FAILED;
             entry.state = ObjectStreamState::Queued;
             activeCount--;
@@ -256,19 +256,18 @@ namespace render::gpudriven
             if (materialComp)
             {
                 renderData.defaultMaterialPath = materialComp->defaultMaterialRef.resolve();
-                for (const auto& [submeshName, matRef] : materialComp->subMeshMaterials)
+                for (const auto& subMatPair : materialComp->subMeshMaterials)
                 {
                     mesh::SubMeshMaterialInfo info;
-                    info.materialPath = matRef.resolve();
-                    renderData.submeshMaterials[submeshName] = info;
+                    info.materialPath = subMatPair.second.resolve();
+                    renderData.submeshMaterials[subMatPair.first] = info;
                 }
             }
 
             // Build GPUObjectData using MergedMeshBuffer's populate methods
-            // We need to iterate all submeshes for this mesh
-            auto meshIt = buffer.getRegisteredMeshes();
+            const auto& registeredMeshes = buffer.getRegisteredMeshes();
             bool foundMesh = false;
-            for (const auto& meshInfo : meshIt)
+            for (const auto& meshInfo : registeredMeshes)
             {
                 if (meshInfo.meshPath != meshPath) continue;
                 foundMesh = true;
@@ -379,7 +378,7 @@ namespace render::gpudriven
                     }
 
                     buffer.updateObjectAtSlot(slot, obj);
-                    buffer.entityToSlot[uuid] = slot;
+                    buffer.mapEntityToSlot(uuid, slot);
                 }
                 break;
             }
