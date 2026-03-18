@@ -21,6 +21,7 @@
 #include "resource/ResourceManager.hpp"
 #include "../../render/material/MaterialPBRExtractor.hpp"
 #include "threading/JobSystem.hpp"
+#include "threading/ParallelCollect.hpp"
 
 
 namespace controllers::offscreen
@@ -129,16 +130,19 @@ namespace controllers::offscreen
         }
         else if (!ctx.bvhManager->needsDynamicRebuild())
         {
-            auto dynamicView = registry.view<components::TransformComponent, components::MeshComponent>();
-            std::vector<uint32_t> dirtyIds;
-            for (auto entity : dynamicView)
-            {
-                const auto& transform = dynamicView.get<components::TransformComponent>(entity);
-                if (!transform.isStatic && transform.isDirty)
+            auto dirtyIds = threading::parallelCollect<uint32_t,
+                components::TransformComponent, components::MeshComponent>(
+                registry,
+                [&registry](entt::entity entity) -> bool
                 {
-                    dirtyIds.push_back(static_cast<uint32_t>(entity));
-                }
-            }
+                    const auto& transform = registry.get<components::TransformComponent>(entity);
+                    return !transform.isStatic && transform.isDirty;
+                },
+                [](entt::entity entity) -> uint32_t
+                {
+                    return static_cast<uint32_t>(entity);
+                });
+
             for (uint32_t id : dirtyIds)
             {
                 ctx.bvhManager->markDynamicEntityDirty(id);
@@ -617,6 +621,9 @@ namespace controllers::offscreen
             registry.storage<components::NameComponent>();
             registry.storage<components::RenderTextureComponent>();
             registry.storage<components::TextComponent>();
+            registry.storage<components::TransformComponent>();
+            registry.storage<components::MeshComponent>();
+            registry.storage<components::DecalComponent>();
             storageAssured = true;
         }
 

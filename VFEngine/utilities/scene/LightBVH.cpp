@@ -1,4 +1,6 @@
 #include "LightBVH.hpp"
+#include "../threading/ParallelCollect.hpp"
+#include "../threading/JobSystem.hpp"
 
 namespace scene
 {
@@ -90,21 +92,41 @@ namespace scene
             return;
         }
 
-        std::unordered_map<uint32_t, math::AABB> updatedBounds;
         auto& registry = EntityRegistry::getRegistry();
 
-        for (uint32_t entityId : dirtyDynamicLights)
-        {
-            auto entity = static_cast<entt::entity>(entityId);
-            if (!registry.valid(entity))
-            {
-                continue;
-            }
+        // Materialize dirty set for indexed parallel access
+        std::vector<uint32_t> dirtyIds(dirtyDynamicLights.begin(), dirtyDynamicLights.end());
+        uint32_t count = static_cast<uint32_t>(dirtyIds.size());
 
-            math::AABB bounds = computeLightBounds(entity, registry);
-            if (bounds.isValid())
+        uint32_t threadCount = threading::JobSystem::instance().getThreadCount() + 1;
+        std::vector<std::vector<std::pair<uint32_t, math::AABB>>> threadResults(threadCount);
+
+        threading::JobSystem::instance().parallelFor(count,
+            [&](uint32_t begin, uint32_t end)
             {
-                updatedBounds[entityId] = bounds;
+                uint32_t slot = begin % threadCount;
+                auto& localResults = threadResults[slot];
+
+                for (uint32_t i = begin; i < end; ++i)
+                {
+                    uint32_t entityId = dirtyIds[i];
+                    auto entity = static_cast<entt::entity>(entityId);
+                    if (!registry.valid(entity)) continue;
+
+                    math::AABB bounds = computeLightBounds(entity, registry);
+                    if (bounds.isValid())
+                    {
+                        localResults.emplace_back(entityId, bounds);
+                    }
+                }
+            }, 64);
+
+        std::unordered_map<uint32_t, math::AABB> updatedBounds;
+        for (auto& v : threadResults)
+        {
+            for (auto& [id, aabb] : v)
+            {
+                updatedBounds[id] = aabb;
             }
         }
 
@@ -170,110 +192,78 @@ namespace scene
     {
         auto& registry = EntityRegistry::getRegistry();
 
+        auto filterStatic = [this, &registry](entt::entity entity) -> bool
         {
-            auto view = registry.view<components::PointLightComponent,
-                                      components::TransformComponent,
-                                      components::WorldTransformComponent>();
-            for (auto entity : view)
-            {
-                const auto& transform = view.get<components::TransformComponent>(entity);
-                if (!transform.isStatic)
-                {
-                    continue;
-                }
+            const auto& transform = registry.get<components::TransformComponent>(entity);
+            if (!transform.isStatic) return false;
+            math::AABB bounds = computeLightBounds(entity, registry);
+            return bounds.isValid();
+        };
 
-                math::AABB bounds = computeLightBounds(entity, registry);
-                if (!bounds.isValid())
-                {
-                    continue;
-                }
-
-                math::BVHPrimitive prim;
-                prim.bounds = bounds;
-                prim.entityId = static_cast<uint32_t>(entity);
-                primitives.push_back(prim);
-            }
-        }
-
+        auto toBVHPrim = [this, &registry](entt::entity entity) -> math::BVHPrimitive
         {
-            auto view = registry.view<components::SpotLightComponent,
-                                      components::TransformComponent,
-                                      components::WorldTransformComponent>();
-            for (auto entity : view)
-            {
-                const auto& transform = view.get<components::TransformComponent>(entity);
-                if (!transform.isStatic)
-                {
-                    continue;
-                }
+            math::BVHPrimitive prim;
+            prim.bounds = computeLightBounds(entity, registry);
+            prim.entityId = static_cast<uint32_t>(entity);
+            return prim;
+        };
 
-                math::AABB bounds = computeLightBounds(entity, registry);
-                if (!bounds.isValid())
-                {
-                    continue;
-                }
+        auto pointPrims = threading::parallelCollect<math::BVHPrimitive,
+            components::PointLightComponent,
+            components::TransformComponent,
+            components::WorldTransformComponent>(registry, filterStatic, toBVHPrim);
 
-                math::BVHPrimitive prim;
-                prim.bounds = bounds;
-                prim.entityId = static_cast<uint32_t>(entity);
-                primitives.push_back(prim);
-            }
-        }
+        auto spotPrims = threading::parallelCollect<math::BVHPrimitive,
+            components::SpotLightComponent,
+            components::TransformComponent,
+            components::WorldTransformComponent>(registry, filterStatic, toBVHPrim);
+
+        primitives.reserve(pointPrims.size() + spotPrims.size());
+        primitives.insert(primitives.end(),
+            std::make_move_iterator(pointPrims.begin()),
+            std::make_move_iterator(pointPrims.end()));
+        primitives.insert(primitives.end(),
+            std::make_move_iterator(spotPrims.begin()),
+            std::make_move_iterator(spotPrims.end()));
     }
 
     void LightBVH::collectDynamicLightPrimitives(std::vector<math::BVHPrimitive>& primitives)
     {
         auto& registry = EntityRegistry::getRegistry();
 
+        auto filterDynamic = [this, &registry](entt::entity entity) -> bool
         {
-            auto view = registry.view<components::PointLightComponent,
-                                      components::TransformComponent,
-                                      components::WorldTransformComponent>();
-            for (auto entity : view)
-            {
-                const auto& transform = view.get<components::TransformComponent>(entity);
-                if (transform.isStatic)
-                {
-                    continue;
-                }
+            const auto& transform = registry.get<components::TransformComponent>(entity);
+            if (transform.isStatic) return false;
+            math::AABB bounds = computeLightBounds(entity, registry);
+            return bounds.isValid();
+        };
 
-                math::AABB bounds = computeLightBounds(entity, registry);
-                if (!bounds.isValid())
-                {
-                    continue;
-                }
-
-                math::BVHPrimitive prim;
-                prim.bounds = bounds;
-                prim.entityId = static_cast<uint32_t>(entity);
-                primitives.push_back(prim);
-            }
-        }
-
+        auto toBVHPrim = [this, &registry](entt::entity entity) -> math::BVHPrimitive
         {
-            auto view = registry.view<components::SpotLightComponent,
-                                      components::TransformComponent,
-                                      components::WorldTransformComponent>();
-            for (auto entity : view)
-            {
-                const auto& transform = view.get<components::TransformComponent>(entity);
-                if (transform.isStatic)
-                {
-                    continue;
-                }
+            math::BVHPrimitive prim;
+            prim.bounds = computeLightBounds(entity, registry);
+            prim.entityId = static_cast<uint32_t>(entity);
+            return prim;
+        };
 
-                math::AABB bounds = computeLightBounds(entity, registry);
-                if (!bounds.isValid())
-                {
-                    continue;
-                }
+        auto pointPrims = threading::parallelCollect<math::BVHPrimitive,
+            components::PointLightComponent,
+            components::TransformComponent,
+            components::WorldTransformComponent>(registry, filterDynamic, toBVHPrim);
 
-                math::BVHPrimitive prim;
-                prim.bounds = bounds;
-                prim.entityId = static_cast<uint32_t>(entity);
-                primitives.push_back(prim);
-            }
-        }
+        auto spotPrims = threading::parallelCollect<math::BVHPrimitive,
+            components::SpotLightComponent,
+            components::TransformComponent,
+            components::WorldTransformComponent>(registry, filterDynamic, toBVHPrim);
+
+        primitives.reserve(pointPrims.size() + spotPrims.size());
+        primitives.insert(primitives.end(),
+            std::make_move_iterator(pointPrims.begin()),
+            std::make_move_iterator(pointPrims.end()));
+        primitives.insert(primitives.end(),
+            std::make_move_iterator(spotPrims.begin()),
+            std::make_move_iterator(spotPrims.end()));
     }
 
     void LightBVH::collectStaticDirectionalLights()

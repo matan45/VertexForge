@@ -217,6 +217,8 @@
     <ClInclude Include="text\TextLayout.hpp" />
     <ClInclude Include="texture\OrmTexturePacker.hpp" />
     <ClInclude Include="threading\JobSystem.hpp" />
+    <ClInclude Include="threading\ParallelCollect.hpp" />
+    <ClInclude Include="threading\ParallelView.hpp" />
     <ClInclude Include="threading\TaskGraph.hpp" />
     <ClInclude Include="threading\TaskGraphBuilder.hpp" />
     <ClInclude Include="threading\TaskGraphImpl.hpp" />

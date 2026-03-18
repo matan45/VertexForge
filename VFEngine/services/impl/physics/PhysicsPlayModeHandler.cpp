@@ -407,6 +407,11 @@ namespace services
     {
         auto& registry = scene::EntityRegistry::getRegistry();
 
+        // Split into standard bodies (safe to parallelize) and root motion bodies (sequential)
+        std::vector<EntityHandle> standardBodies;
+        std::vector<EntityHandle> rootMotionBodies;
+        standardBodies.reserve(activePhysicsBodies.size());
+
         for (const auto& handle : activePhysicsBodies)
         {
             auto entity = internal::fromHandle(handle);
@@ -426,12 +431,32 @@ namespace services
                 const auto& animComp = registry.get<components::AnimatorComponent>(entity);
                 if (animComp.applyRootMotion)
                 {
-                    syncRootMotionEntity(handle);
+                    rootMotionBodies.push_back(handle);
                     continue;
                 }
             }
 
-            syncStandardPhysicsEntity(handle);
+            standardBodies.push_back(handle);
+        }
+
+        // Parallel sync for standard bodies (disjoint per-entity writes)
+        uint32_t count = static_cast<uint32_t>(standardBodies.size());
+        if (count > 0)
+        {
+            threading::JobSystem::instance().parallelFor(count,
+                [this, &standardBodies](uint32_t begin, uint32_t end)
+                {
+                    for (uint32_t i = begin; i < end; ++i)
+                    {
+                        syncStandardPhysicsEntity(standardBodies[i]);
+                    }
+                }, 64);
+        }
+
+        // Sequential sync for root motion entities (shared rootMotionLastSyncPos map)
+        for (const auto& handle : rootMotionBodies)
+        {
+            syncRootMotionEntity(handle);
         }
     }
 
