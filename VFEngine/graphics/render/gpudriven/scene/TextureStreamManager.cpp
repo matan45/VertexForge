@@ -61,7 +61,16 @@ namespace render::gpudriven
 
     void TextureStreamManager::cleanup()
     {
+        if (!commandPool && textures.empty() && !stagingBuffer)
+        {
+            return; // Already cleaned up
+        }
+
         vk::Device vkDevice = device.getLogicalDevice();
+        if (!vkDevice)
+        {
+            return;
+        }
         vkDevice.waitIdle();
 
         // Wait for all pending reads
