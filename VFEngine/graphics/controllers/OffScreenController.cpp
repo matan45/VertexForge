@@ -70,7 +70,8 @@ namespace controllers
         // its own pools for VSM tile recording. Both use the same JobSystem thread pool
         // but never overlap (shadow recording completes before scene recording starts).
         sceneThreadPoolManager = std::make_unique<core::ThreadCommandPoolManager>();
-        uint32_t sceneThreads = std::max(4u, threading::JobSystem::instance().getThreadCount());
+        // 5 slots: mesh(0), terrain(1), grass(2), water+billboards(3), overlays(4)
+        uint32_t sceneThreads = std::max(5u, threading::JobSystem::instance().getThreadCount());
         sceneThreadPoolManager->init(device, sceneThreads);
 
         auto* renderHandler = offScreen->getRenderPassHandler();

@@ -465,14 +465,19 @@ namespace render
             bool hasBillboards = gpuDrivenRenderer->isBillboardRenderingEnabled();
 
             // Secondary command buffers for parallel draw groups:
-            //   Thread 0: opaque + transparent + blend + custom shaders + debug
+            //   Thread 0: opaque + transparent + blend (main mesh draws)
             //   Thread 1: terrain (if enabled)
             //   Thread 2: grass (if enabled)
             //   Thread 3: water + billboards (if enabled)
+            //   Thread 4: overlays — custom shaders, GI debug, debug renderer (executed last)
             vk::CommandBuffer meshCmd{nullptr};
             vk::CommandBuffer terrainCmd{nullptr};
             vk::CommandBuffer grassCmd{nullptr};
             vk::CommandBuffer waterCmd{nullptr};
+            vk::CommandBuffer overlayCmd{nullptr};
+
+            bool hasOverlays = hasCustomShaderMeshes ||
+                (debugRendererPtr && debugRendererPtr->hasItemsToRender());
 
             // Mesh task is always submitted (opaque meshes always exist when we reach this path)
             auto meshFuture = threading::JobSystem::instance().submit([&]() {
@@ -481,20 +486,6 @@ namespace render
                 gpuDrivenRenderer->renderDraw(meshCmd, iblDescriptorSet);
                 if (!wboitActive) gpuDrivenRenderer->renderTransparentDraw(meshCmd, iblDescriptorSet);
                 gpuDrivenRenderer->renderBlendDraw(meshCmd, iblDescriptorSet);
-
-                // Custom shaders, GI debug, debug renderer — folded into mesh secondary
-                // to avoid an extra render pass transition
-                if (hasCustomShaderMeshes)
-                {
-                    meshPipeline->renderMeshList(meshCmd, imageIndex, customShaderMeshDrawList, currentFrustum);
-                }
-                gpuDrivenRenderer->renderGIDebug(meshCmd, currentProjection * currentView);
-                if (debugRendererPtr)
-                {
-                    debugRendererPtr->render(meshCmd, combinedMeshDrawList, currentView, currentProjection,
-                        [this](const std::string& meshId) { return meshPipeline->getMesh(meshId); });
-                }
-
                 meshCmd.end();
             }, threading::JobPriority::HIGH);
 
@@ -532,21 +523,38 @@ namespace render
                 }, threading::JobPriority::HIGH);
             }
 
-            // Wait for all parallel recordings to complete
+            // Wait for all parallel geometry recordings to complete
             meshFuture.get();
             if (terrainFuture.valid()) terrainFuture.get();
             if (grassFuture.valid()) grassFuture.get();
             if (waterFuture.valid()) waterFuture.get();
 
-            // Begin render pass with secondary buffer support and execute
+            // Record overlays LAST (after all geometry) to ensure correct draw order
+            // Custom shaders, GI debug, and debug renderer must render on top of terrain/grass/water
+            overlayCmd = sceneThreadPoolManager->getSecondary(4, frameIndex);
+            setupSecondary(overlayCmd);
+            if (hasCustomShaderMeshes)
+            {
+                meshPipeline->renderMeshList(overlayCmd, imageIndex, customShaderMeshDrawList, currentFrustum);
+            }
+            gpuDrivenRenderer->renderGIDebug(overlayCmd, currentProjection * currentView);
+            if (debugRendererPtr)
+            {
+                debugRendererPtr->render(overlayCmd, combinedMeshDrawList, currentView, currentProjection,
+                    [this](const std::string& meshId) { return meshPipeline->getMesh(meshId); });
+            }
+            overlayCmd.end();
+
+            // Begin render pass with secondary buffer support and execute in order
             meshPipeline->beginRenderPassForSecondary(commandBuffer, imageIndex);
 
             std::vector<vk::CommandBuffer> secondaries;
-            secondaries.reserve(4);
-            secondaries.push_back(meshCmd); // Always present
-            if (terrainCmd) secondaries.push_back(terrainCmd);
-            if (grassCmd) secondaries.push_back(grassCmd);
-            if (waterCmd) secondaries.push_back(waterCmd);
+            secondaries.reserve(5);
+            secondaries.push_back(meshCmd); // 1. Opaque + transparent + blend
+            if (terrainCmd) secondaries.push_back(terrainCmd);  // 2. Terrain
+            if (grassCmd) secondaries.push_back(grassCmd);      // 3. Grass
+            if (waterCmd) secondaries.push_back(waterCmd);      // 4. Water + billboards
+            secondaries.push_back(overlayCmd);                  // 5. Debug/custom (always last)
 
             commandBuffer.executeCommands(
                 static_cast<uint32_t>(secondaries.size()),
