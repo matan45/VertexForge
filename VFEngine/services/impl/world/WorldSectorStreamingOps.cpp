@@ -304,16 +304,46 @@ namespace services
             return;
 
         auto& dispatcher = ::events::EventDispatcher::instance();
+        auto& registry = scene::EntityRegistry::getRegistry();
 
         float sectorSize = sectorManager.getConfig().sectorWorldSize;
-        float boxHeight = 10.0f; // Visual height for sector boxes
-        glm::vec3 halfExtents(sectorSize * 0.5f, boxHeight * 0.5f, sectorSize * 0.5f);
 
         sectorManager.forEachSector([&](const world::WorldSector& sector)
         {
             float cx = (static_cast<float>(sector.coord.x) + 0.5f) * sectorSize;
             float cz = (static_cast<float>(sector.coord.z) + 0.5f) * sectorSize;
-            glm::vec3 center(cx, boxHeight * 0.5f, cz);
+
+            // Compute Y bounds from entity positions in this sector
+            float yMin = 0.0f;
+            float yMax = 10.0f;
+            bool hasEntities = false;
+            for (uint64_t uuid : sector.entityUUIDs)
+            {
+                auto ent = findEntityByUUID(uuid);
+                if (ent != entt::null && registry.any_of<components::TransformComponent>(ent))
+                {
+                    float y = registry.get<components::TransformComponent>(ent).position.y;
+                    if (!hasEntities)
+                    {
+                        yMin = y;
+                        yMax = y + 1.0f;
+                        hasEntities = true;
+                    }
+                    else
+                    {
+                        yMin = std::min(yMin, y);
+                        yMax = std::max(yMax, y + 1.0f);
+                    }
+                }
+            }
+            // Add padding
+            yMin -= 1.0f;
+            yMax += 1.0f;
+
+            float boxHeight = yMax - yMin;
+            float cy = (yMin + yMax) * 0.5f;
+            glm::vec3 center(cx, cy, cz);
+            glm::vec3 halfExtents(sectorSize * 0.5f, boxHeight * 0.5f, sectorSize * 0.5f);
 
             glm::vec4 color;
             switch (sector.state)
