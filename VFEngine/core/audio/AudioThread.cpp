@@ -69,9 +69,10 @@ namespace core::audio
                 {
                     deps.sourceManager->stopAll();
                     deps.streamingManager->stopAll();
+                    // Release context from audio thread so main thread can reclaim it for cleanup
                     deps.audioSystem->releaseContext();
                     running.store(false, std::memory_order_release);
-                    vfLogInfo("AudioThread received shutdown, released context");
+                    vfLogInfo("AudioThread received shutdown");
                     return;
                 }
 

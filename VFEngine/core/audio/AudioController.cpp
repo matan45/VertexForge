@@ -123,6 +123,12 @@ namespace core::audio
             commandQueue.reset();
         }
 
+        // Audio thread released context before exiting — reclaim on main thread for cleanup
+        if (audioSystem)
+        {
+            audioSystem->acquireContext();
+        }
+
         reverbZoneManager->cleanUp();
         effectManager->cleanUp();
         busManager->cleanUp();
