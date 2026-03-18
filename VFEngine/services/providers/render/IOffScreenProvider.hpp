@@ -101,6 +101,19 @@ namespace services {
         size_t bytesUploadedThisFrame = 0;
     };
 
+    struct TextureStreamDebugStats {
+        uint32_t totalRegistered = 0;
+        uint32_t fullyLoaded = 0;
+        uint32_t partiallyLoaded = 0;
+        uint32_t pendingReads = 0;
+        uint32_t pendingUploads = 0;
+        uint32_t uploadsThisFrame = 0;
+        size_t bytesUploadedThisFrame = 0;
+        size_t vramUsedBytes = 0;
+        size_t vramBudgetBytes = 0;
+        uint32_t evictionsThisFrame = 0;
+    };
+
     struct WaterDebugStats {
         float readbackUs = 0.0f;
         float dispatchUs = 0.0f;
@@ -125,6 +138,7 @@ namespace services {
         GPUDrivenDebugStats gpuDriven;
         TerrainDebugStats terrain;
         WaterDebugStats water;
+        TextureStreamDebugStats textureStream;
     };
 
     struct ShadowStats {

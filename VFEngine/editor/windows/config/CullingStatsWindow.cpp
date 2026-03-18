@@ -286,6 +286,37 @@ namespace windows
             }
             ImGui::Separator();
 
+            if (ImGui::CollapsingHeader("Texture Mip Streaming"))
+            {
+                ImGui::Indent();
+                const auto& ts = stats.textureStream;
+
+                ImGui::Text("Registered:    %u (%u full, %u partial)",
+                            ts.totalRegistered, ts.fullyLoaded, ts.partiallyLoaded);
+                ImGui::Text("Pending Reads: %u", ts.pendingReads);
+                ImGui::Text("Uploads/Frame: %u", ts.uploadsThisFrame);
+                ImGui::Text("Evictions:     %u", ts.evictionsThisFrame);
+
+                if (ts.bytesUploadedThisFrame > 0)
+                {
+                    ImGui::Text("Bytes/Frame:   %zu KB", ts.bytesUploadedThisFrame / 1024);
+                }
+
+                if (ts.vramBudgetBytes > 0)
+                {
+                    float memUsage = static_cast<float>(ts.vramUsedBytes) / static_cast<float>(ts.vramBudgetBytes);
+                    ImGui::Text("VRAM:");
+                    ImGui::SameLine();
+                    char memStr[64];
+                    snprintf(memStr, sizeof(memStr), "%zu / %zu MB",
+                             ts.vramUsedBytes / (1024 * 1024), ts.vramBudgetBytes / (1024 * 1024));
+                    ImGui::ProgressBar(memUsage, ImVec2(150, 0), memStr);
+                }
+
+                ImGui::Unindent();
+            }
+            ImGui::Separator();
+
             if (ImGui::CollapsingHeader("Water/Ocean Performance", ImGuiTreeNodeFlags_DefaultOpen))
             {
                 ImGui::Indent();
