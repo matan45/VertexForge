@@ -55,4 +55,19 @@ namespace core
             coreInterface->setPostUpdateCallback(std::move(callback));
         }
     }
+
+    std::function<void()> EditorBootstrap::getSceneGraphUpdateFn() const
+    {
+        return coreInterface ? coreInterface->getSceneGraphUpdateFn() : nullptr;
+    }
+
+    std::function<void()> EditorBootstrap::getImguiDrawFn() const
+    {
+        return coreInterface ? coreInterface->getImguiDrawFn() : nullptr;
+    }
+
+    std::function<void()> EditorBootstrap::getRenderFn() const
+    {
+        return coreInterface ? coreInterface->getRenderFn() : nullptr;
+    }
 }

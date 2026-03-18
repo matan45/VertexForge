@@ -375,23 +375,15 @@ namespace animation
 
         if (leadersToEvaluate.size() > 1)
         {
-            std::vector<std::future<void>> futures;
-            futures.reserve(leadersToEvaluate.size());
-
-            for (auto& [entity, anim] : leadersToEvaluate)
-            {
-                futures.push_back(threading::JobSystem::instance().submit(
-                    [anim, deltaTime]()
+            uint32_t leaderCount = static_cast<uint32_t>(leadersToEvaluate.size());
+            threading::JobSystem::instance().parallelFor(leaderCount,
+                [&leadersToEvaluate, deltaTime](uint32_t begin, uint32_t end)
+                {
+                    for (uint32_t i = begin; i < end; ++i)
                     {
-                        anim->update(deltaTime);
-                    }, threading::JobPriority::HIGH
-                ));
-            }
-
-            for (auto& f : futures)
-            {
-                f.get();
-            }
+                        leadersToEvaluate[i].second->update(deltaTime);
+                    }
+                }, 1); // minBatchSize=1: each animation update is expensive
         }
         else if (!leadersToEvaluate.empty())
         {

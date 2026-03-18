@@ -31,6 +31,7 @@ namespace windows
         menuBar.setCloudConfigWindow(&cloudConfigWindow);
         menuBar.setLightStreamingDebugWindow(&lightStreamingDebugWindow);
         menuBar.setPluginManagerWindow(&pluginManagerWindow);
+        menuBar.setTaskGraphWindow(&taskGraphWindow);
         menuBar.setInputActionMappingWindow(&inputActionMappingWindow);
         subscribeToEvents();
     }
@@ -124,6 +125,7 @@ namespace windows
             cloudConfigWindow.draw();
             lightStreamingDebugWindow.draw();
             pluginManagerWindow.draw();
+            taskGraphWindow.draw();
             inputActionMappingWindow.draw();
         }
         ImGui::End();

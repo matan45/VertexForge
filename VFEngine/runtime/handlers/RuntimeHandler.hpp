@@ -23,6 +23,10 @@
 #include "interfaces/ai/IBehaviorTreeService.hpp"
 #include "events/EventTypes.hpp"
 
+namespace services {
+    class FrameTaskGraph;
+}
+
 namespace plugin {
     class PluginManager;
 }
@@ -74,6 +78,8 @@ namespace handlers {
 
         std::unique_ptr<plugin::PluginManager> pluginManager;
 
+        std::unique_ptr<services::FrameTaskGraph> frameTaskGraph;
+
         events::SubscriptionToken resizeSubscription;
 
     public:
@@ -92,6 +98,7 @@ namespace handlers {
         void initializeServices();
         void setupEventSubscriptions();
         void cleanupEventSubscriptions();
+        void buildFrameTaskGraph();
     };
 
 }

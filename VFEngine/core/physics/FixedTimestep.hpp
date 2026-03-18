@@ -4,6 +4,11 @@
 
 namespace core::physics {
 
+    struct FixedTimestepResult {
+        int stepsTaken = 0;
+        double alpha = 0.0;  // accumulator / timestep after stepping (interpolation factor)
+    };
+
     class FixedTimestep {
     private:
         static constexpr double DEFAULT_TIMESTEP = 1.0 / 60.0;      // 60 Hz physics
@@ -27,8 +32,9 @@ namespace core::physics {
         FixedTimestep() = default;
         ~FixedTimestep() = default;
         
-        int update(double deltaTime, const std::function<void(float)>& physicsStep);
+        FixedTimestepResult update(double deltaTime, const std::function<void(float)>& physicsStep);
         void reset() { accumulator = 0.0; }
+        double getTimestep() const { return timestep; }
 
         void setTimestep(double value) {
             timestep = clamp(value, MIN_TIMESTEP, MAX_TIMESTEP);

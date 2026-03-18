@@ -388,6 +388,12 @@ namespace services
 
     void PhysicsPlayModeHandler::update(float deltaTime)
     {
+        kickUpdate(deltaTime);
+        syncUpdate(deltaTime);
+    }
+
+    void PhysicsPlayModeHandler::kickUpdate(float deltaTime)
+    {
         if (!physicsActive || !physicsProvider)
         {
             return;
@@ -398,7 +404,17 @@ namespace services
             waterService->updateBuoyancy();
         }
 
-        physicsProvider->update(deltaTime);
+        physicsProvider->kickPhysicsStep(deltaTime);
+    }
+
+    void PhysicsPlayModeHandler::syncUpdate(float deltaTime)
+    {
+        if (!physicsActive || !physicsProvider)
+        {
+            return;
+        }
+
+        physicsProvider->syncPhysicsStep();
         physicsProvider->updatePhysicsAnimations(deltaTime);
         syncTransformsFromPhysics();
     }
@@ -467,12 +483,14 @@ namespace services
         auto& transform = registry.get<components::TransformComponent>(entity);
         const auto& rigidBody = registry.get<components::RigidBodyComponent>(entity);
 
+        auto snapshot = physicsProvider->getInterpolatedTransform(handle);
+
         bool allPositionFrozen = rigidBody.freezePositionX && rigidBody.freezePositionY && rigidBody.freezePositionZ;
         bool allRotationFrozen = rigidBody.freezeRotationX && rigidBody.freezeRotationY && rigidBody.freezeRotationZ;
 
         if (!allPositionFrozen)
         {
-            glm::vec3 physPos = physicsProvider->getPosition(handle);
+            glm::vec3 physPos = snapshot.position;
 
             if (rigidBody.freezePositionX) physPos.x = transform.position.x;
             if (rigidBody.freezePositionY) physPos.y = transform.position.y;
@@ -483,7 +501,7 @@ namespace services
 
         if (!allRotationFrozen)
         {
-            glm::quat physRot = physicsProvider->getRotation(handle);
+            glm::quat physRot = snapshot.rotation;
             glm::vec3 eulerRad = glm::eulerAngles(physRot);
             glm::vec3 eulerDeg = glm::degrees(eulerRad);
             transform.rotation = eulerDeg;

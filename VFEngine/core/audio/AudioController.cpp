@@ -84,6 +84,24 @@ namespace core::audio
         });
         busManager->createDefaultBuses();
 
+        // Create command queue and audio thread
+        commandQueue = std::make_unique<AudioCommandQueue>();
+
+        AudioThread::Dependencies deps;
+        deps.audioSystem = audioSystem.get();
+        deps.sourceManager = sourceManager.get();
+        deps.streamingManager = streamingManager.get();
+        deps.busManager = busManager.get();
+        deps.effectManager = effectManager.get();
+        deps.bufferManager = bufferManager.get();
+        deps.listener = listener.get();
+
+        audioThread = std::make_unique<AudioThread>(*commandQueue, deps);
+
+        // Release OpenAL context from main thread so audio thread can claim it
+        audioSystem->releaseContext();
+        audioThread->start();
+
         initialized = true;
         lastUpdateTime = std::chrono::steady_clock::now();
         return true;
@@ -96,7 +114,14 @@ namespace core::audio
             return;
         }
 
-        stopAll();
+        // Signal audio thread to shutdown and wait
+        if (commandQueue && audioThread)
+        {
+            commandQueue->enqueue(ShutdownCmd{});
+            audioThread->stop();
+            audioThread.reset();
+            commandQueue.reset();
+        }
 
         reverbZoneManager->cleanUp();
         effectManager->cleanUp();
@@ -111,73 +136,28 @@ namespace core::audio
 
     void AudioController::update()
     {
-        if (!initialized) return;
+        // No-op: all audio work now happens on the dedicated audio thread
+        lastUpdateTime = std::chrono::steady_clock::now();
+    }
 
-        auto now = std::chrono::steady_clock::now();
-        float deltaTime = std::chrono::duration<float>(now - lastUpdateTime).count();
-        lastUpdateTime = now;
+    // === Sound Playback (enqueue commands) ===
 
-        busManager->flushDirtyVolumes();
-        sourceManager->update();
-        streamingManager->update();
-        sourceManager->updateFilters(listener->getPosition(), deltaTime);
+    AudioHandle AudioController::generateHandle(bool streaming)
+    {
+        uint64_t id = nextMainThreadHandle.fetch_add(1, std::memory_order_relaxed);
+        return streaming ? (id | StreamingHandleBase) : id;
     }
 
     AudioHandle AudioController::playSound(const std::string& path, const PlaySoundParams& params)
     {
-        if (!initialized) return InvalidAudioHandle;
+        if (!initialized || !commandQueue) return InvalidAudioHandle;
 
-        if (params.streaming)
-        {
-            return playStreamingSound(path, params);
-        }
-
-        ALuint bufferId = bufferManager->loadBuffer(path);
-        if (bufferId == 0)
-        {
-            vfLogError("Failed to load audio buffer: {}", path);
-            return InvalidAudioHandle;
-        }
-
-        AudioHandle handle = sourceManager->acquireSource();
-        if (handle == InvalidAudioHandle)
-        {
-            vfLogError("Failed to acquire audio source");
-            return InvalidAudioHandle;
-        }
-
-        AudioSource* source = sourceManager->getSource(handle);
-        if (!source)
-        {
-            sourceManager->releaseSource(handle);
-            return InvalidAudioHandle;
-        }
-
-        source->setBuffer(bufferId);
-
-        AudioSourceConfig config;
-        config.volume = params.volume;
-        config.pitch = params.pitch;
-        config.loop = params.loop;
-        config.is3D = params.is3D;
-        config.position = params.position;
-        config.minDistance = params.minDistance;
-        config.maxDistance = params.maxDistance;
-        config.rolloffFactor = params.rolloffFactor;
-        config.enableDistanceFilter = params.enableDistanceFilter;
-        config.filterStartDistance = params.filterStartDistance;
-        config.filterMaxDistance = params.filterMaxDistance;
-        config.filterIntensity = params.filterIntensity;
-        config.innerConeAngle = params.innerConeAngle;
-        config.outerConeAngle = params.outerConeAngle;
-        config.outerConeGain = params.outerConeGain;
-        config.direction = params.direction;
-        source->applyConfig(config);
-
-        // Assign to bus before play so effect routing is active from first sample
-        busManager->assignSource(handle, params.busName, params.volume);
-        source->play();
-
+        AudioHandle handle = generateHandle(params.streaming);
+        PlaySoundCmd cmd;
+        cmd.preAssignedHandle = handle;
+        cmd.path = path;
+        cmd.params = params;
+        commandQueue->enqueue(std::move(cmd));
         return handle;
     }
 
@@ -192,269 +172,128 @@ namespace core::audio
 
     AudioHandle AudioController::playStreamingSound(const std::string& path, const PlaySoundParams& params)
     {
-        if (!initialized) return InvalidAudioHandle;
-
-        AudioSourceConfig config;
-        config.volume = params.volume;
-        config.pitch = params.pitch;
-        config.loop = params.loop;
-        config.is3D = params.is3D;
-        config.position = params.position;
-        config.minDistance = params.minDistance;
-        config.maxDistance = params.maxDistance;
-        config.rolloffFactor = params.rolloffFactor;
-        config.enableDistanceFilter = params.enableDistanceFilter;
-        config.filterStartDistance = params.filterStartDistance;
-        config.filterMaxDistance = params.filterMaxDistance;
-        config.filterIntensity = params.filterIntensity;
-        config.innerConeAngle = params.innerConeAngle;
-        config.outerConeAngle = params.outerConeAngle;
-        config.outerConeGain = params.outerConeGain;
-        config.direction = params.direction;
-
-        AudioHandle handle = streamingManager->playStreaming(path, config);
-
-        if (handle != InvalidAudioHandle)
-        {
-            busManager->assignSource(handle, params.busName, params.volume);
-        }
-
-        return handle;
+        PlaySoundParams streamParams = params;
+        streamParams.streaming = true;
+        return playSound(path, streamParams);
     }
 
     void AudioController::stopSound(AudioHandle handle)
     {
-        if (!initialized) return;
-
-        // Stop the source first, then remove from bus tracking
-        if (StreamingAudioManager::isStreamingHandle(handle))
-        {
-            streamingManager->stop(handle);
-        }
-        else
-        {
-            AudioSource* source = sourceManager->getSource(handle);
-            if (source)
-            {
-                source->stop();
-            }
-        }
-
-        busManager->removeSource(handle);
-
-        if (!StreamingAudioManager::isStreamingHandle(handle))
-        {
-            sourceManager->releaseSource(handle);
-        }
+        if (!initialized || !commandQueue) return;
+        commandQueue->enqueue(StopSoundCmd{handle});
     }
 
     void AudioController::pauseSound(AudioHandle handle)
     {
-        if (!initialized) return;
-
-        if (StreamingAudioManager::isStreamingHandle(handle))
-        {
-            streamingManager->pause(handle);
-        }
-        else
-        {
-            AudioSource* source = sourceManager->getSource(handle);
-            if (source)
-            {
-                source->pause();
-            }
-        }
+        if (!initialized || !commandQueue) return;
+        commandQueue->enqueue(PauseSoundCmd{handle});
     }
 
     void AudioController::resumeSound(AudioHandle handle)
     {
-        if (!initialized) return;
-
-        if (StreamingAudioManager::isStreamingHandle(handle))
-        {
-            streamingManager->resume(handle);
-        }
-        else
-        {
-            AudioSource* source = sourceManager->getSource(handle);
-            if (source)
-            {
-                source->play();
-            }
-        }
+        if (!initialized || !commandQueue) return;
+        commandQueue->enqueue(ResumeSoundCmd{handle});
     }
+
+    // === Queries (read from snapshot) ===
 
     bool AudioController::isPlaying(AudioHandle handle) const
     {
-        if (!initialized) return false;
-
-        if (StreamingAudioManager::isStreamingHandle(handle))
-        {
-            return streamingManager->isPlaying(handle);
-        }
-        else
-        {
-            const AudioSource* source = sourceManager->getSource(handle);
-            return source && source->isPlaying();
-        }
+        if (!initialized || !audioThread) return false;
+        const auto& snapshot = audioThread->getSnapshot();
+        auto it = snapshot.sources.find(handle);
+        return it != snapshot.sources.end() && it->second.playing;
     }
 
     void AudioController::setVolume(AudioHandle handle, float volume)
     {
-        if (!initialized) return;
-        busManager->setSourceUserVolume(handle, volume);
+        if (!initialized || !commandQueue) return;
+        commandQueue->enqueue(SetVolumeCmd{handle, volume});
     }
 
     void AudioController::setPitch(AudioHandle handle, float pitch)
     {
-        if (!initialized) return;
-
-        if (StreamingAudioManager::isStreamingHandle(handle))
-        {
-            streamingManager->setPitch(handle, pitch);
-        }
-        else
-        {
-            AudioSource* source = sourceManager->getSource(handle);
-            if (source)
-            {
-                source->setPitch(pitch);
-            }
-        }
+        if (!initialized || !commandQueue) return;
+        commandQueue->enqueue(SetPitchCmd{handle, pitch});
     }
 
     void AudioController::stopAll()
     {
-        if (!initialized) return;
-        sourceManager->stopAll();
-        streamingManager->stopAll();
+        if (!initialized || !commandQueue) return;
+        commandQueue->enqueue(StopAllCmd{});
     }
 
     void AudioController::setListenerPosition(const glm::vec3& position, const glm::vec3& forward,
                                               const glm::vec3& up)
     {
-        if (!initialized) return;
-        listener->setPosition(position);
-        listener->setOrientation(forward, up);
+        if (!initialized || !commandQueue) return;
+        commandQueue->enqueue(SetListenerCmd{position, forward, up});
     }
+
+    // === Playback Position ===
 
     float AudioController::getPlaybackPosition(AudioHandle handle) const
     {
-        if (!initialized) return 0.0f;
-
-        if (StreamingAudioManager::isStreamingHandle(handle))
-        {
-            return streamingManager->getPlaybackPosition(handle);
-        }
-        else
-        {
-            const AudioSource* source = sourceManager->getSource(handle);
-            return source ? source->getPlaybackPosition() : 0.0f;
-        }
+        if (!initialized || !audioThread) return 0.0f;
+        const auto& snapshot = audioThread->getSnapshot();
+        auto it = snapshot.sources.find(handle);
+        return it != snapshot.sources.end() ? it->second.playbackPosition : 0.0f;
     }
 
     bool AudioController::setPlaybackPosition(AudioHandle handle, float seconds)
     {
-        if (!initialized) return false;
-
-        if (StreamingAudioManager::isStreamingHandle(handle))
-        {
-            return streamingManager->setPlaybackPosition(handle, seconds);
-        }
-        else
-        {
-            AudioSource* source = sourceManager->getSource(handle);
-            if (source)
-            {
-                source->setPlaybackPosition(seconds);
-                return true;
-            }
-            return false;
-        }
+        if (!initialized || !commandQueue) return false;
+        commandQueue->enqueue(SetPlaybackPosCmd{handle, seconds});
+        return true;
     }
 
     float AudioController::getDuration(AudioHandle handle) const
     {
-        if (!initialized) return 0.0f;
-
-        if (StreamingAudioManager::isStreamingHandle(handle))
-        {
-            return streamingManager->getDuration(handle);
-        }
-        return 0.0f;
+        if (!initialized || !audioThread) return 0.0f;
+        const auto& snapshot = audioThread->getSnapshot();
+        auto it = snapshot.sources.find(handle);
+        return it != snapshot.sources.end() ? it->second.duration : 0.0f;
     }
+
+    // === Audio Settings ===
 
     void AudioController::applySettings(const types::AudioSettings& settings)
     {
-        if (!initialized) return;
-        audioSystem->applySettings(settings);
-
-        if (!settings.busDefinitions.empty())
-        {
-            busManager->loadBusDefinitions(settings.busDefinitions);
-        }
-
-        busManager->setBusVolume("Master", settings.masterVolume);
-        busManager->loadSnapshots(settings.mixSnapshots);
+        if (!initialized || !commandQueue) return;
+        commandQueue->enqueue(ApplySettingsCmd{settings});
     }
 
     types::AudioSettings AudioController::getCurrentSettings() const
     {
         if (!initialized) return types::AudioSettings::createDefault();
-        auto settings = audioSystem->getCurrentSettings();
-
-        // Capture current bus definitions including effect chains
-        auto busNames = busManager->getBusNames();
-        settings.busDefinitions.clear();
-        for (const auto& name : busNames)
-        {
-            types::AudioBusDefinition def;
-            def.name = name;
-            def.defaultVolume = busManager->getBusVolume(name);
-            // Find parent name
-            auto* bus = busManager->getBusByName(name);
-            if (bus && bus->id != bus->parentId)
-            {
-                auto* parent = busManager->getBus(bus->parentId);
-                if (parent)
-                {
-                    def.parentName = parent->name;
-                }
-            }
-            def.effects = busManager->getBusEffectChain(name);
-            settings.busDefinitions.push_back(def);
-        }
-
-        // Capture snapshots
-        settings.mixSnapshots = busManager->getSnapshotDefinitions();
-
-        return settings;
+        // Settings are cached on main thread (not modified by audio thread)
+        return audioSystem->getCurrentSettings();
     }
 
     // === Audio Buses ===
 
     void AudioController::createBus(const std::string& busName, const std::string& parentName)
     {
-        if (!initialized) return;
-        busManager->createBus(busName, parentName);
+        if (!initialized || !commandQueue) return;
+        commandQueue->enqueue(CreateBusCmd{busName, parentName});
     }
 
     void AudioController::setBusVolume(const std::string& busName, float volume)
     {
-        if (!initialized) return;
-        busManager->setBusVolume(busName, volume);
+        if (!initialized || !commandQueue) return;
+        commandQueue->enqueue(BusVolumeCmd{busName, volume});
     }
 
     void AudioController::setBusMuted(const std::string& busName, bool muted)
     {
-        if (!initialized) return;
-        busManager->setBusMuted(busName, muted);
+        if (!initialized || !commandQueue) return;
+        commandQueue->enqueue(BusMuteCmd{busName, muted});
     }
 
     void AudioController::setBusSoloed(const std::string& busName, bool soloed)
     {
-        if (!initialized) return;
-        busManager->setBusSoloed(busName, soloed);
+        if (!initialized || !commandQueue) return;
+        commandQueue->enqueue(BusSoloCmd{busName, soloed});
     }
 
     float AudioController::getBusVolume(const std::string& busName) const
@@ -477,20 +316,20 @@ namespace core::audio
 
     void AudioController::saveMixSnapshot(const std::string& name)
     {
-        if (!initialized) return;
-        busManager->saveSnapshot(name);
+        if (!initialized || !commandQueue) return;
+        commandQueue->enqueue(SaveSnapshotCmd{name});
     }
 
     void AudioController::loadMixSnapshot(const std::string& name)
     {
-        if (!initialized) return;
-        busManager->loadSnapshot(name);
+        if (!initialized || !commandQueue) return;
+        commandQueue->enqueue(LoadSnapshotCmd{name});
     }
 
     void AudioController::deleteMixSnapshot(const std::string& name)
     {
-        if (!initialized) return;
-        busManager->deleteSnapshot(name);
+        if (!initialized || !commandQueue) return;
+        commandQueue->enqueue(DeleteSnapshotCmd{name});
     }
 
     std::vector<std::string> AudioController::getSnapshotNames() const
@@ -503,33 +342,38 @@ namespace core::audio
 
     bool AudioController::addBusEffect(const std::string& busName, const types::BusEffectConfig& config)
     {
-        if (!initialized) return false;
-        return busManager->addBusEffect(busName, config);
+        if (!initialized || !commandQueue) return false;
+        commandQueue->enqueue(AddBusEffectCmd{busName, config});
+        return true;
     }
 
     bool AudioController::removeBusEffect(const std::string& busName, uint32_t effectId)
     {
-        if (!initialized) return false;
-        return busManager->removeBusEffect(busName, effectId);
+        if (!initialized || !commandQueue) return false;
+        commandQueue->enqueue(RemoveBusEffectCmd{busName, effectId});
+        return true;
     }
 
     bool AudioController::updateBusEffect(const std::string& busName, uint32_t effectId,
                                            const types::BusEffectConfig& config)
     {
-        if (!initialized) return false;
-        return busManager->updateBusEffect(busName, effectId, config);
+        if (!initialized || !commandQueue) return false;
+        commandQueue->enqueue(UpdateBusEffectCmd{busName, effectId, config});
+        return true;
     }
 
     bool AudioController::setBusEffectEnabled(const std::string& busName, uint32_t effectId, bool enabled)
     {
-        if (!initialized) return false;
-        return busManager->setBusEffectEnabled(busName, effectId, enabled);
+        if (!initialized || !commandQueue) return false;
+        commandQueue->enqueue(SetBusEffectEnabledCmd{busName, effectId, enabled});
+        return true;
     }
 
     bool AudioController::setBusEffectWetDry(const std::string& busName, uint32_t effectId, float wetDry)
     {
-        if (!initialized) return false;
-        return busManager->setBusEffectWetDry(busName, effectId, wetDry);
+        if (!initialized || !commandQueue) return false;
+        commandQueue->enqueue(SetBusEffectWetDryCmd{busName, effectId, wetDry});
+        return true;
     }
 
     std::vector<types::BusEffectConfig> AudioController::getBusEffectChain(const std::string& busName) const
@@ -546,7 +390,7 @@ namespace core::audio
 
     void AudioController::unloadAudioBuffer(const std::string& path)
     {
-        if (!initialized || !bufferManager) return;
-        bufferManager->unloadBuffer(path);
+        if (!initialized || !commandQueue) return;
+        commandQueue->enqueue(UnloadBufferCmd{path});
     }
 }

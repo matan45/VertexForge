@@ -39,6 +39,8 @@ namespace services
         void unsubscribeFromEvents();
 
         void update(float deltaTime);
+        void kickUpdate(float deltaTime);
+        void syncUpdate(float deltaTime);
 
     private:
         

@@ -43,4 +43,14 @@ namespace core
             coreInterface->setPostUpdateCallback(std::move(callback));
         }
     }
+
+    std::function<void()> RuntimeBootstrap::getSceneGraphUpdateFn() const
+    {
+        return coreInterface ? coreInterface->getSceneGraphUpdateFn() : nullptr;
+    }
+
+    std::function<void()> RuntimeBootstrap::getRenderFn() const
+    {
+        return coreInterface ? coreInterface->getRenderFn() : nullptr;
+    }
 }

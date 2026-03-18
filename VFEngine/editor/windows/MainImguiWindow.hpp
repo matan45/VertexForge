@@ -28,6 +28,7 @@
 #include "config/CloudConfigWindow.hpp"
 #include "config/LightStreamingDebugWindow.hpp"
 #include "PluginManagerWindow.hpp"
+#include "TaskGraphWindow.hpp"
 #include "config/InputActionMappingWindow.hpp"
 #include "MainMenuBar.hpp"
 #include "events/EventDispatcher.hpp"
@@ -73,6 +74,7 @@ namespace windows
         CloudConfigWindow cloudConfigWindow;
         LightStreamingDebugWindow lightStreamingDebugWindow;
         PluginManagerWindow pluginManagerWindow;
+        TaskGraphWindow taskGraphWindow;
         InputActionMappingWindow inputActionMappingWindow;
         MainMenuBar menuBar;
 

@@ -37,6 +37,12 @@ namespace core::audio
 
     uint32_t AudioBusManager::createBus(const std::string& name, const std::string& parentName)
     {
+        std::unique_lock lock(busMutex);
+        return createBusInternal(name, parentName);
+    }
+
+    uint32_t AudioBusManager::createBusInternal(const std::string& name, const std::string& parentName)
+    {
         if (nameToId.count(name))
         {
             return nameToId[name];
@@ -115,6 +121,7 @@ namespace core::audio
 
     std::vector<std::string> AudioBusManager::getBusNames() const
     {
+        std::shared_lock lock(busMutex);
         std::vector<std::string> names;
         names.reserve(buses.size());
         for (const auto& bus : buses)
@@ -126,6 +133,7 @@ namespace core::audio
 
     void AudioBusManager::setBusVolume(const std::string& name, float volume)
     {
+        std::unique_lock lock(busMutex);
         auto* bus = getBusByName(name);
         if (!bus) return;
 
@@ -135,6 +143,7 @@ namespace core::audio
 
     void AudioBusManager::setBusMuted(const std::string& name, bool muted)
     {
+        std::unique_lock lock(busMutex);
         auto* bus = getBusByName(name);
         if (!bus) return;
 
@@ -144,6 +153,7 @@ namespace core::audio
 
     void AudioBusManager::setBusSoloed(const std::string& name, bool soloed)
     {
+        std::unique_lock lock(busMutex);
         auto* bus = getBusByName(name);
         if (!bus) return;
 
@@ -153,6 +163,7 @@ namespace core::audio
 
     void AudioBusManager::flushDirtyVolumes()
     {
+        std::unique_lock lock(busMutex);
         if (!volumesDirty) return;
         volumesDirty = false;
         recalculateEffectiveVolumes();
@@ -161,6 +172,7 @@ namespace core::audio
 
     float AudioBusManager::getBusVolume(const std::string& name) const
     {
+        std::shared_lock lock(busMutex);
         auto it = nameToId.find(name);
         if (it == nameToId.end()) return 1.0f;
 
@@ -173,6 +185,7 @@ namespace core::audio
 
     bool AudioBusManager::isBusMuted(const std::string& name) const
     {
+        std::shared_lock lock(busMutex);
         auto it = nameToId.find(name);
         if (it == nameToId.end()) return false;
 
@@ -185,6 +198,7 @@ namespace core::audio
 
     bool AudioBusManager::isBusSoloed(const std::string& name) const
     {
+        std::shared_lock lock(busMutex);
         auto it = nameToId.find(name);
         if (it == nameToId.end()) return false;
 
@@ -197,6 +211,7 @@ namespace core::audio
 
     void AudioBusManager::assignSource(AudioHandle handle, const std::string& busName, float userVolume)
     {
+        std::unique_lock lock(busMutex);
         uint32_t busId = getBusIdByName(busName);
 
         TrackedSource tracked;
@@ -233,6 +248,7 @@ namespace core::audio
 
     void AudioBusManager::removeSource(AudioHandle handle)
     {
+        std::unique_lock lock(busMutex);
         auto it = trackedSources.find(handle);
         if (it != trackedSources.end())
         {
@@ -258,6 +274,7 @@ namespace core::audio
 
     void AudioBusManager::setSourceUserVolume(AudioHandle handle, float volume)
     {
+        std::unique_lock lock(busMutex);
         auto it = trackedSources.find(handle);
         if (it == trackedSources.end()) return;
 
@@ -274,6 +291,7 @@ namespace core::audio
 
     void AudioBusManager::saveSnapshot(const std::string& name)
     {
+        std::unique_lock lock(busMutex);
         MixSnapshot snapshot;
         snapshot.name = name;
         for (const auto& bus : buses)
@@ -295,6 +313,7 @@ namespace core::audio
 
     void AudioBusManager::loadSnapshot(const std::string& name)
     {
+        std::unique_lock lock(busMutex);
         auto it = snapshots.find(name);
         if (it == snapshots.end()) return;
 
@@ -320,11 +339,13 @@ namespace core::audio
 
     void AudioBusManager::deleteSnapshot(const std::string& name)
     {
+        std::unique_lock lock(busMutex);
         snapshots.erase(name);
     }
 
     std::vector<std::string> AudioBusManager::getSnapshotNames() const
     {
+        std::shared_lock lock(busMutex);
         std::vector<std::string> names;
         for (const auto& [name, _] : snapshots)
         {
@@ -335,15 +356,16 @@ namespace core::audio
 
     void AudioBusManager::createDefaultBuses()
     {
-        createBus(BusNames::Master, "");
-        createBus(BusNames::Music, BusNames::Master);
-        createBus(BusNames::SFX, BusNames::Master);
-        createBus(BusNames::Dialogue, BusNames::Master);
-        createBus(BusNames::Ambient, BusNames::Master);
+        createBusInternal(BusNames::Master, "");
+        createBusInternal(BusNames::Music, BusNames::Master);
+        createBusInternal(BusNames::SFX, BusNames::Master);
+        createBusInternal(BusNames::Dialogue, BusNames::Master);
+        createBusInternal(BusNames::Ambient, BusNames::Master);
     }
 
     void AudioBusManager::loadBusDefinitions(const std::vector<types::AudioBusDefinition>& definitions)
     {
+        std::unique_lock lock(busMutex);
         // Clear existing effects before clearing buses
         if (effectManager)
         {
@@ -376,14 +398,14 @@ namespace core::audio
 
         if (!hasMaster)
         {
-            createBus("Master", "");
+            createBusInternal("Master", "");
         }
 
         for (const auto& def : definitions)
         {
             if (def.name == "Master")
             {
-                createBus("Master", "");
+                createBusInternal("Master", "");
                 auto* bus = getBusByName("Master");
                 if (bus) bus->volume = def.defaultVolume;
             }
@@ -393,7 +415,7 @@ namespace core::audio
         {
             if (def.name != "Master")
             {
-                createBus(def.name, def.parentName);
+                createBusInternal(def.name, def.parentName);
                 auto* bus = getBusByName(def.name);
                 if (bus) bus->volume = def.defaultVolume;
             }
@@ -439,6 +461,7 @@ namespace core::audio
 
     std::vector<types::AudioMixSnapshotDefinition> AudioBusManager::getSnapshotDefinitions() const
     {
+        std::shared_lock lock(busMutex);
         std::vector<types::AudioMixSnapshotDefinition> defs;
         for (const auto& [name, snapshot] : snapshots)
         {
@@ -466,6 +489,7 @@ namespace core::audio
 
     bool AudioBusManager::addBusEffect(const std::string& busName, const types::BusEffectConfig& config)
     {
+        std::unique_lock lock(busMutex);
         if (!effectManager) return false;
         uint32_t busId = getBusIdByName(busName);
         if (!getBus(busId)) return false;
@@ -492,6 +516,7 @@ namespace core::audio
 
     bool AudioBusManager::removeBusEffect(const std::string& busName, uint32_t effectId)
     {
+        std::unique_lock lock(busMutex);
         if (!effectManager) return false;
         uint32_t busId = getBusIdByName(busName);
         if (!getBus(busId)) return false;
@@ -535,6 +560,7 @@ namespace core::audio
     bool AudioBusManager::updateBusEffect(const std::string& busName, uint32_t effectId,
                                            const types::BusEffectConfig& config)
     {
+        std::unique_lock lock(busMutex);
         if (!effectManager) return false;
         uint32_t busId = getBusIdByName(busName);
         return effectManager->updateEffectParams(busId, effectId, config);
@@ -542,6 +568,7 @@ namespace core::audio
 
     bool AudioBusManager::setBusEffectEnabled(const std::string& busName, uint32_t effectId, bool enabled)
     {
+        std::unique_lock lock(busMutex);
         if (!effectManager) return false;
         uint32_t busId = getBusIdByName(busName);
         return effectManager->setEffectEnabled(busId, effectId, enabled);
@@ -549,6 +576,7 @@ namespace core::audio
 
     bool AudioBusManager::setBusEffectWetDry(const std::string& busName, uint32_t effectId, float wetDry)
     {
+        std::unique_lock lock(busMutex);
         if (!effectManager) return false;
         uint32_t busId = getBusIdByName(busName);
         return effectManager->setEffectWetDry(busId, effectId, wetDry);
@@ -556,6 +584,7 @@ namespace core::audio
 
     std::vector<types::BusEffectConfig> AudioBusManager::getBusEffectChain(const std::string& busName) const
     {
+        std::shared_lock lock(busMutex);
         if (!effectManager) return {};
         auto it = nameToId.find(busName);
         if (it == nameToId.end()) return {};

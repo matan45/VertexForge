@@ -7,6 +7,7 @@
 #include "../../physics/RagdollSettingsBuilder.hpp"
 #include <memory>
 #include <mutex>
+#include <future>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -34,6 +35,11 @@ namespace core
 
         void update(float deltaTime) override;
         void setPostStepCallback(std::function<void(float)> callback) override;
+
+        void kickPhysicsStep(float deltaTime) override;
+        void syncPhysicsStep() override;
+        float getInterpolationAlpha() const override;
+        services::PhysicsTransformSnapshot getInterpolatedTransform(services::EntityHandle entity) const override;
 
         void setGravity(const glm::vec3& gravity) override;
         glm::vec3 getGravity() const override;
@@ -139,6 +145,10 @@ namespace core
     private:
         events::SubscriptionToken assetReleaseToken;
         std::unordered_set<uint64_t> waterSensorEntities;
+
+        std::future<physics::FixedTimestepResult> asyncStepFuture;
+        float lastStepAlpha = 0.0f;
+        bool asyncStepInFlight = false;
 
         struct PhysicsAnimationState
         {

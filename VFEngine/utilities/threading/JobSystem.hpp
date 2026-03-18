@@ -4,6 +4,8 @@
 #include <type_traits>
 #include <cstdint>
 
+namespace enki { class TaskScheduler; }
+
 namespace threading {
 
 	enum class JobPriority : uint32_t {
@@ -21,7 +23,14 @@ namespace threading {
 
 		uint32_t getThreadCount() const;
 
+		// Access the underlying enkiTS scheduler (used by TaskGraph for dependency-based execution)
+		enki::TaskScheduler* getScheduler();
+
 		void parallelFor(uint32_t count, const std::function<void(uint32_t begin, uint32_t end)>& body,
+			uint32_t minBatchSize = 64);
+
+		// Overload that exposes the enkiTS thread index for per-thread local storage
+		void parallelFor(uint32_t count, const std::function<void(uint32_t begin, uint32_t end, uint32_t threadNum)>& body,
 			uint32_t minBatchSize = 64);
 
 		template<typename F>

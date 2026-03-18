@@ -8,6 +8,7 @@
 #include <unordered_map>
 #include <map>
 #include <functional>
+#include <shared_mutex>
 
 namespace core::audio
 {
@@ -107,9 +108,12 @@ namespace core::audio
         std::vector<types::AudioMixSnapshotDefinition> getSnapshotDefinitions() const;
 
     private:
+        uint32_t createBusInternal(const std::string& name, const std::string& parentName);
         void recalculateEffectiveVolumes();
         void recalculateBusEffective(AudioBus& bus, float parentEffective, bool parentMuted, bool anySoloed);
         void applyEffectiveVolumesToSources();
+
+        mutable std::shared_mutex busMutex;
 
         std::vector<AudioBus> buses;
         std::unordered_map<std::string, uint32_t> nameToId;
