@@ -28,6 +28,12 @@ namespace core
         uint32_t colliderSettingsRefreshCounter = 0;
         std::vector<events::SubscriptionToken> terrainSubscriptions;
 
+        // Cached lighting layouts (set before renderer exists)
+        vk::DescriptorSetLayout pendingLightBufferLayout;
+        vk::DescriptorSetLayout pendingClusterGridLayout;
+        vk::DescriptorSetLayout pendingClusterLightGridLayout;
+        bool hasPendingLightingLayouts = false;
+
     public:
         explicit VFXRuntimeAdapter();
         ~VFXRuntimeAdapter() noexcept override;

@@ -43,6 +43,10 @@ namespace controllers
             }
 
             gpuRenderPipeline = std::make_unique<render::vfx::VFXSceneGPUPipeline>(device, swapChain);
+            if (hasLightingLayouts)
+            {
+                gpuRenderPipeline->setLightingLayouts(cachedLightBufferLayout, cachedClusterGridLayout, cachedClusterLightGridLayout);
+            }
             gpuRenderPipeline->init(renderPass);
             if (!gpuRenderPipeline->isInitialized())
             {
@@ -53,6 +57,10 @@ namespace controllers
             
             gpuMeshCache = std::make_unique<render::mesh::MeshGPUCache>(device);
             gpuMeshPipeline = std::make_unique<render::vfx::VFXMeshGPUPipeline>(device, swapChain, *gpuMeshCache);
+            if (hasLightingLayouts)
+            {
+                gpuMeshPipeline->setLightingLayouts(cachedLightBufferLayout, cachedClusterGridLayout, cachedClusterLightGridLayout);
+            }
             gpuMeshPipeline->init(renderPass);
             if (!gpuMeshPipeline->isInitialized())
             {
@@ -914,6 +922,12 @@ namespace controllers
         vk::DescriptorSetLayout clusterGridLayout,
         vk::DescriptorSetLayout clusterLightGridLayout)
     {
+        // Cache for pipelines that haven't been created yet
+        cachedLightBufferLayout = lightBufferLayout;
+        cachedClusterGridLayout = clusterGridLayout;
+        cachedClusterLightGridLayout = clusterLightGridLayout;
+        hasLightingLayouts = lightBufferLayout && clusterGridLayout && clusterLightGridLayout;
+
         if (gpuRenderPipeline)
         {
             gpuRenderPipeline->setLightingLayouts(lightBufferLayout, clusterGridLayout, clusterLightGridLayout);

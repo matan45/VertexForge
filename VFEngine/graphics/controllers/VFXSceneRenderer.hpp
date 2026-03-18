@@ -142,6 +142,12 @@ namespace controllers
         std::vector<float> terrainHeights;
         bool terrainDirty = true;
 
+        // Cached lighting layouts (set before init, applied when pipelines are created)
+        vk::DescriptorSetLayout cachedLightBufferLayout;
+        vk::DescriptorSetLayout cachedClusterGridLayout;
+        vk::DescriptorSetLayout cachedClusterLightGridLayout;
+        bool hasLightingLayouts = false;
+
     public:
         explicit VFXSceneRenderer(core::Device& device, core::SwapChain& swapChain);
         ~VFXSceneRenderer();

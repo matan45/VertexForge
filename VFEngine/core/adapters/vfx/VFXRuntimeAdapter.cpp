@@ -38,6 +38,10 @@ namespace core
             auto& swapChain = *VulkanContext::getSwapChain();
             renderer = std::make_unique<controllers::VFXSceneRenderer>(device, swapChain);
         }
+        if (hasPendingLightingLayouts)
+        {
+            renderer->setLightingLayouts(pendingLightBufferLayout, pendingClusterGridLayout, pendingClusterLightGridLayout);
+        }
         renderer->init(sceneRenderPass);
     }
 
@@ -178,6 +182,12 @@ namespace core
         vk::DescriptorSetLayout clusterGridLayout,
         vk::DescriptorSetLayout clusterLightGridLayout)
     {
+        // Cache in case renderer doesn't exist yet (called before init)
+        pendingLightBufferLayout = lightBufferLayout;
+        pendingClusterGridLayout = clusterGridLayout;
+        pendingClusterLightGridLayout = clusterLightGridLayout;
+        hasPendingLightingLayouts = lightBufferLayout && clusterGridLayout && clusterLightGridLayout;
+
         if (renderer) renderer->setLightingLayouts(lightBufferLayout, clusterGridLayout, clusterLightGridLayout);
     }
 
