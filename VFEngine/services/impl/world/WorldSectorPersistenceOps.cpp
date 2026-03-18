@@ -9,8 +9,13 @@
 #include "../../events/render/ObjectStreamingEvents.hpp"
 #include "../../events/render/LightStreamingEvents.hpp"
 #include "scene/EntityRegistry.hpp"
+#include "asset/AssetMetadataSerializer.hpp"
+#include "asset/AssetDatabase.hpp"
 #include "print/Log.hpp"
 #include <filesystem>
+#include <chrono>
+#include <sstream>
+#include <iomanip>
 
 namespace
 {
@@ -158,7 +163,37 @@ namespace services
         });
 
         currentWorldPath = path;
-        return world::WorldDefinitionSerialization::save(worldDefinition, path);
+        bool result = world::WorldDefinitionSerialization::save(worldDefinition, path);
+
+        if (result)
+        {
+            // Create or update .vfmeta sidecar for the .vfworld file
+            auto metaPath = asset::AssetMetadataSerializer::getMetaPath(std::filesystem::path(path));
+            auto existingMeta = asset::AssetMetadataSerializer::load(metaPath);
+
+            asset::AssetMetadata metadata;
+            metadata.guid = existingMeta.has_value() ? existingMeta->guid : asset::AssetGUID::generate();
+            metadata.type = resource::AssetType::World;
+            metadata.importSourcePath = path;
+            {
+                auto now = std::chrono::system_clock::now();
+                auto time = std::chrono::system_clock::to_time_t(now);
+                std::tm tm{};
+                localtime_s(&tm, &time);
+                std::ostringstream oss;
+                oss << std::put_time(&tm, "%Y-%m-%d %H:%M:%S");
+                metadata.importTimestamp = oss.str();
+            }
+            asset::AssetMetadataSerializer::save(metadata, metaPath);
+
+            auto& db = asset::AssetDatabase::instance();
+            if (!db.getGUID(path).has_value())
+            {
+                db.registerAssetWithGUID(metadata.guid, path, resource::AssetType::World);
+            }
+        }
+
+        return result;
     }
 
     bool WorldSectorServiceImpl::loadWorld(const std::string& filePath)
