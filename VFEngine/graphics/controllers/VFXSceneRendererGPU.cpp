@@ -469,6 +469,12 @@ namespace controllers
         gpuConfig.collisionLifetimeLoss = cpuConfig.collisionLifetimeLoss;
         gpuConfig.terrainCollisionEnabled = cpuConfig.collisionEnabled ? 1u : 0u;
 
+        // Lighting
+        gpuConfig.lightingInfluence = cpuConfig.lightingInfluence;
+        gpuConfig.normalMode = static_cast<uint32_t>(cpuConfig.normalMode);
+        gpuConfig.ambientAmount = cpuConfig.ambientAmount;
+        gpuConfig.particleRoughness = cpuConfig.particleRoughness;
+
         return gpuConfig;
     }
 
@@ -901,5 +907,35 @@ namespace controllers
             std::remove_if(activeSubEmitters.begin(), activeSubEmitters.end(),
                 [](const SubEmitterInstance& s) { return s.finished; }),
             activeSubEmitters.end());
+    }
+
+    void VFXSceneRenderer::setLightingLayouts(
+        vk::DescriptorSetLayout lightBufferLayout,
+        vk::DescriptorSetLayout clusterGridLayout,
+        vk::DescriptorSetLayout clusterLightGridLayout)
+    {
+        if (gpuRenderPipeline)
+        {
+            gpuRenderPipeline->setLightingLayouts(lightBufferLayout, clusterGridLayout, clusterLightGridLayout);
+        }
+        if (gpuMeshPipeline)
+        {
+            gpuMeshPipeline->setLightingLayouts(lightBufferLayout, clusterGridLayout, clusterLightGridLayout);
+        }
+    }
+
+    void VFXSceneRenderer::updateLightingDescriptorSets(
+        vk::DescriptorSet lightBufferSet,
+        vk::DescriptorSet clusterGridSet,
+        vk::DescriptorSet clusterLightGridSet)
+    {
+        if (gpuRenderPipeline)
+        {
+            gpuRenderPipeline->updateLightingDescriptorSets(lightBufferSet, clusterGridSet, clusterLightGridSet);
+        }
+        if (gpuMeshPipeline)
+        {
+            gpuMeshPipeline->updateLightingDescriptorSets(lightBufferSet, clusterGridSet, clusterLightGridSet);
+        }
     }
 }

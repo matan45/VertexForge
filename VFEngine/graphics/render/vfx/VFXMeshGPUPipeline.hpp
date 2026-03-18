@@ -99,6 +99,15 @@ namespace render::vfx
         mutable uint32_t frameCounter = 0;
         mutable std::vector<PendingDescriptorSet> pendingDescriptorSets;
 
+        // Lighting descriptor sets (shared from main renderer)
+        vk::DescriptorSetLayout lightBufferLayout;
+        vk::DescriptorSetLayout clusterGridLayout;
+        vk::DescriptorSetLayout clusterLightGridLayout;
+        vk::DescriptorSet cachedLightBufferSet;
+        vk::DescriptorSet cachedClusterGridSet;
+        vk::DescriptorSet cachedClusterLightGridSet;
+        bool lightingAvailable = false;
+
     public:
         explicit VFXMeshGPUPipeline(core::Device& device, core::SwapChain& swapChain,
                                      render::mesh::MeshGPUCache& meshCache);
@@ -128,6 +137,13 @@ namespace render::vfx
         void removeEmitter(uint32_t emitterIndex);
 
         void setDeletionQueue(core::DeferredDeletionQueue* dq) { deletionQueue = dq; }
+
+        void setLightingLayouts(vk::DescriptorSetLayout lightBuffer,
+                                vk::DescriptorSetLayout clusterGrid,
+                                vk::DescriptorSetLayout clusterLightGrid);
+        void updateLightingDescriptorSets(vk::DescriptorSet lightBuffer,
+                                          vk::DescriptorSet clusterGrid,
+                                          vk::DescriptorSet clusterLightGrid);
 
         uint32_t getEmitterMeshIndexCount(uint32_t emitterIndex) const;
 

@@ -290,10 +290,39 @@ namespace render::vfx
         return device.getLogicalDevice().allocateDescriptorSets(allocInfo)[0];
     }
 
+    void VFXMeshGPUPipeline::setLightingLayouts(
+        vk::DescriptorSetLayout lightBuffer,
+        vk::DescriptorSetLayout clusterGrid,
+        vk::DescriptorSetLayout clusterLightGrid)
+    {
+        lightBufferLayout = lightBuffer;
+        clusterGridLayout = clusterGrid;
+        clusterLightGridLayout = clusterLightGrid;
+    }
+
+    void VFXMeshGPUPipeline::updateLightingDescriptorSets(
+        vk::DescriptorSet lightBuffer,
+        vk::DescriptorSet clusterGrid,
+        vk::DescriptorSet clusterLightGrid)
+    {
+        cachedLightBufferSet = lightBuffer;
+        cachedClusterGridSet = clusterGrid;
+        cachedClusterLightGridSet = clusterLightGrid;
+        lightingAvailable = lightBuffer && clusterGrid && clusterLightGrid;
+    }
+
     void VFXMeshGPUPipeline::createPipeline()
     {
         auto vertexBinding = render::mesh::MeshVertexInput::getBindingDescription();
         auto vertexAttribs = render::mesh::MeshVertexInput::getAttributeDescriptions();
+
+        std::vector<vk::DescriptorSetLayout> layouts = {descriptorSetLayout};
+        if (lightBufferLayout && clusterGridLayout && clusterLightGridLayout)
+        {
+            layouts.push_back(lightBufferLayout);
+            layouts.push_back(clusterGridLayout);
+            layouts.push_back(clusterLightGridLayout);
+        }
 
         core::GraphicsPipelineConfig config{
             .device = device.getLogicalDevice(),
@@ -303,7 +332,7 @@ namespace render::vfx
             .vertexBindings = {vertexBinding},
             .vertexAttributes = {vertexAttribs.begin(), vertexAttribs.end()},
             .topology = vk::PrimitiveTopology::eTriangleList,
-            .descriptorSetLayouts = {descriptorSetLayout},
+            .descriptorSetLayouts = layouts,
             .pushConstantSize = sizeof(GPUVFXBillboardPushConstants),
             .pushConstantStages = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
             .cullMode = vk::CullModeFlagBits::eBack,

@@ -62,6 +62,13 @@ namespace core
 
         size_t getInstanceCount() const override;
 
+        void setLightingLayouts(vk::DescriptorSetLayout lightBufferLayout,
+                                vk::DescriptorSetLayout clusterGridLayout,
+                                vk::DescriptorSetLayout clusterLightGridLayout) override;
+        void updateLightingDescriptorSets(vk::DescriptorSet lightBufferSet,
+                                          vk::DescriptorSet clusterGridSet,
+                                          vk::DescriptorSet clusterLightGridSet) override;
+
         void setDistanceCullingEnabled(bool enabled) override;
         void setMaxDrawDistance(float distance) override;
 

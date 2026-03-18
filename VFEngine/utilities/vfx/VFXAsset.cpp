@@ -234,6 +234,24 @@ namespace vfx
                 EmitterDefaults::EVENT_LIFETIME_THRESHOLD, 0.0f, 1.0f
             };
 
+            // Lighting
+            emitterNode.properties["lightingInfluence"] = VFXProperty{
+                "lightingInfluence", VFXPropertyType::Float,
+                EmitterDefaults::LIGHTING_INFLUENCE, 0.0f, 1.0f
+            };
+            emitterNode.properties["normalMode"] = VFXProperty{
+                "normalMode", VFXPropertyType::Int,
+                EmitterDefaults::NORMAL_MODE, 0.0f, 2.0f
+            };
+            emitterNode.properties["ambientAmount"] = VFXProperty{
+                "ambientAmount", VFXPropertyType::Float,
+                EmitterDefaults::AMBIENT_AMOUNT, 0.0f, 1.0f
+            };
+            emitterNode.properties["particleRoughness"] = VFXProperty{
+                "particleRoughness", VFXPropertyType::Float,
+                EmitterDefaults::PARTICLE_ROUGHNESS, 0.0f, 1.0f
+            };
+
             // Collision
             emitterNode.properties["collisionEnabled"] = VFXProperty{
                 "collisionEnabled", VFXPropertyType::Bool,

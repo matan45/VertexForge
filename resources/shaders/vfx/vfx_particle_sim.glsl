@@ -93,6 +93,12 @@ struct GPUEmitterConfig
     float collisionFriction;
     float collisionLifetimeLoss;
     uint terrainCollisionEnabled;
+
+    // Lighting
+    float lightingInfluence;
+    uint normalMode;
+    float ambientAmount;
+    float particleRoughness;
 };
 
 struct GPUEmitterState

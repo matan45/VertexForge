@@ -419,6 +419,7 @@ namespace render::gpudriven
 
         lighting::GPULightBufferManager* getLightBufferManager() const { return lightBufferManager.get(); }
         lighting::ClusterGridManager* getClusterGridManager() const { return clusterGridManager.get(); }
+        lighting::LightCullingPipeline* getLightCullingPipeline() const { return lightCullingPipeline.get(); }
         shadow::ShadowSystem* getShadowSystem() const { return shadowSystem.get(); }
 
         void setDeletionQueue(core::DeferredDeletionQueue* queue);

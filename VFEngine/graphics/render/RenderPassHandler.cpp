@@ -119,6 +119,21 @@ namespace render
 
         if (vfxRuntimeProvider && !vfxRuntimeProvider->isInitialized())
         {
+            // Pass lighting layouts before init so VFX pipelines include them in their layout
+            if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
+            {
+                auto* lbm = gpuDrivenRenderer->getLightBufferManager();
+                auto* cgm = gpuDrivenRenderer->getClusterGridManager();
+                auto* lcp = gpuDrivenRenderer->getLightCullingPipeline();
+                if (lbm && cgm && lcp)
+                {
+                    vfxRuntimeProvider->setLightingLayouts(
+                        lbm->getDescriptorSetLayout(),
+                        cgm->getDescriptorSetLayout(),
+                        lcp->getDescriptorSetLayout());
+                    vfxLightingInitialized = true;
+                }
+            }
             vfxRuntimeProvider->init(meshPipeline->getRenderPass());
         }
     }

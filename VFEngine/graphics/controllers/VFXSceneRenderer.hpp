@@ -181,6 +181,13 @@ namespace controllers
         size_t getInstanceCount() const { return instances.size(); }
         size_t getTotalParticleCount() const;
 
+        void setLightingLayouts(vk::DescriptorSetLayout lightBufferLayout,
+                                vk::DescriptorSetLayout clusterGridLayout,
+                                vk::DescriptorSetLayout clusterLightGridLayout);
+        void updateLightingDescriptorSets(vk::DescriptorSet lightBufferSet,
+                                          vk::DescriptorSet clusterGridSet,
+                                          vk::DescriptorSet clusterLightGridSet);
+
         void setDistanceCullingEnabled(bool enabled) { distanceCullingEnabled = enabled; }
         void setMaxDrawDistance(float distance) { maxVFXDistSq = distance * distance; }
 

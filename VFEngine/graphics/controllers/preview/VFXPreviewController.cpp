@@ -219,6 +219,10 @@ namespace controllers
             config.collisionBounce = params.collisionBounce;
             config.collisionFriction = params.collisionFriction;
             config.collisionLifetimeLoss = params.collisionLifetimeLoss;
+            config.lightingInfluence = params.lightingInfluence;
+            config.normalMode = params.normalMode;
+            config.ambientAmount = params.ambientAmount;
+            config.particleRoughness = params.particleRoughness;
             particleSystem->setEmitterConfig(config);
         }
 

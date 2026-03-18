@@ -100,6 +100,12 @@ struct GPUEmitterConfig
     float collisionFriction;
     float collisionLifetimeLoss;
     uint terrainCollisionEnabled;
+
+    // Lighting
+    float lightingInfluence;
+    uint normalMode;
+    float ambientAmount;
+    float particleRoughness;
 };
 
 layout(std430, set = 0, binding = 3) readonly buffer EmitterConfigBuffer {
@@ -251,6 +257,12 @@ struct GPUEmitterConfig
     float collisionFriction;
     float collisionLifetimeLoss;
     uint terrainCollisionEnabled;
+
+    // Lighting
+    float lightingInfluence;
+    uint normalMode;
+    float ambientAmount;
+    float particleRoughness;
 };
 
 layout(std430, set = 0, binding = 3) readonly buffer EmitterConfigBuffer {
@@ -258,6 +270,37 @@ layout(std430, set = 0, binding = 3) readonly buffer EmitterConfigBuffer {
 };
 
 layout(binding = 4) uniform sampler2D sceneDepthTexture;
+
+// Lighting descriptor sets (shared from main renderer)
+#include "vfx_lighting.glsl"
+
+layout(std430, set = 1, binding = 0) readonly buffer DirectionalLightBuffer {
+    DirectionalLight directionalLights[];
+};
+
+layout(std430, set = 1, binding = 1) readonly buffer PointLightBuffer {
+    PointLight pointLights[];
+};
+
+layout(std430, set = 1, binding = 2) readonly buffer SpotLightBuffer {
+    SpotLight spotLights[];
+};
+
+layout(std140, set = 1, binding = 3) uniform LightCountsUBO {
+    LightCounts lightCounts;
+};
+
+layout(std140, set = 2, binding = 0) uniform ClusterParamsUBO {
+    ClusterGridParams clusterParams;
+};
+
+layout(std430, set = 3, binding = 0) readonly buffer ClusterLightGridBuffer {
+    ClusterLightData clusterLightGrid[];
+};
+
+layout(std430, set = 3, binding = 1) readonly buffer ClusterLightIndexListBuffer {
+    uint lightIndexList[];
+};
 
 layout(push_constant) uniform PushConstants {
     uint emitterIndex;
@@ -272,14 +315,69 @@ void main() {
     vec4 texColor = texture(particleTexture, fragTexCoord);
     vec4 finalColor = texColor * fragColor;
 
-    // Basic directional lighting for mesh particles
-    vec3 lightDir = normalize(vec3(0.5, 1.0, 0.3));
+    GPUEmitterConfig config = configs[pc.emitterIndex];
     vec3 normal = normalize(fragNormal);
-    float diffuse = max(dot(normal, lightDir), 0.0) * 0.6 + 0.4; // ambient (0.4) + diffuse (0.6)
-    finalColor.rgb *= diffuse;
+
+    // Lighting: use scene lights when available, fallback to hard-coded for unlit
+    if (config.lightingInfluence > 0.0 && pc.blendMode != 1u) {
+        // Scene lighting with clustered lights
+        vec3 litColor = finalColor.rgb * config.ambientAmount;
+
+        // Directional lights
+        for (uint i = 0u; i < lightCounts.directionalCount && i < 4u; i++) {
+            float NdotL = max(dot(normal, -directionalLights[i].direction), 0.0);
+            float halfLambert = NdotL * 0.5 + 0.5;
+            litColor += finalColor.rgb * directionalLights[i].color *
+                        directionalLights[i].intensity * halfLambert / LIGHT_INTENSITY_SCALE;
+        }
+
+        // Clustered point lights
+        uint clusterIdx = getClusterIndex(clusterParams, gl_FragCoord.xy, fragViewDepth);
+        ClusterLightData cluster = clusterLightGrid[clusterIdx];
+        uint pointCount = getClusterPointLightCount(cluster);
+        uint spotCount = getClusterSpotLightCount(cluster);
+
+        uint maxPts = min(pointCount, 8u);
+        for (uint i = 0u; i < maxPts; i++) {
+            uint lightIdx = lightIndexList[cluster.offset + i] & LIGHT_INDEX_MASK;
+            PointLight light = pointLights[lightIdx];
+
+            vec3 L = light.position - fragWorldPos;
+            float dist = length(L);
+            if (dist > light.radius) continue;
+            L /= dist;
+
+            float NdotL = max(dot(normal, L), 0.0);
+            float atten = physicalAttenuation(dist, light.radius);
+            litColor += finalColor.rgb * light.color * light.intensity * NdotL * atten / LIGHT_INTENSITY_SCALE;
+        }
+
+        // Clustered spot lights
+        uint maxSpts = min(spotCount, 4u);
+        for (uint i = 0u; i < maxSpts; i++) {
+            uint lightIdx = lightIndexList[cluster.offset + pointCount + i] & LIGHT_INDEX_MASK;
+            SpotLight light = spotLights[lightIdx];
+
+            vec3 L = light.position - fragWorldPos;
+            float dist = length(L);
+            if (dist > light.range) continue;
+            L /= dist;
+
+            float NdotL = max(dot(normal, L), 0.0);
+            float atten = physicalAttenuation(dist, light.range);
+            float spotAtten = spotAngleAttenuation(L, light.direction, light.cosInnerAngle, light.cosOuterAngle);
+            litColor += finalColor.rgb * light.color * light.intensity * NdotL * atten * spotAtten / LIGHT_INTENSITY_SCALE;
+        }
+
+        finalColor.rgb = mix(finalColor.rgb, litColor, config.lightingInfluence);
+    } else {
+        // Fallback: basic hard-coded directional light for unlit mesh particles
+        vec3 lightDir = normalize(vec3(0.5, 1.0, 0.3));
+        float diffuse = max(dot(normal, lightDir), 0.0) * 0.6 + 0.4;
+        finalColor.rgb *= diffuse;
+    }
 
     // Soft particles: fade near scene geometry
-    GPUEmitterConfig config = configs[pc.emitterIndex];
     if (config.softParticleDistance > 0.0) {
         vec2 screenUV = gl_FragCoord.xy / vec2(textureSize(sceneDepthTexture, 0));
         float rawDepth = texture(sceneDepthTexture, screenUV).r;
@@ -292,7 +390,7 @@ void main() {
         finalColor.a *= softFactor;
     }
 
-    // Glow: additive emissive color
+    // Glow: additive emissive color (applied after lighting)
     vec3 glowColor = vec3(pc.glowColorR, pc.glowColorG, pc.glowColorB);
     finalColor.rgb += glowColor * fragGlowIntensity;
 

@@ -173,6 +173,22 @@ namespace core
         return renderer ? renderer->getInstanceCount() : 0;
     }
 
+    void VFXRuntimeAdapter::setLightingLayouts(
+        vk::DescriptorSetLayout lightBufferLayout,
+        vk::DescriptorSetLayout clusterGridLayout,
+        vk::DescriptorSetLayout clusterLightGridLayout)
+    {
+        if (renderer) renderer->setLightingLayouts(lightBufferLayout, clusterGridLayout, clusterLightGridLayout);
+    }
+
+    void VFXRuntimeAdapter::updateLightingDescriptorSets(
+        vk::DescriptorSet lightBufferSet,
+        vk::DescriptorSet clusterGridSet,
+        vk::DescriptorSet clusterLightGridSet)
+    {
+        if (renderer) renderer->updateLightingDescriptorSets(lightBufferSet, clusterGridSet, clusterLightGridSet);
+    }
+
     void VFXRuntimeAdapter::setDistanceCullingEnabled(bool enabled)
     {
         if (renderer) renderer->setDistanceCullingEnabled(enabled);

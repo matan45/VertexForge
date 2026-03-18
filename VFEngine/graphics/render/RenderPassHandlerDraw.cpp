@@ -309,6 +309,31 @@ namespace render
             vfxCamera.farPlane = currentFarPlane;
             vfxRuntimeProvider->setCamera(vfxCamera);
             vfxRuntimeProvider->setSceneDepthImageView(offscreenResources.depthImage.depthImageView);
+
+            // Pass lighting resources from GPUDrivenRenderer to VFX
+            if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
+            {
+                auto* lbm = gpuDrivenRenderer->getLightBufferManager();
+                auto* cgm = gpuDrivenRenderer->getClusterGridManager();
+                auto* lcp = gpuDrivenRenderer->getLightCullingPipeline();
+
+                if (lbm && cgm && lcp)
+                {
+                    if (!vfxLightingInitialized)
+                    {
+                        vfxRuntimeProvider->setLightingLayouts(
+                            lbm->getDescriptorSetLayout(),
+                            cgm->getDescriptorSetLayout(),
+                            lcp->getDescriptorSetLayout());
+                        vfxLightingInitialized = true;
+                    }
+
+                    vfxRuntimeProvider->updateLightingDescriptorSets(
+                        lbm->getDescriptorSet(),
+                        cgm->getDescriptorSet(),
+                        lcp->getDescriptorSet());
+                }
+            }
         }
 
         bool hasTerrainToRender = gpuDrivenRenderer && gpuDrivenRenderer->isTerrainRenderingEnabled()

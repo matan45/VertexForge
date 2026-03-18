@@ -527,6 +527,64 @@ namespace editor::vfxeditor
             if (disableWidget) ImGui::EndDisabled();
             ImGui::PopID();
         }
+
+        // Lighting subsection
+        ImGui::Spacing();
+        ImGui::Text("Lighting");
+        ImGui::Separator();
+
+        struct LightEntry { const char* key; const char* label; };
+        static constexpr LightEntry lightEntries[] = {
+            {"lightingInfluence",  "Light Influence"},
+            {"ambientAmount",      "Ambient"},
+            {"particleRoughness",  "Roughness"},
+        };
+
+        for (const auto& entry : lightEntries)
+        {
+            auto it = node.properties.find(entry.key);
+            if (it == node.properties.end()) continue;
+
+            auto& prop = it->second;
+            ImGui::PushID(entry.key);
+
+            if (auto* val = std::get_if<float>(&prop.value))
+            {
+                ImGui::Text("%s", entry.label);
+                ImGui::SameLine(100.0f);
+                ImGui::SetNextItemWidth(inputWidth);
+                if (ImGui::DragFloat("##v", val, 0.01f, 0.0f, 1.0f, "%.2f"))
+                {
+                    notifyChanged();
+                }
+            }
+
+            ImGui::PopID();
+        }
+
+        // Normal mode combo
+        {
+            auto nmIt = node.properties.find("normalMode");
+            if (nmIt != node.properties.end())
+            {
+                if (auto* val = std::get_if<int32_t>(&nmIt->second.value))
+                {
+                    ImGui::Text("Normal Mode");
+                    ImGui::SameLine(100.0f);
+                    ImGui::SetNextItemWidth(inputWidth * 1.5f);
+                    const char* normalModes[] = {"Sphere", "View-Aligned", "Mesh"};
+                    int current = std::clamp(*val, 0, 2);
+
+                    bool disableMesh = (currentRenderMode != 3);
+                    if (ImGui::Combo("##panel_normalMode", &current, normalModes, 3))
+                    {
+                        if (disableMesh && current == 2) current = 0;
+                        *val = current;
+                        notifyChanged();
+                    }
+                }
+            }
+        }
     }
 
     void VFXPropertyPanel::drawEventsProperties(vfx::VFXNode& node, float inputWidth)

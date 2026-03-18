@@ -81,6 +81,12 @@ struct GPUEmitterConfig
     float collisionFriction;
     float collisionLifetimeLoss;
     uint terrainCollisionEnabled;
+
+    // Lighting
+    float lightingInfluence;
+    uint normalMode;
+    float ambientAmount;
+    float particleRoughness;
 };
 
 const uint MAX_TRAIL_POINTS_STRIDE = 256u;
@@ -276,6 +282,12 @@ struct GPUEmitterConfig
     float collisionFriction;
     float collisionLifetimeLoss;
     uint terrainCollisionEnabled;
+
+    // Lighting
+    float lightingInfluence;
+    uint normalMode;
+    float ambientAmount;
+    float particleRoughness;
 };
 
 layout(std430, set = 0, binding = 3) readonly buffer EmitterConfigBuffer {

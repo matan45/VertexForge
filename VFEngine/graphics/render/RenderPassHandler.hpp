@@ -184,6 +184,7 @@ namespace render
         mutable std::unordered_map<std::string, bool> customShaderRequirementCache;
         material::CallbackId materialChangeCallbackId{};
         mutable bool lightOcclusionInitialized = false;
+        mutable bool vfxLightingInitialized = false;
 
         float brushOverlayRadius_ = 0.0f;
         float brushOverlayFalloff_ = 0.0f;
