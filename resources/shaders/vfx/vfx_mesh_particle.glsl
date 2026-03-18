@@ -105,7 +105,7 @@ struct GPUEmitterConfig
     float lightingInfluence;
     uint normalMode;
     float ambientAmount;
-    float particleRoughness;
+    float _lightPad0;
 };
 
 layout(std430, set = 0, binding = 3) readonly buffer EmitterConfigBuffer {
@@ -262,7 +262,7 @@ struct GPUEmitterConfig
     float lightingInfluence;
     uint normalMode;
     float ambientAmount;
-    float particleRoughness;
+    float _lightPad0;
 };
 
 layout(std430, set = 0, binding = 3) readonly buffer EmitterConfigBuffer {
@@ -271,9 +271,11 @@ layout(std430, set = 0, binding = 3) readonly buffer EmitterConfigBuffer {
 
 layout(binding = 4) uniform sampler2D sceneDepthTexture;
 
-// Lighting descriptor sets (shared from main renderer)
-#include "vfx_lighting.glsl"
+// Lighting types (struct definitions + cluster helpers)
+#include "../common/lighting_functions.glsl"
+#include "../common/cluster_culling.glsl"
 
+// Lighting descriptor sets (shared from main renderer)
 layout(std430, set = 1, binding = 0) readonly buffer DirectionalLightBuffer {
     DirectionalLight directionalLights[];
 };
@@ -302,6 +304,9 @@ layout(std430, set = 3, binding = 1) readonly buffer ClusterLightIndexListBuffer
     uint lightIndexList[];
 };
 
+// VFX lighting evaluation (must come after buffer declarations above)
+#include "vfx_lighting.glsl"
+
 layout(push_constant) uniform PushConstants {
     uint emitterIndex;
     float alphaClipThreshold;
@@ -320,57 +325,9 @@ void main() {
 
     // Lighting: use scene lights when available, fallback to hard-coded for unlit
     if (config.lightingInfluence > 0.0 && pc.blendMode != 1u) {
-        const float INV_PI = 0.31830988;
-
-        // Scene lighting with clustered lights
-        vec3 litColor = finalColor.rgb * config.ambientAmount;
-
-        // Directional lights (Lambertian diffuse with 1/PI normalization)
-        for (uint i = 0u; i < lightCounts.directionalCount && i < 4u; i++) {
-            float NdotL = max(dot(normal, -directionalLights[i].direction), 0.0);
-            litColor += finalColor.rgb * directionalLights[i].color *
-                        directionalLights[i].intensity * NdotL * INV_PI;
-        }
-
-        // Clustered point lights
-        uint clusterIdx = getClusterIndex(clusterParams, gl_FragCoord.xy, fragViewDepth);
-        ClusterLightData cluster = clusterLightGrid[clusterIdx];
-        uint pointCount = getClusterPointLightCount(cluster);
-        uint spotCount = getClusterSpotLightCount(cluster);
-
-        uint maxPts = min(pointCount, 8u);
-        for (uint i = 0u; i < maxPts; i++) {
-            uint lightIdx = lightIndexList[cluster.offset + i] & LIGHT_INDEX_MASK;
-            PointLight light = pointLights[lightIdx];
-
-            vec3 L = light.position - fragWorldPos;
-            float dist = length(L);
-            if (dist > light.radius) continue;
-            L /= dist;
-
-            float NdotL = max(dot(normal, L), 0.0);
-            float atten = physicalAttenuation(dist, light.radius);
-            litColor += finalColor.rgb * light.color * light.intensity * NdotL * atten * INV_PI;
-        }
-
-        // Clustered spot lights
-        uint maxSpts = min(spotCount, 4u);
-        for (uint i = 0u; i < maxSpts; i++) {
-            uint lightIdx = lightIndexList[cluster.offset + pointCount + i] & LIGHT_INDEX_MASK;
-            SpotLight light = spotLights[lightIdx];
-
-            vec3 L = light.position - fragWorldPos;
-            float dist = length(L);
-            if (dist > light.range) continue;
-            L /= dist;
-
-            float NdotL = max(dot(normal, L), 0.0);
-            float atten = physicalAttenuation(dist, light.range);
-            float spotAtten = spotAngleAttenuation(L, light.direction, light.cosInnerAngle, light.cosOuterAngle);
-            litColor += finalColor.rgb * light.color * light.intensity * NdotL * atten * spotAtten * INV_PI;
-        }
-
-        finalColor.rgb = mix(finalColor.rgb, litColor, config.lightingInfluence);
+        finalColor.rgb = evaluateVFXLighting(
+            finalColor.rgb, normal, fragWorldPos, fragViewDepth,
+            config.ambientAmount, config.lightingInfluence);
     } else {
         // Fallback: basic hard-coded directional light for unlit mesh particles
         vec3 lightDir = normalize(vec3(0.5, 1.0, 0.3));

@@ -69,6 +69,7 @@ namespace controllers::offscreen
     void FramePreparationSystem::invalidateMaterialCache(const std::string& materialPath)
     {
         pbrCache.erase(materialPath);
+        instanceBatchCache.erase(materialPath);
     }
 
     void FramePreparationSystem::prepareMeshes(const FrameContext& ctx)
@@ -265,23 +266,31 @@ namespace controllers::offscreen
 
             if (canBatch(entity, renderData))
             {
-                // Resolve material instance to parent for batching (scalar-only overrides)
+                // Resolve material instance to parent for batching (scalar-only overrides).
+                // Uses a cache to avoid synchronous I/O on the render thread each frame.
                 std::string batchMaterialPath = renderData.defaultMaterialPath;
                 bool hasInstancePBR = false;
                 if (material::isInstanceFile(batchMaterialPath))
                 {
-                    auto instanceData = resource::ResourceManager::loadMaterialInstance(
-                        asset::AssetRef::fromPath(batchMaterialPath));
-
-                    if (instanceData && instanceData->parentMaterialRef.isValid()
-                        && instanceData->textureOverrides.empty())
+                    auto cacheIt = instanceBatchCache.find(batchMaterialPath);
+                    if (cacheIt == instanceBatchCache.end())
                     {
-                        std::string parentPath = instanceData->parentMaterialRef.resolve();
-                        if (!parentPath.empty())
+                        InstanceBatchInfo info;
+                        auto instanceData = resource::ResourceManager::loadMaterialInstance(
+                            asset::AssetRef::fromPath(batchMaterialPath));
+                        if (instanceData && instanceData->parentMaterialRef.isValid())
                         {
-                            batchMaterialPath = parentPath;
-                            hasInstancePBR = true;
+                            info.parentMaterialPath = instanceData->parentMaterialRef.resolve();
+                            info.hasTextureOverrides = !instanceData->textureOverrides.empty();
                         }
+                        cacheIt = instanceBatchCache.emplace(batchMaterialPath, std::move(info)).first;
+                    }
+
+                    const auto& info = cacheIt->second;
+                    if (!info.parentMaterialPath.empty() && !info.hasTextureOverrides)
+                    {
+                        batchMaterialPath = info.parentMaterialPath;
+                        hasInstancePBR = true;
                     }
                 }
 

@@ -537,7 +537,6 @@ namespace editor::vfxeditor
         static constexpr LightEntry lightEntries[] = {
             {"lightingInfluence",  "Light Influence"},
             {"ambientAmount",      "Ambient"},
-            {"particleRoughness",  "Roughness"},
         };
 
         for (const auto& entry : lightEntries)
@@ -572,13 +571,20 @@ namespace editor::vfxeditor
                     ImGui::Text("Normal Mode");
                     ImGui::SameLine(100.0f);
                     ImGui::SetNextItemWidth(inputWidth * 1.5f);
+                    bool isMeshMode = (currentRenderMode == 3);
+                    int maxModes = isMeshMode ? 3 : 2;
                     const char* normalModes[] = {"Sphere", "View-Aligned", "Mesh"};
-                    int current = std::clamp(*val, 0, 2);
+                    int current = std::clamp(*val, 0, maxModes - 1);
 
-                    bool disableMesh = (currentRenderMode != 3);
-                    if (ImGui::Combo("##panel_normalMode", &current, normalModes, 3))
+                    // Correct stored value if render mode changed away from Mesh
+                    if (current != *val)
                     {
-                        if (disableMesh && current == 2) current = 0;
+                        *val = current;
+                        notifyChanged();
+                    }
+
+                    if (ImGui::Combo("##panel_normalMode", &current, normalModes, maxModes))
+                    {
                         *val = current;
                         notifyChanged();
                     }

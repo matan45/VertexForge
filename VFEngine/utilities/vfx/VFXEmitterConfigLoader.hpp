@@ -160,8 +160,6 @@ namespace vfx
             getInt(*emitterNode, "normalMode", EmitterDefaults::NORMAL_MODE), 0, 2);
         config.ambientAmount = std::clamp(
             getFloat(*emitterNode, "ambientAmount", EmitterDefaults::AMBIENT_AMOUNT), 0.0f, 1.0f);
-        config.particleRoughness = std::clamp(
-            getFloat(*emitterNode, "particleRoughness", EmitterDefaults::PARTICLE_ROUGHNESS), 0.0f, 1.0f);
 
         // Collision
         config.collisionEnabled = getBool(*emitterNode, "collisionEnabled", EmitterDefaults::COLLISION_ENABLED);

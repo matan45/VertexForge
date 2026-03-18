@@ -247,11 +247,6 @@ namespace vfx
                 "ambientAmount", VFXPropertyType::Float,
                 EmitterDefaults::AMBIENT_AMOUNT, 0.0f, 1.0f
             };
-            emitterNode.properties["particleRoughness"] = VFXProperty{
-                "particleRoughness", VFXPropertyType::Float,
-                EmitterDefaults::PARTICLE_ROUGHNESS, 0.0f, 1.0f
-            };
-
             // Collision
             emitterNode.properties["collisionEnabled"] = VFXProperty{
                 "collisionEnabled", VFXPropertyType::Bool,

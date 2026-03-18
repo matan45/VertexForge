@@ -164,7 +164,6 @@ namespace vfx
         inline constexpr float LIGHTING_INFLUENCE = 0.0f;
         inline constexpr int NORMAL_MODE = 0;              // 0 = sphere, 1 = view-aligned, 2 = mesh
         inline constexpr float AMBIENT_AMOUNT = 0.3f;
-        inline constexpr float PARTICLE_ROUGHNESS = 0.8f;
 
         // Collision
         inline constexpr bool COLLISION_ENABLED = false;

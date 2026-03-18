@@ -74,7 +74,6 @@ namespace controllers
         float lightingInfluence = 0.0f;
         int normalMode = 0;
         float ambientAmount = 0.3f;
-        float particleRoughness = 0.8f;
 
         bool collisionEnabled = false;
         float collisionBounce = 0.5f;

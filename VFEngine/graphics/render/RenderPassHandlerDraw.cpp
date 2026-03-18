@@ -310,8 +310,10 @@ namespace render
             vfxRuntimeProvider->setCamera(vfxCamera);
             vfxRuntimeProvider->setSceneDepthImageView(offscreenResources.depthImage.depthImageView);
 
-            // Pass lighting resources from GPUDrivenRenderer to VFX
-            if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
+            // Update per-frame lighting descriptor sets for VFX.
+            // Lighting layouts are set once during init (RenderPassHandler::initPipelines),
+            // before VFX pipeline creation. Only descriptor sets need per-frame updates.
+            if (vfxLightingInitialized && gpuDrivenRendererInitialized && gpuDrivenRenderer)
             {
                 auto* lbm = gpuDrivenRenderer->getLightBufferManager();
                 auto* cgm = gpuDrivenRenderer->getClusterGridManager();
@@ -319,15 +321,6 @@ namespace render
 
                 if (lbm && cgm && lcp)
                 {
-                    if (!vfxLightingInitialized)
-                    {
-                        vfxRuntimeProvider->setLightingLayouts(
-                            lbm->getDescriptorSetLayout(),
-                            cgm->getDescriptorSetLayout(),
-                            lcp->getDescriptorSetLayout());
-                        vfxLightingInitialized = true;
-                    }
-
                     vfxRuntimeProvider->updateLightingDescriptorSets(
                         lbm->getDescriptorSet(),
                         cgm->getDescriptorSet(),

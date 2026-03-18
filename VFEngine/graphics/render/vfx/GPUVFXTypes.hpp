@@ -133,9 +133,9 @@ namespace render::vfx
 
         // Lighting
         float lightingInfluence = 0.0f;       // 0 = unlit (default), 1 = fully lit
-        uint32_t normalMode = 0;              // 0 = sphere, 1 = view-aligned, 2 = mesh
+        int32_t normalMode = 0;               // 0 = sphere, 1 = view-aligned, 2 = mesh
         float ambientAmount = 0.3f;           // ambient light contribution
-        float particleRoughness = 0.8f;       // diffuse spread (half-Lambert)
+        float _lightPad0 = 0.0f;
     };
     static_assert(sizeof(GPUEmitterConfig) == 336, "GPUEmitterConfig must be 336 bytes for GPU alignment");
     static_assert(offsetof(GPUEmitterConfig, emitDirection) == 0, "GPUEmitterConfig::emitDirection offset mismatch");
@@ -182,7 +182,6 @@ namespace render::vfx
     static_assert(offsetof(GPUEmitterConfig, lightingInfluence) == 320, "GPUEmitterConfig::lightingInfluence offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, normalMode) == 324, "GPUEmitterConfig::normalMode offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, ambientAmount) == 328, "GPUEmitterConfig::ambientAmount offset mismatch");
-    static_assert(offsetof(GPUEmitterConfig, particleRoughness) == 332, "GPUEmitterConfig::particleRoughness offset mismatch");
 
     struct alignas(16) GPUEmitterState
     {

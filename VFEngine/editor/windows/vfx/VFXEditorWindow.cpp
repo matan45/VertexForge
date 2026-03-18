@@ -212,8 +212,6 @@ namespace windows
             getInt(*emitterNode, "normalMode", vfx::EmitterDefaults::NORMAL_MODE), 0, 2);
         params.ambientAmount = std::clamp(
             getFloat(*emitterNode, "ambientAmount", vfx::EmitterDefaults::AMBIENT_AMOUNT), 0.0f, 1.0f);
-        params.particleRoughness = std::clamp(
-            getFloat(*emitterNode, "particleRoughness", vfx::EmitterDefaults::PARTICLE_ROUGHNESS), 0.0f, 1.0f);
 
         // Collision
         params.collisionEnabled = getBool(*emitterNode, "collisionEnabled", vfx::EmitterDefaults::COLLISION_ENABLED);

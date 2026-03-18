@@ -222,7 +222,6 @@ namespace controllers
             config.lightingInfluence = params.lightingInfluence;
             config.normalMode = params.normalMode;
             config.ambientAmount = params.ambientAmount;
-            config.particleRoughness = params.particleRoughness;
             particleSystem->setEmitterConfig(config);
         }
 

@@ -28,12 +28,7 @@ layout(std430, set = 0, binding = 0) readonly buffer PerDrawDataBuffer {
     PerDrawData perDrawData[];
 };
 
-struct GPUInstanceTransform {
-    mat4 modelMatrix;
-    vec4 albedoOverride;
-    vec4 pbrOverride;
-    vec4 iblOverride;
-};
+#include "../common/gpu_instance_types.glsl"
 
 layout(std430, set = 0, binding = 1) readonly buffer InstanceTransformBuffer {
     GPUInstanceTransform instanceTransforms[];
@@ -231,12 +226,7 @@ layout(std430, set = 0, binding = 0) readonly buffer PerDrawDataBuffer {
     PerDrawData perDrawData[];
 };
 
-struct GPUInstanceTransform {
-    mat4 modelMatrix;
-    vec4 albedoOverride;
-    vec4 pbrOverride;
-    vec4 iblOverride;
-};
+#include "../common/gpu_instance_types.glsl"
 
 layout(std430, set = 0, binding = 1) readonly buffer InstanceTransformBuffer {
     GPUInstanceTransform instanceTransforms[];

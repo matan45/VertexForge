@@ -479,9 +479,8 @@ namespace controllers
 
         // Lighting
         gpuConfig.lightingInfluence = cpuConfig.lightingInfluence;
-        gpuConfig.normalMode = static_cast<uint32_t>(cpuConfig.normalMode);
+        gpuConfig.normalMode = cpuConfig.normalMode;
         gpuConfig.ambientAmount = cpuConfig.ambientAmount;
-        gpuConfig.particleRoughness = cpuConfig.particleRoughness;
 
         return gpuConfig;
     }

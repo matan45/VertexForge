@@ -98,7 +98,7 @@ struct GPUEmitterConfig
     float lightingInfluence;
     uint normalMode;
     float ambientAmount;
-    float particleRoughness;
+    float _lightPad0;
 };
 
 struct GPUEmitterState
