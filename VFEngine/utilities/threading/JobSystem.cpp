@@ -91,6 +91,28 @@ namespace threading {
 		pImpl->scheduler.WaitforTask(&task);
 	}
 
+	void JobSystem::parallelFor(uint32_t count,
+		const std::function<void(uint32_t, uint32_t, uint32_t)>& body,
+		uint32_t minBatchSize)
+	{
+		if (count == 0) return;
+
+		if (count <= minBatchSize)
+		{
+			body(0, count, 0);
+			return;
+		}
+
+		enki::TaskSet task(count,
+			[&body](enki::TaskSetPartition range, uint32_t threadNum) {
+				body(range.start, range.end, threadNum);
+			}
+		);
+		task.m_MinRange = minBatchSize;
+		pImpl->scheduler.AddTaskSetToPipe(&task);
+		pImpl->scheduler.WaitforTask(&task);
+	}
+
 	void JobSystem::submitTask(std::function<void()> func, JobPriority priority)
 	{
 		if (pImpl->scheduler.GetThreadNum() == enki::NO_THREAD_NUM) {

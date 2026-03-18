@@ -7,7 +7,8 @@
 namespace threading {
 
 	// Parallel collect: iterate view, filter + transform, build output vector.
-	// Each thread builds a local vector, then merge. Zero contention on hot path.
+	// Each thread builds a local vector (indexed by enkiTS threadNum), then merge.
+	// Zero contention on the hot path.
 	template<typename T, typename... Components, typename Filter, typename Transform>
 	std::vector<T> parallelCollect(entt::registry& registry,
 		Filter&& filter, Transform&& transform,
@@ -43,16 +44,14 @@ namespace threading {
 			return result;
 		}
 
-		// Per-thread local vectors indexed by range partition
+		// Per-thread local vectors indexed by enkiTS thread ID (guaranteed unique per thread)
 		uint32_t threadCount = JobSystem::instance().getThreadCount() + 1; // +1 for calling thread
 		std::vector<std::vector<T>> threadResults(threadCount);
 
 		JobSystem::instance().parallelFor(count,
-			[&](uint32_t begin, uint32_t end)
+			[&](uint32_t begin, uint32_t end, uint32_t threadNum)
 			{
-				// Use a simple thread-local index based on the range start
-				// Each parallelFor partition gets a unique range, so we hash begin to pick a slot
-				uint32_t slot = begin % threadCount;
+				uint32_t slot = threadNum < threadCount ? threadNum : 0;
 				auto& localResults = threadResults[slot];
 
 				for (uint32_t i = begin; i < end; ++i)

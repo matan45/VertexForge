@@ -102,9 +102,9 @@ namespace scene
         std::vector<std::vector<std::pair<uint32_t, math::AABB>>> threadResults(threadCount);
 
         threading::JobSystem::instance().parallelFor(count,
-            [&](uint32_t begin, uint32_t end)
+            [&](uint32_t begin, uint32_t end, uint32_t threadNum)
             {
-                uint32_t slot = begin % threadCount;
+                uint32_t slot = threadNum < threadCount ? threadNum : 0;
                 auto& localResults = threadResults[slot];
 
                 for (uint32_t i = begin; i < end; ++i)
