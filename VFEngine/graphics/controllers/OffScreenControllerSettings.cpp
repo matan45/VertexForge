@@ -56,6 +56,7 @@ namespace controllers
         gpuDriven->setTerrainFrustumCullingEnabled(settings.culling.terrainFrustumCullingEnabled);
         gpuDriven->setTerrainMeshletCullingEnabled(settings.culling.terrainMeshletCullingEnabled);
 
+        gpuDriven->setLODCrossfadeEnabled(settings.culling.lodCrossfadeEnabled);
         gpuDriven->setGlobalLodBias(settings.culling.globalLodBias);
         gpuDriven->setDistanceCullingEnabled(settings.distanceCulling.enabled);
         using namespace render::gpudriven::ObjectCategory;

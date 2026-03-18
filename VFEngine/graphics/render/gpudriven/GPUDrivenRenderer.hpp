@@ -238,6 +238,7 @@ namespace render::gpudriven
         {
             bool frustumCullingEnabled = true;
             bool lodSelectionEnabled = true;
+            bool lodCrossfadeEnabled = true;
             bool occlusionCullingEnabled = true;
             bool distanceCullingEnabled = false;
             float categoryDistances[services::CullingCategory::Count] = {1000.0f, 2000.0f, 500.0f, 300.0f, 200.0f, 500.0f, 1000.0f};
@@ -377,6 +378,9 @@ namespace render::gpudriven
 
         void setLODSelectionEnabled(bool enabled) { culling.lodSelectionEnabled = enabled; }
         bool isLODSelectionEnabled() const { return culling.lodSelectionEnabled; }
+
+        void setLODCrossfadeEnabled(bool enabled) { culling.lodCrossfadeEnabled = enabled; }
+        bool isLODCrossfadeEnabled() const { return culling.lodCrossfadeEnabled; }
 
         void setOcclusionCullingEnabled(bool enabled) { culling.occlusionCullingEnabled = enabled; }
         bool isOcclusionCullingEnabled() const { return culling.occlusionCullingEnabled; }

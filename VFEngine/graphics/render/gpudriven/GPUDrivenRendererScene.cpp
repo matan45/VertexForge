@@ -100,6 +100,7 @@ namespace render::gpudriven
             .frustumCullingEnabled = culling.frustumCullingEnabled,
             .occlusionCullingEnabled = culling.occlusionCullingEnabled,
             .lodSelectionEnabled = culling.lodSelectionEnabled,
+            .lodCrossfadeEnabled = culling.lodCrossfadeEnabled,
             .distanceCullingEnabled = culling.distanceCullingEnabled,
             .categoryDistances = {culling.categoryDistances[0], culling.categoryDistances[1], culling.categoryDistances[2], culling.categoryDistances[3], culling.categoryDistances[4], culling.categoryDistances[5], culling.categoryDistances[6]},
             .shadowDistanceMultiplier = culling.shadowDistanceMultiplier,
@@ -155,6 +156,7 @@ namespace render::gpudriven
             .frustumCullingEnabled = culling.frustumCullingEnabled,
             .occlusionCullingEnabled = false,  // No HiZ data for RTT
             .lodSelectionEnabled = culling.lodSelectionEnabled,
+            .lodCrossfadeEnabled = culling.lodCrossfadeEnabled,
             .distanceCullingEnabled = culling.distanceCullingEnabled,
             .categoryDistances = {culling.categoryDistances[0], culling.categoryDistances[1], culling.categoryDistances[2], culling.categoryDistances[3], culling.categoryDistances[4], culling.categoryDistances[5], culling.categoryDistances[6]},
             .shadowDistanceMultiplier = culling.shadowDistanceMultiplier,
@@ -190,6 +192,7 @@ namespace render::gpudriven
             .frustumCullingEnabled = culling.frustumCullingEnabled,
             .occlusionCullingEnabled = culling.occlusionCullingEnabled,
             .lodSelectionEnabled = culling.lodSelectionEnabled,
+            .lodCrossfadeEnabled = culling.lodCrossfadeEnabled,
             .distanceCullingEnabled = culling.distanceCullingEnabled,
             .categoryDistances = {culling.categoryDistances[0], culling.categoryDistances[1], culling.categoryDistances[2], culling.categoryDistances[3], culling.categoryDistances[4], culling.categoryDistances[5], culling.categoryDistances[6]},
             .shadowDistanceMultiplier = culling.shadowDistanceMultiplier,

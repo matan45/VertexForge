@@ -130,6 +130,31 @@ uint selectLOD(float screenPixels, vec4 thresholds, float globalBias) {
     return 3;
 }
 
+// Compute crossfade alpha for LOD transition dithering.
+// Returns 0-255 byte: 0 = fully visible, 255 = fully fading out.
+const float LOD_CROSSFADE_FRACTION = 0.1;
+
+uint computeCrossfadeByte(float screenPixels, vec4 thresholds, float globalBias, uint selectedLOD) {
+    if (selectedLOD >= 3u) return 0u;
+
+    float adjustedPixels = screenPixels * pow(2.0, -(thresholds.w + globalBias));
+
+    float boundary;
+    if (selectedLOD == 0u) boundary = thresholds.x;
+    else if (selectedLOD == 1u) boundary = thresholds.y;
+    else boundary = thresholds.z;
+
+    float transitionWidth = boundary * LOD_CROSSFADE_FRACTION;
+    float distFromBoundary = adjustedPixels - boundary;
+
+    // Crossfade when approaching the boundary from above (about to switch to coarser LOD)
+    if (distFromBoundary > 0.0 && distFromBoundary < transitionWidth) {
+        float alpha = 1.0 - distFromBoundary / transitionWidth;
+        return uint(clamp(alpha, 0.0, 1.0) * 255.0);
+    }
+    return 0u;
+}
+
 uint findBestAvailableLOD(uint targetLOD, uint availableMask) {
     if (availableMask == 0xFu) {
         return targetLOD;
@@ -275,6 +300,7 @@ void main() {
     uint meshletOffset;
     uint meshletCount;
     uint baseVertexOffset;
+    float screenPixelsCrossfade = 0.0;
 
     if (isInstanced) {
         // For instanced objects, the task shader handles per-instance LOD selection.
@@ -292,8 +318,8 @@ void main() {
         if (camera.enableLODSelection != 0u) {
             vec4 viewSphere = camera.view * vec4(worldSphere.xyz, 1.0);
             viewSphere.w = worldSphere.w;
-            float screenPixels = projectSphereToScreen(viewSphere, camera.projection, camera.screenParams.xy);
-            targetLOD = selectLOD(screenPixels, obj.lodThresholds, camera.globalLodBias);
+            screenPixelsCrossfade = projectSphereToScreen(viewSphere, camera.projection, camera.screenParams.xy);
+            targetLOD = selectLOD(screenPixelsCrossfade, obj.lodThresholds, camera.globalLodBias);
         }
 
         lodLevel = findBestAvailableLOD(targetLOD, obj.availableLODMask);
@@ -374,7 +400,13 @@ void main() {
     perDrawData[globalDrawIndex].flags = obj.flags;
     perDrawData[globalDrawIndex].iblDiffuse = obj.iblParams.x;
     perDrawData[globalDrawIndex].iblSpecular = obj.iblParams.y;
-    perDrawData[globalDrawIndex].lodLevel = lodLevel;
+    // Pack LOD level (bits 0-7) and crossfade alpha (bits 8-15)
+    uint packedLodLevel = lodLevel;
+    if (camera.enableLODSelection == 2u && !isInstanced) {
+        uint crossfadeByte = computeCrossfadeByte(screenPixelsCrossfade, obj.lodThresholds, camera.globalLodBias, lodLevel);
+        packedLodLevel = lodLevel | (crossfadeByte << 8u);
+    }
+    perDrawData[globalDrawIndex].lodLevel = packedLodLevel;
     perDrawData[globalDrawIndex].shaderGroupIndex = obj.shaderGroupIndex;
     perDrawData[globalDrawIndex].meshletOffset = meshletOffset;
     perDrawData[globalDrawIndex].meshletCount = meshletCount;

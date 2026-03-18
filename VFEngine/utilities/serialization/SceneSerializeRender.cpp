@@ -566,6 +566,8 @@ namespace serialization
                 settings.terrainFrustumCullingEnabled = culling["terrainFrustumCullingEnabled"].get<bool>();
             if (culling.contains("terrainMeshletCullingEnabled") && culling["terrainMeshletCullingEnabled"].is_boolean())
                 settings.terrainMeshletCullingEnabled = culling["terrainMeshletCullingEnabled"].get<bool>();
+            if (culling.contains("lodCrossfadeEnabled") && culling["lodCrossfadeEnabled"].is_boolean())
+                settings.lodCrossfadeEnabled = culling["lodCrossfadeEnabled"].get<bool>();
             if (culling.contains("globalLodBias") && culling["globalLodBias"].is_number())
                 settings.globalLodBias = culling["globalLodBias"].get<float>();
         }
@@ -842,6 +844,7 @@ namespace serialization
             {"meshletBackfaceCullingEnabled", settings.culling.meshletBackfaceCullingEnabled},
             {"terrainFrustumCullingEnabled", settings.culling.terrainFrustumCullingEnabled},
             {"terrainMeshletCullingEnabled", settings.culling.terrainMeshletCullingEnabled},
+            {"lodCrossfadeEnabled", settings.culling.lodCrossfadeEnabled},
             {"globalLodBias", settings.culling.globalLodBias}
         };
 

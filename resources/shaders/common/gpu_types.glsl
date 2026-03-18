@@ -17,7 +17,7 @@ struct PerDrawData {
     float iblDiffuse;
     float iblSpecular;
 
-    uint lodLevel;
+    uint lodLevel;          // bits 0-7: LOD level (0-3), bits 8-15: crossfade alpha (0=visible, 255=fading)
     uint shaderGroupIndex;
     uint meshletOffset;
     uint meshletCount;
