@@ -35,6 +35,7 @@ namespace render
 
         // Async compute (non-owning, set by controller)
         core::AsyncComputeManager* asyncComputeManager = nullptr;
+        bool asyncComputeLoggedOnce = false;
 
     public:
         explicit OffScreenViewPort(core::Device& device, core::SwapChain& swapChain);

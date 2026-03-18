@@ -77,8 +77,7 @@ namespace render
         }
 
         uint32_t currentFrame = imageIndex % core::MAX_FRAMES_IN_FLIGHT;
-
-        // Submit async compute work before graphics (runs immediately, no waits)
+        
         if (useAsyncCompute)
         {
             vk::CommandBuffer asyncCmd = asyncComputeManager->beginFrame(currentFrame);

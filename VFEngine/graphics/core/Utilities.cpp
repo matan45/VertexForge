@@ -26,22 +26,27 @@ namespace core {
 				indices.transferFamily = i;
 			}
 
-			// Look for a dedicated compute-only queue family (compute but NOT graphics)
-			if ((queueFamily.queueFlags & vk::QueueFlagBits::eCompute) &&
-			    !(queueFamily.queueFlags & vk::QueueFlagBits::eGraphics) &&
-			    !indices.asyncComputeFamily.has_value()) {
-				indices.asyncComputeFamily = i;
-			}
-
 			i++;
 		}
 
-		// If no dedicated compute-only family, try getting a second queue from the graphics+compute family
-		if (!indices.asyncComputeFamily.has_value() && indices.graphicsAndComputeFamily.has_value()) {
+		// Prefer a second queue from the graphics+compute family (supports all pipeline stages
+		// including fragment/mesh shader barriers used by async compute dispatches).
+		// Only fall back to a dedicated compute-only family if no second queue is available.
+		if (indices.graphicsAndComputeFamily.has_value()) {
 			uint32_t gfxFamily = indices.graphicsAndComputeFamily.value();
 			if (queueFamilies[gfxFamily].queueCount >= 2) {
 				indices.asyncComputeFamily = gfxFamily;
 				indices.asyncComputeUsesSecondQueue = true;
+			}
+			else {
+				// Fall back to dedicated compute-only family
+				for (int j = 0; j < static_cast<int>(queueFamilies.size()); j++) {
+					if ((queueFamilies[j].queueFlags & vk::QueueFlagBits::eCompute) &&
+					    !(queueFamilies[j].queueFlags & vk::QueueFlagBits::eGraphics)) {
+						indices.asyncComputeFamily = j;
+						break;
+					}
+				}
 			}
 		}
 
