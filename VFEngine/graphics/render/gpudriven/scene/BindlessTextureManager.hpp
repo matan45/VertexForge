@@ -55,11 +55,12 @@ namespace render::gpudriven {
 
         uint32_t getRegisteredTextureCount() const { return nextTextureIndex - 1 - static_cast<uint32_t>(freeIndices.size()); }
 
+        void updateDescriptor(uint32_t index, vk::ImageView imageView, vk::Sampler sampler);
+
     private:
         void createDescriptorSetLayout();
         void createDescriptorPool();
         void allocateDescriptorSet();
-        void updateDescriptor(uint32_t index, vk::ImageView imageView, vk::Sampler sampler);
     };
 
 }

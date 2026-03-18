@@ -17,6 +17,7 @@
 #include "../water/WaterGPUTypes.hpp"
 #include "../water/OceanFFT.hpp"
 #include "scene/MeshletBuffer.hpp"
+#include "scene/TextureStreamManager.hpp"
 #include "scene/BoneMatrixManager.hpp"
 #include "../lighting/GPULightBufferManager.hpp"
 #include "../lighting/ClusterGridManager.hpp"
@@ -298,6 +299,9 @@ namespace render::gpudriven
         std::unique_ptr<mesh::MeshStreamManager> meshStreamManager;
         bool meshStreamingEnabled = true;
 
+        // Texture mip streaming
+        std::unique_ptr<TextureStreamManager> textureStreamManager;
+
         bool initialized = false;
         bool enabled = false;
         bool meshShaderSupported = false;
@@ -446,6 +450,10 @@ namespace render::gpudriven
         gi::RadianceCascadeManager* getGICascadeManager() const { return giCascadeManager.get(); }
         gi::GIDebugRenderer* getGIDebugRenderer() const { return giDebugRenderer.get(); }
         const gi::GISettings& getGISettings() const { return cachedGISettings; }
+
+        // Texture streaming
+        TextureStreamManager* getTextureStreamManager() const { return textureStreamManager.get(); }
+        const TextureStreamStats* getTextureStreamStats() const;
 
         void setVisibleLightsFromBVH(const std::vector<uint32_t>& visibleLights);
         void clearVisibleLights();

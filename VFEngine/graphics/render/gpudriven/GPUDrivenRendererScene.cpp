@@ -38,6 +38,13 @@ namespace render::gpudriven
         updateMeshStreaming(opaqueObjects, cameraPosition);
         registerSceneMaterialTextures(opaqueObjects);
 
+        // Update texture mip streaming
+        if (textureStreamManager)
+        {
+            static uint64_t textureStreamFrame = 0;
+            textureStreamManager->update(cameraPosition, textureStreamFrame++);
+        }
+
         TextureIndexResolver textureResolver = createTextureResolver();
         ShaderGroupResolver shaderGroupResolver = [this](const std::string& materialPath) -> uint32_t {
             if (materialPath.empty()) return 0;
@@ -600,6 +607,18 @@ namespace render::gpudriven
         {
             if (texPath.empty()) return;
 
+            // Try mip-streaming path for .vfImage files
+            if (textureStreamManager && texPath.ends_with(".vfImage"))
+            {
+                uint32_t idx = textureStreamManager->registerTexture(texPath, format);
+                if (idx != INVALID_TEXTURE_INDEX)
+                {
+                    registered = true;
+                    return;
+                }
+                // Fall through to legacy path on failure
+            }
+
             if (!materials.textureCache->loadTexture(texPath, format))
             {
                 return;
@@ -656,6 +675,15 @@ namespace render::gpudriven
         {
             cullPipeline->updateHiZDescriptor(hiZView, hiZSampler);
         }
+    }
+
+    const TextureStreamStats* GPUDrivenRenderer::getTextureStreamStats() const
+    {
+        if (textureStreamManager)
+        {
+            return &textureStreamManager->getStats();
+        }
+        return nullptr;
     }
 
     void GPUDrivenRenderer::registerTextureDependencies(const std::string& materialPath,

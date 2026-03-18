@@ -203,6 +203,8 @@
     <ClInclude Include="render\gpudriven\scene\MergedMeshBuffer.hpp" />
     <ClInclude Include="render\gpudriven\scene\MeshShaderPipeline.hpp" />
     <ClInclude Include="render\gpudriven\scene\MeshletBuffer.hpp" />
+    <ClInclude Include="render\gpudriven\scene\StreamableTexture.hpp" />
+    <ClInclude Include="render\gpudriven\scene\TextureStreamManager.hpp" />
     <ClInclude Include="render\gpudriven\terrain\TerrainGPUAdapter.hpp" />
     <ClInclude Include="render\gpudriven\terrain\TerrainMeshBuffer.hpp" />
     <ClInclude Include="render\gpudriven\terrain\TerrainMeshShaderPipeline.hpp" />
@@ -442,6 +444,7 @@
     <ClCompile Include="render\gpudriven\scene\MergedMeshBufferScene.cpp" />
     <ClCompile Include="render\gpudriven\scene\MeshShaderPipeline.cpp" />
     <ClCompile Include="render\gpudriven\scene\MeshletBuffer.cpp" />
+    <ClCompile Include="render\gpudriven\scene\TextureStreamManager.cpp" />
     <ClCompile Include="render\gpudriven\terrain\TerrainGPUAdapter.cpp" />
     <ClCompile Include="render\gpudriven\terrain\TerrainMeshBuffer.cpp" />
     <ClCompile Include="render\gpudriven\terrain\TerrainMeshShaderPipeline.cpp" />

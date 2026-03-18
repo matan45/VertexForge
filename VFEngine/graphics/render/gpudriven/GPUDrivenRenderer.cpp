@@ -61,6 +61,9 @@ namespace render::gpudriven
         bindlessTextures = std::make_unique<BindlessTextureManager>(device);
         bindlessTextures->init();
 
+        textureStreamManager = std::make_unique<TextureStreamManager>(device, *bindlessTextures);
+        textureStreamManager->init();
+
         cullPipeline = std::make_unique<GPUCullLODPipeline>(device);
         cullPipeline->init();
 
@@ -117,6 +120,10 @@ namespace render::gpudriven
             if (core::RenderManager::getGlobalDeletionQueue())
             {
                 shadowSystem->setDeletionQueue(core::RenderManager::getGlobalDeletionQueue());
+                if (textureStreamManager)
+                {
+                    textureStreamManager->setDeletionQueue(core::RenderManager::getGlobalDeletionQueue());
+                }
             }
 
             MeshPipelineInitInfo pipelineInfo{
@@ -241,6 +248,7 @@ namespace render::gpudriven
         vkDevice.waitIdle();
 
         cleanupGI();
+        if (textureStreamManager) textureStreamManager->cleanup();
         if (objectStreamManager) objectStreamManager->cleanup();
         if (lightStreamManager) lightStreamManager->cleanup();
         if (volumetricPipeline) volumetricPipeline->cleanup();

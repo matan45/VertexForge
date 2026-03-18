@@ -124,6 +124,10 @@ namespace render::gpudriven
         {
             shadowSystem->setDeletionQueue(queue);
         }
+        if (textureStreamManager)
+        {
+            textureStreamManager->setDeletionQueue(queue);
+        }
     }
 
     void GPUDrivenRenderer::initLightOcclusionCulling(occlusion::HiZBuffer* hiZBuffer)

@@ -177,6 +177,7 @@
     <ClInclude Include="resource\ResourceManager.hpp" />
     <ClInclude Include="resource\ShaderResource.hpp" />
     <ClInclude Include="resource\TextureResource.hpp" />
+    <ClInclude Include="resource\TextureStreamHandle.hpp" />
     <ClInclude Include="resource\Types.hpp" />
     <ClInclude Include="resource\VertexQuantization.hpp" />
     <ClInclude Include="resource\VorbisDecoder.hpp" />
@@ -301,6 +302,7 @@
     <ClCompile Include="resource\ResourceManager.cpp" />
     <ClCompile Include="resource\ShaderResource.cpp" />
     <ClCompile Include="resource\TextureResource.cpp" />
+    <ClCompile Include="resource\TextureStreamHandle.cpp" />
     <ClCompile Include="resource\VorbisDecoder.cpp" />
     <ClCompile Include="scene\Level.cpp" />
     <ClCompile Include="scene\LevelHandler.cpp" />
