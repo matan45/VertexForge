@@ -373,6 +373,18 @@ namespace windows
 
             if (settings.culling.lodSelectionEnabled)
             {
+                if (ImGui::Checkbox("LOD Crossfade", &settings.culling.lodCrossfadeEnabled))
+                {
+                    isDirty = true;
+                    events::render::SetLODCrossfadeCommand cmd;
+                    cmd.enabled = settings.culling.lodCrossfadeEnabled;
+                    dispatcher.execute(cmd);
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Dithered crossfade between LOD levels to reduce popping.");
+                }
+
                 if (ImGui::DragFloat("Global LOD Bias", &settings.culling.globalLodBias, 0.1f, -4.0f, 4.0f, "%.1f"))
                 {
                     isDirty = true;

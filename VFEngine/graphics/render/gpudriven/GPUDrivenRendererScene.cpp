@@ -38,6 +38,46 @@ namespace render::gpudriven
         updateMeshStreaming(opaqueObjects, cameraPosition);
         registerSceneMaterialTextures(opaqueObjects);
 
+        // Update texture mip streaming distances and state
+        if (textureStreamManager)
+        {
+            static uint64_t textureStreamFrame = 0;
+
+            // Compute min distance from camera to each streamed texture
+            textureStreamManager->resetDistances();
+            for (const auto& meshRender : opaqueObjects)
+            {
+                glm::vec3 objPos = glm::vec3(meshRender.modelMatrix[3]);
+                float dist = glm::length(objPos - cameraPosition);
+
+                auto updateTexDist = [&](const std::string& matPath)
+                {
+                    if (matPath.empty()) return;
+                    auto it = materials.pbrCache.find(matPath);
+                    if (it == materials.pbrCache.end()) return;
+                    const auto& pbr = it->second;
+                    const std::string* paths[] = {
+                        &pbr.albedoTexturePath, &pbr.normalTexturePath, &pbr.ormTexturePath,
+                        &pbr.metallicTexturePath, &pbr.roughnessTexturePath, &pbr.aoTexturePath,
+                        &pbr.emissionTexturePath, &pbr.heightTexturePath
+                    };
+                    for (const auto* p : paths)
+                    {
+                        if (!p->empty())
+                            textureStreamManager->updateTextureDistance(*p, dist);
+                    }
+                };
+
+                updateTexDist(meshRender.defaultMaterialPath);
+                for (const auto& [name, subMat] : meshRender.submeshMaterials)
+                {
+                    updateTexDist(subMat.materialPath);
+                }
+            }
+
+            textureStreamManager->update(cameraPosition, textureStreamFrame++);
+        }
+
         TextureIndexResolver textureResolver = createTextureResolver();
         ShaderGroupResolver shaderGroupResolver = [this](const std::string& materialPath) -> uint32_t {
             if (materialPath.empty()) return 0;
@@ -54,7 +94,32 @@ namespace render::gpudriven
         };
         BoneOffsetResolver boneOffsetResolver = updateAnimationBones();
 
-        mergedBuffer->updateObjects(opaqueObjects, {textureResolver, shaderGroupResolver, boneOffsetResolver, time, cameraPosition});
+        ObjectResolvers resolvers{textureResolver, shaderGroupResolver, boneOffsetResolver, time, cameraPosition};
+
+        bool useStreaming = objectStreamingEnabled && objectStreamManager
+                           && objectStreamManager->getStats().totalRegistered > 0;
+
+        if (useStreaming)
+        {
+            if (!mergedBuffer->isPersistentMode())
+            {
+                mergedBuffer->setPersistentMode(true);
+            }
+            auto& registry = scene::EntityRegistry::getRegistry();
+            objectStreamManager->update(cameraPosition, resolvers, registry);
+        }
+        else
+        {
+            if (mergedBuffer->isPersistentMode())
+            {
+                mergedBuffer->setPersistentMode(false);
+            }
+            mergedBuffer->updateObjects(opaqueObjects, resolvers);
+        }
+
+        uint32_t objectCount = useStreaming
+            ? mergedBuffer->getActiveObjectCount()
+            : mergedBuffer->getObjectCount();
 
         CameraUpdateParams cameraParams{
             .view = view,
@@ -63,11 +128,12 @@ namespace render::gpudriven
             .nearPlane = nearPlane,
             .farPlane = farPlane,
             .time = time,
-            .objectCount = mergedBuffer ? mergedBuffer->getObjectCount() : 0,
+            .objectCount = objectCount,
             .hiZMipLevels = hiZMipLevels,
             .frustumCullingEnabled = culling.frustumCullingEnabled,
             .occlusionCullingEnabled = culling.occlusionCullingEnabled,
             .lodSelectionEnabled = culling.lodSelectionEnabled,
+            .lodCrossfadeEnabled = culling.lodCrossfadeEnabled,
             .distanceCullingEnabled = culling.distanceCullingEnabled,
             .categoryDistances = {culling.categoryDistances[0], culling.categoryDistances[1], culling.categoryDistances[2], culling.categoryDistances[3], culling.categoryDistances[4], culling.categoryDistances[5], culling.categoryDistances[6]},
             .shadowDistanceMultiplier = culling.shadowDistanceMultiplier,
@@ -92,7 +158,7 @@ namespace render::gpudriven
         updatePipelineDescriptors();
 
         // Phase 3: Detect scene changes for shadow page invalidation
-        uint32_t currentObjectCount = mergedBuffer->getObjectCount();
+        uint32_t currentObjectCount = objectCount;
         if (shadowSystem && shadowSystem->isInitialized())
         {
             if (currentObjectCount != stats.totalObjects)
@@ -123,6 +189,7 @@ namespace render::gpudriven
             .frustumCullingEnabled = culling.frustumCullingEnabled,
             .occlusionCullingEnabled = false,  // No HiZ data for RTT
             .lodSelectionEnabled = culling.lodSelectionEnabled,
+            .lodCrossfadeEnabled = culling.lodCrossfadeEnabled,
             .distanceCullingEnabled = culling.distanceCullingEnabled,
             .categoryDistances = {culling.categoryDistances[0], culling.categoryDistances[1], culling.categoryDistances[2], culling.categoryDistances[3], culling.categoryDistances[4], culling.categoryDistances[5], culling.categoryDistances[6]},
             .shadowDistanceMultiplier = culling.shadowDistanceMultiplier,
@@ -158,6 +225,7 @@ namespace render::gpudriven
             .frustumCullingEnabled = culling.frustumCullingEnabled,
             .occlusionCullingEnabled = culling.occlusionCullingEnabled,
             .lodSelectionEnabled = culling.lodSelectionEnabled,
+            .lodCrossfadeEnabled = culling.lodCrossfadeEnabled,
             .distanceCullingEnabled = culling.distanceCullingEnabled,
             .categoryDistances = {culling.categoryDistances[0], culling.categoryDistances[1], culling.categoryDistances[2], culling.categoryDistances[3], culling.categoryDistances[4], culling.categoryDistances[5], culling.categoryDistances[6]},
             .shadowDistanceMultiplier = culling.shadowDistanceMultiplier,
@@ -418,7 +486,8 @@ namespace render::gpudriven
             cameraBuffer->getBuffer(),
             batchManager->getCombinedDrawCommandBuffer(),
             batchManager->getCombinedPerDrawDataBuffer(),
-            batchManager->getCombinedDrawCountBuffer()
+            batchManager->getCombinedDrawCountBuffer(),
+            mergedBuffer->getActiveIndexBuffer()
         );
 
         bool hasMeshes = mergedBuffer->getObjectCount() > 0;
@@ -574,6 +643,18 @@ namespace render::gpudriven
         {
             if (texPath.empty()) return;
 
+            // Try mip-streaming path for .vfImage files
+            if (textureStreamManager && texPath.ends_with(".vfImage"))
+            {
+                uint32_t idx = textureStreamManager->registerTexture(texPath, format);
+                if (idx != INVALID_TEXTURE_INDEX)
+                {
+                    registered = true;
+                    return;
+                }
+                // Fall through to legacy path on failure
+            }
+
             if (!materials.textureCache->loadTexture(texPath, format))
             {
                 return;
@@ -630,6 +711,15 @@ namespace render::gpudriven
         {
             cullPipeline->updateHiZDescriptor(hiZView, hiZSampler);
         }
+    }
+
+    const TextureStreamStats* GPUDrivenRenderer::getTextureStreamStats() const
+    {
+        if (textureStreamManager)
+        {
+            return &textureStreamManager->getStats();
+        }
+        return nullptr;
     }
 
     void GPUDrivenRenderer::registerTextureDependencies(const std::string& materialPath,

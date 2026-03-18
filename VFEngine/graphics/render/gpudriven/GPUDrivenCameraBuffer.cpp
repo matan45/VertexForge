@@ -76,7 +76,9 @@ namespace render::gpudriven
 
         data.enableFrustumCulling = params.frustumCullingEnabled ? 1 : 0;
         data.enableOcclusionCulling = (params.occlusionCullingEnabled && params.hiZMipLevels > 0) ? 1 : 0;
-        data.enableLODSelection = params.lodSelectionEnabled ? 1 : 0;
+        data.enableLODSelection = params.lodSelectionEnabled
+            ? (params.lodCrossfadeEnabled ? LOD_SELECTION_WITH_CROSSFADE : LOD_SELECTION_ENABLED)
+            : LOD_SELECTION_DISABLED;
         data.batchCount = params.batchManager ? params.batchManager->getBatchCount() : 1;
 
         data.commandsPerBatch = params.batchManager ? params.batchManager->getCommandsPerBatch() : MAX_DRAW_COMMANDS;

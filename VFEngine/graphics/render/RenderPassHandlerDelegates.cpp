@@ -153,6 +153,14 @@ namespace render
         }
     }
 
+    void RenderPassHandler::setLODCrossfadeEnabled(bool enabled)
+    {
+        if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
+        {
+            gpuDrivenRenderer->setLODCrossfadeEnabled(enabled);
+        }
+    }
+
     void RenderPassHandler::setMeshletFrustumCullingEnabled(bool enabled)
     {
         if (gpuDrivenRendererInitialized && gpuDrivenRenderer)

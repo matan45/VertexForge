@@ -125,6 +125,28 @@ uint selectLODTask(float screenPixels, vec4 thresholds) {
     return 3;
 }
 
+const float LOD_CROSSFADE_FRACTION_TASK = 0.04;
+
+uint computeCrossfadeByteTask(float screenPixels, vec4 thresholds, uint selectedLOD) {
+    if (selectedLOD >= 3u) return 0u;
+
+    float adjustedPixels = screenPixels * pow(2.0, -thresholds.w);
+
+    float boundary;
+    if (selectedLOD == 0u) boundary = thresholds.x;
+    else if (selectedLOD == 1u) boundary = thresholds.y;
+    else boundary = thresholds.z;
+
+    float transitionWidth = boundary * LOD_CROSSFADE_FRACTION_TASK;
+    float distAboveBoundary = adjustedPixels - boundary;
+
+    if (distAboveBoundary >= 0.0 && distAboveBoundary < transitionWidth) {
+        float alpha = 1.0 - distAboveBoundary / transitionWidth;
+        return uint(clamp(alpha, 0.0, 1.0) * 255.0);
+    }
+    return 0u;
+}
+
 uint findBestAvailableLODTask(uint targetLOD, uint availableMask) {
     if (availableMask == 0xFu) return targetLOD;
     if (availableMask == 0u) return 0xFFFFFFFFu;
@@ -151,7 +173,8 @@ void main() {
     // Per-instance meshlet range (may differ from drawData for instanced objects)
     uint meshletOffset = drawData.meshletOffset;
     uint meshletCount = drawData.meshletCount;
-    uint actualLodLevel = drawData.lodLevel;
+    uint actualLodLevel = drawData.lodLevel & 0xFFu;
+    float instanceScreenPixels = 0.0;
 
     if (isInstanced) {
         uint instanceOffset = drawData.instanceData.w;
@@ -181,9 +204,9 @@ void main() {
         }
 
         vec4 viewSphere = vec4((camera.view * vec4(worldSphere.xyz, 1.0)).xyz, worldSphere.w);
-        float screenPixels = projectSphereToScreenTask(viewSphere, camera.projection,
+        instanceScreenPixels = projectSphereToScreenTask(viewSphere, camera.projection,
             vec2(pc.screenWidth, pc.screenHeight));
-        uint targetLOD = selectLODTask(screenPixels, obj.lodThresholds);
+        uint targetLOD = selectLODTask(instanceScreenPixels, obj.lodThresholds);
         uint lodLevel = findBestAvailableLODTask(targetLOD, obj.availableLODMask);
 
         if (lodLevel != 0xFFFFFFFFu) {
@@ -276,7 +299,18 @@ void main() {
             normalMat3 = transpose(inverse(modelMat3));
         }
         payload.instanceNormalMatrix = mat4(normalMat3);
-        payload.instanceLodLevel = actualLodLevel;
+
+        // Pack LOD level (bits 0-7) and crossfade alpha (bits 8-15)
+        // For instanced objects, compute crossfade from screen pixels.
+        // For non-instanced, crossfade is already packed by the compute shader.
+        uint packedLod = actualLodLevel;
+        if (isInstanced && instanceScreenPixels > 0.0) {
+            uint crossfadeByte = computeCrossfadeByteTask(instanceScreenPixels, objects[drawData.objectIndex].lodThresholds, actualLodLevel);
+            packedLod = actualLodLevel | (crossfadeByte << 8u);
+        } else if (!isInstanced) {
+            packedLod = drawData.lodLevel; // Already packed by compute shader
+        }
+        payload.instanceLodLevel = packedLod;
 
         // Per-instance PBR overrides
         if (isInstanced) {

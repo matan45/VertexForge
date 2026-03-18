@@ -50,6 +50,10 @@ layout(std430, set = 0, binding = 4) buffer DrawCountBuffer {
 
 layout(set = 0, binding = 5) uniform sampler2D hiZTexture;
 
+layout(std430, set = 0, binding = 6) readonly buffer ActiveIndexBuffer {
+    uint activeIndices[];
+};
+
 uvec4 getMeshletLODData(GPUObjectData obj, uint level) {
     switch (level) {
         case 0: return obj.meshletLod0;
@@ -126,6 +130,36 @@ uint selectLOD(float screenPixels, vec4 thresholds, float globalBias) {
     return 3;
 }
 
+// Compute crossfade alpha for LOD transition dithering.
+// Returns 0-255 byte: 0 = fully visible, 255 = fully fading out.
+// Transition zone is just below each LOD boundary — as screenPixels drops
+// toward the boundary, crossfade increases (more dither). Once it crosses
+// the boundary and a coarser LOD is selected, crossfade resets to 0.
+const float LOD_CROSSFADE_FRACTION = 0.04; // 4% of threshold — narrow zone
+
+uint computeCrossfadeByte(float screenPixels, vec4 thresholds, float globalBias, uint selectedLOD) {
+    if (selectedLOD >= 3u) return 0u;
+
+    float adjustedPixels = screenPixels * pow(2.0, -(thresholds.w + globalBias));
+
+    // Get the boundary for the NEXT coarser LOD (the one we're approaching)
+    float boundary;
+    if (selectedLOD == 0u) boundary = thresholds.x;
+    else if (selectedLOD == 1u) boundary = thresholds.y;
+    else boundary = thresholds.z;
+
+    float transitionWidth = boundary * LOD_CROSSFADE_FRACTION;
+
+    // adjustedPixels is above boundary (we're at selectedLOD).
+    // As it drops toward boundary, we fade out: alpha goes 0 -> 1.
+    float distAboveBoundary = adjustedPixels - boundary;
+    if (distAboveBoundary >= 0.0 && distAboveBoundary < transitionWidth) {
+        float alpha = 1.0 - distAboveBoundary / transitionWidth; // 0 at top, 1 near boundary
+        return uint(clamp(alpha, 0.0, 1.0) * 255.0);
+    }
+    return 0u;
+}
+
 uint findBestAvailableLOD(uint targetLOD, uint availableMask) {
     if (availableMask == 0xFu) {
         return targetLOD;
@@ -200,11 +234,12 @@ bool hiZOcclusionTest(vec4 worldSphere, mat4 viewProjection, vec2 screenSize, ui
 }
 
 void main() {
-    uint objectIndex = gl_GlobalInvocationID.x;
-    if (objectIndex >= camera.objectCount) {
+    uint threadIndex = gl_GlobalInvocationID.x;
+    if (threadIndex >= camera.objectCount) {
         return;
     }
 
+    uint objectIndex = activeIndices[threadIndex];
     GPUObjectData obj = objects[objectIndex];
 
     uint batchIndex = objectIndex % camera.batchCount;
@@ -270,6 +305,7 @@ void main() {
     uint meshletOffset;
     uint meshletCount;
     uint baseVertexOffset;
+    float screenPixelsCrossfade = 0.0;
 
     if (isInstanced) {
         // For instanced objects, the task shader handles per-instance LOD selection.
@@ -284,11 +320,11 @@ void main() {
         meshletCount = meshletLodData.y;
         baseVertexOffset = meshletLodData.z;
     } else {
-        if (camera.enableLODSelection != 0u) {
+        if (camera.enableLODSelection != LOD_SELECTION_DISABLED) {
             vec4 viewSphere = camera.view * vec4(worldSphere.xyz, 1.0);
             viewSphere.w = worldSphere.w;
-            float screenPixels = projectSphereToScreen(viewSphere, camera.projection, camera.screenParams.xy);
-            targetLOD = selectLOD(screenPixels, obj.lodThresholds, camera.globalLodBias);
+            screenPixelsCrossfade = projectSphereToScreen(viewSphere, camera.projection, camera.screenParams.xy);
+            targetLOD = selectLOD(screenPixelsCrossfade, obj.lodThresholds, camera.globalLodBias);
         }
 
         lodLevel = findBestAvailableLOD(targetLOD, obj.availableLODMask);
@@ -369,7 +405,13 @@ void main() {
     perDrawData[globalDrawIndex].flags = obj.flags;
     perDrawData[globalDrawIndex].iblDiffuse = obj.iblParams.x;
     perDrawData[globalDrawIndex].iblSpecular = obj.iblParams.y;
-    perDrawData[globalDrawIndex].lodLevel = lodLevel;
+    // Pack LOD level (bits 0-7) and crossfade alpha (bits 8-15)
+    uint packedLodLevel = lodLevel;
+    if (camera.enableLODSelection == LOD_SELECTION_WITH_CROSSFADE && !isInstanced) {
+        uint crossfadeByte = computeCrossfadeByte(screenPixelsCrossfade, obj.lodThresholds, camera.globalLodBias, lodLevel);
+        packedLodLevel = lodLevel | (crossfadeByte << 8u);
+    }
+    perDrawData[globalDrawIndex].lodLevel = packedLodLevel;
     perDrawData[globalDrawIndex].shaderGroupIndex = obj.shaderGroupIndex;
     perDrawData[globalDrawIndex].meshletOffset = meshletOffset;
     perDrawData[globalDrawIndex].meshletCount = meshletCount;

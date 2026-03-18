@@ -198,7 +198,15 @@ namespace render::gpudriven
 
         if (hasMeshObjects)
         {
-            mergedBuffer->uploadObjects(cmd);
+            if (mergedBuffer->isPersistentMode())
+            {
+                mergedBuffer->uploadDirtyObjects(cmd);
+                mergedBuffer->uploadActiveIndices(cmd);
+            }
+            else
+            {
+                mergedBuffer->uploadObjects(cmd);
+            }
             if (mergedBuffer->getInstanceCount() > 0)
             {
                 mergedBuffer->uploadInstances(cmd);
@@ -505,6 +513,15 @@ namespace render::gpudriven
     {
         lightStreamManager = std::make_unique<lighting::LightStreamManager>();
         lightStreamManager->init(config);
+    }
+
+    void GPUDrivenRenderer::initObjectStreaming(const gpudriven::ObjectStreamConfig& config)
+    {
+        if (mergedBuffer)
+        {
+            objectStreamManager = std::make_unique<gpudriven::GPUObjectStreamManager>(*mergedBuffer);
+            objectStreamManager->init(config);
+        }
     }
 
     void GPUDrivenRenderer::initGI(const gi::GISettings& settings)

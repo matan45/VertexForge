@@ -74,6 +74,7 @@ namespace world
         int maxLoadsPerFrame = 1;
         int maxUnloadsPerFrame = 1;
         int maxEntitiesPerFrame = 8;
+        bool enableGPUObjectStreaming = true; // Use persistent GPU slots with priority-based streaming
     };
 
 } // namespace world

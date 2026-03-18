@@ -8,6 +8,7 @@
 #include "../../events/world/WorldSectorEvents.hpp"
 #include "../../events/render/DebugDrawEvents.hpp"
 #include "../../events/render/LightStreamingEvents.hpp"
+#include "../../events/render/ObjectStreamingEvents.hpp"
 #include "../../events/scene/ScenePersistenceEvents.hpp"
 #include "../../events/scene/EntityTransformEvents.hpp"
 #include "../../data/EntityConversion.hpp"
@@ -42,6 +43,7 @@ namespace services
         if (isPlayMode)
         {
             glm::vec3 cameraPos = getPrimaryCameraPosition();
+            
             streamer.update(cameraPos, sectorManager, streamingActions);
 
             for (const auto& action : streamingActions)
@@ -90,6 +92,52 @@ namespace services
                         events::render::lightstreaming::RegisterSectorLightsCommand cmd;
                         cmd.sectorId = world::sectorCoordToId(sector.coord);
                         cmd.lightEntityIds = std::move(lightEntityIds);
+                        ::events::EventDispatcher::instance().execute(cmd);
+                    }
+                }
+
+                // Register sector mesh objects for GPU streaming (including sub-entities)
+                {
+                    auto& registry = scene::EntityRegistry::getRegistry();
+                    std::vector<std::pair<uint64_t, entt::entity>> meshEntities;
+
+                    auto collectMeshEntities = [&](auto&& self, entt::entity ent) -> void
+                    {
+                        if (ent == entt::null || !registry.valid(ent)) return;
+
+                        if (registry.any_of<components::MeshComponent>(ent))
+                        {
+                            auto* uuidComp = registry.try_get<components::UUIDComponent>(ent);
+                            if (uuidComp)
+                            {
+                                meshEntities.emplace_back(uuidComp->id.getValue(), ent);
+                            }
+                        }
+
+                        auto* childrenComp = registry.try_get<components::ChildrenComponent>(ent);
+                        if (childrenComp)
+                        {
+                            for (auto child : childrenComp->children)
+                            {
+                                self(self, child);
+                            }
+                        }
+                    };
+
+                    for (uint64_t uuid : sector.entityUUIDs)
+                    {
+                        auto ent = findEntityByUUID(uuid);
+                        if (ent != entt::null)
+                        {
+                            collectMeshEntities(collectMeshEntities, ent);
+                        }
+                    }
+
+                    if (!meshEntities.empty())
+                    {
+                        events::render::objectstreaming::RegisterSectorObjectsCommand cmd;
+                        cmd.sectorId = world::sectorCoordToId(sector.coord);
+                        cmd.entities = std::move(meshEntities);
                         ::events::EventDispatcher::instance().execute(cmd);
                     }
                 }
@@ -169,7 +217,12 @@ namespace services
 
         sector->state = world::SectorState::Unloading;
 
-        // Unregister sector lights before entities are destroyed
+        // Unregister sector objects and lights before entities are destroyed
+        {
+            events::render::objectstreaming::UnregisterSectorObjectsCommand objCmd;
+            objCmd.sectorId = world::sectorCoordToId(coord);
+            ::events::EventDispatcher::instance().execute(objCmd);
+        }
         {
             events::render::lightstreaming::UnregisterSectorLightsCommand cmd;
             cmd.sectorId = world::sectorCoordToId(coord);
@@ -251,16 +304,46 @@ namespace services
             return;
 
         auto& dispatcher = ::events::EventDispatcher::instance();
+        auto& registry = scene::EntityRegistry::getRegistry();
 
         float sectorSize = sectorManager.getConfig().sectorWorldSize;
-        float boxHeight = 10.0f; // Visual height for sector boxes
-        glm::vec3 halfExtents(sectorSize * 0.5f, boxHeight * 0.5f, sectorSize * 0.5f);
 
         sectorManager.forEachSector([&](const world::WorldSector& sector)
         {
             float cx = (static_cast<float>(sector.coord.x) + 0.5f) * sectorSize;
             float cz = (static_cast<float>(sector.coord.z) + 0.5f) * sectorSize;
-            glm::vec3 center(cx, boxHeight * 0.5f, cz);
+
+            // Compute Y bounds from entity positions in this sector
+            float yMin = 0.0f;
+            float yMax = 10.0f;
+            bool hasEntities = false;
+            for (uint64_t uuid : sector.entityUUIDs)
+            {
+                auto ent = findEntityByUUID(uuid);
+                if (ent != entt::null && registry.any_of<components::TransformComponent>(ent))
+                {
+                    float y = registry.get<components::TransformComponent>(ent).position.y;
+                    if (!hasEntities)
+                    {
+                        yMin = y;
+                        yMax = y + 1.0f;
+                        hasEntities = true;
+                    }
+                    else
+                    {
+                        yMin = std::min(yMin, y);
+                        yMax = std::max(yMax, y + 1.0f);
+                    }
+                }
+            }
+            // Add padding
+            yMin -= 1.0f;
+            yMax += 1.0f;
+
+            float boxHeight = yMax - yMin;
+            float cy = (yMin + yMax) * 0.5f;
+            glm::vec3 center(cx, cy, cz);
+            glm::vec3 halfExtents(sectorSize * 0.5f, boxHeight * 0.5f, sectorSize * 0.5f);
 
             glm::vec4 color;
             switch (sector.state)

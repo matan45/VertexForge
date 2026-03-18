@@ -204,6 +204,7 @@ void main() {
 #include "../common/gpu_types.glsl"
 #include "../common/camera_types.glsl"
 #include "../common/gi_sampling.glsl"
+#include "../common/lod_crossfade.glsl"
 
 layout(location = 0) in vec3 fragWorldPos;
 layout(location = 1) in vec3 fragNormal;
@@ -588,6 +589,16 @@ void main() {
         }
     }
 
+    // LOD crossfade dithering — skip for translucent objects (dither + alpha blend = holes)
+    {
+        float crossfadeAlpha = float((fragLodLevel >> 8u) & 0xFFu) / 255.0;
+        if (crossfadeAlpha > 0.0 && (drawData.flags & FLAG_TRANSLUCENT) == 0u) {
+            if (ditherTest(gl_FragCoord.xy, crossfadeAlpha)) {
+                discard;
+            }
+        }
+    }
+
     if ((drawData.flags & FLAG_TRANSLUCENT) != 0u) {
         float materialOpacity = float(drawData.blendModeAndOpacity >> 16u) / 65535.0;
         alpha *= materialOpacity;
@@ -739,7 +750,7 @@ void main() {
             vec3(1.0, 0.5, 0.0),
             vec3(1.0, 0.0, 0.0)
         );
-        uint lod = min(fragLodLevel, 3u);
+        uint lod = min(fragLodLevel & 0xFFu, 3u);
         color = mix(color, lodColors[lod], 0.5);
     }
 

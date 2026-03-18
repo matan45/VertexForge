@@ -6,6 +6,7 @@
 #include "resource/MeshStreamHandle.hpp"
 #include "print/Log.hpp"
 #include <material/MaterialInstanceTypes.hpp>
+#include <algorithm>
 
 static_assert(sizeof(resource::Vertex) == 64, "Vertex size must be 64 bytes for MergedMeshBuffer");
 
@@ -112,11 +113,16 @@ namespace render::gpudriven
         submeshKeyToIndex.clear();
         cpuObjectData.clear();
         cpuInstanceTransforms.clear();
+        activeObjectIndices.clear();
+        entityToSlot.clear();
+        dirtySlots.clear();
 
         totalVertexCount = 0;
         totalIndexCount = 0;
         currentObjectCount = 0;
         currentInstanceCount = 0;
+        activeObjectCount = 0;
+        persistentMode = false;
         initialized = false;
 
     }
@@ -126,6 +132,7 @@ namespace render::gpudriven
         createGeometryBuffers();
         createObjectBuffers();
         createInstanceBuffers();
+        createActiveIndexBuffers();
     }
 
     void MergedMeshBuffer::createGeometryBuffers()
@@ -214,9 +221,48 @@ namespace render::gpudriven
         }
     }
 
+    void MergedMeshBuffer::createActiveIndexBuffers()
+    {
+        const auto& logicalDevice = device.getLogicalDevice();
+        const auto& physicalDevice = device.getPhysicalDevice();
+
+        {
+            core::BufferInfoRequest request(logicalDevice, physicalDevice);
+            request.size = maxObjectCount * sizeof(uint32_t);
+            request.usage = vk::BufferUsageFlagBits::eStorageBuffer |
+                vk::BufferUsageFlagBits::eTransferDst;
+            request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
+            core::BufferUtilities::createBuffer(request, activeIndexBuffer, activeIndexBufferMemory);
+        }
+
+        {
+            core::BufferInfoRequest request(logicalDevice, physicalDevice);
+            request.size = maxObjectCount * sizeof(uint32_t);
+            request.usage = vk::BufferUsageFlagBits::eTransferSrc;
+            request.properties = vk::MemoryPropertyFlagBits::eHostVisible |
+                vk::MemoryPropertyFlagBits::eHostCoherent;
+            core::BufferUtilities::createBuffer(request, activeIndexStagingBuffer, activeIndexStagingMemory);
+
+            activeIndexStagingMapped = logicalDevice.mapMemory(
+                activeIndexStagingMemory, 0, request.size, vk::MemoryMapFlags{}
+            );
+        }
+
+        activeObjectIndices.resize(maxObjectCount);
+    }
+
     void MergedMeshBuffer::destroyBuffers()
     {
         const auto& logicalDevice = device.getLogicalDevice();
+
+        if (activeIndexStagingMapped)
+        {
+            logicalDevice.unmapMemory(activeIndexStagingMemory);
+            activeIndexStagingMapped = nullptr;
+        }
+
+        core::BufferUtilities::destroyBuffer(logicalDevice, activeIndexStagingBuffer, activeIndexStagingMemory);
+        core::BufferUtilities::destroyBuffer(logicalDevice, activeIndexBuffer, activeIndexBufferMemory);
 
         if (instanceStagingMapped)
         {
@@ -277,6 +323,38 @@ namespace render::gpudriven
             barrier,
             {}
         );
+
+        // Upload identity active-index mapping for legacy (edit) mode
+        // so the cull shader's activeIndices[i] == i
+        {
+            auto* indices = static_cast<uint32_t*>(activeIndexStagingMapped);
+            for (uint32_t i = 0; i < currentObjectCount; ++i)
+                indices[i] = i;
+
+            vk::BufferCopy idxCopy;
+            idxCopy.srcOffset = 0;
+            idxCopy.dstOffset = 0;
+            idxCopy.size = currentObjectCount * sizeof(uint32_t);
+            cmd.copyBuffer(activeIndexStagingBuffer, activeIndexBuffer, idxCopy);
+
+            vk::BufferMemoryBarrier idxBarrier;
+            idxBarrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
+            idxBarrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
+            idxBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            idxBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            idxBarrier.buffer = activeIndexBuffer;
+            idxBarrier.offset = 0;
+            idxBarrier.size = idxCopy.size;
+
+            cmd.pipelineBarrier(
+                vk::PipelineStageFlagBits::eTransfer,
+                vk::PipelineStageFlagBits::eComputeShader,
+                {},
+                {},
+                idxBarrier,
+                {}
+            );
+        }
     }
 
     void MergedMeshBuffer::uploadInstances(vk::CommandBuffer cmd)
@@ -596,6 +674,180 @@ namespace render::gpudriven
         freeMeshSlots.push_back(meshIdx);
 
         vfLogInfo("MergedMeshBuffer::freeMesh: Freed mesh '{}'", meshPath);
+    }
+
+    void MergedMeshBuffer::setPersistentMode(bool enabled)
+    {
+        if (persistentMode == enabled) return;
+        persistentMode = enabled;
+
+        if (enabled)
+        {
+            objectAllocator.reset(maxObjectCount);
+            entityToSlot.clear();
+            dirtySlots.clear();
+            activeObjectCount = 0;
+        }
+        else
+        {
+            objectAllocator.reset(0);
+            entityToSlot.clear();
+            dirtySlots.clear();
+            activeObjectCount = 0;
+        }
+    }
+
+    uint32_t MergedMeshBuffer::allocateObjectSlot()
+    {
+        uint32_t slot = objectAllocator.allocate(1);
+        if (slot != FreeListAllocator::ALLOCATION_FAILED)
+        {
+            objectAllocator.markUsed(1);
+        }
+        return slot;
+    }
+
+    void MergedMeshBuffer::freeObjectSlot(uint32_t slot)
+    {
+        if (slot < maxObjectCount)
+        {
+            objectAllocator.free(slot, 1);
+            // Zero out the slot in CPU data
+            cpuObjectData[slot] = GPUObjectData{};
+        }
+    }
+
+    void MergedMeshBuffer::updateObjectAtSlot(uint32_t slot, const GPUObjectData& data)
+    {
+        if (slot < maxObjectCount)
+        {
+            cpuObjectData[slot] = data;
+            dirtySlots.push_back(slot);
+        }
+    }
+
+    void MergedMeshBuffer::rebuildActiveIndexList()
+    {
+        activeObjectCount = 0;
+        for (const auto& [uuid, slot] : entityToSlot)
+        {
+            activeObjectIndices[activeObjectCount++] = slot;
+        }
+    }
+
+    void MergedMeshBuffer::uploadDirtyObjects(vk::CommandBuffer cmd)
+    {
+        if (dirtySlots.empty()) return;
+
+        // Sort and deduplicate dirty slots for coalesced copies
+        std::sort(dirtySlots.begin(), dirtySlots.end());
+        dirtySlots.erase(std::unique(dirtySlots.begin(), dirtySlots.end()), dirtySlots.end());
+
+        peakObjectCount = std::max(peakObjectCount, static_cast<uint32_t>(entityToSlot.size()));
+
+        // Copy dirty slots to staging buffer and build coalesced copy regions
+        std::vector<vk::BufferCopy> copyRegions;
+        uint32_t rangeStart = dirtySlots[0];
+        uint32_t rangeEnd = dirtySlots[0];
+
+        for (size_t i = 1; i < dirtySlots.size(); ++i)
+        {
+            // Merge if slots are close (within 4 slots gap to reduce copy count)
+            if (dirtySlots[i] <= rangeEnd + 4)
+            {
+                rangeEnd = dirtySlots[i];
+            }
+            else
+            {
+                // Emit range
+                size_t srcOffset = rangeStart * sizeof(GPUObjectData);
+                size_t rangeSize = (rangeEnd - rangeStart + 1) * sizeof(GPUObjectData);
+                std::memcpy(static_cast<uint8_t*>(objectStagingMapped) + srcOffset,
+                            cpuObjectData.data() + rangeStart, rangeSize);
+                copyRegions.push_back({srcOffset, srcOffset, rangeSize});
+
+                rangeStart = dirtySlots[i];
+                rangeEnd = dirtySlots[i];
+            }
+        }
+
+        // Emit last range
+        {
+            size_t srcOffset = rangeStart * sizeof(GPUObjectData);
+            size_t rangeSize = (rangeEnd - rangeStart + 1) * sizeof(GPUObjectData);
+            std::memcpy(static_cast<uint8_t*>(objectStagingMapped) + srcOffset,
+                        cpuObjectData.data() + rangeStart, rangeSize);
+            copyRegions.push_back({srcOffset, srcOffset, rangeSize});
+        }
+
+        // Limit copy regions to prevent excessive command buffer usage
+        if (copyRegions.size() > 32)
+        {
+            // Fall back to a single large copy covering all dirty ranges
+            uint32_t first = dirtySlots.front();
+            uint32_t last = dirtySlots.back();
+            size_t srcOffset = first * sizeof(GPUObjectData);
+            size_t rangeSize = (last - first + 1) * sizeof(GPUObjectData);
+            std::memcpy(static_cast<uint8_t*>(objectStagingMapped) + srcOffset,
+                        cpuObjectData.data() + first, rangeSize);
+            copyRegions.clear();
+            copyRegions.push_back({srcOffset, srcOffset, rangeSize});
+        }
+
+        cmd.copyBuffer(objectStagingBuffer, objectBuffer,
+                       static_cast<uint32_t>(copyRegions.size()), copyRegions.data());
+
+        vk::BufferMemoryBarrier barrier;
+        barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
+        barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
+        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.buffer = objectBuffer;
+        barrier.offset = 0;
+        barrier.size = VK_WHOLE_SIZE;
+
+        cmd.pipelineBarrier(
+            vk::PipelineStageFlagBits::eTransfer,
+            vk::PipelineStageFlagBits::eComputeShader,
+            {},
+            {},
+            barrier,
+            {}
+        );
+
+        dirtySlots.clear();
+    }
+
+    void MergedMeshBuffer::uploadActiveIndices(vk::CommandBuffer cmd)
+    {
+        if (activeObjectCount == 0) return;
+
+        size_t copySize = activeObjectCount * sizeof(uint32_t);
+        std::memcpy(activeIndexStagingMapped, activeObjectIndices.data(), copySize);
+
+        vk::BufferCopy copyRegion;
+        copyRegion.srcOffset = 0;
+        copyRegion.dstOffset = 0;
+        copyRegion.size = copySize;
+        cmd.copyBuffer(activeIndexStagingBuffer, activeIndexBuffer, copyRegion);
+
+        vk::BufferMemoryBarrier barrier;
+        barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
+        barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
+        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.buffer = activeIndexBuffer;
+        barrier.offset = 0;
+        barrier.size = copySize;
+
+        cmd.pipelineBarrier(
+            vk::PipelineStageFlagBits::eTransfer,
+            vk::PipelineStageFlagBits::eComputeShader,
+            {},
+            {},
+            barrier,
+            {}
+        );
     }
 
     void MergedMeshBuffer::flushPendingTransfers()

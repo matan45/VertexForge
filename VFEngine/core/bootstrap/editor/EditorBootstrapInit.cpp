@@ -27,6 +27,7 @@
 #include "../../adapters/render/BillboardRenderAdapter.hpp"
 #include "../../adapters/render/DecalRenderAdapter.hpp"
 #include "../../adapters/render/LightStreamingAdapter.hpp"
+#include "../../adapters/render/ObjectStreamingAdapter.hpp"
 #include "../../adapters/render/GIAdapter.hpp"
 #include "../../adapters/ai/BehaviorTreeAdapter.hpp"
 #include "types/PhysicsTypes.hpp"
@@ -71,6 +72,7 @@ namespace core
         billboardRenderAdapter = std::make_unique<adapters::BillboardRenderAdapter>();
         decalRenderAdapter = std::make_unique<adapters::DecalRenderAdapter>();
         lightStreamingAdapter = std::make_unique<adapters::LightStreamingAdapter>();
+        objectStreamingAdapter = std::make_unique<adapters::ObjectStreamingAdapter>();
         giAdapter = std::make_unique<adapters::GIAdapter>();
         behaviorTreeAdapter = std::make_unique<BehaviorTreeAdapter>(scriptingAdapter.get());
 
@@ -80,6 +82,7 @@ namespace core
         billboardRenderAdapter->setOffScreenController(offScreen.get());
         decalRenderAdapter->setOffScreenController(offScreen.get());
         lightStreamingAdapter->setOffScreenController(offScreen.get());
+        objectStreamingAdapter->setOffScreenController(offScreen.get());
         giAdapter->setOffScreenController(offScreen.get());
         audioAdapter->init();
         scriptingAdapter->init();

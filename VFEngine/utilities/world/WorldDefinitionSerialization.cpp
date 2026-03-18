@@ -28,6 +28,7 @@ namespace world
             streamingJson["maxLoadsPerFrame"] = definition.streamingConfig.maxLoadsPerFrame;
             streamingJson["maxUnloadsPerFrame"] = definition.streamingConfig.maxUnloadsPerFrame;
             streamingJson["maxEntitiesPerFrame"] = definition.streamingConfig.maxEntitiesPerFrame;
+            streamingJson["enableGPUObjectStreaming"] = definition.streamingConfig.enableGPUObjectStreaming;
             worldJson["streamingConfig"] = streamingJson;
 
             json sectorsJson = json::array();
@@ -94,6 +95,7 @@ namespace world
                 outDefinition.streamingConfig.maxLoadsPerFrame = stc.value("maxLoadsPerFrame", 1);
                 outDefinition.streamingConfig.maxUnloadsPerFrame = stc.value("maxUnloadsPerFrame", 1);
                 outDefinition.streamingConfig.maxEntitiesPerFrame = stc.value("maxEntitiesPerFrame", 8);
+                outDefinition.streamingConfig.enableGPUObjectStreaming = stc.value("enableGPUObjectStreaming", true);
             }
 
             outDefinition.sectorFilePaths.clear();

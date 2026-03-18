@@ -23,6 +23,7 @@
 #include "../../adapters/render/BillboardRenderAdapter.hpp"
 #include "../../adapters/render/DecalRenderAdapter.hpp"
 #include "../../adapters/render/LightStreamingAdapter.hpp"
+#include "../../adapters/render/ObjectStreamingAdapter.hpp"
 #include "../../adapters/render/GIAdapter.hpp"
 #include "../../adapters/ai/BehaviorTreeAdapter.hpp"
 
@@ -156,6 +157,11 @@ namespace core
     services::ILightStreamingProvider* EditorBootstrap::getLightStreamingProvider()
     {
         return lightStreamingAdapter.get();
+    }
+
+    services::IObjectStreamingProvider* EditorBootstrap::getObjectStreamingProvider()
+    {
+        return objectStreamingAdapter.get();
     }
 
     services::IGIProvider* EditorBootstrap::getGIProvider()

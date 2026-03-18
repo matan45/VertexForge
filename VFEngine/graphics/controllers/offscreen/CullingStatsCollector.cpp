@@ -125,6 +125,21 @@ namespace controllers::offscreen
                 stats.terrain.bytesUploadedThisFrame = streamStats->bytesUploadedThisFrame;
             }
 
+            const auto* texStreamStats = gpuDrivenRenderer->getTextureStreamStats();
+            if (texStreamStats)
+            {
+                stats.textureStream.totalRegistered = texStreamStats->totalRegistered;
+                stats.textureStream.fullyLoaded = texStreamStats->fullyLoaded;
+                stats.textureStream.partiallyLoaded = texStreamStats->partiallyLoaded;
+                stats.textureStream.pendingReads = texStreamStats->pendingReads;
+                stats.textureStream.pendingUploads = texStreamStats->pendingUploads;
+                stats.textureStream.uploadsThisFrame = texStreamStats->uploadsThisFrame;
+                stats.textureStream.bytesUploadedThisFrame = texStreamStats->bytesUploadedThisFrame;
+                stats.textureStream.vramUsedBytes = texStreamStats->vramUsedBytes;
+                stats.textureStream.vramBudgetBytes = texStreamStats->vramBudgetBytes;
+                stats.textureStream.evictionsThisFrame = texStreamStats->evictionsThisFrame;
+            }
+
             stats.water.readbackUs = gpuDrivenRenderer->getWaterReadbackUs();
             stats.water.dispatchUs = gpuDrivenRenderer->getWaterDispatchUs();
             stats.water.updateUs = gpuDrivenRenderer->getWaterUpdateUs();

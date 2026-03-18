@@ -10,6 +10,7 @@
 #include "../../events/scene/ScenePersistenceEvents.hpp"
 #include "../../events/editor/EditorModeEvents.hpp"
 #include "../../events/render/RenderEvents.hpp"
+#include "../../events/render/ObjectStreamingEvents.hpp"
 #include "../../events/physics/PhysicsEvents.hpp"
 #include "../../data/EditorMode.hpp"
 #include "../../data/EntityConversion.hpp"
@@ -482,6 +483,11 @@ namespace services
             {
                 if (worldMode)
                 {
+                    // Disable GPU object streaming
+                    events::render::objectstreaming::SetObjectStreamingEnabledCommand cmd;
+                    cmd.enabled = false;
+                    ::events::EventDispatcher::instance().execute(cmd);
+
                     entityLoader.clear();
                     sectorManager.clear();
                     worldDefinition = {};

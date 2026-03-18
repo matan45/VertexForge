@@ -59,6 +59,7 @@ namespace types
 
         bool terrainFrustumCullingEnabled = true;
         bool terrainMeshletCullingEnabled = true;
+        bool lodCrossfadeEnabled = true;
         float globalLodBias = 0.0f;
     };
 

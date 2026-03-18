@@ -19,15 +19,20 @@ namespace render::gpudriven
         Ready
     };
 
-    constexpr uint32_t MAX_GPU_OBJECTS = 65536;
+    constexpr uint32_t MAX_GPU_OBJECTS = 262144;
     constexpr uint32_t MAX_DRAW_COMMANDS = 700000;
     constexpr uint32_t DEFAULT_BATCH_COUNT = 4;
     constexpr uint32_t MAX_BATCH_COUNT = 8;
-    constexpr uint32_t MAX_BINDLESS_TEXTURES = 8192;
+    constexpr uint32_t MAX_BINDLESS_TEXTURES = 16384;
     constexpr uint32_t MAX_SHADER_GROUPS = 16;
     constexpr uint32_t LOD_LEVEL_COUNT = 4;
     constexpr uint32_t CULL_WORKGROUP_SIZE = 64;
     constexpr uint32_t INVALID_TEXTURE_INDEX = 0xFFFFFFFF;
+
+    // enableLODSelection values — must match camera_types.glsl constants
+    constexpr uint32_t LOD_SELECTION_DISABLED       = 0;
+    constexpr uint32_t LOD_SELECTION_ENABLED        = 1;
+    constexpr uint32_t LOD_SELECTION_WITH_CROSSFADE = 2;
 
     constexpr uint32_t MAX_BONES_PER_OBJECT = 128;
     constexpr uint32_t MAX_ANIMATED_OBJECTS = 4096;

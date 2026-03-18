@@ -21,6 +21,7 @@ namespace windows
         int tilesPerSector = 4;
         float loadRadius = 4.0f;
         float unloadRadius = 5.0f;
+        bool gpuObjectStreaming = true;
 
         int totalSectors = 0;
         int loadedSectors = 0;

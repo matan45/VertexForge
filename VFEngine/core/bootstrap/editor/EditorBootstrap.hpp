@@ -30,6 +30,7 @@ namespace services
     class IBillboardRenderProvider;
     class IDecalRenderProvider;
     class ILightStreamingProvider;
+    class IObjectStreamingProvider;
     class IGIProvider;
     class IBehaviorTreeProvider;
 }
@@ -81,6 +82,7 @@ namespace core
         class BillboardRenderAdapter;
         class DecalRenderAdapter;
         class LightStreamingAdapter;
+        class ObjectStreamingAdapter;
         class GIAdapter;
     }
     class BehaviorTreeAdapter;
@@ -117,6 +119,7 @@ namespace core
         std::unique_ptr<adapters::BillboardRenderAdapter> billboardRenderAdapter;
         std::unique_ptr<adapters::DecalRenderAdapter> decalRenderAdapter;
         std::unique_ptr<adapters::LightStreamingAdapter> lightStreamingAdapter;
+        std::unique_ptr<adapters::ObjectStreamingAdapter> objectStreamingAdapter;
         std::unique_ptr<adapters::GIAdapter> giAdapter;
         std::unique_ptr<BehaviorTreeAdapter> behaviorTreeAdapter;
 
@@ -188,6 +191,7 @@ namespace core
         services::IDecalRenderProvider* getDecalRenderProvider();
 
         services::ILightStreamingProvider* getLightStreamingProvider();
+        services::IObjectStreamingProvider* getObjectStreamingProvider();
 
         services::IGIProvider* getGIProvider();
 

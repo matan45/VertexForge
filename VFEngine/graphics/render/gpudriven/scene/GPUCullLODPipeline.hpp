@@ -35,6 +35,7 @@ namespace render::gpudriven
         vk::Buffer cachedDrawCommandBuffer;
         vk::Buffer cachedPerDrawDataBuffer;
         vk::Buffer cachedDrawCountBuffer;
+        vk::Buffer cachedActiveIndexBuffer;
 
         // Cached Hi-Z descriptor info
         vk::ImageView cachedHiZView;
@@ -59,7 +60,8 @@ namespace render::gpudriven
             vk::Buffer cameraBuffer,
             vk::Buffer drawCommandBuffer,
             vk::Buffer perDrawDataBuffer,
-            vk::Buffer drawCountBuffer
+            vk::Buffer drawCountBuffer,
+            vk::Buffer activeIndexBuffer
         );
 
         void updateHiZDescriptor(vk::ImageView hiZView, vk::Sampler hiZSampler);

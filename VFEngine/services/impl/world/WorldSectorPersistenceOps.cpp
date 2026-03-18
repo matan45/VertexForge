@@ -6,8 +6,16 @@
 #include "world/WorldDefinitionSerialization.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/world/WorldSectorEvents.hpp"
+#include "../../events/render/ObjectStreamingEvents.hpp"
+#include "../../events/render/LightStreamingEvents.hpp"
+#include "scene/EntityRegistry.hpp"
+#include "asset/AssetMetadataSerializer.hpp"
+#include "asset/AssetDatabase.hpp"
 #include "print/Log.hpp"
 #include <filesystem>
+#include <chrono>
+#include <sstream>
+#include <iomanip>
 
 namespace
 {
@@ -42,6 +50,14 @@ namespace services
         worldMode = true;
         currentWorldPath = filePath;
 
+        // Enable GPU object streaming if configured
+        if (streamingConfig.enableGPUObjectStreaming)
+        {
+            events::render::objectstreaming::SetObjectStreamingEnabledCommand cmd;
+            cmd.enabled = true;
+            ::events::EventDispatcher::instance().execute(cmd);
+        }
+
         // Tag root entity so the world auto-loads with the scene
         auto& root = sceneGraph->GetRoot();
         root.addOrReplaceComponent<components::WorldSectorComponent>().worldFilePath = filePath;
@@ -60,10 +76,54 @@ namespace services
             }
         }
 
-        // Mark all sectors as Loaded since entities are already live in the scene
-        sectorManager.forEachSector([](world::WorldSector& sector)
+        // Mark all sectors as Loaded since entities are already live in the scene,
+        // and register their entities for GPU object/light streaming
+        auto& registry = scene::EntityRegistry::getRegistry();
+        sectorManager.forEachSector([&](world::WorldSector& sector)
         {
             sector.state = world::SectorState::Loaded;
+
+            if (streamingConfig.enableGPUObjectStreaming)
+            {
+                std::vector<std::pair<uint64_t, entt::entity>> meshEntities;
+                std::vector<uint32_t> lightEntityIds;
+
+                // Build UUID -> entity lookup map once (O(N)), then resolve each UUID in O(1)
+                auto uuidView = registry.view<components::UUIDComponent>();
+                std::unordered_map<uint64_t, entt::entity> uuidToEntity;
+                for (auto ent : uuidView)
+                {
+                    uuidToEntity[uuidView.get<components::UUIDComponent>(ent).id.getValue()] = ent;
+                }
+
+                for (uint64_t uuid : sector.entityUUIDs)
+                {
+                    auto it = uuidToEntity.find(uuid);
+                    if (it != uuidToEntity.end())
+                    {
+                        auto ent = it->second;
+                        if (registry.any_of<components::MeshComponent>(ent))
+                            meshEntities.emplace_back(uuid, ent);
+                        if (registry.any_of<components::PointLightComponent, components::SpotLightComponent>(ent))
+                            lightEntityIds.push_back(static_cast<uint32_t>(ent));
+                    }
+                }
+
+                if (!meshEntities.empty())
+                {
+                    events::render::objectstreaming::RegisterSectorObjectsCommand cmd;
+                    cmd.sectorId = world::sectorCoordToId(sector.coord);
+                    cmd.entities = std::move(meshEntities);
+                    ::events::EventDispatcher::instance().execute(cmd);
+                }
+                if (!lightEntityIds.empty())
+                {
+                    events::render::lightstreaming::RegisterSectorLightsCommand cmd;
+                    cmd.sectorId = world::sectorCoordToId(sector.coord);
+                    cmd.lightEntityIds = std::move(lightEntityIds);
+                    ::events::EventDispatcher::instance().execute(cmd);
+                }
+            }
         });
 
         return saveWorld(filePath);
@@ -108,7 +168,37 @@ namespace services
         });
 
         currentWorldPath = path;
-        return world::WorldDefinitionSerialization::save(worldDefinition, path);
+        bool result = world::WorldDefinitionSerialization::save(worldDefinition, path);
+
+        if (result)
+        {
+            // Create or update .vfmeta sidecar for the .vfworld file
+            auto metaPath = asset::AssetMetadataSerializer::getMetaPath(std::filesystem::path(path));
+            auto existingMeta = asset::AssetMetadataSerializer::load(metaPath);
+
+            asset::AssetMetadata metadata;
+            metadata.guid = existingMeta.has_value() ? existingMeta->guid : asset::AssetGUID::generate();
+            metadata.type = resource::AssetType::World;
+            metadata.importSourcePath = path;
+            {
+                auto now = std::chrono::system_clock::now();
+                auto time = std::chrono::system_clock::to_time_t(now);
+                std::tm tm{};
+                localtime_s(&tm, &time);
+                std::ostringstream oss;
+                oss << std::put_time(&tm, "%Y-%m-%d %H:%M:%S");
+                metadata.importTimestamp = oss.str();
+            }
+            asset::AssetMetadataSerializer::save(metadata, metaPath);
+
+            auto& db = asset::AssetDatabase::instance();
+            if (!db.getGUID(path).has_value())
+            {
+                db.registerAssetWithGUID(metadata.guid, path, resource::AssetType::World);
+            }
+        }
+
+        return result;
     }
 
     bool WorldSectorServiceImpl::loadWorld(const std::string& filePath)
@@ -126,6 +216,14 @@ namespace services
 
         worldMode = true;
         currentWorldPath = filePath;
+
+        // Enable GPU object streaming if configured
+        if (newDef.streamingConfig.enableGPUObjectStreaming)
+        {
+            events::render::objectstreaming::SetObjectStreamingEnabledCommand cmd;
+            cmd.enabled = true;
+            ::events::EventDispatcher::instance().execute(cmd);
+        }
 
         for (const auto& [coord, sectorPath] : worldDefinition.sectorFilePaths)
         {
@@ -162,6 +260,13 @@ namespace services
     {
         if (!worldMode)
             return;
+
+        // Disable GPU object streaming so entities render through the normal path again
+        {
+            events::render::objectstreaming::SetObjectStreamingEnabledCommand cmd;
+            cmd.enabled = false;
+            ::events::EventDispatcher::instance().execute(cmd);
+        }
 
         entityLoader.clear();
         sectorManager.clear();

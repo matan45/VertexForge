@@ -126,6 +126,21 @@ namespace render::gpudriven
         std::unordered_map<std::string, std::string> instanceToParentCache;
         material::CallbackId materialChangeCallbackId{};
 
+        // Persistent slot mode (play mode streaming)
+        FreeListAllocator objectAllocator;
+        std::unordered_map<uint64_t, uint32_t> entityToSlot;    // Entity UUID -> GPU slot
+        std::vector<uint32_t> activeObjectIndices;
+        uint32_t activeObjectCount = 0;
+        std::vector<uint32_t> dirtySlots;
+        bool persistentMode = false;
+
+        // Active-index GPU buffer
+        vk::Buffer activeIndexBuffer;
+        vk::DeviceMemory activeIndexBufferMemory;
+        vk::Buffer activeIndexStagingBuffer;
+        vk::DeviceMemory activeIndexStagingMemory;
+        void* activeIndexStagingMapped = nullptr;
+
     public:
         explicit MergedMeshBuffer(core::Device& device);
         ~MergedMeshBuffer();
@@ -174,6 +189,21 @@ namespace render::gpudriven
 
         const std::vector<MergedMeshInfo>& getRegisteredMeshes() const { return registeredMeshes; }
 
+        // Persistent slot mode (play mode streaming)
+        void setPersistentMode(bool enabled);
+        bool isPersistentMode() const { return persistentMode; }
+        uint32_t allocateObjectSlot();
+        void freeObjectSlot(uint32_t slot);
+        void updateObjectAtSlot(uint32_t slot, const GPUObjectData& data);
+        void rebuildActiveIndexList();
+        void uploadDirtyObjects(vk::CommandBuffer cmd);
+        void uploadActiveIndices(vk::CommandBuffer cmd);
+        uint32_t getActiveObjectCount() const { return activeObjectCount; }
+        vk::Buffer getActiveIndexBuffer() const { return activeIndexBuffer; }
+        void mapEntityToSlot(uint64_t entityUUID, uint32_t slot) { entityToSlot[entityUUID] = slot; }
+        void unmapEntitySlot(uint64_t entityUUID) { entityToSlot.erase(entityUUID); }
+        uint32_t getEntitySlotCount() const { return static_cast<uint32_t>(entityToSlot.size()); }
+
         MergedMeshInfo* reserveMesh(const std::string& meshPath,
                                     const resource::MeshStreamHeader& header);
 
@@ -201,6 +231,7 @@ namespace render::gpudriven
         void createGeometryBuffers();
         void createObjectBuffers();
         void createInstanceBuffers();
+        void createActiveIndexBuffers();
         void destroyBuffers();
 
         void uploadVertexDataAt(uint32_t offset, const void* data, uint32_t vertexCount);

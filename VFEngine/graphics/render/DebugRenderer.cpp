@@ -294,7 +294,8 @@ namespace render
             !lightGizmoDrawList.empty() || (showClusterDebug && clusterDebugData) ||
             (showShadowDebug && !shadowFrustumDrawList.empty()) ||
             !uiCanvasDrawList.empty() || !uiCanvasImageDrawList.empty() ||
-            (showNavmeshDebug && navmeshDebugRenderer && navmeshDebugRenderer->hasMeshData());
+            (showNavmeshDebug && navmeshDebugRenderer && navmeshDebugRenderer->hasMeshData()) ||
+            (immediateDebugRenderer && immediateDebugRenderer->hasData());
     }
 
     void DebugRenderer::setShowGrid(bool show)

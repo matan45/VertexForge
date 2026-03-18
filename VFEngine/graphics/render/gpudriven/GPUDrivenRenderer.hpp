@@ -2,6 +2,7 @@
 
 #include "GPUDrivenTypes.hpp"
 #include "scene/MergedMeshBuffer.hpp"
+#include "scene/GPUObjectStreamManager.hpp"
 #include "scene/IndirectBatchManager.hpp"
 #include "scene/BindlessTextureManager.hpp"
 #include "scene/GPUCullLODPipeline.hpp"
@@ -16,6 +17,7 @@
 #include "../water/WaterGPUTypes.hpp"
 #include "../water/OceanFFT.hpp"
 #include "scene/MeshletBuffer.hpp"
+#include "scene/TextureStreamManager.hpp"
 #include "scene/BoneMatrixManager.hpp"
 #include "../lighting/GPULightBufferManager.hpp"
 #include "../lighting/ClusterGridManager.hpp"
@@ -236,6 +238,7 @@ namespace render::gpudriven
         {
             bool frustumCullingEnabled = true;
             bool lodSelectionEnabled = true;
+            bool lodCrossfadeEnabled = true;
             bool occlusionCullingEnabled = true;
             bool distanceCullingEnabled = false;
             float categoryDistances[services::CullingCategory::Count] = {1000.0f, 2000.0f, 500.0f, 300.0f, 200.0f, 500.0f, 1000.0f};
@@ -280,6 +283,10 @@ namespace render::gpudriven
         // Light streaming
         std::unique_ptr<lighting::LightStreamManager> lightStreamManager;
 
+        // Object streaming
+        std::unique_ptr<gpudriven::GPUObjectStreamManager> objectStreamManager;
+        bool objectStreamingEnabled = false;
+
         // Global Illumination
         std::unique_ptr<gi::RadianceCascadeManager> giCascadeManager;
         std::unique_ptr<gi::ProbeTracePipeline> giTracePipeline;
@@ -292,6 +299,9 @@ namespace render::gpudriven
 
         std::unique_ptr<mesh::MeshStreamManager> meshStreamManager;
         bool meshStreamingEnabled = true;
+
+        // Texture mip streaming
+        std::unique_ptr<TextureStreamManager> textureStreamManager;
 
         bool initialized = false;
         bool enabled = false;
@@ -369,6 +379,9 @@ namespace render::gpudriven
         void setLODSelectionEnabled(bool enabled) { culling.lodSelectionEnabled = enabled; }
         bool isLODSelectionEnabled() const { return culling.lodSelectionEnabled; }
 
+        void setLODCrossfadeEnabled(bool enabled) { culling.lodCrossfadeEnabled = enabled; }
+        bool isLODCrossfadeEnabled() const { return culling.lodCrossfadeEnabled; }
+
         void setOcclusionCullingEnabled(bool enabled) { culling.occlusionCullingEnabled = enabled; }
         bool isOcclusionCullingEnabled() const { return culling.occlusionCullingEnabled; }
 
@@ -428,6 +441,12 @@ namespace render::gpudriven
         lighting::LightStreamManager* getLightStreamManager() const { return lightStreamManager.get(); }
         void initLightStreaming(const lighting::LightStreamingConfig& config = {});
 
+        // Object streaming
+        gpudriven::GPUObjectStreamManager* getObjectStreamManager() const { return objectStreamManager.get(); }
+        void initObjectStreaming(const gpudriven::ObjectStreamConfig& config = {});
+        void setObjectStreamingEnabled(bool enabled) { objectStreamingEnabled = enabled; }
+        bool isObjectStreamingEnabled() const { return objectStreamingEnabled; }
+
         // Global Illumination
         void initGI(const gi::GISettings& settings);
         void cleanupGI();
@@ -435,6 +454,10 @@ namespace render::gpudriven
         gi::RadianceCascadeManager* getGICascadeManager() const { return giCascadeManager.get(); }
         gi::GIDebugRenderer* getGIDebugRenderer() const { return giDebugRenderer.get(); }
         const gi::GISettings& getGISettings() const { return cachedGISettings; }
+
+        // Texture streaming
+        TextureStreamManager* getTextureStreamManager() const { return textureStreamManager.get(); }
+        const TextureStreamStats* getTextureStreamStats() const;
 
         void setVisibleLightsFromBVH(const std::vector<uint32_t>& visibleLights);
         void clearVisibleLights();

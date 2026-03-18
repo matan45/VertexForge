@@ -306,6 +306,11 @@ namespace controllers {
 		offScreenController->setLODSelectionEnabled(enabled);
 	}
 
+	void OffScreen::setLODCrossfadeEnabled(bool enabled)
+	{
+		offScreenController->setLODCrossfadeEnabled(enabled);
+	}
+
 	void OffScreen::setMeshletFrustumCullingEnabled(bool enabled)
 	{
 		offScreenController->setMeshletFrustumCullingEnabled(enabled);
@@ -602,6 +607,37 @@ namespace controllers {
 	void OffScreen::unregisterSectorLights(uint32_t sectorId)
 	{
 		offScreenController->unregisterSectorLights(sectorId);
+	}
+
+	void OffScreen::setObjectStreamingEnabled(bool enabled)
+	{
+		offScreenController->setObjectStreamingEnabled(enabled);
+	}
+
+	void OffScreen::setObjectStreamingConfig(const render::gpudriven::ObjectStreamConfig& config)
+	{
+		offScreenController->setObjectStreamingConfig(config);
+	}
+
+	render::gpudriven::ObjectStreamConfig OffScreen::getObjectStreamingConfig() const
+	{
+		return offScreenController->getObjectStreamingConfig();
+	}
+
+	render::gpudriven::ObjectStreamingStats OffScreen::getObjectStreamingStats() const
+	{
+		return offScreenController->getObjectStreamingStats();
+	}
+
+	void OffScreen::registerSectorObjects(uint32_t sectorId,
+	                                       const std::vector<std::pair<uint64_t, entt::entity>>& entities)
+	{
+		offScreenController->registerSectorObjects(sectorId, entities);
+	}
+
+	void OffScreen::unregisterSectorObjects(uint32_t sectorId)
+	{
+		offScreenController->unregisterSectorObjects(sectorId);
 	}
 
 }

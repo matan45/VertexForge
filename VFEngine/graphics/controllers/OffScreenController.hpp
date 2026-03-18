@@ -10,13 +10,16 @@
 #include "atmosphere/AtmosphereSettings.hpp"
 #include "cloud/CloudSettings.hpp"
 #include "../render/lighting/LightStreamManager.hpp"
+#include "../render/gpudriven/scene/GPUObjectStreamTypes.hpp"
 #include "../render/tools/ImmediateDebugTypes.hpp"
 #include "../../services/providers/render/IDecalRenderProvider.hpp"
 #include <memory>
 #include <string_view>
 #include <string>
 #include <vector>
+#include <utility>
 #include <optional>
+#include <entt/entt.hpp>
 
 namespace events
 {
@@ -170,6 +173,7 @@ namespace controllers
 
         void setFrustumCullingEnabled(bool enabled);
         void setLODSelectionEnabled(bool enabled);
+        void setLODCrossfadeEnabled(bool enabled);
         void setMeshletFrustumCullingEnabled(bool enabled);
         void setMeshletBackfaceCullingEnabled(bool enabled);
         void setDistanceCullingEnabled(bool enabled);
@@ -266,6 +270,15 @@ namespace controllers
         render::lighting::LightStreamingStats getLightStreamingStats() const;
         void registerSectorLights(uint32_t sectorId, const std::vector<uint32_t>& lightEntityIds);
         void unregisterSectorLights(uint32_t sectorId);
+
+        // Object streaming settings
+        void setObjectStreamingEnabled(bool enabled);
+        void setObjectStreamingConfig(const render::gpudriven::ObjectStreamConfig& config);
+        render::gpudriven::ObjectStreamConfig getObjectStreamingConfig() const;
+        render::gpudriven::ObjectStreamingStats getObjectStreamingStats() const;
+        void registerSectorObjects(uint32_t sectorId,
+                                   const std::vector<std::pair<uint64_t, entt::entity>>& entities);
+        void unregisterSectorObjects(uint32_t sectorId);
 
     private:
         std::unique_ptr<render::gpudriven::BrushComputePipeline> brushComputePipeline;

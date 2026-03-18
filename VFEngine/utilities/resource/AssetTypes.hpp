@@ -26,6 +26,7 @@ namespace resource {
 		Terrain = 15,
 		TerrainMaterial = 16,
 		BehaviorTree = 17,
+		World = 18,
 		COUNT
 	};
 
@@ -49,6 +50,7 @@ namespace resource {
 		case AssetType::Terrain:          return "Terrain";
 		case AssetType::TerrainMaterial:  return "TerrainMaterial";
 		case AssetType::BehaviorTree:     return "BehaviorTree";
+		case AssetType::World:            return "World";
 		default:                          return "Unknown";
 		}
 	}

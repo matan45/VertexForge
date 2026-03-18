@@ -11,8 +11,12 @@ namespace core {
 }
 
 namespace render::gpudriven {
-    
+
+    class TextureStreamManager;
+
     class BindlessTextureManager {
+        friend class TextureStreamManager;
+
     private:
         core::Device& device;
         
@@ -25,6 +29,7 @@ namespace render::gpudriven {
         uint32_t nextTextureIndex = 1; // Index 0 is reserved for default texture
         std::vector<uint32_t> freeIndices;
 
+        uint32_t effectiveMaxTextures = MAX_BINDLESS_TEXTURES;
         bool initialized = false;
         bool defaultTextureSet = false;
         vk::ImageView defaultImageView;

@@ -102,6 +102,7 @@ namespace core
         void setFrustumCullingEnabled(bool enabled) override;
         void setOcclusionCullingEnabled(bool enabled) override;
         void setLODSelectionEnabled(bool enabled) override;
+        void setLODCrossfadeEnabled(bool enabled) override;
         void setMeshletFrustumCullingEnabled(bool enabled) override;
         void setMeshletBackfaceCullingEnabled(bool enabled) override;
         void setDistanceCullingEnabled(bool enabled) override;

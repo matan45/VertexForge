@@ -27,6 +27,7 @@ namespace render::gpudriven
         bool frustumCullingEnabled;
         bool occlusionCullingEnabled;
         bool lodSelectionEnabled;
+        bool lodCrossfadeEnabled = true;
         bool distanceCullingEnabled;
         float categoryDistances[services::CullingCategory::Count];
         float shadowDistanceMultiplier;

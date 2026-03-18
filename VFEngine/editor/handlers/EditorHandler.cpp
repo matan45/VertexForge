@@ -37,6 +37,7 @@
 #include "impl/render/BillboardRenderServiceImpl.hpp"
 #include "impl/render/DecalRenderServiceImpl.hpp"
 #include "impl/render/LightStreamingServiceImpl.hpp"
+#include "impl/render/ObjectStreamingServiceImpl.hpp"
 #include "impl/render/GIServiceImpl.hpp"
 #include "impl/ai/BehaviorTreeServiceImpl.hpp"
 #include "impl/ai/BehaviorTreePlayModeHandler.hpp"
@@ -378,6 +379,10 @@ namespace handlers
             bootstrap->getLightStreamingProvider()
         );
 
+        objectStreamingService = std::make_shared<services::ObjectStreamingServiceImpl>(
+            bootstrap->getObjectStreamingProvider()
+        );
+
         giService = std::make_shared<services::GIServiceImpl>(
             bootstrap->getGIProvider()
         );
@@ -567,6 +572,7 @@ namespace handlers
         billboardRenderService->registerEventHandlers();
         decalRenderService->registerEventHandlers();
         lightStreamingService->registerEventHandlers();
+        objectStreamingService->registerEventHandlers();
         giService->registerEventHandlers();
         behaviorTreeService->registerEventHandlers();
 
