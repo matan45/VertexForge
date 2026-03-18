@@ -8,6 +8,27 @@
 #include <algorithm>
 #include <cmath>
 
+namespace
+{
+    vk::Format resolveVulkanFormat(resource::TextureCompressionFormat compression, vk::Format uncompressedFormat)
+    {
+        switch (compression)
+        {
+            case resource::TextureCompressionFormat::BC7:
+            {
+                if (uncompressedFormat == vk::Format::eR8G8B8A8Srgb ||
+                    uncompressedFormat == vk::Format::eB8G8R8A8Srgb)
+                    return vk::Format::eBc7SrgbBlock;
+                return vk::Format::eBc7UnormBlock;
+            }
+            case resource::TextureCompressionFormat::BC6H:
+                return vk::Format::eBc6HUfloatBlock;
+            default:
+                return uncompressedFormat;
+        }
+    }
+}
+
 namespace render::gpudriven
 {
     TextureStreamManager::TextureStreamManager(core::Device& device, BindlessTextureManager& bindlessMgr)
@@ -29,7 +50,10 @@ namespace render::gpudriven
         poolInfo.queueFamilyIndex = device.getQueueFamilyIndices().graphicsAndComputeFamily.value();
         commandPool = device.getLogicalDevice().createCommandPool(poolInfo);
 
-        createStagingBuffer(config.maxBytesPerFrame);
+        // 32MB initial staging — covers up to 2048x2048 RGBA uncompressed (16MB) with headroom.
+        // Grows automatically if a larger mip is encountered.
+        constexpr size_t initialStagingSize = 32 * 1024 * 1024;
+        createStagingBuffer(std::max(initialStagingSize, config.maxBytesPerFrame));
 
         vfLogInfo("TextureStreamManager: Initialized (VRAM budget: {} MB, max {}/frame)",
                   config.vramBudgetBytes / (1024 * 1024), config.maxBytesPerFrame / (1024 * 1024));
@@ -123,6 +147,9 @@ namespace render::gpudriven
         }
 
         const auto& header = handle->getHeader();
+
+        // Resolve Vulkan format based on file compression (BC7, BC6H, etc.)
+        format = resolveVulkanFormat(header.compression, format);
 
         // Read tail mips (last N mips) immediately
         uint32_t tailStart = (header.mipLevels > config.tailMipCount)
@@ -233,6 +260,17 @@ namespace render::gpudriven
                             vk::PipelineStageFlagBits::eTransfer,
                             {}, nullptr, nullptr, barrier);
 
+        // Calculate total tail mip data size and grow staging buffer if needed
+        size_t totalTailSize = 0;
+        for (const auto& mip : tailMips)
+        {
+            totalTailSize += mip.dataSize;
+        }
+        if (totalTailSize > stagingBufferSize)
+        {
+            createStagingBuffer(totalTailSize * 2);
+        }
+
         // Copy tail mips from staging
         size_t stagingOffset = 0;
         uint32_t tailStart = tex.lowestLoadedMip;
@@ -241,13 +279,6 @@ namespace render::gpudriven
         {
             const auto& mip = tailMips[i];
             uint32_t mipLevel = tailStart + i;
-
-            if (stagingOffset + mip.dataSize > stagingBufferSize)
-            {
-                // Need bigger staging buffer — shouldn't happen for tail mips but be safe
-                vfLogWarning("TextureStreamManager: Staging buffer too small for tail mips of '{}'", tex.path);
-                break;
-            }
 
             memcpy(static_cast<char*>(stagingMapped) + stagingOffset, mip.data.data(), mip.dataSize);
 
