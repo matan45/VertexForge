@@ -29,8 +29,15 @@ namespace terrain
         void normalizeAll();
         void initializeDefault(uint32_t vertexResolution);
 
-        void packRGBA(uint32_t x, uint32_t z,
-                      float& r, float& g, float& b, float& a) const;
+        struct PackedRGBA
+        {
+            float r = 0.0f;
+            float g = 0.0f;
+            float b = 0.0f;
+            float a = 0.0f;
+        };
+
+        [[nodiscard]] PackedRGBA packRGBA(uint32_t x, uint32_t z) const;
 
         // Returns channel [0-3] if paletteLayer is assigned, else 0xFF
         [[nodiscard]] uint8_t findChannel(uint8_t paletteLayer) const;

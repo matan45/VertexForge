@@ -69,7 +69,6 @@ namespace windows
                 dispatcher.execute(offsetCmd);
             }
 
-            // Update brush cursor UV BEFORE render so raycast uses current mouse position
             updateBrushCursors(vp, vs);
 
             events::render::GetViewportTextureQuery query;
@@ -99,67 +98,53 @@ namespace windows
         ImGui::End();
     }
 
+    bool ViewPort::tryGetGameCameraState(CameraState& state, float aspectRatio)
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+        auto primaryCameraOpt = dispatcher.query(events::scene::GetPrimaryCameraQuery{});
+        if (!primaryCameraOpt.has_value()) return false;
+
+        auto primaryCamera = *primaryCameraOpt;
+        events::scene::GetCameraDataQuery cameraQuery;
+        cameraQuery.entity = primaryCamera;
+        if (!dispatcher.query(cameraQuery).has_value()) return false;
+
+        events::scene::GetWorldTransformQuery transformQuery;
+        transformQuery.entity = primaryCamera;
+        auto transformOpt = dispatcher.query(transformQuery);
+        if (!transformOpt.has_value()) return false;
+
+        auto& transform = *transformOpt;
+        auto enttEntity = services::internal::fromHandle(primaryCamera);
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!registry.all_of<components::CameraComponent>(enttEntity)) return false;
+
+        auto& camComp = registry.get<components::CameraComponent>(enttEntity);
+        camComp.aspectRatio = aspectRatio;
+        camComp.updateProjectionMatrix();
+        camComp.updateViewMatrix(transform.position, transform.rotation);
+
+        state.viewMatrix = camComp.viewMatrix;
+        state.projectionMatrix = camComp.projectionMatrix;
+        state.position = transform.position;
+
+        glm::mat4 rotMat = glm::mat4(1.0f);
+        rotMat = glm::rotate(rotMat, glm::radians(transform.rotation.y), glm::vec3(0, 1, 0));
+        rotMat = glm::rotate(rotMat, glm::radians(transform.rotation.x), glm::vec3(1, 0, 0));
+        state.forward = glm::normalize(glm::vec3(rotMat * glm::vec4(0, 0, -1, 0)));
+        return true;
+    }
+
     CameraState ViewPort::getActiveCameraState(bool isPlayMode, float aspectRatio)
     {
         CameraState state;
-        auto& dispatcher = events::EventDispatcher::instance();
+        if (isPlayMode && tryGetGameCameraState(state, aspectRatio))
+            return state;
 
-        bool usingGameCamera = false;
-        if (isPlayMode)
-        {
-            auto primaryCameraOpt = dispatcher.query(events::scene::GetPrimaryCameraQuery{});
-            if (primaryCameraOpt.has_value())
-            {
-                auto primaryCamera = *primaryCameraOpt;
-
-                events::scene::GetCameraDataQuery cameraQuery;
-                cameraQuery.entity = primaryCamera;
-                auto cameraDataOpt = dispatcher.query(cameraQuery);
-
-                if (cameraDataOpt.has_value())
-                {
-                    // Use world transform so child cameras follow parent movement
-                    events::scene::GetWorldTransformQuery transformQuery;
-                    transformQuery.entity = primaryCamera;
-                    auto transformOpt = dispatcher.query(transformQuery);
-
-                    if (transformOpt.has_value())
-                    {
-                        auto& transform = *transformOpt;
-
-                        auto enttEntity = services::internal::fromHandle(primaryCamera);
-                        auto& registry = scene::EntityRegistry::getRegistry();
-                        if (registry.all_of<components::CameraComponent>(enttEntity))
-                        {
-                            auto& camComp = registry.get<components::CameraComponent>(enttEntity);
-                            camComp.aspectRatio = aspectRatio;
-                            camComp.updateProjectionMatrix();
-                            camComp.updateViewMatrix(transform.position, transform.rotation);
-
-                            state.viewMatrix = camComp.viewMatrix;
-                            state.projectionMatrix = camComp.projectionMatrix;
-                            state.position = transform.position;
-
-                            glm::mat4 rotMat = glm::mat4(1.0f);
-                            rotMat = glm::rotate(rotMat, glm::radians(transform.rotation.y), glm::vec3(0, 1, 0));
-                            rotMat = glm::rotate(rotMat, glm::radians(transform.rotation.x), glm::vec3(1, 0, 0));
-                            state.forward = glm::normalize(glm::vec3(rotMat * glm::vec4(0, 0, -1, 0)));
-
-                            usingGameCamera = true;
-                        }
-                    }
-                }
-            }
-        }
-
-        if (!usingGameCamera)
-        {
-            state.viewMatrix = editorCamera->getViewMatrix();
-            state.projectionMatrix = editorCamera->getProjectionMatrix();
-            state.position = editorCamera->position;
-            state.forward = editorCamera->getForwardDirection();
-        }
-
+        state.viewMatrix = editorCamera->getViewMatrix();
+        state.projectionMatrix = editorCamera->getProjectionMatrix();
+        state.position = editorCamera->position;
+        state.forward = editorCamera->getForwardDirection();
         return state;
     }
 
@@ -365,139 +350,88 @@ namespace windows
         else if (meshBrushActive) updateMeshBrushCursorUV(viewportPos, viewportSize);
     }
 
-    void ViewPort::updateSculptCursorUV(glm::vec2 viewportPos, glm::vec2 viewportSize)
+    void ViewPort::sendCursorUV(glm::vec2 viewportPos, glm::vec2 viewportSize)
     {
-        auto& dispatcher = events::EventDispatcher::instance();
         ImGui::SetMouseCursor(ImGuiMouseCursor_None);
-
         ImVec2 mousePos = ImGui::GetMousePos();
-        glm::vec2 uv = (glm::vec2(mousePos.x, mousePos.y) - viewportPos) / viewportSize;
-        uv = glm::clamp(uv, glm::vec2(0.0f), glm::vec2(1.0f));
-
+        glm::vec2 uv = glm::clamp((glm::vec2(mousePos.x, mousePos.y) - viewportPos) / viewportSize,
+                                   glm::vec2(0.0f), glm::vec2(1.0f));
         events::terrainRaycast::SetCursorPositionCommand cmd;
         cmd.cursorUV = uv;
-        dispatcher.execute(cmd);
+        events::EventDispatcher::instance().execute(cmd);
+    }
+
+    void ViewPort::updateSculptCursorUV(glm::vec2 viewportPos, glm::vec2 viewportSize)
+    {
+        sendCursorUV(viewportPos, viewportSize);
     }
 
     void ViewPort::handleSculptBrush()
     {
         auto& dispatcher = events::EventDispatcher::instance();
-        bool sculptActive = dispatcher.query(events::sculpt::IsSculptModeActiveQuery{});
-
-        if (!sculptActive || !ImGui::IsWindowHovered())
-        {
+        if (!dispatcher.query(events::sculpt::IsSculptModeActiveQuery{}) || !ImGui::IsWindowHovered()) {
             sculptDragging = false;
             return;
         }
-
-        bool leftDown = ImGui::IsMouseDown(ImGuiMouseButton_Left);
-        bool shiftHeld = ImGui::GetIO().KeyShift;
-
-        if (leftDown)
-        {
+        if (ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
             auto hitResult = dispatcher.query(events::terrainRaycast::GetTerrainHitQuery{});
-            if (hitResult.hit)
-            {
+            if (hitResult.hit) {
                 events::brush::ApplyBrushCommand applyCmd;
                 applyCmd.worldPosition = hitResult.position;
                 applyCmd.deltaTime = ImGui::GetIO().DeltaTime;
-                applyCmd.invert = shiftHeld;
+                applyCmd.invert = ImGui::GetIO().KeyShift;
                 applyCmd.isFirstApplication = !sculptDragging;
                 dispatcher.execute(applyCmd);
-
                 sculptDragging = true;
             }
-        }
-        else
-        {
+        } else {
             sculptDragging = false;
         }
     }
 
     void ViewPort::updatePaintCursorUV(glm::vec2 viewportPos, glm::vec2 viewportSize)
     {
-        auto& dispatcher = events::EventDispatcher::instance();
-        ImGui::SetMouseCursor(ImGuiMouseCursor_None);
-
-        ImVec2 mousePos = ImGui::GetMousePos();
-        glm::vec2 uv = (glm::vec2(mousePos.x, mousePos.y) - viewportPos) / viewportSize;
-        uv = glm::clamp(uv, glm::vec2(0.0f), glm::vec2(1.0f));
-
-        events::terrainRaycast::SetCursorPositionCommand cmd;
-        cmd.cursorUV = uv;
-        dispatcher.execute(cmd);
+        sendCursorUV(viewportPos, viewportSize);
     }
 
     void ViewPort::handlePaintBrush()
     {
         auto& dispatcher = events::EventDispatcher::instance();
-        bool paintActive = dispatcher.query(events::paint::IsPaintModeActiveQuery{});
-
-        if (!paintActive || !ImGui::IsWindowHovered())
-        {
+        if (!dispatcher.query(events::paint::IsPaintModeActiveQuery{}) || !ImGui::IsWindowHovered()) {
             paintDragging = false;
             return;
         }
-
-        bool leftDown = ImGui::IsMouseDown(ImGuiMouseButton_Left);
-        bool shiftHeld = ImGui::GetIO().KeyShift;
-
-        if (leftDown)
-        {
+        if (ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
             auto hitResult = dispatcher.query(events::terrainRaycast::GetTerrainHitQuery{});
-            if (hitResult.hit)
-            {
+            if (hitResult.hit) {
                 events::paintBrush::ApplyPaintBrushCommand applyCmd;
                 applyCmd.worldPosition = hitResult.position;
                 applyCmd.deltaTime = ImGui::GetIO().DeltaTime;
-                applyCmd.invert = shiftHeld;
+                applyCmd.invert = ImGui::GetIO().KeyShift;
                 applyCmd.isFirstApplication = !paintDragging;
                 dispatcher.execute(applyCmd);
-
                 paintDragging = true;
             }
-        }
-        else
-        {
+        } else {
             paintDragging = false;
         }
     }
 
     void ViewPort::updateHoleCursorUV(glm::vec2 viewportPos, glm::vec2 viewportSize)
     {
-        auto& dispatcher = events::EventDispatcher::instance();
-        ImGui::SetMouseCursor(ImGuiMouseCursor_None);
-
-        ImVec2 mousePos = ImGui::GetMousePos();
-        glm::vec2 uv = (glm::vec2(mousePos.x, mousePos.y) - viewportPos) / viewportSize;
-        uv = glm::clamp(uv, glm::vec2(0.0f), glm::vec2(1.0f));
-
-        events::terrainRaycast::SetCursorPositionCommand cmd;
-        cmd.cursorUV = uv;
-        dispatcher.execute(cmd);
+        sendCursorUV(viewportPos, viewportSize);
     }
 
     void ViewPort::handleHoleBrush()
     {
         auto& dispatcher = events::EventDispatcher::instance();
-        bool holeActive = dispatcher.query(events::hole::IsHoleModeActiveQuery{});
-
-        if (!holeActive || !ImGui::IsWindowHovered())
-        {
-            return;
-        }
-
-        bool leftDown = ImGui::IsMouseDown(ImGuiMouseButton_Left);
-        bool shiftHeld = ImGui::GetIO().KeyShift;
-
-        if (leftDown)
-        {
+        if (!dispatcher.query(events::hole::IsHoleModeActiveQuery{}) || !ImGui::IsWindowHovered()) return;
+        if (ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
             auto hitResult = dispatcher.query(events::terrainRaycast::GetTerrainHitQuery{});
-            if (hitResult.hit)
-            {
+            if (hitResult.hit) {
                 events::holeBrush::ApplyHoleBrushCommand applyCmd;
                 applyCmd.worldPosition = hitResult.position;
-                applyCmd.erase = shiftHeld;
+                applyCmd.erase = ImGui::GetIO().KeyShift;
                 dispatcher.execute(applyCmd);
             }
         }
@@ -505,97 +439,56 @@ namespace windows
 
     void ViewPort::updateVegetationCursorUV(glm::vec2 viewportPos, glm::vec2 viewportSize)
     {
-        auto& dispatcher = events::EventDispatcher::instance();
-        ImGui::SetMouseCursor(ImGuiMouseCursor_None);
-
-        ImVec2 mousePos = ImGui::GetMousePos();
-        glm::vec2 uv = (glm::vec2(mousePos.x, mousePos.y) - viewportPos) / viewportSize;
-        uv = glm::clamp(uv, glm::vec2(0.0f), glm::vec2(1.0f));
-
-        events::terrainRaycast::SetCursorPositionCommand cmd;
-        cmd.cursorUV = uv;
-        dispatcher.execute(cmd);
+        sendCursorUV(viewportPos, viewportSize);
     }
 
     void ViewPort::handleVegetationBrush()
     {
         auto& dispatcher = events::EventDispatcher::instance();
-        bool vegActive = dispatcher.query(events::vegetationBrush::IsVegetationBrushModeActiveQuery{});
-
-        if (!vegActive || !ImGui::IsWindowHovered())
-        {
+        if (!dispatcher.query(events::vegetationBrush::IsVegetationBrushModeActiveQuery{}) || !ImGui::IsWindowHovered()) {
             vegetationDragging = false;
             return;
         }
-
-        bool leftDown = ImGui::IsMouseDown(ImGuiMouseButton_Left);
-        bool shiftHeld = ImGui::GetIO().KeyShift;
-
-        if (leftDown)
-        {
+        if (ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
             auto hitResult = dispatcher.query(events::terrainRaycast::GetTerrainHitQuery{});
-            if (hitResult.hit)
-            {
+            if (hitResult.hit) {
                 events::vegetationBrush::ApplyVegetationDensityBrushCommand applyCmd;
                 applyCmd.worldPosition = hitResult.position;
                 applyCmd.deltaTime = ImGui::GetIO().DeltaTime;
-                applyCmd.invert = shiftHeld;
+                applyCmd.invert = ImGui::GetIO().KeyShift;
                 applyCmd.isFirstApplication = !vegetationDragging;
                 dispatcher.execute(applyCmd);
-
                 vegetationDragging = true;
             }
-        }
-        else
-        {
+        } else {
             vegetationDragging = false;
         }
     }
 
     void ViewPort::updateMeshBrushCursorUV(glm::vec2 viewportPos, glm::vec2 viewportSize)
     {
-        auto& dispatcher = events::EventDispatcher::instance();
-        ImGui::SetMouseCursor(ImGuiMouseCursor_None);
-
-        ImVec2 mousePos = ImGui::GetMousePos();
-        glm::vec2 uv = (glm::vec2(mousePos.x, mousePos.y) - viewportPos) / viewportSize;
-        uv = glm::clamp(uv, glm::vec2(0.0f), glm::vec2(1.0f));
-
-        events::terrainRaycast::SetCursorPositionCommand cmd;
-        cmd.cursorUV = uv;
-        dispatcher.execute(cmd);
+        sendCursorUV(viewportPos, viewportSize);
     }
 
     void ViewPort::handleMeshBrush()
     {
         auto& dispatcher = events::EventDispatcher::instance();
-        bool meshBrushActive = dispatcher.query(events::meshBrush::IsMeshBrushModeActiveQuery{});
-
-        if (!meshBrushActive || !ImGui::IsWindowHovered() || ImGui::GetIO().KeyCtrl)
-        {
+        if (!dispatcher.query(events::meshBrush::IsMeshBrushModeActiveQuery{}) || !ImGui::IsWindowHovered() || ImGui::GetIO().KeyCtrl) {
             meshBrushDragging = false;
             return;
         }
-
-        bool leftDown = ImGui::IsMouseDown(ImGuiMouseButton_Left);
-
-        if (leftDown)
-        {
+        if (ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
             auto hitResult = dispatcher.query(events::terrainRaycast::GetTerrainHitQuery{});
-            if (hitResult.hit)
-            {
+            if (hitResult.hit) {
                 events::meshBrush::ApplyMeshBrushCommand applyCmd;
                 applyCmd.worldPosition = hitResult.position;
                 applyCmd.surfaceNormal = hitResult.normal;
                 applyCmd.deltaTime = ImGui::GetIO().DeltaTime;
                 applyCmd.isFirstApplication = !meshBrushDragging;
                 dispatcher.execute(applyCmd);
-
                 meshBrushDragging = true;
             }
-        }
-        else
-        {
+        } else {
             meshBrushDragging = false;
         }
     }

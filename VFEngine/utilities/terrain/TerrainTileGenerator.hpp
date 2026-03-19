@@ -83,15 +83,28 @@ namespace terrain
 
         void calculateBounds(TileLODData& lodData) const;
 
+    public:
+        struct SkirtEdgeVertex
+        {
+            uint32_t idx = 0;
+            uint32_t baseX = 0;
+            uint32_t baseZ = 0;
+        };
+
+        struct SkirtEdgeParams
+        {
+            const std::vector<resource::Vertex>* mainVertices = nullptr;
+            TileEdge edge = TileEdge::North;
+            uint32_t lodLevel = 0;
+            float skirtDepth = 0.0f;
+            const std::vector<uint8_t>* holeMask = nullptr;
+            uint32_t baseVertexCount = 0;
+        };
+
         void addSkirtEdge(
             std::vector<resource::Vertex>& vertices,
             std::vector<uint32_t>& indices,
-            const std::vector<resource::Vertex>& mainVertices,
-            TileEdge edge,
-            uint32_t lodLevel,
-            float skirtDepth,
-            const std::vector<uint8_t>& holeMask,
-            uint32_t baseVertexCount
+            const SkirtEdgeParams& params
         ) const;
 
         [[nodiscard]] bool isEdgeVertex(uint32_t x, uint32_t z, uint32_t vertCount) const;

@@ -7,43 +7,27 @@
 #include "../../render/RenderPassHandler.hpp"
 #include "../../render/mesh/StaticMeshPipeline.hpp"
 #include "../../render/mesh/MeshTypes.hpp"
-#include "../../render/billboard/BillboardTypes.hpp"
-#include "../../render/billboard/BillboardPipeline.hpp"
-
-#include "../../render/text/TextTypes.hpp"
-#include "../../render/text/TextPipeline.hpp"
 #include "../../render/gpudriven/GPUDrivenRenderer.hpp"
 #include "../../render/occlusion/CameraOcclusionManager.hpp"
 #include "../../animation/RuntimeAnimatorSystem.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "scene/Entity.hpp"
 #include "components/Components.hpp"
-#include "components/LightTextComponents.hpp"
 #include "resource/ResourceManager.hpp"
 #include "../../render/material/MaterialPBRExtractor.hpp"
-#include "threading/JobSystem.hpp"
 #include "threading/ParallelCollect.hpp"
-
 
 namespace controllers::offscreen
 {
-    const render::mesh::ExtractedPBRValues* FramePreparationSystem::getCachedPBRValues(
-        const std::string& materialPath)
+    const render::mesh::ExtractedPBRValues* FramePreparationSystem::getCachedPBRValues(const std::string& materialPath)
     {
-        if (materialPath.empty())
-        {
-            return nullptr;
-        }
+        if (materialPath.empty()) return nullptr;
 
         auto it = pbrCache.find(materialPath);
-        if (it != pbrCache.end())
-        {
-            return &it->second;
-        }
+        if (it != pbrCache.end()) return &it->second;
 
         auto [inserted, success] = pbrCache.emplace(materialPath,
-                                                    render::mesh::MaterialPBRExtractor::extractPBRFromPath(
-                                                        materialPath));
+            render::mesh::MaterialPBRExtractor::extractPBRFromPath(materialPath));
         return &inserted->second;
     }
 
@@ -51,7 +35,6 @@ namespace controllers::offscreen
                                                       const std::string& materialPath)
     {
         matInfo.materialPath = materialPath;
-
         const auto* pbrValues = getCachedPBRValues(materialPath);
         if (pbrValues)
         {
@@ -78,15 +61,10 @@ namespace controllers::offscreen
     {
         auto* renderHandler = ctx.renderHandler;
 
-        // Ensure the mesh pipeline + GPU-driven renderer are initialized so
-        // terrain/water can render even when the scene contains no mesh assets.
         if (!renderHandler->isMeshPipelineInitialized())
-        {
             renderHandler->initMeshPipeline();
-        }
 
         auto* meshPipeline = renderHandler->getMeshPipeline();
-
         if (!meshPipeline)
         {
             renderHandler->setMeshDrawList({});
@@ -98,15 +76,12 @@ namespace controllers::offscreen
             auto& animatorSystem = animation::RuntimeAnimatorSystem::instance();
             if (ctx.playModeActive)
             {
-                // Pass frustum culling context to skip bone evaluation for off-screen entities
                 const auto& frustum = ctx.cameraController->getCurrentFrustum();
                 if (frustum.isInitialized())
                 {
                     glm::mat4 invView = glm::inverse(ctx.cameraController->getCurrentViewMatrix());
-                    glm::vec3 cameraPos = glm::vec3(invView[3]);
-                    animatorSystem.setCullingContext(frustum, cameraPos);
+                    animatorSystem.setCullingContext(frustum, glm::vec3(invView[3]));
                 }
-
                 animatorSystem.syncWithRegistry();
                 animatorSystem.updateAll(ctx.deltaTime);
             }
@@ -124,141 +99,72 @@ namespace controllers::offscreen
         bool staticNeedsRebuild = ctx.bvhManager->isStaticDirty() && frustumReady;
 
         static int dynamicBvhCooldown = 0;
-
         if (dynamicBvhCooldown > 0)
-        {
             --dynamicBvhCooldown;
-        }
         else if (!ctx.bvhManager->needsDynamicRebuild())
         {
             auto dirtyIds = threading::parallelCollect<uint32_t,
                 components::TransformComponent, components::MeshComponent>(
                 registry,
-                [&registry](entt::entity entity) -> bool
-                {
-                    const auto& transform = registry.get<components::TransformComponent>(entity);
-                    return !transform.isStatic && transform.isDirty;
+                [&registry](entt::entity entity) -> bool {
+                    return !registry.get<components::TransformComponent>(entity).isStatic
+                        && registry.get<components::TransformComponent>(entity).isDirty;
                 },
-                [](entt::entity entity) -> uint32_t
-                {
-                    return static_cast<uint32_t>(entity);
-                });
+                [](entt::entity entity) -> uint32_t { return static_cast<uint32_t>(entity); });
 
             for (uint32_t id : dirtyIds)
-            {
                 ctx.bvhManager->markDynamicEntityDirty(id);
-            }
         }
 
         bool dynamicNeedsUpdate = ctx.bvhManager->isDynamicDirty() && frustumReady;
-
-        if (staticNeedsRebuild)
-        {
-            ctx.bvhManager->rebuildStaticBVH();
-        }
-        if (dynamicNeedsUpdate)
-        {
-            ctx.bvhManager->updateDynamicBVH();
-            dynamicBvhCooldown = 5;
-        }
+        if (staticNeedsRebuild) ctx.bvhManager->rebuildStaticBVH();
+        if (dynamicNeedsUpdate) { ctx.bvhManager->updateDynamicBVH(); dynamicBvhCooldown = 5; }
 
         auto* gpuDrivenRenderer = renderHandler->getGPUDrivenRenderer();
         bool useGPUDrivenCulling = renderHandler->isGPUDrivenRendererInitialized()
-            && gpuDrivenRenderer
-            && gpuDrivenRenderer->isEnabled();
+            && gpuDrivenRenderer && gpuDrivenRenderer->isEnabled();
 
         auto buildRenderData = [&](entt::entity entity, const components::MeshComponent& meshComp,
-                                   const components::WorldTransformComponent& worldTransform) ->
-            render::mesh::MeshRenderData
+                                   const components::WorldTransformComponent& worldTransform) -> render::mesh::MeshRenderData
         {
-            render::mesh::MeshRenderData renderData;
-            renderData.entity = entity;
-            renderData.meshPath = meshComp.meshRef.resolve();
-            renderData.modelMatrix = worldTransform.worldMatrix;
-
-            renderData.albedo = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
-            renderData.metallic = 0.0f;
-            renderData.roughness = 0.5f;
-            renderData.ao = 1.0f;
-            renderData.emission = 0.0f;
-            renderData.showBoundingBox = (!ctx.playModeActive && ctx.showDebugRendering)
-                                             ? meshComp.showBoundingBox
-                                             : false;
-            renderData.maxDrawDistance = meshComp.maxDrawDistance;
+            render::mesh::MeshRenderData rd;
+            rd.entity = entity;
+            rd.meshPath = meshComp.meshRef.resolve();
+            rd.modelMatrix = worldTransform.worldMatrix;
+            rd.albedo = glm::vec4(1.0f); rd.metallic = 0.0f; rd.roughness = 0.5f; rd.ao = 1.0f; rd.emission = 0.0f;
+            rd.showBoundingBox = (!ctx.playModeActive && ctx.showDebugRendering) ? meshComp.showBoundingBox : false;
+            rd.maxDrawDistance = meshComp.maxDrawDistance;
 
             if (registry.all_of<components::MaterialComponent>(entity))
             {
                 const auto& materialComp = registry.get<components::MaterialComponent>(entity);
-                renderData.defaultMaterialPath = materialComp.defaultMaterialRef.resolve();
-
+                rd.defaultMaterialPath = materialComp.defaultMaterialRef.resolve();
                 const auto* pbrValues = getCachedPBRValues(materialComp.defaultMaterialRef.resolve());
-                if (pbrValues)
-                {
-                    renderData.albedo = pbrValues->albedo;
-                    renderData.metallic = pbrValues->metallic;
-                    renderData.roughness = pbrValues->roughness;
-                    renderData.ao = pbrValues->ao;
-                    renderData.emission = pbrValues->emission;
-                }
-
+                if (pbrValues) { rd.albedo = pbrValues->albedo; rd.metallic = pbrValues->metallic; rd.roughness = pbrValues->roughness; rd.ao = pbrValues->ao; rd.emission = pbrValues->emission; }
                 for (const auto& [submeshName, materialRef] : materialComp.subMeshMaterials)
                 {
                     render::mesh::SubMeshMaterialInfo matInfo;
                     populateMaterialInfo(matInfo, materialRef.resolve());
-                    renderData.submeshMaterials[submeshName] = matInfo;
+                    rd.submeshMaterials[submeshName] = matInfo;
                 }
             }
-
-            return renderData;
+            return rd;
         };
 
-        // Check if an entity can be instanced-batched with others sharing the same mesh+material.
-        // Entities with per-instance unique data (bounding box debug, animations) cannot be batched.
-        auto canBatch = [&](entt::entity entity, const render::mesh::MeshRenderData& rd) -> bool
-        {
+        auto canBatch = [&](entt::entity entity, const render::mesh::MeshRenderData& rd) -> bool {
             if (rd.showBoundingBox) return false;
             if (registry.all_of<components::AnimatorComponent>(entity)) return false;
             return true;
         };
 
-        // Batch key: meshPath + defaultMaterialPath + submesh material fingerprint + maxDrawDistance.
-        // maxDrawDistance is included because per-object distance override is stored in aabbMin.w of
-        // GPUObjectData, which is shared across all instances in the batch.
-        struct BatchKey
-        {
-            std::string meshPath;
-            std::string materialPath;
-            size_t submeshMaterialHash;
-            float maxDrawDistance;
-            bool operator==(const BatchKey& o) const
-            {
-                return meshPath == o.meshPath && materialPath == o.materialPath
-                    && submeshMaterialHash == o.submeshMaterialHash
-                    && maxDrawDistance == o.maxDrawDistance;
-            }
-        };
-        struct BatchKeyHash
-        {
-            size_t operator()(const BatchKey& k) const
-            {
-                size_t h = std::hash<std::string>{}(k.meshPath);
-                h ^= std::hash<std::string>{}(k.materialPath) + 0x9e3779b9 + (h << 6) + (h >> 2);
-                h ^= k.submeshMaterialHash + 0x9e3779b9 + (h << 6) + (h >> 2);
-                h ^= std::hash<float>{}(k.maxDrawDistance) + 0x9e3779b9 + (h << 6) + (h >> 2);
-                return h;
-            }
-        };
+        struct BatchKey { std::string meshPath; std::string materialPath; size_t submeshMaterialHash; float maxDrawDistance;
+            bool operator==(const BatchKey& o) const { return meshPath == o.meshPath && materialPath == o.materialPath && submeshMaterialHash == o.submeshMaterialHash && maxDrawDistance == o.maxDrawDistance; } };
+        struct BatchKeyHash { size_t operator()(const BatchKey& k) const { size_t h = std::hash<std::string>{}(k.meshPath); h ^= std::hash<std::string>{}(k.materialPath) + 0x9e3779b9 + (h << 6) + (h >> 2); h ^= k.submeshMaterialHash + 0x9e3779b9 + (h << 6) + (h >> 2); h ^= std::hash<float>{}(k.maxDrawDistance) + 0x9e3779b9 + (h << 6) + (h >> 2); return h; } };
 
-        auto hashSubmeshMaterials = [](const std::unordered_map<std::string, render::mesh::SubMeshMaterialInfo>& mats) -> size_t
-        {
+        auto hashSubmeshMaterials = [](const std::unordered_map<std::string, render::mesh::SubMeshMaterialInfo>& mats) -> size_t {
             if (mats.empty()) return 0;
             size_t h = 0;
-            for (const auto& [name, info] : mats)
-            {
-                size_t entry = std::hash<std::string>{}(name);
-                entry ^= std::hash<std::string>{}(info.materialPath) + 0x9e3779b9 + (entry << 6) + (entry >> 2);
-                h ^= entry;
-            }
+            for (const auto& [name, info] : mats) { size_t entry = std::hash<std::string>{}(name); entry ^= std::hash<std::string>{}(info.materialPath) + 0x9e3779b9 + (entry << 6) + (entry >> 2); h ^= entry; }
             return h;
         };
 
@@ -271,8 +177,6 @@ namespace controllers::offscreen
 
             if (canBatch(entity, renderData))
             {
-                // Resolve material instance to parent for batching (scalar-only overrides).
-                // Uses a cache to avoid synchronous I/O on the render thread each frame.
                 std::string batchMaterialPath = renderData.defaultMaterialPath;
                 bool hasInstancePBR = false;
                 if (material::isInstanceFile(batchMaterialPath))
@@ -281,46 +185,22 @@ namespace controllers::offscreen
                     if (cacheIt == instanceBatchCache.end())
                     {
                         InstanceBatchInfo info;
-                        auto instanceData = resource::ResourceManager::loadMaterialInstance(
-                            asset::AssetRef::fromPath(batchMaterialPath));
+                        auto instanceData = resource::ResourceManager::loadMaterialInstance(asset::AssetRef::fromPath(batchMaterialPath));
                         if (instanceData && instanceData->parentMaterialRef.isValid())
-                        {
-                            info.parentMaterialPath = instanceData->parentMaterialRef.resolve();
-                            info.hasTextureOverrides = !instanceData->textureOverrides.empty();
-                        }
+                        { info.parentMaterialPath = instanceData->parentMaterialRef.resolve(); info.hasTextureOverrides = !instanceData->textureOverrides.empty(); }
                         cacheIt = instanceBatchCache.emplace(batchMaterialPath, std::move(info)).first;
                     }
-
                     const auto& info = cacheIt->second;
-                    if (!info.parentMaterialPath.empty() && !info.hasTextureOverrides)
-                    {
-                        batchMaterialPath = info.parentMaterialPath;
-                        hasInstancePBR = true;
-                    }
+                    if (!info.parentMaterialPath.empty() && !info.hasTextureOverrides) { batchMaterialPath = info.parentMaterialPath; hasInstancePBR = true; }
                 }
 
-                BatchKey key{renderData.meshPath, batchMaterialPath,
-                             hashSubmeshMaterials(renderData.submeshMaterials),
-                             renderData.maxDrawDistance};
+                BatchKey key{renderData.meshPath, batchMaterialPath, hashSubmeshMaterials(renderData.submeshMaterials), renderData.maxDrawDistance};
                 auto it = batchMap.find(key);
                 if (it != batchMap.end())
                 {
                     render::mesh::MeshRenderData::InstanceData instData;
                     instData.modelMatrix = worldTransform.worldMatrix;
-                    if (hasInstancePBR)
-                    {
-                        auto* pbr = getCachedPBRValues(renderData.defaultMaterialPath);
-                        if (pbr)
-                        {
-                            instData.albedo = pbr->albedo;
-                            instData.pbrParams = glm::vec4(pbr->metallic, pbr->roughness, pbr->ao, pbr->emission);
-                            instData.iblParams = glm::vec4(pbr->iblDiffuse, pbr->iblSpecular, pbr->alphaCutoff, 1.0f);
-                        }
-                        else
-                        {
-                            instData.iblParams.w = 0.0f;
-                        }
-                    }
+                    if (hasInstancePBR) { auto* pbr = getCachedPBRValues(renderData.defaultMaterialPath); if (pbr) { instData.albedo = pbr->albedo; instData.pbrParams = glm::vec4(pbr->metallic, pbr->roughness, pbr->ao, pbr->emission); instData.iblParams = glm::vec4(pbr->iblDiffuse, pbr->iblSpecular, pbr->alphaCutoff, 1.0f); } else { instData.iblParams.w = 0.0f; } }
                     meshDrawList[it->second].instanceTransforms.push_back(instData);
                     return;
                 }
@@ -328,110 +208,55 @@ namespace controllers::offscreen
                 size_t idx = meshDrawList.size();
                 render::mesh::MeshRenderData::InstanceData firstInst;
                 firstInst.modelMatrix = worldTransform.worldMatrix;
-                if (hasInstancePBR)
-                {
-                    auto* pbr = getCachedPBRValues(renderData.defaultMaterialPath);
-                    if (pbr)
-                    {
-                        firstInst.albedo = pbr->albedo;
-                        firstInst.pbrParams = glm::vec4(pbr->metallic, pbr->roughness, pbr->ao, pbr->emission);
-                        firstInst.iblParams = glm::vec4(pbr->iblDiffuse, pbr->iblSpecular, pbr->alphaCutoff, 1.0f);
-                    }
-                }
+                if (hasInstancePBR) { auto* pbr = getCachedPBRValues(renderData.defaultMaterialPath); if (pbr) { firstInst.albedo = pbr->albedo; firstInst.pbrParams = glm::vec4(pbr->metallic, pbr->roughness, pbr->ao, pbr->emission); firstInst.iblParams = glm::vec4(pbr->iblDiffuse, pbr->iblSpecular, pbr->alphaCutoff, 1.0f); } }
                 renderData.instanceTransforms.push_back(firstInst);
                 meshDrawList.push_back(std::move(renderData));
                 batchMap[key] = idx;
                 return;
             }
-
             meshDrawList.push_back(std::move(renderData));
         };
 
+        auto meshView = registry.view<components::MeshComponent, components::WorldTransformComponent>();
+
         if (useGPUDrivenCulling)
         {
-            auto view = registry.view<components::MeshComponent, components::WorldTransformComponent>();
-
-            for (auto entity : view)
+            for (auto entity : meshView)
             {
-                if (!scene::Entity::isEffectivelyActive(registry, entity))
-                {
-                    continue;
-                }
-
-                const auto& meshComp = view.get<components::MeshComponent>(entity);
-                const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
-
-                if (!meshComp.meshRef.isValid() || !meshPipeline->isMeshLoaded(meshComp.meshRef.resolve()))
-                {
-                    continue;
-                }
-
-                collectEntity(entity, meshComp, worldTransform);
+                if (!scene::Entity::isEffectivelyActive(registry, entity)) continue;
+                const auto& meshComp = meshView.get<components::MeshComponent>(entity);
+                if (!meshComp.meshRef.isValid() || !meshPipeline->isMeshLoaded(meshComp.meshRef.resolve())) continue;
+                collectEntity(entity, meshComp, meshView.get<components::WorldTransformComponent>(entity));
             }
         }
         else if (ctx.bvhManager->isBuilt() && frustumReady)
         {
             std::vector<uint32_t> visibleEntities;
             ctx.bvhManager->queryFrustum(*activeFrustum, visibleEntities);
-
             for (uint32_t entityId : visibleEntities)
             {
                 auto entity = static_cast<entt::entity>(entityId);
-
-                if (!registry.valid(entity))
-                {
-                    continue;
-                }
-
-                if (!registry.all_of<components::MeshComponent, components::WorldTransformComponent>(entity))
-                {
-                    continue;
-                }
-
-                if (!scene::Entity::isEffectivelyActive(registry, entity))
-                {
-                    continue;
-                }
-
+                if (!registry.valid(entity)) continue;
+                if (!registry.all_of<components::MeshComponent, components::WorldTransformComponent>(entity)) continue;
+                if (!scene::Entity::isEffectivelyActive(registry, entity)) continue;
                 const auto& meshComp = registry.get<components::MeshComponent>(entity);
-                const auto& worldTransform = registry.get<components::WorldTransformComponent>(entity);
-
-                if (!meshComp.meshRef.isValid() || !meshPipeline->isMeshLoaded(meshComp.meshRef.resolve()))
-                {
-                    continue;
-                }
-
-                collectEntity(entity, meshComp, worldTransform);
+                if (!meshComp.meshRef.isValid() || !meshPipeline->isMeshLoaded(meshComp.meshRef.resolve())) continue;
+                collectEntity(entity, meshComp, registry.get<components::WorldTransformComponent>(entity));
             }
         }
         else
         {
-            auto view = registry.view<components::MeshComponent, components::WorldTransformComponent>();
-
-            for (auto entity : view)
+            for (auto entity : meshView)
             {
-                if (!scene::Entity::isEffectivelyActive(registry, entity))
-                {
-                    continue;
-                }
-
-                const auto& meshComp = view.get<components::MeshComponent>(entity);
-                const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
-
-                if (!meshComp.meshRef.isValid() || !meshPipeline->isMeshLoaded(meshComp.meshRef.resolve()))
-                {
-                    continue;
-                }
-
+                if (!scene::Entity::isEffectivelyActive(registry, entity)) continue;
+                const auto& meshComp = meshView.get<components::MeshComponent>(entity);
+                const auto& worldTransform = meshView.get<components::WorldTransformComponent>(entity);
+                if (!meshComp.meshRef.isValid() || !meshPipeline->isMeshLoaded(meshComp.meshRef.resolve())) continue;
                 if (frustumReady)
                 {
                     const math::AABB* boundingBox = meshPipeline->getMeshBoundingBox(meshComp.meshRef.resolve());
-                    if (boundingBox && !activeFrustum->intersectsAABB(*boundingBox, worldTransform.worldMatrix))
-                    {
-                        continue;
-                    }
+                    if (boundingBox && !activeFrustum->intersectsAABB(*boundingBox, worldTransform.worldMatrix)) continue;
                 }
-
                 collectEntity(entity, meshComp, worldTransform);
             }
         }
@@ -439,7 +264,6 @@ namespace controllers::offscreen
         if (useGPUDrivenCulling && ctx.lightBvhManager && frustumReady)
         {
             ctx.lightBvhManager->update();
-
             std::vector<uint32_t> visibleLights;
             ctx.lightBvhManager->queryFrustum(*activeFrustum, visibleLights);
             renderHandler->setVisibleLightsFromBVH(visibleLights);
@@ -451,232 +275,5 @@ namespace controllers::offscreen
 
         renderHandler->setMeshDrawList(std::move(meshDrawList));
         renderHandler->setCurrentFrustum(&ctx.cameraController->getCurrentFrustum());
-    }
-
-    std::vector<render::billboard::BillboardRenderData> FramePreparationSystem::gatherBillboardData(
-        const FrameContext& ctx)
-    {
-        bool showEditorIcons = !ctx.playModeActive && ctx.showBillboardIcons;
-        std::vector<render::billboard::BillboardRenderData> billboardDrawList;
-
-        auto& registry = scene::EntityRegistry::getRegistry();
-        auto view = registry.view<components::BillboardComponent, components::WorldTransformComponent>();
-
-        for (auto entity : view)
-        {
-            if (!scene::Entity::isEffectivelyActive(registry, entity))
-            {
-                continue;
-            }
-
-            const auto& billboard = view.get<components::BillboardComponent>(entity);
-            const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
-
-            if (billboard.editorOnly && !showEditorIcons)
-            {
-                continue;
-            }
-
-            render::billboard::BillboardRenderData renderData;
-            renderData.worldPosition = glm::vec3(worldTransform.worldMatrix[3]);
-            renderData.atlasIndex = billboard.getEffectiveAtlasIndex();
-            renderData.size = billboard.size;
-            renderData.sizeMode = static_cast<uint32_t>(billboard.sizeMode);
-            renderData.entityId = static_cast<uint32_t>(entity);
-            renderData.colorTint = billboard.colorTint;
-            renderData.texturePath = billboard.textureRef.resolve();
-
-            if (billboard.renderTextureSource != entt::null
-                && registry.valid(billboard.renderTextureSource)
-                && registry.all_of<components::RenderTextureComponent>(billboard.renderTextureSource))
-            {
-                const auto& rtt = registry.get<components::RenderTextureComponent>(billboard.renderTextureSource);
-                if (rtt.textureId != rendertexture::INVALID_RENDER_TEXTURE_ID)
-                {
-                    renderData.texturePath = "__rtt_" + std::to_string(rtt.textureId) + "__";
-                }
-            }
-
-            billboardDrawList.push_back(renderData);
-        }
-
-        return billboardDrawList;
-    }
-
-    std::vector<render::text::TextRenderData> FramePreparationSystem::gatherTextData(const FrameContext& ctx)
-    {
-        std::vector<render::text::TextRenderData> textDrawList;
-
-        auto& registry = scene::EntityRegistry::getRegistry();
-        auto view = registry.view<components::TextComponent, components::WorldTransformComponent>();
-
-        for (auto entity : view)
-        {
-            if (!scene::Entity::isEffectivelyActive(registry, entity))
-            {
-                continue;
-            }
-
-            const auto& textComp = view.get<components::TextComponent>(entity);
-            const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
-
-            if (!textComp.fontRef.isValid() || textComp.text.empty())
-            {
-                continue;
-            }
-
-            render::text::TextRenderData renderData;
-            renderData.fontPath = textComp.fontRef.resolve();
-            renderData.text = textComp.text;
-            renderData.worldPosition = glm::vec3(worldTransform.worldMatrix[3]);
-            renderData.fontSize = textComp.fontSize;
-            renderData.color = textComp.color;
-            renderData.renderMode = 1; // WorldSpace only
-            renderData.entityId = static_cast<uint32_t>(entity);
-            renderData.lineSpacing = textComp.lineSpacing;
-            renderData.letterSpacing = textComp.letterSpacing;
-            renderData.maxWidth = textComp.maxWidth;
-
-            textDrawList.push_back(std::move(renderData));
-        }
-
-        return textDrawList;
-    }
-
-    void FramePreparationSystem::prepareBillboards(const FrameContext& ctx)
-    {
-        auto* renderHandler = ctx.renderHandler;
-
-        renderHandler->initBillboardPipeline();
-
-        if (!renderHandler->isBillboardPipelineInitialized())
-        {
-            renderHandler->setBillboardDrawList({});
-            return;
-        }
-
-        renderHandler->setBillboardDrawList(gatherBillboardData(ctx));
-    }
-
-    void FramePreparationSystem::prepareText(const FrameContext& ctx)
-    {
-        auto* renderHandler = ctx.renderHandler;
-
-        renderHandler->initTextPipeline();
-
-        if (!renderHandler->isTextPipelineInitialized())
-        {
-            renderHandler->setTextDrawList({});
-            return;
-        }
-
-        renderHandler->setTextDrawList(gatherTextData(ctx));
-    }
-
-    void FramePreparationSystem::prepareSceneData(const FrameContext& ctx)
-    {
-        auto* renderHandler = ctx.renderHandler;
-
-        // Mesh preparation first - mutates ECS (animator, BVH), initializes mesh pipeline
-        prepareMeshes(ctx);
-
-        // Pipeline init must happen on the main thread (Vulkan state)
-        renderHandler->initBillboardPipeline();
-        renderHandler->initTextPipeline();
-
-        bool billboardReady = renderHandler->isBillboardPipelineInitialized();
-        bool textReady = renderHandler->isTextPipelineInitialized();
-
-        // Pre-assure component storage once on the main thread before first parallel use.
-        // registry.view() internally calls assure<T>() which WRITES to the storage map
-        // if the type hasn't been seen yet. Two parallel jobs both triggering assure()
-        // for different types corrupts the internal storage map (EnTT is not thread-safe).
-        // Note: this function is only called from the main thread (render prep path),
-        // so a plain bool is safe here.
-        static bool storageAssured = false;
-        if (!storageAssured)
-        {
-            auto& registry = scene::EntityRegistry::getRegistry();
-            registry.storage<components::BillboardComponent>();
-            registry.storage<components::WorldTransformComponent>();
-            registry.storage<components::NameComponent>();
-            registry.storage<components::RenderTextureComponent>();
-            registry.storage<components::TextComponent>();
-            registry.storage<components::TransformComponent>();
-            registry.storage<components::MeshComponent>();
-            registry.storage<components::DecalComponent>();
-            storageAssured = true;
-        }
-
-        // Gather billboard and text data in parallel (read-only ECS queries)
-        auto& jobs = threading::JobSystem::instance();
-
-        auto billboardFuture = jobs.submit([&]() -> std::vector<render::billboard::BillboardRenderData> {
-            return billboardReady ? gatherBillboardData(ctx) : std::vector<render::billboard::BillboardRenderData>{};
-        }, threading::JobPriority::HIGH);
-
-        auto textFuture = jobs.submit([&]() -> std::vector<render::text::TextRenderData> {
-            return textReady ? gatherTextData(ctx) : std::vector<render::text::TextRenderData>{};
-        }, threading::JobPriority::HIGH);
-
-        renderHandler->setBillboardDrawList(billboardFuture.get());
-        renderHandler->setTextDrawList(textFuture.get());
-
-        // Prepare decals (lightweight - no pipeline init needed, DecalPipeline is always available)
-        prepareDecals(ctx);
-    }
-
-    void FramePreparationSystem::prepareDecals(const FrameContext& ctx)
-    {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        auto view = registry.view<components::DecalComponent, components::WorldTransformComponent>();
-
-        std::vector<services::DecalRenderData> decalDrawList;
-
-        for (auto entity : view)
-        {
-            if (!scene::Entity::isEffectivelyActive(registry, entity))
-            {
-                continue;
-            }
-
-            const auto& decal = view.get<components::DecalComponent>(entity);
-            const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
-
-            // Extract position and rotation from world matrix, replace scale with halfExtents
-            // This way Transform.scale is ignored — only halfExtents controls decal size
-            glm::mat4 worldMatrix = worldTransform.worldMatrix;
-            glm::vec3 col0 = glm::vec3(worldMatrix[0]);
-            glm::vec3 col1 = glm::vec3(worldMatrix[1]);
-            glm::vec3 col2 = glm::vec3(worldMatrix[2]);
-            glm::vec3 axisX = glm::normalize(col0);
-            glm::vec3 axisY = glm::normalize(col1);
-            glm::vec3 axisZ = glm::normalize(col2);
-
-            glm::mat4 decalWorldMatrix = glm::mat4(1.0f);
-            decalWorldMatrix[0] = glm::vec4(axisX * decal.halfExtents.x, 0.0f);
-            decalWorldMatrix[1] = glm::vec4(axisY * decal.halfExtents.y, 0.0f);
-            decalWorldMatrix[2] = glm::vec4(axisZ * decal.halfExtents.z, 0.0f);
-            decalWorldMatrix[3] = worldMatrix[3]; // position
-
-            services::DecalRenderData renderData;
-            renderData.worldMatrix = decalWorldMatrix;
-            renderData.inverseWorldMatrix = glm::inverse(decalWorldMatrix);
-            renderData.halfExtents = decal.halfExtents;
-            renderData.albedoTexture = decal.albedoTextureRef.resolve();
-            renderData.normalTexture = decal.normalTextureRef.resolve();
-            renderData.ormTexture = decal.ormTextureRef.resolve();
-            renderData.color = decal.color;
-            renderData.angleFadeStart = decal.angleFadeStart;
-            renderData.angleFadeEnd = decal.angleFadeEnd;
-            renderData.edgeFalloff = decal.edgeFalloff;
-            renderData.sortPriority = decal.sortPriority;
-            renderData.modifyNormals = decal.modifyNormals;
-            renderData.normalStrength = decal.normalStrength;
-
-            decalDrawList.push_back(std::move(renderData));
-        }
-
-        ctx.renderHandler->setDecalDrawList(decalDrawList);
     }
 }

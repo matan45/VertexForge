@@ -20,7 +20,6 @@ namespace core::audio {
 
     private:
         ReverbZoneManager* reverbZoneManager = nullptr;
-        glm::vec3 lastListenerPos{0.0f};
     };
 
 }

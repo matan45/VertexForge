@@ -1,7 +1,7 @@
 #include "VFXRuntimeAdapter.hpp"
 #include "VFXSceneRenderer.hpp"
 #include "../../graphics/core/VulkanContext.hpp"
-#include "../../graphics/render/vfx/GPUVFXTypes.hpp"
+#include "../../graphics/render/vfx/compute/GPUVFXTypes.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/CoreComponents.hpp"
 #include "components/PhysicsComponents.hpp"

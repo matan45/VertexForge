@@ -353,14 +353,13 @@ namespace render::gpudriven
         {
             for (uint32_t x = 0; x < wm.resolution; ++x)
             {
-                float r, g, b, a;
-                wm.packRGBA(x, z, r, g, b, a);
+                auto rgba = wm.packRGBA(x, z);
 
                 uint32_t pixelOffset = (z * wm.resolution + x) * 4;
-                packedData[pixelOffset + 0] = static_cast<uint8_t>(r * 255.0f + 0.5f);
-                packedData[pixelOffset + 1] = static_cast<uint8_t>(g * 255.0f + 0.5f);
-                packedData[pixelOffset + 2] = static_cast<uint8_t>(b * 255.0f + 0.5f);
-                packedData[pixelOffset + 3] = static_cast<uint8_t>(a * 255.0f + 0.5f);
+                packedData[pixelOffset + 0] = static_cast<uint8_t>(rgba.r * 255.0f + 0.5f);
+                packedData[pixelOffset + 1] = static_cast<uint8_t>(rgba.g * 255.0f + 0.5f);
+                packedData[pixelOffset + 2] = static_cast<uint8_t>(rgba.b * 255.0f + 0.5f);
+                packedData[pixelOffset + 3] = static_cast<uint8_t>(rgba.a * 255.0f + 0.5f);
             }
         }
 

@@ -42,13 +42,13 @@
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <OutDir>$(ProjectDir)..\..\bin\Graphics\Debug\x64\</OutDir>
-    <IntDir>$(ProjectDir)obj\x64\Debug\</IntDir>
+    <IntDir>$(ProjectDir)obj\x64\Debug\Graphics\</IntDir>
     <TargetName>Graphics</TargetName>
     <TargetExt>.lib</TargetExt>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <OutDir>$(ProjectDir)..\..\bin\Graphics\Release\x64\</OutDir>
-    <IntDir>$(ProjectDir)obj\x64\Release\</IntDir>
+    <IntDir>$(ProjectDir)obj\x64\Release\Graphics\</IntDir>
     <TargetName>Graphics</TargetName>
     <TargetExt>.lib</TargetExt>
   </PropertyGroup>
@@ -99,20 +99,6 @@
     </Lib>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="animation\AnimationBlender.hpp" />
-    <ClInclude Include="animation\AnimationComputePipeline.hpp" />
-    <ClInclude Include="animation\AnimationDataCache.hpp" />
-    <ClInclude Include="animation\AnimationEvaluator.hpp" />
-    <ClInclude Include="animation\AnimationGPUData.hpp" />
-    <ClInclude Include="animation\AnimationLOD.hpp" />
-    <ClInclude Include="animation\AnimationLayerStack.hpp" />
-    <ClInclude Include="animation\AnimatorStateMachine.hpp" />
-    <ClInclude Include="animation\BlendTree.hpp" />
-    <ClInclude Include="animation\BoneLOD.hpp" />
-    <ClInclude Include="animation\IKPostProcess.hpp" />
-    <ClInclude Include="animation\IKSolver.hpp" />
-    <ClInclude Include="animation\RuntimeAnimatorSystem.hpp" />
-    <ClInclude Include="animation\SocketAttachmentUpdater.hpp" />
     <ClInclude Include="controllers\AnimatorSystemController.hpp" />
     <ClInclude Include="controllers\Graphics.hpp" />
     <ClInclude Include="controllers\OffScreenController.hpp" />
@@ -302,21 +288,6 @@
     <ClInclude Include="render\vegetation\VegetationBufferManager.hpp" />
     <ClInclude Include="render\vegetation\VegetationGPUTypes.hpp" />
     <ClInclude Include="render\vegetation\WindSystem.hpp" />
-    <ClInclude Include="render\vfx\GPUVFXBufferManager.hpp" />
-    <ClInclude Include="render\vfx\GPUVFXComputePipeline.hpp" />
-    <ClInclude Include="render\vfx\GPUVFXTypes.hpp" />
-    <ClInclude Include="render\vfx\VFXBillboardPipeline.hpp" />
-    <ClInclude Include="render\vfx\VFXBillboardTypes.hpp" />
-    <ClInclude Include="render\vfx\VFXEmitterPool.hpp" />
-    <ClInclude Include="render\vfx\VFXLUTBaker.hpp" />
-    <ClInclude Include="render\vfx\VFXMeshGPUPipeline.hpp" />
-    <ClInclude Include="render\vfx\VFXMeshPreviewPipeline.hpp" />
-    <ClInclude Include="render\vfx\VFXParticleSystem.hpp" />
-    <ClInclude Include="render\vfx\VFXQuadData.hpp" />
-    <ClInclude Include="render\vfx\VFXRibbonGPUPipeline.hpp" />
-    <ClInclude Include="render\vfx\VFXRibbonPreviewPipeline.hpp" />
-    <ClInclude Include="render\vfx\VFXSceneGPUPipeline.hpp" />
-    <ClInclude Include="render\vfx\VFXScenePipeline.hpp" />
     <ClInclude Include="render\volumetric\VolumetricFogComposite.hpp" />
     <ClInclude Include="render\volumetric\VolumetricGridManager.hpp" />
     <ClInclude Include="render\volumetric\VolumetricLightInjection.hpp" />
@@ -334,34 +305,25 @@
     <ClInclude Include="render\water\WaterPipeline.hpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="animation\AnimationBlender.cpp" />
-    <ClCompile Include="animation\AnimationComputePipeline.cpp" />
-    <ClCompile Include="animation\AnimationDataCache.cpp" />
-    <ClCompile Include="animation\AnimationEvaluator.cpp" />
-    <ClCompile Include="animation\AnimationLOD.cpp" />
-    <ClCompile Include="animation\AnimationLayerStack.cpp" />
-    <ClCompile Include="animation\AnimatorStateMachine.cpp" />
-    <ClCompile Include="animation\AnimatorStateMachineControls.cpp" />
-    <ClCompile Include="animation\BlendTree.cpp" />
-    <ClCompile Include="animation\IKPostProcess.cpp" />
-    <ClCompile Include="animation\IKSolver.cpp" />
-    <ClCompile Include="animation\RuntimeAnimatorSystem.cpp" />
-    <ClCompile Include="animation\SocketAttachmentUpdater.cpp" />
     <ClCompile Include="controllers\AnimatorSystemController.cpp" />
     <ClCompile Include="controllers\Graphics.cpp" />
     <ClCompile Include="controllers\OffScreenController.cpp" />
     <ClCompile Include="controllers\OffScreenControllerDebug.cpp" />
     <ClCompile Include="controllers\OffScreenControllerFrame.cpp" />
     <ClCompile Include="controllers\OffScreenControllerSettings.cpp" />
+    <ClCompile Include="controllers\OffScreenControllerStreaming.cpp" />
     <ClCompile Include="controllers\RenderController.cpp" />
     <ClCompile Include="controllers\RenderTextureController.cpp" />
     <ClCompile Include="controllers\TextureController.cpp" />
     <ClCompile Include="controllers\VFXSceneRenderer.cpp" />
     <ClCompile Include="controllers\VFXSceneRendererGPU.cpp" />
+    <ClCompile Include="controllers\VFXSceneRendererRender.cpp" />
     <ClCompile Include="controllers\offscreen\CameraController.cpp" />
     <ClCompile Include="controllers\offscreen\CullingStatsCollector.cpp" />
     <ClCompile Include="controllers\offscreen\DebugFrameBuilder.cpp" />
+    <ClCompile Include="controllers\offscreen\DebugFrameBuilderLights.cpp" />
     <ClCompile Include="controllers\offscreen\FramePreparationSystem.cpp" />
+    <ClCompile Include="controllers\offscreen\FramePreparationSystemData.cpp" />
     <ClCompile Include="controllers\offscreen\IBLController.cpp" />
     <ClCompile Include="controllers\offscreen\LightBVHManager.cpp" />
     <ClCompile Include="controllers\offscreen\MeshAssetManager.cpp" />
@@ -370,6 +332,9 @@
     <ClCompile Include="controllers\offscreen\UIFrameBuilder.cpp" />
     <ClCompile Include="controllers\offscreen\UIFrameBuilderScreenSpace.cpp" />
     <ClCompile Include="controllers\offscreen\UIInteractionSystem.cpp" />
+    <ClCompile Include="controllers\offscreen\UIInteractionSystemDropdown.cpp" />
+    <ClCompile Include="controllers\offscreen\UIInteractionSystemSlider.cpp" />
+    <ClCompile Include="controllers\offscreen\UIInteractionSystemTextEditing.cpp" />
     <ClCompile Include="controllers\offscreen\UIInteractionSystemTextInput.cpp" />
     <ClCompile Include="controllers\offscreen\UIInteractionSystemWidgets.cpp" />
     <ClCompile Include="controllers\offscreen\UIScreenSpaceScroll.cpp" />
@@ -390,6 +355,7 @@
     <ClCompile Include="core\Shader.cpp" />
     <ClCompile Include="core\SwapChain.cpp" />
     <ClCompile Include="core\Texture.cpp" />
+    <ClCompile Include="core\TextureLoad.cpp" />
     <ClCompile Include="core\ThreadCommandPoolManager.cpp" />
     <ClCompile Include="core\TransferManager.cpp" />
     <ClCompile Include="core\Utilities.cpp" />
@@ -402,11 +368,15 @@
     <ClCompile Include="render\IBL.cpp" />
     <ClCompile Include="render\OffScreenViewPort.cpp" />
     <ClCompile Include="render\RenderPassHandler.cpp" />
+    <ClCompile Include="render\RenderPassHandlerAsyncCompute.cpp" />
+    <ClCompile Include="render\RenderPassHandlerConfig.cpp" />
     <ClCompile Include="render\RenderPassHandlerDelegates.cpp" />
     <ClCompile Include="render\RenderPassHandlerDraw.cpp" />
     <ClCompile Include="render\RenderPassHandlerPipelines.cpp" />
     <ClCompile Include="render\RenderTextureViewPort.cpp" />
     <ClCompile Include="render\atmosphere\AtmospherePipeline.cpp" />
+    <ClCompile Include="render\atmosphere\AtmospherePipelineRender.cpp" />
+    <ClCompile Include="render\atmosphere\AtmospherePipelineSetup.cpp" />
     <ClCompile Include="render\billboard\BillboardAtlasManager.cpp" />
     <ClCompile Include="render\billboard\BillboardBufferManager.cpp" />
     <ClCompile Include="render\billboard\BillboardPipeline.cpp" />
@@ -416,6 +386,7 @@
     <ClCompile Include="render\cloud\CloudRayMarch.cpp" />
     <ClCompile Include="render\cloud\CloudTemporal.cpp" />
     <ClCompile Include="render\decal\DecalPipeline.cpp" />
+    <ClCompile Include="render\decal\DecalPipelineRender.cpp" />
     <ClCompile Include="render\gi\AccelerationStructureManager.cpp" />
     <ClCompile Include="render\gi\GIDebugRenderer.cpp" />
     <ClCompile Include="render\gi\ProbeStorageBuffer.cpp" />
@@ -423,11 +394,15 @@
     <ClCompile Include="render\gi\ProbeUpdatePipeline.cpp" />
     <ClCompile Include="render\gi\RadianceCascadeManager.cpp" />
     <ClCompile Include="render\gi\SSGIPipeline.cpp" />
+    <ClCompile Include="render\gi\SSGIPipelineDescriptors.cpp" />
+    <ClCompile Include="render\gi\SSGIPipelineRecord.cpp" />
+    <ClCompile Include="render\gi\SSGIPipelineSetup.cpp" />
     <ClCompile Include="render\gpudriven\GPUDrivenCameraBuffer.cpp" />
     <ClCompile Include="render\gpudriven\GPUDrivenRenderer.cpp" />
     <ClCompile Include="render\gpudriven\GPUDrivenRendererBillboard.cpp" />
     <ClCompile Include="render\gpudriven\GPUDrivenRendererCompute.cpp" />
     <ClCompile Include="render\gpudriven\GPUDrivenRendererDraw.cpp" />
+    <ClCompile Include="render\gpudriven\GPUDrivenRendererGI.cpp" />
     <ClCompile Include="render\gpudriven\GPUDrivenRendererQuery.cpp" />
     <ClCompile Include="render\gpudriven\GPUDrivenRendererScene.cpp" />
     <ClCompile Include="render\gpudriven\GPUDrivenRendererTerrain.cpp" />
@@ -446,12 +421,15 @@
     <ClCompile Include="render\gpudriven\scene\IndirectBatchManager.cpp" />
     <ClCompile Include="render\gpudriven\scene\MergedMeshBuffer.cpp" />
     <ClCompile Include="render\gpudriven\scene\MergedMeshBufferScene.cpp" />
+    <ClCompile Include="render\gpudriven\scene\MergedMeshBufferStreaming.cpp" />
     <ClCompile Include="render\gpudriven\scene\MeshShaderPipeline.cpp" />
     <ClCompile Include="render\gpudriven\scene\MeshletBuffer.cpp" />
     <ClCompile Include="render\gpudriven\scene\TextureStreamManager.cpp" />
+    <ClCompile Include="render\gpudriven\scene\TextureStreamManagerUpdate.cpp" />
     <ClCompile Include="render\gpudriven\terrain\TerrainGPUAdapter.cpp" />
     <ClCompile Include="render\gpudriven\terrain\TerrainMeshBuffer.cpp" />
     <ClCompile Include="render\gpudriven\terrain\TerrainMeshShaderPipeline.cpp" />
+    <ClCompile Include="render\gpudriven\terrain\TerrainMeshShaderPipelineDispatch.cpp" />
     <ClCompile Include="render\gpudriven\terrain\TerrainRaycastPipeline.cpp" />
     <ClCompile Include="render\gpudriven\terrain\TerrainStreamManager.cpp" />
     <ClCompile Include="render\ibl\BRDFLUTGenerator.cpp" />
@@ -501,8 +479,10 @@
     <ClCompile Include="render\shadow\ShadowGPUDataManager.cpp" />
     <ClCompile Include="render\shadow\ShadowPassPipeline.cpp" />
     <ClCompile Include="render\shadow\ShadowPassRecorder.cpp" />
+    <ClCompile Include="render\shadow\ShadowPassRecorderParallel.cpp" />
     <ClCompile Include="render\shadow\ShadowResourcePool.cpp" />
     <ClCompile Include="render\shadow\ShadowSystem.cpp" />
+    <ClCompile Include="render\shadow\ShadowSystemFeedback.cpp" />
     <ClCompile Include="render\shadow\ShadowSystemFrame.cpp" />
     <ClCompile Include="render\shadow\SpotShadowCalculator.cpp" />
     <ClCompile Include="render\shadow\TerrainShadowPipeline.cpp" />
@@ -530,6 +510,7 @@
     <ClCompile Include="render\transparency\WBOITPipeline.cpp" />
     <ClCompile Include="render\ui\UIRenderBufferManager.cpp" />
     <ClCompile Include="render\ui\UIRenderPipeline.cpp" />
+    <ClCompile Include="render\ui\UIRenderPipelineRecord.cpp" />
     <ClCompile Include="render\ui\UITextBufferManager.cpp" />
     <ClCompile Include="render\ui\UITextPipeline.cpp" />
     <ClCompile Include="render\ui\UITextPipelineSetup.cpp" />
@@ -538,28 +519,6 @@
     <ClCompile Include="render\vegetation\GrassStreamManager.cpp" />
     <ClCompile Include="render\vegetation\VegetationBufferManager.cpp" />
     <ClCompile Include="render\vegetation\WindSystem.cpp" />
-    <ClCompile Include="render\vfx\GPUVFXBufferManager.cpp" />
-    <ClCompile Include="render\vfx\GPUVFXBufferManagerCreate.cpp" />
-    <ClCompile Include="render\vfx\GPUVFXBufferManagerUpdate.cpp" />
-    <ClCompile Include="render\vfx\GPUVFXComputePipeline.cpp" />
-    <ClCompile Include="render\vfx\VFXBillboardPipeline.cpp" />
-    <ClCompile Include="render\vfx\VFXBillboardPipelineRender.cpp" />
-    <ClCompile Include="render\vfx\VFXBillboardPipelineSetup.cpp" />
-    <ClCompile Include="render\vfx\VFXEmitterPool.cpp" />
-    <ClCompile Include="render\vfx\VFXLUTBaker.cpp" />
-    <ClCompile Include="render\vfx\VFXMeshGPUPipeline.cpp" />
-    <ClCompile Include="render\vfx\VFXMeshGPUPipelineRender.cpp" />
-    <ClCompile Include="render\vfx\VFXMeshPreviewPipeline.cpp" />
-    <ClCompile Include="render\vfx\VFXMeshPreviewPipelineRender.cpp" />
-    <ClCompile Include="render\vfx\VFXParticleSystem.cpp" />
-    <ClCompile Include="render\vfx\VFXRibbonGPUPipeline.cpp" />
-    <ClCompile Include="render\vfx\VFXRibbonGPUPipelineRender.cpp" />
-    <ClCompile Include="render\vfx\VFXRibbonPreviewPipeline.cpp" />
-    <ClCompile Include="render\vfx\VFXRibbonPreviewPipelineRender.cpp" />
-    <ClCompile Include="render\vfx\VFXSceneGPUPipeline.cpp" />
-    <ClCompile Include="render\vfx\VFXSceneGPUPipelineRender.cpp" />
-    <ClCompile Include="render\vfx\VFXSceneGPUPipelineSetup.cpp" />
-    <ClCompile Include="render\vfx\VFXScenePipeline.cpp" />
     <ClCompile Include="render\volumetric\VolumetricFogComposite.cpp" />
     <ClCompile Include="render\volumetric\VolumetricGridManager.cpp" />
     <ClCompile Include="render\volumetric\VolumetricLightInjection.cpp" />
@@ -696,6 +655,9 @@
   <ItemGroup>
     <ProjectReference Include="..\Window\Window.vcxproj">
       <Project>{3DEA79DA-298C-A4B0-1247-B804FE872B01}</Project>
+    </ProjectReference>
+    <ProjectReference Include="VFX.vcxproj">
+      <Project>{192A880B-8533-887C-0EAF-9E7C7AB7937C}</Project>
     </ProjectReference>
     <ProjectReference Include="..\imgui.vcxproj">
       <Project>{0098A80F-6CAC-D0C0-352E-7420A101CDF1}</Project>

@@ -9,11 +9,9 @@
 #include "../material/MaterialInstanceAsset.hpp"
 #include "../animator/AnimatorAsset.hpp"
 #include "../terrain/TerrainMaterialAsset.hpp"
-#include <bit>
 #include <algorithm>
 #include <cctype>
 #include <fstream>
-
 
 namespace resource
 {
@@ -21,14 +19,10 @@ namespace resource
     {
         using namespace std::chrono_literals;
         std::unique_lock lock(cacheMutex);
-
         while (running)
         {
             cleanupCondition.wait_for(lock, 1min);
-
-            if (!running)
-                break;
-
+            if (!running) break;
             unloadUnusedResources();
         }
     }
@@ -39,10 +33,7 @@ namespace resource
 
         auto releaseExpired = [&lifecycle](auto& cache) {
             std::erase_if(cache, [&lifecycle](const auto& pair) {
-                if (pair.second.expired()) {
-                    lifecycle.release(pair.first);
-                    return true;
-                }
+                if (pair.second.expired()) { lifecycle.release(pair.first); return true; }
                 return false;
             });
         };
@@ -55,16 +46,12 @@ namespace resource
         releaseExpired(animationCache);
         releaseExpired(animatorCache);
 
-        // Material caches don't acquire in lifecycle (entity components own the lifecycle reference).
-        // Just clean expired weak_ptrs without releasing from lifecycle.
         auto cleanExpired = [](auto& cache) {
             std::erase_if(cache, [](const auto& pair) { return pair.second.expired(); });
         };
         cleanExpired(materialCache);
         cleanExpired(materialInstanceCache);
         cleanExpired(terrainMaterialCache);
-
-        // Shaders are engine-internal, not lifecycle-tracked — just clean expired entries
         std::erase_if(shaderCache, [](const auto& pair) { return pair.second.expired(); });
     }
 
@@ -116,6 +103,31 @@ namespace resource
         }
     }
 
+    static FileType readBinaryHeader(const fs::path& filePath)
+    {
+        std::ifstream file(filePath, std::ios::binary);
+        if (!file.is_open())
+        {
+            vfLogError("Failed to open file: {}", filePath.string());
+            return FileType::UNKNOWN;
+        }
+
+        uint8_t typeByte = 0;
+        file.read(reinterpret_cast<char*>(&typeByte), sizeof(typeByte));
+        if (!file || file.gcount() != sizeof(typeByte))
+        {
+            vfLogError("Failed to read header from file: {}", filePath.string());
+            return FileType::UNKNOWN;
+        }
+
+        if (!isValidFileType(typeByte))
+        {
+            vfLogError("Invalid file type header {} in file: {}", typeByte, filePath.string());
+            return FileType::UNKNOWN;
+        }
+        return static_cast<FileType>(typeByte);
+    }
+
     FileType ResourceManager::readHeaderFile(const fs::path& filePath)
     {
         if (filePath.empty())
@@ -134,36 +146,12 @@ namespace resource
         auto extension = filePath.extension().string();
         std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
 
-        // Handle text-based formats by extension
         if (extension == ".vfscene")
-        {
             return FileType::SCENE;
-        }
 
-        // For binary formats, read the header
-        std::ifstream file(filePath, std::ios::binary);
-        if (!file.is_open())
-        {
-            vfLogError("Failed to open file: {}", filePath.string());
+        FileType headerType = readBinaryHeader(filePath);
+        if (headerType == FileType::UNKNOWN)
             return FileType::UNKNOWN;
-        }
-
-        uint8_t typeByte = 0;
-        file.read(reinterpret_cast<char*>(&typeByte), sizeof(typeByte));
-
-        if (!file || file.gcount() != sizeof(typeByte))
-        {
-            vfLogError("Failed to read header from file: {}", filePath.string());
-            return FileType::UNKNOWN;
-        }
-
-        if (!isValidFileType(typeByte))
-        {
-            vfLogError("Invalid file type header {} in file: {}", typeByte, filePath.string());
-            return FileType::UNKNOWN;
-        }
-
-        FileType headerType = static_cast<FileType>(typeByte);
 
         FileType expectedType = getExpectedTypeFromExtension(extension);
         if (expectedType != FileType::UNKNOWN && headerType != expectedType)
@@ -172,7 +160,6 @@ namespace resource
                        filePath.string(), getFileTypeName(headerType), getFileTypeName(expectedType));
             return expectedType;
         }
-
         return headerType;
     }
 
@@ -244,52 +231,34 @@ namespace resource
     std::future<std::shared_ptr<std::vector<ShaderModel>>> ResourceManager::loadShaderAsync(std::string_view path)
     {
         std::string key(path);
-
         {
             std::scoped_lock lock(cacheMutex);
             auto cacheIt = shaderCache.find(key);
             if (cacheIt != shaderCache.end()) {
-                if (auto resource = cacheIt->second.lock()) {
+                if (auto resource = cacheIt->second.lock())
                     return make_ready_future(resource);
-                }
             }
-
             auto pendingIt = pendingShaderLoads.find(key);
             if (pendingIt != pendingShaderLoads.end()) {
-                return std::async(std::launch::deferred, [sf = pendingIt->second]() mutable {
-                    return sf.get();
-                });
+                return std::async(std::launch::deferred, [sf = pendingIt->second]() mutable { return sf.get(); });
             }
         }
 
         pendingAsyncOps.fetch_add(1, std::memory_order_relaxed);
-        std::shared_future<std::shared_ptr<std::vector<ShaderModel>>> sharedFuture = std::async(std::launch::async,
-            [key]() -> std::shared_ptr<std::vector<ShaderModel>> {
+        auto sharedFuture = std::async(std::launch::async, [key]() -> std::shared_ptr<std::vector<ShaderModel>> {
             struct AsyncGuard { ~AsyncGuard() { pendingAsyncOps.fetch_sub(1, std::memory_order_release); } } guard;
             try {
-                if (shuttingDown.load(std::memory_order_acquire)) {
+                if (shuttingDown.load(std::memory_order_acquire) || key.empty()) {
+                    if (key.empty()) vfLogError("Empty path provided for shader loading");
                     std::scoped_lock lock(cacheMutex);
                     pendingShaderLoads.erase(key);
                     return nullptr;
                 }
-
-                if (key.empty()) {
-                    vfLogError("Empty path provided for shader loading");
-                    std::scoped_lock lock(cacheMutex);
-                    pendingShaderLoads.erase(key);
-                    return nullptr;
-                }
-
                 auto resource = std::make_shared<std::vector<ShaderModel>>(ShaderResource::readShaderFile(key));
-
-                {
-                    std::scoped_lock lock(cacheMutex);
-                    pendingShaderLoads.erase(key);
-                    if (resource && !shuttingDown.load(std::memory_order_acquire)) {
-                        shaderCache[key] = resource;
-                    }
-                }
-
+                std::scoped_lock lock(cacheMutex);
+                pendingShaderLoads.erase(key);
+                if (resource && !shuttingDown.load(std::memory_order_acquire))
+                    shaderCache[key] = resource;
                 return resource;
             }
             catch (const std::exception& e) {
@@ -306,14 +275,8 @@ namespace resource
             }
         }).share();
 
-        {
-            std::scoped_lock lock(cacheMutex);
-            pendingShaderLoads[key] = sharedFuture;
-        }
-
-        return std::async(std::launch::deferred, [sf = std::move(sharedFuture)]() mutable {
-            return sf.get();
-        });
+        { std::scoped_lock lock(cacheMutex); pendingShaderLoads[key] = sharedFuture; }
+        return std::async(std::launch::deferred, [sf = std::move(sharedFuture)]() mutable { return sf.get(); });
     }
 
     std::future<std::shared_ptr<FontData>> ResourceManager::loadFontAsync(const asset::AssetRef& ref)
@@ -399,45 +362,46 @@ namespace resource
         pendingShaderLoads.clear();
 
         AssetLifecycleManager::instance().clear();
-
         vfLogInfo("All resource caches cleared");
     }
 
-    std::shared_ptr<material::MaterialData> ResourceManager::loadMaterial(const asset::AssetRef& ref)
+    template <typename T, typename LoadFunc>
+    static std::shared_ptr<T> loadSyncCached(
+        const asset::AssetRef& ref,
+        std::unordered_map<asset::AssetGUID, std::weak_ptr<T>, asset::AssetGUID::Hash>& cache,
+        std::mutex& mtx, LoadFunc loader, const char* typeName)
     {
-        if (!ref.isValid()) return nullptr;
-
         auto guid = ref.getGUID();
         {
-            std::scoped_lock lock(cacheMutex);
-            auto it = materialCache.find(guid);
-            if (it != materialCache.end()) {
-                if (auto existing = it->second.lock()) {
-                    return existing;
-                }
+            std::scoped_lock lock(mtx);
+            auto it = cache.find(guid);
+            if (it != cache.end()) {
+                if (auto existing = it->second.lock()) return existing;
             }
         }
 
         std::string path = ref.resolve();
         if (path.empty()) {
-            vfLogError("Failed to resolve material AssetRef: {}", guid.toString());
+            vfLogError("Failed to resolve {} AssetRef: {}", typeName, guid.toString());
             return nullptr;
         }
 
-        auto result = material::MaterialAsset::load(path);
+        auto result = loader(path);
         if (!result) {
-            vfLogError("Failed to load material: {}", path);
+            vfLogError("Failed to load {}: {}", typeName, path);
             return nullptr;
         }
 
-        auto material = std::make_shared<material::MaterialData>(std::move(*result));
+        auto resource = std::make_shared<T>(std::move(*result));
+        { std::scoped_lock lock(mtx); cache[guid] = resource; }
+        return resource;
+    }
 
-        {
-            std::scoped_lock lock(cacheMutex);
-            materialCache[guid] = material;
-        }
-
-        return material;
+    std::shared_ptr<material::MaterialData> ResourceManager::loadMaterial(const asset::AssetRef& ref)
+    {
+        if (!ref.isValid()) return nullptr;
+        return loadSyncCached<material::MaterialData>(ref, materialCache, cacheMutex,
+            [](const std::string& p) { return material::MaterialAsset::load(p); }, "material");
     }
 
     void ResourceManager::invalidateMaterialCache(const asset::AssetRef& ref)
@@ -449,38 +413,8 @@ namespace resource
     std::shared_ptr<material::MaterialInstanceData> ResourceManager::loadMaterialInstance(const asset::AssetRef& ref)
     {
         if (!ref.isValid()) return nullptr;
-
-        auto guid = ref.getGUID();
-        {
-            std::scoped_lock lock(cacheMutex);
-            auto it = materialInstanceCache.find(guid);
-            if (it != materialInstanceCache.end()) {
-                if (auto existing = it->second.lock()) {
-                    return existing;
-                }
-            }
-        }
-
-        std::string path = ref.resolve();
-        if (path.empty()) {
-            vfLogError("Failed to resolve material instance AssetRef: {}", guid.toString());
-            return nullptr;
-        }
-
-        auto result = material::MaterialInstanceAsset::load(path);
-        if (!result) {
-            vfLogError("Failed to load material instance: {}", path);
-            return nullptr;
-        }
-
-        auto instance = std::make_shared<material::MaterialInstanceData>(std::move(*result));
-
-        {
-            std::scoped_lock lock(cacheMutex);
-            materialInstanceCache[guid] = instance;
-        }
-
-        return instance;
+        return loadSyncCached<material::MaterialInstanceData>(ref, materialInstanceCache, cacheMutex,
+            [](const std::string& p) { return material::MaterialInstanceAsset::load(p); }, "material instance");
     }
 
     void ResourceManager::invalidateMaterialInstanceCache(const asset::AssetRef& ref)
@@ -491,37 +425,8 @@ namespace resource
 
     std::shared_ptr<terrain::TerrainMaterialData> ResourceManager::loadTerrainMaterial(const asset::AssetRef& ref)
     {
-        auto guid = ref.getGUID();
-        {
-            std::scoped_lock lock(cacheMutex);
-            auto it = terrainMaterialCache.find(guid);
-            if (it != terrainMaterialCache.end()) {
-                if (auto existing = it->second.lock()) {
-                    return existing;
-                }
-            }
-        }
-
-        std::string path = ref.resolve();
-        if (path.empty()) {
-            vfLogError("Failed to resolve terrain material AssetRef: {}", guid.toString());
-            return nullptr;
-        }
-
-        auto result = terrain::TerrainMaterialAsset::load(path);
-        if (!result) {
-            vfLogError("Failed to load terrain material: {}", path);
-            return nullptr;
-        }
-
-        auto terrainMat = std::make_shared<terrain::TerrainMaterialData>(std::move(*result));
-
-        {
-            std::scoped_lock lock(cacheMutex);
-            terrainMaterialCache[guid] = terrainMat;
-        }
-
-        return terrainMat;
+        return loadSyncCached<terrain::TerrainMaterialData>(ref, terrainMaterialCache, cacheMutex,
+            [](const std::string& p) { return terrain::TerrainMaterialAsset::load(p); }, "terrain material");
     }
 
     void ResourceManager::invalidateTerrainMaterialCache(const asset::AssetRef& ref)
@@ -532,36 +437,7 @@ namespace resource
 
     std::shared_ptr<animator::AnimatorData> ResourceManager::loadAnimator(const asset::AssetRef& ref)
     {
-        auto guid = ref.getGUID();
-        {
-            std::scoped_lock lock(cacheMutex);
-            auto it = animatorCache.find(guid);
-            if (it != animatorCache.end()) {
-                if (auto existing = it->second.lock()) {
-                    return existing;
-                }
-            }
-        }
-
-        std::string path = ref.resolve();
-        if (path.empty()) {
-            vfLogError("Failed to resolve animator AssetRef: {}", guid.toString());
-            return nullptr;
-        }
-
-        auto result = animator::AnimatorAsset::load(path);
-        if (!result) {
-            vfLogError("Failed to load animator: {}", path);
-            return nullptr;
-        }
-
-        auto animatorData = std::make_shared<animator::AnimatorData>(std::move(*result));
-
-        {
-            std::scoped_lock lock(cacheMutex);
-            animatorCache[guid] = animatorData;
-        }
-
-        return animatorData;
+        return loadSyncCached<animator::AnimatorData>(ref, animatorCache, cacheMutex,
+            [](const std::string& p) { return animator::AnimatorAsset::load(p); }, "animator");
     }
 }

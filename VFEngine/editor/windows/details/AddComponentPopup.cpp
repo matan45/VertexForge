@@ -4,11 +4,9 @@
 #include "events/scene/ComponentPhysicsLightEvents.hpp"
 #include "events/scene/ComponentMediaEvents.hpp"
 #include "events/scripting/ScriptingEvents.hpp"
-#include "events/ui/UIEvents.hpp"
 #include "events/physics/SocketEvents.hpp"
 #include "events/physics/IKEvents.hpp"
 #include "events/scene/ReverbZoneEvents.hpp"
-#include "events/plugin/PluginComponentEvents.hpp"
 #include <imgui.h>
 
 namespace windows::details
@@ -108,9 +106,7 @@ namespace windows::details
                 dispatcher.execute(cmd);
             }
             if (ImGui::IsItemHovered())
-            {
                 ImGui::SetTooltip("Streaming audio for background music and ambient sounds");
-            }
         }
 
         if (!c.hasAudio3D)
@@ -122,9 +118,7 @@ namespace windows::details
                 dispatcher.execute(cmd);
             }
             if (ImGui::IsItemHovered())
-            {
                 ImGui::SetTooltip("Cached audio for spatial sound effects");
-            }
         }
 
         if (!c.hasReverbZone)
@@ -136,9 +130,7 @@ namespace windows::details
                 dispatcher.execute(cmd);
             }
             if (ImGui::IsItemHovered())
-            {
                 ImGui::SetTooltip("Environmental reverb zone with shape volume and presets");
-            }
         }
 
         if (!c.hasScript)
@@ -152,9 +144,7 @@ namespace windows::details
                 dispatcher.execute(cmd);
             }
             if (ImGui::IsItemHovered())
-            {
                 ImGui::SetTooltip("mType script for custom behavior");
-            }
         }
 
         if (!c.hasVFX)
@@ -166,9 +156,7 @@ namespace windows::details
                 dispatcher.execute(cmd);
             }
             if (ImGui::IsItemHovered())
-            {
                 ImGui::SetTooltip("Visual effects particle system");
-            }
         }
 
         if (!c.hasBillboard)
@@ -180,9 +168,7 @@ namespace windows::details
                 dispatcher.execute(cmd);
             }
             if (ImGui::IsItemHovered())
-            {
                 ImGui::SetTooltip("Camera-facing textured quad");
-            }
         }
 
         if (!c.hasText)
@@ -194,9 +180,7 @@ namespace windows::details
                 dispatcher.execute(cmd);
             }
             if (ImGui::IsItemHovered())
-            {
                 ImGui::SetTooltip("SDF text rendering with custom fonts");
-            }
         }
 
         if (!c.hasRenderTexture)
@@ -208,9 +192,7 @@ namespace windows::details
                 dispatcher.execute(cmd);
             }
             if (ImGui::IsItemHovered())
-            {
                 ImGui::SetTooltip("Renders camera view to a texture (requires Camera component)");
-            }
         }
 
         if (!c.hasDecal)
@@ -222,9 +204,7 @@ namespace windows::details
                 dispatcher.execute(cmd);
             }
             if (ImGui::IsItemHovered())
-            {
                 ImGui::SetTooltip("Projects decal onto scene geometry (footprints, bullet holes, etc.)");
-            }
         }
     }
 
@@ -246,9 +226,7 @@ namespace windows::details
                 dispatcher.execute(cmd);
             }
             if (ImGui::IsItemHovered())
-            {
                 ImGui::SetTooltip("Collision shape (Box, Sphere, Capsule, Convex Mesh, or Triangle Mesh)");
-            }
         }
 
         if (!c.hasRigidBody)
@@ -260,9 +238,7 @@ namespace windows::details
                 dispatcher.execute(cmd);
             }
             if (ImGui::IsItemHovered())
-            {
                 ImGui::SetTooltip("Physics body for dynamics simulation");
-            }
         }
 
         if (!c.hasPhysicsAnimation)
@@ -274,9 +250,7 @@ namespace windows::details
                 dispatcher.execute(cmd);
             }
             if (ImGui::IsItemHovered())
-            {
                 ImGui::SetTooltip("Ragdoll and kinematic bone physics for animated meshes");
-            }
         }
 
         if (!c.hasNavmeshAgent)
@@ -288,9 +262,7 @@ namespace windows::details
                 dispatcher.execute(cmd);
             }
             if (ImGui::IsItemHovered())
-            {
                 ImGui::SetTooltip("Navigation mesh agent for pathfinding and crowd movement");
-            }
         }
 
         if (!c.hasController)
@@ -302,9 +274,7 @@ namespace windows::details
                 dispatcher.execute(cmd);
             }
             if (ImGui::IsItemHovered())
-            {
                 ImGui::SetTooltip("Player or AI controller for character movement and input");
-            }
         }
     }
 
@@ -326,9 +296,7 @@ namespace windows::details
                 dispatcher.execute(cmd);
             }
             if (ImGui::IsItemHovered())
-            {
                 ImGui::SetTooltip("Attach this entity to an animation socket on a parent skeleton");
-            }
         }
 
         if (!c.hasIK)
@@ -340,9 +308,7 @@ namespace windows::details
                 dispatcher.execute(cmd);
             }
             if (ImGui::IsItemHovered())
-            {
                 ImGui::SetTooltip("FABRIK IK solver for bone chain targeting (feet, hands, look-at)");
-            }
         }
 
         if (!c.hasBehaviorTree)
@@ -354,9 +320,7 @@ namespace windows::details
                 dispatcher.execute(cmd);
             }
             if (ImGui::IsItemHovered())
-            {
                 ImGui::SetTooltip("AI behavior tree for complex decision-making");
-            }
         }
     }
 
@@ -378,9 +342,7 @@ namespace windows::details
                 dispatcher.execute(cmd);
             }
             if (ImGui::IsItemHovered())
-            {
                 ImGui::SetTooltip("Infinite distance light (sun, moon)");
-            }
         }
 
         if (!c.hasPointLight)
@@ -392,9 +354,7 @@ namespace windows::details
                 dispatcher.execute(cmd);
             }
             if (ImGui::IsItemHovered())
-            {
                 ImGui::SetTooltip("Omnidirectional light with range attenuation");
-            }
         }
 
         if (!c.hasSpotLight)
@@ -406,310 +366,7 @@ namespace windows::details
                 dispatcher.execute(cmd);
             }
             if (ImGui::IsItemHovered())
-            {
                 ImGui::SetTooltip("Cone-shaped light with inner/outer angles");
-            }
-        }
-    }
-
-    void AddComponentPopup::drawUISection(const ComponentPresence& c)
-    {
-        auto handle = c.handle;
-        auto& dispatcher = events::EventDispatcher::instance();
-
-        ImGui::Spacing();
-        ImGui::TextDisabled("UI");
-        ImGui::Separator();
-
-        if (!c.hasUICanvas)
-        {
-            if (ImGui::Selectable("  UI Canvas"))
-            {
-                events::ui::AddUICanvasComponentCommand cmd;
-                cmd.entity = handle;
-                dispatcher.execute(cmd);
-            }
-            if (ImGui::IsItemHovered())
-            {
-                ImGui::SetTooltip("UI Canvas with reference resolution and auto-scaling");
-            }
-        }
-
-        if (!c.hasUIRect)
-        {
-            if (ImGui::Selectable("  UI Rect"))
-            {
-                events::ui::AddUIRectComponentCommand cmd;
-                cmd.entity = handle;
-                dispatcher.execute(cmd);
-            }
-            if (ImGui::IsItemHovered())
-            {
-                ImGui::SetTooltip("Rect transform for UI anchoring and layout");
-            }
-        }
-
-        if (!c.hasUIImage)
-        {
-            if (ImGui::Selectable("  UI Image"))
-            {
-                events::ui::AddUIImageComponentCommand cmd;
-                cmd.entity = handle;
-                dispatcher.execute(cmd);
-            }
-            if (ImGui::IsItemHovered())
-            {
-                ImGui::SetTooltip("Screen-space image with texture and color tint");
-            }
-        }
-
-        if (!c.hasUILabel)
-        {
-            if (ImGui::Selectable("  UI Label"))
-            {
-                events::ui::AddUILabelComponentCommand cmd;
-                cmd.entity = handle;
-                dispatcher.execute(cmd);
-            }
-            if (ImGui::IsItemHovered())
-            {
-                ImGui::SetTooltip("Text label with font, alignment, and overflow settings");
-            }
-        }
-
-        if (!c.hasUIScroll)
-        {
-            if (ImGui::Selectable("  UI Scroll"))
-            {
-                events::ui::AddUIScrollComponentCommand cmd;
-                cmd.entity = handle;
-                dispatcher.execute(cmd);
-            }
-            if (ImGui::IsItemHovered())
-            {
-                ImGui::SetTooltip("Scrollable container with clipping and scrollbars");
-            }
-        }
-
-        if (!c.hasUILayoutGroup)
-        {
-            if (ImGui::Selectable("  UI Layout Group"))
-            {
-                events::ui::AddUILayoutGroupComponentCommand cmd;
-                cmd.entity = handle;
-                dispatcher.execute(cmd);
-            }
-            if (ImGui::IsItemHovered())
-            {
-                ImGui::SetTooltip("Auto-stack children vertically or horizontally");
-            }
-        }
-
-        if (!c.hasUIButton)
-        {
-            if (ImGui::Selectable("  UI Button"))
-            {
-                events::ui::AddUIButtonComponentCommand cmd;
-                cmd.entity = handle;
-                dispatcher.execute(cmd);
-            }
-            if (ImGui::IsItemHovered())
-            {
-                ImGui::SetTooltip("Interactive button with state colors and click events");
-            }
-        }
-
-        if (!c.hasUITextInput)
-        {
-            if (ImGui::Selectable("  UI Text Input"))
-            {
-                events::ui::AddUITextInputComponentCommand cmd;
-                cmd.entity = handle;
-                dispatcher.execute(cmd);
-            }
-            if (ImGui::IsItemHovered())
-            {
-                ImGui::SetTooltip("Editable text input field with focus and selection");
-            }
-        }
-
-        if (!c.hasUICheckbox)
-        {
-            if (ImGui::Selectable("  UI Checkbox"))
-            {
-                events::ui::AddUICheckboxComponentCommand cmd;
-                cmd.entity = handle;
-                dispatcher.execute(cmd);
-            }
-            if (ImGui::IsItemHovered())
-            {
-                ImGui::SetTooltip("Toggleable checkbox with radio group support");
-            }
-        }
-
-        if (!c.hasUIDropdown)
-        {
-            if (ImGui::Selectable("  UI Dropdown"))
-            {
-                events::ui::AddUIDropdownComponentCommand cmd;
-                cmd.entity = handle;
-                dispatcher.execute(cmd);
-            }
-            if (ImGui::IsItemHovered())
-            {
-                ImGui::SetTooltip("Dropdown / combo box with selectable options");
-            }
-        }
-
-        if (!c.hasUITabs)
-        {
-            if (ImGui::Selectable("  UI Tabs"))
-            {
-                events::ui::AddUITabsComponentCommand cmd;
-                cmd.entity = handle;
-                dispatcher.execute(cmd);
-            }
-            if (ImGui::IsItemHovered())
-            {
-                ImGui::SetTooltip("Tabbed panel container with switchable content views");
-            }
-        }
-
-        if (!c.hasUISlider)
-        {
-            if (ImGui::Selectable("  UI Slider"))
-            {
-                events::ui::AddUISliderComponentCommand cmd;
-                cmd.entity = handle;
-                dispatcher.execute(cmd);
-            }
-            if (ImGui::IsItemHovered())
-            {
-                ImGui::SetTooltip("Draggable slider for numeric value input");
-            }
-        }
-
-        if (!c.hasUIProgressBar)
-        {
-            if (ImGui::Selectable("  UI Progress Bar"))
-            {
-                events::ui::AddUIProgressBarComponentCommand cmd;
-                cmd.entity = handle;
-                dispatcher.execute(cmd);
-            }
-            if (ImGui::IsItemHovered())
-            {
-                ImGui::SetTooltip("Non-interactive bar displaying progress");
-            }
-        }
-
-        if (!c.hasUIAnimation)
-        {
-            if (ImGui::Selectable("  UI Animation"))
-            {
-                events::ui::AddUIAnimationComponentCommand cmd;
-                cmd.entity = handle;
-                dispatcher.execute(cmd);
-            }
-            if (ImGui::IsItemHovered())
-            {
-                ImGui::SetTooltip("Tween animation system for UI elements");
-            }
-        }
-
-        if (!c.hasUIMask)
-        {
-            if (ImGui::Selectable("  UI Mask"))
-            {
-                events::ui::AddUIMaskComponentCommand cmd;
-                cmd.entity = handle;
-                dispatcher.execute(cmd);
-            }
-            if (ImGui::IsItemHovered())
-            {
-                ImGui::SetTooltip("Stencil mask for clipping children to arbitrary shapes");
-            }
-        }
-
-        if (!c.hasUIDraggable)
-        {
-            if (ImGui::Selectable("  UI Draggable"))
-            {
-                events::ui::AddUIDraggableComponentCommand cmd;
-                cmd.entity = handle;
-                dispatcher.execute(cmd);
-            }
-            if (ImGui::IsItemHovered())
-            {
-                ImGui::SetTooltip("Marks this element as a drag source for drag-and-drop");
-            }
-        }
-
-        if (!c.hasUIDropTarget)
-        {
-            if (ImGui::Selectable("  UI Drop Target"))
-            {
-                events::ui::AddUIDropTargetComponentCommand cmd;
-                cmd.entity = handle;
-                dispatcher.execute(cmd);
-            }
-            if (ImGui::IsItemHovered())
-            {
-                ImGui::SetTooltip("Marks this element as a drop receiver for drag-and-drop");
-            }
-        }
-    }
-
-    void AddComponentPopup::drawPluginSection(const ComponentPresence& c)
-    {
-        auto handle = c.handle;
-        auto& dispatcher = events::EventDispatcher::instance();
-
-        events::plugin::GetRegisteredPluginComponentsQuery listQuery;
-        auto registeredNames = dispatcher.query(listQuery);
-
-        if (registeredNames.empty())
-            return;
-
-        // Check which plugin components this entity already has
-        std::vector<std::pair<std::string, std::string>> available; // qualifiedName, displayName
-        for (const auto& qualifiedName : registeredNames)
-        {
-            events::plugin::GetPluginComponentDataQuery dataQuery;
-            dataQuery.entity = handle;
-            dataQuery.qualifiedName = qualifiedName;
-            auto dataOpt = dispatcher.query(dataQuery);
-
-            if (!dataOpt.has_value())
-            {
-                // Extract display name
-                std::string displayName = qualifiedName;
-                auto sep = qualifiedName.find("::");
-                if (sep != std::string::npos)
-                {
-                    displayName = qualifiedName.substr(sep + 2) + " (" + qualifiedName.substr(0, sep) + ")";
-                }
-                available.emplace_back(qualifiedName, displayName);
-            }
-        }
-
-        if (available.empty())
-            return;
-
-        ImGui::Spacing();
-        ImGui::TextDisabled("Plugin");
-        ImGui::Separator();
-
-        for (const auto& [qualifiedName, displayName] : available)
-        {
-            std::string label = "  " + displayName;
-            if (ImGui::Selectable(label.c_str()))
-            {
-                events::plugin::AddPluginComponentCommand cmd;
-                cmd.entity = handle;
-                cmd.qualifiedName = qualifiedName;
-                dispatcher.execute(cmd);
-            }
         }
     }
 }

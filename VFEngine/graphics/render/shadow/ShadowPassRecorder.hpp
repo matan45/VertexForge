@@ -107,5 +107,23 @@ namespace render::shadow
             ShadowPassPipeline* shadowPassPipeline,
             TerrainShadowPipeline* terrainShadowPipeline,
             std::unordered_map<uint32_t, LightShadowData>& lightShadowData);
+
+        void recordTileCommands(
+            vk::CommandBuffer cmd,
+            const PageRenderEntry& page,
+            VSMPhysicalTilePool* tilePool,
+            const ShadowPassParams& params,
+            const TerrainShadowPassParams* terrainParams,
+            ShadowPassPipeline* shadowPassPipeline,
+            TerrainShadowPipeline* terrainShadowPipeline,
+            bool hasMeshBatches,
+            bool hasTerrainShadows,
+            bool useLoadPass);
+
+        static void transitionPoolToDepthAttachment(vk::CommandBuffer cmd,
+                                                     VSMPhysicalTilePool* tilePool,
+                                                     bool poolFirstUse);
+        static void transitionPoolToShaderRead(vk::CommandBuffer cmd,
+                                                VSMPhysicalTilePool* tilePool);
     };
 }

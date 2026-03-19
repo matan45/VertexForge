@@ -16,6 +16,7 @@ namespace core::api
     {
         registerCoreEffects(interpreter);
         registerAdvancedEffects(interpreter);
+        registerEdgeDetectionAndColorGrading(interpreter);
     }
 
     void PostProcessAPI::registerCoreEffects(services::ScriptInterpreter* interpreter)

@@ -42,293 +42,148 @@ namespace windows
     void AudioMixerWindow::drawBusChannels()
     {
         auto& dispatcher = events::EventDispatcher::instance();
+        auto busNames = dispatcher.query(events::audio::GetBusNamesQuery{});
+        if (busNames.empty()) { ImGui::TextDisabled("No audio buses configured"); return; }
 
-        events::audio::GetBusNamesQuery namesQuery;
-        auto busNames = dispatcher.query(namesQuery);
-
-        if (busNames.empty())
-        {
-            ImGui::TextDisabled("No audio buses configured");
-            return;
-        }
-
-        float channelWidth = 80.0f;
-        float sliderHeight = 150.0f;
-
-        for (size_t i = 0; i < busNames.size(); ++i)
-        {
+        for (size_t i = 0; i < busNames.size(); ++i) {
             const auto& name = busNames[i];
-
             ImGui::BeginGroup();
             ImGui::PushID(static_cast<int>(i));
 
-            // Highlight selected bus
             bool isSelected = (name == selectedBusName);
-            if (isSelected)
-            {
-                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.3f, 0.8f, 1.0f, 1.0f));
-            }
-
-            // Clickable bus name label
-            if (ImGui::Selectable(name.c_str(), isSelected, 0, ImVec2(channelWidth, 0)))
-            {
+            if (isSelected) ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.3f, 0.8f, 1.0f, 1.0f));
+            if (ImGui::Selectable(name.c_str(), isSelected, 0, ImVec2(80.0f, 0)))
                 selectedBusName = (selectedBusName == name) ? "" : name;
-            }
+            if (isSelected) ImGui::PopStyleColor();
 
-            if (isSelected)
-            {
-                ImGui::PopStyleColor();
-            }
-
-            // Volume query
-            events::audio::GetBusVolumeQuery volQuery;
-            volQuery.busName = name;
+            events::audio::GetBusVolumeQuery volQuery; volQuery.busName = name;
             float volume = dispatcher.query(volQuery);
-
-            // Vertical volume slider
             ImGui::PushItemWidth(30.0f);
-            if (ImGui::VSliderFloat("##vol", ImVec2(30, sliderHeight), &volume, 0.0f, 1.0f, ""))
-            {
-                events::audio::SetBusVolumeCommand cmd;
-                cmd.busName = name;
-                cmd.volume = volume;
+            if (ImGui::VSliderFloat("##vol", ImVec2(30, 150), &volume, 0.0f, 1.0f, "")) {
+                events::audio::SetBusVolumeCommand cmd; cmd.busName = name; cmd.volume = volume;
                 dispatcher.execute(cmd);
             }
             ImGui::PopItemWidth();
-
-            // Volume readout
             ImGui::Text("%.0f%%", volume * 100.0f);
 
-            // Mute button
-            events::audio::IsBusMutedQuery muteQuery;
-            muteQuery.busName = name;
+            events::audio::IsBusMutedQuery muteQuery; muteQuery.busName = name;
             bool muted = dispatcher.query(muteQuery);
-
-            if (muted)
-            {
-                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.2f, 0.2f, 1.0f));
-            }
-            if (ImGui::Button("M", ImVec2(25, 20)))
-            {
-                events::audio::SetBusMutedCommand cmd;
-                cmd.busName = name;
-                cmd.muted = !muted;
+            if (muted) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.2f, 0.2f, 1.0f));
+            if (ImGui::Button("M", ImVec2(25, 20))) {
+                events::audio::SetBusMutedCommand cmd; cmd.busName = name; cmd.muted = !muted;
                 dispatcher.execute(cmd);
             }
-            if (muted)
-            {
-                ImGui::PopStyleColor();
-            }
+            if (muted) ImGui::PopStyleColor();
 
-            // Solo button
             ImGui::SameLine();
-
-            if (ImGui::Button("S", ImVec2(25, 20)))
-            {
-                events::audio::SetBusSoloedCommand cmd;
-                cmd.busName = name;
-                cmd.soloed = true;
+            if (ImGui::Button("S", ImVec2(25, 20))) {
+                events::audio::SetBusSoloedCommand cmd; cmd.busName = name; cmd.soloed = true;
                 dispatcher.execute(cmd);
             }
 
             ImGui::PopID();
             ImGui::EndGroup();
-
-            if (i < busNames.size() - 1)
-            {
-                ImGui::SameLine();
-                ImGui::Dummy(ImVec2(10, 0));
-                ImGui::SameLine();
-            }
+            if (i < busNames.size() - 1) { ImGui::SameLine(); ImGui::Dummy(ImVec2(10, 0)); ImGui::SameLine(); }
         }
     }
 
     void AudioMixerWindow::drawEffectChainSection()
     {
-        if (selectedBusName.empty())
-        {
-            ImGui::TextDisabled("Select a bus to edit its effect chain");
-            return;
-        }
+        if (selectedBusName.empty()) { ImGui::TextDisabled("Select a bus to edit its effect chain"); return; }
 
         auto& dispatcher = events::EventDispatcher::instance();
-
         ImGui::Text("Effects: %s", selectedBusName.c_str());
 
-        // Query effect chain
-        events::audio::GetBusEffectChainQuery chainQuery;
-        chainQuery.busName = selectedBusName;
+        events::audio::GetBusEffectChainQuery chainQuery; chainQuery.busName = selectedBusName;
         auto effectChain = dispatcher.query(chainQuery);
+        int maxEffects = dispatcher.query(events::audio::GetMaxEffectsPerBusQuery{});
 
-        // Query max effects
-        events::audio::GetMaxEffectsPerBusQuery maxQuery;
-        int maxEffects = dispatcher.query(maxQuery);
-
-        // Effect list
-        for (size_t i = 0; i < effectChain.size(); ++i)
-        {
+        for (size_t i = 0; i < effectChain.size(); ++i) {
             auto& effect = effectChain[i];
             ImGui::PushID(static_cast<int>(effect.id));
 
-            // Effect type label
-            std::string label = types::audioEffectTypeToString(effect.type);
-            ImGui::Text("%zu. %s", i + 1, label.c_str());
-
+            ImGui::Text("%zu. %s", i + 1, types::audioEffectTypeToString(effect.type).c_str());
             ImGui::SameLine(200);
 
-            // Enable checkbox
             bool enabled = effect.enabled;
-            if (ImGui::Checkbox("##en", &enabled))
-            {
+            if (ImGui::Checkbox("##en", &enabled)) {
                 events::audio::SetBusEffectEnabledCommand cmd;
-                cmd.busName = selectedBusName;
-                cmd.effectId = effect.id;
-                cmd.enabled = enabled;
+                cmd.busName = selectedBusName; cmd.effectId = effect.id; cmd.enabled = enabled;
                 dispatcher.execute(cmd);
             }
-
             ImGui::SameLine();
 
-            // Wet/dry slider
             float wetDry = effect.wetDryMix;
             ImGui::PushItemWidth(100);
-            if (ImGui::SliderFloat("##wd", &wetDry, 0.0f, 1.0f, "Wet %.2f"))
-            {
+            if (ImGui::SliderFloat("##wd", &wetDry, 0.0f, 1.0f, "Wet %.2f")) {
                 events::audio::SetBusEffectWetDryCommand cmd;
-                cmd.busName = selectedBusName;
-                cmd.effectId = effect.id;
-                cmd.wetDryMix = wetDry;
+                cmd.busName = selectedBusName; cmd.effectId = effect.id; cmd.wetDryMix = wetDry;
                 dispatcher.execute(cmd);
             }
-            ImGui::PopItemWidth();
+            ImGui::PopItemWidth(); ImGui::SameLine();
 
-            ImGui::SameLine();
-
-            // Remove button
-            if (ImGui::Button("X##rm"))
-            {
+            if (ImGui::Button("X##rm")) {
                 events::audio::RemoveBusEffectCommand cmd;
-                cmd.busName = selectedBusName;
-                cmd.effectId = effect.id;
+                cmd.busName = selectedBusName; cmd.effectId = effect.id;
                 dispatcher.execute(cmd);
-                ImGui::PopID();
-                break; // chain changed, exit loop
+                ImGui::PopID(); break;
             }
 
-            // Type-specific parameter editors (collapsible)
-            if (ImGui::TreeNode("Parameters"))
-            {
-                switch (effect.type)
-                {
-                case types::AudioEffectType::Reverb:
-                    drawReverbEditor(selectedBusName, effect.id);
-                    break;
-                case types::AudioEffectType::EQ:
-                    drawEQEditor(selectedBusName, effect.id);
-                    break;
-                case types::AudioEffectType::Compressor:
-                    drawCompressorEditor(selectedBusName, effect.id);
-                    break;
-                case types::AudioEffectType::Echo:
-                    drawEchoEditor(selectedBusName, effect.id);
-                    break;
-                case types::AudioEffectType::Chorus:
-                    drawChorusEditor(selectedBusName, effect.id);
-                    break;
+            if (ImGui::TreeNode("Parameters")) {
+                switch (effect.type) {
+                case types::AudioEffectType::Reverb:    drawReverbEditor(selectedBusName, effect.id); break;
+                case types::AudioEffectType::EQ:        drawEQEditor(selectedBusName, effect.id); break;
+                case types::AudioEffectType::Compressor: drawCompressorEditor(selectedBusName, effect.id); break;
+                case types::AudioEffectType::Echo:      drawEchoEditor(selectedBusName, effect.id); break;
+                case types::AudioEffectType::Chorus:    drawChorusEditor(selectedBusName, effect.id); break;
                 }
                 ImGui::TreePop();
             }
-
             ImGui::PopID();
         }
 
-        // Add Effect dropdown
         bool atMax = static_cast<int>(effectChain.size()) >= maxEffects;
         ImGui::BeginDisabled(atMax);
-
-        const char* effectTypeNames[] = {"Reverb", "EQ", "Compressor", "Echo", "Chorus"};
         ImGui::PushItemWidth(120);
-        ImGui::Combo("##addtype", &addEffectTypeIndex, effectTypeNames, 5);
-        ImGui::PopItemWidth();
-
-        ImGui::SameLine();
-
-        if (ImGui::Button("Add Effect"))
-        {
-            auto effectType = static_cast<types::AudioEffectType>(addEffectTypeIndex);
-            auto config = types::BusEffectConfig::createDefault(effectType);
-
-            events::audio::AddBusEffectCommand cmd;
-            cmd.busName = selectedBusName;
-            cmd.config = config;
+        ImGui::Combo("##addtype", &addEffectTypeIndex, "Reverb\0EQ\0Compressor\0Echo\0Chorus\0", 5);
+        ImGui::PopItemWidth(); ImGui::SameLine();
+        if (ImGui::Button("Add Effect")) {
+            events::audio::AddBusEffectCommand cmd; cmd.busName = selectedBusName;
+            cmd.config = types::BusEffectConfig::createDefault(static_cast<types::AudioEffectType>(addEffectTypeIndex));
             dispatcher.execute(cmd);
         }
-
         ImGui::EndDisabled();
-
-        if (atMax && maxEffects > 0)
-        {
-            ImGui::SameLine();
-            ImGui::TextDisabled("(max %d effects)", maxEffects);
-        }
-        else if (maxEffects == 0)
-        {
-            ImGui::TextDisabled("EFX not available");
-        }
+        if (atMax && maxEffects > 0) { ImGui::SameLine(); ImGui::TextDisabled("(max %d effects)", maxEffects); }
+        else if (maxEffects == 0) { ImGui::TextDisabled("EFX not available"); }
     }
 
     void AudioMixerWindow::drawReverbEditor(const std::string& busName, uint32_t effectId)
     {
         auto& dispatcher = events::EventDispatcher::instance();
-
-        // Preset dropdown
-        static std::vector<std::string> presetNames;
-        if (presetNames.empty())
-        {
-            // Common presets subset for quick access
-            presetNames = {"Generic", "Room", "Bathroom", "Living Room", "Stone Room",
-                           "Auditorium", "Concert Hall", "Cave", "Arena", "Hangar",
-                           "Hallway", "Forest", "City", "Mountains", "Underwater",
-                           "Chapel", "Castle Hall", "Factory Hall"};
-        }
+        static std::vector<std::string> presetNames = {
+            "Generic", "Room", "Bathroom", "Living Room", "Stone Room",
+            "Auditorium", "Concert Hall", "Cave", "Arena", "Hangar",
+            "Hallway", "Forest", "City", "Mountains", "Underwater",
+            "Chapel", "Castle Hall", "Factory Hall"};
 
         static int selectedPreset = 0;
         ImGui::PushItemWidth(200);
-        if (ImGui::BeginCombo("Preset##rv", presetNames[selectedPreset].c_str()))
-        {
-            for (int i = 0; i < static_cast<int>(presetNames.size()); ++i)
-            {
+        if (ImGui::BeginCombo("Preset##rv", presetNames[selectedPreset].c_str())) {
+            for (int i = 0; i < static_cast<int>(presetNames.size()); ++i) {
                 bool isSelected = (selectedPreset == i);
-                if (ImGui::Selectable(presetNames[i].c_str(), isSelected))
-                {
+                if (ImGui::Selectable(presetNames[i].c_str(), isSelected)) {
                     selectedPreset = i;
-
-                    // Apply preset
-                    types::BusEffectConfig config;
-                    config.id = effectId;
-                    config.type = types::AudioEffectType::Reverb;
-
-                    types::ReverbParams params;
-                    params.presetName = presetNames[i];
-                    config.params = params;
-
+                    types::BusEffectConfig config; config.id = effectId; config.type = types::AudioEffectType::Reverb;
+                    types::ReverbParams params; params.presetName = presetNames[i]; config.params = params;
                     events::audio::UpdateBusEffectCommand cmd;
-                    cmd.busName = busName;
-                    cmd.effectId = effectId;
-                    cmd.config = config;
+                    cmd.busName = busName; cmd.effectId = effectId; cmd.config = config;
                     dispatcher.execute(cmd);
                 }
-                if (isSelected)
-                {
-                    ImGui::SetItemDefaultFocus();
-                }
+                if (isSelected) ImGui::SetItemDefaultFocus();
             }
             ImGui::EndCombo();
         }
         ImGui::PopItemWidth();
-
-        // Key reverb parameters for manual tweaking
-        // These are read-only display since full params are set via presets
         ImGui::TextDisabled("Use presets to configure reverb parameters");
     }
 
@@ -455,61 +310,32 @@ namespace windows
     void AudioMixerWindow::drawCreateBusSection()
     {
         auto& dispatcher = events::EventDispatcher::instance();
-
         ImGui::Text("Create Bus:");
 
         char buf[128] = {};
-        if (newBusName.size() < sizeof(buf))
-        {
-            std::copy(newBusName.begin(), newBusName.end(), buf);
-        }
-
+        if (newBusName.size() < sizeof(buf)) std::copy(newBusName.begin(), newBusName.end(), buf);
         ImGui::PushItemWidth(150);
-        if (ImGui::InputText("##NewBusName", buf, sizeof(buf)))
-        {
-            newBusName = buf;
-        }
-        ImGui::PopItemWidth();
+        if (ImGui::InputText("##NewBusName", buf, sizeof(buf))) newBusName = buf;
+        ImGui::PopItemWidth(); ImGui::SameLine();
 
-        ImGui::SameLine();
-
-        events::audio::GetBusNamesQuery namesQuery;
-        auto busNames = dispatcher.query(namesQuery);
-
-        ImGui::PushItemWidth(120);
-        if (selectedParentIndex >= static_cast<int>(busNames.size()))
-        {
-            selectedParentIndex = 0;
-        }
+        auto busNames = dispatcher.query(events::audio::GetBusNamesQuery{});
+        if (selectedParentIndex >= static_cast<int>(busNames.size())) selectedParentIndex = 0;
         const char* parentPreview = busNames.empty() ? "Master" : busNames[selectedParentIndex].c_str();
-        if (ImGui::BeginCombo("##ParentBus", parentPreview))
-        {
-            for (int i = 0; i < static_cast<int>(busNames.size()); ++i)
-            {
+        ImGui::PushItemWidth(120);
+        if (ImGui::BeginCombo("##ParentBus", parentPreview)) {
+            for (int i = 0; i < static_cast<int>(busNames.size()); ++i) {
                 bool isSelected = (selectedParentIndex == i);
-                if (ImGui::Selectable(busNames[i].c_str(), isSelected))
-                {
-                    selectedParentIndex = i;
-                }
-                if (isSelected)
-                {
-                    ImGui::SetItemDefaultFocus();
-                }
+                if (ImGui::Selectable(busNames[i].c_str(), isSelected)) selectedParentIndex = i;
+                if (isSelected) ImGui::SetItemDefaultFocus();
             }
             ImGui::EndCombo();
         }
-        ImGui::PopItemWidth();
+        ImGui::PopItemWidth(); ImGui::SameLine();
 
-        ImGui::SameLine();
-
-        bool canCreate = !newBusName.empty();
-        ImGui::BeginDisabled(!canCreate);
-        if (ImGui::Button("Add Bus"))
-        {
-            std::string parentName = busNames.empty() ? "Master" : busNames[selectedParentIndex];
-            events::audio::CreateBusCommand cmd;
-            cmd.busName = newBusName;
-            cmd.parentName = parentName;
+        ImGui::BeginDisabled(newBusName.empty());
+        if (ImGui::Button("Add Bus")) {
+            events::audio::CreateBusCommand cmd; cmd.busName = newBusName;
+            cmd.parentName = busNames.empty() ? "Master" : busNames[selectedParentIndex];
             dispatcher.execute(cmd);
             newBusName.clear();
         }
@@ -519,58 +345,30 @@ namespace windows
     void AudioMixerWindow::drawSnapshotSection()
     {
         auto& dispatcher = events::EventDispatcher::instance();
-
         ImGui::Text("Mix Snapshots:");
 
         char buf[128] = {};
-        if (snapshotName.size() < sizeof(buf))
-        {
-            std::copy(snapshotName.begin(), snapshotName.end(), buf);
-        }
-
+        if (snapshotName.size() < sizeof(buf)) std::copy(snapshotName.begin(), snapshotName.end(), buf);
         ImGui::PushItemWidth(200);
-        if (ImGui::InputText("##SnapshotName", buf, sizeof(buf)))
-        {
-            snapshotName = buf;
-        }
-        ImGui::PopItemWidth();
+        if (ImGui::InputText("##SnapshotName", buf, sizeof(buf))) snapshotName = buf;
+        ImGui::PopItemWidth(); ImGui::SameLine();
 
-        ImGui::SameLine();
-        bool canSave = !snapshotName.empty();
-        ImGui::BeginDisabled(!canSave);
-        if (ImGui::Button("Save"))
-        {
-            events::audio::SaveMixSnapshotCommand cmd;
-            cmd.name = snapshotName;
+        ImGui::BeginDisabled(snapshotName.empty());
+        if (ImGui::Button("Save")) {
+            events::audio::SaveMixSnapshotCommand cmd; cmd.name = snapshotName;
             dispatcher.execute(cmd);
         }
         ImGui::EndDisabled();
 
-        // Existing snapshots
-        events::audio::GetSnapshotNamesQuery snapshotQuery;
-        auto snapshotNames = dispatcher.query(snapshotQuery);
-
-        if (!snapshotNames.empty())
-        {
+        auto snapshotNames = dispatcher.query(events::audio::GetSnapshotNamesQuery{});
+        if (!snapshotNames.empty()) {
             ImGui::Spacing();
-            for (const auto& name : snapshotNames)
-            {
+            for (const auto& name : snapshotNames) {
                 ImGui::PushID(name.c_str());
-                if (ImGui::Button("Load"))
-                {
-                    events::audio::LoadMixSnapshotCommand cmd;
-                    cmd.name = name;
-                    dispatcher.execute(cmd);
-                }
+                if (ImGui::Button("Load")) { events::audio::LoadMixSnapshotCommand cmd; cmd.name = name; dispatcher.execute(cmd); }
                 ImGui::SameLine();
-                if (ImGui::Button("Delete"))
-                {
-                    events::audio::DeleteMixSnapshotCommand cmd;
-                    cmd.name = name;
-                    dispatcher.execute(cmd);
-                }
-                ImGui::SameLine();
-                ImGui::Text("%s", name.c_str());
+                if (ImGui::Button("Delete")) { events::audio::DeleteMixSnapshotCommand cmd; cmd.name = name; dispatcher.execute(cmd); }
+                ImGui::SameLine(); ImGui::Text("%s", name.c_str());
                 ImGui::PopID();
             }
         }

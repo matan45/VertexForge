@@ -114,7 +114,21 @@ namespace animation
         mutable std::vector<const animator::AnimationEvent*> cachedFiredEvents;
 
         void blendLayers();
+        void evaluateBaseLayerPose();
+        std::vector<glm::mat4> evaluateLayerPose(AnimationLayerRuntime& layer);
+        void applyOverlayLayer(AnimationLayerRuntime& layer);
+
         void resolveBoneMasks();
+        const animator::BoneMaskDefinition* findBoneMaskDefinition(const std::string& maskName) const;
+        void resolveBoneMaskIndices(AnimationLayerRuntime& layer, const animator::BoneMaskDefinition& maskDef);
+
+        void initializeSharedParameters(const animator::AnimatorData& data);
+        void initializeLayerRuntimes(const animator::AnimatorData& data);
+        void initializeSingleGraphLayer(const animator::AnimatorData& data);
+
         void computeReferencePose(AnimationLayerRuntime& layer);
+        const resource::AnimationData* findReferencePoseClip(const AnimationLayerRuntime& layer) const;
+        void updateDirectClipPlayback(AnimationLayerRuntime& layer, float deltaTime);
+        void collectFiredEvents();
     };
 }

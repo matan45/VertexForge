@@ -63,64 +63,64 @@ namespace animation
         evaluateCurrentPose();
     }
 
+    void AnimatorStateMachine::advanceStateTime(float deltaTime)
+    {
+        const animator::AnimatorState* currentState = getCurrentAnimatorState();
+        if (!currentState)
+            return;
+
+        float duration = getAnimationDuration(state.currentStateId);
+        if (duration > 0.0f)
+        {
+            state.previousNormalizedTime = std::fmod(state.stateTime / duration, 1.0f);
+        }
+
+        state.stateTime += deltaTime * currentState->playbackSpeed;
+
+        if (duration > 0.0f && !state.isBlending && currentState->loop)
+        {
+            while (state.stateTime >= duration)
+            {
+                state.stateTime -= duration;
+                state.currentLoopCount++;
+            }
+        }
+    }
+
+    void AnimatorStateMachine::advancePreviousStateTime(float deltaTime)
+    {
+        const animator::AnimatorState* prevState = getPreviousAnimatorState();
+        if (!prevState)
+            return;
+
+        state.previousStateTime += deltaTime * prevState->playbackSpeed;
+
+        float prevDuration = getAnimationDuration(state.previousStateId);
+        if (prevDuration > 0.0f && prevState->loop)
+        {
+            while (state.previousStateTime >= prevDuration)
+            {
+                state.previousStateTime -= prevDuration;
+            }
+        }
+    }
+
     void AnimatorStateMachine::update(float deltaTime)
     {
         if (!initialized || !activeGraph || !state.isPlaying)
-        {
             return;
-        }
 
-        const animator::AnimatorState* currentState = getCurrentAnimatorState();
-        if (currentState)
-        {
-            float duration = getAnimationDuration(state.currentStateId);
-            if (duration > 0.0f)
-            {
-                state.previousNormalizedTime = std::fmod(state.stateTime / duration, 1.0f);
-            }
-
-            state.stateTime += deltaTime * currentState->playbackSpeed;
-
-            if (duration > 0.0f && !state.isBlending)
-            {
-                if (currentState->loop)
-                {
-                    while (state.stateTime >= duration)
-                    {
-                        state.stateTime -= duration;
-                        state.currentLoopCount++;
-                    }
-                }
-            }
-        }
+        advanceStateTime(deltaTime);
 
         if (state.isBlending)
-        {
-            const animator::AnimatorState* prevState = getPreviousAnimatorState();
-            if (prevState)
-            {
-                state.previousStateTime += deltaTime * prevState->playbackSpeed;
-
-                float prevDuration = getAnimationDuration(state.previousStateId);
-                if (prevDuration > 0.0f && prevState->loop)
-                {
-                    while (state.previousStateTime >= prevDuration)
-                    {
-                        state.previousStateTime -= prevDuration;
-                    }
-                }
-            }
-        }
+            advancePreviousStateTime(deltaTime);
 
         updateBlending(deltaTime);
 
         if (!state.isBlending)
-        {
             evaluateTransitions();
-        }
 
         fireTriggeredEvents();
-
         evaluateCurrentPose();
     }
 
@@ -207,6 +207,51 @@ namespace animation
         return false;
     }
 
+    bool AnimatorStateMachine::checkTransitionConditions(const animator::AnimatorTransition& transition) const
+    {
+        if (transition.sourceStateId != 0 && transition.targetStateId == state.currentStateId)
+        {
+            return false;
+        }
+
+        if (transition.hasExitTime)
+        {
+            float duration = getAnimationDuration(state.currentStateId);
+            if (duration > 0.0f)
+            {
+                float normalizedTime = std::fmod(state.stateTime / duration, 1.0f);
+                const animator::AnimatorState* animState = getCurrentAnimatorState();
+                bool isLooping = animState && animState->loop;
+
+                if (!shouldEvaluateExitTime(transition, normalizedTime, isLooping))
+                {
+                    return false;
+                }
+            }
+        }
+
+        return animator::evaluateAllConditions(transition.conditions, *parameters);
+    }
+
+    void AnimatorStateMachine::executeTransition(const animator::AnimatorTransition& transition)
+    {
+        if (transition.hasExitTime)
+        {
+            state.exitTimeEvaluatedAtLoop = state.currentLoopCount;
+        }
+
+        startTransition(transition);
+
+        for (const auto& condition : transition.conditions)
+        {
+            const auto* param = activeGraph->findParameter(condition.parameterName);
+            if (param && param->type == animator::AnimatorParameterType::Trigger)
+            {
+                parameters->resetTrigger(condition.parameterName);
+            }
+        }
+    }
+
     void AnimatorStateMachine::evaluateTransitions()
     {
         if (!activeGraph)
@@ -216,44 +261,9 @@ namespace animation
 
         for (const animator::AnimatorTransition* transition : transitions)
         {
-            if (transition->sourceStateId != 0 && transition->targetStateId == state.currentStateId)
+            if (checkTransitionConditions(*transition))
             {
-                continue;
-            }
-
-            if (transition->hasExitTime)
-            {
-                float duration = getAnimationDuration(state.currentStateId);
-                if (duration > 0.0f)
-                {
-                    float normalizedTime = std::fmod(state.stateTime / duration, 1.0f);
-                    const animator::AnimatorState* animState = getCurrentAnimatorState();
-                    bool isLooping = animState && animState->loop;
-
-                    if (!shouldEvaluateExitTime(*transition, normalizedTime, isLooping))
-                    {
-                        continue;
-                    }
-                }
-            }
-
-            if (animator::evaluateAllConditions(transition->conditions, *parameters))
-            {
-                if (transition->hasExitTime)
-                {
-                    state.exitTimeEvaluatedAtLoop = state.currentLoopCount;
-                }
-
-                startTransition(*transition);
-
-                for (const auto& condition : transition->conditions)
-                {
-                    const auto* param = activeGraph->findParameter(condition.parameterName);
-                    if (param && param->type == animator::AnimatorParameterType::Trigger)
-                    {
-                        parameters->resetTrigger(condition.parameterName);
-                    }
-                }
+                executeTransition(*transition);
                 break;
             }
             else if (transition->hasExitTime)
@@ -356,6 +366,31 @@ namespace animation
         rootMotionLastLoopCount = state.currentLoopCount;
     }
 
+    void AnimatorStateMachine::evaluateBlendingPose(glm::vec3& outRootPosition)
+    {
+        glm::vec3 prevRoot{0.0f}, currRoot{0.0f};
+        glm::vec3* prevRootPtr = rootMotionEnabled ? &prevRoot : nullptr;
+        glm::vec3* currRootPtr = rootMotionEnabled ? &currRoot : nullptr;
+
+        auto prevPose = evaluateStatePose(state.previousStateId, state.previousStateTime,
+                                           previousEvaluator, prevRootPtr);
+        auto currPose = evaluateStatePose(state.currentStateId, state.stateTime,
+                                           currentEvaluator, currRootPtr);
+
+        if (!prevPose.empty() && !currPose.empty())
+        {
+            currentBoneMatrices = AnimationBlender::blendPoses(prevPose, currPose, state.blendWeight);
+            if (rootMotionEnabled)
+                outRootPosition = glm::mix(prevRoot, currRoot, state.blendWeight);
+        }
+        else if (!currPose.empty())
+        {
+            currentBoneMatrices = currPose;
+            if (rootMotionEnabled)
+                outRootPosition = currRoot;
+        }
+    }
+
     void AnimatorStateMachine::evaluateCurrentPose()
     {
         if (!activeGraph || !skeletonData)
@@ -367,34 +402,14 @@ namespace animation
         }
 
         glm::vec3 currentRootPosition{0.0f};
-        glm::vec3* rootPtr = rootMotionEnabled ? &currentRootPosition : nullptr;
 
         if (state.isBlending)
         {
-            glm::vec3 prevRoot{0.0f}, currRoot{0.0f};
-            glm::vec3* prevRootPtr = rootMotionEnabled ? &prevRoot : nullptr;
-            glm::vec3* currRootPtr = rootMotionEnabled ? &currRoot : nullptr;
-
-            auto prevPose = evaluateStatePose(state.previousStateId, state.previousStateTime,
-                                               previousEvaluator, prevRootPtr);
-            auto currPose = evaluateStatePose(state.currentStateId, state.stateTime,
-                                               currentEvaluator, currRootPtr);
-
-            if (!prevPose.empty() && !currPose.empty())
-            {
-                currentBoneMatrices = AnimationBlender::blendPoses(prevPose, currPose, state.blendWeight);
-                if (rootMotionEnabled)
-                    currentRootPosition = glm::mix(prevRoot, currRoot, state.blendWeight);
-            }
-            else if (!currPose.empty())
-            {
-                currentBoneMatrices = currPose;
-                if (rootMotionEnabled)
-                    currentRootPosition = currRoot;
-            }
+            evaluateBlendingPose(currentRootPosition);
         }
         else
         {
+            glm::vec3* rootPtr = rootMotionEnabled ? &currentRootPosition : nullptr;
             auto pose = evaluateStatePose(state.currentStateId, state.stateTime,
                                            currentEvaluator, rootPtr);
             if (!pose.empty())
@@ -412,117 +427,4 @@ namespace animation
             updateRootMotionDelta(currentRootPosition);
     }
 
-    bool AnimatorStateMachine::loadAnimationForState(uint32_t stateId)
-    {
-        if (!activeGraph || !animationLoadCallback)
-        {
-            return false;
-        }
-
-        const animator::AnimatorState* animState = activeGraph->findStateById(stateId);
-        if (!animState)
-        {
-            loadedAnimations[stateId] = nullptr;
-            return false;
-        }
-
-        if (animState->blendTree.has_value())
-        {
-            if (loadedBlendTreeStates.contains(stateId))
-                return true;
-            loadBlendTreeAnimations(*animState);
-            loadedBlendTreeStates.insert(stateId);
-            return true;
-        }
-
-        auto it = loadedAnimations.find(stateId);
-        if (it != loadedAnimations.end())
-        {
-            return it->second != nullptr;
-        }
-
-        if (!animState->animationRef.isValid())
-        {
-            loadedAnimations[stateId] = nullptr;
-            return false;
-        }
-
-        const resource::AnimationData* animData = animationLoadCallback(animState->animationRef.resolve());
-        loadedAnimations[stateId] = animData;
-
-        return animData != nullptr;
-    }
-
-    void AnimatorStateMachine::loadBlendTreeAnimations(const animator::AnimatorState& animState)
-    {
-        if (!animState.blendTree.has_value() || !animationLoadCallback)
-            return;
-
-        for (const auto& entry : animState.blendTree->entries)
-        {
-            if (entry.animationRef.isValid())
-            {
-                animationLoadCallback(entry.animationRef.resolve());
-            }
-        }
-    }
-
-    float AnimatorStateMachine::getAnimationDuration(uint32_t stateId) const
-    {
-        if (activeGraph)
-        {
-            const animator::AnimatorState* animState = activeGraph->findStateById(stateId);
-            if (animState && animState->blendTree.has_value() && !animState->blendTree->entries.empty())
-            {
-                for (const auto& entry : animState->blendTree->entries)
-                {
-                    if (entry.animationRef.isValid() && animationLoadCallback)
-                    {
-                        const resource::AnimationData* data = animationLoadCallback(entry.animationRef.resolve());
-                        if (data)
-                        {
-                            float tps = data->ticksPerSecond > 0.0f ? data->ticksPerSecond : 24.0f;
-                            return data->duration / tps;
-                        }
-                    }
-                }
-            }
-        }
-
-        auto it = loadedAnimations.find(stateId);
-        if (it != loadedAnimations.end() && it->second)
-        {
-            float tps = it->second->ticksPerSecond > 0.0f ? it->second->ticksPerSecond : 24.0f;
-            return it->second->duration / tps;
-        }
-        return 0.0f;
-    }
-
-    bool AnimatorStateMachine::hasBlendTree(uint32_t stateId) const
-    {
-        if (!activeGraph)
-            return false;
-        const animator::AnimatorState* animState = activeGraph->findStateById(stateId);
-        return animState && animState->blendTree.has_value();
-    }
-
-    std::vector<glm::mat4> AnimatorStateMachine::evaluateBlendTreePose(
-        const animator::AnimatorState& animState, float time) const
-    {
-        if (!animState.blendTree.has_value() || !skeletonData || !animationLoadCallback)
-            return {};
-
-        return blendTreeEvaluator.evaluate(
-            animState.blendTree.value(), *parameters, *skeletonData, time, animationLoadCallback);
-    }
-
-    std::vector<glm::mat4> AnimatorStateMachine::evaluateBlendTreePose(
-        const animator::AnimatorState& animState, float time, glm::vec3& outRootPosition) const
-    {
-        if (!animState.blendTree.has_value() || !skeletonData || !animationLoadCallback)
-            return {};
-
-        return blendTreeEvaluator.evaluate(
-            animState.blendTree.value(), *parameters, *skeletonData, time, animationLoadCallback, outRootPosition);
-    }
 }

@@ -1,0 +1,149 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{7AABC339-E68A-42D5-EFA2-CDAB5B01A936}</ProjectGuid>
+    <IgnoreWarnCompileDuplicatedFilename>true</IgnoreWarnCompileDuplicatedFilename>
+    <Keyword>Win32Proj</Keyword>
+    <RootNamespace>Terrain</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <CharacterSet>Unicode</CharacterSet>
+    <PlatformToolset>v145</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <CharacterSet>Unicode</CharacterSet>
+    <PlatformToolset>v145</PlatformToolset>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <OutDir>$(ProjectDir)..\..\bin\Terrain\Debug\x64\</OutDir>
+    <IntDir>$(ProjectDir)obj\x64\Debug\Terrain\</IntDir>
+    <TargetName>Terrain</TargetName>
+    <TargetExt>.lib</TargetExt>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <OutDir>$(ProjectDir)..\..\bin\Terrain\Release\x64\</OutDir>
+    <IntDir>$(ProjectDir)obj\x64\Release\Terrain\</IntDir>
+    <TargetName>Terrain</TargetName>
+    <TargetExt>.lib</TargetExt>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <WarningLevel>Level3</WarningLevel>
+      <PreprocessorDefinitions>VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1;GLM_FORCE_DEPTH_ZERO_TO_ONE;_CRT_SECURE_NO_WARNINGS;MESHOPTIMIZER_API=__declspec(dllimport);DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..\..\dependencies\spdlog\include;..\..\dependencies\glm;..\..\dependencies\entt\single_include;..\..\dependencies\json\single_include;..\..\dependencies\meshoptimizer\src;..\..\dependencies\enkiTS\src;..\..\dependencies\stb;.;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <DebugInformationFormat>EditAndContinue</DebugInformationFormat>
+      <Optimization>Disabled</Optimization>
+      <AdditionalOptions>/utf-8 /MP /bigobj %(AdditionalOptions)</AdditionalOptions>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <ExternalWarningLevel>Level3</ExternalWarningLevel>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <WarningLevel>Level3</WarningLevel>
+      <PreprocessorDefinitions>VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1;GLM_FORCE_DEPTH_ZERO_TO_ONE;_CRT_SECURE_NO_WARNINGS;MESHOPTIMIZER_API=__declspec(dllimport);NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..\..\dependencies\spdlog\include;..\..\dependencies\glm;..\..\dependencies\entt\single_include;..\..\dependencies\json\single_include;..\..\dependencies\meshoptimizer\src;..\..\dependencies\enkiTS\src;..\..\dependencies\stb;.;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <Optimization>Full</Optimization>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <MinimalRebuild>false</MinimalRebuild>
+      <StringPooling>true</StringPooling>
+      <AdditionalOptions>/utf-8 /MP /bigobj %(AdditionalOptions)</AdditionalOptions>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <ExternalWarningLevel>Level3</ExternalWarningLevel>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClInclude Include="terrain\BrushSampler.hpp" />
+    <ClInclude Include="terrain\BrushTypes.hpp" />
+    <ClInclude Include="terrain\HeightmapLoader.hpp" />
+    <ClInclude Include="terrain\HoleBrushApplicator.hpp" />
+    <ClInclude Include="terrain\HoleBrushTypes.hpp" />
+    <ClInclude Include="terrain\PaintBrushTypes.hpp" />
+    <ClInclude Include="terrain\TerrainCompression.hpp" />
+    <ClInclude Include="terrain\TerrainFileCache.hpp" />
+    <ClInclude Include="terrain\TerrainGrid.hpp" />
+    <ClInclude Include="terrain\TerrainHitResult.hpp" />
+    <ClInclude Include="terrain\TerrainMaterialAsset.hpp" />
+    <ClInclude Include="terrain\TerrainMaterialTypes.hpp" />
+    <ClInclude Include="terrain\TerrainSerializer.hpp" />
+    <ClInclude Include="terrain\TerrainTile.hpp" />
+    <ClInclude Include="terrain\TerrainTileGenerator.hpp" />
+    <ClInclude Include="terrain\TerrainTypes.hpp" />
+    <ClInclude Include="terrain\TerrainWeightMap.hpp" />
+    <ClInclude Include="terrain\TerrainWeightMapAsset.hpp" />
+    <ClInclude Include="terrain\TerrainWorldStreamer.hpp" />
+    <ClInclude Include="terrain\WeightBrushApplicator.hpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="terrain\BrushSampler.cpp" />
+    <ClCompile Include="terrain\HeightmapLoader.cpp" />
+    <ClCompile Include="terrain\HoleBrushApplicator.cpp" />
+    <ClCompile Include="terrain\TerrainEdgeStitching.cpp" />
+    <ClCompile Include="terrain\TerrainFileCache.cpp" />
+    <ClCompile Include="terrain\TerrainGrid.cpp" />
+    <ClCompile Include="terrain\TerrainMaterialAsset.cpp" />
+    <ClCompile Include="terrain\TerrainMeshletGen.cpp" />
+    <ClCompile Include="terrain\TerrainSerializer.cpp" />
+    <ClCompile Include="terrain\TerrainSerializerRead.cpp" />
+    <ClCompile Include="terrain\TerrainSerializerSave.cpp" />
+    <ClCompile Include="terrain\TerrainSkirtGen.cpp" />
+    <ClCompile Include="terrain\TerrainTile.cpp" />
+    <ClCompile Include="terrain\TerrainTileGenerator.cpp" />
+    <ClCompile Include="terrain\TerrainWeightMap.cpp" />
+    <ClCompile Include="terrain\TerrainWeightMapAsset.cpp" />
+    <ClCompile Include="terrain\TerrainWorldStreamer.cpp" />
+    <ClCompile Include="terrain\WeightBrushApplicator.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="Utilities.vcxproj">
+      <Project>{010A8043-6D74-34BA-B6B2-E55F225C120F}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\meshoptimizer.vcxproj">
+      <Project>{75046AD2-E1C4-E508-AAFF-2E86167F2AE5}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\enkiTS.vcxproj">
+      <Project>{130A7BFB-FFAB-A5D1-E866-B925D4A72C22}</Project>
+    </ProjectReference>
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

@@ -59,11 +59,9 @@ namespace terrain
                 writeLE(file, coord.x);
                 writeLE(file, coord.z);
 
-                // Write per-tile palette indices (4 bytes)
                 for (uint8_t i = 0; i < WEIGHT_CHANNELS; ++i)
                     writeLE<uint8_t>(file, weightData.layerIndices[i]);
 
-                // Always write exactly 4 channels
                 for (uint8_t ch = 0; ch < WEIGHT_CHANNELS; ++ch)
                 {
                     if (ch < weightData.layerWeights.size())
@@ -186,11 +184,9 @@ namespace terrain
                 TileWeightMapData weightData;
                 weightData.resolution = resolution;
 
-                // Read per-tile palette indices (4 bytes)
                 for (uint8_t li = 0; li < WEIGHT_CHANNELS; ++li)
                     weightData.layerIndices[li] = readLE<uint8_t>(file);
 
-                // Always read exactly 4 channels
                 weightData.layerWeights.resize(WEIGHT_CHANNELS);
                 for (uint8_t ch = 0; ch < WEIGHT_CHANNELS; ++ch)
                 {

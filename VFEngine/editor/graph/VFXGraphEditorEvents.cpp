@@ -228,60 +228,28 @@ namespace editor::graph
 
     void VFXGraphEditor::initializeModifierProperties(vfx::VFXNode& node)
     {
-        switch (node.type)
-        {
+        switch (node.type) {
         case vfx::VFXNodeType::ColorOverLifetime:
-            node.properties["gradient"] = vfx::VFXProperty{
-                "gradient", vfx::VFXPropertyType::Gradient,
-                vfx::VFXGradient::fromStartEnd(
-                    vfx::ModifierDefaults::COLOR_START, vfx::ModifierDefaults::COLOR_END),
-                0.0f, 1.0f
-            };
+            node.properties["gradient"] = {"gradient", vfx::VFXPropertyType::Gradient,
+                vfx::VFXGradient::fromStartEnd(vfx::ModifierDefaults::COLOR_START, vfx::ModifierDefaults::COLOR_END), 0.0f, 1.0f};
             break;
-
         case vfx::VFXNodeType::SizeOverLifetime:
-            node.properties["curve"] = vfx::VFXProperty{
-                "curve", vfx::VFXPropertyType::Curve,
-                vfx::VFXCurve::fromStartEnd(
-                    vfx::ModifierDefaults::SIZE_START_MULTIPLIER,
-                    vfx::ModifierDefaults::SIZE_END_MULTIPLIER),
-                0.0f, 10.0f
-            };
+            node.properties["curve"] = {"curve", vfx::VFXPropertyType::Curve,
+                vfx::VFXCurve::fromStartEnd(vfx::ModifierDefaults::SIZE_START_MULTIPLIER, vfx::ModifierDefaults::SIZE_END_MULTIPLIER), 0.0f, 10.0f};
             break;
-
         case vfx::VFXNodeType::SpeedOverLifetime:
-            node.properties["curve"] = vfx::VFXProperty{
-                "curve", vfx::VFXPropertyType::Curve,
-                vfx::VFXCurve::fromStartEnd(
-                    vfx::ModifierDefaults::SPEED_START_MULTIPLIER,
-                    vfx::ModifierDefaults::SPEED_END_MULTIPLIER),
-                0.0f, 10.0f
-            };
+            node.properties["curve"] = {"curve", vfx::VFXPropertyType::Curve,
+                vfx::VFXCurve::fromStartEnd(vfx::ModifierDefaults::SPEED_START_MULTIPLIER, vfx::ModifierDefaults::SPEED_END_MULTIPLIER), 0.0f, 10.0f};
             break;
-
         case vfx::VFXNodeType::RotationOverLifetime:
-            node.properties["curve"] = vfx::VFXProperty{
-                "curve", vfx::VFXPropertyType::Curve,
-                vfx::VFXCurve::constant(vfx::ModifierDefaults::ANGULAR_VELOCITY),
-                -720.0f, 720.0f
-            };
+            node.properties["curve"] = {"curve", vfx::VFXPropertyType::Curve,
+                vfx::VFXCurve::constant(vfx::ModifierDefaults::ANGULAR_VELOCITY), -720.0f, 720.0f};
             break;
-
         case vfx::VFXNodeType::GlowOverLifetime:
-            node.properties["curve"] = vfx::VFXProperty{
-                "curve", vfx::VFXPropertyType::Curve,
-                vfx::VFXCurve::fromStartEnd(1.0f, 0.0f),
-                0.0f, 10.0f
-            };
-            node.properties["glowColor"] = vfx::VFXProperty{
-                "glowColor", vfx::VFXPropertyType::Color,
-                glm::vec4(1.0f, 1.0f, 1.0f, 1.0f),
-                0.0f, 1.0f
-            };
+            node.properties["curve"] = {"curve", vfx::VFXPropertyType::Curve, vfx::VFXCurve::fromStartEnd(1.0f, 0.0f), 0.0f, 10.0f};
+            node.properties["glowColor"] = {"glowColor", vfx::VFXPropertyType::Color, glm::vec4(1.0f), 0.0f, 1.0f};
             break;
-
-        default:
-            break;
+        default: break;
         }
     }
 

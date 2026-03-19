@@ -8,9 +8,6 @@
 
 namespace texture
 {
-    // ============================================================================
-    // Helper: Get grayscale value from mip data
-    // ============================================================================
     static uint8_t getGrayscaleValue(const resource::MipLevelData& mipData,
                                      uint32_t x, uint32_t y,
                                      uint32_t width, [[maybe_unused]] uint32_t channels)
@@ -29,9 +26,6 @@ namespace texture
         return mipData.data[idx];
     }
 
-    // ============================================================================
-    // Helper: Validate texture dimensions match
-    // ============================================================================
     static bool validateTextureDimensions(
         const std::vector<const resource::TextureData*>& textures,
         uint32_t& outWidth,
@@ -59,9 +53,6 @@ namespace texture
         return true;
     }
 
-    // ============================================================================
-    // Helper: Validate mip data exists for provided textures
-    // ============================================================================
     static bool validateMipData(
         const resource::TextureData* aoTexture,
         const resource::TextureData* roughnessTexture,
@@ -89,9 +80,6 @@ namespace texture
         return true;
     }
 
-    // ============================================================================
-    // Helper: Pack pixels from source textures into ORM format (RGBA)
-    // ============================================================================
     static void packPixels(
         resource::MipLevelData& ormMip,
         uint32_t width,
@@ -125,8 +113,6 @@ namespace texture
                                        ? getGrayscaleValue(metallicMip, x, y, width, metallicTexture->numbersOfChannels)
                                        : OrmTexturePacker::DEFAULT_METALLIC;
 
-                // ORM: R=AO, G=Roughness, B=Metallic, A=255
-                // BGRA order for .vfImage format (TGAReader swaps B<->R when loading)
                 ormMip.data[outIdx + 0] = ao;
                 ormMip.data[outIdx + 1] = roughness;
                 ormMip.data[outIdx + 2] = metallic;
@@ -141,9 +127,6 @@ namespace texture
         }
     }
 
-    // ============================================================================
-    // Helper: Sample a 2x2 block from source and write averaged pixel to dest
-    // ============================================================================
     static void sampleBoxFilter(
         const resource::MipLevelData& srcMip,
         uint32_t srcWidth, uint32_t srcHeight,
@@ -177,9 +160,6 @@ namespace texture
         dstData[dstIdx + 3] = 255;
     }
 
-    // ============================================================================
-    // Helper: Downsample a single mip level using box filter (RGBA)
-    // ============================================================================
     static resource::MipLevelData downsampleLevel(
         const resource::MipLevelData& srcMip,
         uint32_t srcWidth,
@@ -205,9 +185,6 @@ namespace texture
         return newMip;
     }
 
-    // ============================================================================
-    // Helper: Generate mipmaps using box filter (RGBA)
-    // ============================================================================
     static void generateMipmaps(resource::TextureData& ormTexture)
     {
         uint32_t mipWidth = ormTexture.width;
@@ -230,9 +207,6 @@ namespace texture
         ormTexture.mipLevels = static_cast<uint32_t>(ormTexture.mipData.size());
     }
 
-    // ============================================================================
-    // Helper: Serialize texture to file
-    // ============================================================================
     static bool serializeToFile(
         const resource::TextureData& ormTexture,
         const std::string& outputPath,
@@ -273,12 +247,10 @@ namespace texture
 
                 if (isCompressed)
                 {
-                    // Write compressed data directly
                     file.write(reinterpret_cast<const char*>(mip.data.data()), dataSize);
                 }
                 else
                 {
-                    // Write uncompressed pixel data in BGRA format (TGA-style, matching standard loader)
                     for (size_t i = 0; i < mip.data.size(); i += 4)
                     {
                         uint8_t bgra[4] = { mip.data[i + 2], mip.data[i + 1], mip.data[i], mip.data[i + 3] };
@@ -297,9 +269,6 @@ namespace texture
         }
     }
 
-    // ============================================================================
-    // Helper: Load textures asynchronously and wait for results
-    // ============================================================================
     static void loadTextures(
         const OrmPackInput& input,
         bool hasAo, bool hasRoughness, bool hasMetallic,
@@ -323,9 +292,6 @@ namespace texture
         if (hasMetallic) metallicData = metallicFuture.get();
     }
 
-    // ============================================================================
-    // Helper: Validate loaded texture data
-    // ============================================================================
     static bool validateLoadedTextures(
         bool hasAo, bool hasRoughness, bool hasMetallic,
         const std::shared_ptr<resource::TextureData>& aoData,
@@ -334,7 +300,6 @@ namespace texture
         const OrmPackInput& input,
         std::string& errorMessage)
     {
-        // ORM packing requires uncompressed pixel access — source textures must be imported as Uncompressed
         if (hasAo && aoData && aoData->compressionFormat != resource::TextureCompressionFormat::Uncompressed)
         {
             errorMessage = "AO texture is compressed (BC7). Re-import as Uncompressed for ORM packing: " + input.aoPath;
@@ -368,9 +333,6 @@ namespace texture
         return true;
     }
 
-    // ============================================================================
-    // Helper: Retrieve mip level 0 references for each channel texture
-    // ============================================================================
     struct ChannelMipRefs
     {
         resource::MipLevelData emptyMip;
@@ -397,9 +359,6 @@ namespace texture
         return refs;
     }
 
-    // ============================================================================
-    // Helper: Build ORM texture from channel data, generate mipmaps
-    // ============================================================================
     static resource::TextureData buildOrmTexture(
         uint32_t width, uint32_t height,
         const resource::TextureData* aoTexture,
@@ -426,9 +385,6 @@ namespace texture
         return ormTexture;
     }
 
-    // ============================================================================
-    // Public: Pack ORM from file paths
-    // ============================================================================
     OrmPackResult OrmTexturePacker::packORM(
         const OrmPackInput& input,
         OrmPackProgressCallback progressCallback)
@@ -476,9 +432,6 @@ namespace texture
             input.outputPath, progressCallback, input.compressCallback);
     }
 
-    // ============================================================================
-    // Public: Pack ORM from loaded texture data
-    // ============================================================================
     OrmPackResult OrmTexturePacker::packORMFromData(
         const resource::TextureData* aoTexture,
         const resource::TextureData* roughnessTexture,
@@ -517,7 +470,6 @@ namespace texture
 
         if (progressCallback) progressCallback(0.85f);
 
-        // Compress the ORM texture if a compression callback was provided
         if (compressCallback)
         {
             compressCallback(ormTexture);

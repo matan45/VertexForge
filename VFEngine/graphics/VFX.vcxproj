@@ -1,0 +1,165 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{192A880B-8533-887C-0EAF-9E7C7AB7937C}</ProjectGuid>
+    <IgnoreWarnCompileDuplicatedFilename>true</IgnoreWarnCompileDuplicatedFilename>
+    <Keyword>Win32Proj</Keyword>
+    <RootNamespace>VFX</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <CharacterSet>Unicode</CharacterSet>
+    <PlatformToolset>v145</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <CharacterSet>Unicode</CharacterSet>
+    <PlatformToolset>v145</PlatformToolset>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <OutDir>$(ProjectDir)..\..\bin\VFX\Debug\x64\</OutDir>
+    <IntDir>$(ProjectDir)obj\x64\Debug\VFX\</IntDir>
+    <TargetName>VFX</TargetName>
+    <TargetExt>.lib</TargetExt>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <OutDir>$(ProjectDir)..\..\bin\VFX\Release\x64\</OutDir>
+    <IntDir>$(ProjectDir)obj\x64\Release\VFX\</IntDir>
+    <TargetName>VFX</TargetName>
+    <TargetExt>.lib</TargetExt>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <WarningLevel>Level3</WarningLevel>
+      <PreprocessorDefinitions>VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1;GLM_FORCE_DEPTH_ZERO_TO_ONE;_CRT_SECURE_NO_WARNINGS;DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..\..\dependencies\spdlog\include;..\..\dependencies\glm;..\..\dependencies\entt\single_include;..\..\dependencies\json\single_include;..\..\dependencies\imgui;..\..\dependencies\stb;..\utilities;..\services;.;..\window\controllers;C:\VulkanSDK\1.4.335.0\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <DebugInformationFormat>EditAndContinue</DebugInformationFormat>
+      <Optimization>Disabled</Optimization>
+      <AdditionalOptions>/utf-8 /MP %(AdditionalOptions)</AdditionalOptions>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <ExternalWarningLevel>Level3</ExternalWarningLevel>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+    <Lib>
+      <AdditionalDependencies>shaderc_shared.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>C:\VulkanSDK\1.4.335.0\Lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+    </Lib>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <WarningLevel>Level3</WarningLevel>
+      <PreprocessorDefinitions>VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1;GLM_FORCE_DEPTH_ZERO_TO_ONE;_CRT_SECURE_NO_WARNINGS;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..\..\dependencies\spdlog\include;..\..\dependencies\glm;..\..\dependencies\entt\single_include;..\..\dependencies\json\single_include;..\..\dependencies\imgui;..\..\dependencies\stb;..\utilities;..\services;.;..\window\controllers;C:\VulkanSDK\1.4.335.0\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <Optimization>Full</Optimization>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <MinimalRebuild>false</MinimalRebuild>
+      <StringPooling>true</StringPooling>
+      <AdditionalOptions>/utf-8 /MP %(AdditionalOptions)</AdditionalOptions>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <ExternalWarningLevel>Level3</ExternalWarningLevel>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+    </Link>
+    <Lib>
+      <AdditionalDependencies>shaderc_shared.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>C:\VulkanSDK\1.4.335.0\Lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+    </Lib>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClInclude Include="..\utilities\vfx\VFXAsset.hpp" />
+    <ClInclude Include="..\utilities\vfx\VFXCurveTypes.hpp" />
+    <ClInclude Include="..\utilities\vfx\VFXEmitterConfigLoader.hpp" />
+    <ClInclude Include="..\utilities\vfx\VFXEventTypes.hpp" />
+    <ClInclude Include="..\utilities\vfx\VFXForceConfigLoader.hpp" />
+    <ClInclude Include="..\utilities\vfx\VFXForceTypes.hpp" />
+    <ClInclude Include="..\utilities\vfx\VFXModifierConfigLoader.hpp" />
+    <ClInclude Include="..\utilities\vfx\VFXModifierTypes.hpp" />
+    <ClInclude Include="..\utilities\vfx\VFXShapeConfigLoader.hpp" />
+    <ClInclude Include="..\utilities\vfx\VFXShapeTypes.hpp" />
+    <ClInclude Include="..\utilities\vfx\VFXTypes.hpp" />
+    <ClInclude Include="render\vfx\billboard\VFXBillboardPipeline.hpp" />
+    <ClInclude Include="render\vfx\billboard\VFXBillboardTypes.hpp" />
+    <ClInclude Include="render\vfx\compute\GPUVFXBufferManager.hpp" />
+    <ClInclude Include="render\vfx\compute\GPUVFXComputePipeline.hpp" />
+    <ClInclude Include="render\vfx\compute\GPUVFXTypes.hpp" />
+    <ClInclude Include="render\vfx\lut\VFXLUTBaker.hpp" />
+    <ClInclude Include="render\vfx\mesh\VFXMeshGPUPipeline.hpp" />
+    <ClInclude Include="render\vfx\mesh\VFXMeshPreviewPipeline.hpp" />
+    <ClInclude Include="render\vfx\particle\VFXEmitterPool.hpp" />
+    <ClInclude Include="render\vfx\particle\VFXParticleSystem.hpp" />
+    <ClInclude Include="render\vfx\quad\VFXQuadData.hpp" />
+    <ClInclude Include="render\vfx\ribbon\VFXRibbonGPUPipeline.hpp" />
+    <ClInclude Include="render\vfx\ribbon\VFXRibbonPreviewPipeline.hpp" />
+    <ClInclude Include="render\vfx\scene\VFXSceneGPUPipeline.hpp" />
+    <ClInclude Include="render\vfx\scene\VFXScenePipeline.hpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\utilities\vfx\VFXAsset.cpp" />
+    <ClCompile Include="..\utilities\vfx\VFXAssetDefaults.cpp" />
+    <ClCompile Include="..\utilities\vfx\VFXCurveTypes.cpp" />
+    <ClCompile Include="..\utilities\vfx\VFXEventTypes.cpp" />
+    <ClCompile Include="..\utilities\vfx\VFXForceConfigLoader.cpp" />
+    <ClCompile Include="..\utilities\vfx\VFXModifierConfigLoader.cpp" />
+    <ClCompile Include="..\utilities\vfx\VFXShapeConfigLoader.cpp" />
+    <ClCompile Include="..\utilities\vfx\VFXTypes.cpp" />
+    <ClCompile Include="render\vfx\billboard\VFXBillboardPipeline.cpp" />
+    <ClCompile Include="render\vfx\billboard\VFXBillboardPipelineRender.cpp" />
+    <ClCompile Include="render\vfx\billboard\VFXBillboardPipelineSetup.cpp" />
+    <ClCompile Include="render\vfx\compute\GPUVFXBufferManager.cpp" />
+    <ClCompile Include="render\vfx\compute\GPUVFXBufferManagerCreate.cpp" />
+    <ClCompile Include="render\vfx\compute\GPUVFXBufferManagerUpdate.cpp" />
+    <ClCompile Include="render\vfx\compute\GPUVFXComputePipeline.cpp" />
+    <ClCompile Include="render\vfx\lut\VFXLUTBaker.cpp" />
+    <ClCompile Include="render\vfx\mesh\VFXMeshGPUPipeline.cpp" />
+    <ClCompile Include="render\vfx\mesh\VFXMeshGPUPipelineRender.cpp" />
+    <ClCompile Include="render\vfx\mesh\VFXMeshPreviewPipeline.cpp" />
+    <ClCompile Include="render\vfx\mesh\VFXMeshPreviewPipelineRender.cpp" />
+    <ClCompile Include="render\vfx\particle\VFXEmitterPool.cpp" />
+    <ClCompile Include="render\vfx\particle\VFXParticleSystem.cpp" />
+    <ClCompile Include="render\vfx\particle\VFXParticleSystemSpawn.cpp" />
+    <ClCompile Include="render\vfx\ribbon\VFXRibbonGPUPipeline.cpp" />
+    <ClCompile Include="render\vfx\ribbon\VFXRibbonGPUPipelineRender.cpp" />
+    <ClCompile Include="render\vfx\ribbon\VFXRibbonPreviewPipeline.cpp" />
+    <ClCompile Include="render\vfx\ribbon\VFXRibbonPreviewPipelineRender.cpp" />
+    <ClCompile Include="render\vfx\scene\VFXSceneGPUPipeline.cpp" />
+    <ClCompile Include="render\vfx\scene\VFXSceneGPUPipelineRender.cpp" />
+    <ClCompile Include="render\vfx\scene\VFXSceneGPUPipelineSetup.cpp" />
+    <ClCompile Include="render\vfx\scene\VFXScenePipeline.cpp" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

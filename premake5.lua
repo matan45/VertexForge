@@ -100,6 +100,12 @@ project "Core"
 
    files { "VFEngine/core/**.hpp", "VFEngine/core/**.cpp" }
 
+   -- Extracted subsystems compiled by their own projects
+   removefiles {
+      "VFEngine/core/audio/**",
+      "VFEngine/core/physics/**"
+   }
+
    includedirs {
       "VFEngine/graphics/controllers",   -- Graphics headers
       "VFEngine/window/controllers",     -- Window headers
@@ -122,20 +128,16 @@ project "Core"
 	  "dependencies/recastnavigation/DetourCrowd/Include" -- DetourCrowd agent steering
    }
 
-   links { "Graphics", "mType", "jolt", "recast" }  -- Link against Graphics, mType, jolt, recast (Services is a higher layer, no link needed)
+   links { "Graphics", "Audio", "Physics", "Animation", "mType", "jolt", "recast" }
    defines { "_CRT_SECURE_NO_WARNINGS", "JPH_OBJECT_STREAM", "JPH_SHARED_LIBRARY" }
 
    filter "configurations:Debug"
       defines { "DEBUG", "JPH_ENABLE_ASSERTS" }
       symbols "On"
-      libdirs { "dependencies/openal-soft/build/Debug" }
-      links { "OpenAL32.lib" }
 
    filter "configurations:Release"
       defines { "NDEBUG" }
       optimize "On"
-      libdirs { "dependencies/openal-soft/build/Release" }
-      links { "OpenAL32.lib" }
 	  
 	  
 project "Import"
@@ -218,6 +220,12 @@ project "Graphics"
 
    files { "VFEngine/graphics/**.hpp", "VFEngine/graphics/**.cpp" ,"resources/shaders/**.glsl"}
 
+   -- Extracted subsystems compiled by their own projects
+   removefiles {
+      "VFEngine/graphics/animation/**",
+      "VFEngine/graphics/render/vfx/**"
+   }
+
    includedirs {
       "dependencies/glfw/include",
       "dependencies/spdlog/include",
@@ -241,6 +249,7 @@ project "Graphics"
 
    links {
       "Window",
+	  "VFX",
 	  "imgui"
    }
 
@@ -304,6 +313,17 @@ project "Utilities"
 
    files { "VFEngine/utilities/**.hpp", "VFEngine/utilities/**.cpp" }
 
+   -- Extracted subsystems compiled by their own projects
+   removefiles {
+      "VFEngine/utilities/terrain/**",
+      "VFEngine/utilities/serialization/**",
+      "VFEngine/utilities/world/WorldDefinitionSerialization.*",
+      "VFEngine/utilities/world/WorldSectorSerialization.*",
+      "VFEngine/utilities/world/**",
+      "VFEngine/utilities/animator/**",
+      "VFEngine/utilities/vfx/**"
+   }
+
    includedirs {
       "dependencies/spdlog/include",
       "dependencies/glm",
@@ -353,7 +373,7 @@ project "Services"
       -- NOTE: NO VFEngine/core/controllers - Services uses provider interfaces
    }
 
-   links { "Utilities", "Window" }  -- Window needed for InputServiceImpl
+   links { "Utilities", "Terrain", "Serialization", "World", "Window" }
 
    filter "configurations:Debug"
       defines { "DEBUG" }
@@ -434,6 +454,288 @@ project "Window"
    filter "configurations:Release"
       defines { "NDEBUG" }
       optimize "On"
+
+-- Group for Extracted Subsystems
+group "Subsystems"
+
+-- Audio subsystem (extracted from Core)
+project "Audio"
+   kind "StaticLib"
+   language "C++"
+   cppdialect "C++20"
+   location "VFEngine/core"
+   targetdir "bin/%{prj.name}/%{cfg.buildcfg}/%{cfg.platform}"
+
+   files { "VFEngine/core/audio/**.hpp", "VFEngine/core/audio/**.cpp" }
+
+   includedirs {
+      "dependencies/spdlog/include",
+      "dependencies/glm",
+      "dependencies/entt/single_include",
+      "dependencies/json/single_include",
+      "VFEngine/utilities",
+      "VFEngine/services",
+      "dependencies/openal-soft/include"
+   }
+
+   defines { "_CRT_SECURE_NO_WARNINGS" }
+
+   filter "configurations:Debug"
+      defines { "DEBUG" }
+      symbols "On"
+      libdirs { "dependencies/openal-soft/build/Debug" }
+      links { "OpenAL32.lib" }
+
+   filter "configurations:Release"
+      defines { "NDEBUG" }
+      optimize "On"
+      libdirs { "dependencies/openal-soft/build/Release" }
+      links { "OpenAL32.lib" }
+
+
+-- Physics subsystem (extracted from Core)
+project "Physics"
+   kind "StaticLib"
+   language "C++"
+   cppdialect "C++20"
+   location "VFEngine/core"
+   targetdir "bin/%{prj.name}/%{cfg.buildcfg}/%{cfg.platform}"
+
+   files { "VFEngine/core/physics/**.hpp", "VFEngine/core/physics/**.cpp" }
+
+   includedirs {
+      "dependencies/spdlog/include",
+      "dependencies/glm",
+      "dependencies/entt/single_include",
+      "dependencies/json/single_include",
+      "VFEngine/utilities",
+      "VFEngine/services",
+      "dependencies/JoltPhysics"
+   }
+
+   defines { "_CRT_SECURE_NO_WARNINGS", "JPH_OBJECT_STREAM", "JPH_SHARED_LIBRARY" }
+
+   filter "configurations:Debug"
+      defines { "DEBUG", "JPH_ENABLE_ASSERTS" }
+      symbols "On"
+
+   filter "configurations:Release"
+      defines { "NDEBUG" }
+      optimize "On"
+
+
+-- Terrain subsystem (extracted from Utilities)
+project "Terrain"
+   kind "StaticLib"
+   language "C++"
+   cppdialect "C++20"
+   location "VFEngine/utilities"
+   targetdir "bin/%{prj.name}/%{cfg.buildcfg}/%{cfg.platform}"
+
+   files { "VFEngine/utilities/terrain/**.hpp", "VFEngine/utilities/terrain/**.cpp" }
+
+   includedirs {
+      "dependencies/spdlog/include",
+      "dependencies/glm",
+      "dependencies/entt/single_include",
+      "dependencies/json/single_include",
+      "dependencies/meshoptimizer/src",
+      "dependencies/enkiTS/src",
+      "dependencies/stb",
+      "VFEngine/utilities"
+   }
+
+   defines { "_CRT_SECURE_NO_WARNINGS", "MESHOPTIMIZER_API=__declspec(dllimport)" }
+
+   links { "Utilities", "meshoptimizer", "enkiTS" }
+
+   buildoptions { "/bigobj" }
+
+   filter "configurations:Debug"
+      defines { "DEBUG" }
+      symbols "On"
+
+   filter "configurations:Release"
+      defines { "NDEBUG" }
+      optimize "On"
+
+
+-- Serialization subsystem (extracted from Utilities)
+project "Serialization"
+   kind "StaticLib"
+   language "C++"
+   cppdialect "C++20"
+   location "VFEngine/utilities"
+   targetdir "bin/%{prj.name}/%{cfg.buildcfg}/%{cfg.platform}"
+
+   files {
+      "VFEngine/utilities/serialization/**.hpp",
+      "VFEngine/utilities/serialization/**.cpp",
+      "VFEngine/utilities/world/WorldDefinitionSerialization.hpp",
+      "VFEngine/utilities/world/WorldDefinitionSerialization.cpp",
+      "VFEngine/utilities/world/WorldSectorSerialization.hpp",
+      "VFEngine/utilities/world/WorldSectorSerialization.cpp"
+   }
+
+   includedirs {
+      "dependencies/spdlog/include",
+      "dependencies/glm",
+      "dependencies/entt/single_include",
+      "dependencies/json/single_include",
+      "VFEngine/utilities"
+   }
+
+   defines { "_CRT_SECURE_NO_WARNINGS" }
+
+   links { "Utilities" }
+
+   buildoptions { "/bigobj" }
+
+   filter "configurations:Debug"
+      defines { "DEBUG" }
+      symbols "On"
+
+   filter "configurations:Release"
+      defines { "NDEBUG" }
+      optimize "On"
+
+
+-- DataTypes (header-only, extracted from Services for dependency clarity)
+project "DataTypes"
+   kind "None"
+   language "C++"
+   cppdialect "C++20"
+   location "VFEngine/services"
+   targetdir "bin/%{prj.name}/%{cfg.buildcfg}/%{cfg.platform}"
+
+   files { "VFEngine/services/data/**.hpp" }
+
+   includedirs {
+      "dependencies/glm",
+      "dependencies/entt/single_include",
+      "VFEngine/utilities",
+      vulkanLibPath.."/Include"
+   }
+
+
+-- World subsystem (extracted from Utilities)
+project "World"
+   kind "StaticLib"
+   language "C++"
+   cppdialect "C++20"
+   location "VFEngine/utilities"
+   targetdir "bin/%{prj.name}/%{cfg.buildcfg}/%{cfg.platform}"
+
+   files { "VFEngine/utilities/world/**.hpp", "VFEngine/utilities/world/**.cpp" }
+
+   -- Serialization files are compiled by the Serialization project
+   removefiles {
+      "VFEngine/utilities/world/WorldDefinitionSerialization.*",
+      "VFEngine/utilities/world/WorldSectorSerialization.*"
+   }
+
+   includedirs {
+      "dependencies/spdlog/include",
+      "dependencies/glm",
+      "dependencies/entt/single_include",
+      "dependencies/json/single_include",
+      "VFEngine/utilities"
+   }
+
+   defines { "_CRT_SECURE_NO_WARNINGS" }
+
+   links { "Utilities", "Terrain", "Serialization" }
+
+   filter "configurations:Debug"
+      defines { "DEBUG" }
+      symbols "On"
+
+   filter "configurations:Release"
+      defines { "NDEBUG" }
+      optimize "On"
+
+
+-- Animation subsystem (extracted from Graphics + Utilities)
+project "Animation"
+   kind "StaticLib"
+   language "C++"
+   cppdialect "C++20"
+   location "VFEngine/graphics"
+   targetdir "bin/%{prj.name}/%{cfg.buildcfg}/%{cfg.platform}"
+
+   files {
+      "VFEngine/graphics/animation/**.hpp",
+      "VFEngine/graphics/animation/**.cpp",
+      "VFEngine/utilities/animator/**.hpp",
+      "VFEngine/utilities/animator/**.cpp"
+   }
+
+   includedirs {
+      "dependencies/spdlog/include",
+      "dependencies/glm",
+      "dependencies/entt/single_include",
+      "dependencies/json/single_include",
+      "VFEngine/utilities",
+      "VFEngine/services",
+      vulkanLibPath.."/Include"
+   }
+
+   defines { "_CRT_SECURE_NO_WARNINGS" }
+
+   filter "configurations:Debug"
+      defines { "DEBUG" }
+      symbols "On"
+
+   filter "configurations:Release"
+      defines { "NDEBUG" }
+      optimize "On"
+
+
+-- VFX subsystem (extracted from Graphics + Utilities)
+project "VFX"
+   kind "StaticLib"
+   language "C++"
+   cppdialect "C++20"
+   location "VFEngine/graphics"
+   targetdir "bin/%{prj.name}/%{cfg.buildcfg}/%{cfg.platform}"
+
+   files {
+      "VFEngine/graphics/render/vfx/**.hpp",
+      "VFEngine/graphics/render/vfx/**.cpp",
+      "VFEngine/utilities/vfx/**.hpp",
+      "VFEngine/utilities/vfx/**.cpp"
+   }
+
+   includedirs {
+      "dependencies/spdlog/include",
+      "dependencies/glm",
+      "dependencies/entt/single_include",
+      "dependencies/json/single_include",
+      "dependencies/imgui",
+      "dependencies/stb",
+      "VFEngine/utilities",
+      "VFEngine/services",
+      "VFEngine/graphics",
+      "VFEngine/window/controllers",
+      vulkanLibPath.."/Include"
+   }
+
+   defines { "_CRT_SECURE_NO_WARNINGS" }
+
+   libdirs {
+      vulkanLibPath.."/Lib"
+   }
+
+   filter "configurations:Debug"
+      defines { "DEBUG" }
+      symbols "On"
+      links { "shaderc_shared.lib" }
+
+   filter "configurations:Release"
+      defines { "NDEBUG" }
+      optimize "On"
+      links { "shaderc_shared.lib" }
+
 
 -- Group for Libraries
 group "libs"

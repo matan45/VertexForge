@@ -66,6 +66,7 @@ namespace windows
         void drawPathBar(float availableWidth);
         void drawContentPanel();
         void handleAssetClick(const AssetClickResult& clickResult);
+        void handleDoubleClick();
         void handleDragDrop();
 
         // Keyboard shortcut handling

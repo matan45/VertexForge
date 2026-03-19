@@ -167,87 +167,43 @@ namespace windows::animation
                                                                  uint32_t selectedTransitionId,
                                                                  bool& isDirty)
     {
-        if (!animatorData || selectedTransitionId == 0)
-            return;
+        if (!animatorData || selectedTransitionId == 0) return;
 
         animator::AnimatorTransition* transition = nullptr;
-        for (auto& t : animatorData->graph.transitions)
-        {
-            if (t.id == selectedTransitionId)
-            {
-                transition = &t;
-                break;
-            }
+        for (auto& t : animatorData->graph.transitions) {
+            if (t.id == selectedTransitionId) { transition = &t; break; }
         }
-
-        if (!transition)
-            return;
+        if (!transition) return;
 
         std::string sourceName = transition->sourceStateId == 0 ? "Any State" : "Unknown";
         std::string targetName = "Unknown";
-
         if (transition->sourceStateId != 0)
-        {
-            if (auto* s = animatorData->graph.findStateById(transition->sourceStateId))
-                sourceName = s->name;
-        }
-        if (auto* t = animatorData->graph.findStateById(transition->targetStateId))
-            targetName = t->name;
+            if (auto* s = animatorData->graph.findStateById(transition->sourceStateId)) sourceName = s->name;
+        if (auto* t = animatorData->graph.findStateById(transition->targetStateId)) targetName = t->name;
 
         ImGui::Text("%s -> %s", sourceName.c_str(), targetName.c_str());
         ImGui::Separator();
 
-        if (ImGui::DragFloat("Blend Duration", &transition->blendDuration, 0.01f, 0.0f, 5.0f))
-        {
-            isDirty = true;
-        }
+        isDirty |= ImGui::DragFloat("Blend Duration", &transition->blendDuration, 0.01f, 0.0f, 5.0f);
+        isDirty |= ImGui::Checkbox("Has Exit Time", &transition->hasExitTime);
+        if (transition->hasExitTime) isDirty |= ImGui::DragFloat("Exit Time", &transition->exitTime, 0.01f, 0.0f, 1.0f);
+        isDirty |= ImGui::DragInt("Priority", &transition->priority);
 
-        if (ImGui::Checkbox("Has Exit Time", &transition->hasExitTime))
-        {
-            isDirty = true;
-        }
-
-        if (transition->hasExitTime)
-        {
-            if (ImGui::DragFloat("Exit Time", &transition->exitTime, 0.01f, 0.0f, 1.0f))
-            {
-                isDirty = true;
-            }
-        }
-
-        if (ImGui::DragInt("Priority", &transition->priority))
-        {
-            isDirty = true;
-        }
-
-        ImGui::Separator();
-        ImGui::Text("Conditions:");
+        ImGui::Separator(); ImGui::Text("Conditions:");
 
         int conditionToRemove = -1;
-        for (size_t i = 0; i < transition->conditions.size(); ++i)
-        {
+        for (size_t i = 0; i < transition->conditions.size(); ++i) {
             ImGui::PushID(static_cast<int>(i));
             drawConditionEditor(transition->conditions[i], animatorData, isDirty);
-
             ImGui::SameLine();
-            if (ImGui::SmallButton("X"))
-            {
-                conditionToRemove = static_cast<int>(i);
-            }
+            if (ImGui::SmallButton("X")) conditionToRemove = static_cast<int>(i);
             ImGui::PopID();
         }
 
-        if (conditionToRemove >= 0)
-        {
-            transition->conditions.erase(transition->conditions.begin() + conditionToRemove);
-            isDirty = true;
-        }
-
-        if (ImGui::Button("Add Condition"))
-        {
+        if (conditionToRemove >= 0) { transition->conditions.erase(transition->conditions.begin() + conditionToRemove); isDirty = true; }
+        if (ImGui::Button("Add Condition")) {
             animator::TransitionCondition cond;
-            if (!animatorData->graph.parameters.empty())
-            {
+            if (!animatorData->graph.parameters.empty()) {
                 cond.parameterName = animatorData->graph.parameters[0].name;
                 cond.op = animator::ComparisonOperator::Equal;
                 cond.value = animatorData->graph.parameters[0].defaultValue;
@@ -261,13 +217,9 @@ namespace windows::animation
                                                        animator::AnimatorData* animatorData,
                                                        bool& isDirty)
     {
-        if (ImGui::BeginCombo("##param", condition.parameterName.c_str()))
-        {
-            for (const auto& param : animatorData->graph.parameters)
-            {
-                bool isSelected = (condition.parameterName == param.name);
-                if (ImGui::Selectable(param.name.c_str(), isSelected))
-                {
+        if (ImGui::BeginCombo("##param", condition.parameterName.c_str())) {
+            for (const auto& param : animatorData->graph.parameters) {
+                if (ImGui::Selectable(param.name.c_str(), condition.parameterName == param.name)) {
                     condition.parameterName = param.name;
                     condition.value = param.defaultValue;
                     isDirty = true;
@@ -276,62 +228,30 @@ namespace windows::animation
             ImGui::EndCombo();
         }
 
-        animator::AnimatorParameterType paramType = animator::AnimatorParameterType::Float;
+        auto paramType = animator::AnimatorParameterType::Float;
         for (const auto& param : animatorData->graph.parameters)
-        {
-            if (param.name == condition.parameterName)
-            {
-                paramType = param.type;
-                break;
-            }
-        }
+            if (param.name == condition.parameterName) { paramType = param.type; break; }
 
-        ImGui::SameLine();
-        const char* opNames[] = {"==", "!=", ">", "<", ">=", "<="};
+        ImGui::SameLine(); ImGui::SetNextItemWidth(50);
         int opIndex = static_cast<int>(condition.op);
-        ImGui::SetNextItemWidth(50);
-        if (ImGui::Combo("##op", &opIndex, opNames, IM_ARRAYSIZE(opNames)))
-        {
-            condition.op = static_cast<animator::ComparisonOperator>(opIndex);
-            isDirty = true;
-        }
+        if (ImGui::Combo("##op", &opIndex, "==\0!=\0>\0<\0>=\0<=\0"))
+            { condition.op = static_cast<animator::ComparisonOperator>(opIndex); isDirty = true; }
 
-        ImGui::SameLine();
-        ImGui::SetNextItemWidth(80);
-
-        switch (paramType)
-        {
-        case animator::AnimatorParameterType::Float:
-            {
-                float val = std::get<float>(condition.value);
-                if (ImGui::DragFloat("##val", &val, 0.01f))
-                {
-                    condition.value = val;
-                    isDirty = true;
-                }
-            }
-            break;
-        case animator::AnimatorParameterType::Int:
-            {
-                int32_t val = std::get<int32_t>(condition.value);
-                if (ImGui::DragInt("##val", &val))
-                {
-                    condition.value = val;
-                    isDirty = true;
-                }
-            }
-            break;
+        ImGui::SameLine(); ImGui::SetNextItemWidth(80);
+        switch (paramType) {
+        case animator::AnimatorParameterType::Float: {
+            float val = std::get<float>(condition.value);
+            if (ImGui::DragFloat("##val", &val, 0.01f)) { condition.value = val; isDirty = true; }
+        } break;
+        case animator::AnimatorParameterType::Int: {
+            int32_t val = std::get<int32_t>(condition.value);
+            if (ImGui::DragInt("##val", &val)) { condition.value = val; isDirty = true; }
+        } break;
         case animator::AnimatorParameterType::Bool:
-        case animator::AnimatorParameterType::Trigger:
-            {
-                bool val = std::get<bool>(condition.value);
-                if (ImGui::Checkbox("##val", &val))
-                {
-                    condition.value = val;
-                    isDirty = true;
-                }
-            }
-            break;
+        case animator::AnimatorParameterType::Trigger: {
+            bool val = std::get<bool>(condition.value);
+            if (ImGui::Checkbox("##val", &val)) { condition.value = val; isDirty = true; }
+        } break;
         }
     }
 

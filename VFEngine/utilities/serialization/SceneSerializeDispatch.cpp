@@ -16,293 +16,142 @@ namespace serialization
         pluginDeserializeHook = std::move(deserialize);
     }
 
-    json SceneSerialization::serializeEntityComponents(scene::Entity& entity)
+    void SceneSerialization::serializeRenderComponents(scene::Entity& entity, json& out)
     {
-        json componentsJson = json::object();
-
         if (entity.hasComponent<components::CameraComponent>())
-        {
-            componentsJson["camera"] = serializeCamera(entity.getComponent<components::CameraComponent>());
-        }
-
+            out["camera"] = serializeCamera(entity.getComponent<components::CameraComponent>());
         if (entity.hasComponent<components::IBLComponent>())
-        {
-            componentsJson["ibl"] = serializeIBL(entity.getComponent<components::IBLComponent>());
-        }
-
+            out["ibl"] = serializeIBL(entity.getComponent<components::IBLComponent>());
         if (entity.hasComponent<components::WorldSectorComponent>())
         {
             json wsJson;
             wsJson["worldFilePath"] = entity.getComponent<components::WorldSectorComponent>().worldFilePath;
-            componentsJson["worldSector"] = wsJson;
+            out["worldSector"] = wsJson;
         }
-
         if (entity.hasComponent<components::MeshComponent>())
-        {
-            componentsJson["mesh"] = serializeMesh(entity.getComponent<components::MeshComponent>());
-        }
-
+            out["mesh"] = serializeMesh(entity.getComponent<components::MeshComponent>());
         if (entity.hasComponent<components::MaterialComponent>())
-        {
-            componentsJson["material"] = serializeMaterial(entity.getComponent<components::MaterialComponent>());
-        }
-
+            out["material"] = serializeMaterial(entity.getComponent<components::MaterialComponent>());
         if (entity.hasComponent<components::BillboardComponent>())
-        {
-            componentsJson["billboard"] = serializeBillboard(entity.getComponent<components::BillboardComponent>());
-        }
-
+            out["billboard"] = serializeBillboard(entity.getComponent<components::BillboardComponent>());
         if (entity.hasComponent<components::TextComponent>())
-        {
-            componentsJson["text"] = serializeText(entity.getComponent<components::TextComponent>());
-        }
+            out["text"] = serializeText(entity.getComponent<components::TextComponent>());
+    }
 
+    void SceneSerialization::serializeAudioPhysicsComponents(scene::Entity& entity, json& out)
+    {
         if (entity.hasComponent<components::AudioSource2DComponent>())
-        {
-            componentsJson["audioSource2D"] = serializeAudioSource2D(
-                entity.getComponent<components::AudioSource2DComponent>());
-        }
-
+            out["audioSource2D"] = serializeAudioSource2D(entity.getComponent<components::AudioSource2DComponent>());
         if (entity.hasComponent<components::AudioSource3DComponent>())
-        {
-            componentsJson["audioSource3D"] = serializeAudioSource3D(
-                entity.getComponent<components::AudioSource3DComponent>());
-        }
-
+            out["audioSource3D"] = serializeAudioSource3D(entity.getComponent<components::AudioSource3DComponent>());
         if (entity.hasComponent<components::ReverbZoneComponent>())
-        {
-            componentsJson["reverbZone"] = serializeReverbZone(
-                entity.getComponent<components::ReverbZoneComponent>());
-        }
-
+            out["reverbZone"] = serializeReverbZone(entity.getComponent<components::ReverbZoneComponent>());
         if (entity.hasComponent<components::ScriptComponent>())
-        {
-            componentsJson["script"] = serializeScript(entity.getComponent<components::ScriptComponent>());
-        }
-
+            out["script"] = serializeScript(entity.getComponent<components::ScriptComponent>());
         if (entity.hasComponent<components::ColliderComponent>())
-        {
-            componentsJson["collider"] = serializeCollider(entity.getComponent<components::ColliderComponent>());
-        }
-
+            out["collider"] = serializeCollider(entity.getComponent<components::ColliderComponent>());
         if (entity.hasComponent<components::RigidBodyComponent>())
-        {
-            componentsJson["rigidBody"] = serializeRigidBody(entity.getComponent<components::RigidBodyComponent>());
-        }
-
+            out["rigidBody"] = serializeRigidBody(entity.getComponent<components::RigidBodyComponent>());
         if (entity.hasComponent<components::PhysicsAnimationComponent>())
-        {
-            componentsJson["physicsAnimation"] = serializePhysicsAnimation(
-                entity.getComponent<components::PhysicsAnimationComponent>());
-        }
-
+            out["physicsAnimation"] = serializePhysicsAnimation(entity.getComponent<components::PhysicsAnimationComponent>());
         if (entity.hasComponent<components::VFXComponent>())
-        {
-            componentsJson["vfx"] = serializeVFX(entity.getComponent<components::VFXComponent>());
-        }
+            out["vfx"] = serializeVFX(entity.getComponent<components::VFXComponent>());
+    }
 
+    void SceneSerialization::serializeLightEnvironmentComponents(scene::Entity& entity, json& out)
+    {
         if (entity.hasComponent<components::DirectionalLightComponent>())
-        {
-            componentsJson["directionalLight"] = serializeDirectionalLight(
-                entity.getComponent<components::DirectionalLightComponent>());
-        }
-
+            out["directionalLight"] = serializeDirectionalLight(entity.getComponent<components::DirectionalLightComponent>());
         if (entity.hasComponent<components::PointLightComponent>())
-        {
-            componentsJson["pointLight"] = serializePointLight(
-                entity.getComponent<components::PointLightComponent>());
-        }
-
+            out["pointLight"] = serializePointLight(entity.getComponent<components::PointLightComponent>());
         if (entity.hasComponent<components::SpotLightComponent>())
-        {
-            componentsJson["spotLight"] = serializeSpotLight(
-                entity.getComponent<components::SpotLightComponent>());
-        }
-
+            out["spotLight"] = serializeSpotLight(entity.getComponent<components::SpotLightComponent>());
         if (entity.hasComponent<components::TerrainComponent>())
-        {
-            componentsJson["terrain"] = serializeTerrain(
-                entity.getComponent<components::TerrainComponent>());
-        }
-
+            out["terrain"] = serializeTerrain(entity.getComponent<components::TerrainComponent>());
         if (entity.hasComponent<components::TerrainTileComponent>())
-        {
-            componentsJson["terrainTile"] = serializeTerrainTile(
-                entity.getComponent<components::TerrainTileComponent>());
-        }
-
+            out["terrainTile"] = serializeTerrainTile(entity.getComponent<components::TerrainTileComponent>());
         if (entity.hasComponent<components::GrassComponent>())
-        {
-            componentsJson["grass"] = serializeGrass(
-                entity.getComponent<components::GrassComponent>());
-        }
-
+            out["grass"] = serializeGrass(entity.getComponent<components::GrassComponent>());
         if (entity.hasComponent<components::WaterComponent>())
-        {
-            componentsJson["water"] = serializeWater(
-                entity.getComponent<components::WaterComponent>());
-        }
-
+            out["water"] = serializeWater(entity.getComponent<components::WaterComponent>());
         if (entity.hasComponent<components::WaterTileComponent>())
-        {
-            componentsJson["waterTile"] = serializeWaterTile(
-                entity.getComponent<components::WaterTileComponent>());
-        }
+            out["waterTile"] = serializeWaterTile(entity.getComponent<components::WaterTileComponent>());
+    }
 
+    void SceneSerialization::serializeUIStructuralComponents(scene::Entity& entity, json& out)
+    {
         if (entity.hasComponent<components::UICanvasComponent>())
-        {
-            componentsJson["uiCanvas"] = serializeUICanvas(
-                entity.getComponent<components::UICanvasComponent>());
-        }
-
+            out["uiCanvas"] = serializeUICanvas(entity.getComponent<components::UICanvasComponent>());
         if (entity.hasComponent<components::UIRectComponent>())
-        {
-            componentsJson["uiRect"] = serializeUIRect(
-                entity.getComponent<components::UIRectComponent>());
-        }
-
+            out["uiRect"] = serializeUIRect(entity.getComponent<components::UIRectComponent>());
         if (entity.hasComponent<components::UIImageComponent>())
-        {
-            componentsJson["uiImage"] = serializeUIImage(
-                entity.getComponent<components::UIImageComponent>());
-        }
-
+            out["uiImage"] = serializeUIImage(entity.getComponent<components::UIImageComponent>());
         if (entity.hasComponent<components::UIScrollComponent>())
-        {
-            componentsJson["uiScroll"] = serializeUIScroll(
-                entity.getComponent<components::UIScrollComponent>());
-        }
-
+            out["uiScroll"] = serializeUIScroll(entity.getComponent<components::UIScrollComponent>());
         if (entity.hasComponent<components::UILayoutGroupComponent>())
-        {
-            componentsJson["uiLayoutGroup"] = serializeUILayoutGroup(
-                entity.getComponent<components::UILayoutGroupComponent>());
-        }
-
+            out["uiLayoutGroup"] = serializeUILayoutGroup(entity.getComponent<components::UILayoutGroupComponent>());
         if (entity.hasComponent<components::UILabelComponent>())
-        {
-            componentsJson["uiLabel"] = serializeUILabel(
-                entity.getComponent<components::UILabelComponent>());
-        }
-
-        if (entity.hasComponent<components::UIButtonComponent>())
-        {
-            componentsJson["uiButton"] = serializeUIButton(
-                entity.getComponent<components::UIButtonComponent>());
-        }
-
-        if (entity.hasComponent<components::UITextInputComponent>())
-        {
-            componentsJson["uiTextInput"] = serializeUITextInput(
-                entity.getComponent<components::UITextInputComponent>());
-        }
-
-        if (entity.hasComponent<components::UICheckboxComponent>())
-        {
-            componentsJson["uiCheckbox"] = serializeUICheckbox(
-                entity.getComponent<components::UICheckboxComponent>());
-        }
-
-        if (entity.hasComponent<components::UIDropdownComponent>())
-        {
-            componentsJson["uiDropdown"] = serializeUIDropdown(
-                entity.getComponent<components::UIDropdownComponent>());
-        }
-
-        if (entity.hasComponent<components::UITabsComponent>())
-        {
-            componentsJson["uiTabs"] = serializeUITabs(
-                entity.getComponent<components::UITabsComponent>());
-        }
-
-        if (entity.hasComponent<components::UISliderComponent>())
-        {
-            componentsJson["uiSlider"] = serializeUISlider(
-                entity.getComponent<components::UISliderComponent>());
-        }
-
-        if (entity.hasComponent<components::UIProgressBarComponent>())
-        {
-            componentsJson["uiProgressBar"] = serializeUIProgressBar(
-                entity.getComponent<components::UIProgressBarComponent>());
-        }
-
+            out["uiLabel"] = serializeUILabel(entity.getComponent<components::UILabelComponent>());
         if (entity.hasComponent<components::UIAnimationComponent>())
-        {
-            componentsJson["uiAnimation"] = serializeUIAnimation(
-                entity.getComponent<components::UIAnimationComponent>());
-        }
-
+            out["uiAnimation"] = serializeUIAnimation(entity.getComponent<components::UIAnimationComponent>());
         if (entity.hasComponent<components::UIMaskComponent>())
-        {
-            componentsJson["uiMask"] = serializeUIMask(
-                entity.getComponent<components::UIMaskComponent>());
-        }
-
+            out["uiMask"] = serializeUIMask(entity.getComponent<components::UIMaskComponent>());
         if (entity.hasComponent<components::UIDraggableComponent>())
-        {
-            componentsJson["uiDraggable"] = serializeUIDraggable(
-                entity.getComponent<components::UIDraggableComponent>());
-        }
+            out["uiDraggable"] = serializeUIDraggable(entity.getComponent<components::UIDraggableComponent>());
         if (entity.hasComponent<components::UIDropTargetComponent>())
-        {
-            componentsJson["uiDropTarget"] = serializeUIDropTarget(
-                entity.getComponent<components::UIDropTargetComponent>());
-        }
+            out["uiDropTarget"] = serializeUIDropTarget(entity.getComponent<components::UIDropTargetComponent>());
+    }
 
+    void SceneSerialization::serializeUIInteractiveComponents(scene::Entity& entity, json& out)
+    {
+        if (entity.hasComponent<components::UIButtonComponent>())
+            out["uiButton"] = serializeUIButton(entity.getComponent<components::UIButtonComponent>());
+        if (entity.hasComponent<components::UITextInputComponent>())
+            out["uiTextInput"] = serializeUITextInput(entity.getComponent<components::UITextInputComponent>());
+        if (entity.hasComponent<components::UICheckboxComponent>())
+            out["uiCheckbox"] = serializeUICheckbox(entity.getComponent<components::UICheckboxComponent>());
+        if (entity.hasComponent<components::UIDropdownComponent>())
+            out["uiDropdown"] = serializeUIDropdown(entity.getComponent<components::UIDropdownComponent>());
+        if (entity.hasComponent<components::UITabsComponent>())
+            out["uiTabs"] = serializeUITabs(entity.getComponent<components::UITabsComponent>());
+        if (entity.hasComponent<components::UISliderComponent>())
+            out["uiSlider"] = serializeUISlider(entity.getComponent<components::UISliderComponent>());
+        if (entity.hasComponent<components::UIProgressBarComponent>())
+            out["uiProgressBar"] = serializeUIProgressBar(entity.getComponent<components::UIProgressBarComponent>());
+    }
+
+    void SceneSerialization::serializeMiscComponents(scene::Entity& entity, json& out)
+    {
         if (entity.hasComponent<components::SocketAttachmentComponent>())
-        {
-            componentsJson["socketAttachment"] = serializeSocketAttachment(
-                entity.getComponent<components::SocketAttachmentComponent>());
-        }
-
+            out["socketAttachment"] = serializeSocketAttachment(entity.getComponent<components::SocketAttachmentComponent>());
         if (entity.hasComponent<components::SocketOverrideComponent>())
-        {
-            componentsJson["socketOverride"] = serializeSocketOverride(
-                entity.getComponent<components::SocketOverrideComponent>());
-        }
-
+            out["socketOverride"] = serializeSocketOverride(entity.getComponent<components::SocketOverrideComponent>());
         if (entity.hasComponent<components::NavmeshAgentComponent>())
-        {
-            componentsJson["navmeshAgent"] = serializeNavmeshAgent(
-                entity.getComponent<components::NavmeshAgentComponent>());
-        }
-
+            out["navmeshAgent"] = serializeNavmeshAgent(entity.getComponent<components::NavmeshAgentComponent>());
         if (entity.hasComponent<components::NavmeshComponent>())
-        {
-            componentsJson["navmesh"] = serializeNavmesh(
-                entity.getComponent<components::NavmeshComponent>());
-        }
-
+            out["navmesh"] = serializeNavmesh(entity.getComponent<components::NavmeshComponent>());
         if (entity.hasComponent<components::RenderTextureComponent>())
-        {
-            componentsJson["renderTexture"] = serializeRenderTexture(
-                entity.getComponent<components::RenderTextureComponent>());
-        }
-
+            out["renderTexture"] = serializeRenderTexture(entity.getComponent<components::RenderTextureComponent>());
         if (entity.hasComponent<components::ControllerComponent>())
-        {
-            componentsJson["controller"] = serializeController(
-                entity.getComponent<components::ControllerComponent>());
-        }
-
+            out["controller"] = serializeController(entity.getComponent<components::ControllerComponent>());
         if (entity.hasComponent<components::IKTargetComponent>())
-        {
-            componentsJson["ikTarget"] = serializeIKTarget(
-                entity.getComponent<components::IKTargetComponent>());
-        }
-
+            out["ikTarget"] = serializeIKTarget(entity.getComponent<components::IKTargetComponent>());
         if (entity.hasComponent<components::BehaviorTreeComponent>())
-        {
-            componentsJson["behaviorTree"] = serializeBehaviorTree(
-                entity.getComponent<components::BehaviorTreeComponent>());
-        }
-
+            out["behaviorTree"] = serializeBehaviorTree(entity.getComponent<components::BehaviorTreeComponent>());
         if (entity.hasComponent<components::DecalComponent>())
-        {
-            componentsJson["decal"] = serializeDecal(
-                entity.getComponent<components::DecalComponent>());
-        }
+            out["decal"] = serializeDecal(entity.getComponent<components::DecalComponent>());
+    }
+
+    json SceneSerialization::serializeEntityComponents(scene::Entity& entity)
+    {
+        json componentsJson = json::object();
+
+        serializeRenderComponents(entity, componentsJson);
+        serializeAudioPhysicsComponents(entity, componentsJson);
+        serializeLightEnvironmentComponents(entity, componentsJson);
+        serializeUIStructuralComponents(entity, componentsJson);
+        serializeUIInteractiveComponents(entity, componentsJson);
+        serializeMiscComponents(entity, componentsJson);
 
         // Plugin components
         {
@@ -318,364 +167,6 @@ namespace serialization
         }
 
         return componentsJson;
-    }
-
-    void SceneSerialization::deserializeEntityComponents(const json& componentsJson, scene::Entity& entity)
-    {
-        if (componentsJson.contains("camera"))
-        {
-            auto& camera = entity.addOrReplaceComponent<components::CameraComponent>();
-            deserializeCamera(componentsJson["camera"], camera);
-            if (!componentsJson.contains("billboard"))
-            {
-                auto& billboard = entity.addOrReplaceComponent<components::BillboardComponent>();
-                billboard.iconType = components::BillboardIconType::Camera;
-            }
-        }
-
-        if (componentsJson.contains("ibl"))
-        {
-            auto iblRef = deserializeIBLRef(componentsJson["ibl"]);
-            if (iblRef.isValid())
-            {
-                entity.addOrReplaceComponent<components::IBLComponent>().hdrRef = iblRef;
-            }
-        }
-
-        if (componentsJson.contains("worldSector"))
-        {
-            const auto& wsJson = componentsJson["worldSector"];
-            if (wsJson.contains("worldFilePath") && wsJson["worldFilePath"].is_string())
-            {
-                entity.addOrReplaceComponent<components::WorldSectorComponent>().worldFilePath =
-                    wsJson["worldFilePath"].get<std::string>();
-            }
-        }
-
-        if (componentsJson.contains("mesh"))
-        {
-            auto& meshComp = entity.addOrReplaceComponent<components::MeshComponent>();
-            deserializeMesh(componentsJson["mesh"], meshComp);
-        }
-
-        if (componentsJson.contains("material"))
-        {
-            auto& matComp = entity.addOrReplaceComponent<components::MaterialComponent>();
-            deserializeMaterial(componentsJson["material"], matComp);
-        }
-
-        if (componentsJson.contains("billboard"))
-        {
-            auto& billboardComp = entity.addOrReplaceComponent<components::BillboardComponent>();
-            deserializeBillboard(componentsJson["billboard"], billboardComp);
-        }
-
-        if (componentsJson.contains("text"))
-        {
-            auto& textComp = entity.addOrReplaceComponent<components::TextComponent>();
-            deserializeText(componentsJson["text"], textComp);
-        }
-
-        if (componentsJson.contains("audioSource2D"))
-        {
-            auto& audioComp = entity.addOrReplaceComponent<components::AudioSource2DComponent>();
-            deserializeAudioSource2D(componentsJson["audioSource2D"], audioComp);
-            if (!componentsJson.contains("billboard"))
-            {
-                auto& billboard = entity.addOrReplaceComponent<components::BillboardComponent>();
-                billboard.iconType = components::BillboardIconType::Audio2D;
-            }
-        }
-
-        if (componentsJson.contains("audioSource3D"))
-        {
-            auto& audioComp = entity.addOrReplaceComponent<components::AudioSource3DComponent>();
-            deserializeAudioSource3D(componentsJson["audioSource3D"], audioComp);
-            if (!componentsJson.contains("billboard"))
-            {
-                auto& billboard = entity.addOrReplaceComponent<components::BillboardComponent>();
-                billboard.iconType = components::BillboardIconType::Audio3D;
-            }
-        }
-
-        if (componentsJson.contains("reverbZone"))
-        {
-            auto& reverbComp = entity.addOrReplaceComponent<components::ReverbZoneComponent>();
-            deserializeReverbZone(componentsJson["reverbZone"], reverbComp);
-        }
-
-        if (componentsJson.contains("script"))
-        {
-            auto& scriptComp = entity.addOrReplaceComponent<components::ScriptComponent>();
-            deserializeScript(componentsJson["script"], scriptComp);
-        }
-
-        if (componentsJson.contains("collider"))
-        {
-            auto& colliderComp = entity.addOrReplaceComponent<components::ColliderComponent>();
-            deserializeCollider(componentsJson["collider"], colliderComp);
-        }
-
-        if (componentsJson.contains("rigidBody"))
-        {
-            auto& rigidBodyComp = entity.addOrReplaceComponent<components::RigidBodyComponent>();
-            deserializeRigidBody(componentsJson["rigidBody"], rigidBodyComp);
-        }
-
-        if (componentsJson.contains("physicsAnimation"))
-        {
-            auto& physAnimComp = entity.addOrReplaceComponent<components::PhysicsAnimationComponent>();
-            deserializePhysicsAnimation(componentsJson["physicsAnimation"], physAnimComp);
-        }
-
-        if (componentsJson.contains("vfx"))
-        {
-            auto& vfxComp = entity.addOrReplaceComponent<components::VFXComponent>();
-            deserializeVFX(componentsJson["vfx"], vfxComp);
-            if (!componentsJson.contains("billboard"))
-            {
-                auto& billboard = entity.addOrReplaceComponent<components::BillboardComponent>();
-                billboard.iconType = components::BillboardIconType::Particle;
-            }
-        }
-
-        if (componentsJson.contains("directionalLight"))
-        {
-            auto& lightComp = entity.addOrReplaceComponent<components::DirectionalLightComponent>();
-            deserializeDirectionalLight(componentsJson["directionalLight"], lightComp);
-            if (!componentsJson.contains("billboard"))
-            {
-                auto& billboard = entity.addOrReplaceComponent<components::BillboardComponent>();
-                billboard.iconType = components::BillboardIconType::DirectionalLight;
-            }
-        }
-
-        if (componentsJson.contains("pointLight"))
-        {
-            auto& lightComp = entity.addOrReplaceComponent<components::PointLightComponent>();
-            deserializePointLight(componentsJson["pointLight"], lightComp);
-            if (!componentsJson.contains("billboard"))
-            {
-                auto& billboard = entity.addOrReplaceComponent<components::BillboardComponent>();
-                billboard.iconType = components::BillboardIconType::PointLight;
-            }
-        }
-
-        if (componentsJson.contains("spotLight"))
-        {
-            auto& lightComp = entity.addOrReplaceComponent<components::SpotLightComponent>();
-            deserializeSpotLight(componentsJson["spotLight"], lightComp);
-            if (!componentsJson.contains("billboard"))
-            {
-                auto& billboard = entity.addOrReplaceComponent<components::BillboardComponent>();
-                billboard.iconType = components::BillboardIconType::SpotLight;
-            }
-        }
-
-        if (componentsJson.contains("terrain"))
-        {
-            auto& terrainComp = entity.addOrReplaceComponent<components::TerrainComponent>();
-            deserializeTerrain(componentsJson["terrain"], terrainComp);
-        }
-
-        if (componentsJson.contains("terrainTile"))
-        {
-            auto& tileComp = entity.addOrReplaceComponent<components::TerrainTileComponent>();
-            deserializeTerrainTile(componentsJson["terrainTile"], tileComp);
-        }
-
-        if (componentsJson.contains("grass"))
-        {
-            auto& grassComp = entity.addOrReplaceComponent<components::GrassComponent>();
-            deserializeGrass(componentsJson["grass"], grassComp);
-        }
-
-        if (componentsJson.contains("water"))
-        {
-            auto& waterComp = entity.addOrReplaceComponent<components::WaterComponent>();
-            deserializeWater(componentsJson["water"], waterComp);
-        }
-
-        if (componentsJson.contains("waterTile"))
-        {
-            auto& waterTileComp = entity.addOrReplaceComponent<components::WaterTileComponent>();
-            deserializeWaterTile(componentsJson["waterTile"], waterTileComp);
-        }
-
-        if (componentsJson.contains("uiCanvas"))
-        {
-            auto& canvasComp = entity.addOrReplaceComponent<components::UICanvasComponent>();
-            deserializeUICanvas(componentsJson["uiCanvas"], canvasComp);
-        }
-
-        if (componentsJson.contains("uiRect"))
-        {
-            auto& rectComp = entity.addOrReplaceComponent<components::UIRectComponent>();
-            deserializeUIRect(componentsJson["uiRect"], rectComp);
-        }
-
-        if (componentsJson.contains("uiImage"))
-        {
-            auto& imageComp = entity.addOrReplaceComponent<components::UIImageComponent>();
-            deserializeUIImage(componentsJson["uiImage"], imageComp);
-        }
-
-        if (componentsJson.contains("uiScroll"))
-        {
-            auto& scrollComp = entity.addOrReplaceComponent<components::UIScrollComponent>();
-            deserializeUIScroll(componentsJson["uiScroll"], scrollComp);
-        }
-
-        if (componentsJson.contains("uiLayoutGroup"))
-        {
-            auto& layoutGroupComp = entity.addOrReplaceComponent<components::UILayoutGroupComponent>();
-            deserializeUILayoutGroup(componentsJson["uiLayoutGroup"], layoutGroupComp);
-        }
-
-        if (componentsJson.contains("uiLabel"))
-        {
-            auto& labelComp = entity.addOrReplaceComponent<components::UILabelComponent>();
-            deserializeUILabel(componentsJson["uiLabel"], labelComp);
-        }
-
-        if (componentsJson.contains("uiButton"))
-        {
-            auto& buttonComp = entity.addOrReplaceComponent<components::UIButtonComponent>();
-            deserializeUIButton(componentsJson["uiButton"], buttonComp);
-        }
-
-        if (componentsJson.contains("uiTextInput"))
-        {
-            auto& textInputComp = entity.addOrReplaceComponent<components::UITextInputComponent>();
-            deserializeUITextInput(componentsJson["uiTextInput"], textInputComp);
-        }
-
-        if (componentsJson.contains("uiCheckbox"))
-        {
-            auto& checkboxComp = entity.addOrReplaceComponent<components::UICheckboxComponent>();
-            deserializeUICheckbox(componentsJson["uiCheckbox"], checkboxComp);
-        }
-
-        if (componentsJson.contains("uiDropdown"))
-        {
-            auto& dropdownComp = entity.addOrReplaceComponent<components::UIDropdownComponent>();
-            deserializeUIDropdown(componentsJson["uiDropdown"], dropdownComp);
-        }
-
-        if (componentsJson.contains("uiTabs"))
-        {
-            auto& tabsComp = entity.addOrReplaceComponent<components::UITabsComponent>();
-            deserializeUITabs(componentsJson["uiTabs"], tabsComp);
-        }
-
-        if (componentsJson.contains("uiSlider"))
-        {
-            auto& sliderComp = entity.addOrReplaceComponent<components::UISliderComponent>();
-            deserializeUISlider(componentsJson["uiSlider"], sliderComp);
-        }
-
-        if (componentsJson.contains("uiProgressBar"))
-        {
-            auto& pbComp = entity.addOrReplaceComponent<components::UIProgressBarComponent>();
-            deserializeUIProgressBar(componentsJson["uiProgressBar"], pbComp);
-        }
-
-        if (componentsJson.contains("uiAnimation"))
-        {
-            auto& animComp = entity.addOrReplaceComponent<components::UIAnimationComponent>();
-            deserializeUIAnimation(componentsJson["uiAnimation"], animComp);
-        }
-
-        if (componentsJson.contains("uiMask"))
-        {
-            auto& maskComp = entity.addOrReplaceComponent<components::UIMaskComponent>();
-            deserializeUIMask(componentsJson["uiMask"], maskComp);
-        }
-
-        if (componentsJson.contains("uiDraggable"))
-        {
-            auto& comp = entity.addOrReplaceComponent<components::UIDraggableComponent>();
-            deserializeUIDraggable(componentsJson["uiDraggable"], comp);
-        }
-        if (componentsJson.contains("uiDropTarget"))
-        {
-            auto& comp = entity.addOrReplaceComponent<components::UIDropTargetComponent>();
-            deserializeUIDropTarget(componentsJson["uiDropTarget"], comp);
-        }
-
-        if (componentsJson.contains("socketAttachment"))
-        {
-            auto& attachment = entity.addOrReplaceComponent<components::SocketAttachmentComponent>();
-            deserializeSocketAttachment(componentsJson["socketAttachment"], attachment);
-        }
-
-        if (componentsJson.contains("socketOverride"))
-        {
-            auto& override = entity.addOrReplaceComponent<components::SocketOverrideComponent>();
-            deserializeSocketOverride(componentsJson["socketOverride"], override);
-        }
-
-        if (componentsJson.contains("navmeshAgent"))
-        {
-            auto& agentComp = entity.addOrReplaceComponent<components::NavmeshAgentComponent>();
-            deserializeNavmeshAgent(componentsJson["navmeshAgent"], agentComp);
-        }
-
-        if (componentsJson.contains("navmesh"))
-        {
-            auto& navmeshComp = entity.addOrReplaceComponent<components::NavmeshComponent>();
-            deserializeNavmesh(componentsJson["navmesh"], navmeshComp);
-        }
-
-        if (componentsJson.contains("renderTexture"))
-        {
-            auto& rttComp = entity.addOrReplaceComponent<components::RenderTextureComponent>();
-            deserializeRenderTexture(componentsJson["renderTexture"], rttComp);
-        }
-
-        if (componentsJson.contains("controller"))
-        {
-            auto& controllerComp = entity.addOrReplaceComponent<components::ControllerComponent>();
-            deserializeController(componentsJson["controller"], controllerComp);
-        }
-
-        if (componentsJson.contains("ikTarget"))
-        {
-            auto& ikTargetComp = entity.addOrReplaceComponent<components::IKTargetComponent>();
-            deserializeIKTarget(componentsJson["ikTarget"], ikTargetComp);
-        }
-
-        if (componentsJson.contains("behaviorTree"))
-        {
-            auto& btComp = entity.addOrReplaceComponent<components::BehaviorTreeComponent>();
-            deserializeBehaviorTree(componentsJson["behaviorTree"], btComp);
-        }
-
-        if (componentsJson.contains("decal"))
-        {
-            auto& decalComp = entity.addOrReplaceComponent<components::DecalComponent>();
-            deserializeDecal(componentsJson["decal"], decalComp);
-        }
-
-        // Plugin components
-        {
-            std::shared_lock lock(pluginHookMutex);
-            if (pluginDeserializeHook)
-            {
-                json pluginEntries = json::object();
-                for (const auto& [key, value] : componentsJson.items())
-                {
-                    if (key.rfind("plugin:", 0) == 0)
-                    {
-                        pluginEntries[key] = value;
-                    }
-                }
-                if (!pluginEntries.empty())
-                {
-                    pluginDeserializeHook(pluginEntries, entity);
-                }
-            }
-        }
     }
 
     void SceneSerialization::deserializeSceneSettings(const json& sceneJson, scene::SceneGraphSystem& sceneGraph)
@@ -712,6 +203,5 @@ namespace serialization
         {
             sceneGraph.setRenderSettings(types::RenderSettings::createDefault());
         }
-
     }
 }

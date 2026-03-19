@@ -18,8 +18,6 @@ namespace core::audio {
         cmd.up = up;
         dispatcher.execute(cmd);
 
-        lastListenerPos = position;
-
         // Update reverb zones based on listener position
         if (reverbZoneManager)
         {

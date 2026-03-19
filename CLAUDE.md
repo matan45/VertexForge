@@ -22,15 +22,30 @@ msbuild VFEngine/VertexForge.sln /p:Configuration=Release /p:Platform=x64
 ### Module Dependency Graph
 
 ```
-Editor   ──> Services, Import (ONLY)
-Import   ──> Utilities (ONLY)
-Runtime  ──> Services (ONLY)
-Services ──> Utilities (ONLY - uses provider interfaces implemented by Core)
-Core     ──> Graphics, Window, Services (implements provider adapters)
-Graphics ──> Window, Utilities
+Editor   ──> Services, Import, Core (ONLY)
+Import   ──> Utilities (SharedLib/DLL, requires CMake-built libs: assimp, freetype, libogg, libvorbis)
+Runtime  ──> Services, Core (ONLY)
+Services ──> Utilities, Terrain, Serialization, World, Window
+Core     ──> Graphics, Audio, Physics, Animation, mType, jolt, recast
+Graphics ──> Window, VFX, imgui
 ```
 
-All modules are static libraries except Editor and Runtime (ConsoleApp executables).
+All modules are static libraries except Editor and Runtime (ConsoleApp executables), Import (SharedLib/DLL), jolt and meshoptimizer (SharedLib/DLL).
+
+### Subsystem Extraction
+
+Large modules are split into separately compiled subsystem projects using `removefiles` in the parent and dedicated projects for each subsystem. This reduces compile times and clarifies boundaries.
+
+| Subsystem | Extracted From | Compiles |
+|-----------|---------------|----------|
+| Audio | Core | `core/audio/**` |
+| Physics | Core | `core/physics/**` |
+| Animation | Graphics + Utilities | `graphics/animation/**` + `utilities/animator/**` |
+| VFX | Graphics + Utilities | `graphics/render/vfx/**` + `utilities/vfx/**` |
+| Terrain | Utilities | `utilities/terrain/**` |
+| Serialization | Utilities | `utilities/serialization/**` + `utilities/world/World*Serialization.*` |
+| World | Utilities | `utilities/world/**` (excluding serialization files) |
+| DataTypes | Services | `services/data/**` (header-only, `kind "None"`) |
 
 **Key constraints**:
 - Editor accesses rendering/scene/input through Services layer APIs (never directly include Core or Graphics)
@@ -221,10 +236,19 @@ meshProcessor.loadFromFile(file, fileName, location, progressCallback);
 | Vulkan + shaderc | Graphics rendering, runtime shader compilation |
 | GLFW | Window/input |
 | ImGui + ImGuizmo + imgui-node-editor | Editor UI |
+| IconFontCppHeaders | Icon font rendering for UI |
 | EnTT | Entity Component System |
 | Assimp | 3D model importing (requires CMake build) |
-| OpenAL | Audio playback (requires CMake build) |
-| JoltPhysics | Physics simulation |
+| OpenAL + libogg + libvorbis | Audio playback and Ogg Vorbis codec (requires CMake build) |
+| JoltPhysics | Physics simulation (SharedLib) |
+| v-hacd | Convex mesh decomposition for physics colliders |
+| recastnavigation | Navigation mesh generation and AI pathfinding |
+| mType + asmjit | Scripting language interpreter with JIT compilation |
+| enkiTS | Parallel task scheduling |
+| meshoptimizer | Mesh/meshlet optimization and LOD generation (SharedLib) |
+| ispc_texcomp | BC7/BC6H texture compression |
+| freetype | Font rasterization (requires CMake build) |
+| nlohmann/json | JSON serialization for scenes/assets/config |
 | spdlog | Logging |
 | GLM | Mathematics |
 | stb, tinyexr, dr_libs | Image/audio file loading |

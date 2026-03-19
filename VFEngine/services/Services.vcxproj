@@ -42,13 +42,13 @@
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <OutDir>$(ProjectDir)..\..\bin\Services\Debug\x64\</OutDir>
-    <IntDir>$(ProjectDir)obj\x64\Debug\</IntDir>
+    <IntDir>$(ProjectDir)obj\x64\Debug\Services\</IntDir>
     <TargetName>Services</TargetName>
     <TargetExt>.lib</TargetExt>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <OutDir>$(ProjectDir)..\..\bin\Services\Release\x64\</OutDir>
-    <IntDir>$(ProjectDir)obj\x64\Release\</IntDir>
+    <IntDir>$(ProjectDir)obj\x64\Release\Services\</IntDir>
     <TargetName>Services</TargetName>
     <TargetExt>.lib</TargetExt>
   </PropertyGroup>
@@ -375,6 +375,7 @@
     <ClCompile Include="impl\editor\SculptModeServiceImpl.cpp" />
     <ClCompile Include="impl\editor\UndoRedoServiceImpl.cpp" />
     <ClCompile Include="impl\editor\WindowStateServiceImpl.cpp" />
+    <ClCompile Include="impl\input\ActionMappingServiceHandlers.cpp" />
     <ClCompile Include="impl\input\ActionMappingServiceImpl.cpp" />
     <ClCompile Include="impl\input\InputServiceImpl.cpp" />
     <ClCompile Include="impl\lifecycle\AssetLifecycleServiceImpl.cpp" />
@@ -385,8 +386,10 @@
     <ClCompile Include="impl\navmesh\NavmeshServiceImpl.cpp" />
     <ClCompile Include="impl\navmesh\NavmeshStreamer.cpp" />
     <ClCompile Include="impl\navmesh\NavmeshTileManager.cpp" />
+    <ClCompile Include="impl\physics\ControllerServiceHandlers.cpp" />
     <ClCompile Include="impl\physics\ControllerServiceImpl.cpp" />
     <ClCompile Include="impl\physics\PhysicsAnimationServiceImpl.cpp" />
+    <ClCompile Include="impl\physics\PhysicsPlayModeEnter.cpp" />
     <ClCompile Include="impl\physics\PhysicsPlayModeHandler.cpp" />
     <ClCompile Include="impl\physics\PhysicsServiceImpl.cpp" />
     <ClCompile Include="impl\project\FileOperationsServiceImpl.cpp" />
@@ -395,10 +398,13 @@
     <ClCompile Include="impl\render\BillboardRenderServiceImpl.cpp" />
     <ClCompile Include="impl\render\DebugDrawServiceImpl.cpp" />
     <ClCompile Include="impl\render\DecalRenderServiceImpl.cpp" />
+    <ClCompile Include="impl\render\EditorRenderServiceCulling.cpp" />
     <ClCompile Include="impl\render\EditorRenderServiceImpl.cpp" />
+    <ClCompile Include="impl\render\EditorRenderServiceViewport.cpp" />
     <ClCompile Include="impl\render\GIServiceImpl.cpp" />
     <ClCompile Include="impl\render\LightStreamingServiceImpl.cpp" />
     <ClCompile Include="impl\render\ObjectStreamingServiceImpl.cpp" />
+    <ClCompile Include="impl\render\PreviewServiceAnimVFX.cpp" />
     <ClCompile Include="impl\render\PreviewServiceImpl.cpp" />
     <ClCompile Include="impl\render\RenderHookServiceImpl.cpp" />
     <ClCompile Include="impl\render\RenderTexturePlayModeHandler.cpp" />
@@ -446,6 +452,15 @@
   <ItemGroup>
     <ProjectReference Include="..\utilities\Utilities.vcxproj">
       <Project>{010A8043-6D74-34BA-B6B2-E55F225C120F}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\utilities\Terrain.vcxproj">
+      <Project>{7AABC339-E68A-42D5-EFA2-CDAB5B01A936}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\utilities\Serialization.vcxproj">
+      <Project>{2319AF09-8FD9-2A40-5814-74BDC4936F1C}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\utilities\World.vcxproj">
+      <Project>{4D25640E-B939-8CBF-82BB-2F1FEE8E88F0}</Project>
     </ProjectReference>
     <ProjectReference Include="..\Window\Window.vcxproj">
       <Project>{3DEA79DA-298C-A4B0-1247-B804FE872B01}</Project>

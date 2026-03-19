@@ -12,8 +12,6 @@ namespace behaviortree
     namespace fs = std::filesystem;
     using WarningLogger = std::function<void(const std::string&)>;
 
-    // --- BlackboardValue serialization ---
-
     static json serializeBlackboardValue(const BlackboardValue& val, BlackboardValueType type)
     {
         switch (type)
@@ -81,8 +79,6 @@ namespace behaviortree
         }
     }
 
-    // --- Properties serialization ---
-
     static json serializeProperties(const std::unordered_map<std::string, BlackboardValue>& properties)
     {
         json j = json::object();
@@ -129,8 +125,6 @@ namespace behaviortree
         }
         return properties;
     }
-
-    // --- Node serialization ---
 
     static json serializeNode(const BTNode& node)
     {
@@ -181,8 +175,6 @@ namespace behaviortree
         return node;
     }
 
-    // --- Link serialization ---
-
     static json serializeLink(const BTLink& link)
     {
         json j;
@@ -202,8 +194,6 @@ namespace behaviortree
         link.sortOrder = j.value("sortOrder", 0u);
         return link;
     }
-
-    // --- Blackboard key serialization ---
 
     static json serializeBlackboardKey(const BlackboardKeyDef& keyDef)
     {
@@ -225,8 +215,6 @@ namespace behaviortree
         }
         return keyDef;
     }
-
-    // --- Parse helpers ---
 
     static void parseNodes(const json& j, BTGraph& graph, const WarningLogger& logWarning)
     {
@@ -309,7 +297,6 @@ namespace behaviortree
 
         if (data.graph.rootNodeId == 0 && !data.graph.nodes.empty())
         {
-            // Find the root node
             for (const auto& node : data.graph.nodes)
             {
                 if (node.type == BTNodeType::Root)
@@ -326,46 +313,39 @@ namespace behaviortree
     static std::optional<json> readJsonFromFile(std::string_view path)
     {
         fs::path filePath(path);
-        if (!fs::exists(filePath))
-        {
+        if (!fs::exists(filePath)) {
             vfLogError("Behavior tree file not found: {}", path);
             return std::nullopt;
         }
 
         std::error_code ec;
         auto fileSize = fs::file_size(filePath, ec);
-        if (ec)
-        {
+        if (ec) {
             vfLogError("Cannot read behavior tree file size '{}': {}", path, ec.message());
             return std::nullopt;
         }
 
         constexpr size_t MAX_BT_FILE_SIZE = 10 * 1024 * 1024;
-        if (fileSize > MAX_BT_FILE_SIZE)
-        {
+        if (fileSize > MAX_BT_FILE_SIZE) {
             vfLogError("Behavior tree file '{}' is too large ({} bytes, max {} bytes)",
                        path, fileSize, MAX_BT_FILE_SIZE);
             return std::nullopt;
         }
 
         std::ifstream file(filePath);
-        if (!file.is_open())
-        {
+        if (!file.is_open()) {
             vfLogError("Failed to open behavior tree file: {}", path);
             return std::nullopt;
         }
 
         json j;
         try { file >> j; }
-        catch (const json::parse_error& e)
-        {
-            vfLogError("Behavior tree file '{}' contains invalid JSON at byte {}: {}",
-                       path, e.byte, e.what());
+        catch (const json::parse_error& e) {
+            vfLogError("Behavior tree file '{}' contains invalid JSON at byte {}: {}", path, e.byte, e.what());
             return std::nullopt;
         }
 
-        if (!j.is_object())
-        {
+        if (!j.is_object()) {
             vfLogError("Behavior tree file '{}' must contain a JSON object at root level", path);
             return std::nullopt;
         }
@@ -403,8 +383,6 @@ namespace behaviortree
 
         return j;
     }
-
-    // --- Public API ---
 
     std::optional<BehaviorTreeData> BehaviorTreeAsset::load(std::string_view path)
     {
@@ -491,7 +469,6 @@ namespace behaviortree
         data.name = name;
         data.version = BT_FORMAT_VERSION;
 
-        // Create root node
         BTNode rootNode;
         rootNode.id = data.graph.nextNodeId++;
         rootNode.type = BTNodeType::Root;
@@ -500,7 +477,6 @@ namespace behaviortree
         data.graph.rootNodeId = rootNode.id;
         data.graph.nodes.push_back(std::move(rootNode));
 
-        // Create default sequence child
         BTNode sequenceNode;
         sequenceNode.id = data.graph.nextNodeId++;
         sequenceNode.type = BTNodeType::Sequence;
@@ -508,7 +484,6 @@ namespace behaviortree
         sequenceNode.position = glm::vec2(300.0f, 200.0f);
         data.graph.nodes.push_back(std::move(sequenceNode));
 
-        // Link root -> sequence
         BTLink link;
         link.id = data.graph.nextLinkId++;
         link.sourceNodeId = 1; // root

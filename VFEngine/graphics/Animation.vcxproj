@@ -1,0 +1,149 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{859E00A2-F108-B518-3A47-66BEA6F0926D}</ProjectGuid>
+    <IgnoreWarnCompileDuplicatedFilename>true</IgnoreWarnCompileDuplicatedFilename>
+    <Keyword>Win32Proj</Keyword>
+    <RootNamespace>Animation</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <CharacterSet>Unicode</CharacterSet>
+    <PlatformToolset>v145</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <CharacterSet>Unicode</CharacterSet>
+    <PlatformToolset>v145</PlatformToolset>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <OutDir>$(ProjectDir)..\..\bin\Animation\Debug\x64\</OutDir>
+    <IntDir>$(ProjectDir)obj\x64\Debug\Animation\</IntDir>
+    <TargetName>Animation</TargetName>
+    <TargetExt>.lib</TargetExt>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <OutDir>$(ProjectDir)..\..\bin\Animation\Release\x64\</OutDir>
+    <IntDir>$(ProjectDir)obj\x64\Release\Animation\</IntDir>
+    <TargetName>Animation</TargetName>
+    <TargetExt>.lib</TargetExt>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <WarningLevel>Level3</WarningLevel>
+      <PreprocessorDefinitions>VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1;GLM_FORCE_DEPTH_ZERO_TO_ONE;_CRT_SECURE_NO_WARNINGS;DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..\..\dependencies\spdlog\include;..\..\dependencies\glm;..\..\dependencies\entt\single_include;..\..\dependencies\json\single_include;..\utilities;..\services;C:\VulkanSDK\1.4.335.0\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <DebugInformationFormat>EditAndContinue</DebugInformationFormat>
+      <Optimization>Disabled</Optimization>
+      <AdditionalOptions>/utf-8 /MP %(AdditionalOptions)</AdditionalOptions>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <ExternalWarningLevel>Level3</ExternalWarningLevel>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <WarningLevel>Level3</WarningLevel>
+      <PreprocessorDefinitions>VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1;GLM_FORCE_DEPTH_ZERO_TO_ONE;_CRT_SECURE_NO_WARNINGS;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..\..\dependencies\spdlog\include;..\..\dependencies\glm;..\..\dependencies\entt\single_include;..\..\dependencies\json\single_include;..\utilities;..\services;C:\VulkanSDK\1.4.335.0\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <Optimization>Full</Optimization>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <MinimalRebuild>false</MinimalRebuild>
+      <StringPooling>true</StringPooling>
+      <AdditionalOptions>/utf-8 /MP %(AdditionalOptions)</AdditionalOptions>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <ExternalWarningLevel>Level3</ExternalWarningLevel>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClInclude Include="..\utilities\animator\AnimationEventTypes.hpp" />
+    <ClInclude Include="..\utilities\animator\AnimationLayerTypes.hpp" />
+    <ClInclude Include="..\utilities\animator\AnimatorAsset.hpp" />
+    <ClInclude Include="..\utilities\animator\AnimatorTypes.hpp" />
+    <ClInclude Include="..\utilities\animator\BlendTreeTypes.hpp" />
+    <ClInclude Include="..\utilities\animator\FootIKHelper.hpp" />
+    <ClInclude Include="..\utilities\animator\HandIKHelper.hpp" />
+    <ClInclude Include="..\utilities\animator\IKTypes.hpp" />
+    <ClInclude Include="..\utilities\animator\LookAtIKHelper.hpp" />
+    <ClInclude Include="..\utilities\animator\SocketTypes.hpp" />
+    <ClInclude Include="animation\AnimationBlender.hpp" />
+    <ClInclude Include="animation\AnimationComputePipeline.hpp" />
+    <ClInclude Include="animation\AnimationDataCache.hpp" />
+    <ClInclude Include="animation\AnimationEvaluator.hpp" />
+    <ClInclude Include="animation\AnimationGPUData.hpp" />
+    <ClInclude Include="animation\AnimationLOD.hpp" />
+    <ClInclude Include="animation\AnimationLayerStack.hpp" />
+    <ClInclude Include="animation\AnimatorStateMachine.hpp" />
+    <ClInclude Include="animation\BlendTree.hpp" />
+    <ClInclude Include="animation\BoneLOD.hpp" />
+    <ClInclude Include="animation\IKPostProcess.hpp" />
+    <ClInclude Include="animation\IKSolver.hpp" />
+    <ClInclude Include="animation\RuntimeAnimatorSystem.hpp" />
+    <ClInclude Include="animation\SocketAttachmentUpdater.hpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\utilities\animator\AnimatorAsset.cpp" />
+    <ClCompile Include="..\utilities\animator\AnimatorAssetDeserialize.cpp" />
+    <ClCompile Include="..\utilities\animator\AnimatorAssetSerialize.cpp" />
+    <ClCompile Include="..\utilities\animator\AnimatorTypes.cpp" />
+    <ClCompile Include="..\utilities\animator\FootIKHelper.cpp" />
+    <ClCompile Include="..\utilities\animator\HandIKHelper.cpp" />
+    <ClCompile Include="..\utilities\animator\IKTypes.cpp" />
+    <ClCompile Include="..\utilities\animator\LookAtIKHelper.cpp" />
+    <ClCompile Include="animation\AnimationBlender.cpp" />
+    <ClCompile Include="animation\AnimationComputePipeline.cpp" />
+    <ClCompile Include="animation\AnimationDataCache.cpp" />
+    <ClCompile Include="animation\AnimationEvaluator.cpp" />
+    <ClCompile Include="animation\AnimationLOD.cpp" />
+    <ClCompile Include="animation\AnimationLayerStack.cpp" />
+    <ClCompile Include="animation\AnimationLayerStackControls.cpp" />
+    <ClCompile Include="animation\AnimatorStateMachine.cpp" />
+    <ClCompile Include="animation\AnimatorStateMachineControls.cpp" />
+    <ClCompile Include="animation\AnimatorStateMachineHelpers.cpp" />
+    <ClCompile Include="animation\BlendTree.cpp" />
+    <ClCompile Include="animation\IKPostProcess.cpp" />
+    <ClCompile Include="animation\IKSolver.cpp" />
+    <ClCompile Include="animation\RuntimeAnimatorSystem.cpp" />
+    <ClCompile Include="animation\RuntimeAnimatorSystemEval.cpp" />
+    <ClCompile Include="animation\RuntimeAnimatorSystemInit.cpp" />
+    <ClCompile Include="animation\SocketAttachmentUpdater.cpp" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

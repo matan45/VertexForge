@@ -56,7 +56,6 @@ namespace core::audio
             {
                 parentId = it->second;
 
-                // Guard against circular parent references
                 uint32_t ancestor = parentId;
                 int maxDepth = 32;
                 while (maxDepth-- > 0)
@@ -228,7 +227,6 @@ namespace core::audio
             volumeCallback(handle, userVolume * effective);
         }
 
-        // Route source to bus effects and reverb zones
         if (sourceResolveCallback)
         {
             ALuint sourceId = sourceResolveCallback(handle);
@@ -252,7 +250,6 @@ namespace core::audio
         auto it = trackedSources.find(handle);
         if (it != trackedSources.end())
         {
-            // Unroute source from bus effects and reverb zones
             if (sourceResolveCallback)
             {
                 ALuint sourceId = sourceResolveCallback(handle);
@@ -354,52 +351,16 @@ namespace core::audio
         return names;
     }
 
-    void AudioBusManager::createDefaultBuses()
+    void AudioBusManager::createBusesFromDefinitions(const std::vector<types::AudioBusDefinition>& definitions)
     {
-        createBusInternal(BusNames::Master, "");
-        createBusInternal(BusNames::Music, BusNames::Master);
-        createBusInternal(BusNames::SFX, BusNames::Master);
-        createBusInternal(BusNames::Dialogue, BusNames::Master);
-        createBusInternal(BusNames::Ambient, BusNames::Master);
-    }
-
-    void AudioBusManager::loadBusDefinitions(const std::vector<types::AudioBusDefinition>& definitions)
-    {
-        std::unique_lock lock(busMutex);
-        // Clear existing effects before clearing buses
-        if (effectManager)
-        {
-            for (const auto& bus : buses)
-            {
-                effectManager->clearBusEffects(bus.id);
-            }
-        }
-
-        buses.clear();
-        nameToId.clear();
-        nextBusId = 0;
-
-        if (definitions.empty())
-        {
-            createDefaultBuses();
-            return;
-        }
-
-        // First pass: create all buses (Master first)
         bool hasMaster = false;
         for (const auto& def : definitions)
         {
-            if (def.name == "Master")
-            {
-                hasMaster = true;
-                break;
-            }
+            if (def.name == "Master") { hasMaster = true; break; }
         }
 
         if (!hasMaster)
-        {
             createBusInternal("Master", "");
-        }
 
         for (const auto& def : definitions)
         {
@@ -420,17 +381,45 @@ namespace core::audio
                 if (bus) bus->volume = def.defaultVolume;
             }
         }
+    }
 
-        // Load effect chains for each bus
+    void AudioBusManager::createDefaultBuses()
+    {
+        createBusInternal(BusNames::Master, "");
+        createBusInternal(BusNames::Music, BusNames::Master);
+        createBusInternal(BusNames::SFX, BusNames::Master);
+        createBusInternal(BusNames::Dialogue, BusNames::Master);
+        createBusInternal(BusNames::Ambient, BusNames::Master);
+    }
+
+    void AudioBusManager::loadBusDefinitions(const std::vector<types::AudioBusDefinition>& definitions)
+    {
+        std::unique_lock lock(busMutex);
+        if (effectManager)
+        {
+            for (const auto& bus : buses)
+                effectManager->clearBusEffects(bus.id);
+        }
+
+        buses.clear();
+        nameToId.clear();
+        nextBusId = 0;
+
+        if (definitions.empty())
+        {
+            createDefaultBuses();
+            return;
+        }
+
+        createBusesFromDefinitions(definitions);
+
         if (effectManager)
         {
             for (const auto& def : definitions)
             {
                 uint32_t busId = getBusIdByName(def.name);
                 for (const auto& effectConfig : def.effects)
-                {
                     effectManager->addEffect(busId, effectConfig);
-                }
             }
         }
 
@@ -444,7 +433,6 @@ namespace core::audio
         {
             MixSnapshot snapshot;
             snapshot.name = def.name;
-            // Convert string-keyed serialization format to id-keyed internal format
             for (const auto& [busName, vol] : def.busVolumes)
             {
                 uint32_t id = getBusIdByName(busName);
@@ -467,7 +455,6 @@ namespace core::audio
         {
             types::AudioMixSnapshotDefinition def;
             def.name = snapshot.name;
-            // Convert id-keyed internal format to string-keyed serialization format
             for (const auto& [busId, vol] : snapshot.busVolumes)
             {
                 for (const auto& bus : buses)
@@ -487,198 +474,4 @@ namespace core::audio
         return defs;
     }
 
-    bool AudioBusManager::addBusEffect(const std::string& busName, const types::BusEffectConfig& config)
-    {
-        std::unique_lock lock(busMutex);
-        if (!effectManager) return false;
-        uint32_t busId = getBusIdByName(busName);
-        if (!getBus(busId)) return false;
-
-        if (!effectManager->addEffect(busId, config)) return false;
-
-        // Route all existing sources on this bus to the updated effect chain
-        if (sourceResolveCallback)
-        {
-            for (auto& [handle, tracked] : trackedSources)
-            {
-                if (tracked.busId == busId)
-                {
-                    ALuint sourceId = sourceResolveCallback(handle);
-                    if (sourceId != 0)
-                    {
-                        effectManager->routeSourceToBus(sourceId, busId);
-                    }
-                }
-            }
-        }
-        return true;
-    }
-
-    bool AudioBusManager::removeBusEffect(const std::string& busName, uint32_t effectId)
-    {
-        std::unique_lock lock(busMutex);
-        if (!effectManager) return false;
-        uint32_t busId = getBusIdByName(busName);
-        if (!getBus(busId)) return false;
-
-        // Unroute sources first, then remove, then re-route
-        if (sourceResolveCallback)
-        {
-            for (auto& [handle, tracked] : trackedSources)
-            {
-                if (tracked.busId == busId)
-                {
-                    ALuint sourceId = sourceResolveCallback(handle);
-                    if (sourceId != 0)
-                    {
-                        effectManager->unrouteSource(sourceId, busId);
-                    }
-                }
-            }
-        }
-
-        bool result = effectManager->removeEffect(busId, effectId);
-
-        // Re-route with remaining effects
-        if (sourceResolveCallback)
-        {
-            for (auto& [handle, tracked] : trackedSources)
-            {
-                if (tracked.busId == busId)
-                {
-                    ALuint sourceId = sourceResolveCallback(handle);
-                    if (sourceId != 0)
-                    {
-                        effectManager->routeSourceToBus(sourceId, busId);
-                    }
-                }
-            }
-        }
-        return result;
-    }
-
-    bool AudioBusManager::updateBusEffect(const std::string& busName, uint32_t effectId,
-                                           const types::BusEffectConfig& config)
-    {
-        std::unique_lock lock(busMutex);
-        if (!effectManager) return false;
-        uint32_t busId = getBusIdByName(busName);
-        return effectManager->updateEffectParams(busId, effectId, config);
-    }
-
-    bool AudioBusManager::setBusEffectEnabled(const std::string& busName, uint32_t effectId, bool enabled)
-    {
-        std::unique_lock lock(busMutex);
-        if (!effectManager) return false;
-        uint32_t busId = getBusIdByName(busName);
-        return effectManager->setEffectEnabled(busId, effectId, enabled);
-    }
-
-    bool AudioBusManager::setBusEffectWetDry(const std::string& busName, uint32_t effectId, float wetDry)
-    {
-        std::unique_lock lock(busMutex);
-        if (!effectManager) return false;
-        uint32_t busId = getBusIdByName(busName);
-        return effectManager->setEffectWetDry(busId, effectId, wetDry);
-    }
-
-    std::vector<types::BusEffectConfig> AudioBusManager::getBusEffectChain(const std::string& busName) const
-    {
-        std::shared_lock lock(busMutex);
-        if (!effectManager) return {};
-        auto it = nameToId.find(busName);
-        if (it == nameToId.end()) return {};
-        return effectManager->getBusEffectChain(it->second);
-    }
-
-    int AudioBusManager::getMaxEffectsPerBus() const
-    {
-        if (!effectManager) return 0;
-        return effectManager->getMaxEffectsPerBus();
-    }
-
-    void AudioBusManager::recalculateEffectiveVolumes()
-    {
-        bool anySoloed = false;
-        for (const auto& bus : buses)
-        {
-            if (bus.soloed)
-            {
-                anySoloed = true;
-                break;
-            }
-        }
-
-        // Find Master bus and start recursion
-        for (auto& bus : buses)
-        {
-            if (bus.name == "Master")
-            {
-                bool masterMuted = bus.muted;
-                float masterVol = (masterMuted && !bus.soloed && anySoloed) ? 0.0f : bus.volume;
-                if (bus.muted && !anySoloed) masterVol = 0.0f;
-                if (anySoloed && !bus.soloed) masterVol = 0.0f;
-                if (anySoloed && bus.soloed) masterVol = bus.volume;
-                if (!anySoloed && !bus.muted) masterVol = bus.volume;
-
-                bus.effectiveVolume = masterVol;
-                recalculateBusEffective(bus, masterVol, bus.muted, anySoloed);
-                break;
-            }
-        }
-    }
-
-    void AudioBusManager::recalculateBusEffective(AudioBus& bus, float parentEffective,
-                                                   bool parentMuted, bool anySoloed)
-    {
-        for (uint32_t childId : bus.childIds)
-        {
-            auto* child = getBus(childId);
-            if (!child) continue;
-
-            bool effectivelyMuted = child->muted || parentMuted;
-
-            if (anySoloed)
-            {
-                if (child->soloed)
-                {
-                    child->effectiveVolume = child->volume * parentEffective;
-                    if (parentEffective == 0.0f)
-                    {
-                        // Parent is not soloed, but child is — use own volume
-                        child->effectiveVolume = child->volume;
-                    }
-                }
-                else
-                {
-                    child->effectiveVolume = 0.0f;
-                }
-            }
-            else
-            {
-                if (effectivelyMuted)
-                {
-                    child->effectiveVolume = 0.0f;
-                }
-                else
-                {
-                    child->effectiveVolume = child->volume * parentEffective;
-                }
-            }
-
-            recalculateBusEffective(*child, child->effectiveVolume, effectivelyMuted, anySoloed);
-        }
-    }
-
-    void AudioBusManager::applyEffectiveVolumesToSources()
-    {
-        if (!volumeCallback) return;
-
-        for (auto& [handle, tracked] : trackedSources)
-        {
-            auto* bus = getBus(tracked.busId);
-            float effective = bus ? bus->effectiveVolume : 1.0f;
-            volumeCallback(handle, tracked.userVolume * effective);
-        }
-    }
 }
