@@ -109,6 +109,10 @@ namespace controllers
         stats.totalPages = cacheStats.totalPages;
         stats.renderedPages = cacheStats.renderedPages;
         stats.cachedPages = cacheStats.cachedPages;
+        stats.staticPagesRendered = cacheStats.staticPagesRendered;
+        stats.dynamicPagesRendered = cacheStats.dynamicPagesRendered;
+        stats.tileCopiesThisFrame = cacheStats.tileCopiesThisFrame;
+        stats.dynamicTilesAllocated = cacheStats.dynamicTilesAllocated;
 
         return stats;
     }

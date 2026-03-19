@@ -158,10 +158,16 @@ namespace services {
         uint32_t renderedThisFrame = 0;
         uint32_t skippedThisFrame = 0;
 
-        // Page-level cache stats (Phase 3)
+        // Page-level cache stats
         uint32_t totalPages = 0;
         uint32_t renderedPages = 0;
         uint32_t cachedPages = 0;
+
+        // Dual-layer shadow stats
+        uint32_t staticPagesRendered = 0;
+        uint32_t dynamicPagesRendered = 0;
+        uint32_t tileCopiesThisFrame = 0;
+        uint32_t dynamicTilesAllocated = 0;
     };
 
     struct GPUPipelineStatus {
