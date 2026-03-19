@@ -362,18 +362,17 @@ void main() {
 
     vec3 R = reflect(-V, N);
     vec3 F0 = mix(vec3(0.04), albedo, metallic);
-    vec3 F = fresnelSchlickRoughness(max(dot(N, V), 0.0), F0, roughness);
-
-    vec3 kS = F;
-    vec3 kD = (1.0 - kS) * (1.0 - metallic);
-
     vec3 irradiance = texture(irradianceMap, N).rgb;
-    vec3 diffuse = irradiance * albedo;
-
     vec3 prefilteredColor = textureLod(prefilterMap, R, roughness * MAX_REFLECTION_LOD).rgb;
     vec2 brdf = texture(brdfLUT, vec2(max(dot(N, V), 0.0), roughness)).rg;
+
+    vec3 specularScale;
+    vec3 kD;
+    multiScatterCompensation(F0, brdf, metallic, specularScale, kD);
+
+    vec3 diffuse = irradiance * albedo;
     // Match mesh shader default iblSpecular (0.5) to avoid over-bright terrain reflections
-    vec3 specular = prefilteredColor * (F * brdf.x + brdf.y) * 0.5;
+    vec3 specular = prefilteredColor * specularScale * 0.5;
 
     vec3 ambient = (kD * diffuse + specular) * ao;
 

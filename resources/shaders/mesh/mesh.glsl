@@ -144,6 +144,18 @@ vec3 fresnelSchlickRoughness(float cosTheta, vec3 F0, float roughness) {
     return F0 + (max(vec3(1.0 - roughness), F0) - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
 }
 
+// Multi-scattering energy compensation (Fdez-Aguera 2019)
+void multiScatterCompensation(vec3 F0, vec2 brdfLookup, float metallic,
+                              out vec3 specularScale, out vec3 kD) {
+    vec3 FssEss = F0 * brdfLookup.x + brdfLookup.y;
+    float Ess = brdfLookup.x + brdfLookup.y;
+    float Ems = 1.0 - Ess;
+    vec3 Favg = F0 + (1.0 - F0) / 21.0;
+    vec3 FmsEms = Ems * FssEss * Favg / (1.0 - Favg * Ems);
+    specularScale = FssEss + FmsEms;
+    kD = (1.0 - FssEss - FmsEms) * (1.0 - metallic);
+}
+
 void main() {
     vec3 N = normalize(fragNormal);
     vec3 V = normalize(camera.cameraPos - fragWorldPos);
@@ -205,18 +217,16 @@ void main() {
     vec3 F0 = vec3(0.04);
     F0 = mix(F0, albedo, metallic);
 
-    vec3 F = fresnelSchlickRoughness(max(dot(N, V), 0.0), F0, roughness);
-
-    vec3 kS = F;
-    vec3 kD = 1.0 - kS;
-    kD *= 1.0 - metallic;
-
     vec3 irradiance = texture(irradianceMap, N).rgb;
-    vec3 diffuse = irradiance * albedo * pc.iblDiffuse;
-
     vec3 prefilteredColor = textureLod(prefilterMap, R, roughness * MAX_REFLECTION_LOD).rgb;
     vec2 brdf = texture(brdfLUT, vec2(max(dot(N, V), 0.0), roughness)).rg;
-    vec3 specular = prefilteredColor * (F * brdf.x + brdf.y) * pc.iblSpecular;
+
+    vec3 specularScale;
+    vec3 kD;
+    multiScatterCompensation(F0, brdf, metallic, specularScale, kD);
+
+    vec3 diffuse = irradiance * albedo * pc.iblDiffuse;
+    vec3 specular = prefilteredColor * specularScale * pc.iblSpecular;
 
     vec3 ambient = (kD * diffuse + specular) * ao;
 
