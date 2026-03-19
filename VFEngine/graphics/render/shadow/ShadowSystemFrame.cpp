@@ -821,6 +821,33 @@ namespace render::shadow
             if (data.vsmPageLastUsedFrame.size() != totalPages)
                 data.vsmPageLastUsedFrame.resize(totalPages, 0);
 
+            // Non-static lights: ensure all pages are allocated (bypass feedback).
+            // Feedback can't drive allocation for pages that were evicted because
+            // the shader can't sample unmapped pages, creating a deadlock.
+            if (!data.isStatic)
+            {
+                // Ensure dirty vector is sized before accessing
+                if (data.vsmPageDirty.size() != totalPages)
+                    data.vsmPageDirty.resize(totalPages, true);
+
+                for (uint32_t i = 0; i < totalPages; ++i)
+                {
+                    if (data.vsmPhysicalTiles[i] == vsm::INVALID_TILE)
+                    {
+                        uint32_t tile = tilePool->allocateTile();
+                        if (tile != vsm::INVALID_TILE)
+                        {
+                            data.vsmPhysicalTiles[i] = tile;
+                            uint32_t px = i % data.vsmPagesX;
+                            uint32_t py = i / data.vsmPagesX;
+                            pageTable->mapPage(data.vsmPageTableOffset, px, py, data.vsmPagesX, tile);
+                            data.vsmPageDirty[i] = true;
+                        }
+                    }
+                }
+                continue; // skip feedback-driven logic for non-static lights
+            }
+
             for (uint32_t i = 0; i < totalPages; ++i)
             {
                 uint32_t feedbackIdx = data.vsmPageTableOffset + i;
