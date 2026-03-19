@@ -359,12 +359,18 @@ namespace render::shadow
 
         for (auto& [entityId, data] : lightShadowData)
         {
+            if (!data.settings.enabled || !data.settings.castShadows)
+                continue;
+
+            // Track rendered frames for scene-load warmup (forceRender in addPageToRenderLists).
+            // Capped to avoid unbounded growth; only the first few frames matter.
+            if (data.renderedFrameCount < 10)
+                ++data.renderedFrameCount;
+
             if (data.isStatic && !data.shadowCached &&
-                data.settings.enabled && data.settings.castShadows &&
                 data.type != ShadowMapType::DirectionalCSM)
             {
-                ++data.renderedFrameCount;
-                if (data.renderedFrameCount >= 2)
+                if (data.renderedFrameCount >= 4)
                 {
                     data.shadowCached = true;
                     data.lastRenderedFrame = frameCounter;
@@ -374,6 +380,7 @@ namespace render::shadow
 
         collectShadowViewsForGPU(visibleLightIds);
         applyFeedbackAllocations();
+        determineDynamicPages();
         buildPageRenderList();
     }
 }

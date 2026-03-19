@@ -205,6 +205,16 @@ namespace windows
                                                       : ImVec4(1, 0.8f, 0.2f, 1);
             ImGui::TextColored(cacheColor, "  Page cache hit: %.0f%%", pageCacheRatio * 100.0f);
         }
+
+        if (shadowStats.totalPages > 0)
+        {
+            ImGui::Spacing();
+            ImGui::Text("Dual-Layer Shadow");
+            ImGui::Text("  Static pages rendered: %u", shadowStats.staticPagesRendered);
+            ImGui::Text("  Dynamic pages rendered: %u", shadowStats.dynamicPagesRendered);
+            ImGui::Text("  Tile copies/frame: %u", shadowStats.tileCopiesThisFrame);
+            ImGui::Text("  Dynamic tiles allocated: %u", shadowStats.dynamicTilesAllocated);
+        }
     }
 
     void RenderConfigWindow::drawTerrainSection()

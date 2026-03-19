@@ -19,6 +19,8 @@ namespace render::shadow
         float depthBias;
         float slopeBias;
         float normalBias;
+        uint32_t objectFilterMask = 0;   // AND with PerDrawData.flags
+        uint32_t objectFilterValue = 0;  // expected result after AND (0,0 = all objects pass)
     };
 
     class ShadowPassPipeline

@@ -135,6 +135,9 @@ namespace controllers::offscreen
             rd.showBoundingBox = (!ctx.playModeActive && ctx.showDebugRendering) ? meshComp.showBoundingBox : false;
             rd.maxDrawDistance = meshComp.maxDrawDistance;
 
+            if (registry.all_of<components::TransformComponent>(entity))
+                rd.isStatic = registry.get<components::TransformComponent>(entity).isStatic;
+
             if (registry.all_of<components::MaterialComponent>(entity))
             {
                 const auto& materialComp = registry.get<components::MaterialComponent>(entity);

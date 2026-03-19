@@ -66,10 +66,16 @@ namespace render::shadow
         [[nodiscard]] float getUtilization() const;
         [[nodiscard]] bool isInitialized() const { return initialized; }
 
+        // Dual-layer tile copy support
+        [[nodiscard]] vk::ImageCopy getTileCopyRegion(uint32_t srcTileIndex, uint32_t dstTileIndex) const;
+        static void transitionPoolToTransfer(vk::CommandBuffer cmd, VSMPhysicalTilePool* tilePool);
+        static void transitionPoolFromTransfer(vk::CommandBuffer cmd, VSMPhysicalTilePool* tilePool);
+
     private:
         void createPoolImage();
         void createSamplers();
         void createRenderPasses();
+        vk::RenderPass createSingleRenderPass(vk::AttachmentLoadOp loadOp);
         void createFramebuffers();
     };
 }

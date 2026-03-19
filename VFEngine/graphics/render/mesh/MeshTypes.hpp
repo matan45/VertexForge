@@ -190,6 +190,7 @@ namespace render::mesh
         float lodBias = 0.0f;
         int forceLODLevel = -1;
         float maxDrawDistance = 0.0f;
+        bool isStatic = true;
 
         // Instance batching: if non-empty, render N instances with different transforms
         struct InstanceData

@@ -143,7 +143,8 @@ namespace render::shadow
             1,
             depthFormat,
             vk::ImageTiling::eOptimal,
-            vk::ImageUsageFlagBits::eDepthStencilAttachment | vk::ImageUsageFlagBits::eSampled,
+            vk::ImageUsageFlagBits::eDepthStencilAttachment | vk::ImageUsageFlagBits::eSampled |
+            vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst,
             vk::MemoryPropertyFlagBits::eDeviceLocal
         );
 
@@ -194,109 +195,62 @@ namespace render::shadow
         depthSampler = logicalDevice.createSampler(samplerInfo);
     }
 
-    void VSMPhysicalTilePool::createRenderPasses()
+    vk::RenderPass VSMPhysicalTilePool::createSingleRenderPass(vk::AttachmentLoadOp loadOp)
     {
         const auto& logicalDevice = device.getLogicalDevice();
 
-        // eClear render pass
-        {
-            vk::AttachmentDescription depthAttachment{};
-            depthAttachment.format = depthFormat;
-            depthAttachment.samples = vk::SampleCountFlagBits::e1;
-            depthAttachment.loadOp = vk::AttachmentLoadOp::eClear;
-            depthAttachment.storeOp = vk::AttachmentStoreOp::eStore;
-            depthAttachment.stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
-            depthAttachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
-            depthAttachment.initialLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
-            depthAttachment.finalLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
+        vk::AttachmentDescription depthAttachment{};
+        depthAttachment.format = depthFormat;
+        depthAttachment.samples = vk::SampleCountFlagBits::e1;
+        depthAttachment.loadOp = loadOp;
+        depthAttachment.storeOp = vk::AttachmentStoreOp::eStore;
+        depthAttachment.stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
+        depthAttachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
+        depthAttachment.initialLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
+        depthAttachment.finalLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
 
-            vk::AttachmentReference depthRef{};
-            depthRef.attachment = 0;
-            depthRef.layout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
+        vk::AttachmentReference depthRef{};
+        depthRef.attachment = 0;
+        depthRef.layout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
 
-            vk::SubpassDescription subpass{};
-            subpass.pipelineBindPoint = vk::PipelineBindPoint::eGraphics;
-            subpass.colorAttachmentCount = 0;
-            subpass.pDepthStencilAttachment = &depthRef;
+        vk::SubpassDescription subpass{};
+        subpass.pipelineBindPoint = vk::PipelineBindPoint::eGraphics;
+        subpass.colorAttachmentCount = 0;
+        subpass.pDepthStencilAttachment = &depthRef;
 
-            std::array<vk::SubpassDependency, 2> dependencies{};
-            dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
-            dependencies[0].dstSubpass = 0;
-            dependencies[0].srcStageMask = vk::PipelineStageFlagBits::eFragmentShader;
-            dependencies[0].dstStageMask = vk::PipelineStageFlagBits::eEarlyFragmentTests;
-            dependencies[0].srcAccessMask = vk::AccessFlagBits::eShaderRead;
-            dependencies[0].dstAccessMask = vk::AccessFlagBits::eDepthStencilAttachmentRead |
-                                             vk::AccessFlagBits::eDepthStencilAttachmentWrite;
-            dependencies[0].dependencyFlags = vk::DependencyFlagBits::eByRegion;
+        std::array<vk::SubpassDependency, 2> dependencies{};
+        dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
+        dependencies[0].dstSubpass = 0;
+        dependencies[0].srcStageMask = vk::PipelineStageFlagBits::eFragmentShader;
+        dependencies[0].dstStageMask = vk::PipelineStageFlagBits::eEarlyFragmentTests;
+        dependencies[0].srcAccessMask = vk::AccessFlagBits::eShaderRead;
+        dependencies[0].dstAccessMask = vk::AccessFlagBits::eDepthStencilAttachmentRead |
+                                         vk::AccessFlagBits::eDepthStencilAttachmentWrite;
+        dependencies[0].dependencyFlags = vk::DependencyFlagBits::eByRegion;
 
-            dependencies[1].srcSubpass = 0;
-            dependencies[1].dstSubpass = VK_SUBPASS_EXTERNAL;
-            dependencies[1].srcStageMask = vk::PipelineStageFlagBits::eLateFragmentTests;
-            dependencies[1].dstStageMask = vk::PipelineStageFlagBits::eFragmentShader;
-            dependencies[1].srcAccessMask = vk::AccessFlagBits::eDepthStencilAttachmentWrite;
-            dependencies[1].dstAccessMask = vk::AccessFlagBits::eShaderRead;
-            dependencies[1].dependencyFlags = vk::DependencyFlagBits::eByRegion;
+        dependencies[1].srcSubpass = 0;
+        dependencies[1].dstSubpass = VK_SUBPASS_EXTERNAL;
+        dependencies[1].srcStageMask = vk::PipelineStageFlagBits::eLateFragmentTests;
+        dependencies[1].dstStageMask = vk::PipelineStageFlagBits::eFragmentShader;
+        dependencies[1].srcAccessMask = vk::AccessFlagBits::eDepthStencilAttachmentWrite;
+        dependencies[1].dstAccessMask = vk::AccessFlagBits::eShaderRead;
+        dependencies[1].dependencyFlags = vk::DependencyFlagBits::eByRegion;
 
-            vk::RenderPassCreateInfo renderPassInfo{};
-            renderPassInfo.attachmentCount = 1;
-            renderPassInfo.pAttachments = &depthAttachment;
-            renderPassInfo.subpassCount = 1;
-            renderPassInfo.pSubpasses = &subpass;
-            renderPassInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
-            renderPassInfo.pDependencies = dependencies.data();
+        vk::RenderPassCreateInfo renderPassInfo{};
+        renderPassInfo.attachmentCount = 1;
+        renderPassInfo.pAttachments = &depthAttachment;
+        renderPassInfo.subpassCount = 1;
+        renderPassInfo.pSubpasses = &subpass;
+        renderPassInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
+        renderPassInfo.pDependencies = dependencies.data();
 
-            renderPass = logicalDevice.createRenderPass(renderPassInfo);
-        }
+        return logicalDevice.createRenderPass(renderPassInfo);
+    }
 
-        // eLoad render pass (preserves cached tiles)
-        {
-            vk::AttachmentDescription depthAttachment{};
-            depthAttachment.format = depthFormat;
-            depthAttachment.samples = vk::SampleCountFlagBits::e1;
-            depthAttachment.loadOp = vk::AttachmentLoadOp::eLoad;
-            depthAttachment.storeOp = vk::AttachmentStoreOp::eStore;
-            depthAttachment.stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
-            depthAttachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
-            depthAttachment.initialLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
-            depthAttachment.finalLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
-
-            vk::AttachmentReference depthRef{};
-            depthRef.attachment = 0;
-            depthRef.layout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
-
-            vk::SubpassDescription subpass{};
-            subpass.pipelineBindPoint = vk::PipelineBindPoint::eGraphics;
-            subpass.colorAttachmentCount = 0;
-            subpass.pDepthStencilAttachment = &depthRef;
-
-            std::array<vk::SubpassDependency, 2> dependencies{};
-            dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
-            dependencies[0].dstSubpass = 0;
-            dependencies[0].srcStageMask = vk::PipelineStageFlagBits::eFragmentShader;
-            dependencies[0].dstStageMask = vk::PipelineStageFlagBits::eEarlyFragmentTests;
-            dependencies[0].srcAccessMask = vk::AccessFlagBits::eShaderRead;
-            dependencies[0].dstAccessMask = vk::AccessFlagBits::eDepthStencilAttachmentRead |
-                                             vk::AccessFlagBits::eDepthStencilAttachmentWrite;
-            dependencies[0].dependencyFlags = vk::DependencyFlagBits::eByRegion;
-
-            dependencies[1].srcSubpass = 0;
-            dependencies[1].dstSubpass = VK_SUBPASS_EXTERNAL;
-            dependencies[1].srcStageMask = vk::PipelineStageFlagBits::eLateFragmentTests;
-            dependencies[1].dstStageMask = vk::PipelineStageFlagBits::eFragmentShader;
-            dependencies[1].srcAccessMask = vk::AccessFlagBits::eDepthStencilAttachmentWrite;
-            dependencies[1].dstAccessMask = vk::AccessFlagBits::eShaderRead;
-            dependencies[1].dependencyFlags = vk::DependencyFlagBits::eByRegion;
-
-            vk::RenderPassCreateInfo renderPassInfo{};
-            renderPassInfo.attachmentCount = 1;
-            renderPassInfo.pAttachments = &depthAttachment;
-            renderPassInfo.subpassCount = 1;
-            renderPassInfo.pSubpasses = &subpass;
-            renderPassInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
-            renderPassInfo.pDependencies = dependencies.data();
-
-            renderPassLoad = logicalDevice.createRenderPass(renderPassInfo);
-        }
+    void VSMPhysicalTilePool::createRenderPasses()
+    {
+        renderPass = createSingleRenderPass(vk::AttachmentLoadOp::eClear);
+        renderPassLoad = createSingleRenderPass(vk::AttachmentLoadOp::eLoad);
     }
 
     void VSMPhysicalTilePool::createFramebuffers()
@@ -374,5 +328,83 @@ namespace render::shadow
     float VSMPhysicalTilePool::getUtilization() const
     {
         return 1.0f - static_cast<float>(freeTiles.size()) / static_cast<float>(vsm::MAX_PHYSICAL_TILES);
+    }
+
+    vk::ImageCopy VSMPhysicalTilePool::getTileCopyRegion(uint32_t srcTileIndex, uint32_t dstTileIndex) const
+    {
+        uint32_t srcX = (srcTileIndex % vsm::TILES_PER_SIDE) * vsm::PAGE_SIZE;
+        uint32_t srcY = (srcTileIndex / vsm::TILES_PER_SIDE) * vsm::PAGE_SIZE;
+        uint32_t dstX = (dstTileIndex % vsm::TILES_PER_SIDE) * vsm::PAGE_SIZE;
+        uint32_t dstY = (dstTileIndex / vsm::TILES_PER_SIDE) * vsm::PAGE_SIZE;
+
+        vk::ImageCopy region{};
+        region.srcSubresource.aspectMask = vk::ImageAspectFlagBits::eDepth;
+        region.srcSubresource.mipLevel = 0;
+        region.srcSubresource.baseArrayLayer = 0;
+        region.srcSubresource.layerCount = 1;
+        region.srcOffset = vk::Offset3D{static_cast<int32_t>(srcX), static_cast<int32_t>(srcY), 0};
+        region.dstSubresource.aspectMask = vk::ImageAspectFlagBits::eDepth;
+        region.dstSubresource.mipLevel = 0;
+        region.dstSubresource.baseArrayLayer = 0;
+        region.dstSubresource.layerCount = 1;
+        region.dstOffset = vk::Offset3D{static_cast<int32_t>(dstX), static_cast<int32_t>(dstY), 0};
+        region.extent = vk::Extent3D{vsm::PAGE_SIZE, vsm::PAGE_SIZE, 1};
+        return region;
+    }
+
+    // Uses eGeneral (not eTransferSrc/eTransferDst) because the copy is a same-image
+    // operation: src and dst regions are in the same pool atlas. Vulkan requires eGeneral
+    // when the same image is both transfer source and destination.
+    void VSMPhysicalTilePool::transitionPoolToTransfer(vk::CommandBuffer cmd, VSMPhysicalTilePool* tilePool)
+    {
+        vk::ImageMemoryBarrier barrier{};
+        barrier.srcAccessMask = vk::AccessFlagBits::eDepthStencilAttachmentWrite;
+        barrier.dstAccessMask = vk::AccessFlagBits::eTransferRead | vk::AccessFlagBits::eTransferWrite;
+        barrier.oldLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
+        barrier.newLayout = vk::ImageLayout::eGeneral;
+        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.image = tilePool->poolImage;
+        barrier.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eDepth;
+        barrier.subresourceRange.baseMipLevel = 0;
+        barrier.subresourceRange.levelCount = 1;
+        barrier.subresourceRange.baseArrayLayer = 0;
+        barrier.subresourceRange.layerCount = 1;
+
+        cmd.pipelineBarrier(
+            vk::PipelineStageFlagBits::eLateFragmentTests,
+            vk::PipelineStageFlagBits::eTransfer,
+            {},
+            0, nullptr,
+            0, nullptr,
+            1, &barrier
+        );
+    }
+
+    void VSMPhysicalTilePool::transitionPoolFromTransfer(vk::CommandBuffer cmd, VSMPhysicalTilePool* tilePool)
+    {
+        vk::ImageMemoryBarrier barrier{};
+        barrier.srcAccessMask = vk::AccessFlagBits::eTransferRead | vk::AccessFlagBits::eTransferWrite;
+        barrier.dstAccessMask = vk::AccessFlagBits::eDepthStencilAttachmentRead |
+                                vk::AccessFlagBits::eDepthStencilAttachmentWrite;
+        barrier.oldLayout = vk::ImageLayout::eGeneral;
+        barrier.newLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
+        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.image = tilePool->poolImage;
+        barrier.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eDepth;
+        barrier.subresourceRange.baseMipLevel = 0;
+        barrier.subresourceRange.levelCount = 1;
+        barrier.subresourceRange.baseArrayLayer = 0;
+        barrier.subresourceRange.layerCount = 1;
+
+        cmd.pipelineBarrier(
+            vk::PipelineStageFlagBits::eTransfer,
+            vk::PipelineStageFlagBits::eEarlyFragmentTests,
+            {},
+            0, nullptr,
+            0, nullptr,
+            1, &barrier
+        );
     }
 }

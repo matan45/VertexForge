@@ -10,6 +10,7 @@ namespace serialization
         j["position"] = json::array({transform.position.x, transform.position.y, transform.position.z});
         j["rotation"] = json::array({transform.rotation.x, transform.rotation.y, transform.rotation.z});
         j["scale"] = json::array({transform.scale.x, transform.scale.y, transform.scale.z});
+        j["isStatic"] = transform.isStatic;
         return j;
     }
 
@@ -71,6 +72,10 @@ namespace serialization
         if (auto it = j.find("scale"); it != j.end() && it->is_array() && it->size() >= 3)
         {
             transform.scale = glm::vec3((*it)[0].get<float>(), (*it)[1].get<float>(), (*it)[2].get<float>());
+        }
+        if (auto it = j.find("isStatic"); it != j.end() && it->is_boolean())
+        {
+            transform.isStatic = it->get<bool>();
         }
         transform.isDirty = true;
     }

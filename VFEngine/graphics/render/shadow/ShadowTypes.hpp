@@ -137,9 +137,17 @@ namespace render::shadow
         uint32_t vsmPagesX = 0;
         uint32_t vsmPagesY = 0;
         uint32_t vsmPageTableOffset = 0;
-        std::vector<uint32_t> vsmPhysicalTiles;
-        std::vector<uint32_t> vsmPageLastUsedFrame; // per-page frame counter for eviction
-        std::vector<bool> vsmPageDirty;             // per-page dirty flag for incremental rendering
+        std::vector<uint32_t> vsmPhysicalTiles;     // static layer tiles
+        std::vector<uint32_t> vsmPageLastUsedFrame;  // per-page frame counter for eviction
+        std::vector<bool> vsmPageDirty;              // per-page dirty flag for static layer
+
+        // Dual-layer: dynamic tile overlay (only for non-static lights)
+        std::vector<uint32_t> vsmDynamicTiles;       // dynamic tile per page (INVALID_TILE = none allocated)
+        std::vector<bool> vsmPageHasDynamic;          // true if page has dynamic geometry this frame
+        std::vector<uint32_t> vsmDynamicTileLastUsedFrame; // for cooldown before freeing dynamic tiles
+
+        // Light movement tracking: detect when VP matrix changes to invalidate cached pages
+        glm::mat4 lastViewProjection{0.0f}; // initialized to zero so first frame always dirty
 
         void invalidate()
         {

@@ -393,6 +393,9 @@ namespace render::gpudriven
                     std::memcpy(&obj.aabbMax.w, &one, sizeof(uint32_t));
                     obj.instanceData = glm::uvec4(INVALID_TEXTURE_INDEX, 0, 0, 0);
 
+                    if (entry.isStatic)
+                        obj.flags |= ObjectFlags::ShadowStatic;
+
                     // Uniform scale flag
                     float scaleX = glm::length(glm::vec3(obj.modelMatrix[0]));
                     float scaleY = glm::length(glm::vec3(obj.modelMatrix[1]));

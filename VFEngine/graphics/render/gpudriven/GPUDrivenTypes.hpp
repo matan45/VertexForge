@@ -114,6 +114,7 @@ namespace render::gpudriven
         constexpr uint32_t Selected = 1 << 13;
         constexpr uint32_t Billboard = 1 << 14;
         constexpr uint32_t Instanced = 1 << 15;
+        constexpr uint32_t ShadowStatic = 1 << 17;  // Object's shadow geometry is cacheable (from TransformComponent::isStatic)
     }
 
     namespace ObjectCategory
