@@ -16,6 +16,7 @@
 #include "../../render/occlusion/CameraOcclusionManager.hpp"
 #include "../../animation/RuntimeAnimatorSystem.hpp"
 #include "scene/EntityRegistry.hpp"
+#include "scene/Entity.hpp"
 #include "components/Components.hpp"
 #include "components/LightTextComponents.hpp"
 #include "resource/ResourceManager.hpp"
@@ -352,13 +353,9 @@ namespace controllers::offscreen
 
             for (auto entity : view)
             {
-                if (registry.all_of<components::NameComponent>(entity))
+                if (!scene::Entity::isEffectivelyActive(registry, entity))
                 {
-                    const auto& nameComp = registry.get<components::NameComponent>(entity);
-                    if (!nameComp.isActive)
-                    {
-                        continue;
-                    }
+                    continue;
                 }
 
                 const auto& meshComp = view.get<components::MeshComponent>(entity);
@@ -391,13 +388,9 @@ namespace controllers::offscreen
                     continue;
                 }
 
-                if (registry.all_of<components::NameComponent>(entity))
+                if (!scene::Entity::isEffectivelyActive(registry, entity))
                 {
-                    const auto& nameComp = registry.get<components::NameComponent>(entity);
-                    if (!nameComp.isActive)
-                    {
-                        continue;
-                    }
+                    continue;
                 }
 
                 const auto& meshComp = registry.get<components::MeshComponent>(entity);
@@ -417,13 +410,9 @@ namespace controllers::offscreen
 
             for (auto entity : view)
             {
-                if (registry.all_of<components::NameComponent>(entity))
+                if (!scene::Entity::isEffectivelyActive(registry, entity))
                 {
-                    const auto& nameComp = registry.get<components::NameComponent>(entity);
-                    if (!nameComp.isActive)
-                    {
-                        continue;
-                    }
+                    continue;
                 }
 
                 const auto& meshComp = view.get<components::MeshComponent>(entity);
@@ -475,13 +464,9 @@ namespace controllers::offscreen
 
         for (auto entity : view)
         {
-            if (registry.all_of<components::NameComponent>(entity))
+            if (!scene::Entity::isEffectivelyActive(registry, entity))
             {
-                const auto& nameComp = registry.get<components::NameComponent>(entity);
-                if (!nameComp.isActive)
-                {
-                    continue;
-                }
+                continue;
             }
 
             const auto& billboard = view.get<components::BillboardComponent>(entity);
@@ -527,13 +512,9 @@ namespace controllers::offscreen
 
         for (auto entity : view)
         {
-            if (registry.all_of<components::NameComponent>(entity))
+            if (!scene::Entity::isEffectivelyActive(registry, entity))
             {
-                const auto& nameComp = registry.get<components::NameComponent>(entity);
-                if (!nameComp.isActive)
-                {
-                    continue;
-                }
+                continue;
             }
 
             const auto& textComp = view.get<components::TextComponent>(entity);
@@ -654,13 +635,9 @@ namespace controllers::offscreen
 
         for (auto entity : view)
         {
-            if (registry.all_of<components::NameComponent>(entity))
+            if (!scene::Entity::isEffectivelyActive(registry, entity))
             {
-                const auto& nameComp = registry.get<components::NameComponent>(entity);
-                if (!nameComp.isActive)
-                {
-                    continue;
-                }
+                continue;
             }
 
             const auto& decal = view.get<components::DecalComponent>(entity);

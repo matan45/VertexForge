@@ -45,9 +45,8 @@ namespace controllers::offscreen
         {
             auto& dropdownComp = registry.get<components::UIDropdownComponent>(dropdownEntity);
 
-            if (registry.all_of<components::NameComponent>(dropdownEntity))
-                if (!registry.get<components::NameComponent>(dropdownEntity).isActive)
-                    continue;
+            if (!scene::Entity::isEffectivelyActive(registry, dropdownEntity))
+                continue;
 
             const auto* canvas = ui_common::findCanvasForEntity(registry, dropdownEntity);
             if (!canvas && registry.all_of<components::UICanvasComponent>(dropdownEntity))
@@ -110,9 +109,8 @@ namespace controllers::offscreen
         {
             auto& comp = registry.get<components::UIDropdownComponent>(dropdownEntity);
 
-            if (registry.all_of<components::NameComponent>(dropdownEntity))
-                if (!registry.get<components::NameComponent>(dropdownEntity).isActive)
-                    continue;
+            if (!scene::Entity::isEffectivelyActive(registry, dropdownEntity))
+                continue;
 
             auto previousState = comp.currentState;
             components::UIDropdownState newState = components::UIDropdownState::Normal;
@@ -377,9 +375,8 @@ namespace controllers::offscreen
 
         for (auto tabsEntity : tabsView)
         {
-            if (registry.all_of<components::NameComponent>(tabsEntity))
-                if (!registry.get<components::NameComponent>(tabsEntity).isActive)
-                    continue;
+            if (!scene::Entity::isEffectivelyActive(registry, tabsEntity))
+                continue;
 
             if (!registry.all_of<components::ChildrenComponent>(tabsEntity))
                 continue;
@@ -423,9 +420,8 @@ namespace controllers::offscreen
                 if (!registry.valid(btnEntity)) continue;
                 if (!registry.all_of<components::UIRectComponent>(btnEntity)) continue;
 
-                if (registry.all_of<components::NameComponent>(btnEntity))
-                    if (!registry.get<components::NameComponent>(btnEntity).isActive)
-                        continue;
+                if (!scene::Entity::isEffectivelyActive(registry, btnEntity))
+                    continue;
 
                 const auto& btnRect = registry.get<components::UIRectComponent>(btnEntity);
                 PixelRect rect = ui_common::resolvePixelRect(btnRect, vw, vh, scale);
@@ -603,9 +599,8 @@ namespace controllers::offscreen
             if (!comp.interactable || comp.isDragging)
                 continue;
 
-            if (registry.all_of<components::NameComponent>(sliderEntity))
-                if (!registry.get<components::NameComponent>(sliderEntity).isActive)
-                    continue;
+            if (!scene::Entity::isEffectivelyActive(registry, sliderEntity))
+                continue;
 
             const auto* canvas = ui_common::findCanvasForEntity(registry, sliderEntity);
             if (!canvas && registry.all_of<components::UICanvasComponent>(sliderEntity))
@@ -640,9 +635,8 @@ namespace controllers::offscreen
             if (comp.isDragging)
                 continue;
 
-            if (registry.all_of<components::NameComponent>(sliderEntity))
-                if (!registry.get<components::NameComponent>(sliderEntity).isActive)
-                    continue;
+            if (!scene::Entity::isEffectivelyActive(registry, sliderEntity))
+                continue;
 
             auto previousState = comp.currentState;
             components::UISliderState newState = components::UISliderState::Normal;

@@ -93,9 +93,8 @@ namespace controllers::offscreen
 
             for (auto layoutEntity : layoutView)
             {
-                if (registry.all_of<components::NameComponent>(layoutEntity))
-                    if (!registry.get<components::NameComponent>(layoutEntity).isActive)
-                        continue;
+                if (!scene::Entity::isEffectivelyActive(registry, layoutEntity))
+                    continue;
 
                 const auto* layoutCanvas = findCanvasForEntity(registry, layoutEntity);
                 if (!layoutCanvas)
@@ -122,8 +121,7 @@ namespace controllers::offscreen
                 {
                     if (!registry.valid(child) || !registry.all_of<components::UIRectComponent>(child))
                         continue;
-                    if (registry.all_of<components::NameComponent>(child)
-                        && !registry.get<components::NameComponent>(child).isActive)
+                    if (!scene::Entity::isEffectivelyActive(registry, child))
                         continue;
 
                     auto& childRect = registry.get<components::UIRectComponent>(child);
@@ -298,9 +296,8 @@ namespace controllers::offscreen
             if (!registry.valid(entity))
                 return;
 
-            if (registry.all_of<components::NameComponent>(entity))
-                if (!registry.get<components::NameComponent>(entity).isActive)
-                    return;
+            if (!scene::Entity::isEffectivelyActive(registry, entity))
+                return;
 
             // Track scroll ancestor
             entt::entity effectiveScrollAncestor = scrollAncestor;

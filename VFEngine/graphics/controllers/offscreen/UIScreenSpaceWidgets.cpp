@@ -21,9 +21,8 @@ namespace controllers::offscreen::ui_screenspace
 
         for (auto sliderEntity : sliderDrawView)
         {
-            if (registry.all_of<components::NameComponent>(sliderEntity))
-                if (!registry.get<components::NameComponent>(sliderEntity).isActive)
-                    continue;
+            if (!scene::Entity::isEffectivelyActive(registry, sliderEntity))
+                continue;
 
             const auto& sliderComp = registry.get<components::UISliderComponent>(sliderEntity);
             const auto& rectComp = registry.get<components::UIRectComponent>(sliderEntity);
@@ -126,9 +125,8 @@ namespace controllers::offscreen::ui_screenspace
 
         for (auto pbEntity : progressBarView)
         {
-            if (registry.all_of<components::NameComponent>(pbEntity))
-                if (!registry.get<components::NameComponent>(pbEntity).isActive)
-                    continue;
+            if (!scene::Entity::isEffectivelyActive(registry, pbEntity))
+                continue;
 
             auto& pbComp = registry.get<components::UIProgressBarComponent>(pbEntity);
             const auto& rectComp = registry.get<components::UIRectComponent>(pbEntity);
@@ -227,9 +225,8 @@ namespace controllers::offscreen::ui_screenspace
         auto scrollBarView = registry.view<components::UIScrollComponent, components::UIRectComponent>();
         for (auto scrollEntity : scrollBarView)
         {
-            if (registry.all_of<components::NameComponent>(scrollEntity))
-                if (!registry.get<components::NameComponent>(scrollEntity).isActive)
-                    continue;
+            if (!scene::Entity::isEffectivelyActive(registry, scrollEntity))
+                continue;
 
             const auto& scrollComp = registry.get<components::UIScrollComponent>(scrollEntity);
 
@@ -448,9 +445,8 @@ namespace controllers::offscreen::ui_screenspace
             if (!comp.isOpen || comp.options.empty())
                 continue;
 
-            if (registry.all_of<components::NameComponent>(dropdownEntity))
-                if (!registry.get<components::NameComponent>(dropdownEntity).isActive)
-                    continue;
+            if (!scene::Entity::isEffectivelyActive(registry, dropdownEntity))
+                continue;
 
             const auto* canvas = findCanvasForEntity(registry, dropdownEntity);
             if (!canvas && registry.all_of<components::UICanvasComponent>(dropdownEntity))

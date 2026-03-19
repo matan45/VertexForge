@@ -45,9 +45,8 @@ namespace controllers::offscreen
             if (!buttonComp.interactable)
                 continue;
 
-            if (registry.all_of<components::NameComponent>(buttonEntity))
-                if (!registry.get<components::NameComponent>(buttonEntity).isActive)
-                    continue;
+            if (!scene::Entity::isEffectivelyActive(registry, buttonEntity))
+                continue;
 
             const auto* canvas = findCanvasForEntity(registry, buttonEntity);
             if (!canvas && registry.all_of<components::UICanvasComponent>(buttonEntity))
@@ -84,9 +83,8 @@ namespace controllers::offscreen
         {
             auto& comp = registry.get<components::UIButtonComponent>(buttonEntity);
 
-            if (registry.all_of<components::NameComponent>(buttonEntity))
-                if (!registry.get<components::NameComponent>(buttonEntity).isActive)
-                    continue;
+            if (!scene::Entity::isEffectivelyActive(registry, buttonEntity))
+                continue;
 
             auto previousState = comp.currentState;
             components::UIButtonState newState = components::UIButtonState::Normal;
@@ -265,9 +263,8 @@ namespace controllers::offscreen
             if (!checkboxComp.interactable)
                 continue;
 
-            if (registry.all_of<components::NameComponent>(checkboxEntity))
-                if (!registry.get<components::NameComponent>(checkboxEntity).isActive)
-                    continue;
+            if (!scene::Entity::isEffectivelyActive(registry, checkboxEntity))
+                continue;
 
             const auto* canvas = findCanvasForEntity(registry, checkboxEntity);
             if (!canvas && registry.all_of<components::UICanvasComponent>(checkboxEntity))
@@ -326,9 +323,8 @@ namespace controllers::offscreen
         {
             auto& comp = registry.get<components::UICheckboxComponent>(checkboxEntity);
 
-            if (registry.all_of<components::NameComponent>(checkboxEntity))
-                if (!registry.get<components::NameComponent>(checkboxEntity).isActive)
-                    continue;
+            if (!scene::Entity::isEffectivelyActive(registry, checkboxEntity))
+                continue;
 
             auto previousState = comp.currentState;
             components::UICheckboxState newState = components::UICheckboxState::Normal;

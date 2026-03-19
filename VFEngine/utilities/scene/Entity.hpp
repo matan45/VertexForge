@@ -208,6 +208,22 @@ namespace scene {
 			return childEntities;
 		}
 
+		// Check if entity is effectively active (self AND all ancestors are active)
+		static bool isEffectivelyActive(entt::registry& registry, entt::entity entity) {
+			entt::entity current = entity;
+			while (current != entt::null && registry.valid(current)) {
+				if (registry.all_of<components::NameComponent>(current)) {
+					if (!registry.get<components::NameComponent>(current).isActive)
+						return false;
+				}
+				if (registry.all_of<components::ParentComponent>(current))
+					current = registry.get<components::ParentComponent>(current).parent;
+				else
+					break;
+			}
+			return true;
+		}
+
 		void removeAllOptionalComponents() {
 			if (!isAlive()) {
 				vfLogError("Trying to remove components from an invalid entity.");
