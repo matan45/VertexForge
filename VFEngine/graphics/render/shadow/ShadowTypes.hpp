@@ -146,6 +146,9 @@ namespace render::shadow
         std::vector<bool> vsmPageHasDynamic;          // true if page has dynamic geometry this frame
         std::vector<uint32_t> vsmDynamicTileLastUsedFrame; // for cooldown before freeing dynamic tiles
 
+        // Light movement tracking: detect when VP matrix changes to invalidate cached pages
+        glm::mat4 lastViewProjection{0.0f}; // initialized to zero so first frame always dirty
+
         void invalidate()
         {
             for (auto& view : views)

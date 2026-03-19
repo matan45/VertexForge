@@ -359,11 +359,15 @@ namespace render::shadow
 
         for (auto& [entityId, data] : lightShadowData)
         {
+            if (!data.settings.enabled || !data.settings.castShadows)
+                continue;
+
+            // Track rendered frames for all lights (used for dual-layer warmup)
+            ++data.renderedFrameCount;
+
             if (data.isStatic && !data.shadowCached &&
-                data.settings.enabled && data.settings.castShadows &&
                 data.type != ShadowMapType::DirectionalCSM)
             {
-                ++data.renderedFrameCount;
                 if (data.renderedFrameCount >= 2)
                 {
                     data.shadowCached = true;

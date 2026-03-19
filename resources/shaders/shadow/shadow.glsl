@@ -236,6 +236,8 @@ layout(push_constant) uniform ShadowPushConstants {
     float depthBias;
     float slopeBias;
     float normalBias;
+    uint objectFilterMask;
+    uint objectFilterValue;
 } pc;
 
 layout(std430, set = 0, binding = 0) readonly buffer PerDrawDataBuffer {

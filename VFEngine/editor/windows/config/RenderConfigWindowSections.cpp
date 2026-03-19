@@ -206,8 +206,7 @@ namespace windows
             ImGui::TextColored(cacheColor, "  Page cache hit: %.0f%%", pageCacheRatio * 100.0f);
         }
 
-        if (shadowStats.staticPagesRendered > 0 || shadowStats.dynamicPagesRendered > 0 ||
-            shadowStats.dynamicTilesAllocated > 0)
+        if (shadowStats.totalPages > 0)
         {
             ImGui::Spacing();
             ImGui::Text("Dual-Layer Shadow");

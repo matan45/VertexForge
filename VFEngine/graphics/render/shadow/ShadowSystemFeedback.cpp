@@ -112,10 +112,13 @@ namespace render::shadow
 
         ++lastCacheStats.totalPages;
 
+        // renderedFrameCount < 3: keep re-rendering to ensure GPU draw data is ready after scene load
+        bool forceRender = data.renderedFrameCount < 3;
+
         if (data.isStatic)
         {
             // Static light: single-layer path (all objects, legacy behavior)
-            if (!isDirty && !data.vsmPageDirty[pageIdx])
+            if (!isDirty && !data.vsmPageDirty[pageIdx] && !forceRender)
             {
                 ++lastCacheStats.cachedPages;
                 return;
@@ -130,14 +133,17 @@ namespace render::shadow
             entry.layer = ShadowLayer::All;
             pageRenderList.push_back(entry);
             ++lastCacheStats.renderedPages;
-            data.vsmPageDirty[pageIdx] = false;
+            if (!forceRender)
+                data.vsmPageDirty[pageIdx] = false;
         }
         else
         {
             // Dynamic light: dual-layer path
 
-            // Static layer: only render if dirty
-            if (isDirty || data.vsmPageDirty[pageIdx])
+            // Static layer: render ALL objects (cached until dirty)
+            // renderedFrameCount < 3: keep re-rendering for first few frames to ensure GPU draw data is ready
+            bool forceRender = data.renderedFrameCount < 3;
+            if (isDirty || data.vsmPageDirty[pageIdx] || forceRender)
             {
                 PageRenderEntry staticEntry;
                 staticEntry.physicalTileIndex = physTile;
@@ -145,11 +151,12 @@ namespace render::shadow
                 staticEntry.depthBias = view.depthBias;
                 staticEntry.slopeBias = view.slopeBias;
                 staticEntry.normalBias = view.normalBias;
-                staticEntry.layer = ShadowLayer::Static;
+                staticEntry.layer = ShadowLayer::All; // render all objects into static tile
                 staticPageRenderList.push_back(staticEntry);
                 ++lastCacheStats.renderedPages;
                 ++lastCacheStats.staticPagesRendered;
-                data.vsmPageDirty[pageIdx] = false;
+                if (!forceRender)
+                    data.vsmPageDirty[pageIdx] = false;
             }
             else
             {
@@ -251,6 +258,15 @@ namespace render::shadow
         const auto& view = data.views[0];
         if (view.cached)
             return;
+
+        // Detect light movement: if VP matrix changed, mark all pages dirty
+        bool lightMoved = (view.viewProjectionMatrix != data.lastViewProjection);
+        if (lightMoved)
+        {
+            data.lastViewProjection = view.viewProjectionMatrix;
+            for (size_t i = 0; i < data.vsmPageDirty.size(); ++i)
+                data.vsmPageDirty[i] = true;
+        }
 
         for (uint32_t py = 0; py < data.vsmPagesY; ++py)
         {
@@ -398,18 +414,13 @@ namespace render::shadow
 
     void ShadowSystem::applyFeedbackAllocations()
     {
-        if (!feedbackEnabled || !feedbackHasResults || prevFrameFeedback.empty())
-            return;
-
-        static constexpr uint32_t WARMUP_FRAMES = 120;
-        bool allowEviction = frameCounter > WARMUP_FRAMES;
-
         if (!tilePool || !pageTable)
             return;
 
+        // Non-static lights: brute-force allocate all pages (no feedback needed)
         for (auto& [entityId, data] : lightShadowData)
         {
-            if (!data.usesVSM())
+            if (!data.usesVSM() || data.isStatic)
                 continue;
 
             uint32_t totalPages = data.vsmPagesX * data.vsmPagesY;
@@ -420,29 +431,46 @@ namespace render::shadow
                 data.vsmPhysicalTiles.resize(totalPages, vsm::INVALID_TILE);
             if (data.vsmPageLastUsedFrame.size() != totalPages)
                 data.vsmPageLastUsedFrame.resize(totalPages, 0);
+            if (data.vsmPageDirty.size() != totalPages)
+                data.vsmPageDirty.resize(totalPages, true);
 
-            if (!data.isStatic)
+            for (uint32_t i = 0; i < totalPages; ++i)
             {
-                if (data.vsmPageDirty.size() != totalPages)
-                    data.vsmPageDirty.resize(totalPages, true);
-
-                for (uint32_t i = 0; i < totalPages; ++i)
+                if (data.vsmPhysicalTiles[i] == vsm::INVALID_TILE)
                 {
-                    if (data.vsmPhysicalTiles[i] == vsm::INVALID_TILE)
+                    uint32_t tile = tilePool->allocateTile();
+                    if (tile != vsm::INVALID_TILE)
                     {
-                        uint32_t tile = tilePool->allocateTile();
-                        if (tile != vsm::INVALID_TILE)
-                        {
-                            data.vsmPhysicalTiles[i] = tile;
-                            uint32_t px = i % data.vsmPagesX;
-                            uint32_t py = i / data.vsmPagesX;
-                            pageTable->mapPage(data.vsmPageTableOffset, px, py, data.vsmPagesX, tile);
-                            data.vsmPageDirty[i] = true;
-                        }
+                        data.vsmPhysicalTiles[i] = tile;
+                        uint32_t px = i % data.vsmPagesX;
+                        uint32_t py = i / data.vsmPagesX;
+                        pageTable->mapPage(data.vsmPageTableOffset, px, py, data.vsmPagesX, tile);
+                        data.vsmPageDirty[i] = true;
                     }
                 }
-                continue;
             }
+        }
+
+        // Static lights: feedback-driven allocation (requires results)
+        if (!feedbackEnabled || !feedbackHasResults || prevFrameFeedback.empty())
+            return;
+
+        static constexpr uint32_t WARMUP_FRAMES = 120;
+        bool allowEviction = frameCounter > WARMUP_FRAMES;
+
+        for (auto& [entityId, data] : lightShadowData)
+        {
+            if (!data.usesVSM() || !data.isStatic)
+                continue;
+
+            uint32_t totalPages = data.vsmPagesX * data.vsmPagesY;
+            if (totalPages == 0)
+                continue;
+
+            if (data.vsmPhysicalTiles.size() != totalPages)
+                data.vsmPhysicalTiles.resize(totalPages, vsm::INVALID_TILE);
+            if (data.vsmPageLastUsedFrame.size() != totalPages)
+                data.vsmPageLastUsedFrame.resize(totalPages, 0);
 
             for (uint32_t i = 0; i < totalPages; ++i)
             {
