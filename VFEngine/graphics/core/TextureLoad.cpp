@@ -76,6 +76,14 @@ namespace core
             for (const auto& mip : p.mipData)
             {
                 size_t mipSize = static_cast<size_t>(computeMipSize(mip, p.useDataSize));
+                if (mip.data.empty() || mip.data.size() < mipSize)
+                {
+                    vfLogError("Mip data is empty or too small (expected {}, got {})", mipSize, mip.data.size());
+                    p.device.getLogicalDevice().unmapMemory(stagingBufferMemory);
+                    p.device.getLogicalDevice().destroyBuffer(stagingBuffer);
+                    p.device.getLogicalDevice().freeMemory(stagingBufferMemory);
+                    return false;
+                }
                 memcpy(static_cast<char*>(data) + offset, mip.data.data(), mipSize);
                 offset += mipSize;
             }
@@ -242,12 +250,12 @@ namespace core
         }
     }
 
-    void Texture::loadTextureFromData(const resource::TextureData& textureData, vk::Format format, bool isEditor)
+    bool Texture::loadTextureFromData(const resource::TextureData& textureData, vk::Format format, bool isEditor)
     {
         if (textureData.mipData.empty())
         {
             vfLogError("Texture data is empty");
-            return;
+            return false;
         }
 
         imageData = {textureData.width, textureData.height, textureData.numbersOfChannels, textureData.mipLevels};
@@ -255,7 +263,7 @@ namespace core
 
         MipUploadParams params{device, commandPool, image, imageMemory, textureData.mipData,
                                textureData.width, textureData.height, textureData.mipLevels, resolvedFormat, false};
-        if (!stageAndUploadMips(params)) return;
+        if (!stageAndUploadMips(params)) return false;
 
         createSampler(textureData.mipLevels);
 
@@ -270,5 +278,6 @@ namespace core
             descriptorSet = ImGui_ImplVulkan_AddTexture(sampler, imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
             createPerMipViews(resolvedFormat);
         }
+        return true;
     }
 }

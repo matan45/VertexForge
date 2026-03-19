@@ -113,6 +113,11 @@ void multiScatterCompensation(vec3 F0, vec2 brdfLookup, float metallic,
     kD = (1.0 - FssEss - FmsEms) * (1.0 - metallic);
 }
 
+// Specular occlusion from AO (Lagarde/de Rousiers, Frostbite 2014)
+float specularOcclusion(float NdotV, float ao, float roughness) {
+    return clamp(pow(NdotV + ao, exp2(-16.0 * roughness - 1.0)) - 1.0 + ao, 0.0, 1.0);
+}
+
 void main() {
     vec3 N = normalize(fragNormal);
     vec3 V = normalize(camera.cameraPos - fragWorldPos);
@@ -126,9 +131,10 @@ void main() {
 
     vec3 F0 = mix(vec3(0.04), albedo, metallic);
 
+    float NdotV = max(dot(N, V), 0.0);
     vec3 irradiance = texture(irradianceMap, N).rgb;
     vec3 prefilteredColor = textureLod(prefilterMap, R, roughness * MAX_REFLECTION_LOD).rgb;
-    vec2 brdf = texture(brdfLUT, vec2(max(dot(N, V), 0.0), roughness)).rg;
+    vec2 brdf = texture(brdfLUT, vec2(NdotV, roughness)).rg;
 
     vec3 specularScale;
     vec3 kD;
@@ -137,7 +143,8 @@ void main() {
     vec3 diffuse = irradiance * albedo;
     vec3 specular = prefilteredColor * specularScale;
 
-    vec3 ambient = (kD * diffuse + specular) * ao;
+    float so = specularOcclusion(NdotV, ao, roughness);
+    vec3 ambient = kD * diffuse * ao + specular * so;
     vec3 emissive = albedo * pc.emission;
     vec3 color = ambient + emissive;
 

@@ -14,7 +14,10 @@ namespace controllers {
 	std::unique_ptr<dto::EditorTexture> EditorTextureController::loadTextureFromData(const resource::TextureData& textureData)
 	{
 		auto texture = TextureController::createTexture();
-		texture->loadTextureFromData(textureData);
+		if (!texture->loadTextureFromData(textureData))
+		{
+			return nullptr;
+		}
 		return std::make_unique<dto::EditorTexture>(std::move(texture));
 	}
 

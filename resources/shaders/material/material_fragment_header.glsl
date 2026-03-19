@@ -94,6 +94,11 @@ void multiScatterCompensation(vec3 F0, vec2 brdfLookup, float metallic,
     kD = (1.0 - FssEss - FmsEms) * (1.0 - metallic);
 }
 
+// Specular occlusion from AO (Lagarde/de Rousiers, Frostbite 2014)
+float specularOcclusion(float NdotV, float ao, float roughness) {
+    return clamp(pow(NdotV + ao, exp2(-16.0 * roughness - 1.0)) - 1.0 + ao, 0.0, 1.0);
+}
+
 // Parallax Occlusion Mapping - only compiled when USE_PARALLAX is defined
 #ifdef USE_PARALLAX
 // Returns offset UV coordinates based on height map

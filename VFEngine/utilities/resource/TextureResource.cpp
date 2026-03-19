@@ -104,6 +104,12 @@ namespace resource
                 mipLevel.dataSize = static_cast<uint32_t>(mipLevel.data.size());
             }
 
+            if (!inFile || mipLevel.data.empty())
+            {
+                vfLogError("Failed to read mip level {} data from texture file: {}", level, path);
+                return {};
+            }
+
             textureData.mipData.push_back(std::move(mipLevel));
         }
 
