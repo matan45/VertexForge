@@ -42,13 +42,13 @@
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <OutDir>$(ProjectDir)..\..\bin\Core\Debug\x64\</OutDir>
-    <IntDir>$(ProjectDir)obj\x64\Debug\</IntDir>
+    <IntDir>$(ProjectDir)obj\x64\Debug\Core\</IntDir>
     <TargetName>Core</TargetName>
     <TargetExt>.lib</TargetExt>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <OutDir>$(ProjectDir)..\..\bin\Core\Release\x64\</OutDir>
-    <IntDir>$(ProjectDir)obj\x64\Release\</IntDir>
+    <IntDir>$(ProjectDir)obj\x64\Release\Core\</IntDir>
     <TargetName>Core</TargetName>
     <TargetExt>.lib</TargetExt>
   </PropertyGroup>
@@ -68,10 +68,6 @@
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>
-    <Lib>
-      <AdditionalDependencies>OpenAL32.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>..\..\dependencies\openal-soft\build\Debug;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-    </Lib>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
@@ -93,10 +89,6 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
     </Link>
-    <Lib>
-      <AdditionalDependencies>OpenAL32.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>..\..\dependencies\openal-soft\build\Release;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-    </Lib>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="adapters\ai\BehaviorTreeAdapter.hpp" />
@@ -178,22 +170,6 @@
     <ClInclude Include="adapters\vegetation\GrassRenderAdapter.hpp" />
     <ClInclude Include="adapters\vfx\VFXPreviewAdapter.hpp" />
     <ClInclude Include="adapters\vfx\VFXRuntimeAdapter.hpp" />
-    <ClInclude Include="audio\AudioBufferManager.hpp" />
-    <ClInclude Include="audio\AudioBusManager.hpp" />
-    <ClInclude Include="audio\AudioCommandQueue.hpp" />
-    <ClInclude Include="audio\AudioController.hpp" />
-    <ClInclude Include="audio\AudioEffectManager.hpp" />
-    <ClInclude Include="audio\AudioListener.hpp" />
-    <ClInclude Include="audio\AudioPlayParams.hpp" />
-    <ClInclude Include="audio\AudioSceneUpdater.hpp" />
-    <ClInclude Include="audio\AudioSource.hpp" />
-    <ClInclude Include="audio\AudioSourceManager.hpp" />
-    <ClInclude Include="audio\AudioSystem.hpp" />
-    <ClInclude Include="audio\AudioThread.hpp" />
-    <ClInclude Include="audio\ReverbPresets.hpp" />
-    <ClInclude Include="audio\ReverbZoneManager.hpp" />
-    <ClInclude Include="audio\StreamingAudioManager.hpp" />
-    <ClInclude Include="audio\StreamingAudioSource.hpp" />
     <ClInclude Include="bootstrap\editor\EditorBootstrap.hpp" />
     <ClInclude Include="bootstrap\runtime\RuntimeBootstrap.hpp" />
     <ClInclude Include="controllers\CoreInterface.hpp" />
@@ -203,22 +179,6 @@
     <ClInclude Include="controllers\imguiHandler\ImguiWindowHandler.hpp" />
     <ClInclude Include="controllers\texture\EditorTexture.hpp" />
     <ClInclude Include="core\MainLoop.hpp" />
-    <ClInclude Include="physics\FixedTimestep.hpp" />
-    <ClInclude Include="physics\JoltConversions.hpp" />
-    <ClInclude Include="physics\PhysicsBodyRegistry.hpp" />
-    <ClInclude Include="physics\PhysicsCharacterManager.hpp" />
-    <ClInclude Include="physics\PhysicsContactListener.hpp" />
-    <ClInclude Include="physics\PhysicsContext.hpp" />
-    <ClInclude Include="physics\PhysicsLayers.hpp" />
-    <ClInclude Include="physics\PhysicsMeshLoader.hpp" />
-    <ClInclude Include="physics\PhysicsRagdollManager.hpp" />
-    <ClInclude Include="physics\PhysicsRigidBodyManager.hpp" />
-    <ClInclude Include="physics\PhysicsShapeFactory.hpp" />
-    <ClInclude Include="physics\PhysicsSkeletonConverter.hpp" />
-    <ClInclude Include="physics\PhysicsStateBuffer.hpp" />
-    <ClInclude Include="physics\PhysicsTerrainManager.hpp" />
-    <ClInclude Include="physics\PhysicsWorld.hpp" />
-    <ClInclude Include="physics\RagdollSettingsBuilder.hpp" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="adapters\ai\BehaviorTreeAdapter.cpp" />
@@ -300,21 +260,6 @@
     <ClCompile Include="adapters\vegetation\GrassRenderAdapter.cpp" />
     <ClCompile Include="adapters\vfx\VFXPreviewAdapter.cpp" />
     <ClCompile Include="adapters\vfx\VFXRuntimeAdapter.cpp" />
-    <ClCompile Include="audio\AudioBufferManager.cpp" />
-    <ClCompile Include="audio\AudioBusManager.cpp" />
-    <ClCompile Include="audio\AudioCommandQueue.cpp" />
-    <ClCompile Include="audio\AudioController.cpp" />
-    <ClCompile Include="audio\AudioEffectManager.cpp" />
-    <ClCompile Include="audio\AudioListener.cpp" />
-    <ClCompile Include="audio\AudioSceneUpdater.cpp" />
-    <ClCompile Include="audio\AudioSource.cpp" />
-    <ClCompile Include="audio\AudioSourceManager.cpp" />
-    <ClCompile Include="audio\AudioSystem.cpp" />
-    <ClCompile Include="audio\AudioThread.cpp" />
-    <ClCompile Include="audio\ReverbPresets.cpp" />
-    <ClCompile Include="audio\ReverbZoneManager.cpp" />
-    <ClCompile Include="audio\StreamingAudioManager.cpp" />
-    <ClCompile Include="audio\StreamingAudioSource.cpp" />
     <ClCompile Include="bootstrap\editor\EditorBootstrap.cpp" />
     <ClCompile Include="bootstrap\editor\EditorBootstrapCleanup.cpp" />
     <ClCompile Include="bootstrap\editor\EditorBootstrapFrame.cpp" />
@@ -331,23 +276,19 @@
     <ClCompile Include="controllers\imguiHandler\ImguiWindowHandler.cpp" />
     <ClCompile Include="controllers\texture\EditorTexture.cpp" />
     <ClCompile Include="core\MainLoop.cpp" />
-    <ClCompile Include="physics\FixedTimestep.cpp" />
-    <ClCompile Include="physics\PhysicsBodyRegistry.cpp" />
-    <ClCompile Include="physics\PhysicsCharacterManager.cpp" />
-    <ClCompile Include="physics\PhysicsContactListener.cpp" />
-    <ClCompile Include="physics\PhysicsMeshLoader.cpp" />
-    <ClCompile Include="physics\PhysicsRagdollManager.cpp" />
-    <ClCompile Include="physics\PhysicsRigidBodyManager.cpp" />
-    <ClCompile Include="physics\PhysicsShapeFactory.cpp" />
-    <ClCompile Include="physics\PhysicsSkeletonConverter.cpp" />
-    <ClCompile Include="physics\PhysicsStateBuffer.cpp" />
-    <ClCompile Include="physics\PhysicsTerrainManager.cpp" />
-    <ClCompile Include="physics\PhysicsWorld.cpp" />
-    <ClCompile Include="physics\RagdollSettingsBuilder.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\graphics\Graphics.vcxproj">
       <Project>{1653CE33-0220-293F-2B39-17E717655ECD}</Project>
+    </ProjectReference>
+    <ProjectReference Include="Audio.vcxproj">
+      <Project>{9718D90C-032D-01BE-CCAE-A41D3882FDEE}</Project>
+    </ProjectReference>
+    <ProjectReference Include="Physics.vcxproj">
+      <Project>{888B590D-F46A-D8A8-FD82-637F69E13E0A}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\graphics\Animation.vcxproj">
+      <Project>{859E00A2-F108-B518-3A47-66BEA6F0926D}</Project>
     </ProjectReference>
     <ProjectReference Include="..\mType.vcxproj">
       <Project>{7490E30F-E0A4-0BC1-A926-AF2015FA07F2}</Project>
