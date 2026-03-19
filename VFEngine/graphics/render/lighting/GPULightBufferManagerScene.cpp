@@ -5,6 +5,7 @@
 #include "../shadow/ShadowTypes.hpp"
 #include "print/Log.hpp"
 #include "scene/EntityRegistry.hpp"
+#include "scene/Entity.hpp"
 #include "components/Components.hpp"
 #include "components/LightTextComponents.hpp"
 #include <cmath>
@@ -78,11 +79,8 @@ namespace render::lighting
 
         for (auto entity : view)
         {
-            if (auto* nameComp = registry.try_get<components::NameComponent>(entity))
-            {
-                if (!nameComp->isActive)
-                    continue;
-            }
+            if (!scene::Entity::isEffectivelyActive(registry, entity))
+                continue;
 
             if (visibleLightIds && visibleLightIds->find(static_cast<uint32_t>(entity)) == visibleLightIds->end())
                 continue;
@@ -143,11 +141,8 @@ namespace render::lighting
 
         for (auto entity : view)
         {
-            if (auto* nameComp = registry.try_get<components::NameComponent>(entity))
-            {
-                if (!nameComp->isActive)
-                    continue;
-            }
+            if (!scene::Entity::isEffectivelyActive(registry, entity))
+                continue;
 
             if (visibleLightIds && visibleLightIds->find(static_cast<uint32_t>(entity)) == visibleLightIds->end())
             {
@@ -220,11 +215,8 @@ namespace render::lighting
 
         for (auto entity : view)
         {
-            if (auto* nameComp = registry.try_get<components::NameComponent>(entity))
-            {
-                if (!nameComp->isActive)
-                    continue;
-            }
+            if (!scene::Entity::isEffectivelyActive(registry, entity))
+                continue;
 
             if (visibleLightIds && visibleLightIds->find(static_cast<uint32_t>(entity)) == visibleLightIds->end())
             {

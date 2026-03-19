@@ -267,6 +267,9 @@ namespace services
             data.isActive = sceneEntity.getComponent<components::NameComponent>().isActive;
         }
 
+        auto& registry = scene::EntityRegistry::getRegistry();
+        data.isEffectivelyActive = scene::Entity::isEffectivelyActive(registry, entity);
+
         if (sceneEntity.hasComponent<components::ParentComponent>())
         {
             data.parent = internal::toHandle(sceneEntity.getComponent<components::ParentComponent>().parent);

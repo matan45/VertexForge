@@ -14,6 +14,7 @@
 #include "../../render/gpudriven/GPUDrivenRenderer.hpp"
 #include "../../render/lighting/ClusterGridManager.hpp"
 #include "scene/EntityRegistry.hpp"
+#include "scene/Entity.hpp"
 #include "components/Components.hpp"
 #include "../../../services/events/EventDispatcher.hpp"
 #include "../../../services/events/render/DebugDrawEvents.hpp"
@@ -40,13 +41,9 @@ namespace controllers::offscreen
 
         for (auto entity : view)
         {
-            if (registry.all_of<components::NameComponent>(entity))
+            if (!scene::Entity::isEffectivelyActive(registry, entity))
             {
-                const auto& nameComp = registry.get<components::NameComponent>(entity);
-                if (!nameComp.isActive)
-                {
-                    continue;
-                }
+                continue;
             }
 
             const auto& cameraComp = view.get<components::CameraComponent>(entity);
@@ -97,13 +94,9 @@ namespace controllers::offscreen
 
         for (auto entity : view)
         {
-            if (registry.all_of<components::NameComponent>(entity))
+            if (!scene::Entity::isEffectivelyActive(registry, entity))
             {
-                const auto& nameComp = registry.get<components::NameComponent>(entity);
-                if (!nameComp.isActive)
-                {
-                    continue;
-                }
+                continue;
             }
 
             const auto& audioComp = view.get<components::AudioSource3DComponent>(entity);
@@ -166,10 +159,9 @@ namespace controllers::offscreen
 
         for (auto entity : view)
         {
-            if (registry.all_of<components::NameComponent>(entity))
+            if (!scene::Entity::isEffectivelyActive(registry, entity))
             {
-                const auto& nameComp = registry.get<components::NameComponent>(entity);
-                if (!nameComp.isActive) continue;
+                continue;
             }
 
             const auto& zone = view.get<components::ReverbZoneComponent>(entity);
@@ -251,10 +243,9 @@ namespace controllers::offscreen
 
         for (auto entity : view)
         {
-            if (registry.all_of<components::NameComponent>(entity))
+            if (!scene::Entity::isEffectivelyActive(registry, entity))
             {
-                if (!registry.get<components::NameComponent>(entity).isActive)
-                    continue;
+                continue;
             }
 
             const auto& colliderComp = view.get<components::ColliderComponent>(entity);
@@ -348,13 +339,9 @@ namespace controllers::offscreen
 
         for (auto entity : view)
         {
-            if (registry.all_of<components::NameComponent>(entity))
+            if (!scene::Entity::isEffectivelyActive(registry, entity))
             {
-                const auto& nameComp = registry.get<components::NameComponent>(entity);
-                if (!nameComp.isActive)
-                {
-                    continue;
-                }
+                continue;
             }
 
             const auto& lightComp = view.get<components::DirectionalLightComponent>(entity);
@@ -382,13 +369,9 @@ namespace controllers::offscreen
 
         for (auto entity : view)
         {
-            if (registry.all_of<components::NameComponent>(entity))
+            if (!scene::Entity::isEffectivelyActive(registry, entity))
             {
-                const auto& nameComp = registry.get<components::NameComponent>(entity);
-                if (!nameComp.isActive)
-                {
-                    continue;
-                }
+                continue;
             }
 
             const auto& lightComp = view.get<components::PointLightComponent>(entity);
@@ -417,13 +400,9 @@ namespace controllers::offscreen
 
         for (auto entity : view)
         {
-            if (registry.all_of<components::NameComponent>(entity))
+            if (!scene::Entity::isEffectivelyActive(registry, entity))
             {
-                const auto& nameComp = registry.get<components::NameComponent>(entity);
-                if (!nameComp.isActive)
-                {
-                    continue;
-                }
+                continue;
             }
 
             const auto& lightComp = view.get<components::SpotLightComponent>(entity);
@@ -583,10 +562,9 @@ namespace controllers::offscreen
 
         for (auto entity : rectView)
         {
-            if (registry.all_of<components::NameComponent>(entity))
+            if (!scene::Entity::isEffectivelyActive(registry, entity))
             {
-                if (!registry.get<components::NameComponent>(entity).isActive)
-                    continue;
+                continue;
             }
 
             if (registry.all_of<components::UICanvasComponent>(entity))
@@ -669,11 +647,9 @@ namespace controllers::offscreen
 
         for (auto entity : view)
         {
-            if (registry.all_of<components::NameComponent>(entity))
+            if (!scene::Entity::isEffectivelyActive(registry, entity))
             {
-                const auto& nameComp = registry.get<components::NameComponent>(entity);
-                if (!nameComp.isActive)
-                    continue;
+                continue;
             }
 
             const auto& canvasComp = view.get<components::UICanvasComponent>(entity);

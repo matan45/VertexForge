@@ -1,6 +1,7 @@
 #pragma once
 #include "components/Components.hpp"
 #include "scene/EntityRegistry.hpp"
+#include "scene/Entity.hpp"
 #include "../../../services/data/EntityConversion.hpp"
 #include <glm/glm.hpp>
 #include <entt/entt.hpp>
@@ -110,9 +111,7 @@ namespace controllers::offscreen::ui_common
 
     inline bool isEntityActive(entt::registry& registry, entt::entity entity)
     {
-        if (registry.all_of<components::NameComponent>(entity))
-            return registry.get<components::NameComponent>(entity).isActive;
-        return true;
+        return scene::Entity::isEffectivelyActive(registry, entity);
     }
 
     inline std::unordered_map<uint32_t, ScrollContainerInfo> buildScrollContainerMap(

@@ -80,9 +80,8 @@ namespace controllers::offscreen::ui_screenspace
 
         for (auto scrollEntity : scrollDragView)
         {
-            if (registry.all_of<components::NameComponent>(scrollEntity))
-                if (!registry.get<components::NameComponent>(scrollEntity).isActive)
-                    continue;
+            if (!scene::Entity::isEffectivelyActive(registry, scrollEntity))
+                continue;
 
             const auto* scrollCanvas = findCanvasForEntity(registry, scrollEntity);
             if (!scrollCanvas) continue;
@@ -158,9 +157,8 @@ namespace controllers::offscreen::ui_screenspace
 
         for (auto scrollEntity : scrollInputView)
         {
-            if (registry.all_of<components::NameComponent>(scrollEntity))
-                if (!registry.get<components::NameComponent>(scrollEntity).isActive)
-                    continue;
+            if (!scene::Entity::isEffectivelyActive(registry, scrollEntity))
+                continue;
 
             const auto* scrollCanvas = findCanvasForEntity(registry, scrollEntity);
             if (!scrollCanvas)
@@ -223,8 +221,7 @@ namespace controllers::offscreen::ui_screenspace
                 {
                     if (!registry.valid(child) || !registry.all_of<components::UIRectComponent>(child))
                         continue;
-                    if (registry.all_of<components::NameComponent>(child)
-                        && !registry.get<components::NameComponent>(child).isActive)
+                    if (!scene::Entity::isEffectivelyActive(registry, child))
                         continue;
 
                     PixelRect cr = resolvePixelRect(
@@ -263,9 +260,8 @@ namespace controllers::offscreen::ui_screenspace
         auto scrollView = registry.view<components::UIScrollComponent, components::UIRectComponent>();
         for (auto scrollEntity : scrollView)
         {
-            if (registry.all_of<components::NameComponent>(scrollEntity))
-                if (!registry.get<components::NameComponent>(scrollEntity).isActive)
-                    continue;
+            if (!scene::Entity::isEffectivelyActive(registry, scrollEntity))
+                continue;
 
             const auto* scrollCanvas = findCanvasForEntity(registry, scrollEntity);
             if (!scrollCanvas)

@@ -148,9 +148,8 @@ namespace controllers::offscreen
             if (!comp.interactable)
                 continue;
 
-            if (registry.all_of<components::NameComponent>(entity))
-                if (!registry.get<components::NameComponent>(entity).isActive)
-                    continue;
+            if (!scene::Entity::isEffectivelyActive(registry, entity))
+                continue;
 
             const auto* canvas = ui_common::findCanvasForEntity(registry, entity);
             if (!canvas && registry.all_of<components::UICanvasComponent>(entity))
@@ -607,9 +606,8 @@ namespace controllers::offscreen
         {
             auto& comp = registry.get<components::UITextInputComponent>(entity);
 
-            if (registry.all_of<components::NameComponent>(entity))
-                if (!registry.get<components::NameComponent>(entity).isActive)
-                    continue;
+            if (!scene::Entity::isEffectivelyActive(registry, entity))
+                continue;
 
             // State machine
             if (!comp.interactable)

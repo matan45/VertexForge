@@ -62,7 +62,7 @@ namespace windows
             return;
 
         drawEntityName(handle, entityDataOpt->name);
-        drawEntityActiveCheckbox(handle, entityDataOpt->isActive);
+        drawEntityActiveCheckbox(handle, entityDataOpt->isActive, entityDataOpt->isEffectivelyActive);
         ImGui::Separator();
 
         transformDrawer.draw(handle);
@@ -157,20 +157,35 @@ namespace windows
         }
     }
 
-    void EntityDetailsPanel::drawEntityActiveCheckbox(services::EntityHandle handle, bool isActive)
+    void EntityDetailsPanel::drawEntityActiveCheckbox(services::EntityHandle handle, bool isActive, bool isEffectivelyActive)
     {
         auto& dispatcher = events::EventDispatcher::instance();
 
-        if (ImGui::Checkbox("Active", &isActive))
+        bool parentInactive = isActive && !isEffectivelyActive;
+        if (parentInactive)
         {
-            events::scene::SetEntityActiveCommand cmd;
-            cmd.entity = handle;
-            cmd.isActive = isActive;
-            dispatcher.execute(cmd);
+            ImGui::BeginDisabled();
+            bool disabled = false;
+            ImGui::Checkbox("Active", &disabled);
+            ImGui::EndDisabled();
+            if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+            {
+                ImGui::SetTooltip("Inactive because a parent entity is inactive");
+            }
         }
-        if (ImGui::IsItemHovered())
+        else
         {
-            ImGui::SetTooltip("When disabled, the entity and all its components are inactive");
+            if (ImGui::Checkbox("Active", &isActive))
+            {
+                events::scene::SetEntityActiveCommand cmd;
+                cmd.entity = handle;
+                cmd.isActive = isActive;
+                dispatcher.execute(cmd);
+            }
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("When disabled, the entity and all its components are inactive");
+            }
         }
     }
 
