@@ -315,7 +315,7 @@ namespace render::shadow
         // Page counts: balance quality vs draw call count
         // Each page = 1 full indirect draw. Total draws = sum of all pages across all lights.
         static constexpr uint32_t MAX_DIR_PAGES = 4;  // 4×4 = 512×512 per cascade, 64 draws for 4 cascades
-        static constexpr uint32_t MAX_SPOT_PAGES = 2;  // 2×2 = 256×256 per spot, 4 draws per spot
+        static constexpr uint32_t MAX_SPOT_PAGES = 1;  // 1×1 = 128×128 per spot, 1 draw per spot
 
         uint32_t pagesX, pagesY;
         if (data.type == ShadowMapType::DirectionalCSM)
