@@ -82,6 +82,23 @@ vec3 fresnelSchlickRoughness(float cosTheta, vec3 F0, float roughness) {
     return F0 + (max(vec3(1.0 - roughness), F0) - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
 }
 
+// Multi-scattering energy compensation (Fdez-Aguera 2019)
+void multiScatterCompensation(vec3 F0, vec2 brdfLookup, float metallic,
+                              out vec3 specularScale, out vec3 kD) {
+    vec3 FssEss = F0 * brdfLookup.x + brdfLookup.y;
+    float Ess = brdfLookup.x + brdfLookup.y;
+    float Ems = 1.0 - Ess;
+    vec3 Favg = F0 + (1.0 - F0) / 21.0;
+    vec3 FmsEms = Ems * FssEss * Favg / max(1.0 - Favg * Ems, 1e-6);
+    specularScale = FssEss + FmsEms;
+    kD = (1.0 - FssEss - FmsEms) * (1.0 - metallic);
+}
+
+// Specular occlusion from AO (Lagarde/de Rousiers, Frostbite 2014)
+float specularOcclusion(float NdotV, float ao, float roughness) {
+    return clamp(pow(NdotV + ao, exp2(-16.0 * roughness * roughness - 1.0)) - 1.0 + ao, 0.0, 1.0);
+}
+
 // Parallax Occlusion Mapping - only compiled when USE_PARALLAX is defined
 #ifdef USE_PARALLAX
 // Returns offset UV coordinates based on height map

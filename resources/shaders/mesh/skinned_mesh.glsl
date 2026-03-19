@@ -101,6 +101,8 @@ vec3 fresnelSchlickRoughness(float cosTheta, vec3 F0, float roughness) {
     return F0 + (max(vec3(1.0 - roughness), F0) - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
 }
 
+#include "../common/ibl_functions.glsl"
+
 void main() {
     vec3 N = normalize(fragNormal);
     vec3 V = normalize(camera.cameraPos - fragWorldPos);
@@ -114,18 +116,20 @@ void main() {
 
     vec3 F0 = mix(vec3(0.04), albedo, metallic);
 
-    vec3 F = fresnelSchlickRoughness(max(dot(N, V), 0.0), F0, roughness);
-    vec3 kS = F;
-    vec3 kD = (1.0 - kS) * (1.0 - metallic);
-
+    float NdotV = max(dot(N, V), 0.0);
     vec3 irradiance = texture(irradianceMap, N).rgb;
-    vec3 diffuse = irradiance * albedo;
-
     vec3 prefilteredColor = textureLod(prefilterMap, R, roughness * MAX_REFLECTION_LOD).rgb;
-    vec2 brdf = texture(brdfLUT, vec2(max(dot(N, V), 0.0), roughness)).rg;
-    vec3 specular = prefilteredColor * (F * brdf.x + brdf.y);
+    vec2 brdf = texture(brdfLUT, vec2(NdotV, roughness)).rg;
 
-    vec3 ambient = (kD * diffuse + specular) * ao;
+    vec3 specularScale;
+    vec3 kD;
+    multiScatterCompensation(F0, brdf, metallic, specularScale, kD);
+
+    vec3 diffuse = irradiance * albedo;
+    vec3 specular = prefilteredColor * specularScale;
+
+    float so = specularOcclusion(NdotV, ao, roughness);
+    vec3 ambient = kD * diffuse * ao + specular * so;
     vec3 emissive = albedo * pc.emission;
     vec3 color = ambient + emissive;
 

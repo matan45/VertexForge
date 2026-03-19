@@ -47,11 +47,11 @@ namespace core {
 		explicit Texture(Device& device);
 		~Texture();
 
-		void loadTextureFromFile(std::string_view filePath, vk::Format format = vk::Format::eR8G8B8A8Srgb, bool isEditor = true);
+		bool loadTextureFromFile(std::string_view filePath, vk::Format format = vk::Format::eR8G8B8A8Srgb, bool isEditor = true);
 		void loadHDRFromFile(std::string_view filePath, bool isEditor = true);
 		
 		void loadHDRFromData(const resource::HDRData& hdrData, bool isEditor = false);
-		void loadTextureFromData(const resource::TextureData& textureData, vk::Format format = vk::Format::eR8G8B8A8Srgb, bool isEditor = true);
+		bool loadTextureFromData(const resource::TextureData& textureData, vk::Format format = vk::Format::eR8G8B8A8Srgb, bool isEditor = true);
 		
 		const vk::DescriptorSet& getDescriptorSet() const { return descriptorSet; }
 		const vk::ImageView& getImageView() const { return imageView; }

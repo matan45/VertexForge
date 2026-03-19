@@ -203,6 +203,7 @@ void main() {
 
 #include "../common/gpu_types.glsl"
 #include "../common/camera_types.glsl"
+#include "../common/lighting_functions.glsl"
 #include "../common/gi_sampling.glsl"
 #include "../common/lod_crossfade.glsl"
 
@@ -242,54 +243,18 @@ layout(push_constant) uniform PushConstants {
     float screenHeight;
 } pc;
 
-struct DirectionalLight {
-    vec3 direction;
-    float intensity;
-    vec3 color;
-    int shadowIndex;
-};
+// Light structs provided by lighting_functions.glsl include
 
 layout(std430, set = 6, binding = 0) readonly buffer DirectionalLightBuffer {
     DirectionalLight directionalLights[];
-};
-
-struct PointLight {
-    vec3 position;
-    float radius;
-    vec3 color;
-    float intensity;
-    int shadowIndex;
-    uint padding0;
-    uint padding1;
-    uint padding2;
 };
 
 layout(std430, set = 6, binding = 1) readonly buffer PointLightBuffer {
     PointLight pointLights[];
 };
 
-struct SpotLight {
-    vec3 position;
-    float range;
-    vec3 direction;
-    float intensity;
-    vec3 color;
-    float cosInnerAngle;
-    float cosOuterAngle;
-    int shadowIndex;
-    uint padding0;
-    uint padding1;
-};
-
 layout(std430, set = 6, binding = 2) readonly buffer SpotLightBuffer {
     SpotLight spotLights[];
-};
-
-struct LightCounts {
-    uint directionalCount;
-    uint pointCount;
-    uint spotCount;
-    float shadowIntensity;
 };
 
 layout(std140, set = 6, binding = 3) uniform LightCountsUBO {
@@ -344,8 +309,6 @@ layout(set = 10, binding = 3) uniform samplerCube shadowCubesDepth[32];
 #define PAGE_TABLE pageTable
 #include "../common/shadow_sampling.glsl"
 
-const float LIGHTING_PI = 3.14159265359;
-
 const uint LIGHT_INDEX_MASK = 0x7FFFFFFFu;
 
 float linearizeDepth(float windowZ) {
@@ -372,155 +335,6 @@ uint getClusterIndex(vec2 fragCoord, float viewZ) {
            slice * clusterParams.gridDimensions.x * clusterParams.gridDimensions.y;
 }
 
-float smoothDistanceAttenuation(float distance, float range) {
-    float distRatio = distance / range;
-    float attenuation = clamp(1.0 - distRatio * distRatio, 0.0, 1.0);
-    return attenuation * attenuation;
-}
-
-const float LIGHT_INTENSITY_SCALE = 100.0;
-
-float physicalAttenuation(float distance, float range) {
-    float windowFn = smoothDistanceAttenuation(distance, range);
-    float distAtt = LIGHT_INTENSITY_SCALE / max(distance * distance, 0.0001);
-    return distAtt * windowFn;
-}
-
-float spotAngleAttenuation(vec3 lightDir, vec3 spotDir, float cosInner, float cosOuter) {
-    float cosAngle = dot(-lightDir, spotDir);
-
-    if (cosInner <= cosOuter) {
-        return cosAngle >= cosOuter ? 1.0 : 0.0;
-    }
-
-    return clamp((cosAngle - cosOuter) / (cosInner - cosOuter), 0.0, 1.0);
-}
-
-float distributionGGX(float NdotH, float roughness) {
-    float a = roughness * roughness;
-    float a2 = a * a;
-    float NdotH2 = NdotH * NdotH;
-    float denom = NdotH2 * (a2 - 1.0) + 1.0;
-    return a2 / (LIGHTING_PI * denom * denom);
-}
-
-float geometrySchlickGGX(float NdotV, float roughness) {
-    float r = roughness + 1.0;
-    float k = (r * r) / 8.0;
-    return NdotV / (NdotV * (1.0 - k) + k);
-}
-
-float geometrySmith(float NdotV, float NdotL, float roughness) {
-    return geometrySchlickGGX(NdotV, roughness) * geometrySchlickGGX(NdotL, roughness);
-}
-
-vec3 fresnelSchlickDirect(float cosTheta, vec3 F0) {
-    return F0 + (1.0 - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
-}
-
-vec3 evaluatePointLight(vec3 worldPos, vec3 N, vec3 V, vec3 albedo,
-                        float metallic, float roughness, vec3 F0,
-                        PointLight light) {
-    vec3 L = light.position - worldPos;
-    float distance = length(L);
-
-    if (distance > light.radius) return vec3(0.0);
-
-    L = normalize(L);
-
-    float NdotL = dot(N, L);
-    if (NdotL <= 0.0) return vec3(0.0);
-
-    vec3 H = normalize(V + L);
-
-    float NdotV = max(dot(N, V), 0.0);
-    float NdotH = max(dot(N, H), 0.0);
-    float HdotV = max(dot(H, V), 0.0);
-
-    float attenuation = physicalAttenuation(distance, light.radius);
-    vec3 radiance = light.color * light.intensity * attenuation;
-
-    float D = distributionGGX(NdotH, roughness);
-    float G = geometrySmith(NdotV, NdotL, roughness);
-    vec3 F = fresnelSchlickDirect(HdotV, F0);
-
-    vec3 numerator = D * G * F;
-    float denominator = 4.0 * NdotV * NdotL + 0.0001;
-    vec3 specularBRDF = numerator / denominator;
-
-    vec3 kD = (vec3(1.0) - F) * (1.0 - metallic);
-
-    return (kD * albedo / LIGHTING_PI + specularBRDF) * radiance * NdotL;
-}
-
-vec3 evaluateSpotLight(vec3 worldPos, vec3 N, vec3 V, vec3 albedo,
-                       float metallic, float roughness, vec3 F0,
-                       SpotLight light) {
-    vec3 L = light.position - worldPos;
-    float distance = length(L);
-
-    if (distance > light.range) return vec3(0.0);
-
-    L = normalize(L);
-
-    float spotAtt = spotAngleAttenuation(L, light.direction, light.cosInnerAngle, light.cosOuterAngle);
-    if (spotAtt <= 0.0) return vec3(0.0);
-
-    float NdotL = dot(N, L);
-    if (NdotL <= 0.0) return vec3(0.0);
-
-    vec3 H = normalize(V + L);
-
-    float NdotV = max(dot(N, V), 0.0);
-    float NdotH = max(dot(N, H), 0.0);
-    float HdotV = max(dot(H, V), 0.0);
-
-    float distAtt = physicalAttenuation(distance, light.range);
-    vec3 radiance = light.color * light.intensity * distAtt * spotAtt;
-
-    float D = distributionGGX(NdotH, roughness);
-    float G = geometrySmith(NdotV, NdotL, roughness);
-    vec3 F = fresnelSchlickDirect(HdotV, F0);
-
-    vec3 numerator = D * G * F;
-    float denominator = 4.0 * NdotV * NdotL + 0.0001;
-    vec3 specularBRDF = numerator / denominator;
-
-    vec3 kD = (vec3(1.0) - F) * (1.0 - metallic);
-
-    return (kD * albedo / LIGHTING_PI + specularBRDF) * radiance * NdotL;
-}
-
-vec3 evaluateDirectionalLight(vec3 N, vec3 V, vec3 albedo,
-                              float metallic, float roughness, vec3 F0,
-                              DirectionalLight light) {
-    vec3 L = -normalize(light.direction);
-
-    float NdotL = dot(N, L);
-    if (NdotL <= 0.0) return vec3(0.0);
-
-    vec3 H = normalize(V + L);
-
-    float NdotV = max(dot(N, V), 0.0);
-    float NdotH = max(dot(N, H), 0.0);
-    float HdotV = max(dot(H, V), 0.0);
-
-    vec3 radiance = light.color * light.intensity;
-
-    float D = distributionGGX(NdotH, roughness);
-    float G = geometrySmith(NdotV, NdotL, roughness);
-    vec3 F = fresnelSchlickDirect(HdotV, F0);
-
-    vec3 numerator = D * G * F;
-    float denominator = 4.0 * NdotV * NdotL + 0.0001;
-    vec3 specularBRDF = numerator / denominator;
-
-    vec3 kD = (vec3(1.0) - F) * (1.0 - metallic);
-
-    return (kD * albedo / LIGHTING_PI + specularBRDF) * radiance * NdotL;
-}
-
-const float MAX_REFLECTION_LOD = 4.0;
 const uint INVALID_TEXTURE_INDEX = 0xFFFFFFFF;
 const uint FLAG_ALPHA_MASK = 1u << 4;
 const uint FLAG_TRANSLUCENT = 1u << 5;
@@ -532,10 +346,6 @@ bool isValidTexture(uint index) {
 
 vec3 unpackORM(vec4 ormSample) {
     return vec3(ormSample.r, ormSample.g, ormSample.b);
-}
-
-vec3 fresnelSchlickRoughness(float cosTheta, vec3 F0, float roughness) {
-    return F0 + (max(vec3(1.0 - roughness), F0) - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
 }
 
 void main() {
@@ -644,19 +454,20 @@ void main() {
 
     vec3 R = reflect(-V, N);
     vec3 F0 = mix(vec3(0.04), albedo, metallic);
-    vec3 F = fresnelSchlickRoughness(max(dot(N, V), 0.0), F0, roughness);
-
-    vec3 kS = F;
-    vec3 kD = (1.0 - kS) * (1.0 - metallic);
-
+    float NdotV = max(dot(N, V), 0.0);
     vec3 irradiance = texture(irradianceMap, N).rgb;
-    vec3 diffuse = irradiance * albedo * matIblDiffuse;
-
     vec3 prefilteredColor = textureLod(prefilterMap, R, roughness * MAX_REFLECTION_LOD).rgb;
-    vec2 brdf = texture(brdfLUT, vec2(max(dot(N, V), 0.0), roughness)).rg;
-    vec3 specular = prefilteredColor * (F * brdf.x + brdf.y) * matIblSpecular;
+    vec2 brdf = texture(brdfLUT, vec2(NdotV, roughness)).rg;
 
-    vec3 ambient = (kD * diffuse + specular) * ao;
+    vec3 specularScale;
+    vec3 kD;
+    multiScatterCompensation(F0, brdf, metallic, specularScale, kD);
+
+    vec3 diffuse = irradiance * albedo * matIblDiffuse;
+    vec3 specular = prefilteredColor * specularScale * matIblSpecular;
+
+    float so = specularOcclusion(NdotV, ao, roughness);
+    vec3 ambient = kD * diffuse * ao + specular * so;
 
     vec3 directLighting = vec3(0.0);
     float minShadow = 1.0;
