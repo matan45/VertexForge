@@ -22,6 +22,15 @@ namespace serialization
 
     using SceneLoadProgressCallback = std::function<void(const std::string&, size_t, size_t)>;
 
+    struct DeserializeEntityContext
+    {
+        scene::SceneGraphSystem& sceneGraph;
+        bool isRoot;
+        SceneLoadProgressCallback progressCallback;
+        size_t& entitiesLoaded;
+        size_t totalEntities;
+    };
+
     class SceneSerialization
     {
         friend class PrefabSerialization;
@@ -44,22 +53,37 @@ namespace serialization
 
         static json serializeEntity(scene::Entity& entity);
         static void deserializeEntity(const json& entityJson, scene::Entity& entity,
-                                      scene::SceneGraphSystem& sceneGraph, bool isRoot,
-                                      SceneLoadProgressCallback progressCallback, size_t& entitiesLoaded,
-                                      size_t totalEntities);
+                                      DeserializeEntityContext& ctx);
 
     private:
         static json serializeRootEntity(scene::Entity& root);
         static json serializeEntityComponents(scene::Entity& entity);
         static void deserializeEntityComponents(const json& componentsJson, scene::Entity& entity);
+
+        // Deserialize dispatch sub-helpers
+        static void deserializeRenderComponents(const json& j, scene::Entity& entity);
+        static void deserializeAudioComponents(const json& j, scene::Entity& entity);
+        static void deserializePhysicsComponents(const json& j, scene::Entity& entity);
+        static void deserializeLightComponents(const json& j, scene::Entity& entity);
+        static void deserializeEnvironmentComponents(const json& j, scene::Entity& entity);
+        static void deserializeUIStructuralComponents(const json& j, scene::Entity& entity);
+        static void deserializeUIInteractiveComponents(const json& j, scene::Entity& entity);
+        static void deserializeMiscComponents(const json& j, scene::Entity& entity);
+
+        // Serialize dispatch sub-helpers
+        static void serializeRenderComponents(scene::Entity& entity, json& out);
+        static void serializeAudioPhysicsComponents(scene::Entity& entity, json& out);
+        static void serializeLightEnvironmentComponents(scene::Entity& entity, json& out);
+        static void serializeUIStructuralComponents(scene::Entity& entity, json& out);
+        static void serializeUIInteractiveComponents(scene::Entity& entity, json& out);
+        static void serializeMiscComponents(scene::Entity& entity, json& out);
+
         static void deserializeSceneSettings(const json& sceneJson, scene::SceneGraphSystem& sceneGraph);
 
         static size_t countEntities(const json& entityJson);
 
         static void deserializeChildren(const json& childrenJson, scene::Entity& parent,
-                                        scene::SceneGraphSystem& sceneGraph,
-                                        SceneLoadProgressCallback progressCallback, size_t& entitiesLoaded,
-                                        size_t totalEntities);
+                                        DeserializeEntityContext& ctx);
 
         static json serializeTransform(const components::TransformComponent& transform);
         static void deserializeTransform(const json& j, components::TransformComponent& transform);
@@ -139,8 +163,10 @@ namespace serialization
         static std::string rigidBodyTypeToString(components::RigidBodyType type);
         static components::RigidBodyType stringToRigidBodyType(const std::string& str);
 
+    public:
         static std::string colliderShapeToString(components::ColliderShape shape);
         static components::ColliderShape stringToColliderShape(const std::string& str);
+    private:
 
         static std::string shadowQualityToString(types::ShadowQuality quality);
         static types::ShadowQuality stringToShadowQuality(const std::string& str);
@@ -150,6 +176,12 @@ namespace serialization
 
         static json serializePostProcessSettings(const postprocess::PostProcessSettings& settings);
         static void deserializePostProcessSettings(const json& j, postprocess::PostProcessSettings& settings);
+
+        static json serializeAtmosphereSettings(const render::atmosphere::AtmosphereSettings& settings);
+        static void deserializeAtmosphereSettings(const json& j, render::atmosphere::AtmosphereSettings& settings);
+
+        static json serializeCloudSettings(const render::cloud::CloudSettings& settings);
+        static void deserializeCloudSettings(const json& j, render::cloud::CloudSettings& settings);
 
         static std::string toneMappingModeToString(postprocess::ToneMappingMode mode);
         static postprocess::ToneMappingMode stringToToneMappingMode(const std::string& str);

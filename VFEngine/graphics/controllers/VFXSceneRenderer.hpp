@@ -1,7 +1,7 @@
 #pragma once
 
-#include "../render/vfx/VFXBillboardTypes.hpp"
-#include "../render/vfx/GPUVFXTypes.hpp"
+#include "../render/vfx/billboard/VFXBillboardTypes.hpp"
+#include "../render/vfx/compute/GPUVFXTypes.hpp"
 #include "../../services/data/VFXTypes.hpp"
 #include <glm/glm.hpp>
 #include <vulkan/vulkan.hpp>

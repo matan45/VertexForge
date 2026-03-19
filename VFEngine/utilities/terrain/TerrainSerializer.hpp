@@ -118,18 +118,36 @@ namespace terrain
         bool hasLODCache = false;
     };
 
+    struct TerrainSaveParams
+    {
+        std::string_view path;
+        const TerrainGrid* grid = nullptr;
+        TerrainTileConfig config;
+        int32_t gridMinX = 0;
+        int32_t gridMinZ = 0;
+        int32_t gridMaxX = 0;
+        int32_t gridMaxZ = 0;
+        std::string materialPath;
+        TerrainPhysicsConfig physicsConfig;
+        TerrainStreamingConfig streamingConfig;
+    };
+
+    struct TerrainIncrementalSaveParams
+    {
+        std::string_view path;
+        const TerrainGrid* grid = nullptr;
+        const std::unordered_set<TileCoord, TileCoordHash>* dirtyCoords = nullptr;
+        TerrainFileHeader currentHeader;
+        uint64_t indexTableOffset = 0;
+        const std::unordered_map<TileCoord, TileIndexEntry, TileCoordHash>* currentIndexMap = nullptr;
+        TerrainPhysicsConfig physicsConfig;
+        TerrainStreamingConfig streamingConfig;
+    };
+
     class TerrainSerializer
     {
     public:
-        static bool save(
-            std::string_view path,
-            const TerrainGrid& grid,
-            const TerrainTileConfig& config,
-            int32_t gridMinX, int32_t gridMinZ,
-            int32_t gridMaxX, int32_t gridMaxZ,
-            const std::string& materialPath,
-            const TerrainPhysicsConfig& physicsConfig = {},
-            const TerrainStreamingConfig& streamingConfig = {});
+        static bool save(const TerrainSaveParams& params);
 
         static bool readHeader(
             std::string_view path,
@@ -137,15 +155,7 @@ namespace terrain
             std::vector<TileIndexEntry>& outIndex,
             uint64_t* outIndexTableOffset = nullptr);
 
-        static bool saveIncremental(
-            std::string_view path,
-            const TerrainGrid& grid,
-            const std::unordered_set<TileCoord, TileCoordHash>& dirtyCoords,
-            const TerrainFileHeader& currentHeader,
-            uint64_t indexTableOffset,
-            const std::unordered_map<TileCoord, TileIndexEntry, TileCoordHash>& currentIndexMap,
-            const TerrainPhysicsConfig& physicsConfig = {},
-            const TerrainStreamingConfig& streamingConfig = {});
+        static bool saveIncremental(const TerrainIncrementalSaveParams& params);
 
         static bool readTileHeights(
             std::string_view path,
@@ -182,6 +192,37 @@ namespace terrain
         static TerrainFormatFlags computeFlags(const TerrainGrid& grid,
                                                 const TerrainPhysicsConfig& physicsConfig,
                                                 const TerrainStreamingConfig& streamingConfig);
+
+        static TerrainFileHeader buildSaveHeader(const TerrainSaveParams& params,
+                                                  TerrainFormatFlags flags,
+                                                  uint32_t tileCount);
+
+        static bool writeAllTileData(std::ostream& file,
+                                      const std::vector<const TerrainTile*>& tiles,
+                                      TerrainFormatFlags flags,
+                                      std::vector<TileIndexEntry>& indexEntries);
+
+        static bool writeFullSaveToStream(std::ostream& file,
+                                           const TerrainFileHeader& header,
+                                           const std::vector<const TerrainTile*>& tiles,
+                                           TerrainFormatFlags flags);
+
+        static bool validateIncrementalFlags(TerrainFormatFlags currentFlags,
+                                              TerrainFormatFlags newFlags);
+
+        static std::vector<TileIndexEntry> buildSortedIndex(
+            const std::unordered_map<TileCoord, TileIndexEntry, TileCoordHash>& indexMap);
+
+        static bool writeIncrementalTiles(std::ostream& file,
+                                           const TerrainGrid& grid,
+                                           const std::unordered_set<TileCoord, TileCoordHash>& dirtyCoords,
+                                           TerrainFormatFlags flags,
+                                           std::vector<TileIndexEntry>& indexEntries);
+
+        static bool writeIncrementalHeaderAndIndex(std::ostream& file,
+                                                    const TerrainFileHeader& updatedHeader,
+                                                    uint64_t indexTableOffset,
+                                                    const std::vector<TileIndexEntry>& indexEntries);
 
         static bool parseHeader(std::istream& file, TerrainFileHeader& outHeader);
         static bool parseIndexTable(std::istream& file, uint32_t tileCount,

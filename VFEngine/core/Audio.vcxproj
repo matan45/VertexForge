@@ -119,6 +119,7 @@
   <ItemGroup>
     <ClCompile Include="audio\AudioBufferManager.cpp" />
     <ClCompile Include="audio\AudioBusManager.cpp" />
+    <ClCompile Include="audio\AudioBusManagerEffects.cpp" />
     <ClCompile Include="audio\AudioCommandQueue.cpp" />
     <ClCompile Include="audio\AudioController.cpp" />
     <ClCompile Include="audio\AudioEffectManager.cpp" />

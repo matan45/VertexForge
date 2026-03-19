@@ -101,20 +101,27 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="serialization\PrefabSerialization.cpp" />
+    <ClCompile Include="serialization\PrefabSerializationIO.cpp" />
     <ClCompile Include="serialization\ProjectSerialization.cpp" />
     <ClCompile Include="serialization\SceneSerialization.cpp" />
     <ClCompile Include="serialization\SceneSerializeCore.cpp" />
     <ClCompile Include="serialization\SceneSerializeDecal.cpp" />
     <ClCompile Include="serialization\SceneSerializeDispatch.cpp" />
+    <ClCompile Include="serialization\SceneSerializeDispatchDeserialize.cpp" />
+    <ClCompile Include="serialization\SceneSerializeEnvironment.cpp" />
     <ClCompile Include="serialization\SceneSerializeGrass.cpp" />
     <ClCompile Include="serialization\SceneSerializeIK.cpp" />
     <ClCompile Include="serialization\SceneSerializeLights.cpp" />
     <ClCompile Include="serialization\SceneSerializePhysics.cpp" />
+    <ClCompile Include="serialization\SceneSerializePhysicsAnimation.cpp" />
+    <ClCompile Include="serialization\SceneSerializePostProcess.cpp" />
     <ClCompile Include="serialization\SceneSerializeRender.cpp" />
     <ClCompile Include="serialization\SceneSerializeRenderTexture.cpp" />
     <ClCompile Include="serialization\SceneSerializeSettings.cpp" />
+    <ClCompile Include="serialization\SceneSerializeSettingsAudio.cpp" />
     <ClCompile Include="serialization\SceneSerializeSocket.cpp" />
     <ClCompile Include="serialization\SceneSerializeUI.cpp" />
+    <ClCompile Include="serialization\SceneSerializeUILayout.cpp" />
     <ClCompile Include="serialization\SceneSerializeUIWidgets.cpp" />
     <ClCompile Include="serialization\SceneSerializeWater.cpp" />
     <ClCompile Include="world\WorldDefinitionSerialization.cpp" />

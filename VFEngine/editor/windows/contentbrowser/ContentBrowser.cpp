@@ -63,18 +63,14 @@ namespace windows
             [this](const events::resource::ImportCompletedNotification&)
             {
                 if (fs::exists(currentPath) && fs::is_directory(currentPath))
-                {
                     loadDirectory(currentPath);
-                }
             });
 
         assetSavedToken = dispatcher.subscribe<events::resource::AssetSavedNotification>(
             [this](const events::resource::AssetSavedNotification&)
             {
                 if (fs::exists(currentPath) && fs::is_directory(currentPath))
-                {
                     loadDirectory(currentPath);
-                }
             });
 
         fileMovedToken = dispatcher.subscribe<events::fileops::FileMovedNotification>(
@@ -113,34 +109,13 @@ namespace windows
     ContentBrowser::~ContentBrowser()
     {
         auto& dispatcher = events::EventDispatcher::instance();
-        if (projectLoadedToken.isValid())
-        {
-            dispatcher.unsubscribe(projectLoadedToken);
-        }
-        if (importCompletedToken.isValid())
-        {
-            dispatcher.unsubscribe(importCompletedToken);
-        }
-        if (assetSavedToken.isValid())
-        {
-            dispatcher.unsubscribe(assetSavedToken);
-        }
-        if (fileMovedToken.isValid())
-        {
-            dispatcher.unsubscribe(fileMovedToken);
-        }
-        if (fileDeletedToken.isValid())
-        {
-            dispatcher.unsubscribe(fileDeletedToken);
-        }
-        if (folderSelectedToken.isValid())
-        {
-            dispatcher.unsubscribe(folderSelectedToken);
-        }
-        if (batchCompletedToken.isValid())
-        {
-            dispatcher.unsubscribe(batchCompletedToken);
-        }
+        if (projectLoadedToken.isValid()) dispatcher.unsubscribe(projectLoadedToken);
+        if (importCompletedToken.isValid()) dispatcher.unsubscribe(importCompletedToken);
+        if (assetSavedToken.isValid()) dispatcher.unsubscribe(assetSavedToken);
+        if (fileMovedToken.isValid()) dispatcher.unsubscribe(fileMovedToken);
+        if (fileDeletedToken.isValid()) dispatcher.unsubscribe(fileDeletedToken);
+        if (folderSelectedToken.isValid()) dispatcher.unsubscribe(folderSelectedToken);
+        if (batchCompletedToken.isValid()) dispatcher.unsubscribe(batchCompletedToken);
     }
 
     void ContentBrowser::draw()
@@ -163,271 +138,43 @@ namespace windows
         }
 
         updateCutState();
-
         modals->processModals(currentPath, selectedFile);
         drawContentPanel();
     }
 
-    void ContentBrowser::drawContentPanel()
+    void ContentBrowser::handleDoubleClick()
     {
-        if (ImGui::Begin("Content Folder"))
+        if (selectedType == AssetType::Script)
         {
-            if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows))
-            {
-                handleKeyboardShortcuts();
-            }
-
-            drawToolbar();
-
-            ImGui::Separator();
-
-            modals->drawContextMenu(selectedFile);
-
-            if (showFileWindow)
-            {
-                ImGui::SetNextWindowSize(ImVec2(800, 600), ImGuiCond_FirstUseEver);
-
-                std::string windowTitle = "File: " + StringUtil::wstringToUtf8(selectedFile.filename().wstring());
-                if (ImGui::Begin(windowTitle.c_str(), &showFileWindow))
-                {
-                    ImGui::Text("File Name: %s", StringUtil::wstringToUtf8(selectedFile.filename().wstring()).c_str());
-                    ImGui::Text("File Path: %s", StringUtil::wstringToUtf8(selectedFile.wstring()).c_str());
-                    ImGui::Separator();
-
-                    if (previewManager->openPreview(selectedFile, selectedType))
-                    {
-                        showFileWindow = false;
-                    }
-                }
-                ImGui::End();
-            }
-
-            for (auto& asset : assets)
-            {
-                asset.isSelected = selectedPaths.find(asset.path) != selectedPaths.end();
-            }
-
-            AssetClickResult clickResult = gridRenderer->draw(assets, searchQuery);
-            handleAssetClick(clickResult);
-
-            ImGui::Columns(1);
-
-            handleDragDrop();
+            std::string filePath = StringUtil::wstringToUtf8(selectedFile.wstring());
+            std::string args = "\"" + filePath + "\"";
+            ShellExecuteA(nullptr, "open", "code", args.c_str(), nullptr, SW_SHOWNORMAL);
         }
-
-        ImGui::End();
-    }
-
-    void ContentBrowser::handleAssetClick(const AssetClickResult& clickResult)
-    {
-        if (!clickResult.wasClicked && clickResult.pendingNavigation.empty())
+        else if (selectedType == AssetType::Terrain)
         {
-            return;
+            events::terrain::BeginTerrainLoadCommand cmd;
+            cmd.path = StringUtil::wstringToUtf8(selectedFile.wstring());
+            events::EventDispatcher::instance().execute(cmd);
         }
-
-        if (clickResult.wasClicked)
+        else if (selectedType == AssetType::Water)
         {
-            selectedFile = clickResult.clickedPath;
-            selectedType = clickResult.clickedType;
-
-            int clickedIndex = -1;
-            for (size_t i = 0; i < assets.size(); ++i)
-            {
-                if (assets[i].path == StringUtil::wstringToUtf8(clickResult.clickedPath.wstring()))
-                {
-                    clickedIndex = static_cast<int>(i);
-                    break;
-                }
-            }
-
-            if (clickedIndex >= 0)
-            {
-                bool ctrlHeld = ImGui::IsKeyDown(ImGuiMod_Ctrl);
-                bool shiftHeld = ImGui::IsKeyDown(ImGuiMod_Shift);
-                selectAsset(static_cast<size_t>(clickedIndex), ctrlHeld, shiftHeld);
-
-                for (auto& asset : assets)
-                {
-                    asset.isSelected = selectedPaths.find(asset.path) != selectedPaths.end();
-                }
-            }
-
-            if (clickResult.wasDoubleClicked)
-            {
-                if (selectedType == AssetType::Script)
-                {
-                    std::string filePath = StringUtil::wstringToUtf8(selectedFile.wstring());
-                    std::string args = "\"" + filePath + "\"";
-                    ShellExecuteA(nullptr, "open", "code", args.c_str(), nullptr, SW_SHOWNORMAL);
-                }
-                else if (selectedType == AssetType::Terrain)
-                {
-                    events::terrain::BeginTerrainLoadCommand cmd;
-                    cmd.path = StringUtil::wstringToUtf8(selectedFile.wstring());
-                    events::EventDispatcher::instance().execute(cmd);
-                }
-                else if (selectedType == AssetType::Water)
-                {
-                    events::water::LoadWaterCommand cmd;
-                    cmd.path = StringUtil::wstringToUtf8(selectedFile.wstring());
-                    events::EventDispatcher::instance().execute(cmd);
-                }
-                else if (selectedType == AssetType::Scene)
-                {
-                    events::scene::LoadSceneCommand cmd;
-                    cmd.filePath = StringUtil::wstringToUtf8(selectedFile.wstring());
-                    events::EventDispatcher::instance().execute(cmd);
-                }
-                else if (selectedType == AssetType::InputMapping)
-                {
-                    events::application::OpenInputMappingWindowNotification notif;
-                    events::EventDispatcher::instance().publish(notif);
-                }
-                else if (selectedType != AssetType::Navmesh && selectedType != AssetType::PhysAnim)
-                {
-                    showFileWindow = true;
-                }
-            }
+            events::water::LoadWaterCommand cmd;
+            cmd.path = StringUtil::wstringToUtf8(selectedFile.wstring());
+            events::EventDispatcher::instance().execute(cmd);
         }
-
-        if (!clickResult.pendingNavigation.empty())
+        else if (selectedType == AssetType::Scene)
         {
-            navigateTo(clickResult.pendingNavigation);
+            events::scene::LoadSceneCommand cmd;
+            cmd.filePath = StringUtil::wstringToUtf8(selectedFile.wstring());
+            events::EventDispatcher::instance().execute(cmd);
         }
-    }
-
-    void ContentBrowser::handleDragDrop()
-    {
-        ImVec2 dropZoneStart = ImGui::GetCursorScreenPos();
-        ImVec2 contentSize = ImGui::GetWindowSize();
-        ImRect dropRect(dropZoneStart, ImVec2(dropZoneStart.x + contentSize.x, dropZoneStart.y + contentSize.y));
-
-        if (ImGui::BeginDragDropTargetCustom(dropRect, ImGui::GetID("ContentFolderDropZone")))
+        else if (selectedType == AssetType::InputMapping)
         {
-            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("DND_SCENE_ENTITY"))
-            {
-                services::EntityHandle entity = *(services::EntityHandle*)payload->Data;
-                modals->triggerSavePrefabModal(entity);
-            }
-
-            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(DND_CONTENT_BROWSER))
-            {
-                bool isValid = DragDropManager::instance().isValidDropTarget(currentPath.string());
-                if (isValid)
-                {
-                    DragDropManager::instance().acceptDrop(currentPath.string());
-                }
-            }
-            ImGui::EndDragDropTarget();
+            events::EventDispatcher::instance().publish(events::application::OpenInputMappingWindowNotification{});
         }
-    }
-
-    void ContentBrowser::drawToolbar()
-    {
-        if (ImGui::Button(ICON_FA_ARROW_LEFT))
+        else if (selectedType != AssetType::Navmesh && selectedType != AssetType::PhysAnim)
         {
-            auto parentPath = currentPath.parent_path();
-            navigateTo(parentPath);
-        }
-
-        ImGui::SameLine();
-
-        if (ImGui::Button(ICON_FA_COPY "##CopyPath"))
-        {
-            ImGui::SetClipboardText(StringUtil::wstringToUtf8(currentPath.wstring()).c_str());
-        }
-        if (ImGui::IsItemHovered())
-        {
-            ImGui::SetTooltip("Copy path to clipboard");
-        }
-
-        ImGui::SameLine();
-
-        float availableWidth = ImGui::GetContentRegionAvail().x - 300.0f;
-        if (availableWidth < 200.0f) availableWidth = 200.0f;
-
-        drawPathBar(availableWidth);
-
-        ImGui::SameLine();
-
-        if (ImGui::Button(ICON_FA_FILE_IMPORT " Import"))
-        {
-            events::EventDispatcher::instance().publish(events::application::OpenImportDialogNotification{});
-        }
-        if (ImGui::IsItemHovered())
-        {
-            ImGui::SetTooltip("Import assets");
-        }
-
-        ImGui::SameLine();
-
-        ImGui::Text("Search:");
-        ImGui::SameLine();
-        ImGui::SetNextItemWidth(150.0f);
-        char searchBuffer[256];
-        std::strncpy(searchBuffer, searchQuery.c_str(), sizeof(searchBuffer) - 1);
-        searchBuffer[sizeof(searchBuffer) - 1] = '\0';
-        if (ImGui::InputText("##Search", searchBuffer, sizeof(searchBuffer)))
-        {
-            searchQuery = std::string(searchBuffer);
-        }
-    }
-
-    void ContentBrowser::drawPathBar(float availableWidth)
-    {
-        if (!isEditingPath)
-        {
-            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.2f, 0.2f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.3f, 0.3f, 1.0f));
-
-            std::string pathStr = StringUtil::wstringToUtf8(currentPath.wstring());
-            ImGui::SetNextItemWidth(availableWidth);
-            if (ImGui::Button(pathStr.c_str(), ImVec2(availableWidth, 0)))
-            {
-                isEditingPath = true;
-                pathEditBuffer = pathStr;
-            }
-            if (ImGui::IsItemHovered())
-            {
-                ImGui::SetTooltip("Click to edit path");
-            }
-
-            ImGui::PopStyleColor(2);
-        }
-        else
-        {
-            ImGui::SetNextItemWidth(availableWidth);
-
-            if (ImGui::IsWindowAppearing() || pathEditBuffer.empty())
-            {
-                pathEditBuffer = StringUtil::wstringToUtf8(currentPath.wstring());
-            }
-
-            char pathBuffer[1024];
-            std::strncpy(pathBuffer, pathEditBuffer.c_str(), sizeof(pathBuffer) - 1);
-            pathBuffer[sizeof(pathBuffer) - 1] = '\0';
-
-            ImGui::SetKeyboardFocusHere();
-            if (ImGui::InputText("##PathEdit", pathBuffer, sizeof(pathBuffer),
-                                 ImGuiInputTextFlags_EnterReturnsTrue))
-            {
-                fs::path newPath(pathBuffer);
-                if (fs::exists(newPath) && fs::is_directory(newPath))
-                {
-                    navigateTo(newPath);
-                }
-                isEditingPath = false;
-            }
-            else
-            {
-                pathEditBuffer = pathBuffer;
-            }
-
-            if (ImGui::IsKeyPressed(ImGuiKey_Escape) ||
-                (!ImGui::IsItemActive() && ImGui::IsMouseClicked(0) && !ImGui::IsItemHovered()))
-            {
-                isEditingPath = false;
-            }
+            showFileWindow = true;
         }
     }
 
@@ -437,9 +184,7 @@ namespace windows
 
         std::error_code statusEc;
         if (entry.is_directory(statusEc) || statusEc)
-        {
             return Other;
-        }
 
         std::string extension = entry.path().extension().string();
 
@@ -467,9 +212,7 @@ namespace windows
             extension == ".vfAnim" || extension == ".vfScene");
 
         if (!isVfAsset)
-        {
             return Other;
-        }
 
         resource::FileType fileType = resource::ResourceManager::readHeaderFile(entry);
 
@@ -490,26 +233,17 @@ namespace windows
         std::error_code ec;
         for (auto& entry : fs::directory_iterator(path, ec))
         {
-            if (ec)
-            {
-                ec.clear();
-                continue;
-            }
+            if (ec) { ec.clear(); continue; }
 
             try
             {
                 std::string filename = entry.path().filename().string();
                 if (filename.empty() || filename == "nul" || filename == "con" ||
                     filename == "prn" || filename == "aux" || filename == "." || filename == "..")
-                {
                     continue;
-                }
 
-                // Hide .vfmeta sidecar files and asset database index from the content browser
                 if (entry.path().extension() == ".vfmeta" || filename == "assetdb.json")
-                {
                     continue;
-                }
 
                 Asset asset;
                 asset.path = StringUtil::wstringToUtf8(entry.path().wstring());
@@ -517,10 +251,7 @@ namespace windows
                 asset.type = detectAssetType(entry);
                 assets.push_back(asset);
             }
-            catch (const std::exception&)
-            {
-                continue;
-            }
+            catch (const std::exception&) { continue; }
         }
     }
 
@@ -544,47 +275,23 @@ namespace windows
 
         if (ImGui::IsKeyDown(ImGuiMod_Ctrl))
         {
-            // Ctrl+C - Copy
             if (ImGui::IsKeyPressed(ImGuiKey_C, false))
-            {
                 performCopy();
-            }
-
-            // Ctrl+X - Cut
             if (ImGui::IsKeyPressed(ImGuiKey_X, false))
-            {
                 performCut();
-            }
-
-            // Ctrl+V - Paste
             if (ImGui::IsKeyPressed(ImGuiKey_V, false))
-            {
                 performPaste();
-            }
-
-            // Ctrl+Z - Undo
             if (ImGui::IsKeyPressed(ImGuiKey_Z, false))
-            {
                 dispatcher.execute(events::undoredo::UndoCommand{});
-            }
-
-            // Ctrl+Y - Redo
             if (ImGui::IsKeyPressed(ImGuiKey_Y, false))
-            {
                 dispatcher.execute(events::undoredo::RedoCommand{});
-            }
-
-            // Ctrl+A - Select All
             if (ImGui::IsKeyPressed(ImGuiKey_A, false))
             {
                 for (const auto& asset : assets)
-                {
                     selectedPaths.insert(asset.path);
-                }
             }
         }
 
-        // Escape - Cancel cut operation
         if (ImGui::IsKeyPressed(ImGuiKey_Escape, false))
         {
             auto& clipboard = ClipboardManager::instance();
@@ -595,16 +302,12 @@ namespace windows
             }
         }
 
-        // Delete key
         if (ImGui::IsKeyPressed(ImGuiKey_Delete, false))
         {
             auto paths = getSelectedPaths();
-            if (!paths.empty())
+            if (!paths.empty() && !selectedFile.empty())
             {
-                if (!selectedFile.empty())
-                {
-                    modals->triggerDeleteModal();
-                }
+                modals->triggerDeleteModal();
             }
         }
     }
@@ -612,9 +315,7 @@ namespace windows
     void ContentBrowser::selectAsset(size_t index, bool ctrlHeld, bool shiftHeld)
     {
         if (index >= assets.size())
-        {
             return;
-        }
 
         const std::string& path = assets[index].path;
 
@@ -622,32 +323,20 @@ namespace windows
         {
             size_t start = std::min(static_cast<size_t>(lastSelectedIndex), index);
             size_t end = std::max(static_cast<size_t>(lastSelectedIndex), index);
-
             if (!ctrlHeld)
-            {
                 selectedPaths.clear();
-            }
-
             for (size_t i = start; i <= end; ++i)
-            {
                 selectedPaths.insert(assets[i].path);
-            }
         }
         else if (ctrlHeld)
         {
             if (selectedPaths.find(path) != selectedPaths.end())
-            {
                 selectedPaths.erase(path);
-            }
             else
-            {
                 selectedPaths.insert(path);
-            }
         }
         else
         {
-            // If clicking on already selected item, keep selection (allows multi-drag)
-            // If clicking on unselected item, clear and select only that item
             if (selectedPaths.find(path) == selectedPaths.end())
             {
                 selectedPaths.clear();
@@ -673,11 +362,8 @@ namespace windows
     {
         auto& clipboard = ClipboardManager::instance();
         const auto& cutPaths = clipboard.getCutPaths();
-
         for (auto& asset : assets)
-        {
             asset.isCut = cutPaths.find(asset.path) != cutPaths.end();
-        }
     }
 
     std::vector<ClipboardItem> ContentBrowser::buildClipboardItems() const
@@ -705,18 +391,14 @@ namespace windows
     {
         auto items = buildClipboardItems();
         if (!items.empty())
-        {
             ClipboardManager::instance().cut(items);
-        }
     }
 
     void ContentBrowser::performCopy()
     {
         auto items = buildClipboardItems();
         if (!items.empty())
-        {
             ClipboardManager::instance().copy(items);
-        }
     }
 
     bool ContentBrowser::performPaste()

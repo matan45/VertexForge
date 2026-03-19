@@ -15,5 +15,6 @@ namespace core::api
     private:
         static void registerCoreEffects(services::ScriptInterpreter* interpreter);
         static void registerAdvancedEffects(services::ScriptInterpreter* interpreter);
+        static void registerEdgeDetectionAndColorGrading(services::ScriptInterpreter* interpreter);
     };
 }

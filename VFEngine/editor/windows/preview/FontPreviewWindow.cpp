@@ -28,7 +28,6 @@ namespace windows
     {
         loadingCancelled.store(true);
 
-        // Wait for async operation to complete (required before destroying this object)
         if (loadFuture.valid())
         {
             try
@@ -39,10 +38,7 @@ namespace windows
                     (void)loadFuture.get();
                 }
             }
-            catch (...)
-            {
-                // Suppress exceptions in destructor - nothing we can do here
-            }
+            catch (...) {}
         }
 
         if (atlasHandle.isValid())
@@ -53,31 +49,18 @@ namespace windows
                 releaseCmd.handle = atlasHandle.imguiDescriptorSet;
                 events::EventDispatcher::instance().execute(releaseCmd);
             }
-            catch (...)
-            {
-                // Suppress exceptions in destructor - GPU resource may leak
-                // but we cannot throw from destructor
-            }
+            catch (...) {}
         }
     }
 
     void FontPreviewWindow::draw()
     {
-        if (!isOpen)
-        {
-            return;
-        }
+        if (!isOpen) return;
 
-        if (needsInit)
-        {
-            startAsyncLoad();
-            needsInit = false;
-        }
-
+        if (needsInit) { startAsyncLoad(); needsInit = false; }
         updateAsyncLoading();
 
         ImGui::SetNextWindowSize(ImVec2(900, 600), ImGuiCond_FirstUseEver);
-
         if (ImGui::Begin(windowTitle.c_str(), &isOpen, ImGuiWindowFlags_NoCollapse))
         {
             if (isOpen)
@@ -85,26 +68,14 @@ namespace windows
                 float panelWidth = 220.0f;
                 ImVec2 contentSize = ImGui::GetContentRegionAvail();
 
-                // Left panel - Info
                 ImGui::BeginChild("InfoPanel", ImVec2(panelWidth, contentSize.y), true);
                 drawInfoPanel();
                 ImGui::EndChild();
-
                 ImGui::SameLine();
 
-                // Right panel - Preview
                 float previewWidth = contentSize.x - panelWidth - ImGui::GetStyle().ItemSpacing.x;
                 ImGui::BeginChild("PreviewPanel", ImVec2(previewWidth, contentSize.y), true);
-
-                if (loadingInProgress.load())
-                {
-                    drawLoadingIndicator();
-                }
-                else
-                {
-                    drawPreviewPanel();
-                }
-
+                loadingInProgress.load() ? drawLoadingIndicator() : drawPreviewPanel();
                 ImGui::EndChild();
             }
         }
@@ -124,51 +95,26 @@ namespace windows
 
     void FontPreviewWindow::updateAsyncLoading()
     {
-        if (!loadingInProgress.load() || !loadFuture.valid())
-        {
-            return;
-        }
+        if (!loadingInProgress.load() || !loadFuture.valid()) return;
+        if (loadFuture.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready) return;
 
-        if (loadFuture.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready)
-        {
-            try
-            {
-                FontLoadResult result = loadFuture.get();
-
-                if (result.success)
-                {
-                    // Upload atlas texture to GPU first (may throw)
-                    // Do this before modifying member state for exception safety
-                    auto& dispatcher = events::EventDispatcher::instance();
-                    events::render::LoadEditorTextureFromDataCommand loadCmd;
-                    loadCmd.textureData = std::move(result.atlasAsRGBA);
-                    services::EditorTextureHandle newHandle = dispatcher.execute(loadCmd);
-
-                    // Only update member state after all operations that may throw succeed
-                    // This ensures consistent state if an exception occurs
-                    fontData = std::move(result.fontData);
-                    atlasHandle = newHandle;
-                    fontLoaded = true;
-                }
-                else
-                {
-                    loadFailed = true;
-                    errorMessage = result.errorMessage;
-                }
-            }
-            catch (const std::exception& e)
-            {
+        try {
+            FontLoadResult result = loadFuture.get();
+            if (result.success) {
+                events::render::LoadEditorTextureFromDataCommand loadCmd;
+                loadCmd.textureData = std::move(result.atlasAsRGBA);
+                atlasHandle = events::EventDispatcher::instance().execute(loadCmd);
+                fontData = std::move(result.fontData);
+                fontLoaded = true;
+            } else {
                 loadFailed = true;
-                errorMessage = std::string("Exception: ") + e.what();
+                errorMessage = result.errorMessage;
             }
-            catch (...)
-            {
-                loadFailed = true;
-                errorMessage = "Unknown exception during font loading";
-            }
-
-            loadingInProgress.store(false);
         }
+        catch (const std::exception& e) { loadFailed = true; errorMessage = std::string("Exception: ") + e.what(); }
+        catch (...) { loadFailed = true; errorMessage = "Unknown exception during font loading"; }
+
+        loadingInProgress.store(false);
     }
 
     FontLoadResult FontPreviewWindow::loadFontBackground(const std::string& path)
@@ -200,20 +146,17 @@ namespace windows
 
             if (loadingCancelled.load())
             {
-                // Clean up already-loaded font data before returning
                 result.fontData = resource::FontData{};
                 result.errorMessage = "Cancelled";
                 return result;
             }
 
-            // Convert atlas to RGBA for ImGui (may throw std::bad_alloc)
             result.atlasAsRGBA = convertAtlasToRGBA(result.fontData.atlas);
 
             result.success = true;
         }
         catch (const std::bad_alloc& e)
         {
-            // Memory allocation failure - clean up partial state
             result.fontData = resource::FontData{};
             result.atlasAsRGBA = resource::TextureData{};
             result.errorMessage = std::string("Out of memory: ") + e.what();
@@ -243,7 +186,6 @@ namespace windows
 
         if (atlas.format == resource::FontAtlasFormat::SDF_8)
         {
-            // Uses shared utility to ensure consistency with shader logic
             for (size_t i = 0; i < pixelCount; ++i)
             {
                 rgbaData[i * 4 + 0] = 255;
@@ -282,82 +224,56 @@ namespace windows
         ImGui::Text("Font Info");
         ImGui::Separator();
 
-        if (loadFailed)
-        {
+        if (loadFailed) {
             ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "Failed to load");
             ImGui::TextWrapped("%s", errorMessage.c_str());
             return;
         }
+        if (!fontLoaded) { ImGui::TextDisabled("Loading..."); return; }
 
-        if (!fontLoaded)
-        {
-            ImGui::TextDisabled("Loading...");
-            return;
-        }
-
-        if (ImGui::CollapsingHeader("Metadata", ImGuiTreeNodeFlags_DefaultOpen))
-        {
-            ImGui::Text("Name:");
-            ImGui::TextWrapped("  %s", fontData.metadata.fontName.c_str());
+        if (ImGui::CollapsingHeader("Metadata", ImGuiTreeNodeFlags_DefaultOpen)) {
+            ImGui::Text("Name:"); ImGui::TextWrapped("  %s", fontData.metadata.fontName.c_str());
             ImGui::Spacing();
-
             ImGui::Text("Style: %s", fontData.metadata.fontStyle.c_str());
             ImGui::Text("Base Size: %u px", fontData.metadata.baseFontSize);
             if (resource::hasFlag(fontData.formatFlags, resource::FontFormatFlags::COLOR_EMOJI))
-            {
                 ImGui::TextColored(ImVec4(0.2f, 0.8f, 0.2f, 1.0f), "Color Emoji Font");
-            }
         }
-
         ImGui::Spacing();
 
-        if (ImGui::CollapsingHeader("Metrics", ImGuiTreeNodeFlags_DefaultOpen))
-        {
+        if (ImGui::CollapsingHeader("Metrics", ImGuiTreeNodeFlags_DefaultOpen)) {
             ImGui::Text("Line Height: %.2f", fontData.metadata.lineHeight);
             ImGui::Text("Ascender: %.2f", fontData.metadata.ascender);
             ImGui::Text("Descender: %.2f", fontData.metadata.descender);
             ImGui::Text("Underline Pos: %.2f", fontData.metadata.underlinePosition);
             ImGui::Text("Underline Thick: %.2f", fontData.metadata.underlineThickness);
         }
-
         ImGui::Spacing();
 
-        if (ImGui::CollapsingHeader("Atlas", ImGuiTreeNodeFlags_DefaultOpen))
-        {
+        if (ImGui::CollapsingHeader("Atlas", ImGuiTreeNodeFlags_DefaultOpen)) {
             ImGui::Text("Size: %dx%d", fontData.atlas.width, fontData.atlas.height);
-
             const char* formatStr = "Unknown";
-            switch (fontData.atlas.format)
-            {
-            case resource::FontAtlasFormat::GRAYSCALE_8: formatStr = "Grayscale";
-                break;
-            case resource::FontAtlasFormat::SDF_8: formatStr = "SDF";
-                break;
-            case resource::FontAtlasFormat::RGBA_32: formatStr = "RGBA";
-                break;
+            switch (fontData.atlas.format) {
+            case resource::FontAtlasFormat::GRAYSCALE_8: formatStr = "Grayscale"; break;
+            case resource::FontAtlasFormat::SDF_8: formatStr = "SDF"; break;
+            case resource::FontAtlasFormat::RGBA_32: formatStr = "RGBA"; break;
             }
             ImGui::Text("Format: %s", formatStr);
             ImGui::Text("Glyphs: %zu", fontData.glyphs.size());
             ImGui::Text("Kerning Pairs: %zu", fontData.kerningPairs.size());
         }
-
         ImGui::Spacing();
 
-        if (fontData.isSDF() && ImGui::CollapsingHeader("SDF Parameters"))
-        {
+        if (fontData.isSDF() && ImGui::CollapsingHeader("SDF Parameters")) {
             ImGui::Text("Spread: %.2f", fontData.sdfParams.spread);
             ImGui::Text("Padding: %u", fontData.sdfParams.padding);
             ImGui::Text("Edge Value: %.2f", fontData.sdfParams.edgeValue);
         }
-
         ImGui::Spacing();
 
-        if (ImGui::CollapsingHeader("Character Ranges"))
-        {
+        if (ImGui::CollapsingHeader("Character Ranges")) {
             for (const auto& range : fontData.characterRanges)
-            {
                 ImGui::Text("  U+%04X - U+%04X", range.rangeStart, range.rangeEnd);
-            }
         }
     }
 
@@ -441,72 +357,37 @@ namespace windows
 
     void FontPreviewWindow::drawCharacterGrid()
     {
-        if (!atlasHandle.isValid())
-        {
-            ImGui::TextDisabled("Atlas not loaded");
-            return;
-        }
+        if (!atlasHandle.isValid()) { ImGui::TextDisabled("Atlas not loaded"); return; }
 
         ImGui::Text("Character Grid:");
-
         ImVec2 startPos = ImGui::GetCursorScreenPos();
         ImVec2 availSize = ImGui::GetContentRegionAvail();
-
         ImDrawList* drawList = ImGui::GetWindowDrawList();
-        drawList->AddRectFilled(startPos,
-                                ImVec2(startPos.x + availSize.x, startPos.y + availSize.y),
-                                IM_COL32(30, 30, 30, 255));
+        drawList->AddRectFilled(startPos, ImVec2(startPos.x + availSize.x, startPos.y + availSize.y), IM_COL32(30, 30, 30, 255));
 
         float scale = previewFontSize / static_cast<float>(fontData.metadata.baseFontSize);
         float cellSize = previewFontSize + 8.0f;
-        int glyphsPerRow = static_cast<int>(availSize.x / cellSize);
-        if (glyphsPerRow < 1) glyphsPerRow = 1;
-
-        float x = startPos.x + 4.0f;
-        float y = startPos.y + 4.0f;
+        int glyphsPerRow = std::max(1, static_cast<int>(availSize.x / cellSize));
+        float x = startPos.x + 4.0f, y = startPos.y + 4.0f;
         int col = 0;
 
-        for (const auto& glyph : fontData.glyphs)
-        {
-            if (y + cellSize > startPos.y + availSize.y)
-            {
-                break;
-            }
+        for (const auto& glyph : fontData.glyphs) {
+            if (y + cellSize > startPos.y + availSize.y) break;
 
             float u0 = static_cast<float>(glyph.atlasX) / fontData.atlas.width;
             float v0 = static_cast<float>(glyph.atlasY) / fontData.atlas.height;
             float u1 = static_cast<float>(glyph.atlasX + glyph.atlasWidth) / fontData.atlas.width;
             float v1 = static_cast<float>(glyph.atlasY + glyph.atlasHeight) / fontData.atlas.height;
+            float glyphW = glyph.atlasWidth * scale, glyphH = glyph.atlasHeight * scale;
+            float offsetX = (cellSize - glyphW) * 0.5f, offsetY = (cellSize - glyphH) * 0.5f;
 
-            float glyphW = glyph.atlasWidth * scale;
-            float glyphH = glyph.atlasHeight * scale;
+            drawList->AddImage(atlasHandle.imguiDescriptorSet,
+                ImVec2(x + offsetX, y + offsetY), ImVec2(x + offsetX + glyphW, y + offsetY + glyphH),
+                ImVec2(u0, v0), ImVec2(u1, v1), IM_COL32(255, 255, 255, 255));
 
-            // Center glyph in cell
-            float offsetX = (cellSize - glyphW) * 0.5f;
-            float offsetY = (cellSize - glyphH) * 0.5f;
-
-            drawList->AddImage(
-                atlasHandle.imguiDescriptorSet,
-                ImVec2(x + offsetX, y + offsetY),
-                ImVec2(x + offsetX + glyphW, y + offsetY + glyphH),
-                ImVec2(u0, v0),
-                ImVec2(u1, v1),
-                IM_COL32(255, 255, 255, 255)
-            );
-
-            col++;
-            if (col >= glyphsPerRow)
-            {
-                col = 0;
-                x = startPos.x + 4.0f;
-                y += cellSize;
-            }
-            else
-            {
-                x += cellSize;
-            }
+            if (++col >= glyphsPerRow) { col = 0; x = startPos.x + 4.0f; y += cellSize; }
+            else { x += cellSize; }
         }
-
         ImGui::Dummy(availSize);
     }
 
@@ -526,7 +407,6 @@ namespace windows
         float atlasW = static_cast<float>(fontData.atlas.width) * atlasZoom;
         float atlasH = static_cast<float>(fontData.atlas.height) * atlasZoom;
 
-        // Center if smaller than available space
         ImVec2 imageSize(atlasW, atlasH);
         if (atlasW < availSize.x && atlasH < availSize.y)
         {
@@ -544,51 +424,24 @@ namespace windows
         ImVec2 availSize = ImGui::GetContentRegionAvail();
         ImVec2 windowPos = ImGui::GetCursorScreenPos();
         ImDrawList* drawList = ImGui::GetWindowDrawList();
-
-        drawList->AddRectFilled(
-            windowPos,
-            ImVec2(windowPos.x + availSize.x, windowPos.y + availSize.y),
-            IM_COL32(30, 30, 30, 255)
-        );
+        drawList->AddRectFilled(windowPos, ImVec2(windowPos.x + availSize.x, windowPos.y + availSize.y), IM_COL32(30, 30, 30, 255));
 
         float time = static_cast<float>(ImGui::GetTime());
-        float spinnerRadius = 20.0f;
-        float spinnerThickness = 4.0f;
-        ImVec2 spinnerCenter(
-            windowPos.x + availSize.x * 0.5f,
-            windowPos.y + availSize.y * 0.5f - 20.0f
-        );
+        ImVec2 center(windowPos.x + availSize.x * 0.5f, windowPos.y + availSize.y * 0.5f - 20.0f);
+        float startAngle = time * 4.0f, arcLength = 3.14159f * 1.3f;
 
-        int numSegments = 12;
-        float startAngle = time * 4.0f;
-        float arcLength = 3.14159f * 1.3f;
-
-        for (int i = 0; i < numSegments; ++i)
-        {
-            float t1 = static_cast<float>(i) / numSegments;
-            float t2 = static_cast<float>(i + 1) / numSegments;
-            float angle1 = startAngle + t1 * arcLength;
-            float angle2 = startAngle + t2 * arcLength;
-
-            int alpha = static_cast<int>(255 * (1.0f - t1 * 0.7f));
-            ImU32 segColor = IM_COL32(100, 180, 255, alpha);
-
-            ImVec2 p1(spinnerCenter.x + cosf(angle1) * spinnerRadius,
-                      spinnerCenter.y + sinf(angle1) * spinnerRadius);
-            ImVec2 p2(spinnerCenter.x + cosf(angle2) * spinnerRadius,
-                      spinnerCenter.y + sinf(angle2) * spinnerRadius);
-
-            drawList->AddLine(p1, p2, segColor, spinnerThickness);
+        for (int i = 0; i < 12; ++i) {
+            float t1 = static_cast<float>(i) / 12.0f, t2 = static_cast<float>(i + 1) / 12.0f;
+            float a1 = startAngle + t1 * arcLength, a2 = startAngle + t2 * arcLength;
+            ImU32 col = IM_COL32(100, 180, 255, static_cast<int>(255 * (1.0f - t1 * 0.7f)));
+            drawList->AddLine(ImVec2(center.x + cosf(a1) * 20.0f, center.y + sinf(a1) * 20.0f),
+                              ImVec2(center.x + cosf(a2) * 20.0f, center.y + sinf(a2) * 20.0f), col, 4.0f);
         }
 
         const char* loadingText = "Loading font...";
         ImVec2 textSize = ImGui::CalcTextSize(loadingText);
-        ImGui::SetCursorPos(ImVec2(
-            (availSize.x - textSize.x) * 0.5f,
-            availSize.y * 0.5f + 20.0f
-        ));
+        ImGui::SetCursorPos(ImVec2((availSize.x - textSize.x) * 0.5f, availSize.y * 0.5f + 20.0f));
         ImGui::Text("%s", loadingText);
-
         ImGui::Dummy(availSize);
     }
 

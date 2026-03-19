@@ -118,6 +118,8 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\utilities\animator\AnimatorAsset.cpp" />
+    <ClCompile Include="..\utilities\animator\AnimatorAssetDeserialize.cpp" />
+    <ClCompile Include="..\utilities\animator\AnimatorAssetSerialize.cpp" />
     <ClCompile Include="..\utilities\animator\AnimatorTypes.cpp" />
     <ClCompile Include="..\utilities\animator\FootIKHelper.cpp" />
     <ClCompile Include="..\utilities\animator\HandIKHelper.cpp" />
@@ -129,12 +131,16 @@
     <ClCompile Include="animation\AnimationEvaluator.cpp" />
     <ClCompile Include="animation\AnimationLOD.cpp" />
     <ClCompile Include="animation\AnimationLayerStack.cpp" />
+    <ClCompile Include="animation\AnimationLayerStackControls.cpp" />
     <ClCompile Include="animation\AnimatorStateMachine.cpp" />
     <ClCompile Include="animation\AnimatorStateMachineControls.cpp" />
+    <ClCompile Include="animation\AnimatorStateMachineHelpers.cpp" />
     <ClCompile Include="animation\BlendTree.cpp" />
     <ClCompile Include="animation\IKPostProcess.cpp" />
     <ClCompile Include="animation\IKSolver.cpp" />
     <ClCompile Include="animation\RuntimeAnimatorSystem.cpp" />
+    <ClCompile Include="animation\RuntimeAnimatorSystemEval.cpp" />
+    <ClCompile Include="animation\RuntimeAnimatorSystemInit.cpp" />
     <ClCompile Include="animation\SocketAttachmentUpdater.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

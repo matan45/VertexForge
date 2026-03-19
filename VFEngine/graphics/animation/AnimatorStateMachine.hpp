@@ -114,9 +114,14 @@ namespace animation
 
     private:
         void evaluateTransitions();
+        bool checkTransitionConditions(const animator::AnimatorTransition& transition) const;
+        void executeTransition(const animator::AnimatorTransition& transition);
         void startTransition(const animator::AnimatorTransition& transition);
         void updateBlending(float deltaTime);
+        void advanceStateTime(float deltaTime);
+        void advancePreviousStateTime(float deltaTime);
         void evaluateCurrentPose();
+        void evaluateBlendingPose(glm::vec3& outRootPosition);
         std::vector<glm::mat4> evaluateStatePose(uint32_t stateId, float time,
                                                    AnimationEvaluator& evaluator,
                                                    glm::vec3* outRootPos) const;

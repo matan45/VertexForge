@@ -422,6 +422,12 @@ namespace render
         void drawSceneMeshes(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
         void drawGPUDrivenMeshPass(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex,
                                    DebugRenderer* debugRendererPtr, bool hasCustomShaderMeshes, bool hasVFX) const;
+        void recordParallelScenePass(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex,
+                                     vk::DescriptorSet iblDescriptorSet, DebugRenderer* debugRendererPtr,
+                                     bool hasCustomShaderMeshes, bool wboitActive) const;
+        void recordInlineScenePass(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex,
+                                   vk::DescriptorSet iblDescriptorSet, DebugRenderer* debugRendererPtr,
+                                   bool hasCustomShaderMeshes, bool wboitActive) const;
         void drawOverlays(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
         void executeOcclusionPasses(const vk::CommandBuffer& commandBuffer) const;
         void dispatchTerrainRaycast(const vk::CommandBuffer& commandBuffer) const;

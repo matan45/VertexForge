@@ -7,8 +7,6 @@ namespace serialization
 {
     namespace
     {
-        // ---- Enum/string conversions for shadows/cascade ----
-
         std::string shadowQualityToStr(types::ShadowQuality quality)
         {
             switch (quality)
@@ -51,467 +49,23 @@ namespace serialization
             return types::CascadeSplitMode::Practical;
         }
 
-        // ---- Enum/string conversions for postprocess ----
-
-        std::string toneMappingModeToStr(postprocess::ToneMappingMode mode)
-        {
-            switch (mode)
-            {
-            case postprocess::ToneMappingMode::ACES: return "aces";
-            case postprocess::ToneMappingMode::Reinhard: return "reinhard";
-            case postprocess::ToneMappingMode::Uncharted2: return "uncharted2";
-            case postprocess::ToneMappingMode::Linear: return "linear";
-            default: return "aces";
-            }
-        }
-
-        postprocess::ToneMappingMode strToToneMappingMode(const std::string& str)
-        {
-            if (str == "aces") return postprocess::ToneMappingMode::ACES;
-            if (str == "reinhard") return postprocess::ToneMappingMode::Reinhard;
-            if (str == "uncharted2") return postprocess::ToneMappingMode::Uncharted2;
-            if (str == "linear") return postprocess::ToneMappingMode::Linear;
-            return postprocess::ToneMappingMode::ACES;
-        }
-
-        // ---- Serialize post-process helpers ----
-
-        json serializeToneMapping(const postprocess::ToneMappingSettings& s)
+        json serializeShadowSettings(const types::ShadowSettings& s)
         {
             return {
                 {"enabled", s.enabled},
-                {"mode", toneMappingModeToStr(s.mode)},
-                {"exposure", s.exposure},
-                {"gamma", s.gamma},
-                {"contrast", s.contrast},
-                {"toe", s.toe},
-                {"shoulder", s.shoulder}
+                {"quality", shadowQualityToStr(s.quality)},
+                {"cascadeCount", s.cascadeCount},
+                {"cascadeSplitMode", cascadeSplitModeToStr(s.cascadeSplitMode)},
+                {"shadowBias", s.shadowBias},
+                {"slopeBias", s.slopeBias},
+                {"normalBias", s.normalBias},
+                {"softShadows", s.softShadows},
+                {"shadowIntensity", s.shadowIntensity},
+                {"directionalResolution", s.directionalResolution},
+                {"spotResolution", s.spotResolution},
+                {"pointResolution", s.pointResolution}
             };
         }
-
-        json serializeTAA(const postprocess::TAASettings& s)
-        {
-            return {
-                {"enabled", s.enabled},
-                {"blendFactor", s.blendFactor},
-                {"sharpenStrength", s.sharpenStrength},
-                {"useVarianceClipping", s.useVarianceClipping}
-            };
-        }
-
-        json serializeBloom(const postprocess::BloomSettings& s)
-        {
-            return {
-                {"enabled", s.enabled},
-                {"threshold", s.threshold},
-                {"intensity", s.intensity},
-                {"radius", s.radius},
-                {"passes", s.passes}
-            };
-        }
-
-        json serializeVignette(const postprocess::VignetteSettings& s)
-        {
-            return {
-                {"enabled", s.enabled},
-                {"intensity", s.intensity},
-                {"radius", s.radius},
-                {"softness", s.softness}
-            };
-        }
-
-        json serializeChromaticAberration(const postprocess::ChromaticAberrationSettings& s)
-        {
-            return {
-                {"enabled", s.enabled},
-                {"intensity", s.intensity}
-            };
-        }
-
-        json serializeFilmGrain(const postprocess::FilmGrainSettings& s)
-        {
-            return {
-                {"enabled", s.enabled},
-                {"intensity", s.intensity},
-                {"size", s.size}
-            };
-        }
-
-        json serializeDepthOfField(const postprocess::DepthOfFieldSettings& s)
-        {
-            return {
-                {"enabled", s.enabled},
-                {"focusMode", static_cast<int>(s.focusMode)},
-                {"focalDistance", s.focalDistance},
-                {"focusTargetX", s.focusTargetX},
-                {"focusTargetY", s.focusTargetY},
-                {"focusTargetZ", s.focusTargetZ},
-                {"focusSmoothing", s.focusSmoothing},
-                {"focalRange", s.focalRange},
-                {"maxBlurRadius", s.maxBlurRadius},
-                {"sampleCount", s.sampleCount}
-            };
-        }
-
-        std::string volumetricQualityToStr(postprocess::VolumetricQuality quality)
-        {
-            switch (quality)
-            {
-            case postprocess::VolumetricQuality::Low: return "low";
-            case postprocess::VolumetricQuality::Medium: return "medium";
-            case postprocess::VolumetricQuality::High: return "high";
-            default: return "medium";
-            }
-        }
-
-        postprocess::VolumetricQuality strToVolumetricQuality(const std::string& str)
-        {
-            if (str == "low") return postprocess::VolumetricQuality::Low;
-            if (str == "medium") return postprocess::VolumetricQuality::Medium;
-            if (str == "high") return postprocess::VolumetricQuality::High;
-            return postprocess::VolumetricQuality::Medium;
-        }
-
-        json serializeSSAO(const postprocess::SSAOSettings& s)
-        {
-            return {
-                {"enabled", s.enabled},
-                {"radius", s.radius},
-                {"bias", s.bias},
-                {"intensity", s.intensity},
-                {"kernelSize", s.kernelSize},
-                {"power", s.power}
-            };
-        }
-
-        json serializeEdgeDetection(const postprocess::EdgeDetectionSettings& s)
-        {
-            return {
-                {"enabled", s.enabled},
-                {"threshold", s.threshold},
-                {"edgeWidth", s.edgeWidth},
-                {"edgeColor", {s.edgeColor[0], s.edgeColor[1], s.edgeColor[2]}},
-                {"opacity", s.opacity}
-            };
-        }
-
-        json serializeAutoExposure(const postprocess::AutoExposureSettings& s)
-        {
-            return {
-                {"enabled", s.enabled},
-                {"minExposure", s.minExposure},
-                {"maxExposure", s.maxExposure},
-                {"adaptSpeedUp", s.adaptSpeedUp},
-                {"adaptSpeedDown", s.adaptSpeedDown},
-                {"exposureCompensation", s.exposureCompensation},
-                {"lowPercentile", s.lowPercentile},
-                {"highPercentile", s.highPercentile}
-            };
-        }
-
-        json serializeVolumetricFog(const postprocess::VolumetricFogSettings& s)
-        {
-            return {
-                {"enabled", s.enabled},
-                {"quality", volumetricQualityToStr(s.quality)},
-                {"uniformDensity", s.uniformDensity},
-                {"fogColor", {s.fogColor[0], s.fogColor[1], s.fogColor[2]}},
-                {"heightFogDensity", s.heightFogDensity},
-                {"heightFogFalloff", s.heightFogFalloff},
-                {"heightFogOffset", s.heightFogOffset},
-                {"scatteringCoefficient", s.scatteringCoefficient},
-                {"absorptionCoefficient", s.absorptionCoefficient},
-                {"anisotropy", s.anisotropy},
-                {"temporalBlendFactor", s.temporalBlendFactor},
-                {"intensity", s.intensity},
-                {"ambientIntensity", s.ambientIntensity},
-                {"maxDistance", s.maxDistance}
-            };
-        }
-
-        // ---- Deserialize post-process helpers ----
-
-        void deserializeToneMapping(const json& j, postprocess::ToneMappingSettings& s)
-        {
-            if (!j.contains("toneMapping") || !j["toneMapping"].is_object())
-                return;
-            const auto& tm = j["toneMapping"];
-            if (tm.contains("enabled") && tm["enabled"].is_boolean())
-                s.enabled = tm["enabled"].get<bool>();
-            if (tm.contains("mode") && tm["mode"].is_string())
-                s.mode = strToToneMappingMode(tm["mode"].get<std::string>());
-            if (tm.contains("exposure") && tm["exposure"].is_number())
-                s.exposure = std::clamp(tm["exposure"].get<float>(), 0.01f, 20.0f);
-            if (tm.contains("gamma") && tm["gamma"].is_number())
-                s.gamma = std::clamp(tm["gamma"].get<float>(), 0.1f, 5.0f);
-            if (tm.contains("contrast") && tm["contrast"].is_number())
-                s.contrast = std::clamp(tm["contrast"].get<float>(), 0.5f, 2.0f);
-            if (tm.contains("toe") && tm["toe"].is_number())
-                s.toe = std::clamp(tm["toe"].get<float>(), 0.0f, 1.0f);
-            if (tm.contains("shoulder") && tm["shoulder"].is_number())
-                s.shoulder = std::clamp(tm["shoulder"].get<float>(), 0.0f, 1.0f);
-        }
-
-        void deserializeTAA(const json& j, postprocess::TAASettings& s)
-        {
-            if (!j.contains("taa") || !j["taa"].is_object())
-                return;
-            const auto& taa = j["taa"];
-            if (taa.contains("enabled") && taa["enabled"].is_boolean())
-                s.enabled = taa["enabled"].get<bool>();
-            if (taa.contains("blendFactor") && taa["blendFactor"].is_number())
-                s.blendFactor = std::clamp(taa["blendFactor"].get<float>(), 0.01f, 0.5f);
-            if (taa.contains("sharpenStrength") && taa["sharpenStrength"].is_number())
-                s.sharpenStrength = std::clamp(taa["sharpenStrength"].get<float>(), 0.0f, 1.0f);
-            if (taa.contains("useVarianceClipping") && taa["useVarianceClipping"].is_boolean())
-                s.useVarianceClipping = taa["useVarianceClipping"].get<bool>();
-        }
-
-        void deserializeBloom(const json& j, postprocess::BloomSettings& s)
-        {
-            if (!j.contains("bloom") || !j["bloom"].is_object())
-                return;
-            const auto& bloom = j["bloom"];
-            if (bloom.contains("enabled") && bloom["enabled"].is_boolean())
-                s.enabled = bloom["enabled"].get<bool>();
-            if (bloom.contains("threshold") && bloom["threshold"].is_number())
-                s.threshold = std::clamp(bloom["threshold"].get<float>(), 0.0f, 10.0f);
-            if (bloom.contains("intensity") && bloom["intensity"].is_number())
-                s.intensity = std::clamp(bloom["intensity"].get<float>(), 0.0f, 5.0f);
-            if (bloom.contains("radius") && bloom["radius"].is_number())
-                s.radius = std::clamp(bloom["radius"].get<float>(), 0.0f, 1.0f);
-            if (bloom.contains("passes") && bloom["passes"].is_number_unsigned())
-                s.passes = std::clamp(bloom["passes"].get<uint32_t>(), 1u, 10u);
-        }
-
-        void deserializeVignette(const json& j, postprocess::VignetteSettings& s)
-        {
-            if (!j.contains("vignette") || !j["vignette"].is_object())
-                return;
-            const auto& vignette = j["vignette"];
-            if (vignette.contains("enabled") && vignette["enabled"].is_boolean())
-                s.enabled = vignette["enabled"].get<bool>();
-            if (vignette.contains("intensity") && vignette["intensity"].is_number())
-                s.intensity = std::clamp(vignette["intensity"].get<float>(), 0.0f, 1.0f);
-            if (vignette.contains("radius") && vignette["radius"].is_number())
-                s.radius = std::clamp(vignette["radius"].get<float>(), 0.0f, 2.0f);
-            if (vignette.contains("softness") && vignette["softness"].is_number())
-                s.softness = std::clamp(vignette["softness"].get<float>(), 0.0f, 1.0f);
-        }
-
-        void deserializeChromaticAberration(const json& j, postprocess::ChromaticAberrationSettings& s)
-        {
-            if (!j.contains("chromaticAberration") || !j["chromaticAberration"].is_object())
-                return;
-            const auto& ca = j["chromaticAberration"];
-            if (ca.contains("enabled") && ca["enabled"].is_boolean())
-                s.enabled = ca["enabled"].get<bool>();
-            if (ca.contains("intensity") && ca["intensity"].is_number())
-                s.intensity = std::clamp(ca["intensity"].get<float>(), 0.0f, 0.1f);
-        }
-
-        void deserializeFilmGrain(const json& j, postprocess::FilmGrainSettings& s)
-        {
-            if (!j.contains("filmGrain") || !j["filmGrain"].is_object())
-                return;
-            const auto& fg = j["filmGrain"];
-            if (fg.contains("enabled") && fg["enabled"].is_boolean())
-                s.enabled = fg["enabled"].get<bool>();
-            if (fg.contains("intensity") && fg["intensity"].is_number())
-                s.intensity = std::clamp(fg["intensity"].get<float>(), 0.0f, 1.0f);
-            if (fg.contains("size") && fg["size"].is_number())
-                s.size = std::clamp(fg["size"].get<float>(), 0.1f, 5.0f);
-        }
-
-        void deserializeDepthOfField(const json& j, postprocess::DepthOfFieldSettings& s)
-        {
-            if (!j.contains("depthOfField") || !j["depthOfField"].is_object())
-                return;
-            const auto& df = j["depthOfField"];
-            if (df.contains("enabled") && df["enabled"].is_boolean())
-                s.enabled = df["enabled"].get<bool>();
-            if (df.contains("focusMode") && df["focusMode"].is_number_integer())
-                s.focusMode = static_cast<postprocess::DoFFocusMode>(
-                    std::clamp(df["focusMode"].get<int>(), 0, 1));
-            if (df.contains("focalDistance") && df["focalDistance"].is_number())
-                s.focalDistance = std::clamp(df["focalDistance"].get<float>(), 0.1f, 1000.0f);
-            if (df.contains("focusTargetX") && df["focusTargetX"].is_number())
-                s.focusTargetX = df["focusTargetX"].get<float>();
-            if (df.contains("focusTargetY") && df["focusTargetY"].is_number())
-                s.focusTargetY = df["focusTargetY"].get<float>();
-            if (df.contains("focusTargetZ") && df["focusTargetZ"].is_number())
-                s.focusTargetZ = df["focusTargetZ"].get<float>();
-            if (df.contains("focusSmoothing") && df["focusSmoothing"].is_number())
-                s.focusSmoothing = std::clamp(df["focusSmoothing"].get<float>(), 0.1f, 50.0f);
-            if (df.contains("focalRange") && df["focalRange"].is_number())
-                s.focalRange = std::clamp(df["focalRange"].get<float>(), 0.1f, 100.0f);
-            if (df.contains("maxBlurRadius") && df["maxBlurRadius"].is_number())
-                s.maxBlurRadius = std::clamp(df["maxBlurRadius"].get<float>(), 0.0f, 20.0f);
-            if (df.contains("sampleCount") && df["sampleCount"].is_number_integer())
-                s.sampleCount = std::clamp(df["sampleCount"].get<int>(), 4, 32);
-        }
-
-        void deserializeVolumetricFog(const json& j, postprocess::VolumetricFogSettings& s)
-        {
-            if (!j.contains("volumetricFog") || !j["volumetricFog"].is_object())
-                return;
-            const auto& vf = j["volumetricFog"];
-            if (vf.contains("enabled") && vf["enabled"].is_boolean())
-                s.enabled = vf["enabled"].get<bool>();
-            if (vf.contains("quality") && vf["quality"].is_string())
-                s.quality = strToVolumetricQuality(vf["quality"].get<std::string>());
-            if (vf.contains("uniformDensity") && vf["uniformDensity"].is_number())
-                s.uniformDensity = std::clamp(vf["uniformDensity"].get<float>(), 0.0f, 1.0f);
-            if (vf.contains("fogColor") && vf["fogColor"].is_array() && vf["fogColor"].size() == 3)
-            {
-                s.fogColor[0] = std::clamp(vf["fogColor"][0].get<float>(), 0.0f, 1.0f);
-                s.fogColor[1] = std::clamp(vf["fogColor"][1].get<float>(), 0.0f, 1.0f);
-                s.fogColor[2] = std::clamp(vf["fogColor"][2].get<float>(), 0.0f, 1.0f);
-            }
-            if (vf.contains("heightFogDensity") && vf["heightFogDensity"].is_number())
-                s.heightFogDensity = std::clamp(vf["heightFogDensity"].get<float>(), 0.0f, 1.0f);
-            if (vf.contains("heightFogFalloff") && vf["heightFogFalloff"].is_number())
-                s.heightFogFalloff = std::clamp(vf["heightFogFalloff"].get<float>(), 0.0f, 5.0f);
-            if (vf.contains("heightFogOffset") && vf["heightFogOffset"].is_number())
-                s.heightFogOffset = std::clamp(vf["heightFogOffset"].get<float>(), -100.0f, 100.0f);
-            if (vf.contains("scatteringCoefficient") && vf["scatteringCoefficient"].is_number())
-                s.scatteringCoefficient = std::clamp(vf["scatteringCoefficient"].get<float>(), 0.0f, 5.0f);
-            if (vf.contains("absorptionCoefficient") && vf["absorptionCoefficient"].is_number())
-                s.absorptionCoefficient = std::clamp(vf["absorptionCoefficient"].get<float>(), 0.0f, 5.0f);
-            if (vf.contains("anisotropy") && vf["anisotropy"].is_number())
-                s.anisotropy = std::clamp(vf["anisotropy"].get<float>(), -1.0f, 1.0f);
-            if (vf.contains("temporalBlendFactor") && vf["temporalBlendFactor"].is_number())
-                s.temporalBlendFactor = std::clamp(vf["temporalBlendFactor"].get<float>(), 0.0f, 1.0f);
-            if (vf.contains("intensity") && vf["intensity"].is_number())
-                s.intensity = std::clamp(vf["intensity"].get<float>(), 0.0f, 5.0f);
-            if (vf.contains("ambientIntensity") && vf["ambientIntensity"].is_number())
-                s.ambientIntensity = std::clamp(vf["ambientIntensity"].get<float>(), 0.0f, 2.0f);
-            if (vf.contains("maxDistance") && vf["maxDistance"].is_number())
-                s.maxDistance = std::clamp(vf["maxDistance"].get<float>(), 10.0f, 5000.0f);
-        }
-
-        void deserializeSSAO(const json& j, postprocess::SSAOSettings& s)
-        {
-            if (!j.contains("ssao") || !j["ssao"].is_object())
-                return;
-            const auto& ao = j["ssao"];
-            if (ao.contains("enabled") && ao["enabled"].is_boolean())
-                s.enabled = ao["enabled"].get<bool>();
-            if (ao.contains("radius") && ao["radius"].is_number())
-                s.radius = std::clamp(ao["radius"].get<float>(), 0.1f, 5.0f);
-            if (ao.contains("bias") && ao["bias"].is_number())
-                s.bias = std::clamp(ao["bias"].get<float>(), 0.001f, 0.1f);
-            if (ao.contains("intensity") && ao["intensity"].is_number())
-                s.intensity = std::clamp(ao["intensity"].get<float>(), 0.1f, 5.0f);
-            if (ao.contains("kernelSize") && ao["kernelSize"].is_number_integer())
-                s.kernelSize = std::clamp(ao["kernelSize"].get<int>(), 8, 64);
-            if (ao.contains("power") && ao["power"].is_number())
-                s.power = std::clamp(ao["power"].get<float>(), 0.5f, 5.0f);
-        }
-
-        void deserializeEdgeDetection(const json& j, postprocess::EdgeDetectionSettings& s)
-        {
-            if (!j.contains("edgeDetection") || !j["edgeDetection"].is_object())
-                return;
-            const auto& ed = j["edgeDetection"];
-            if (ed.contains("enabled") && ed["enabled"].is_boolean())
-                s.enabled = ed["enabled"].get<bool>();
-            if (ed.contains("threshold") && ed["threshold"].is_number())
-                s.threshold = std::clamp(ed["threshold"].get<float>(), 0.01f, 1.0f);
-            if (ed.contains("edgeWidth") && ed["edgeWidth"].is_number())
-                s.edgeWidth = std::clamp(ed["edgeWidth"].get<float>(), 0.5f, 3.0f);
-            if (ed.contains("edgeColor") && ed["edgeColor"].is_array() && ed["edgeColor"].size() == 3)
-            {
-                s.edgeColor[0] = std::clamp(ed["edgeColor"][0].get<float>(), 0.0f, 1.0f);
-                s.edgeColor[1] = std::clamp(ed["edgeColor"][1].get<float>(), 0.0f, 1.0f);
-                s.edgeColor[2] = std::clamp(ed["edgeColor"][2].get<float>(), 0.0f, 1.0f);
-            }
-            if (ed.contains("opacity") && ed["opacity"].is_number())
-                s.opacity = std::clamp(ed["opacity"].get<float>(), 0.0f, 1.0f);
-        }
-
-        void deserializeAutoExposure(const json& j, postprocess::AutoExposureSettings& s)
-        {
-            if (!j.contains("autoExposure") || !j["autoExposure"].is_object())
-                return;
-            const auto& ae = j["autoExposure"];
-            if (ae.contains("enabled") && ae["enabled"].is_boolean())
-                s.enabled = ae["enabled"].get<bool>();
-            if (ae.contains("minExposure") && ae["minExposure"].is_number())
-                s.minExposure = std::clamp(ae["minExposure"].get<float>(), 0.01f, 1.0f);
-            if (ae.contains("maxExposure") && ae["maxExposure"].is_number())
-                s.maxExposure = std::clamp(ae["maxExposure"].get<float>(), 1.0f, 20.0f);
-            if (ae.contains("adaptSpeedUp") && ae["adaptSpeedUp"].is_number())
-                s.adaptSpeedUp = std::clamp(ae["adaptSpeedUp"].get<float>(), 0.1f, 10.0f);
-            if (ae.contains("adaptSpeedDown") && ae["adaptSpeedDown"].is_number())
-                s.adaptSpeedDown = std::clamp(ae["adaptSpeedDown"].get<float>(), 0.1f, 10.0f);
-            if (ae.contains("exposureCompensation") && ae["exposureCompensation"].is_number())
-                s.exposureCompensation = std::clamp(ae["exposureCompensation"].get<float>(), -5.0f, 5.0f);
-            if (ae.contains("lowPercentile") && ae["lowPercentile"].is_number())
-                s.lowPercentile = std::clamp(ae["lowPercentile"].get<float>(), 0.0f, 0.5f);
-            if (ae.contains("highPercentile") && ae["highPercentile"].is_number())
-                s.highPercentile = std::clamp(ae["highPercentile"].get<float>(), 0.5f, 1.0f);
-        }
-
-        json serializeColorGrading(const postprocess::ColorGradingSettings& s)
-        {
-            return {
-                {"enabled", s.enabled},
-                {"primaryLutPath", s.primaryLutPath},
-                {"secondaryLutPath", s.secondaryLutPath},
-                {"lutIntensity", s.lutIntensity},
-                {"lutBlendFactor", s.lutBlendFactor},
-                {"liftR", s.liftR}, {"liftG", s.liftG}, {"liftB", s.liftB},
-                {"gammaR", s.gammaR}, {"gammaG", s.gammaG}, {"gammaB", s.gammaB},
-                {"gainR", s.gainR}, {"gainG", s.gainG}, {"gainB", s.gainB},
-                {"saturation", s.saturation},
-                {"colorTemperature", s.colorTemperature},
-                {"colorTint", s.colorTint}
-            };
-        }
-
-        void deserializeColorGrading(const json& j, postprocess::ColorGradingSettings& s)
-        {
-            if (!j.contains("colorGrading") || !j["colorGrading"].is_object())
-                return;
-            const auto& cg = j["colorGrading"];
-            if (cg.contains("enabled") && cg["enabled"].is_boolean())
-                s.enabled = cg["enabled"].get<bool>();
-            if (cg.contains("primaryLutPath") && cg["primaryLutPath"].is_string())
-                s.primaryLutPath = cg["primaryLutPath"].get<std::string>();
-            if (cg.contains("secondaryLutPath") && cg["secondaryLutPath"].is_string())
-                s.secondaryLutPath = cg["secondaryLutPath"].get<std::string>();
-            if (cg.contains("lutIntensity") && cg["lutIntensity"].is_number())
-                s.lutIntensity = std::clamp(cg["lutIntensity"].get<float>(), 0.0f, 1.0f);
-            if (cg.contains("lutBlendFactor") && cg["lutBlendFactor"].is_number())
-                s.lutBlendFactor = std::clamp(cg["lutBlendFactor"].get<float>(), 0.0f, 1.0f);
-            if (cg.contains("liftR") && cg["liftR"].is_number())
-                s.liftR = std::clamp(cg["liftR"].get<float>(), -1.0f, 1.0f);
-            if (cg.contains("liftG") && cg["liftG"].is_number())
-                s.liftG = std::clamp(cg["liftG"].get<float>(), -1.0f, 1.0f);
-            if (cg.contains("liftB") && cg["liftB"].is_number())
-                s.liftB = std::clamp(cg["liftB"].get<float>(), -1.0f, 1.0f);
-            if (cg.contains("gammaR") && cg["gammaR"].is_number())
-                s.gammaR = std::clamp(cg["gammaR"].get<float>(), 0.01f, 5.0f);
-            if (cg.contains("gammaG") && cg["gammaG"].is_number())
-                s.gammaG = std::clamp(cg["gammaG"].get<float>(), 0.01f, 5.0f);
-            if (cg.contains("gammaB") && cg["gammaB"].is_number())
-                s.gammaB = std::clamp(cg["gammaB"].get<float>(), 0.01f, 5.0f);
-            if (cg.contains("gainR") && cg["gainR"].is_number())
-                s.gainR = std::clamp(cg["gainR"].get<float>(), 0.0f, 5.0f);
-            if (cg.contains("gainG") && cg["gainG"].is_number())
-                s.gainG = std::clamp(cg["gainG"].get<float>(), 0.0f, 5.0f);
-            if (cg.contains("gainB") && cg["gainB"].is_number())
-                s.gainB = std::clamp(cg["gainB"].get<float>(), 0.0f, 5.0f);
-            if (cg.contains("saturation") && cg["saturation"].is_number())
-                s.saturation = std::clamp(cg["saturation"].get<float>(), 0.0f, 3.0f);
-            if (cg.contains("colorTemperature") && cg["colorTemperature"].is_number())
-                s.colorTemperature = std::clamp(cg["colorTemperature"].get<float>(), 1000.0f, 15000.0f);
-            if (cg.contains("colorTint") && cg["colorTint"].is_number())
-                s.colorTint = std::clamp(cg["colorTint"].get<float>(), -1.0f, 1.0f);
-        }
-
-        // ---- Deserialize render sub-helpers ----
 
         void deserializeShadowSettings(const json& j, types::ShadowSettings& settings)
         {
@@ -545,6 +99,21 @@ namespace serialization
                 settings.spotResolution = shadows["spotResolution"].get<uint32_t>();
             if (shadows.contains("pointResolution") && shadows["pointResolution"].is_number_unsigned())
                 settings.pointResolution = shadows["pointResolution"].get<uint32_t>();
+        }
+
+        json serializeCullingSettings(const types::CullingSettings& s)
+        {
+            return {
+                {"frustumCullingEnabled", s.frustumCullingEnabled},
+                {"occlusionCullingEnabled", s.occlusionCullingEnabled},
+                {"lodSelectionEnabled", s.lodSelectionEnabled},
+                {"meshletFrustumCullingEnabled", s.meshletFrustumCullingEnabled},
+                {"meshletBackfaceCullingEnabled", s.meshletBackfaceCullingEnabled},
+                {"terrainFrustumCullingEnabled", s.terrainFrustumCullingEnabled},
+                {"terrainMeshletCullingEnabled", s.terrainMeshletCullingEnabled},
+                {"lodCrossfadeEnabled", s.lodCrossfadeEnabled},
+                {"globalLodBias", s.globalLodBias}
+            };
         }
 
         void deserializeCullingSettings(const json& j, types::CullingSettings& settings)
@@ -591,6 +160,17 @@ namespace serialization
             }
         }
 
+        json serializeTerrainRenderSettings(const types::TerrainSettings& s)
+        {
+            return {
+                {"enabled", s.enabled},
+                {"lodBias", s.lodBias},
+                {"errorThreshold", s.errorThreshold},
+                {"textureScale", s.textureScale},
+                {"shadowLOD", s.shadowLOD}
+            };
+        }
+
         void deserializeTerrainRenderSettings(const json& j, types::TerrainSettings& settings)
         {
             if (!j.contains("terrain") || !j["terrain"].is_object())
@@ -610,6 +190,21 @@ namespace serialization
             if (terrain.contains("shadowLOD") && terrain["shadowLOD"].is_number_unsigned())
                 settings.shadowLOD = std::min(terrain["shadowLOD"].get<uint32_t>(), 3u);
         }
+        json serializeDistanceCullingSettings(const types::DistanceCullingSettings& s)
+        {
+            return {
+                {"enabled", s.enabled},
+                {"staticMeshDistance", s.staticMeshDistance},
+                {"terrainDistance", s.terrainDistance},
+                {"foliageDistance", s.foliageDistance},
+                {"vfxDistance", s.vfxDistance},
+                {"decalDistance", s.decalDistance},
+                {"billboardDistance", s.billboardDistance},
+                {"waterDistance", s.waterDistance},
+                {"shadowDistanceMultiplier", s.shadowDistanceMultiplier}
+            };
+        }
+
         void deserializeDistanceCullingSettings(const json& j, types::DistanceCullingSettings& settings)
         {
             if (!j.contains("distanceCulling") || !j["distanceCulling"].is_object())
@@ -637,315 +232,40 @@ namespace serialization
             if (dc.contains("shadowDistanceMultiplier") && dc["shadowDistanceMultiplier"].is_number())
                 settings.shadowDistanceMultiplier = dc["shadowDistanceMultiplier"].get<float>();
         }
-        // ---- Atmosphere helpers ----
+        // ---- GI helpers ----
 
-        json serializeAtmosphere(const render::atmosphere::AtmosphereSettings& s)
+        json serializeGISettings(const render::gi::GISettings& gi)
         {
             return {
-                {"enabled", s.enabled},
-                {"planetRadius", s.planetRadius},
-                {"atmosphereRadius", s.atmosphereRadius},
-                {"rayleighScattering", {s.rayleighScattering.x, s.rayleighScattering.y, s.rayleighScattering.z}},
-                {"rayleighDensityExpScale", s.rayleighDensityExpScale},
-                {"mieScattering", s.mieScattering},
-                {"mieAbsorption", s.mieAbsorption},
-                {"mieAnisotropy", s.mieAnisotropy},
-                {"mieDensityExpScale", s.mieDensityExpScale},
-                {"ozoneAbsorption", {s.ozoneAbsorption.x, s.ozoneAbsorption.y, s.ozoneAbsorption.z}},
-                {"ozoneCenterAlt", s.ozoneCenterAlt},
-                {"ozoneWidth", s.ozoneWidth},
-                {"sunIrradiance", {s.sunIrradiance.x, s.sunIrradiance.y, s.sunIrradiance.z}},
-                {"sunAngularRadius", s.sunAngularRadius},
-                {"sunAzimuth", s.sunAzimuth},
-                {"sunElevation", s.sunElevation},
-                {"groundAlbedo", {s.groundAlbedo.x, s.groundAlbedo.y, s.groundAlbedo.z}},
-                {"aerialMaxDist", s.aerialMaxDist},
-                {"aerialIntensity", s.aerialIntensity}
+                {"enabled", gi.enabled},
+                {"quality", static_cast<int>(gi.quality)},
+                {"probeSpacing", gi.probeSpacing},
+                {"cascadeMultiplier", gi.cascadeMultiplier},
+                {"probeRaysPerUpdate", gi.probeRaysPerUpdate},
+                {"temporalBlendFactor", gi.temporalBlendFactor},
+                {"probeUpdateRate", gi.probeUpdateRate},
+                {"maxProbeDistance", gi.maxProbeDistance},
+                {"farFieldEnabled", gi.farFieldEnabled},
+                {"farFieldMaxDistance", gi.farFieldMaxDistance},
+                {"farFieldCascadeCount", gi.farFieldCascadeCount},
+                {"farFieldProbeSpacing", gi.farFieldProbeSpacing},
+                {"farFieldRaysPerUpdate", gi.farFieldRaysPerUpdate},
+                {"farFieldUpdateRate", gi.farFieldUpdateRate},
+                {"ssgiEnabled", gi.ssgiEnabled},
+                {"ssgiIntensity", gi.ssgiIntensity},
+                {"ssgiRadius", gi.ssgiRadius},
+                {"ssgiMaxDistance", gi.ssgiMaxDistance},
+                {"ssgiSampleCount", gi.ssgiSampleCount},
+                {"ssgiTemporalBlend", gi.ssgiTemporalBlend},
+                {"ssgiHalfResolution", gi.ssgiHalfResolution}
             };
         }
 
-        void deserializeAtmosphere(const json& j, render::atmosphere::AtmosphereSettings& s)
+        void deserializeGISettings(const json& j, render::gi::GISettings& gi)
         {
-            if (!j.contains("atmosphere") || !j["atmosphere"].is_object())
+            if (!j.contains("gi") || !j["gi"].is_object())
                 return;
-            const auto& a = j["atmosphere"];
-
-            if (a.contains("enabled") && a["enabled"].is_boolean())
-                s.enabled = a["enabled"].get<bool>();
-            if (a.contains("planetRadius") && a["planetRadius"].is_number())
-                s.planetRadius = a["planetRadius"].get<float>();
-            if (a.contains("atmosphereRadius") && a["atmosphereRadius"].is_number())
-                s.atmosphereRadius = a["atmosphereRadius"].get<float>();
-            if (a.contains("rayleighScattering") && a["rayleighScattering"].is_array() && a["rayleighScattering"].size() == 3)
-            {
-                s.rayleighScattering.x = a["rayleighScattering"][0].get<float>();
-                s.rayleighScattering.y = a["rayleighScattering"][1].get<float>();
-                s.rayleighScattering.z = a["rayleighScattering"][2].get<float>();
-            }
-            if (a.contains("rayleighDensityExpScale") && a["rayleighDensityExpScale"].is_number())
-            {
-                float v = a["rayleighDensityExpScale"].get<float>();
-                s.rayleighDensityExpScale = (v == 0.0f) ? -1.0f / 8000.0f : v; // guard against zero from corrupted files
-            }
-            if (a.contains("mieScattering") && a["mieScattering"].is_number())
-                s.mieScattering = a["mieScattering"].get<float>();
-            if (a.contains("mieAbsorption") && a["mieAbsorption"].is_number())
-                s.mieAbsorption = a["mieAbsorption"].get<float>();
-            if (a.contains("mieAnisotropy") && a["mieAnisotropy"].is_number())
-                s.mieAnisotropy = std::clamp(a["mieAnisotropy"].get<float>(), -1.0f, 1.0f);
-            if (a.contains("mieDensityExpScale") && a["mieDensityExpScale"].is_number())
-            {
-                float v = a["mieDensityExpScale"].get<float>();
-                s.mieDensityExpScale = (v == 0.0f) ? -1.0f / 1200.0f : v;
-            }
-            if (a.contains("ozoneAbsorption") && a["ozoneAbsorption"].is_array() && a["ozoneAbsorption"].size() == 3)
-            {
-                s.ozoneAbsorption.x = a["ozoneAbsorption"][0].get<float>();
-                s.ozoneAbsorption.y = a["ozoneAbsorption"][1].get<float>();
-                s.ozoneAbsorption.z = a["ozoneAbsorption"][2].get<float>();
-            }
-            if (a.contains("ozoneCenterAlt") && a["ozoneCenterAlt"].is_number())
-                s.ozoneCenterAlt = a["ozoneCenterAlt"].get<float>();
-            if (a.contains("ozoneWidth") && a["ozoneWidth"].is_number())
-                s.ozoneWidth = a["ozoneWidth"].get<float>();
-            if (a.contains("sunIrradiance") && a["sunIrradiance"].is_array() && a["sunIrradiance"].size() == 3)
-            {
-                s.sunIrradiance.x = a["sunIrradiance"][0].get<float>();
-                s.sunIrradiance.y = a["sunIrradiance"][1].get<float>();
-                s.sunIrradiance.z = a["sunIrradiance"][2].get<float>();
-            }
-            if (a.contains("sunAngularRadius") && a["sunAngularRadius"].is_number())
-                s.sunAngularRadius = a["sunAngularRadius"].get<float>();
-            if (a.contains("sunAzimuth") && a["sunAzimuth"].is_number())
-                s.sunAzimuth = a["sunAzimuth"].get<float>();
-            if (a.contains("sunElevation") && a["sunElevation"].is_number())
-                s.sunElevation = std::clamp(a["sunElevation"].get<float>(), -90.0f, 90.0f);
-            if (a.contains("groundAlbedo") && a["groundAlbedo"].is_array() && a["groundAlbedo"].size() == 3)
-            {
-                s.groundAlbedo.x = std::clamp(a["groundAlbedo"][0].get<float>(), 0.0f, 1.0f);
-                s.groundAlbedo.y = std::clamp(a["groundAlbedo"][1].get<float>(), 0.0f, 1.0f);
-                s.groundAlbedo.z = std::clamp(a["groundAlbedo"][2].get<float>(), 0.0f, 1.0f);
-            }
-            if (a.contains("aerialMaxDist") && a["aerialMaxDist"].is_number())
-                s.aerialMaxDist = std::max(a["aerialMaxDist"].get<float>(), 1000.0f);
-            if (a.contains("aerialIntensity") && a["aerialIntensity"].is_number())
-                s.aerialIntensity = std::clamp(a["aerialIntensity"].get<float>(), 0.0f, 5.0f);
-        }
-
-        json serializeCloud(const render::cloud::CloudSettings& s)
-        {
-            return {
-                {"enabled", s.enabled},
-                {"cloudMinAltitude", s.cloudMinAltitude},
-                {"cloudMaxAltitude", s.cloudMaxAltitude},
-                {"globalDensity", s.globalDensity},
-                {"globalCoverage", s.globalCoverage},
-                {"cloudType", s.cloudType},
-                {"shapeScale", s.shapeScale},
-                {"detailScale", s.detailScale},
-                {"erosionStrength", s.erosionStrength},
-                {"curlStrength", s.curlStrength},
-                {"windSpeed", s.windSpeed},
-                {"windDirectionDeg", s.windDirectionDeg},
-                {"lightAbsorption", s.lightAbsorption},
-                {"phaseForward", s.phaseForward},
-                {"phaseBackward", s.phaseBackward},
-                {"phaseBlend", s.phaseBlend},
-                {"ambientIntensity", s.ambientIntensity},
-                {"temporalBlendFactor", s.temporalBlendFactor},
-                {"maxMarchSteps", s.maxMarchSteps},
-                {"lightMarchSteps", s.lightMarchSteps},
-                {"cloudColorTint", {s.cloudColorTint.x, s.cloudColorTint.y, s.cloudColorTint.z}}
-            };
-        }
-
-        void deserializeCloud(const json& j, render::cloud::CloudSettings& s)
-        {
-            if (!j.contains("cloud") || !j["cloud"].is_object())
-                return;
-            const auto& c = j["cloud"];
-
-            if (c.contains("enabled") && c["enabled"].is_boolean())
-                s.enabled = c["enabled"].get<bool>();
-            if (c.contains("cloudMinAltitude") && c["cloudMinAltitude"].is_number())
-                s.cloudMinAltitude = c["cloudMinAltitude"].get<float>();
-            if (c.contains("cloudMaxAltitude") && c["cloudMaxAltitude"].is_number())
-                s.cloudMaxAltitude = c["cloudMaxAltitude"].get<float>();
-            if (c.contains("globalDensity") && c["globalDensity"].is_number())
-                s.globalDensity = std::clamp(c["globalDensity"].get<float>(), 0.0f, 1.0f);
-            if (c.contains("globalCoverage") && c["globalCoverage"].is_number())
-                s.globalCoverage = std::clamp(c["globalCoverage"].get<float>(), 0.0f, 1.0f);
-            if (c.contains("cloudType") && c["cloudType"].is_number())
-                s.cloudType = std::clamp(c["cloudType"].get<float>(), 0.0f, 1.0f);
-            if (c.contains("shapeScale") && c["shapeScale"].is_number())
-                s.shapeScale = c["shapeScale"].get<float>();
-            if (c.contains("detailScale") && c["detailScale"].is_number())
-                s.detailScale = c["detailScale"].get<float>();
-            if (c.contains("erosionStrength") && c["erosionStrength"].is_number())
-                s.erosionStrength = std::clamp(c["erosionStrength"].get<float>(), 0.0f, 1.0f);
-            if (c.contains("curlStrength") && c["curlStrength"].is_number())
-                s.curlStrength = std::clamp(c["curlStrength"].get<float>(), 0.0f, 1.0f);
-            if (c.contains("windSpeed") && c["windSpeed"].is_number())
-                s.windSpeed = c["windSpeed"].get<float>();
-            if (c.contains("windDirectionDeg") && c["windDirectionDeg"].is_number())
-                s.windDirectionDeg = c["windDirectionDeg"].get<float>();
-            if (c.contains("lightAbsorption") && c["lightAbsorption"].is_number())
-                s.lightAbsorption = std::clamp(c["lightAbsorption"].get<float>(), 0.0f, 2.0f);
-            if (c.contains("phaseForward") && c["phaseForward"].is_number())
-                s.phaseForward = std::clamp(c["phaseForward"].get<float>(), 0.0f, 1.0f);
-            if (c.contains("phaseBackward") && c["phaseBackward"].is_number())
-                s.phaseBackward = std::clamp(c["phaseBackward"].get<float>(), -1.0f, 0.0f);
-            if (c.contains("phaseBlend") && c["phaseBlend"].is_number())
-                s.phaseBlend = std::clamp(c["phaseBlend"].get<float>(), 0.0f, 1.0f);
-            if (c.contains("ambientIntensity") && c["ambientIntensity"].is_number())
-                s.ambientIntensity = std::clamp(c["ambientIntensity"].get<float>(), 0.0f, 2.0f);
-            if (c.contains("temporalBlendFactor") && c["temporalBlendFactor"].is_number())
-                s.temporalBlendFactor = std::clamp(c["temporalBlendFactor"].get<float>(), 0.0f, 1.0f);
-            if (c.contains("maxMarchSteps") && c["maxMarchSteps"].is_number_unsigned())
-                s.maxMarchSteps = std::clamp(c["maxMarchSteps"].get<uint32_t>(), 16u, 256u);
-            if (c.contains("lightMarchSteps") && c["lightMarchSteps"].is_number_unsigned())
-                s.lightMarchSteps = std::clamp(c["lightMarchSteps"].get<uint32_t>(), 2u, 16u);
-            if (c.contains("cloudColorTint") && c["cloudColorTint"].is_array() && c["cloudColorTint"].size() == 3)
-            {
-                s.cloudColorTint.x = std::clamp(c["cloudColorTint"][0].get<float>(), 0.0f, 2.0f);
-                s.cloudColorTint.y = std::clamp(c["cloudColorTint"][1].get<float>(), 0.0f, 2.0f);
-                s.cloudColorTint.z = std::clamp(c["cloudColorTint"][2].get<float>(), 0.0f, 2.0f);
-            }
-        }
-
-    } // anonymous namespace
-
-    // ---- Render Settings ----
-
-    json SceneSerialization::serializeRenderSettings(const types::RenderSettings& settings)
-    {
-        json j;
-
-        j["shadows"] = {
-            {"enabled", settings.shadows.enabled},
-            {"quality", shadowQualityToStr(settings.shadows.quality)},
-            {"cascadeCount", settings.shadows.cascadeCount},
-            {"cascadeSplitMode", cascadeSplitModeToStr(settings.shadows.cascadeSplitMode)},
-            {"shadowBias", settings.shadows.shadowBias},
-            {"slopeBias", settings.shadows.slopeBias},
-            {"normalBias", settings.shadows.normalBias},
-            {"softShadows", settings.shadows.softShadows},
-            {"shadowIntensity", settings.shadows.shadowIntensity},
-            {"directionalResolution", settings.shadows.directionalResolution},
-            {"spotResolution", settings.shadows.spotResolution},
-            {"pointResolution", settings.shadows.pointResolution}
-        };
-
-        j["culling"] = {
-            {"frustumCullingEnabled", settings.culling.frustumCullingEnabled},
-            {"occlusionCullingEnabled", settings.culling.occlusionCullingEnabled},
-            {"lodSelectionEnabled", settings.culling.lodSelectionEnabled},
-            {"meshletFrustumCullingEnabled", settings.culling.meshletFrustumCullingEnabled},
-            {"meshletBackfaceCullingEnabled", settings.culling.meshletBackfaceCullingEnabled},
-            {"terrainFrustumCullingEnabled", settings.culling.terrainFrustumCullingEnabled},
-            {"terrainMeshletCullingEnabled", settings.culling.terrainMeshletCullingEnabled},
-            {"lodCrossfadeEnabled", settings.culling.lodCrossfadeEnabled},
-            {"globalLodBias", settings.culling.globalLodBias}
-        };
-
-        j["distanceCulling"] = {
-            {"enabled", settings.distanceCulling.enabled},
-            {"staticMeshDistance", settings.distanceCulling.staticMeshDistance},
-            {"terrainDistance", settings.distanceCulling.terrainDistance},
-            {"foliageDistance", settings.distanceCulling.foliageDistance},
-            {"vfxDistance", settings.distanceCulling.vfxDistance},
-            {"decalDistance", settings.distanceCulling.decalDistance},
-            {"billboardDistance", settings.distanceCulling.billboardDistance},
-            {"waterDistance", settings.distanceCulling.waterDistance},
-            {"shadowDistanceMultiplier", settings.distanceCulling.shadowDistanceMultiplier}
-        };
-
-        j["transparency"] = {
-            {"wboitEnabled", settings.transparency.wboitEnabled}
-        };
-
-        j["shadowLOD"] = {
-            {"enabled", settings.shadowLOD.enabled}
-        };
-
-        j["terrain"] = {
-            {"enabled", settings.terrain.enabled},
-            {"lodBias", settings.terrain.lodBias},
-            {"errorThreshold", settings.terrain.errorThreshold},
-            {"textureScale", settings.terrain.textureScale},
-            {"shadowLOD", settings.terrain.shadowLOD}
-        };
-
-        j["postProcess"] = serializePostProcessSettings(settings.postProcess);
-
-        j["gi"] = {
-            {"enabled", settings.gi.enabled},
-            {"quality", static_cast<int>(settings.gi.quality)},
-            {"probeSpacing", settings.gi.probeSpacing},
-            {"cascadeMultiplier", settings.gi.cascadeMultiplier},
-            {"probeRaysPerUpdate", settings.gi.probeRaysPerUpdate},
-            {"temporalBlendFactor", settings.gi.temporalBlendFactor},
-            {"probeUpdateRate", settings.gi.probeUpdateRate},
-            {"maxProbeDistance", settings.gi.maxProbeDistance},
-            {"farFieldEnabled", settings.gi.farFieldEnabled},
-            {"farFieldMaxDistance", settings.gi.farFieldMaxDistance},
-            {"farFieldCascadeCount", settings.gi.farFieldCascadeCount},
-            {"farFieldProbeSpacing", settings.gi.farFieldProbeSpacing},
-            {"farFieldRaysPerUpdate", settings.gi.farFieldRaysPerUpdate},
-            {"farFieldUpdateRate", settings.gi.farFieldUpdateRate},
-            {"ssgiEnabled", settings.gi.ssgiEnabled},
-            {"ssgiIntensity", settings.gi.ssgiIntensity},
-            {"ssgiRadius", settings.gi.ssgiRadius},
-            {"ssgiMaxDistance", settings.gi.ssgiMaxDistance},
-            {"ssgiSampleCount", settings.gi.ssgiSampleCount},
-            {"ssgiTemporalBlend", settings.gi.ssgiTemporalBlend},
-            {"ssgiHalfResolution", settings.gi.ssgiHalfResolution}
-        };
-
-        j["vfxLOD"] = {
-            {"lod0Distance", settings.vfxLOD.lod0Distance},
-            {"lod1Distance", settings.vfxLOD.lod1Distance},
-            {"lod2Distance", settings.vfxLOD.lod2Distance},
-            {"transitionZone", settings.vfxLOD.transitionZone}
-        };
-
-        j["animationLOD"] = {
-            {"lod0Distance", settings.animationLOD.lod0Distance},
-            {"lod1Distance", settings.animationLOD.lod1Distance},
-            {"lod2Distance", settings.animationLOD.lod2Distance},
-            {"lod3Distance", settings.animationLOD.lod3Distance},
-            {"lod0Interval", settings.animationLOD.lod0Interval},
-            {"lod1Interval", settings.animationLOD.lod1Interval},
-            {"lod2Interval", settings.animationLOD.lod2Interval},
-            {"maxStreamingInitPerFrame", settings.animationLOD.maxStreamingInitPerFrame}
-        };
-
-        j["atmosphere"] = serializeAtmosphere(settings.atmosphere);
-        j["cloud"] = serializeCloud(settings.cloud);
-
-        return j;
-    }
-
-    void SceneSerialization::deserializeRenderSettings(const json& j, types::RenderSettings& settings)
-    {
-        deserializeShadowSettings(j, settings.shadows);
-
-        if (j.contains("shadowLOD") && j["shadowLOD"].is_object())
-        {
-            const auto& sl = j["shadowLOD"];
-            if (sl.contains("enabled") && sl["enabled"].is_boolean())
-                settings.shadowLOD.enabled = sl["enabled"].get<bool>();
-        }
-
-        deserializeCullingSettings(j, settings.culling);
-        deserializeDistanceCullingSettings(j, settings.distanceCulling);
-        deserializeTransparencySettings(j, settings.transparency);
-        deserializeTerrainRenderSettings(j, settings.terrain);
-
-        if (j.contains("gi") && j["gi"].is_object())
-        {
             const auto& g = j["gi"];
-            auto& gi = settings.gi;
             if (g.contains("enabled") && g["enabled"].is_boolean())
                 gi.enabled = g["enabled"].get<bool>();
             if (g.contains("quality") && g["quality"].is_number_integer())
@@ -990,6 +310,114 @@ namespace serialization
                 gi.ssgiHalfResolution = g["ssgiHalfResolution"].get<bool>();
         }
 
+        // ---- VFX LOD helpers ----
+
+        json serializeVfxLODSettings(const types::VFXLODSettings& vfxLOD)
+        {
+            return {
+                {"lod0Distance", vfxLOD.lod0Distance},
+                {"lod1Distance", vfxLOD.lod1Distance},
+                {"lod2Distance", vfxLOD.lod2Distance},
+                {"transitionZone", vfxLOD.transitionZone}
+            };
+        }
+
+        void deserializeVfxLODSettings(const json& j, types::VFXLODSettings& vfxLOD)
+        {
+            if (!j.contains("vfxLOD") || !j["vfxLOD"].is_object())
+                return;
+            const auto& vl = j["vfxLOD"];
+            if (vl.contains("lod0Distance") && vl["lod0Distance"].is_number())
+                vfxLOD.lod0Distance = vl["lod0Distance"].get<float>();
+            if (vl.contains("lod1Distance") && vl["lod1Distance"].is_number())
+                vfxLOD.lod1Distance = vl["lod1Distance"].get<float>();
+            if (vl.contains("lod2Distance") && vl["lod2Distance"].is_number())
+                vfxLOD.lod2Distance = vl["lod2Distance"].get<float>();
+            if (vl.contains("transitionZone") && vl["transitionZone"].is_number())
+                vfxLOD.transitionZone = vl["transitionZone"].get<float>();
+        }
+
+        // ---- Animation LOD helpers ----
+
+        json serializeAnimationLODSettings(const types::AnimationLODSettings& animLOD)
+        {
+            return {
+                {"lod0Distance", animLOD.lod0Distance},
+                {"lod1Distance", animLOD.lod1Distance},
+                {"lod2Distance", animLOD.lod2Distance},
+                {"lod3Distance", animLOD.lod3Distance},
+                {"lod0Interval", animLOD.lod0Interval},
+                {"lod1Interval", animLOD.lod1Interval},
+                {"lod2Interval", animLOD.lod2Interval},
+                {"maxStreamingInitPerFrame", animLOD.maxStreamingInitPerFrame}
+            };
+        }
+
+        void deserializeAnimationLODSettings(const json& j, types::AnimationLODSettings& animLOD)
+        {
+            if (!j.contains("animationLOD") || !j["animationLOD"].is_object())
+                return;
+            const auto& al = j["animationLOD"];
+            if (al.contains("lod0Distance") && al["lod0Distance"].is_number())
+                animLOD.lod0Distance = al["lod0Distance"].get<float>();
+            if (al.contains("lod1Distance") && al["lod1Distance"].is_number())
+                animLOD.lod1Distance = al["lod1Distance"].get<float>();
+            if (al.contains("lod2Distance") && al["lod2Distance"].is_number())
+                animLOD.lod2Distance = al["lod2Distance"].get<float>();
+            if (al.contains("lod3Distance") && al["lod3Distance"].is_number())
+                animLOD.lod3Distance = al["lod3Distance"].get<float>();
+            if (al.contains("lod0Interval") && al["lod0Interval"].is_number_unsigned())
+                animLOD.lod0Interval = al["lod0Interval"].get<uint32_t>();
+            if (al.contains("lod1Interval") && al["lod1Interval"].is_number_unsigned())
+                animLOD.lod1Interval = al["lod1Interval"].get<uint32_t>();
+            if (al.contains("lod2Interval") && al["lod2Interval"].is_number_unsigned())
+                animLOD.lod2Interval = al["lod2Interval"].get<uint32_t>();
+            if (al.contains("maxStreamingInitPerFrame") && al["maxStreamingInitPerFrame"].is_number_unsigned())
+                animLOD.maxStreamingInitPerFrame = al["maxStreamingInitPerFrame"].get<uint32_t>();
+        }
+
+    } // anonymous namespace
+
+    // ---- Render Settings ----
+
+    json SceneSerialization::serializeRenderSettings(const types::RenderSettings& settings)
+    {
+        json j;
+
+        j["shadows"] = serializeShadowSettings(settings.shadows);
+        j["culling"] = serializeCullingSettings(settings.culling);
+        j["distanceCulling"] = serializeDistanceCullingSettings(settings.distanceCulling);
+        j["transparency"] = { {"wboitEnabled", settings.transparency.wboitEnabled} };
+        j["shadowLOD"] = { {"enabled", settings.shadowLOD.enabled} };
+        j["terrain"] = serializeTerrainRenderSettings(settings.terrain);
+        j["postProcess"] = serializePostProcessSettings(settings.postProcess);
+        j["gi"] = serializeGISettings(settings.gi);
+        j["vfxLOD"] = serializeVfxLODSettings(settings.vfxLOD);
+        j["animationLOD"] = serializeAnimationLODSettings(settings.animationLOD);
+        j["atmosphere"] = serializeAtmosphereSettings(settings.atmosphere);
+        j["cloud"] = serializeCloudSettings(settings.cloud);
+
+        return j;
+    }
+
+    void SceneSerialization::deserializeRenderSettings(const json& j, types::RenderSettings& settings)
+    {
+        deserializeShadowSettings(j, settings.shadows);
+
+        if (j.contains("shadowLOD") && j["shadowLOD"].is_object())
+        {
+            const auto& sl = j["shadowLOD"];
+            if (sl.contains("enabled") && sl["enabled"].is_boolean())
+                settings.shadowLOD.enabled = sl["enabled"].get<bool>();
+        }
+
+        deserializeCullingSettings(j, settings.culling);
+        deserializeDistanceCullingSettings(j, settings.distanceCulling);
+        deserializeTransparencySettings(j, settings.transparency);
+        deserializeTerrainRenderSettings(j, settings.terrain);
+
+        deserializeGISettings(j, settings.gi);
+
         if (j.contains("postProcess") && j["postProcess"].is_object())
         {
             deserializePostProcessSettings(j["postProcess"], settings.postProcess);
@@ -999,83 +427,10 @@ namespace serialization
             settings.postProcess = postprocess::PostProcessSettings::createDefault();
         }
 
-        if (j.contains("vfxLOD") && j["vfxLOD"].is_object())
-        {
-            const auto& vl = j["vfxLOD"];
-            if (vl.contains("lod0Distance") && vl["lod0Distance"].is_number())
-                settings.vfxLOD.lod0Distance = vl["lod0Distance"].get<float>();
-            if (vl.contains("lod1Distance") && vl["lod1Distance"].is_number())
-                settings.vfxLOD.lod1Distance = vl["lod1Distance"].get<float>();
-            if (vl.contains("lod2Distance") && vl["lod2Distance"].is_number())
-                settings.vfxLOD.lod2Distance = vl["lod2Distance"].get<float>();
-            if (vl.contains("transitionZone") && vl["transitionZone"].is_number())
-                settings.vfxLOD.transitionZone = vl["transitionZone"].get<float>();
-        }
+        deserializeVfxLODSettings(j, settings.vfxLOD);
+        deserializeAnimationLODSettings(j, settings.animationLOD);
 
-        if (j.contains("animationLOD") && j["animationLOD"].is_object())
-        {
-            const auto& al = j["animationLOD"];
-            if (al.contains("lod0Distance") && al["lod0Distance"].is_number())
-                settings.animationLOD.lod0Distance = al["lod0Distance"].get<float>();
-            if (al.contains("lod1Distance") && al["lod1Distance"].is_number())
-                settings.animationLOD.lod1Distance = al["lod1Distance"].get<float>();
-            if (al.contains("lod2Distance") && al["lod2Distance"].is_number())
-                settings.animationLOD.lod2Distance = al["lod2Distance"].get<float>();
-            if (al.contains("lod3Distance") && al["lod3Distance"].is_number())
-                settings.animationLOD.lod3Distance = al["lod3Distance"].get<float>();
-            if (al.contains("lod0Interval") && al["lod0Interval"].is_number_unsigned())
-                settings.animationLOD.lod0Interval = al["lod0Interval"].get<uint32_t>();
-            if (al.contains("lod1Interval") && al["lod1Interval"].is_number_unsigned())
-                settings.animationLOD.lod1Interval = al["lod1Interval"].get<uint32_t>();
-            if (al.contains("lod2Interval") && al["lod2Interval"].is_number_unsigned())
-                settings.animationLOD.lod2Interval = al["lod2Interval"].get<uint32_t>();
-            if (al.contains("maxStreamingInitPerFrame") && al["maxStreamingInitPerFrame"].is_number_unsigned())
-                settings.animationLOD.maxStreamingInitPerFrame = al["maxStreamingInitPerFrame"].get<uint32_t>();
-        }
-
-        deserializeAtmosphere(j, settings.atmosphere);
-        deserializeCloud(j, settings.cloud);
-    }
-
-    // ---- Post-Process Settings ----
-
-    json SceneSerialization::serializePostProcessSettings(const postprocess::PostProcessSettings& settings)
-    {
-        json j;
-
-        j["enabled"] = settings.enabled;
-        j["toneMapping"] = serializeToneMapping(settings.toneMapping);
-        j["taa"] = serializeTAA(settings.taa);
-        j["bloom"] = serializeBloom(settings.bloom);
-        j["vignette"] = serializeVignette(settings.vignette);
-        j["chromaticAberration"] = serializeChromaticAberration(settings.chromaticAberration);
-        j["filmGrain"] = serializeFilmGrain(settings.filmGrain);
-        j["depthOfField"] = serializeDepthOfField(settings.depthOfField);
-        j["volumetricFog"] = serializeVolumetricFog(settings.volumetricFog);
-        j["ssao"] = serializeSSAO(settings.ssao);
-        j["edgeDetection"] = serializeEdgeDetection(settings.edgeDetection);
-        j["autoExposure"] = serializeAutoExposure(settings.autoExposure);
-        j["colorGrading"] = serializeColorGrading(settings.colorGrading);
-
-        return j;
-    }
-
-    void SceneSerialization::deserializePostProcessSettings(const json& j, postprocess::PostProcessSettings& settings)
-    {
-        if (j.contains("enabled") && j["enabled"].is_boolean())
-            settings.enabled = j["enabled"].get<bool>();
-
-        deserializeToneMapping(j, settings.toneMapping);
-        deserializeTAA(j, settings.taa);
-        deserializeBloom(j, settings.bloom);
-        deserializeVignette(j, settings.vignette);
-        deserializeChromaticAberration(j, settings.chromaticAberration);
-        deserializeFilmGrain(j, settings.filmGrain);
-        deserializeDepthOfField(j, settings.depthOfField);
-        deserializeVolumetricFog(j, settings.volumetricFog);
-        deserializeSSAO(j, settings.ssao);
-        deserializeEdgeDetection(j, settings.edgeDetection);
-        deserializeAutoExposure(j, settings.autoExposure);
-        deserializeColorGrading(j, settings.colorGrading);
+        deserializeAtmosphereSettings(j, settings.atmosphere);
+        deserializeCloudSettings(j, settings.cloud);
     }
 }

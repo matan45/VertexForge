@@ -1,5 +1,5 @@
 #include "WindowImguiHandler.hpp"
-#include "../windows/ConsoleLog.hpp"
+#include "../windows/debug/ConsoleLog.hpp"
 #include "imguiHandler/ImguiWindowHandler.hpp"
 #include "../windows/scene/SceneHierarchyPanel.hpp"
 #include "../windows/scene/EntityDetailsPanel.hpp"
@@ -12,7 +12,7 @@
 #include "../windows/import/FileOperationProgressWindow.hpp"
 #include "../windows/import/SceneLoadProgressWindow.hpp"
 #include "../windows/config/NavmeshWindow.hpp"
-#include "../windows/AssetLifecycleWindow.hpp"
+#include "../windows/asset/AssetLifecycleWindow.hpp"
 #include "../windows/config/GIConfigWindow.hpp"
 
 namespace handlers

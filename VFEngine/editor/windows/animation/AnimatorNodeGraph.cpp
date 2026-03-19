@@ -393,86 +393,45 @@ namespace windows::animation
         }
     }
 
+    static bool isInRect(ImVec2 pos, ImVec2 mn, ImVec2 mx)
+    {
+        return pos.x >= mn.x && pos.x <= mx.x && pos.y >= mn.y && pos.y <= mx.y;
+    }
+
     void AnimatorNodeGraph::drawZoomControls(ImVec2 canvasPos, ImVec2 canvasSize, float currentZoom, int& pendingZoomSteps)
     {
-        ImDrawList* fgDrawList = ImGui::GetForegroundDrawList();
+        ImDrawList* dl = ImGui::GetForegroundDrawList();
+        float px = canvasPos.x + canvasSize.x - 130, py = canvasPos.y + canvasSize.y - 40;
+        float pw = 125, ph = 35, bs = 25, by = py + 5, sp = 5;
 
-        float panelX = canvasPos.x + canvasSize.x - 130;
-        float panelY = canvasPos.y + canvasSize.y - 40;
-        float panelWidth = 125;
-        float panelHeight = 35;
+        dl->AddRectFilled(ImVec2(px, py), ImVec2(px + pw, py + ph), IM_COL32(30, 30, 30, 220), 6.0f);
+        dl->AddRect(ImVec2(px, py), ImVec2(px + pw, py + ph), IM_COL32(60, 60, 60, 255), 6.0f);
 
-        fgDrawList->AddRectFilled(
-            ImVec2(panelX, panelY),
-            ImVec2(panelX + panelWidth, panelY + panelHeight),
-            IM_COL32(30, 30, 30, 220), 6.0f);
-        fgDrawList->AddRect(
-            ImVec2(panelX, panelY),
-            ImVec2(panelX + panelWidth, panelY + panelHeight),
-            IM_COL32(60, 60, 60, 255), 6.0f);
+        ImVec2 mp = ImGui::GetMousePos();
+        bool click = ImGui::IsMouseClicked(ImGuiMouseButton_Left);
 
-        float btnSize = 25;
-        float btnY = panelY + 5;
-        float btnSpacing = 5;
+        float ox = px + 5;
+        ImVec2 oMin(ox, by), oMax(ox + bs, by + bs);
+        bool oHov = isInRect(mp, oMin, oMax);
+        dl->AddRectFilled(oMin, oMax, oHov ? IM_COL32(80, 80, 80, 255) : IM_COL32(50, 50, 50, 255), 4.0f);
+        dl->AddLine(ImVec2(ox + 6, by + bs / 2), ImVec2(ox + bs - 6, by + bs / 2), IM_COL32(220, 220, 220, 255), 2.0f);
+        if (oHov && click) pendingZoomSteps = -1;
 
-        ImVec2 mousePos = ImGui::GetMousePos();
-        bool mouseClicked = ImGui::IsMouseClicked(ImGuiMouseButton_Left);
+        char zoomText[16]; snprintf(zoomText, sizeof(zoomText), "%.0f%%", currentZoom * 100.0f);
+        ImVec2 ts = ImGui::CalcTextSize(zoomText);
+        float tw = 55;
+        dl->AddText(ImVec2(ox + bs + sp + (tw - ts.x) / 2, by + (bs - ts.y) / 2), IM_COL32(200, 200, 200, 255), zoomText);
 
-        float zoomOutX = panelX + 5;
-        ImVec2 zoomOutMin(zoomOutX, btnY);
-        ImVec2 zoomOutMax(zoomOutX + btnSize, btnY + btnSize);
-        bool zoomOutHovered = mousePos.x >= zoomOutMin.x && mousePos.x <= zoomOutMax.x &&
-            mousePos.y >= zoomOutMin.y && mousePos.y <= zoomOutMax.y;
+        if (isInRect(mp, ImVec2(px, py), ImVec2(px + pw, py + ph))) ImGui::SetTooltip("Press F to fit all nodes");
 
-        ImU32 zoomOutColor = zoomOutHovered ? IM_COL32(80, 80, 80, 255) : IM_COL32(50, 50, 50, 255);
-        fgDrawList->AddRectFilled(zoomOutMin, zoomOutMax, zoomOutColor, 4.0f);
-        fgDrawList->AddLine(
-            ImVec2(zoomOutX + 6, btnY + btnSize / 2),
-            ImVec2(zoomOutX + btnSize - 6, btnY + btnSize / 2),
-            IM_COL32(220, 220, 220, 255), 2.0f);
-
-        if (zoomOutHovered && mouseClicked)
-        {
-            pendingZoomSteps = -1;
-        }
-
-        char zoomText[16];
-        snprintf(zoomText, sizeof(zoomText), "%.0f%%", currentZoom * 100.0f);
-        ImVec2 textSize = ImGui::CalcTextSize(zoomText);
-        float textAreaWidth = 55;
-        float textX = zoomOutX + btnSize + btnSpacing + (textAreaWidth - textSize.x) / 2;
-        float textY = btnY + (btnSize - textSize.y) / 2;
-        fgDrawList->AddText(ImVec2(textX, textY), IM_COL32(200, 200, 200, 255), zoomText);
-
-        bool panelHovered = mousePos.x >= panelX && mousePos.x <= panelX + panelWidth &&
-            mousePos.y >= panelY && mousePos.y <= panelY + panelHeight;
-        if (panelHovered)
-        {
-            ImGui::SetTooltip("Press F to fit all nodes");
-        }
-
-        float zoomInX = zoomOutX + btnSize + btnSpacing + textAreaWidth + btnSpacing;
-        ImVec2 zoomInMin(zoomInX, btnY);
-        ImVec2 zoomInMax(zoomInX + btnSize, btnY + btnSize);
-        bool zoomInHovered = mousePos.x >= zoomInMin.x && mousePos.x <= zoomInMax.x &&
-            mousePos.y >= zoomInMin.y && mousePos.y <= zoomInMax.y;
-
-        ImU32 zoomInColor = zoomInHovered ? IM_COL32(80, 80, 80, 255) : IM_COL32(50, 50, 50, 255);
-        fgDrawList->AddRectFilled(zoomInMin, zoomInMax, zoomInColor, 4.0f);
-        ImVec2 plusCenter(zoomInX + btnSize / 2, btnY + btnSize / 2);
-        fgDrawList->AddLine(
-            ImVec2(plusCenter.x - 6, plusCenter.y),
-            ImVec2(plusCenter.x + 6, plusCenter.y),
-            IM_COL32(220, 220, 220, 255), 2.0f);
-        fgDrawList->AddLine(
-            ImVec2(plusCenter.x, plusCenter.y - 6),
-            ImVec2(plusCenter.x, plusCenter.y + 6),
-            IM_COL32(220, 220, 220, 255), 2.0f);
-
-        if (zoomInHovered && mouseClicked)
-        {
-            pendingZoomSteps = 1;
-        }
+        float ix = ox + bs + sp + tw + sp;
+        ImVec2 iMin(ix, by), iMax(ix + bs, by + bs);
+        bool iHov = isInRect(mp, iMin, iMax);
+        dl->AddRectFilled(iMin, iMax, iHov ? IM_COL32(80, 80, 80, 255) : IM_COL32(50, 50, 50, 255), 4.0f);
+        ImVec2 pc(ix + bs / 2, by + bs / 2);
+        dl->AddLine(ImVec2(pc.x - 6, pc.y), ImVec2(pc.x + 6, pc.y), IM_COL32(220, 220, 220, 255), 2.0f);
+        dl->AddLine(ImVec2(pc.x, pc.y - 6), ImVec2(pc.x, pc.y + 6), IM_COL32(220, 220, 220, 255), 2.0f);
+        if (iHov && click) pendingZoomSteps = 1;
     }
 
     ed::NodeId AnimatorNodeGraph::stateIdToNodeId(uint32_t stateId) const

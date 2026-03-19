@@ -81,13 +81,14 @@ namespace terrain
         layerIndices = {0, 1, 2, 3};
     }
 
-    void TileWeightMapData::packRGBA(uint32_t x, uint32_t z,
-                                      float& r, float& g, float& b, float& a) const
+    TileWeightMapData::PackedRGBA TileWeightMapData::packRGBA(uint32_t x, uint32_t z) const
     {
-        r = (0 < layerWeights.size()) ? getWeight(0, x, z) : 0.0f;
-        g = (1 < layerWeights.size()) ? getWeight(1, x, z) : 0.0f;
-        b = (2 < layerWeights.size()) ? getWeight(2, x, z) : 0.0f;
-        a = (3 < layerWeights.size()) ? getWeight(3, x, z) : 0.0f;
+        PackedRGBA result;
+        result.r = (0 < layerWeights.size()) ? getWeight(0, x, z) : 0.0f;
+        result.g = (1 < layerWeights.size()) ? getWeight(1, x, z) : 0.0f;
+        result.b = (2 < layerWeights.size()) ? getWeight(2, x, z) : 0.0f;
+        result.a = (3 < layerWeights.size()) ? getWeight(3, x, z) : 0.0f;
+        return result;
     }
 
     uint8_t TileWeightMapData::findChannel(uint8_t paletteLayer) const
@@ -102,7 +103,6 @@ namespace terrain
 
     uint8_t TileWeightMapData::assignChannel(uint8_t paletteLayer)
     {
-        // Already assigned?
         uint8_t existing = findChannel(paletteLayer);
         if (existing != 0xFF)
             return existing;
@@ -110,7 +110,6 @@ namespace terrain
         if (!isInitialized())
             return 0;
 
-        // Find channel with near-zero total weight
         constexpr float EPSILON = 0.01f;
         size_t texelCount = getTexelCount();
 
@@ -124,7 +123,6 @@ namespace terrain
             }
         }
 
-        // Find a near-zero channel
         for (uint8_t ch = 0; ch < WEIGHT_CHANNELS; ++ch)
         {
             if (channelSums[ch] < EPSILON)
@@ -134,7 +132,6 @@ namespace terrain
             }
         }
 
-        // All occupied — find channel with lowest total weight, zero it, reassign
         uint8_t minCh = 0;
         float minSum = channelSums[0];
         for (uint8_t ch = 1; ch < WEIGHT_CHANNELS; ++ch)

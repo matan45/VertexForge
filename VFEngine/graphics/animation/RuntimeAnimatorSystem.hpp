@@ -123,6 +123,29 @@ namespace animation
         void applyRootMotion(entt::entity entity, AnimationLayerStack* anim, entt::registry& registry);
         void applyIKPostProcess(entt::entity entity, AnimationLayerStack* anim, entt::registry& registry);
 
+        struct EvalCandidate
+        {
+            entt::entity entity;
+            AnimationLayerStack* anim;
+            uint8_t lodLevel;
+        };
+
+        void gatherEvalCandidates(std::vector<EvalCandidate>& evalCandidates,
+                                   std::vector<std::pair<entt::entity, AnimationLayerStack*>>& lodInterpolateEntities);
+        void classifyInstanceGroups(std::vector<EvalCandidate>& evalCandidates,
+                                     ActiveAnimatorList& leadersToEvaluate,
+                                     std::vector<std::pair<entt::entity, AnimationLayerStack*>>& followersToSync);
+        void evaluateLeadersAndSync(ActiveAnimatorList& leadersToEvaluate,
+                                     std::vector<std::pair<entt::entity, AnimationLayerStack*>>& followersToSync,
+                                     ActiveAnimatorList& activeAnimators, float deltaTime);
+        void cachePosesAndInterpolate(ActiveAnimatorList& activeAnimators,
+                                       std::vector<std::pair<entt::entity, AnimationLayerStack*>>& lodInterpolateEntities);
+
+        void subscribeToEvents();
+        void subscribeToWorldEvents();
+        const resource::SkeletonData* resolveEntitySkeleton(entt::entity entity, std::string& outMeshPath);
+        void setupEntityAnimatorComponent(entt::entity entity, AnimationLayerStack* layerStack, const std::string& animatorPath);
+
         uint64_t computeInstanceGroupKey(const std::string& animatorPath, uint32_t stateId,
                                           uint8_t lodLevel, float normalizedTime) const;
     };

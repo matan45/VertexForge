@@ -11,92 +11,37 @@
 
 namespace
 {
+    void writeStorageBufferDescriptor(vk::Device vkDevice, vk::DescriptorSet set,
+                                      uint32_t binding, vk::Buffer buffer, vk::DeviceSize range = VK_WHOLE_SIZE)
+    {
+        vk::DescriptorBufferInfo info{buffer, 0, range};
+        vk::WriteDescriptorSet write{};
+        write.dstSet = set; write.dstBinding = binding;
+        write.descriptorCount = 1; write.descriptorType = vk::DescriptorType::eStorageBuffer;
+        write.pBufferInfo = &info;
+        vkDevice.updateDescriptorSets(write, {});
+    }
+
     void writeTerrainDataDescriptors(vk::Device vkDevice, vk::DescriptorSet descriptorSet,
                                      vk::Buffer tileDataBuffer, vk::Buffer statsBuffer)
     {
-        std::array<vk::DescriptorBufferInfo, 2> bufferInfos{};
-        bufferInfos[0].buffer = tileDataBuffer;
-        bufferInfos[0].offset = 0;
-        bufferInfos[0].range = VK_WHOLE_SIZE;
-
-        bufferInfos[1].buffer = statsBuffer;
-        bufferInfos[1].offset = 0;
-        bufferInfos[1].range = sizeof(render::gpudriven::TerrainCullingStats);
-
-        std::array<vk::WriteDescriptorSet, 2> writes{};
-        writes[0].dstSet = descriptorSet;
-        writes[0].dstBinding = 0;
-        writes[0].dstArrayElement = 0;
-        writes[0].descriptorCount = 1;
-        writes[0].descriptorType = vk::DescriptorType::eStorageBuffer;
-        writes[0].pBufferInfo = &bufferInfos[0];
-
-        writes[1].dstSet = descriptorSet;
-        writes[1].dstBinding = 1;
-        writes[1].dstArrayElement = 0;
-        writes[1].descriptorCount = 1;
-        writes[1].descriptorType = vk::DescriptorType::eStorageBuffer;
-        writes[1].pBufferInfo = &bufferInfos[1];
-
-        vkDevice.updateDescriptorSets(writes, {});
+        writeStorageBufferDescriptor(vkDevice, descriptorSet, 0, tileDataBuffer);
+        writeStorageBufferDescriptor(vkDevice, descriptorSet, 1, statsBuffer,
+                                     sizeof(render::gpudriven::TerrainCullingStats));
     }
 
     void writeMeshletDescriptors(vk::Device vkDevice, vk::DescriptorSet descriptorSet,
                                  render::gpudriven::TerrainMeshBuffer& terrainBuffer)
     {
-        vk::DescriptorBufferInfo meshletInfo{};
-        meshletInfo.buffer = terrainBuffer.getMeshletBuffer();
-        meshletInfo.offset = 0;
-        meshletInfo.range = VK_WHOLE_SIZE;
-
-        vk::DescriptorBufferInfo vertexIndicesInfo{};
-        vertexIndicesInfo.buffer = terrainBuffer.getMeshletVertexBuffer();
-        vertexIndicesInfo.offset = 0;
-        vertexIndicesInfo.range = VK_WHOLE_SIZE;
-
-        vk::DescriptorBufferInfo primitivesInfo{};
-        primitivesInfo.buffer = terrainBuffer.getMeshletPrimitiveBuffer();
-        primitivesInfo.offset = 0;
-        primitivesInfo.range = VK_WHOLE_SIZE;
-
-        std::array<vk::WriteDescriptorSet, 3> writes{};
-        writes[0].dstSet = descriptorSet;
-        writes[0].dstBinding = 0;
-        writes[0].descriptorCount = 1;
-        writes[0].descriptorType = vk::DescriptorType::eStorageBuffer;
-        writes[0].pBufferInfo = &meshletInfo;
-
-        writes[1].dstSet = descriptorSet;
-        writes[1].dstBinding = 1;
-        writes[1].descriptorCount = 1;
-        writes[1].descriptorType = vk::DescriptorType::eStorageBuffer;
-        writes[1].pBufferInfo = &vertexIndicesInfo;
-
-        writes[2].dstSet = descriptorSet;
-        writes[2].dstBinding = 2;
-        writes[2].descriptorCount = 1;
-        writes[2].descriptorType = vk::DescriptorType::eStorageBuffer;
-        writes[2].pBufferInfo = &primitivesInfo;
-
-        vkDevice.updateDescriptorSets(writes, {});
+        writeStorageBufferDescriptor(vkDevice, descriptorSet, 0, terrainBuffer.getMeshletBuffer());
+        writeStorageBufferDescriptor(vkDevice, descriptorSet, 1, terrainBuffer.getMeshletVertexBuffer());
+        writeStorageBufferDescriptor(vkDevice, descriptorSet, 2, terrainBuffer.getMeshletPrimitiveBuffer());
     }
 
     void writeVertexDescriptor(vk::Device vkDevice, vk::DescriptorSet descriptorSet,
                                render::gpudriven::TerrainMeshBuffer& terrainBuffer)
     {
-        vk::DescriptorBufferInfo vertexInfo{};
-        vertexInfo.buffer = terrainBuffer.getVertexBuffer();
-        vertexInfo.offset = 0;
-        vertexInfo.range = VK_WHOLE_SIZE;
-
-        vk::WriteDescriptorSet write{};
-        write.dstSet = descriptorSet;
-        write.dstBinding = 0;
-        write.descriptorCount = 1;
-        write.descriptorType = vk::DescriptorType::eStorageBuffer;
-        write.pBufferInfo = &vertexInfo;
-
-        vkDevice.updateDescriptorSets(write, {});
+        writeStorageBufferDescriptor(vkDevice, descriptorSet, 0, terrainBuffer.getVertexBuffer());
     }
 }
 
@@ -300,69 +245,22 @@ namespace render::gpudriven
     {
         vk::Device vkDevice = device.getLogicalDevice();
 
-        if (terrainBufferPool)
-        {
-            vkDevice.destroyDescriptorPool(terrainBufferPool);
-            terrainBufferPool = nullptr;
-        }
-
-        if (weightMapPool)
-        {
-            vkDevice.destroyDescriptorPool(weightMapPool);
-            weightMapPool = nullptr;
-        }
-
-        if (weightMapLayout)
-        {
-            vkDevice.destroyDescriptorSetLayout(weightMapLayout);
-            weightMapLayout = nullptr;
-        }
-
-        if (emptyDescriptorPool)
-        {
-            vkDevice.destroyDescriptorPool(emptyDescriptorPool);
-            emptyDescriptorPool = nullptr;
-        }
-
-        if (emptyLayout)
-        {
-            vkDevice.destroyDescriptorSetLayout(emptyLayout);
-            emptyLayout = nullptr;
-        }
-
-        if (terrainDataPool)
-        {
-            vkDevice.destroyDescriptorPool(terrainDataPool);
-            terrainDataPool = nullptr;
-        }
-        if (terrainDataLayout)
-        {
-            vkDevice.destroyDescriptorSetLayout(terrainDataLayout);
-            terrainDataLayout = nullptr;
-        }
+        if (terrainBufferPool) { vkDevice.destroyDescriptorPool(terrainBufferPool); terrainBufferPool = nullptr; }
+        if (weightMapPool) { vkDevice.destroyDescriptorPool(weightMapPool); weightMapPool = nullptr; }
+        if (weightMapLayout) { vkDevice.destroyDescriptorSetLayout(weightMapLayout); weightMapLayout = nullptr; }
+        if (emptyDescriptorPool) { vkDevice.destroyDescriptorPool(emptyDescriptorPool); emptyDescriptorPool = nullptr; }
+        if (emptyLayout) { vkDevice.destroyDescriptorSetLayout(emptyLayout); emptyLayout = nullptr; }
+        if (terrainDataPool) { vkDevice.destroyDescriptorPool(terrainDataPool); terrainDataPool = nullptr; }
+        if (terrainDataLayout) { vkDevice.destroyDescriptorSetLayout(terrainDataLayout); terrainDataLayout = nullptr; }
     }
 
     void TerrainMeshShaderPipeline::cleanup()
     {
         vk::Device vkDevice = device.getLogicalDevice();
 
-        if (terrainShader)
-        {
-            terrainShader->cleanUp();
-            terrainShader.reset();
-        }
-
-        if (graphicsPipeline)
-        {
-            vkDevice.destroyPipeline(graphicsPipeline);
-            graphicsPipeline = nullptr;
-        }
-
-        if (pipelineLayout)
-        {
-            vkDevice.destroyPipelineLayout(pipelineLayout);
-            pipelineLayout = nullptr;
-        }
+        if (terrainShader) { terrainShader->cleanUp(); terrainShader.reset(); }
+        if (graphicsPipeline) { vkDevice.destroyPipeline(graphicsPipeline); graphicsPipeline = nullptr; }
+        if (pipelineLayout) { vkDevice.destroyPipelineLayout(pipelineLayout); pipelineLayout = nullptr; }
 
         if (tileDataBufferMapped)
         {
@@ -387,7 +285,6 @@ namespace render::gpudriven
     void TerrainMeshShaderPipeline::createTileDataBuffer()
     {
         vk::Device vkDevice = device.getLogicalDevice();
-
         vk::DeviceSize bufferSize = maxTileCount * sizeof(TerrainTileGPUData);
 
         core::BufferInfoRequest request(vkDevice, device.getPhysicalDevice());
@@ -419,7 +316,6 @@ namespace render::gpudriven
         void* data = vkDevice.mapMemory(statsBufferMemory, 0, sizeof(TerrainCullingStats));
         std::memset(data, 0, sizeof(TerrainCullingStats));
         vkDevice.unmapMemory(statsBufferMemory);
-
     }
 
     void TerrainMeshShaderPipeline::createTerrainDataDescriptor()
@@ -460,7 +356,6 @@ namespace render::gpudriven
         terrainDataDescriptorSet = sets[0];
 
         writeTerrainDataDescriptors(vkDevice, terrainDataDescriptorSet, tileDataBuffer, statsBuffer);
-
     }
 
     bool TerrainMeshShaderPipeline::loadTerrainShaders()
@@ -507,26 +402,14 @@ namespace render::gpudriven
         vk::DescriptorSetLayout shadowTextureLayout,
         vk::RenderPass renderPass)
     {
-        if (!loadTerrainShaders())
-        {
-            return;
-        }
+        if (!loadTerrainShaders()) return;
 
         vk::Device vkDevice = device.getLogicalDevice();
 
         std::array<vk::DescriptorSetLayout, 12> setLayouts = {
-            iblLayout,              // Set 0: IBL/Camera
-            weightMapLayout,       // Set 1: Weight map SSBO
-            bindlessTextureLayout,  // Set 2: Bindless textures
-            meshletDataLayout,      // Set 3: Meshlet data
-            vertexDataLayout,       // Set 4: Vertex data
-            emptyLayout,            // Set 5: (unused - bones)
-            lightDataLayout,        // Set 6: Light data
-            clusterGridLayout,      // Set 7: Cluster grid params
-            cullingOutputLayout,    // Set 8: Cluster culling output
-            shadowDataLayout,       // Set 9: Shadow data
-            shadowTextureLayout,    // Set 10: Shadow textures
-            terrainDataLayout       // Set 11: Terrain tile data
+            iblLayout, weightMapLayout, bindlessTextureLayout, meshletDataLayout,
+            vertexDataLayout, emptyLayout, lightDataLayout, clusterGridLayout,
+            cullingOutputLayout, shadowDataLayout, shadowTextureLayout, terrainDataLayout
         };
 
         vk::PushConstantRange pushConstantRange{};
@@ -567,26 +450,6 @@ namespace render::gpudriven
         }
     }
 
-    void TerrainMeshShaderPipeline::updateTileData(const std::vector<TerrainTileGPUData>& tiles)
-    {
-        if (tiles.empty())
-        {
-            currentTileCount = 0;
-            return;
-        }
-
-        if (tiles.size() > maxTileCount)
-        {
-            vfLogWarning("TerrainMeshShaderPipeline: Tile count {} exceeds max {}, truncating",
-                          tiles.size(), maxTileCount);
-        }
-
-        currentTileCount = static_cast<uint32_t>(std::min(tiles.size(), static_cast<size_t>(maxTileCount)));
-        vk::DeviceSize dataSize = currentTileCount * sizeof(TerrainTileGPUData);
-
-        std::memcpy(tileDataBufferMapped, tiles.data(), dataSize);
-    }
-
     void TerrainMeshShaderPipeline::updateTerrainBufferDescriptors(TerrainMeshBuffer& terrainBuffer)
     {
         if (!initialized) return;
@@ -606,10 +469,7 @@ namespace render::gpudriven
 
             terrainBufferPool = vkDevice.createDescriptorPool(poolInfo);
 
-            std::array<vk::DescriptorSetLayout, 2> layouts = {
-                cachedMeshletLayout,
-                cachedVertexLayout
-            };
+            std::array<vk::DescriptorSetLayout, 2> layouts = { cachedMeshletLayout, cachedVertexLayout };
 
             vk::DescriptorSetAllocateInfo allocInfo{};
             allocInfo.descriptorPool = terrainBufferPool;
@@ -623,242 +483,5 @@ namespace render::gpudriven
 
         writeMeshletDescriptors(vkDevice, terrainMeshletDescriptorSet, terrainBuffer);
         writeVertexDescriptor(vkDevice, terrainVertexDescriptorSet, terrainBuffer);
-    }
-
-    void TerrainMeshShaderPipeline::updateWeightMapDescriptor(vk::Buffer weightMapBuffer)
-    {
-        if (!initialized || !weightMapDescriptorSet || !weightMapBuffer) return;
-
-        vk::Device vkDevice = device.getLogicalDevice();
-
-        vk::DescriptorBufferInfo bufferInfo{};
-        bufferInfo.buffer = weightMapBuffer;
-        bufferInfo.offset = 0;
-        bufferInfo.range = VK_WHOLE_SIZE;
-
-        vk::WriteDescriptorSet write{};
-        write.dstSet = weightMapDescriptorSet;
-        write.dstBinding = 0;
-        write.descriptorCount = 1;
-        write.descriptorType = vk::DescriptorType::eStorageBuffer;
-        write.pBufferInfo = &bufferInfo;
-
-        vkDevice.updateDescriptorSets(write, {});
-    }
-
-    void TerrainMeshShaderPipeline::updateTerrainLayerInfo(const std::vector<TerrainLayerGPUData>& layers)
-    {
-        if (!terrainLayerBufferMapped) return;
-
-        constexpr uint32_t maxLayers = terrain::MAX_TERRAIN_LAYERS;
-        if (layers.empty())
-        {
-            std::memset(terrainLayerBufferMapped, 0, maxLayers * sizeof(TerrainLayerGPUData));
-            return;
-        }
-
-        uint32_t count = static_cast<uint32_t>(std::min(layers.size(), static_cast<size_t>(maxLayers)));
-        std::memcpy(terrainLayerBufferMapped, layers.data(), count * sizeof(TerrainLayerGPUData));
-    }
-
-    void TerrainMeshShaderPipeline::updateSharedDescriptors(vk::DescriptorSet iblDescSet,
-                                                            vk::DescriptorSet bindlessDescSet,
-                                                            vk::DescriptorSet lightDataDescSet,
-                                                            vk::DescriptorSet clusterGridDescSet,
-                                                            vk::DescriptorSet cullingOutputDescSet,
-                                                            vk::DescriptorSet shadowDataDescSet,
-                                                            vk::DescriptorSet shadowTextureDescSet)
-    {
-        iblDescriptorSet = iblDescSet;
-        bindlessDescriptorSet = bindlessDescSet;
-        lightDataDescriptorSet = lightDataDescSet;
-        clusterGridDescriptorSet = clusterGridDescSet;
-        cullingOutputDescriptorSet = cullingOutputDescSet;
-        shadowDataDescriptorSet = shadowDataDescSet;
-        shadowTextureDescriptorSet = shadowTextureDescSet;
-    }
-
-    bool TerrainMeshShaderPipeline::validateDescriptorsForDispatch() const
-    {
-        const std::array<std::pair<vk::DescriptorSet, const char*>, 12> descriptors = {{
-            {iblDescriptorSet, "iblDescriptorSet (set 0)"},
-            {weightMapDescriptorSet, "weightMapDescriptorSet (set 1)"},
-            {bindlessDescriptorSet, "bindlessDescriptorSet (set 2)"},
-            {terrainMeshletDescriptorSet, "terrainMeshletDescriptorSet (set 3)"},
-            {terrainVertexDescriptorSet, "terrainVertexDescriptorSet (set 4)"},
-            {emptyDescriptorSet5, "emptyDescriptorSet5 (set 5)"},
-            {lightDataDescriptorSet, "lightDataDescriptorSet (set 6)"},
-            {clusterGridDescriptorSet, "clusterGridDescriptorSet (set 7)"},
-            {cullingOutputDescriptorSet, "cullingOutputDescriptorSet (set 8)"},
-            {shadowDataDescriptorSet, "shadowDataDescriptorSet (set 9)"},
-            {shadowTextureDescriptorSet, "shadowTextureDescriptorSet (set 10)"},
-            {terrainDataDescriptorSet, "terrainDataDescriptorSet (set 11)"}
-        }};
-
-        static bool warnedMissing = false;
-        bool hasCriticalMissing = false;
-
-        for (const auto& [set, name] : descriptors)
-        {
-            if (!set)
-            {
-                hasCriticalMissing = true;
-                if (!warnedMissing)
-                {
-                    vfLogWarning("TerrainMeshShaderPipeline: {} is NULL!", name);
-                }
-            }
-        }
-        warnedMissing = true;
-
-        if (hasCriticalMissing)
-        {
-            static bool warnedAbort = false;
-            if (!warnedAbort)
-            {
-                vfLogWarning("TerrainMeshShaderPipeline: Aborting dispatch - missing critical descriptor sets.");
-                warnedAbort = true;
-            }
-        }
-
-        return !hasCriticalMissing;
-    }
-
-    void TerrainMeshShaderPipeline::bindDescriptorSetsInBatches(
-        vk::CommandBuffer cmd, const std::array<vk::DescriptorSet, 12>& currentSets) const
-    {
-        uint32_t batchStart = 0;
-        std::vector<vk::DescriptorSet> batch;
-        batch.reserve(12);
-
-        auto flushBatch = [&]() {
-            if (!batch.empty())
-            {
-                cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout,
-                                       batchStart, batch, {});
-                batch.clear();
-            }
-        };
-
-        for (uint32_t i = 0; i < 12; ++i)
-        {
-            vk::DescriptorSet current = currentSets[i];
-
-            if (!current)
-            {
-                flushBatch();
-                batchStart = i + 1;
-                continue;
-            }
-
-            if (batch.empty())
-            {
-                batchStart = i;
-            }
-            batch.push_back(current);
-        }
-        flushBatch();
-    }
-
-    TerrainPushConstants TerrainMeshShaderPipeline::buildTerrainPushConstants(
-        uint32_t viewMode, float screenWidth, float screenHeight,
-        float lodBias, float errorThreshold, float textureScale) const
-    {
-        TerrainPushConstants pc{};
-        pc.tileCount = currentTileCount;
-
-        uint32_t effectiveViewMode = viewMode;
-        if (frustumCullingEnabled)
-        {
-            effectiveViewMode |= TERRAIN_CULL_FRUSTUM_BIT;
-        }
-        if (meshletCullingEnabled)
-        {
-            effectiveViewMode |= TERRAIN_CULL_BACKFACE_BIT;
-        }
-
-        pc.viewMode = effectiveViewMode;
-        pc.screenWidth = screenWidth;
-        pc.screenHeight = screenHeight;
-        pc.lodBias = lodBias;
-        pc.errorThreshold = errorThreshold;
-        pc.terrainTextureScale = textureScale;
-        pc.terrainMaxDrawDistSq = terrainMaxDrawDistSq;
-        pc.brushWorldPos = brushWorldPos;
-        pc.brushWorldRadius = brushWorldRadius;
-        pc.brushFalloff = brushFalloff;
-        pc.brushShape = brushShape;
-        pc.shadowLOD = static_cast<float>(shadowLOD);
-        pc._pad2 = 0.0f;
-        pc._pad3 = 0.0f;
-        pc.viewProjection = viewProjection;
-        return pc;
-    }
-
-    void TerrainMeshShaderPipeline::dispatch(vk::CommandBuffer cmd,
-                                              uint32_t viewMode,
-                                              float screenWidth,
-                                              float screenHeight,
-                                              float lodBias,
-                                              float errorThreshold,
-                                              float textureScale)
-    {
-        if (!initialized || !graphicsPipeline || currentTileCount == 0)
-        {
-            return;
-        }
-
-        cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
-
-        std::array<vk::DescriptorSet, 12> currentSets = {
-            iblDescriptorSet,
-            weightMapDescriptorSet,
-            bindlessDescriptorSet,
-            terrainMeshletDescriptorSet,
-            terrainVertexDescriptorSet,
-            emptyDescriptorSet5,
-            lightDataDescriptorSet,
-            clusterGridDescriptorSet,
-            cullingOutputDescriptorSet,
-            shadowDataDescriptorSet,
-            shadowTextureDescriptorSet,
-            terrainDataDescriptorSet
-        };
-
-        if (!validateDescriptorsForDispatch())
-        {
-            return;
-        }
-
-        bindDescriptorSetsInBatches(cmd, currentSets);
-
-        TerrainPushConstants pushConstants = buildTerrainPushConstants(
-            viewMode, screenWidth, screenHeight, lodBias, errorThreshold, textureScale);
-
-        cmd.pushConstants(pipelineLayout,
-                          vk::ShaderStageFlagBits::eTaskEXT |
-                          vk::ShaderStageFlagBits::eMeshEXT |
-                          vk::ShaderStageFlagBits::eFragment,
-                          0, sizeof(TerrainPushConstants), &pushConstants);
-
-        cmd.drawMeshTasksEXT(currentTileCount, 1, 1);
-    }
-
-    TerrainCullingStats TerrainMeshShaderPipeline::readStats()
-    {
-        if (!statsBuffer)
-        {
-            return cachedStats;
-        }
-
-        device.getGraphicsQueue().waitIdle();
-
-        vk::Device vkDevice = device.getLogicalDevice();
-
-        void* data = vkDevice.mapMemory(statsBufferMemory, 0, sizeof(TerrainCullingStats));
-        std::memcpy(&cachedStats, data, sizeof(TerrainCullingStats));
-        vkDevice.unmapMemory(statsBufferMemory);
-
-        return cachedStats;
     }
 }

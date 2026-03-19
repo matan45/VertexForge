@@ -1,8 +1,7 @@
 #include "ActionMappingServiceImpl.hpp"
 #include "../../events/EventDispatcher.hpp"
-#include "../../events/input/ActionMappingEvents.hpp"
-#include "../../events/input/InputContextEvents.hpp"
 #include "../../events/input/InputEvents.hpp"
+#include "../../events/input/ActionMappingEvents.hpp"
 #include "../../events/project/ResourceEvents.hpp"
 #include "../../serialization/InputMappingSerialization.hpp"
 #include "input/KeyCodes.hpp"
@@ -45,10 +44,6 @@ namespace services {
         contextStack.push_back("Default");
     }
 
-    // ============================================
-    // Context filtering
-    // ============================================
-
     bool ActionMappingServiceImpl::isActionContextActive(const std::string& contextName) const {
         for (auto it = contextStack.rbegin(); it != contextStack.rend(); ++it) {
             auto ctxIt = contexts.find(*it);
@@ -58,10 +53,6 @@ namespace services {
         }
         return false;
     }
-
-    // ============================================
-    // Action state queries
-    // ============================================
 
     bool ActionMappingServiceImpl::isActionDown(const std::string& actionName) const {
         auto it = actions.find(actionName);
@@ -131,10 +122,6 @@ namespace services {
         return false;
     }
 
-    // ============================================
-    // Binding queries
-    // ============================================
-
     std::vector<InputBinding> ActionMappingServiceImpl::getActionBindings(const std::string& actionName) const {
         auto it = actions.find(actionName);
         if (it == actions.end()) return {};
@@ -149,10 +136,6 @@ namespace services {
         }
         return names;
     }
-
-    // ============================================
-    // Action registration
-    // ============================================
 
     void ActionMappingServiceImpl::registerAction(const std::string& actionName,
                                                     const std::vector<InputBinding>& defaultBindings,
@@ -174,18 +157,10 @@ namespace services {
         publishMappingChanged();
     }
 
-    // ============================================
-    // Action removal
-    // ============================================
-
     void ActionMappingServiceImpl::unregisterAction(const std::string& actionName) {
         actions.erase(actionName);
         publishMappingChanged();
     }
-
-    // ============================================
-    // Binding mutations
-    // ============================================
 
     void ActionMappingServiceImpl::addBinding(const std::string& actionName, const InputBinding& binding) {
         auto it = actions.find(actionName);
@@ -235,10 +210,6 @@ namespace services {
         publishMappingChanged();
     }
 
-    // ============================================
-    // 1D Axis
-    // ============================================
-
     void ActionMappingServiceImpl::registerAxis1D(const std::string& name,
                                                     const std::string& positiveAction,
                                                     const std::string& negativeAction) {
@@ -273,10 +244,6 @@ namespace services {
         if (it == axes1D.end()) return std::nullopt;
         return it->second;
     }
-
-    // ============================================
-    // 2D Axis
-    // ============================================
 
     void ActionMappingServiceImpl::registerAxis2D(const std::string& name,
                                                     const std::string& upAction,
@@ -323,10 +290,6 @@ namespace services {
         if (it == axes2D.end()) return std::nullopt;
         return it->second;
     }
-
-    // ============================================
-    // Persistence
-    // ============================================
 
     bool ActionMappingServiceImpl::saveBindings(const std::string& filePath) {
         serialization::InputMappingData data;
@@ -387,10 +350,6 @@ namespace services {
         return true;
     }
 
-    // ============================================
-    // Action consumption
-    // ============================================
-
     void ActionMappingServiceImpl::consumeAction(const std::string& actionName) {
         consumedActions.insert(actionName);
     }
@@ -402,10 +361,6 @@ namespace services {
     void ActionMappingServiceImpl::clearConsumedActions() {
         consumedActions.clear();
     }
-
-    // ============================================
-    // Context management
-    // ============================================
 
     void ActionMappingServiceImpl::createContext(const std::string& name, bool blocking) {
         if (contexts.find(name) != contexts.end()) {
@@ -501,212 +456,6 @@ namespace services {
         auto it = actions.find(actionName);
         if (it == actions.end()) return "";
         return it->second.context;
-    }
-
-    // ============================================
-    // Event handler registration
-    // ============================================
-
-    void ActionMappingServiceImpl::registerEventHandlers() {
-        auto& dispatcher = events::EventDispatcher::instance();
-
-        // Queries
-        dispatcher.registerQueryHandler<events::input::IsActionDownQuery>(
-            [this](const events::input::IsActionDownQuery& query) {
-                return isActionDown(query.actionName);
-            });
-
-        dispatcher.registerQueryHandler<events::input::IsActionPressedQuery>(
-            [this](const events::input::IsActionPressedQuery& query) {
-                return isActionPressed(query.actionName);
-            });
-
-        dispatcher.registerQueryHandler<events::input::IsActionReleasedQuery>(
-            [this](const events::input::IsActionReleasedQuery& query) {
-                return isActionReleased(query.actionName);
-            });
-
-        dispatcher.registerQueryHandler<events::input::GetActionBindingsQuery>(
-            [this](const events::input::GetActionBindingsQuery& query) {
-                return getActionBindings(query.actionName);
-            });
-
-        dispatcher.registerQueryHandler<events::input::GetAllActionNamesQuery>(
-            [this](const events::input::GetAllActionNamesQuery&) {
-                return getAllActionNames();
-            });
-
-        // Commands
-        dispatcher.registerCommandHandler<events::input::RegisterActionCommand>(
-            [this](const events::input::RegisterActionCommand& cmd) {
-                registerAction(cmd.actionName, cmd.defaultBindings, cmd.context);
-            });
-
-        dispatcher.registerCommandHandler<events::input::SetActionContextCommand>(
-            [this](const events::input::SetActionContextCommand& cmd) {
-                setActionContext(cmd.actionName, cmd.context);
-            });
-
-        dispatcher.registerCommandHandler<events::input::UnregisterActionCommand>(
-            [this](const events::input::UnregisterActionCommand& cmd) {
-                unregisterAction(cmd.actionName);
-            });
-
-        dispatcher.registerCommandHandler<events::input::AddActionBindingCommand>(
-            [this](const events::input::AddActionBindingCommand& cmd) {
-                addBinding(cmd.actionName, cmd.binding);
-            });
-
-        dispatcher.registerCommandHandler<events::input::RemoveActionBindingCommand>(
-            [this](const events::input::RemoveActionBindingCommand& cmd) {
-                removeBinding(cmd.actionName, cmd.binding);
-            });
-
-        dispatcher.registerCommandHandler<events::input::SetActionBindingsCommand>(
-            [this](const events::input::SetActionBindingsCommand& cmd) {
-                setBindings(cmd.actionName, cmd.bindings);
-            });
-
-        dispatcher.registerCommandHandler<events::input::ResetActionBindingsCommand>(
-            [this](const events::input::ResetActionBindingsCommand& cmd) {
-                resetBindings(cmd.actionName);
-            });
-
-        dispatcher.registerCommandHandler<events::input::ResetAllActionBindingsCommand>(
-            [this](const events::input::ResetAllActionBindingsCommand&) {
-                resetAllBindings();
-            });
-
-        dispatcher.registerCommandHandler<events::input::SaveActionBindingsCommand>(
-            [this](const events::input::SaveActionBindingsCommand& cmd) {
-                return saveBindings(cmd.filePath);
-            });
-
-        dispatcher.registerCommandHandler<events::input::LoadActionBindingsCommand>(
-            [this](const events::input::LoadActionBindingsCommand& cmd) {
-                return loadBindings(cmd.filePath);
-            });
-
-        // Axis queries
-        dispatcher.registerQueryHandler<events::input::GetAxis1DValueQuery>(
-            [this](const events::input::GetAxis1DValueQuery& query) {
-                return getAxis1DValue(query.axisName);
-            });
-
-        dispatcher.registerQueryHandler<events::input::GetAxis2DValueQuery>(
-            [this](const events::input::GetAxis2DValueQuery& query) {
-                return getAxis2DValue(query.axisName);
-            });
-
-        dispatcher.registerQueryHandler<events::input::GetAllAxis1DNamesQuery>(
-            [this](const events::input::GetAllAxis1DNamesQuery&) {
-                return getAllAxis1DNames();
-            });
-
-        dispatcher.registerQueryHandler<events::input::GetAllAxis2DNamesQuery>(
-            [this](const events::input::GetAllAxis2DNamesQuery&) {
-                return getAllAxis2DNames();
-            });
-
-        dispatcher.registerQueryHandler<events::input::GetAxis1DDefinitionQuery>(
-            [this](const events::input::GetAxis1DDefinitionQuery& query) {
-                return getAxis1DDefinition(query.axisName);
-            });
-
-        dispatcher.registerQueryHandler<events::input::GetAxis2DDefinitionQuery>(
-            [this](const events::input::GetAxis2DDefinitionQuery& query) {
-                return getAxis2DDefinition(query.axisName);
-            });
-
-        // Axis commands
-        dispatcher.registerCommandHandler<events::input::RegisterAxis1DCommand>(
-            [this](const events::input::RegisterAxis1DCommand& cmd) {
-                registerAxis1D(cmd.axisName, cmd.positiveAction, cmd.negativeAction);
-            });
-
-        dispatcher.registerCommandHandler<events::input::RegisterAxis2DCommand>(
-            [this](const events::input::RegisterAxis2DCommand& cmd) {
-                registerAxis2D(cmd.axisName, cmd.upAction, cmd.downAction,
-                               cmd.leftAction, cmd.rightAction, cmd.normalize);
-            });
-
-        dispatcher.registerCommandHandler<events::input::UnregisterAxis1DCommand>(
-            [this](const events::input::UnregisterAxis1DCommand& cmd) {
-                unregisterAxis1D(cmd.axisName);
-            });
-
-        dispatcher.registerCommandHandler<events::input::UnregisterAxis2DCommand>(
-            [this](const events::input::UnregisterAxis2DCommand& cmd) {
-                unregisterAxis2D(cmd.axisName);
-            });
-
-        // Context commands
-        dispatcher.registerCommandHandler<events::input::CreateContextCommand>(
-            [this](const events::input::CreateContextCommand& cmd) {
-                createContext(cmd.contextName, cmd.blocking);
-            });
-
-        dispatcher.registerCommandHandler<events::input::RemoveContextCommand>(
-            [this](const events::input::RemoveContextCommand& cmd) {
-                removeContext(cmd.contextName);
-            });
-
-        dispatcher.registerCommandHandler<events::input::PushContextCommand>(
-            [this](const events::input::PushContextCommand& cmd) {
-                pushContext(cmd.contextName);
-            });
-
-        dispatcher.registerCommandHandler<events::input::PopContextCommand>(
-            [this](const events::input::PopContextCommand& cmd) {
-                popContext(cmd.contextName);
-            });
-
-        dispatcher.registerCommandHandler<events::input::SetContextBlockingCommand>(
-            [this](const events::input::SetContextBlockingCommand& cmd) {
-                setContextBlocking(cmd.contextName, cmd.blocking);
-            });
-
-        // Context queries
-        dispatcher.registerQueryHandler<events::input::GetActiveContextsQuery>(
-            [this](const events::input::GetActiveContextsQuery&) {
-                return getActiveContexts();
-            });
-
-        dispatcher.registerQueryHandler<events::input::GetAllContextNamesQuery>(
-            [this](const events::input::GetAllContextNamesQuery&) {
-                return getAllContextNames();
-            });
-
-        dispatcher.registerQueryHandler<events::input::IsContextActiveQuery>(
-            [this](const events::input::IsContextActiveQuery& query) {
-                return isContextActive(query.contextName);
-            });
-
-        dispatcher.registerQueryHandler<events::input::GetContextActionsQuery>(
-            [this](const events::input::GetContextActionsQuery& query) {
-                return getContextActions(query.contextName);
-            });
-
-        dispatcher.registerQueryHandler<events::input::GetActionContextQuery>(
-            [this](const events::input::GetActionContextQuery& query) {
-                return getActionContext(query.actionName);
-            });
-
-        // Consumption
-        dispatcher.registerCommandHandler<events::input::ConsumeActionCommand>(
-            [this](const events::input::ConsumeActionCommand& cmd) {
-                consumeAction(cmd.actionName);
-            });
-
-        dispatcher.registerQueryHandler<events::input::IsActionConsumedQuery>(
-            [this](const events::input::IsActionConsumedQuery& query) {
-                return isActionConsumed(query.actionName);
-            });
-
-        dispatcher.registerCommandHandler<events::input::ClearConsumedActionsCommand>(
-            [this](const events::input::ClearConsumedActionsCommand&) {
-                clearConsumedActions();
-            });
     }
 
 }

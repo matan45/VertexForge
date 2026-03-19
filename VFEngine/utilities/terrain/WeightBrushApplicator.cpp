@@ -12,7 +12,6 @@ namespace terrain
             return false;
         }
 
-        // Resolve palette layer to channel via per-tile indirection
         if (params.activeLayer >= MAX_TERRAIN_LAYERS)
         {
             return false;
@@ -21,7 +20,6 @@ namespace terrain
         uint8_t channel = weightMap.findChannel(paletteLayer);
         if (channel == 0xFF)
         {
-            // Not yet assigned to this tile — assign it
             channel = weightMap.assignChannel(paletteLayer);
         }
 
@@ -138,7 +136,6 @@ namespace terrain
 
         wm.setWeight(channel, x, z, newWeight);
 
-        // Decrease other channels proportionally to maintain sum = 1.0
         float otherSum = 0.0f;
         uint32_t channelCount = static_cast<uint32_t>(wm.layerWeights.size());
         for (uint32_t i = 0; i < channelCount; ++i)
@@ -180,7 +177,6 @@ namespace terrain
 
         wm.setWeight(channel, x, z, newWeight);
 
-        // Redistribute removed weight to channel 0 (or 1 if erasing channel 0)
         uint32_t fallbackChannel = (channel == 0) ? 1 : 0;
         if (fallbackChannel < wm.layerWeights.size() && fallbackChannel != channel)
         {

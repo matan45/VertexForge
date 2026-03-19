@@ -212,6 +212,7 @@
     <ClCompile Include="adapters\api\PhysicsRigidBodyAPI.cpp" />
     <ClCompile Include="adapters\api\PostProcessAPI.cpp" />
     <ClCompile Include="adapters\api\PostProcessAPIAdvanced.cpp" />
+    <ClCompile Include="adapters\api\PostProcessAPIAdvanced2.cpp" />
     <ClCompile Include="adapters\api\RenderTextureAPI.cpp" />
     <ClCompile Include="adapters\api\ScriptCommunicationAPI.cpp" />
     <ClCompile Include="adapters\api\SocketAPI.cpp" />
@@ -225,6 +226,7 @@
     <ClCompile Include="adapters\audio\AudioAdapter.cpp" />
     <ClCompile Include="adapters\navmesh\NavmeshAdapter.cpp" />
     <ClCompile Include="adapters\navmesh\NavmeshAdapterBuildOps.cpp" />
+    <ClCompile Include="adapters\navmesh\NavmeshAdapterCrowd.cpp" />
     <ClCompile Include="adapters\physics\IKAdapter.cpp" />
     <ClCompile Include="adapters\physics\PhysicsAdapter.cpp" />
     <ClCompile Include="adapters\physics\PhysicsAdapterAnimationOps.cpp" />
@@ -253,6 +255,7 @@
     <ClCompile Include="adapters\scripting\ScriptUIEventBridge.cpp" />
     <ClCompile Include="adapters\scripting\ScriptVFXEventBridge.cpp" />
     <ClCompile Include="adapters\scripting\ScriptingAdapter.cpp" />
+    <ClCompile Include="adapters\scripting\ScriptingAdapterLifecycle.cpp" />
     <ClCompile Include="adapters\terrain\TerrainBrushComputeAdapter.cpp" />
     <ClCompile Include="adapters\terrain\TerrainRaycastAdapter.cpp" />
     <ClCompile Include="adapters\terrain\TerrainRenderAdapter.cpp" />
@@ -273,6 +276,7 @@
     <ClCompile Include="controllers\CoreInterface.cpp" />
     <ClCompile Include="controllers\EditorTextureController.cpp" />
     <ClCompile Include="controllers\OffScreen.cpp" />
+    <ClCompile Include="controllers\OffScreenSettings.cpp" />
     <ClCompile Include="controllers\imguiHandler\ImguiWindowHandler.cpp" />
     <ClCompile Include="controllers\texture\EditorTexture.cpp" />
     <ClCompile Include="core\MainLoop.cpp" />

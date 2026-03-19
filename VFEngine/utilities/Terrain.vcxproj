@@ -123,6 +123,8 @@
     <ClCompile Include="terrain\TerrainMeshletGen.cpp" />
     <ClCompile Include="terrain\TerrainSerializer.cpp" />
     <ClCompile Include="terrain\TerrainSerializerRead.cpp" />
+    <ClCompile Include="terrain\TerrainSerializerSave.cpp" />
+    <ClCompile Include="terrain\TerrainSkirtGen.cpp" />
     <ClCompile Include="terrain\TerrainTile.cpp" />
     <ClCompile Include="terrain\TerrainTileGenerator.cpp" />
     <ClCompile Include="terrain\TerrainWeightMap.cpp" />

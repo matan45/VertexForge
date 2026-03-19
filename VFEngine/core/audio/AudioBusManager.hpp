@@ -109,6 +109,7 @@ namespace core::audio
 
     private:
         uint32_t createBusInternal(const std::string& name, const std::string& parentName);
+        void createBusesFromDefinitions(const std::vector<types::AudioBusDefinition>& definitions);
         void recalculateEffectiveVolumes();
         void recalculateBusEffective(AudioBus& bus, float parentEffective, bool parentMuted, bool anySoloed);
         void applyEffectiveVolumesToSources();

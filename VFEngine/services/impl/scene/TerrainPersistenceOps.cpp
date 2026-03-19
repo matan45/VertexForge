@@ -196,15 +196,17 @@ namespace services
             streamingConfig.maxUnloadsPerFrame = cfg.maxUnloadsPerFrame;
         }
 
-        bool result = terrain::TerrainSerializer::saveIncremental(
-            path,
-            *gridIt->second,
-            cache.getDirtyCoords(),
-            cache.getHeader(),
-            cache.getIndexTableOffset(),
-            cache.getIndexMap(),
-            physicsConfig,
-            streamingConfig);
+        terrain::TerrainIncrementalSaveParams incParams;
+        incParams.path = path;
+        incParams.grid = gridIt->second.get();
+        incParams.dirtyCoords = &cache.getDirtyCoords();
+        incParams.currentHeader = cache.getHeader();
+        incParams.indexTableOffset = cache.getIndexTableOffset();
+        incParams.currentIndexMap = &cache.getIndexMap();
+        incParams.physicsConfig = physicsConfig;
+        incParams.streamingConfig = streamingConfig;
+
+        bool result = terrain::TerrainSerializer::saveIncremental(incParams);
 
         if (!result)
         {
@@ -291,10 +293,19 @@ namespace services
         int32_t boundsMinX, boundsMinZ, boundsMaxX, boundsMaxZ;
         gridIt->second->computeBounds(boundsMinX, boundsMinZ, boundsMaxX, boundsMaxZ);
 
-        bool result = terrain::TerrainSerializer::save(
-            path, *gridIt->second, tileConfig,
-            boundsMinX, boundsMinZ, boundsMaxX, boundsMaxZ,
-            comp.terrainMaterialRef.resolve(), physicsConfig, streamingConfig);
+        terrain::TerrainSaveParams saveParams;
+        saveParams.path = path;
+        saveParams.grid = gridIt->second.get();
+        saveParams.config = tileConfig;
+        saveParams.gridMinX = boundsMinX;
+        saveParams.gridMinZ = boundsMinZ;
+        saveParams.gridMaxX = boundsMaxX;
+        saveParams.gridMaxZ = boundsMaxZ;
+        saveParams.materialPath = comp.terrainMaterialRef.resolve();
+        saveParams.physicsConfig = physicsConfig;
+        saveParams.streamingConfig = streamingConfig;
+
+        bool result = terrain::TerrainSerializer::save(saveParams);
 
         if (result)
         {

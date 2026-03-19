@@ -15,7 +15,6 @@
 #include <glm/glm.hpp>
 #include <string>
 #include <memory>
-#include <chrono>
 
 namespace core::audio {
 
@@ -38,7 +37,6 @@ namespace core::audio {
         AudioHandle generateHandle(bool streaming);
 
         bool initialized = false;
-        std::chrono::steady_clock::time_point lastUpdateTime;
     public:
         explicit AudioController();
         ~AudioController();

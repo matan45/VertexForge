@@ -217,6 +217,8 @@ namespace render
                                                        float cameraNear, float cameraFar);
             void collectShadowViewsForGPU(const std::unordered_set<uint32_t>* visibleLightIds);
             void buildPageRenderList();
+            void buildCSMPageRenderList(LightShadowData& data);
+            void buildSingleViewPageRenderList(LightShadowData& data);
         };
     }
 }

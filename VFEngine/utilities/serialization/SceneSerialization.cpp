@@ -39,9 +39,7 @@ namespace serialization
     }
 
     void SceneSerialization::deserializeChildren(const json& childrenJson, scene::Entity& parent,
-                                                 scene::SceneGraphSystem& sceneGraph,
-                                                 SceneLoadProgressCallback progressCallback, size_t& entitiesLoaded,
-                                                 size_t totalEntities)
+                                                 DeserializeEntityContext& ctx)
     {
         for (const auto& childJson : childrenJson)
         {
@@ -67,16 +65,16 @@ namespace serialization
                 child.addOrReplaceComponent<components::UUIDComponent>(uuidValue);
             }
 
-            sceneGraph.addChild(parent, child);
+            ctx.sceneGraph.addChild(parent, child);
 
-            deserializeEntity(childJson, child, sceneGraph, false, progressCallback, entitiesLoaded, totalEntities);
+            DeserializeEntityContext childCtx{ctx.sceneGraph, false, ctx.progressCallback,
+                                              ctx.entitiesLoaded, ctx.totalEntities};
+            deserializeEntity(childJson, child, childCtx);
         }
     }
 
     void SceneSerialization::deserializeEntity(const json& entityJson, scene::Entity& entity,
-                                               scene::SceneGraphSystem& sceneGraph, bool isRoot,
-                                               SceneLoadProgressCallback progressCallback, size_t& entitiesLoaded,
-                                               size_t totalEntities)
+                                               DeserializeEntityContext& ctx)
     {
         std::string entityName = "Unnamed";
         if (entityJson.contains("name"))
@@ -93,13 +91,13 @@ namespace serialization
             }
         }
 
-        if (progressCallback)
+        if (ctx.progressCallback)
         {
-            progressCallback(entityName, entitiesLoaded, totalEntities);
+            ctx.progressCallback(entityName, ctx.entitiesLoaded, ctx.totalEntities);
         }
-        ++entitiesLoaded;
+        ++ctx.entitiesLoaded;
 
-        if (isRoot && entityJson.contains("uuid"))
+        if (ctx.isRoot && entityJson.contains("uuid"))
         {
             uint64_t uuidValue = entityJson["uuid"].get<uint64_t>();
             entity.addOrReplaceComponent<components::UUIDComponent>(uuidValue);
@@ -118,8 +116,7 @@ namespace serialization
 
         if (entityJson.contains("children") && entityJson["children"].is_array())
         {
-            deserializeChildren(entityJson["children"], entity, sceneGraph, progressCallback, entitiesLoaded,
-                                totalEntities);
+            deserializeChildren(entityJson["children"], entity, ctx);
         }
     }
 
@@ -193,8 +190,8 @@ namespace serialization
             deserializeSceneSettings(sceneJson, sceneGraph);
 
             scene::Entity& root = sceneGraph.GetRoot();
-            deserializeEntity(sceneJson["root"], root, sceneGraph, true, progressCallback, entitiesLoaded,
-                              totalEntities);
+            DeserializeEntityContext ctx{sceneGraph, true, progressCallback, entitiesLoaded, totalEntities};
+            deserializeEntity(sceneJson["root"], root, ctx);
 
             resolveRenderTextureSourceNames();
 
@@ -327,7 +324,8 @@ namespace serialization
             scene::Entity& root = sceneGraph.GetRoot();
             size_t entitiesLoaded = 0;
             size_t totalEntities = countEntities(snapshot["root"]);
-            deserializeEntity(snapshot["root"], root, sceneGraph, true, progressCallback, entitiesLoaded, totalEntities);
+            DeserializeEntityContext ctx{sceneGraph, true, progressCallback, entitiesLoaded, totalEntities};
+            deserializeEntity(snapshot["root"], root, ctx);
 
             resolveRenderTextureSourceNames();
 

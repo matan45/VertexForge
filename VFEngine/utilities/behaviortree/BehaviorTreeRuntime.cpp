@@ -308,6 +308,51 @@ namespace behaviortree
         }
     }
 
+    template <typename T>
+    static BTNodeStatus compareValues(T a, T b, CompareOp op)
+    {
+        switch (op) {
+        case CompareOp::Equal:        return a == b ? BTNodeStatus::Success : BTNodeStatus::Failure;
+        case CompareOp::NotEqual:     return a != b ? BTNodeStatus::Success : BTNodeStatus::Failure;
+        case CompareOp::Greater:      return a > b ? BTNodeStatus::Success : BTNodeStatus::Failure;
+        case CompareOp::Less:         return a < b ? BTNodeStatus::Success : BTNodeStatus::Failure;
+        case CompareOp::GreaterEqual: return a >= b ? BTNodeStatus::Success : BTNodeStatus::Failure;
+        case CompareOp::LessEqual:    return a <= b ? BTNodeStatus::Success : BTNodeStatus::Failure;
+        }
+        return BTNodeStatus::Failure;
+    }
+
+    static BTNodeStatus compareBlackboardValues(const BlackboardValue& bbVal, const BlackboardValue& compareVal, CompareOp op)
+    {
+        if (std::holds_alternative<float>(bbVal) && std::holds_alternative<float>(compareVal)) {
+            float a = std::get<float>(bbVal), b = std::get<float>(compareVal);
+            constexpr float epsilon = 1e-5f;
+            if (op == CompareOp::Equal) return std::abs(a - b) < epsilon ? BTNodeStatus::Success : BTNodeStatus::Failure;
+            if (op == CompareOp::NotEqual) return std::abs(a - b) >= epsilon ? BTNodeStatus::Success : BTNodeStatus::Failure;
+            return compareValues(a, b, op);
+        }
+        if (std::holds_alternative<int32_t>(bbVal) && std::holds_alternative<int32_t>(compareVal))
+            return compareValues(std::get<int32_t>(bbVal), std::get<int32_t>(compareVal), op);
+        if (std::holds_alternative<bool>(bbVal) && std::holds_alternative<bool>(compareVal)) {
+            if (op == CompareOp::Equal) return std::get<bool>(bbVal) == std::get<bool>(compareVal) ? BTNodeStatus::Success : BTNodeStatus::Failure;
+            if (op == CompareOp::NotEqual) return std::get<bool>(bbVal) != std::get<bool>(compareVal) ? BTNodeStatus::Success : BTNodeStatus::Failure;
+        }
+        if (std::holds_alternative<std::string>(bbVal) && std::holds_alternative<std::string>(compareVal)) {
+            if (op == CompareOp::Equal) return std::get<std::string>(bbVal) == std::get<std::string>(compareVal) ? BTNodeStatus::Success : BTNodeStatus::Failure;
+            if (op == CompareOp::NotEqual) return std::get<std::string>(bbVal) != std::get<std::string>(compareVal) ? BTNodeStatus::Success : BTNodeStatus::Failure;
+        }
+        return BTNodeStatus::Failure;
+    }
+
+    template <typename T>
+    static T getNodeProperty(const BTNode& node, const std::string& key, T defaultVal)
+    {
+        auto it = node.properties.find(key);
+        if (it != node.properties.end() && std::holds_alternative<T>(it->second))
+            return std::get<T>(it->second);
+        return defaultVal;
+    }
+
     BTNodeStatus BehaviorTreeRuntime::tickTask(const BTNode& node, float dt, IBTTaskExecutor* executor)
     {
         auto& state = getNodeState(node.id);
@@ -316,188 +361,61 @@ namespace behaviortree
         {
         case BTNodeType::Wait:
         {
-            float duration = 1.0f;
-            auto it = node.properties.find("duration");
-            if (it != node.properties.end() && std::holds_alternative<float>(it->second))
-            {
-                duration = std::get<float>(it->second);
-            }
-
-            if (state.isFirstTick)
-            {
-                state.elapsedTime = 0.0f;
-            }
-
+            float duration = getNodeProperty<float>(node, "duration", 1.0f);
+            if (state.isFirstTick) state.elapsedTime = 0.0f;
             state.elapsedTime += dt;
-            if (state.elapsedTime >= duration)
-            {
-                state.elapsedTime = 0.0f;
-                return BTNodeStatus::Success;
-            }
+            if (state.elapsedTime >= duration) { state.elapsedTime = 0.0f; return BTNodeStatus::Success; }
             return BTNodeStatus::Running;
         }
 
         case BTNodeType::Log:
         {
             if (!executor) return BTNodeStatus::Failure;
-
-            std::string message = "BT Log";
-            auto msgIt = node.properties.find("message");
-            if (msgIt != node.properties.end() && std::holds_alternative<std::string>(msgIt->second))
-            {
-                message = std::get<std::string>(msgIt->second);
-            }
-
-            LogLevel level = LogLevel::Info;
-            auto lvlIt = node.properties.find("level");
-            if (lvlIt != node.properties.end() && std::holds_alternative<std::string>(lvlIt->second))
-            {
-                level = stringToLogLevel(std::get<std::string>(lvlIt->second));
-            }
-
-            return executor->executeLog(message, level);
+            std::string message = getNodeProperty<std::string>(node, "message", std::string("BT Log"));
+            std::string lvlStr = getNodeProperty<std::string>(node, "level", std::string("Info"));
+            return executor->executeLog(message, stringToLogLevel(lvlStr));
         }
 
         case BTNodeType::MoveTo:
         {
             if (!executor) return BTNodeStatus::Failure;
-
-            std::string targetKey = "target";
-            auto keyIt = node.properties.find("targetKey");
-            if (keyIt != node.properties.end() && std::holds_alternative<std::string>(keyIt->second))
-            {
-                targetKey = std::get<std::string>(keyIt->second);
-            }
-
-            float arrivalDistance = 0.5f;
-            auto distIt = node.properties.find("arrivalDistance");
-            if (distIt != node.properties.end() && std::holds_alternative<float>(distIt->second))
-            {
-                arrivalDistance = std::get<float>(distIt->second);
-            }
-
+            std::string targetKey = getNodeProperty<std::string>(node, "targetKey", std::string("target"));
+            float arrivalDistance = getNodeProperty<float>(node, "arrivalDistance", 0.5f);
             return executor->executeMoveTo(ownerEntity, targetKey, arrivalDistance, blackboard, state.isFirstTick);
         }
 
         case BTNodeType::PlayAnimation:
         {
             if (!executor) return BTNodeStatus::Failure;
-
-            std::string stateName;
-            auto nameIt = node.properties.find("stateName");
-            if (nameIt != node.properties.end() && std::holds_alternative<std::string>(nameIt->second))
-            {
-                stateName = std::get<std::string>(nameIt->second);
-            }
-
-            bool waitForCompletion = false;
-            auto waitIt = node.properties.find("waitForCompletion");
-            if (waitIt != node.properties.end() && std::holds_alternative<bool>(waitIt->second))
-            {
-                waitForCompletion = std::get<bool>(waitIt->second);
-            }
-
+            std::string stateName = getNodeProperty<std::string>(node, "stateName", std::string{});
+            bool waitForCompletion = getNodeProperty<bool>(node, "waitForCompletion", false);
             return executor->executePlayAnimation(ownerEntity, stateName, waitForCompletion);
         }
 
         case BTNodeType::SetBlackboardValue:
         {
-            std::string key;
-            auto keyIt = node.properties.find("key");
-            if (keyIt != node.properties.end() && std::holds_alternative<std::string>(keyIt->second))
-            {
-                key = std::get<std::string>(keyIt->second);
-            }
-
+            std::string key = getNodeProperty<std::string>(node, "key", std::string{});
             if (key.empty()) return BTNodeStatus::Failure;
-
             auto valIt = node.properties.find("value");
-            if (valIt != node.properties.end())
-            {
-                blackboard.set(key, valIt->second);
-            }
+            if (valIt != node.properties.end()) blackboard.set(key, valIt->second);
             return BTNodeStatus::Success;
         }
 
         case BTNodeType::CheckBlackboardValue:
         {
-            std::string key;
-            auto keyIt = node.properties.find("key");
-            if (keyIt != node.properties.end() && std::holds_alternative<std::string>(keyIt->second))
-            {
-                key = std::get<std::string>(keyIt->second);
-            }
-
+            std::string key = getNodeProperty<std::string>(node, "key", std::string{});
             if (key.empty() || !blackboard.has(key)) return BTNodeStatus::Failure;
 
-            CompareOp op = CompareOp::Equal;
-            auto opIt = node.properties.find("compareOp");
-            if (opIt != node.properties.end() && std::holds_alternative<std::string>(opIt->second))
-            {
-                op = stringToCompareOp(std::get<std::string>(opIt->second));
-            }
-
-            BlackboardValue bbVal = blackboard.get(key);
+            CompareOp op = stringToCompareOp(getNodeProperty<std::string>(node, "compareOp", std::string("Equal")));
             auto compareValIt = node.properties.find("compareValue");
             if (compareValIt == node.properties.end()) return BTNodeStatus::Failure;
-
-            const BlackboardValue& compareVal = compareValIt->second;
-
-            if (std::holds_alternative<float>(bbVal) && std::holds_alternative<float>(compareVal))
-            {
-                float a = std::get<float>(bbVal);
-                float b = std::get<float>(compareVal);
-                constexpr float epsilon = 1e-5f;
-                switch (op)
-                {
-                case CompareOp::Equal: return std::abs(a - b) < epsilon ? BTNodeStatus::Success : BTNodeStatus::Failure;
-                case CompareOp::NotEqual: return std::abs(a - b) >= epsilon ? BTNodeStatus::Success : BTNodeStatus::Failure;
-                case CompareOp::Greater: return a > b ? BTNodeStatus::Success : BTNodeStatus::Failure;
-                case CompareOp::Less: return a < b ? BTNodeStatus::Success : BTNodeStatus::Failure;
-                case CompareOp::GreaterEqual: return a >= b ? BTNodeStatus::Success : BTNodeStatus::Failure;
-                case CompareOp::LessEqual: return a <= b ? BTNodeStatus::Success : BTNodeStatus::Failure;
-                }
-            }
-
-            if (std::holds_alternative<int32_t>(bbVal) && std::holds_alternative<int32_t>(compareVal))
-            {
-                int32_t a = std::get<int32_t>(bbVal);
-                int32_t b = std::get<int32_t>(compareVal);
-                switch (op)
-                {
-                case CompareOp::Equal: return a == b ? BTNodeStatus::Success : BTNodeStatus::Failure;
-                case CompareOp::NotEqual: return a != b ? BTNodeStatus::Success : BTNodeStatus::Failure;
-                case CompareOp::Greater: return a > b ? BTNodeStatus::Success : BTNodeStatus::Failure;
-                case CompareOp::Less: return a < b ? BTNodeStatus::Success : BTNodeStatus::Failure;
-                case CompareOp::GreaterEqual: return a >= b ? BTNodeStatus::Success : BTNodeStatus::Failure;
-                case CompareOp::LessEqual: return a <= b ? BTNodeStatus::Success : BTNodeStatus::Failure;
-                }
-            }
-
-            if (std::holds_alternative<bool>(bbVal) && std::holds_alternative<bool>(compareVal))
-            {
-                bool a = std::get<bool>(bbVal);
-                bool b = std::get<bool>(compareVal);
-                if (op == CompareOp::Equal) return a == b ? BTNodeStatus::Success : BTNodeStatus::Failure;
-                if (op == CompareOp::NotEqual) return a != b ? BTNodeStatus::Success : BTNodeStatus::Failure;
-            }
-
-            if (std::holds_alternative<std::string>(bbVal) && std::holds_alternative<std::string>(compareVal))
-            {
-                const auto& a = std::get<std::string>(bbVal);
-                const auto& b = std::get<std::string>(compareVal);
-                if (op == CompareOp::Equal) return a == b ? BTNodeStatus::Success : BTNodeStatus::Failure;
-                if (op == CompareOp::NotEqual) return a != b ? BTNodeStatus::Success : BTNodeStatus::Failure;
-            }
-
-            return BTNodeStatus::Failure;
+            return compareBlackboardValues(blackboard.get(key), compareValIt->second, op);
         }
 
         case BTNodeType::ScriptTask:
         {
             if (!executor) return BTNodeStatus::Failure;
-            return executor->executeScriptTask(ownerEntity, node.scriptPath, node.scriptClassName,
-                                                blackboard, dt);
+            return executor->executeScriptTask(ownerEntity, node.scriptPath, node.scriptClassName, blackboard, dt);
         }
 
         default:

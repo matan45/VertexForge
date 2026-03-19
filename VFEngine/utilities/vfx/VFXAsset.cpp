@@ -1,6 +1,6 @@
 #include "../print/Log.hpp"
-#include "VFXAsset.hpp"
 #include "../uuid/UUID.hpp"
+#include "VFXAsset.hpp"
 #include <nlohmann/json.hpp>
 #include <fstream>
 #include <filesystem>
@@ -92,181 +92,6 @@ namespace vfx
             return j;
         }
 
-        VFXNode createDefaultEmitterNode(uint32_t nodeId)
-        {
-            VFXNode emitterNode;
-            emitterNode.id = nodeId;
-            emitterNode.type = VFXNodeType::Emitter;
-            emitterNode.name = "Emitter";
-            emitterNode.position = glm::vec2(100.0f, 200.0f);
-
-            emitterNode.properties["spawnRate"] = VFXProperty{
-                "spawnRate", VFXPropertyType::Float,
-                EmitterDefaults::SPAWN_RATE, 0.0f, 1000.0f
-            };
-            emitterNode.properties["lifetime"] = VFXProperty{
-                "lifetime", VFXPropertyType::Float,
-                EmitterDefaults::LIFETIME, 0.0f, 60.0f
-            };
-            emitterNode.properties["startSize"] = VFXProperty{
-                "startSize", VFXPropertyType::Float,
-                EmitterDefaults::START_SIZE, 0.0f, 100.0f
-            };
-            emitterNode.properties["startVelocity"] = VFXProperty{
-                "startVelocity", VFXPropertyType::Vec3,
-                glm::vec3(0.0f, 1.0f, 0.0f), 0.0f, 0.0f
-            };
-            emitterNode.properties["startColor"] = VFXProperty{
-                "startColor", VFXPropertyType::Color,
-                glm::vec4(1.0f, 1.0f, 1.0f, 1.0f), 0.0f, 1.0f
-            };
-            emitterNode.properties["looping"] = VFXProperty{
-                "looping", VFXPropertyType::Bool,
-                EmitterDefaults::LOOPING, 0.0f, 1.0f
-            };
-            emitterNode.properties["texture"] = VFXProperty{
-                "texture", VFXPropertyType::String,
-                std::string(""), 0.0f, 0.0f
-            };
-
-            emitterNode.properties["flipbookRows"] = VFXProperty{
-                "flipbookRows", VFXPropertyType::Int,
-                EmitterDefaults::FLIPBOOK_ROWS, 1.0f, 16.0f
-            };
-            emitterNode.properties["flipbookColumns"] = VFXProperty{
-                "flipbookColumns", VFXPropertyType::Int,
-                EmitterDefaults::FLIPBOOK_COLUMNS, 1.0f, 16.0f
-            };
-            emitterNode.properties["flipbookFrameRate"] = VFXProperty{
-                "flipbookFrameRate", VFXPropertyType::Float,
-                EmitterDefaults::FLIPBOOK_FRAME_RATE, 0.0f, 120.0f
-            };
-            emitterNode.properties["flipbookRandomStart"] = VFXProperty{
-                "flipbookRandomStart", VFXPropertyType::Bool,
-                EmitterDefaults::FLIPBOOK_RANDOM_START, 0.0f, 1.0f
-            };
-
-            // Rendering
-            emitterNode.properties["alphaClipThreshold"] = VFXProperty{
-                "alphaClipThreshold", VFXPropertyType::Float,
-                EmitterDefaults::ALPHA_CLIP_THRESHOLD, 0.0f, 1.0f
-            };
-            emitterNode.properties["additiveBlend"] = VFXProperty{
-                "additiveBlend", VFXPropertyType::Bool,
-                EmitterDefaults::ADDITIVE_BLEND, 0.0f, 1.0f
-            };
-
-            emitterNode.properties["renderMode"] = VFXProperty{
-                "renderMode", VFXPropertyType::Int,
-                EmitterDefaults::RENDER_MODE, 0.0f, 4.0f
-            };
-            emitterNode.properties["softParticleDistance"] = VFXProperty{
-                "softParticleDistance", VFXPropertyType::Float,
-                EmitterDefaults::SOFT_PARTICLE_DISTANCE, 0.0f, 50.0f
-            };
-            emitterNode.properties["stretchMultiplier"] = VFXProperty{
-                "stretchMultiplier", VFXPropertyType::Float,
-                EmitterDefaults::STRETCH_MULTIPLIER, 0.1f, 10.0f
-            };
-
-            emitterNode.properties["meshPath"] = VFXProperty{
-                "meshPath", VFXPropertyType::String,
-                std::string(""), 0.0f, 0.0f
-            };
-
-            emitterNode.properties["maxTrailPoints"] = VFXProperty{
-                "maxTrailPoints", VFXPropertyType::Int,
-                EmitterDefaults::MAX_TRAIL_POINTS, 2.0f, 256.0f
-            };
-            emitterNode.properties["ribbonWidth"] = VFXProperty{
-                "ribbonWidth", VFXPropertyType::Float,
-                EmitterDefaults::RIBBON_WIDTH, 0.01f, 10.0f
-            };
-            emitterNode.properties["ribbonMinDistance"] = VFXProperty{
-                "ribbonMinDistance", VFXPropertyType::Float,
-                EmitterDefaults::RIBBON_MIN_DISTANCE, 0.0f, 5.0f
-            };
-
-            emitterNode.properties["uvScrollSpeedU"] = VFXProperty{
-                "uvScrollSpeedU", VFXPropertyType::Float,
-                EmitterDefaults::UV_SCROLL_SPEED_U, -10.0f, 10.0f
-            };
-            emitterNode.properties["uvScrollSpeedV"] = VFXProperty{
-                "uvScrollSpeedV", VFXPropertyType::Float,
-                EmitterDefaults::UV_SCROLL_SPEED_V, -10.0f, 10.0f
-            };
-
-            // Events
-            emitterNode.properties["eventOnSpawnEnabled"] = VFXProperty{
-                "eventOnSpawnEnabled", VFXPropertyType::Bool,
-                EmitterDefaults::EVENT_ON_SPAWN_ENABLED, 0.0f, 1.0f
-            };
-            emitterNode.properties["eventOnSpawnVFX"] = VFXProperty{
-                "eventOnSpawnVFX", VFXPropertyType::String,
-                std::string(""), 0.0f, 0.0f
-            };
-            emitterNode.properties["eventOnDeathEnabled"] = VFXProperty{
-                "eventOnDeathEnabled", VFXPropertyType::Bool,
-                EmitterDefaults::EVENT_ON_DEATH_ENABLED, 0.0f, 1.0f
-            };
-            emitterNode.properties["eventOnDeathVFX"] = VFXProperty{
-                "eventOnDeathVFX", VFXPropertyType::String,
-                std::string(""), 0.0f, 0.0f
-            };
-            emitterNode.properties["eventOnCollisionEnabled"] = VFXProperty{
-                "eventOnCollisionEnabled", VFXPropertyType::Bool,
-                EmitterDefaults::EVENT_ON_COLLISION_ENABLED, 0.0f, 1.0f
-            };
-            emitterNode.properties["eventOnCollisionVFX"] = VFXProperty{
-                "eventOnCollisionVFX", VFXPropertyType::String,
-                std::string(""), 0.0f, 0.0f
-            };
-            emitterNode.properties["eventOnLifetimeThresholdEnabled"] = VFXProperty{
-                "eventOnLifetimeThresholdEnabled", VFXPropertyType::Bool,
-                EmitterDefaults::EVENT_ON_LIFETIME_THRESHOLD_ENABLED, 0.0f, 1.0f
-            };
-            emitterNode.properties["eventOnLifetimeThresholdVFX"] = VFXProperty{
-                "eventOnLifetimeThresholdVFX", VFXPropertyType::String,
-                std::string(""), 0.0f, 0.0f
-            };
-            emitterNode.properties["eventLifetimeThreshold"] = VFXProperty{
-                "eventLifetimeThreshold", VFXPropertyType::Float,
-                EmitterDefaults::EVENT_LIFETIME_THRESHOLD, 0.0f, 1.0f
-            };
-
-            // Lighting
-            emitterNode.properties["lightingInfluence"] = VFXProperty{
-                "lightingInfluence", VFXPropertyType::Float,
-                EmitterDefaults::LIGHTING_INFLUENCE, 0.0f, 1.0f
-            };
-            emitterNode.properties["normalMode"] = VFXProperty{
-                "normalMode", VFXPropertyType::Int,
-                EmitterDefaults::NORMAL_MODE, 0.0f, 2.0f
-            };
-            emitterNode.properties["ambientAmount"] = VFXProperty{
-                "ambientAmount", VFXPropertyType::Float,
-                EmitterDefaults::AMBIENT_AMOUNT, 0.0f, 1.0f
-            };
-            // Collision
-            emitterNode.properties["collisionEnabled"] = VFXProperty{
-                "collisionEnabled", VFXPropertyType::Bool,
-                EmitterDefaults::COLLISION_ENABLED, 0.0f, 1.0f
-            };
-            emitterNode.properties["collisionBounce"] = VFXProperty{
-                "collisionBounce", VFXPropertyType::Float,
-                EmitterDefaults::COLLISION_BOUNCE, 0.0f, 1.0f
-            };
-            emitterNode.properties["collisionFriction"] = VFXProperty{
-                "collisionFriction", VFXPropertyType::Float,
-                EmitterDefaults::COLLISION_FRICTION, 0.0f, 1.0f
-            };
-            emitterNode.properties["collisionLifetimeLoss"] = VFXProperty{
-                "collisionLifetimeLoss", VFXPropertyType::Float,
-                EmitterDefaults::COLLISION_LIFETIME_LOSS, 0.0f, 1.0f
-            };
-
-            return emitterNode;
-        }
     } // anonymous namespace
 
     json VFXAsset::serializePropertyValue(const VFXPropertyValue& val, VFXPropertyType type)
@@ -601,7 +426,6 @@ namespace vfx
 
         json graphJson;
 
-        // Serialize nodes
         json nodesJson = json::array();
         for (const auto& node : vfxData.graph.nodes)
         {
@@ -609,7 +433,6 @@ namespace vfx
         }
         graphJson["nodes"] = nodesJson;
 
-        // Serialize links
         json linksJson = json::array();
         for (const auto& link : vfxData.graph.links)
         {
@@ -631,7 +454,7 @@ namespace vfx
                 return false;
             }
 
-            file << j.dump(4); // Pretty print with 4-space indent
+            file << j.dump(4);
             vfLogInfo("Saved VFX: {} to {}", vfxData.name, path);
             return true;
         }
@@ -642,32 +465,4 @@ namespace vfx
         }
     }
 
-    VFXData VFXAsset::createDefault(const std::string& name)
-    {
-        VFXData vfxData;
-        vfxData.uuid = std::to_string(uuid::UUID().getValue());
-        vfxData.name = name;
-        vfxData.version = VFX_FORMAT_VERSION;
-
-        vfxData.graph.nodes.push_back(createDefaultEmitterNode(vfxData.graph.nextNodeId++));
-
-        // Create OutSystem node
-        VFXNode outNode;
-        outNode.id = vfxData.graph.nextNodeId++;
-        outNode.type = VFXNodeType::OutSystem;
-        outNode.name = "Output";
-        outNode.position = glm::vec2(400.0f, 200.0f);
-        vfxData.graph.nodes.push_back(std::move(outNode));
-
-        // Create link from Emitter to OutSystem
-        VFXNodeLink link;
-        link.id = vfxData.graph.nextLinkId++;
-        link.sourceNodeId = 1;  // Emitter
-        link.targetNodeId = 2;  // OutSystem
-        link.sourcePin = "Output";
-        link.targetPin = "Input";
-        vfxData.graph.links.push_back(std::move(link));
-
-        return vfxData;
-    }
 }

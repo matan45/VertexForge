@@ -12,7 +12,6 @@ namespace core::audio
           , busManager(std::make_unique<AudioBusManager>())
           , effectManager(std::make_unique<AudioEffectManager>())
           , reverbZoneManager(std::make_unique<ReverbZoneManager>())
-          , lastUpdateTime(std::chrono::steady_clock::now())
     {
     }
 
@@ -103,7 +102,6 @@ namespace core::audio
         audioThread->start();
 
         initialized = true;
-        lastUpdateTime = std::chrono::steady_clock::now();
         return true;
     }
 
@@ -143,7 +141,6 @@ namespace core::audio
     void AudioController::update()
     {
         // No-op: all audio work now happens on the dedicated audio thread
-        lastUpdateTime = std::chrono::steady_clock::now();
     }
 
     // === Sound Playback (enqueue commands) ===

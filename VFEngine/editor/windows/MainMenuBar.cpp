@@ -9,7 +9,7 @@
 #include "config/RenderConfigWindow.hpp"
 #include "config/ProjectSettingsWindow.hpp"
 #include "terrain/TerrainCreationWindow.hpp"
-#include "WaterEditorWindow.hpp"
+#include "water/WaterEditorWindow.hpp"
 #include "config/PostProcessConfigWindow.hpp"
 #include "config/NavmeshWindow.hpp"
 #include "config/GIConfigWindow.hpp"
@@ -17,13 +17,13 @@
 #include "config/AtmosphereConfigWindow.hpp"
 #include "config/CloudConfigWindow.hpp"
 #include "config/LightStreamingDebugWindow.hpp"
-#include "AssetLifecycleWindow.hpp"
-#include "WorldSectorWindow.hpp"
-#include "VFXDebugWindow.hpp"
-#include "PluginManagerWindow.hpp"
-#include "TaskGraphWindow.hpp"
+#include "asset/AssetLifecycleWindow.hpp"
+#include "world/WorldSectorWindow.hpp"
+#include "vfx/VFXDebugWindow.hpp"
+#include "plugin/PluginManagerWindow.hpp"
+#include "debug/TaskGraphWindow.hpp"
 #include "config/InputActionMappingWindow.hpp"
-#include "AnimationDebugWindow.hpp"
+#include "animation/AnimationDebugWindow.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/project/SceneEvents.hpp"
 #include "events/render/RenderEvents.hpp"
@@ -165,137 +165,31 @@ namespace windows
 
     void MainMenuBar::handleSettingsMenu()
     {
-        if (ImGui::BeginMenu("Settings"))
-        {
-            if (ImGui::MenuItem("Project"))
-            {
-                if (projectSettingsWindow)
-                {
-                    projectSettingsWindow->show();
-                }
-            }
-            else if (ImGui::MenuItem("Editor Camera"))
-            {
-                if (editorCameraWindow)
-                {
-                    editorCameraWindow->show();
-                }
-            }
-            else if (ImGui::MenuItem("Physics Config"))
-            {
-                if (physicsConfigWindow)
-                {
-                    physicsConfigWindow->show();
-                }
-            }
-            else if (ImGui::MenuItem("Audio Config"))
-            {
-                if (audioConfigWindow)
-                {
-                    audioConfigWindow->show();
-                }
-            }
-            else if (ImGui::MenuItem("Audio Mixer"))
-            {
-                if (audioMixerWindow)
-                {
-                    audioMixerWindow->show();
-                }
-            }
-            else if (ImGui::MenuItem("Render Config"))
-            {
-                if (renderConfigWindow)
-                {
-                    renderConfigWindow->show();
-                }
-            }
-            else if (ImGui::MenuItem("Input Action Mapping"))
-            {
-                if (inputActionMappingWindow)
-                {
-                    inputActionMappingWindow->show();
-                }
-            }
-            else if (ImGui::MenuItem("Plugin Manager"))
-            {
-                if (pluginManagerWindow)
-                {
-                    pluginManagerWindow->show();
-                }
-            }
-            ImGui::EndMenu();
-        }
+        if (!ImGui::BeginMenu("Settings")) return;
+        if (ImGui::MenuItem("Project") && projectSettingsWindow) projectSettingsWindow->show();
+        else if (ImGui::MenuItem("Editor Camera") && editorCameraWindow) editorCameraWindow->show();
+        else if (ImGui::MenuItem("Physics Config") && physicsConfigWindow) physicsConfigWindow->show();
+        else if (ImGui::MenuItem("Audio Config") && audioConfigWindow) audioConfigWindow->show();
+        else if (ImGui::MenuItem("Audio Mixer") && audioMixerWindow) audioMixerWindow->show();
+        else if (ImGui::MenuItem("Render Config") && renderConfigWindow) renderConfigWindow->show();
+        else if (ImGui::MenuItem("Input Action Mapping") && inputActionMappingWindow) inputActionMappingWindow->show();
+        else if (ImGui::MenuItem("Plugin Manager") && pluginManagerWindow) pluginManagerWindow->show();
+        ImGui::EndMenu();
     }
 
     void MainMenuBar::handleAddMenu()
     {
-        if (ImGui::BeginMenu("Add"))
-        {
-            if (ImGui::MenuItem("IBL"))
-            {
-                if (iblWindow)
-                {
-                    iblWindow->show();
-                }
-            }
-            else if (ImGui::MenuItem("Terrain"))
-            {
-                if (terrainCreationWindow)
-                {
-                    terrainCreationWindow->show();
-                }
-            }
-            else if (ImGui::MenuItem("Water"))
-            {
-                if (waterEditorWindow)
-                {
-                    waterEditorWindow->show();
-                }
-            }
-            else if (ImGui::MenuItem("Post Process"))
-            {
-                if (postProcessConfigWindow)
-                {
-                    postProcessConfigWindow->show();
-                }
-            }
-            else if (ImGui::MenuItem("Navigation"))
-            {
-                if (navmeshWindow)
-                {
-                    navmeshWindow->show();
-                }
-            }
-            else if (ImGui::MenuItem("Volumetric Fog"))
-            {
-                if (volumetricFogConfigWindow)
-                {
-                    volumetricFogConfigWindow->show();
-                }
-            }
-            else if (ImGui::MenuItem("Atmosphere"))
-            {
-                if (atmosphereConfigWindow)
-                {
-                    atmosphereConfigWindow->show();
-                }
-            }
-            else if (ImGui::MenuItem("Clouds"))
-            {
-                if (cloudConfigWindow)
-                {
-                    cloudConfigWindow->show();
-                }
-            }
-            else if (ImGui::MenuItem("Global Illumination"))
-            {
-                if (giConfigWindow)
-                {
-                    giConfigWindow->show();
-                }
-            }
-            ImGui::EndMenu();
-        }
+        if (!ImGui::BeginMenu("Add")) return;
+        if (ImGui::MenuItem("IBL") && iblWindow) iblWindow->show();
+        else if (ImGui::MenuItem("Terrain") && terrainCreationWindow) terrainCreationWindow->show();
+        else if (ImGui::MenuItem("Water") && waterEditorWindow) waterEditorWindow->show();
+        else if (ImGui::MenuItem("Post Process") && postProcessConfigWindow) postProcessConfigWindow->show();
+        else if (ImGui::MenuItem("Navigation") && navmeshWindow) navmeshWindow->show();
+        else if (ImGui::MenuItem("Volumetric Fog") && volumetricFogConfigWindow) volumetricFogConfigWindow->show();
+        else if (ImGui::MenuItem("Atmosphere") && atmosphereConfigWindow) atmosphereConfigWindow->show();
+        else if (ImGui::MenuItem("Clouds") && cloudConfigWindow) cloudConfigWindow->show();
+        else if (ImGui::MenuItem("Global Illumination") && giConfigWindow) giConfigWindow->show();
+        ImGui::EndMenu();
     }
 
     void MainMenuBar::handleScriptsMenu()
@@ -399,45 +293,11 @@ namespace windows
                 }
             }
 
-            if (ImGui::MenuItem("Asset Lifecycle"))
-            {
-                if (assetLifecycleWindow)
-                {
-                    assetLifecycleWindow->show();
-                }
-            }
-
-            if (ImGui::MenuItem("VFX Stats"))
-            {
-                if (vfxDebugWindow)
-                {
-                    vfxDebugWindow->show();
-                }
-            }
-
-            if (ImGui::MenuItem("Animation Stats"))
-            {
-                if (animationDebugWindow)
-                {
-                    animationDebugWindow->show();
-                }
-            }
-
-            if (ImGui::MenuItem("Light Streaming"))
-            {
-                if (lightStreamingDebugWindow)
-                {
-                    lightStreamingDebugWindow->show();
-                }
-            }
-
-            if (ImGui::MenuItem("Task Graph"))
-            {
-                if (taskGraphWindow)
-                {
-                    taskGraphWindow->show();
-                }
-            }
+            if (ImGui::MenuItem("Asset Lifecycle") && assetLifecycleWindow) assetLifecycleWindow->show();
+            if (ImGui::MenuItem("VFX Stats") && vfxDebugWindow) vfxDebugWindow->show();
+            if (ImGui::MenuItem("Animation Stats") && animationDebugWindow) animationDebugWindow->show();
+            if (ImGui::MenuItem("Light Streaming") && lightStreamingDebugWindow) lightStreamingDebugWindow->show();
+            if (ImGui::MenuItem("Task Graph") && taskGraphWindow) taskGraphWindow->show();
 
             ImGui::EndMenu();
         }

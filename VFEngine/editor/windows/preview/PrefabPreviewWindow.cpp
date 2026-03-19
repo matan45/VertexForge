@@ -19,49 +19,19 @@ namespace windows
 
             node.name = entityJson.value("name", "Entity");
 
-            // Parse transform if present
-            if (entityJson.contains("transform"))
-            {
+            auto parseVec3 = [](const json& j, float dx, float dy, float dz) -> glm::vec3 {
+                if (j.is_array() && j.size() >= 3) return {j[0].get<float>(), j[1].get<float>(), j[2].get<float>()};
+                if (j.is_object()) return {j.value("x", dx), j.value("y", dy), j.value("z", dz)};
+                return {dx, dy, dz};
+            };
+
+            if (entityJson.contains("transform")) {
                 const auto& t = entityJson["transform"];
-                if (t.contains("position"))
-                {
-                    const auto& pos = t["position"];
-                    if (pos.is_array() && pos.size() >= 3)
-                    {
-                        node.position = glm::vec3(pos[0].get<float>(), pos[1].get<float>(), pos[2].get<float>());
-                    }
-                    else if (pos.is_object())
-                    {
-                        node.position = glm::vec3(pos.value("x", 0.0f), pos.value("y", 0.0f), pos.value("z", 0.0f));
-                    }
-                }
-                if (t.contains("rotation"))
-                {
-                    const auto& rot = t["rotation"];
-                    if (rot.is_array() && rot.size() >= 3)
-                    {
-                        node.rotation = glm::vec3(rot[0].get<float>(), rot[1].get<float>(), rot[2].get<float>());
-                    }
-                    else if (rot.is_object())
-                    {
-                        node.rotation = glm::vec3(rot.value("x", 0.0f), rot.value("y", 0.0f), rot.value("z", 0.0f));
-                    }
-                }
-                if (t.contains("scale"))
-                {
-                    const auto& scl = t["scale"];
-                    if (scl.is_array() && scl.size() >= 3)
-                    {
-                        node.scale = glm::vec3(scl[0].get<float>(), scl[1].get<float>(), scl[2].get<float>());
-                    }
-                    else if (scl.is_object())
-                    {
-                        node.scale = glm::vec3(scl.value("x", 1.0f), scl.value("y", 1.0f), scl.value("z", 1.0f));
-                    }
-                }
+                if (t.contains("position")) node.position = parseVec3(t["position"], 0, 0, 0);
+                if (t.contains("rotation")) node.rotation = parseVec3(t["rotation"], 0, 0, 0);
+                if (t.contains("scale"))    node.scale = parseVec3(t["scale"], 1, 1, 1);
             }
 
-            // Collect component types and extract asset paths
             if (entityJson.contains("components"))
             {
                 const auto& componentsJson = entityJson["components"];
@@ -87,7 +57,6 @@ namespace windows
                     }
                 }
 
-                // Extract asset paths
                 if (componentsJson.contains("mesh"))
                 {
                     node.meshPath = componentsJson["mesh"].value("meshPath", "");
@@ -106,7 +75,6 @@ namespace windows
                 }
             }
 
-            // Recursively parse children
             if (entityJson.contains("children") && entityJson["children"].is_array())
             {
                 for (const auto& childJson : entityJson["children"])
@@ -162,14 +130,12 @@ namespace windows
                 float panelWidth = 150.0f;
                 ImVec2 contentSize = ImGui::GetContentRegionAvail();
 
-                // Info panel on the left
                 ImGui::BeginChild("InfoPanel", ImVec2(panelWidth, contentSize.y), true);
                 drawInfoPanel();
                 ImGui::EndChild();
 
                 ImGui::SameLine();
 
-                // Entity tree panel on the right
                 float treeWidth = contentSize.x - panelWidth - ImGui::GetStyle().ItemSpacing.x;
                 ImGui::BeginChild("EntityTreePanel", ImVec2(treeWidth, contentSize.y), true);
 
@@ -257,18 +223,15 @@ namespace windows
                 return result;
             }
 
-            // Validate structure
             if (!prefabJson.contains("prefab") || !prefabJson["prefab"].contains("entity"))
             {
                 result.errorMessage = "Invalid prefab format";
                 return result;
             }
 
-            // Extract metadata
             result.version = prefabJson.value("version", "unknown");
             result.prefabName = prefabJson["prefab"].value("name", "Unnamed");
 
-            // Parse entity tree and count components
             result.rootEntity = parseEntityFromJson(prefabJson["prefab"]["entity"], result.stats);
 
             result.success = true;
@@ -309,22 +272,12 @@ namespace windows
             return;
         }
 
-        // Prefab metadata
-        ImGui::Text("Name:");
-        ImGui::TextWrapped("  %s", prefabName.c_str());
-        ImGui::Spacing();
+        ImGui::Text("Name:"); ImGui::TextWrapped("  %s", prefabName.c_str()); ImGui::Spacing();
         ImGui::Text("Version: %s", prefabVersion.c_str());
-
-        ImGui::Separator();
-        ImGui::Spacing();
-
-        // Entity count
+        ImGui::Separator(); ImGui::Spacing();
         ImGui::Text("Entities: %u", componentStats.totalEntities);
+        ImGui::Separator(); ImGui::Spacing();
 
-        ImGui::Separator();
-        ImGui::Spacing();
-
-        // Component statistics
         if (ImGui::CollapsingHeader("Components", ImGuiTreeNodeFlags_DefaultOpen))
         {
             if (componentStats.counts.empty())
@@ -340,7 +293,6 @@ namespace windows
             }
         }
 
-        // Show selected entity details if any
         if (selectedEntityPath.has_value() && prefabLoaded)
         {
             ImGui::Separator();
@@ -382,7 +334,6 @@ namespace windows
                         }
                     }
 
-                    // Show asset paths
                     if (!selectedNode->meshPath.empty())
                     {
                         ImGui::Spacing();
@@ -426,19 +377,16 @@ namespace windows
 
         ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_DefaultOpen;
 
-        // Highlight if selected
         if (selectedEntityPath.has_value() && *selectedEntityPath == path)
         {
             flags |= ImGuiTreeNodeFlags_Selected;
         }
 
-        // Make leaf nodes not expandable
         if (node.children.empty())
         {
             flags |= ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
         }
 
-        // Build label with component hints
         std::string label = node.name;
         if (!node.componentTypes.empty())
         {
@@ -453,13 +401,11 @@ namespace windows
 
         bool nodeOpen = ImGui::TreeNodeEx(path.c_str(), flags, "%s", label.c_str());
 
-        // Handle selection
         if (ImGui::IsItemClicked())
         {
             selectedEntityPath = path;
         }
 
-        // Tooltip with transform info
         if (ImGui::IsItemHovered())
         {
             ImGui::BeginTooltip();
@@ -469,7 +415,6 @@ namespace windows
             ImGui::EndTooltip();
         }
 
-        // Recursively draw children if node is open
         if (nodeOpen && !node.children.empty())
         {
             for (const auto& child : node.children)
@@ -488,55 +433,24 @@ namespace windows
         ImVec2 availSize = ImGui::GetContentRegionAvail();
         ImVec2 windowPos = ImGui::GetCursorScreenPos();
         ImDrawList* drawList = ImGui::GetWindowDrawList();
+        drawList->AddRectFilled(windowPos, ImVec2(windowPos.x + availSize.x, windowPos.y + availSize.y), IM_COL32(30, 30, 30, 255));
 
-        // Semi-transparent dark overlay
-        drawList->AddRectFilled(
-            windowPos,
-            ImVec2(windowPos.x + availSize.x, windowPos.y + availSize.y),
-            IM_COL32(30, 30, 30, 255)
-        );
+        float centerX = windowPos.x + (availSize.x - 200.0f) * 0.5f;
+        float centerY = windowPos.y + (availSize.y - 80.0f) * 0.5f;
+        ImVec2 center(centerX + 100.0f, centerY + 20.0f);
+        float startAngle = static_cast<float>(ImGui::GetTime()) * 4.0f, arcLength = 3.14159f * 1.3f;
 
-        // Center content
-        float contentWidth = 200.0f;
-        float contentHeight = 80.0f;
-        float centerX = windowPos.x + (availSize.x - contentWidth) * 0.5f;
-        float centerY = windowPos.y + (availSize.y - contentHeight) * 0.5f;
-
-        // Spinner animation
-        float time = static_cast<float>(ImGui::GetTime());
-        float spinnerRadius = 16.0f;
-        float spinnerThickness = 3.0f;
-        ImVec2 spinnerCenter(centerX + contentWidth * 0.5f, centerY + 20.0f);
-
-        // Draw spinner arc
-        int numSegments = 24;
-        float startAngle = time * 4.0f;
-        float arcLength = 3.14159f * 1.3f;
-
-        for (int i = 0; i < numSegments; ++i)
-        {
-            float t1 = static_cast<float>(i) / static_cast<float>(numSegments);
-            float t2 = static_cast<float>(i + 1) / static_cast<float>(numSegments);
-            float angle1 = startAngle + t1 * arcLength;
-            float angle2 = startAngle + t2 * arcLength;
-
-            int alpha = static_cast<int>(255 * (1.0f - t1 * 0.7f));
-            ImU32 segColor = IM_COL32(100, 180, 255, alpha);
-
-            ImVec2 p1(spinnerCenter.x + cosf(angle1) * spinnerRadius,
-                      spinnerCenter.y + sinf(angle1) * spinnerRadius);
-            ImVec2 p2(spinnerCenter.x + cosf(angle2) * spinnerRadius,
-                      spinnerCenter.y + sinf(angle2) * spinnerRadius);
-
-            drawList->AddLine(p1, p2, segColor, spinnerThickness);
+        for (int i = 0; i < 24; ++i) {
+            float t1 = static_cast<float>(i) / 24.0f, t2 = static_cast<float>(i + 1) / 24.0f;
+            float a1 = startAngle + t1 * arcLength, a2 = startAngle + t2 * arcLength;
+            ImU32 col = IM_COL32(100, 180, 255, static_cast<int>(255 * (1.0f - t1 * 0.7f)));
+            drawList->AddLine(ImVec2(center.x + cosf(a1) * 16.0f, center.y + sinf(a1) * 16.0f),
+                              ImVec2(center.x + cosf(a2) * 16.0f, center.y + sinf(a2) * 16.0f), col, 3.0f);
         }
 
-        // Status message
         const char* statusText = loadingStatus.c_str();
         ImVec2 textSize = ImGui::CalcTextSize(statusText);
-        ImVec2 textPos(centerX + (contentWidth - textSize.x) * 0.5f, centerY + 50.0f);
-        drawList->AddText(textPos, IM_COL32(200, 200, 200, 255), statusText);
-
+        drawList->AddText(ImVec2(centerX + (200.0f - textSize.x) * 0.5f, centerY + 50.0f), IM_COL32(200, 200, 200, 255), statusText);
         ImGui::Dummy(availSize);
     }
 
