@@ -3,6 +3,7 @@
 #include "ShadowResourcePool.hpp"
 #include "ShadowPassPipeline.hpp"
 #include "TerrainShadowPipeline.hpp"
+#include "../gpudriven/GPUDrivenTypes.hpp"
 #include "../../core/Device.hpp"
 #include <chrono>
 
@@ -266,15 +267,14 @@ namespace render::shadow
             pc.slopeBias = page.slopeBias;
             pc.normalBias = page.normalBias;
 
-            constexpr uint32_t FLAG_SHADOW_STATIC = 1u << 17u;
             if (page.layer == ShadowLayer::Static)
             {
-                pc.objectFilterMask = FLAG_SHADOW_STATIC;
-                pc.objectFilterValue = FLAG_SHADOW_STATIC;
+                pc.objectFilterMask = gpudriven::ObjectFlags::ShadowStatic;
+                pc.objectFilterValue = gpudriven::ObjectFlags::ShadowStatic;
             }
             else if (page.layer == ShadowLayer::Dynamic)
             {
-                pc.objectFilterMask = FLAG_SHADOW_STATIC;
+                pc.objectFilterMask = gpudriven::ObjectFlags::ShadowStatic;
                 pc.objectFilterValue = 0;
             }
 

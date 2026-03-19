@@ -352,6 +352,9 @@ namespace render::shadow
         return region;
     }
 
+    // Uses eGeneral (not eTransferSrc/eTransferDst) because the copy is a same-image
+    // operation: src and dst regions are in the same pool atlas. Vulkan requires eGeneral
+    // when the same image is both transfer source and destination.
     void VSMPhysicalTilePool::transitionPoolToTransfer(vk::CommandBuffer cmd, VSMPhysicalTilePool* tilePool)
     {
         vk::ImageMemoryBarrier barrier{};

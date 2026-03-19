@@ -174,7 +174,8 @@ namespace render::shadow
             lastStats.tileCount = static_cast<uint32_t>(
                 ctx.pageRenderList.size() + ctx.staticPageRenderList.size() +
                 ctx.dynamicPageRenderList.size());
-            lastStats.threadsUsed = threadPoolManager->getThreadCount();
+            uint32_t totalTiles = lastStats.tileCount;
+            lastStats.threadsUsed = std::min(totalTiles, threadPoolManager->getThreadCount());
             lastStats.usedParallel = true;
 
             transitionPoolToShaderRead(primaryCmd, ctx.tilePool);

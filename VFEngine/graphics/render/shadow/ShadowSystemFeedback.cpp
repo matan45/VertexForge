@@ -7,6 +7,9 @@
 
 namespace render::shadow
 {
+    // Phase 1 (conservative): marks ALL pages as having dynamic content if any dynamic entity exists.
+    // This over-allocates dynamic tiles but is correct. Phase 2 optimization: per-page frustum-AABB
+    // testing to only mark pages where dynamic objects actually overlap the page's shadow frustum.
     void ShadowSystem::determineDynamicPages()
     {
         auto& registry = scene::EntityRegistry::getRegistry();
@@ -137,7 +140,7 @@ namespace render::shadow
             staticEntry.depthBias = view.depthBias;
             staticEntry.slopeBias = view.slopeBias;
             staticEntry.normalBias = view.normalBias;
-            staticEntry.layer = ShadowLayer::All;
+            staticEntry.layer = ShadowLayer::Static;
             staticPageRenderList.push_back(staticEntry);
             ++lastCacheStats.renderedPages;
             ++lastCacheStats.staticPagesRendered;
@@ -408,6 +411,9 @@ namespace render::shadow
     {
         if (!tilePool || !pageTable) return;
 
+        // Non-static lights allocate ALL pages eagerly (bypasses feedback).
+        // This ensures tiles are ready on the first frame after scene load,
+        // before feedback results are available (feedback has 1-frame latency).
         for (auto& [entityId, data] : lightShadowData)
             if (data.usesVSM() && !data.isStatic)
                 allocateNonStaticLightPages(data);
