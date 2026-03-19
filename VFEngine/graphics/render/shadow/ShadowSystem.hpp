@@ -64,8 +64,11 @@ namespace render
 
             std::unordered_map<uint32_t, int32_t> entityToShadowIndex;
 
-            // VSM page render list (built each frame)
-            std::vector<shadow::PageRenderEntry> pageRenderList;
+            // VSM page render lists (built each frame)
+            std::vector<shadow::PageRenderEntry> pageRenderList;          // legacy: static lights (all objects)
+            std::vector<shadow::PageRenderEntry> staticPageRenderList;    // dual-layer: static-only objects
+            std::vector<shadow::PageRenderEntry> dynamicPageRenderList;   // dual-layer: dynamic-only objects
+            std::vector<shadow::TileCopyEntry> tileCopyList;              // dual-layer: static->dynamic tile copies
 
             bool shadowsEnabled = true;
             ShadowQuality globalQuality = ShadowQuality::High;
@@ -100,6 +103,11 @@ namespace render
                 uint32_t totalPages = 0;
                 uint32_t renderedPages = 0;
                 uint32_t cachedPages = 0;
+                // Dual-layer stats
+                uint32_t staticPagesRendered = 0;
+                uint32_t dynamicPagesRendered = 0;
+                uint32_t tileCopiesThisFrame = 0;
+                uint32_t dynamicTilesAllocated = 0;
             };
 
             mutable ShadowCacheStats lastCacheStats{};
@@ -217,8 +225,12 @@ namespace render
                                                        float cameraNear, float cameraFar);
             void collectShadowViewsForGPU(const std::unordered_set<uint32_t>* visibleLightIds);
             void buildPageRenderList();
+            void determineDynamicPages();
             void buildCSMPageRenderList(LightShadowData& data);
             void buildSingleViewPageRenderList(LightShadowData& data);
+            void addPageToRenderLists(LightShadowData& data, uint32_t pageIdx,
+                                      const glm::mat4& cropViewProjection,
+                                      const ShadowView& view, bool isDirty);
         };
     }
 }

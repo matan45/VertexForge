@@ -1,16 +1,61 @@
 #include "ShadowSystem.hpp"
 #include "../../core/RenderManager.hpp"
 #include "../../core/ThreadCommandPoolManager.hpp"
+#include "scene/EntityRegistry.hpp"
+#include "components/Components.hpp"
 #include "print/Log.hpp"
 
 namespace render::shadow
 {
+    void ShadowSystem::determineDynamicPages()
+    {
+        // Check if any non-static (dynamic) mesh entities exist in the scene
+        auto& registry = scene::EntityRegistry::getRegistry();
+        bool hasDynamicObjects = false;
+
+        auto view = registry.view<components::TransformComponent, components::MeshComponent>();
+        for (auto entity : view)
+        {
+            const auto& transform = view.get<components::TransformComponent>(entity);
+            if (!transform.isStatic)
+            {
+                hasDynamicObjects = true;
+                break;
+            }
+        }
+
+        // For each dynamic light, mark all pages as having/not-having dynamic objects
+        // Phase 1 (simple): if any dynamic objects exist, conservatively mark all pages
+        // Phase 2 (future): per-page frustum-AABB testing for precise detection
+        for (auto& [entityId, data] : lightShadowData)
+        {
+            if (data.isStatic || !data.usesVSM())
+                continue;
+
+            uint32_t totalPages = data.vsmPagesX * data.vsmPagesY;
+            if (data.vsmPageHasDynamic.size() != totalPages)
+                data.vsmPageHasDynamic.resize(totalPages, false);
+
+            for (uint32_t i = 0; i < totalPages; ++i)
+            {
+                data.vsmPageHasDynamic[i] = hasDynamicObjects;
+            }
+        }
+    }
+
     void ShadowSystem::buildPageRenderList()
     {
         pageRenderList.clear();
+        staticPageRenderList.clear();
+        dynamicPageRenderList.clear();
+        tileCopyList.clear();
         lastCacheStats.totalPages = 0;
         lastCacheStats.renderedPages = 0;
         lastCacheStats.cachedPages = 0;
+        lastCacheStats.staticPagesRendered = 0;
+        lastCacheStats.dynamicPagesRendered = 0;
+        lastCacheStats.tileCopiesThisFrame = 0;
+        lastCacheStats.dynamicTilesAllocated = 0;
 
         for (auto& [entityId, data] : lightShadowData)
         {
@@ -27,10 +72,147 @@ namespace render::shadow
             if (data.vsmPageDirty.size() != totalPages)
                 data.vsmPageDirty.resize(totalPages, true);
 
+            // Ensure dual-layer vectors are sized for dynamic lights
+            if (!data.isStatic)
+            {
+                if (data.vsmDynamicTiles.size() != totalPages)
+                    data.vsmDynamicTiles.resize(totalPages, vsm::INVALID_TILE);
+                if (data.vsmPageHasDynamic.size() != totalPages)
+                    data.vsmPageHasDynamic.resize(totalPages, false);
+                if (data.vsmDynamicTileLastUsedFrame.size() != totalPages)
+                    data.vsmDynamicTileLastUsedFrame.resize(totalPages, 0);
+            }
+
             if (data.type == ShadowMapType::DirectionalCSM)
                 buildCSMPageRenderList(data);
             else
                 buildSingleViewPageRenderList(data);
+        }
+
+        lastCacheStats.tileCopiesThisFrame = static_cast<uint32_t>(tileCopyList.size());
+
+        // Count total dynamic tiles allocated across all lights
+        for (const auto& [entityId, data] : lightShadowData)
+        {
+            for (uint32_t tile : data.vsmDynamicTiles)
+            {
+                if (tile != vsm::INVALID_TILE)
+                    ++lastCacheStats.dynamicTilesAllocated;
+            }
+        }
+    }
+
+    void ShadowSystem::addPageToRenderLists(LightShadowData& data, uint32_t pageIdx,
+                                              const glm::mat4& cropViewProjection,
+                                              const ShadowView& view, bool isDirty)
+    {
+        uint32_t physTile = data.vsmPhysicalTiles[pageIdx];
+        if (physTile == vsm::INVALID_TILE)
+            return;
+
+        ++lastCacheStats.totalPages;
+
+        if (data.isStatic)
+        {
+            // Static light: single-layer path (all objects, legacy behavior)
+            if (!isDirty && !data.vsmPageDirty[pageIdx])
+            {
+                ++lastCacheStats.cachedPages;
+                return;
+            }
+
+            PageRenderEntry entry;
+            entry.physicalTileIndex = physTile;
+            entry.cropViewProjection = cropViewProjection;
+            entry.depthBias = view.depthBias;
+            entry.slopeBias = view.slopeBias;
+            entry.normalBias = view.normalBias;
+            entry.layer = ShadowLayer::All;
+            pageRenderList.push_back(entry);
+            ++lastCacheStats.renderedPages;
+            data.vsmPageDirty[pageIdx] = false;
+        }
+        else
+        {
+            // Dynamic light: dual-layer path
+
+            // Static layer: only render if dirty
+            if (isDirty || data.vsmPageDirty[pageIdx])
+            {
+                PageRenderEntry staticEntry;
+                staticEntry.physicalTileIndex = physTile;
+                staticEntry.cropViewProjection = cropViewProjection;
+                staticEntry.depthBias = view.depthBias;
+                staticEntry.slopeBias = view.slopeBias;
+                staticEntry.normalBias = view.normalBias;
+                staticEntry.layer = ShadowLayer::Static;
+                staticPageRenderList.push_back(staticEntry);
+                ++lastCacheStats.renderedPages;
+                ++lastCacheStats.staticPagesRendered;
+                data.vsmPageDirty[pageIdx] = false;
+            }
+            else
+            {
+                ++lastCacheStats.cachedPages;
+            }
+
+            // Dynamic layer: if page has dynamic objects, allocate tile + copy + render
+            if (data.vsmPageHasDynamic[pageIdx])
+            {
+                // Allocate dynamic tile if not yet allocated
+                if (data.vsmDynamicTiles[pageIdx] == vsm::INVALID_TILE)
+                {
+                    uint32_t dynTile = tilePool->allocateTile();
+                    if (dynTile != vsm::INVALID_TILE)
+                    {
+                        data.vsmDynamicTiles[pageIdx] = dynTile;
+                    }
+                }
+
+                uint32_t dynTile = data.vsmDynamicTiles[pageIdx];
+                if (dynTile != vsm::INVALID_TILE)
+                {
+                    // Copy static tile -> dynamic tile
+                    tileCopyList.push_back({physTile, dynTile});
+
+                    // Render dynamic objects on top
+                    PageRenderEntry dynEntry;
+                    dynEntry.physicalTileIndex = dynTile;
+                    dynEntry.cropViewProjection = cropViewProjection;
+                    dynEntry.depthBias = view.depthBias;
+                    dynEntry.slopeBias = view.slopeBias;
+                    dynEntry.normalBias = view.normalBias;
+                    dynEntry.layer = ShadowLayer::Dynamic;
+                    dynamicPageRenderList.push_back(dynEntry);
+                    ++lastCacheStats.dynamicPagesRendered;
+
+                    // Page table points to composited (dynamic) tile
+                    uint32_t px = pageIdx % data.vsmPagesX;
+                    uint32_t py = pageIdx / data.vsmPagesX;
+                    pageTable->mapPage(data.vsmPageTableOffset, px, py, data.vsmPagesX, dynTile);
+
+                    data.vsmDynamicTileLastUsedFrame[pageIdx] = frameCounter;
+                }
+            }
+            else
+            {
+                // No dynamic objects: page table points to static tile
+                // Free dynamic tile if it was allocated and cooldown expired
+                constexpr uint32_t DYNAMIC_TILE_COOLDOWN = 30;
+                if (data.vsmDynamicTiles[pageIdx] != vsm::INVALID_TILE)
+                {
+                    if (frameCounter - data.vsmDynamicTileLastUsedFrame[pageIdx] > DYNAMIC_TILE_COOLDOWN)
+                    {
+                        tilePool->freeTile(data.vsmDynamicTiles[pageIdx]);
+                        data.vsmDynamicTiles[pageIdx] = vsm::INVALID_TILE;
+
+                        // Remap page table back to static tile
+                        uint32_t px = pageIdx % data.vsmPagesX;
+                        uint32_t py = pageIdx / data.vsmPagesX;
+                        pageTable->mapPage(data.vsmPageTableOffset, px, py, data.vsmPagesX, physTile);
+                    }
+                }
+            }
         }
     }
 
@@ -54,30 +236,8 @@ namespace render::shadow
                     if (pageIdx >= data.vsmPhysicalTiles.size())
                         continue;
 
-                    uint32_t physTile = data.vsmPhysicalTiles[pageIdx];
-                    if (physTile == vsm::INVALID_TILE)
-                        continue;
-
-                    ++lastCacheStats.totalPages;
-
-                    if (!csmDirty && !data.vsmPageDirty[pageIdx])
-                    {
-                        ++lastCacheStats.cachedPages;
-                        continue;
-                    }
-
                     glm::mat4 cropMatrix = vsm::computePageCropMatrix(px, py, pagesPerCascade, pagesPerCascade);
-
-                    PageRenderEntry entry;
-                    entry.physicalTileIndex = physTile;
-                    entry.cropViewProjection = cropMatrix * view.viewProjectionMatrix;
-                    entry.depthBias = view.depthBias;
-                    entry.slopeBias = view.slopeBias;
-                    entry.normalBias = view.normalBias;
-                    pageRenderList.push_back(entry);
-                    ++lastCacheStats.renderedPages;
-
-                    data.vsmPageDirty[pageIdx] = false;
+                    addPageToRenderLists(data, pageIdx, cropMatrix * view.viewProjectionMatrix, view, csmDirty);
                 }
             }
         }
@@ -100,30 +260,8 @@ namespace render::shadow
                 if (pageIdx >= data.vsmPhysicalTiles.size())
                     continue;
 
-                uint32_t physTile = data.vsmPhysicalTiles[pageIdx];
-                if (physTile == vsm::INVALID_TILE)
-                    continue;
-
-                ++lastCacheStats.totalPages;
-
-                if (data.isStatic && !data.vsmPageDirty[pageIdx])
-                {
-                    ++lastCacheStats.cachedPages;
-                    continue;
-                }
-
                 glm::mat4 cropMatrix = vsm::computePageCropMatrix(px, py, data.vsmPagesX, data.vsmPagesY);
-
-                PageRenderEntry entry;
-                entry.physicalTileIndex = physTile;
-                entry.cropViewProjection = cropMatrix * view.viewProjectionMatrix;
-                entry.depthBias = view.depthBias;
-                entry.slopeBias = view.slopeBias;
-                entry.normalBias = view.normalBias;
-                pageRenderList.push_back(entry);
-                ++lastCacheStats.renderedPages;
-
-                data.vsmPageDirty[pageIdx] = false;
+                addPageToRenderLists(data, pageIdx, cropMatrix * view.viewProjectionMatrix, view, false);
             }
         }
     }
@@ -390,14 +528,16 @@ namespace render::shadow
         constexpr uint32_t PARALLEL_TILE_THRESHOLD = 5;
         uint32_t frameIndex = core::RenderManager::getImageIndex();
 
+        uint32_t totalPages = static_cast<uint32_t>(pageRenderList.size() + staticPageRenderList.size() + dynamicPageRenderList.size());
         if (threadPoolManager && threadPoolManager->getThreadCount() > 1 &&
-            pageRenderList.size() >= PARALLEL_TILE_THRESHOLD)
+            totalPages >= PARALLEL_TILE_THRESHOLD)
         {
             threadPoolManager->resetFrame(frameIndex);
             passRecorder->recordShadowPassParallel(cmd, params, terrainParams,
                 tilePool.get(), resourcePool.get(),
                 shadowPassPipeline.get(), terrainShadowPipeline.get(),
-                pageRenderList, lightShadowData, shadowsEnabled, poolFirstUse,
+                pageRenderList, staticPageRenderList, dynamicPageRenderList, tileCopyList,
+                lightShadowData, shadowsEnabled, poolFirstUse,
                 threadPoolManager.get(), frameIndex);
         }
         else
@@ -405,7 +545,8 @@ namespace render::shadow
             passRecorder->recordShadowPass(cmd, params, terrainParams,
                 tilePool.get(), resourcePool.get(),
                 shadowPassPipeline.get(), terrainShadowPipeline.get(),
-                pageRenderList, lightShadowData, shadowsEnabled, poolFirstUse);
+                pageRenderList, staticPageRenderList, dynamicPageRenderList, tileCopyList,
+                lightShadowData, shadowsEnabled, poolFirstUse);
         }
 
         if (shadowsEnabled)

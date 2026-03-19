@@ -36,6 +36,13 @@ namespace render::shadow
         uint32_t drawCountStructSize;
     };
 
+    enum class ShadowLayer : uint8_t
+    {
+        All,     // render all objects (legacy / static light path)
+        Static,  // render only static objects
+        Dynamic  // render only dynamic objects
+    };
+
     // Page render entry from ShadowSystem
     struct PageRenderEntry
     {
@@ -44,6 +51,14 @@ namespace render::shadow
         float depthBias;
         float slopeBias;
         float normalBias;
+        ShadowLayer layer = ShadowLayer::All;
+    };
+
+    // Tile copy entry for static->dynamic copy phase
+    struct TileCopyEntry
+    {
+        uint32_t srcTileIndex; // static tile
+        uint32_t dstTileIndex; // dynamic tile
     };
 
     struct ShadowRecordingStats
@@ -76,6 +91,9 @@ namespace render::shadow
             ShadowPassPipeline* shadowPassPipeline,
             TerrainShadowPipeline* terrainShadowPipeline,
             const std::vector<PageRenderEntry>& pageRenderList,
+            const std::vector<PageRenderEntry>& staticPageRenderList,
+            const std::vector<PageRenderEntry>& dynamicPageRenderList,
+            const std::vector<TileCopyEntry>& tileCopyList,
             std::unordered_map<uint32_t, LightShadowData>& lightShadowData,
             bool shadowsEnabled,
             bool poolFirstUse);
@@ -90,6 +108,9 @@ namespace render::shadow
             ShadowPassPipeline* shadowPassPipeline,
             TerrainShadowPipeline* terrainShadowPipeline,
             const std::vector<PageRenderEntry>& pageRenderList,
+            const std::vector<PageRenderEntry>& staticPageRenderList,
+            const std::vector<PageRenderEntry>& dynamicPageRenderList,
+            const std::vector<TileCopyEntry>& tileCopyList,
             std::unordered_map<uint32_t, LightShadowData>& lightShadowData,
             bool shadowsEnabled,
             bool poolFirstUse,

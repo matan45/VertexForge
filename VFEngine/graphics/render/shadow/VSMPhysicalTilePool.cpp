@@ -143,7 +143,8 @@ namespace render::shadow
             1,
             depthFormat,
             vk::ImageTiling::eOptimal,
-            vk::ImageUsageFlagBits::eDepthStencilAttachment | vk::ImageUsageFlagBits::eSampled,
+            vk::ImageUsageFlagBits::eDepthStencilAttachment | vk::ImageUsageFlagBits::eSampled |
+            vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst,
             vk::MemoryPropertyFlagBits::eDeviceLocal
         );
 
@@ -374,5 +375,80 @@ namespace render::shadow
     float VSMPhysicalTilePool::getUtilization() const
     {
         return 1.0f - static_cast<float>(freeTiles.size()) / static_cast<float>(vsm::MAX_PHYSICAL_TILES);
+    }
+
+    vk::ImageCopy VSMPhysicalTilePool::getTileCopyRegion(uint32_t srcTileIndex, uint32_t dstTileIndex) const
+    {
+        uint32_t srcX = (srcTileIndex % vsm::TILES_PER_SIDE) * vsm::PAGE_SIZE;
+        uint32_t srcY = (srcTileIndex / vsm::TILES_PER_SIDE) * vsm::PAGE_SIZE;
+        uint32_t dstX = (dstTileIndex % vsm::TILES_PER_SIDE) * vsm::PAGE_SIZE;
+        uint32_t dstY = (dstTileIndex / vsm::TILES_PER_SIDE) * vsm::PAGE_SIZE;
+
+        vk::ImageCopy region{};
+        region.srcSubresource.aspectMask = vk::ImageAspectFlagBits::eDepth;
+        region.srcSubresource.mipLevel = 0;
+        region.srcSubresource.baseArrayLayer = 0;
+        region.srcSubresource.layerCount = 1;
+        region.srcOffset = vk::Offset3D{static_cast<int32_t>(srcX), static_cast<int32_t>(srcY), 0};
+        region.dstSubresource.aspectMask = vk::ImageAspectFlagBits::eDepth;
+        region.dstSubresource.mipLevel = 0;
+        region.dstSubresource.baseArrayLayer = 0;
+        region.dstSubresource.layerCount = 1;
+        region.dstOffset = vk::Offset3D{static_cast<int32_t>(dstX), static_cast<int32_t>(dstY), 0};
+        region.extent = vk::Extent3D{vsm::PAGE_SIZE, vsm::PAGE_SIZE, 1};
+        return region;
+    }
+
+    void VSMPhysicalTilePool::transitionPoolToTransfer(vk::CommandBuffer cmd, VSMPhysicalTilePool* tilePool)
+    {
+        vk::ImageMemoryBarrier barrier{};
+        barrier.srcAccessMask = vk::AccessFlagBits::eDepthStencilAttachmentWrite;
+        barrier.dstAccessMask = vk::AccessFlagBits::eTransferRead | vk::AccessFlagBits::eTransferWrite;
+        barrier.oldLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
+        barrier.newLayout = vk::ImageLayout::eGeneral;
+        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.image = tilePool->poolImage;
+        barrier.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eDepth;
+        barrier.subresourceRange.baseMipLevel = 0;
+        barrier.subresourceRange.levelCount = 1;
+        barrier.subresourceRange.baseArrayLayer = 0;
+        barrier.subresourceRange.layerCount = 1;
+
+        cmd.pipelineBarrier(
+            vk::PipelineStageFlagBits::eLateFragmentTests,
+            vk::PipelineStageFlagBits::eTransfer,
+            {},
+            0, nullptr,
+            0, nullptr,
+            1, &barrier
+        );
+    }
+
+    void VSMPhysicalTilePool::transitionPoolFromTransfer(vk::CommandBuffer cmd, VSMPhysicalTilePool* tilePool)
+    {
+        vk::ImageMemoryBarrier barrier{};
+        barrier.srcAccessMask = vk::AccessFlagBits::eTransferRead | vk::AccessFlagBits::eTransferWrite;
+        barrier.dstAccessMask = vk::AccessFlagBits::eDepthStencilAttachmentRead |
+                                vk::AccessFlagBits::eDepthStencilAttachmentWrite;
+        barrier.oldLayout = vk::ImageLayout::eGeneral;
+        barrier.newLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
+        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.image = tilePool->poolImage;
+        barrier.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eDepth;
+        barrier.subresourceRange.baseMipLevel = 0;
+        barrier.subresourceRange.levelCount = 1;
+        barrier.subresourceRange.baseArrayLayer = 0;
+        barrier.subresourceRange.layerCount = 1;
+
+        cmd.pipelineBarrier(
+            vk::PipelineStageFlagBits::eTransfer,
+            vk::PipelineStageFlagBits::eEarlyFragmentTests,
+            {},
+            0, nullptr,
+            0, nullptr,
+            1, &barrier
+        );
     }
 }

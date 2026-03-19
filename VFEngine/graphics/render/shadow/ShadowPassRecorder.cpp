@@ -112,6 +112,20 @@ namespace render::shadow
             pc.slopeBias = page.slopeBias;
             pc.normalBias = page.normalBias;
 
+            // Set filter based on shadow layer
+            constexpr uint32_t FLAG_SHADOW_STATIC = 1u << 17u;
+            if (page.layer == ShadowLayer::Static)
+            {
+                pc.objectFilterMask = FLAG_SHADOW_STATIC;
+                pc.objectFilterValue = FLAG_SHADOW_STATIC; // only static objects
+            }
+            else if (page.layer == ShadowLayer::Dynamic)
+            {
+                pc.objectFilterMask = FLAG_SHADOW_STATIC;
+                pc.objectFilterValue = 0; // only dynamic objects
+            }
+            // ShadowLayer::All: mask=0, value=0 (all objects pass)
+
             for (uint32_t shaderGroup = 0; shaderGroup < params.shaderGroupCount; ++shaderGroup)
             {
                 if (shaderGroup == params.transparentGroupIndex) continue;
@@ -164,6 +178,9 @@ namespace render::shadow
         ShadowPassPipeline* shadowPassPipeline,
         TerrainShadowPipeline* terrainShadowPipeline,
         const std::vector<PageRenderEntry>& pageRenderList,
+        const std::vector<PageRenderEntry>& staticPageRenderList,
+        const std::vector<PageRenderEntry>& dynamicPageRenderList,
+        const std::vector<TileCopyEntry>& tileCopyList,
         std::unordered_map<uint32_t, LightShadowData>& lightShadowData,
         bool shadowsEnabled,
         bool poolFirstUse)
@@ -180,7 +197,7 @@ namespace render::shadow
                                   terrainShadowPipeline != nullptr &&
                                   terrainShadowPipeline->isInitialized();
 
-        bool hasPageViews = !pageRenderList.empty();
+        bool hasPageViews = !pageRenderList.empty() || !staticPageRenderList.empty() || !dynamicPageRenderList.empty();
         bool hasPointShadows = false;
         for (const auto& [entityId, data] : lightShadowData)
         {
@@ -204,12 +221,9 @@ namespace render::shadow
         if (!hasMeshBatches && !hasTerrainShadows)
             return;
 
-        if (hasPageViews)
+        // Helper lambda to record a render pass for a list of pages
+        auto recordRenderPassForPages = [&](const std::vector<PageRenderEntry>& pages, bool useLoadPass)
         {
-            transitionPoolToDepthAttachment(cmd, tilePool, poolFirstUse);
-
-            bool useLoadPass = !poolFirstUse;
-
             vk::ClearValue clearValue{};
             clearValue.depthStencil = vk::ClearDepthStencilValue{1.0f, 0};
 
@@ -250,7 +264,7 @@ namespace render::shadow
                     descriptorSets.data(), 0, nullptr);
             }
 
-            for (const auto& page : pageRenderList)
+            for (const auto& page : pages)
             {
                 recordTileCommands(cmd, page, tilePool, params, terrainParams,
                                   shadowPassPipeline, terrainShadowPipeline,
@@ -258,13 +272,110 @@ namespace render::shadow
             }
 
             cmd.endRenderPass();
+        };
+
+        if (hasPageViews)
+        {
+            transitionPoolToDepthAttachment(cmd, tilePool, poolFirstUse);
+            bool useLoadPass = !poolFirstUse;
+
+            // Phase A: Render static light pages (all objects) + static-layer pages (static objects only)
+            bool hasLegacyOrStaticPages = !pageRenderList.empty() || !staticPageRenderList.empty();
+            if (hasLegacyOrStaticPages)
+            {
+                // Combine legacy (all-objects) and static-layer pages into one render pass
+                // Both use eLoad to preserve cached tiles
+                vk::ClearValue clearValue{};
+                clearValue.depthStencil = vk::ClearDepthStencilValue{1.0f, 0};
+
+                vk::RenderPassBeginInfo renderPassInfo{};
+                if (useLoadPass)
+                {
+                    renderPassInfo.renderPass = tilePool->getRenderPassLoad();
+                    renderPassInfo.framebuffer = tilePool->getFramebufferLoad();
+                    renderPassInfo.clearValueCount = 0;
+                    renderPassInfo.pClearValues = nullptr;
+                }
+                else
+                {
+                    renderPassInfo.renderPass = tilePool->getRenderPass();
+                    renderPassInfo.framebuffer = tilePool->getFramebuffer();
+                    renderPassInfo.clearValueCount = 1;
+                    renderPassInfo.pClearValues = &clearValue;
+                }
+                renderPassInfo.renderArea.offset = vk::Offset2D{0, 0};
+                renderPassInfo.renderArea.extent = vk::Extent2D{
+                    vsm::PHYSICAL_POOL_DIM, vsm::PHYSICAL_POOL_DIM};
+
+                cmd.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
+
+                if (hasMeshBatches)
+                {
+                    cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, shadowPassPipeline->getPipeline());
+
+                    std::array<vk::DescriptorSet, 5> descriptorSets = {
+                        params.perDrawDataDescSet, params.meshletDataDescSet,
+                        params.vertexDataDescSet, params.boneMatrixDescSet,
+                        params.cameraDescSet
+                    };
+                    cmd.bindDescriptorSets(
+                        vk::PipelineBindPoint::eGraphics,
+                        shadowPassPipeline->getPipelineLayout(),
+                        0, static_cast<uint32_t>(descriptorSets.size()),
+                        descriptorSets.data(), 0, nullptr);
+                }
+
+                // Legacy pages (static lights - render all objects, layer = All)
+                for (const auto& page : pageRenderList)
+                {
+                    recordTileCommands(cmd, page, tilePool, params, terrainParams,
+                                      shadowPassPipeline, terrainShadowPipeline,
+                                      hasMeshBatches, hasTerrainShadows, useLoadPass);
+                }
+
+                // Static-layer pages (dynamic lights - render only static objects)
+                for (const auto& page : staticPageRenderList)
+                {
+                    recordTileCommands(cmd, page, tilePool, params, terrainParams,
+                                      shadowPassPipeline, terrainShadowPipeline,
+                                      hasMeshBatches, hasTerrainShadows, useLoadPass);
+                }
+
+                cmd.endRenderPass();
+            }
+
+            // Phase B: Copy static tiles -> dynamic tiles
+            if (!tileCopyList.empty())
+            {
+                VSMPhysicalTilePool::transitionPoolToTransfer(cmd, tilePool);
+
+                std::vector<vk::ImageCopy> copyRegions;
+                copyRegions.reserve(tileCopyList.size());
+                for (const auto& entry : tileCopyList)
+                {
+                    copyRegions.push_back(tilePool->getTileCopyRegion(entry.srcTileIndex, entry.dstTileIndex));
+                }
+
+                cmd.copyImage(
+                    tilePool->getPoolImage(), vk::ImageLayout::eGeneral,
+                    tilePool->getPoolImage(), vk::ImageLayout::eGeneral,
+                    static_cast<uint32_t>(copyRegions.size()), copyRegions.data());
+
+                VSMPhysicalTilePool::transitionPoolFromTransfer(cmd, tilePool);
+            }
+
+            // Phase C: Render dynamic-layer pages (dynamic objects on top of copied static)
+            if (!dynamicPageRenderList.empty())
+            {
+                recordRenderPassForPages(dynamicPageRenderList, true);
+            }
 
             transitionPoolToShaderRead(cmd, tilePool);
         }
 
         auto recordEnd = std::chrono::high_resolution_clock::now();
         lastStats.recordingUs = std::chrono::duration<float, std::micro>(recordEnd - recordStart).count();
-        lastStats.tileCount = static_cast<uint32_t>(pageRenderList.size());
+        lastStats.tileCount = static_cast<uint32_t>(pageRenderList.size() + staticPageRenderList.size() + dynamicPageRenderList.size());
         lastStats.threadsUsed = 0;
         lastStats.usedParallel = false;
 

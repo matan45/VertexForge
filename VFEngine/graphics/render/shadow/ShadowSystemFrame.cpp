@@ -374,6 +374,7 @@ namespace render::shadow
 
         collectShadowViewsForGPU(visibleLightIds);
         applyFeedbackAllocations();
+        determineDynamicPages();
         buildPageRenderList();
     }
 }

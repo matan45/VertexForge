@@ -20,9 +20,12 @@ layout(push_constant) uniform ShadowPushConstants {
     float depthBias;
     float slopeBias;
     float normalBias;
+    uint objectFilterMask;
+    uint objectFilterValue;
 } pc;
 
 const uint FLAG_INSTANCED = (1u << 15u);
+const uint FLAG_SHADOW_STATIC = (1u << 17u);
 
 layout(std430, set = 0, binding = 0) readonly buffer PerDrawDataBuffer {
     PerDrawData perDrawData[];
@@ -82,6 +85,19 @@ bool sphereInFrustum(vec4 sphere, vec4 frustumPlanes[6]) {
 void main() {
     uint drawIndex = pc.baseDrawIndex + gl_DrawID;
     PerDrawData drawData = perDrawData[drawIndex];
+
+    // Dual-layer shadow filter: skip objects that don't match the current pass
+    if (pc.objectFilterMask != 0u &&
+        (drawData.flags & pc.objectFilterMask) != pc.objectFilterValue)
+    {
+        if (gl_LocalInvocationID.x == 0) {
+            payload.drawIndex = drawIndex;
+            payload.meshletCount = 0;
+            payload.instanceModelMatrix = mat4(1.0);
+            EmitMeshTasksEXT(0, 1, 1);
+        }
+        return;
+    }
 
     uint instanceIndex = gl_WorkGroupID.y;
     mat4 modelMatrix;

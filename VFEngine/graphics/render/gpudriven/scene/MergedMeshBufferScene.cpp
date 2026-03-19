@@ -230,6 +230,9 @@ namespace render::gpudriven
             }
         }
 
+        if (meshRender.isStatic)
+            obj.flags |= ObjectFlags::ShadowStatic;
+
         float scaleX = glm::length(glm::vec3(obj.modelMatrix[0]));
         float scaleY = glm::length(glm::vec3(obj.modelMatrix[1]));
         float scaleZ = glm::length(glm::vec3(obj.modelMatrix[2]));

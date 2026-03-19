@@ -19,6 +19,9 @@ namespace render::shadow
         ShadowPassPipeline* shadowPassPipeline,
         TerrainShadowPipeline* terrainShadowPipeline,
         const std::vector<PageRenderEntry>& pageRenderList,
+        const std::vector<PageRenderEntry>& staticPageRenderList,
+        const std::vector<PageRenderEntry>& dynamicPageRenderList,
+        const std::vector<TileCopyEntry>& tileCopyList,
         std::unordered_map<uint32_t, LightShadowData>& lightShadowData,
         bool shadowsEnabled,
         bool poolFirstUse,
@@ -36,7 +39,7 @@ namespace render::shadow
                                   terrainShadowPipeline != nullptr &&
                                   terrainShadowPipeline->isInitialized();
 
-        bool hasPageViews = !pageRenderList.empty();
+        bool hasPageViews = !pageRenderList.empty() || !staticPageRenderList.empty() || !dynamicPageRenderList.empty();
         bool hasPointShadows = false;
         for (const auto& [entityId, data] : lightShadowData)
         {
@@ -60,46 +63,12 @@ namespace render::shadow
         if (!hasMeshBatches && !hasTerrainShadows)
             return;
 
-        if (hasPageViews)
+        // Lambda to dispatch pages across threads using secondary command buffers
+        auto dispatchPagesParallel = [&](const std::vector<PageRenderEntry>& pages,
+                                         vk::RenderPass renderPass, vk::Framebuffer framebuffer,
+                                         bool useLoadPass)
         {
-            transitionPoolToDepthAttachment(primaryCmd, tilePool, poolFirstUse);
-
-            bool useLoadPass = !poolFirstUse;
-
-            vk::ClearValue clearValue{};
-            clearValue.depthStencil = vk::ClearDepthStencilValue{1.0f, 0};
-
-            vk::RenderPassBeginInfo renderPassInfo{};
-            vk::RenderPass renderPass;
-            vk::Framebuffer framebuffer;
-
-            if (useLoadPass)
-            {
-                renderPass = tilePool->getRenderPassLoad();
-                framebuffer = tilePool->getFramebufferLoad();
-                renderPassInfo.renderPass = renderPass;
-                renderPassInfo.framebuffer = framebuffer;
-                renderPassInfo.clearValueCount = 0;
-                renderPassInfo.pClearValues = nullptr;
-            }
-            else
-            {
-                renderPass = tilePool->getRenderPass();
-                framebuffer = tilePool->getFramebuffer();
-                renderPassInfo.renderPass = renderPass;
-                renderPassInfo.framebuffer = framebuffer;
-                renderPassInfo.clearValueCount = 1;
-                renderPassInfo.pClearValues = &clearValue;
-            }
-            renderPassInfo.renderArea.offset = vk::Offset2D{0, 0};
-            renderPassInfo.renderArea.extent = vk::Extent2D{
-                vsm::PHYSICAL_POOL_DIM, vsm::PHYSICAL_POOL_DIM};
-
-            primaryCmd.beginRenderPass(renderPassInfo, vk::SubpassContents::eSecondaryCommandBuffers);
-
-            auto recordStart = std::chrono::high_resolution_clock::now();
-
-            uint32_t tileCount = static_cast<uint32_t>(pageRenderList.size());
+            uint32_t tileCount = static_cast<uint32_t>(pages.size());
             uint32_t threadCount = threadPoolManager->getThreadCount();
 
             std::vector<vk::CommandBuffer> secondaryBuffers(threadCount, nullptr);
@@ -138,7 +107,7 @@ namespace render::shadow
 
                     for (uint32_t i = begin; i < end; ++i)
                     {
-                        recordTileCommands(secondary, pageRenderList[i], tilePool,
+                        recordTileCommands(secondary, pages[i], tilePool,
                                           params, terrainParams, shadowPassPipeline,
                                           terrainShadowPipeline, hasMeshBatches,
                                           hasTerrainShadows, useLoadPass);
@@ -149,18 +118,12 @@ namespace render::shadow
                     threadUsed[threadNum] = true;
                 }, 1);
 
-            auto recordEnd = std::chrono::high_resolution_clock::now();
-
             std::vector<vk::CommandBuffer> validSecondaries;
             validSecondaries.reserve(threadCount);
-            uint32_t usedThreads = 0;
             for (uint32_t t = 0; t < threadCount; t++)
             {
                 if (threadUsed[t])
-                {
                     validSecondaries.push_back(secondaryBuffers[t]);
-                    usedThreads++;
-                }
             }
 
             if (!validSecondaries.empty())
@@ -169,13 +132,103 @@ namespace render::shadow
                     static_cast<uint32_t>(validSecondaries.size()),
                     validSecondaries.data());
             }
+        };
+
+        if (hasPageViews)
+        {
+            transitionPoolToDepthAttachment(primaryCmd, tilePool, poolFirstUse);
+            bool useLoadPass = !poolFirstUse;
+
+            auto recordStart = std::chrono::high_resolution_clock::now();
+
+            // Phase A: Legacy (static lights) + static-layer pages
+            bool hasLegacyOrStaticPages = !pageRenderList.empty() || !staticPageRenderList.empty();
+            if (hasLegacyOrStaticPages)
+            {
+                vk::ClearValue clearValue{};
+                clearValue.depthStencil = vk::ClearDepthStencilValue{1.0f, 0};
+
+                vk::RenderPass rp;
+                vk::Framebuffer fb;
+                vk::RenderPassBeginInfo rpInfo{};
+
+                if (useLoadPass)
+                {
+                    rp = tilePool->getRenderPassLoad();
+                    fb = tilePool->getFramebufferLoad();
+                    rpInfo.renderPass = rp;
+                    rpInfo.framebuffer = fb;
+                    rpInfo.clearValueCount = 0;
+                    rpInfo.pClearValues = nullptr;
+                }
+                else
+                {
+                    rp = tilePool->getRenderPass();
+                    fb = tilePool->getFramebuffer();
+                    rpInfo.renderPass = rp;
+                    rpInfo.framebuffer = fb;
+                    rpInfo.clearValueCount = 1;
+                    rpInfo.pClearValues = &clearValue;
+                }
+                rpInfo.renderArea.offset = vk::Offset2D{0, 0};
+                rpInfo.renderArea.extent = vk::Extent2D{vsm::PHYSICAL_POOL_DIM, vsm::PHYSICAL_POOL_DIM};
+
+                // Combine legacy + static pages
+                std::vector<PageRenderEntry> combinedPhaseA;
+                combinedPhaseA.reserve(pageRenderList.size() + staticPageRenderList.size());
+                combinedPhaseA.insert(combinedPhaseA.end(), pageRenderList.begin(), pageRenderList.end());
+                combinedPhaseA.insert(combinedPhaseA.end(), staticPageRenderList.begin(), staticPageRenderList.end());
+
+                primaryCmd.beginRenderPass(rpInfo, vk::SubpassContents::eSecondaryCommandBuffers);
+                dispatchPagesParallel(combinedPhaseA, rp, fb, useLoadPass);
+                primaryCmd.endRenderPass();
+            }
+
+            // Phase B: Copy static tiles -> dynamic tiles
+            if (!tileCopyList.empty())
+            {
+                VSMPhysicalTilePool::transitionPoolToTransfer(primaryCmd, tilePool);
+
+                std::vector<vk::ImageCopy> copyRegions;
+                copyRegions.reserve(tileCopyList.size());
+                for (const auto& entry : tileCopyList)
+                {
+                    copyRegions.push_back(tilePool->getTileCopyRegion(entry.srcTileIndex, entry.dstTileIndex));
+                }
+
+                primaryCmd.copyImage(
+                    tilePool->getPoolImage(), vk::ImageLayout::eGeneral,
+                    tilePool->getPoolImage(), vk::ImageLayout::eGeneral,
+                    static_cast<uint32_t>(copyRegions.size()), copyRegions.data());
+
+                VSMPhysicalTilePool::transitionPoolFromTransfer(primaryCmd, tilePool);
+            }
+
+            // Phase C: Dynamic-layer pages
+            if (!dynamicPageRenderList.empty())
+            {
+                vk::RenderPass rp = tilePool->getRenderPassLoad();
+                vk::Framebuffer fb = tilePool->getFramebufferLoad();
+
+                vk::RenderPassBeginInfo rpInfo{};
+                rpInfo.renderPass = rp;
+                rpInfo.framebuffer = fb;
+                rpInfo.clearValueCount = 0;
+                rpInfo.pClearValues = nullptr;
+                rpInfo.renderArea.offset = vk::Offset2D{0, 0};
+                rpInfo.renderArea.extent = vk::Extent2D{vsm::PHYSICAL_POOL_DIM, vsm::PHYSICAL_POOL_DIM};
+
+                primaryCmd.beginRenderPass(rpInfo, vk::SubpassContents::eSecondaryCommandBuffers);
+                dispatchPagesParallel(dynamicPageRenderList, rp, fb, true);
+                primaryCmd.endRenderPass();
+            }
+
+            auto recordEnd = std::chrono::high_resolution_clock::now();
 
             lastStats.recordingUs = std::chrono::duration<float, std::micro>(recordEnd - recordStart).count();
-            lastStats.tileCount = tileCount;
-            lastStats.threadsUsed = usedThreads;
+            lastStats.tileCount = static_cast<uint32_t>(pageRenderList.size() + staticPageRenderList.size() + dynamicPageRenderList.size());
+            lastStats.threadsUsed = threadPoolManager->getThreadCount();
             lastStats.usedParallel = true;
-
-            primaryCmd.endRenderPass();
 
             transitionPoolToShaderRead(primaryCmd, tilePool);
         }

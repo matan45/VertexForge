@@ -400,13 +400,23 @@ namespace render::shadow
         if (!tilePool || !pageTable)
             return;
 
-        // Free physical tiles
+        // Free static layer physical tiles
         for (uint32_t tile : data.vsmPhysicalTiles)
         {
             if (tile != vsm::INVALID_TILE)
                 tilePool->freeTile(tile);
         }
         data.vsmPhysicalTiles.clear();
+
+        // Free dynamic layer tiles
+        for (uint32_t tile : data.vsmDynamicTiles)
+        {
+            if (tile != vsm::INVALID_TILE)
+                tilePool->freeTile(tile);
+        }
+        data.vsmDynamicTiles.clear();
+        data.vsmPageHasDynamic.clear();
+        data.vsmDynamicTileLastUsedFrame.clear();
 
         // Free page table block
         if (data.vsmPagesX > 0 && data.vsmPagesY > 0)
