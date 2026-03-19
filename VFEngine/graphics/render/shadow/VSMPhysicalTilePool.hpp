@@ -75,6 +75,7 @@ namespace render::shadow
         void createPoolImage();
         void createSamplers();
         void createRenderPasses();
+        vk::RenderPass createSingleRenderPass(vk::AttachmentLoadOp loadOp);
         void createFramebuffers();
     };
 }

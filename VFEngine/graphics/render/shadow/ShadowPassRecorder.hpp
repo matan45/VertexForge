@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ShadowTypes.hpp"
+#include "ShadowPassPipeline.hpp"
 #include "VSMTypes.hpp"
 #include <vulkan/vulkan.hpp>
 #include <vector>
@@ -38,12 +39,11 @@ namespace render::shadow
 
     enum class ShadowLayer : uint8_t
     {
-        All,     // render all objects (legacy / static light path)
-        Static,  // render only static objects
-        Dynamic  // render only dynamic objects
+        All,
+        Static,
+        Dynamic
     };
 
-    // Page render entry from ShadowSystem
     struct PageRenderEntry
     {
         uint32_t physicalTileIndex;
@@ -54,19 +54,43 @@ namespace render::shadow
         ShadowLayer layer = ShadowLayer::All;
     };
 
-    // Tile copy entry for static->dynamic copy phase
     struct TileCopyEntry
     {
-        uint32_t srcTileIndex; // static tile
-        uint32_t dstTileIndex; // dynamic tile
+        uint32_t srcTileIndex;
+        uint32_t dstTileIndex;
     };
 
     struct ShadowRecordingStats
     {
-        float recordingUs = 0.0f;       // Total CPU time for shadow recording
-        uint32_t tileCount = 0;         // Tiles recorded
-        uint32_t threadsUsed = 0;       // Threads that participated (0 = inline)
+        float recordingUs = 0.0f;
+        uint32_t tileCount = 0;
+        uint32_t threadsUsed = 0;
         bool usedParallel = false;
+    };
+
+    struct ShadowPassContext
+    {
+        const ShadowPassParams& params;
+        const TerrainShadowPassParams* terrainParams;
+        VSMPhysicalTilePool* tilePool;
+        ShadowResourcePool* resourcePool;
+        ShadowPassPipeline* shadowPassPipeline;
+        TerrainShadowPipeline* terrainShadowPipeline;
+        const std::vector<PageRenderEntry>& pageRenderList;
+        const std::vector<PageRenderEntry>& staticPageRenderList;
+        const std::vector<PageRenderEntry>& dynamicPageRenderList;
+        const std::vector<TileCopyEntry>& tileCopyList;
+        std::unordered_map<uint32_t, LightShadowData>& lightShadowData;
+        bool shadowsEnabled;
+        bool poolFirstUse;
+    };
+
+    struct ShadowPassPrerequisites
+    {
+        bool hasTerrainShadows = false;
+        bool hasPageViews = false;
+        bool hasPointShadows = false;
+        bool hasMeshBatches = false;
     };
 
     class ShadowPassRecorder
@@ -82,64 +106,95 @@ namespace render::shadow
         ShadowPassRecorder(const ShadowPassRecorder&) = delete;
         ShadowPassRecorder& operator=(const ShadowPassRecorder&) = delete;
 
-        void recordShadowPass(
-            vk::CommandBuffer cmd,
-            const ShadowPassParams& params,
-            const TerrainShadowPassParams* terrainParams,
-            VSMPhysicalTilePool* tilePool,
-            ShadowResourcePool* resourcePool,
-            ShadowPassPipeline* shadowPassPipeline,
-            TerrainShadowPipeline* terrainShadowPipeline,
-            const std::vector<PageRenderEntry>& pageRenderList,
-            const std::vector<PageRenderEntry>& staticPageRenderList,
-            const std::vector<PageRenderEntry>& dynamicPageRenderList,
-            const std::vector<TileCopyEntry>& tileCopyList,
-            std::unordered_map<uint32_t, LightShadowData>& lightShadowData,
-            bool shadowsEnabled,
-            bool poolFirstUse);
+        void recordShadowPass(vk::CommandBuffer cmd, const ShadowPassContext& ctx);
 
-        // Parallel version: records VSM tiles across worker threads using secondary command buffers
         void recordShadowPassParallel(
-            vk::CommandBuffer primaryCmd,
-            const ShadowPassParams& params,
-            const TerrainShadowPassParams* terrainParams,
-            VSMPhysicalTilePool* tilePool,
-            ShadowResourcePool* resourcePool,
-            ShadowPassPipeline* shadowPassPipeline,
-            TerrainShadowPipeline* terrainShadowPipeline,
-            const std::vector<PageRenderEntry>& pageRenderList,
-            const std::vector<PageRenderEntry>& staticPageRenderList,
-            const std::vector<PageRenderEntry>& dynamicPageRenderList,
-            const std::vector<TileCopyEntry>& tileCopyList,
-            std::unordered_map<uint32_t, LightShadowData>& lightShadowData,
-            bool shadowsEnabled,
-            bool poolFirstUse,
+            vk::CommandBuffer cmd,
+            const ShadowPassContext& ctx,
             core::ThreadCommandPoolManager* threadPoolManager,
             uint32_t frameIndex);
 
         const ShadowRecordingStats& getLastStats() const { return lastStats; }
 
     private:
-        void renderPointLightCubeShadows(
-            vk::CommandBuffer cmd,
-            const ShadowPassParams& params,
-            const TerrainShadowPassParams* terrainParams,
-            ShadowResourcePool* resourcePool,
-            ShadowPassPipeline* shadowPassPipeline,
-            TerrainShadowPipeline* terrainShadowPipeline,
-            std::unordered_map<uint32_t, LightShadowData>& lightShadowData);
+        bool validatePrerequisites(const ShadowPassContext& ctx,
+                                   ShadowPassPrerequisites& out) const;
 
-        void recordTileCommands(
-            vk::CommandBuffer cmd,
-            const PageRenderEntry& page,
-            VSMPhysicalTilePool* tilePool,
-            const ShadowPassParams& params,
-            const TerrainShadowPassParams* terrainParams,
-            ShadowPassPipeline* shadowPassPipeline,
-            TerrainShadowPipeline* terrainShadowPipeline,
-            bool hasMeshBatches,
-            bool hasTerrainShadows,
+        void beginTileRenderPass(vk::CommandBuffer cmd,
+                                 VSMPhysicalTilePool* tilePool,
+                                 bool useLoadPass);
+
+        void bindShadowPipelineAndSets(vk::CommandBuffer cmd,
+                                       const ShadowPassContext& ctx);
+
+        static void executeTileCopies(vk::CommandBuffer cmd,
+                                      VSMPhysicalTilePool* tilePool,
+                                      const std::vector<TileCopyEntry>& copies);
+
+        void recordTileCommands(vk::CommandBuffer cmd,
+                                const PageRenderEntry& page,
+                                const ShadowPassContext& ctx,
+                                bool useLoadPass);
+
+        void recordStaticPhase(vk::CommandBuffer cmd,
+                               const ShadowPassContext& ctx,
+                               const ShadowPassPrerequisites& prereq,
+                               bool useLoadPass);
+
+        void recordDynamicPhase(vk::CommandBuffer cmd,
+                                const ShadowPassContext& ctx,
+                                const ShadowPassPrerequisites& prereq);
+
+        void renderPointLightCubeShadows(vk::CommandBuffer cmd,
+                                         const ShadowPassContext& ctx);
+
+        struct CubeFaceRenderInfo
+        {
+            const ShadowView& view;
+            vk::Framebuffer framebuffer;
+            uint32_t cubeSize;
+        };
+
+        void renderCubeFace(vk::CommandBuffer cmd,
+                            const ShadowPassContext& ctx,
+                            const ShadowPassPrerequisites& prereq,
+                            const CubeFaceRenderInfo& faceInfo);
+
+        void dispatchMeshBatches(vk::CommandBuffer cmd,
+                                 const ShadowPassContext& ctx,
+                                 ShadowPushConstants& pc);
+
+        void dispatchTerrainShadow(vk::CommandBuffer cmd,
+                                   const ShadowPassContext& ctx,
+                                   const glm::mat4& viewProj,
+                                   float depthBias,
+                                   float slopeBias);
+
+        std::vector<std::pair<uint32_t, LightShadowData*>>
+            collectPointLights(const ShadowPassContext& ctx) const;
+
+        struct ParallelDispatchArgs
+        {
+            vk::CommandBuffer primaryCmd;
+            const ShadowPassContext* ctx;
+            const ShadowPassPrerequisites* prereq;
+            core::ThreadCommandPoolManager* threadPoolManager;
+            uint32_t frameIndex;
+        };
+
+        void dispatchPagesParallel(
+            const ParallelDispatchArgs& args,
+            const std::vector<PageRenderEntry>& pages,
+            vk::RenderPass renderPass,
+            vk::Framebuffer framebuffer,
             bool useLoadPass);
+
+        void recordStaticPhaseParallel(
+            const ParallelDispatchArgs& args,
+            bool useLoadPass);
+
+        void recordDynamicPhaseParallel(
+            const ParallelDispatchArgs& args);
 
         static void transitionPoolToDepthAttachment(vk::CommandBuffer cmd,
                                                      VSMPhysicalTilePool* tilePool,

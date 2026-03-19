@@ -231,6 +231,16 @@ namespace render
             void addPageToRenderLists(LightShadowData& data, uint32_t pageIdx,
                                       const glm::mat4& cropViewProjection,
                                       const ShadowView& view, bool isDirty);
+            void addStaticLightPage(LightShadowData& data, uint32_t pageIdx,
+                                     const glm::mat4& cropVP, const ShadowView& view,
+                                     bool isDirty, bool forceRender);
+            void addDualLayerPage(LightShadowData& data, uint32_t pageIdx,
+                                   const glm::mat4& cropVP, const ShadowView& view,
+                                   bool isDirty, bool forceRender);
+            void allocateDynamicTile(LightShadowData& data, uint32_t pageIdx);
+            void freeDynamicTileIfExpired(LightShadowData& data, uint32_t pageIdx, uint32_t physTile);
+            void allocateNonStaticLightPages(LightShadowData& data);
+            void allocateStaticLightPages(LightShadowData& data, bool allowEviction);
         };
     }
 }
