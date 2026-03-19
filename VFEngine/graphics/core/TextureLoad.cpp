@@ -230,8 +230,9 @@ namespace core
         imageData = {texturePtr->width, texturePtr->height, texturePtr->numbersOfChannels, texturePtr->mipLevels};
         vk::Format resolvedFormat = resolveVulkanFormat(texturePtr->compressionFormat, format);
 
+        bool isCompressed = (texturePtr->compressionFormat != resource::TextureCompressionFormat::Uncompressed);
         MipUploadParams params{device, commandPool, image, imageMemory, texturePtr->mipData,
-                               texturePtr->width, texturePtr->height, texturePtr->mipLevels, resolvedFormat, false};
+                               texturePtr->width, texturePtr->height, texturePtr->mipLevels, resolvedFormat, isCompressed};
         if (!stageAndUploadMips(params)) return;
 
         texturePtr->releaseCPUData();
@@ -261,8 +262,9 @@ namespace core
         imageData = {textureData.width, textureData.height, textureData.numbersOfChannels, textureData.mipLevels};
         vk::Format resolvedFormat = resolveVulkanFormat(textureData.compressionFormat, format);
 
+        bool isCompressed = (textureData.compressionFormat != resource::TextureCompressionFormat::Uncompressed);
         MipUploadParams params{device, commandPool, image, imageMemory, textureData.mipData,
-                               textureData.width, textureData.height, textureData.mipLevels, resolvedFormat, false};
+                               textureData.width, textureData.height, textureData.mipLevels, resolvedFormat, isCompressed};
         if (!stageAndUploadMips(params)) return false;
 
         createSampler(textureData.mipLevels);
