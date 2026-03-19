@@ -128,13 +128,6 @@ namespace render
             vfxRuntimeProvider->recreate(meshPipeline->getRenderPass());
     }
 
-    void RenderPassHandler::setBrushOverlayParams(float radius, float falloff, float shape)
-    {
-        brushOverlayRadius_ = radius;
-        brushOverlayFalloff_ = falloff;
-        brushOverlayShape_ = shape;
-    }
-
     void RenderPassHandler::resetVolumetricFogComposite() { if (volumetricFogComposite) { volumetricFogComposite->cleanup(); volumetricFogComposite.reset(); } }
     void RenderPassHandler::initVolumetricFogComposite(volumetric::VolumetricPipeline* volPipeline)
     {

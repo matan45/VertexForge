@@ -4,6 +4,7 @@
 #include "string/StringUtil.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/project/ResourceEvents.hpp"
+#include "events/scene/ScenePersistenceEvents.hpp"
 #include <material/MaterialAsset.hpp>
 #include <animator/AnimatorAsset.hpp>
 #include <vfx/VFXAsset.hpp>

@@ -1,5 +1,12 @@
 #include "EditorHandler.hpp"
+#include "editor/EditorBootstrap.hpp"
+#include "impl/physics/PhysicsPlayModeHandler.hpp"
+#include "impl/vfx/VFXPlayModeHandler.hpp"
+#include "impl/render/RenderTexturePlayModeHandler.hpp"
+#include "impl/ai/BehaviorTreePlayModeHandler.hpp"
 #include "impl/threading/FrameTaskGraph.hpp"
+#include "core/PluginManager.hpp"
+#include "../../../core/audio/AudioSceneUpdater.hpp"
 #include "time/Timer.hpp"
 
 namespace handlers

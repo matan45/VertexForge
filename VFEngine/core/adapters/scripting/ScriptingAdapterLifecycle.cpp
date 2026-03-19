@@ -2,6 +2,7 @@
 #include <services/ScriptInterpreter.hpp>
 
 #include "ScriptingAdapter.hpp"
+#include "CoroutineManager.hpp"
 #include "NativeAPIRegistry.hpp"
 #include <vm/runtime/VirtualMachine.hpp>
 #include <runtime/EventLoop.hpp>
