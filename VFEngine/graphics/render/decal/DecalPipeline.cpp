@@ -186,7 +186,10 @@ namespace render::decal
             resource::MipLevelData mip0;
             mip0.width = 1; mip0.height = 1; mip0.data = {255, 255, 255, 255};
             texData.mipData.push_back(std::move(mip0));
-            fallbackWhiteTexture->loadTextureFromData(texData, vk::Format::eR8G8B8A8Srgb, false);
+            if (!fallbackWhiteTexture->loadTextureFromData(texData, vk::Format::eR8G8B8A8Srgb, false))
+            {
+                vfLogError("Failed to create fallback white texture for decals");
+            }
         }
         {
             fallbackNormalTexture = std::make_unique<core::Texture>(device);
@@ -195,7 +198,10 @@ namespace render::decal
             resource::MipLevelData mip0;
             mip0.width = 1; mip0.height = 1; mip0.data = {128, 128, 255, 255};
             texData.mipData.push_back(std::move(mip0));
-            fallbackNormalTexture->loadTextureFromData(texData, vk::Format::eR8G8B8A8Unorm, false);
+            if (!fallbackNormalTexture->loadTextureFromData(texData, vk::Format::eR8G8B8A8Unorm, false))
+            {
+                vfLogError("Failed to create fallback normal texture for decals");
+            }
         }
     }
 

@@ -56,6 +56,7 @@ namespace core
 
             vk::Buffer stagingBuffer;
             vk::DeviceMemory stagingBufferMemory;
+            bool mapped = false;
 
             BufferInfoRequest bufferInfo(p.device.getLogicalDevice(), p.device.getPhysicalDevice());
             bufferInfo.size = totalSize;
@@ -63,14 +64,20 @@ namespace core
             bufferInfo.properties = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
             BufferUtilities::createBuffer(bufferInfo, stagingBuffer, stagingBufferMemory);
 
+            auto cleanupStaging = [&] {
+                if (mapped) p.device.getLogicalDevice().unmapMemory(stagingBufferMemory);
+                p.device.getLogicalDevice().destroyBuffer(stagingBuffer);
+                p.device.getLogicalDevice().freeMemory(stagingBufferMemory);
+            };
+
             void* data;
             if (p.device.getLogicalDevice().mapMemory(stagingBufferMemory, 0, totalSize, {}, &data) != vk::Result::eSuccess)
             {
                 vfLogError("failed to map memory");
-                p.device.getLogicalDevice().destroyBuffer(stagingBuffer);
-                p.device.getLogicalDevice().freeMemory(stagingBufferMemory);
+                cleanupStaging();
                 return false;
             }
+            mapped = true;
 
             vk::DeviceSize offset = 0;
             for (const auto& mip : p.mipData)
@@ -79,15 +86,14 @@ namespace core
                 if (mip.data.empty() || mip.data.size() < mipSize)
                 {
                     vfLogError("Mip data is empty or too small (expected {}, got {})", mipSize, mip.data.size());
-                    p.device.getLogicalDevice().unmapMemory(stagingBufferMemory);
-                    p.device.getLogicalDevice().destroyBuffer(stagingBuffer);
-                    p.device.getLogicalDevice().freeMemory(stagingBufferMemory);
+                    cleanupStaging();
                     return false;
                 }
                 memcpy(static_cast<char*>(data) + offset, mip.data.data(), mipSize);
                 offset += mipSize;
             }
             p.device.getLogicalDevice().unmapMemory(stagingBufferMemory);
+            mapped = false;
 
             ImageInfoRequest imageInfo(p.device.getLogicalDevice(), p.device.getPhysicalDevice());
             imageInfo.width = p.width;
@@ -134,8 +140,7 @@ namespace core
                                                   vk::ImageLayout::eShaderReadOnlyOptimal, vk::ImageAspectFlagBits::eColor, 1, p.mipLevels);
             Utilities::endSingleTimeCommands(p.device.getGraphicsQueue(), cmdB);
 
-            p.device.getLogicalDevice().destroyBuffer(stagingBuffer);
-            p.device.getLogicalDevice().freeMemory(stagingBufferMemory);
+            cleanupStaging();
             return true;
         }
 
@@ -216,7 +221,7 @@ namespace core
         }
     }
 
-    void Texture::loadTextureFromFile(std::string_view filePath, vk::Format format, bool isEditor)
+    bool Texture::loadTextureFromFile(std::string_view filePath, vk::Format format, bool isEditor)
     {
         auto textureData = resource::ResourceManager::loadTextureAsync(asset::AssetRef::fromPath(std::string(filePath)));
         auto texturePtr = textureData.get();
@@ -224,7 +229,7 @@ namespace core
         if (!texturePtr || texturePtr->mipData.empty())
         {
             vfLogError("Failed to load texture from: {}", filePath);
-            return;
+            return false;
         }
 
         imageData = {texturePtr->width, texturePtr->height, texturePtr->numbersOfChannels, texturePtr->mipLevels};
@@ -233,7 +238,7 @@ namespace core
         bool isCompressed = (texturePtr->compressionFormat != resource::TextureCompressionFormat::Uncompressed);
         MipUploadParams params{device, commandPool, image, imageMemory, texturePtr->mipData,
                                texturePtr->width, texturePtr->height, texturePtr->mipLevels, resolvedFormat, isCompressed};
-        if (!stageAndUploadMips(params)) return;
+        if (!stageAndUploadMips(params)) return false;
 
         texturePtr->releaseCPUData();
         createSampler(texturePtr->mipLevels);
@@ -249,6 +254,8 @@ namespace core
             descriptorSet = ImGui_ImplVulkan_AddTexture(sampler, imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
             createPerMipViews(resolvedFormat);
         }
+
+        return true;
     }
 
     bool Texture::loadTextureFromData(const resource::TextureData& textureData, vk::Format format, bool isEditor)
