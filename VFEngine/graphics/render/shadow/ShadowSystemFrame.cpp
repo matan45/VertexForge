@@ -405,7 +405,7 @@ namespace render::shadow
                         ++lastCacheStats.totalPages;
 
                         // Skip clean pages for static spot/directional2D lights
-                        if (!data.vsmPageDirty[pageIdx])
+                        if (data.isStatic && !data.vsmPageDirty[pageIdx])
                         {
                             ++lastCacheStats.cachedPages;
                             continue;
