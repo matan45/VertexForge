@@ -90,10 +90,12 @@ namespace controllers::offscreen
 
             stats.gpuDriven.meshletFrustumCullingEnabled = gpuDrivenRenderer->isMeshletFrustumCullingEnabled();
             stats.gpuDriven.meshletBackfaceCullingEnabled = gpuDrivenRenderer->isMeshletBackfaceCullingEnabled();
+            stats.gpuDriven.meshletOcclusionCullingEnabled = gpuDrivenRenderer->isMeshletOcclusionCullingEnabled();
             auto meshletStats = gpuDrivenRenderer->getMeshletCullingStats();
             stats.gpuDriven.totalMeshlets = meshletStats.totalMeshlets;
             stats.gpuDriven.meshletsCulledByFrustum = meshletStats.culledByFrustum;
             stats.gpuDriven.meshletsCulledByBackface = meshletStats.culledByBackface;
+            stats.gpuDriven.meshletsCulledByOcclusion = meshletStats.culledByOcclusion;
             stats.gpuDriven.visibleMeshlets = meshletStats.visibleMeshlets;
 
             stats.terrain.updateTerrainUs = gpuDrivenRenderer->getTerrainUpdateUs();
@@ -106,6 +108,7 @@ namespace controllers::offscreen
             stats.terrain.culledTiles = terrainCulling.culledTiles;
             stats.terrain.totalMeshlets = terrainCulling.totalMeshlets;
             stats.terrain.culledMeshlets = terrainCulling.culledMeshlets;
+            stats.terrain.culledByOcclusion = terrainCulling.culledByOcclusion;
             stats.terrain.visibleMeshlets = terrainCulling.visibleMeshlets;
             stats.terrain.lodCount0 = terrainCulling.lodCount0;
             stats.terrain.lodCount1 = terrainCulling.lodCount1;

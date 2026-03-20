@@ -40,6 +40,12 @@
 #include "../gi/ProbeUpdatePipeline.hpp"
 #include "../gi/GIDebugRenderer.hpp"
 #include "../gi/AccelerationStructureManager.hpp"
+#include "../svt/SVTTypes.hpp"
+#include "../svt/PhysicalTileCache.hpp"
+#include "../svt/SVTPageTable.hpp"
+#include "../svt/SVTFeedbackPipeline.hpp"
+#include "../svt/SVTStreamManager.hpp"
+#include "../svt/TerrainSVTCompositor.hpp"
 #include "../material/MaterialPBRExtractor.hpp"
 #include "../../core/Texture.hpp"
 #include "material/MaterialManager.hpp"
@@ -73,6 +79,8 @@ namespace render::mesh
 namespace render::occlusion
 {
     class HiZBuffer;
+    class DepthPrepass;
+    class DepthPrepassPipeline;
 }
 
 namespace terrain
@@ -125,6 +133,27 @@ namespace render::gpudriven
             float uploadTileDataUs = 0.0f;
             TerrainStreamManager::TileDataLoader pendingTileDataLoader;
             TerrainStreamManager::TileRAMEvictor pendingTileRAMEvictor;
+        };
+
+        struct SVTState
+        {
+            std::unique_ptr<svt::PhysicalTileCache> tileCache;
+            std::unique_ptr<svt::SVTPageTable> pageTable;
+            std::unique_ptr<svt::SVTFeedbackPipeline> feedbackPipeline;
+            std::unique_ptr<svt::SVTStreamManager> streamManager;
+            std::unique_ptr<svt::TerrainSVTCompositor> compositor;
+
+            svt::SVTConfig config;
+
+            // SVT params GPU UBO
+            vk::Buffer paramsBuffer;
+            vk::DeviceMemory paramsMemory;
+            void* paramsMapped = nullptr;
+
+            bool enabled = false;
+            bool initialized = false;
+            uint64_t frameCounter = 0;
+            std::string lastMaterialPath;
         };
 
         struct WaterState
@@ -246,6 +275,7 @@ namespace render::gpudriven
             float globalLodBias = 0.0f;
             bool meshletFrustumCullingEnabled = true;
             bool meshletBackfaceCullingEnabled = true;
+            bool meshletOcclusionCullingEnabled = true;
             uint32_t currentViewMode = 0;
         };
 
@@ -277,6 +307,12 @@ namespace render::gpudriven
         std::unique_ptr<lighting::LightCullingPipeline> lightCullingPipeline;
         std::unique_ptr<shadow::ShadowSystem> shadowSystem;
         std::unique_ptr<occlusion::LightOcclusionCulling> lightOcclusionCulling;
+
+        // Depth prepass for meshlet-level Hi-Z occlusion culling
+        std::unique_ptr<occlusion::DepthPrepass> depthPrepass;
+        std::unique_ptr<occlusion::DepthPrepassPipeline> depthPrepassPipeline;
+        std::unique_ptr<occlusion::HiZBuffer> prepassHiZ;
+        uint32_t prepassHiZMipLevels = 0;
         std::unique_ptr<volumetric::VolumetricPipeline> volumetricPipeline;
         ::postprocess::VolumetricFogSettings cachedVolumetricSettings;
 
@@ -314,6 +350,7 @@ namespace render::gpudriven
         vk::RenderPass cachedWBOITRenderPass;
 
         TerrainState terrain;
+        SVTState svt;
         WaterState water;
         VegetationState vegetation;
         BillboardState billboard;
@@ -395,6 +432,12 @@ namespace render::gpudriven
         bool isMeshletFrustumCullingEnabled() const { return culling.meshletFrustumCullingEnabled; }
         void setMeshletBackfaceCullingEnabled(bool enabled) { culling.meshletBackfaceCullingEnabled = enabled; }
         bool isMeshletBackfaceCullingEnabled() const { return culling.meshletBackfaceCullingEnabled; }
+        void setMeshletOcclusionCullingEnabled(bool enabled) { culling.meshletOcclusionCullingEnabled = enabled; }
+        bool isMeshletOcclusionCullingEnabled() const { return culling.meshletOcclusionCullingEnabled; }
+
+        void initDepthPrepass();
+        void renderDepthPrepass(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet);
+        void generatePrepassHiZ(vk::CommandBuffer cmd);
 
         void setDistanceCullingEnabled(bool enabled) { culling.distanceCullingEnabled = enabled; }
         bool isDistanceCullingEnabled() const { return culling.distanceCullingEnabled; }
@@ -496,6 +539,14 @@ namespace render::gpudriven
 
         void invalidateTerrainLayerData() { terrain.layerDataDirty = true; }
 
+        // SVT (Sparse Virtual Texturing)
+        void initSVT(const svt::SVTConfig& config = {});
+        void cleanupSVT();
+        void setSVTEnabled(bool enabled);
+        bool isSVTEnabled() const { return svt.enabled; }
+        const svt::SVTStreamStats* getSVTStreamStats() const;
+        void updateSVTParams(const glm::vec2& terrainWorldMin, const glm::vec2& terrainWorldMax);
+
         void setTerrainRenderingEnabled(bool enabled) { terrain.renderingEnabled = enabled; }
         bool isTerrainRenderingEnabled() const { return terrain.renderingEnabled; }
         void setTerrainLODBias(float bias) { terrain.lodBias = bias; }
@@ -585,6 +636,8 @@ namespace render::gpudriven
         BoneOffsetResolver updateAnimationBones();
         void updateClusterGrid(const glm::mat4& projection, float nearPlane, float farPlane);
         void updatePipelineDescriptors();
+        void updateAllPipelinesHiZ();
+        std::pair<vk::ImageView, vk::Sampler> getHiZViewSampler() const;
 
         void initBillboardSubsystems(vk::DescriptorSetLayout iblDescriptorSetLayout, vk::RenderPass renderPass);
         void initTerrainSubsystems(vk::DescriptorSetLayout iblDescriptorSetLayout, vk::RenderPass renderPass);
@@ -596,6 +649,9 @@ namespace render::gpudriven
         void updateLightCullingState(vk::CommandBuffer cmd);
         void dispatchVolumetricFog(vk::CommandBuffer cmd);
         void dispatchGIProbeUpdate(vk::CommandBuffer cmd);
+
+        void dispatchSVTFeedback(vk::CommandBuffer cmd);
+        void updateSVTStreaming();
 
         static uint64_t makeTileKey(int32_t x, int32_t z);
     };

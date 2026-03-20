@@ -157,9 +157,10 @@ namespace windows
                         ImGui::Text("  Total Meshlets:      %u", gpu.totalMeshlets);
                         ImGui::Text("  Culled by Frustum:   %u", gpu.meshletsCulledByFrustum);
                         ImGui::Text("  Culled by Backface:  %u", gpu.meshletsCulledByBackface);
+                        ImGui::Text("  Culled by Occlusion: %u", gpu.meshletsCulledByOcclusion);
                         ImGui::Text("  Visible:             %u", gpu.visibleMeshlets);
 
-                        uint32_t totalCulled = gpu.meshletsCulledByFrustum + gpu.meshletsCulledByBackface;
+                        uint32_t totalCulled = gpu.meshletsCulledByFrustum + gpu.meshletsCulledByBackface + gpu.meshletsCulledByOcclusion;
                         float meshletCullRate = static_cast<float>(totalCulled) / static_cast<float>(gpu.totalMeshlets);
                         ImGui::Text("Meshlet Cull Rate:");
                         ImGui::SameLine();
@@ -298,11 +299,12 @@ namespace windows
                 ImGui::Separator();
 
                 ImGui::Text("GPU Culling (Task Shader):");
-                ImGui::Text("  Total Tiles:     %u", t.totalTiles);
-                ImGui::Text("  Culled Tiles:    %u", t.culledTiles);
-                ImGui::Text("  Total Meshlets:  %u", t.totalMeshlets);
-                ImGui::Text("  Culled Meshlets: %u", t.culledMeshlets);
-                ImGui::Text("  Visible Meshlets:%u", t.visibleMeshlets);
+                ImGui::Text("  Total Tiles:       %u", t.totalTiles);
+                ImGui::Text("  Culled Tiles:      %u", t.culledTiles);
+                ImGui::Text("  Total Meshlets:    %u", t.totalMeshlets);
+                ImGui::Text("  Culled Meshlets:   %u", t.culledMeshlets);
+                ImGui::Text("  Culled by Occl.:   %u", t.culledByOcclusion);
+                ImGui::Text("  Visible Meshlets:  %u", t.visibleMeshlets);
 
                 if (t.totalMeshlets > 0)
                 {

@@ -143,6 +143,26 @@ namespace events::terrain
         std::string_view getName() const override { return "SetTerrainColliderProperties"; }
     };
 
+    struct BeginCreateTerrainCommand : ICommand<bool>
+    {
+        services::TerrainCreationData config;
+
+        std::string_view getName() const override { return "BeginCreateTerrain"; }
+    };
+
+    struct PollCreateTerrainCommand : ICommand<services::TerrainCreationPollResult>
+    {
+        std::string_view getName() const override { return "PollCreateTerrain"; }
+    };
+
+    struct TerrainCreationProgressNotification : INotification
+    {
+        float progress = 0.0f;
+        std::string stage;
+
+        std::string_view getName() const override { return "TerrainCreationProgress"; }
+    };
+
     struct BeginTerrainLoadCommand : ICommand<bool>
     {
         std::string path;
@@ -327,5 +347,15 @@ namespace events::terrain
         services::EntityHandle terrainEntity;
 
         std::string_view getName() const override { return "LoadAllTiles"; }
+    };
+
+    // Bake terrain SVT: composites all layer textures with weight maps
+    // into per-channel .vfSVT files alongside the .vfTerrain save path.
+    // On next terrain load, these are auto-detected and used for fast streaming.
+    struct BakeTerrainSVTCommand : ICommand<bool>
+    {
+        services::EntityHandle terrainEntity;
+
+        std::string_view getName() const override { return "BakeTerrainSVT"; }
     };
 }

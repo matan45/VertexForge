@@ -44,6 +44,7 @@ namespace controllers
         gpuDriven->setLODSelectionEnabled(settings.culling.lodSelectionEnabled);
         gpuDriven->setMeshletFrustumCullingEnabled(settings.culling.meshletFrustumCullingEnabled);
         gpuDriven->setMeshletBackfaceCullingEnabled(settings.culling.meshletBackfaceCullingEnabled);
+        gpuDriven->setMeshletOcclusionCullingEnabled(settings.culling.meshletOcclusionCullingEnabled);
         gpuDriven->setTerrainFrustumCullingEnabled(settings.culling.terrainFrustumCullingEnabled);
         gpuDriven->setTerrainMeshletCullingEnabled(settings.culling.terrainMeshletCullingEnabled);
         gpuDriven->setLODCrossfadeEnabled(settings.culling.lodCrossfadeEnabled);
@@ -76,6 +77,8 @@ namespace controllers
         gpuDriven->setTerrainErrorThreshold(settings.terrain.errorThreshold);
         gpuDriven->setTerrainTextureScale(settings.terrain.textureScale);
         gpuDriven->setTerrainShadowLOD(settings.terrain.shadowLOD);
+        if (settings.terrain.svtEnabled)
+            gpuDriven->setSVTEnabled(true);
     }
 
     services::ShadowStats OffScreenController::getShadowStats() const
@@ -287,6 +290,12 @@ namespace controllers
         if (rh) rh->setMeshletBackfaceCullingEnabled(enabled);
     }
 
+    void OffScreenController::setMeshletOcclusionCullingEnabled(bool enabled)
+    {
+        auto* rh = offScreen->getRenderPassHandler();
+        if (rh) rh->setMeshletOcclusionCullingEnabled(enabled);
+    }
+
     void OffScreenController::setDistanceCullingEnabled(bool enabled)
     {
         auto* renderHandler = offScreen->getRenderPassHandler();
@@ -397,6 +406,12 @@ namespace controllers
     {
         auto* rh = offScreen->getRenderPassHandler();
         if (rh) rh->setTerrainShadowLOD(lod);
+    }
+
+    void OffScreenController::setTerrainSVTEnabled(bool enabled)
+    {
+        auto* rh = offScreen->getRenderPassHandler();
+        if (rh) rh->setTerrainSVTEnabled(enabled);
     }
 
     void OffScreenController::setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider)

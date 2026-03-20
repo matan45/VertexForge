@@ -177,6 +177,14 @@ namespace render
         }
     }
 
+    void RenderPassHandler::setMeshletOcclusionCullingEnabled(bool enabled)
+    {
+        if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
+        {
+            gpuDrivenRenderer->setMeshletOcclusionCullingEnabled(enabled);
+        }
+    }
+
     void RenderPassHandler::setGlobalLodBias(float bias)
     {
         if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
@@ -264,6 +272,18 @@ namespace render
         if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
         {
             gpuDrivenRenderer->setTerrainShadowLOD(lod);
+        }
+    }
+
+    void RenderPassHandler::setTerrainSVTEnabled(bool enabled)
+    {
+        if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
+        {
+            if (enabled && !gpuDrivenRenderer->isSVTEnabled())
+            {
+                gpuDrivenRenderer->initSVT();
+            }
+            gpuDrivenRenderer->setSVTEnabled(enabled);
         }
     }
 

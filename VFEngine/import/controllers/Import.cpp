@@ -97,7 +97,24 @@ namespace controllers
             if (!fileResult.outputPath.empty())
             {
                 resource::AssetType assetType = fileTypeToAssetType(ctx.fileType);
-                if (assetType != resource::AssetType::COUNT)
+
+                // SVT import produces .vfSVT instead of .vfImage
+                if (ctx.file.config.svtEnabled)
+                {
+                    std::string svtPath = std::string(ctx.location) + "/" +
+                                          std::string(ctx.fileName) + ".vfSVT";
+                    if (std::filesystem::exists(svtPath))
+                    {
+                        createVfMeta(svtPath, ctx.file.path, resource::AssetType::SVT);
+                        fileResult.outputPath = svtPath;
+                    }
+                    else if (assetType != resource::AssetType::COUNT)
+                    {
+                        // SVT conversion failed, fell back to .vfImage
+                        createVfMeta(fileResult.outputPath, ctx.file.path, assetType);
+                    }
+                }
+                else if (assetType != resource::AssetType::COUNT)
                 {
                     createVfMeta(fileResult.outputPath, ctx.file.path, assetType);
                 }

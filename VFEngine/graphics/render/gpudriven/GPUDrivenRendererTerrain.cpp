@@ -10,6 +10,7 @@
 #include "../../core/SwapChain.hpp"
 #include "print/Log.hpp"
 #include <chrono>
+#include <limits>
 
 namespace render::gpudriven
 {
@@ -234,6 +235,22 @@ namespace render::gpudriven
         auto uploadEnd = std::chrono::high_resolution_clock::now();
         terrain.uploadTileDataUs = std::chrono::duration<float, std::micro>(uploadEnd - uploadStart).count();
 
+        // SVT: auto-compute terrain world bounds and update params
+        if (svt.enabled && svt.initialized && !visibleTiles.empty())
+        {
+            glm::vec2 worldMin(std::numeric_limits<float>::max());
+            glm::vec2 worldMax(std::numeric_limits<float>::lowest());
+            for (const auto* tile : visibleTiles)
+            {
+                if (!tile) continue;
+                worldMin.x = std::min(worldMin.x, tile->worldBounds.min.x);
+                worldMin.y = std::min(worldMin.y, tile->worldBounds.min.z);
+                worldMax.x = std::max(worldMax.x, tile->worldBounds.max.x);
+                worldMax.y = std::max(worldMax.y, tile->worldBounds.max.z);
+            }
+            updateSVTParams(worldMin, worldMax);
+        }
+
         terrain.updateUs = std::chrono::duration<float, std::micro>(uploadEnd - frameStart).count();
     }
 
@@ -339,6 +356,8 @@ namespace render::gpudriven
         }
         terrain.pipeline->setTerrainMaxDrawDistSq(terrainDistSq);
         terrain.pipeline->setShadowLOD(terrain.shadowLOD);
+        terrain.pipeline->setMeshletOcclusionCullingEnabled(culling.meshletOcclusionCullingEnabled);
+        terrain.pipeline->setHiZMipLevels(prepassHiZMipLevels);
 
         uint32_t viewMode = culling.currentViewMode;
         if (culling.meshletFrustumCullingEnabled) viewMode |= TERRAIN_CULL_FRUSTUM_BIT;

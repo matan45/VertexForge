@@ -56,6 +56,7 @@ namespace types
         bool lodSelectionEnabled = true;
         bool meshletFrustumCullingEnabled = true;
         bool meshletBackfaceCullingEnabled = true;
+        bool meshletOcclusionCullingEnabled = true;
 
         bool terrainFrustumCullingEnabled = true;
         bool terrainMeshletCullingEnabled = true;
@@ -88,6 +89,7 @@ namespace types
         float errorThreshold = 2.0f;
         float textureScale = 0.1f;
         uint32_t shadowLOD = 2; // LOD level for terrain shadows (0=highest, 3=lowest)
+        bool svtEnabled = false; // Sparse Virtual Texturing
     };
 
     struct VFXLODSettings

@@ -4,6 +4,8 @@
 
 #include "../common/gpu_types.glsl"
 #include "../common/camera_types.glsl"
+#include "../common/culling_functions.glsl"
+#include "../common/hiz_occlusion.glsl"
 
 layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 
@@ -63,16 +65,6 @@ uvec4 getMeshletLODData(GPUObjectData obj, uint level) {
     }
 }
 
-vec4 transformBoundingSphere(vec4 localSphere, mat4 modelMatrix) {
-    vec3 worldCenter = (modelMatrix * vec4(localSphere.xyz, 1.0)).xyz;
-    float scaleX = length(modelMatrix[0].xyz);
-    float scaleY = length(modelMatrix[1].xyz);
-    float scaleZ = length(modelMatrix[2].xyz);
-    float maxScale = max(max(scaleX, scaleY), scaleZ);
-    float worldRadius = localSphere.w * maxScale;
-    return vec4(worldCenter, worldRadius);
-}
-
 void transformAABB(vec3 localMin, vec3 localMax, mat4 modelMatrix, out vec3 worldMin, out vec3 worldMax) {
     vec3 corners[8];
     corners[0] = (modelMatrix * vec4(localMin.x, localMin.y, localMin.z, 1.0)).xyz;
@@ -90,26 +82,6 @@ void transformAABB(vec3 localMin, vec3 localMax, mat4 modelMatrix, out vec3 worl
         worldMin = min(worldMin, corners[i]);
         worldMax = max(worldMax, corners[i]);
     }
-}
-
-// AABB frustum test using p-vertex method
-bool aabbInFrustum(vec3 aabbMin, vec3 aabbMax, vec4 frustumPlanes[6]) {
-    for (int i = 0; i < 6; i++) {
-        vec3 planeNormal = frustumPlanes[i].xyz;
-        float planeD = frustumPlanes[i].w;
-
-        vec3 pVertex;
-        pVertex.x = (planeNormal.x >= 0.0) ? aabbMax.x : aabbMin.x;
-        pVertex.y = (planeNormal.y >= 0.0) ? aabbMax.y : aabbMin.y;
-        pVertex.z = (planeNormal.z >= 0.0) ? aabbMax.z : aabbMin.z;
-
-        float distance = dot(planeNormal, pVertex) + planeD;
-
-        if (distance < 0.0) {
-            return false;
-        }
-    }
-    return true;
 }
 
 float projectSphereToScreen(vec4 worldSphere, mat4 projection, vec2 screenSize) {
@@ -180,57 +152,9 @@ uint findBestAvailableLOD(uint targetLOD, uint availableMask) {
     return 0xFFFFFFFFu;
 }
 
+// Wrapper for backward compatibility — delegates to shared hiz_occlusion.glsl
 bool hiZOcclusionTest(vec4 worldSphere, mat4 viewProjection, vec2 screenSize, uint hiZMipLevels) {
-    vec3 center = worldSphere.xyz;
-    float radius = worldSphere.w;
-    vec3 aabbMin = center - vec3(radius);
-    vec3 aabbMax = center + vec3(radius);
-
-    vec4 corners[8];
-    corners[0] = viewProjection * vec4(aabbMin.x, aabbMin.y, aabbMin.z, 1.0);
-    corners[1] = viewProjection * vec4(aabbMax.x, aabbMin.y, aabbMin.z, 1.0);
-    corners[2] = viewProjection * vec4(aabbMin.x, aabbMax.y, aabbMin.z, 1.0);
-    corners[3] = viewProjection * vec4(aabbMax.x, aabbMax.y, aabbMin.z, 1.0);
-    corners[4] = viewProjection * vec4(aabbMin.x, aabbMin.y, aabbMax.z, 1.0);
-    corners[5] = viewProjection * vec4(aabbMax.x, aabbMin.y, aabbMax.z, 1.0);
-    corners[6] = viewProjection * vec4(aabbMin.x, aabbMax.y, aabbMax.z, 1.0);
-    corners[7] = viewProjection * vec4(aabbMax.x, aabbMax.y, aabbMax.z, 1.0);
-
-    vec2 ndcMin = vec2(1.0);
-    vec2 ndcMax = vec2(-1.0);
-    float minDepth = 1.0;
-
-    for (int i = 0; i < 8; i++) {
-        if (corners[i].w <= 0.0) {
-            return true;
-        }
-        vec3 ndc = corners[i].xyz / corners[i].w;
-        ndcMin = min(ndcMin, ndc.xy);
-        ndcMax = max(ndcMax, ndc.xy);
-        minDepth = min(minDepth, ndc.z);
-    }
-
-    ndcMin = clamp(ndcMin, vec2(-1.0), vec2(1.0));
-    ndcMax = clamp(ndcMax, vec2(-1.0), vec2(1.0));
-
-    if (minDepth < 0.0) {
-        return true;
-    }
-
-    vec2 uvMin = ndcMin * 0.5 + 0.5;
-    vec2 uvMax = ndcMax * 0.5 + 0.5;
-    vec2 sizePixels = (uvMax - uvMin) * screenSize;
-    float maxDimension = max(sizePixels.x, sizePixels.y);
-    float mipLevel = ceil(log2(maxDimension));
-    mipLevel = clamp(mipLevel, 0.0, float(hiZMipLevels - 1u));
-
-    float hiZDepth = 0.0;
-    hiZDepth = max(hiZDepth, textureLod(hiZTexture, uvMin, mipLevel).r);
-    hiZDepth = max(hiZDepth, textureLod(hiZTexture, uvMax, mipLevel).r);
-    hiZDepth = max(hiZDepth, textureLod(hiZTexture, vec2(uvMin.x, uvMax.y), mipLevel).r);
-    hiZDepth = max(hiZDepth, textureLod(hiZTexture, vec2(uvMax.x, uvMin.y), mipLevel).r);
-
-    return minDepth <= hiZDepth + 0.0001;
+    return hiZOcclusionTest(hiZTexture, worldSphere, viewProjection, screenSize, hiZMipLevels);
 }
 
 void main() {

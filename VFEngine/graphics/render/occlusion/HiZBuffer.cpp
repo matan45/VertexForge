@@ -250,6 +250,15 @@ namespace render::occlusion
         }
     }
 
+    vk::ImageAspectFlags HiZBuffer::getDepthAspectMask() const
+    {
+        bool hasStencil = (depthFormat == vk::Format::eD24UnormS8Uint ||
+                           depthFormat == vk::Format::eD32SfloatS8Uint ||
+                           depthFormat == vk::Format::eD16UnormS8Uint);
+        return vk::ImageAspectFlagBits::eDepth |
+               (hasStencil ? vk::ImageAspectFlagBits::eStencil : vk::ImageAspectFlags{});
+    }
+
     void HiZBuffer::transitionDepthToShaderRead(vk::CommandBuffer cmd)
     {
         vk::ImageMemoryBarrier barrier{};
@@ -258,8 +267,7 @@ namespace render::occlusion
         barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         barrier.image = sourceDepthImage;
-        barrier.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eDepth |
-            vk::ImageAspectFlagBits::eStencil;
+        barrier.subresourceRange.aspectMask = getDepthAspectMask();
         barrier.subresourceRange.baseMipLevel = 0;
         barrier.subresourceRange.levelCount = 1;
         barrier.subresourceRange.baseArrayLayer = 0;
@@ -282,8 +290,7 @@ namespace render::occlusion
         barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         barrier.image = sourceDepthImage;
-        barrier.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eDepth |
-            vk::ImageAspectFlagBits::eStencil;
+        barrier.subresourceRange.aspectMask = getDepthAspectMask();
         barrier.subresourceRange.baseMipLevel = 0;
         barrier.subresourceRange.levelCount = 1;
         barrier.subresourceRange.baseArrayLayer = 0;

@@ -1,4 +1,7 @@
 #include "GPUDrivenRenderer.hpp"
+#include "../occlusion/DepthPrepass.hpp"
+#include "../occlusion/DepthPrepassPipeline.hpp"
+#include "../occlusion/HiZBuffer.hpp"
 #include "../mesh/MeshStreamManager.hpp"
 #include "../vegetation/GrassComputePipeline.hpp"
 #include "../vegetation/GrassMeshShaderPipeline.hpp"
@@ -258,9 +261,13 @@ namespace render::gpudriven
         if (billboard.meshShaderPipeline) billboard.meshShaderPipeline->cleanup();
         if (billboard.bufferManager) billboard.bufferManager->cleanup();
         if (billboard.streamManager) billboard.streamManager->cleanup();
+        cleanupSVT();
         cleanupVegetation();
         if (terrain.pipeline) terrain.pipeline->cleanup();
         if (terrain.meshBuffer) terrain.meshBuffer->cleanup();
+        if (depthPrepassPipeline) depthPrepassPipeline->cleanup();
+        if (prepassHiZ) prepassHiZ->cleanup();
+        if (depthPrepass) depthPrepass->cleanup();
         if (lightOcclusionCulling) lightOcclusionCulling->cleanup();
         if (wboitMeshShaderPipeline) wboitMeshShaderPipeline->cleanup();
         if (transparentMeshShaderPipeline) transparentMeshShaderPipeline->cleanup();
@@ -290,6 +297,9 @@ namespace render::gpudriven
         water.oceanFFT.reset();
         water.pipeline.reset();
         water.meshBuffer.reset();
+        depthPrepassPipeline.reset();
+        prepassHiZ.reset();
+        depthPrepass.reset();
         lightOcclusionCulling.reset();
         wboitMeshShaderPipeline.reset();
         transparentMeshShaderPipeline.reset();

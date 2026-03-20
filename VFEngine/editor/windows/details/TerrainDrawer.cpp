@@ -55,6 +55,7 @@ namespace windows::details {
             drawSaveLoad(handle, terrain);
             drawGridExpansion(handle);
             drawStreaming(handle);
+            drawSVTBake(handle, terrain);
             drawPhysics(handle, terrain);
 
             ImGui::Unindent(10.0f);
@@ -219,6 +220,15 @@ namespace windows::details {
             cmd.terrainEntity = handle;
             cmd.enabled = streamingEnabled;
             dispatcher.execute(cmd);
+        }
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip("Streams terrain tiles in/out based on camera distance.\n\n"
+                              "Requirements:\n"
+                              "  - Terrain must be saved to a .vfTerrain file first\n"
+                              "  - Streaming loads tiles from disk on demand\n"
+                              "  - Distant tiles are unloaded to save memory\n\n"
+                              "Save the terrain before enabling streaming.");
         }
 
         events::terrain::GetTerrainStreamingConfigQuery configQuery;
@@ -423,30 +433,128 @@ namespace windows::details {
         }
     }
 
-    void TerrainDrawer::pollSaveResult(services::EntityHandle handle)
+    void TerrainDrawer::drawSVTBake(services::EntityHandle handle, const services::TerrainData& terrain)
     {
-        if (!isSaving || !pendingSave.valid())
-            return;
+        auto& dispatcher = events::EventDispatcher::instance();
 
-        if (pendingSave.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready)
+        ImGui::Separator();
+        ImGui::Text("Virtual Texturing (SVT)");
+
+        bool hasSavePath = !terrain.savePath.empty();
+
+        if (!hasSavePath)
         {
-            bool success = pendingSave.get();
-            isSaving = false;
+            ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f),
+                               "Save terrain first to enable SVT bake");
+        }
 
-            auto& dispatcher = events::EventDispatcher::instance();
-            events::terrain::SetTerrainSaveLockCommand lockCmd;
-            lockCmd.locked = false;
-            dispatcher.execute(lockCmd);
+        ImGui::BeginDisabled(!hasSavePath || isBaking);
 
-            if (success)
+        if (ImGui::Button("Bake SVT Textures"))
+        {
+            isBaking = true;
+            saveStatusMessage.clear();
+
+            pendingBake = threading::JobSystem::instance().submit([handle]()
             {
-                saveStatusMessage = "Saved successfully";
-                statusFrameCounter = 180; // ~3 seconds at 60fps
+                events::terrain::BakeTerrainSVTCommand cmd;
+                cmd.terrainEntity = handle;
+                return events::EventDispatcher::instance().execute(cmd);
+            }, threading::JobPriority::LOW);
+        }
+
+        ImGui::EndDisabled();
+
+        if (isBaking)
+        {
+            ImGui::SameLine();
+            ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.3f, 1.0f), "Baking...");
+        }
+
+        if (ImGui::IsItemHovered() && hasSavePath)
+        {
+            ImGui::SetTooltip("Composites all terrain layer textures with weight maps\n"
+                              "into .vfSVT cache files for fast GPU streaming.\n\n"
+                              "Output files:\n"
+                              "  %s_svt_albedo.vfSVT\n"
+                              "  %s_svt_normal.vfSVT\n"
+                              "  %s_svt_orm.vfSVT\n\n"
+                              "These are auto-loaded when the terrain is opened.",
+                              terrain.savePath.c_str(),
+                              terrain.savePath.c_str(),
+                              terrain.savePath.c_str());
+        }
+
+        // Show SVT cache status
+        if (hasSavePath)
+        {
+            std::string basePath = terrain.savePath;
+            auto dotPos = basePath.rfind('.');
+            if (dotPos != std::string::npos)
+                basePath = basePath.substr(0, dotPos);
+
+            bool hasAlbedo = std::filesystem::exists(basePath + "_svt_albedo.vfSVT");
+            bool hasNormal = std::filesystem::exists(basePath + "_svt_normal.vfSVT");
+            bool hasORM = std::filesystem::exists(basePath + "_svt_orm.vfSVT");
+
+            if (hasAlbedo || hasNormal || hasORM)
+            {
+                ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.3f, 1.0f), "SVT Cache:");
+                if (hasAlbedo) ImGui::BulletText("Albedo");
+                if (hasNormal) ImGui::BulletText("Normal");
+                if (hasORM) ImGui::BulletText("ORM");
             }
             else
             {
-                saveStatusMessage = "Failed to save terrain";
-                statusFrameCounter = 300; // ~5 seconds
+                ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "No SVT cache (runtime compositing)");
+            }
+        }
+    }
+
+    void TerrainDrawer::pollSaveResult(services::EntityHandle handle)
+    {
+        if (isSaving && pendingSave.valid())
+        {
+            if (pendingSave.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready)
+            {
+                bool success = pendingSave.get();
+                isSaving = false;
+
+                auto& dispatcher = events::EventDispatcher::instance();
+                events::terrain::SetTerrainSaveLockCommand lockCmd;
+                lockCmd.locked = false;
+                dispatcher.execute(lockCmd);
+
+                if (success)
+                {
+                    saveStatusMessage = "Saved successfully";
+                    statusFrameCounter = 180; // ~3 seconds at 60fps
+                }
+                else
+                {
+                    saveStatusMessage = "Failed to save terrain";
+                    statusFrameCounter = 300; // ~5 seconds
+                }
+            }
+        }
+
+        if (isBaking && pendingBake.valid())
+        {
+            if (pendingBake.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready)
+            {
+                bool success = pendingBake.get();
+                isBaking = false;
+
+                if (success)
+                {
+                    saveStatusMessage = "SVT bake completed";
+                    statusFrameCounter = 180;
+                }
+                else
+                {
+                    saveStatusMessage = "Failed to bake SVT textures";
+                    statusFrameCounter = 300;
+                }
             }
         }
     }

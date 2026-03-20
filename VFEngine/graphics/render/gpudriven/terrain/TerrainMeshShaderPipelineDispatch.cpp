@@ -128,11 +128,11 @@ namespace render::gpudriven
     }
 
     void TerrainMeshShaderPipeline::bindDescriptorSetsInBatches(
-        vk::CommandBuffer cmd, const std::array<vk::DescriptorSet, 12>& currentSets) const
+        vk::CommandBuffer cmd, const vk::DescriptorSet* currentSets, uint32_t count) const
     {
         uint32_t batchStart = 0;
         std::vector<vk::DescriptorSet> batch;
-        batch.reserve(12);
+        batch.reserve(count);
 
         auto flushBatch = [&]() {
             if (!batch.empty())
@@ -143,7 +143,7 @@ namespace render::gpudriven
             }
         };
 
-        for (uint32_t i = 0; i < 12; ++i)
+        for (uint32_t i = 0; i < count; ++i)
         {
             vk::DescriptorSet current = currentSets[i];
 
@@ -173,6 +173,8 @@ namespace render::gpudriven
         uint32_t effectiveViewMode = viewMode;
         if (frustumCullingEnabled) effectiveViewMode |= TERRAIN_CULL_FRUSTUM_BIT;
         if (meshletCullingEnabled) effectiveViewMode |= TERRAIN_CULL_BACKFACE_BIT;
+        if (meshletOcclusionCullingEnabled && hiZMipLevels > 0) effectiveViewMode |= TERRAIN_CULL_OCCLUSION_BIT;
+        if (svtEnabled) effectiveViewMode |= SVT_VIEWMODE_ENABLED_BIT;
 
         pc.viewMode = effectiveViewMode;
         pc.screenWidth = screenWidth;
@@ -186,7 +188,7 @@ namespace render::gpudriven
         pc.brushFalloff = brushFalloff;
         pc.brushShape = brushShape;
         pc.shadowLOD = static_cast<float>(shadowLOD);
-        pc._pad2 = 0.0f;
+        pc.hiZMipLevels = hiZMipLevels;
         pc._pad3 = 0.0f;
         pc.viewProjection = viewProjection;
         return pc;
@@ -204,16 +206,17 @@ namespace render::gpudriven
 
         cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
 
-        std::array<vk::DescriptorSet, 12> currentSets = {
+        std::array<vk::DescriptorSet, 13> currentSets = {
             iblDescriptorSet, weightMapDescriptorSet, bindlessDescriptorSet,
             terrainMeshletDescriptorSet, terrainVertexDescriptorSet, emptyDescriptorSet5,
             lightDataDescriptorSet, clusterGridDescriptorSet, cullingOutputDescriptorSet,
-            shadowDataDescriptorSet, shadowTextureDescriptorSet, terrainDataDescriptorSet
+            shadowDataDescriptorSet, shadowTextureDescriptorSet, terrainDataDescriptorSet,
+            svtEnabled ? svtDescriptorSet : vk::DescriptorSet{nullptr}  // Set 12: SVT (optional)
         };
 
         if (!validateDescriptorsForDispatch()) return;
 
-        bindDescriptorSetsInBatches(cmd, currentSets);
+        bindDescriptorSetsInBatches(cmd, currentSets.data(), static_cast<uint32_t>(currentSets.size()));
 
         TerrainPushConstants pushConstants = buildTerrainPushConstants(
             viewMode, screenWidth, screenHeight, lodBias, errorThreshold, textureScale);

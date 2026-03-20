@@ -241,6 +241,7 @@
     <ClInclude Include="windows\preview\ImagePreviewWindow.hpp" />
     <ClInclude Include="windows\preview\MeshPreviewWindow.hpp" />
     <ClInclude Include="windows\preview\PrefabPreviewWindow.hpp" />
+    <ClInclude Include="windows\preview\SVTPreviewWindow.hpp" />
     <ClInclude Include="windows\scene\EntityDetailsPanel.hpp" />
     <ClInclude Include="windows\scene\FolderStructureWindow.hpp" />
     <ClInclude Include="windows\scene\SceneHierarchyPanel.hpp" />
@@ -404,6 +405,7 @@
     <ClCompile Include="windows\preview\ImagePreviewWindow.cpp" />
     <ClCompile Include="windows\preview\MeshPreviewWindow.cpp" />
     <ClCompile Include="windows\preview\PrefabPreviewWindow.cpp" />
+    <ClCompile Include="windows\preview\SVTPreviewWindow.cpp" />
     <ClCompile Include="windows\scene\EntityDetailsPanel.cpp" />
     <ClCompile Include="windows\scene\FolderStructureWindow.cpp" />
     <ClCompile Include="windows\scene\SceneHierarchyPanel.cpp" />

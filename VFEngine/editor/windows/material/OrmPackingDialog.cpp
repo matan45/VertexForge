@@ -252,6 +252,7 @@ namespace editor::materialeditor
         if (result.success)
         {
             vfLogInfo("ORM texture packed successfully: {}", result.outputPath);
+
             showDialog = false;
 
             events::resource::ImportCompletedNotification notification;

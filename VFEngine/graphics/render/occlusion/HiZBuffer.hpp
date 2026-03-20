@@ -77,6 +77,7 @@ namespace render::occlusion
         void createComputePipeline();
         void createDescriptorSets();
 
+        vk::ImageAspectFlags getDepthAspectMask() const;
         void transitionDepthToShaderRead(vk::CommandBuffer cmd);
         void transitionDepthToAttachment(vk::CommandBuffer cmd);
         void generateMipLevel(vk::CommandBuffer cmd, uint32_t mipIndex,

@@ -106,6 +106,7 @@ namespace core
         void setLODCrossfadeEnabled(bool enabled) override;
         void setMeshletFrustumCullingEnabled(bool enabled) override;
         void setMeshletBackfaceCullingEnabled(bool enabled) override;
+        void setMeshletOcclusionCullingEnabled(bool enabled) override;
         void setDistanceCullingEnabled(bool enabled) override;
         void setCategoryDistance(uint32_t category, float distance) override;
         void setShadowDistanceMultiplier(float multiplier) override;
@@ -120,6 +121,7 @@ namespace core
         void setTerrainErrorThreshold(float threshold) override;
         void setTerrainTextureScale(float scale) override;
         void setTerrainShadowLOD(uint32_t lod) override;
+        void setTerrainSVTEnabled(bool enabled) override;
 
         void setUIViewportOffset(const glm::vec2& offset, const glm::vec2& panelSize) override;
 

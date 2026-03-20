@@ -61,9 +61,11 @@ namespace services {
 
         bool meshletFrustumCullingEnabled = false;
         bool meshletBackfaceCullingEnabled = false;
+        bool meshletOcclusionCullingEnabled = false;
         uint32_t totalMeshlets = 0;
         uint32_t meshletsCulledByFrustum = 0;
         uint32_t meshletsCulledByBackface = 0;
+        uint32_t meshletsCulledByOcclusion = 0;
         uint32_t visibleMeshlets = 0;
 
         bool bvhLightCullingEnabled = false;
@@ -85,6 +87,7 @@ namespace services {
         uint32_t culledTiles = 0;
         uint32_t totalMeshlets = 0;
         uint32_t culledMeshlets = 0;
+        uint32_t culledByOcclusion = 0;
         uint32_t visibleMeshlets = 0;
         uint32_t lodCount0 = 0;
         uint32_t lodCount1 = 0;
@@ -259,6 +262,7 @@ namespace services {
         virtual void setLODCrossfadeEnabled(bool enabled) = 0;
         virtual void setMeshletFrustumCullingEnabled(bool enabled) = 0;
         virtual void setMeshletBackfaceCullingEnabled(bool enabled) = 0;
+        virtual void setMeshletOcclusionCullingEnabled(bool enabled) = 0;
 
         virtual void setWBOITEnabled(bool enabled) = 0;
 
@@ -275,6 +279,7 @@ namespace services {
         virtual void setTerrainErrorThreshold(float threshold) = 0;
         virtual void setTerrainTextureScale(float scale) = 0;
         virtual void setTerrainShadowLOD(uint32_t lod) = 0;
+        virtual void setTerrainSVTEnabled(bool enabled) = 0;
 
         virtual void setUIViewportOffset(const glm::vec2& offset, const glm::vec2& panelSize) = 0;
 

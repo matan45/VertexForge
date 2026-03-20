@@ -33,6 +33,7 @@ namespace render::gpudriven
         cachedShadowTextureLayout = info.shadowTextureLayout;
         cachedGIProbeDataLayout = info.giProbeDataLayout;
 
+
         createStatsBuffer();
         createPerDrawDataDescriptor();
         createMeshletDataDescriptor();
@@ -128,6 +129,7 @@ namespace render::gpudriven
         cachedShadowDataLayout = info.shadowDataLayout;
         cachedShadowTextureLayout = info.shadowTextureLayout;
         cachedGIProbeDataLayout = info.giProbeDataLayout;
+
 
         if (graphicsPipeline)
         {
@@ -233,6 +235,24 @@ namespace render::gpudriven
         device.getLogicalDevice().updateDescriptorSets(writes, {});
     }
 
+    void MeshShaderPipeline::updateHiZDescriptor(vk::ImageView hiZView, vk::Sampler hiZSampler)
+    {
+        vk::DescriptorImageInfo imageInfo{};
+        imageInfo.sampler = hiZSampler;
+        imageInfo.imageView = hiZView;
+        imageInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+
+        vk::WriteDescriptorSet write{};
+        write.dstSet = meshletDataDescriptorSet;
+        write.dstBinding = 4;
+        write.dstArrayElement = 0;
+        write.descriptorCount = 1;
+        write.descriptorType = vk::DescriptorType::eCombinedImageSampler;
+        write.pImageInfo = &imageInfo;
+
+        device.getLogicalDevice().updateDescriptorSets(write, {});
+    }
+
     void MeshShaderPipeline::updateVertexDescriptors(MergedMeshBuffer& mergedBuffer)
     {
         vk::DescriptorBufferInfo vertexInfo{};
@@ -335,7 +355,7 @@ namespace render::gpudriven
     {
         vk::Device vkDevice = device.getLogicalDevice();
 
-        std::array<vk::DescriptorSetLayoutBinding, 4> bindings{};
+        std::array<vk::DescriptorSetLayoutBinding, 5> bindings{};
 
         bindings[0].binding = 0;
         bindings[0].descriptorType = vk::DescriptorType::eStorageBuffer;
@@ -357,20 +377,28 @@ namespace render::gpudriven
         bindings[3].descriptorCount = 1;
         bindings[3].stageFlags = vk::ShaderStageFlagBits::eTaskEXT;
 
+        // Binding 4: Hi-Z texture for meshlet occlusion culling
+        bindings[4].binding = 4;
+        bindings[4].descriptorType = vk::DescriptorType::eCombinedImageSampler;
+        bindings[4].descriptorCount = 1;
+        bindings[4].stageFlags = vk::ShaderStageFlagBits::eTaskEXT;
+
         vk::DescriptorSetLayoutCreateInfo layoutInfo{};
         layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
         layoutInfo.pBindings = bindings.data();
 
         meshletDataLayout = vkDevice.createDescriptorSetLayout(layoutInfo);
 
-        vk::DescriptorPoolSize poolSize{};
-        poolSize.type = vk::DescriptorType::eStorageBuffer;
-        poolSize.descriptorCount = 4;
+        std::array<vk::DescriptorPoolSize, 2> poolSizes{};
+        poolSizes[0].type = vk::DescriptorType::eStorageBuffer;
+        poolSizes[0].descriptorCount = 4;
+        poolSizes[1].type = vk::DescriptorType::eCombinedImageSampler;
+        poolSizes[1].descriptorCount = 1;
 
         vk::DescriptorPoolCreateInfo poolInfo{};
         poolInfo.maxSets = 1;
-        poolInfo.poolSizeCount = 1;
-        poolInfo.pPoolSizes = &poolSize;
+        poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
+        poolInfo.pPoolSizes = poolSizes.data();
 
         meshletDataPool = vkDevice.createDescriptorPool(poolInfo);
 

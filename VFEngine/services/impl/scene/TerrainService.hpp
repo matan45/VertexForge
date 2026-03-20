@@ -12,7 +12,9 @@
 #include "terrain/TerrainWorldStreamer.hpp"
 #include <glm/glm.hpp>
 #include <atomic>
+#include <future>
 #include <memory>
+#include <optional>
 #include <vector>
 
 namespace scene
@@ -26,9 +28,15 @@ namespace terrain
     class TerrainTile;
 }
 
+namespace render::svt
+{
+    class SVTFileWriter;
+}
+
 namespace components
 {
     struct TerrainColliderDebugData;
+    struct TerrainComponent;
 }
 
 namespace services
@@ -58,6 +66,16 @@ namespace services
         std::vector<terrain::StreamingAction> streamingActions; // persistent scratch buffer
         std::vector<std::pair<uint64_t, terrain::TileCoord>> pendingPhysicsTiles;
 
+        // Async terrain creation state
+        struct PendingTerrainCreation
+        {
+            TerrainCreationData config;
+            std::future<std::unique_ptr<terrain::TerrainGrid>> future;
+            std::atomic<float> progress{0.0f};
+            std::atomic<bool> done{false};
+        };
+        std::shared_ptr<PendingTerrainCreation> pendingCreation;
+
     public:
         explicit TerrainService(std::shared_ptr<scene::SceneGraphSystem> sceneGraph);
         ~TerrainService() override;
@@ -65,6 +83,8 @@ namespace services
         void registerEventHandlers() override;
 
         EntityHandle createTerrain(const TerrainCreationData& config) override;
+        bool beginCreateTerrainAsync(const TerrainCreationData& config);
+        TerrainCreationPollResult pollCreateTerrain();
         bool deleteTerrain(EntityHandle terrainEntity) override;
         std::optional<TerrainData> getTerrainData(EntityHandle entity) const override;
         bool hasTerrainComponent(EntityHandle entity) const override;
@@ -118,6 +138,7 @@ namespace services
         bool streamOutTile(EntityHandle terrainEntity, int32_t tileX, int32_t tileZ);
         void commitStreamingChanges(EntityHandle terrainEntity);
         void loadAllTiles(EntityHandle terrainEntity);
+        bool bakeTerrainSVT(EntityHandle terrainEntity);
 
         bool ensureTileLODData(terrain::TerrainTile& tile, uint8_t lodLevel);
         void releaseTileRAMData(terrain::TerrainTile& tile);
@@ -164,5 +185,17 @@ namespace services
         void applyVegetationDensityBrush(const glm::vec3& worldPosition, float deltaTime, bool invert, bool isFirstApplication);
         void registerVegetationBrushHandlers(::events::EventDispatcher& dispatcher);
 
+        // SVT bake helpers
+        struct BakeLayerCPU;
+        bool loadBakeMaterial(const std::string& materialPath, std::vector<BakeLayerCPU>& layers);
+        struct BakeParams;
+        bool computeBakeParams(const components::TerrainComponent& comp, BakeParams& params);
+        void compositeAndWriteTile(const BakeParams& params,
+                                   const std::vector<BakeLayerCPU>& layers,
+                                   const std::vector<const terrain::TerrainTile*>& allTiles,
+                                   uint32_t mip, uint32_t tx, uint32_t ty,
+                                   render::svt::SVTFileWriter& albedoWriter,
+                                   render::svt::SVTFileWriter& normalWriter,
+                                   render::svt::SVTFileWriter& ormWriter);
     };
 }

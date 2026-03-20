@@ -182,6 +182,7 @@ namespace render::gpudriven
 
         createEmptyDescriptorSet();
         createWeightMapDescriptor();
+        createSVTDescriptorLayout();
         createTerrainLayerBuffer();
         createTileDataBuffer();
         createStatsBuffer();
@@ -252,6 +253,8 @@ namespace render::gpudriven
         if (emptyLayout) { vkDevice.destroyDescriptorSetLayout(emptyLayout); emptyLayout = nullptr; }
         if (terrainDataPool) { vkDevice.destroyDescriptorPool(terrainDataPool); terrainDataPool = nullptr; }
         if (terrainDataLayout) { vkDevice.destroyDescriptorSetLayout(terrainDataLayout); terrainDataLayout = nullptr; }
+        if (svtPool) { vkDevice.destroyDescriptorPool(svtPool); svtPool = nullptr; }
+        if (svtLayout) { vkDevice.destroyDescriptorSetLayout(svtLayout); svtLayout = nullptr; }
     }
 
     void TerrainMeshShaderPipeline::cleanup()
@@ -318,6 +321,119 @@ namespace render::gpudriven
         vkDevice.unmapMemory(statsBufferMemory);
     }
 
+    void TerrainMeshShaderPipeline::createSVTDescriptorLayout()
+    {
+        vk::Device vkDevice = device.getLogicalDevice();
+
+        // Set 12 layout for SVT (8 bindings):
+        //   binding 0: page table SSBO
+        //   binding 2: SVT params UBO
+        //   binding 3-7: albedo, normal, ORM, emission, height cache sampler2DArray
+        std::array<vk::DescriptorSetLayoutBinding, 7> bindings{};
+
+        bindings[0].binding = 0;
+        bindings[0].descriptorType = vk::DescriptorType::eStorageBuffer;
+        bindings[0].descriptorCount = 1;
+        bindings[0].stageFlags = vk::ShaderStageFlagBits::eFragment;
+
+        bindings[1].binding = 2;
+        bindings[1].descriptorType = vk::DescriptorType::eUniformBuffer;
+        bindings[1].descriptorCount = 1;
+        bindings[1].stageFlags = vk::ShaderStageFlagBits::eFragment;
+
+        for (uint32_t i = 0; i < 5; ++i)
+        {
+            bindings[2 + i].binding = 3 + i;
+            bindings[2 + i].descriptorType = vk::DescriptorType::eCombinedImageSampler;
+            bindings[2 + i].descriptorCount = 1;
+            bindings[2 + i].stageFlags = vk::ShaderStageFlagBits::eFragment;
+        }
+
+        vk::DescriptorSetLayoutCreateInfo layoutInfo{};
+        layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
+        layoutInfo.pBindings = bindings.data();
+        svtLayout = vkDevice.createDescriptorSetLayout(layoutInfo);
+    }
+
+    void TerrainMeshShaderPipeline::initSVTDescriptorSet(
+        vk::Buffer pageTableBuffer, vk::Buffer svtParamsBuffer,
+        const SVTCacheViews caches[5])
+    {
+        vk::Device vkDevice = device.getLogicalDevice();
+
+        if (!svtPool)
+        {
+            std::array<vk::DescriptorPoolSize, 3> poolSizes = {{
+                {vk::DescriptorType::eStorageBuffer, 1},
+                {vk::DescriptorType::eUniformBuffer, 1},
+                {vk::DescriptorType::eCombinedImageSampler, 5}
+            }};
+
+            vk::DescriptorPoolCreateInfo poolInfo{};
+            poolInfo.maxSets = 1;
+            poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
+            poolInfo.pPoolSizes = poolSizes.data();
+            svtPool = vkDevice.createDescriptorPool(poolInfo);
+
+            vk::DescriptorSetAllocateInfo allocInfo{};
+            allocInfo.descriptorPool = svtPool;
+            allocInfo.descriptorSetCount = 1;
+            allocInfo.pSetLayouts = &svtLayout;
+            svtDescriptorSet = vkDevice.allocateDescriptorSets(allocInfo)[0];
+        }
+
+        // Write descriptors
+        vk::DescriptorBufferInfo pageTableInfo{pageTableBuffer, 0, VK_WHOLE_SIZE};
+        vk::DescriptorBufferInfo paramsInfo{svtParamsBuffer, 0, VK_WHOLE_SIZE};
+        std::array<vk::DescriptorImageInfo, 5> imageInfos{};
+        for (int i = 0; i < 5; ++i)
+        {
+            imageInfos[i].sampler = caches[i].sampler;
+            imageInfos[i].imageView = caches[i].view;
+            imageInfos[i].imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+        }
+
+        std::array<vk::WriteDescriptorSet, 7> writes{};
+
+        writes[0].dstSet = svtDescriptorSet;
+        writes[0].dstBinding = 0;
+        writes[0].descriptorCount = 1;
+        writes[0].descriptorType = vk::DescriptorType::eStorageBuffer;
+        writes[0].pBufferInfo = &pageTableInfo;
+
+        writes[1].dstSet = svtDescriptorSet;
+        writes[1].dstBinding = 2;
+        writes[1].descriptorCount = 1;
+        writes[1].descriptorType = vk::DescriptorType::eUniformBuffer;
+        writes[1].pBufferInfo = &paramsInfo;
+
+        for (int i = 0; i < 5; ++i)
+        {
+            writes[2 + i].dstSet = svtDescriptorSet;
+            writes[2 + i].dstBinding = 3 + i;
+            writes[2 + i].descriptorCount = 1;
+            writes[2 + i].descriptorType = vk::DescriptorType::eCombinedImageSampler;
+            writes[2 + i].pImageInfo = &imageInfos[i];
+        }
+
+        vkDevice.updateDescriptorSets(writes, {});
+        svtEnabled = true;
+        vfLogInfo("TerrainMeshShaderPipeline: SVT descriptor set initialized (5 channels)");
+    }
+
+    void TerrainMeshShaderPipeline::updateSVTParamsBuffer(vk::Buffer svtParamsBuffer)
+    {
+        if (!svtDescriptorSet) return;
+        vk::DescriptorBufferInfo paramsInfo{svtParamsBuffer, 0, VK_WHOLE_SIZE};
+        vk::WriteDescriptorSet write{};
+        write.dstSet = svtDescriptorSet;
+        write.dstBinding = 2;
+        write.descriptorCount = 1;
+        write.descriptorType = vk::DescriptorType::eUniformBuffer;
+        write.pBufferInfo = &paramsInfo;
+        device.getLogicalDevice().updateDescriptorSets(write, {});
+    }
+
     void TerrainMeshShaderPipeline::createTerrainDataDescriptor()
     {
         vk::Device vkDevice = device.getLogicalDevice();
@@ -361,6 +477,10 @@ namespace render::gpudriven
     bool TerrainMeshShaderPipeline::loadTerrainShaders()
     {
         terrainShader = std::make_unique<core::Shader>(device);
+        if (svtEnabled)
+        {
+            terrainShader->addMacroDefinition("SVT_ENABLED");
+        }
         terrainShader->readShader("../../resources/shaders/gpudriven/task_terrain.glsl");
         terrainShader->readShader("../../resources/shaders/gpudriven/mesh_terrain.glsl");
 
@@ -406,10 +526,11 @@ namespace render::gpudriven
 
         vk::Device vkDevice = device.getLogicalDevice();
 
-        std::array<vk::DescriptorSetLayout, 12> setLayouts = {
+        std::array<vk::DescriptorSetLayout, 13> setLayouts = {
             iblLayout, weightMapLayout, bindlessTextureLayout, meshletDataLayout,
             vertexDataLayout, emptyLayout, lightDataLayout, clusterGridLayout,
-            cullingOutputLayout, shadowDataLayout, shadowTextureLayout, terrainDataLayout
+            cullingOutputLayout, shadowDataLayout, shadowTextureLayout, terrainDataLayout,
+            svtLayout  // Set 12: SVT page table + params + cache textures
         };
 
         vk::PushConstantRange pushConstantRange{};
@@ -458,8 +579,9 @@ namespace render::gpudriven
 
         if (!terrainBufferPool)
         {
-            std::array<vk::DescriptorPoolSize, 1> poolSizes = {{
-                {vk::DescriptorType::eStorageBuffer, 6}
+            std::array<vk::DescriptorPoolSize, 2> poolSizes = {{
+                {vk::DescriptorType::eStorageBuffer, 6},
+                {vk::DescriptorType::eCombinedImageSampler, 1}
             }};
 
             vk::DescriptorPoolCreateInfo poolInfo{};
@@ -483,5 +605,25 @@ namespace render::gpudriven
 
         writeMeshletDescriptors(vkDevice, terrainMeshletDescriptorSet, terrainBuffer);
         writeVertexDescriptor(vkDevice, terrainVertexDescriptorSet, terrainBuffer);
+    }
+
+    void TerrainMeshShaderPipeline::updateHiZDescriptor(vk::ImageView hiZView, vk::Sampler hiZSampler)
+    {
+        if (!initialized || !terrainMeshletDescriptorSet) return;
+
+        vk::DescriptorImageInfo imageInfo{};
+        imageInfo.sampler = hiZSampler;
+        imageInfo.imageView = hiZView;
+        imageInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+
+        vk::WriteDescriptorSet write{};
+        write.dstSet = terrainMeshletDescriptorSet;
+        write.dstBinding = 4;
+        write.dstArrayElement = 0;
+        write.descriptorCount = 1;
+        write.descriptorType = vk::DescriptorType::eCombinedImageSampler;
+        write.pImageInfo = &imageInfo;
+
+        device.getLogicalDevice().updateDescriptorSets(write, {});
     }
 }

@@ -351,6 +351,7 @@ namespace render
         void setLODCrossfadeEnabled(bool enabled);
         void setMeshletFrustumCullingEnabled(bool enabled);
         void setMeshletBackfaceCullingEnabled(bool enabled);
+        void setMeshletOcclusionCullingEnabled(bool enabled);
         void setGlobalLodBias(float bias);
         void setTerrainFrustumCullingEnabled(bool enabled);
         void setTerrainMeshletCullingEnabled(bool enabled);
@@ -362,6 +363,7 @@ namespace render
         void setTerrainErrorThreshold(float threshold);
         void setTerrainTextureScale(float scale);
         void setTerrainShadowLOD(uint32_t lod);
+        void setTerrainSVTEnabled(bool enabled);
 
         void setBillboardRenderingEnabled(bool enabled);
 

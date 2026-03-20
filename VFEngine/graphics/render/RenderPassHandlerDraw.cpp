@@ -223,13 +223,20 @@ namespace render
         else
             gpuDrivenRenderer->dispatchCompute(commandBuffer);
 
+        vk::DescriptorSet iblDescriptorSet = meshPipeline->getIBLDescriptorSet(imageIndex);
+
+        // Depth prepass for meshlet-level Hi-Z occlusion culling
+        if (gpuDrivenRenderer->isMeshletOcclusionCullingEnabled())
+        {
+            gpuDrivenRenderer->renderDepthPrepass(commandBuffer, iblDescriptorSet);
+            gpuDrivenRenderer->generatePrepassHiZ(commandBuffer);
+        }
+
         if (oceanFFTInitialized)
         {
             gpuDrivenRenderer->readbackOceanDisplacement();
             gpuDrivenRenderer->dispatchOceanFFT(commandBuffer, currentTime);
         }
-
-        vk::DescriptorSet iblDescriptorSet = meshPipeline->getIBLDescriptorSet(imageIndex);
 
         bool useParallel = parallelSceneRecording && sceneThreadPoolManager &&
                            sceneThreadPoolManager->getThreadCount() > 1;

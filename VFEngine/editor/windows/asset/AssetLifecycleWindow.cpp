@@ -70,20 +70,24 @@ namespace windows
                      totalAssets, pendingCount,
                      static_cast<float>(totalMemory) / (1024.0f * 1024.0f));
 
-        ImGui::TextDisabled("Tex:%u Mesh:%u Audio:%u Anim:%u Mat:%u Other:%u",
+        uint32_t knownCount =
+            typeCounts[static_cast<int>(resource::AssetType::Texture)] +
+            typeCounts[static_cast<int>(resource::AssetType::Mesh)] +
+            typeCounts[static_cast<int>(resource::AssetType::Audio)] +
+            typeCounts[static_cast<int>(resource::AssetType::Animation)] +
+            typeCounts[static_cast<int>(resource::AssetType::Material)] +
+            typeCounts[static_cast<int>(resource::AssetType::MaterialInstance)] +
+            typeCounts[static_cast<int>(resource::AssetType::SVT)];
+
+        ImGui::TextDisabled("Tex:%u Mesh:%u Audio:%u Anim:%u Mat:%u SVT:%u Other:%u",
                             typeCounts[static_cast<int>(resource::AssetType::Texture)],
                             typeCounts[static_cast<int>(resource::AssetType::Mesh)],
                             typeCounts[static_cast<int>(resource::AssetType::Audio)],
                             typeCounts[static_cast<int>(resource::AssetType::Animation)],
                             typeCounts[static_cast<int>(resource::AssetType::Material)] +
                             typeCounts[static_cast<int>(resource::AssetType::MaterialInstance)],
-                            totalAssets -
-                            typeCounts[static_cast<int>(resource::AssetType::Texture)] -
-                            typeCounts[static_cast<int>(resource::AssetType::Mesh)] -
-                            typeCounts[static_cast<int>(resource::AssetType::Audio)] -
-                            typeCounts[static_cast<int>(resource::AssetType::Animation)] -
-                            typeCounts[static_cast<int>(resource::AssetType::Material)] -
-                            typeCounts[static_cast<int>(resource::AssetType::MaterialInstance)]);
+                            typeCounts[static_cast<int>(resource::AssetType::SVT)],
+                            totalAssets - knownCount);
     }
 
     void AssetLifecycleWindow::drawAssetTable()
@@ -93,7 +97,9 @@ namespace windows
         ImGui::SameLine();
         const char* filterNames[] = {"All", "Texture", "Mesh", "Audio", "Animation",
                                      "Animator", "Material", "MaterialInstance",
-                                     "PhysicsShape", "VFX", "Script", "HDR", "Font", "Skeleton"};
+                                     "PhysicsShape", "VFX", "Script", "HDR", "Font", "Skeleton",
+                                     "Navmesh", "InputMapping", "Terrain", "TerrainMaterial",
+                                     "BehaviorTree", "World", "SVT"};
         ImGui::SetNextItemWidth(150);
         ImGui::Combo("##TypeFilter", &filterType, filterNames, IM_ARRAYSIZE(filterNames));
 

@@ -17,6 +17,7 @@ namespace editor::materialeditor
         importConfig::TextureCompressionMode compressionMode = importConfig::TextureCompressionMode::BC;
         importConfig::TextureCompressionQuality compressionQuality = importConfig::TextureCompressionQuality::Balanced;
 
+
         std::string errorMessage;
         float progress = 0.0f;
         bool packInProgress = false;

@@ -1,4 +1,5 @@
 #include "GPUDrivenRenderer.hpp"
+#include "../occlusion/HiZBuffer.hpp"
 #include "../mesh/MeshTypes.hpp"
 #include "../mesh/MeshStreamManager.hpp"
 #include "../material/MaterialTextureCache.hpp"
@@ -471,6 +472,15 @@ namespace render::gpudriven
         clusterGridManager->updateFromCamera(clusterCameraParams);
     }
 
+    std::pair<vk::ImageView, vk::Sampler> GPUDrivenRenderer::getHiZViewSampler() const
+    {
+        if (prepassHiZ && prepassHiZ->isInitialized())
+            return {prepassHiZ->getHiZImageView(), prepassHiZ->getHiZSampler()};
+        if (bindlessTextures && bindlessTextures->hasDefaultTexture())
+            return {bindlessTextures->getDefaultImageView(), bindlessTextures->getDefaultSampler()};
+        return {nullptr, nullptr};
+    }
+
     void GPUDrivenRenderer::updatePipelineDescriptors()
     {
         if (lightCullingPipeline && clusterGridManager && lightBufferManager)
@@ -514,6 +524,20 @@ namespace render::gpudriven
             wboitMeshShaderPipeline->updateVertexDescriptors(*mergedBuffer);
             wboitMeshShaderPipeline->updateInstanceTransformDescriptor(mergedBuffer->getInstanceTransformBuffer());
             wboitMeshShaderPipeline->updateObjectBufferDescriptor(mergedBuffer->getObjectBuffer());
+        }
+
+        // Initialize Hi-Z descriptors with prepass texture or default fallback
+        {
+            auto [hiZView, hiZSampler] = getHiZViewSampler();
+            if (hiZView && hiZSampler)
+            {
+                if (meshShaderPipeline)
+                    meshShaderPipeline->updateHiZDescriptor(hiZView, hiZSampler);
+                if (transparentMeshShaderPipeline)
+                    transparentMeshShaderPipeline->updateHiZDescriptor(hiZView, hiZSampler);
+                if (wboitMeshShaderPipeline)
+                    wboitMeshShaderPipeline->updateHiZDescriptor(hiZView, hiZSampler);
+            }
         }
 
         if (meshShaderPipeline && hasMeshes)
@@ -581,6 +605,10 @@ namespace render::gpudriven
         {
             terrain.pipeline->updateTerrainBufferDescriptors(*terrain.meshBuffer);
             terrain.pipeline->updateWeightMapDescriptor(terrain.meshBuffer->getWeightMapBuffer());
+
+            auto [hiZView, hiZSampler] = getHiZViewSampler();
+            if (hiZView && hiZSampler)
+                terrain.pipeline->updateHiZDescriptor(hiZView, hiZSampler);
         }
 
         if (shadowSystem && shadowSystem->isInitialized() && cameraBuffer)

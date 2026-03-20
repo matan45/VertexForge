@@ -343,6 +343,12 @@ namespace core {
         }
     }
 
+    void OffScreenAdapter::setMeshletOcclusionCullingEnabled(bool enabled) {
+        if (offScreen) {
+            offScreen->setMeshletOcclusionCullingEnabled(enabled);
+        }
+    }
+
     void OffScreenAdapter::setDistanceCullingEnabled(bool enabled) {
         if (offScreen) {
             offScreen->setDistanceCullingEnabled(enabled);
@@ -412,6 +418,12 @@ namespace core {
     void OffScreenAdapter::setTerrainShadowLOD(uint32_t lod) {
         if (offScreen) {
             offScreen->setTerrainShadowLOD(lod);
+        }
+    }
+
+    void OffScreenAdapter::setTerrainSVTEnabled(bool enabled) {
+        if (offScreen) {
+            offScreen->setTerrainSVTEnabled(enabled);
         }
     }
 

@@ -1,7 +1,9 @@
 #pragma once
+#include "EntityHandle.hpp"
 #include <string>
 #include <array>
 #include <cstdint>
+#include <optional>
 
 namespace services
 {
@@ -19,6 +21,14 @@ namespace services
         std::string heightmapPath;
         std::string terrainMaterialPath;
         std::string weightMapPath;
+    };
+
+    struct TerrainCreationPollResult
+    {
+        bool inProgress = false;
+        float progress = 0.0f;
+        std::string stage;
+        std::optional<EntityHandle> result;
     };
 
     struct TerrainData

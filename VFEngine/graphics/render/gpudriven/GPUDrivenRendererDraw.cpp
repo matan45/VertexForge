@@ -59,6 +59,7 @@ namespace render::gpudriven
             descriptorSets.data(),
             0, nullptr);
 
+
         float dispatchWidth, dispatchHeight;
         if (screenWidth > 0 && screenHeight > 0)
         {
@@ -85,8 +86,10 @@ namespace render::gpudriven
                 pushConstants.viewMode = culling.currentViewMode;
                 if (culling.meshletFrustumCullingEnabled) pushConstants.viewMode |= MESHLET_CULL_FRUSTUM_BIT;
                 if (culling.meshletBackfaceCullingEnabled) pushConstants.viewMode |= MESHLET_CULL_BACKFACE_BIT;
+                if (culling.meshletOcclusionCullingEnabled) pushConstants.viewMode |= MESHLET_CULL_OCCLUSION_BIT;
                 pushConstants.screenWidth = dispatchWidth;
                 pushConstants.screenHeight = dispatchHeight;
+                pushConstants.hiZMipLevels = prepassHiZMipLevels;
 
                 cmd.pushConstants(
                     layout,
@@ -138,6 +141,7 @@ namespace render::gpudriven
             static_cast<uint32_t>(descriptorSets.size()),
             descriptorSets.data(),
             0, nullptr);
+
 
         float dispatchWidth, dispatchHeight;
         if (screenWidth > 0 && screenHeight > 0)
@@ -216,6 +220,7 @@ namespace render::gpudriven
             descriptorSets.data(),
             0, nullptr);
 
+
         float dispatchWidth, dispatchHeight;
         if (screenWidth > 0 && screenHeight > 0)
         {
@@ -292,6 +297,7 @@ namespace render::gpudriven
             static_cast<uint32_t>(descriptorSets.size()),
             descriptorSets.data(),
             0, nullptr);
+
 
         float dispatchWidth, dispatchHeight;
         if (screenWidth > 0 && screenHeight > 0)

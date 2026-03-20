@@ -38,6 +38,8 @@ namespace services
         dispatcher.unregisterCommandHandler<events::terrain::SaveTerrainCommand>();
         dispatcher.unregisterCommandHandler<events::terrain::LoadTerrainCommand>();
         dispatcher.unregisterCommandHandler<events::terrain::SetTerrainSaveLockCommand>();
+        dispatcher.unregisterCommandHandler<events::terrain::BeginCreateTerrainCommand>();
+        dispatcher.unregisterCommandHandler<events::terrain::PollCreateTerrainCommand>();
         dispatcher.unregisterCommandHandler<events::terrain::BeginTerrainLoadCommand>();
         dispatcher.unregisterCommandHandler<events::terrain::PollTerrainLoadCommand>();
         dispatcher.unregisterCommandHandler<events::terrain::SetTerrainColliderPropertiesCommand>();

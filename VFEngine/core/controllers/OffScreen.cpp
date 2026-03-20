@@ -326,6 +326,11 @@ namespace controllers {
 		offScreenController->setMeshletBackfaceCullingEnabled(enabled);
 	}
 
+	void OffScreen::setMeshletOcclusionCullingEnabled(bool enabled)
+	{
+		offScreenController->setMeshletOcclusionCullingEnabled(enabled);
+	}
+
 	void OffScreen::setDistanceCullingEnabled(bool enabled)
 	{
 		offScreenController->setDistanceCullingEnabled(enabled);
@@ -399,6 +404,11 @@ namespace controllers {
 	void OffScreen::setTerrainShadowLOD(uint32_t lod)
 	{
 		offScreenController->setTerrainShadowLOD(lod);
+	}
+
+	void OffScreen::setTerrainSVTEnabled(bool enabled)
+	{
+		offScreenController->setTerrainSVTEnabled(enabled);
 	}
 
 	void OffScreen::setUIViewportOffset(const glm::vec2& offset, const glm::vec2& panelSize)

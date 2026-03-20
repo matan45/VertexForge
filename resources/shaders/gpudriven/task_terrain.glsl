@@ -5,6 +5,8 @@
 
 #include "../common/gpu_types.glsl"
 #include "../common/camera_types.glsl"
+#include "../common/culling_functions.glsl"
+#include "../common/hiz_occlusion.glsl"
 
 layout(local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
 
@@ -34,8 +36,12 @@ layout(std430, set = 11, binding = 1) buffer TerrainStatsBuffer {
     uint lodCount1;
     uint lodCount2;
     uint lodCount3;
-    uint padding[3];
+    uint culledByOcclusion;
+    uint padding[2];
 } stats;
+
+// Hi-Z texture for meshlet occlusion culling (from depth prepass)
+layout(set = 3, binding = 4) uniform sampler2D meshletHiZTexture;
 
 layout(push_constant) uniform PushConstants {
     uint tileCount;
@@ -46,11 +52,20 @@ layout(push_constant) uniform PushConstants {
     float errorThreshold;   // Screen-space error threshold in pixels
     float terrainTextureScale;     // Scale for world-space UV tiling
     float terrainMaxDrawDistSq;    // Squared max draw distance for terrain (0 = disabled)
+    vec2 brushWorldPos;            // Brush overlay world position
+    float brushWorldRadius;        // 0.0 = inactive
+    float brushFalloff;
+    float brushShape;
+    float shadowLOD;
+    uint hiZMipLevels;             // Mip levels in the Hi-Z pyramid (0 = disabled)
+    float _pad3;                   // Align mat4 to 16-byte boundary
+    mat4 viewProjection;
 } pc;
 
 const uint TERRAIN_CULL_FRUSTUM_BIT = 0x100u;
 const uint TERRAIN_CULL_BACKFACE_BIT = 0x200u;
 const uint TERRAIN_DEBUG_FORCE_LOD0_BIT = 0x400u;
+const uint TERRAIN_CULL_OCCLUSION_BIT = 0x800u;
 
 struct TerrainMeshletPayload {
     uint tileIndex;
@@ -64,52 +79,7 @@ taskPayloadSharedEXT TerrainMeshletPayload payload;
 
 shared uint sharedVisibleCount;
 shared uint sharedMeshletIndices[MAX_MESHLETS_PER_PAYLOAD];
-shared uint sharedTileData[8]; // For broadcasting tile visibility/LOD data
-
-bool aabbInFrustum(vec3 aabbMin, vec3 aabbMax, vec4 frustumPlanes[6]) {
-    for (int i = 0; i < 6; i++) {
-        vec3 positive = vec3(
-            frustumPlanes[i].x > 0.0 ? aabbMax.x : aabbMin.x,
-            frustumPlanes[i].y > 0.0 ? aabbMax.y : aabbMin.y,
-            frustumPlanes[i].z > 0.0 ? aabbMax.z : aabbMin.z
-        );
-        float distance = dot(frustumPlanes[i].xyz, positive) + frustumPlanes[i].w;
-        if (distance < 0.0) {
-            return false;
-        }
-    }
-    return true;
-}
-
-bool sphereInFrustum(vec4 sphere, vec4 frustumPlanes[6]) {
-    for (int i = 0; i < 6; i++) {
-        float distance = dot(frustumPlanes[i].xyz, sphere.xyz) + frustumPlanes[i].w;
-        if (distance < -sphere.w) {
-            return false;
-        }
-    }
-    return true;
-}
-
-vec4 transformBoundingSphere(vec4 localSphere, mat4 modelMatrix) {
-    vec3 worldCenter = (modelMatrix * vec4(localSphere.xyz, 1.0)).xyz;
-    float scaleX = length(modelMatrix[0].xyz);
-    float scaleY = length(modelMatrix[1].xyz);
-    float scaleZ = length(modelMatrix[2].xyz);
-    float maxScale = max(max(scaleX, scaleY), scaleZ);
-    float worldRadius = localSphere.w * maxScale;
-    return vec4(worldCenter, worldRadius);
-}
-
-bool coneCullTest(vec4 cone, mat4 modelMatrix, vec3 cameraPos, vec3 meshletCenter) {
-    if (cone.w >= 1.0) {
-        return true; // No valid cone, pass the test
-    }
-    vec3 worldConeAxis = normalize(mat3(modelMatrix) * cone.xyz);
-    vec3 viewDir = normalize(meshletCenter - cameraPos);
-    float dotProduct = dot(viewDir, worldConeAxis);
-    return dotProduct < cone.w;
-}
+shared uint sharedTileData[8];
 
 // Returns the coarsest LOD level where screen-space error is still acceptable
 uint selectLODByGeometricError(TerrainTileGPUData tile, float distance, float screenHeight) {
@@ -192,6 +162,17 @@ void main() {
             if (distSq > pc.terrainMaxDrawDistSq) {
                 tileVisible = false;
                 atomicAdd(stats.culledTiles, 1);
+            }
+        }
+
+        // Stage 1c: Tile-level Hi-Z occlusion culling (AABB test)
+        if (tileVisible && (pc.viewMode & TERRAIN_CULL_OCCLUSION_BIT) != 0u && pc.hiZMipLevels > 0u) {
+            mat4 vp = camera.projection * camera.view;
+            if (!hiZOcclusionTestAABB(meshletHiZTexture, tile.aabbMin.xyz, tile.aabbMax.xyz,
+                                       vp, vec2(pc.screenWidth, pc.screenHeight), pc.hiZMipLevels)) {
+                tileVisible = false;
+                atomicAdd(stats.culledTiles, 1);
+                atomicAdd(stats.culledByOcclusion, 1);
             }
         }
 
@@ -278,6 +259,17 @@ void main() {
                 if (!coneCullTest(meshlet.cone, tile.modelMatrix, camera.cameraPos, worldSphere.xyz)) {
                     meshletVisible = false;
                     atomicAdd(stats.culledMeshlets, 1);
+                }
+            }
+
+            // Meshlet-level Hi-Z occlusion culling
+            if (meshletVisible && (pc.viewMode & TERRAIN_CULL_OCCLUSION_BIT) != 0u && pc.hiZMipLevels > 0u) {
+                mat4 vp = camera.projection * camera.view;
+                if (!hiZOcclusionTest(meshletHiZTexture, worldSphere, vp,
+                                      vec2(pc.screenWidth, pc.screenHeight), pc.hiZMipLevels)) {
+                    meshletVisible = false;
+                    atomicAdd(stats.culledMeshlets, 1);
+                    atomicAdd(stats.culledByOcclusion, 1);
                 }
             }
 

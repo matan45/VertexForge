@@ -11,6 +11,7 @@
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/terrain/TerrainEvents.hpp"
+#include "threading/JobSystem.hpp"
 #include <asset/AssetRef.hpp>
 #include <algorithm>
 
@@ -49,32 +50,47 @@ namespace services
         }
         else
         {
-            auto heightmapData = terrain::HeightmapLoader::load(config.heightmapPath);
-            if (heightmapData && heightmapData->isValid())
+            float terrainMinX = static_cast<float>(minX) * config.worldTileSize;
+            float terrainMinZ = static_cast<float>(minZ) * config.worldTileSize;
+            float terrainWidth = static_cast<float>(config.tilesX) * config.worldTileSize;
+            float terrainDepth = static_cast<float>(config.tilesZ) * config.worldTileSize;
+
+            // Check if SVT heightmap — use streaming sampler (no full image in RAM)
+            bool isSVT = config.heightmapPath.size() > 6 &&
+                         config.heightmapPath.substr(config.heightmapPath.size() - 6) == ".vfSVT";
+
+            bool heightmapLoaded = false;
+
+            if (isSVT)
             {
-                float terrainMinX = static_cast<float>(minX) * config.worldTileSize;
-                float terrainMinZ = static_cast<float>(minZ) * config.worldTileSize;
-                float terrainWidth = static_cast<float>(config.tilesX) * config.worldTileSize;
-                float terrainDepth = static_cast<float>(config.tilesZ) * config.worldTileSize;
-
-                grid->setHeightSampler(terrain::createHeightSamplerFromMap(
-                    heightmapData,
-                    terrainMinX,
-                    terrainMinZ,
-                    terrainWidth,
-                    terrainDepth,
-                    config.minHeight,
-                    config.maxHeight
-                ));
-
-                vfLogInfo("Loaded heightmap from: {}", config.heightmapPath);
+                terrain::TerrainBounds hBounds{terrainMinX, terrainMinZ,
+                    terrainWidth, terrainDepth, config.minHeight, config.maxHeight};
+                auto sampler = terrain::createStreamingHeightSamplerFromSVT(
+                    config.heightmapPath, hBounds);
+                if (sampler)
+                {
+                    grid->setHeightSampler(std::move(sampler));
+                    vfLogInfo("Streaming SVT heightmap: {}", config.heightmapPath);
+                    heightmapLoaded = true;
+                }
             }
-            else
+
+            if (!heightmapLoaded)
             {
-                vfLogWarning("Failed to load heightmap: {}, creating flat terrain", config.heightmapPath);
-                grid->setHeightSampler([](float /*worldX*/, float /*worldZ*/) -> float {
-                    return 0.0f;
-                });
+                auto heightmapData = terrain::HeightmapLoader::load(config.heightmapPath);
+                if (heightmapData && heightmapData->isValid())
+                {
+                    terrain::TerrainBounds hBounds{terrainMinX, terrainMinZ,
+                        terrainWidth, terrainDepth, config.minHeight, config.maxHeight};
+                    grid->setHeightSampler(terrain::createHeightSamplerFromMap(
+                        heightmapData, hBounds));
+                    vfLogInfo("Loaded heightmap from: {}", config.heightmapPath);
+                }
+                else
+                {
+                    vfLogWarning("Failed to load heightmap: {}, creating flat terrain", config.heightmapPath);
+                    grid->setHeightSampler([](float, float) -> float { return 0.0f; });
+                }
             }
         }
 
@@ -282,5 +298,198 @@ namespace services
         auto& transform = tileEntity.getComponent<components::TransformComponent>();
         transform.position = tile->worldOrigin;
         transform.isDirty = true;
+    }
+
+    bool TerrainService::beginCreateTerrainAsync(const TerrainCreationData& config)
+    {
+        if (pendingCreation)
+        {
+            vfLogWarning("TerrainService: Terrain creation already in progress");
+            return false;
+        }
+
+        auto pending = std::make_shared<PendingTerrainCreation>();
+        pending->config = config;
+        pending->progress.store(0.0f);
+        pending->done.store(false);
+
+        auto progressPtr = pending;
+        pending->future = threading::JobSystem::instance().submit(
+            [config, progressPtr]() -> std::unique_ptr<terrain::TerrainGrid>
+            {
+                terrain::TerrainTileConfig tileConfig;
+                switch (config.resolution)
+                {
+                case 0: tileConfig.resolution = terrain::TileResolution::Low; break;
+                case 1: tileConfig.resolution = terrain::TileResolution::Medium; break;
+                case 2: tileConfig.resolution = terrain::TileResolution::High; break;
+                default: tileConfig.resolution = terrain::TileResolution::Low; break;
+                }
+                tileConfig.worldTileSize = config.worldTileSize;
+                tileConfig.maxHeight = config.maxHeight;
+                tileConfig.minHeight = config.minHeight;
+
+                int32_t halfX = config.tilesX / 2;
+                int32_t halfZ = config.tilesZ / 2;
+                int32_t minX = -halfX;
+                int32_t minZ = -halfZ;
+                int32_t maxX = config.tilesX - halfX - 1;
+                int32_t maxZ = config.tilesZ - halfZ - 1;
+
+                auto grid = std::make_unique<terrain::TerrainGrid>(tileConfig);
+
+                progressPtr->progress.store(0.05f);
+
+                // Load heightmap (I/O heavy)
+                if (!config.heightmapPath.empty())
+                {
+                    float terrainMinX = static_cast<float>(minX) * config.worldTileSize;
+                    float terrainMinZ = static_cast<float>(minZ) * config.worldTileSize;
+                    float terrainWidth = static_cast<float>(config.tilesX) * config.worldTileSize;
+                    float terrainDepth = static_cast<float>(config.tilesZ) * config.worldTileSize;
+
+                    bool isSVT = config.heightmapPath.size() > 6 &&
+                                 config.heightmapPath.substr(config.heightmapPath.size() - 6) == ".vfSVT";
+
+                    bool heightmapLoaded = false;
+                    if (isSVT)
+                    {
+                        terrain::TerrainBounds hBounds{terrainMinX, terrainMinZ,
+                            terrainWidth, terrainDepth, config.minHeight, config.maxHeight};
+                        auto sampler = terrain::createStreamingHeightSamplerFromSVT(
+                            config.heightmapPath, hBounds);
+                        if (sampler)
+                        {
+                            grid->setHeightSampler(std::move(sampler));
+                            heightmapLoaded = true;
+                        }
+                    }
+
+                    if (!heightmapLoaded)
+                    {
+                        auto heightmapData = terrain::HeightmapLoader::load(config.heightmapPath);
+                        if (heightmapData && heightmapData->isValid())
+                        {
+                            terrain::TerrainBounds hBounds{terrainMinX, terrainMinZ,
+                                terrainWidth, terrainDepth, config.minHeight, config.maxHeight};
+                            grid->setHeightSampler(terrain::createHeightSamplerFromMap(
+                                heightmapData, hBounds));
+                        }
+                        else
+                        {
+                            grid->setHeightSampler([](float, float) -> float { return 0.0f; });
+                        }
+                    }
+                }
+                else
+                {
+                    grid->setHeightSampler([](float, float) -> float { return 0.0f; });
+                }
+
+                progressPtr->progress.store(0.2f);
+
+                // Generate tiles (already uses enkiTS internally)
+                grid->createGrid(minX, minZ, maxX, maxZ,
+                    [&progressPtr](float p, const std::string&)
+                    {
+                        progressPtr->progress.store(0.2f + p * 0.75f);
+                    });
+
+                progressPtr->progress.store(1.0f);
+                progressPtr->done.store(true);
+                return grid;
+            },
+            threading::JobPriority::NORMAL
+        );
+
+        pendingCreation = std::move(pending);
+
+        events::terrain::TerrainCreationProgressNotification progressNotification;
+        progressNotification.progress = 0.0f;
+        progressNotification.stage = "Starting terrain creation...";
+        events::EventDispatcher::instance().publish(progressNotification);
+
+        return true;
+    }
+
+    TerrainCreationPollResult TerrainService::pollCreateTerrain()
+    {
+        TerrainCreationPollResult result;
+
+        if (!pendingCreation)
+        {
+            result.inProgress = false;
+            return result;
+        }
+
+        float progress = pendingCreation->progress.load();
+        result.inProgress = true;
+        result.progress = progress;
+        result.stage = progress < 0.2f ? "Loading heightmap..." : "Generating tiles...";
+
+        if (!pendingCreation->done.load())
+            return result;
+
+        // Grid is ready — finalize on main thread
+        auto grid = pendingCreation->future.get();
+        auto config = pendingCreation->config;
+        pendingCreation.reset();
+
+        int32_t halfX = config.tilesX / 2;
+        int32_t halfZ = config.tilesZ / 2;
+        int32_t minX = -halfX;
+        int32_t minZ = -halfZ;
+        int32_t maxX = config.tilesX - halfX - 1;
+        int32_t maxZ = config.tilesZ - halfZ - 1;
+
+        scene::Entity parentEntity("Terrain");
+        sceneGraph->addChild(sceneGraph->GetRoot(), parentEntity);
+
+        auto& terrainComp = parentEntity.addComponent<components::TerrainComponent>();
+        terrainComp.resolution = config.resolution;
+        terrainComp.worldTileSize = config.worldTileSize;
+        terrainComp.maxHeight = config.maxHeight;
+        terrainComp.minHeight = config.minHeight;
+        terrainComp.gridMinX = minX;
+        terrainComp.gridMinZ = minZ;
+        terrainComp.gridMaxX = maxX;
+        terrainComp.gridMaxZ = maxZ;
+        terrainComp.heightmapPath = config.heightmapPath;
+        terrainComp.terrainMaterialRef = asset::AssetRef::fromPath(config.terrainMaterialPath);
+        terrainComp.weightMapPath = config.weightMapPath;
+        terrainComp.isActive = true;
+        terrainComp.isDirty = false;
+        terrainComp.activeTileCount = static_cast<uint32_t>(config.tilesX * config.tilesZ);
+        terrainComp.visibleTileCount = 0;
+
+        EntityHandle parentHandle = internal::toHandle(parentEntity.getHandle());
+        createTileEntities(parentHandle, *grid);
+
+        terrainGrids[parentHandle.id] = std::move(grid);
+        worldStreamers[parentHandle.id] = std::make_unique<terrain::TerrainWorldStreamer>();
+
+        if (!config.weightMapPath.empty())
+            loadWeightMaps(parentHandle.id, config.weightMapPath);
+
+        if (!config.terrainMaterialPath.empty())
+            syncWeightMapLayerCount(parentHandle.id, config.terrainMaterialPath);
+
+        events::terrain::TerrainCreationProgressNotification progressDone;
+        progressDone.progress = 1.0f;
+        progressDone.stage = "Complete";
+        events::EventDispatcher::instance().publish(progressDone);
+
+        events::terrain::TerrainCreatedNotification notification;
+        notification.terrainEntity = parentHandle;
+        notification.config = config;
+        events::EventDispatcher::instance().publish(notification);
+
+        vfLogInfo("Created terrain with {} tiles (async)", config.tilesX * config.tilesZ);
+
+        result.inProgress = false;
+        result.progress = 1.0f;
+        result.stage = "Complete";
+        result.result = parentHandle;
+        return result;
     }
 }

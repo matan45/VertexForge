@@ -11,6 +11,7 @@
 #include "../vfx/VFXEditorWindow.hpp"
 #include "../terrain/TerrainMaterialEditorWindow.hpp"
 #include "../ai/BehaviorTreeEditorWindow.hpp"
+#include "../preview/SVTPreviewWindow.hpp"
 #include "imguiHandler/ImguiWindowHandler.hpp"
 #include "string/StringUtil.hpp"
 
@@ -30,6 +31,7 @@ namespace windows
         eraseExpired(openVFXEditors);
         eraseExpired(openTerrainMaterialEditors);
         eraseExpired(openBehaviorTreeEditors);
+        eraseExpired(openSVTPreviews);
     }
 
     bool PreviewWindowManager::openPreview(const fs::path& filePath, AssetType type)
@@ -78,6 +80,9 @@ namespace windows
             return true;
         case AssetType::BehaviorTree:
             openBehaviorTreeEditor(path);
+            return true;
+        case AssetType::SVT:
+            openSVTPreview(path);
             return true;
         default:
             return false;
@@ -266,6 +271,17 @@ namespace windows
             auto editorWindow = std::make_shared<editor::windows::BehaviorTreeEditorWindow>(path);
             controllers::imguiHandler::ImguiWindowHandler::add(editorWindow);
             openBehaviorTreeEditors[path] = editorWindow;
+        }
+    }
+
+    void PreviewWindowManager::openSVTPreview(const std::string& path)
+    {
+        auto it = openSVTPreviews.find(path);
+        if (it == openSVTPreviews.end() || it->second.expired())
+        {
+            auto previewWindow = std::make_shared<SVTPreviewWindow>(path);
+            controllers::imguiHandler::ImguiWindowHandler::add(previewWindow);
+            openSVTPreviews[path] = previewWindow;
         }
     }
 

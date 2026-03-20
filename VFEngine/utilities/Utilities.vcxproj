@@ -158,6 +158,8 @@
     <ClInclude Include="resource\AssetLifecycleManager.hpp" />
     <ClInclude Include="resource\AssetTypes.hpp" />
     <ClInclude Include="resource\AudioResource.hpp" />
+    <ClInclude Include="resource\BC7Decoder.hpp" />
+    <ClInclude Include="resource\BC7Encoder.hpp" />
     <ClInclude Include="resource\ConvexHullTypes.hpp" />
     <ClInclude Include="resource\EndianUtils.hpp" />
     <ClInclude Include="resource\FontResource.hpp" />
@@ -239,6 +241,8 @@
     <ClCompile Include="resource\AnimationResource.cpp" />
     <ClCompile Include="resource\AssetLifecycleManager.cpp" />
     <ClCompile Include="resource\AudioResource.cpp" />
+    <ClCompile Include="resource\BC7Decoder.cpp" />
+    <ClCompile Include="resource\BC7Encoder.cpp" />
     <ClCompile Include="resource\FontResource.cpp" />
     <ClCompile Include="resource\MeshStreamHandle.cpp" />
     <ClCompile Include="resource\MeshStreamHandleParse.cpp" />
