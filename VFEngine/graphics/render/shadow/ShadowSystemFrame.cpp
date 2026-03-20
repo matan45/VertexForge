@@ -446,9 +446,13 @@ namespace render::shadow
             view.lightDirection = glm::vec4(lightDirection, 0.0f);
             view.cascadeIndex = static_cast<uint16_t>(i);
             view.texelSize = levelData.texelSize;
-            view.depthBias = data.settings.depthBias;
-            view.slopeBias = data.settings.slopeBias;
-            view.normalBias = data.settings.normalBias;
+
+            // Scale bias per level: larger levels cover more world space
+            // so they need proportionally more bias to avoid acne
+            float biasScale = 1.0f + static_cast<float>(i) * 0.3f;
+            view.depthBias = data.settings.depthBias * biasScale;
+            view.slopeBias = data.settings.slopeBias * biasScale;
+            view.normalBias = data.settings.normalBias * biasScale;
 
             // Snap-based dirty detection
             if (i < data.clipmapLastSnapPositions.size())

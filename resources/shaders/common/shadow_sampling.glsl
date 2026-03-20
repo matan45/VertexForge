@@ -290,7 +290,52 @@ float sampleDirectionalShadow(int baseShadowIndex, vec3 worldPos, vec3 worldNorm
 }
 
 // ============================================================
-// Directional Shadow (Clipmap with level selection)
+// Clipmap Shadow - sample a single level with per-level bias
+// ============================================================
+float sampleClipmapLevel(int shadowIndex, vec3 worldPos, vec3 worldNormal) {
+    if (shadowIndex < 0 || shadowIndex >= MAX_SHADOW_VIEWS) return 1.0;
+
+    ShadowData sd = SHADOW_BUFFER[shadowIndex];
+
+    // Scale normal bias by texel size (larger levels need more bias)
+    float levelTexelSize = sd.biasParams.w;
+    float biasScale = max(levelTexelSize / 0.01, 1.0);  // normalize relative to ~1cm texel
+    vec3 biasedPos = worldPos + worldNormal * sd.biasParams.z * 0.3 * biasScale;
+
+    vec4 lsPos = sd.viewProjection * vec4(biasedPos, 1.0);
+    float w = max(lsPos.w, 0.0001);
+    vec3 ndc = lsPos.xyz / w;
+
+    vec2 uv = ndc.xy * 0.5 + 0.5;
+    float receiverDepth = clamp(ndc.z, 0.0, 1.0);
+
+    // Reject pixels outside this level's coverage
+    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) return 1.0;
+
+    // Look up page table
+    bool valid;
+    vec2 physicalUV = vsmLookupPhysicalUV(sd, uv, valid);
+    if (!valid) return 1.0;
+
+    bool filterEnabled = sd.pcssParams.z > 0.5;
+    if (!filterEnabled) {
+        return texture(physicalPoolShadow, vec3(physicalUV, receiverDepth));
+    }
+
+    // PCSS
+    float lightSize = sd.pcssParams.x;
+    float searchRadius = sd.pcssParams.y;
+    vec2 blockerResult = blockerSearchVSM(sd, uv, receiverDepth, searchRadius);
+
+    if (blockerResult.x < 0.0) return 1.0;
+    if (blockerResult.y >= float(PCSS_SAMPLE_COUNT)) return 0.0;
+
+    float penumbra = estimatePenumbra(receiverDepth, blockerResult.x, lightSize);
+    return pcssFilterVSM(sd, uv, receiverDepth, penumbra, sd.biasParams.w);
+}
+
+// ============================================================
+// Directional Shadow (Clipmap with level selection + blending)
 // ============================================================
 float sampleDirectionalClipmapShadow(int baseShadowIndex, vec3 worldPos, vec3 worldNormal, float viewZ) {
     if (baseShadowIndex < 0 || baseShadowIndex >= MAX_SHADOW_VIEWS) return 1.0;
@@ -303,25 +348,43 @@ float sampleDirectionalClipmapShadow(int baseShadowIndex, vec3 worldPos, vec3 wo
         if (levelCount <= 0) return 1.0;
     }
 
-    // Level selection: log2(distance / baseExtent), clamped
+    // Level selection based on light-space distance from camera
+    // rangeParams.x = baseExtent, rangeParams.y = worldExtent for this level
     float baseExtent = SHADOW_BUFFER[baseShadowIndex].rangeParams.x;
-    float level = log2(max(viewZ, baseExtent) / baseExtent);
-    int levelIdx = clamp(int(level), 0, levelCount - 1);
+    if (baseExtent <= 0.0) baseExtent = 2.0;
 
+    // Use viewZ (linear depth) to select level
+    float continuousLevel = log2(max(viewZ, baseExtent) / baseExtent);
+    continuousLevel = max(continuousLevel, 0.0);
+
+    int levelIdx = clamp(int(continuousLevel), 0, levelCount - 1);
     int shadowIndex = baseShadowIndex + levelIdx;
-    float shadow = sampleVSMShadow(shadowIndex, worldPos, worldNormal);
 
-    // Inter-level blending at boundaries (blend zone: 70%-100% of level transition)
-    float levelFrac = fract(level);
-    if (levelFrac > 0.7 && levelIdx < levelCount - 1) {
-        float nextShadow = sampleVSMShadow(shadowIndex + 1, worldPos, worldNormal);
-        float blend = smoothstep(0.7, 1.0, levelFrac);
+    // Sample the primary level
+    float shadow = sampleClipmapLevel(shadowIndex, worldPos, worldNormal);
+
+    // Smooth blending between adjacent levels to prevent popping
+    // Blend zone: last 30% of each level's range (70%-100%)
+    float levelFrac = fract(continuousLevel);
+    if (levelFrac > 0.6 && levelIdx < levelCount - 1) {
+        int nextIndex = shadowIndex + 1;
+        float nextShadow = sampleClipmapLevel(nextIndex, worldPos, worldNormal);
+        float blend = smoothstep(0.6, 1.0, levelFrac);
         shadow = mix(shadow, nextShadow, blend);
     }
 
-    // Distance fade at outermost level
+    // Also blend with the previous level at the start of each level
+    // This creates a symmetric blend zone at every boundary
+    if (levelFrac < 0.4 && levelIdx > 0) {
+        int prevIndex = shadowIndex - 1;
+        float prevShadow = sampleClipmapLevel(prevIndex, worldPos, worldNormal);
+        float blend = smoothstep(0.4, 0.0, levelFrac);
+        shadow = mix(shadow, prevShadow, blend);
+    }
+
+    // Distance fade-out at outermost level
     float maxExtent = baseExtent * exp2(float(levelCount - 1));
-    float fadeStart = maxExtent * 0.85;
+    float fadeStart = maxExtent * 0.8;
     float fadeFactor = 1.0 - smoothstep(fadeStart, maxExtent, viewZ);
 
     return mix(1.0, shadow, fadeFactor);
