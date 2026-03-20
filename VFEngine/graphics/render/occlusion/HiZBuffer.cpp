@@ -252,6 +252,10 @@ namespace render::occlusion
 
     void HiZBuffer::transitionDepthToShaderRead(vk::CommandBuffer cmd)
     {
+        bool hasStencil = (depthFormat == vk::Format::eD24UnormS8Uint ||
+                           depthFormat == vk::Format::eD32SfloatS8Uint ||
+                           depthFormat == vk::Format::eD16UnormS8Uint);
+
         vk::ImageMemoryBarrier barrier{};
         barrier.oldLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
         barrier.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
@@ -259,7 +263,7 @@ namespace render::occlusion
         barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         barrier.image = sourceDepthImage;
         barrier.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eDepth |
-            vk::ImageAspectFlagBits::eStencil;
+            (hasStencil ? vk::ImageAspectFlagBits::eStencil : vk::ImageAspectFlags{});
         barrier.subresourceRange.baseMipLevel = 0;
         barrier.subresourceRange.levelCount = 1;
         barrier.subresourceRange.baseArrayLayer = 0;
@@ -276,6 +280,10 @@ namespace render::occlusion
 
     void HiZBuffer::transitionDepthToAttachment(vk::CommandBuffer cmd)
     {
+        bool hasStencil = (depthFormat == vk::Format::eD24UnormS8Uint ||
+                           depthFormat == vk::Format::eD32SfloatS8Uint ||
+                           depthFormat == vk::Format::eD16UnormS8Uint);
+
         vk::ImageMemoryBarrier barrier{};
         barrier.oldLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
         barrier.newLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
@@ -283,7 +291,7 @@ namespace render::occlusion
         barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         barrier.image = sourceDepthImage;
         barrier.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eDepth |
-            vk::ImageAspectFlagBits::eStencil;
+            (hasStencil ? vk::ImageAspectFlagBits::eStencil : vk::ImageAspectFlags{});
         barrier.subresourceRange.baseMipLevel = 0;
         barrier.subresourceRange.levelCount = 1;
         barrier.subresourceRange.baseArrayLayer = 0;
