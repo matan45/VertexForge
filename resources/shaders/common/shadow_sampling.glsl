@@ -68,6 +68,14 @@ vec2 vsmLookupPhysicalUV(ShadowData sd, vec2 uv, out bool valid) {
     // UV within the page [0,1]
     vec2 pageUV = fract(uv * vec2(sd.pageTableInfo.xy));
 
+    // Clamp pageUV inward by 1 texel to avoid sampling the very edge of a
+    // physical tile. At page boundaries the outermost texels may hold
+    // stale / cleared depth, which shows up as visible seam lines between
+    // adjacent tiles. Combined with the CPU-side guard band (which renders
+    // overlapping depth into that border), this eliminates boundary seams.
+    float borderTexel = 1.0 / PAGE_SIZE_F;
+    pageUV = clamp(pageUV, vec2(borderTexel), vec2(1.0 - borderTexel));
+
     // Physical UV in the pool texture
     vec2 physicalUV = (vec2(float(tileX), float(tileY)) + pageUV) * (PAGE_SIZE_F / POOL_DIM_F);
     return physicalUV;
