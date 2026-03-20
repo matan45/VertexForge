@@ -317,7 +317,7 @@ namespace windows
         {
             nfd::FileDialog fileDialog;
             std::vector<std::pair<std::wstring, std::wstring>> filters = {
-                {L"Textures", L"*.vfImage"}
+                {L"Textures", L"*.vfImage;*.vfSVT"}
             };
             std::string selectedPath = fileDialog.openFileDialog(filters);
             if (!selectedPath.empty())

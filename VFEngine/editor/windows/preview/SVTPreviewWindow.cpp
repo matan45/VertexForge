@@ -21,14 +21,8 @@ namespace windows
 
     SVTPreviewWindow::~SVTPreviewWindow()
     {
-        if (mipPreviewHandle.isValid())
-        {
-            auto& dispatcher = events::EventDispatcher::instance();
-            events::render::ReleaseEditorTextureCommand releaseCmd;
-            releaseCmd.handle = mipPreviewHandle.imguiDescriptorSet;
-            dispatcher.execute(releaseCmd);
-        }
-
+        // Handle is released in draw() when isOpen becomes false,
+        // before ImGui records draw commands for this frame.
         reader.close();
     }
 
@@ -89,18 +83,17 @@ namespace windows
             static_cast<uint32_t>(mipLevel), header.virtualSizeLog2, header.tileSizeLog2);
         if (tilesPerSide == 0) tilesPerSide = 1;
 
-        // Assemble all tiles into one image (skip borders, just use the inner tile content)
-        assembledWidth = tilesPerSide * tileSize;
-        assembledHeight = tilesPerSide * tileSize;
+        // Assemble tiles into preview image, downsampling if too large
+        uint32_t fullWidth = tilesPerSide * tileSize;
+        uint32_t fullHeight = tilesPerSide * tileSize;
 
-        // Cap preview size to avoid huge allocations
-        if (assembledWidth > 4096 || assembledHeight > 4096)
-        {
-            // For very large mips, just show the grid info
-            assembledWidth = assembledHeight = 0;
-            loadedPreviewMip = mipLevel;
-            return;
-        }
+        // Downsample factor: keep preview under 2048px
+        uint32_t downsample = 1;
+        while ((fullWidth / downsample) > 2048 || (fullHeight / downsample) > 2048)
+            downsample *= 2;
+
+        assembledWidth = fullWidth / downsample;
+        assembledHeight = fullHeight / downsample;
 
         assembledMipRGBA.resize(static_cast<size_t>(assembledWidth) * assembledHeight * 4);
         // Fill with checkerboard pattern (for missing tiles)
@@ -137,18 +130,19 @@ namespace windows
 
                 if (decoded.empty()) continue;
 
-                // Copy the inner tile region (skip border pixels) to assembled image
-                for (uint32_t py = 0; py < tileSize; ++py)
+                // Copy inner tile region to assembled image (with downsampling)
+                uint32_t dsTileSize = tileSize / downsample;
+                for (uint32_t py = 0; py < dsTileSize; ++py)
                 {
-                    for (uint32_t px = 0; px < tileSize; ++px)
+                    for (uint32_t px = 0; px < dsTileSize; ++px)
                     {
-                        uint32_t imgX = tx * tileSize + px;
-                        uint32_t imgY = ty * tileSize + py;
+                        uint32_t imgX = tx * dsTileSize + px;
+                        uint32_t imgY = ty * dsTileSize + py;
                         if (imgX >= assembledWidth || imgY >= assembledHeight) continue;
 
-                        // Source: offset by border in the decoded physical tile
-                        uint32_t srcX = px + border;
-                        uint32_t srcY = py + border;
+                        // Source: offset by border, then scale by downsample
+                        uint32_t srcX = px * downsample + border;
+                        uint32_t srcY = py * downsample + border;
                         size_t srcIdx = (static_cast<size_t>(srcY) * physTileSize + srcX) * 4;
                         size_t dstIdx = (static_cast<size_t>(imgY) * assembledWidth + imgX) * 4;
 
@@ -207,7 +201,19 @@ namespace windows
 
     void SVTPreviewWindow::draw()
     {
-        if (!isOpen) return;
+        if (!isOpen)
+        {
+            // Release texture handle before destruction so ImGui doesn't reference a freed descriptor
+            if (mipPreviewHandle.isValid())
+            {
+                auto& dispatcher = events::EventDispatcher::instance();
+                events::render::ReleaseEditorTextureCommand releaseCmd;
+                releaseCmd.handle = mipPreviewHandle.imguiDescriptorSet;
+                dispatcher.execute(releaseCmd);
+                mipPreviewHandle = {};
+            }
+            return;
+        }
 
         ImGui::SetNextWindowSize(ImVec2(800, 600), ImGuiCond_FirstUseEver);
 
