@@ -16,10 +16,10 @@ namespace render::svt
     class SVTFileTileProvider : public SVTTileProvider
     {
     private:
-        std::unique_ptr<SVTFileReader> albedoReader_;
-        std::unique_ptr<SVTFileReader> normalReader_;
-        std::unique_ptr<SVTFileReader> ormReader_;
-        mutable std::mutex readerMutex_;
+        std::unique_ptr<SVTFileReader> albedoReader;
+        std::unique_ptr<SVTFileReader> normalReader;
+        std::unique_ptr<SVTFileReader> ormReader;
+        mutable std::mutex readerMutex;
 
     public:
         SVTFileTileProvider() = default;
@@ -33,8 +33,8 @@ namespace render::svt
 
         SVTTileData generateTile(const VirtualTileCoord& coord) override;
 
-        bool hasAlbedo() const { return albedoReader_ && albedoReader_->isValid(); }
-        bool hasNormal() const { return normalReader_ && normalReader_->isValid(); }
-        bool hasORM() const { return ormReader_ && ormReader_->isValid(); }
+        bool hasAlbedo() const { return albedoReader && albedoReader->isValid(); }
+        bool hasNormal() const { return normalReader && normalReader->isValid(); }
+        bool hasORM() const { return ormReader && ormReader->isValid(); }
     };
 }

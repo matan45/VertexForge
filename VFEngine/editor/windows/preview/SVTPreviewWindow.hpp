@@ -54,6 +54,7 @@ namespace windows
         void drawPreviewPanel();
         void countPresentTiles();
         void loadMipPreview(int mipLevel);
-        void updateAsyncLoading();
+        void decodeTilesForMip(int mipLevel, uint32_t downsample);
+        void uploadPreviewTexture();
     };
 }

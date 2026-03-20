@@ -29,14 +29,14 @@ namespace render::svt
     class SVTFeedbackPipeline
     {
     private:
-        core::Device& device_;
-        SVTConfig config_;
+        core::Device& device;
+        SVTConfig config;
 
-        std::unique_ptr<core::Shader> shader_;
-        vk::Pipeline pipeline_;
-        vk::PipelineLayout pipelineLayout_;
-        vk::DescriptorSetLayout descriptorSetLayout_;
-        vk::DescriptorPool descriptorPool_;
+        std::unique_ptr<core::Shader> shader;
+        vk::Pipeline pipeline;
+        vk::PipelineLayout pipelineLayout;
+        vk::DescriptorSetLayout descriptorSetLayout;
+        vk::DescriptorPool descriptorPool;
 
         // Double-buffered feedback: GPU writes to one, CPU reads the other
         static constexpr uint32_t FEEDBACK_BUFFER_COUNT = 3; // Triple-buffer for latency
@@ -47,17 +47,17 @@ namespace render::svt
             void* feedbackMapped = nullptr;
             vk::DescriptorSet descriptorSet;
         };
-        FeedbackFrame feedbackFrames_[FEEDBACK_BUFFER_COUNT];
+        FeedbackFrame feedbackFrames[FEEDBACK_BUFFER_COUNT];
 
         // UBO for feedback params
-        vk::Buffer paramsBuffer_;
-        vk::DeviceMemory paramsMemory_;
-        void* paramsMapped_ = nullptr;
+        vk::Buffer paramsBuffer;
+        vk::DeviceMemory paramsMemory;
+        void* paramsMapped = nullptr;
 
-        uint32_t totalPageTableEntries_ = 0;
-        uint64_t currentFrame_ = 0;
+        uint32_t totalPageTableEntries = 0;
+        uint64_t currentFrame = 0;
 
-        bool initialized_ = false;
+        bool initialized = false;
 
     public:
         explicit SVTFeedbackPipeline(core::Device& device);
@@ -87,8 +87,8 @@ namespace render::svt
         // Clear the feedback buffer for the current write frame
         void clearFeedbackBuffer(vk::CommandBuffer cmd, uint64_t frameIndex);
 
-        uint32_t getTotalEntries() const { return totalPageTableEntries_; }
-        bool isInitialized() const { return initialized_; }
+        uint32_t getTotalEntries() const { return totalPageTableEntries; }
+        bool isInitialized() const { return initialized; }
 
     private:
         void createDescriptorSetLayout();
@@ -99,7 +99,7 @@ namespace render::svt
         uint32_t writeFrameIndex(uint64_t frame) const { return frame % FEEDBACK_BUFFER_COUNT; }
         uint32_t readFrameIndex(uint64_t frame) const
         {
-            return (frame + FEEDBACK_BUFFER_COUNT - config_.feedbackLatencyFrames) % FEEDBACK_BUFFER_COUNT;
+            return (frame + FEEDBACK_BUFFER_COUNT - config.feedbackLatencyFrames) % FEEDBACK_BUFFER_COUNT;
         }
     };
 }

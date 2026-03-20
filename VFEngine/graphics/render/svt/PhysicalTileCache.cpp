@@ -9,7 +9,7 @@
 namespace render::svt
 {
     PhysicalTileCache::PhysicalTileCache(core::Device& device)
-        : device_(device)
+        : device(device)
     {
     }
 
@@ -18,90 +18,90 @@ namespace render::svt
         cleanup();
     }
 
-    void PhysicalTileCache::init(const SVTConfig& config)
+    void PhysicalTileCache::init(const SVTConfig& cfg)
     {
-        if (initialized_) return;
-        config_ = config;
+        if (initialized) return;
+        config = cfg;
 
         // Create all 5 channel caches
-        createChannelCache(albedoCache_, vk::Format::eBc7SrgbBlock, "SVT_Albedo");
-        createChannelCache(normalCache_, vk::Format::eBc7UnormBlock, "SVT_Normal");
-        createChannelCache(ormCache_, vk::Format::eBc7UnormBlock, "SVT_ORM");
-        createChannelCache(emissionCache_, vk::Format::eBc7SrgbBlock, "SVT_Emission");
-        createChannelCache(heightCache_, vk::Format::eBc7UnormBlock, "SVT_Height");
+        createChannelCache(albedoCache, vk::Format::eBc7SrgbBlock, "SVT_Albedo");
+        createChannelCache(normalCache, vk::Format::eBc7UnormBlock, "SVT_Normal");
+        createChannelCache(ormCache, vk::Format::eBc7UnormBlock, "SVT_ORM");
+        createChannelCache(emissionCache, vk::Format::eBc7SrgbBlock, "SVT_Emission");
+        createChannelCache(heightCache, vk::Format::eBc7UnormBlock, "SVT_Height");
 
         // Initialize tile tracking
-        tileSlots_.resize(config_.physicalTileCount);
-        freeList_.reserve(config_.physicalTileCount);
-        for (uint32_t i = config_.physicalTileCount; i > 0; --i)
+        tileSlots.resize(config.physicalTileCount);
+        freeList.reserve(config.physicalTileCount);
+        for (uint32_t i = config.physicalTileCount; i > 0; --i)
         {
-            freeList_.push_back(i - 1);
+            freeList.push_back(i - 1);
         }
 
         createStagingBuffer();
 
         // Create command pool for upload commands
-        auto queueFamily = device_.getQueueFamilyIndices().graphicsAndComputeFamily.value();
+        auto queueFamily = device.getQueueFamilyIndices().graphicsAndComputeFamily.value();
         vk::CommandPoolCreateInfo poolInfo{};
         poolInfo.flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer
                        | vk::CommandPoolCreateFlagBits::eTransient;
         poolInfo.queueFamilyIndex = queueFamily;
-        commandPool_ = device_.getLogicalDevice().createCommandPool(poolInfo);
+        commandPool = device.getLogicalDevice().createCommandPool(poolInfo);
 
-        initialized_ = true;
+        initialized = true;
         vfLogInfo("SVT PhysicalTileCache initialized: {} tiles per channel, {}x{} physical tile size",
-                     config_.physicalTileCount, SVT_PHYSICAL_TILE_SIZE, SVT_PHYSICAL_TILE_SIZE);
+                     config.physicalTileCount, SVT_PHYSICAL_TILE_SIZE, SVT_PHYSICAL_TILE_SIZE);
     }
 
     void PhysicalTileCache::cleanup()
     {
-        if (!initialized_) return;
+        if (!initialized) return;
 
-        auto dev = device_.getLogicalDevice();
+        auto dev = device.getLogicalDevice();
         dev.waitIdle();
 
-        if (commandPool_)
+        if (commandPool)
         {
-            dev.destroyCommandPool(commandPool_);
-            commandPool_ = nullptr;
+            dev.destroyCommandPool(commandPool);
+            commandPool = nullptr;
         }
 
-        if (stagingBuffer_)
+        if (stagingBuffer)
         {
-            if (stagingMapped_)
+            if (stagingMapped)
             {
-                dev.unmapMemory(stagingMemory_);
-                stagingMapped_ = nullptr;
+                dev.unmapMemory(stagingMemory);
+                stagingMapped = nullptr;
             }
-            core::BufferUtilities::destroyBuffer(dev, stagingBuffer_, stagingMemory_);
+            core::BufferUtilities::destroyBuffer(dev, stagingBuffer, stagingMemory);
         }
 
-        destroyChannelCache(albedoCache_);
-        destroyChannelCache(normalCache_);
-        destroyChannelCache(ormCache_);
-        destroyChannelCache(emissionCache_);
-        destroyChannelCache(heightCache_);
+        destroyChannelCache(albedoCache);
+        destroyChannelCache(normalCache);
+        destroyChannelCache(ormCache);
+        destroyChannelCache(emissionCache);
+        destroyChannelCache(heightCache);
 
-        tileSlots_.clear();
-        freeList_.clear();
-        initialized_ = false;
+        tileSlots.clear();
+        freeList.clear();
+        initialized = false;
     }
 
     uint32_t PhysicalTileCache::allocateTile()
     {
-        if (freeList_.empty()) return SVT_INVALID_TILE;
+        if (freeList.empty()) return SVT_INVALID_TILE;
 
-        uint32_t idx = freeList_.back();
-        freeList_.pop_back();
-        tileSlots_[idx].occupied = true;
+        uint32_t idx = freeList.back();
+        freeList.pop_back();
+        tileSlots[idx].occupied = true;
         return idx;
     }
 
     void PhysicalTileCache::freeTile(uint32_t tileIndex)
     {
-        if (tileIndex >= config_.physicalTileCount) return;
-        tileSlots_[tileIndex] = {};
-        freeList_.push_back(tileIndex);
+        if (tileIndex >= config.physicalTileCount) return;
+        tileSlots[tileIndex] = {};
+        freeList.push_back(tileIndex);
     }
 
     uint32_t PhysicalTileCache::evictLRU(uint64_t currentFrame)
@@ -109,9 +109,9 @@ namespace render::svt
         uint32_t bestIdx = SVT_INVALID_TILE;
         uint64_t oldestFrame = currentFrame;
 
-        for (uint32_t i = 0; i < config_.physicalTileCount; ++i)
+        for (uint32_t i = 0; i < config.physicalTileCount; ++i)
         {
-            auto& slot = tileSlots_[i];
+            auto& slot = tileSlots[i];
             if (slot.occupied && slot.lastUsedFrame < oldestFrame)
             {
                 oldestFrame = slot.lastUsedFrame;
@@ -121,7 +121,7 @@ namespace render::svt
 
         if (bestIdx != SVT_INVALID_TILE)
         {
-            tileSlots_[bestIdx] = {};
+            tileSlots[bestIdx] = {};
             // Don't push to freeList — caller will reuse immediately
         }
 
@@ -130,32 +130,32 @@ namespace render::svt
 
     void PhysicalTileCache::touchTile(uint32_t tileIndex, uint64_t frame)
     {
-        if (tileIndex < config_.physicalTileCount)
+        if (tileIndex < config.physicalTileCount)
         {
-            tileSlots_[tileIndex].lastUsedFrame = frame;
+            tileSlots[tileIndex].lastUsedFrame = frame;
         }
     }
 
     void PhysicalTileCache::setTileMapping(uint32_t tileIndex, const VirtualTileCoord& virtualCoord)
     {
-        if (tileIndex < config_.physicalTileCount)
+        if (tileIndex < config.physicalTileCount)
         {
-            tileSlots_[tileIndex].virtualCoord = virtualCoord;
+            tileSlots[tileIndex].virtualCoord = virtualCoord;
         }
     }
 
     void PhysicalTileCache::uploadTileData(uint32_t tileIndex, uint32_t channelIndex,
                                            const void* compressedData, uint32_t dataSize)
     {
-        if (tileIndex >= config_.physicalTileCount || !compressedData) return;
+        if (tileIndex >= config.physicalTileCount || !compressedData) return;
 
         switch (channelIndex)
         {
-        case SVT_CHANNEL_ALBEDO:   uploadToLayer(albedoCache_, tileIndex, compressedData, dataSize); break;
-        case SVT_CHANNEL_NORMAL:   uploadToLayer(normalCache_, tileIndex, compressedData, dataSize); break;
-        case SVT_CHANNEL_ORM:      uploadToLayer(ormCache_, tileIndex, compressedData, dataSize); break;
-        case SVT_CHANNEL_EMISSION: uploadToLayer(emissionCache_, tileIndex, compressedData, dataSize); break;
-        case SVT_CHANNEL_HEIGHT:   uploadToLayer(heightCache_, tileIndex, compressedData, dataSize); break;
+        case SVT_CHANNEL_ALBEDO:   uploadToLayer(albedoCache, tileIndex, compressedData, dataSize); break;
+        case SVT_CHANNEL_NORMAL:   uploadToLayer(normalCache, tileIndex, compressedData, dataSize); break;
+        case SVT_CHANNEL_ORM:      uploadToLayer(ormCache, tileIndex, compressedData, dataSize); break;
+        case SVT_CHANNEL_EMISSION: uploadToLayer(emissionCache, tileIndex, compressedData, dataSize); break;
+        case SVT_CHANNEL_HEIGHT:   uploadToLayer(heightCache, tileIndex, compressedData, dataSize); break;
         default: break;
         }
     }
@@ -170,16 +170,27 @@ namespace render::svt
 
     void PhysicalTileCache::createChannelCache(ChannelCache& cache, vk::Format format, const char* debugName)
     {
-        auto dev = device_.getLogicalDevice();
-        auto physDev = device_.getPhysicalDevice();
-
         cache.format = format;
+
+        createCacheImage(cache, format);
+        createCacheSampler(cache);
+        transitionCacheLayout(cache);
+
+        vfLogInfo("SVT: Created {} cache: {}x{}x{} layers, format {}",
+                      debugName, SVT_PHYSICAL_TILE_SIZE, SVT_PHYSICAL_TILE_SIZE,
+                      config.physicalTileCount, static_cast<int>(format));
+    }
+
+    void PhysicalTileCache::createCacheImage(ChannelCache& cache, vk::Format format)
+    {
+        auto dev = device.getLogicalDevice();
+        auto physDev = device.getPhysicalDevice();
 
         // Create 2D array image: each layer is one physical tile
         core::ImageInfoRequest imgReq(dev, physDev,
             SVT_PHYSICAL_TILE_SIZE,
             SVT_PHYSICAL_TILE_SIZE,
-            config_.physicalTileCount,  // array layers = tile count
+            config.physicalTileCount,  // array layers = tile count
             1,                          // single mip per tile layer
             format,
             vk::ImageTiling::eOptimal,
@@ -193,10 +204,15 @@ namespace render::svt
             format,
             vk::ImageAspectFlagBits::eColor,
             vk::ImageViewType::e2DArray,
-            config_.physicalTileCount,
+            config.physicalTileCount,
             1
         );
         core::ImageUtilities::createImageView(viewReq, cache.view);
+    }
+
+    void PhysicalTileCache::createCacheSampler(ChannelCache& cache)
+    {
+        auto dev = device.getLogicalDevice();
 
         // Create sampler with linear filtering and clamp-to-edge (tiles have borders for filtering)
         vk::SamplerCreateInfo samplerInfo{};
@@ -213,10 +229,14 @@ namespace render::svt
         samplerInfo.minLod = 0.0f;
         samplerInfo.maxLod = 0.0f;
         cache.sampler = dev.createSampler(samplerInfo);
+    }
 
-        // Transition image to shader-read-optimal
+    void PhysicalTileCache::transitionCacheLayout(ChannelCache& cache)
+    {
+        auto dev = device.getLogicalDevice();
+
         vk::CommandBufferAllocateInfo allocInfo{};
-        allocInfo.commandPool = device_.getStagingCommandPool();
+        allocInfo.commandPool = device.getStagingCommandPool();
         allocInfo.level = vk::CommandBufferLevel::ePrimary;
         allocInfo.commandBufferCount = 1;
         auto cmdBuf = dev.allocateCommandBuffers(allocInfo)[0];
@@ -227,25 +247,21 @@ namespace render::svt
 
         core::ImageUtilities::transitionImageLayout(cmdBuf, cache.image,
             vk::ImageLayout::eUndefined, vk::ImageLayout::eShaderReadOnlyOptimal,
-            vk::ImageAspectFlagBits::eColor, config_.physicalTileCount, 1);
+            vk::ImageAspectFlagBits::eColor, config.physicalTileCount, 1);
 
         cmdBuf.end();
 
         vk::SubmitInfo submitInfo{};
         submitInfo.commandBufferCount = 1;
         submitInfo.pCommandBuffers = &cmdBuf;
-        device_.getGraphicsQueue().submit(submitInfo);
-        device_.getGraphicsQueue().waitIdle();
-        dev.freeCommandBuffers(device_.getStagingCommandPool(), cmdBuf);
-
-        vfLogInfo("SVT: Created {} cache: {}x{}x{} layers, format {}",
-                      debugName, SVT_PHYSICAL_TILE_SIZE, SVT_PHYSICAL_TILE_SIZE,
-                      config_.physicalTileCount, static_cast<int>(format));
+        device.getGraphicsQueue().submit(submitInfo);
+        device.getGraphicsQueue().waitIdle();
+        dev.freeCommandBuffers(device.getStagingCommandPool(), cmdBuf);
     }
 
     void PhysicalTileCache::destroyChannelCache(ChannelCache& cache)
     {
-        auto dev = device_.getLogicalDevice();
+        auto dev = device.getLogicalDevice();
         if (cache.sampler) dev.destroySampler(cache.sampler);
         if (cache.view) dev.destroyImageView(cache.view);
         if (cache.image) dev.destroyImage(cache.image);
@@ -256,33 +272,33 @@ namespace render::svt
     void PhysicalTileCache::createStagingBuffer()
     {
         // Staging buffer large enough for one tile (BC7 compressed)
-        stagingBufferSize_ = SVT_TILE_SIZE_BC7;
+        stagingBufferSize = SVT_TILE_SIZE_BC7;
 
-        auto dev = device_.getLogicalDevice();
-        auto physDev = device_.getPhysicalDevice();
+        auto dev = device.getLogicalDevice();
+        auto physDev = device.getPhysicalDevice();
 
         core::BufferInfoRequest bufReq(dev, physDev,
-            stagingBufferSize_,
+            stagingBufferSize,
             vk::BufferUsageFlagBits::eTransferSrc,
             vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
         );
-        core::BufferUtilities::createBuffer(bufReq, stagingBuffer_, stagingMemory_);
-        stagingMapped_ = dev.mapMemory(stagingMemory_, 0, stagingBufferSize_);
+        core::BufferUtilities::createBuffer(bufReq, stagingBuffer, stagingMemory);
+        stagingMapped = dev.mapMemory(stagingMemory, 0, stagingBufferSize);
     }
 
     void PhysicalTileCache::uploadToLayer(ChannelCache& cache, uint32_t layer,
                                           const void* data, uint32_t dataSize)
     {
-        if (!data || dataSize == 0 || dataSize > stagingBufferSize_) return;
+        if (!data || dataSize == 0 || dataSize > stagingBufferSize) return;
 
-        auto dev = device_.getLogicalDevice();
+        auto dev = device.getLogicalDevice();
 
         // Copy data to staging buffer
-        std::memcpy(stagingMapped_, data, dataSize);
+        std::memcpy(stagingMapped, data, dataSize);
 
         // Allocate one-time command buffer
         vk::CommandBufferAllocateInfo allocInfo{};
-        allocInfo.commandPool = commandPool_;
+        allocInfo.commandPool = commandPool;
         allocInfo.level = vk::CommandBufferLevel::ePrimary;
         allocInfo.commandBufferCount = 1;
         auto cmdBuf = dev.allocateCommandBuffers(allocInfo)[0];
@@ -291,7 +307,23 @@ namespace render::svt
         beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
         cmdBuf.begin(beginInfo);
 
-        // Transition layer to transfer dst
+        prepareUploadBarrier(cmdBuf, cache, layer);
+        copyBufferToImage(cmdBuf, cache, layer);
+        finalizeUploadBarrier(cmdBuf, cache, layer);
+
+        cmdBuf.end();
+
+        vk::SubmitInfo submitInfo{};
+        submitInfo.commandBufferCount = 1;
+        submitInfo.pCommandBuffers = &cmdBuf;
+        device.getGraphicsQueue().submit(submitInfo);
+        device.getGraphicsQueue().waitIdle();
+
+        dev.freeCommandBuffers(commandPool, cmdBuf);
+    }
+
+    void PhysicalTileCache::prepareUploadBarrier(vk::CommandBuffer cmd, ChannelCache& cache, uint32_t layer)
+    {
         vk::ImageMemoryBarrier barrier{};
         barrier.oldLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
         barrier.newLayout = vk::ImageLayout::eTransferDstOptimal;
@@ -306,12 +338,14 @@ namespace render::svt
         barrier.srcAccessMask = vk::AccessFlagBits::eShaderRead;
         barrier.dstAccessMask = vk::AccessFlagBits::eTransferWrite;
 
-        cmdBuf.pipelineBarrier(
+        cmd.pipelineBarrier(
             vk::PipelineStageFlagBits::eFragmentShader,
             vk::PipelineStageFlagBits::eTransfer,
             {}, {}, {}, barrier);
+    }
 
-        // Copy staging buffer to image layer
+    void PhysicalTileCache::copyBufferToImage(vk::CommandBuffer cmd, ChannelCache& cache, uint32_t layer)
+    {
         vk::BufferImageCopy region{};
         region.bufferOffset = 0;
         region.bufferRowLength = 0;
@@ -323,28 +357,29 @@ namespace render::svt
         region.imageOffset = vk::Offset3D{0, 0, 0};
         region.imageExtent = vk::Extent3D{SVT_PHYSICAL_TILE_SIZE, SVT_PHYSICAL_TILE_SIZE, 1};
 
-        cmdBuf.copyBufferToImage(stagingBuffer_, cache.image,
-                                 vk::ImageLayout::eTransferDstOptimal, region);
+        cmd.copyBufferToImage(stagingBuffer, cache.image,
+                              vk::ImageLayout::eTransferDstOptimal, region);
+    }
 
-        // Transition back to shader read
+    void PhysicalTileCache::finalizeUploadBarrier(vk::CommandBuffer cmd, ChannelCache& cache, uint32_t layer)
+    {
+        vk::ImageMemoryBarrier barrier{};
         barrier.oldLayout = vk::ImageLayout::eTransferDstOptimal;
         barrier.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.image = cache.image;
+        barrier.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
+        barrier.subresourceRange.baseMipLevel = 0;
+        barrier.subresourceRange.levelCount = 1;
+        barrier.subresourceRange.baseArrayLayer = layer;
+        barrier.subresourceRange.layerCount = 1;
         barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
         barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
 
-        cmdBuf.pipelineBarrier(
+        cmd.pipelineBarrier(
             vk::PipelineStageFlagBits::eTransfer,
             vk::PipelineStageFlagBits::eFragmentShader,
             {}, {}, {}, barrier);
-
-        cmdBuf.end();
-
-        vk::SubmitInfo submitInfo{};
-        submitInfo.commandBufferCount = 1;
-        submitInfo.pCommandBuffers = &cmdBuf;
-        device_.getGraphicsQueue().submit(submitInfo);
-        device_.getGraphicsQueue().waitIdle();
-
-        dev.freeCommandBuffers(commandPool_, cmdBuf);
     }
 }

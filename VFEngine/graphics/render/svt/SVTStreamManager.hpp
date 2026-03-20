@@ -69,25 +69,25 @@ namespace render::svt
     class SVTStreamManager
     {
     private:
-        PhysicalTileCache& cache_;
-        SVTPageTable& pageTable_;
-        SVTConfig config_;
+        PhysicalTileCache& cache;
+        SVTPageTable& pageTable;
+        SVTConfig config;
 
-        SVTTileProvider* tileProvider_ = nullptr;
+        SVTTileProvider* tileProvider = nullptr;
 
         // Request tracking
-        std::priority_queue<TileRequest> requestQueue_;
-        std::unordered_map<VirtualTileCoord, uint32_t, VirtualTileCoordHash> residentTiles_;
+        std::priority_queue<TileRequest> requestQueue;
+        std::unordered_map<VirtualTileCoord, uint32_t, VirtualTileCoordHash> residentTiles;
         // Maps virtual tile coord -> physical tile index
 
         // Completed tiles waiting for GPU upload
-        std::vector<SVTTileData> uploadQueue_;
-        std::mutex uploadQueueMutex_;
+        std::vector<SVTTileData> uploadQueue;
+        std::mutex uploadQueueMutex;
 
-        SVTStreamStats stats_;
-        uint64_t currentFrame_ = 0;
+        SVTStreamStats stats;
+        uint64_t currentFrame = 0;
 
-        bool initialized_ = false;
+        bool initialized = false;
 
     public:
         SVTStreamManager(PhysicalTileCache& cache, SVTPageTable& pageTable);
@@ -95,7 +95,7 @@ namespace render::svt
 
         void init(const SVTConfig& config);
 
-        void setTileProvider(SVTTileProvider* provider) { tileProvider_ = provider; }
+        void setTileProvider(SVTTileProvider* provider) { tileProvider = provider; }
 
         // Process feedback data and update streaming state.
         // Call once per frame after reading back feedback.
@@ -118,12 +118,16 @@ namespace render::svt
         // Check if a virtual tile is currently resident
         bool isTileResident(const VirtualTileCoord& coord) const;
 
-        const SVTStreamStats& getStats() const { return stats_; }
+        const SVTStreamStats& getStats() const { return stats; }
 
         void clear();
 
     private:
         void generateTileAsync(const VirtualTileCoord& coord);
         float calculatePriority(const VirtualTileCoord& coord, uint32_t feedbackMip) const;
+
+        // Helpers for processUploads()
+        uint32_t allocateOrEvictTile();
+        void uploadTileChannels(uint32_t physTile, const SVTTileData& tileData);
     };
 }

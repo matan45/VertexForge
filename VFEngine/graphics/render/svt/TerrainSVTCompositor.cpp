@@ -12,25 +12,20 @@ namespace render::svt
                                      const glm::vec2& terrainWorldMin,
                                      const glm::vec2& terrainWorldMax)
     {
-        config_ = config;
-        terrainWorldMin_ = terrainWorldMin;
-        terrainWorldMax_ = terrainWorldMax;
-        initialized_ = true;
+        this->config = config;
+        this->terrainWorldMin = terrainWorldMin;
+        this->terrainWorldMax = terrainWorldMax;
+        initialized = true;
     }
 
     void TerrainSVTCompositor::setLayers(std::vector<TerrainLayerSource> layers)
     {
-        layers_ = std::move(layers);
-    }
-
-    void TerrainSVTCompositor::setWeightMapCallback(WeightMapCallback callback)
-    {
-        weightMapCallback_ = std::move(callback);
+        this->layers = std::move(layers);
     }
 
     glm::vec2 TerrainSVTCompositor::getSVTScale() const
     {
-        glm::vec2 worldSize = terrainWorldMax_ - terrainWorldMin_;
+        glm::vec2 worldSize = terrainWorldMax - terrainWorldMin;
         if (worldSize.x <= 0.0f || worldSize.y <= 0.0f) return glm::vec2(1.0f);
         return glm::vec2(1.0f / worldSize.x, 1.0f / worldSize.y);
     }
@@ -38,71 +33,55 @@ namespace render::svt
     glm::vec2 TerrainSVTCompositor::getSVTOffset() const
     {
         glm::vec2 scale = getSVTScale();
-        return -terrainWorldMin_ * scale;
+        return -terrainWorldMin * scale;
     }
 
-    SVTTileData TerrainSVTCompositor::generateTile(const VirtualTileCoord& coord)
+    TileBounds TerrainSVTCompositor::computeTileBounds(const VirtualTileCoord& coord) const
     {
-        SVTTileData result;
-        result.coord = coord;
+        TileBounds bounds;
+        bounds.physTileSize = SVT_PHYSICAL_TILE_SIZE;
 
-        if (!initialized_ || layers_.empty())
-        {
-            result.valid = false;
-            return result;
-        }
-
-        uint32_t virtualSize = 1u << config_.virtualTextureSizeLog2;
         uint32_t tileSize = SVT_TILE_SIZE;
-        uint32_t physTileSize = SVT_PHYSICAL_TILE_SIZE;
         uint32_t border = SVT_BORDER_SIZE;
 
         // Tiles per side at this mip level
         uint32_t tilesPerSide = computeTilesPerMipSide(coord.mipLevel,
-            config_.virtualTextureSizeLog2, config_.tileSizeLog2);
+            config.virtualTextureSizeLog2, config.tileSizeLog2);
         if (tilesPerSide == 0) tilesPerSide = 1;
 
         // Virtual UV bounds for this tile (including border)
         float tileUVSize = 1.0f / static_cast<float>(tilesPerSide);
-        float texelUVSize = tileUVSize / static_cast<float>(tileSize);
-        float borderUV = static_cast<float>(border) * texelUVSize;
+        bounds.texelUVSize = tileUVSize / static_cast<float>(tileSize);
+        float borderUV = static_cast<float>(border) * bounds.texelUVSize;
 
-        float uvMinX = static_cast<float>(coord.x) * tileUVSize - borderUV;
-        float uvMinY = static_cast<float>(coord.y) * tileUVSize - borderUV;
+        bounds.uvMinX = static_cast<float>(coord.x) * tileUVSize - borderUV;
+        bounds.uvMinY = static_cast<float>(coord.y) * tileUVSize - borderUV;
+        bounds.worldSize = terrainWorldMax - terrainWorldMin;
 
-        // World-space bounds
-        glm::vec2 worldSize = terrainWorldMax_ - terrainWorldMin_;
+        return bounds;
+    }
 
-        // Get weight map for this region
-        glm::vec2 regionWorldMin = terrainWorldMin_ + glm::vec2(uvMinX, uvMinY) * worldSize;
-        glm::vec2 regionWorldMax = terrainWorldMin_ +
-            glm::vec2(uvMinX + static_cast<float>(physTileSize) * texelUVSize,
-                       uvMinY + static_cast<float>(physTileSize) * texelUVSize) * worldSize;
+    void TerrainSVTCompositor::compositeTileTexels(const TileBounds& bounds,
+                                                    const TerrainWeightMapRegion& weightRegion,
+                                                    std::vector<uint8_t>& albedoRGBA,
+                                                    std::vector<uint8_t>& normalRGBA,
+                                                    std::vector<uint8_t>& ormRGBA) const
+    {
+        auto clampByte = [](float v) -> uint8_t {
+            return static_cast<uint8_t>(std::clamp(v * 255.0f, 0.0f, 255.0f));
+        };
 
-        TerrainWeightMapRegion weightRegion;
-        if (weightMapCallback_)
+        for (uint32_t py = 0; py < bounds.physTileSize; ++py)
         {
-            weightRegion = weightMapCallback_(regionWorldMin, regionWorldMax);
-        }
-
-        // Allocate RGBA8 buffers for compositing
-        size_t pixelCount = static_cast<size_t>(physTileSize) * physTileSize;
-        std::vector<uint8_t> albedoRGBA(pixelCount * 4, 128);
-        std::vector<uint8_t> normalRGBA(pixelCount * 4, 128);
-        std::vector<uint8_t> ormRGBA(pixelCount * 4, 128);
-
-        // Composite each texel
-        for (uint32_t py = 0; py < physTileSize; ++py)
-        {
-            for (uint32_t px = 0; px < physTileSize; ++px)
+            for (uint32_t px = 0; px < bounds.physTileSize; ++px)
             {
                 // Virtual UV for this texel
-                float u = uvMinX + (static_cast<float>(px) + 0.5f) * texelUVSize;
-                float v = uvMinY + (static_cast<float>(py) + 0.5f) * texelUVSize;
+                float u = bounds.uvMinX + (static_cast<float>(px) + 0.5f) * bounds.texelUVSize;
+                float v = bounds.uvMinY + (static_cast<float>(py) + 0.5f) * bounds.texelUVSize;
 
                 // World position
-                float worldX = terrainWorldMin_.x + u * worldSize.x;
-                float worldZ = terrainWorldMin_.y + v * worldSize.y;
+                float worldX = terrainWorldMin.x + u * bounds.worldSize.x;
+                float worldZ = terrainWorldMin.y + v * bounds.worldSize.y;
 
                 // Sample weights
                 float weights[4] = {0.0f, 0.0f, 0.0f, 0.0f};
@@ -129,9 +108,9 @@ namespace render::svt
                     if (w < 0.001f) continue;
 
                     uint32_t paletteIdx = (packedLI >> (ch * 8)) & 0xFFu;
-                    if (paletteIdx >= layers_.size()) continue;
+                    if (paletteIdx >= layers.size()) continue;
 
-                    const auto& layer = layers_[paletteIdx];
+                    const auto& layer = layers[paletteIdx];
 
                     // Sample layer textures
                     glm::vec4 layerAlbedo = sampleLayerTexture(
@@ -184,26 +163,50 @@ namespace render::svt
                 }
 
                 // Write to RGBA8 buffers
-                size_t idx = (static_cast<size_t>(py) * physTileSize + px) * 4;
+                size_t idx = (static_cast<size_t>(py) * bounds.physTileSize + px) * 4;
 
-                albedoRGBA[idx + 0] = static_cast<uint8_t>(std::clamp(albedo.r * 255.0f, 0.0f, 255.0f));
-                albedoRGBA[idx + 1] = static_cast<uint8_t>(std::clamp(albedo.g * 255.0f, 0.0f, 255.0f));
-                albedoRGBA[idx + 2] = static_cast<uint8_t>(std::clamp(albedo.b * 255.0f, 0.0f, 255.0f));
+                albedoRGBA[idx + 0] = clampByte(albedo.r);
+                albedoRGBA[idx + 1] = clampByte(albedo.g);
+                albedoRGBA[idx + 2] = clampByte(albedo.b);
                 albedoRGBA[idx + 3] = 255;
 
                 // Normal: re-encode from [-1,1] to [0,1]
-                normalRGBA[idx + 0] = static_cast<uint8_t>(std::clamp((normal.x * 0.5f + 0.5f) * 255.0f, 0.0f, 255.0f));
-                normalRGBA[idx + 1] = static_cast<uint8_t>(std::clamp((normal.y * 0.5f + 0.5f) * 255.0f, 0.0f, 255.0f));
-                normalRGBA[idx + 2] = static_cast<uint8_t>(std::clamp((normal.z * 0.5f + 0.5f) * 255.0f, 0.0f, 255.0f));
+                normalRGBA[idx + 0] = clampByte(normal.x * 0.5f + 0.5f);
+                normalRGBA[idx + 1] = clampByte(normal.y * 0.5f + 0.5f);
+                normalRGBA[idx + 2] = clampByte(normal.z * 0.5f + 0.5f);
                 normalRGBA[idx + 3] = 255;
 
                 // ORM: R=AO, G=Roughness, B=Metallic
-                ormRGBA[idx + 0] = static_cast<uint8_t>(std::clamp(ao * 255.0f, 0.0f, 255.0f));
-                ormRGBA[idx + 1] = static_cast<uint8_t>(std::clamp(roughness * 255.0f, 0.0f, 255.0f));
-                ormRGBA[idx + 2] = static_cast<uint8_t>(std::clamp(metallic * 255.0f, 0.0f, 255.0f));
+                ormRGBA[idx + 0] = clampByte(ao);
+                ormRGBA[idx + 1] = clampByte(roughness);
+                ormRGBA[idx + 2] = clampByte(metallic);
                 ormRGBA[idx + 3] = 255;
             }
         }
+    }
+
+    SVTTileData TerrainSVTCompositor::generateTile(const VirtualTileCoord& coord)
+    {
+        SVTTileData result;
+        result.coord = coord;
+
+        if (!initialized || layers.empty())
+        {
+            result.valid = false;
+            return result;
+        }
+
+        TileBounds bounds = computeTileBounds(coord);
+
+        TerrainWeightMapRegion weightRegion;
+
+        // Allocate RGBA8 buffers for compositing
+        size_t pixelCount = static_cast<size_t>(bounds.physTileSize) * bounds.physTileSize;
+        std::vector<uint8_t> albedoRGBA(pixelCount * 4, 128);
+        std::vector<uint8_t> normalRGBA(pixelCount * 4, 128);
+        std::vector<uint8_t> ormRGBA(pixelCount * 4, 128);
+
+        compositeTileTexels(bounds, weightRegion, albedoRGBA, normalRGBA, ormRGBA);
 
         // BC7-compress the tiles
         result.albedoData = compressTileBC7(albedoRGBA, true);

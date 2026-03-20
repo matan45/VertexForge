@@ -26,9 +26,15 @@ namespace terrain
     class TerrainTile;
 }
 
+namespace render::svt
+{
+    class SVTFileWriter;
+}
+
 namespace components
 {
     struct TerrainColliderDebugData;
+    struct TerrainComponent;
 }
 
 namespace services
@@ -165,5 +171,17 @@ namespace services
         void applyVegetationDensityBrush(const glm::vec3& worldPosition, float deltaTime, bool invert, bool isFirstApplication);
         void registerVegetationBrushHandlers(::events::EventDispatcher& dispatcher);
 
+        // SVT bake helpers
+        struct BakeLayerCPU;
+        bool loadBakeMaterial(const std::string& materialPath, std::vector<BakeLayerCPU>& layers);
+        struct BakeParams;
+        bool computeBakeParams(const components::TerrainComponent& comp, BakeParams& params);
+        void compositeAndWriteTile(const BakeParams& params,
+                                   const std::vector<BakeLayerCPU>& layers,
+                                   const std::vector<const terrain::TerrainTile*>& allTiles,
+                                   uint32_t mip, uint32_t tx, uint32_t ty,
+                                   render::svt::SVTFileWriter& albedoWriter,
+                                   render::svt::SVTFileWriter& normalWriter,
+                                   render::svt::SVTFileWriter& ormWriter);
     };
 }

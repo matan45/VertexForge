@@ -8,7 +8,7 @@
 namespace render::svt
 {
     SVTFeedbackPipeline::SVTFeedbackPipeline(core::Device& device)
-        : device_(device)
+        : device(device)
     {
     }
 
@@ -21,10 +21,10 @@ namespace render::svt
                                     vk::ImageView depthImageView,
                                     vk::Sampler depthSampler)
     {
-        if (initialized_) return;
-        config_ = config;
-        totalPageTableEntries_ = computeTotalPageTableEntries(
-            config_.virtualTextureSizeLog2, config_.tileSizeLog2);
+        if (initialized) return;
+        this->config = config;
+        totalPageTableEntries = computeTotalPageTableEntries(
+            config.virtualTextureSizeLog2, config.tileSizeLog2);
 
         createDescriptorSetLayout();
         createPipeline();
@@ -34,27 +34,27 @@ namespace render::svt
         // Update descriptor sets with depth image
         updateDepthImage(depthImageView, depthSampler);
 
-        initialized_ = true;
-        vfLogInfo("SVT FeedbackPipeline initialized: {} page table entries", totalPageTableEntries_);
+        initialized = true;
+        vfLogInfo("SVT FeedbackPipeline initialized: {} page table entries", totalPageTableEntries);
     }
 
     void SVTFeedbackPipeline::cleanup()
     {
-        if (!initialized_) return;
+        if (!initialized) return;
 
-        auto dev = device_.getLogicalDevice();
+        auto dev = device.getLogicalDevice();
         dev.waitIdle();
 
         // Params buffer
-        if (paramsMapped_)
+        if (paramsMapped)
         {
-            dev.unmapMemory(paramsMemory_);
-            paramsMapped_ = nullptr;
+            dev.unmapMemory(paramsMemory);
+            paramsMapped = nullptr;
         }
-        core::BufferUtilities::destroyBuffer(dev, paramsBuffer_, paramsMemory_);
+        core::BufferUtilities::destroyBuffer(dev, paramsBuffer, paramsMemory);
 
         // Feedback buffers
-        for (auto& frame : feedbackFrames_)
+        for (auto& frame : feedbackFrames)
         {
             if (frame.feedbackMapped)
             {
@@ -64,28 +64,28 @@ namespace render::svt
             core::BufferUtilities::destroyBuffer(dev, frame.feedbackBuffer, frame.feedbackMemory);
         }
 
-        if (descriptorPool_) dev.destroyDescriptorPool(descriptorPool_);
-        if (pipeline_) dev.destroyPipeline(pipeline_);
-        if (pipelineLayout_) dev.destroyPipelineLayout(pipelineLayout_);
-        if (descriptorSetLayout_) dev.destroyDescriptorSetLayout(descriptorSetLayout_);
+        if (descriptorPool) dev.destroyDescriptorPool(descriptorPool);
+        if (pipeline) dev.destroyPipeline(pipeline);
+        if (pipelineLayout) dev.destroyPipelineLayout(pipelineLayout);
+        if (descriptorSetLayout) dev.destroyDescriptorSetLayout(descriptorSetLayout);
 
-        if (shader_)
+        if (shader)
         {
-            shader_->cleanUp();
-            shader_.reset();
+            shader->cleanUp();
+            shader.reset();
         }
 
-        initialized_ = false;
+        initialized = false;
     }
 
     void SVTFeedbackPipeline::updateDepthImage(vk::ImageView depthImageView,
                                                 vk::Sampler depthSampler)
     {
-        auto dev = device_.getLogicalDevice();
+        auto dev = device.getLogicalDevice();
 
         for (uint32_t i = 0; i < FEEDBACK_BUFFER_COUNT; ++i)
         {
-            auto& frame = feedbackFrames_[i];
+            auto& frame = feedbackFrames[i];
 
             vk::DescriptorImageInfo depthInfo{};
             depthInfo.imageView = depthImageView;
@@ -95,10 +95,10 @@ namespace render::svt
             vk::DescriptorBufferInfo feedbackBufInfo{};
             feedbackBufInfo.buffer = frame.feedbackBuffer;
             feedbackBufInfo.offset = 0;
-            feedbackBufInfo.range = totalPageTableEntries_ * sizeof(uint32_t);
+            feedbackBufInfo.range = totalPageTableEntries * sizeof(uint32_t);
 
             vk::DescriptorBufferInfo paramsBufInfo{};
-            paramsBufInfo.buffer = paramsBuffer_;
+            paramsBufInfo.buffer = paramsBuffer;
             paramsBufInfo.offset = 0;
             paramsBufInfo.range = sizeof(SVTFeedbackParamsGPU);
 
@@ -133,8 +133,8 @@ namespace render::svt
                                         const glm::vec2& svtScale,
                                         const glm::vec2& svtOffset)
     {
-        if (!initialized_) return;
-        currentFrame_ = frameIndex;
+        if (!initialized) return;
+        currentFrame = frameIndex;
 
         // Update params UBO
         SVTFeedbackParamsGPU params{};
@@ -142,18 +142,18 @@ namespace render::svt
         params.screenParams = screenParams;
         params.svtScaleOffset = glm::vec4(svtScale, svtOffset);
         params.svtInfo = glm::uvec4(
-            config_.virtualTextureSizeLog2,
-            config_.tileSizeLog2,
+            config.virtualTextureSizeLog2,
+            config.tileSizeLog2,
             0,
-            computeMipLevelCount(config_.virtualTextureSizeLog2, config_.tileSizeLog2)
+            computeMipLevelCount(config.virtualTextureSizeLog2, config.tileSizeLog2)
         );
         params.cameraPos = glm::vec4(cameraPos, 0.0f);
-        std::memcpy(paramsMapped_, &params, sizeof(params));
+        std::memcpy(paramsMapped, &params, sizeof(params));
 
         uint32_t wIdx = writeFrameIndex(frameIndex);
-        cmd.bindPipeline(vk::PipelineBindPoint::eCompute, pipeline_);
-        cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, pipelineLayout_,
-                               0, feedbackFrames_[wIdx].descriptorSet, {});
+        cmd.bindPipeline(vk::PipelineBindPoint::eCompute, pipeline);
+        cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, pipelineLayout,
+                               0, feedbackFrames[wIdx].descriptorSet, {});
 
         uint32_t groupsX = (static_cast<uint32_t>(screenParams.x) + 7) / 8;
         uint32_t groupsY = (static_cast<uint32_t>(screenParams.y) + 7) / 8;
@@ -162,23 +162,23 @@ namespace render::svt
 
     const uint32_t* SVTFeedbackPipeline::readFeedback(uint64_t frameIndex) const
     {
-        if (!initialized_) return nullptr;
+        if (!initialized) return nullptr;
         uint32_t rIdx = readFrameIndex(frameIndex);
-        return static_cast<const uint32_t*>(feedbackFrames_[rIdx].feedbackMapped);
+        return static_cast<const uint32_t*>(feedbackFrames[rIdx].feedbackMapped);
     }
 
     void SVTFeedbackPipeline::clearFeedbackBuffer(vk::CommandBuffer cmd, uint64_t frameIndex)
     {
         uint32_t wIdx = writeFrameIndex(frameIndex);
-        cmd.fillBuffer(feedbackFrames_[wIdx].feedbackBuffer, 0,
-                       totalPageTableEntries_ * sizeof(uint32_t), 0);
+        cmd.fillBuffer(feedbackFrames[wIdx].feedbackBuffer, 0,
+                       totalPageTableEntries * sizeof(uint32_t), 0);
     }
 
     // ---- Private ----
 
     void SVTFeedbackPipeline::createDescriptorSetLayout()
     {
-        auto dev = device_.getLogicalDevice();
+        auto dev = device.getLogicalDevice();
 
         std::array<vk::DescriptorSetLayoutBinding, 3> bindings{};
 
@@ -203,40 +203,40 @@ namespace render::svt
         vk::DescriptorSetLayoutCreateInfo layoutInfo{};
         layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
         layoutInfo.pBindings = bindings.data();
-        descriptorSetLayout_ = dev.createDescriptorSetLayout(layoutInfo);
+        descriptorSetLayout = dev.createDescriptorSetLayout(layoutInfo);
 
         vk::PipelineLayoutCreateInfo pipelineLayoutInfo{};
         pipelineLayoutInfo.setLayoutCount = 1;
-        pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout_;
-        pipelineLayout_ = dev.createPipelineLayout(pipelineLayoutInfo);
+        pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout;
+        pipelineLayout = dev.createPipelineLayout(pipelineLayoutInfo);
     }
 
     void SVTFeedbackPipeline::createPipeline()
     {
-        shader_ = std::make_unique<core::Shader>(device_);
-        shader_->readShader("../../resources/shaders/svt/svt_feedback.glsl");
+        shader = std::make_unique<core::Shader>(device);
+        shader->readShader("../../resources/shaders/svt/svt_feedback.glsl");
 
-        const auto& stages = shader_->getShaderStages();
+        const auto& stages = shader->getShaderStages();
         if (stages.empty())
         {
-            vfLogError("Failed to load SVT feedback shader: {}", shader_->getLastCompilationError());
+            vfLogError("Failed to load SVT feedback shader: {}", shader->getLastCompilationError());
             return;
         }
 
         vk::ComputePipelineCreateInfo pipelineInfo{};
         pipelineInfo.stage = stages[0];
-        pipelineInfo.layout = pipelineLayout_;
+        pipelineInfo.layout = pipelineLayout;
 
-        auto result = device_.getLogicalDevice().createComputePipeline(nullptr, pipelineInfo);
-        pipeline_ = result.value;
+        auto result = device.getLogicalDevice().createComputePipeline(nullptr, pipelineInfo);
+        pipeline = result.value;
     }
 
     void SVTFeedbackPipeline::createFeedbackBuffers()
     {
-        auto dev = device_.getLogicalDevice();
-        auto physDev = device_.getPhysicalDevice();
+        auto dev = device.getLogicalDevice();
+        auto physDev = device.getPhysicalDevice();
 
-        vk::DeviceSize bufferSize = totalPageTableEntries_ * sizeof(uint32_t);
+        vk::DeviceSize bufferSize = totalPageTableEntries * sizeof(uint32_t);
 
         // Create descriptor pool
         std::array<vk::DescriptorPoolSize, 3> poolSizes{};
@@ -248,11 +248,11 @@ namespace render::svt
         poolInfo.maxSets = FEEDBACK_BUFFER_COUNT;
         poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
         poolInfo.pPoolSizes = poolSizes.data();
-        descriptorPool_ = dev.createDescriptorPool(poolInfo);
+        descriptorPool = dev.createDescriptorPool(poolInfo);
 
         for (uint32_t i = 0; i < FEEDBACK_BUFFER_COUNT; ++i)
         {
-            auto& frame = feedbackFrames_[i];
+            auto& frame = feedbackFrames[i];
 
             // Host-visible feedback buffer for CPU readback
             core::BufferInfoRequest bufReq(dev, physDev,
@@ -266,24 +266,24 @@ namespace render::svt
 
             // Allocate descriptor set
             vk::DescriptorSetAllocateInfo allocInfo{};
-            allocInfo.descriptorPool = descriptorPool_;
+            allocInfo.descriptorPool = descriptorPool;
             allocInfo.descriptorSetCount = 1;
-            allocInfo.pSetLayouts = &descriptorSetLayout_;
+            allocInfo.pSetLayouts = &descriptorSetLayout;
             frame.descriptorSet = dev.allocateDescriptorSets(allocInfo)[0];
         }
     }
 
     void SVTFeedbackPipeline::createParamsBuffer()
     {
-        auto dev = device_.getLogicalDevice();
-        auto physDev = device_.getPhysicalDevice();
+        auto dev = device.getLogicalDevice();
+        auto physDev = device.getPhysicalDevice();
 
         core::BufferInfoRequest bufReq(dev, physDev,
             sizeof(SVTFeedbackParamsGPU),
             vk::BufferUsageFlagBits::eUniformBuffer,
             vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
         );
-        core::BufferUtilities::createBuffer(bufReq, paramsBuffer_, paramsMemory_);
-        paramsMapped_ = dev.mapMemory(paramsMemory_, 0, sizeof(SVTFeedbackParamsGPU));
+        core::BufferUtilities::createBuffer(bufReq, paramsBuffer, paramsMemory);
+        paramsMapped = dev.mapMemory(paramsMemory, 0, sizeof(SVTFeedbackParamsGPU));
     }
 }

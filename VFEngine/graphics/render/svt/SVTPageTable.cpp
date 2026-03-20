@@ -7,7 +7,7 @@
 namespace render::svt
 {
     SVTPageTable::SVTPageTable(core::Device& device)
-        : device_(device)
+        : device(device)
     {
     }
 
@@ -18,24 +18,24 @@ namespace render::svt
 
     void SVTPageTable::init(const SVTConfig& config)
     {
-        if (initialized_) return;
-        config_ = config;
+        if (initialized) return;
+        this->config = config;
 
-        mipLevelCount_ = computeMipLevelCount(config_.virtualTextureSizeLog2, config_.tileSizeLog2);
-        totalEntries_ = computeTotalPageTableEntries(config_.virtualTextureSizeLog2, config_.tileSizeLog2);
+        mipLevelCount = computeMipLevelCount(config.virtualTextureSizeLog2, config.tileSizeLog2);
+        totalEntries = computeTotalPageTableEntries(config.virtualTextureSizeLog2, config.tileSizeLog2);
 
         // Build per-mip metadata
-        mipInfos_.resize(mipLevelCount_);
-        for (uint32_t m = 0; m < mipLevelCount_; ++m)
+        mipInfos.resize(mipLevelCount);
+        for (uint32_t m = 0; m < mipLevelCount; ++m)
         {
-            mipInfos_[m].offset = computePageTableMipOffset(m, config_.virtualTextureSizeLog2, config_.tileSizeLog2);
-            mipInfos_[m].tilesPerSide = computeTilesPerMipSide(m, config_.virtualTextureSizeLog2, config_.tileSizeLog2);
-            if (mipInfos_[m].tilesPerSide == 0) mipInfos_[m].tilesPerSide = 1;
+            mipInfos[m].offset = computePageTableMipOffset(m, config.virtualTextureSizeLog2, config.tileSizeLog2);
+            mipInfos[m].tilesPerSide = computeTilesPerMipSide(m, config.virtualTextureSizeLog2, config.tileSizeLog2);
+            if (mipInfos[m].tilesPerSide == 0) mipInfos[m].tilesPerSide = 1;
         }
 
         // Initialize CPU entries to invalid
-        entries_.resize(totalEntries_);
-        std::memset(entries_.data(), 0, totalEntries_ * sizeof(SVTPageTableEntry));
+        entries.resize(totalEntries);
+        std::memset(entries.data(), 0, totalEntries * sizeof(SVTPageTableEntry));
 
         // Create GPU buffer
         createBuffer();
@@ -43,46 +43,46 @@ namespace render::svt
         // Upload initial (all-invalid) state
         flushToGPU();
 
-        initialized_ = true;
+        initialized = true;
         vfLogInfo("SVT PageTable initialized: {} total entries across {} mip levels, buffer size = {} KB",
-                     totalEntries_, mipLevelCount_,
-                     (totalEntries_ * sizeof(SVTPageTableEntry)) / 1024);
+                     totalEntries, mipLevelCount,
+                     (totalEntries * sizeof(SVTPageTableEntry)) / 1024);
     }
 
     void SVTPageTable::cleanup()
     {
-        if (!initialized_) return;
+        if (!initialized) return;
 
-        auto dev = device_.getLogicalDevice();
-        if (mapped_)
+        auto dev = device.getLogicalDevice();
+        if (mapped)
         {
-            dev.unmapMemory(memory_);
-            mapped_ = nullptr;
+            dev.unmapMemory(memory);
+            mapped = nullptr;
         }
-        core::BufferUtilities::destroyBuffer(dev, buffer_, memory_);
+        core::BufferUtilities::destroyBuffer(dev, buffer, memory);
 
-        entries_.clear();
-        mipInfos_.clear();
-        initialized_ = false;
+        entries.clear();
+        mipInfos.clear();
+        initialized = false;
     }
 
     void SVTPageTable::setEntry(const VirtualTileCoord& coord, const SVTPageTableEntry& entry)
     {
         uint32_t idx = getFlatIndex(coord);
-        if (idx < totalEntries_)
+        if (idx < totalEntries)
         {
-            entries_[idx] = entry;
-            dirty_ = true;
+            entries[idx] = entry;
+            dirty = true;
         }
     }
 
     void SVTPageTable::clearEntry(const VirtualTileCoord& coord)
     {
         uint32_t idx = getFlatIndex(coord);
-        if (idx < totalEntries_)
+        if (idx < totalEntries)
         {
-            entries_[idx] = SVTPageTableEntry::invalid();
-            dirty_ = true;
+            entries[idx] = SVTPageTableEntry::invalid();
+            dirty = true;
         }
     }
 
@@ -90,48 +90,48 @@ namespace render::svt
     {
         uint32_t idx = getFlatIndex(coord);
         static const SVTPageTableEntry invalidEntry{};
-        if (idx >= totalEntries_) return invalidEntry;
-        return entries_[idx];
+        if (idx >= totalEntries) return invalidEntry;
+        return entries[idx];
     }
 
     void SVTPageTable::flushToGPU()
     {
-        if (!mapped_ || !dirty_) return;
-        std::memcpy(mapped_, entries_.data(), totalEntries_ * sizeof(SVTPageTableEntry));
-        dirty_ = false;
+        if (!mapped || !dirty) return;
+        std::memcpy(mapped, entries.data(), totalEntries * sizeof(SVTPageTableEntry));
+        dirty = false;
     }
 
     void SVTPageTable::clearAll()
     {
-        std::memset(entries_.data(), 0, totalEntries_ * sizeof(SVTPageTableEntry));
-        dirty_ = true;
+        std::memset(entries.data(), 0, totalEntries * sizeof(SVTPageTableEntry));
+        dirty = true;
     }
 
     uint32_t SVTPageTable::getFlatIndex(const VirtualTileCoord& coord) const
     {
-        if (coord.mipLevel >= mipLevelCount_) return totalEntries_; // Out of bounds
+        if (coord.mipLevel >= mipLevelCount) return totalEntries; // Out of bounds
 
-        const auto& mip = mipInfos_[coord.mipLevel];
-        if (coord.x >= mip.tilesPerSide || coord.y >= mip.tilesPerSide) return totalEntries_;
+        const auto& mip = mipInfos[coord.mipLevel];
+        if (coord.x >= mip.tilesPerSide || coord.y >= mip.tilesPerSide) return totalEntries;
 
         return mip.offset + coord.y * mip.tilesPerSide + coord.x;
     }
 
     void SVTPageTable::createBuffer()
     {
-        auto dev = device_.getLogicalDevice();
-        auto physDev = device_.getPhysicalDevice();
+        auto dev = device.getLogicalDevice();
+        auto physDev = device.getPhysicalDevice();
 
-        vk::DeviceSize bufferSize = totalEntries_ * sizeof(SVTPageTableEntry);
+        vk::DeviceSize bufferSize = totalEntries * sizeof(SVTPageTableEntry);
 
         core::BufferInfoRequest bufReq(dev, physDev,
             bufferSize,
             vk::BufferUsageFlagBits::eStorageBuffer,
             vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
         );
-        core::BufferUtilities::createBuffer(bufReq, buffer_, memory_);
+        core::BufferUtilities::createBuffer(bufReq, buffer, memory);
 
         // Persistently map
-        mapped_ = dev.mapMemory(memory_, 0, bufferSize);
+        mapped = dev.mapMemory(memory, 0, bufferSize);
     }
 }

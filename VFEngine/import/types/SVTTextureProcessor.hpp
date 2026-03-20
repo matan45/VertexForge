@@ -9,6 +9,23 @@ namespace types
 {
     using SVTProgressCallback = std::function<void(float progress)>;
 
+    struct ImageData
+    {
+        const uint8_t* data = nullptr;
+        uint32_t width = 0;
+        uint32_t height = 0;
+    };
+
+    struct ORMPackInput
+    {
+        std::string aoPath;
+        std::string roughnessPath;
+        std::string metallicPath;
+        float defaultAO = 1.0f;
+        float defaultRoughness = 0.5f;
+        float defaultMetallic = 0.0f;
+    };
+
     // Converts a large texture into a tiled .vfSVT file for Sparse Virtual Texturing.
     // Only textures above the size threshold are tiled; smaller ones should use
     // the standard .vfImage path.
@@ -24,28 +41,19 @@ namespace types
         };
 
         // Convert a source image file to .vfSVT format.
-        // Input: path to source image (PNG, JPG, TGA, HDR, EXR)
-        // Output: .vfSVT file at outputPath
-        // Returns true on success.
         static bool convertToSVT(const std::string& inputPath,
                                   const std::string& outputPath,
                                   const Config& config = {},
                                   SVTProgressCallback progressCallback = nullptr);
 
         // Convert an already-loaded RGBA8 texture to .vfSVT format.
-        static bool convertRGBA8ToSVT(const uint8_t* rgbaData,
-                                       uint32_t width, uint32_t height,
+        static bool convertRGBA8ToSVT(const ImageData& image,
                                        const std::string& outputPath,
                                        const Config& config = {},
                                        SVTProgressCallback progressCallback = nullptr);
 
         // Pack separate AO, Roughness, Metallic images into a single ORM .vfSVT.
-        // Each input can be empty (uses default scalar value).
-        // All inputs must be the same resolution if provided.
-        static bool packORMToSVT(const std::string& aoPath,
-                                  const std::string& roughnessPath,
-                                  const std::string& metallicPath,
-                                  float defaultAO, float defaultRoughness, float defaultMetallic,
+        static bool packORMToSVT(const ORMPackInput& input,
                                   const std::string& outputPath,
                                   const Config& config = {},
                                   SVTProgressCallback progressCallback = nullptr);

@@ -6,7 +6,6 @@
 #include <vector>
 #include <string>
 #include <memory>
-#include <functional>
 
 namespace resource
 {
@@ -37,25 +36,31 @@ namespace render::svt
         uint32_t packedLayerIndices = 0; // 4x8-bit palette indices packed
     };
 
+    // UV and world-space bounds for a virtual tile
+    struct TileBounds
+    {
+        float uvMinX = 0.0f;
+        float uvMinY = 0.0f;
+        float texelUVSize = 0.0f;
+        uint32_t physTileSize = 0;
+        glm::vec2 worldSize{0.0f};
+    };
+
     // Generates SVT tile data for terrain by compositing terrain layer textures
     // weighted by splat maps. Implements SVTTileProvider interface.
     class TerrainSVTCompositor : public SVTTileProvider
     {
     private:
-        SVTConfig config_;
+        SVTConfig config;
 
         // Terrain world bounds (for virtual UV mapping)
-        glm::vec2 terrainWorldMin_{0.0f};
-        glm::vec2 terrainWorldMax_{0.0f};
+        glm::vec2 terrainWorldMin{0.0f};
+        glm::vec2 terrainWorldMax{0.0f};
 
         // Layer sources (up to 32)
-        std::vector<TerrainLayerSource> layers_;
+        std::vector<TerrainLayerSource> layers;
 
-        // Callback to retrieve weight map data for a world region
-        using WeightMapCallback = std::function<TerrainWeightMapRegion(const glm::vec2& worldMin, const glm::vec2& worldMax)>;
-        WeightMapCallback weightMapCallback_;
-
-        bool initialized_ = false;
+        bool initialized = false;
 
     public:
         TerrainSVTCompositor() = default;
@@ -65,7 +70,6 @@ namespace render::svt
                   const glm::vec2& terrainWorldMax);
 
         void setLayers(std::vector<TerrainLayerSource> layers);
-        void setWeightMapCallback(WeightMapCallback callback);
 
         // SVTTileProvider interface
         SVTTileData generateTile(const VirtualTileCoord& coord) override;
@@ -75,6 +79,16 @@ namespace render::svt
         glm::vec2 getSVTOffset() const;
 
     private:
+        // Compute UV and world-space bounds for a virtual tile coordinate
+        TileBounds computeTileBounds(const VirtualTileCoord& coord) const;
+
+        // Composite layer textures into RGBA8 buffers for a tile
+        void compositeTileTexels(const TileBounds& bounds,
+                                 const TerrainWeightMapRegion& weightRegion,
+                                 std::vector<uint8_t>& albedoRGBA,
+                                 std::vector<uint8_t>& normalRGBA,
+                                 std::vector<uint8_t>& ormRGBA) const;
+
         // Sample a terrain layer texture at world-space coordinates
         glm::vec4 sampleLayerTexture(const resource::TextureData* texture,
                                       float worldX, float worldZ,

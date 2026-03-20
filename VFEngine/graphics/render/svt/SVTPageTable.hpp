@@ -17,29 +17,29 @@ namespace render::svt
     class SVTPageTable
     {
     private:
-        core::Device& device_;
-        SVTConfig config_;
+        core::Device& device;
+        SVTConfig config;
 
         // CPU-side page table entries (all mip levels, packed sequentially)
-        std::vector<SVTPageTableEntry> entries_;
-        uint32_t totalEntries_ = 0;
+        std::vector<SVTPageTableEntry> entries;
+        uint32_t totalEntries = 0;
 
         // Per-mip metadata
         struct MipInfo
         {
-            uint32_t offset = 0;        // Offset into entries_ array
+            uint32_t offset = 0;        // Offset into entries array
             uint32_t tilesPerSide = 0;  // Number of tiles per side at this mip
         };
-        std::vector<MipInfo> mipInfos_;
-        uint32_t mipLevelCount_ = 0;
+        std::vector<MipInfo> mipInfos;
+        uint32_t mipLevelCount = 0;
 
         // GPU SSBO
-        vk::Buffer buffer_;
-        vk::DeviceMemory memory_;
-        void* mapped_ = nullptr;  // Persistently mapped (host-visible + coherent)
+        vk::Buffer buffer;
+        vk::DeviceMemory memory;
+        void* mapped = nullptr;  // Persistently mapped (host-visible + coherent)
 
-        bool initialized_ = false;
-        bool dirty_ = false;
+        bool initialized = false;
+        bool dirty = false;
 
     public:
         explicit SVTPageTable(core::Device& device);
@@ -69,21 +69,21 @@ namespace render::svt
         // Get the flat index for a virtual tile coordinate
         uint32_t getFlatIndex(const VirtualTileCoord& coord) const;
 
-        vk::Buffer getBuffer() const { return buffer_; }
-        uint32_t getTotalEntries() const { return totalEntries_; }
-        uint32_t getMipLevelCount() const { return mipLevelCount_; }
+        vk::Buffer getBuffer() const { return buffer; }
+        uint32_t getTotalEntries() const { return totalEntries; }
+        uint32_t getMipLevelCount() const { return mipLevelCount; }
 
         uint32_t getTilesPerSide(uint32_t mipLevel) const
         {
-            return mipLevel < mipLevelCount_ ? mipInfos_[mipLevel].tilesPerSide : 0;
+            return mipLevel < mipLevelCount ? mipInfos[mipLevel].tilesPerSide : 0;
         }
 
         uint32_t getMipOffset(uint32_t mipLevel) const
         {
-            return mipLevel < mipLevelCount_ ? mipInfos_[mipLevel].offset : 0;
+            return mipLevel < mipLevelCount ? mipInfos[mipLevel].offset : 0;
         }
 
-        bool isInitialized() const { return initialized_; }
+        bool isInitialized() const { return initialized; }
 
     private:
         void createBuffer();

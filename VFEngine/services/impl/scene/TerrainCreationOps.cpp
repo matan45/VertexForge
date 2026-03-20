@@ -62,10 +62,10 @@ namespace services
 
             if (isSVT)
             {
+                terrain::TerrainBounds hBounds{terrainMinX, terrainMinZ,
+                    terrainWidth, terrainDepth, config.minHeight, config.maxHeight};
                 auto sampler = terrain::createStreamingHeightSamplerFromSVT(
-                    config.heightmapPath,
-                    terrainMinX, terrainMinZ, terrainWidth, terrainDepth,
-                    config.minHeight, config.maxHeight);
+                    config.heightmapPath, hBounds);
                 if (sampler)
                 {
                     grid->setHeightSampler(std::move(sampler));
@@ -79,10 +79,10 @@ namespace services
                 auto heightmapData = terrain::HeightmapLoader::load(config.heightmapPath);
                 if (heightmapData && heightmapData->isValid())
                 {
+                    terrain::TerrainBounds hBounds{terrainMinX, terrainMinZ,
+                        terrainWidth, terrainDepth, config.minHeight, config.maxHeight};
                     grid->setHeightSampler(terrain::createHeightSamplerFromMap(
-                        heightmapData,
-                        terrainMinX, terrainMinZ, terrainWidth, terrainDepth,
-                        config.minHeight, config.maxHeight));
+                        heightmapData, hBounds));
                     vfLogInfo("Loaded heightmap from: {}", config.heightmapPath);
                 }
                 else

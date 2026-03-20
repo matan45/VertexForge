@@ -18,8 +18,8 @@ namespace render::svt
     class PhysicalTileCache
     {
     private:
-        core::Device& device_;
-        SVTConfig config_;
+        core::Device& device;
+        SVTConfig config;
 
         // Per-channel cache images (sampler2DArray)
         struct ChannelCache
@@ -32,25 +32,25 @@ namespace render::svt
             uint32_t bindlessIndex = 0;
         };
 
-        ChannelCache albedoCache_;
-        ChannelCache normalCache_;
-        ChannelCache ormCache_;
-        ChannelCache emissionCache_;
-        ChannelCache heightCache_;
+        ChannelCache albedoCache;
+        ChannelCache normalCache;
+        ChannelCache ormCache;
+        ChannelCache emissionCache;
+        ChannelCache heightCache;
 
         // CPU-side tile tracking
-        std::vector<PhysicalTileInfo> tileSlots_;
-        std::vector<uint32_t> freeList_;
+        std::vector<PhysicalTileInfo> tileSlots;
+        std::vector<uint32_t> freeList;
 
         // Staging buffer for tile uploads
-        vk::Buffer stagingBuffer_;
-        vk::DeviceMemory stagingMemory_;
-        void* stagingMapped_ = nullptr;
-        size_t stagingBufferSize_ = 0;
+        vk::Buffer stagingBuffer;
+        vk::DeviceMemory stagingMemory;
+        void* stagingMapped = nullptr;
+        size_t stagingBufferSize = 0;
 
-        vk::CommandPool commandPool_;
+        vk::CommandPool commandPool;
 
-        bool initialized_ = false;
+        bool initialized = false;
 
     public:
         explicit PhysicalTileCache(core::Device& device);
@@ -59,7 +59,7 @@ namespace render::svt
         PhysicalTileCache(const PhysicalTileCache&) = delete;
         PhysicalTileCache& operator=(const PhysicalTileCache&) = delete;
 
-        void init(const SVTConfig& config);
+        void init(const SVTConfig& cfg);
         void cleanup();
 
         // Allocate a physical tile slot. Returns tile index or SVT_INVALID_TILE if full.
@@ -86,41 +86,49 @@ namespace render::svt
         void flushUploads();
 
         // Getters for bindless registration
-        vk::ImageView getAlbedoView() const { return albedoCache_.view; }
-        vk::ImageView getNormalView() const { return normalCache_.view; }
-        vk::ImageView getORMView() const { return ormCache_.view; }
-        vk::ImageView getEmissionView() const { return emissionCache_.view; }
-        vk::ImageView getHeightView() const { return heightCache_.view; }
+        vk::ImageView getAlbedoView() const { return albedoCache.view; }
+        vk::ImageView getNormalView() const { return normalCache.view; }
+        vk::ImageView getORMView() const { return ormCache.view; }
+        vk::ImageView getEmissionView() const { return emissionCache.view; }
+        vk::ImageView getHeightView() const { return heightCache.view; }
 
-        vk::Sampler getAlbedoSampler() const { return albedoCache_.sampler; }
-        vk::Sampler getNormalSampler() const { return normalCache_.sampler; }
-        vk::Sampler getORMSampler() const { return ormCache_.sampler; }
-        vk::Sampler getEmissionSampler() const { return emissionCache_.sampler; }
-        vk::Sampler getHeightSampler() const { return heightCache_.sampler; }
+        vk::Sampler getAlbedoSampler() const { return albedoCache.sampler; }
+        vk::Sampler getNormalSampler() const { return normalCache.sampler; }
+        vk::Sampler getORMSampler() const { return ormCache.sampler; }
+        vk::Sampler getEmissionSampler() const { return emissionCache.sampler; }
+        vk::Sampler getHeightSampler() const { return heightCache.sampler; }
 
-        void setAlbedoBindlessIndex(uint32_t idx) { albedoCache_.bindlessIndex = idx; }
-        void setNormalBindlessIndex(uint32_t idx) { normalCache_.bindlessIndex = idx; }
-        void setORMBindlessIndex(uint32_t idx) { ormCache_.bindlessIndex = idx; }
-        void setEmissionBindlessIndex(uint32_t idx) { emissionCache_.bindlessIndex = idx; }
-        void setHeightBindlessIndex(uint32_t idx) { heightCache_.bindlessIndex = idx; }
+        void setAlbedoBindlessIndex(uint32_t idx) { albedoCache.bindlessIndex = idx; }
+        void setNormalBindlessIndex(uint32_t idx) { normalCache.bindlessIndex = idx; }
+        void setORMBindlessIndex(uint32_t idx) { ormCache.bindlessIndex = idx; }
+        void setEmissionBindlessIndex(uint32_t idx) { emissionCache.bindlessIndex = idx; }
+        void setHeightBindlessIndex(uint32_t idx) { heightCache.bindlessIndex = idx; }
 
-        uint32_t getAlbedoBindlessIndex() const { return albedoCache_.bindlessIndex; }
-        uint32_t getNormalBindlessIndex() const { return normalCache_.bindlessIndex; }
-        uint32_t getORMBindlessIndex() const { return ormCache_.bindlessIndex; }
-        uint32_t getEmissionBindlessIndex() const { return emissionCache_.bindlessIndex; }
-        uint32_t getHeightBindlessIndex() const { return heightCache_.bindlessIndex; }
+        uint32_t getAlbedoBindlessIndex() const { return albedoCache.bindlessIndex; }
+        uint32_t getNormalBindlessIndex() const { return normalCache.bindlessIndex; }
+        uint32_t getORMBindlessIndex() const { return ormCache.bindlessIndex; }
+        uint32_t getEmissionBindlessIndex() const { return emissionCache.bindlessIndex; }
+        uint32_t getHeightBindlessIndex() const { return heightCache.bindlessIndex; }
 
-        const PhysicalTileInfo& getTileInfo(uint32_t tileIndex) const { return tileSlots_[tileIndex]; }
-        uint32_t getTileCount() const { return config_.physicalTileCount; }
-        uint32_t getFreeTileCount() const { return static_cast<uint32_t>(freeList_.size()); }
+        const PhysicalTileInfo& getTileInfo(uint32_t tileIndex) const { return tileSlots[tileIndex]; }
+        uint32_t getTileCount() const { return config.physicalTileCount; }
+        uint32_t getFreeTileCount() const { return static_cast<uint32_t>(freeList.size()); }
 
-        bool isInitialized() const { return initialized_; }
+        bool isInitialized() const { return initialized; }
 
     private:
         void createChannelCache(ChannelCache& cache, vk::Format format, const char* debugName);
+        void createCacheImage(ChannelCache& cache, vk::Format format);
+        void createCacheSampler(ChannelCache& cache);
+        void transitionCacheLayout(ChannelCache& cache);
+
         void destroyChannelCache(ChannelCache& cache);
         void createStagingBuffer();
+
         void uploadToLayer(ChannelCache& cache, uint32_t layer,
                            const void* data, uint32_t dataSize);
+        void prepareUploadBarrier(vk::CommandBuffer cmd, ChannelCache& cache, uint32_t layer);
+        void copyBufferToImage(vk::CommandBuffer cmd, ChannelCache& cache, uint32_t layer);
+        void finalizeUploadBarrier(vk::CommandBuffer cmd, ChannelCache& cache, uint32_t layer);
     };
 }

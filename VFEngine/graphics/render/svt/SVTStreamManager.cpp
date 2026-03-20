@@ -8,46 +8,46 @@
 namespace render::svt
 {
     SVTStreamManager::SVTStreamManager(PhysicalTileCache& cache, SVTPageTable& pageTable)
-        : cache_(cache), pageTable_(pageTable)
+        : cache(cache), pageTable(pageTable)
     {
     }
 
     void SVTStreamManager::init(const SVTConfig& config)
     {
-        config_ = config;
-        initialized_ = true;
+        this->config = config;
+        initialized = true;
     }
 
     void SVTStreamManager::update(const uint32_t* feedbackData, uint32_t entryCount,
                                    uint64_t frameIndex, const glm::vec3& cameraPos)
     {
-        if (!initialized_ || !feedbackData) return;
-        currentFrame_ = frameIndex;
+        if (!initialized || !feedbackData) return;
+        currentFrame = frameIndex;
 
-        stats_.tilesUploadedThisFrame = 0;
-        stats_.tilesEvictedThisFrame = 0;
-        stats_.bytesUploadedThisFrame = 0;
+        stats.tilesUploadedThisFrame = 0;
+        stats.tilesEvictedThisFrame = 0;
+        stats.bytesUploadedThisFrame = 0;
 
         processFeedback(feedbackData, entryCount, frameIndex, cameraPos);
         touchVisibleTiles(feedbackData, entryCount, frameIndex);
         processEvictions();
         processUploads();
 
-        stats_.totalPhysicalTiles = cache_.getTileCount();
-        stats_.usedPhysicalTiles = cache_.getTileCount() - cache_.getFreeTileCount();
-        stats_.pendingRequests = static_cast<uint32_t>(requestQueue_.size());
+        stats.totalPhysicalTiles = cache.getTileCount();
+        stats.usedPhysicalTiles = cache.getTileCount() - cache.getFreeTileCount();
+        stats.pendingRequests = static_cast<uint32_t>(requestQueue.size());
     }
 
     void SVTStreamManager::processFeedback(const uint32_t* feedbackData, uint32_t entryCount,
                                             uint64_t frameIndex, const glm::vec3& cameraPos)
     {
         // Scan feedback buffer for requested tiles
-        uint32_t mipLevels = computeMipLevelCount(config_.virtualTextureSizeLog2, config_.tileSizeLog2);
+        uint32_t mipLevels = computeMipLevelCount(config.virtualTextureSizeLog2, config.tileSizeLog2);
 
         for (uint32_t mip = 0; mip < mipLevels; ++mip)
         {
-            uint32_t mipOffset = computePageTableMipOffset(mip, config_.virtualTextureSizeLog2, config_.tileSizeLog2);
-            uint32_t tilesPerSide = computeTilesPerMipSide(mip, config_.virtualTextureSizeLog2, config_.tileSizeLog2);
+            uint32_t mipOffset = computePageTableMipOffset(mip, config.virtualTextureSizeLog2, config.tileSizeLog2);
+            uint32_t tilesPerSide = computeTilesPerMipSide(mip, config.virtualTextureSizeLog2, config.tileSizeLog2);
             if (tilesPerSide == 0) tilesPerSide = 1;
 
             for (uint32_t y = 0; y < tilesPerSide; ++y)
@@ -68,17 +68,17 @@ namespace render::svt
                     uint32_t requestedMip = fb & 0xFu;
                     float priority = calculatePriority(coord, requestedMip);
 
-                    requestQueue_.push({coord, priority});
+                    requestQueue.push({coord, priority});
                 }
             }
         }
 
         // Process top-priority requests up to budget
         uint32_t tilesGenerated = 0;
-        while (!requestQueue_.empty() && tilesGenerated < config_.maxTilesPerFrame)
+        while (!requestQueue.empty() && tilesGenerated < config.maxTilesPerFrame)
         {
-            auto req = requestQueue_.top();
-            requestQueue_.pop();
+            auto req = requestQueue.top();
+            requestQueue.pop();
 
             // Double-check not already resident (may have been queued multiple times)
             if (isTileResident(req.coord)) continue;
@@ -88,99 +88,107 @@ namespace render::svt
         }
     }
 
+    uint32_t SVTStreamManager::allocateOrEvictTile()
+    {
+        uint32_t physTile = cache.allocateTile();
+        if (physTile != SVT_INVALID_TILE) return physTile;
+
+        // Try eviction
+        physTile = cache.evictLRU(currentFrame);
+        if (physTile == SVT_INVALID_TILE)
+        {
+            vfLogWarning("SVT: Cache full, cannot upload tile");
+            return SVT_INVALID_TILE;
+        }
+
+        // Remove evicted tile from resident map
+        auto evictedInfo = cache.getTileInfo(physTile);
+        if (evictedInfo.occupied)
+        {
+            residentTiles.erase(evictedInfo.virtualCoord);
+            pageTable.clearEntry(evictedInfo.virtualCoord);
+            ++stats.tilesEvictedThisFrame;
+        }
+
+        return physTile;
+    }
+
+    void SVTStreamManager::uploadTileChannels(uint32_t physTile, const SVTTileData& tileData)
+    {
+        const std::pair<const std::vector<uint8_t>&, uint32_t> channels[] = {
+            {tileData.albedoData,   SVT_CHANNEL_ALBEDO},
+            {tileData.normalData,   SVT_CHANNEL_NORMAL},
+            {tileData.ormData,      SVT_CHANNEL_ORM},
+            {tileData.emissionData, SVT_CHANNEL_EMISSION},
+            {tileData.heightData,   SVT_CHANNEL_HEIGHT}
+        };
+
+        for (auto& [data, channel] : channels)
+        {
+            if (!data.empty())
+                cache.uploadTileData(physTile, channel, data.data(), static_cast<uint32_t>(data.size()));
+        }
+    }
+
     void SVTStreamManager::processUploads()
     {
-        std::lock_guard<std::mutex> lock(uploadQueueMutex_);
+        std::lock_guard<std::mutex> lock(uploadQueueMutex);
 
         uint32_t uploaded = 0;
         size_t bytesUploaded = 0;
 
-        while (!uploadQueue_.empty() && uploaded < config_.maxTilesPerFrame
-               && bytesUploaded < config_.maxBytesPerFrame)
+        while (!uploadQueue.empty() && uploaded < config.maxTilesPerFrame
+               && bytesUploaded < config.maxBytesPerFrame)
         {
-            auto& tileData = uploadQueue_.back();
+            auto& tileData = uploadQueue.back();
 
             if (!tileData.valid)
             {
-                uploadQueue_.pop_back();
+                uploadQueue.pop_back();
                 continue;
             }
 
-            // Allocate physical tile slot
-            uint32_t physTile = cache_.allocateTile();
-            if (physTile == SVT_INVALID_TILE)
-            {
-                // Try eviction
-                physTile = cache_.evictLRU(currentFrame_);
-                if (physTile == SVT_INVALID_TILE)
-                {
-                    vfLogWarning("SVT: Cache full, cannot upload tile");
-                    break;
-                }
+            uint32_t physTile = allocateOrEvictTile();
+            if (physTile == SVT_INVALID_TILE) break;
 
-                // Remove evicted tile from resident map
-                auto evictedInfo = cache_.getTileInfo(physTile);
-                if (evictedInfo.occupied)
-                {
-                    residentTiles_.erase(evictedInfo.virtualCoord);
-                    pageTable_.clearEntry(evictedInfo.virtualCoord);
-                    ++stats_.tilesEvictedThisFrame;
-                }
-            }
-
-            // Upload tile data to all present channels
-            if (!tileData.albedoData.empty())
-                cache_.uploadTileData(physTile, SVT_CHANNEL_ALBEDO, tileData.albedoData.data(),
-                                      static_cast<uint32_t>(tileData.albedoData.size()));
-            if (!tileData.normalData.empty())
-                cache_.uploadTileData(physTile, SVT_CHANNEL_NORMAL, tileData.normalData.data(),
-                                      static_cast<uint32_t>(tileData.normalData.size()));
-            if (!tileData.ormData.empty())
-                cache_.uploadTileData(physTile, SVT_CHANNEL_ORM, tileData.ormData.data(),
-                                      static_cast<uint32_t>(tileData.ormData.size()));
-            if (!tileData.emissionData.empty())
-                cache_.uploadTileData(physTile, SVT_CHANNEL_EMISSION, tileData.emissionData.data(),
-                                      static_cast<uint32_t>(tileData.emissionData.size()));
-            if (!tileData.heightData.empty())
-                cache_.uploadTileData(physTile, SVT_CHANNEL_HEIGHT, tileData.heightData.data(),
-                                      static_cast<uint32_t>(tileData.heightData.size()));
+            uploadTileChannels(physTile, tileData);
 
             // Update tracking
-            cache_.setTileMapping(physTile, tileData.coord);
-            cache_.touchTile(physTile, currentFrame_);
-            residentTiles_[tileData.coord] = physTile;
+            cache.setTileMapping(physTile, tileData.coord);
+            cache.touchTile(physTile, currentFrame);
+            residentTiles[tileData.coord] = physTile;
 
             // Update page table
             auto entry = SVTPageTableEntry::encode(physTile, 0, true, tileData.channelMask);
-            pageTable_.setEntry(tileData.coord, entry);
+            pageTable.setEntry(tileData.coord, entry);
 
             bytesUploaded += tileData.albedoData.size() + tileData.normalData.size()
                            + tileData.ormData.size() + tileData.emissionData.size()
                            + tileData.heightData.size();
             ++uploaded;
 
-            uploadQueue_.pop_back();
+            uploadQueue.pop_back();
         }
 
         if (uploaded > 0)
         {
-            pageTable_.flushToGPU();
+            pageTable.flushToGPU();
         }
 
-        stats_.tilesUploadedThisFrame += uploaded;
-        stats_.bytesUploadedThisFrame += bytesUploaded;
+        stats.tilesUploadedThisFrame += uploaded;
+        stats.bytesUploadedThisFrame += bytesUploaded;
     }
 
     void SVTStreamManager::touchVisibleTiles(const uint32_t* feedbackData,
                                               uint32_t entryCount, uint64_t frame)
     {
         // Mark all resident tiles that appear in feedback as recently used
-        for (auto& [coord, physTile] : residentTiles_)
+        for (auto& [coord, physTile] : residentTiles)
         {
-            uint32_t idx = pageTable_.getFlatIndex(coord);
+            uint32_t idx = pageTable.getFlatIndex(coord);
             if (idx < entryCount && (feedbackData[idx] & SVT_FEEDBACK_REQUEST_FLAG))
             {
-                cache_.touchTile(physTile, frame);
+                cache.touchTile(physTile, frame);
             }
         }
     }
@@ -188,62 +196,62 @@ namespace render::svt
     void SVTStreamManager::processEvictions()
     {
         // Evict tiles when cache usage exceeds threshold
-        float usageRatio = 1.0f - static_cast<float>(cache_.getFreeTileCount()) / cache_.getTileCount();
+        float usageRatio = 1.0f - static_cast<float>(cache.getFreeTileCount()) / cache.getTileCount();
         if (usageRatio < 0.9f) return;  // Below 90%, no eviction needed
 
         float targetRatio = 0.8f;
-        uint32_t targetFree = static_cast<uint32_t>(cache_.getTileCount() * (1.0f - targetRatio));
+        uint32_t targetFree = static_cast<uint32_t>(cache.getTileCount() * (1.0f - targetRatio));
 
-        while (cache_.getFreeTileCount() < targetFree)
+        while (cache.getFreeTileCount() < targetFree)
         {
-            uint32_t evicted = cache_.evictLRU(currentFrame_);
+            uint32_t evicted = cache.evictLRU(currentFrame);
             if (evicted == SVT_INVALID_TILE) break;
 
-            auto evictedInfo = cache_.getTileInfo(evicted);
-            residentTiles_.erase(evictedInfo.virtualCoord);
-            pageTable_.clearEntry(evictedInfo.virtualCoord);
-            cache_.freeTile(evicted);
-            ++stats_.tilesEvictedThisFrame;
+            auto evictedInfo = cache.getTileInfo(evicted);
+            residentTiles.erase(evictedInfo.virtualCoord);
+            pageTable.clearEntry(evictedInfo.virtualCoord);
+            cache.freeTile(evicted);
+            ++stats.tilesEvictedThisFrame;
         }
     }
 
     bool SVTStreamManager::isTileResident(const VirtualTileCoord& coord) const
     {
-        return residentTiles_.find(coord) != residentTiles_.end();
+        return residentTiles.find(coord) != residentTiles.end();
     }
 
     void SVTStreamManager::clear()
     {
         // Clear request queue
-        while (!requestQueue_.empty()) requestQueue_.pop();
+        while (!requestQueue.empty()) requestQueue.pop();
 
         {
-            std::lock_guard<std::mutex> lock(uploadQueueMutex_);
-            uploadQueue_.clear();
+            std::lock_guard<std::mutex> lock(uploadQueueMutex);
+            uploadQueue.clear();
         }
 
         // Free all physical tiles
-        for (auto& [coord, physTile] : residentTiles_)
+        for (auto& [coord, physTile] : residentTiles)
         {
-            cache_.freeTile(physTile);
+            cache.freeTile(physTile);
         }
-        residentTiles_.clear();
+        residentTiles.clear();
 
-        pageTable_.clearAll();
-        pageTable_.flushToGPU();
+        pageTable.clearAll();
+        pageTable.flushToGPU();
     }
 
     void SVTStreamManager::generateTileAsync(const VirtualTileCoord& coord)
     {
-        if (!tileProvider_) return;
+        if (!tileProvider) return;
 
         // For now, generate synchronously. Can be made async with std::async later.
-        auto tileData = tileProvider_->generateTile(coord);
+        auto tileData = tileProvider->generateTile(coord);
 
         if (tileData.valid)
         {
-            std::lock_guard<std::mutex> lock(uploadQueueMutex_);
-            uploadQueue_.push_back(std::move(tileData));
+            std::lock_guard<std::mutex> lock(uploadQueueMutex);
+            uploadQueue.push_back(std::move(tileData));
         }
     }
 

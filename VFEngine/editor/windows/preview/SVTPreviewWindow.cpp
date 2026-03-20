@@ -83,11 +83,9 @@ namespace windows
             static_cast<uint32_t>(mipLevel), header.virtualSizeLog2, header.tileSizeLog2);
         if (tilesPerSide == 0) tilesPerSide = 1;
 
-        // Assemble tiles into preview image, downsampling if too large
         uint32_t fullWidth = tilesPerSide * tileSize;
         uint32_t fullHeight = tilesPerSide * tileSize;
 
-        // Downsample factor: keep preview under 2048px
         uint32_t downsample = 1;
         while ((fullWidth / downsample) > 2048 || (fullHeight / downsample) > 2048)
             downsample *= 2;
@@ -95,7 +93,24 @@ namespace windows
         assembledWidth = fullWidth / downsample;
         assembledHeight = fullHeight / downsample;
 
+        decodeTilesForMip(mipLevel, downsample);
+        uploadPreviewTexture();
+
+        loadedPreviewMip = mipLevel;
+    }
+
+    void SVTPreviewWindow::decodeTilesForMip(int mipLevel, uint32_t downsample)
+    {
+        const auto& header = reader.getHeader();
+        uint32_t tileSize = 1u << header.tileSizeLog2;
+        uint32_t border = header.borderSize;
+        uint32_t physTileSize = tileSize + 2 * border;
+        uint32_t tilesPerSide = render::svt::computeTilesPerMipSide(
+            static_cast<uint32_t>(mipLevel), header.virtualSizeLog2, header.tileSizeLog2);
+        if (tilesPerSide == 0) tilesPerSide = 1;
+
         assembledMipRGBA.resize(static_cast<size_t>(assembledWidth) * assembledHeight * 4);
+
         // Fill with checkerboard pattern (for missing tiles)
         for (uint32_t y = 0; y < assembledHeight; ++y)
         {
@@ -111,8 +126,7 @@ namespace windows
             }
         }
 
-        uint32_t border = header.borderSize;
-        uint32_t physTileSize = tileSize + 2 * border;
+        uint32_t dsTileSize = tileSize / downsample;
 
         for (uint32_t ty = 0; ty < tilesPerSide; ++ty)
         {
@@ -120,18 +134,12 @@ namespace windows
             {
                 std::vector<uint8_t> tileData;
                 render::svt::VirtualTileCoord coord{tx, ty, static_cast<uint32_t>(mipLevel)};
-                bool present = reader.readTile(coord, tileData);
+                if (!reader.readTile(coord, tileData) || tileData.empty()) continue;
 
-                if (!present || tileData.empty()) continue;
-
-                // Decompress BC7 tile to RGBA8
                 auto decoded = resource::BC7Decoder::decompress(
                     tileData.data(), physTileSize, physTileSize);
-
                 if (decoded.empty()) continue;
 
-                // Copy inner tile region to assembled image (with downsampling)
-                uint32_t dsTileSize = tileSize / downsample;
                 for (uint32_t py = 0; py < dsTileSize; ++py)
                 {
                     for (uint32_t px = 0; px < dsTileSize; ++px)
@@ -140,7 +148,6 @@ namespace windows
                         uint32_t imgY = ty * dsTileSize + py;
                         if (imgX >= assembledWidth || imgY >= assembledHeight) continue;
 
-                        // Source: offset by border, then scale by downsample
                         uint32_t srcX = px * downsample + border;
                         uint32_t srcY = py * downsample + border;
                         size_t srcIdx = (static_cast<size_t>(srcY) * physTileSize + srcX) * 4;
@@ -157,8 +164,10 @@ namespace windows
                 }
             }
         }
+    }
 
-        // Release old preview
+    void SVTPreviewWindow::uploadPreviewTexture()
+    {
         if (mipPreviewHandle.isValid())
         {
             auto& dispatcher = events::EventDispatcher::instance();
@@ -168,35 +177,26 @@ namespace windows
             mipPreviewHandle = {};
         }
 
-        // Load assembled image as editor texture (synchronous)
-        if (assembledWidth > 0 && assembledHeight > 0)
-        {
-            auto& dispatcher = events::EventDispatcher::instance();
+        if (assembledWidth == 0 || assembledHeight == 0) return;
 
-            events::render::LoadEditorTextureFromDataCommand loadCmd;
-            loadCmd.textureData.width = assembledWidth;
-            loadCmd.textureData.height = assembledHeight;
-            loadCmd.textureData.numbersOfChannels = 4;
-            loadCmd.textureData.mipLevels = 1;
-            loadCmd.textureData.compressionFormat = resource::TextureCompressionFormat::Uncompressed;
+        auto& dispatcher = events::EventDispatcher::instance();
 
-            resource::MipLevelData mip0;
-            mip0.width = assembledWidth;
-            mip0.height = assembledHeight;
-            mip0.dataSize = static_cast<uint32_t>(assembledMipRGBA.size());
-            mip0.data = assembledMipRGBA;
-            loadCmd.textureData.mipData.push_back(std::move(mip0));
+        events::render::LoadEditorTextureFromDataCommand loadCmd;
+        loadCmd.textureData.width = assembledWidth;
+        loadCmd.textureData.height = assembledHeight;
+        loadCmd.textureData.numbersOfChannels = 4;
+        loadCmd.textureData.mipLevels = 1;
+        loadCmd.textureData.compressionFormat = resource::TextureCompressionFormat::Uncompressed;
 
-            mipPreviewHandle = dispatcher.execute(loadCmd);
-            mipPreviewLoading = false;
-        }
+        resource::MipLevelData mip0;
+        mip0.width = assembledWidth;
+        mip0.height = assembledHeight;
+        mip0.dataSize = static_cast<uint32_t>(assembledMipRGBA.size());
+        mip0.data = assembledMipRGBA;
+        loadCmd.textureData.mipData.push_back(std::move(mip0));
 
-        loadedPreviewMip = mipLevel;
-    }
-
-    void SVTPreviewWindow::updateAsyncLoading()
-    {
-        // Currently using synchronous loading — nothing to poll
+        mipPreviewHandle = dispatcher.execute(loadCmd);
+        mipPreviewLoading = false;
     }
 
     void SVTPreviewWindow::draw()

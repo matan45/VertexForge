@@ -31,15 +31,20 @@ namespace terrain
         static std::string getExtension(const std::string& filePath);
     };
 
+    struct TerrainBounds
+    {
+        float minX = 0.0f;
+        float minZ = 0.0f;
+        float width = 0.0f;
+        float depth = 0.0f;
+        float minHeight = 0.0f;
+        float maxHeight = 0.0f;
+    };
+
     // Maps world coordinates to heightmap UV based on terrain dimensions
     HeightSampler createHeightSamplerFromMap(
         std::shared_ptr<const HeightmapData> heightmap,
-        float terrainMinX,
-        float terrainMinZ,
-        float terrainWidth,
-        float terrainDepth,
-        float minHeight,
-        float maxHeight
+        const TerrainBounds& bounds
     );
 
     // Creates a streaming height sampler from a .vfSVT file.
@@ -47,11 +52,6 @@ namespace terrain
     // Returns empty sampler if file can't be opened.
     HeightSampler createStreamingHeightSamplerFromSVT(
         const std::string& svtPath,
-        float terrainMinX,
-        float terrainMinZ,
-        float terrainWidth,
-        float terrainDepth,
-        float minHeight,
-        float maxHeight
+        const TerrainBounds& bounds
     );
 }

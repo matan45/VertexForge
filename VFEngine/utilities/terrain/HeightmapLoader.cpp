@@ -173,45 +173,40 @@ namespace terrain
         result->height = outputHeight;
         result->heights.resize(static_cast<size_t>(outputWidth) * outputHeight, 0.0f);
 
-        for (uint32_t ty = 0; ty < tilesPerSide; ++ty)
+        auto decodeTileToHeights = [&](uint32_t tx, uint32_t ty)
         {
-            for (uint32_t tx = 0; tx < tilesPerSide; ++tx)
+            std::vector<uint8_t> tileData;
+            render::svt::VirtualTileCoord coord{tx, ty, selectedMip};
+            if (!reader.readTile(coord, tileData) || tileData.empty()) return;
+
+            auto decoded = resource::BC7Decoder::decompress(
+                tileData.data(), physTileSize, physTileSize);
+            if (decoded.empty()) return;
+
+            for (uint32_t py = 0; py < tileSize; ++py)
             {
-                std::vector<uint8_t> tileData;
-                render::svt::VirtualTileCoord coord{tx, ty, selectedMip};
-                if (!reader.readTile(coord, tileData) || tileData.empty())
-                    continue;
-
-                // Decompress BC7 tile
-                auto decoded = resource::BC7Decoder::decompress(
-                    tileData.data(), physTileSize, physTileSize);
-                if (decoded.empty()) continue;
-
-                // Copy inner tile region (skip borders), convert to grayscale height
-                for (uint32_t py = 0; py < tileSize; ++py)
+                for (uint32_t px = 0; px < tileSize; ++px)
                 {
-                    for (uint32_t px = 0; px < tileSize; ++px)
+                    uint32_t imgX = tx * tileSize + px;
+                    uint32_t imgY = ty * tileSize + py;
+                    if (imgX >= outputWidth || imgY >= outputHeight) continue;
+
+                    size_t srcIdx = (static_cast<size_t>(py + border) * physTileSize + px + border) * 4;
+                    if (srcIdx + 2 < decoded.size())
                     {
-                        uint32_t imgX = tx * tileSize + px;
-                        uint32_t imgY = ty * tileSize + py;
-                        if (imgX >= outputWidth || imgY >= outputHeight) continue;
-
-                        uint32_t srcX = px + border;
-                        uint32_t srcY = py + border;
-                        size_t srcIdx = (static_cast<size_t>(srcY) * physTileSize + srcX) * 4;
-
-                        if (srcIdx + 2 < decoded.size())
-                        {
-                            float r = decoded[srcIdx + 0] / 255.0f;
-                            float g = decoded[srcIdx + 1] / 255.0f;
-                            float b = decoded[srcIdx + 2] / 255.0f;
-                            float height = 0.299f * r + 0.587f * g + 0.114f * b;
-                            result->heights[static_cast<size_t>(imgY) * outputWidth + imgX] = height;
-                        }
+                        float r = decoded[srcIdx + 0] / 255.0f;
+                        float g = decoded[srcIdx + 1] / 255.0f;
+                        float b = decoded[srcIdx + 2] / 255.0f;
+                        result->heights[static_cast<size_t>(imgY) * outputWidth + imgX] =
+                            0.299f * r + 0.587f * g + 0.114f * b;
                     }
                 }
             }
-        }
+        };
+
+        for (uint32_t ty = 0; ty < tilesPerSide; ++ty)
+            for (uint32_t tx = 0; tx < tilesPerSide; ++tx)
+                decodeTileToHeights(tx, ty);
 
         reader.close();
         vfLogInfo("HeightmapLoader: Loaded {}x{} SVT heightmap from {} (mip {})",
@@ -232,22 +227,17 @@ namespace terrain
 
     HeightSampler createHeightSamplerFromMap(
         std::shared_ptr<const HeightmapData> heightmap,
-        float terrainMinX,
-        float terrainMinZ,
-        float terrainWidth,
-        float terrainDepth,
-        float minHeight,
-        float maxHeight)
+        const TerrainBounds& bounds)
     {
-        return [heightmap, terrainMinX, terrainMinZ, terrainWidth, terrainDepth, minHeight, maxHeight]
+        return [heightmap, bounds]
         (float worldX, float worldZ) -> float
         {
-            float u = (worldX - terrainMinX) / terrainWidth;
-            float v = (worldZ - terrainMinZ) / terrainDepth;
+            float u = (worldX - bounds.minX) / bounds.width;
+            float v = (worldZ - bounds.minZ) / bounds.depth;
 
             float normalizedHeight = heightmap->sample(u, v);
 
-            return minHeight + normalizedHeight * (maxHeight - minHeight);
+            return bounds.minHeight + normalizedHeight * (bounds.maxHeight - bounds.minHeight);
         };
     }
 
@@ -356,12 +346,7 @@ namespace terrain
 
     HeightSampler createStreamingHeightSamplerFromSVT(
         const std::string& svtPath,
-        float terrainMinX,
-        float terrainMinZ,
-        float terrainWidth,
-        float terrainDepth,
-        float minHeight,
-        float maxHeight)
+        const TerrainBounds& bounds)
     {
         auto tileCache = std::make_shared<SVTHeightTileCache>();
         if (!tileCache->reader.open(svtPath))
@@ -377,7 +362,6 @@ namespace terrain
         tileCache->virtualSizeLog2 = header.virtualSizeLog2;
         tileCache->tileSizeLog2 = header.tileSizeLog2;
 
-        // Use mip 0 for full resolution
         tileCache->mipLevel = 0;
         tileCache->tilesPerSide = render::svt::computeTilesPerMipSide(
             0, header.virtualSizeLog2, header.tileSizeLog2);
@@ -386,14 +370,14 @@ namespace terrain
         vfLogInfo("HeightmapLoader: Streaming SVT heightmap from {} ({}x{} tiles, mip 0)",
                   svtPath, tileCache->tilesPerSide, tileCache->tilesPerSide);
 
-        return [tileCache, terrainMinX, terrainMinZ, terrainWidth, terrainDepth, minHeight, maxHeight]
+        return [tileCache, bounds]
         (float worldX, float worldZ) -> float
         {
-            float u = (worldX - terrainMinX) / terrainWidth;
-            float v = (worldZ - terrainMinZ) / terrainDepth;
+            float u = (worldX - bounds.minX) / bounds.width;
+            float v = (worldZ - bounds.minZ) / bounds.depth;
 
             float normalizedHeight = tileCache->sampleHeight(u, v);
-            return minHeight + normalizedHeight * (maxHeight - minHeight);
+            return bounds.minHeight + normalizedHeight * (bounds.maxHeight - bounds.minHeight);
         };
     }
 }

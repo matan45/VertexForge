@@ -33,18 +33,18 @@ namespace render::svt
     class SVTFileReader
     {
     private:
-        mutable std::ifstream file_;
-        SVTFileHeader header_{};
-        std::vector<SVTTileDirectoryEntry> directory_;
-        uint32_t totalTiles_ = 0;
-        bool valid_ = false;
+        mutable std::ifstream file;
+        SVTFileHeader header{};
+        std::vector<SVTTileDirectoryEntry> directory;
+        uint32_t totalTiles = 0;
+        bool valid = false;
 
         uint32_t getTileIndex(const VirtualTileCoord& coord) const
         {
             uint32_t mipOffset = computePageTableMipOffset(coord.mipLevel,
-                header_.virtualSizeLog2, header_.tileSizeLog2);
+                header.virtualSizeLog2, header.tileSizeLog2);
             uint32_t tilesPerSide = computeTilesPerMipSide(coord.mipLevel,
-                header_.virtualSizeLog2, header_.tileSizeLog2);
+                header.virtualSizeLog2, header.tileSizeLog2);
             if (tilesPerSide == 0) tilesPerSide = 1;
             return mipOffset + coord.y * tilesPerSide + coord.x;
         }
@@ -52,70 +52,70 @@ namespace render::svt
     public:
         bool open(const std::string& path)
         {
-            file_.open(path, std::ios::binary);
-            if (!file_.is_open()) return false;
+            file.open(path, std::ios::binary);
+            if (!file.is_open()) return false;
 
-            file_.read(reinterpret_cast<char*>(&header_), sizeof(header_));
-            if (header_.magic[0] != 'S' || header_.magic[1] != 'V' || header_.magic[2] != 'T')
+            file.read(reinterpret_cast<char*>(&header), sizeof(header));
+            if (header.magic[0] != 'S' || header.magic[1] != 'V' || header.magic[2] != 'T')
             {
-                file_.close();
+                file.close();
                 return false;
             }
 
-            totalTiles_ = computeTotalPageTableEntries(header_.virtualSizeLog2, header_.tileSizeLog2);
-            directory_.resize(totalTiles_);
-            file_.read(reinterpret_cast<char*>(directory_.data()),
-                       totalTiles_ * sizeof(SVTTileDirectoryEntry));
+            totalTiles = computeTotalPageTableEntries(header.virtualSizeLog2, header.tileSizeLog2);
+            directory.resize(totalTiles);
+            file.read(reinterpret_cast<char*>(directory.data()),
+                       totalTiles * sizeof(SVTTileDirectoryEntry));
 
-            valid_ = file_.good();
-            return valid_;
+            valid = file.good();
+            return valid;
         }
 
         void close()
         {
-            file_.close();
-            valid_ = false;
+            file.close();
+            valid = false;
         }
 
         bool readTile(const VirtualTileCoord& coord, std::vector<uint8_t>& outData) const
         {
-            if (!valid_) return false;
+            if (!valid) return false;
 
             uint32_t idx = getTileIndex(coord);
-            if (idx >= totalTiles_) return false;
+            if (idx >= totalTiles) return false;
 
-            const auto& entry = directory_[idx];
+            const auto& entry = directory[idx];
             if (entry.fileOffset == 0 || entry.compressedSize == 0) return false;
 
             outData.resize(entry.compressedSize);
-            file_.seekg(static_cast<std::streamoff>(entry.fileOffset));
-            file_.read(reinterpret_cast<char*>(outData.data()), entry.compressedSize);
+            file.seekg(static_cast<std::streamoff>(entry.fileOffset));
+            file.read(reinterpret_cast<char*>(outData.data()), entry.compressedSize);
 
-            return file_.good();
+            return file.good();
         }
 
-        const SVTFileHeader& getHeader() const { return header_; }
-        uint32_t getTotalTiles() const { return totalTiles_; }
-        bool isValid() const { return valid_; }
+        const SVTFileHeader& getHeader() const { return header; }
+        uint32_t getTotalTiles() const { return totalTiles; }
+        bool isValid() const { return valid; }
     };
 
     // Writes a .vfSVT file during import
     class SVTFileWriter
     {
     private:
-        std::ofstream file_;
-        SVTFileHeader header_{};
-        std::vector<SVTTileDirectoryEntry> directory_;
-        uint32_t totalTiles_ = 0;
-        uint64_t currentDataOffset_ = 0;
-        bool valid_ = false;
+        std::ofstream file;
+        SVTFileHeader header{};
+        std::vector<SVTTileDirectoryEntry> directory;
+        uint32_t totalTiles = 0;
+        uint64_t currentDataOffset = 0;
+        bool valid = false;
 
         uint32_t getTileIndex(const VirtualTileCoord& coord) const
         {
             uint32_t mipOffset = computePageTableMipOffset(coord.mipLevel,
-                header_.virtualSizeLog2, header_.tileSizeLog2);
+                header.virtualSizeLog2, header.tileSizeLog2);
             uint32_t tilesPerSide = computeTilesPerMipSide(coord.mipLevel,
-                header_.virtualSizeLog2, header_.tileSizeLog2);
+                header.virtualSizeLog2, header.tileSizeLog2);
             if (tilesPerSide == 0) tilesPerSide = 1;
             return mipOffset + coord.y * tilesPerSide + coord.x;
         }
@@ -124,54 +124,54 @@ namespace render::svt
         bool create(const std::string& path, uint32_t virtualSizeLog2,
                      uint32_t tileSizeLog2 = 7, uint32_t borderSize = 4)
         {
-            file_.open(path, std::ios::binary);
-            if (!file_.is_open()) return false;
+            file.open(path, std::ios::binary);
+            if (!file.is_open()) return false;
 
-            header_.virtualSizeLog2 = virtualSizeLog2;
-            header_.tileSizeLog2 = tileSizeLog2;
-            header_.borderSize = borderSize;
-            header_.mipLevelCount = computeMipLevelCount(virtualSizeLog2, tileSizeLog2);
+            header.virtualSizeLog2 = virtualSizeLog2;
+            header.tileSizeLog2 = tileSizeLog2;
+            header.borderSize = borderSize;
+            header.mipLevelCount = computeMipLevelCount(virtualSizeLog2, tileSizeLog2);
 
-            totalTiles_ = computeTotalPageTableEntries(virtualSizeLog2, tileSizeLog2);
-            directory_.resize(totalTiles_);
-            std::memset(directory_.data(), 0, totalTiles_ * sizeof(SVTTileDirectoryEntry));
+            totalTiles = computeTotalPageTableEntries(virtualSizeLog2, tileSizeLog2);
+            directory.resize(totalTiles);
+            std::memset(directory.data(), 0, totalTiles * sizeof(SVTTileDirectoryEntry));
 
-            file_.write(reinterpret_cast<const char*>(&header_), sizeof(header_));
-            file_.write(reinterpret_cast<const char*>(directory_.data()),
-                        totalTiles_ * sizeof(SVTTileDirectoryEntry));
+            file.write(reinterpret_cast<const char*>(&header), sizeof(header));
+            file.write(reinterpret_cast<const char*>(directory.data()),
+                        totalTiles * sizeof(SVTTileDirectoryEntry));
 
-            currentDataOffset_ = sizeof(header_) + totalTiles_ * sizeof(SVTTileDirectoryEntry);
-            valid_ = file_.good();
-            return valid_;
+            currentDataOffset = sizeof(header) + totalTiles * sizeof(SVTTileDirectoryEntry);
+            valid = file.good();
+            return valid;
         }
 
         bool writeTile(const VirtualTileCoord& coord, const void* data, uint32_t dataSize)
         {
-            if (!valid_ || !data || dataSize == 0) return false;
+            if (!valid || !data || dataSize == 0) return false;
 
             uint32_t idx = getTileIndex(coord);
-            if (idx >= totalTiles_) return false;
+            if (idx >= totalTiles) return false;
 
-            directory_[idx].fileOffset = currentDataOffset_;
-            directory_[idx].compressedSize = dataSize;
+            directory[idx].fileOffset = currentDataOffset;
+            directory[idx].compressedSize = dataSize;
 
-            file_.write(reinterpret_cast<const char*>(data), dataSize);
-            currentDataOffset_ += dataSize;
+            file.write(reinterpret_cast<const char*>(data), dataSize);
+            currentDataOffset += dataSize;
 
-            return file_.good();
+            return file.good();
         }
 
         bool finalize()
         {
-            if (!valid_) return false;
+            if (!valid) return false;
 
-            file_.seekp(0);
-            file_.write(reinterpret_cast<const char*>(&header_), sizeof(header_));
-            file_.write(reinterpret_cast<const char*>(directory_.data()),
-                        totalTiles_ * sizeof(SVTTileDirectoryEntry));
+            file.seekp(0);
+            file.write(reinterpret_cast<const char*>(&header), sizeof(header));
+            file.write(reinterpret_cast<const char*>(directory.data()),
+                        totalTiles * sizeof(SVTTileDirectoryEntry));
 
-            file_.close();
-            valid_ = false;
+            file.close();
+            valid = false;
             return true;
         }
     };
