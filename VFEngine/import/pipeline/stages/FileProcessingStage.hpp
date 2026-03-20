@@ -5,6 +5,7 @@
 #include "../../types/Mesh.hpp"
 #include "../../types/Font.hpp"
 #include "../../types/Animation.hpp"
+#include "../../types/SVTTextureProcessor.hpp"
 
 namespace pipeline::stages
 {
@@ -29,5 +30,6 @@ namespace pipeline::stages
         void processAudio(ImportContext& context);
         void processMesh(ImportContext& context);
         void processFont(ImportContext& context);
+        void processTextureSVT(ImportContext& context);
     };
 }

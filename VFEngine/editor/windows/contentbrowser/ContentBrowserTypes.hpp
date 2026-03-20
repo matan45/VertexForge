@@ -28,6 +28,7 @@ namespace windows
         BehaviorTree,
         Plugin,
         InputMapping,
+        SVT,
         Other
     };
 
@@ -54,7 +55,8 @@ namespace windows
         Water = 18,
         BehaviorTree = 19,
         Plugin = 20,
-        InputMapping = 21
+        InputMapping = 21,
+        SVT = 22
     };
 
     struct Asset

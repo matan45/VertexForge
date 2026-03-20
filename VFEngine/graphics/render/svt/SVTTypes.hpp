@@ -35,47 +35,49 @@ namespace render::svt
     constexpr uint32_t SVT_MAX_MIP_LEVELS = 11;       // log2(131072/128) + 1
     constexpr uint32_t SVT_INVALID_TILE = 0xFFFFFFFF;
 
+    // ---- SVT Channel Indices ----
+    constexpr uint32_t SVT_CHANNEL_ALBEDO = 0;
+    constexpr uint32_t SVT_CHANNEL_NORMAL = 1;
+    constexpr uint32_t SVT_CHANNEL_ORM = 2;
+    constexpr uint32_t SVT_CHANNEL_EMISSION = 3;
+    constexpr uint32_t SVT_CHANNEL_HEIGHT = 4;
+    constexpr uint32_t SVT_CHANNEL_COUNT = 5;
+
     // ---- Page Table Entry Layout ----
     //
-    // Two uint32 words per entry (8 bytes):
+    // Single uint32 per entry (4 bytes). All 5 texture channels share the same
+    // physical tile slot index (loaded/evicted together as a group).
     //
-    // word0:
-    //   bits [0..11]   albedo physical tile index (0-4095)
+    //   bits [0..11]   physical tile index (0-4095), same for all channels
     //   bit  [12]      valid flag (1 = tile is resident)
     //   bits [13..15]  mip delta (fallback: how many mips coarser than requested)
-    //   bits [16..31]  unused / reserved
-    //
-    // word1:
-    //   bits [0..11]   normal physical tile index (0-4095)
-    //   bits [12..23]  ORM physical tile index (0-4095)
-    //   bits [24..31]  flags (reserved)
+    //   bits [16..20]  channel presence mask (bit per channel: albedo, normal, ORM, emission, height)
+    //   bits [21..31]  reserved
 
     struct SVTPageTableEntry
     {
-        uint32_t word0 = 0;
-        uint32_t word1 = 0;
+        uint32_t packed = 0;
 
-        static SVTPageTableEntry encode(uint32_t albedoTile, uint32_t normalTile,
-                                        uint32_t ormTile, uint32_t mipDelta, bool valid)
+        static SVTPageTableEntry encode(uint32_t physTile, uint32_t mipDelta,
+                                        bool valid, uint32_t channelMask = 0x7u)
         {
             SVTPageTableEntry e;
-            e.word0 = (albedoTile & 0xFFFu)
-                    | ((valid ? 1u : 0u) << 12)
-                    | ((mipDelta & 0x7u) << 13);
-            e.word1 = (normalTile & 0xFFFu)
-                    | ((ormTile & 0xFFFu) << 12);
+            e.packed = (physTile & 0xFFFu)
+                     | ((valid ? 1u : 0u) << 12)
+                     | ((mipDelta & 0x7u) << 13)
+                     | ((channelMask & 0x1Fu) << 16);
             return e;
         }
 
-        bool isValid() const { return (word0 >> 12) & 1u; }
-        uint32_t albedoTile() const { return word0 & 0xFFFu; }
-        uint32_t normalTile() const { return word1 & 0xFFFu; }
-        uint32_t ormTile() const { return (word1 >> 12) & 0xFFFu; }
-        uint32_t mipDelta() const { return (word0 >> 13) & 0x7u; }
+        bool isValid() const { return (packed >> 12) & 1u; }
+        uint32_t physicalTile() const { return packed & 0xFFFu; }
+        uint32_t mipDelta() const { return (packed >> 13) & 0x7u; }
+        uint32_t channelMask() const { return (packed >> 16) & 0x1Fu; }
+        bool hasChannel(uint32_t ch) const { return (channelMask() >> ch) & 1u; }
 
         static SVTPageTableEntry invalid() { return {}; }
     };
-    static_assert(sizeof(SVTPageTableEntry) == 8);
+    static_assert(sizeof(SVTPageTableEntry) == 4);
 
     // ---- Virtual Tile Coordinate ----
 
@@ -125,10 +127,11 @@ namespace render::svt
     {
         glm::vec4 svtScaleOffset;       // xy = scale, zw = offset  (worldPos.xz * scale + offset = virtualUV)
         glm::uvec4 svtInfo;             // x = virtualSizeLog2, y = tileSizeLog2, z = physicalTileCount, w = mipLevels
-        glm::uvec4 svtCacheIndices;     // x = albedoCacheBindlessIdx, y = normalCacheBindlessIdx, z = ormCacheBindlessIdx, w = unused
+        glm::uvec4 svtCacheIndices0;    // x = albedoCacheBindlessIdx, y = normalCacheBindlessIdx, z = ormCacheBindlessIdx, w = emissionCacheBindlessIdx
+        glm::uvec4 svtCacheIndices1;    // x = heightCacheBindlessIdx, y = unused, z = unused, w = unused
         glm::uvec4 svtTileInfo;         // x = borderSize, y = physicalTileSize, z = pageTableEntryCount, w = svtEnabled
     };
-    static_assert(sizeof(SVTParamsGPU) == 64);
+    static_assert(sizeof(SVTParamsGPU) == 80);
 
     // ---- Feedback request flags ----
 

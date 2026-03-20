@@ -406,6 +406,11 @@ namespace controllers {
 		offScreenController->setTerrainShadowLOD(lod);
 	}
 
+	void OffScreen::setTerrainSVTEnabled(bool enabled)
+	{
+		offScreenController->setTerrainSVTEnabled(enabled);
+	}
+
 	void OffScreen::setUIViewportOffset(const glm::vec2& offset, const glm::vec2& panelSize)
 	{
 		offScreenController->setUIViewportOffset(offset, panelSize);

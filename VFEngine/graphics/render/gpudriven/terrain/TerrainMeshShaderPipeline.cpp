@@ -325,13 +325,11 @@ namespace render::gpudriven
     {
         vk::Device vkDevice = device.getLogicalDevice();
 
-        // Set 12 layout for SVT:
-        //   binding 0: page table SSBO (fragment)
-        //   binding 2: SVT params UBO (fragment)
-        //   binding 3: albedo cache sampler2DArray (fragment)
-        //   binding 4: normal cache sampler2DArray (fragment)
-        //   binding 5: ORM cache sampler2DArray (fragment)
-        std::array<vk::DescriptorSetLayoutBinding, 5> bindings{};
+        // Set 12 layout for SVT (8 bindings):
+        //   binding 0: page table SSBO
+        //   binding 2: SVT params UBO
+        //   binding 3-7: albedo, normal, ORM, emission, height cache sampler2DArray
+        std::array<vk::DescriptorSetLayoutBinding, 7> bindings{};
 
         bindings[0].binding = 0;
         bindings[0].descriptorType = vk::DescriptorType::eStorageBuffer;
@@ -343,20 +341,13 @@ namespace render::gpudriven
         bindings[1].descriptorCount = 1;
         bindings[1].stageFlags = vk::ShaderStageFlagBits::eFragment;
 
-        bindings[2].binding = 3;
-        bindings[2].descriptorType = vk::DescriptorType::eCombinedImageSampler;
-        bindings[2].descriptorCount = 1;
-        bindings[2].stageFlags = vk::ShaderStageFlagBits::eFragment;
-
-        bindings[3].binding = 4;
-        bindings[3].descriptorType = vk::DescriptorType::eCombinedImageSampler;
-        bindings[3].descriptorCount = 1;
-        bindings[3].stageFlags = vk::ShaderStageFlagBits::eFragment;
-
-        bindings[4].binding = 5;
-        bindings[4].descriptorType = vk::DescriptorType::eCombinedImageSampler;
-        bindings[4].descriptorCount = 1;
-        bindings[4].stageFlags = vk::ShaderStageFlagBits::eFragment;
+        for (uint32_t i = 0; i < 5; ++i)
+        {
+            bindings[2 + i].binding = 3 + i;
+            bindings[2 + i].descriptorType = vk::DescriptorType::eCombinedImageSampler;
+            bindings[2 + i].descriptorCount = 1;
+            bindings[2 + i].stageFlags = vk::ShaderStageFlagBits::eFragment;
+        }
 
         vk::DescriptorSetLayoutCreateInfo layoutInfo{};
         layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
@@ -366,9 +357,7 @@ namespace render::gpudriven
 
     void TerrainMeshShaderPipeline::initSVTDescriptorSet(
         vk::Buffer pageTableBuffer, vk::Buffer svtParamsBuffer,
-        vk::ImageView albedoView, vk::Sampler albedoSampler,
-        vk::ImageView normalView, vk::Sampler normalSampler,
-        vk::ImageView ormView, vk::Sampler ormSampler)
+        const SVTCacheViews caches[5])
     {
         vk::Device vkDevice = device.getLogicalDevice();
 
@@ -377,7 +366,7 @@ namespace render::gpudriven
             std::array<vk::DescriptorPoolSize, 3> poolSizes = {{
                 {vk::DescriptorType::eStorageBuffer, 1},
                 {vk::DescriptorType::eUniformBuffer, 1},
-                {vk::DescriptorType::eCombinedImageSampler, 3}
+                {vk::DescriptorType::eCombinedImageSampler, 5}
             }};
 
             vk::DescriptorPoolCreateInfo poolInfo{};
@@ -396,11 +385,15 @@ namespace render::gpudriven
         // Write descriptors
         vk::DescriptorBufferInfo pageTableInfo{pageTableBuffer, 0, VK_WHOLE_SIZE};
         vk::DescriptorBufferInfo paramsInfo{svtParamsBuffer, 0, VK_WHOLE_SIZE};
-        vk::DescriptorImageInfo albedoInfo{albedoSampler, albedoView, vk::ImageLayout::eShaderReadOnlyOptimal};
-        vk::DescriptorImageInfo normalInfo{normalSampler, normalView, vk::ImageLayout::eShaderReadOnlyOptimal};
-        vk::DescriptorImageInfo ormInfo{ormSampler, ormView, vk::ImageLayout::eShaderReadOnlyOptimal};
+        std::array<vk::DescriptorImageInfo, 5> imageInfos{};
+        for (int i = 0; i < 5; ++i)
+        {
+            imageInfos[i].sampler = caches[i].sampler;
+            imageInfos[i].imageView = caches[i].view;
+            imageInfos[i].imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+        }
 
-        std::array<vk::WriteDescriptorSet, 5> writes{};
+        std::array<vk::WriteDescriptorSet, 7> writes{};
 
         writes[0].dstSet = svtDescriptorSet;
         writes[0].dstBinding = 0;
@@ -414,27 +407,18 @@ namespace render::gpudriven
         writes[1].descriptorType = vk::DescriptorType::eUniformBuffer;
         writes[1].pBufferInfo = &paramsInfo;
 
-        writes[2].dstSet = svtDescriptorSet;
-        writes[2].dstBinding = 3;
-        writes[2].descriptorCount = 1;
-        writes[2].descriptorType = vk::DescriptorType::eCombinedImageSampler;
-        writes[2].pImageInfo = &albedoInfo;
-
-        writes[3].dstSet = svtDescriptorSet;
-        writes[3].dstBinding = 4;
-        writes[3].descriptorCount = 1;
-        writes[3].descriptorType = vk::DescriptorType::eCombinedImageSampler;
-        writes[3].pImageInfo = &normalInfo;
-
-        writes[4].dstSet = svtDescriptorSet;
-        writes[4].dstBinding = 5;
-        writes[4].descriptorCount = 1;
-        writes[4].descriptorType = vk::DescriptorType::eCombinedImageSampler;
-        writes[4].pImageInfo = &ormInfo;
+        for (int i = 0; i < 5; ++i)
+        {
+            writes[2 + i].dstSet = svtDescriptorSet;
+            writes[2 + i].dstBinding = 3 + i;
+            writes[2 + i].descriptorCount = 1;
+            writes[2 + i].descriptorType = vk::DescriptorType::eCombinedImageSampler;
+            writes[2 + i].pImageInfo = &imageInfos[i];
+        }
 
         vkDevice.updateDescriptorSets(writes, {});
         svtEnabled = true;
-        vfLogInfo("TerrainMeshShaderPipeline: SVT descriptor set initialized");
+        vfLogInfo("TerrainMeshShaderPipeline: SVT descriptor set initialized (5 channels)");
     }
 
     void TerrainMeshShaderPipeline::updateSVTParamsBuffer(vk::Buffer svtParamsBuffer)

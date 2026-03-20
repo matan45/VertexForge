@@ -236,6 +236,26 @@ layout(std430, set = 1, binding = 0) readonly buffer PerDrawDataBuffer {
 
 layout(set = 2, binding = 0) uniform sampler2D bindlessTextures[];
 
+// ---- SVT (Sparse Virtual Texturing) descriptors ----
+#ifdef SVT_ENABLED
+#include "../common/svt_types.glsl"
+layout(std430, set = 12, binding = 0) readonly buffer SVTPageTableBuf {
+    uint svtPageTableData[];
+};
+layout(set = 12, binding = 2) uniform SVTParamsUBO {
+    SVTParams svtParams;
+};
+layout(set = 12, binding = 3) uniform sampler2DArray svtAlbedoCache;
+layout(set = 12, binding = 4) uniform sampler2DArray svtNormalCache;
+layout(set = 12, binding = 5) uniform sampler2DArray svtORMCache;
+layout(set = 12, binding = 6) uniform sampler2DArray svtEmissionCache;
+layout(set = 12, binding = 7) uniform sampler2DArray svtHeightCache;
+
+#define SVT_PAGE_TABLE_DATA svtPageTableData
+#define SVT_PARAMS svtParams
+#include "../common/svt_sampling.glsl"
+#endif
+
 layout(push_constant) uniform PushConstants {
     uint baseDrawIndex;
     uint viewMode;
@@ -339,6 +359,7 @@ const uint INVALID_TEXTURE_INDEX = 0xFFFFFFFF;
 const uint FLAG_ALPHA_MASK = 1u << 4;
 const uint FLAG_TRANSLUCENT = 1u << 5;
 const uint FLAG_ADDITIVE_BLEND = 1u << 10;
+const uint FLAG_SVT_TEXTURE = 1u << 18;
 
 bool isValidTexture(uint index) {
     return index != INVALID_TEXTURE_INDEX && index != 0xFFu && index < 4096u;
@@ -386,6 +407,17 @@ void main() {
     vec3 albedo = matAlbedo.rgb;
     float alpha = matAlbedo.a;
 
+#ifdef SVT_ENABLED
+    bool useSVT = (drawData.flags & FLAG_SVT_TEXTURE) != 0u;
+    if (useSVT) {
+        // SVT path: sample all channels from virtual texture cache
+        SVTSampleResult svtResult = sampleSVT(fragTexCoord, texDx, texDy);
+        if (svtResult.isResident) {
+            albedo = svtResult.albedo.rgb;
+            alpha = svtResult.albedo.a;
+        }
+    } else
+#endif
     if (isValidTexture(albedoIdx)) {
         vec4 albedoSample = textureGrad(bindlessTextures[nonuniformEXT(albedoIdx)], texCoords, texDx, texDy);
         albedo = albedoSample.rgb;
@@ -419,6 +451,16 @@ void main() {
     float ao = matParams.z;
     float emission = matParams.w;
 
+#ifdef SVT_ENABLED
+    if (useSVT) {
+        SVTSampleResult svtResult = sampleSVT(fragTexCoord, texDx, texDy);
+        if (svtResult.isResident) {
+            ao = svtResult.orm.r;
+            roughness = svtResult.orm.g;
+            metallic = svtResult.orm.b;
+        }
+    } else
+#endif
     if (isValidTexture(ormIdx)) {
         vec3 ormValues = unpackORM(textureGrad(bindlessTextures[nonuniformEXT(ormIdx)], texCoords, texDx, texDy));
         ao = ormValues.x;
@@ -436,6 +478,23 @@ void main() {
         }
     }
 
+#ifdef SVT_ENABLED
+    if (useSVT) {
+        SVTSampleResult svtNormResult = sampleSVT(fragTexCoord, texDx, texDy);
+        if (svtNormResult.isResident) {
+            vec3 pos_dx = dFdx(fragWorldPos);
+            vec3 pos_dy = dFdy(fragWorldPos);
+            vec2 uv_dx = dFdx(fragTexCoord);
+            vec2 uv_dy = dFdy(fragTexCoord);
+            vec3 T = normalize(pos_dx * uv_dy.y - pos_dy * uv_dx.y);
+            vec3 B = normalize(pos_dy * uv_dx.x - pos_dx * uv_dy.x);
+            T = normalize(T - N * dot(N, T));
+            B = cross(N, T);
+            mat3 TBN = mat3(T, B, N);
+            N = normalize(TBN * svtNormResult.normal);
+        }
+    } else
+#endif
     if (isValidTexture(normalIdx)) {
         vec3 pos_dx = dFdx(fragWorldPos);
         vec3 pos_dy = dFdy(fragWorldPos);
@@ -518,6 +577,15 @@ void main() {
     }
 
     vec3 emissive = vec3(0.0);
+#ifdef SVT_ENABLED
+    if (useSVT) {
+        SVTSampleResult svtEmResult = sampleSVT(fragTexCoord, texDx, texDy);
+        if (svtEmResult.isResident && svtEntryHasChannel(svtEmResult.channelMask, SVT_CH_EMISSION))
+            emissive = svtEmResult.emission * emissionMultiplier;
+        else
+            emissive = albedo * emissionMultiplier;
+    } else
+#endif
     if (isValidTexture(emissionIdx)) {
         emissive = textureGrad(bindlessTextures[nonuniformEXT(emissionIdx)], texCoords, texDx, texDy).rgb * emissionMultiplier;
     } else {

@@ -206,6 +206,7 @@ namespace windows
         if (extension == ".mt") return Script;
         if (extension == ".vfplugin") return Plugin;
         if (extension == ".vfInputMapping") return InputMapping;
+        if (extension == ".vfSVT") return SVT;
 
         bool isVfAsset = (extension == ".vfImage" || extension == ".vfHdr" ||
             extension == ".vfMesh" || extension == ".vfAudio" ||

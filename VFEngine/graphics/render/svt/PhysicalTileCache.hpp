@@ -35,6 +35,8 @@ namespace render::svt
         ChannelCache albedoCache_;
         ChannelCache normalCache_;
         ChannelCache ormCache_;
+        ChannelCache emissionCache_;
+        ChannelCache heightCache_;
 
         // CPU-side tile tracking
         std::vector<PhysicalTileInfo> tileSlots_;
@@ -87,18 +89,26 @@ namespace render::svt
         vk::ImageView getAlbedoView() const { return albedoCache_.view; }
         vk::ImageView getNormalView() const { return normalCache_.view; }
         vk::ImageView getORMView() const { return ormCache_.view; }
+        vk::ImageView getEmissionView() const { return emissionCache_.view; }
+        vk::ImageView getHeightView() const { return heightCache_.view; }
 
         vk::Sampler getAlbedoSampler() const { return albedoCache_.sampler; }
         vk::Sampler getNormalSampler() const { return normalCache_.sampler; }
         vk::Sampler getORMSampler() const { return ormCache_.sampler; }
+        vk::Sampler getEmissionSampler() const { return emissionCache_.sampler; }
+        vk::Sampler getHeightSampler() const { return heightCache_.sampler; }
 
         void setAlbedoBindlessIndex(uint32_t idx) { albedoCache_.bindlessIndex = idx; }
         void setNormalBindlessIndex(uint32_t idx) { normalCache_.bindlessIndex = idx; }
         void setORMBindlessIndex(uint32_t idx) { ormCache_.bindlessIndex = idx; }
+        void setEmissionBindlessIndex(uint32_t idx) { emissionCache_.bindlessIndex = idx; }
+        void setHeightBindlessIndex(uint32_t idx) { heightCache_.bindlessIndex = idx; }
 
         uint32_t getAlbedoBindlessIndex() const { return albedoCache_.bindlessIndex; }
         uint32_t getNormalBindlessIndex() const { return normalCache_.bindlessIndex; }
         uint32_t getORMBindlessIndex() const { return ormCache_.bindlessIndex; }
+        uint32_t getEmissionBindlessIndex() const { return emissionCache_.bindlessIndex; }
+        uint32_t getHeightBindlessIndex() const { return heightCache_.bindlessIndex; }
 
         const PhysicalTileInfo& getTileInfo(uint32_t tileIndex) const { return tileSlots_[tileIndex]; }
         uint32_t getTileCount() const { return config_.physicalTileCount; }

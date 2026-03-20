@@ -4,50 +4,49 @@
 #ifndef SVT_TYPES_GLSL
 #define SVT_TYPES_GLSL
 
-// Page table entry layout (2x uint32 = 8 bytes)
+// Page table entry layout (1x uint32 = 4 bytes)
+// All 5 channels (albedo, normal, ORM, emission, height) share the same physical tile index.
 //
-// word0:
-//   bits [0..11]   albedo physical tile index
+//   bits [0..11]   physical tile index (same for all channels)
 //   bit  [12]      valid flag
 //   bits [13..15]  mip delta (how many mips coarser than requested)
-//   bits [16..31]  reserved
-//
-// word1:
-//   bits [0..11]   normal physical tile index
-//   bits [12..23]  ORM physical tile index
-//   bits [24..31]  flags / reserved
+//   bits [16..20]  channel presence mask (albedo=0, normal=1, ORM=2, emission=3, height=4)
+//   bits [21..31]  reserved
 
-struct SVTPageEntry {
-    uint word0;
-    uint word1;
-};
-
-bool svtEntryIsValid(SVTPageEntry e) {
-    return (e.word0 & 0x1000u) != 0u;
+bool svtEntryIsValid(uint entry) {
+    return (entry & 0x1000u) != 0u;
 }
 
-uint svtEntryAlbedoTile(SVTPageEntry e) {
-    return e.word0 & 0xFFFu;
+uint svtEntryPhysTile(uint entry) {
+    return entry & 0xFFFu;
 }
 
-uint svtEntryNormalTile(SVTPageEntry e) {
-    return e.word1 & 0xFFFu;
+uint svtEntryMipDelta(uint entry) {
+    return (entry >> 13) & 0x7u;
 }
 
-uint svtEntryORMTile(SVTPageEntry e) {
-    return (e.word1 >> 12) & 0xFFFu;
+uint svtEntryChannelMask(uint entry) {
+    return (entry >> 16) & 0x1Fu;
 }
 
-uint svtEntryMipDelta(SVTPageEntry e) {
-    return (e.word0 >> 13) & 0x7u;
+bool svtEntryHasChannel(uint entry, uint channel) {
+    return ((entry >> (16u + channel)) & 1u) != 0u;
 }
+
+// Channel indices
+#define SVT_CH_ALBEDO   0u
+#define SVT_CH_NORMAL   1u
+#define SVT_CH_ORM      2u
+#define SVT_CH_EMISSION 3u
+#define SVT_CH_HEIGHT   4u
 
 // SVT parameters UBO
 struct SVTParams {
-    vec4  svtScaleOffset;      // xy = scale, zw = offset (worldXZ * scale + offset = virtualUV)
-    uvec4 svtInfo;             // x = virtualSizeLog2, y = tileSizeLog2, z = physicalTileCount, w = mipLevels
-    uvec4 svtCacheIndices;     // x = albedoCacheIdx, y = normalCacheIdx, z = ormCacheIdx
-    uvec4 svtTileInfo;         // x = borderSize, y = physicalTileSize, z = totalPageTableEntries, w = svtEnabled
+    vec4  svtScaleOffset;       // xy = scale, zw = offset (worldXZ * scale + offset = virtualUV)
+    uvec4 svtInfo;              // x = virtualSizeLog2, y = tileSizeLog2, z = physicalTileCount, w = mipLevels
+    uvec4 svtCacheIndices0;     // x = albedoCacheIdx, y = normalCacheIdx, z = ormCacheIdx, w = emissionCacheIdx
+    uvec4 svtCacheIndices1;     // x = heightCacheIdx, y/z/w = unused
+    uvec4 svtTileInfo;          // x = borderSize, y = physicalTileSize, z = totalPageTableEntries, w = svtEnabled
 };
 
 // Constants

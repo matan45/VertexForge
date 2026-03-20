@@ -19,9 +19,12 @@ namespace render::svt
     struct SVTTileData
     {
         VirtualTileCoord coord;
-        std::vector<uint8_t> albedoData;   // BC7 compressed
-        std::vector<uint8_t> normalData;   // BC7 compressed
-        std::vector<uint8_t> ormData;      // BC7 compressed
+        std::vector<uint8_t> albedoData;     // BC7 compressed
+        std::vector<uint8_t> normalData;     // BC7 compressed
+        std::vector<uint8_t> ormData;        // BC7 compressed
+        std::vector<uint8_t> emissionData;   // BC7 compressed (optional)
+        std::vector<uint8_t> heightData;     // BC7 compressed (optional)
+        uint32_t channelMask = 0x7u;         // Bitmask of present channels
         bool valid = false;
     };
 

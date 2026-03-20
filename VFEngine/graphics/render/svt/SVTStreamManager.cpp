@@ -128,13 +128,22 @@ namespace render::svt
                 }
             }
 
-            // Upload tile data to all three channels
-            cache_.uploadTileData(physTile, 0, tileData.albedoData.data(),
-                                  static_cast<uint32_t>(tileData.albedoData.size()));
-            cache_.uploadTileData(physTile, 1, tileData.normalData.data(),
-                                  static_cast<uint32_t>(tileData.normalData.size()));
-            cache_.uploadTileData(physTile, 2, tileData.ormData.data(),
-                                  static_cast<uint32_t>(tileData.ormData.size()));
+            // Upload tile data to all present channels
+            if (!tileData.albedoData.empty())
+                cache_.uploadTileData(physTile, SVT_CHANNEL_ALBEDO, tileData.albedoData.data(),
+                                      static_cast<uint32_t>(tileData.albedoData.size()));
+            if (!tileData.normalData.empty())
+                cache_.uploadTileData(physTile, SVT_CHANNEL_NORMAL, tileData.normalData.data(),
+                                      static_cast<uint32_t>(tileData.normalData.size()));
+            if (!tileData.ormData.empty())
+                cache_.uploadTileData(physTile, SVT_CHANNEL_ORM, tileData.ormData.data(),
+                                      static_cast<uint32_t>(tileData.ormData.size()));
+            if (!tileData.emissionData.empty())
+                cache_.uploadTileData(physTile, SVT_CHANNEL_EMISSION, tileData.emissionData.data(),
+                                      static_cast<uint32_t>(tileData.emissionData.size()));
+            if (!tileData.heightData.empty())
+                cache_.uploadTileData(physTile, SVT_CHANNEL_HEIGHT, tileData.heightData.data(),
+                                      static_cast<uint32_t>(tileData.heightData.size()));
 
             // Update tracking
             cache_.setTileMapping(physTile, tileData.coord);
@@ -142,10 +151,12 @@ namespace render::svt
             residentTiles_[tileData.coord] = physTile;
 
             // Update page table
-            auto entry = SVTPageTableEntry::encode(physTile, physTile, physTile, 0, true);
+            auto entry = SVTPageTableEntry::encode(physTile, 0, true, tileData.channelMask);
             pageTable_.setEntry(tileData.coord, entry);
 
-            bytesUploaded += tileData.albedoData.size() + tileData.normalData.size() + tileData.ormData.size();
+            bytesUploaded += tileData.albedoData.size() + tileData.normalData.size()
+                           + tileData.ormData.size() + tileData.emissionData.size()
+                           + tileData.heightData.size();
             ++uploaded;
 
             uploadQueue_.pop_back();

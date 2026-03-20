@@ -259,6 +259,8 @@ layout(set = 12, binding = 2) uniform SVTParamsUBO {
 layout(set = 12, binding = 3) uniform sampler2DArray svtAlbedoCache;
 layout(set = 12, binding = 4) uniform sampler2DArray svtNormalCache;
 layout(set = 12, binding = 5) uniform sampler2DArray svtORMCache;
+layout(set = 12, binding = 6) uniform sampler2DArray svtEmissionCache;
+layout(set = 12, binding = 7) uniform sampler2DArray svtHeightCache;
 
 #define SVT_PAGE_TABLE_DATA svtPageTableData
 #define SVT_PARAMS svtParams

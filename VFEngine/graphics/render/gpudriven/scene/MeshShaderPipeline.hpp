@@ -26,6 +26,7 @@ namespace render::gpudriven
         vk::DescriptorSetLayout shadowDataLayout;
         vk::DescriptorSetLayout shadowTextureLayout;
         vk::DescriptorSetLayout giProbeDataLayout;
+        vk::DescriptorSetLayout svtLayout;  // Set 12: SVT page table + params + caches
         vk::RenderPass renderPass;
         bool transparentMode = false;
         bool wboitMode = false;
@@ -95,6 +96,7 @@ namespace render::gpudriven
         vk::DescriptorSetLayout cachedShadowDataLayout;
         vk::DescriptorSetLayout cachedShadowTextureLayout;
         vk::DescriptorSetLayout cachedGIProbeDataLayout;
+        vk::DescriptorSetLayout cachedSVTLayout;
         
         bool isTransparentMode = false;
         bool isWBOITMode = false;

@@ -23,10 +23,12 @@ namespace render::svt
         if (initialized_) return;
         config_ = config;
 
-        // Create the three channel caches
+        // Create all 5 channel caches
         createChannelCache(albedoCache_, vk::Format::eBc7SrgbBlock, "SVT_Albedo");
         createChannelCache(normalCache_, vk::Format::eBc7UnormBlock, "SVT_Normal");
         createChannelCache(ormCache_, vk::Format::eBc7UnormBlock, "SVT_ORM");
+        createChannelCache(emissionCache_, vk::Format::eBc7SrgbBlock, "SVT_Emission");
+        createChannelCache(heightCache_, vk::Format::eBc7UnormBlock, "SVT_Height");
 
         // Initialize tile tracking
         tileSlots_.resize(config_.physicalTileCount);
@@ -77,6 +79,8 @@ namespace render::svt
         destroyChannelCache(albedoCache_);
         destroyChannelCache(normalCache_);
         destroyChannelCache(ormCache_);
+        destroyChannelCache(emissionCache_);
+        destroyChannelCache(heightCache_);
 
         tileSlots_.clear();
         freeList_.clear();
@@ -147,9 +151,11 @@ namespace render::svt
 
         switch (channelIndex)
         {
-        case 0: uploadToLayer(albedoCache_, tileIndex, compressedData, dataSize); break;
-        case 1: uploadToLayer(normalCache_, tileIndex, compressedData, dataSize); break;
-        case 2: uploadToLayer(ormCache_, tileIndex, compressedData, dataSize); break;
+        case SVT_CHANNEL_ALBEDO:   uploadToLayer(albedoCache_, tileIndex, compressedData, dataSize); break;
+        case SVT_CHANNEL_NORMAL:   uploadToLayer(normalCache_, tileIndex, compressedData, dataSize); break;
+        case SVT_CHANNEL_ORM:      uploadToLayer(ormCache_, tileIndex, compressedData, dataSize); break;
+        case SVT_CHANNEL_EMISSION: uploadToLayer(emissionCache_, tileIndex, compressedData, dataSize); break;
+        case SVT_CHANNEL_HEIGHT:   uploadToLayer(heightCache_, tileIndex, compressedData, dataSize); break;
         default: break;
         }
     }

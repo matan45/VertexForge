@@ -26,7 +26,15 @@ namespace pipeline::stages
         {
             if (context.fileType == "PNG" || context.fileType == "JPEG" || context.fileType == "BMP" || context.fileType == "TGA")
             {
-                processTexture(context);
+                // Check if SVT tiling is requested for large textures
+                if (context.file.config.svtEnabled)
+                {
+                    processTextureSVT(context);
+                }
+                else
+                {
+                    processTexture(context);
+                }
             }
             else if (context.fileType == "HDR" || context.fileType == "EXR")
             {
@@ -125,5 +133,32 @@ namespace pipeline::stages
         {
             throw std::runtime_error("Failed to import font: " + std::string(context.fileName));
         }
+    }
+
+    void FileProcessingStage::processTextureSVT(ImportContext& context)
+    {
+        // First generate standard .vfImage (still needed as fallback for small objects)
+        processTexture(context);
+
+        // Then generate .vfSVT alongside it for large textures
+        types::SVTTextureProcessor::Config svtConfig;
+        svtConfig.minSizeForSVT = context.file.config.svtMinSize;
+        svtConfig.srgb = true; // Assume albedo; normal/ORM would be imported separately
+
+        std::string outputPath = std::string(context.location) + "/" +
+                                 std::string(context.fileName) + "." + FileExtension::svt;
+
+        types::SVTProgressCallback svtProgress = nullptr;
+        if (context.progressCallback)
+        {
+            svtProgress = [&context](float progress)
+            {
+                context.progressCallback(context.fileName, context.fileIndex + 1,
+                                         context.totalFiles, 0.5f + progress * 0.5f);
+            };
+        }
+
+        types::SVTTextureProcessor::convertToSVT(context.file.path, outputPath,
+                                                   svtConfig, svtProgress);
     }
 }

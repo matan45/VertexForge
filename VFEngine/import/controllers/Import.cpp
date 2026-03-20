@@ -101,6 +101,17 @@ namespace controllers
                 {
                     createVfMeta(fileResult.outputPath, ctx.file.path, assetType);
                 }
+
+                // If SVT was generated alongside, create its .vfmeta too
+                if (ctx.file.config.svtEnabled)
+                {
+                    std::string svtPath = std::string(ctx.location) + "/" +
+                                          std::string(ctx.fileName) + ".vfSVT";
+                    if (std::filesystem::exists(svtPath))
+                    {
+                        createVfMeta(svtPath, ctx.file.path, resource::AssetType::SVT);
+                    }
+                }
             }
 
             if (progressCallback)

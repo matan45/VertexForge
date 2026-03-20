@@ -34,6 +34,7 @@ struct FileExtension
     inline static const std::string terrainWeights = "vfTerrainWeights";
     inline static const std::string terrain = "vfTerrain";
     inline static const std::string water = "vfWater";
+    inline static const std::string svt = "vfSVT";
     inline static const std::string assetMeta = "vfmeta";
 };
 
@@ -108,6 +109,8 @@ namespace importConfig
         TextureCompressionMode compressionMode = TextureCompressionMode::BC;
         TextureCompressionQuality compressionQuality = TextureCompressionQuality::Balanced;
         AudioImportConfig audioConfig;
+        bool svtEnabled = false;           // Generate .vfSVT for large textures (>= svtMinSize)
+        uint32_t svtMinSize = 4096;        // Minimum texture dimension for SVT tiling
     };
 
     struct ImportFiles

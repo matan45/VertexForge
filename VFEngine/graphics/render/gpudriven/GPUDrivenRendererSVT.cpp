@@ -7,6 +7,11 @@
 #include "print/Log.hpp"
 #include <cstring>
 
+// Windows defines MemoryBarrier as a macro - undefine it to use vk::MemoryBarrier
+#ifdef MemoryBarrier
+#undef MemoryBarrier
+#endif
+
 namespace render::gpudriven
 {
     void GPUDrivenRenderer::initSVT(const svt::SVTConfig& config)
@@ -47,12 +52,15 @@ namespace render::gpudriven
         // Wire SVT to terrain pipeline and recompile shaders with SVT_ENABLED
         if (terrain.pipeline)
         {
+            TerrainMeshShaderPipeline::SVTCacheViews caches[5] = {
+                {svt.tileCache->getAlbedoView(),   svt.tileCache->getAlbedoSampler()},
+                {svt.tileCache->getNormalView(),    svt.tileCache->getNormalSampler()},
+                {svt.tileCache->getORMView(),       svt.tileCache->getORMSampler()},
+                {svt.tileCache->getEmissionView(),  svt.tileCache->getEmissionSampler()},
+                {svt.tileCache->getHeightView(),    svt.tileCache->getHeightSampler()}
+            };
             terrain.pipeline->initSVTDescriptorSet(
-                svt.pageTable->getBuffer(),
-                svt.paramsBuffer,
-                svt.tileCache->getAlbedoView(), svt.tileCache->getAlbedoSampler(),
-                svt.tileCache->getNormalView(), svt.tileCache->getNormalSampler(),
-                svt.tileCache->getORMView(), svt.tileCache->getORMSampler());
+                svt.pageTable->getBuffer(), svt.paramsBuffer, caches);
 
             // Recreate pipeline to recompile shaders with SVT_ENABLED macro
             terrain.pipeline->recreate(
@@ -237,10 +245,13 @@ namespace render::gpudriven
             svt.config.tileSizeLog2,
             svt.config.physicalTileCount,
             svt::computeMipLevelCount(svt.config.virtualTextureSizeLog2, svt.config.tileSizeLog2));
-        params.svtCacheIndices = glm::uvec4(
+        params.svtCacheIndices0 = glm::uvec4(
             svt.tileCache->getAlbedoBindlessIndex(),
             svt.tileCache->getNormalBindlessIndex(),
-            svt.tileCache->getORMBindlessIndex(), 0);
+            svt.tileCache->getORMBindlessIndex(),
+            svt.tileCache->getEmissionBindlessIndex());
+        params.svtCacheIndices1 = glm::uvec4(
+            svt.tileCache->getHeightBindlessIndex(), 0, 0, 0);
         params.svtTileInfo = glm::uvec4(
             svt::SVT_BORDER_SIZE,
             svt::SVT_PHYSICAL_TILE_SIZE,

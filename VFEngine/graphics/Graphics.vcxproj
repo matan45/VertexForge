@@ -260,6 +260,8 @@
     <ClInclude Include="render\shadow\VSMTypes.hpp" />
     <ClInclude Include="render\svt\PhysicalTileCache.hpp" />
     <ClInclude Include="render\svt\SVTFeedbackPipeline.hpp" />
+    <ClInclude Include="render\svt\SVTFileFormat.hpp" />
+    <ClInclude Include="render\svt\SVTFileTileProvider.hpp" />
     <ClInclude Include="render\svt\SVTPageTable.hpp" />
     <ClInclude Include="render\svt\SVTStreamManager.hpp" />
     <ClInclude Include="render\svt\SVTTypes.hpp" />
@@ -503,6 +505,8 @@
     <ClCompile Include="render\shadow\VSMPhysicalTilePool.cpp" />
     <ClCompile Include="render\svt\PhysicalTileCache.cpp" />
     <ClCompile Include="render\svt\SVTFeedbackPipeline.cpp" />
+    <ClCompile Include="render\svt\SVTFileFormat.cpp" />
+    <ClCompile Include="render\svt\SVTFileTileProvider.cpp" />
     <ClCompile Include="render\svt\SVTPageTable.cpp" />
     <ClCompile Include="render\svt\SVTStreamManager.cpp" />
     <ClCompile Include="render\svt\TerrainSVTCompositor.cpp" />

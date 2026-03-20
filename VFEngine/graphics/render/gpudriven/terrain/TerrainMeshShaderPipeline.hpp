@@ -209,12 +209,18 @@ namespace render::gpudriven
         // SVT integration
         void setSVTEnabled(bool enabled) { svtEnabled = enabled; }
         bool isSVTEnabled() const { return svtEnabled; }
+
+        struct SVTCacheViews
+        {
+            vk::ImageView view;
+            vk::Sampler sampler;
+        };
+
         void initSVTDescriptorSet(vk::Buffer pageTableBuffer, vk::Buffer svtParamsBuffer,
-                                   vk::ImageView albedoView, vk::Sampler albedoSampler,
-                                   vk::ImageView normalView, vk::Sampler normalSampler,
-                                   vk::ImageView ormView, vk::Sampler ormSampler);
+                                   const SVTCacheViews caches[5]); // albedo, normal, ORM, emission, height
         void updateSVTParamsBuffer(vk::Buffer svtParamsBuffer);
         vk::DescriptorSet getSVTDescriptorSet() const { return svtDescriptorSet; }
+        vk::DescriptorSetLayout getSVTLayout() const { return svtLayout; }
 
     private:
         bool frustumCullingEnabled = true;

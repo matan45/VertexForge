@@ -1,20 +1,10 @@
 // SVT virtual texture sampling functions
 //
 // Before including this file, declare:
-//   - SVT_PAGE_TABLE_DATA: name of the uint[] SSBO holding page table entries (2 uints per entry)
+//   - SVT_PAGE_TABLE_DATA: name of the uint[] SSBO holding page table entries (1 uint per entry)
 //   - SVT_PARAMS: name of the SVTParams uniform
-//   - svtAlbedoCache: sampler2DArray for albedo physical cache
-//   - svtNormalCache: sampler2DArray for normal physical cache
-//   - svtORMCache: sampler2DArray for ORM physical cache
-//
-// Example:
-//   layout(std430, set = 12, binding = 0) readonly buffer SVTPageTableBuf { uint svtPageTableData[]; };
-//   layout(set = 12, binding = 2) uniform SVTParamsUBO { SVTParams svtParams; };
-//   layout(set = 12, binding = 3) uniform sampler2DArray svtAlbedoCache;
-//   ...
-//   #define SVT_PAGE_TABLE_DATA svtPageTableData
-//   #define SVT_PARAMS svtParams
-//   #include "svt_sampling.glsl"
+//   - svtAlbedoCache, svtNormalCache, svtORMCache: sampler2DArray for caches
+//   - svtEmissionCache, svtHeightCache: sampler2DArray for optional caches
 
 #ifndef SVT_SAMPLING_GLSL
 #define SVT_SAMPLING_GLSL
@@ -24,21 +14,30 @@
 struct SVTSampleResult {
     vec4 albedo;
     vec3 normal;
-    vec3 orm;         // R = AO, G = roughness, B = metallic
-    float mipLevel;   // Resolved mip level (for debug vis)
-    bool isResident;  // True if exact or fallback mip was found
+    vec3 orm;          // R = AO, G = roughness, B = metallic
+    vec3 emission;
+    float height;
+    float mipLevel;    // Resolved mip level (for debug vis)
+    bool isResident;   // True if exact or fallback mip was found
+    uint channelMask;  // Which channels are present
 };
 
-SVTSampleResult sampleSVT(vec2 worldXZ, vec2 dWorlddx, vec2 dWorlddy) {
+SVTSampleResult sampleSVT(vec2 virtualUVorTexCoord, vec2 dUVdx, vec2 dUVdy) {
     SVTSampleResult result;
     result.albedo = vec4(1.0, 0.0, 1.0, 1.0); // Magenta = missing
     result.normal = vec3(0.0, 0.0, 1.0);
     result.orm = vec3(1.0, 0.5, 0.0);
+    result.emission = vec3(0.0);
+    result.height = 0.0;
     result.mipLevel = 0.0;
     result.isResident = false;
+    result.channelMask = 0u;
 
-    // Compute virtual UV
-    vec2 virtualUV = worldXZ * SVT_PARAMS.svtScaleOffset.xy + SVT_PARAMS.svtScaleOffset.zw;
+    // For terrain: virtualUV comes from worldXZ * scale + offset
+    // For scene materials: virtualUV = texCoord directly (UV space is the virtual texture)
+    vec2 virtualUV = virtualUVorTexCoord;
+
+    // Clamp to valid range
     if (any(lessThan(virtualUV, vec2(0.0))) || any(greaterThanEqual(virtualUV, vec2(1.0))))
         return result;
 
@@ -47,8 +46,6 @@ SVTSampleResult sampleSVT(vec2 worldXZ, vec2 dWorlddx, vec2 dWorlddy) {
     uint mipLevels = SVT_PARAMS.svtInfo.w;
 
     // Compute mip level from screen-space derivatives
-    vec2 dUVdx = dWorlddx * SVT_PARAMS.svtScaleOffset.xy;
-    vec2 dUVdy = dWorlddy * SVT_PARAMS.svtScaleOffset.xy;
     float virtualSize = float(1u << vsLog2);
     vec2 texGradX = dUVdx * virtualSize;
     vec2 texGradY = dUVdy * virtualSize;
@@ -62,14 +59,13 @@ SVTSampleResult sampleSVT(vec2 worldXZ, vec2 dWorlddx, vec2 dWorlddy) {
         uvec2 tileCoord = clamp(uvec2(virtualUV * float(tps)), uvec2(0), uvec2(tps - 1u));
         uint pageIdx = svtPageTableIndex(tileCoord, m, vsLog2, tsLog2);
 
-        // Read page table entry (2 uints)
-        uint w0 = SVT_PAGE_TABLE_DATA[pageIdx * 2u];
-        uint w1 = SVT_PAGE_TABLE_DATA[pageIdx * 2u + 1u];
-        SVTPageEntry entry;
-        entry.word0 = w0;
-        entry.word1 = w1;
+        // Read page table entry (1 uint per entry)
+        uint entry = SVT_PAGE_TABLE_DATA[pageIdx];
 
         if (svtEntryIsValid(entry)) {
+            uint physTile = svtEntryPhysTile(entry);
+            result.channelMask = svtEntryChannelMask(entry);
+
             // Compute UV within the tile
             vec2 tileUV = fract(virtualUV * float(tps));
 
@@ -78,14 +74,22 @@ SVTSampleResult sampleSVT(vec2 worldXZ, vec2 dWorlddx, vec2 dWorlddy) {
             float physSize = float(SVT_PHYSICAL_TILE_SIZE);
             vec2 physUV = (tileUV * float(SVT_TILE_SIZE) + border) / physSize;
 
-            // Sample from physical caches
-            uint albedoTile = svtEntryAlbedoTile(entry);
-            uint normalTile = svtEntryNormalTile(entry);
-            uint ormTile = svtEntryORMTile(entry);
+            // Sample from physical caches (all use same physTile index)
+            if (svtEntryHasChannel(entry, SVT_CH_ALBEDO))
+                result.albedo = texture(svtAlbedoCache, vec3(physUV, float(physTile)));
 
-            result.albedo = texture(svtAlbedoCache, vec3(physUV, float(albedoTile)));
-            result.normal = texture(svtNormalCache, vec3(physUV, float(normalTile))).rgb * 2.0 - 1.0;
-            result.orm = texture(svtORMCache, vec3(physUV, float(ormTile))).rgb;
+            if (svtEntryHasChannel(entry, SVT_CH_NORMAL))
+                result.normal = texture(svtNormalCache, vec3(physUV, float(physTile))).rgb * 2.0 - 1.0;
+
+            if (svtEntryHasChannel(entry, SVT_CH_ORM))
+                result.orm = texture(svtORMCache, vec3(physUV, float(physTile))).rgb;
+
+            if (svtEntryHasChannel(entry, SVT_CH_EMISSION))
+                result.emission = texture(svtEmissionCache, vec3(physUV, float(physTile))).rgb;
+
+            if (svtEntryHasChannel(entry, SVT_CH_HEIGHT))
+                result.height = texture(svtHeightCache, vec3(physUV, float(physTile))).r;
+
             result.mipLevel = float(m);
             result.isResident = true;
             return result;
@@ -96,11 +100,12 @@ SVTSampleResult sampleSVT(vec2 worldXZ, vec2 dWorlddx, vec2 dWorlddy) {
     return result;
 }
 
-// Convenience: sample from world position using fragment derivatives
+// Convenience: sample from world position using fragment derivatives (for terrain)
 SVTSampleResult sampleSVTFromWorld(vec3 worldPos) {
-    vec2 dWorlddx = dFdx(worldPos.xz);
-    vec2 dWorlddy = dFdy(worldPos.xz);
-    return sampleSVT(worldPos.xz, dWorlddx, dWorlddy);
+    vec2 worldUV = worldPos.xz * SVT_PARAMS.svtScaleOffset.xy + SVT_PARAMS.svtScaleOffset.zw;
+    vec2 dWorlddx = dFdx(worldPos.xz) * SVT_PARAMS.svtScaleOffset.xy;
+    vec2 dWorlddy = dFdy(worldPos.xz) * SVT_PARAMS.svtScaleOffset.xy;
+    return sampleSVT(worldUV, dWorlddx, dWorlddy);
 }
 
 #endif // SVT_SAMPLING_GLSL
