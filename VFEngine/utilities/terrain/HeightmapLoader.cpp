@@ -101,20 +101,35 @@ namespace terrain
             vfLogWarning("HeightmapLoader: vfImage mip0 dimensions don't match header");
         }
 
-        if (compressionFormat != 0)
+        std::vector<uint8_t> pixelData;
+        size_t pixelCount = static_cast<size_t>(mipWidth) * mipHeight;
+
+        if (compressionFormat == 0)
         {
-            vfLogError("HeightmapLoader: Heightmap '{}' is compressed (format {}). "
-                       "Heightmaps must be imported as uncompressed for correct results. "
-                       "Re-import with 'Uncompressed' compression mode.",
-                       filePath, compressionFormat);
+            // Uncompressed BGRA pixel data
+            pixelData.resize(pixelCount * 4);
+            file.read(reinterpret_cast<char*>(pixelData.data()), static_cast<std::streamsize>(pixelData.size()));
+        }
+        else if (compressionFormat == 1)
+        {
+            // BC7 compressed — read compressed data and decompress
+            std::vector<uint8_t> compressedData(dataSize);
+            file.read(reinterpret_cast<char*>(compressedData.data()), dataSize);
+            pixelData = resource::BC7Decoder::decompress(compressedData.data(), mipWidth, mipHeight);
+            if (pixelData.empty())
+            {
+                vfLogError("HeightmapLoader: Failed to decompress BC7 heightmap: {}", filePath);
+                file.close();
+                return nullptr;
+            }
+        }
+        else
+        {
+            vfLogError("HeightmapLoader: Unsupported compression format {} in heightmap: {}",
+                       compressionFormat, filePath);
             file.close();
             return nullptr;
         }
-
-        // Read uncompressed pixel data (BGRA format, always width*height*4 bytes)
-        size_t pixelCount = static_cast<size_t>(mipWidth) * mipHeight;
-        std::vector<uint8_t> pixelData(pixelCount * 4);
-        file.read(reinterpret_cast<char*>(pixelData.data()), static_cast<std::streamsize>(pixelData.size()));
         file.close();
 
         auto result = std::make_shared<HeightmapData>();
@@ -122,13 +137,25 @@ namespace terrain
         result->height = mipHeight;
         result->heights.resize(pixelCount);
 
-        // Convert BGRA to grayscale using luminance formula
+        // Convert to grayscale using luminance formula
+        // Uncompressed vfImage is BGRA, BC7-decoded is RGBA
+        bool isBGRA = (compressionFormat == 0);
         for (size_t i = 0; i < pixelCount; ++i)
         {
             size_t idx = i * 4;
-            float b = static_cast<float>(pixelData[idx]) / 255.0f;
-            float g = static_cast<float>(pixelData[idx + 1]) / 255.0f;
-            float r = static_cast<float>(pixelData[idx + 2]) / 255.0f;
+            float r, g, b;
+            if (isBGRA)
+            {
+                b = static_cast<float>(pixelData[idx]) / 255.0f;
+                g = static_cast<float>(pixelData[idx + 1]) / 255.0f;
+                r = static_cast<float>(pixelData[idx + 2]) / 255.0f;
+            }
+            else
+            {
+                r = static_cast<float>(pixelData[idx]) / 255.0f;
+                g = static_cast<float>(pixelData[idx + 1]) / 255.0f;
+                b = static_cast<float>(pixelData[idx + 2]) / 255.0f;
+            }
             result->heights[i] = 0.299f * r + 0.587f * g + 0.114f * b;
         }
 

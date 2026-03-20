@@ -19,6 +19,10 @@ namespace windows
         float minHeight = -10.0f;
         std::string heightmapPath;
 
+        bool creationInProgress = false;
+        float creationProgress = 0.0f;
+        std::string creationStage;
+
     public:
         void draw();
 
@@ -29,5 +33,6 @@ namespace windows
         void createTerrain();
         void browseHeightmap();
         void loadTerrain();
+        void pollTerrainCreation();
     };
 }

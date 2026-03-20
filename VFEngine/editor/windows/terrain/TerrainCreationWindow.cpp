@@ -79,25 +79,32 @@ namespace windows
 
             float buttonWidth = 120.0f;
 
-            if (ImGui::Button("Create", ImVec2(buttonWidth, 0)))
+            if (creationInProgress)
             {
-                createTerrain();
-                visible = false;
+                pollTerrainCreation();
+                ImGui::ProgressBar(creationProgress, ImVec2(-1, 0), creationStage.c_str());
             }
-
-            ImGui::SameLine();
-
-            if (ImGui::Button("Load Terrain...", ImVec2(buttonWidth, 0)))
+            else
             {
-                loadTerrain();
-                visible = false;
-            }
+                if (ImGui::Button("Create", ImVec2(buttonWidth, 0)))
+                {
+                    createTerrain();
+                }
 
-            ImGui::SameLine();
+                ImGui::SameLine();
 
-            if (ImGui::Button("Cancel", ImVec2(buttonWidth, 0)))
-            {
-                visible = false;
+                if (ImGui::Button("Load Terrain...", ImVec2(buttonWidth, 0)))
+                {
+                    loadTerrain();
+                    visible = false;
+                }
+
+                ImGui::SameLine();
+
+                if (ImGui::Button("Cancel", ImVec2(buttonWidth, 0)))
+                {
+                    visible = false;
+                }
             }
         }
         ImGui::End();
@@ -131,9 +138,30 @@ namespace windows
         config.minHeight = minHeight;
         config.heightmapPath = heightmapPath;
 
-        events::terrain::CreateTerrainCommand cmd;
+        events::terrain::BeginCreateTerrainCommand cmd;
         cmd.config = config;
-        events::EventDispatcher::instance().execute(cmd);
+        bool started = events::EventDispatcher::instance().execute(cmd);
+        if (started)
+        {
+            creationInProgress = true;
+            creationProgress = 0.0f;
+            creationStage = "Starting...";
+        }
+    }
+
+    void TerrainCreationWindow::pollTerrainCreation()
+    {
+        events::terrain::PollCreateTerrainCommand pollCmd;
+        auto result = events::EventDispatcher::instance().execute(pollCmd);
+
+        creationProgress = result.progress;
+        creationStage = result.stage;
+
+        if (!result.inProgress)
+        {
+            creationInProgress = false;
+            visible = false;
+        }
     }
 
     void TerrainCreationWindow::loadTerrain()

@@ -12,7 +12,9 @@
 #include "terrain/TerrainWorldStreamer.hpp"
 #include <glm/glm.hpp>
 #include <atomic>
+#include <future>
 #include <memory>
+#include <optional>
 #include <vector>
 
 namespace scene
@@ -64,6 +66,16 @@ namespace services
         std::vector<terrain::StreamingAction> streamingActions; // persistent scratch buffer
         std::vector<std::pair<uint64_t, terrain::TileCoord>> pendingPhysicsTiles;
 
+        // Async terrain creation state
+        struct PendingTerrainCreation
+        {
+            TerrainCreationData config;
+            std::future<std::unique_ptr<terrain::TerrainGrid>> future;
+            std::atomic<float> progress{0.0f};
+            std::atomic<bool> done{false};
+        };
+        std::shared_ptr<PendingTerrainCreation> pendingCreation;
+
     public:
         explicit TerrainService(std::shared_ptr<scene::SceneGraphSystem> sceneGraph);
         ~TerrainService() override;
@@ -71,6 +83,8 @@ namespace services
         void registerEventHandlers() override;
 
         EntityHandle createTerrain(const TerrainCreationData& config) override;
+        bool beginCreateTerrainAsync(const TerrainCreationData& config);
+        TerrainCreationPollResult pollCreateTerrain();
         bool deleteTerrain(EntityHandle terrainEntity) override;
         std::optional<TerrainData> getTerrainData(EntityHandle entity) const override;
         bool hasTerrainComponent(EntityHandle entity) const override;

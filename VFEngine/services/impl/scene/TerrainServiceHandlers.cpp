@@ -321,6 +321,18 @@ namespace services
 
     void TerrainService::registerAsyncLoadHandlers(::events::EventDispatcher& dispatcher)
     {
+        dispatcher.registerCommandHandler<events::terrain::BeginCreateTerrainCommand>(
+            [this](const events::terrain::BeginCreateTerrainCommand& cmd) -> bool
+            {
+                return beginCreateTerrainAsync(cmd.config);
+            });
+
+        dispatcher.registerCommandHandler<events::terrain::PollCreateTerrainCommand>(
+            [this](const events::terrain::PollCreateTerrainCommand&) -> TerrainCreationPollResult
+            {
+                return pollCreateTerrain();
+            });
+
         dispatcher.registerCommandHandler<events::terrain::BeginTerrainLoadCommand>(
             [this](const events::terrain::BeginTerrainLoadCommand& cmd) -> bool
             {
