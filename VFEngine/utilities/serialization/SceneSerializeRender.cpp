@@ -49,6 +49,22 @@ namespace serialization
             return types::CascadeSplitMode::Practical;
         }
 
+        std::string directionalShadowModeToStr(types::DirectionalShadowMode mode)
+        {
+            switch (mode)
+            {
+            case types::DirectionalShadowMode::CSM: return "csm";
+            case types::DirectionalShadowMode::Clipmap: return "clipmap";
+            default: return "csm";
+            }
+        }
+
+        types::DirectionalShadowMode strToDirectionalShadowMode(const std::string& str)
+        {
+            if (str == "clipmap") return types::DirectionalShadowMode::Clipmap;
+            return types::DirectionalShadowMode::CSM;
+        }
+
         json serializeShadowSettings(const types::ShadowSettings& s)
         {
             return {
@@ -63,7 +79,10 @@ namespace serialization
                 {"shadowIntensity", s.shadowIntensity},
                 {"directionalResolution", s.directionalResolution},
                 {"spotResolution", s.spotResolution},
-                {"pointResolution", s.pointResolution}
+                {"pointResolution", s.pointResolution},
+                {"directionalMode", directionalShadowModeToStr(s.directionalMode)},
+                {"clipmapLevelCount", s.clipmapLevelCount},
+                {"clipmapBaseExtent", s.clipmapBaseExtent}
             };
         }
 
@@ -99,6 +118,12 @@ namespace serialization
                 settings.spotResolution = shadows["spotResolution"].get<uint32_t>();
             if (shadows.contains("pointResolution") && shadows["pointResolution"].is_number_unsigned())
                 settings.pointResolution = shadows["pointResolution"].get<uint32_t>();
+            if (shadows.contains("directionalMode") && shadows["directionalMode"].is_string())
+                settings.directionalMode = strToDirectionalShadowMode(shadows["directionalMode"].get<std::string>());
+            if (shadows.contains("clipmapLevelCount") && shadows["clipmapLevelCount"].is_number_unsigned())
+                settings.clipmapLevelCount = std::clamp(shadows["clipmapLevelCount"].get<uint8_t>(), uint8_t(4), uint8_t(16));
+            if (shadows.contains("clipmapBaseExtent") && shadows["clipmapBaseExtent"].is_number())
+                settings.clipmapBaseExtent = std::clamp(shadows["clipmapBaseExtent"].get<float>(), 0.5f, 10.0f);
         }
 
         json serializeCullingSettings(const types::CullingSettings& s)

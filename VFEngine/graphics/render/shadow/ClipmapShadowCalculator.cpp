@@ -16,11 +16,9 @@ namespace render::shadow
         ClipmapLevelData result{};
 
         // Step 1: Compute world extent for this level
-        // Each level doubles in coverage: level 0 = baseExtent, level 1 = 2x, level 2 = 4x, etc.
         result.worldExtent = baseExtent * std::pow(2.0f, static_cast<float>(level));
 
         // Step 2: Setup stable light coordinate system
-        // CRITICAL: Must be identical to CascadeShadowCalculator to ensure consistent axes
         glm::vec3 lightDir = glm::normalize(lightDirection);
         glm::vec3 worldUp = (std::abs(lightDir.y) < 0.99f)
             ? glm::vec3(0.0f, 1.0f, 0.0f)
@@ -29,73 +27,57 @@ namespace render::shadow
         glm::vec3 lightRight = glm::normalize(glm::cross(worldUp, lightDir));
         glm::vec3 lightUp = glm::cross(lightDir, lightRight);
 
-        // Step 3: Compute texel size from the extent and resolution
+        // Step 3: Compute texel size
+        // Must match EXACTLY with the orthographic projection extent.
+        // Projection uses [-worldExtent, worldExtent] = 2*worldExtent total.
         float diameter = 2.0f * result.worldExtent;
         result.texelSize = diameter / static_cast<float>(resolution);
 
-        // Step 4: Project camera position onto light-space XY plane
-        // (lightRight = X, lightUp = Y in the orthographic projection)
+        // Step 4: Project camera onto light-space axes
         float lightSpaceX = glm::dot(cameraWorldPos, lightRight);
         float lightSpaceY = glm::dot(cameraWorldPos, lightUp);
         float lightSpaceZ = glm::dot(cameraWorldPos, lightDir);
 
-        // Step 5: Snap to texel grid (CRITICAL for shimmer prevention)
-        // Quantize the snap grid to power-of-2 for absolute stability,
-        // matching what CascadeShadowCalculator does.
-        float snapGridSize = result.texelSize;
-        if (snapGridSize > 0.0f)
-        {
-            float log2Grid = std::log2(snapGridSize);
-            float quantizedLog = std::ceil(log2Grid);
-            snapGridSize = std::pow(2.0f, quantizedLog);
-        }
-        else
-        {
-            snapGridSize = 1.0f;
-        }
-
-        float snappedX = snapToTexel(lightSpaceX, snapGridSize);
-        float snappedY = snapToTexel(lightSpaceY, snapGridSize);
+        // Step 5: Snap XY to EXACT texel grid (prevents XY shimmer)
+        // No power-of-2 quantization - clipmap texel sizes are already clean.
+        float snappedX = snapToTexel(lightSpaceX, result.texelSize);
+        float snappedY = snapToTexel(lightSpaceY, result.texelSize);
 
         result.snapPosition = glm::vec2(snappedX, snappedY);
 
-        // Step 6: Reconstruct snapped center in world space
+        // Step 6: Snap Z to a coarse grid
+        // Z movement doesn't affect XY shadow placement (orthographic projection),
+        // but it does shift the depth range. Snapping Z to a large grid ensures
+        // the view matrix only changes infrequently along the light direction.
+        // The depth shift per snap is zSnapGrid / (far-near) which is negligible.
+        float zSnapGrid = std::max(result.worldExtent, 50.0f);
+        float snappedZ = snapToTexel(lightSpaceZ, zSnapGrid);
+
+        // Step 7: Reconstruct snapped center in world space
         glm::vec3 snappedCenter = snappedX * lightRight +
                                    snappedY * lightUp +
-                                   lightSpaceZ * lightDir;
+                                   snappedZ * lightDir;
 
-        // Step 7: Compute Z range
-        // Extend far behind camera to capture shadow casters between
-        // the light source and the visible scene.
-        // Use consistent, generous range to avoid shadows disappearing.
-        float zExtension = std::max(result.worldExtent * 3.0f, 800.0f);
+        // Step 8: Compute Z range - extend behind camera for shadow casters
+        float zHalfRange = std::max(result.worldExtent * 4.0f, 1000.0f);
 
-        // Build view matrix - position the light far back along lightDir
-        glm::vec3 lightPos = snappedCenter - lightDir * zExtension;
+        glm::vec3 lightPos = snappedCenter - lightDir * zHalfRange;
         result.viewMatrix = glm::lookAt(lightPos, snappedCenter, lightUp);
 
-        // Step 8: Compute stable Z bounds
-        // Quantize near/far to prevent depth precision shifts during movement
-        float zQuantization = std::max(10.0f, result.worldExtent * 0.1f);
-
-        float nearClip = 0.1f;
-        float farClip = zExtension * 2.0f;
-
-        // Quantize
-        nearClip = std::max(0.1f, std::floor(nearClip / zQuantization) * zQuantization);
-        farClip = std::ceil(farClip / zQuantization) * zQuantization;
-        if (farClip <= nearClip) farClip = nearClip + zQuantization;
+        // Step 9: Fixed near/far relative to the snapped light position
+        float nearClip = 1.0f;
+        float farClip = zHalfRange * 2.0f;
 
         result.nearDistance = nearClip;
         result.farDistance = farClip;
 
-        // Step 9: Build orthographic projection with the level's extent
-        // 10% margin compensates for texel snapping offsets (same as CSM)
-        float stableExtent = result.worldExtent * 1.1f;
-
+        // Step 10: Build orthographic projection
+        // Use EXACTLY worldExtent - no margin.
+        // Snap grid = texel size = 2*worldExtent/resolution, so each snap
+        // jump moves the projection by exactly 1 pixel. Zero shimmer.
         result.projMatrix = glm::orthoRH_ZO(
-            -stableExtent, stableExtent,
-            -stableExtent, stableExtent,
+            -result.worldExtent, result.worldExtent,
+            -result.worldExtent, result.worldExtent,
             nearClip, farClip
         );
 
