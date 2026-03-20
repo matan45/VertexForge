@@ -194,6 +194,7 @@ namespace controllers
         void setTerrainErrorThreshold(float threshold);
         void setTerrainTextureScale(float scale);
         void setTerrainShadowLOD(uint32_t lod);
+        void setTerrainSVTEnabled(bool enabled);
 
         void setShowClusterDebug(bool show) { showClusterDebug = show; }
         bool getShowClusterDebug() const { return showClusterDebug; }

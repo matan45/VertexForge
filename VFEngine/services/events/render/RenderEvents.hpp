@@ -303,6 +303,12 @@ namespace events::render {
         std::string_view getName() const override { return "SetTerrainShadowLOD"; }
     };
 
+    struct SetTerrainSVTEnabledCommand : ICommand<> {
+        bool enabled;
+
+        std::string_view getName() const override { return "SetTerrainSVTEnabled"; }
+    };
+
     struct SetShowNavmeshDebugCommand : ICommand<> {
         bool show;
 

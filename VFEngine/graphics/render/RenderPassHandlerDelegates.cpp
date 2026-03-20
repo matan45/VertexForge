@@ -275,6 +275,18 @@ namespace render
         }
     }
 
+    void RenderPassHandler::setTerrainSVTEnabled(bool enabled)
+    {
+        if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
+        {
+            if (enabled && !gpuDrivenRenderer->isSVTEnabled())
+            {
+                gpuDrivenRenderer->initSVT();
+            }
+            gpuDrivenRenderer->setSVTEnabled(enabled);
+        }
+    }
+
     void RenderPassHandler::updateGPUDrivenHiZ() const
     {
         if (!gpuDrivenRendererInitialized || !gpuDrivenRenderer)

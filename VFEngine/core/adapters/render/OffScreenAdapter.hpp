@@ -121,6 +121,7 @@ namespace core
         void setTerrainErrorThreshold(float threshold) override;
         void setTerrainTextureScale(float scale) override;
         void setTerrainShadowLOD(uint32_t lod) override;
+        void setTerrainSVTEnabled(bool enabled) override;
 
         void setUIViewportOffset(const glm::vec2& offset, const glm::vec2& panelSize) override;
 

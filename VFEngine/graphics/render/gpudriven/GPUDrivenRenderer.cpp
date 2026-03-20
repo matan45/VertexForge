@@ -261,6 +261,7 @@ namespace render::gpudriven
         if (billboard.meshShaderPipeline) billboard.meshShaderPipeline->cleanup();
         if (billboard.bufferManager) billboard.bufferManager->cleanup();
         if (billboard.streamManager) billboard.streamManager->cleanup();
+        cleanupSVT();
         cleanupVegetation();
         if (terrain.pipeline) terrain.pipeline->cleanup();
         if (terrain.meshBuffer) terrain.meshBuffer->cleanup();

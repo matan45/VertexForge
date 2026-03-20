@@ -29,6 +29,13 @@ namespace render::gpudriven
     constexpr uint32_t CULL_WORKGROUP_SIZE = 64;
     constexpr uint32_t INVALID_TEXTURE_INDEX = 0xFFFFFFFF;
 
+    // SVT (Sparse Virtual Texturing) constants
+    constexpr uint32_t SVT_DESCRIPTOR_SET = 12;         // Descriptor set for SVT data
+    constexpr uint32_t SVT_PAGE_TABLE_BINDING = 0;      // Page table SSBO binding in set 12
+    constexpr uint32_t SVT_FEEDBACK_BINDING = 1;        // Feedback buffer SSBO binding in set 12
+    constexpr uint32_t SVT_PARAMS_BINDING = 2;          // SVT params UBO binding in set 12
+    constexpr uint32_t SVT_VIEWMODE_ENABLED_BIT = 0x10000u;  // Bit 16 of viewMode enables SVT at runtime
+
     // enableLODSelection values — must match camera_types.glsl constants
     constexpr uint32_t LOD_SELECTION_DISABLED       = 0;
     constexpr uint32_t LOD_SELECTION_ENABLED        = 1;

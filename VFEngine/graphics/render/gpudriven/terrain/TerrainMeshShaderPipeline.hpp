@@ -81,6 +81,12 @@ namespace render::gpudriven
         vk::DescriptorPool emptyDescriptorPool;
         vk::DescriptorSet emptyDescriptorSet5;
 
+        // SVT descriptor set (Set 12)
+        vk::DescriptorSetLayout svtLayout;
+        vk::DescriptorPool svtPool;
+        vk::DescriptorSet svtDescriptorSet;
+        bool svtEnabled = false;
+
         // Weight map + layer info descriptor (Set 1)
         vk::DescriptorSetLayout weightMapLayout;
         vk::DescriptorPool weightMapPool;
@@ -200,6 +206,16 @@ namespace render::gpudriven
             viewProjection = viewProj;
         }
 
+        // SVT integration
+        void setSVTEnabled(bool enabled) { svtEnabled = enabled; }
+        bool isSVTEnabled() const { return svtEnabled; }
+        void initSVTDescriptorSet(vk::Buffer pageTableBuffer, vk::Buffer svtParamsBuffer,
+                                   vk::ImageView albedoView, vk::Sampler albedoSampler,
+                                   vk::ImageView normalView, vk::Sampler normalSampler,
+                                   vk::ImageView ormView, vk::Sampler ormSampler);
+        void updateSVTParamsBuffer(vk::Buffer svtParamsBuffer);
+        vk::DescriptorSet getSVTDescriptorSet() const { return svtDescriptorSet; }
+
     private:
         bool frustumCullingEnabled = true;
         bool meshletCullingEnabled = true;
@@ -208,6 +224,7 @@ namespace render::gpudriven
 
         void createEmptyDescriptorSet();
         void createWeightMapDescriptor();
+        void createSVTDescriptorLayout();
         void createTerrainLayerBuffer();
         void createTileDataBuffer();
         void createStatsBuffer();
@@ -226,7 +243,7 @@ namespace render::gpudriven
         void cleanupDescriptorResources();
         bool validateDescriptorsForDispatch() const;
         void bindDescriptorSetsInBatches(vk::CommandBuffer cmd,
-                                         const std::array<vk::DescriptorSet, 12>& sets) const;
+                                         const vk::DescriptorSet* sets, uint32_t count) const;
         TerrainPushConstants buildTerrainPushConstants(uint32_t viewMode, float screenWidth, float screenHeight,
                                                        float lodBias, float errorThreshold, float textureScale) const;
     };

@@ -238,6 +238,7 @@ project "Graphics"
       "VFEngine/utilities",
       "VFEngine/window/controllers",
 	  "dependencies/IconFontCppHeaders",
+      "dependencies/ispc_texcomp",
       vulkanLibPath.."/Include"
    }
 
@@ -250,7 +251,8 @@ project "Graphics"
    links {
       "Window",
 	  "VFX",
-	  "imgui"
+	  "imgui",
+	  "ispc_texcomp"
    }
 
    filter "configurations:Debug"

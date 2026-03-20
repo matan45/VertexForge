@@ -77,6 +77,8 @@ namespace controllers
         gpuDriven->setTerrainErrorThreshold(settings.terrain.errorThreshold);
         gpuDriven->setTerrainTextureScale(settings.terrain.textureScale);
         gpuDriven->setTerrainShadowLOD(settings.terrain.shadowLOD);
+        if (settings.terrain.svtEnabled)
+            gpuDriven->setSVTEnabled(true);
     }
 
     services::ShadowStats OffScreenController::getShadowStats() const
@@ -404,6 +406,12 @@ namespace controllers
     {
         auto* rh = offScreen->getRenderPassHandler();
         if (rh) rh->setTerrainShadowLOD(lod);
+    }
+
+    void OffScreenController::setTerrainSVTEnabled(bool enabled)
+    {
+        auto* rh = offScreen->getRenderPassHandler();
+        if (rh) rh->setTerrainSVTEnabled(enabled);
     }
 
     void OffScreenController::setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider)

@@ -57,7 +57,7 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <PreprocessorDefinitions>VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1;GLM_FORCE_DEPTH_ZERO_TO_ONE;_CRT_SECURE_NO_WARNINGS;DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\..\dependencies\glfw\include;..\..\dependencies\spdlog\include;..\..\dependencies\imgui;..\..\dependencies\imgui\backends;..\..\dependencies\glm;..\..\dependencies\entt\single_include;..\..\dependencies\stb;..\..\dependencies\json\single_include;..\utilities;..\window\controllers;..\..\dependencies\IconFontCppHeaders;C:\VulkanSDK\1.4.335.0\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\..\dependencies\glfw\include;..\..\dependencies\spdlog\include;..\..\dependencies\imgui;..\..\dependencies\imgui\backends;..\..\dependencies\glm;..\..\dependencies\entt\single_include;..\..\dependencies\stb;..\..\dependencies\json\single_include;..\utilities;..\window\controllers;..\..\dependencies\IconFontCppHeaders;..\..\dependencies\ispc_texcomp;C:\VulkanSDK\1.4.335.0\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DebugInformationFormat>EditAndContinue</DebugInformationFormat>
       <Optimization>Disabled</Optimization>
       <AdditionalOptions>/utf-8 /MP %(AdditionalOptions)</AdditionalOptions>
@@ -78,7 +78,7 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <PreprocessorDefinitions>VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1;GLM_FORCE_DEPTH_ZERO_TO_ONE;_CRT_SECURE_NO_WARNINGS;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\..\dependencies\glfw\include;..\..\dependencies\spdlog\include;..\..\dependencies\imgui;..\..\dependencies\imgui\backends;..\..\dependencies\glm;..\..\dependencies\entt\single_include;..\..\dependencies\stb;..\..\dependencies\json\single_include;..\utilities;..\window\controllers;..\..\dependencies\IconFontCppHeaders;C:\VulkanSDK\1.4.335.0\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\..\dependencies\glfw\include;..\..\dependencies\spdlog\include;..\..\dependencies\imgui;..\..\dependencies\imgui\backends;..\..\dependencies\glm;..\..\dependencies\entt\single_include;..\..\dependencies\stb;..\..\dependencies\json\single_include;..\utilities;..\window\controllers;..\..\dependencies\IconFontCppHeaders;..\..\dependencies\ispc_texcomp;C:\VulkanSDK\1.4.335.0\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <Optimization>Full</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
@@ -258,6 +258,12 @@
     <ClInclude Include="render\shadow\VSMPageTable.hpp" />
     <ClInclude Include="render\shadow\VSMPhysicalTilePool.hpp" />
     <ClInclude Include="render\shadow\VSMTypes.hpp" />
+    <ClInclude Include="render\svt\PhysicalTileCache.hpp" />
+    <ClInclude Include="render\svt\SVTFeedbackPipeline.hpp" />
+    <ClInclude Include="render\svt\SVTPageTable.hpp" />
+    <ClInclude Include="render\svt\SVTStreamManager.hpp" />
+    <ClInclude Include="render\svt\SVTTypes.hpp" />
+    <ClInclude Include="render\svt\TerrainSVTCompositor.hpp" />
     <ClInclude Include="render\text\TextBufferManager.hpp" />
     <ClInclude Include="render\text\TextFontCache.hpp" />
     <ClInclude Include="render\text\TextPipeline.hpp" />
@@ -407,6 +413,7 @@
     <ClCompile Include="render\gpudriven\GPUDrivenRendererDraw.cpp" />
     <ClCompile Include="render\gpudriven\GPUDrivenRendererGI.cpp" />
     <ClCompile Include="render\gpudriven\GPUDrivenRendererQuery.cpp" />
+    <ClCompile Include="render\gpudriven\GPUDrivenRendererSVT.cpp" />
     <ClCompile Include="render\gpudriven\GPUDrivenRendererScene.cpp" />
     <ClCompile Include="render\gpudriven\GPUDrivenRendererTerrain.cpp" />
     <ClCompile Include="render\gpudriven\GPUDrivenRendererVegetation.cpp" />
@@ -494,6 +501,11 @@
     <ClCompile Include="render\shadow\VSMFeedbackPipeline.cpp" />
     <ClCompile Include="render\shadow\VSMPageTable.cpp" />
     <ClCompile Include="render\shadow\VSMPhysicalTilePool.cpp" />
+    <ClCompile Include="render\svt\PhysicalTileCache.cpp" />
+    <ClCompile Include="render\svt\SVTFeedbackPipeline.cpp" />
+    <ClCompile Include="render\svt\SVTPageTable.cpp" />
+    <ClCompile Include="render\svt\SVTStreamManager.cpp" />
+    <ClCompile Include="render\svt\TerrainSVTCompositor.cpp" />
     <ClCompile Include="render\text\TextBufferManager.cpp" />
     <ClCompile Include="render\text\TextFontCache.cpp" />
     <ClCompile Include="render\text\TextPipeline.cpp" />
@@ -566,6 +578,8 @@
     <None Include="..\..\resources\shaders\common\lod_crossfade.glsl" />
     <None Include="..\..\resources\shaders\common\shadow_sampling.glsl" />
     <None Include="..\..\resources\shaders\common\shadow_sampling_types.glsl" />
+    <None Include="..\..\resources\shaders\common\svt_sampling.glsl" />
+    <None Include="..\..\resources\shaders\common\svt_types.glsl" />
     <None Include="..\..\resources\shaders\common\volumetric_common.glsl" />
     <None Include="..\..\resources\shaders\decal\decal.glsl" />
     <None Include="..\..\resources\shaders\depthprepass\mesh_depth_prepass.glsl" />
@@ -628,6 +642,7 @@
     <None Include="..\..\resources\shaders\shadow\shadow_grass.glsl" />
     <None Include="..\..\resources\shaders\shadow\shadow_terrain.glsl" />
     <None Include="..\..\resources\shaders\shadow\vsm_feedback.glsl" />
+    <None Include="..\..\resources\shaders\svt\svt_feedback.glsl" />
     <None Include="..\..\resources\shaders\terrain\brush_compute.glsl" />
     <None Include="..\..\resources\shaders\terrain\brush_influence.glsl" />
     <None Include="..\..\resources\shaders\terrain\terrain_depth_sample.glsl" />
@@ -673,6 +688,9 @@
     </ProjectReference>
     <ProjectReference Include="..\imgui.vcxproj">
       <Project>{0098A80F-6CAC-D0C0-352E-7420A101CDF1}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\ispc_texcomp.vcxproj">
+      <Project>{73EAF6A7-5F4D-864C-08D3-BE02F41452CF}</Project>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

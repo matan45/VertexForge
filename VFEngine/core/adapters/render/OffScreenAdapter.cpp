@@ -421,6 +421,12 @@ namespace core {
         }
     }
 
+    void OffScreenAdapter::setTerrainSVTEnabled(bool enabled) {
+        if (offScreen) {
+            offScreen->setTerrainSVTEnabled(enabled);
+        }
+    }
+
     void OffScreenAdapter::setUIViewportOffset(const glm::vec2& offset, const glm::vec2& panelSize) {
         if (offScreen) {
             offScreen->setUIViewportOffset(offset, panelSize);
