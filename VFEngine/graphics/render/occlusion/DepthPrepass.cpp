@@ -34,9 +34,7 @@ namespace render::occlusion
         core::ImageInfoRequest imageRequest(
             device.getLogicalDevice(),
             device.getPhysicalDevice(),
-            width, height,
-            1, // layers
-            1, // mipLevels
+            width, height, 1, 1,
             vk::Format::eD32Sfloat,
             vk::ImageTiling::eOptimal,
             vk::ImageUsageFlagBits::eDepthStencilAttachment | vk::ImageUsageFlagBits::eSampled,
@@ -45,17 +43,17 @@ namespace render::occlusion
         core::ImageUtilities::createImage(imageRequest, depthImage, depthMemory);
 
         core::ImageViewInfoRequest viewRequest(
-            device.getLogicalDevice(),
-            depthImage,
-            vk::Format::eD32Sfloat,
-            vk::ImageAspectFlagBits::eDepth,
-            vk::ImageViewType::e2D,
-            1, // layerCount
-            1  // mipLevels
+            device.getLogicalDevice(), depthImage,
+            vk::Format::eD32Sfloat, vk::ImageAspectFlagBits::eDepth,
+            vk::ImageViewType::e2D, 1, 1
         );
         core::ImageUtilities::createImageView(viewRequest, depthImageView);
 
-        // Transition to depth attachment optimal
+        transitionInitialLayout();
+    }
+
+    void DepthPrepass::transitionInitialLayout()
+    {
         vk::CommandPoolCreateInfo poolInfo{};
         poolInfo.queueFamilyIndex = device.getQueueFamilyIndices().graphicsAndComputeFamily.value();
         poolInfo.flags = vk::CommandPoolCreateFlagBits::eTransient;
@@ -77,11 +75,7 @@ namespace render::occlusion
         barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         barrier.image = depthImage;
-        barrier.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eDepth;
-        barrier.subresourceRange.baseMipLevel = 0;
-        barrier.subresourceRange.levelCount = 1;
-        barrier.subresourceRange.baseArrayLayer = 0;
-        barrier.subresourceRange.layerCount = 1;
+        barrier.subresourceRange = {vk::ImageAspectFlagBits::eDepth, 0, 1, 0, 1};
         barrier.srcAccessMask = vk::AccessFlagBits::eNone;
         barrier.dstAccessMask = vk::AccessFlagBits::eDepthStencilAttachmentRead |
                                 vk::AccessFlagBits::eDepthStencilAttachmentWrite;
@@ -89,8 +83,7 @@ namespace render::occlusion
         cmd.pipelineBarrier(
             vk::PipelineStageFlagBits::eTopOfPipe,
             vk::PipelineStageFlagBits::eEarlyFragmentTests,
-            {}, {}, {}, barrier
-        );
+            {}, {}, {}, barrier);
 
         cmd.end();
 

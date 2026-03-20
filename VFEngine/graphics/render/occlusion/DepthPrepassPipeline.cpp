@@ -17,163 +17,106 @@ namespace render::occlusion
         cleanup();
     }
 
-    void DepthPrepassPipeline::init(vk::RenderPass depthRenderPass,
-                                     vk::DescriptorSetLayout cameraLayout,
-                                     vk::DescriptorSetLayout perDrawLayout,
-                                     vk::DescriptorSetLayout bindlessTextureLayout,
-                                     vk::DescriptorSetLayout meshletDataLayout,
-                                     vk::DescriptorSetLayout vertexDataLayout,
-                                     vk::DescriptorSetLayout boneMatrixLayout,
-                                     vk::DescriptorSetLayout terrainDataLayout)
+    void DepthPrepassPipeline::init(const DepthPrepassInitInfo& info)
     {
-        createScenePipeline(depthRenderPass, cameraLayout, perDrawLayout,
-                            bindlessTextureLayout, meshletDataLayout,
-                            vertexDataLayout, boneMatrixLayout);
-        createTerrainPipeline(depthRenderPass, cameraLayout, meshletDataLayout,
-                              vertexDataLayout, terrainDataLayout);
-
+        createScenePipeline(info);
+        createTerrainPipeline(info);
         initialized = true;
         vfLogInfo("Depth prepass pipelines initialized");
     }
 
-    void DepthPrepassPipeline::createScenePipeline(
-        vk::RenderPass renderPass,
-        vk::DescriptorSetLayout cameraLayout,
-        vk::DescriptorSetLayout perDrawLayout,
-        vk::DescriptorSetLayout bindlessTextureLayout,
-        vk::DescriptorSetLayout meshletDataLayout,
-        vk::DescriptorSetLayout vertexDataLayout,
-        vk::DescriptorSetLayout boneMatrixLayout)
+    DepthPrepassPipeline::PipelineCreateResult DepthPrepassPipeline::createDepthOnlyPipeline(
+        core::Shader& shader, vk::RenderPass renderPass,
+        const std::vector<vk::DescriptorSetLayout>& layouts,
+        uint32_t pushConstantSize)
     {
         vk::Device vkDevice = device.getLogicalDevice();
+        const auto& stages = shader.getShaderStages();
 
+        vk::PushConstantRange pushRange{};
+        pushRange.stageFlags = vk::ShaderStageFlagBits::eTaskEXT | vk::ShaderStageFlagBits::eMeshEXT;
+        pushRange.offset = 0;
+        pushRange.size = pushConstantSize;
+
+        vk::PipelineLayoutCreateInfo layoutInfo{};
+        layoutInfo.setLayoutCount = static_cast<uint32_t>(layouts.size());
+        layoutInfo.pSetLayouts = layouts.data();
+        layoutInfo.pushConstantRangeCount = 1;
+        layoutInfo.pPushConstantRanges = &pushRange;
+
+        vk::PipelineLayout pipelineLayout = vkDevice.createPipelineLayout(layoutInfo);
+
+        core::MeshShaderPipelineConfig config{
+            .device = vkDevice,
+            .renderPass = renderPass,
+            .extent = swapChain.getSwapchainExtent(),
+            .shaderStages = stages,
+            .existingPipelineLayout = pipelineLayout,
+            .cullMode = vk::CullModeFlagBits::eBack,
+            .depthTestEnable = true,
+            .depthWriteEnable = true,
+            .depthCompareOp = vk::CompareOp::eLess,
+            .blendEnable = false
+        };
+        config.dynamicStates = {vk::DynamicState::eViewport, vk::DynamicState::eScissor};
+
+        auto result = core::PipelineUtilities::createMeshShaderPipeline(config);
+        return {result.pipeline, pipelineLayout};
+    }
+
+    void DepthPrepassPipeline::createScenePipeline(const DepthPrepassInitInfo& info)
+    {
         sceneShader = std::make_unique<core::Shader>(device);
         sceneShader->readShader("../../resources/shaders/depthprepass/task_depth_prepass.glsl");
         sceneShader->readShader("../../resources/shaders/depthprepass/mesh_depth_prepass.glsl");
 
-        const auto& stages = sceneShader->getShaderStages();
-        if (stages.size() < 2)
+        if (sceneShader->getShaderStages().size() < 2)
         {
-            vfLogError("DepthPrepassPipeline: Failed to load scene depth prepass shaders: {}",
+            vfLogError("DepthPrepassPipeline: Failed to load scene shaders: {}",
                         sceneShader->getLastCompilationError());
             return;
         }
 
-        // Set layout matches the scene pipeline: set 0=camera, set 1=perDraw, set 2=bindless,
-        // set 3=meshlet, set 4=vertex, set 5=bones
-        std::vector<vk::DescriptorSetLayout> setLayouts = {
-            cameraLayout,
-            perDrawLayout,
-            bindlessTextureLayout,
-            meshletDataLayout,
-            vertexDataLayout,
-            boneMatrixLayout
+        std::vector<vk::DescriptorSetLayout> layouts = {
+            info.cameraLayout, info.perDrawLayout, info.bindlessTextureLayout,
+            info.meshletDataLayout, info.vertexDataLayout, info.boneMatrixLayout
         };
 
-        vk::PushConstantRange pushConstantRange{};
-        pushConstantRange.stageFlags = vk::ShaderStageFlagBits::eTaskEXT |
-                                       vk::ShaderStageFlagBits::eMeshEXT;
-        pushConstantRange.offset = 0;
-        pushConstantRange.size = sizeof(DepthPrepassPushConstants);
-
-        vk::PipelineLayoutCreateInfo layoutCreateInfo{};
-        layoutCreateInfo.setLayoutCount = static_cast<uint32_t>(setLayouts.size());
-        layoutCreateInfo.pSetLayouts = setLayouts.data();
-        layoutCreateInfo.pushConstantRangeCount = 1;
-        layoutCreateInfo.pPushConstantRanges = &pushConstantRange;
-
-        scenePipelineLayout = vkDevice.createPipelineLayout(layoutCreateInfo);
-
-        core::MeshShaderPipelineConfig config{
-            .device = vkDevice,
-            .renderPass = renderPass,
-            .extent = swapChain.getSwapchainExtent(),
-            .shaderStages = stages,
-            .existingPipelineLayout = scenePipelineLayout,
-            .cullMode = vk::CullModeFlagBits::eBack,
-            .depthTestEnable = true,
-            .depthWriteEnable = true,
-            .depthCompareOp = vk::CompareOp::eLess,
-            .blendEnable = false
-        };
-        config.dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor };
-
-        auto result = core::PipelineUtilities::createMeshShaderPipeline(config);
+        auto result = createDepthOnlyPipeline(*sceneShader, info.renderPass, layouts,
+                                               sizeof(DepthPrepassPushConstants));
         scenePipeline = result.pipeline;
+        scenePipelineLayout = result.layout;
     }
 
-    void DepthPrepassPipeline::createTerrainPipeline(
-        vk::RenderPass renderPass,
-        vk::DescriptorSetLayout cameraLayout,
-        vk::DescriptorSetLayout meshletDataLayout,
-        vk::DescriptorSetLayout vertexDataLayout,
-        vk::DescriptorSetLayout terrainDataLayout)
+    void DepthPrepassPipeline::createTerrainPipeline(const DepthPrepassInitInfo& info)
     {
-        vk::Device vkDevice = device.getLogicalDevice();
-
         terrainShader = std::make_unique<core::Shader>(device);
         terrainShader->readShader("../../resources/shaders/depthprepass/task_terrain_depth_prepass.glsl");
         terrainShader->readShader("../../resources/shaders/depthprepass/mesh_terrain_depth_prepass.glsl");
 
-        const auto& stages = terrainShader->getShaderStages();
-        if (stages.size() < 2)
+        if (terrainShader->getShaderStages().size() < 2)
         {
-            vfLogError("DepthPrepassPipeline: Failed to load terrain depth prepass shaders: {}",
+            vfLogError("DepthPrepassPipeline: Failed to load terrain shaders: {}",
                         terrainShader->getLastCompilationError());
             return;
         }
 
-        // Terrain layout: set 0=camera, set 1=empty, set 2=empty, set 3=meshlet,
-        // set 4=vertex, ... set 11=terrain
-        // We need to match the full terrain pipeline layout for descriptor set binding compatibility.
-        // Use empty layouts for unused sets, or pad with the meshlet/vertex layouts.
-        // Simpler approach: create a dedicated layout with only the sets we use.
-
-        // Build layout array with 12 slots (0..11)
-        // Create empty layout for unused sets
+        vk::Device vkDevice = device.getLogicalDevice();
         vk::DescriptorSetLayoutCreateInfo emptyLayoutInfo{};
-        emptyLayoutInfo.bindingCount = 0;
         vk::DescriptorSetLayout emptyLayout = vkDevice.createDescriptorSetLayout(emptyLayoutInfo);
 
-        std::vector<vk::DescriptorSetLayout> setLayouts(12, emptyLayout);
-        setLayouts[0] = cameraLayout;        // Camera UBO
-        setLayouts[3] = meshletDataLayout;   // Meshlets
-        setLayouts[4] = vertexDataLayout;    // Vertices
-        setLayouts[11] = terrainDataLayout;  // Terrain tile data
+        std::vector<vk::DescriptorSetLayout> layouts(12, emptyLayout);
+        layouts[0] = info.cameraLayout;
+        layouts[3] = info.meshletDataLayout;
+        layouts[4] = info.vertexDataLayout;
+        layouts[11] = info.terrainDataLayout;
 
-        vk::PushConstantRange pushConstantRange{};
-        pushConstantRange.stageFlags = vk::ShaderStageFlagBits::eTaskEXT |
-                                       vk::ShaderStageFlagBits::eMeshEXT;
-        pushConstantRange.offset = 0;
-        pushConstantRange.size = sizeof(TerrainDepthPrepassPushConstants);
-
-        vk::PipelineLayoutCreateInfo layoutCreateInfo{};
-        layoutCreateInfo.setLayoutCount = static_cast<uint32_t>(setLayouts.size());
-        layoutCreateInfo.pSetLayouts = setLayouts.data();
-        layoutCreateInfo.pushConstantRangeCount = 1;
-        layoutCreateInfo.pPushConstantRanges = &pushConstantRange;
-
-        terrainPipelineLayout = vkDevice.createPipelineLayout(layoutCreateInfo);
-
-        // Clean up the temporary empty layout
-        vkDevice.destroyDescriptorSetLayout(emptyLayout);
-
-        core::MeshShaderPipelineConfig config{
-            .device = vkDevice,
-            .renderPass = renderPass,
-            .extent = swapChain.getSwapchainExtent(),
-            .shaderStages = stages,
-            .existingPipelineLayout = terrainPipelineLayout,
-            .cullMode = vk::CullModeFlagBits::eBack,
-            .depthTestEnable = true,
-            .depthWriteEnable = true,
-            .depthCompareOp = vk::CompareOp::eLess,
-            .blendEnable = false
-        };
-        config.dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor };
-
-        auto result = core::PipelineUtilities::createMeshShaderPipeline(config);
+        auto result = createDepthOnlyPipeline(*terrainShader, info.renderPass, layouts,
+                                               sizeof(TerrainDepthPrepassPushConstants));
         terrainPipeline = result.pipeline;
+        terrainPipelineLayout = result.layout;
+
+        vkDevice.destroyDescriptorSetLayout(emptyLayout);
     }
 
     void DepthPrepassPipeline::bindScenePipeline(vk::CommandBuffer cmd) const
@@ -203,7 +146,6 @@ namespace render::occlusion
     void DepthPrepassPipeline::cleanup()
     {
         if (!initialized) return;
-
         device.getLogicalDevice().waitIdle();
 
         if (scenePipeline) device.getLogicalDevice().destroyPipeline(scenePipeline);

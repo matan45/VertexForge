@@ -4,6 +4,7 @@
 
 #include "../common/gpu_types.glsl"
 #include "../common/camera_types.glsl"
+#include "../common/culling_functions.glsl"
 #include "../common/hiz_occlusion.glsl"
 
 layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
@@ -64,16 +65,6 @@ uvec4 getMeshletLODData(GPUObjectData obj, uint level) {
     }
 }
 
-vec4 transformBoundingSphere(vec4 localSphere, mat4 modelMatrix) {
-    vec3 worldCenter = (modelMatrix * vec4(localSphere.xyz, 1.0)).xyz;
-    float scaleX = length(modelMatrix[0].xyz);
-    float scaleY = length(modelMatrix[1].xyz);
-    float scaleZ = length(modelMatrix[2].xyz);
-    float maxScale = max(max(scaleX, scaleY), scaleZ);
-    float worldRadius = localSphere.w * maxScale;
-    return vec4(worldCenter, worldRadius);
-}
-
 void transformAABB(vec3 localMin, vec3 localMax, mat4 modelMatrix, out vec3 worldMin, out vec3 worldMax) {
     vec3 corners[8];
     corners[0] = (modelMatrix * vec4(localMin.x, localMin.y, localMin.z, 1.0)).xyz;
@@ -91,26 +82,6 @@ void transformAABB(vec3 localMin, vec3 localMax, mat4 modelMatrix, out vec3 worl
         worldMin = min(worldMin, corners[i]);
         worldMax = max(worldMax, corners[i]);
     }
-}
-
-// AABB frustum test using p-vertex method
-bool aabbInFrustum(vec3 aabbMin, vec3 aabbMax, vec4 frustumPlanes[6]) {
-    for (int i = 0; i < 6; i++) {
-        vec3 planeNormal = frustumPlanes[i].xyz;
-        float planeD = frustumPlanes[i].w;
-
-        vec3 pVertex;
-        pVertex.x = (planeNormal.x >= 0.0) ? aabbMax.x : aabbMin.x;
-        pVertex.y = (planeNormal.y >= 0.0) ? aabbMax.y : aabbMin.y;
-        pVertex.z = (planeNormal.z >= 0.0) ? aabbMax.z : aabbMin.z;
-
-        float distance = dot(planeNormal, pVertex) + planeD;
-
-        if (distance < 0.0) {
-            return false;
-        }
-    }
-    return true;
 }
 
 float projectSphereToScreen(vec4 worldSphere, mat4 projection, vec2 screenSize) {

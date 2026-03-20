@@ -5,6 +5,7 @@
 
 #include "../common/gpu_types.glsl"
 #include "../common/camera_types.glsl"
+#include "../common/culling_functions.glsl"
 
 layout(local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
 
@@ -43,41 +44,6 @@ taskPayloadSharedEXT TerrainMeshletPayload payload;
 shared uint sharedVisibleCount;
 shared uint sharedMeshletIndices[MAX_MESHLETS_PER_PAYLOAD];
 shared uint sharedTileData[5];
-
-bool aabbInFrustum(vec3 aabbMin, vec3 aabbMax, vec4 frustumPlanes[6]) {
-    for (int i = 0; i < 6; i++) {
-        vec3 positive = vec3(
-            frustumPlanes[i].x > 0.0 ? aabbMax.x : aabbMin.x,
-            frustumPlanes[i].y > 0.0 ? aabbMax.y : aabbMin.y,
-            frustumPlanes[i].z > 0.0 ? aabbMax.z : aabbMin.z
-        );
-        float distance = dot(frustumPlanes[i].xyz, positive) + frustumPlanes[i].w;
-        if (distance < 0.0) {
-            return false;
-        }
-    }
-    return true;
-}
-
-vec4 transformBoundingSphere(vec4 localSphere, mat4 modelMatrix) {
-    vec3 worldCenter = (modelMatrix * vec4(localSphere.xyz, 1.0)).xyz;
-    float scaleX = length(modelMatrix[0].xyz);
-    float scaleY = length(modelMatrix[1].xyz);
-    float scaleZ = length(modelMatrix[2].xyz);
-    float maxScale = max(max(scaleX, scaleY), scaleZ);
-    float worldRadius = localSphere.w * maxScale;
-    return vec4(worldCenter, worldRadius);
-}
-
-bool sphereInFrustum(vec4 sphere, vec4 frustumPlanes[6]) {
-    for (int i = 0; i < 6; i++) {
-        float distance = dot(frustumPlanes[i].xyz, sphere.xyz) + frustumPlanes[i].w;
-        if (distance < -sphere.w) {
-            return false;
-        }
-    }
-    return true;
-}
 
 void main() {
     uint tileIndex = gl_WorkGroupID.x;

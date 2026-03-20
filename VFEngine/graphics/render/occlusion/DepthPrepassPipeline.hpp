@@ -1,6 +1,7 @@
 #pragma once
 #include <vulkan/vulkan.hpp>
 #include <memory>
+#include <vector>
 
 namespace core
 {
@@ -27,18 +28,28 @@ namespace render::occlusion
         float screenHeight;
     };
 
+    struct DepthPrepassInitInfo
+    {
+        vk::RenderPass renderPass;
+        vk::DescriptorSetLayout cameraLayout;
+        vk::DescriptorSetLayout perDrawLayout;
+        vk::DescriptorSetLayout bindlessTextureLayout;
+        vk::DescriptorSetLayout meshletDataLayout;
+        vk::DescriptorSetLayout vertexDataLayout;
+        vk::DescriptorSetLayout boneMatrixLayout;
+        vk::DescriptorSetLayout terrainDataLayout;
+    };
+
     class DepthPrepassPipeline
     {
     private:
         core::Device& device;
         core::SwapChain& swapChain;
 
-        // Scene depth prepass pipeline
         std::unique_ptr<core::Shader> sceneShader;
         vk::Pipeline scenePipeline;
         vk::PipelineLayout scenePipelineLayout;
 
-        // Terrain depth prepass pipeline
         std::unique_ptr<core::Shader> terrainShader;
         vk::Pipeline terrainPipeline;
         vk::PipelineLayout terrainPipelineLayout;
@@ -52,15 +63,7 @@ namespace render::occlusion
         DepthPrepassPipeline(const DepthPrepassPipeline&) = delete;
         DepthPrepassPipeline& operator=(const DepthPrepassPipeline&) = delete;
 
-        void init(vk::RenderPass depthRenderPass,
-                  vk::DescriptorSetLayout cameraLayout,
-                  vk::DescriptorSetLayout perDrawLayout,
-                  vk::DescriptorSetLayout bindlessTextureLayout,
-                  vk::DescriptorSetLayout meshletDataLayout,
-                  vk::DescriptorSetLayout vertexDataLayout,
-                  vk::DescriptorSetLayout boneMatrixLayout,
-                  vk::DescriptorSetLayout terrainDataLayout);
-
+        void init(const DepthPrepassInitInfo& info);
         void cleanup();
 
         void bindScenePipeline(vk::CommandBuffer cmd) const;
@@ -74,18 +77,18 @@ namespace render::occlusion
         bool isInitialized() const { return initialized; }
 
     private:
-        void createScenePipeline(vk::RenderPass renderPass,
-                                  vk::DescriptorSetLayout cameraLayout,
-                                  vk::DescriptorSetLayout perDrawLayout,
-                                  vk::DescriptorSetLayout bindlessTextureLayout,
-                                  vk::DescriptorSetLayout meshletDataLayout,
-                                  vk::DescriptorSetLayout vertexDataLayout,
-                                  vk::DescriptorSetLayout boneMatrixLayout);
+        struct PipelineCreateResult
+        {
+            vk::Pipeline pipeline;
+            vk::PipelineLayout layout;
+        };
 
-        void createTerrainPipeline(vk::RenderPass renderPass,
-                                    vk::DescriptorSetLayout cameraLayout,
-                                    vk::DescriptorSetLayout meshletDataLayout,
-                                    vk::DescriptorSetLayout vertexDataLayout,
-                                    vk::DescriptorSetLayout terrainDataLayout);
+        PipelineCreateResult createDepthOnlyPipeline(
+            core::Shader& shader, vk::RenderPass renderPass,
+            const std::vector<vk::DescriptorSetLayout>& layouts,
+            uint32_t pushConstantSize);
+
+        void createScenePipeline(const DepthPrepassInitInfo& info);
+        void createTerrainPipeline(const DepthPrepassInitInfo& info);
     };
 }

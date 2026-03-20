@@ -600,6 +600,8 @@ namespace render::gpudriven
         BoneOffsetResolver updateAnimationBones();
         void updateClusterGrid(const glm::mat4& projection, float nearPlane, float farPlane);
         void updatePipelineDescriptors();
+        void updateAllPipelinesHiZ();
+        std::pair<vk::ImageView, vk::Sampler> getHiZViewSampler() const;
 
         void initBillboardSubsystems(vk::DescriptorSetLayout iblDescriptorSetLayout, vk::RenderPass renderPass);
         void initTerrainSubsystems(vk::DescriptorSetLayout iblDescriptorSetLayout, vk::RenderPass renderPass);

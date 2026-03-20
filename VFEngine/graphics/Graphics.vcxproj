@@ -556,6 +556,7 @@
     <None Include="..\..\resources\shaders\cloud\cloud_weather_gen.glsl" />
     <None Include="..\..\resources\shaders\common\camera_types.glsl" />
     <None Include="..\..\resources\shaders\common\cluster_culling.glsl" />
+    <None Include="..\..\resources\shaders\common\culling_functions.glsl" />
     <None Include="..\..\resources\shaders\common\gi_sampling.glsl" />
     <None Include="..\..\resources\shaders\common\gpu_instance_types.glsl" />
     <None Include="..\..\resources\shaders\common\gpu_types.glsl" />

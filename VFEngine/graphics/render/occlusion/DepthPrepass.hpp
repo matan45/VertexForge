@@ -48,6 +48,7 @@ namespace render::occlusion
 
     private:
         void createDepthImage();
+        void transitionInitialLayout();
         void createRenderPass();
         void createFramebuffer();
     };

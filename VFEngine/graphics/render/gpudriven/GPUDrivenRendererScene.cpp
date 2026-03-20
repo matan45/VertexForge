@@ -472,6 +472,15 @@ namespace render::gpudriven
         clusterGridManager->updateFromCamera(clusterCameraParams);
     }
 
+    std::pair<vk::ImageView, vk::Sampler> GPUDrivenRenderer::getHiZViewSampler() const
+    {
+        if (prepassHiZ && prepassHiZ->isInitialized())
+            return {prepassHiZ->getHiZImageView(), prepassHiZ->getHiZSampler()};
+        if (bindlessTextures && bindlessTextures->hasDefaultTexture())
+            return {bindlessTextures->getDefaultImageView(), bindlessTextures->getDefaultSampler()};
+        return {nullptr, nullptr};
+    }
+
     void GPUDrivenRenderer::updatePipelineDescriptors()
     {
         if (lightCullingPipeline && clusterGridManager && lightBufferManager)
@@ -517,23 +526,9 @@ namespace render::gpudriven
             wboitMeshShaderPipeline->updateObjectBufferDescriptor(mergedBuffer->getObjectBuffer());
         }
 
-        // Initialize Hi-Z descriptor (binding 4) with default or prepass texture
-        // This must be done after updateMeshletDescriptors to avoid uninitialized descriptor errors
+        // Initialize Hi-Z descriptors with prepass texture or default fallback
         {
-            vk::ImageView hiZView;
-            vk::Sampler hiZSampler;
-
-            if (prepassHiZ && prepassHiZ->isInitialized())
-            {
-                hiZView = prepassHiZ->getHiZImageView();
-                hiZSampler = prepassHiZ->getHiZSampler();
-            }
-            else if (bindlessTextures && bindlessTextures->hasDefaultTexture())
-            {
-                hiZView = bindlessTextures->getDefaultImageView();
-                hiZSampler = bindlessTextures->getDefaultSampler();
-            }
-
+            auto [hiZView, hiZSampler] = getHiZViewSampler();
             if (hiZView && hiZSampler)
             {
                 if (meshShaderPipeline)
@@ -611,23 +606,9 @@ namespace render::gpudriven
             terrain.pipeline->updateTerrainBufferDescriptors(*terrain.meshBuffer);
             terrain.pipeline->updateWeightMapDescriptor(terrain.meshBuffer->getWeightMapBuffer());
 
-            // Initialize terrain Hi-Z descriptor (binding 4) with default or prepass texture
-            vk::ImageView hiZView;
-            vk::Sampler hiZSampler;
-            if (prepassHiZ && prepassHiZ->isInitialized())
-            {
-                hiZView = prepassHiZ->getHiZImageView();
-                hiZSampler = prepassHiZ->getHiZSampler();
-            }
-            else if (bindlessTextures && bindlessTextures->hasDefaultTexture())
-            {
-                hiZView = bindlessTextures->getDefaultImageView();
-                hiZSampler = bindlessTextures->getDefaultSampler();
-            }
+            auto [hiZView, hiZSampler] = getHiZViewSampler();
             if (hiZView && hiZSampler)
-            {
                 terrain.pipeline->updateHiZDescriptor(hiZView, hiZSampler);
-            }
         }
 
         if (shadowSystem && shadowSystem->isInitialized() && cameraBuffer)
