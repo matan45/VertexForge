@@ -32,13 +32,15 @@ namespace render::gpudriven
         float brushFalloff;        // Falloff type (0=constant, 1=linear, 2=smooth, 3=sharp)
         float brushShape;          // Shape (0=circle, 1=square)
         float shadowLOD;           // Shadow LOD level (0-3) for receiver-side bias scaling
-        float _pad2, _pad3;        // Align mat4 to 16-byte boundary (offset 64)
+        uint32_t hiZMipLevels;     // Mip levels in the Hi-Z pyramid (0 = disabled)
+        float _pad3;               // Align mat4 to 16-byte boundary (offset 64)
         glm::mat4 viewProjection; // CPU-precomputed view-projection (matches raycast invViewProjection)
     };
 
     // Terrain culling bits (same as regular mesh shader bits)
     constexpr uint32_t TERRAIN_CULL_FRUSTUM_BIT = 0x100;
     constexpr uint32_t TERRAIN_CULL_BACKFACE_BIT = 0x200;
+    constexpr uint32_t TERRAIN_CULL_OCCLUSION_BIT = 0x800;
 
     class TerrainMeshShaderPipeline
     {
@@ -146,6 +148,7 @@ namespace render::gpudriven
         void updateTileData(const std::vector<TerrainTileGPUData>& tiles);
 
         void updateTerrainBufferDescriptors(TerrainMeshBuffer& terrainBuffer);
+        void updateHiZDescriptor(vk::ImageView hiZView, vk::Sampler hiZSampler);
 
         void updateWeightMapDescriptor(vk::Buffer weightMapBuffer);
 
@@ -179,6 +182,8 @@ namespace render::gpudriven
 
         void setFrustumCullingEnabled(bool enabled) { frustumCullingEnabled = enabled; }
         void setMeshletCullingEnabled(bool enabled) { meshletCullingEnabled = enabled; }
+        void setMeshletOcclusionCullingEnabled(bool enabled) { meshletOcclusionCullingEnabled = enabled; }
+        void setHiZMipLevels(uint32_t levels) { hiZMipLevels = levels; }
         void setTerrainMaxDrawDistSq(float distSq) { terrainMaxDrawDistSq = distSq; }
         void setShadowLOD(uint32_t lod) { shadowLOD = lod; }
 
@@ -198,6 +203,8 @@ namespace render::gpudriven
     private:
         bool frustumCullingEnabled = true;
         bool meshletCullingEnabled = true;
+        bool meshletOcclusionCullingEnabled = false;
+        uint32_t hiZMipLevels = 0;
 
         void createEmptyDescriptorSet();
         void createWeightMapDescriptor();

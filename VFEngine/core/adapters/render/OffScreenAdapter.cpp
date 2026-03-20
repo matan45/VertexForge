@@ -343,6 +343,12 @@ namespace core {
         }
     }
 
+    void OffScreenAdapter::setMeshletOcclusionCullingEnabled(bool enabled) {
+        if (offScreen) {
+            offScreen->setMeshletOcclusionCullingEnabled(enabled);
+        }
+    }
+
     void OffScreenAdapter::setDistanceCullingEnabled(bool enabled) {
         if (offScreen) {
             offScreen->setDistanceCullingEnabled(enabled);

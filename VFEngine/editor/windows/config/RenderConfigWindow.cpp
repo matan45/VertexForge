@@ -186,6 +186,16 @@ namespace windows
             if (ImGui::IsItemHovered())
                 ImGui::SetTooltip("Cull meshlet clusters facing away from camera using cone culling.");
 
+            if (ImGui::Checkbox("Meshlet Occlusion Culling", &settings.culling.meshletOcclusionCullingEnabled))
+            {
+                isDirty = true;
+                events::render::SetMeshletOcclusionCullingCommand cmd;
+                cmd.enabled = settings.culling.meshletOcclusionCullingEnabled;
+                dispatcher.execute(cmd);
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Cull meshlets hidden behind occluders using Hi-Z depth prepass.");
+
             ImGui::Separator();
             ImGui::Text("Terrain Culling");
             ImGui::Spacing();

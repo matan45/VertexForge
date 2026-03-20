@@ -5,6 +5,7 @@
 
 #include "../common/gpu_types.glsl"
 #include "../common/camera_types.glsl"
+#include "../common/hiz_occlusion.glsl"
 
 layout(local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
 
@@ -39,17 +40,23 @@ layout(std430, set = 3, binding = 3) buffer CullingStatsBuffer {
     uint culledByFrustum;
     uint culledByBackface;
     uint visibleMeshlets;
+    uint culledByOcclusion;
 } stats;
+
+// Hi-Z texture for meshlet occlusion culling (from depth prepass)
+layout(set = 3, binding = 4) uniform sampler2D meshletHiZTexture;
 
 layout(push_constant) uniform PushConstants {
     uint baseDrawIndex;
     uint viewMode;
     float screenWidth;
     float screenHeight;
+    uint hiZMipLevels;
 } pc;
 
 const uint MESHLET_CULL_FRUSTUM_BIT = 0x100u;
 const uint MESHLET_CULL_BACKFACE_BIT = 0x200u;
+const uint MESHLET_CULL_OCCLUSION_BIT = 0x800u;
 
 struct MeshletPayload {
     uint drawIndex;
@@ -264,6 +271,15 @@ void main() {
                                                 camera.cameraPos, worldSphere.xyz);
             if (!backfaceVisible) {
                 atomicAdd(stats.culledByBackface, 1);
+                isVisible = false;
+            }
+        }
+
+        if (isVisible && (pc.viewMode & MESHLET_CULL_OCCLUSION_BIT) != 0u && pc.hiZMipLevels > 0u) {
+            mat4 viewProjection = camera.projection * camera.view;
+            if (!hiZOcclusionTest(meshletHiZTexture, worldSphere, viewProjection,
+                                  vec2(pc.screenWidth, pc.screenHeight), pc.hiZMipLevels)) {
+                atomicAdd(stats.culledByOcclusion, 1);
                 isVisible = false;
             }
         }

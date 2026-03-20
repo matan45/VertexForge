@@ -167,7 +167,8 @@ namespace render::gpudriven
         uint32_t lodCount1;
         uint32_t lodCount2;
         uint32_t lodCount3;
-        uint32_t padding[3];
+        uint32_t culledByOcclusion;
+        uint32_t padding[2];
     };
     static_assert(sizeof(TerrainCullingStats) == 48);
 

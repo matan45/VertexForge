@@ -4,6 +4,7 @@
 
 #include "../common/gpu_types.glsl"
 #include "../common/camera_types.glsl"
+#include "../common/hiz_occlusion.glsl"
 
 layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 
@@ -180,57 +181,9 @@ uint findBestAvailableLOD(uint targetLOD, uint availableMask) {
     return 0xFFFFFFFFu;
 }
 
+// Wrapper for backward compatibility — delegates to shared hiz_occlusion.glsl
 bool hiZOcclusionTest(vec4 worldSphere, mat4 viewProjection, vec2 screenSize, uint hiZMipLevels) {
-    vec3 center = worldSphere.xyz;
-    float radius = worldSphere.w;
-    vec3 aabbMin = center - vec3(radius);
-    vec3 aabbMax = center + vec3(radius);
-
-    vec4 corners[8];
-    corners[0] = viewProjection * vec4(aabbMin.x, aabbMin.y, aabbMin.z, 1.0);
-    corners[1] = viewProjection * vec4(aabbMax.x, aabbMin.y, aabbMin.z, 1.0);
-    corners[2] = viewProjection * vec4(aabbMin.x, aabbMax.y, aabbMin.z, 1.0);
-    corners[3] = viewProjection * vec4(aabbMax.x, aabbMax.y, aabbMin.z, 1.0);
-    corners[4] = viewProjection * vec4(aabbMin.x, aabbMin.y, aabbMax.z, 1.0);
-    corners[5] = viewProjection * vec4(aabbMax.x, aabbMin.y, aabbMax.z, 1.0);
-    corners[6] = viewProjection * vec4(aabbMin.x, aabbMax.y, aabbMax.z, 1.0);
-    corners[7] = viewProjection * vec4(aabbMax.x, aabbMax.y, aabbMax.z, 1.0);
-
-    vec2 ndcMin = vec2(1.0);
-    vec2 ndcMax = vec2(-1.0);
-    float minDepth = 1.0;
-
-    for (int i = 0; i < 8; i++) {
-        if (corners[i].w <= 0.0) {
-            return true;
-        }
-        vec3 ndc = corners[i].xyz / corners[i].w;
-        ndcMin = min(ndcMin, ndc.xy);
-        ndcMax = max(ndcMax, ndc.xy);
-        minDepth = min(minDepth, ndc.z);
-    }
-
-    ndcMin = clamp(ndcMin, vec2(-1.0), vec2(1.0));
-    ndcMax = clamp(ndcMax, vec2(-1.0), vec2(1.0));
-
-    if (minDepth < 0.0) {
-        return true;
-    }
-
-    vec2 uvMin = ndcMin * 0.5 + 0.5;
-    vec2 uvMax = ndcMax * 0.5 + 0.5;
-    vec2 sizePixels = (uvMax - uvMin) * screenSize;
-    float maxDimension = max(sizePixels.x, sizePixels.y);
-    float mipLevel = ceil(log2(maxDimension));
-    mipLevel = clamp(mipLevel, 0.0, float(hiZMipLevels - 1u));
-
-    float hiZDepth = 0.0;
-    hiZDepth = max(hiZDepth, textureLod(hiZTexture, uvMin, mipLevel).r);
-    hiZDepth = max(hiZDepth, textureLod(hiZTexture, uvMax, mipLevel).r);
-    hiZDepth = max(hiZDepth, textureLod(hiZTexture, vec2(uvMin.x, uvMax.y), mipLevel).r);
-    hiZDepth = max(hiZDepth, textureLod(hiZTexture, vec2(uvMax.x, uvMin.y), mipLevel).r);
-
-    return minDepth <= hiZDepth + 0.0001;
+    return hiZOcclusionTest(hiZTexture, worldSphere, viewProjection, screenSize, hiZMipLevels);
 }
 
 void main() {

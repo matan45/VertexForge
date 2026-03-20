@@ -458,8 +458,9 @@ namespace render::gpudriven
 
         if (!terrainBufferPool)
         {
-            std::array<vk::DescriptorPoolSize, 1> poolSizes = {{
-                {vk::DescriptorType::eStorageBuffer, 6}
+            std::array<vk::DescriptorPoolSize, 2> poolSizes = {{
+                {vk::DescriptorType::eStorageBuffer, 6},
+                {vk::DescriptorType::eCombinedImageSampler, 1}
             }};
 
             vk::DescriptorPoolCreateInfo poolInfo{};
@@ -483,5 +484,25 @@ namespace render::gpudriven
 
         writeMeshletDescriptors(vkDevice, terrainMeshletDescriptorSet, terrainBuffer);
         writeVertexDescriptor(vkDevice, terrainVertexDescriptorSet, terrainBuffer);
+    }
+
+    void TerrainMeshShaderPipeline::updateHiZDescriptor(vk::ImageView hiZView, vk::Sampler hiZSampler)
+    {
+        if (!initialized || !terrainMeshletDescriptorSet) return;
+
+        vk::DescriptorImageInfo imageInfo{};
+        imageInfo.sampler = hiZSampler;
+        imageInfo.imageView = hiZView;
+        imageInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+
+        vk::WriteDescriptorSet write{};
+        write.dstSet = terrainMeshletDescriptorSet;
+        write.dstBinding = 4;
+        write.dstArrayElement = 0;
+        write.descriptorCount = 1;
+        write.descriptorType = vk::DescriptorType::eCombinedImageSampler;
+        write.pImageInfo = &imageInfo;
+
+        device.getLogicalDevice().updateDescriptorSets(write, {});
     }
 }

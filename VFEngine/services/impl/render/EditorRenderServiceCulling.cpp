@@ -48,6 +48,13 @@ namespace services
                     offScreenProvider->setMeshletBackfaceCullingEnabled(cmd.enabled);
             });
 
+        dispatcher.registerCommandHandler<events::render::SetMeshletOcclusionCullingCommand>(
+            [this](const events::render::SetMeshletOcclusionCullingCommand& cmd)
+            {
+                if (offScreenProvider)
+                    offScreenProvider->setMeshletOcclusionCullingEnabled(cmd.enabled);
+            });
+
         dispatcher.registerCommandHandler<events::render::SetDistanceCullingCommand>(
             [this](const events::render::SetDistanceCullingCommand& cmd)
             {

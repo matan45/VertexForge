@@ -37,11 +37,13 @@ namespace render::gpudriven
         uint32_t viewMode;
         float screenWidth;
         float screenHeight;
+        uint32_t hiZMipLevels;
     };
 
-    // viewMode bit packing: bits 0-7 = viewMode, bit 8 = frustum culling, bit 9 = backface culling
+    // viewMode bit packing: bits 0-7 = viewMode, bit 8 = frustum culling, bit 9 = backface culling, bit 11 = occlusion culling
     constexpr uint32_t MESHLET_CULL_FRUSTUM_BIT = 0x100;
     constexpr uint32_t MESHLET_CULL_BACKFACE_BIT = 0x200;
+    constexpr uint32_t MESHLET_CULL_OCCLUSION_BIT = 0x800;
 
     struct MeshletCullingStats
     {
@@ -49,6 +51,7 @@ namespace render::gpudriven
         uint32_t culledByFrustum;
         uint32_t culledByBackface;
         uint32_t visibleMeshlets;
+        uint32_t culledByOcclusion;
     };
 
     class MeshShaderPipeline
@@ -110,6 +113,7 @@ namespace render::gpudriven
         void updateInstanceTransformDescriptor(vk::Buffer instanceTransformBuffer);
         void updateObjectBufferDescriptor(vk::Buffer objectBuffer);
         void updateMeshletDescriptors(MeshletBuffer& meshletBuffer);
+        void updateHiZDescriptor(vk::ImageView hiZView, vk::Sampler hiZSampler);
         void updateVertexDescriptors(MergedMeshBuffer& mergedBuffer);
 
         void updateLightingDescriptors(vk::DescriptorSet lightDataDescSet,

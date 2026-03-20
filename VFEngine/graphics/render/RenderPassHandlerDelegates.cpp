@@ -177,6 +177,14 @@ namespace render
         }
     }
 
+    void RenderPassHandler::setMeshletOcclusionCullingEnabled(bool enabled)
+    {
+        if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
+        {
+            gpuDrivenRenderer->setMeshletOcclusionCullingEnabled(enabled);
+        }
+    }
+
     void RenderPassHandler::setGlobalLodBias(float bias)
     {
         if (gpuDrivenRendererInitialized && gpuDrivenRenderer)

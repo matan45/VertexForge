@@ -135,6 +135,7 @@ namespace controllers
         void setLODCrossfadeEnabled(bool enabled);
         void setMeshletFrustumCullingEnabled(bool enabled);
         void setMeshletBackfaceCullingEnabled(bool enabled);
+        void setMeshletOcclusionCullingEnabled(bool enabled);
         void setDistanceCullingEnabled(bool enabled);
         void setCategoryDistance(uint32_t category, float distance);
         void setShadowDistanceMultiplier(float multiplier);

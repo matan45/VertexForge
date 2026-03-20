@@ -5,6 +5,7 @@
 
 #include "../common/gpu_types.glsl"
 #include "../common/camera_types.glsl"
+#include "../common/hiz_occlusion.glsl"
 
 layout(local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
 
@@ -34,8 +35,12 @@ layout(std430, set = 11, binding = 1) buffer TerrainStatsBuffer {
     uint lodCount1;
     uint lodCount2;
     uint lodCount3;
-    uint padding[3];
+    uint culledByOcclusion;
+    uint padding[2];
 } stats;
+
+// Hi-Z texture for meshlet occlusion culling (from depth prepass)
+layout(set = 3, binding = 4) uniform sampler2D meshletHiZTexture;
 
 layout(push_constant) uniform PushConstants {
     uint tileCount;
@@ -46,11 +51,20 @@ layout(push_constant) uniform PushConstants {
     float errorThreshold;   // Screen-space error threshold in pixels
     float terrainTextureScale;     // Scale for world-space UV tiling
     float terrainMaxDrawDistSq;    // Squared max draw distance for terrain (0 = disabled)
+    vec2 brushWorldPos;            // Brush overlay world position
+    float brushWorldRadius;        // 0.0 = inactive
+    float brushFalloff;
+    float brushShape;
+    float shadowLOD;
+    uint hiZMipLevels;             // Mip levels in the Hi-Z pyramid (0 = disabled)
+    float _pad3;                   // Align mat4 to 16-byte boundary
+    mat4 viewProjection;
 } pc;
 
 const uint TERRAIN_CULL_FRUSTUM_BIT = 0x100u;
 const uint TERRAIN_CULL_BACKFACE_BIT = 0x200u;
 const uint TERRAIN_DEBUG_FORCE_LOD0_BIT = 0x400u;
+const uint TERRAIN_CULL_OCCLUSION_BIT = 0x800u;
 
 struct TerrainMeshletPayload {
     uint tileIndex;
@@ -195,6 +209,17 @@ void main() {
             }
         }
 
+        // Stage 1c: Tile-level Hi-Z occlusion culling (AABB test)
+        if (tileVisible && (pc.viewMode & TERRAIN_CULL_OCCLUSION_BIT) != 0u && pc.hiZMipLevels > 0u) {
+            mat4 vp = camera.projection * camera.view;
+            if (!hiZOcclusionTestAABB(meshletHiZTexture, tile.aabbMin.xyz, tile.aabbMax.xyz,
+                                       vp, vec2(pc.screenWidth, pc.screenHeight), pc.hiZMipLevels)) {
+                tileVisible = false;
+                atomicAdd(stats.culledTiles, 1);
+                atomicAdd(stats.culledByOcclusion, 1);
+            }
+        }
+
         if (tileVisible) {
             // Stage 2: GPU LOD selection based on geometric error
             float distance = length(tile.boundingSphere.xyz - camera.cameraPos);
@@ -278,6 +303,17 @@ void main() {
                 if (!coneCullTest(meshlet.cone, tile.modelMatrix, camera.cameraPos, worldSphere.xyz)) {
                     meshletVisible = false;
                     atomicAdd(stats.culledMeshlets, 1);
+                }
+            }
+
+            // Meshlet-level Hi-Z occlusion culling
+            if (meshletVisible && (pc.viewMode & TERRAIN_CULL_OCCLUSION_BIT) != 0u && pc.hiZMipLevels > 0u) {
+                mat4 vp = camera.projection * camera.view;
+                if (!hiZOcclusionTest(meshletHiZTexture, worldSphere, vp,
+                                      vec2(pc.screenWidth, pc.screenHeight), pc.hiZMipLevels)) {
+                    meshletVisible = false;
+                    atomicAdd(stats.culledMeshlets, 1);
+                    atomicAdd(stats.culledByOcclusion, 1);
                 }
             }
 

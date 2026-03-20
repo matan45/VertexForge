@@ -73,6 +73,8 @@ namespace render::mesh
 namespace render::occlusion
 {
     class HiZBuffer;
+    class DepthPrepass;
+    class DepthPrepassPipeline;
 }
 
 namespace terrain
@@ -246,6 +248,7 @@ namespace render::gpudriven
             float globalLodBias = 0.0f;
             bool meshletFrustumCullingEnabled = true;
             bool meshletBackfaceCullingEnabled = true;
+            bool meshletOcclusionCullingEnabled = false;
             uint32_t currentViewMode = 0;
         };
 
@@ -277,6 +280,12 @@ namespace render::gpudriven
         std::unique_ptr<lighting::LightCullingPipeline> lightCullingPipeline;
         std::unique_ptr<shadow::ShadowSystem> shadowSystem;
         std::unique_ptr<occlusion::LightOcclusionCulling> lightOcclusionCulling;
+
+        // Depth prepass for meshlet-level Hi-Z occlusion culling
+        std::unique_ptr<occlusion::DepthPrepass> depthPrepass;
+        std::unique_ptr<occlusion::DepthPrepassPipeline> depthPrepassPipeline;
+        std::unique_ptr<occlusion::HiZBuffer> prepassHiZ;
+        uint32_t prepassHiZMipLevels = 0;
         std::unique_ptr<volumetric::VolumetricPipeline> volumetricPipeline;
         ::postprocess::VolumetricFogSettings cachedVolumetricSettings;
 
@@ -395,6 +404,12 @@ namespace render::gpudriven
         bool isMeshletFrustumCullingEnabled() const { return culling.meshletFrustumCullingEnabled; }
         void setMeshletBackfaceCullingEnabled(bool enabled) { culling.meshletBackfaceCullingEnabled = enabled; }
         bool isMeshletBackfaceCullingEnabled() const { return culling.meshletBackfaceCullingEnabled; }
+        void setMeshletOcclusionCullingEnabled(bool enabled) { culling.meshletOcclusionCullingEnabled = enabled; }
+        bool isMeshletOcclusionCullingEnabled() const { return culling.meshletOcclusionCullingEnabled; }
+
+        void initDepthPrepass();
+        void renderDepthPrepass(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet);
+        void generatePrepassHiZ(vk::CommandBuffer cmd);
 
         void setDistanceCullingEnabled(bool enabled) { culling.distanceCullingEnabled = enabled; }
         bool isDistanceCullingEnabled() const { return culling.distanceCullingEnabled; }

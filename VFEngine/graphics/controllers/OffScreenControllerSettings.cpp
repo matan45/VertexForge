@@ -44,6 +44,7 @@ namespace controllers
         gpuDriven->setLODSelectionEnabled(settings.culling.lodSelectionEnabled);
         gpuDriven->setMeshletFrustumCullingEnabled(settings.culling.meshletFrustumCullingEnabled);
         gpuDriven->setMeshletBackfaceCullingEnabled(settings.culling.meshletBackfaceCullingEnabled);
+        gpuDriven->setMeshletOcclusionCullingEnabled(settings.culling.meshletOcclusionCullingEnabled);
         gpuDriven->setTerrainFrustumCullingEnabled(settings.culling.terrainFrustumCullingEnabled);
         gpuDriven->setTerrainMeshletCullingEnabled(settings.culling.terrainMeshletCullingEnabled);
         gpuDriven->setLODCrossfadeEnabled(settings.culling.lodCrossfadeEnabled);
@@ -285,6 +286,12 @@ namespace controllers
     {
         auto* rh = offScreen->getRenderPassHandler();
         if (rh) rh->setMeshletBackfaceCullingEnabled(enabled);
+    }
+
+    void OffScreenController::setMeshletOcclusionCullingEnabled(bool enabled)
+    {
+        auto* rh = offScreen->getRenderPassHandler();
+        if (rh) rh->setMeshletOcclusionCullingEnabled(enabled);
     }
 
     void OffScreenController::setDistanceCullingEnabled(bool enabled)

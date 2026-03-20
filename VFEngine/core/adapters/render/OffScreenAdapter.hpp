@@ -106,6 +106,7 @@ namespace core
         void setLODCrossfadeEnabled(bool enabled) override;
         void setMeshletFrustumCullingEnabled(bool enabled) override;
         void setMeshletBackfaceCullingEnabled(bool enabled) override;
+        void setMeshletOcclusionCullingEnabled(bool enabled) override;
         void setDistanceCullingEnabled(bool enabled) override;
         void setCategoryDistance(uint32_t category, float distance) override;
         void setShadowDistanceMultiplier(float multiplier) override;

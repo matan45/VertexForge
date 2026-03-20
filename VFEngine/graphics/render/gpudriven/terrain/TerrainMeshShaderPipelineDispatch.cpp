@@ -173,6 +173,7 @@ namespace render::gpudriven
         uint32_t effectiveViewMode = viewMode;
         if (frustumCullingEnabled) effectiveViewMode |= TERRAIN_CULL_FRUSTUM_BIT;
         if (meshletCullingEnabled) effectiveViewMode |= TERRAIN_CULL_BACKFACE_BIT;
+        if (meshletOcclusionCullingEnabled && hiZMipLevels > 0) effectiveViewMode |= TERRAIN_CULL_OCCLUSION_BIT;
 
         pc.viewMode = effectiveViewMode;
         pc.screenWidth = screenWidth;
@@ -186,7 +187,7 @@ namespace render::gpudriven
         pc.brushFalloff = brushFalloff;
         pc.brushShape = brushShape;
         pc.shadowLOD = static_cast<float>(shadowLOD);
-        pc._pad2 = 0.0f;
+        pc.hiZMipLevels = hiZMipLevels;
         pc._pad3 = 0.0f;
         pc.viewProjection = viewProjection;
         return pc;

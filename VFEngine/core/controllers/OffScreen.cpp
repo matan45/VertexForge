@@ -326,6 +326,11 @@ namespace controllers {
 		offScreenController->setMeshletBackfaceCullingEnabled(enabled);
 	}
 
+	void OffScreen::setMeshletOcclusionCullingEnabled(bool enabled)
+	{
+		offScreenController->setMeshletOcclusionCullingEnabled(enabled);
+	}
+
 	void OffScreen::setDistanceCullingEnabled(bool enabled)
 	{
 		offScreenController->setDistanceCullingEnabled(enabled);

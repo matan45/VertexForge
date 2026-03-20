@@ -70,8 +70,9 @@ layout(push_constant) uniform PushConstants {
     float brushWorldRadius;
     float brushFalloff;
     float brushShape;
-    float shadowLOD;             // Shadow LOD level (0-3) for receiver-side bias scaling
-    float _pad2, _pad3;          // Align mat4 to 16-byte boundary
+    float shadowLOD;
+    uint hiZMipLevels;           // Mip levels in the Hi-Z pyramid (0 = disabled)
+    float _pad3;                 // Align mat4 to 16-byte boundary
     mat4 viewProjection;         // CPU-precomputed view-projection (matches raycast invViewProjection)
 } pc;
 
@@ -261,8 +262,9 @@ layout(push_constant) uniform PushConstants {
     float brushWorldRadius;
     float brushFalloff;
     float brushShape;
-    float shadowLOD;             // Shadow LOD level (0-3) for receiver-side bias scaling
-    float _pad2, _pad3;          // Align mat4 to 16-byte boundary
+    float shadowLOD;
+    uint hiZMipLevels;           // Mip levels in the Hi-Z pyramid (0 = disabled)
+    float _pad3;                 // Align mat4 to 16-byte boundary
     mat4 viewProjection;         // CPU-precomputed view-projection (matches raycast invViewProjection)
 } pc;
 
