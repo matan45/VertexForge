@@ -7,6 +7,7 @@
 #include <fstream>
 #include <algorithm>
 #include <filesystem>
+#include <mutex>
 
 namespace terrain
 {
@@ -90,19 +91,27 @@ namespace terrain
 
         // Read compression format byte (added by VK-914 texture compression)
         uint8_t compressionFormat = resource::endian::readLE<uint8_t>(file);
-        (void)compressionFormat;
 
         uint32_t mipWidth = resource::endian::readLE<uint32_t>(file);
         uint32_t mipHeight = resource::endian::readLE<uint32_t>(file);
         uint32_t dataSize = resource::endian::readLE<uint32_t>(file);
-        (void)dataSize;
 
         if (mipWidth != width || mipHeight != height)
         {
             vfLogWarning("HeightmapLoader: vfImage mip0 dimensions don't match header");
         }
 
-        // Pixel data is BGRA format
+        if (compressionFormat != 0)
+        {
+            vfLogError("HeightmapLoader: Heightmap '{}' is compressed (format {}). "
+                       "Heightmaps must be imported as uncompressed for correct results. "
+                       "Re-import with 'Uncompressed' compression mode.",
+                       filePath, compressionFormat);
+            file.close();
+            return nullptr;
+        }
+
+        // Read uncompressed pixel data (BGRA format, always width*height*4 bytes)
         size_t pixelCount = static_cast<size_t>(mipWidth) * mipHeight;
         std::vector<uint8_t> pixelData(pixelCount * 4);
         file.read(reinterpret_cast<char*>(pixelData.data()), static_cast<std::streamsize>(pixelData.size()));
@@ -238,6 +247,152 @@ namespace terrain
 
             float normalizedHeight = heightmap->sample(u, v);
 
+            return minHeight + normalizedHeight * (maxHeight - minHeight);
+        };
+    }
+
+    // Streaming SVT tile cache for on-demand height sampling
+    struct SVTHeightTileCache
+    {
+        render::svt::SVTFileReader reader;
+        uint32_t tileSize = 0;
+        uint32_t border = 0;
+        uint32_t physTileSize = 0;
+        uint32_t virtualSizeLog2 = 0;
+        uint32_t tileSizeLog2 = 0;
+        uint32_t mipLevel = 0;
+        uint32_t tilesPerSide = 0;
+
+        // LRU cache: tile coord key → decompressed heights (tileSize x tileSize floats)
+        static constexpr size_t MAX_CACHED_TILES = 32;
+
+        struct CachedTile
+        {
+            uint32_t tx = 0, ty = 0;
+            std::vector<float> heights; // tileSize * tileSize
+            uint64_t accessOrder = 0;
+        };
+
+        std::vector<CachedTile> cache;
+        uint64_t accessCounter = 0;
+        mutable std::mutex cacheMutex;
+
+        float sampleHeight(float u, float v)
+        {
+            u = std::clamp(u, 0.0f, 0.9999f);
+            v = std::clamp(v, 0.0f, 0.9999f);
+
+            // Determine which tile this falls in
+            float fx = u * static_cast<float>(tilesPerSide * tileSize);
+            float fz = v * static_cast<float>(tilesPerSide * tileSize);
+            uint32_t tx = static_cast<uint32_t>(fx) / tileSize;
+            uint32_t ty = static_cast<uint32_t>(fz) / tileSize;
+            tx = std::min(tx, tilesPerSide - 1);
+            ty = std::min(ty, tilesPerSide - 1);
+
+            // Local pixel within tile
+            uint32_t localX = static_cast<uint32_t>(fx) % tileSize;
+            uint32_t localY = static_cast<uint32_t>(fz) % tileSize;
+
+            std::lock_guard<std::mutex> lock(cacheMutex);
+
+            // Check cache
+            for (auto& entry : cache)
+            {
+                if (entry.tx == tx && entry.ty == ty)
+                {
+                    entry.accessOrder = ++accessCounter;
+                    size_t idx = static_cast<size_t>(localY) * tileSize + localX;
+                    return idx < entry.heights.size() ? entry.heights[idx] : 0.0f;
+                }
+            }
+
+            // Cache miss — load and decompress tile
+            std::vector<uint8_t> tileData;
+            render::svt::VirtualTileCoord coord{tx, ty, mipLevel};
+            if (!reader.readTile(coord, tileData) || tileData.empty())
+                return 0.0f;
+
+            auto decoded = resource::BC7Decoder::decompress(
+                tileData.data(), physTileSize, physTileSize);
+            if (decoded.empty())
+                return 0.0f;
+
+            // Convert to grayscale heights (skip border)
+            std::vector<float> heights(static_cast<size_t>(tileSize) * tileSize);
+            for (uint32_t py = 0; py < tileSize; ++py)
+            {
+                for (uint32_t px = 0; px < tileSize; ++px)
+                {
+                    uint32_t srcX = px + border;
+                    uint32_t srcY = py + border;
+                    size_t srcIdx = (static_cast<size_t>(srcY) * physTileSize + srcX) * 4;
+                    if (srcIdx + 2 < decoded.size())
+                    {
+                        float r = decoded[srcIdx + 0] / 255.0f;
+                        float g = decoded[srcIdx + 1] / 255.0f;
+                        float b = decoded[srcIdx + 2] / 255.0f;
+                        heights[static_cast<size_t>(py) * tileSize + px] = 0.299f * r + 0.587f * g + 0.114f * b;
+                    }
+                }
+            }
+
+            // Evict oldest if cache full
+            if (cache.size() >= MAX_CACHED_TILES)
+            {
+                auto oldest = std::min_element(cache.begin(), cache.end(),
+                    [](const CachedTile& a, const CachedTile& b) { return a.accessOrder < b.accessOrder; });
+                *oldest = CachedTile{tx, ty, std::move(heights), ++accessCounter};
+            }
+            else
+            {
+                cache.push_back(CachedTile{tx, ty, std::move(heights), ++accessCounter});
+            }
+
+            size_t idx = static_cast<size_t>(localY) * tileSize + localX;
+            return idx < cache.back().heights.size() ? cache.back().heights[idx] : 0.0f;
+        }
+    };
+
+    HeightSampler createStreamingHeightSamplerFromSVT(
+        const std::string& svtPath,
+        float terrainMinX,
+        float terrainMinZ,
+        float terrainWidth,
+        float terrainDepth,
+        float minHeight,
+        float maxHeight)
+    {
+        auto tileCache = std::make_shared<SVTHeightTileCache>();
+        if (!tileCache->reader.open(svtPath))
+        {
+            vfLogError("HeightmapLoader: Failed to open SVT for streaming: {}", svtPath);
+            return {};
+        }
+
+        const auto& header = tileCache->reader.getHeader();
+        tileCache->tileSize = 1u << header.tileSizeLog2;
+        tileCache->border = header.borderSize;
+        tileCache->physTileSize = tileCache->tileSize + 2 * tileCache->border;
+        tileCache->virtualSizeLog2 = header.virtualSizeLog2;
+        tileCache->tileSizeLog2 = header.tileSizeLog2;
+
+        // Use mip 0 for full resolution
+        tileCache->mipLevel = 0;
+        tileCache->tilesPerSide = render::svt::computeTilesPerMipSide(
+            0, header.virtualSizeLog2, header.tileSizeLog2);
+        if (tileCache->tilesPerSide == 0) tileCache->tilesPerSide = 1;
+
+        vfLogInfo("HeightmapLoader: Streaming SVT heightmap from {} ({}x{} tiles, mip 0)",
+                  svtPath, tileCache->tilesPerSide, tileCache->tilesPerSide);
+
+        return [tileCache, terrainMinX, terrainMinZ, terrainWidth, terrainDepth, minHeight, maxHeight]
+        (float worldX, float worldZ) -> float
+        {
+            float u = (worldX - terrainMinX) / terrainWidth;
+            float v = (worldZ - terrainMinZ) / terrainDepth;
+
+            float normalizedHeight = tileCache->sampleHeight(u, v);
             return minHeight + normalizedHeight * (maxHeight - minHeight);
         };
     }

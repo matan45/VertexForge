@@ -76,33 +76,6 @@ namespace render::gpudriven
                 cachedRenderPass);
         }
 
-        // Wire SVT to scene mesh pipelines and recompile with SVT_ENABLED
-        auto wireSVTToMeshPipeline = [&](MeshShaderPipeline* pipeline, const char* name)
-        {
-            if (!pipeline) return;
-            pipeline->updateSVTDescriptor(terrain.pipeline->getSVTDescriptorSet());
-
-            MeshPipelineInitInfo info;
-            info.iblLayout = cachedIBLLayout;
-            info.bindlessTextureLayout = bindlessTextures->getDescriptorSetLayout();
-            info.boneMatrixLayout = boneMatrixManager ? boneMatrixManager->getDescriptorSetLayout()
-                                                       : meshShaderPipeline->getVertexDataLayout();
-            info.lightDataLayout = lightBufferManager->getDescriptorSetLayout();
-            info.clusterGridLayout = clusterGridManager->getDescriptorSetLayout();
-            info.cullingOutputLayout = lightCullingPipeline->getDescriptorSetLayout();
-            info.shadowDataLayout = shadowSystem->getShadowDataLayout();
-            info.shadowTextureLayout = shadowSystem->getShadowTextureLayout();
-            info.giProbeDataLayout = giCascadeManager ? giCascadeManager->getProbeDataLayout()
-                                                       : vk::DescriptorSetLayout{};
-            info.svtLayout = terrain.pipeline->getSVTLayout();
-            info.renderPass = cachedRenderPass;
-            pipeline->recreate(info);
-            vfLogInfo("SVT: Recreated {} pipeline with SVT_ENABLED", name);
-        };
-
-        wireSVTToMeshPipeline(meshShaderPipeline.get(), "opaque");
-        wireSVTToMeshPipeline(transparentMeshShaderPipeline.get(), "transparent");
-
         svt.initialized = true;
         svt.enabled = true;
         vfLogInfo("SVT subsystem initialized: {} physical tiles, {} page table entries",
@@ -134,10 +107,6 @@ namespace render::gpudriven
         {
             terrain.pipeline->setSVTEnabled(false);
         }
-
-        // Clear SVT descriptor from scene pipelines
-        if (meshShaderPipeline) meshShaderPipeline->updateSVTDescriptor(nullptr);
-        if (transparentMeshShaderPipeline) transparentMeshShaderPipeline->updateSVTDescriptor(nullptr);
 
         svt.initialized = false;
         svt.enabled = false;

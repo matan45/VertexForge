@@ -531,34 +531,32 @@ namespace services
         std::string svtNormalPath = basePath + "_svt_normal.vfSVT";
         std::string svtORMPath = basePath + "_svt_orm.vfSVT";
 
-        // Get terrain world bounds
+        // Compute terrain world bounds from grid extents (not from loaded tiles —
+        // with streaming enabled, most tiles may be unloaded)
         auto& grid = *gridIt->second;
-        auto allTiles = grid.getAllTiles();
-        if (allTiles.empty())
-            return false;
-
-        float wMinX = allTiles[0]->worldBounds.min.x;
-        float wMinZ = allTiles[0]->worldBounds.min.z;
-        float wMaxX = allTiles[0]->worldBounds.max.x;
-        float wMaxZ = allTiles[0]->worldBounds.max.z;
-        for (size_t i = 1; i < allTiles.size(); ++i)
-        {
-            if (allTiles[i]->worldBounds.min.x < wMinX) wMinX = allTiles[i]->worldBounds.min.x;
-            if (allTiles[i]->worldBounds.min.z < wMinZ) wMinZ = allTiles[i]->worldBounds.min.z;
-            if (allTiles[i]->worldBounds.max.x > wMaxX) wMaxX = allTiles[i]->worldBounds.max.x;
-            if (allTiles[i]->worldBounds.max.z > wMaxZ) wMaxZ = allTiles[i]->worldBounds.max.z;
-        }
+        float worldTileSize = terrainComp.worldTileSize;
+        float wMinX = static_cast<float>(terrainComp.gridMinX) * worldTileSize;
+        float wMinZ = static_cast<float>(terrainComp.gridMinZ) * worldTileSize;
+        float wMaxX = static_cast<float>(terrainComp.gridMaxX + 1) * worldTileSize;
+        float wMaxZ = static_cast<float>(terrainComp.gridMaxZ + 1) * worldTileSize;
 
         float terrainWidth = wMaxX - wMinX;
         float terrainDepth = wMaxZ - wMinZ;
         float maxDim = terrainWidth > terrainDepth ? terrainWidth : terrainDepth;
 
-        // Compute virtual texture size
+        if (maxDim <= 0.0f)
+        {
+            vfLogError("BakeTerrainSVT: Invalid terrain bounds");
+            return false;
+        }
+
+        // Compute virtual texture size — 16 texels per world unit (good balance)
+        // 30x30 grid @ 32 tile size = 960 units → 960*16 = 15360 → 16384 virtual (128x128 tiles)
         uint32_t tileSizeLog2 = 7;
         uint32_t tileSize = 1u << tileSizeLog2;
         uint32_t virtualSize = tileSize;
         uint32_t virtualSizeLog2 = tileSizeLog2;
-        uint32_t targetTexels = static_cast<uint32_t>(maxDim * 10.0f); // ~10 texels per world unit
+        uint32_t targetTexels = static_cast<uint32_t>(maxDim * 16.0f);
         while (virtualSize < targetTexels && virtualSizeLog2 < 17)
         {
             virtualSize <<= 1;

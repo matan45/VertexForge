@@ -41,4 +41,17 @@ namespace terrain
         float minHeight,
         float maxHeight
     );
+
+    // Creates a streaming height sampler from a .vfSVT file.
+    // Only reads and decompresses tiles on demand (caches recent tiles).
+    // Returns empty sampler if file can't be opened.
+    HeightSampler createStreamingHeightSamplerFromSVT(
+        const std::string& svtPath,
+        float terrainMinX,
+        float terrainMinZ,
+        float terrainWidth,
+        float terrainDepth,
+        float minHeight,
+        float maxHeight
+    );
 }

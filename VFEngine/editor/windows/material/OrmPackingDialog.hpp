@@ -17,7 +17,6 @@ namespace editor::materialeditor
         importConfig::TextureCompressionMode compressionMode = importConfig::TextureCompressionMode::BC;
         importConfig::TextureCompressionQuality compressionQuality = importConfig::TextureCompressionQuality::Balanced;
 
-        bool alsoGenerateSVT = false;
 
         std::string errorMessage;
         float progress = 0.0f;

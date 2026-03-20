@@ -5,7 +5,6 @@
 #include <events/EventDispatcher.hpp>
 #include <events/project/ResourceEvents.hpp>
 #include "TextureCompressor.hpp"
-#include "SVTTextureProcessor.hpp"
 #include "imgui.h"
 #include <filesystem>
 
@@ -48,7 +47,7 @@ namespace editor::materialeditor
 
             nfd::FileDialog fileDialog;
             std::vector<std::pair<std::wstring, std::wstring>> filters = {
-                {L"VF Image / SVT", L"*.vfImage;*.vfSVT"},
+                {L"VF Image", L"*.vfImage"},
                 {L"All Files", L"*.*"}
             };
 
@@ -180,13 +179,6 @@ namespace editor::materialeditor
             ImGui::Unindent();
 
             ImGui::Spacing();
-
-            ImGui::Checkbox("Also generate SVT (.vfSVT)", &alsoGenerateSVT);
-            if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("Generate a tiled .vfSVT file alongside the .vfImage\n"
-                                  "for Sparse Virtual Texturing (large texture streaming).");
-
-            ImGui::Spacing();
             ImGui::Separator();
             ImGui::Spacing();
 
@@ -261,6 +253,8 @@ namespace editor::materialeditor
         {
             vfLogInfo("ORM texture packed successfully: {}", result.outputPath);
 
+            showDialog = false;
+
             events::resource::ImportCompletedNotification notification;
             services::ImportResult importResult;
             importResult.success = true;
@@ -268,45 +262,7 @@ namespace editor::materialeditor
             importResult.outputPath = result.outputPath;
             importResult.assetType = resource::AssetType::Texture;
             notification.results.push_back(importResult);
-
-            // Generate SVT version if requested
-            if (alsoGenerateSVT)
-            {
-                std::string svtPath = outputPath;
-                auto dotPos = svtPath.rfind(".vfImage");
-                if (dotPos != std::string::npos)
-                    svtPath.replace(dotPos, 8, ".vfSVT");
-                else
-                    svtPath += ".vfSVT";
-
-                types::SVTTextureProcessor::Config svtConfig;
-                svtConfig.srgb = false; // ORM is linear data
-                svtConfig.minSizeForSVT = 0; // Always generate regardless of size
-
-                bool svtOk = types::SVTTextureProcessor::packORMToSVT(
-                    aoPath, roughnessPath, metallicPath,
-                    1.0f, 0.5f, 0.0f,
-                    svtPath, svtConfig,
-                    [this](float p) { progress = 0.5f + p * 0.5f; });
-
-                if (svtOk)
-                {
-                    vfLogInfo("ORM SVT generated: {}", svtPath);
-                    services::ImportResult svtResult;
-                    svtResult.success = true;
-                    svtResult.sourcePath = svtPath;
-                    svtResult.outputPath = svtPath;
-                    svtResult.assetType = resource::AssetType::SVT;
-                    notification.results.push_back(svtResult);
-                }
-                else
-                {
-                    vfLogWarning("Failed to generate ORM SVT: {}", svtPath);
-                }
-            }
-
             events::EventDispatcher::instance().publish(notification);
-            showDialog = false;
         }
         else
         {

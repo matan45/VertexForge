@@ -4,7 +4,6 @@
 #include "asset/AssetRef.hpp"
 #include <cmath>
 #include <vector>
-#include <filesystem>
 
 namespace render::mesh
 {
@@ -329,27 +328,6 @@ namespace render::mesh
         pbr.blendMode = matData.blendMode;
         pbr.opacity = matData.opacity;
         pbr.alphaCutoff = matData.alphaCutoff;
-
-        // Auto-detect SVT counterparts: check if .vfSVT exists alongside .vfImage
-        auto detectSVT = [](const std::string& texPath) -> std::string
-        {
-            if (texPath.empty()) return {};
-            std::string svtPath = texPath;
-            auto pos = svtPath.rfind(".vfImage");
-            if (pos != std::string::npos)
-            {
-                svtPath.replace(pos, 8, ".vfSVT");
-                if (std::filesystem::exists(svtPath))
-                    return svtPath;
-            }
-            return {};
-        };
-
-        pbr.svtAlbedoPath = detectSVT(pbr.albedoTexturePath);
-        pbr.svtNormalPath = detectSVT(pbr.normalTexturePath);
-        pbr.svtORMPath = detectSVT(pbr.ormTexturePath);
-        pbr.svtEmissionPath = detectSVT(pbr.emissionTexturePath);
-        pbr.svtHeightPath = detectSVT(pbr.heightTexturePath);
 
         return pbr;
     }

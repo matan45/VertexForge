@@ -49,32 +49,47 @@ namespace services
         }
         else
         {
-            auto heightmapData = terrain::HeightmapLoader::load(config.heightmapPath);
-            if (heightmapData && heightmapData->isValid())
+            float terrainMinX = static_cast<float>(minX) * config.worldTileSize;
+            float terrainMinZ = static_cast<float>(minZ) * config.worldTileSize;
+            float terrainWidth = static_cast<float>(config.tilesX) * config.worldTileSize;
+            float terrainDepth = static_cast<float>(config.tilesZ) * config.worldTileSize;
+
+            // Check if SVT heightmap — use streaming sampler (no full image in RAM)
+            bool isSVT = config.heightmapPath.size() > 6 &&
+                         config.heightmapPath.substr(config.heightmapPath.size() - 6) == ".vfSVT";
+
+            bool heightmapLoaded = false;
+
+            if (isSVT)
             {
-                float terrainMinX = static_cast<float>(minX) * config.worldTileSize;
-                float terrainMinZ = static_cast<float>(minZ) * config.worldTileSize;
-                float terrainWidth = static_cast<float>(config.tilesX) * config.worldTileSize;
-                float terrainDepth = static_cast<float>(config.tilesZ) * config.worldTileSize;
-
-                grid->setHeightSampler(terrain::createHeightSamplerFromMap(
-                    heightmapData,
-                    terrainMinX,
-                    terrainMinZ,
-                    terrainWidth,
-                    terrainDepth,
-                    config.minHeight,
-                    config.maxHeight
-                ));
-
-                vfLogInfo("Loaded heightmap from: {}", config.heightmapPath);
+                auto sampler = terrain::createStreamingHeightSamplerFromSVT(
+                    config.heightmapPath,
+                    terrainMinX, terrainMinZ, terrainWidth, terrainDepth,
+                    config.minHeight, config.maxHeight);
+                if (sampler)
+                {
+                    grid->setHeightSampler(std::move(sampler));
+                    vfLogInfo("Streaming SVT heightmap: {}", config.heightmapPath);
+                    heightmapLoaded = true;
+                }
             }
-            else
+
+            if (!heightmapLoaded)
             {
-                vfLogWarning("Failed to load heightmap: {}, creating flat terrain", config.heightmapPath);
-                grid->setHeightSampler([](float /*worldX*/, float /*worldZ*/) -> float {
-                    return 0.0f;
-                });
+                auto heightmapData = terrain::HeightmapLoader::load(config.heightmapPath);
+                if (heightmapData && heightmapData->isValid())
+                {
+                    grid->setHeightSampler(terrain::createHeightSamplerFromMap(
+                        heightmapData,
+                        terrainMinX, terrainMinZ, terrainWidth, terrainDepth,
+                        config.minHeight, config.maxHeight));
+                    vfLogInfo("Loaded heightmap from: {}", config.heightmapPath);
+                }
+                else
+                {
+                    vfLogWarning("Failed to load heightmap: {}, creating flat terrain", config.heightmapPath);
+                    grid->setHeightSampler([](float, float) -> float { return 0.0f; });
+                }
             }
         }
 

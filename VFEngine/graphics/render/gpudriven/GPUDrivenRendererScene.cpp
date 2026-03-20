@@ -95,19 +95,7 @@ namespace render::gpudriven
         };
         BoneOffsetResolver boneOffsetResolver = updateAnimationBones();
 
-        SVTMaterialChecker svtChecker = nullptr;
-        if (svt.enabled && svt.initialized)
-        {
-            svtChecker = [this](const std::string& materialPath) -> bool
-            {
-                if (materialPath.empty()) return false;
-                auto it = materials.pbrCache.find(materialPath);
-                if (it == materials.pbrCache.end()) return false;
-                return it->second.usesSVT();
-            };
-        }
-
-        ObjectResolvers resolvers{textureResolver, shaderGroupResolver, boneOffsetResolver, svtChecker, time, cameraPosition};
+        ObjectResolvers resolvers{textureResolver, shaderGroupResolver, boneOffsetResolver, time, cameraPosition};
 
         bool useStreaming = objectStreamingEnabled && objectStreamManager
                            && objectStreamManager->getStats().totalRegistered > 0;

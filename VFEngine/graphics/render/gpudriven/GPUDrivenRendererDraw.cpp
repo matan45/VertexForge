@@ -32,15 +32,6 @@ namespace render::gpudriven
         return sets;
     }
 
-    static void bindSVTDescriptorSet(vk::CommandBuffer cmd, vk::PipelineLayout layout,
-                                      MeshShaderPipeline& pipeline)
-    {
-        auto svtSet = pipeline.getSVTDescriptorSet();
-        if (!svtSet) return;
-        cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, layout,
-                               12, 1, &svtSet, 0, nullptr);
-    }
-
     void GPUDrivenRenderer::renderDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet,
                                        uint32_t screenWidth, uint32_t screenHeight)
     {
@@ -67,7 +58,7 @@ namespace render::gpudriven
             static_cast<uint32_t>(descriptorSets.size()),
             descriptorSets.data(),
             0, nullptr);
-        bindSVTDescriptorSet(cmd, layout, *meshShaderPipeline);
+
 
         float dispatchWidth, dispatchHeight;
         if (screenWidth > 0 && screenHeight > 0)
@@ -150,7 +141,7 @@ namespace render::gpudriven
             static_cast<uint32_t>(descriptorSets.size()),
             descriptorSets.data(),
             0, nullptr);
-        bindSVTDescriptorSet(cmd, layout, *transparentMeshShaderPipeline);
+
 
         float dispatchWidth, dispatchHeight;
         if (screenWidth > 0 && screenHeight > 0)
@@ -228,7 +219,7 @@ namespace render::gpudriven
             static_cast<uint32_t>(descriptorSets.size()),
             descriptorSets.data(),
             0, nullptr);
-        bindSVTDescriptorSet(cmd, layout, *wboitMeshShaderPipeline);
+
 
         float dispatchWidth, dispatchHeight;
         if (screenWidth > 0 && screenHeight > 0)
@@ -306,7 +297,7 @@ namespace render::gpudriven
             static_cast<uint32_t>(descriptorSets.size()),
             descriptorSets.data(),
             0, nullptr);
-        bindSVTDescriptorSet(cmd, layout, *transparentMeshShaderPipeline);
+
 
         float dispatchWidth, dispatchHeight;
         if (screenWidth > 0 && screenHeight > 0)

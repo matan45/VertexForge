@@ -26,7 +26,6 @@ namespace render::gpudriven
         vk::DescriptorSetLayout shadowDataLayout;
         vk::DescriptorSetLayout shadowTextureLayout;
         vk::DescriptorSetLayout giProbeDataLayout;
-        vk::DescriptorSetLayout svtLayout;  // Set 12: SVT page table + params + caches
         vk::RenderPass renderPass;
         bool transparentMode = false;
         bool wboitMode = false;
@@ -88,7 +87,6 @@ namespace render::gpudriven
         vk::DescriptorSet shadowDataDescriptorSet;
         vk::DescriptorSet shadowTextureDescriptorSet;
         vk::DescriptorSet giProbeDataDescriptorSet;
-        vk::DescriptorSet svtDescriptorSet_;
 
         vk::DescriptorSetLayout cachedLightDataLayout;
         vk::DescriptorSetLayout cachedClusterGridLayout;
@@ -97,8 +95,7 @@ namespace render::gpudriven
         vk::DescriptorSetLayout cachedShadowDataLayout;
         vk::DescriptorSetLayout cachedShadowTextureLayout;
         vk::DescriptorSetLayout cachedGIProbeDataLayout;
-        vk::DescriptorSetLayout cachedSVTLayout;
-        
+
         bool isTransparentMode = false;
         bool isWBOITMode = false;
     public:
@@ -127,8 +124,6 @@ namespace render::gpudriven
                                      vk::DescriptorSet shadowTextureDescSet);
 
         void updateGIProbeDescriptor(vk::DescriptorSet giProbeDescSet);
-        void updateSVTDescriptor(vk::DescriptorSet svtDescSet);
-        vk::DescriptorSet getSVTDescriptorSet() const { return svtDescriptorSet_; }
 
         vk::Pipeline getPipeline() const { return graphicsPipeline; }
         vk::PipelineLayout getPipelineLayout() const { return pipelineLayout; }

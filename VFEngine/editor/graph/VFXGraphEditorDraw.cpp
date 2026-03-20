@@ -201,7 +201,7 @@ namespace editor::graph {
                             if (ImGui::SmallButton(("..." + widgetId).c_str())) {
                                 nfd::FileDialog dialog;
                                 std::string path = dialog.openFileDialog({
-                                    {L"VF Image / SVT", L"*.vfImage;*.vfSVT"}
+                                    {L"VF Image", L"*.vfImage"}
                                 });
                                 if (!path.empty()) {
                                     *val = path;

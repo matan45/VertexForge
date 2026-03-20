@@ -32,7 +32,7 @@ namespace render::gpudriven
         cachedShadowDataLayout = info.shadowDataLayout;
         cachedShadowTextureLayout = info.shadowTextureLayout;
         cachedGIProbeDataLayout = info.giProbeDataLayout;
-        cachedSVTLayout = info.svtLayout;
+
 
         createStatsBuffer();
         createPerDrawDataDescriptor();
@@ -129,7 +129,7 @@ namespace render::gpudriven
         cachedShadowDataLayout = info.shadowDataLayout;
         cachedShadowTextureLayout = info.shadowTextureLayout;
         cachedGIProbeDataLayout = info.giProbeDataLayout;
-        cachedSVTLayout = info.svtLayout;
+
 
         if (graphicsPipeline)
         {
@@ -295,11 +295,6 @@ namespace render::gpudriven
     void MeshShaderPipeline::updateGIProbeDescriptor(vk::DescriptorSet giProbeDescSet)
     {
         giProbeDataDescriptorSet = giProbeDescSet;
-    }
-
-    void MeshShaderPipeline::updateSVTDescriptor(vk::DescriptorSet svtDescSet)
-    {
-        svtDescriptorSet_ = svtDescSet;
     }
 
     void MeshShaderPipeline::createPerDrawDataDescriptor()
@@ -482,10 +477,6 @@ namespace render::gpudriven
         {
             meshShader->addMacroDefinition("GI_ENABLED");
         }
-        if (info.svtLayout)
-        {
-            meshShader->addMacroDefinition("SVT_ENABLED");
-        }
         meshShader->readShader("../../resources/shaders/gpudriven/task_gpudriven.glsl");
         meshShader->readShader("../../resources/shaders/gpudriven/mesh_shader_gpudriven.glsl");
 
@@ -529,16 +520,6 @@ namespace render::gpudriven
         if (info.giProbeDataLayout)
         {
             setLayouts.push_back(info.giProbeDataLayout);
-        }
-
-        if (info.svtLayout)
-        {
-            // Ensure SVT layout is at set 12 (pad with empty layouts if GI not present)
-            while (setLayouts.size() < 12)
-            {
-                setLayouts.push_back(info.iblLayout); // Placeholder for missing sets
-            }
-            setLayouts.push_back(info.svtLayout);
         }
 
         vk::PushConstantRange pushConstantRange{};

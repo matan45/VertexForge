@@ -282,7 +282,7 @@ namespace windows
                     {
                         nfd::FileDialog fileDialog;
                         std::vector<std::pair<std::wstring, std::wstring>> filters = {
-                            {L"VF Image / SVT", L"*.vfImage;*.vfSVT"}
+                            {L"VF Image", L"*.vfImage"}
                         };
                         std::string selectedPath = fileDialog.openFileDialog(filters);
                         if (!selectedPath.empty())
@@ -290,49 +290,17 @@ namespace windows
                             selectedPath.erase(
                                 std::remove(selectedPath.begin(), selectedPath.end(), '\0'),
                                 selectedPath.end());
-                            auto ref = asset::AssetRef::fromPath(selectedPath);
-                            if (selectedPath.find(".vfSVT") != std::string::npos)
-                            {
-                                layer.svtAlbedoRef = ref;
-                                // Also check for .vfImage sibling
-                                std::string imgPath = selectedPath;
-                                auto pos = imgPath.rfind(".vfSVT");
-                                if (pos != std::string::npos)
-                                {
-                                    imgPath.replace(pos, 6, ".vfImage");
-                                    if (std::filesystem::exists(imgPath))
-                                        layer.albedoTextureRef = asset::AssetRef::fromPath(imgPath);
-                                }
-                            }
-                            else
-                            {
-                                layer.albedoTextureRef = ref;
-                                // Auto-detect SVT sibling
-                                std::string svtPath = selectedPath;
-                                auto pos = svtPath.rfind(".vfImage");
-                                if (pos != std::string::npos)
-                                {
-                                    svtPath.replace(pos, 8, ".vfSVT");
-                                    if (std::filesystem::exists(svtPath))
-                                        layer.svtAlbedoRef = asset::AssetRef::fromPath(svtPath);
-                                }
-                            }
+                            layer.albedoTextureRef = asset::AssetRef::fromPath(selectedPath);
                             onChanged();
                         }
                     }
-                    if (layer.albedoTextureRef.isValid() || layer.svtAlbedoRef.isValid())
+                    if (layer.albedoTextureRef.isValid())
                     {
                         ImGui::SameLine();
                         if (ImGui::SmallButton("X##albedo"))
                         {
                             layer.albedoTextureRef = asset::AssetRef::invalid();
-                            layer.svtAlbedoRef = asset::AssetRef::invalid();
                             onChanged();
-                        }
-                        if (layer.svtAlbedoRef.isValid())
-                        {
-                            ImGui::SameLine();
-                            ImGui::TextColored(ImVec4(0.3f, 0.8f, 0.3f, 1.0f), "[SVT]");
                         }
                     }
                 }
@@ -349,7 +317,7 @@ namespace windows
                     {
                         nfd::FileDialog fileDialog;
                         std::vector<std::pair<std::wstring, std::wstring>> filters = {
-                            {L"VF Image / SVT", L"*.vfImage;*.vfSVT"}
+                            {L"VF Image", L"*.vfImage"}
                         };
                         std::string selectedPath = fileDialog.openFileDialog(filters);
                         if (!selectedPath.empty())
@@ -357,47 +325,17 @@ namespace windows
                             selectedPath.erase(
                                 std::remove(selectedPath.begin(), selectedPath.end(), '\0'),
                                 selectedPath.end());
-                            auto ref = asset::AssetRef::fromPath(selectedPath);
-                            if (selectedPath.find(".vfSVT") != std::string::npos)
-                            {
-                                layer.svtNormalRef = ref;
-                                std::string imgPath = selectedPath;
-                                auto pos = imgPath.rfind(".vfSVT");
-                                if (pos != std::string::npos)
-                                {
-                                    imgPath.replace(pos, 6, ".vfImage");
-                                    if (std::filesystem::exists(imgPath))
-                                        layer.normalTextureRef = asset::AssetRef::fromPath(imgPath);
-                                }
-                            }
-                            else
-                            {
-                                layer.normalTextureRef = ref;
-                                std::string svtPath = selectedPath;
-                                auto pos = svtPath.rfind(".vfImage");
-                                if (pos != std::string::npos)
-                                {
-                                    svtPath.replace(pos, 8, ".vfSVT");
-                                    if (std::filesystem::exists(svtPath))
-                                        layer.svtNormalRef = asset::AssetRef::fromPath(svtPath);
-                                }
-                            }
+                            layer.normalTextureRef = asset::AssetRef::fromPath(selectedPath);
                             onChanged();
                         }
                     }
-                    if (layer.normalTextureRef.isValid() || layer.svtNormalRef.isValid())
+                    if (layer.normalTextureRef.isValid())
                     {
                         ImGui::SameLine();
                         if (ImGui::SmallButton("X##normal"))
                         {
                             layer.normalTextureRef = asset::AssetRef::invalid();
-                            layer.svtNormalRef = asset::AssetRef::invalid();
                             onChanged();
-                        }
-                        if (layer.svtNormalRef.isValid())
-                        {
-                            ImGui::SameLine();
-                            ImGui::TextColored(ImVec4(0.3f, 0.8f, 0.3f, 1.0f), "[SVT]");
                         }
                     }
                 }
@@ -414,7 +352,7 @@ namespace windows
                     {
                         nfd::FileDialog fileDialog;
                         std::vector<std::pair<std::wstring, std::wstring>> filters = {
-                            {L"VF Image / SVT", L"*.vfImage;*.vfSVT"}
+                            {L"VF Image", L"*.vfImage"}
                         };
                         std::string selectedPath = fileDialog.openFileDialog(filters);
                         if (!selectedPath.empty())
@@ -422,47 +360,17 @@ namespace windows
                             selectedPath.erase(
                                 std::remove(selectedPath.begin(), selectedPath.end(), '\0'),
                                 selectedPath.end());
-                            auto ref = asset::AssetRef::fromPath(selectedPath);
-                            if (selectedPath.find(".vfSVT") != std::string::npos)
-                            {
-                                layer.svtORMRef = ref;
-                                std::string imgPath = selectedPath;
-                                auto pos = imgPath.rfind(".vfSVT");
-                                if (pos != std::string::npos)
-                                {
-                                    imgPath.replace(pos, 6, ".vfImage");
-                                    if (std::filesystem::exists(imgPath))
-                                        layer.ormTextureRef = asset::AssetRef::fromPath(imgPath);
-                                }
-                            }
-                            else
-                            {
-                                layer.ormTextureRef = ref;
-                                std::string svtPath = selectedPath;
-                                auto pos = svtPath.rfind(".vfImage");
-                                if (pos != std::string::npos)
-                                {
-                                    svtPath.replace(pos, 8, ".vfSVT");
-                                    if (std::filesystem::exists(svtPath))
-                                        layer.svtORMRef = asset::AssetRef::fromPath(svtPath);
-                                }
-                            }
+                            layer.ormTextureRef = asset::AssetRef::fromPath(selectedPath);
                             onChanged();
                         }
                     }
-                    if (layer.ormTextureRef.isValid() || layer.svtORMRef.isValid())
+                    if (layer.ormTextureRef.isValid())
                     {
                         ImGui::SameLine();
                         if (ImGui::SmallButton("X##orm"))
                         {
                             layer.ormTextureRef = asset::AssetRef::invalid();
-                            layer.svtORMRef = asset::AssetRef::invalid();
                             onChanged();
-                        }
-                        if (layer.svtORMRef.isValid())
-                        {
-                            ImGui::SameLine();
-                            ImGui::TextColored(ImVec4(0.3f, 0.8f, 0.3f, 1.0f), "[SVT]");
                         }
                     }
                 }

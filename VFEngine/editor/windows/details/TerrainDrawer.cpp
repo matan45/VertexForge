@@ -221,6 +221,15 @@ namespace windows::details {
             cmd.enabled = streamingEnabled;
             dispatcher.execute(cmd);
         }
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip("Streams terrain tiles in/out based on camera distance.\n\n"
+                              "Requirements:\n"
+                              "  - Terrain must be saved to a .vfTerrain file first\n"
+                              "  - Streaming loads tiles from disk on demand\n"
+                              "  - Distant tiles are unloaded to save memory\n\n"
+                              "Save the terrain before enabling streaming.");
+        }
 
         events::terrain::GetTerrainStreamingConfigQuery configQuery;
         configQuery.terrainEntity = handle;
