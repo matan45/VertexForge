@@ -303,7 +303,8 @@ namespace services
             }
 
             {
-                std::vector<std::string> terrainPaths;
+                struct TerrainLoadInfo { std::string path; bool svtEnabled; };
+                std::vector<TerrainLoadInfo> terrainInfos;
                 std::vector<EntityHandle> terrainEntitiesToDelete;
 
                 auto terrainView = registry.view<components::TerrainComponent>();
@@ -312,7 +313,7 @@ namespace services
                     const auto& terrainComp = terrainView.get<components::TerrainComponent>(entity);
                     if (!terrainComp.savePath.empty())
                     {
-                        terrainPaths.push_back(terrainComp.savePath);
+                        terrainInfos.push_back({terrainComp.savePath, terrainComp.svtEnabled});
                         terrainEntitiesToDelete.push_back(internal::toHandle(entity));
                     }
                 }
@@ -324,11 +325,34 @@ namespace services
                     dispatcher.execute(delCmd);
                 }
 
-                for (const auto& path : terrainPaths)
+                for (const auto& info : terrainInfos)
                 {
                     events::terrain::LoadTerrainCommand loadCmd;
-                    loadCmd.path = path;
+                    loadCmd.path = info.path;
                     dispatcher.execute(loadCmd);
+                }
+
+                // Restore svtEnabled on newly-created terrain entities and propagate to GPU
+                bool anySvtEnabled = false;
+                auto newTerrainView = registry.view<components::TerrainComponent>();
+                for (auto entity : newTerrainView)
+                {
+                    auto& comp = newTerrainView.get<components::TerrainComponent>(entity);
+                    for (const auto& info : terrainInfos)
+                    {
+                        if (comp.savePath == info.path)
+                        {
+                            comp.svtEnabled = info.svtEnabled;
+                            if (info.svtEnabled) anySvtEnabled = true;
+                            break;
+                        }
+                    }
+                }
+                if (anySvtEnabled)
+                {
+                    events::render::SetTerrainSVTEnabledCommand svtCmd;
+                    svtCmd.enabled = true;
+                    dispatcher.execute(svtCmd);
                 }
             }
 

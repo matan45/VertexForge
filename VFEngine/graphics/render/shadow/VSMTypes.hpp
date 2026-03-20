@@ -85,16 +85,11 @@ namespace render::shadow::vsm
         float sx = static_cast<float>(pagesX);
         float sy = static_cast<float>(pagesY);
 
-        // Guard band: expand each page by 1 texel on each side.
-        // In NDC, 1 texel = 2 / (pagesPerSide * PAGE_SIZE).
-        // This makes the crop slightly smaller (wider view) so adjacent tiles overlap.
-        float guardTexels = 1.0f;
-        float guardX = guardTexels * 2.0f / (sx * static_cast<float>(PAGE_SIZE));
-        float guardY = guardTexels * 2.0f / (sy * static_cast<float>(PAGE_SIZE));
-
-        // Effective scale with guard band (slightly less zoom = wider coverage)
-        float effectiveSx = sx / (1.0f + 2.0f * guardTexels / static_cast<float>(PAGE_SIZE));
-        float effectiveSy = sy / (1.0f + 2.0f * guardTexels / static_cast<float>(PAGE_SIZE));
+        // Guard band: expand each page by 1 texel on each side so adjacent tiles overlap
+        constexpr float guardTexels = 1.0f;
+        float guardScale = 1.0f + 2.0f * guardTexels / static_cast<float>(PAGE_SIZE);
+        float effectiveSx = sx / guardScale;
+        float effectiveSy = sy / guardScale;
 
         // Center of this page in NDC
         float cx = (2.0f * (static_cast<float>(pageX) + 0.5f) / sx) - 1.0f;

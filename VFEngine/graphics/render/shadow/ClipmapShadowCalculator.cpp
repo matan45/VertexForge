@@ -7,6 +7,13 @@
 
 namespace render::shadow
 {
+    // Minimum Z-snap grid size in meters — prevents sub-meter Z oscillation on small levels
+    static constexpr float MIN_Z_SNAP_METERS = 50.0f;
+    // Minimum depth half-range — ensures shadow casters behind camera are captured even for small levels
+    static constexpr float MIN_DEPTH_HALF_RANGE_METERS = 1000.0f;
+    // Depth range multiplier — each level covers N× its extent in the light direction
+    static constexpr float DEPTH_RANGE_EXTENT_MULTIPLIER = 4.0f;
+
     ClipmapLevelData ClipmapShadowCalculator::computeClipmapLevel(
         uint32_t level,
         float baseExtent,
@@ -34,20 +41,19 @@ namespace render::shadow
         float snappedY = snapToTexel(lightSpaceY, result.texelSize);
         result.snapPosition = glm::vec2(snappedX, snappedY);
 
-        // Snap Z to coarse grid (stable depth range, infrequent updates)
-        float zSnapGrid = std::max(result.worldExtent, 50.0f);
+        float zSnapGrid = std::max(result.worldExtent, MIN_Z_SNAP_METERS);
         float snappedZ = snapToTexel(lightSpaceZ, zSnapGrid);
 
         glm::vec3 snappedCenter = snappedX * axes.lightRight +
                                    snappedY * axes.lightUp +
                                    snappedZ * axes.lightDir;
 
-        // Z range extends behind camera to capture shadow casters
-        float zHalfRange = std::max(result.worldExtent * 4.0f, 1000.0f);
+        float zHalfRange = std::max(result.worldExtent * DEPTH_RANGE_EXTENT_MULTIPLIER,
+                                     MIN_DEPTH_HALF_RANGE_METERS);
         glm::vec3 lightPos = snappedCenter - axes.lightDir * zHalfRange;
         result.viewMatrix = glm::lookAt(lightPos, snappedCenter, axes.lightUp);
 
-        result.nearDistance = 1.0f;
+        result.nearDistance = std::max(1.0f, result.worldExtent * 0.1f);
         result.farDistance = zHalfRange * 2.0f;
 
         result.projMatrix = glm::orthoRH_ZO(

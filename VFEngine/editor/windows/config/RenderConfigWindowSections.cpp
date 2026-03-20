@@ -22,7 +22,7 @@ namespace windows
             {
                 ImGui::Spacing();
                 drawShadowQualitySettings();
-                drawShadowCSMSettings();
+                drawDirectionalShadowSettings();
                 drawShadowBiasSettings();
                 drawShadowFilterSettings();
             }
@@ -49,7 +49,7 @@ namespace windows
         }
     }
 
-    void RenderConfigWindow::drawShadowCSMSettings()
+    void RenderConfigWindow::drawDirectionalShadowSettings()
     {
         ImGui::Separator();
         ImGui::Text("Directional Light");

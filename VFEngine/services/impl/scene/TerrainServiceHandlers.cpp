@@ -195,8 +195,20 @@ namespace services
                     registry.get<components::TerrainComponent>(ent).svtEnabled = cmd.enabled;
                 }
 
+                // GPU SVT is a single global instance — enable if any terrain wants it
+                bool anyEnabled = false;
+                auto view = registry.view<components::TerrainComponent>();
+                for (auto e : view)
+                {
+                    if (view.get<components::TerrainComponent>(e).svtEnabled)
+                    {
+                        anyEnabled = true;
+                        break;
+                    }
+                }
+
                 events::render::SetTerrainSVTEnabledCommand renderCmd;
-                renderCmd.enabled = cmd.enabled;
+                renderCmd.enabled = anyEnabled;
                 events::EventDispatcher::instance().execute(renderCmd);
             });
     }

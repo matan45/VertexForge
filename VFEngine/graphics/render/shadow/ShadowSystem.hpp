@@ -228,8 +228,6 @@ namespace render
             void updateDirectionalCSMMatricesFromData(LightShadowData& data,
                                                        const glm::mat4& worldMatrix,
                                                        const CameraContext& camera);
-            void updateDirectionalClipmapMatrices(LightShadowData& data, uint32_t entityId,
-                                                   const CameraContext& camera);
             void updateDirectionalClipmapMatricesFromData(LightShadowData& data,
                                                            const glm::mat4& worldMatrix,
                                                            const CameraContext& camera);

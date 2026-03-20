@@ -383,19 +383,6 @@ namespace render::shadow
         buildPageRenderList();
     }
 
-    void ShadowSystem::updateDirectionalClipmapMatrices(LightShadowData& data, uint32_t entityId,
-                                                         const CameraContext& camera)
-    {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        auto entity = static_cast<entt::entity>(entityId);
-        if (!registry.valid(entity) ||
-            !registry.all_of<components::WorldTransformComponent>(entity))
-            return;
-
-        updateDirectionalClipmapMatricesFromData(data,
-            registry.get<components::WorldTransformComponent>(entity).worldMatrix, camera);
-    }
-
     void ShadowSystem::updateDirectionalClipmapMatricesFromData(LightShadowData& data,
                                                                   const glm::mat4& worldMatrix,
                                                                   const CameraContext& camera)

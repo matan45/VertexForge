@@ -301,6 +301,12 @@ float sampleDirectionalShadow(int baseShadowIndex, vec3 worldPos, vec3 worldNorm
 // Directional Shadow (Clipmap with level selection + blending)
 // Reuses sampleVSMShadow — per-level bias is applied on CPU side.
 // ============================================================
+
+// Blend in outer 40% of each level to avoid popping at level transitions
+const float CLIPMAP_BLEND_START = 0.6;  // fract > this → blend toward next level
+const float CLIPMAP_BLEND_END   = 0.4;  // fract < this → blend toward prev level
+const float CLIPMAP_FADE_START  = 0.8;  // fraction of max extent where distance fade begins
+
 float sampleDirectionalClipmapShadow(int baseShadowIndex, vec3 worldPos, vec3 worldNormal, float viewZ) {
     if (baseShadowIndex < 0 || baseShadowIndex >= MAX_SHADOW_VIEWS) return 1.0;
 
@@ -323,18 +329,17 @@ float sampleDirectionalClipmapShadow(int baseShadowIndex, vec3 worldPos, vec3 wo
 
     // Symmetric blending at level boundaries to prevent popping
     float levelFrac = fract(continuousLevel);
-    if (levelFrac > 0.6 && levelIdx < levelCount - 1) {
+    if (levelFrac > CLIPMAP_BLEND_START && levelIdx < levelCount - 1) {
         float nextShadow = sampleVSMShadow(shadowIndex + 1, worldPos, worldNormal);
-        shadow = mix(shadow, nextShadow, smoothstep(0.6, 1.0, levelFrac));
+        shadow = mix(shadow, nextShadow, smoothstep(CLIPMAP_BLEND_START, 1.0, levelFrac));
     }
-    if (levelFrac < 0.4 && levelIdx > 0) {
+    if (levelFrac < CLIPMAP_BLEND_END && levelIdx > 0) {
         float prevShadow = sampleVSMShadow(shadowIndex - 1, worldPos, worldNormal);
-        shadow = mix(shadow, prevShadow, smoothstep(0.4, 0.0, levelFrac));
+        shadow = mix(shadow, prevShadow, smoothstep(CLIPMAP_BLEND_END, 0.0, levelFrac));
     }
 
-    // Distance fade-out at outermost level
     float maxExtent = baseExtent * exp2(float(levelCount - 1));
-    float fadeFactor = 1.0 - smoothstep(maxExtent * 0.8, maxExtent, viewZ);
+    float fadeFactor = 1.0 - smoothstep(maxExtent * CLIPMAP_FADE_START, maxExtent, viewZ);
     return mix(1.0, shadow, fadeFactor);
 }
 
