@@ -60,6 +60,10 @@ namespace render::gpudriven {
 
         uint32_t getRegisteredTextureCount() const { return nextTextureIndex - 1 - static_cast<uint32_t>(freeIndices.size()); }
 
+        vk::ImageView getDefaultImageView() const { return defaultImageView; }
+        vk::Sampler getDefaultSampler() const { return defaultSampler; }
+        bool hasDefaultTexture() const { return defaultTextureSet; }
+
     private:
         void createDescriptorSetLayout();
         void createDescriptorPool();
