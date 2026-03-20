@@ -177,6 +177,12 @@ namespace services
             {
                 loadAllTiles(cmd.terrainEntity);
             });
+
+        dispatcher.registerCommandHandler<events::terrain::BakeTerrainSVTCommand>(
+            [this](const events::terrain::BakeTerrainSVTCommand& cmd)
+            {
+                return bakeTerrainSVT(cmd.terrainEntity);
+            });
     }
 
     void TerrainService::registerBrushHandlers(::events::EventDispatcher& dispatcher)

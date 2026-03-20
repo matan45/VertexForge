@@ -15,9 +15,16 @@
 #include <asset/AssetDatabase.hpp>
 #include <asset/AssetMetadata.hpp>
 #include <asset/AssetMetadataSerializer.hpp>
+#include "../../../graphics/render/svt/SVTFileFormat.hpp"
+#include "../../../graphics/render/svt/SVTTypes.hpp"
+#include "resource/BC7Encoder.hpp"
+#include "resource/ResourceManager.hpp"
+#include "terrain/TerrainMaterialTypes.hpp"
+#include "terrain/TerrainWeightMap.hpp"
 #include <chrono>
 #include <sstream>
 #include <iomanip>
+#include <limits>
 
 namespace services
 {
@@ -485,5 +492,298 @@ namespace services
         loadVegetation(parentHandle.id, path);
 
         return parentHandle;
+    }
+
+    bool TerrainService::bakeTerrainSVT(EntityHandle terrainEntity)
+    {
+        auto gridIt = terrainGrids.find(terrainEntity.id);
+        if (gridIt == terrainGrids.end() || !gridIt->second)
+        {
+            vfLogError("BakeTerrainSVT: No terrain grid found");
+            return false;
+        }
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        entt::entity ent = internal::fromHandle(terrainEntity);
+
+        if (!registry.valid(ent) || !registry.all_of<components::TerrainComponent>(ent))
+        {
+            vfLogError("BakeTerrainSVT: Invalid terrain entity");
+            return false;
+        }
+
+        const auto& terrainComp = registry.get<components::TerrainComponent>(ent);
+
+        std::string savePath = terrainComp.savePath;
+        if (savePath.empty())
+        {
+            vfLogError("BakeTerrainSVT: Terrain must be saved first");
+            return false;
+        }
+
+        // Strip extension to build SVT sidecar paths
+        std::string basePath = savePath;
+        auto dotPos = basePath.rfind('.');
+        if (dotPos != std::string::npos)
+            basePath = basePath.substr(0, dotPos);
+
+        std::string svtAlbedoPath = basePath + "_svt_albedo.vfSVT";
+        std::string svtNormalPath = basePath + "_svt_normal.vfSVT";
+        std::string svtORMPath = basePath + "_svt_orm.vfSVT";
+
+        // Get terrain world bounds
+        auto& grid = *gridIt->second;
+        auto allTiles = grid.getAllTiles();
+        if (allTiles.empty())
+            return false;
+
+        float wMinX = allTiles[0]->worldBounds.min.x;
+        float wMinZ = allTiles[0]->worldBounds.min.z;
+        float wMaxX = allTiles[0]->worldBounds.max.x;
+        float wMaxZ = allTiles[0]->worldBounds.max.z;
+        for (size_t i = 1; i < allTiles.size(); ++i)
+        {
+            if (allTiles[i]->worldBounds.min.x < wMinX) wMinX = allTiles[i]->worldBounds.min.x;
+            if (allTiles[i]->worldBounds.min.z < wMinZ) wMinZ = allTiles[i]->worldBounds.min.z;
+            if (allTiles[i]->worldBounds.max.x > wMaxX) wMaxX = allTiles[i]->worldBounds.max.x;
+            if (allTiles[i]->worldBounds.max.z > wMaxZ) wMaxZ = allTiles[i]->worldBounds.max.z;
+        }
+
+        float terrainWidth = wMaxX - wMinX;
+        float terrainDepth = wMaxZ - wMinZ;
+        float maxDim = terrainWidth > terrainDepth ? terrainWidth : terrainDepth;
+
+        // Compute virtual texture size
+        uint32_t tileSizeLog2 = 7;
+        uint32_t tileSize = 1u << tileSizeLog2;
+        uint32_t virtualSize = tileSize;
+        uint32_t virtualSizeLog2 = tileSizeLog2;
+        uint32_t targetTexels = static_cast<uint32_t>(maxDim * 10.0f); // ~10 texels per world unit
+        while (virtualSize < targetTexels && virtualSizeLog2 < 17)
+        {
+            virtualSize <<= 1;
+            ++virtualSizeLog2;
+        }
+
+        uint32_t mipLevels = render::svt::computeMipLevelCount(virtualSizeLog2, tileSizeLog2);
+        uint32_t border = 4;
+        uint32_t physTileSize = tileSize + 2 * border;
+
+        vfLogInfo("BakeTerrainSVT: Virtual size {}x{} ({} mips), terrain {:.0f}x{:.0f}",
+                  virtualSize, virtualSize, mipLevels, terrainWidth, terrainDepth);
+
+        // Load terrain material layer textures (CPU data for compositing)
+        std::string materialPath = terrainComp.terrainMaterialRef.resolve();
+        auto materialData = resource::ResourceManager::loadTerrainMaterial(
+            asset::AssetRef::fromPath(materialPath));
+        if (!materialData || materialData->activeLayerCount == 0)
+        {
+            vfLogError("BakeTerrainSVT: Failed to load terrain material: {}", materialPath);
+            return false;
+        }
+
+        // Load layer textures (keep CPU pixel data)
+        struct LayerCPU
+        {
+            std::shared_ptr<resource::TextureData> albedo;
+            std::shared_ptr<resource::TextureData> normal;
+            std::shared_ptr<resource::TextureData> orm;
+            float tilingScale = 1.0f;
+            float roughness = 0.5f, metallic = 0.0f, ao = 1.0f;
+        };
+
+        std::vector<LayerCPU> layers(materialData->activeLayerCount);
+        for (uint8_t i = 0; i < materialData->activeLayerCount; ++i)
+        {
+            const auto& ml = materialData->layers[i];
+            auto loadTex = [](const std::string& path) -> std::shared_ptr<resource::TextureData>
+            {
+                if (path.empty()) return nullptr;
+                try { return resource::ResourceManager::loadTextureAsync(asset::AssetRef::fromPath(path)).get(); }
+                catch (...) { return nullptr; }
+            };
+
+            layers[i].albedo = loadTex(ml.albedoTextureRef.resolve());
+            layers[i].normal = loadTex(ml.normalTextureRef.resolve());
+            layers[i].orm = loadTex(ml.ormTextureRef.resolve());
+            layers[i].tilingScale = ml.tilingScale;
+            layers[i].roughness = ml.roughness;
+            layers[i].metallic = ml.metallic;
+            layers[i].ao = ml.ao;
+        }
+
+        // Open SVT writers
+        render::svt::SVTFileWriter albedoWriter, normalWriter, ormWriter;
+        if (!albedoWriter.create(svtAlbedoPath, virtualSizeLog2, tileSizeLog2, border))
+            return false;
+        if (!normalWriter.create(svtNormalPath, virtualSizeLog2, tileSizeLog2, border))
+            return false;
+        if (!ormWriter.create(svtORMPath, virtualSizeLog2, tileSizeLog2, border))
+            return false;
+
+        // Helper: sample texture at world UV with tiling
+        auto sampleTex = [](const resource::TextureData* tex, float worldX, float worldZ, float tilingScale) -> glm::vec4
+        {
+            if (!tex || tex->mipData.empty() || tex->width == 0)
+                return glm::vec4(0.5f, 0.5f, 0.5f, 1.0f);
+
+            if (tex->compressionFormat != resource::TextureCompressionFormat::Uncompressed)
+                return glm::vec4(0.5f, 0.5f, 0.5f, 1.0f);
+
+            float u = worldX * tilingScale;
+            float v = worldZ * tilingScale;
+            u -= std::floor(u);
+            v -= std::floor(v);
+
+            uint32_t px = static_cast<uint32_t>(u * (tex->width - 1));
+            uint32_t py = static_cast<uint32_t>(v * (tex->height - 1));
+            uint32_t ch = tex->numbersOfChannels;
+            if (ch == 0) ch = 4;
+
+            const auto& mip0 = tex->mipData[0];
+            size_t idx = (static_cast<size_t>(py) * tex->width + px) * ch;
+            if (idx + 2 >= mip0.data.size()) return glm::vec4(0.5f);
+
+            return glm::vec4(mip0.data[idx] / 255.0f, mip0.data[idx + 1] / 255.0f,
+                             mip0.data[idx + 2] / 255.0f,
+                             (ch >= 4 && idx + 3 < mip0.data.size()) ? mip0.data[idx + 3] / 255.0f : 1.0f);
+        };
+
+        // Composite and write tiles for each mip level
+        std::vector<uint8_t> tileAlbedo(static_cast<size_t>(physTileSize) * physTileSize * 4);
+        std::vector<uint8_t> tileNormal(static_cast<size_t>(physTileSize) * physTileSize * 4);
+        std::vector<uint8_t> tileORM(static_cast<size_t>(physTileSize) * physTileSize * 4);
+
+        uint32_t totalWritten = 0;
+
+        for (uint32_t mip = 0; mip < mipLevels; ++mip)
+        {
+            uint32_t tilesPerSide = render::svt::computeTilesPerMipSide(mip, virtualSizeLog2, tileSizeLog2);
+            if (tilesPerSide == 0) tilesPerSide = 1;
+            float mipVirtualSize = static_cast<float>(1u << (virtualSizeLog2 - mip));
+            float texelToWorld = terrainWidth / mipVirtualSize;
+
+            for (uint32_t ty = 0; ty < tilesPerSide; ++ty)
+            {
+                for (uint32_t tx = 0; tx < tilesPerSide; ++tx)
+                {
+                    // Composite each texel
+                    for (uint32_t py = 0; py < physTileSize; ++py)
+                    {
+                        for (uint32_t px = 0; px < physTileSize; ++px)
+                        {
+                            // Virtual texel position (with border offset)
+                            float vx = static_cast<float>(tx * tileSize + px) - static_cast<float>(border);
+                            float vy = static_cast<float>(ty * tileSize + py) - static_cast<float>(border);
+                            float worldX = wMinX + vx * texelToWorld;
+                            float worldZ = wMinZ + vy * texelToWorld;
+
+                            // Find which terrain tile this point falls in and sample weight map
+                            float weights[4] = {1.0f, 0.0f, 0.0f, 0.0f};
+                            uint32_t packedLI = 0;
+
+                            for (const auto* tile : allTiles)
+                            {
+                                if (worldX >= tile->worldBounds.min.x && worldX <= tile->worldBounds.max.x &&
+                                    worldZ >= tile->worldBounds.min.z && worldZ <= tile->worldBounds.max.z &&
+                                    tile->hasWeightMap())
+                                {
+                                    const auto& wm = tile->weightMap;
+                                    float u = (worldX - tile->worldBounds.min.x) /
+                                              (tile->worldBounds.max.x - tile->worldBounds.min.x);
+                                    float v = (worldZ - tile->worldBounds.min.z) /
+                                              (tile->worldBounds.max.z - tile->worldBounds.min.z);
+
+                                    // Bilinear sample weight map
+                                    float fx = u * static_cast<float>(wm.resolution - 1);
+                                    float fz = v * static_cast<float>(wm.resolution - 1);
+                                    uint32_t x0 = static_cast<uint32_t>(fx);
+                                    uint32_t z0 = static_cast<uint32_t>(fz);
+                                    x0 = x0 < wm.resolution ? x0 : wm.resolution - 1;
+                                    z0 = z0 < wm.resolution ? z0 : wm.resolution - 1;
+
+                                    for (int ch = 0; ch < 4; ++ch)
+                                        weights[ch] = wm.getWeight(ch, x0, z0);
+
+                                    // Pack layer indices
+                                    packedLI = wm.layerIndices[0]
+                                             | (static_cast<uint32_t>(wm.layerIndices[1]) << 8)
+                                             | (static_cast<uint32_t>(wm.layerIndices[2]) << 16)
+                                             | (static_cast<uint32_t>(wm.layerIndices[3]) << 24);
+                                    break;
+                                }
+                            }
+
+                            // Blend layers
+                            glm::vec3 albedo(0.0f), normal(0.0f);
+                            float rough = 0.0f, metal = 0.0f, ao_val = 0.0f, totalW = 0.0f;
+
+                            for (int ch = 0; ch < 4; ++ch)
+                            {
+                                float w = weights[ch];
+                                if (w < 0.001f) continue;
+                                uint32_t li = (packedLI >> (ch * 8)) & 0xFFu;
+                                if (li >= layers.size()) continue;
+
+                                const auto& layer = layers[li];
+                                glm::vec4 a = sampleTex(layer.albedo.get(), worldX, worldZ, layer.tilingScale);
+                                glm::vec4 n = sampleTex(layer.normal.get(), worldX, worldZ, layer.tilingScale);
+
+                                albedo += glm::vec3(a) * w;
+                                normal += glm::vec3(n.r * 2.0f - 1.0f, n.g * 2.0f - 1.0f, n.b * 2.0f - 1.0f) * w;
+
+                                if (layer.orm)
+                                {
+                                    glm::vec4 o = sampleTex(layer.orm.get(), worldX, worldZ, layer.tilingScale);
+                                    ao_val += o.r * w; rough += o.g * w; metal += o.b * w;
+                                }
+                                else
+                                {
+                                    ao_val += layer.ao * w; rough += layer.roughness * w; metal += layer.metallic * w;
+                                }
+                                totalW += w;
+                            }
+
+                            if (totalW > 0.001f)
+                            {
+                                float inv = 1.0f / totalW;
+                                albedo *= inv; normal = glm::normalize(normal);
+                                rough *= inv; metal *= inv; ao_val *= inv;
+                            }
+
+                            size_t idx = (static_cast<size_t>(py) * physTileSize + px) * 4;
+                            auto clampByte = [](float v) { return static_cast<uint8_t>(std::clamp(v * 255.0f, 0.0f, 255.0f)); };
+
+                            tileAlbedo[idx+0] = clampByte(albedo.r); tileAlbedo[idx+1] = clampByte(albedo.g);
+                            tileAlbedo[idx+2] = clampByte(albedo.b); tileAlbedo[idx+3] = 255;
+
+                            tileNormal[idx+0] = clampByte(normal.x*0.5f+0.5f); tileNormal[idx+1] = clampByte(normal.y*0.5f+0.5f);
+                            tileNormal[idx+2] = clampByte(normal.z*0.5f+0.5f); tileNormal[idx+3] = 255;
+
+                            tileORM[idx+0] = clampByte(ao_val); tileORM[idx+1] = clampByte(rough);
+                            tileORM[idx+2] = clampByte(metal); tileORM[idx+3] = 255;
+                        }
+                    }
+
+                    // BC7 compress and write
+                    auto compAlbedo = resource::BC7Encoder::compress(tileAlbedo.data(), physTileSize, physTileSize);
+                    auto compNormal = resource::BC7Encoder::compress(tileNormal.data(), physTileSize, physTileSize);
+                    auto compORM = resource::BC7Encoder::compress(tileORM.data(), physTileSize, physTileSize);
+
+                    render::svt::VirtualTileCoord coord{tx, ty, mip};
+                    albedoWriter.writeTile(coord, compAlbedo.data(), static_cast<uint32_t>(compAlbedo.size()));
+                    normalWriter.writeTile(coord, compNormal.data(), static_cast<uint32_t>(compNormal.size()));
+                    ormWriter.writeTile(coord, compORM.data(), static_cast<uint32_t>(compORM.size()));
+                    ++totalWritten;
+                }
+            }
+        }
+
+        albedoWriter.finalize();
+        normalWriter.finalize();
+        ormWriter.finalize();
+
+        vfLogInfo("BakeTerrainSVT: Wrote {} tiles to SVT cache at {}", totalWritten, basePath);
+        return true;
     }
 }

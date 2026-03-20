@@ -36,6 +36,16 @@ namespace render::mesh
 
         bool usesORM() const { return !ormTexturePath.empty(); }
 
+        // SVT virtual texture paths (empty = no SVT, use standard bindless)
+        // These mirror the standard paths but point to .vfSVT files
+        std::string svtAlbedoPath;
+        std::string svtNormalPath;
+        std::string svtORMPath;
+        std::string svtEmissionPath;
+        std::string svtHeightPath;
+
+        bool usesSVT() const { return !svtAlbedoPath.empty(); }
+
         std::string materialPath;
     };
 

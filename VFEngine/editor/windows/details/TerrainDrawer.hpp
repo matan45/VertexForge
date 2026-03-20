@@ -18,6 +18,7 @@ namespace windows::details {
         void drawGridExpansion(services::EntityHandle handle);
         void drawStreaming(services::EntityHandle handle);
         void drawPhysics(services::EntityHandle handle, const services::TerrainData& terrain);
+        void drawSVTBake(services::EntityHandle handle, const services::TerrainData& terrain);
 
         void startSave(services::EntityHandle handle, const std::string& path);
         void startSaveAs(services::EntityHandle handle);

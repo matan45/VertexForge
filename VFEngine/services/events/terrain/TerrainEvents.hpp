@@ -328,4 +328,14 @@ namespace events::terrain
 
         std::string_view getName() const override { return "LoadAllTiles"; }
     };
+
+    // Bake terrain SVT: composites all layer textures with weight maps
+    // into per-channel .vfSVT files alongside the .vfTerrain save path.
+    // On next terrain load, these are auto-detected and used for fast streaming.
+    struct BakeTerrainSVTCommand : ICommand<bool>
+    {
+        services::EntityHandle terrainEntity;
+
+        std::string_view getName() const override { return "BakeTerrainSVT"; }
+    };
 }

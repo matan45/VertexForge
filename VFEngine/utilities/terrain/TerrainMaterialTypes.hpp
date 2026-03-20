@@ -44,6 +44,11 @@ namespace terrain
         float emissionStrength = 0.0f;     // Emission intensity (0 = none)
         TerrainLayerBlendMode blendMode = TerrainLayerBlendMode::Linear;
         bool enabled = true;
+
+        // SVT virtual texture refs (optional, for streaming large layer textures)
+        asset::AssetRef svtAlbedoRef;
+        asset::AssetRef svtNormalRef;
+        asset::AssetRef svtORMRef;
     };
 
     struct TerrainMaterialData

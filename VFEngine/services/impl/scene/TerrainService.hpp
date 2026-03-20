@@ -118,6 +118,7 @@ namespace services
         bool streamOutTile(EntityHandle terrainEntity, int32_t tileX, int32_t tileZ);
         void commitStreamingChanges(EntityHandle terrainEntity);
         void loadAllTiles(EntityHandle terrainEntity);
+        bool bakeTerrainSVT(EntityHandle terrainEntity);
 
         bool ensureTileLODData(terrain::TerrainTile& tile, uint8_t lodLevel);
         void releaseTileRAMData(terrain::TerrainTile& tile);

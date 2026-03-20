@@ -55,6 +55,7 @@ namespace windows::details {
             drawSaveLoad(handle, terrain);
             drawGridExpansion(handle);
             drawStreaming(handle);
+            drawSVTBake(handle, terrain);
             drawPhysics(handle, terrain);
 
             ImGui::Unindent(10.0f);
@@ -420,6 +421,78 @@ namespace windows::details {
             events::terrain::BeginTerrainLoadCommand cmd;
             cmd.path = path;
             dispatcher.execute(cmd);
+        }
+    }
+
+    void TerrainDrawer::drawSVTBake(services::EntityHandle handle, const services::TerrainData& terrain)
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        ImGui::Separator();
+        ImGui::Text("Virtual Texturing (SVT)");
+
+        bool hasSavePath = !terrain.savePath.empty();
+
+        if (!hasSavePath)
+        {
+            ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f),
+                               "Save terrain first to enable SVT bake");
+        }
+
+        ImGui::BeginDisabled(!hasSavePath || isSaving);
+
+        if (ImGui::Button("Bake SVT Textures"))
+        {
+            isSaving = true;
+            saveStatusMessage.clear();
+
+            pendingSave = threading::JobSystem::instance().submit([handle]()
+            {
+                events::terrain::BakeTerrainSVTCommand cmd;
+                cmd.terrainEntity = handle;
+                return events::EventDispatcher::instance().execute(cmd);
+            }, threading::JobPriority::LOW);
+        }
+
+        ImGui::EndDisabled();
+
+        if (ImGui::IsItemHovered() && hasSavePath)
+        {
+            ImGui::SetTooltip("Composites all terrain layer textures with weight maps\n"
+                              "into .vfSVT cache files for fast GPU streaming.\n\n"
+                              "Output files:\n"
+                              "  %s_svt_albedo.vfSVT\n"
+                              "  %s_svt_normal.vfSVT\n"
+                              "  %s_svt_orm.vfSVT\n\n"
+                              "These are auto-loaded when the terrain is opened.",
+                              terrain.savePath.c_str(),
+                              terrain.savePath.c_str(),
+                              terrain.savePath.c_str());
+        }
+
+        // Show SVT cache status
+        if (hasSavePath)
+        {
+            std::string basePath = terrain.savePath;
+            auto dotPos = basePath.rfind('.');
+            if (dotPos != std::string::npos)
+                basePath = basePath.substr(0, dotPos);
+
+            bool hasAlbedo = std::filesystem::exists(basePath + "_svt_albedo.vfSVT");
+            bool hasNormal = std::filesystem::exists(basePath + "_svt_normal.vfSVT");
+            bool hasORM = std::filesystem::exists(basePath + "_svt_orm.vfSVT");
+
+            if (hasAlbedo || hasNormal || hasORM)
+            {
+                ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.3f, 1.0f), "SVT Cache:");
+                if (hasAlbedo) ImGui::BulletText("Albedo");
+                if (hasNormal) ImGui::BulletText("Normal");
+                if (hasORM) ImGui::BulletText("ORM");
+            }
+            else
+            {
+                ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "No SVT cache (runtime compositing)");
+            }
         }
     }
 
