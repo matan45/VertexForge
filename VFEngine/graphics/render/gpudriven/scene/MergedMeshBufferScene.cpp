@@ -233,6 +233,10 @@ namespace render::gpudriven
         if (meshRender.isStatic)
             obj.flags |= ObjectFlags::ShadowStatic;
 
+        // Mark objects that should use SVT virtual textures
+        if (resolvers.svtChecker && !materialPath.empty() && resolvers.svtChecker(materialPath))
+            obj.flags |= ObjectFlags::SVTTexture;
+
         float scaleX = glm::length(glm::vec3(obj.modelMatrix[0]));
         float scaleY = glm::length(glm::vec3(obj.modelMatrix[1]));
         float scaleZ = glm::length(glm::vec3(obj.modelMatrix[2]));

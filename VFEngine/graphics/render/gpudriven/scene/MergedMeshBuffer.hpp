@@ -49,11 +49,15 @@ namespace render::gpudriven
 
     using BoneOffsetResolver = std::function<uint32_t(entt::entity entity)>;
 
+    // Returns true if the material has SVT virtual textures available
+    using SVTMaterialChecker = std::function<bool(const std::string& materialPath)>;
+
     struct ObjectResolvers
     {
         TextureIndexResolver textureResolver;
         ShaderGroupResolver shaderGroupResolver;
         BoneOffsetResolver boneOffsetResolver;
+        SVTMaterialChecker svtChecker;
         float time = 0.0f;
         glm::vec3 cameraPosition{0.0f};
     };

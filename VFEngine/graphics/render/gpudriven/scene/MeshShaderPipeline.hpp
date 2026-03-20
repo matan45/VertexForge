@@ -88,6 +88,7 @@ namespace render::gpudriven
         vk::DescriptorSet shadowDataDescriptorSet;
         vk::DescriptorSet shadowTextureDescriptorSet;
         vk::DescriptorSet giProbeDataDescriptorSet;
+        vk::DescriptorSet svtDescriptorSet_;
 
         vk::DescriptorSetLayout cachedLightDataLayout;
         vk::DescriptorSetLayout cachedClusterGridLayout;
@@ -126,6 +127,8 @@ namespace render::gpudriven
                                      vk::DescriptorSet shadowTextureDescSet);
 
         void updateGIProbeDescriptor(vk::DescriptorSet giProbeDescSet);
+        void updateSVTDescriptor(vk::DescriptorSet svtDescSet);
+        vk::DescriptorSet getSVTDescriptorSet() const { return svtDescriptorSet_; }
 
         vk::Pipeline getPipeline() const { return graphicsPipeline; }
         vk::PipelineLayout getPipelineLayout() const { return pipelineLayout; }

@@ -13,6 +13,7 @@
 #include "asset/AssetRef.hpp"
 #include "material/MaterialInstanceTypes.hpp"
 #include "../../core/SwapChain.hpp"
+#include <filesystem>
 #include "components/Components.hpp"
 #include "components/PhysicsAnimationComponent.hpp"
 #include "scene/EntityRegistry.hpp"
@@ -95,7 +96,30 @@ namespace render::gpudriven
         };
         BoneOffsetResolver boneOffsetResolver = updateAnimationBones();
 
-        ObjectResolvers resolvers{textureResolver, shaderGroupResolver, boneOffsetResolver, time, cameraPosition};
+        SVTMaterialChecker svtChecker = nullptr;
+        if (svt.enabled && svt.initialized)
+        {
+            svtChecker = [this](const std::string& materialPath) -> bool
+            {
+                if (materialPath.empty()) return false;
+                // Check if albedo texture has a .vfSVT counterpart
+                auto it = materials.pbrCache.find(materialPath);
+                if (it == materials.pbrCache.end()) return false;
+                const auto& texPath = it->second.albedoTexturePath;
+                if (texPath.empty()) return false;
+                // Replace .vfImage extension with .vfSVT and check existence
+                std::string svtPath = texPath;
+                auto dotPos = svtPath.rfind(".vfImage");
+                if (dotPos != std::string::npos)
+                {
+                    svtPath.replace(dotPos, 8, ".vfSVT");
+                    return std::filesystem::exists(svtPath);
+                }
+                return false;
+            };
+        }
+
+        ObjectResolvers resolvers{textureResolver, shaderGroupResolver, boneOffsetResolver, svtChecker, time, cameraPosition};
 
         bool useStreaming = objectStreamingEnabled && objectStreamManager
                            && objectStreamManager->getStats().totalRegistered > 0;

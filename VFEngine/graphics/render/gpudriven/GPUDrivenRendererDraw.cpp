@@ -29,6 +29,13 @@ namespace render::gpudriven
         {
             sets.push_back(pipeline.getGIProbeDataDescriptorSet());
         }
+        if (pipeline.getSVTDescriptorSet())
+        {
+            // Pad to set 12 if GI isn't present (GI = set 11)
+            while (sets.size() < 12)
+                sets.push_back(vk::DescriptorSet{nullptr});
+            sets.push_back(pipeline.getSVTDescriptorSet());
+        }
         return sets;
     }
 

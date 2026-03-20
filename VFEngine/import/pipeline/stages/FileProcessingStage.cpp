@@ -137,13 +137,9 @@ namespace pipeline::stages
 
     void FileProcessingStage::processTextureSVT(ImportContext& context)
     {
-        // First generate standard .vfImage (still needed as fallback for small objects)
-        processTexture(context);
-
-        // Then generate .vfSVT alongside it for large textures
         types::SVTTextureProcessor::Config svtConfig;
         svtConfig.minSizeForSVT = context.file.config.svtMinSize;
-        svtConfig.srgb = true; // Assume albedo; normal/ORM would be imported separately
+        svtConfig.srgb = true;
 
         std::string outputPath = std::string(context.location) + "/" +
                                  std::string(context.fileName) + "." + FileExtension::svt;
@@ -154,11 +150,15 @@ namespace pipeline::stages
             svtProgress = [&context](float progress)
             {
                 context.progressCallback(context.fileName, context.fileIndex + 1,
-                                         context.totalFiles, 0.5f + progress * 0.5f);
+                                         context.totalFiles, progress);
             };
         }
 
-        types::SVTTextureProcessor::convertToSVT(context.file.path, outputPath,
-                                                   svtConfig, svtProgress);
+        if (!types::SVTTextureProcessor::convertToSVT(context.file.path, outputPath,
+                                                       svtConfig, svtProgress))
+        {
+            // If SVT conversion fails (e.g., texture too small), fall back to standard .vfImage
+            processTexture(context);
+        }
     }
 }

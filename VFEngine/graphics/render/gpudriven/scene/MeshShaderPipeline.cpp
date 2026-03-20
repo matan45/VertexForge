@@ -297,6 +297,11 @@ namespace render::gpudriven
         giProbeDataDescriptorSet = giProbeDescSet;
     }
 
+    void MeshShaderPipeline::updateSVTDescriptor(vk::DescriptorSet svtDescSet)
+    {
+        svtDescriptorSet_ = svtDescSet;
+    }
+
     void MeshShaderPipeline::createPerDrawDataDescriptor()
     {
         vk::Device vkDevice = device.getLogicalDevice();
