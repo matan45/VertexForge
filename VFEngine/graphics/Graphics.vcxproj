@@ -244,6 +244,7 @@
     <ClInclude Include="render\preview\PreviewRenderHandler.hpp" />
     <ClInclude Include="render\preview\PreviewViewPort.hpp" />
     <ClInclude Include="render\shadow\CascadeShadowCalculator.hpp" />
+    <ClInclude Include="render\shadow\ClipmapShadowCalculator.hpp" />
     <ClInclude Include="render\shadow\PointShadowCalculator.hpp" />
     <ClInclude Include="render\shadow\ShadowCubeMap.hpp" />
     <ClInclude Include="render\shadow\ShadowGPUDataManager.hpp" />
@@ -488,6 +489,7 @@
     <ClCompile Include="render\preview\PreviewRenderHandler.cpp" />
     <ClCompile Include="render\preview\PreviewViewPort.cpp" />
     <ClCompile Include="render\shadow\CascadeShadowCalculator.cpp" />
+    <ClCompile Include="render\shadow\ClipmapShadowCalculator.cpp" />
     <ClCompile Include="render\shadow\PointShadowCalculator.cpp" />
     <ClCompile Include="render\shadow\ShadowCubeMap.cpp" />
     <ClCompile Include="render\shadow\ShadowGPUDataManager.cpp" />

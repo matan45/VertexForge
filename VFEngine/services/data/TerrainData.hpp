@@ -53,6 +53,7 @@ namespace services
 
         std::string savePath;
         bool saveDirty = false;
+        bool svtEnabled = false;
 
         // Collider properties (from TerrainColliderComponent)
         uint8_t colliderCollisionLayer = 0;

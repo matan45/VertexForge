@@ -1,4 +1,5 @@
 #include "CascadeShadowCalculator.hpp"
+#include "ShadowTypes.hpp"
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/ext/matrix_clip_space.hpp>
 #include <algorithm>
@@ -149,15 +150,10 @@ namespace render::shadow
             radius = 1.0f;  // Fallback for degenerate cases
         }
 
-        // Step 3: Setup light coordinate system (world-anchored, not frustum-centered)
-        glm::vec3 lightDir = glm::normalize(lightDirection);
-        glm::vec3 worldUp = (std::abs(lightDir.y) < 0.99f)
-            ? glm::vec3(0.0f, 1.0f, 0.0f)
-            : glm::vec3(1.0f, 0.0f, 0.0f);
-
-        // Compute stable light-space axes (based only on light direction, not frustum)
-        glm::vec3 lightRight = glm::normalize(glm::cross(worldUp, lightDir));
-        glm::vec3 lightUp = glm::cross(lightDir, lightRight);
+        auto axes = LightSpaceAxes::fromDirection(lightDirection);
+        const auto& lightDir = axes.lightDir;
+        const auto& lightRight = axes.lightRight;
+        const auto& lightUp = axes.lightUp;
 
         // Step 4: Compute texel size from sphere diameter
         float sphereDiameter = 2.0f * radius;

@@ -100,10 +100,17 @@ namespace render::lighting
                 settings.depthBias = shadowSystem->getGlobalDepthBias();
                 settings.normalBias = shadowSystem->getGlobalNormalBias();
                 settings.cascadeCount = shadowSystem->getGlobalCascadeCount();
+                settings.clipmapLevelCount = shadowSystem->getGlobalClipmapLevelCount();
+                settings.clipmapBaseExtent = shadowSystem->getGlobalClipmapBaseExtent();
                 settings.lightSize = light.lightSize;
                 settings.enabled = true;
                 settings.castShadows = true;
-                pendingShadow.push_back({entityId, shadow::ShadowMapType::DirectionalCSM, settings});
+
+                auto dirMode = shadowSystem->getGlobalDirectionalMode();
+                auto shadowType = (dirMode == types::DirectionalShadowMode::Clipmap)
+                    ? shadow::ShadowMapType::DirectionalClipmap
+                    : shadow::ShadowMapType::DirectionalCSM;
+                pendingShadow.push_back({entityId, shadowType, settings});
             }
 
             const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);

@@ -22,7 +22,7 @@ namespace windows
             {
                 ImGui::Spacing();
                 drawShadowQualitySettings();
-                drawShadowCSMSettings();
+                drawDirectionalShadowSettings();
                 drawShadowBiasSettings();
                 drawShadowFilterSettings();
             }
@@ -49,25 +49,68 @@ namespace windows
         }
     }
 
-    void RenderConfigWindow::drawShadowCSMSettings()
+    void RenderConfigWindow::drawDirectionalShadowSettings()
     {
         ImGui::Separator();
-        ImGui::Text("Directional Light (CSM)");
+        ImGui::Text("Directional Light");
         ImGui::Spacing();
 
-        int cascades = settings.shadows.cascadeCount;
-        if (ImGui::SliderInt("Cascade Count", &cascades, 1, 4))
+        const char* dirModes[] = {"CSM (Cascaded)", "Clipmap"};
+        int currentDirMode = static_cast<int>(settings.shadows.directionalMode);
+        if (ImGui::Combo("Shadow Mode", &currentDirMode, dirModes, 2))
         {
-            settings.shadows.cascadeCount = static_cast<uint8_t>(cascades);
+            settings.shadows.directionalMode = static_cast<types::DirectionalShadowMode>(currentDirMode);
             isDirty = true;
         }
-
-        const char* splitModes[] = {"Linear", "Logarithmic", "Practical"};
-        int currentMode = static_cast<int>(settings.shadows.cascadeSplitMode);
-        if (ImGui::Combo("Split Mode", &currentMode, splitModes, 3))
+        if (ImGui::IsItemHovered())
         {
-            settings.shadows.cascadeSplitMode = static_cast<types::CascadeSplitMode>(currentMode);
-            isDirty = true;
+            ImGui::SetTooltip("CSM: Traditional cascaded shadow maps (4 cascades max)\n"
+                              "Clipmap: Concentric shadow levels for large-scale worlds");
+        }
+
+        ImGui::Spacing();
+
+        if (settings.shadows.directionalMode == types::DirectionalShadowMode::CSM)
+        {
+            int cascades = settings.shadows.cascadeCount;
+            if (ImGui::SliderInt("Cascade Count", &cascades, 1, 4))
+            {
+                settings.shadows.cascadeCount = static_cast<uint8_t>(cascades);
+                isDirty = true;
+            }
+
+            const char* splitModes[] = {"Linear", "Logarithmic", "Practical"};
+            int currentMode = static_cast<int>(settings.shadows.cascadeSplitMode);
+            if (ImGui::Combo("Split Mode", &currentMode, splitModes, 3))
+            {
+                settings.shadows.cascadeSplitMode = static_cast<types::CascadeSplitMode>(currentMode);
+                isDirty = true;
+            }
+        }
+        else
+        {
+            int levels = settings.shadows.clipmapLevelCount;
+            if (ImGui::SliderInt("Level Count", &levels, 4, 16))
+            {
+                settings.shadows.clipmapLevelCount = static_cast<uint8_t>(levels);
+                isDirty = true;
+            }
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("Number of clipmap levels.\n"
+                                  "Each level doubles world coverage.\n"
+                                  "16 levels = ~65km range with 2m base extent.");
+            }
+
+            if (ImGui::DragFloat("Base Extent (m)", &settings.shadows.clipmapBaseExtent, 0.1f, 0.5f, 10.0f, "%.1f"))
+            {
+                isDirty = true;
+            }
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("World half-extent of level 0 (finest detail).\n"
+                                  "Smaller = higher near-shadow quality.");
+            }
         }
     }
 
@@ -294,23 +337,6 @@ namespace windows
                                       "Recommended: 2 (shadows don't need high detail)");
                 }
 
-                ImGui::Separator();
-                ImGui::Text("Virtual Texturing");
-                ImGui::Spacing();
-
-                if (ImGui::Checkbox("Enable SVT", &settings.terrain.svtEnabled))
-                {
-                    isDirty = true;
-                    events::render::SetTerrainSVTEnabledCommand cmd;
-                    cmd.enabled = settings.terrain.svtEnabled;
-                    dispatcher.execute(cmd);
-                }
-                if (ImGui::IsItemHovered())
-                {
-                    ImGui::SetTooltip("Sparse Virtual Texturing (SVT)\n"
-                                      "Streams only visible texture tiles to GPU.\n"
-                                      "Reduces VRAM usage for large terrains.");
-                }
             }
 
             ImGui::Unindent(10.0f);

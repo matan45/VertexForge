@@ -9,6 +9,7 @@
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/terrain/TerrainEvents.hpp"
+#include "../../events/render/RenderEvents.hpp"
 #include "../../events/terrain/BrushEvents.hpp"
 #include "../../events/terrain/PaintBrushEvents.hpp"
 #include "../../events/terrain/HoleBrushEvents.hpp"
@@ -182,6 +183,33 @@ namespace services
             [this](const events::terrain::BakeTerrainSVTCommand& cmd)
             {
                 return bakeTerrainSVT(cmd.terrainEntity);
+            });
+
+        dispatcher.registerCommandHandler<events::terrain::SetTerrainSVTEnabledCommand>(
+            [this](const events::terrain::SetTerrainSVTEnabledCommand& cmd)
+            {
+                auto& registry = scene::EntityRegistry::getRegistry();
+                entt::entity ent = internal::fromHandle(cmd.terrainEntity);
+                if (registry.valid(ent) && registry.all_of<components::TerrainComponent>(ent))
+                {
+                    registry.get<components::TerrainComponent>(ent).svtEnabled = cmd.enabled;
+                }
+
+                // GPU SVT is a single global instance — enable if any terrain wants it
+                bool anyEnabled = false;
+                auto view = registry.view<components::TerrainComponent>();
+                for (auto e : view)
+                {
+                    if (view.get<components::TerrainComponent>(e).svtEnabled)
+                    {
+                        anyEnabled = true;
+                        break;
+                    }
+                }
+
+                events::render::SetTerrainSVTEnabledCommand renderCmd;
+                renderCmd.enabled = anyEnabled;
+                events::EventDispatcher::instance().execute(renderCmd);
             });
     }
 

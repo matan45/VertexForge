@@ -358,4 +358,12 @@ namespace events::terrain
 
         std::string_view getName() const override { return "BakeTerrainSVT"; }
     };
+
+    struct SetTerrainSVTEnabledCommand : ICommand<>
+    {
+        services::EntityHandle terrainEntity;
+        bool enabled = false;
+
+        std::string_view getName() const override { return "SetTerrainSVTEnabled"; }
+    };
 }

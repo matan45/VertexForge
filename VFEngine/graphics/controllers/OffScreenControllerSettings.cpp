@@ -77,8 +77,6 @@ namespace controllers
         gpuDriven->setTerrainErrorThreshold(settings.terrain.errorThreshold);
         gpuDriven->setTerrainTextureScale(settings.terrain.textureScale);
         gpuDriven->setTerrainShadowLOD(settings.terrain.shadowLOD);
-        if (settings.terrain.svtEnabled)
-            gpuDriven->setSVTEnabled(true);
     }
 
     services::ShadowStats OffScreenController::getShadowStats() const

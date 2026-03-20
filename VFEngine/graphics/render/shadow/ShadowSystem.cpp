@@ -229,6 +229,9 @@ namespace render::shadow
         case ShadowMapType::PointCube:
             viewCount = 6;
             break;
+        case ShadowMapType::DirectionalClipmap:
+            viewCount = settings.clipmapLevelCount;
+            break;
         case ShadowMapType::Spot2D:
         case ShadowMapType::Directional2D:
             viewCount = 1;
@@ -336,6 +339,40 @@ namespace render::shadow
             pagesX = pagesPerCascade;
             pagesY = pagesPerCascade * data.settings.cascadeCount;
         }
+        else if (data.type == ShadowMapType::DirectionalClipmap)
+        {
+            // Tiered page density: near levels get more pages, far levels get fewer
+            // Level 0-3: 4x4=16 pages, Level 4-7: 2x2=4 pages, Level 8+: 1x1=1 page
+            uint32_t levelCount = data.settings.clipmapLevelCount;
+            data.clipmapLevelPagesPerSide.resize(levelCount);
+            data.clipmapLevelPageOffsets.resize(levelCount);
+            data.clipmapLastSnapPositions.resize(levelCount, glm::vec2(0.0f));
+
+            uint32_t totalPages = 0;
+            for (uint32_t i = 0; i < levelCount; ++i)
+            {
+                uint32_t pps;
+                if (i < 4)       pps = MAX_DIR_PAGES;  // 4x4
+                else if (i < 8)  pps = 2;              // 2x2
+                else             pps = 1;              // 1x1
+
+                data.clipmapLevelPagesPerSide[i] = pps;
+                data.clipmapLevelPageOffsets[i] = totalPages;
+                totalPages += pps * pps;
+            }
+
+            for (size_t i = 0; i < data.views.size(); ++i)
+            {
+                auto& view = data.views[i];
+                view.cascadeIndex = static_cast<uint16_t>(i);
+                view.type = data.type;
+            }
+
+            // Allocate as a flat page table block (totalPages entries wide, 1 tall)
+            // We use pagesX=totalPages, pagesY=1 as a flat layout
+            pagesX = totalPages;
+            pagesY = 1;
+        }
         else if (data.type == ShadowMapType::Spot2D || data.type == ShadowMapType::Directional2D)
         {
             uint32_t pages = std::clamp(data.settings.resolution / vsm::PAGE_SIZE, 1u, MAX_SPOT_PAGES);
@@ -427,6 +464,11 @@ namespace render::shadow
         data.vsmPagesX = 0;
         data.vsmPagesY = 0;
         data.vsmPageTableOffset = 0;
+
+        // Clear clipmap tracking
+        data.clipmapLastSnapPositions.clear();
+        data.clipmapLevelPageOffsets.clear();
+        data.clipmapLevelPagesPerSide.clear();
     }
 
     void ShadowSystem::setDeletionQueue(core::DeferredDeletionQueue* queue)
@@ -562,7 +604,7 @@ namespace render::shadow
             if (!data.settings.enabled || !data.settings.castShadows)
                 continue;
 
-            if (data.type == ShadowMapType::DirectionalCSM || data.type == ShadowMapType::Directional2D)
+            if (data.isDirectionalType())
             {
                 for (size_t i = 0; i < data.views.size(); ++i)
                 {

@@ -4,11 +4,39 @@
 #include <vulkan/vulkan.hpp>
 #include <cstdint>
 #include <cstddef>
+#include <cmath>
 #include <limits>
 #include <vector>
 
 namespace render::shadow
 {
+    struct CameraContext
+    {
+        glm::mat4 view{1.0f};
+        glm::mat4 projection{1.0f};
+        float nearPlane = 0.1f;
+        float farPlane = 100.0f;
+    };
+
+    struct LightSpaceAxes
+    {
+        glm::vec3 lightDir{0.0f, -1.0f, 0.0f};
+        glm::vec3 lightRight{1.0f, 0.0f, 0.0f};
+        glm::vec3 lightUp{0.0f, 0.0f, 1.0f};
+
+        static LightSpaceAxes fromDirection(const glm::vec3& direction)
+        {
+            LightSpaceAxes axes;
+            axes.lightDir = glm::normalize(direction);
+            glm::vec3 worldUp = (std::abs(axes.lightDir.y) < 0.99f)
+                ? glm::vec3(0.0f, 1.0f, 0.0f)
+                : glm::vec3(1.0f, 0.0f, 0.0f);
+            axes.lightRight = glm::normalize(glm::cross(worldUp, axes.lightDir));
+            axes.lightUp = glm::cross(axes.lightDir, axes.lightRight);
+            return axes;
+        }
+    };
+
     namespace ShadowConstants
     {
         inline constexpr uint32_t CUBE_FACE_COUNT = 6;
@@ -30,7 +58,8 @@ namespace render::shadow
         Directional2D,
         DirectionalCSM,
         PointCube,
-        Spot2D
+        Spot2D,
+        DirectionalClipmap
     };
 
     enum class ShadowQuality : uint8_t
@@ -78,6 +107,10 @@ namespace render::shadow
 
         bool enabled = true;
         bool castShadows = true;
+
+        // Clipmap settings
+        uint32_t clipmapLevelCount = 16;
+        float clipmapBaseExtent = 2.0f;
     };
 
     struct ShadowView
@@ -149,6 +182,11 @@ namespace render::shadow
         // Light movement tracking: detect when VP matrix changes to invalidate cached pages
         glm::mat4 lastViewProjection{0.0f}; // initialized to zero so first frame always dirty
 
+        // Clipmap tracking (only used when type == DirectionalClipmap)
+        std::vector<glm::vec2> clipmapLastSnapPositions;  // per-level snap position for dirty detection
+        std::vector<uint32_t> clipmapLevelPageOffsets;     // per-level offset within page table block
+        std::vector<uint32_t> clipmapLevelPagesPerSide;    // per-level page grid dimension (variable density)
+
         void invalidate()
         {
             for (auto& view : views)
@@ -177,7 +215,15 @@ namespace render::shadow
 
         [[nodiscard]] bool usesVSM() const
         {
-            return type == ShadowMapType::Spot2D || type == ShadowMapType::Directional2D || type == ShadowMapType::DirectionalCSM;
+            return type == ShadowMapType::Spot2D || type == ShadowMapType::Directional2D
+                || type == ShadowMapType::DirectionalCSM || type == ShadowMapType::DirectionalClipmap;
+        }
+
+        [[nodiscard]] bool isDirectionalType() const
+        {
+            return type == ShadowMapType::DirectionalCSM
+                || type == ShadowMapType::Directional2D
+                || type == ShadowMapType::DirectionalClipmap;
         }
     };
 

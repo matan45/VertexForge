@@ -106,9 +106,7 @@ namespace render::shadow
     }
 
     void ShadowSystem::updateDirectionalCSMMatrices(LightShadowData& data, uint32_t entityId,
-                                                     const glm::mat4& cameraView,
-                                                     const glm::mat4& cameraProjection,
-                                                     float cameraNear, float cameraFar)
+                                                     const CameraContext& camera)
     {
         auto& registry = scene::EntityRegistry::getRegistry();
         auto entity = static_cast<entt::entity>(entityId);
@@ -120,21 +118,18 @@ namespace render::shadow
         }
 
         updateDirectionalCSMMatricesFromData(data,
-            registry.get<components::WorldTransformComponent>(entity).worldMatrix,
-            cameraView, cameraProjection, cameraNear, cameraFar);
+            registry.get<components::WorldTransformComponent>(entity).worldMatrix, camera);
     }
 
     void ShadowSystem::updateDirectionalCSMMatricesFromData(LightShadowData& data,
                                                              const glm::mat4& worldMatrix,
-                                                             const glm::mat4& cameraView,
-                                                             const glm::mat4& cameraProjection,
-                                                             float cameraNear, float cameraFar)
+                                                             const CameraContext& camera)
     {
         glm::vec3 lightDirection = glm::normalize(
             glm::vec3(worldMatrix * glm::vec4(0.0f, 0.0f, -1.0f, 0.0f)));
 
         auto splits = CascadeShadowCalculator::computeSplitDistances(
-            cameraNear, cameraFar,
+            camera.nearPlane, camera.farPlane,
             data.settings.cascadeCount,
             globalCascadeSplitMode,
             data.settings.cascadeSplitLambda);
@@ -149,7 +144,7 @@ namespace render::shadow
             float cascadeFar = splits[i + 1];
 
             auto frustumCorners = CascadeShadowCalculator::getFrustumCornersWorldSpace(
-                cameraView, cameraProjection, cascadeNear, cascadeFar);
+                camera.view, camera.projection, cascadeNear, cascadeFar);
 
             auto cascadeData = CascadeShadowCalculator::computeCascadeMatrix(
                 frustumCorners, lightDirection, data.settings.resolution);
@@ -178,9 +173,7 @@ namespace render::shadow
             if (!data.settings.enabled || !data.settings.castShadows)
                 continue;
 
-            bool isDirectional = (data.type == ShadowMapType::DirectionalCSM ||
-                data.type == ShadowMapType::Directional2D);
-            if (visibleLightIds && !isDirectional && !visibleLightIds->contains(entityId))
+            if (visibleLightIds && !data.isDirectionalType() && !visibleLightIds->contains(entityId))
                 continue;
 
             float texelSize = 1.0f / static_cast<float>(data.settings.resolution);
@@ -199,6 +192,7 @@ namespace render::shadow
             {
             case ShadowMapType::Directional2D:
             case ShadowMapType::DirectionalCSM:
+            case ShadowMapType::DirectionalClipmap:
                 for (const auto& view : data.views)
                 {
                     ShadowView viewCopy = view;
@@ -298,7 +292,7 @@ namespace render::shadow
             if (data.isStatic)
                 ++lastCacheStats.totalStaticLights;
 
-            if (data.isStatic && data.shadowCached && data.type != ShadowMapType::DirectionalCSM)
+            if (data.isStatic && data.shadowCached && !data.isDirectionalType())
             {
                 for (auto& view : data.views)
                     view.cached = true;
@@ -327,7 +321,7 @@ namespace render::shadow
                 }
                 spotLights.push_back({&data, worldMatrix, outerAngle, range});
             }
-            else if (data.type == ShadowMapType::DirectionalCSM)
+            else if (data.isDirectionalType())
             {
                 directionalLights.push_back({&data, worldMatrix});
             }
@@ -347,10 +341,16 @@ namespace render::shadow
                 for (auto& ref : spotLights)
                     updateSpotShadowMatricesFromData(*ref.data, ref.worldMatrix, ref.outerAngle, ref.range);
             }, threading::JobPriority::HIGH);
+        CameraContext camera{cameraView, cameraProjection, cameraNear, cameraFar};
         auto f3 = threading::JobSystem::instance().submit(
-            [this, &directionalLights, &cameraView, &cameraProjection, cameraNear, cameraFar]() {
+            [this, &directionalLights, camera]() {
                 for (auto& ref : directionalLights)
-                    updateDirectionalCSMMatricesFromData(*ref.data, ref.worldMatrix, cameraView, cameraProjection, cameraNear, cameraFar);
+                {
+                    if (ref.data->type == ShadowMapType::DirectionalClipmap)
+                        updateDirectionalClipmapMatricesFromData(*ref.data, ref.worldMatrix, camera);
+                    else
+                        updateDirectionalCSMMatricesFromData(*ref.data, ref.worldMatrix, camera);
+                }
             }, threading::JobPriority::HIGH);
 
         f1.get();
@@ -367,8 +367,7 @@ namespace render::shadow
             if (data.renderedFrameCount < 10)
                 ++data.renderedFrameCount;
 
-            if (data.isStatic && !data.shadowCached &&
-                data.type != ShadowMapType::DirectionalCSM)
+            if (data.isStatic && !data.shadowCached && !data.isDirectionalType())
             {
                 if (data.renderedFrameCount >= 4)
                 {
@@ -382,5 +381,71 @@ namespace render::shadow
         applyFeedbackAllocations();
         determineDynamicPages();
         buildPageRenderList();
+    }
+
+    void ShadowSystem::updateDirectionalClipmapMatricesFromData(LightShadowData& data,
+                                                                  const glm::mat4& worldMatrix,
+                                                                  const CameraContext& camera)
+    {
+        glm::vec3 lightDirection = glm::normalize(
+            glm::vec3(worldMatrix * glm::vec4(0.0f, 0.0f, -1.0f, 0.0f)));
+
+        glm::vec3 cameraWorldPos = -glm::vec3(camera.view[3]) * glm::mat3(camera.view);
+
+        uint32_t levelCount = std::min(static_cast<uint32_t>(data.views.size()),
+                                        data.settings.clipmapLevelCount);
+
+        for (uint32_t i = 0; i < levelCount; ++i)
+        {
+            uint32_t pagesPerSide = (i < data.clipmapLevelPagesPerSide.size())
+                ? data.clipmapLevelPagesPerSide[i] : 1;
+            uint32_t levelResolution = pagesPerSide * vsm::PAGE_SIZE;
+
+            auto levelData = ClipmapShadowCalculator::computeClipmapLevel(
+                i, data.settings.clipmapBaseExtent, cameraWorldPos, lightDirection, levelResolution);
+
+            auto& view = data.views[i];
+            view.viewMatrix = levelData.viewMatrix;
+            view.projectionMatrix = levelData.projMatrix;
+            view.viewProjectionMatrix = levelData.viewProjMatrix;
+            view.nearPlane = levelData.nearDistance;
+            view.farPlane = levelData.farDistance;
+            view.lightDirection = glm::vec4(lightDirection, 0.0f);
+            view.cascadeIndex = static_cast<uint16_t>(i);
+            view.texelSize = levelData.texelSize;
+
+            float biasScale = 1.0f + static_cast<float>(i) * 0.3f;
+            view.depthBias = data.settings.depthBias * biasScale;
+            view.slopeBias = data.settings.slopeBias * biasScale;
+            view.normalBias = data.settings.normalBias * biasScale;
+
+            updateClipmapDirtyFlags(data, i, levelData);
+        }
+    }
+
+    void ShadowSystem::updateClipmapDirtyFlags(LightShadowData& data, uint32_t level,
+                                                const ClipmapLevelData& levelData)
+    {
+        if (level >= data.clipmapLastSnapPositions.size())
+            return;
+
+        float snapDelta = ClipmapShadowCalculator::computeSnapDelta(
+            levelData, data.clipmapLastSnapPositions[level]);
+
+        if (snapDelta < 0.5f)
+            return;
+
+        if (level < data.clipmapLevelPageOffsets.size() && level < data.clipmapLevelPagesPerSide.size())
+        {
+            uint32_t basePageIdx = data.clipmapLevelPageOffsets[level];
+            uint32_t pps = data.clipmapLevelPagesPerSide[level];
+            for (uint32_t p = 0; p < pps * pps; ++p)
+            {
+                uint32_t pageIdx = basePageIdx + p;
+                if (pageIdx < data.vsmPageDirty.size())
+                    data.vsmPageDirty[pageIdx] = true;
+            }
+        }
+        data.clipmapLastSnapPositions[level] = levelData.snapPosition;
     }
 }

@@ -228,6 +228,11 @@ vec2 vsmLookupPhysicalUVVol(ShadowData sd, vec2 uv, out bool valid) {
     uint tileY = (pageEntry >> PAGE_ENTRY_Y_SHIFT) & PAGE_ENTRY_Y_MASK;
 
     vec2 pageUV = fract(uv * vec2(sd.pageTableInfo.xy));
+
+    // Clamp inward by 1 texel to prevent seams at tile boundaries
+    float borderTexel = 1.0 / PAGE_SIZE_F;
+    pageUV = clamp(pageUV, vec2(borderTexel), vec2(1.0 - borderTexel));
+
     vec2 physicalUV = (vec2(float(tileX), float(tileY)) + pageUV) * (PAGE_SIZE_F / POOL_DIM_F);
     return physicalUV;
 }

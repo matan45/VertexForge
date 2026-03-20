@@ -2,6 +2,7 @@
 
 #include "ShadowTypes.hpp"
 #include "VSMTypes.hpp"
+#include "ClipmapShadowCalculator.hpp"
 #include "VSMPhysicalTilePool.hpp"
 #include "VSMPageTable.hpp"
 #include "ShadowResourcePool.hpp"
@@ -78,6 +79,9 @@ namespace render
             float globalNormalBias = 0.02f;
             uint8_t globalCascadeCount = 4;
             types::CascadeSplitMode globalCascadeSplitMode = types::CascadeSplitMode::Practical;
+            types::DirectionalShadowMode globalDirectionalMode = types::DirectionalShadowMode::CSM;
+            uint8_t globalClipmapLevelCount = 16;
+            float globalClipmapBaseExtent = 2.0f;
 
             bool initialized = false;
             bool needsUpdate = true;
@@ -165,6 +169,9 @@ namespace render
             [[nodiscard]] float getGlobalDepthBias() const { return globalDepthBias; }
             [[nodiscard]] float getGlobalNormalBias() const { return globalNormalBias; }
             [[nodiscard]] uint8_t getGlobalCascadeCount() const { return globalCascadeCount; }
+            [[nodiscard]] types::DirectionalShadowMode getGlobalDirectionalMode() const { return globalDirectionalMode; }
+            [[nodiscard]] uint8_t getGlobalClipmapLevelCount() const { return globalClipmapLevelCount; }
+            [[nodiscard]] float getGlobalClipmapBaseExtent() const { return globalClipmapBaseExtent; }
 
             void applyRenderSettings(const types::RenderSettings& settings);
 
@@ -217,16 +224,20 @@ namespace render
                                                     const glm::mat4& worldMatrix,
                                                     float outerAngle, float range);
             void updateDirectionalCSMMatrices(LightShadowData& data, uint32_t entityId,
-                                               const glm::mat4& cameraView, const glm::mat4& cameraProjection,
-                                               float cameraNear, float cameraFar);
+                                               const CameraContext& camera);
             void updateDirectionalCSMMatricesFromData(LightShadowData& data,
                                                        const glm::mat4& worldMatrix,
-                                                       const glm::mat4& cameraView, const glm::mat4& cameraProjection,
-                                                       float cameraNear, float cameraFar);
+                                                       const CameraContext& camera);
+            void updateDirectionalClipmapMatricesFromData(LightShadowData& data,
+                                                           const glm::mat4& worldMatrix,
+                                                           const CameraContext& camera);
+            void updateClipmapDirtyFlags(LightShadowData& data, uint32_t level,
+                                          const ClipmapLevelData& levelData);
             void collectShadowViewsForGPU(const std::unordered_set<uint32_t>* visibleLightIds);
             void buildPageRenderList();
             void determineDynamicPages();
             void buildCSMPageRenderList(LightShadowData& data);
+            void buildClipmapPageRenderList(LightShadowData& data);
             void buildSingleViewPageRenderList(LightShadowData& data);
             void addPageToRenderLists(LightShadowData& data, uint32_t pageIdx,
                                       const glm::mat4& cropViewProjection,

@@ -503,6 +503,21 @@ namespace windows::details {
                 if (hasAlbedo) ImGui::BulletText("Albedo");
                 if (hasNormal) ImGui::BulletText("Normal");
                 if (hasORM) ImGui::BulletText("ORM");
+
+                ImGui::Spacing();
+                bool svtOn = terrain.svtEnabled;
+                if (ImGui::Checkbox("Enable SVT", &svtOn))
+                {
+                    events::terrain::SetTerrainSVTEnabledCommand cmd;
+                    cmd.terrainEntity = handle;
+                    cmd.enabled = svtOn;
+                    dispatcher.execute(cmd);
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Stream only visible texture tiles to GPU.\n"
+                                      "Reduces VRAM usage for large terrains.");
+                }
             }
             else
             {

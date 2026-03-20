@@ -68,6 +68,14 @@ vec2 vsmLookupPhysicalUV(ShadowData sd, vec2 uv, out bool valid) {
     // UV within the page [0,1]
     vec2 pageUV = fract(uv * vec2(sd.pageTableInfo.xy));
 
+    // Clamp pageUV inward by 1 texel to avoid sampling the very edge of a
+    // physical tile. At page boundaries the outermost texels may hold
+    // stale / cleared depth, which shows up as visible seam lines between
+    // adjacent tiles. Combined with the CPU-side guard band (which renders
+    // overlapping depth into that border), this eliminates boundary seams.
+    float borderTexel = 1.0 / PAGE_SIZE_F;
+    pageUV = clamp(pageUV, vec2(borderTexel), vec2(1.0 - borderTexel));
+
     // Physical UV in the pool texture
     vec2 physicalUV = (vec2(float(tileX), float(tileY)) + pageUV) * (PAGE_SIZE_F / POOL_DIM_F);
     return physicalUV;
@@ -286,6 +294,52 @@ float sampleDirectionalShadow(int baseShadowIndex, vec3 worldPos, vec3 worldNorm
     float fadeStart = maxDistance * 0.85;
     float fadeFactor = 1.0 - smoothstep(fadeStart, maxDistance, viewZ);
 
+    return mix(1.0, shadow, fadeFactor);
+}
+
+// ============================================================
+// Directional Shadow (Clipmap with level selection + blending)
+// Reuses sampleVSMShadow — per-level bias is applied on CPU side.
+// ============================================================
+
+// Blend in outer 40% of each level to avoid popping at level transitions
+const float CLIPMAP_BLEND_START = 0.6;  // fract > this → blend toward next level
+const float CLIPMAP_BLEND_END   = 0.4;  // fract < this → blend toward prev level
+const float CLIPMAP_FADE_START  = 0.8;  // fraction of max extent where distance fade begins
+
+float sampleDirectionalClipmapShadow(int baseShadowIndex, vec3 worldPos, vec3 worldNormal, float viewZ) {
+    if (baseShadowIndex < 0 || baseShadowIndex >= MAX_SHADOW_VIEWS) return 1.0;
+
+    int levelCount = int(SHADOW_BUFFER[baseShadowIndex].rangeParams.z);
+    levelCount = clamp(levelCount, 1, 16);
+
+    if (baseShadowIndex + levelCount > MAX_SHADOW_VIEWS) {
+        levelCount = MAX_SHADOW_VIEWS - baseShadowIndex;
+        if (levelCount <= 0) return 1.0;
+    }
+
+    float baseExtent = SHADOW_BUFFER[baseShadowIndex].rangeParams.x;
+    if (baseExtent <= 0.0) baseExtent = 2.0;
+
+    float continuousLevel = max(log2(max(viewZ, baseExtent) / baseExtent), 0.0);
+    int levelIdx = clamp(int(continuousLevel), 0, levelCount - 1);
+    int shadowIndex = baseShadowIndex + levelIdx;
+
+    float shadow = sampleVSMShadow(shadowIndex, worldPos, worldNormal);
+
+    // Symmetric blending at level boundaries to prevent popping
+    float levelFrac = fract(continuousLevel);
+    if (levelFrac > CLIPMAP_BLEND_START && levelIdx < levelCount - 1) {
+        float nextShadow = sampleVSMShadow(shadowIndex + 1, worldPos, worldNormal);
+        shadow = mix(shadow, nextShadow, smoothstep(CLIPMAP_BLEND_START, 1.0, levelFrac));
+    }
+    if (levelFrac < CLIPMAP_BLEND_END && levelIdx > 0) {
+        float prevShadow = sampleVSMShadow(shadowIndex - 1, worldPos, worldNormal);
+        shadow = mix(shadow, prevShadow, smoothstep(CLIPMAP_BLEND_END, 0.0, levelFrac));
+    }
+
+    float maxExtent = baseExtent * exp2(float(levelCount - 1));
+    float fadeFactor = 1.0 - smoothstep(maxExtent * CLIPMAP_FADE_START, maxExtent, viewZ);
     return mix(1.0, shadow, fadeFactor);
 }
 

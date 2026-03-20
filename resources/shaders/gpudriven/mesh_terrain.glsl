@@ -673,7 +673,7 @@ void main() {
     if (viewModeValue == 13u) {
         // Missing tile flash (magenta pulse)
         if (!svt_isResident) {
-            float pulse = sin(float(camera.frameIndex) * 0.1) * 0.5 + 0.5;
+            float pulse = sin(camera.time * 6.0) * 0.5 + 0.5;
             color = mix(color, vec3(1.0, 0.0, 1.0), pulse * 0.8);
         }
     }

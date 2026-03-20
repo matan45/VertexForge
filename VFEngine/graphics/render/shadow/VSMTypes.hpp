@@ -76,10 +76,20 @@ namespace render::shadow::vsm
     // region of the page (pageX, pageY) out of (pagesX, pagesY) total pages.
     // The page region in NDC is [2*px/N - 1, 2*(px+1)/N - 1], and the crop
     // scales and translates this to fill [-1, 1].
+    //
+    // A 1-texel guard band is added so adjacent pages render overlapping depth
+    // at their shared boundary. This prevents visible seams where two tiles meet,
+    // since both tiles will agree on the depth value at the boundary.
     inline glm::mat4 computePageCropMatrix(uint32_t pageX, uint32_t pageY, uint32_t pagesX, uint32_t pagesY)
     {
         float sx = static_cast<float>(pagesX);
         float sy = static_cast<float>(pagesY);
+
+        // Guard band: expand each page by 1 texel on each side so adjacent tiles overlap
+        constexpr float guardTexels = 1.0f;
+        float guardScale = 1.0f + 2.0f * guardTexels / static_cast<float>(PAGE_SIZE);
+        float effectiveSx = sx / guardScale;
+        float effectiveSy = sy / guardScale;
 
         // Center of this page in NDC
         float cx = (2.0f * (static_cast<float>(pageX) + 0.5f) / sx) - 1.0f;
@@ -87,10 +97,10 @@ namespace render::shadow::vsm
 
         // Scale NDC so this page fills [-1,1], then translate center to origin
         glm::mat4 crop(1.0f);
-        crop[0][0] = sx;
-        crop[1][1] = sy;
-        crop[3][0] = -cx * sx;
-        crop[3][1] = -cy * sy;
+        crop[0][0] = effectiveSx;
+        crop[1][1] = effectiveSy;
+        crop[3][0] = -cx * effectiveSx;
+        crop[3][1] = -cy * effectiveSy;
         return crop;
     }
 }
