@@ -1,6 +1,8 @@
 #include "HeightmapLoader.hpp"
 #include "../print/Log.hpp"
 #include "../resource/EndianUtils.hpp"
+#include "../resource/BC7Decoder.hpp"
+#include "../../graphics/render/svt/SVTFileFormat.hpp"
 
 #include <fstream>
 #include <algorithm>
@@ -50,9 +52,13 @@ namespace terrain
         {
             return loadVFImage(filePath);
         }
+        else if (ext == ".vfsvt")
+        {
+            return loadVFSVT(filePath);
+        }
         else
         {
-            vfLogError("HeightmapLoader: Unsupported file format: {}. Use .vfImage", ext);
+            vfLogError("HeightmapLoader: Unsupported file format: {}. Use .vfImage or .vfSVT", ext);
             return nullptr;
         }
     }
@@ -118,6 +124,89 @@ namespace terrain
         }
 
         vfLogInfo("HeightmapLoader: Loaded {}x{} vfImage heightmap from {}", mipWidth, mipHeight, filePath);
+        return result;
+    }
+
+    std::shared_ptr<HeightmapData> HeightmapLoader::loadVFSVT(const std::string& filePath)
+    {
+        render::svt::SVTFileReader reader;
+        if (!reader.open(filePath))
+        {
+            vfLogError("HeightmapLoader: Failed to open SVT file: {}", filePath);
+            return nullptr;
+        }
+
+        const auto& header = reader.getHeader();
+        uint32_t tileSize = 1u << header.tileSizeLog2;
+        uint32_t border = header.borderSize;
+        uint32_t physTileSize = tileSize + 2 * border;
+        uint32_t mipLevels = render::svt::computeMipLevelCount(
+            header.virtualSizeLog2, header.tileSizeLog2);
+
+        // Use mip 0 for full resolution, or a coarser mip if it's too large
+        uint32_t selectedMip = 0;
+        uint32_t virtualSize = 1u << header.virtualSizeLog2;
+        while (virtualSize > 8192 && selectedMip < mipLevels - 1)
+        {
+            virtualSize >>= 1;
+            ++selectedMip;
+        }
+
+        uint32_t tilesPerSide = render::svt::computeTilesPerMipSide(
+            selectedMip, header.virtualSizeLog2, header.tileSizeLog2);
+        if (tilesPerSide == 0) tilesPerSide = 1;
+
+        uint32_t outputWidth = tilesPerSide * tileSize;
+        uint32_t outputHeight = tilesPerSide * tileSize;
+
+        auto result = std::make_shared<HeightmapData>();
+        result->width = outputWidth;
+        result->height = outputHeight;
+        result->heights.resize(static_cast<size_t>(outputWidth) * outputHeight, 0.0f);
+
+        for (uint32_t ty = 0; ty < tilesPerSide; ++ty)
+        {
+            for (uint32_t tx = 0; tx < tilesPerSide; ++tx)
+            {
+                std::vector<uint8_t> tileData;
+                render::svt::VirtualTileCoord coord{tx, ty, selectedMip};
+                if (!reader.readTile(coord, tileData) || tileData.empty())
+                    continue;
+
+                // Decompress BC7 tile
+                auto decoded = resource::BC7Decoder::decompress(
+                    tileData.data(), physTileSize, physTileSize);
+                if (decoded.empty()) continue;
+
+                // Copy inner tile region (skip borders), convert to grayscale height
+                for (uint32_t py = 0; py < tileSize; ++py)
+                {
+                    for (uint32_t px = 0; px < tileSize; ++px)
+                    {
+                        uint32_t imgX = tx * tileSize + px;
+                        uint32_t imgY = ty * tileSize + py;
+                        if (imgX >= outputWidth || imgY >= outputHeight) continue;
+
+                        uint32_t srcX = px + border;
+                        uint32_t srcY = py + border;
+                        size_t srcIdx = (static_cast<size_t>(srcY) * physTileSize + srcX) * 4;
+
+                        if (srcIdx + 2 < decoded.size())
+                        {
+                            float r = decoded[srcIdx + 0] / 255.0f;
+                            float g = decoded[srcIdx + 1] / 255.0f;
+                            float b = decoded[srcIdx + 2] / 255.0f;
+                            float height = 0.299f * r + 0.587f * g + 0.114f * b;
+                            result->heights[static_cast<size_t>(imgY) * outputWidth + imgX] = height;
+                        }
+                    }
+                }
+            }
+        }
+
+        reader.close();
+        vfLogInfo("HeightmapLoader: Loaded {}x{} SVT heightmap from {} (mip {})",
+                  outputWidth, outputHeight, filePath, selectedMip);
         return result;
     }
 

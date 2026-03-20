@@ -191,4 +191,83 @@ namespace types
 
         return writer.finalize();
     }
+
+    bool SVTTextureProcessor::packORMToSVT(const std::string& aoPath,
+                                            const std::string& roughnessPath,
+                                            const std::string& metallicPath,
+                                            float defaultAO, float defaultRoughness, float defaultMetallic,
+                                            const std::string& outputPath,
+                                            const Config& config,
+                                            SVTProgressCallback progressCallback)
+    {
+        if (progressCallback) progressCallback(0.0f);
+
+        // Load whichever channels are provided
+        int aoW = 0, aoH = 0, aoC = 0;
+        int roughW = 0, roughH = 0, roughC = 0;
+        int metalW = 0, metalH = 0, metalC = 0;
+
+        stbi_set_flip_vertically_on_load(false);
+        uint8_t* aoData = nullptr;
+        uint8_t* roughData = nullptr;
+        uint8_t* metalData = nullptr;
+
+        if (!aoPath.empty())
+            aoData = stbi_load(aoPath.c_str(), &aoW, &aoH, &aoC, 1);
+        if (!roughnessPath.empty())
+            roughData = stbi_load(roughnessPath.c_str(), &roughW, &roughH, &roughC, 1);
+        if (!metallicPath.empty())
+            metalData = stbi_load(metallicPath.c_str(), &metalW, &metalH, &metalC, 1);
+
+        // Determine output resolution from whichever image was loaded
+        uint32_t width = 0, height = 0;
+        if (aoData) { width = static_cast<uint32_t>(aoW); height = static_cast<uint32_t>(aoH); }
+        else if (roughData) { width = static_cast<uint32_t>(roughW); height = static_cast<uint32_t>(roughH); }
+        else if (metalData) { width = static_cast<uint32_t>(metalW); height = static_cast<uint32_t>(metalH); }
+
+        if (width == 0 || height == 0)
+        {
+            if (aoData) stbi_image_free(aoData);
+            if (roughData) stbi_image_free(roughData);
+            if (metalData) stbi_image_free(metalData);
+            return false;
+        }
+
+        if (progressCallback) progressCallback(0.1f);
+
+        // Pack into RGBA8: R=AO, G=Roughness, B=Metallic, A=255
+        std::vector<uint8_t> ormRGBA(static_cast<size_t>(width) * height * 4);
+        uint8_t defAO = static_cast<uint8_t>(std::clamp(defaultAO * 255.0f, 0.0f, 255.0f));
+        uint8_t defRough = static_cast<uint8_t>(std::clamp(defaultRoughness * 255.0f, 0.0f, 255.0f));
+        uint8_t defMetal = static_cast<uint8_t>(std::clamp(defaultMetallic * 255.0f, 0.0f, 255.0f));
+
+        for (uint32_t y = 0; y < height; ++y)
+        {
+            for (uint32_t x = 0; x < width; ++x)
+            {
+                size_t srcIdx = static_cast<size_t>(y) * width + x;
+                size_t dstIdx = srcIdx * 4;
+
+                ormRGBA[dstIdx + 0] = (aoData && srcIdx < static_cast<size_t>(aoW) * aoH)
+                                       ? aoData[srcIdx] : defAO;
+                ormRGBA[dstIdx + 1] = (roughData && srcIdx < static_cast<size_t>(roughW) * roughH)
+                                       ? roughData[srcIdx] : defRough;
+                ormRGBA[dstIdx + 2] = (metalData && srcIdx < static_cast<size_t>(metalW) * metalH)
+                                       ? metalData[srcIdx] : defMetal;
+                ormRGBA[dstIdx + 3] = 255;
+            }
+        }
+
+        if (aoData) stbi_image_free(aoData);
+        if (roughData) stbi_image_free(roughData);
+        if (metalData) stbi_image_free(metalData);
+
+        if (progressCallback) progressCallback(0.2f);
+
+        // Now tile and compress as SVT
+        Config ormConfig = config;
+        ormConfig.srgb = false; // ORM is linear data, not sRGB
+        return convertRGBA8ToSVT(ormRGBA.data(), width, height, outputPath, ormConfig,
+            [&](float p) { if (progressCallback) progressCallback(0.2f + p * 0.8f); });
+    }
 }

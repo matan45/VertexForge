@@ -39,6 +39,17 @@ namespace types
                                        const Config& config = {},
                                        SVTProgressCallback progressCallback = nullptr);
 
+        // Pack separate AO, Roughness, Metallic images into a single ORM .vfSVT.
+        // Each input can be empty (uses default scalar value).
+        // All inputs must be the same resolution if provided.
+        static bool packORMToSVT(const std::string& aoPath,
+                                  const std::string& roughnessPath,
+                                  const std::string& metallicPath,
+                                  float defaultAO, float defaultRoughness, float defaultMetallic,
+                                  const std::string& outputPath,
+                                  const Config& config = {},
+                                  SVTProgressCallback progressCallback = nullptr);
+
         // Check if a texture is large enough to benefit from SVT
         static bool shouldUseSVT(uint32_t width, uint32_t height,
                                   uint32_t minSize = 4096);

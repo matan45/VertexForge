@@ -1,6 +1,8 @@
 #pragma once
 #include "imguiHandler/ImguiWindow.hpp"
 #include "../../graphics/render/svt/SVTFileFormat.hpp"
+#include "data/DTOs.hpp"
+#include "data/AsyncLoadingTypes.hpp"
 #include <string>
 #include <vector>
 #include <imgui.h>
@@ -8,7 +10,7 @@
 namespace windows
 {
     // Preview window for .vfSVT (Sparse Virtual Texture) files.
-    // Shows file info, tile grid visualization, and individual tile preview.
+    // Shows file info, tile grid visualization with actual texture content.
     class SVTPreviewWindow : public controllers::imguiHandler::ImguiWindow
     {
     private:
@@ -26,15 +28,18 @@ namespace windows
 
         // View state
         int selectedMipLevel = 0;
-        int highlightTileX = -1;
-        int highlightTileY = -1;
         float gridZoom = 1.0f;
 
-        // Tile preview (decoded for display)
-        ImTextureID tilePreviewDescriptor = 0;
-        int previewTileX = -1;
-        int previewTileY = -1;
-        int previewTileMip = -1;
+        // Full mip texture preview (loaded via editor texture system)
+        services::EditorTextureHandle mipPreviewHandle;
+        bool mipPreviewLoading = false;
+        int loadedPreviewMip = -1;
+        services::TextureLoadingProgress loadingProgress;
+
+        // Assembled mip image for preview
+        std::vector<uint8_t> assembledMipRGBA;
+        uint32_t assembledWidth = 0;
+        uint32_t assembledHeight = 0;
 
     public:
         explicit SVTPreviewWindow(const std::string& path);
@@ -46,8 +51,9 @@ namespace windows
     private:
         void loadFile();
         void drawInfoPanel();
-        void drawTileGridPanel();
-        void drawTilePreviewPanel();
+        void drawPreviewPanel();
         void countPresentTiles();
+        void loadMipPreview(int mipLevel);
+        void updateAsyncLoading();
     };
 }

@@ -1,7 +1,13 @@
 #include "SVTPreviewWindow.hpp"
 #include "imgui.h"
+#include "events/EventDispatcher.hpp"
+#include "events/render/RenderEvents.hpp"
+#include "resource/Types.hpp"
+#include "resource/BC7Decoder.hpp"
 #include <filesystem>
 #include <cmath>
+#include <cstring>
+#include <algorithm>
 
 namespace windows
 {
@@ -15,6 +21,14 @@ namespace windows
 
     SVTPreviewWindow::~SVTPreviewWindow()
     {
+        if (mipPreviewHandle.isValid())
+        {
+            auto& dispatcher = events::EventDispatcher::instance();
+            events::render::ReleaseEditorTextureCommand releaseCmd;
+            releaseCmd.handle = mipPreviewHandle.imguiDescriptorSet;
+            dispatcher.execute(releaseCmd);
+        }
+
         reader.close();
     }
 
@@ -26,10 +40,17 @@ namespace windows
             totalTiles = reader.getTotalTiles();
             countPresentTiles();
 
-            // Get file size
             std::error_code ec;
             fileSizeBytes = std::filesystem::file_size(filePath, ec);
             if (ec) fileSizeBytes = 0;
+
+            // Auto-select coarsest mip that has a reasonable number of tiles
+            const auto& header = reader.getHeader();
+            uint32_t mipLevels = render::svt::computeMipLevelCount(
+                header.virtualSizeLog2, header.tileSizeLog2);
+            selectedMipLevel = static_cast<int>(mipLevels > 2 ? mipLevels - 3 : 0);
+
+            loadMipPreview(selectedMipLevel);
         }
     }
 
@@ -58,11 +79,137 @@ namespace windows
         }
     }
 
+    void SVTPreviewWindow::loadMipPreview(int mipLevel)
+    {
+        if (!loaded || mipLevel == loadedPreviewMip) return;
+
+        const auto& header = reader.getHeader();
+        uint32_t tileSize = 1u << header.tileSizeLog2;
+        uint32_t tilesPerSide = render::svt::computeTilesPerMipSide(
+            static_cast<uint32_t>(mipLevel), header.virtualSizeLog2, header.tileSizeLog2);
+        if (tilesPerSide == 0) tilesPerSide = 1;
+
+        // Assemble all tiles into one image (skip borders, just use the inner tile content)
+        assembledWidth = tilesPerSide * tileSize;
+        assembledHeight = tilesPerSide * tileSize;
+
+        // Cap preview size to avoid huge allocations
+        if (assembledWidth > 4096 || assembledHeight > 4096)
+        {
+            // For very large mips, just show the grid info
+            assembledWidth = assembledHeight = 0;
+            loadedPreviewMip = mipLevel;
+            return;
+        }
+
+        assembledMipRGBA.resize(static_cast<size_t>(assembledWidth) * assembledHeight * 4);
+        // Fill with checkerboard pattern (for missing tiles)
+        for (uint32_t y = 0; y < assembledHeight; ++y)
+        {
+            for (uint32_t x = 0; x < assembledWidth; ++x)
+            {
+                size_t idx = (static_cast<size_t>(y) * assembledWidth + x) * 4;
+                bool dark = ((x / 16) + (y / 16)) % 2 == 0;
+                uint8_t v = dark ? 40 : 60;
+                assembledMipRGBA[idx + 0] = v;
+                assembledMipRGBA[idx + 1] = v;
+                assembledMipRGBA[idx + 2] = v;
+                assembledMipRGBA[idx + 3] = 255;
+            }
+        }
+
+        uint32_t border = header.borderSize;
+        uint32_t physTileSize = tileSize + 2 * border;
+
+        for (uint32_t ty = 0; ty < tilesPerSide; ++ty)
+        {
+            for (uint32_t tx = 0; tx < tilesPerSide; ++tx)
+            {
+                std::vector<uint8_t> tileData;
+                render::svt::VirtualTileCoord coord{tx, ty, static_cast<uint32_t>(mipLevel)};
+                bool present = reader.readTile(coord, tileData);
+
+                if (!present || tileData.empty()) continue;
+
+                // Decompress BC7 tile to RGBA8
+                auto decoded = resource::BC7Decoder::decompress(
+                    tileData.data(), physTileSize, physTileSize);
+
+                if (decoded.empty()) continue;
+
+                // Copy the inner tile region (skip border pixels) to assembled image
+                for (uint32_t py = 0; py < tileSize; ++py)
+                {
+                    for (uint32_t px = 0; px < tileSize; ++px)
+                    {
+                        uint32_t imgX = tx * tileSize + px;
+                        uint32_t imgY = ty * tileSize + py;
+                        if (imgX >= assembledWidth || imgY >= assembledHeight) continue;
+
+                        // Source: offset by border in the decoded physical tile
+                        uint32_t srcX = px + border;
+                        uint32_t srcY = py + border;
+                        size_t srcIdx = (static_cast<size_t>(srcY) * physTileSize + srcX) * 4;
+                        size_t dstIdx = (static_cast<size_t>(imgY) * assembledWidth + imgX) * 4;
+
+                        if (srcIdx + 3 < decoded.size())
+                        {
+                            assembledMipRGBA[dstIdx + 0] = decoded[srcIdx + 0];
+                            assembledMipRGBA[dstIdx + 1] = decoded[srcIdx + 1];
+                            assembledMipRGBA[dstIdx + 2] = decoded[srcIdx + 2];
+                            assembledMipRGBA[dstIdx + 3] = decoded[srcIdx + 3];
+                        }
+                    }
+                }
+            }
+        }
+
+        // Release old preview
+        if (mipPreviewHandle.isValid())
+        {
+            auto& dispatcher = events::EventDispatcher::instance();
+            events::render::ReleaseEditorTextureCommand releaseCmd;
+            releaseCmd.handle = mipPreviewHandle.imguiDescriptorSet;
+            dispatcher.execute(releaseCmd);
+            mipPreviewHandle = {};
+        }
+
+        // Load assembled image as editor texture (synchronous)
+        if (assembledWidth > 0 && assembledHeight > 0)
+        {
+            auto& dispatcher = events::EventDispatcher::instance();
+
+            events::render::LoadEditorTextureFromDataCommand loadCmd;
+            loadCmd.textureData.width = assembledWidth;
+            loadCmd.textureData.height = assembledHeight;
+            loadCmd.textureData.numbersOfChannels = 4;
+            loadCmd.textureData.mipLevels = 1;
+            loadCmd.textureData.compressionFormat = resource::TextureCompressionFormat::Uncompressed;
+
+            resource::MipLevelData mip0;
+            mip0.width = assembledWidth;
+            mip0.height = assembledHeight;
+            mip0.dataSize = static_cast<uint32_t>(assembledMipRGBA.size());
+            mip0.data = assembledMipRGBA;
+            loadCmd.textureData.mipData.push_back(std::move(mip0));
+
+            mipPreviewHandle = dispatcher.execute(loadCmd);
+            mipPreviewLoading = false;
+        }
+
+        loadedPreviewMip = mipLevel;
+    }
+
+    void SVTPreviewWindow::updateAsyncLoading()
+    {
+        // Currently using synchronous loading — nothing to poll
+    }
+
     void SVTPreviewWindow::draw()
     {
         if (!isOpen) return;
 
-        ImGui::SetNextWindowSize(ImVec2(700, 500), ImGuiCond_FirstUseEver);
+        ImGui::SetNextWindowSize(ImVec2(800, 600), ImGuiCond_FirstUseEver);
 
         if (ImGui::Begin(windowTitle.c_str(), &isOpen, ImGuiWindowFlags_NoCollapse))
         {
@@ -83,10 +230,11 @@ namespace windows
 
             ImGui::SameLine();
 
-            // Right: tile grid
-            float gridWidth = contentSize.x - panelWidth - ImGui::GetStyle().ItemSpacing.x;
-            ImGui::BeginChild("SVTGrid", ImVec2(gridWidth, contentSize.y), true);
-            drawTileGridPanel();
+            // Right: texture preview
+            float previewWidth = contentSize.x - panelWidth - ImGui::GetStyle().ItemSpacing.x;
+            ImGui::BeginChild("SVTPreview", ImVec2(previewWidth, contentSize.y), true,
+                              ImGuiWindowFlags_HorizontalScrollbar);
+            drawPreviewPanel();
             ImGui::EndChild();
         }
         ImGui::End();
@@ -139,102 +287,92 @@ namespace windows
             static_cast<uint32_t>(selectedMipLevel), header.virtualSizeLog2, header.tileSizeLog2);
         if (tilesAtMip == 0) tilesAtMip = 1;
 
+        int prevMip = selectedMipLevel;
         ImGui::SliderInt("##Mip", &selectedMipLevel, 0, static_cast<int>(mipLevels - 1));
-        ImGui::Text("Tiles: %dx%d", tilesAtMip, tilesAtMip);
+        if (selectedMipLevel != prevMip)
+        {
+            loadMipPreview(selectedMipLevel);
+        }
 
+        ImGui::Text("Tiles: %dx%d", tilesAtMip, tilesAtMip);
         uint32_t mipRes = virtualSize >> selectedMipLevel;
         ImGui::Text("Resolution: %dx%d", mipRes, mipRes);
 
         ImGui::Spacing();
         ImGui::Separator();
         ImGui::Text("Zoom");
-        ImGui::SliderFloat("##GridZoom", &gridZoom, 0.5f, 5.0f, "%.1fx");
+        ImGui::SliderFloat("##GridZoom", &gridZoom, 0.25f, 5.0f, "%.2fx");
+
+        if (ImGui::Button("Reset View", ImVec2(-1, 0)))
+        {
+            gridZoom = 1.0f;
+        }
     }
 
-    void SVTPreviewWindow::drawTileGridPanel()
+    void SVTPreviewWindow::drawPreviewPanel()
     {
-        const auto& header = reader.getHeader();
-        uint32_t tilesPerSide = render::svt::computeTilesPerMipSide(
-            static_cast<uint32_t>(selectedMipLevel),
-            header.virtualSizeLog2, header.tileSizeLog2);
-        if (tilesPerSide == 0) tilesPerSide = 1;
-
-        ImVec2 avail = ImGui::GetContentRegionAvail();
-        float cellSize = std::min(avail.x, avail.y) / static_cast<float>(tilesPerSide) * gridZoom;
-        cellSize = std::max(cellSize, 2.0f);
-
-        ImDrawList* drawList = ImGui::GetWindowDrawList();
-        ImVec2 origin = ImGui::GetCursorScreenPos();
-
-        // Draw tile grid
-        for (uint32_t y = 0; y < tilesPerSide; ++y)
+        if (mipPreviewHandle.isValid())
         {
-            for (uint32_t x = 0; x < tilesPerSide; ++x)
+            ImVec2 avail = ImGui::GetContentRegionAvail();
+            float imageAspect = static_cast<float>(assembledWidth) / std::max(1.0f, static_cast<float>(assembledHeight));
+            float availAspect = avail.x / std::max(1.0f, avail.y);
+
+            ImVec2 imageSize;
+            if (imageAspect > availAspect)
             {
-                ImVec2 p0(origin.x + x * cellSize, origin.y + y * cellSize);
-                ImVec2 p1(p0.x + cellSize - 1.0f, p0.y + cellSize - 1.0f);
-
-                // Check if tile is present
-                std::vector<uint8_t> tmp;
-                render::svt::VirtualTileCoord coord{x, y, static_cast<uint32_t>(selectedMipLevel)};
-                bool present = reader.readTile(coord, tmp);
-
-                ImU32 color;
-                if (present)
-                    color = IM_COL32(50, 180, 50, 200);   // Green = present
-                else
-                    color = IM_COL32(60, 60, 60, 200);     // Dark gray = missing
-
-                // Highlight hovered tile
-                if (static_cast<int>(x) == highlightTileX && static_cast<int>(y) == highlightTileY)
-                    color = IM_COL32(255, 255, 100, 220);  // Yellow = hovered
-
-                drawList->AddRectFilled(p0, p1, color);
-                drawList->AddRect(p0, p1, IM_COL32(30, 30, 30, 255));
+                imageSize.x = avail.x * gridZoom;
+                imageSize.y = imageSize.x / imageAspect;
             }
-        }
-
-        // Handle mouse hover
-        ImVec2 mousePos = ImGui::GetMousePos();
-        if (mousePos.x >= origin.x && mousePos.y >= origin.y)
-        {
-            int mx = static_cast<int>((mousePos.x - origin.x) / cellSize);
-            int my = static_cast<int>((mousePos.y - origin.y) / cellSize);
-            if (mx >= 0 && mx < static_cast<int>(tilesPerSide) &&
-                my >= 0 && my < static_cast<int>(tilesPerSide))
+            else
             {
-                highlightTileX = mx;
-                highlightTileY = my;
+                imageSize.y = avail.y * gridZoom;
+                imageSize.x = imageSize.y * imageAspect;
+            }
 
-                // Tooltip
+            ImGui::Image(mipPreviewHandle.imguiDescriptorSet, imageSize);
+
+            // Tooltip on hover
+            if (ImGui::IsItemHovered())
+            {
+                ImVec2 itemPos = ImGui::GetItemRectMin();
+                ImVec2 mousePos = ImGui::GetMousePos();
+                float relX = (mousePos.x - itemPos.x) / imageSize.x;
+                float relY = (mousePos.y - itemPos.y) / imageSize.y;
+
+                const auto& header = reader.getHeader();
+                uint32_t tilesPerSide = render::svt::computeTilesPerMipSide(
+                    static_cast<uint32_t>(selectedMipLevel),
+                    header.virtualSizeLog2, header.tileSizeLog2);
+                if (tilesPerSide == 0) tilesPerSide = 1;
+
+                int tileX = static_cast<int>(relX * tilesPerSide);
+                int tileY = static_cast<int>(relY * tilesPerSide);
+                tileX = std::clamp(tileX, 0, static_cast<int>(tilesPerSide) - 1);
+                tileY = std::clamp(tileY, 0, static_cast<int>(tilesPerSide) - 1);
+
                 std::vector<uint8_t> tmp;
                 render::svt::VirtualTileCoord coord{
-                    static_cast<uint32_t>(mx),
-                    static_cast<uint32_t>(my),
+                    static_cast<uint32_t>(tileX),
+                    static_cast<uint32_t>(tileY),
                     static_cast<uint32_t>(selectedMipLevel)};
                 bool present = reader.readTile(coord, tmp);
 
                 ImGui::BeginTooltip();
-                ImGui::Text("Tile (%d, %d) Mip %d", mx, my, selectedMipLevel);
+                ImGui::Text("Tile (%d, %d) Mip %d", tileX, tileY, selectedMipLevel);
                 ImGui::Text("Status: %s", present ? "Present" : "Missing");
                 if (present)
                     ImGui::Text("Data: %zu bytes", tmp.size());
                 ImGui::EndTooltip();
             }
-            else
-            {
-                highlightTileX = highlightTileY = -1;
-            }
         }
-
-        // Set dummy to make the child scrollable
-        float totalSize = tilesPerSide * cellSize;
-        ImGui::Dummy(ImVec2(totalSize, totalSize));
-
-        // Legend
-        ImGui::Spacing();
-        ImGui::TextColored(ImVec4(0.2f, 0.7f, 0.2f, 1.0f), "Green = Present");
-        ImGui::SameLine();
-        ImGui::TextColored(ImVec4(0.3f, 0.3f, 0.3f, 1.0f), "Gray = Missing");
+        else if (assembledWidth == 0)
+        {
+            ImGui::TextWrapped("Mip level too large for preview (>4096 px). "
+                               "Select a higher mip level to preview.");
+        }
+        else
+        {
+            ImGui::TextDisabled("No preview available");
+        }
     }
 }

@@ -228,6 +228,13 @@ namespace windows
                         ImGui::SetTooltip("Higher quality = slower import, better visual fidelity");
                 }
 
+                ImGui::Spacing();
+                ImGui::Checkbox("Virtual Texturing (SVT)", &svtEnabled);
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Generate tiled .vfSVT for large textures (4K+).\n"
+                                      "Streams only visible tiles to GPU, reducing VRAM usage.\n"
+                                      "Small textures below threshold will import as standard .vfImage.");
+
                 ImGui::Unindent();
             }
 
@@ -284,6 +291,7 @@ namespace windows
                     config.compressionQuality = compressionQuality;
                     config.audioConfig.quality = audioQuality;
                     config.audioConfig.loadType = audioLoadType;
+                    config.svtEnabled = svtEnabled;
                     importFiles.emplace_back(req.path, config);
                     filePaths.push_back(req.path);
                 }

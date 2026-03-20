@@ -22,11 +22,12 @@ namespace terrain
     class HeightmapLoader
     {
     public:
-        // Supported formats: .vfImage
+        // Supported formats: .vfImage, .vfSVT
         static std::shared_ptr<HeightmapData> load(const std::string& filePath);
 
     private:
         static std::shared_ptr<HeightmapData> loadVFImage(const std::string& filePath);
+        static std::shared_ptr<HeightmapData> loadVFSVT(const std::string& filePath);
         static std::string getExtension(const std::string& filePath);
     };
 
