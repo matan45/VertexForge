@@ -4,11 +4,39 @@
 #include <vulkan/vulkan.hpp>
 #include <cstdint>
 #include <cstddef>
+#include <cmath>
 #include <limits>
 #include <vector>
 
 namespace render::shadow
 {
+    struct CameraContext
+    {
+        glm::mat4 view{1.0f};
+        glm::mat4 projection{1.0f};
+        float nearPlane = 0.1f;
+        float farPlane = 100.0f;
+    };
+
+    struct LightSpaceAxes
+    {
+        glm::vec3 lightDir{0.0f, -1.0f, 0.0f};
+        glm::vec3 lightRight{1.0f, 0.0f, 0.0f};
+        glm::vec3 lightUp{0.0f, 0.0f, 1.0f};
+
+        static LightSpaceAxes fromDirection(const glm::vec3& direction)
+        {
+            LightSpaceAxes axes;
+            axes.lightDir = glm::normalize(direction);
+            glm::vec3 worldUp = (std::abs(axes.lightDir.y) < 0.99f)
+                ? glm::vec3(0.0f, 1.0f, 0.0f)
+                : glm::vec3(1.0f, 0.0f, 0.0f);
+            axes.lightRight = glm::normalize(glm::cross(worldUp, axes.lightDir));
+            axes.lightUp = glm::cross(axes.lightDir, axes.lightRight);
+            return axes;
+        }
+    };
+
     namespace ShadowConstants
     {
         inline constexpr uint32_t CUBE_FACE_COUNT = 6;
@@ -189,6 +217,13 @@ namespace render::shadow
         {
             return type == ShadowMapType::Spot2D || type == ShadowMapType::Directional2D
                 || type == ShadowMapType::DirectionalCSM || type == ShadowMapType::DirectionalClipmap;
+        }
+
+        [[nodiscard]] bool isDirectionalType() const
+        {
+            return type == ShadowMapType::DirectionalCSM
+                || type == ShadowMapType::Directional2D
+                || type == ShadowMapType::DirectionalClipmap;
         }
     };
 

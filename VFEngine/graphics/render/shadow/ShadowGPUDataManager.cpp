@@ -435,6 +435,94 @@ namespace render::shadow
 
     }
 
+    namespace
+    {
+        enum class ViewType { Directional, Point, Spot };
+
+        void packRangeParams(vsm::GPUVSMLight& gpu, const ShadowView& view,
+                             const LightShadowData* ld, ViewType viewType, bool isClipmap)
+        {
+            if (isClipmap && ld)
+            {
+                float baseExtent = ld->settings.clipmapBaseExtent;
+                float worldExtent = baseExtent * std::pow(2.0f, static_cast<float>(view.cascadeIndex));
+                float levelCount = static_cast<float>(ld->settings.clipmapLevelCount);
+                gpu.rangeParams = glm::vec4(baseExtent, worldExtent, levelCount,
+                                             static_cast<float>(view.cascadeIndex));
+            }
+            else if (viewType == ViewType::Directional)
+            {
+                float cascadeCount = ld ? static_cast<float>(ld->settings.cascadeCount) : 4.0f;
+                gpu.rangeParams = glm::vec4(view.nearPlane, view.farPlane,
+                                             cascadeCount, static_cast<float>(view.cascadeIndex));
+            }
+            else
+            {
+                float range = view.farPlane - view.nearPlane;
+                float invRange = (range > 0.0001f) ? (1.0f / range) : 0.0f;
+                gpu.rangeParams = glm::vec4(view.nearPlane, view.farPlane,
+                                             invRange, static_cast<float>(view.cascadeIndex));
+            }
+        }
+
+        void packPCSSParams(vsm::GPUVSMLight& gpu, const ShadowView& view,
+                            ViewType viewType,
+                            const std::unordered_map<uint32_t, uint32_t>& entityToCubeIndex)
+        {
+            float cubeMapIndex = -1.0f;
+            if (viewType == ViewType::Point)
+            {
+                auto it = entityToCubeIndex.find(view.entityId);
+                if (it != entityToCubeIndex.end())
+                    cubeMapIndex = static_cast<float>(it->second);
+            }
+            float searchRadius = view.lightSize * view.texelSize * 20.0f;
+            gpu.pcssParams = glm::vec4(view.lightSize, searchRadius,
+                                        view.filterEnabled ? 1.0f : 0.0f, cubeMapIndex);
+        }
+
+        void packPageTableInfo(vsm::GPUVSMLight& gpu, const ShadowView& view,
+                               const LightShadowData* ld, ViewType viewType, bool isClipmap)
+        {
+            int lightType = 0;
+            if (isClipmap) lightType = 3;
+            else if (viewType == ViewType::Spot) lightType = 1;
+            else if (viewType == ViewType::Point) lightType = 2;
+
+            if (!ld || !ld->usesVSM())
+            {
+                gpu.pageTableInfo = glm::ivec4(0, 0, 0, lightType);
+                return;
+            }
+
+            uint32_t pagesX = ld->vsmPagesX;
+            uint32_t pagesY = ld->vsmPagesY;
+            uint32_t ptOffset = ld->vsmPageTableOffset;
+
+            if (ld->type == ShadowMapType::DirectionalCSM)
+            {
+                uint32_t ppc = ld->vsmPagesX;
+                pagesX = ppc;
+                pagesY = ppc;
+                ptOffset = ld->vsmPageTableOffset + view.cascadeIndex * ppc * ppc;
+            }
+            else if (ld->type == ShadowMapType::DirectionalClipmap)
+            {
+                uint32_t levelIdx = view.cascadeIndex;
+                if (levelIdx < ld->clipmapLevelPagesPerSide.size())
+                {
+                    pagesX = ld->clipmapLevelPagesPerSide[levelIdx];
+                    pagesY = pagesX;
+                    ptOffset = ld->vsmPageTableOffset + ld->clipmapLevelPageOffsets[levelIdx];
+                }
+            }
+
+            gpu.pageTableInfo = glm::ivec4(
+                static_cast<int>(pagesX), static_cast<int>(pagesY),
+                static_cast<int>(ptOffset), lightType);
+        }
+    }
+
     void ShadowGPUDataManager::buildGPUShadowData(
         const std::vector<ShadowView>& directionalViews,
         const std::vector<ShadowView>& pointViews,
@@ -444,136 +532,21 @@ namespace render::shadow
     {
         gpuShadowData.clear();
 
-        enum class ViewType { Directional, Point, Spot };
-
         auto addViews = [&](const std::vector<ShadowView>& views, ViewType viewType)
         {
             for (const auto& view : views)
             {
+                auto itData = lightShadowData.find(view.entityId);
+                const LightShadowData* ld = (itData != lightShadowData.end()) ? &itData->second : nullptr;
+                bool isClipmap = ld && ld->type == ShadowMapType::DirectionalClipmap;
+
                 vsm::GPUVSMLight gpu{};
                 gpu.viewProjection = view.viewProjectionMatrix;
+                gpu.biasParams = glm::vec4(view.depthBias, view.slopeBias, view.normalBias, view.texelSize);
 
-                gpu.biasParams = glm::vec4(
-                    view.depthBias,
-                    view.slopeBias,
-                    view.normalBias,
-                    view.texelSize
-                );
-
-                float rangeZ = 0.0f;
-                float rangeW = 0.0f;
-                bool isClipmap = false;
-                if (viewType == ViewType::Directional)
-                {
-                    auto it = lightShadowData.find(view.entityId);
-                    if (it != lightShadowData.end())
-                    {
-                        if (it->second.type == ShadowMapType::DirectionalClipmap)
-                        {
-                            isClipmap = true;
-                            rangeZ = static_cast<float>(it->second.settings.clipmapLevelCount);
-                        }
-                        else
-                        {
-                            rangeZ = static_cast<float>(it->second.settings.cascadeCount);
-                        }
-                    }
-                    rangeW = static_cast<float>(view.cascadeIndex);
-                }
-                else
-                {
-                    float range = view.farPlane - view.nearPlane;
-                    rangeZ = (range > 0.0001f) ? (1.0f / range) : 0.0f;
-                    rangeW = static_cast<float>(view.cascadeIndex);
-                }
-
-                if (isClipmap)
-                {
-                    auto it2 = lightShadowData.find(view.entityId);
-                    float baseExtent = (it2 != lightShadowData.end()) ? it2->second.settings.clipmapBaseExtent : 2.0f;
-                    float worldExtent = baseExtent * std::pow(2.0f, static_cast<float>(view.cascadeIndex));
-                    gpu.rangeParams = glm::vec4(
-                        baseExtent,    // x: baseExtent (for shader level selection)
-                        worldExtent,   // y: worldExtent for this level
-                        rangeZ,        // z: levelCount
-                        rangeW         // w: levelIndex
-                    );
-                }
-                else
-                {
-                    gpu.rangeParams = glm::vec4(
-                        view.nearPlane,
-                        view.farPlane,
-                        rangeZ,
-                        rangeW
-                    );
-                }
-
-                float cubeMapIndex = -1.0f;
-                if (viewType == ViewType::Point)
-                {
-                    auto it = entityToCubeIndex.find(view.entityId);
-                    if (it != entityToCubeIndex.end())
-                    {
-                        cubeMapIndex = static_cast<float>(it->second);
-                    }
-                }
-
-                float searchRadius = view.lightSize * view.texelSize * 20.0f;
-                gpu.pcssParams = glm::vec4(
-                    view.lightSize,
-                    searchRadius,
-                    view.filterEnabled ? 1.0f : 0.0f,
-                    cubeMapIndex
-                );
-
-                // Page table info
-                int lightType = 0;
-                if (isClipmap) lightType = 3;
-                else if (viewType == ViewType::Spot) lightType = 1;
-                else if (viewType == ViewType::Point) lightType = 2;
-
-                auto itPT = lightShadowData.find(view.entityId);
-                if (itPT != lightShadowData.end() && itPT->second.usesVSM())
-                {
-                    const auto& ld = itPT->second;
-                    uint32_t pagesX = ld.vsmPagesX;
-                    uint32_t pagesY = ld.vsmPagesY;
-                    uint32_t ptOffset = ld.vsmPageTableOffset;
-
-                    if (ld.type == ShadowMapType::DirectionalCSM)
-                    {
-                        // Each cascade occupies a section of the page grid
-                        uint32_t pagesPerCascade = ld.vsmPagesX;
-                        pagesX = pagesPerCascade;
-                        pagesY = pagesPerCascade;
-                        ptOffset = ld.vsmPageTableOffset + view.cascadeIndex * pagesPerCascade * pagesPerCascade;
-                    }
-                    else if (ld.type == ShadowMapType::DirectionalClipmap)
-                    {
-                        // Each clipmap level has its own page grid size
-                        uint32_t levelIdx = view.cascadeIndex;
-                        if (levelIdx < ld.clipmapLevelPagesPerSide.size())
-                        {
-                            uint32_t pps = ld.clipmapLevelPagesPerSide[levelIdx];
-                            pagesX = pps;
-                            pagesY = pps;
-                            ptOffset = ld.vsmPageTableOffset + ld.clipmapLevelPageOffsets[levelIdx];
-                        }
-                    }
-
-                    gpu.pageTableInfo = glm::ivec4(
-                        static_cast<int>(pagesX),
-                        static_cast<int>(pagesY),
-                        static_cast<int>(ptOffset),
-                        lightType
-                    );
-                }
-                else
-                {
-                    // Point light - no page table
-                    gpu.pageTableInfo = glm::ivec4(0, 0, 0, lightType);
-                }
+                packRangeParams(gpu, view, ld, viewType, isClipmap);
+                packPCSSParams(gpu, view, viewType, entityToCubeIndex);
+                packPageTableInfo(gpu, view, ld, viewType, isClipmap);
 
                 gpuShadowData.push_back(gpu);
             }

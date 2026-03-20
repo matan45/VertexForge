@@ -217,6 +217,7 @@ namespace serialization
                 settings.textureScale = terrain["textureScale"].get<float>();
             if (terrain.contains("shadowLOD") && terrain["shadowLOD"].is_number_unsigned())
                 settings.shadowLOD = std::min(terrain["shadowLOD"].get<uint32_t>(), 3u);
+            // svtEnabled moved to per-terrain TerrainComponent (backward compat: ignored here)
         }
         json serializeDistanceCullingSettings(const types::DistanceCullingSettings& s)
         {

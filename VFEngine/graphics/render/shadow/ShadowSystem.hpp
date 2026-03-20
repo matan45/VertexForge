@@ -224,19 +224,17 @@ namespace render
                                                     const glm::mat4& worldMatrix,
                                                     float outerAngle, float range);
             void updateDirectionalCSMMatrices(LightShadowData& data, uint32_t entityId,
-                                               const glm::mat4& cameraView, const glm::mat4& cameraProjection,
-                                               float cameraNear, float cameraFar);
+                                               const CameraContext& camera);
             void updateDirectionalCSMMatricesFromData(LightShadowData& data,
                                                        const glm::mat4& worldMatrix,
-                                                       const glm::mat4& cameraView, const glm::mat4& cameraProjection,
-                                                       float cameraNear, float cameraFar);
+                                                       const CameraContext& camera);
             void updateDirectionalClipmapMatrices(LightShadowData& data, uint32_t entityId,
-                                                   const glm::mat4& cameraView, const glm::mat4& cameraProjection,
-                                                   float cameraNear, float cameraFar);
+                                                   const CameraContext& camera);
             void updateDirectionalClipmapMatricesFromData(LightShadowData& data,
                                                            const glm::mat4& worldMatrix,
-                                                           const glm::mat4& cameraView, const glm::mat4& cameraProjection,
-                                                           float cameraNear, float cameraFar);
+                                                           const CameraContext& camera);
+            void updateClipmapDirtyFlags(LightShadowData& data, uint32_t level,
+                                          const ClipmapLevelData& levelData);
             void collectShadowViewsForGPU(const std::unordered_set<uint32_t>* visibleLightIds);
             void buildPageRenderList();
             void determineDynamicPages();

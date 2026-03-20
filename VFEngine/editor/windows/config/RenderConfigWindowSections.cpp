@@ -337,23 +337,6 @@ namespace windows
                                       "Recommended: 2 (shadows don't need high detail)");
                 }
 
-                ImGui::Separator();
-                ImGui::Text("Virtual Texturing");
-                ImGui::Spacing();
-
-                if (ImGui::Checkbox("Enable SVT", &settings.terrain.svtEnabled))
-                {
-                    isDirty = true;
-                    events::render::SetTerrainSVTEnabledCommand cmd;
-                    cmd.enabled = settings.terrain.svtEnabled;
-                    dispatcher.execute(cmd);
-                }
-                if (ImGui::IsItemHovered())
-                {
-                    ImGui::SetTooltip("Sparse Virtual Texturing (SVT)\n"
-                                      "Streams only visible texture tiles to GPU.\n"
-                                      "Reduces VRAM usage for large terrains.");
-                }
             }
 
             ImGui::Unindent(10.0f);

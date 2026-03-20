@@ -604,8 +604,7 @@ namespace render::shadow
             if (!data.settings.enabled || !data.settings.castShadows)
                 continue;
 
-            if (data.type == ShadowMapType::DirectionalCSM || data.type == ShadowMapType::Directional2D
-                || data.type == ShadowMapType::DirectionalClipmap)
+            if (data.isDirectionalType())
             {
                 for (size_t i = 0; i < data.views.size(); ++i)
                 {

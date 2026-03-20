@@ -238,7 +238,6 @@ namespace render::shadow
                         continue;
 
                     glm::mat4 cropMatrix = vsm::computePageCropMatrix(px, py, pagesPerSide, pagesPerSide);
-                    // Dirty flag is managed by snap-based detection in updateDirectionalClipmapMatricesFromData
                     addPageToRenderLists(data, pageIdx, cropMatrix * view.viewProjectionMatrix, view, false);
                 }
             }
@@ -305,9 +304,7 @@ namespace render::shadow
             data.settings.normalBias = shadowSettings.normalBias;
 
             // Handle directional shadow mode switching (CSM <-> Clipmap)
-            bool isDirectional = (data.type == ShadowMapType::DirectionalCSM ||
-                                  data.type == ShadowMapType::DirectionalClipmap);
-            if (isDirectional && modeChanged)
+            if (data.isDirectionalType() && modeChanged)
             {
                 if (data.usesVSM())
                     freeVSMPages(data);
