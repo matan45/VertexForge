@@ -30,7 +30,8 @@ namespace render::shadow
         Directional2D,
         DirectionalCSM,
         PointCube,
-        Spot2D
+        Spot2D,
+        DirectionalClipmap
     };
 
     enum class ShadowQuality : uint8_t
@@ -78,6 +79,10 @@ namespace render::shadow
 
         bool enabled = true;
         bool castShadows = true;
+
+        // Clipmap settings
+        uint32_t clipmapLevelCount = 16;
+        float clipmapBaseExtent = 2.0f;
     };
 
     struct ShadowView
@@ -149,6 +154,11 @@ namespace render::shadow
         // Light movement tracking: detect when VP matrix changes to invalidate cached pages
         glm::mat4 lastViewProjection{0.0f}; // initialized to zero so first frame always dirty
 
+        // Clipmap tracking (only used when type == DirectionalClipmap)
+        std::vector<glm::vec2> clipmapLastSnapPositions;  // per-level snap position for dirty detection
+        std::vector<uint32_t> clipmapLevelPageOffsets;     // per-level offset within page table block
+        std::vector<uint32_t> clipmapLevelPagesPerSide;    // per-level page grid dimension (variable density)
+
         void invalidate()
         {
             for (auto& view : views)
@@ -177,7 +187,8 @@ namespace render::shadow
 
         [[nodiscard]] bool usesVSM() const
         {
-            return type == ShadowMapType::Spot2D || type == ShadowMapType::Directional2D || type == ShadowMapType::DirectionalCSM;
+            return type == ShadowMapType::Spot2D || type == ShadowMapType::Directional2D
+                || type == ShadowMapType::DirectionalCSM || type == ShadowMapType::DirectionalClipmap;
         }
     };
 

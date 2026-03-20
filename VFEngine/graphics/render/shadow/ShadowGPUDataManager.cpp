@@ -4,6 +4,7 @@
 #include "../../core/Device.hpp"
 #include "../../core/BufferUtilities.hpp"
 #include "print/Log.hpp"
+#include <cmath>
 
 namespace render::shadow
 {
@@ -461,12 +462,21 @@ namespace render::shadow
 
                 float rangeZ = 0.0f;
                 float rangeW = 0.0f;
+                bool isClipmap = false;
                 if (viewType == ViewType::Directional)
                 {
                     auto it = lightShadowData.find(view.entityId);
                     if (it != lightShadowData.end())
                     {
-                        rangeZ = static_cast<float>(it->second.settings.cascadeCount);
+                        if (it->second.type == ShadowMapType::DirectionalClipmap)
+                        {
+                            isClipmap = true;
+                            rangeZ = static_cast<float>(it->second.settings.clipmapLevelCount);
+                        }
+                        else
+                        {
+                            rangeZ = static_cast<float>(it->second.settings.cascadeCount);
+                        }
                     }
                     rangeW = static_cast<float>(view.cascadeIndex);
                 }
@@ -477,12 +487,27 @@ namespace render::shadow
                     rangeW = static_cast<float>(view.cascadeIndex);
                 }
 
-                gpu.rangeParams = glm::vec4(
-                    view.nearPlane,
-                    view.farPlane,
-                    rangeZ,
-                    rangeW
-                );
+                if (isClipmap)
+                {
+                    auto it2 = lightShadowData.find(view.entityId);
+                    float baseExtent = (it2 != lightShadowData.end()) ? it2->second.settings.clipmapBaseExtent : 2.0f;
+                    float worldExtent = baseExtent * std::pow(2.0f, static_cast<float>(view.cascadeIndex));
+                    gpu.rangeParams = glm::vec4(
+                        baseExtent,    // x: baseExtent (for shader level selection)
+                        worldExtent,   // y: worldExtent for this level
+                        rangeZ,        // z: levelCount
+                        rangeW         // w: levelIndex
+                    );
+                }
+                else
+                {
+                    gpu.rangeParams = glm::vec4(
+                        view.nearPlane,
+                        view.farPlane,
+                        rangeZ,
+                        rangeW
+                    );
+                }
 
                 float cubeMapIndex = -1.0f;
                 if (viewType == ViewType::Point)
@@ -504,14 +529,14 @@ namespace render::shadow
 
                 // Page table info
                 int lightType = 0;
-                if (viewType == ViewType::Spot) lightType = 1;
+                if (isClipmap) lightType = 3;
+                else if (viewType == ViewType::Spot) lightType = 1;
                 else if (viewType == ViewType::Point) lightType = 2;
 
-                auto it = lightShadowData.find(view.entityId);
-                if (it != lightShadowData.end() && it->second.usesVSM())
+                auto itPT = lightShadowData.find(view.entityId);
+                if (itPT != lightShadowData.end() && itPT->second.usesVSM())
                 {
-                    const auto& ld = it->second;
-                    // For CSM, we need per-cascade page info
+                    const auto& ld = itPT->second;
                     uint32_t pagesX = ld.vsmPagesX;
                     uint32_t pagesY = ld.vsmPagesY;
                     uint32_t ptOffset = ld.vsmPageTableOffset;
@@ -523,6 +548,18 @@ namespace render::shadow
                         pagesX = pagesPerCascade;
                         pagesY = pagesPerCascade;
                         ptOffset = ld.vsmPageTableOffset + view.cascadeIndex * pagesPerCascade * pagesPerCascade;
+                    }
+                    else if (ld.type == ShadowMapType::DirectionalClipmap)
+                    {
+                        // Each clipmap level has its own page grid size
+                        uint32_t levelIdx = view.cascadeIndex;
+                        if (levelIdx < ld.clipmapLevelPagesPerSide.size())
+                        {
+                            uint32_t pps = ld.clipmapLevelPagesPerSide[levelIdx];
+                            pagesX = pps;
+                            pagesY = pps;
+                            ptOffset = ld.vsmPageTableOffset + ld.clipmapLevelPageOffsets[levelIdx];
+                        }
                     }
 
                     gpu.pageTableInfo = glm::ivec4(

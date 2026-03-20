@@ -66,6 +66,8 @@ namespace render::shadow
 
             if (data.type == ShadowMapType::DirectionalCSM)
                 buildCSMPageRenderList(data);
+            else if (data.type == ShadowMapType::DirectionalClipmap)
+                buildClipmapPageRenderList(data);
             else
                 buildSingleViewPageRenderList(data);
         }
@@ -213,6 +215,36 @@ namespace render::shadow
         }
     }
 
+    void ShadowSystem::buildClipmapPageRenderList(LightShadowData& data)
+    {
+        uint32_t levelCount = std::min(static_cast<uint32_t>(data.views.size()),
+                                        static_cast<uint32_t>(data.clipmapLevelPagesPerSide.size()));
+
+        for (uint32_t level = 0; level < levelCount; ++level)
+        {
+            const auto& view = data.views[level];
+            if (view.cached)
+                continue;
+
+            uint32_t pagesPerSide = data.clipmapLevelPagesPerSide[level];
+            uint32_t basePageIdx = data.clipmapLevelPageOffsets[level];
+
+            for (uint32_t py = 0; py < pagesPerSide; ++py)
+            {
+                for (uint32_t px = 0; px < pagesPerSide; ++px)
+                {
+                    uint32_t pageIdx = basePageIdx + py * pagesPerSide + px;
+                    if (pageIdx >= data.vsmPhysicalTiles.size())
+                        continue;
+
+                    glm::mat4 cropMatrix = vsm::computePageCropMatrix(px, py, pagesPerSide, pagesPerSide);
+                    // Dirty flag is managed by snap-based detection in updateDirectionalClipmapMatricesFromData
+                    addPageToRenderLists(data, pageIdx, cropMatrix * view.viewProjectionMatrix, view, false);
+                }
+            }
+        }
+    }
+
     void ShadowSystem::buildSingleViewPageRenderList(LightShadowData& data)
     {
         if (data.views.empty())
@@ -256,6 +288,13 @@ namespace render::shadow
         globalNormalBias = shadowSettings.normalBias;
         globalCascadeCount = shadowSettings.cascadeCount;
         globalCascadeSplitMode = shadowSettings.cascadeSplitMode;
+        globalClipmapLevelCount = shadowSettings.clipmapLevelCount;
+        globalClipmapBaseExtent = shadowSettings.clipmapBaseExtent;
+
+        types::DirectionalShadowMode newMode = shadowSettings.directionalMode;
+        bool modeChanged = (newMode != globalDirectionalMode);
+        globalDirectionalMode = newMode;
+
         if (!shadowSettings.enabled || shadowSettings.quality == types::ShadowQuality::Off)
             return;
         globalQuality = static_cast<ShadowQuality>(shadowSettings.quality);
@@ -265,7 +304,43 @@ namespace render::shadow
             data.settings.slopeBias = shadowSettings.slopeBias;
             data.settings.normalBias = shadowSettings.normalBias;
 
-            if (data.type == ShadowMapType::DirectionalCSM &&
+            // Handle directional shadow mode switching (CSM <-> Clipmap)
+            bool isDirectional = (data.type == ShadowMapType::DirectionalCSM ||
+                                  data.type == ShadowMapType::DirectionalClipmap);
+            if (isDirectional && modeChanged)
+            {
+                if (data.usesVSM())
+                    freeVSMPages(data);
+
+                if (newMode == types::DirectionalShadowMode::Clipmap)
+                {
+                    data.type = ShadowMapType::DirectionalClipmap;
+                    data.settings.clipmapLevelCount = shadowSettings.clipmapLevelCount;
+                    data.settings.clipmapBaseExtent = shadowSettings.clipmapBaseExtent;
+                    data.views.resize(shadowSettings.clipmapLevelCount);
+                    for (size_t i = 0; i < data.views.size(); ++i)
+                    {
+                        data.views[i].cascadeIndex = static_cast<uint16_t>(i);
+                        data.views[i].type = ShadowMapType::DirectionalClipmap;
+                    }
+                }
+                else
+                {
+                    data.type = ShadowMapType::DirectionalCSM;
+                    data.settings.cascadeCount = shadowSettings.cascadeCount;
+                    data.views.resize(shadowSettings.cascadeCount);
+                    for (size_t i = 0; i < data.views.size(); ++i)
+                    {
+                        data.views[i].cascadeIndex = static_cast<uint16_t>(i);
+                        data.views[i].type = ShadowMapType::DirectionalCSM;
+                    }
+                }
+
+                if (data.usesVSM())
+                    allocateVSMPages(data);
+                data.matricesDirty = true;
+            }
+            else if (data.type == ShadowMapType::DirectionalCSM &&
                 data.settings.cascadeCount != shadowSettings.cascadeCount)
             {
                 if (data.usesVSM())
@@ -274,6 +349,28 @@ namespace render::shadow
                 data.views.resize(shadowSettings.cascadeCount);
                 if (data.usesVSM())
                     allocateVSMPages(data);
+            }
+            else if (data.type == ShadowMapType::DirectionalClipmap)
+            {
+                // Update clipmap settings if changed
+                bool clipmapChanged = (data.settings.clipmapLevelCount != shadowSettings.clipmapLevelCount ||
+                                       data.settings.clipmapBaseExtent != shadowSettings.clipmapBaseExtent);
+                if (clipmapChanged)
+                {
+                    if (data.usesVSM())
+                        freeVSMPages(data);
+                    data.settings.clipmapLevelCount = shadowSettings.clipmapLevelCount;
+                    data.settings.clipmapBaseExtent = shadowSettings.clipmapBaseExtent;
+                    data.views.resize(shadowSettings.clipmapLevelCount);
+                    for (size_t i = 0; i < data.views.size(); ++i)
+                    {
+                        data.views[i].cascadeIndex = static_cast<uint16_t>(i);
+                        data.views[i].type = ShadowMapType::DirectionalClipmap;
+                    }
+                    if (data.usesVSM())
+                        allocateVSMPages(data);
+                    data.matricesDirty = true;
+                }
             }
             data.settingsDirty = true;
         }

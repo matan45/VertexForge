@@ -23,6 +23,12 @@ namespace types
         Practical
     };
 
+    enum class DirectionalShadowMode : uint8_t
+    {
+        CSM = 0,
+        Clipmap
+    };
+
     struct ShadowSettings
     {
         bool enabled = true;
@@ -47,6 +53,11 @@ namespace types
         uint32_t directionalResolution = 2048;
         uint32_t spotResolution = 1024;
         uint32_t pointResolution = 512;
+
+        // Directional shadow mode
+        DirectionalShadowMode directionalMode = DirectionalShadowMode::CSM;
+        uint8_t clipmapLevelCount = 16;
+        float clipmapBaseExtent = 2.0f; // meters, level 0 half-extent
     };
 
     struct CullingSettings

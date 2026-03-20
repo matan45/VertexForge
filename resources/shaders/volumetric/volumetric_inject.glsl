@@ -253,7 +253,7 @@ float sampleCascadeShadowSimple(int shadowIndex, vec3 worldPos) {
     return texture(physicalPoolShadow, vec3(physicalUV, receiverDepth));
 }
 
-float sampleDirectionalShadowVolumetric(int baseShadowIndex, vec3 worldPos, float viewZ) {
+float sampleDirectionalShadowVolumetricCSM(int baseShadowIndex, vec3 worldPos, float viewZ) {
     if (baseShadowIndex < 0 || baseShadowIndex >= MAX_SHADOW_VIEWS) return 1.0;
 
     int cascadeCount = int(shadowData[baseShadowIndex].rangeParams.z);
@@ -282,6 +282,40 @@ float sampleDirectionalShadowVolumetric(int baseShadowIndex, vec3 worldPos, floa
     float fadeFactor = 1.0 - smoothstep(fadeStart, maxDistance, viewZ);
 
     return mix(1.0, shadow, fadeFactor);
+}
+
+float sampleDirectionalShadowVolumetricClipmap(int baseShadowIndex, vec3 worldPos, float viewZ) {
+    if (baseShadowIndex < 0 || baseShadowIndex >= MAX_SHADOW_VIEWS) return 1.0;
+
+    int levelCount = int(shadowData[baseShadowIndex].rangeParams.z);
+    levelCount = clamp(levelCount, 1, 16);
+
+    if (baseShadowIndex + levelCount > MAX_SHADOW_VIEWS) {
+        levelCount = MAX_SHADOW_VIEWS - baseShadowIndex;
+        if (levelCount <= 0) return 1.0;
+    }
+
+    float baseExtent = shadowData[baseShadowIndex].rangeParams.x;
+    float level = log2(max(viewZ, baseExtent) / baseExtent);
+    int levelIdx = clamp(int(level), 0, levelCount - 1);
+
+    int shadowIndex = baseShadowIndex + levelIdx;
+    float shadow = sampleCascadeShadowSimple(shadowIndex, worldPos);
+
+    float maxExtent = baseExtent * exp2(float(levelCount - 1));
+    float fadeStart = maxExtent * 0.85;
+    float fadeFactor = 1.0 - smoothstep(fadeStart, maxExtent, viewZ);
+
+    return mix(1.0, shadow, fadeFactor);
+}
+
+float sampleDirectionalShadowVolumetric(int baseShadowIndex, vec3 worldPos, float viewZ) {
+    if (baseShadowIndex < 0 || baseShadowIndex >= MAX_SHADOW_VIEWS) return 1.0;
+    int lightType = shadowData[baseShadowIndex].pageTableInfo.w;
+    if (lightType == 3) {
+        return sampleDirectionalShadowVolumetricClipmap(baseShadowIndex, worldPos, viewZ);
+    }
+    return sampleDirectionalShadowVolumetricCSM(baseShadowIndex, worldPos, viewZ);
 }
 
 float smoothDistanceAttenuation(float distance, float range) {

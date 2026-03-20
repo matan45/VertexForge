@@ -290,6 +290,56 @@ float sampleDirectionalShadow(int baseShadowIndex, vec3 worldPos, vec3 worldNorm
 }
 
 // ============================================================
+// Directional Shadow (Clipmap with level selection)
+// ============================================================
+float sampleDirectionalClipmapShadow(int baseShadowIndex, vec3 worldPos, vec3 worldNormal, float viewZ) {
+    if (baseShadowIndex < 0 || baseShadowIndex >= MAX_SHADOW_VIEWS) return 1.0;
+
+    int levelCount = int(SHADOW_BUFFER[baseShadowIndex].rangeParams.z);
+    levelCount = clamp(levelCount, 1, 16);
+
+    if (baseShadowIndex + levelCount > MAX_SHADOW_VIEWS) {
+        levelCount = MAX_SHADOW_VIEWS - baseShadowIndex;
+        if (levelCount <= 0) return 1.0;
+    }
+
+    // Level selection: log2(distance / baseExtent), clamped
+    float baseExtent = SHADOW_BUFFER[baseShadowIndex].rangeParams.x;
+    float level = log2(max(viewZ, baseExtent) / baseExtent);
+    int levelIdx = clamp(int(level), 0, levelCount - 1);
+
+    int shadowIndex = baseShadowIndex + levelIdx;
+    float shadow = sampleVSMShadow(shadowIndex, worldPos, worldNormal);
+
+    // Inter-level blending at boundaries (blend zone: 70%-100% of level transition)
+    float levelFrac = fract(level);
+    if (levelFrac > 0.7 && levelIdx < levelCount - 1) {
+        float nextShadow = sampleVSMShadow(shadowIndex + 1, worldPos, worldNormal);
+        float blend = smoothstep(0.7, 1.0, levelFrac);
+        shadow = mix(shadow, nextShadow, blend);
+    }
+
+    // Distance fade at outermost level
+    float maxExtent = baseExtent * exp2(float(levelCount - 1));
+    float fadeStart = maxExtent * 0.85;
+    float fadeFactor = 1.0 - smoothstep(fadeStart, maxExtent, viewZ);
+
+    return mix(1.0, shadow, fadeFactor);
+}
+
+// ============================================================
+// Directional Shadow (auto-dispatch CSM vs Clipmap)
+// ============================================================
+float sampleDirectionalShadowAuto(int baseShadowIndex, vec3 worldPos, vec3 worldNormal, float viewZ) {
+    if (baseShadowIndex < 0 || baseShadowIndex >= MAX_SHADOW_VIEWS) return 1.0;
+    int lightType = SHADOW_BUFFER[baseShadowIndex].pageTableInfo.w;
+    if (lightType == 3) {
+        return sampleDirectionalClipmapShadow(baseShadowIndex, worldPos, worldNormal, viewZ);
+    }
+    return sampleDirectionalShadow(baseShadowIndex, worldPos, worldNormal, viewZ);
+}
+
+// ============================================================
 // Point Light Shadow (Cubemap PCSS - unchanged)
 // ============================================================
 float samplePointShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal, vec3 lightPos, float lightRadius) {
