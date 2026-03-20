@@ -505,7 +505,6 @@
     <ClCompile Include="render\shadow\VSMPhysicalTilePool.cpp" />
     <ClCompile Include="render\svt\PhysicalTileCache.cpp" />
     <ClCompile Include="render\svt\SVTFeedbackPipeline.cpp" />
-    <ClCompile Include="render\svt\SVTFileFormat.cpp" />
     <ClCompile Include="render\svt\SVTFileTileProvider.cpp" />
     <ClCompile Include="render\svt\SVTPageTable.cpp" />
     <ClCompile Include="render\svt\SVTStreamManager.cpp" />

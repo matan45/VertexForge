@@ -31,7 +31,7 @@ namespace windows
         float gridZoom = 1.0f;
 
         // Tile preview (decoded for display)
-        ImTextureID tilePreviewDescriptor = nullptr;
+        ImTextureID tilePreviewDescriptor = 0;
         int previewTileX = -1;
         int previewTileY = -1;
         int previewTileMip = -1;
