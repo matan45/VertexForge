@@ -248,7 +248,7 @@ namespace render::gpudriven
             float globalLodBias = 0.0f;
             bool meshletFrustumCullingEnabled = true;
             bool meshletBackfaceCullingEnabled = true;
-            bool meshletOcclusionCullingEnabled = false;
+            bool meshletOcclusionCullingEnabled = true;
             uint32_t currentViewMode = 0;
         };
 

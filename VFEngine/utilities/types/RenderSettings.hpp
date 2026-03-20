@@ -56,7 +56,7 @@ namespace types
         bool lodSelectionEnabled = true;
         bool meshletFrustumCullingEnabled = true;
         bool meshletBackfaceCullingEnabled = true;
-        bool meshletOcclusionCullingEnabled = false;
+        bool meshletOcclusionCullingEnabled = true;
 
         bool terrainFrustumCullingEnabled = true;
         bool terrainMeshletCullingEnabled = true;
