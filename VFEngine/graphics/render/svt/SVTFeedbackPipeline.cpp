@@ -23,6 +23,7 @@ namespace render::svt
     {
         if (initialized) return;
         this->config = config;
+        this->depthSampler = depthSampler;
         totalPageTableEntries = computeTotalPageTableEntries(
             config.virtualTextureSizeLog2, config.tileSizeLog2);
 
@@ -44,6 +45,8 @@ namespace render::svt
 
         auto dev = device.getLogicalDevice();
         dev.waitIdle();
+
+        if (depthSampler) dev.destroySampler(depthSampler);
 
         // Params buffer
         if (paramsMapped)

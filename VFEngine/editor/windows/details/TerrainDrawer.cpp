@@ -448,14 +448,14 @@ namespace windows::details {
                                "Save terrain first to enable SVT bake");
         }
 
-        ImGui::BeginDisabled(!hasSavePath || isSaving);
+        ImGui::BeginDisabled(!hasSavePath || isBaking);
 
         if (ImGui::Button("Bake SVT Textures"))
         {
-            isSaving = true;
+            isBaking = true;
             saveStatusMessage.clear();
 
-            pendingSave = threading::JobSystem::instance().submit([handle]()
+            pendingBake = threading::JobSystem::instance().submit([handle]()
             {
                 events::terrain::BakeTerrainSVTCommand cmd;
                 cmd.terrainEntity = handle;
@@ -464,6 +464,12 @@ namespace windows::details {
         }
 
         ImGui::EndDisabled();
+
+        if (isBaking)
+        {
+            ImGui::SameLine();
+            ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.3f, 1.0f), "Baking...");
+        }
 
         if (ImGui::IsItemHovered() && hasSavePath)
         {
@@ -507,28 +513,48 @@ namespace windows::details {
 
     void TerrainDrawer::pollSaveResult(services::EntityHandle handle)
     {
-        if (!isSaving || !pendingSave.valid())
-            return;
-
-        if (pendingSave.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready)
+        if (isSaving && pendingSave.valid())
         {
-            bool success = pendingSave.get();
-            isSaving = false;
-
-            auto& dispatcher = events::EventDispatcher::instance();
-            events::terrain::SetTerrainSaveLockCommand lockCmd;
-            lockCmd.locked = false;
-            dispatcher.execute(lockCmd);
-
-            if (success)
+            if (pendingSave.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready)
             {
-                saveStatusMessage = "Saved successfully";
-                statusFrameCounter = 180; // ~3 seconds at 60fps
+                bool success = pendingSave.get();
+                isSaving = false;
+
+                auto& dispatcher = events::EventDispatcher::instance();
+                events::terrain::SetTerrainSaveLockCommand lockCmd;
+                lockCmd.locked = false;
+                dispatcher.execute(lockCmd);
+
+                if (success)
+                {
+                    saveStatusMessage = "Saved successfully";
+                    statusFrameCounter = 180; // ~3 seconds at 60fps
+                }
+                else
+                {
+                    saveStatusMessage = "Failed to save terrain";
+                    statusFrameCounter = 300; // ~5 seconds
+                }
             }
-            else
+        }
+
+        if (isBaking && pendingBake.valid())
+        {
+            if (pendingBake.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready)
             {
-                saveStatusMessage = "Failed to save terrain";
-                statusFrameCounter = 300; // ~5 seconds
+                bool success = pendingBake.get();
+                isBaking = false;
+
+                if (success)
+                {
+                    saveStatusMessage = "SVT bake completed";
+                    statusFrameCounter = 180;
+                }
+                else
+                {
+                    saveStatusMessage = "Failed to bake SVT textures";
+                    statusFrameCounter = 300;
+                }
             }
         }
     }

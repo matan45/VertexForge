@@ -82,6 +82,12 @@ namespace render::svt
         void uploadTileData(uint32_t tileIndex, uint32_t channelIndex,
                             const void* compressedData, uint32_t dataSize);
 
+        // Batched upload: all channels for one tile in a single command buffer submit.
+        // channelData[i] = {pointer, size} for channel i. Null pointer = skip channel.
+        struct ChannelUploadData { const void* data; uint32_t size; };
+        void uploadTileBatched(uint32_t tileIndex,
+                               const ChannelUploadData channels[SVT_CHANNEL_COUNT]);
+
         // Flush all pending uploads (must call before rendering)
         void flushUploads();
 

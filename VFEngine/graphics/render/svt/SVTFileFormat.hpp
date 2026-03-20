@@ -97,6 +97,17 @@ namespace render::svt
         const SVTFileHeader& getHeader() const { return header; }
         uint32_t getTotalTiles() const { return totalTiles; }
         bool isValid() const { return valid; }
+
+        uint32_t countPresentEntries() const
+        {
+            uint32_t count = 0;
+            for (const auto& entry : directory)
+            {
+                if (entry.fileOffset != 0 && entry.compressedSize != 0)
+                    ++count;
+            }
+            return count;
+        }
     };
 
     // Writes a .vfSVT file during import

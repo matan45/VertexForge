@@ -108,6 +108,8 @@ namespace render::gpudriven
             terrain.pipeline->setSVTEnabled(false);
         }
 
+        svt.lastMaterialPath.clear();
+        svt.frameCounter = 0;
         svt.initialized = false;
         svt.enabled = false;
     }
@@ -132,7 +134,7 @@ namespace render::gpudriven
         if (!svt.initialized || !svt.enabled || !svt.feedbackPipeline) return;
         if (!svt.feedbackPipeline->isInitialized()) return;
 
-        uint64_t frameIndex = cachedCamera.time > 0 ? static_cast<uint64_t>(cachedCamera.time * 60.0f) : 0;
+        uint64_t frameIndex = svt.frameCounter;
 
         // Clear feedback buffer for this frame
         svt.feedbackPipeline->clearFeedbackBuffer(cmd, frameIndex);
@@ -167,7 +169,8 @@ namespace render::gpudriven
         if (!svt.initialized || !svt.enabled || !svt.feedbackPipeline) return;
         if (!svt.feedbackPipeline->isInitialized()) return;
 
-        uint64_t frameIndex = cachedCamera.time > 0 ? static_cast<uint64_t>(cachedCamera.time * 60.0f) : 0;
+        ++svt.frameCounter;
+        uint64_t frameIndex = svt.frameCounter;
 
         // Read back feedback from N frames ago
         const uint32_t* feedback = svt.feedbackPipeline->readFeedback(frameIndex);
@@ -183,9 +186,10 @@ namespace render::gpudriven
     {
         if (!svt.initialized || !svt.paramsMapped) return;
 
-        // Initialize compositor with terrain bounds
-        if (svt.compositor)
+        // Initialize compositor with terrain bounds and load textures only when material changes
+        if (svt.compositor && svt.lastMaterialPath != terrain.currentMaterialPath)
         {
+            svt.lastMaterialPath = terrain.currentMaterialPath;
             svt.compositor->init(svt.config, terrainWorldMin, terrainWorldMax);
 
             // Load terrain layer textures for CPU-side compositing

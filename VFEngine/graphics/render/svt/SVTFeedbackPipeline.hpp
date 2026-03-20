@@ -57,6 +57,8 @@ namespace render::svt
         uint32_t totalPageTableEntries = 0;
         uint64_t currentFrame = 0;
 
+        vk::Sampler depthSampler;
+
         bool initialized = false;
 
     public:

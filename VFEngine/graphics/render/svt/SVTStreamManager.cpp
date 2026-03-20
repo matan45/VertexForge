@@ -115,19 +115,22 @@ namespace render::svt
 
     void SVTStreamManager::uploadTileChannels(uint32_t physTile, const SVTTileData& tileData)
     {
-        const std::pair<const std::vector<uint8_t>&, uint32_t> channels[] = {
-            {tileData.albedoData,   SVT_CHANNEL_ALBEDO},
-            {tileData.normalData,   SVT_CHANNEL_NORMAL},
-            {tileData.ormData,      SVT_CHANNEL_ORM},
-            {tileData.emissionData, SVT_CHANNEL_EMISSION},
-            {tileData.heightData,   SVT_CHANNEL_HEIGHT}
+        const std::vector<uint8_t>* channelVecs[] = {
+            &tileData.albedoData, &tileData.normalData, &tileData.ormData,
+            &tileData.emissionData, &tileData.heightData
         };
 
-        for (auto& [data, channel] : channels)
+        PhysicalTileCache::ChannelUploadData channels[SVT_CHANNEL_COUNT]{};
+        for (uint32_t i = 0; i < SVT_CHANNEL_COUNT; ++i)
         {
-            if (!data.empty())
-                cache.uploadTileData(physTile, channel, data.data(), static_cast<uint32_t>(data.size()));
+            if (!channelVecs[i]->empty())
+            {
+                channels[i].data = channelVecs[i]->data();
+                channels[i].size = static_cast<uint32_t>(channelVecs[i]->size());
+            }
         }
+
+        cache.uploadTileBatched(physTile, channels);
     }
 
     void SVTStreamManager::processUploads()

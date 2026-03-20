@@ -152,6 +152,8 @@ namespace render::gpudriven
 
             bool enabled = false;
             bool initialized = false;
+            uint64_t frameCounter = 0;
+            std::string lastMaterialPath;
         };
 
         struct WaterState

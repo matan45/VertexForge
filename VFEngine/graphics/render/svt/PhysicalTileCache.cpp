@@ -160,10 +160,71 @@ namespace render::svt
         }
     }
 
+    void PhysicalTileCache::uploadTileBatched(uint32_t tileIndex,
+                                               const ChannelUploadData channels[SVT_CHANNEL_COUNT])
+    {
+        if (tileIndex >= config.physicalTileCount) return;
+
+        ChannelCache* caches[] = { &albedoCache, &normalCache, &ormCache, &emissionCache, &heightCache };
+
+        // Copy all channel data into staging buffer at offsets
+        size_t totalCopied = 0;
+        for (uint32_t i = 0; i < SVT_CHANNEL_COUNT; ++i)
+        {
+            if (!channels[i].data || channels[i].size == 0) continue;
+            if (totalCopied + channels[i].size > stagingBufferSize) break;
+
+            std::memcpy(static_cast<uint8_t*>(stagingMapped) + i * SVT_TILE_SIZE_BC7,
+                        channels[i].data, channels[i].size);
+            totalCopied += channels[i].size;
+        }
+
+        auto dev = device.getLogicalDevice();
+
+        vk::CommandBufferAllocateInfo allocInfo{};
+        allocInfo.commandPool = commandPool;
+        allocInfo.level = vk::CommandBufferLevel::ePrimary;
+        allocInfo.commandBufferCount = 1;
+        auto cmdBuf = dev.allocateCommandBuffers(allocInfo)[0];
+
+        vk::CommandBufferBeginInfo beginInfo{};
+        beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
+        cmdBuf.begin(beginInfo);
+
+        for (uint32_t i = 0; i < SVT_CHANNEL_COUNT; ++i)
+        {
+            if (!channels[i].data || channels[i].size == 0) continue;
+
+            prepareUploadBarrier(cmdBuf, *caches[i], tileIndex);
+
+            vk::BufferImageCopy region{};
+            region.bufferOffset = i * SVT_TILE_SIZE_BC7;
+            region.imageSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+            region.imageSubresource.baseArrayLayer = tileIndex;
+            region.imageSubresource.layerCount = 1;
+            region.imageExtent = vk::Extent3D{SVT_PHYSICAL_TILE_SIZE, SVT_PHYSICAL_TILE_SIZE, 1};
+
+            cmdBuf.copyBufferToImage(stagingBuffer, caches[i]->image,
+                                     vk::ImageLayout::eTransferDstOptimal, region);
+
+            finalizeUploadBarrier(cmdBuf, *caches[i], tileIndex);
+        }
+
+        cmdBuf.end();
+
+        vk::SubmitInfo submitInfo{};
+        submitInfo.commandBufferCount = 1;
+        submitInfo.pCommandBuffers = &cmdBuf;
+        device.getGraphicsQueue().submit(submitInfo);
+        device.getGraphicsQueue().waitIdle();
+
+        dev.freeCommandBuffers(commandPool, cmdBuf);
+    }
+
     void PhysicalTileCache::flushUploads()
     {
-        // Uploads are submitted immediately in uploadToLayer via one-time command buffers.
-        // This is a sync point if needed in the future for batched uploads.
+        // Channel uploads are batched per-tile in uploadTileBatched() (1 submit per tile).
+        // No additional flush needed at this level.
     }
 
     // ---- Private ----
@@ -271,8 +332,9 @@ namespace render::svt
 
     void PhysicalTileCache::createStagingBuffer()
     {
-        // Staging buffer large enough for one tile (BC7 compressed)
-        stagingBufferSize = SVT_TILE_SIZE_BC7;
+        // Staging buffer large enough for all channels of one tile (5x BC7 compressed)
+        // so we can batch all channel uploads into a single command buffer submit
+        stagingBufferSize = SVT_TILE_SIZE_BC7 * SVT_CHANNEL_COUNT;
 
         auto dev = device.getLogicalDevice();
         auto physDev = device.getPhysicalDevice();

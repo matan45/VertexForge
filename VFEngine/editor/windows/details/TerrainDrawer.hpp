@@ -27,6 +27,8 @@ namespace windows::details {
 
         std::future<bool> pendingSave;
         bool isSaving = false;
+        std::future<bool> pendingBake;
+        bool isBaking = false;
         std::string saveStatusMessage;
         int statusFrameCounter = 0;
         nfd::FileDialog fileDialog;

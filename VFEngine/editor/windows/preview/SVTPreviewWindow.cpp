@@ -50,27 +50,8 @@ namespace windows
 
     void SVTPreviewWindow::countPresentTiles()
     {
-        presentTiles = 0;
-        const auto& header = reader.getHeader();
-        uint32_t mipLevels = render::svt::computeMipLevelCount(
-            header.virtualSizeLog2, header.tileSizeLog2);
-
-        for (uint32_t m = 0; m < mipLevels; ++m)
-        {
-            uint32_t tps = render::svt::computeTilesPerMipSide(m,
-                header.virtualSizeLog2, header.tileSizeLog2);
-            if (tps == 0) tps = 1;
-
-            for (uint32_t y = 0; y < tps; ++y)
-            {
-                for (uint32_t x = 0; x < tps; ++x)
-                {
-                    std::vector<uint8_t> tmp;
-                    if (reader.readTile({x, y, m}, tmp))
-                        ++presentTiles;
-                }
-            }
-        }
+        // Count using directory entries (in-memory) instead of reading tile data from disk
+        presentTiles = reader.countPresentEntries();
     }
 
     void SVTPreviewWindow::loadMipPreview(int mipLevel)
