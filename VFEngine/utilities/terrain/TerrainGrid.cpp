@@ -242,7 +242,6 @@ namespace terrain
 
     std::vector<TerrainTile*> TerrainGrid::getVisibleTiles(const math::Frustum& frustum)
     {
-        // Clear visibility from previous frame's result
         for (auto* prev : lastVisibleTiles)
             prev->isVisible = false;
 

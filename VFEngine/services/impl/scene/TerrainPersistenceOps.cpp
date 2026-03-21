@@ -697,8 +697,8 @@ namespace services
                     }
                 }
 
-                glm::vec3 albedo(0.0f), normal(0.0f);
-                float rough = 0.0f, metal = 0.0f, ao_val = 0.0f, totalW = 0.0f;
+                glm::vec3 albedo(0.5f), normal(0.0f, 0.0f, 1.0f);
+                float rough = 0.5f, metal = 0.0f, ao_val = 1.0f, totalW = 0.0f;
 
                 for (int ch = 0; ch < terrain::WEIGHT_CHANNELS; ++ch)
                 {
@@ -729,8 +729,14 @@ namespace services
                 if (totalW > 0.001f)
                 {
                     float inv = 1.0f / totalW;
-                    albedo *= inv; normal = glm::normalize(normal);
+                    albedo *= inv;
                     rough *= inv; metal *= inv; ao_val *= inv;
+                    float nLen = glm::length(normal);
+                    normal = (nLen > 0.001f) ? normal / nLen : glm::vec3(0.0f, 0.0f, 1.0f);
+                }
+                else
+                {
+                    normal = glm::vec3(0.0f, 0.0f, 1.0f);
                 }
 
                 size_t idx = (static_cast<size_t>(py) * pts + px) * 4;
@@ -926,6 +932,12 @@ namespace services
             notification.completed = true;
             notification.success = result.success;
             events::EventDispatcher::instance().publish(notification);
+
+            if (result.success)
+            {
+                events::resource::AssetSavedNotification saved;
+                events::EventDispatcher::instance().publish(saved);
+            }
         }
 
         return result;

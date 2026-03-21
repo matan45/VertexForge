@@ -69,6 +69,16 @@ namespace core
         return terrainService->getTerrainMaterialPath();
     }
 
+    void TerrainRenderAdapter::getTerrainGridWorldBounds(glm::vec2& outMin, glm::vec2& outMax) const
+    {
+        if (!terrainService)
+        {
+            outMin = outMax = glm::vec2(0.0f);
+            return;
+        }
+        terrainService->getTerrainGridWorldBounds(outMin, outMax);
+    }
+
     void TerrainRenderAdapter::setDistanceCullingEnabled(bool enabled)
     {
         if (terrainService) terrainService->setDistanceCullingEnabled(enabled);

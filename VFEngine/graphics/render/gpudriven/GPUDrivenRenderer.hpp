@@ -529,7 +529,9 @@ namespace render::gpudriven
 
         void updateTerrain(const std::vector<terrain::TerrainTile*>& visibleTiles,
                            const glm::vec3& cameraPosition,
-                           const std::string& terrainMaterialPath = "");
+                           const std::string& terrainMaterialPath = "",
+                           const glm::vec2& terrainGridWorldMin = glm::vec2(0.0f),
+                           const glm::vec2& terrainGridWorldMax = glm::vec2(0.0f));
         void renderTerrainDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet,
                                uint32_t screenWidth = 0, uint32_t screenHeight = 0);
         void clearTerrainData();

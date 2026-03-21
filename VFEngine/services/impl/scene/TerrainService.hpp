@@ -116,6 +116,7 @@ namespace services
 
         bool hasActiveTerrain() const { return !terrainGrids.empty(); }
         std::string getTerrainMaterialPath() const;
+        void getTerrainGridWorldBounds(glm::vec2& outMin, glm::vec2& outMax) const;
 
         void setDistanceCullingEnabled(bool enabled) { distanceCullingEnabled_ = enabled; }
         void setMaxDrawDistance(float distance) { maxTerrainDistSq_ = distance * distance; }

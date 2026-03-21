@@ -39,6 +39,7 @@ namespace services
         virtual bool hasActiveTerrain() const = 0;
 
         virtual std::string getTerrainMaterialPath() const = 0;
+        virtual void getTerrainGridWorldBounds(glm::vec2& outMin, glm::vec2& outMax) const = 0;
 
         virtual void setDistanceCullingEnabled(bool enabled) = 0;
         virtual void setMaxDrawDistance(float distance) = 0;

@@ -347,7 +347,6 @@ namespace services
             streamerIt->second->setEnabled(false);
         }
 
-        // Stream in all saved tiles that aren't already loaded
         fileCache.forEachSavedCoord([&](const terrain::TileCoord& coord)
         {
             if (!grid.hasTile(coord))

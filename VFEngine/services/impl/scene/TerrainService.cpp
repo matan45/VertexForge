@@ -158,6 +158,27 @@ namespace services
         return {};
     }
 
+    void TerrainService::getTerrainGridWorldBounds(glm::vec2& outMin, glm::vec2& outMax) const
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto view = registry.view<components::TerrainComponent>();
+        for (auto entity : view)
+        {
+            const auto& comp = view.get<components::TerrainComponent>(entity);
+            if (comp.isActive)
+            {
+                outMin = glm::vec2(
+                    static_cast<float>(comp.gridMinX) * comp.worldTileSize,
+                    static_cast<float>(comp.gridMinZ) * comp.worldTileSize);
+                outMax = glm::vec2(
+                    static_cast<float>(comp.gridMaxX + 1) * comp.worldTileSize,
+                    static_cast<float>(comp.gridMaxZ + 1) * comp.worldTileSize);
+                return;
+            }
+        }
+        outMin = outMax = glm::vec2(0.0f);
+    }
+
     bool TerrainService::hasTerrainTileComponent(EntityHandle entity) const
     {
         if (!entity.isValid())
