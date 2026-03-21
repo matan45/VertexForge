@@ -351,7 +351,7 @@ namespace render::water
         transitionToGeneral(displacementImage);
         transitionToGeneral(normalImage);
 
-        core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), cmd);
+        core::Utilities::endSingleTimeCommands(device, cmd);
     }
 
     void OceanFFTResources::destroyTextures()

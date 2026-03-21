@@ -58,6 +58,9 @@ namespace render
 
     void RenderPassHandler::init()
     {
+        sharedCameraUBO = std::make_unique<common::SharedCameraUBO>(device);
+        sharedCameraUBO->init();
+
         clearColor->init();
 
         if (terrainRaycastPipeline)
@@ -85,6 +88,11 @@ namespace render
     void RenderPassHandler::initMeshPipeline(bool enableGPUDriven)
     {
         if (meshPipelineInitialized) return;
+
+        if (sharedCameraUBO)
+        {
+            meshPipeline->setExternalCameraBuffer(sharedCameraUBO->getBuffer());
+        }
 
         if (iblRenderer->isInitialized())
         {
@@ -205,6 +213,7 @@ namespace render
         if (cloudPipeline) cloudPipeline->cleanup();
         if (postProcessPipeline) postProcessPipeline->cleanup();
         meshPipeline->cleanUp();
+        if (sharedCameraUBO) sharedCameraUBO->cleanup();
         iblRenderer->cleanUp();
         clearColor->cleanUp();
     }

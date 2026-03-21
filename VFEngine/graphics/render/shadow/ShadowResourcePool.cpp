@@ -252,7 +252,7 @@ namespace render::shadow
             1, &cubeBarrier
         );
 
-        core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), cmd, nullptr);
+        core::Utilities::endSingleTimeCommands(device, cmd, nullptr);
     }
 
     void ShadowResourcePool::cleanupPlaceholders()

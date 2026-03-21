@@ -8,6 +8,7 @@
 #include "impl/render/RenderTexturePlayModeHandler.hpp"
 #include "impl/ai/BehaviorTreePlayModeHandler.hpp"
 #include "impl/vfx/VFXRuntimeServiceImpl.hpp"
+#include "impl/render/EditorRenderServiceImpl.hpp"
 #include "../../../core/audio/AudioSceneUpdater.hpp"
 #include "impl/threading/FrameTaskGraph.hpp"
 #include "events/EventDispatcher.hpp"
@@ -69,6 +70,13 @@ namespace handlers
             frameTaskGraph->execute();
         });
 
+        editorRenderServiceImpl = dynamic_cast<services::EditorRenderServiceImpl*>(renderService.get());
+        bootstrap->setPreRenderCallback([this]()
+        {
+            if (editorRenderServiceImpl)
+                editorRenderServiceImpl->renderViewportDeferred();
+        });
+
         if (physicsPlayModeHandler && scriptingService)
         {
             physicsPlayModeHandler->setScriptFixedUpdateCallback([this](float fixedDt)
@@ -90,6 +98,8 @@ namespace handlers
 
     void EditorHandler::cleanUp()
     {
+        bootstrap->stopRenderThread();
+
         if (frameTaskGraph) {
             frameTaskGraph->unregisterEventHandlers();
             frameTaskGraph.reset();

@@ -68,6 +68,8 @@ namespace render::text
         void updateCameraUBO(const glm::mat4& view, const glm::mat4& projection,
                              const glm::vec3& cameraPos) const;
 
+        void setExternalCameraBuffer(vk::Buffer buffer) { bufferManager.setExternalCameraBuffer(buffer); }
+
         void setTextDrawList(const std::vector<TextRenderData>& textEntities);
 
         void recordCommandBuffer(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;

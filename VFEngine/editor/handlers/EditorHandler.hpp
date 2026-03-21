@@ -70,6 +70,7 @@ namespace services {
 	class VFXRuntimeServiceImpl;
 	class RenderTexturePlayModeHandler;
 	class BehaviorTreePlayModeHandler;
+	class EditorRenderServiceImpl;
 }
 
 namespace handlers {
@@ -87,6 +88,7 @@ namespace handlers {
 		
 		std::shared_ptr<services::ISceneService> sceneService;
 		std::shared_ptr<services::IEditorRenderService> renderService;
+		services::EditorRenderServiceImpl* editorRenderServiceImpl = nullptr;
 		std::shared_ptr<services::IInputService> inputService;
 		std::shared_ptr<services::IActionMappingService> actionMappingService;
 		std::shared_ptr<services::IWindowStateService> windowStateService;

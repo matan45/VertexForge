@@ -334,7 +334,7 @@ namespace render::ibl
             vk::ImageLayout::eColorAttachmentOptimal,
             vk::ImageAspectFlagBits::eColor);
 
-        core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), commandBufferInitHelperImageTransition);
+        core::Utilities::endSingleTimeCommands(device, commandBufferInitHelperImageTransition);
 
         vk::UniqueCommandBuffer commandBufferInitCubeImage = core::Utilities::beginSingleTimeCommands(
             device.getLogicalDevice(), commandPool);
@@ -344,7 +344,7 @@ namespace render::ibl
             vk::ImageLayout::eTransferDstOptimal,
             vk::ImageAspectFlagBits::eColor, 6, mipLevels);
 
-        core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), commandBufferInitCubeImage);
+        core::Utilities::endSingleTimeCommands(device, commandBufferInitCubeImage);
 
         // Draw
         vk::ClearValue clearColor{std::array<float, 4>{0.0f, 0.0f, 0.0f, 1.0f}};
@@ -431,7 +431,7 @@ namespace render::ibl
 
                 // Submit and wait for this face to complete before moving to next
                 vk::Fence faceFence = device.getLogicalDevice().createFence({});
-                core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), faceCommandBuffer, faceFence);
+                core::Utilities::endSingleTimeCommands(device, faceCommandBuffer, faceFence);
 
                 if (vk::Result result = device.getLogicalDevice().waitForFences(faceFence, VK_TRUE, UINT64_MAX); result !=
                     vk::Result::eSuccess)
@@ -451,7 +451,7 @@ namespace render::ibl
             vk::ImageLayout::eShaderReadOnlyOptimal,
             vk::ImageAspectFlagBits::eColor, 6, mipLevels);
 
-        core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), commandBufferEndTransition);
+        core::Utilities::endSingleTimeCommands(device, commandBufferEndTransition);
 
         // CleanUp
         device.getLogicalDevice().destroyBuffer(cubeVertexBuffer);

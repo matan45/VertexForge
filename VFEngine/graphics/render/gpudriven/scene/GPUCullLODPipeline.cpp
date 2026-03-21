@@ -1,6 +1,7 @@
 #include "GPUCullLODPipeline.hpp"
 #include "../../../core/Device.hpp"
 #include "../../../core/Shader.hpp"
+#include "../../../core/PipelineUtilities.hpp"
 #include "../GPUDrivenTypes.hpp"
 #include "print/Log.hpp"
 #include <array>
@@ -135,11 +136,8 @@ namespace render::gpudriven
         bindings[6].descriptorCount = 1;
         bindings[6].stageFlags = vk::ShaderStageFlagBits::eCompute;
 
-        vk::DescriptorSetLayoutCreateInfo layoutInfo{};
-        layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
-        layoutInfo.pBindings = bindings.data();
-
-        descriptorSetLayout = vkDevice.createDescriptorSetLayout(layoutInfo);
+        descriptorSetLayout = core::PipelineUtilities::createUpdateAfterBindLayout(
+            vkDevice, bindings.data(), static_cast<uint32_t>(bindings.size()));
         vfLogInfo("GPUCullLODPipeline: Created descriptor set layout");
     }
 
@@ -201,12 +199,8 @@ namespace render::gpudriven
         poolSizes[2].type = vk::DescriptorType::eCombinedImageSampler;
         poolSizes[2].descriptorCount = 1;
 
-        vk::DescriptorPoolCreateInfo poolInfo{};
-        poolInfo.maxSets = 1;
-        poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
-        poolInfo.pPoolSizes = poolSizes.data();
-
-        descriptorPool = vkDevice.createDescriptorPool(poolInfo);
+        descriptorPool = core::PipelineUtilities::createUpdateAfterBindPool(
+            vkDevice, 1, poolSizes.data(), static_cast<uint32_t>(poolSizes.size()));
         vfLogInfo("GPUCullLODPipeline: Created descriptor pool");
     }
 
@@ -390,7 +384,6 @@ namespace render::gpudriven
         descriptorsNeedUpdate = false;
         hiZDescriptorNeedsUpdate = false;
 
-        vfLogWarning("GPUCullLODPipeline: Updated descriptors (Hi-Z: {})", hasHiZ ? "yes" : "no");
     }
 
     void GPUCullLODPipeline::dispatch(vk::CommandBuffer cmd, uint32_t objectCount)

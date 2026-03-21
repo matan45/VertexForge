@@ -231,20 +231,13 @@ namespace render::gpudriven
             bindings[1].descriptorCount = 1;
             bindings[1].stageFlags = vk::ShaderStageFlagBits::eTaskEXT;
 
-            vk::DescriptorSetLayoutCreateInfo layoutInfo{};
-            layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
-            layoutInfo.pBindings = bindings.data();
-            instanceDataLayout = vkDevice.createDescriptorSetLayout(layoutInfo);
+            instanceDataLayout = core::PipelineUtilities::createUpdateAfterBindLayout(vkDevice, bindings.data(), static_cast<uint32_t>(bindings.size()));
 
             vk::DescriptorPoolSize poolSize{};
             poolSize.type = vk::DescriptorType::eStorageBuffer;
             poolSize.descriptorCount = 2;
 
-            vk::DescriptorPoolCreateInfo poolInfo{};
-            poolInfo.maxSets = 1;
-            poolInfo.poolSizeCount = 1;
-            poolInfo.pPoolSizes = &poolSize;
-            instanceDataPool = vkDevice.createDescriptorPool(poolInfo);
+            instanceDataPool = core::PipelineUtilities::createUpdateAfterBindPool(vkDevice, 1, &poolSize, 1);
 
             vk::DescriptorSetAllocateInfo allocInfo{};
             allocInfo.descriptorPool = instanceDataPool;
@@ -262,20 +255,13 @@ namespace render::gpudriven
             binding.descriptorCount = 1;
             binding.stageFlags = vk::ShaderStageFlagBits::eTaskEXT | vk::ShaderStageFlagBits::eMeshEXT;
 
-            vk::DescriptorSetLayoutCreateInfo layoutInfo{};
-            layoutInfo.bindingCount = 1;
-            layoutInfo.pBindings = &binding;
-            cameraLayout = vkDevice.createDescriptorSetLayout(layoutInfo);
+            cameraLayout = core::PipelineUtilities::createUpdateAfterBindLayout(vkDevice, &binding, 1);
 
             vk::DescriptorPoolSize poolSize{};
             poolSize.type = vk::DescriptorType::eUniformBuffer;
             poolSize.descriptorCount = 1;
 
-            vk::DescriptorPoolCreateInfo poolInfo{};
-            poolInfo.maxSets = 1;
-            poolInfo.poolSizeCount = 1;
-            poolInfo.pPoolSizes = &poolSize;
-            cameraPool = vkDevice.createDescriptorPool(poolInfo);
+            cameraPool = core::PipelineUtilities::createUpdateAfterBindPool(vkDevice, 1, &poolSize, 1);
 
             vk::DescriptorSetAllocateInfo allocInfo{};
             allocInfo.descriptorPool = cameraPool;

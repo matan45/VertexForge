@@ -2,6 +2,7 @@
 #include "../../../core/Device.hpp"
 #include "../../../core/Shader.hpp"
 #include "../../../core/BufferUtilities.hpp"
+#include "../../../core/PipelineUtilities.hpp"
 #include "print/Log.hpp"
 
 #include <cstring>
@@ -99,11 +100,8 @@ namespace render::gpudriven
         bindings[1].descriptorCount = 1;
         bindings[1].stageFlags = vk::ShaderStageFlagBits::eCompute;
 
-        vk::DescriptorSetLayoutCreateInfo layoutInfo{};
-        layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
-        layoutInfo.pBindings = bindings.data();
-
-        descriptorSetLayout = vkDevice.createDescriptorSetLayout(layoutInfo);
+        descriptorSetLayout = core::PipelineUtilities::createUpdateAfterBindLayout(
+            vkDevice, bindings.data(), static_cast<uint32_t>(bindings.size()));
     }
 
     void BrushComputePipeline::createPipelineLayout()
@@ -161,12 +159,8 @@ namespace render::gpudriven
         poolSizes[0].type = vk::DescriptorType::eStorageBuffer;
         poolSizes[0].descriptorCount = 2;
 
-        vk::DescriptorPoolCreateInfo poolInfo{};
-        poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
-        poolInfo.pPoolSizes = poolSizes.data();
-        poolInfo.maxSets = 1;
-
-        descriptorPool = vkDevice.createDescriptorPool(poolInfo);
+        descriptorPool = core::PipelineUtilities::createUpdateAfterBindPool(
+            vkDevice, 1, poolSizes.data(), static_cast<uint32_t>(poolSizes.size()));
     }
 
     void BrushComputePipeline::allocateDescriptorSet()
@@ -405,7 +399,7 @@ namespace render::gpudriven
         submitInfo.pCommandBuffers = &cmd;
 
         vk::Fence fence = vkDevice.createFence({});
-        device.getGraphicsQueue().submit(submitInfo, fence);
+        device.submitGraphics(submitInfo, fence);
 
         auto waitResult = vkDevice.waitForFences(fence, VK_TRUE, UINT64_MAX);
         vkDevice.destroyFence(fence);

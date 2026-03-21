@@ -1,4 +1,5 @@
 #include "Utilities.hpp"
+#include "Device.hpp"
 #include "print/Log.hpp"
 
 namespace core {
@@ -101,6 +102,23 @@ namespace core {
 		try {
 			queue.submit(submitInfo, renderFence);
 			queue.waitIdle();
+		}
+		catch (const vk::SystemError& err) {
+			vfLogError("Failed to submit command buffer: {}", err.what());
+		}
+	}
+
+	void Utilities::endSingleTimeCommands(const Device& device, const vk::UniqueCommandBuffer& commandBuffer, const vk::Fence& renderFence)
+	{
+		commandBuffer->end();
+
+		vk::SubmitInfo submitInfo{};
+		submitInfo.commandBufferCount = 1;
+		submitInfo.pCommandBuffers = &(*commandBuffer);
+
+		try {
+			device.submitGraphics(submitInfo, renderFence);
+			device.waitGraphicsIdle();
 		}
 		catch (const vk::SystemError& err) {
 			vfLogError("Failed to submit command buffer: {}", err.what());

@@ -19,6 +19,7 @@ namespace core
         if (!buffer && !memory)
             return;
 
+        std::lock_guard lock(mutex);
         pendingDeletions.push_back({
             BufferDeletion{buffer, memory},
             lastFrameNumber
@@ -31,6 +32,7 @@ namespace core
         if (!image && !memory && views.empty())
             return;
 
+        std::lock_guard lock(mutex);
         pendingDeletions.push_back({
             ImageDeletion{image, memory, views},
             lastFrameNumber
@@ -42,6 +44,7 @@ namespace core
         if (!view)
             return;
 
+        std::lock_guard lock(mutex);
         pendingDeletions.push_back({
             ImageViewDeletion{view},
             lastFrameNumber
@@ -53,6 +56,7 @@ namespace core
         if (!framebuffer)
             return;
 
+        std::lock_guard lock(mutex);
         pendingDeletions.push_back({
             FramebufferDeletion{framebuffer},
             lastFrameNumber
@@ -64,6 +68,7 @@ namespace core
         if (!sampler)
             return;
 
+        std::lock_guard lock(mutex);
         pendingDeletions.push_back({
             SamplerDeletion{sampler},
             lastFrameNumber
@@ -75,6 +80,7 @@ namespace core
         if (!pool)
             return;
 
+        std::lock_guard lock(mutex);
         pendingDeletions.push_back({
             DescriptorPoolDeletion{pool},
             lastFrameNumber
@@ -86,6 +92,7 @@ namespace core
         if (!deletionFunc)
             return;
 
+        std::lock_guard lock(mutex);
         pendingDeletions.push_back({
             CustomDeletion{std::move(deletionFunc)},
             lastFrameNumber
@@ -94,38 +101,58 @@ namespace core
 
     void DeferredDeletionQueue::processDeletions(uint32_t currentFrame)
     {
-        lastFrameNumber = currentFrame;
-
-        auto it = pendingDeletions.begin();
-        while (it != pendingDeletions.end())
+        // Swap pending deletions out under lock, then process without holding lock
+        std::vector<PendingDeletion> localDeletions;
         {
-            uint32_t framesPassed = currentFrame - it->frameQueued;
+            std::lock_guard lock(mutex);
+            lastFrameNumber = currentFrame;
+            localDeletions.swap(pendingDeletions);
+        }
+
+        std::vector<PendingDeletion> kept;
+        for (auto& pending : localDeletions)
+        {
+            uint32_t framesPassed = currentFrame - pending.frameQueued;
 
             if (framesPassed >= FRAMES_BEFORE_DELETE)
             {
-                executeDelete(it->data);
-                it = pendingDeletions.erase(it);
+                executeDelete(pending.data);
             }
             else
             {
-                ++it;
+                kept.push_back(std::move(pending));
             }
+        }
+
+        if (!kept.empty())
+        {
+            std::lock_guard lock(mutex);
+            // Prepend kept items before any newly queued items
+            kept.insert(kept.end(),
+                        std::make_move_iterator(pendingDeletions.begin()),
+                        std::make_move_iterator(pendingDeletions.end()));
+            pendingDeletions = std::move(kept);
         }
     }
 
     void DeferredDeletionQueue::flush()
     {
-        if (pendingDeletions.empty())
+        std::vector<PendingDeletion> localDeletions;
+        {
+            std::lock_guard lock(mutex);
+            localDeletions.swap(pendingDeletions);
+        }
+
+        if (localDeletions.empty())
             return;
 
         device.getLogicalDevice().waitIdle();
 
-        for (const auto& pending : pendingDeletions)
+        for (const auto& pending : localDeletions)
         {
             executeDelete(pending.data);
         }
 
-        pendingDeletions.clear();
         spdlog::debug("DeferredDeletionQueue: Flushed all pending deletions");
     }
 

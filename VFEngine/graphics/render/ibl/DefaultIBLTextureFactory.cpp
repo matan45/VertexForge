@@ -152,8 +152,8 @@ namespace render::ibl
         vk::SubmitInfo submitInfo{};
         submitInfo.commandBufferCount = 1;
         submitInfo.pCommandBuffers = &cmd;
-        device.getGraphicsQueue().submit(submitInfo);
-        device.getGraphicsQueue().waitIdle();
+        device.submitGraphics(submitInfo);
+        device.waitGraphicsIdle();
 
         device.getLogicalDevice().freeCommandBuffers(commandPool, cmd);
         device.getLogicalDevice().destroyBuffer(stagingBuffer);
@@ -258,8 +258,8 @@ namespace render::ibl
         vk::SubmitInfo submitInfo{};
         submitInfo.commandBufferCount = 1;
         submitInfo.pCommandBuffers = &cmd;
-        device.getGraphicsQueue().submit(submitInfo);
-        device.getGraphicsQueue().waitIdle();
+        device.submitGraphics(submitInfo);
+        device.waitGraphicsIdle();
 
         device.getLogicalDevice().freeCommandBuffers(commandPool, cmd);
         device.getLogicalDevice().destroyBuffer(stagingBuffer);

@@ -398,40 +398,42 @@ namespace render::lighting
             {}
         );
 
+        auto& sf = stagingFrames[currentStagingFrame];
+
         if (directionalCount > 0)
         {
             size_t copySize = directionalCount * sizeof(GPUDirectionalLight);
-            std::memcpy(directionalStagingMapped, cpuDirectionalLights.data(), copySize);
+            std::memcpy(sf.directionalStagingMapped, cpuDirectionalLights.data(), copySize);
 
             vk::BufferCopy region{};
             region.srcOffset = 0;
             region.dstOffset = 0;
             region.size = copySize;
-            cmd.copyBuffer(directionalStagingBuffer, directionalBuffer, region);
+            cmd.copyBuffer(sf.directionalStagingBuffer, directionalBuffer, region);
         }
 
         if (pointCount > 0)
         {
             size_t copySize = pointCount * sizeof(GPUPointLight);
-            std::memcpy(pointStagingMapped, cpuPointLights.data(), copySize);
+            std::memcpy(sf.pointStagingMapped, cpuPointLights.data(), copySize);
 
             vk::BufferCopy region{};
             region.srcOffset = 0;
             region.dstOffset = 0;
             region.size = copySize;
-            cmd.copyBuffer(pointStagingBuffer, pointBuffer, region);
+            cmd.copyBuffer(sf.pointStagingBuffer, pointBuffer, region);
         }
 
         if (spotCount > 0)
         {
             size_t copySize = spotCount * sizeof(GPUSpotLight);
-            std::memcpy(spotStagingMapped, cpuSpotLights.data(), copySize);
+            std::memcpy(sf.spotStagingMapped, cpuSpotLights.data(), copySize);
 
             vk::BufferCopy region{};
             region.srcOffset = 0;
             region.dstOffset = 0;
             region.size = copySize;
-            cmd.copyBuffer(spotStagingBuffer, spotBuffer, region);
+            cmd.copyBuffer(sf.spotStagingBuffer, spotBuffer, region);
         }
 
         std::array<vk::BufferMemoryBarrier, 3> barriers{};

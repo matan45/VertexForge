@@ -423,4 +423,41 @@ namespace core
 
 		return result;
 	}
+
+	vk::DescriptorSetLayout PipelineUtilities::createUpdateAfterBindLayout(
+		vk::Device device,
+		const vk::DescriptorSetLayoutBinding* bindings,
+		uint32_t bindingCount)
+	{
+		std::vector<vk::DescriptorBindingFlags> bindingFlags(
+			bindingCount, vk::DescriptorBindingFlagBits::eUpdateAfterBind);
+
+		vk::DescriptorSetLayoutBindingFlagsCreateInfo flagsInfo{};
+		flagsInfo.bindingCount = bindingCount;
+		flagsInfo.pBindingFlags = bindingFlags.data();
+
+		vk::DescriptorSetLayoutCreateInfo layoutInfo{};
+		layoutInfo.bindingCount = bindingCount;
+		layoutInfo.pBindings = bindings;
+		layoutInfo.pNext = &flagsInfo;
+		layoutInfo.flags = vk::DescriptorSetLayoutCreateFlagBits::eUpdateAfterBindPool;
+
+		return device.createDescriptorSetLayout(layoutInfo);
+	}
+
+	vk::DescriptorPool PipelineUtilities::createUpdateAfterBindPool(
+		vk::Device device,
+		uint32_t maxSets,
+		const vk::DescriptorPoolSize* poolSizes,
+		uint32_t poolSizeCount,
+		vk::DescriptorPoolCreateFlags extraFlags)
+	{
+		vk::DescriptorPoolCreateInfo poolInfo{};
+		poolInfo.maxSets = maxSets;
+		poolInfo.poolSizeCount = poolSizeCount;
+		poolInfo.pPoolSizes = poolSizes;
+		poolInfo.flags = vk::DescriptorPoolCreateFlagBits::eUpdateAfterBind | extraFlags;
+
+		return device.createDescriptorPool(poolInfo);
+	}
 }

@@ -328,7 +328,7 @@ namespace render::gpudriven
         cmdBuffer->copyBuffer(combinedDrawCountBuffer, stagingBuffer, copyRegion);
 
         core::Utilities::endSingleTimeCommands(
-            device.getGraphicsQueue(),
+            device,
             cmdBuffer
         );
 

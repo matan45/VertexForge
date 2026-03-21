@@ -21,7 +21,7 @@ namespace controllers {
 		mainLoop->run();
 	}
 
-	void CoreInterface::cleanUp() const
+	void CoreInterface::cleanUp()
 	{
 		animatorSystem->cleanUp();
 		mainLoop->cleanUp();
@@ -62,6 +62,16 @@ namespace controllers {
 	void CoreInterface::setBlitSourceProvider(std::function<void*(uint32_t)> provider)
 	{
 		mainLoop->setBlitSourceProvider(std::move(provider));
+	}
+
+	void CoreInterface::setPreRenderCallback(std::function<void()> callback)
+	{
+		mainLoop->setPreRenderCallback(std::move(callback));
+	}
+
+	void CoreInterface::stopRenderThread()
+	{
+		mainLoop->stopRenderThread();
 	}
 
 	std::function<void()> CoreInterface::getSceneGraphUpdateFn() const

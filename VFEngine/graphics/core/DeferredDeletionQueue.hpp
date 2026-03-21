@@ -5,6 +5,7 @@
 #include <variant>
 #include <functional>
 #include <cstdint>
+#include <mutex>
 
 namespace core
 {
@@ -33,8 +34,8 @@ namespace core
         void processDeletions(uint32_t currentFrame);
         void flush();
 
-        [[nodiscard]] bool hasPendingDeletions() const { return !pendingDeletions.empty(); }
-        [[nodiscard]] size_t getPendingCount() const { return pendingDeletions.size(); }
+        [[nodiscard]] bool hasPendingDeletions() const { std::lock_guard lock(mutex); return !pendingDeletions.empty(); }
+        [[nodiscard]] size_t getPendingCount() const { std::lock_guard lock(mutex); return pendingDeletions.size(); }
 
     private:
         Device& device;
@@ -94,6 +95,7 @@ namespace core
             uint32_t frameQueued;
         };
 
+        mutable std::mutex mutex;
         std::vector<PendingDeletion> pendingDeletions;
 
         void executeDelete(const DeletionData& data);

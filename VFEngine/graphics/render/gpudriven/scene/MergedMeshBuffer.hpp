@@ -3,9 +3,11 @@
 #include "../GPUDrivenTypes.hpp"
 #include "../FreeListAllocator.hpp"
 #include "../../material/MaterialPBRExtractor.hpp"
+#include "../../../core/RenderManager.hpp"
 #include "material/MaterialManager.hpp"
 #include <vulkan/vulkan.hpp>
 #include <entt/entt.hpp>
+#include <array>
 #include <functional>
 #include <memory>
 #include <string>
@@ -80,15 +82,28 @@ namespace render::gpudriven
         vk::Buffer objectBuffer;
         vk::DeviceMemory objectBufferMemory;
 
-        vk::Buffer objectStagingBuffer;
-        vk::DeviceMemory objectStagingMemory;
-        void* objectStagingMapped = nullptr;
-
         vk::Buffer instanceTransformBuffer;
         vk::DeviceMemory instanceTransformBufferMemory;
-        vk::Buffer instanceStagingBuffer;
-        vk::DeviceMemory instanceStagingMemory;
-        void* instanceStagingMapped = nullptr;
+
+        // Per-frame staging buffers to allow CPU/GPU overlap
+        struct StagingFrame
+        {
+            vk::Buffer objectStagingBuffer;
+            vk::DeviceMemory objectStagingMemory;
+            void* objectStagingMapped = nullptr;
+
+            vk::Buffer instanceStagingBuffer;
+            vk::DeviceMemory instanceStagingMemory;
+            void* instanceStagingMapped = nullptr;
+
+            vk::Buffer activeIndexStagingBuffer;
+            vk::DeviceMemory activeIndexStagingMemory;
+            void* activeIndexStagingMapped = nullptr;
+        };
+
+        std::array<StagingFrame, core::MAX_FRAMES_IN_FLIGHT> stagingFrames{};
+        uint32_t currentStagingFrame = 0;
+
         std::vector<GPUInstanceTransform> cpuInstanceTransforms;
         uint32_t maxInstanceCount = MAX_GPU_INSTANCES;
         uint32_t currentInstanceCount = 0;
@@ -137,9 +152,6 @@ namespace render::gpudriven
         // Active-index GPU buffer
         vk::Buffer activeIndexBuffer;
         vk::DeviceMemory activeIndexBufferMemory;
-        vk::Buffer activeIndexStagingBuffer;
-        vk::DeviceMemory activeIndexStagingMemory;
-        void* activeIndexStagingMapped = nullptr;
 
     public:
         explicit MergedMeshBuffer(core::Device& device);
@@ -225,6 +237,10 @@ namespace render::gpudriven
                                                    uint32_t submeshIndex);
 
         void flushPendingTransfers();
+
+        // Advance to next staging frame (call once per frame before uploads)
+        void advanceStagingFrame() { currentStagingFrame = (currentStagingFrame + 1) % core::MAX_FRAMES_IN_FLIGHT; }
+        uint32_t getCurrentStagingFrame() const { return currentStagingFrame; }
 
     private:
         void createBuffers();

@@ -324,22 +324,15 @@ namespace render::gpudriven
         bindings[2].descriptorCount = 1;
         bindings[2].stageFlags = vk::ShaderStageFlagBits::eTaskEXT;
 
-        vk::DescriptorSetLayoutCreateInfo layoutInfo{};
-        layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
-        layoutInfo.pBindings = bindings.data();
-
-        perDrawDataLayout = vkDevice.createDescriptorSetLayout(layoutInfo);
+        perDrawDataLayout = core::PipelineUtilities::createUpdateAfterBindLayout(
+            vkDevice, bindings.data(), static_cast<uint32_t>(bindings.size()));
 
         vk::DescriptorPoolSize poolSize{};
         poolSize.type = vk::DescriptorType::eStorageBuffer;
         poolSize.descriptorCount = 3;
 
-        vk::DescriptorPoolCreateInfo poolInfo{};
-        poolInfo.maxSets = 1;
-        poolInfo.poolSizeCount = 1;
-        poolInfo.pPoolSizes = &poolSize;
-
-        perDrawDataPool = vkDevice.createDescriptorPool(poolInfo);
+        perDrawDataPool = core::PipelineUtilities::createUpdateAfterBindPool(
+            vkDevice, 1, &poolSize, 1);
 
         vk::DescriptorSetAllocateInfo allocInfo{};
         allocInfo.descriptorPool = perDrawDataPool;
@@ -383,11 +376,8 @@ namespace render::gpudriven
         bindings[4].descriptorCount = 1;
         bindings[4].stageFlags = vk::ShaderStageFlagBits::eTaskEXT;
 
-        vk::DescriptorSetLayoutCreateInfo layoutInfo{};
-        layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
-        layoutInfo.pBindings = bindings.data();
-
-        meshletDataLayout = vkDevice.createDescriptorSetLayout(layoutInfo);
+        meshletDataLayout = core::PipelineUtilities::createUpdateAfterBindLayout(
+            vkDevice, bindings.data(), static_cast<uint32_t>(bindings.size()));
 
         std::array<vk::DescriptorPoolSize, 2> poolSizes{};
         poolSizes[0].type = vk::DescriptorType::eStorageBuffer;
@@ -395,12 +385,8 @@ namespace render::gpudriven
         poolSizes[1].type = vk::DescriptorType::eCombinedImageSampler;
         poolSizes[1].descriptorCount = 1;
 
-        vk::DescriptorPoolCreateInfo poolInfo{};
-        poolInfo.maxSets = 1;
-        poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
-        poolInfo.pPoolSizes = poolSizes.data();
-
-        meshletDataPool = vkDevice.createDescriptorPool(poolInfo);
+        meshletDataPool = core::PipelineUtilities::createUpdateAfterBindPool(
+            vkDevice, 1, poolSizes.data(), static_cast<uint32_t>(poolSizes.size()));
 
         vk::DescriptorSetAllocateInfo allocInfo{};
         allocInfo.descriptorPool = meshletDataPool;
@@ -437,22 +423,15 @@ namespace render::gpudriven
         vertexBinding.descriptorCount = 1;
         vertexBinding.stageFlags = vk::ShaderStageFlagBits::eMeshEXT;
 
-        vk::DescriptorSetLayoutCreateInfo layoutInfo{};
-        layoutInfo.bindingCount = 1;
-        layoutInfo.pBindings = &vertexBinding;
-
-        vertexDataLayout = vkDevice.createDescriptorSetLayout(layoutInfo);
+        vertexDataLayout = core::PipelineUtilities::createUpdateAfterBindLayout(
+            vkDevice, &vertexBinding, 1);
 
         vk::DescriptorPoolSize poolSize{};
         poolSize.type = vk::DescriptorType::eStorageBuffer;
         poolSize.descriptorCount = 1;
 
-        vk::DescriptorPoolCreateInfo poolInfo{};
-        poolInfo.maxSets = 1;
-        poolInfo.poolSizeCount = 1;
-        poolInfo.pPoolSizes = &poolSize;
-
-        vertexDataPool = vkDevice.createDescriptorPool(poolInfo);
+        vertexDataPool = core::PipelineUtilities::createUpdateAfterBindPool(
+            vkDevice, 1, &poolSize, 1);
 
         vk::DescriptorSetAllocateInfo allocInfo{};
         allocInfo.descriptorPool = vertexDataPool;
@@ -626,7 +605,7 @@ namespace render::gpudriven
             return cachedStats;
         }
 
-        device.getGraphicsQueue().waitIdle();
+        device.waitGraphicsIdle();
 
         vk::Device vkDevice = device.getLogicalDevice();
 

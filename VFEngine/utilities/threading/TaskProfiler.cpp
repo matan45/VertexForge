@@ -104,6 +104,36 @@ namespace threading {
 		return result;
 	}
 
+	void TaskProfiler::appendToLatestFrame(const std::vector<TaskProfileEntry>& entries)
+	{
+		if (entries.empty()) return;
+
+		std::lock_guard<std::mutex> lock(mutex);
+		if (history.empty()) return;
+
+		size_t idx = (writeIndex == 0) ? (history.size() - 1) : (writeIndex - 1);
+		auto& snapshot = history[idx];
+
+		for (auto& e : entries)
+		{
+			snapshot.entries.push_back(e);
+			maxThreadId = std::max(maxThreadId, e.threadId);
+		}
+
+		// Recompute frame duration to include render thread
+		uint64_t minStart = std::numeric_limits<uint64_t>::max();
+		uint64_t maxEnd = 0;
+		for (auto& e : snapshot.entries)
+		{
+			if (e.endTimeNs > 0)
+			{
+				minStart = std::min(minStart, e.startTimeNs);
+				maxEnd = std::max(maxEnd, e.endTimeNs);
+			}
+		}
+		snapshot.frameDurationNs = (maxEnd > minStart) ? (maxEnd - minStart) : 0;
+	}
+
 	uint32_t TaskProfiler::getMaxThreadId() const
 	{
 		std::lock_guard<std::mutex> lock(mutex);

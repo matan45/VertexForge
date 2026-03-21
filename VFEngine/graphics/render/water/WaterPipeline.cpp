@@ -206,22 +206,13 @@ namespace render::water
         binding.stageFlags = vk::ShaderStageFlagBits::eVertex;
         binding.pImmutableSamplers = nullptr;
 
-        vk::DescriptorSetLayoutCreateInfo layoutInfo{};
-        layoutInfo.bindingCount = 1;
-        layoutInfo.pBindings = &binding;
-
-        waterTileLayout = vkDevice.createDescriptorSetLayout(layoutInfo);
+        waterTileLayout = core::PipelineUtilities::createUpdateAfterBindLayout(vkDevice, &binding, 1);
 
         vk::DescriptorPoolSize poolSize{};
         poolSize.type = vk::DescriptorType::eStorageBuffer;
         poolSize.descriptorCount = 1;
 
-        vk::DescriptorPoolCreateInfo poolInfo{};
-        poolInfo.maxSets = 1;
-        poolInfo.poolSizeCount = 1;
-        poolInfo.pPoolSizes = &poolSize;
-
-        waterTilePool = vkDevice.createDescriptorPool(poolInfo);
+        waterTilePool = core::PipelineUtilities::createUpdateAfterBindPool(vkDevice, 1, &poolSize, 1);
 
         vk::DescriptorSetAllocateInfo allocInfo{};
         allocInfo.descriptorPool = waterTilePool;
@@ -368,7 +359,7 @@ namespace render::water
             vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
             vk::ImageAspectFlagBits::eColor);
 
-        core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), cmd);
+        core::Utilities::endSingleTimeCommands(device, cmd);
 
         device.getLogicalDevice().destroyBuffer(stagingBuffer);
         device.getLogicalDevice().freeMemory(stagingMemory);
@@ -471,7 +462,7 @@ namespace render::water
         core::ImageUtilities::transitionImageLayout(cmd.get(), oceanDummyImage,
             vk::ImageLayout::eUndefined, vk::ImageLayout::eShaderReadOnlyOptimal,
             vk::ImageAspectFlagBits::eColor);
-        core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), cmd);
+        core::Utilities::endSingleTimeCommands(device, cmd);
 
         // Create sampler
         vk::SamplerCreateInfo samplerInfo{};

@@ -34,8 +34,9 @@ namespace core {
 
 		void init();
 		void run();
-		void cleanUp() const;
+		void cleanUp();
 		void close();
+		void stopRenderThread();
 
 		// Get window pointer for service initialization
 		window::Window* getWindow() const { return mainWindow; }
@@ -59,6 +60,9 @@ namespace core {
 
 		// Set blit source provider for runtime (offscreen -> swapchain blit)
 		void setBlitSourceProvider(std::function<void*(uint32_t)> provider);
+
+		// Set callback to run on the render thread before swapchain present
+		void setPreRenderCallback(std::function<void()> callback);
 
 	private:
 		void newFrame() const;

@@ -95,8 +95,6 @@ namespace render::gpudriven
 
     void GPUDrivenCameraBuffer::extractFrustumPlanes(const glm::mat4& viewProjection, glm::vec4 planes[6])
     {
-        // Use the same extraction as CPU-side frustum culling (Frustum::extractFromMatrix)
-        // The projection already has Y-flip applied, and CPU culling works correctly with it
         math::extractFrustumPlanes(viewProjection, planes);
     }
 }

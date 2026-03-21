@@ -7,6 +7,7 @@
 #include "../../services/data/RenderHookTypes.hpp"
 #include "../../services/data/RenderHookContext.hpp"
 #include "../../services/providers/render/IDecalRenderProvider.hpp"
+#include "common/SharedCameraUBO.hpp"
 #include <glm/glm.hpp>
 #include <memory>
 #include <vector>
@@ -142,6 +143,8 @@ namespace render
         bool decalRenderingEnabled = true;
 
         core::OffscreenResources& offscreenResources;
+
+        std::unique_ptr<common::SharedCameraUBO> sharedCameraUBO;
 
         bool meshPipelineInitialized = false;
         std::vector<mesh::MeshRenderData> currentMeshDrawList;
@@ -298,6 +301,10 @@ namespace render
 
         void setDeletionQueue(core::DeferredDeletionQueue* queue);
         void setGPUDrivenCameraData(const glm::vec3& cameraPos, float nearPlane, float farPlane, float time = 0.0f);
+
+        void updateSharedCameraUBO(const glm::mat4& view, const glm::mat4& projection,
+                                   const glm::vec3& cameraPos, float time);
+        vk::Buffer getSharedCameraBuffer() const;
 
         void setVisibleLightsFromBVH(const std::vector<uint32_t>& visibleLights);
         void clearVisibleLights();

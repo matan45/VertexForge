@@ -118,7 +118,7 @@ namespace core
 
         command.get().copyBufferToImage(buffer, image, vk::ImageLayout::eTransferDstOptimal, region);
 
-        core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), command);
+        core::Utilities::endSingleTimeCommands(device, command);
     }
 
     void Texture::createMipSampler(vk::Sampler& outSampler, uint32_t mipLevel)

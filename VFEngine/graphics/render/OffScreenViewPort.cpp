@@ -54,6 +54,20 @@ namespace render
 
         vk::Result result = device.getLogicalDevice().waitForFences(
             1, &inFlightFences[imageIndex], VK_TRUE, UINT64_MAX);
+
+        // Also wait for any other swapchain image that shares the same frame-in-flight
+        // secondary command buffer slot (e.g., images 0 and 2 both map to fi=0 when
+        // MAX_FRAMES_IN_FLIGHT=2). Without this, resetFrame() may reset secondary
+        // command buffers still pending from a different image's submission.
+        uint32_t fi = imageIndex % core::MAX_FRAMES_IN_FLIGHT;
+        for (uint32_t i = 0; i < static_cast<uint32_t>(inFlightFences.size()); i++)
+        {
+            if (i != imageIndex && (i % core::MAX_FRAMES_IN_FLIGHT) == fi)
+            {
+                (void)device.getLogicalDevice().waitForFences(1, &inFlightFences[i], VK_TRUE, UINT64_MAX);
+            }
+        }
+
         result = device.getLogicalDevice().resetFences(1, &inFlightFences[imageIndex]);
         (void)result;
 
@@ -90,7 +104,7 @@ namespace render
 
         commandBuffer.begin(vk::CommandBufferBeginInfo{});
 
-        draw(commandBuffer);
+        draw(commandBuffer, imageIndex);
 
         commandBuffer.end();
 
@@ -125,7 +139,7 @@ namespace render
             submitInfo.signalSemaphoreCount = 0;
             submitInfo.pSignalSemaphores = nullptr;
 
-            device.getGraphicsQueue().submit(submitInfo, inFlightFences[imageIndex]);
+            device.submitGraphics(submitInfo, inFlightFences[imageIndex]);
         }
         else
         {
@@ -135,10 +149,11 @@ namespace render
                 0, nullptr
             );
 
-            device.getGraphicsQueue().submit(submitInfo, inFlightFences[imageIndex]);
+            device.submitGraphics(submitInfo, inFlightFences[imageIndex]);
         }
 
-        device.getGraphicsQueue().waitIdle();
+        // Fence-based sync: inFlightFences[imageIndex] is waited on at the top of render()
+        // when this imageIndex comes around again. No need to stall the entire queue.
 
         return offscreenResources.colorImages[imageIndex].descriptorSet;
     }
@@ -254,9 +269,9 @@ namespace render
         return {};
     }
 
-    void OffScreenViewPort::draw(const vk::CommandBuffer& commandBuffer) const
+    void OffScreenViewPort::draw(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const
     {
-        renderPassHandler->draw(commandBuffer, core::RenderManager::getImageIndex());
+        renderPassHandler->draw(commandBuffer, imageIndex);
     }
 
     void OffScreenViewPort::createOffscreenResources()
@@ -293,7 +308,7 @@ namespace render
         core::ImageUtilities::transitionImageLayout(trasitionDepthImage.get(), depth.depthImage, vk::ImageLayout::eUndefined,
                                                vk::ImageLayout::eDepthStencilAttachmentOptimal,
                                                vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil);
-        core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), trasitionDepthImage);
+        core::Utilities::endSingleTimeCommands(device, trasitionDepthImage);
 
         offscreenResources.depthImage = std::move(depth);
 
@@ -321,7 +336,7 @@ namespace render
                                                    vk::ImageLayout::eUndefined,
                                                    vk::ImageLayout::eDepthStencilAttachmentOptimal,
                                                    vk::ImageAspectFlagBits::eStencil);
-            core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), transitionStencilImage);
+            core::Utilities::endSingleTimeCommands(device, transitionStencilImage);
 
             offscreenResources.uiStencilImage = std::move(stencil);
         }
@@ -341,7 +356,7 @@ namespace render
             core::ImageUtilities::transitionImageLayout(trasitionColorImage.get(), color.colorImage,
                                                    vk::ImageLayout::eUndefined, vk::ImageLayout::eShaderReadOnlyOptimal,
                                                    vk::ImageAspectFlagBits::eColor);
-            core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), trasitionColorImage);
+            core::Utilities::endSingleTimeCommands(device, trasitionColorImage);
 
             updateDescriptorSets(color.descriptorSet, color.colorImageView);
 

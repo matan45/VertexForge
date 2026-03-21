@@ -85,12 +85,12 @@ namespace render::mesh
             renderPass = nullptr;
         }
 
-        if (cameraUBO)
+        if (cameraUBO && !externalCameraBuffer)
         {
             logicalDevice.destroyBuffer(cameraUBO);
             cameraUBO = nullptr;
         }
-        if (cameraUBOMemory)
+        if (cameraUBOMemory && !externalCameraBuffer)
         {
             logicalDevice.freeMemory(cameraUBOMemory);
             cameraUBOMemory = nullptr;

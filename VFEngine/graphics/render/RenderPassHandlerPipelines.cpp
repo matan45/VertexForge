@@ -206,6 +206,10 @@ namespace render
             return;
         }
 
+        if (sharedCameraUBO)
+        {
+            billboardPipeline->setExternalCameraBuffer(sharedCameraUBO->getBuffer());
+        }
         billboardPipeline->init();
         billboardPipelineInitialized = true;
     }
@@ -226,6 +230,10 @@ namespace render
             return;
         }
 
+        if (sharedCameraUBO)
+        {
+            textPipeline->setExternalCameraBuffer(sharedCameraUBO->getBuffer());
+        }
         textPipeline->init();
         textPipelineInitialized = true;
     }

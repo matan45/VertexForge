@@ -2,6 +2,7 @@
 #include "GPUVFXTypes.hpp"
 #include "../../../core/Device.hpp"
 #include "../../../core/Shader.hpp"
+#include "../../../core/PipelineUtilities.hpp"
 #include "print/Log.hpp"
 
 namespace render::vfx
@@ -85,11 +86,7 @@ namespace render::vfx
             bindings[i].stageFlags = vk::ShaderStageFlagBits::eCompute;
         }
 
-        vk::DescriptorSetLayoutCreateInfo layoutInfo{};
-        layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
-        layoutInfo.pBindings = bindings.data();
-
-        descriptorSetLayout = vkDevice.createDescriptorSetLayout(layoutInfo);
+        descriptorSetLayout = core::PipelineUtilities::createUpdateAfterBindLayout(vkDevice, bindings.data(), static_cast<uint32_t>(bindings.size()));
     }
 
     void GPUVFXComputePipeline::createPipelineLayout()
@@ -143,16 +140,11 @@ namespace render::vfx
     {
         vk::Device vkDevice = device.getLogicalDevice();
 
-        std::array<vk::DescriptorPoolSize, 1> poolSizes{};
-        poolSizes[0].type = vk::DescriptorType::eStorageBuffer;
-        poolSizes[0].descriptorCount = 10;
+        vk::DescriptorPoolSize poolSize{};
+        poolSize.type = vk::DescriptorType::eStorageBuffer;
+        poolSize.descriptorCount = 10;
 
-        vk::DescriptorPoolCreateInfo poolInfo{};
-        poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
-        poolInfo.pPoolSizes = poolSizes.data();
-        poolInfo.maxSets = 1;
-
-        descriptorPool = vkDevice.createDescriptorPool(poolInfo);
+        descriptorPool = core::PipelineUtilities::createUpdateAfterBindPool(vkDevice, 1, &poolSize, 1);
     }
 
     void GPUVFXComputePipeline::allocateDescriptorSet()

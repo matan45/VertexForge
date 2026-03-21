@@ -1,7 +1,7 @@
 #pragma once
 #define VULKAN_HPP_DISPATCH_LOADER_DYNAMIC 1
 #include <vulkan/vulkan.hpp>
-#include "RenderManager.hpp" // for MAX_FRAMES_IN_FLIGHT
+#include "GraphicsConstants.hpp"
 #include <array>
 
 namespace core

@@ -5,6 +5,7 @@
 
 #include "../core/Device.hpp"
 #include "../core/SwapChain.hpp"
+#include "../core/CommandPool.hpp"
 #include "../window/Window.hpp"
 #include "../core/Utilities.hpp"
 #include "print/Log.hpp"
@@ -95,9 +96,70 @@ namespace imguiPass {
 
 	void ImguiRender::render(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const
 	{
-
 		ImGui::Render();
 		ImDrawData* drawData = ImGui::GetDrawData();
+
+		renderFromSnapshot(commandBuffer, imageIndex, drawData);
+
+		drawData->Clear();
+	}
+
+	void ImguiRender::generateAndSnapshotDrawData()
+	{
+		ImGui::Render();
+		ImDrawData* drawData = ImGui::GetDrawData();
+
+		// Write to the current write slot (render thread reads from the other slot)
+		uint32_t wi = writeIndex.load(std::memory_order_relaxed);
+		snapshots[wi].snapshot(drawData);
+
+		// Publish: make the write slot the new read slot
+		readIndex.store(wi, std::memory_order_release);
+
+		// Flip write slot for next frame
+		writeIndex.store(1 - wi, std::memory_order_relaxed);
+
+		drawData->Clear();
+	}
+
+	void ImguiRender::renderSnapshotted(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex)
+	{
+		uint32_t ri = readIndex.load(std::memory_order_acquire);
+		ImDrawData* snapshotData = snapshots[ri].getDrawData();
+
+		if (snapshotData)
+		{
+			renderFromSnapshot(commandBuffer, imageIndex, snapshotData);
+		}
+		else
+		{
+			renderEmpty(commandBuffer, imageIndex);
+		}
+	}
+
+	void ImguiRender::renderEmpty(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const
+	{
+
+		// Record an empty render pass to transition swapchain image to present layout
+		vk::ClearValue clearColor = { std::array<float, 4>{0.0f, 0.0f, 0.0f, 1.0f} };
+
+		vk::RenderPassBeginInfo renderPassinfo = {};
+		renderPassinfo.renderPass = imGuiRenderPass;
+		renderPassinfo.framebuffer = imGuiFrameBuffers[imageIndex];
+		renderPassinfo.renderArea.extent.width = swapChain.getSwapchainExtent().width;
+		renderPassinfo.renderArea.extent.height = swapChain.getSwapchainExtent().height;
+		renderPassinfo.clearValueCount = 1;
+		renderPassinfo.pClearValues = &clearColor;
+
+		commandBuffer.beginRenderPass(renderPassinfo, vk::SubpassContents::eInline);
+		commandBuffer.endRenderPass();
+	}
+
+	void ImguiRender::renderFromSnapshot(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex,
+	                                      ImDrawData* snapshotDrawData) const
+	{
+		if (!snapshotDrawData)
+			return;
 
 		vk::ClearValue clearColor = { std::array<float, 4>{0.0f, 0.0f, 0.0f, 0.0f} };
 
@@ -111,11 +173,9 @@ namespace imguiPass {
 
 		commandBuffer.beginRenderPass(renderPassinfo, vk::SubpassContents::eInline);
 
-		ImGui_ImplVulkan_RenderDrawData(drawData, commandBuffer);
+		ImGui_ImplVulkan_RenderDrawData(snapshotDrawData, commandBuffer);
 
 		commandBuffer.endRenderPass();
-
-		drawData->Clear();
 	}
 
 	void ImguiRender::theme() const

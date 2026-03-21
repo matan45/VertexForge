@@ -7,6 +7,9 @@ namespace windows
     private:
         bool visible = false;
 
+        void drawRenderThreadStats();
+        void drawGPUPipelineStatus();
+
     public:
         void draw();
 

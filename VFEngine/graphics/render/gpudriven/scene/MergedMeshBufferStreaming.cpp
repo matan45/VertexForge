@@ -330,10 +330,12 @@ namespace render::gpudriven
         uint32_t rangeStart = dirtySlots[0];
         uint32_t rangeEnd = dirtySlots[0];
 
+        auto& sf = stagingFrames[currentStagingFrame];
+
         auto emitRange = [&](uint32_t start, uint32_t end) {
             size_t srcOffset = start * sizeof(GPUObjectData);
             size_t rangeSize = (end - start + 1) * sizeof(GPUObjectData);
-            std::memcpy(static_cast<uint8_t*>(objectStagingMapped) + srcOffset,
+            std::memcpy(static_cast<uint8_t*>(sf.objectStagingMapped) + srcOffset,
                         cpuObjectData.data() + start, rangeSize);
             copyRegions.push_back({srcOffset, srcOffset, rangeSize});
         };
@@ -359,13 +361,13 @@ namespace render::gpudriven
             uint32_t last = dirtySlots.back();
             size_t srcOffset = first * sizeof(GPUObjectData);
             size_t rangeSize = (last - first + 1) * sizeof(GPUObjectData);
-            std::memcpy(static_cast<uint8_t*>(objectStagingMapped) + srcOffset,
+            std::memcpy(static_cast<uint8_t*>(sf.objectStagingMapped) + srcOffset,
                         cpuObjectData.data() + first, rangeSize);
             copyRegions.clear();
             copyRegions.push_back({srcOffset, srcOffset, rangeSize});
         }
 
-        cmd.copyBuffer(objectStagingBuffer, objectBuffer,
+        cmd.copyBuffer(sf.objectStagingBuffer, objectBuffer,
                        static_cast<uint32_t>(copyRegions.size()), copyRegions.data());
 
         vk::BufferMemoryBarrier barrier;
@@ -387,14 +389,16 @@ namespace render::gpudriven
     {
         if (activeObjectCount == 0) return;
 
+        auto& sf = stagingFrames[currentStagingFrame];
+
         size_t copySize = activeObjectCount * sizeof(uint32_t);
-        std::memcpy(activeIndexStagingMapped, activeObjectIndices.data(), copySize);
+        std::memcpy(sf.activeIndexStagingMapped, activeObjectIndices.data(), copySize);
 
         vk::BufferCopy copyRegion;
         copyRegion.srcOffset = 0;
         copyRegion.dstOffset = 0;
         copyRegion.size = copySize;
-        cmd.copyBuffer(activeIndexStagingBuffer, activeIndexBuffer, copyRegion);
+        cmd.copyBuffer(sf.activeIndexStagingBuffer, activeIndexBuffer, copyRegion);
 
         vk::BufferMemoryBarrier barrier;
         barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;

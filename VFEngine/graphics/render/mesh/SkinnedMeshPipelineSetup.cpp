@@ -163,6 +163,8 @@ namespace render::mesh
 
     void SkinnedMeshPipeline::createCameraUBO()
     {
+        if (externalCameraBuffer) return;
+
         vk::DeviceSize bufferSize = sizeof(CameraUBO);
 
         core::BufferInfoRequest bufferRequest(device.getLogicalDevice(), device.getPhysicalDevice());

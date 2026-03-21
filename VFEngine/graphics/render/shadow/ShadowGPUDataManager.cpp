@@ -3,6 +3,7 @@
 #include "ShadowResourcePool.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/BufferUtilities.hpp"
+#include "../../core/PipelineUtilities.hpp"
 #include "print/Log.hpp"
 #include <cmath>
 
@@ -77,7 +78,8 @@ namespace render::shadow
             core::BufferUtilities::createBuffer(request, shadowDataBuffer, shadowDataMemory);
         }
 
-        // Staging buffer
+        // Per-frame staging buffers
+        for (auto& sf : stagingFrames)
         {
             core::BufferInfoRequest request(
                 logicalDevice,
@@ -86,31 +88,20 @@ namespace render::shadow
                 vk::BufferUsageFlagBits::eTransferSrc,
                 vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
             );
-            core::BufferUtilities::createBuffer(request, shadowDataStagingBuffer, shadowDataStagingMemory);
+            core::BufferUtilities::createBuffer(request, sf.buffer, sf.memory);
+            sf.mapped = logicalDevice.mapMemory(sf.memory, 0, bufferSize);
         }
-
-        shadowDataMapped = logicalDevice.mapMemory(shadowDataStagingMemory, 0, bufferSize);
     }
 
     void ShadowGPUDataManager::destroyShadowDataBuffer()
     {
         const auto& logicalDevice = device.getLogicalDevice();
 
-        if (shadowDataMapped)
+        for (auto& sf : stagingFrames)
         {
-            logicalDevice.unmapMemory(shadowDataStagingMemory);
-            shadowDataMapped = nullptr;
-        }
-
-        if (shadowDataStagingBuffer)
-        {
-            logicalDevice.destroyBuffer(shadowDataStagingBuffer);
-            shadowDataStagingBuffer = nullptr;
-        }
-        if (shadowDataStagingMemory)
-        {
-            logicalDevice.freeMemory(shadowDataStagingMemory);
-            shadowDataStagingMemory = nullptr;
+            if (sf.mapped) { logicalDevice.unmapMemory(sf.memory); sf.mapped = nullptr; }
+            if (sf.buffer) { logicalDevice.destroyBuffer(sf.buffer); sf.buffer = nullptr; }
+            if (sf.memory) { logicalDevice.freeMemory(sf.memory); sf.memory = nullptr; }
         }
 
         if (shadowDataBuffer)
@@ -142,22 +133,13 @@ namespace render::shadow
         bindings[1].descriptorCount = 1;
         bindings[1].stageFlags = vk::ShaderStageFlagBits::eFragment | vk::ShaderStageFlagBits::eCompute;
 
-        vk::DescriptorSetLayoutCreateInfo layoutInfo{};
-        layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
-        layoutInfo.pBindings = bindings.data();
+        shadowDataLayout = core::PipelineUtilities::createUpdateAfterBindLayout(logicalDevice, bindings.data(), static_cast<uint32_t>(bindings.size()));
 
-        shadowDataLayout = logicalDevice.createDescriptorSetLayout(layoutInfo);
+        vk::DescriptorPoolSize shadowDataPoolSize{};
+        shadowDataPoolSize.type = vk::DescriptorType::eStorageBuffer;
+        shadowDataPoolSize.descriptorCount = 2;
 
-        std::array<vk::DescriptorPoolSize, 1> poolSizes{};
-        poolSizes[0].type = vk::DescriptorType::eStorageBuffer;
-        poolSizes[0].descriptorCount = 2;
-
-        vk::DescriptorPoolCreateInfo poolInfo{};
-        poolInfo.maxSets = 1;
-        poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
-        poolInfo.pPoolSizes = poolSizes.data();
-
-        shadowDataPool = logicalDevice.createDescriptorPool(poolInfo);
+        shadowDataPool = core::PipelineUtilities::createUpdateAfterBindPool(logicalDevice, 1, &shadowDataPoolSize, 1);
 
         vk::DescriptorSetAllocateInfo allocInfo{};
         allocInfo.descriptorPool = shadowDataPool;
@@ -259,28 +241,24 @@ namespace render::shadow
         layoutInfo.pBindings = bindings.data();
 
         std::array<vk::DescriptorBindingFlags, 4> bindingFlags{};
-        bindingFlags[0] = {};
-        bindingFlags[1] = {};
-        bindingFlags[2] = vk::DescriptorBindingFlagBits::ePartiallyBound;
-        bindingFlags[3] = vk::DescriptorBindingFlagBits::ePartiallyBound;
+        bindingFlags[0] = vk::DescriptorBindingFlagBits::eUpdateAfterBind;
+        bindingFlags[1] = vk::DescriptorBindingFlagBits::eUpdateAfterBind;
+        bindingFlags[2] = vk::DescriptorBindingFlagBits::ePartiallyBound | vk::DescriptorBindingFlagBits::eUpdateAfterBind;
+        bindingFlags[3] = vk::DescriptorBindingFlagBits::ePartiallyBound | vk::DescriptorBindingFlagBits::eUpdateAfterBind;
 
         vk::DescriptorSetLayoutBindingFlagsCreateInfo bindingFlagsInfo{};
         bindingFlagsInfo.bindingCount = static_cast<uint32_t>(bindingFlags.size());
         bindingFlagsInfo.pBindingFlags = bindingFlags.data();
         layoutInfo.pNext = &bindingFlagsInfo;
+        layoutInfo.flags = vk::DescriptorSetLayoutCreateFlagBits::eUpdateAfterBindPool;
 
         shadowTextureLayout = logicalDevice.createDescriptorSetLayout(layoutInfo);
 
-        std::array<vk::DescriptorPoolSize, 1> poolSizes{};
-        poolSizes[0].type = vk::DescriptorType::eCombinedImageSampler;
-        poolSizes[0].descriptorCount = 2 + 2 * ShadowConstants::MAX_POINT_SHADOW_CASTERS;
+        vk::DescriptorPoolSize shadowTexPoolSize{};
+        shadowTexPoolSize.type = vk::DescriptorType::eCombinedImageSampler;
+        shadowTexPoolSize.descriptorCount = 2 + 2 * ShadowConstants::MAX_POINT_SHADOW_CASTERS;
 
-        vk::DescriptorPoolCreateInfo poolInfo{};
-        poolInfo.maxSets = 1;
-        poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
-        poolInfo.pPoolSizes = poolSizes.data();
-
-        shadowTexturePool = logicalDevice.createDescriptorPool(poolInfo);
+        shadowTexturePool = core::PipelineUtilities::createUpdateAfterBindPool(logicalDevice, 1, &shadowTexPoolSize, 1);
 
         vk::DescriptorSetAllocateInfo allocInfo{};
         allocInfo.descriptorPool = shadowTexturePool;
@@ -562,15 +540,17 @@ namespace render::shadow
         if (!initialized || gpuShadowData.empty())
             return;
 
+        auto& sf = stagingFrames[currentStagingFrame];
+
         size_t dataSize = sizeof(vsm::GPUVSMLight) * gpuShadowData.size();
-        std::memcpy(shadowDataMapped, gpuShadowData.data(), dataSize);
+        std::memcpy(sf.mapped, gpuShadowData.data(), dataSize);
 
         vk::BufferCopy copyRegion{};
         copyRegion.srcOffset = 0;
         copyRegion.dstOffset = 0;
         copyRegion.size = dataSize;
 
-        cmd.copyBuffer(shadowDataStagingBuffer, shadowDataBuffer, 1, &copyRegion);
+        cmd.copyBuffer(sf.buffer, shadowDataBuffer, 1, &copyRegion);
 
         vk::BufferMemoryBarrier barrier{};
         barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;

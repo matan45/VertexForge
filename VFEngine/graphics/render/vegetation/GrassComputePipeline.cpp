@@ -1,6 +1,7 @@
 #include "GrassComputePipeline.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/Shader.hpp"
+#include "../../core/PipelineUtilities.hpp"
 #include "print/Log.hpp"
 #include <array>
 
@@ -186,11 +187,8 @@ namespace render::vegetation
             bindings[i].stageFlags = vk::ShaderStageFlagBits::eCompute;
         }
 
-        vk::DescriptorSetLayoutCreateInfo layoutInfo{};
-        layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
-        layoutInfo.pBindings = bindings.data();
-
-        descriptorSetLayout = vkDevice.createDescriptorSetLayout(layoutInfo);
+        descriptorSetLayout = core::PipelineUtilities::createUpdateAfterBindLayout(
+            vkDevice, bindings.data(), static_cast<uint32_t>(bindings.size()));
         vfLogInfo("GrassComputePipeline: Created descriptor set layout");
     }
 
@@ -250,12 +248,8 @@ namespace render::vegetation
         poolSize.type = vk::DescriptorType::eStorageBuffer;
         poolSize.descriptorCount = 5;
 
-        vk::DescriptorPoolCreateInfo poolInfo{};
-        poolInfo.maxSets = 1;
-        poolInfo.poolSizeCount = 1;
-        poolInfo.pPoolSizes = &poolSize;
-
-        descriptorPool = vkDevice.createDescriptorPool(poolInfo);
+        descriptorPool = core::PipelineUtilities::createUpdateAfterBindPool(
+            vkDevice, 1, &poolSize, 1);
         vfLogInfo("GrassComputePipeline: Created descriptor pool");
     }
 

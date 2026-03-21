@@ -36,6 +36,12 @@ namespace render::gpudriven
             return;
         }
 
+        // Advance staging frame indices for double-buffered CPU→GPU uploads
+        if (mergedBuffer)
+            mergedBuffer->advanceStagingFrame();
+        if (boneMatrixManager)
+            boneMatrixManager->advanceStagingFrame();
+
         updateMeshStreaming(opaqueObjects, cameraPosition);
         registerSceneMaterialTextures(opaqueObjects);
 

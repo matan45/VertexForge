@@ -60,7 +60,7 @@ namespace render::preview
 
         commandBuffer.begin(vk::CommandBufferBeginInfo{});
 
-        draw(commandBuffer);
+        draw(commandBuffer, imageIndex);
 
         commandBuffer.end();
 
@@ -70,9 +70,10 @@ namespace render::preview
             0, nullptr
         );
 
-        device.getGraphicsQueue().submit(submitInfo, inFlightFences[imageIndex]);
+        device.submitGraphics(submitInfo, inFlightFences[imageIndex]);
 
-        device.getGraphicsQueue().waitIdle();
+        // Fence-based sync: inFlightFences[imageIndex] is waited on at the top of render()
+        // when this imageIndex comes around again. No need to stall the entire queue.
 
         return offscreenResources.colorImages[imageIndex].descriptorSet;
     }
@@ -151,9 +152,9 @@ namespace render::preview
         renderHandler->recreate();
     }
 
-    void PreviewViewPort::draw(const vk::CommandBuffer& commandBuffer) const
+    void PreviewViewPort::draw(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const
     {
-        renderHandler->draw(commandBuffer, core::RenderManager::getImageIndex());
+        renderHandler->draw(commandBuffer, imageIndex);
     }
 
     void PreviewViewPort::createOffscreenResources()
@@ -190,7 +191,7 @@ namespace render::preview
         core::ImageUtilities::transitionImageLayout(trasitionDepthImage.get(), depth.depthImage, vk::ImageLayout::eUndefined,
                                                vk::ImageLayout::eDepthStencilAttachmentOptimal,
                                                vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil);
-        core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), trasitionDepthImage);
+        core::Utilities::endSingleTimeCommands(device, trasitionDepthImage);
 
         offscreenResources.depthImage = std::move(depth);
 
@@ -209,7 +210,7 @@ namespace render::preview
             core::ImageUtilities::transitionImageLayout(trasitionColorImage.get(), color.colorImage,
                                                    vk::ImageLayout::eUndefined, vk::ImageLayout::eShaderReadOnlyOptimal,
                                                    vk::ImageAspectFlagBits::eColor);
-            core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), trasitionColorImage);
+            core::Utilities::endSingleTimeCommands(device, trasitionColorImage);
 
             updateDescriptorSets(color.descriptorSet, color.colorImageView);
 

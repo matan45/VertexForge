@@ -159,6 +159,8 @@ namespace render::mesh
 
     void StaticMeshPipeline::createCameraUBO()
     {
+        if (externalCameraBuffer) return;
+
         core::BufferInfoRequest bufferRequest(device.getLogicalDevice(), device.getPhysicalDevice());
         bufferRequest.usage = vk::BufferUsageFlagBits::eUniformBuffer;
         bufferRequest.properties = vk::MemoryPropertyFlagBits::eHostVisible |

@@ -82,6 +82,8 @@ namespace render::billboard
         void updateCameraUBO(const glm::mat4& view, const glm::mat4& projection,
                              const glm::vec3& cameraPos);
 
+        void setExternalCameraBuffer(vk::Buffer buffer) { bufferManager.setExternalCameraBuffer(buffer); }
+
         void setBillboardList(const std::vector<BillboardRenderData>& billboards);
 
         void registerExternalTexture(const std::string& key, vk::ImageView imageView, vk::Sampler externalSampler);

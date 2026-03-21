@@ -122,6 +122,7 @@ namespace render::mesh
                                              const glm::vec3& cameraPos, float time) const
     {
         currentTime = time;
+        if (externalCameraBuffer) return;
 
         CameraUBO ubo{};
         ubo.view = view;
@@ -148,7 +149,7 @@ namespace render::mesh
         }
         framebuffers.clear();
 
-        if (cameraUBO)
+        if (cameraUBO && !externalCameraBuffer)
         {
             device.getLogicalDevice().destroyBuffer(cameraUBO);
             device.getLogicalDevice().freeMemory(cameraUBOMemory);

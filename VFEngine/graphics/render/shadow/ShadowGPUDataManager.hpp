@@ -2,7 +2,9 @@
 
 #include "ShadowTypes.hpp"
 #include "VSMTypes.hpp"
+#include "../../core/RenderManager.hpp"
 #include <vulkan/vulkan.hpp>
+#include <array>
 #include <vector>
 #include <unordered_map>
 
@@ -24,9 +26,16 @@ namespace render::shadow
         // Shadow data SSBO (GPUVSMLight array)
         vk::Buffer shadowDataBuffer;
         vk::DeviceMemory shadowDataMemory;
-        vk::Buffer shadowDataStagingBuffer;
-        vk::DeviceMemory shadowDataStagingMemory;
-        void* shadowDataMapped = nullptr;
+
+        struct ShadowStagingFrame
+        {
+            vk::Buffer buffer;
+            vk::DeviceMemory memory;
+            void* mapped = nullptr;
+        };
+
+        std::array<ShadowStagingFrame, core::MAX_FRAMES_IN_FLIGHT> stagingFrames{};
+        uint32_t currentStagingFrame = 0;
 
         // Page table SSBO descriptor (actual buffer owned by VSMPageTable)
         vk::DescriptorSetLayout shadowDataLayout;  // set 9: binding 0 = VSMLight[], binding 1 = pageTable[]
@@ -65,6 +74,7 @@ namespace render::shadow
             const std::unordered_map<uint32_t, uint32_t>& entityToCubeIndex);
 
         void uploadToGPU(vk::CommandBuffer cmd);
+        void advanceStagingFrame() { currentStagingFrame = (currentStagingFrame + 1) % core::MAX_FRAMES_IN_FLIGHT; }
 
         void updateShadowTextureDescriptor(
             VSMPhysicalTilePool* tilePool,

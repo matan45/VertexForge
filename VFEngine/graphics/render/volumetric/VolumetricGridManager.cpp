@@ -216,7 +216,7 @@ namespace render::volumetric
             {}, {},
             barriers);
 
-        core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), cmd);
+        core::Utilities::endSingleTimeCommands(device, cmd);
     }
 
     void VolumetricGridManager::destroyImages()

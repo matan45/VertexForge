@@ -17,6 +17,20 @@ namespace render
         currentTime = time;
     }
 
+    void RenderPassHandler::updateSharedCameraUBO(const glm::mat4& view, const glm::mat4& projection,
+                                                   const glm::vec3& cameraPos, float time)
+    {
+        if (sharedCameraUBO)
+        {
+            sharedCameraUBO->update(view, projection, cameraPos, time);
+        }
+    }
+
+    vk::Buffer RenderPassHandler::getSharedCameraBuffer() const
+    {
+        return sharedCameraUBO ? sharedCameraUBO->getBuffer() : nullptr;
+    }
+
     void RenderPassHandler::setVisibleLightsFromBVH(const std::vector<uint32_t>& visibleLights)
     {
         if (gpuDrivenRenderer && gpuDrivenRendererInitialized)

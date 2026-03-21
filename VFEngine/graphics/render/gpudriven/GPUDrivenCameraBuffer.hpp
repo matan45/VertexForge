@@ -1,8 +1,10 @@
 #pragma once
 
 #include "GPUDrivenTypes.hpp"
+#include "../../core/RenderManager.hpp"
 #include <vulkan/vulkan.hpp>
 #include <glm/glm.hpp>
+#include <array>
 
 namespace core
 {

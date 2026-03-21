@@ -18,7 +18,7 @@ namespace render::text
     {
         auto& dev = device.getLogicalDevice();
 
-        if (cameraUBO)
+        if (cameraUBO && !externalCameraBuffer)
         {
             dev.destroyBuffer(cameraUBO);
             dev.freeMemory(cameraUBOMemory);
@@ -30,6 +30,8 @@ namespace render::text
 
     void TextBufferManager::createCameraUBO()
     {
+        if (externalCameraBuffer) return;
+
         core::BufferInfoRequest bufferRequest(device.getLogicalDevice(), device.getPhysicalDevice());
         bufferRequest.usage = vk::BufferUsageFlagBits::eUniformBuffer;
         bufferRequest.properties = vk::MemoryPropertyFlagBits::eHostVisible |
@@ -41,6 +43,8 @@ namespace render::text
     void TextBufferManager::updateCameraUBO(const glm::mat4& view, const glm::mat4& projection,
                                              const glm::vec3& cameraPos) const
     {
+        if (externalCameraBuffer) return;
+
         TextCameraUBO ubo{};
         ubo.view = view;
         ubo.projection = projection;

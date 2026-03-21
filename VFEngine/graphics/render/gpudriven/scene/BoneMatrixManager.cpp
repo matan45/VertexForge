@@ -1,6 +1,7 @@
 #include "BoneMatrixManager.hpp"
 #include "../../../core/Device.hpp"
 #include "../../../core/BufferUtilities.hpp"
+#include "../../../core/PipelineUtilities.hpp"
 #include "print/Log.hpp"
 #include "../GPUDrivenTypes.hpp"
 #include <algorithm>
@@ -93,39 +94,45 @@ namespace render::gpudriven
             core::BufferUtilities::createBuffer(request, boneBuffer, boneBufferMemory);
         }
 
+        for (auto& sf : stagingFrames)
         {
             core::BufferInfoRequest request(logicalDevice, physicalDevice);
             request.size = bufferSize;
             request.usage = vk::BufferUsageFlagBits::eTransferSrc;
             request.properties = vk::MemoryPropertyFlagBits::eHostVisible |
                 vk::MemoryPropertyFlagBits::eHostCoherent;
-            core::BufferUtilities::createBuffer(request, stagingBuffer, stagingMemory);
+            core::BufferUtilities::createBuffer(request, sf.buffer, sf.memory);
 
-            stagingMapped = logicalDevice.mapMemory(stagingMemory, 0, bufferSize, vk::MemoryMapFlags{});
+            sf.mapped = logicalDevice.mapMemory(sf.memory, 0, bufferSize, vk::MemoryMapFlags{});
         }
 
-        vfLogInfo("BoneMatrixManager: Created bone buffers ({} MB each)",
-                   bufferSize / (1024 * 1024));
+        vfLogInfo("BoneMatrixManager: Created bone buffers ({} MB each, {} staging frames)",
+                   bufferSize / (1024 * 1024), core::MAX_FRAMES_IN_FLIGHT);
     }
 
     void BoneMatrixManager::destroyBuffers()
     {
         const auto& logicalDevice = device.getLogicalDevice();
 
-        if (stagingMapped)
+        for (auto& sf : stagingFrames)
         {
-            logicalDevice.unmapMemory(stagingMemory);
-            stagingMapped = nullptr;
+            if (sf.mapped)
+            {
+                logicalDevice.unmapMemory(sf.memory);
+                sf.mapped = nullptr;
+            }
+            core::BufferUtilities::destroyBuffer(logicalDevice, sf.buffer, sf.memory);
         }
 
-        core::BufferUtilities::destroyBuffer(logicalDevice, stagingBuffer, stagingMemory);
         core::BufferUtilities::destroyBuffer(logicalDevice, boneBuffer, boneBufferMemory);
     }
 
     void BoneMatrixManager::initializeGPUBuffer()
     {
         size_t bufferSize = maxBoneMatrices * sizeof(glm::mat4);
-        std::memcpy(stagingMapped, cpuBoneMatrices.data(), bufferSize);
+        // Use first staging frame for initialization
+        auto& sf = stagingFrames[0];
+        std::memcpy(sf.mapped, cpuBoneMatrices.data(), bufferSize);
 
         vk::Device vkDevice = device.getLogicalDevice();
         vk::CommandPool cmdPool = device.getStagingCommandPool();
@@ -145,7 +152,7 @@ namespace render::gpudriven
         copyRegion.srcOffset = 0;
         copyRegion.dstOffset = 0;
         copyRegion.size = bufferSize;
-        commandBuffer.copyBuffer(stagingBuffer, boneBuffer, copyRegion);
+        commandBuffer.copyBuffer(sf.buffer, boneBuffer, copyRegion);
 
         commandBuffer.end();
 
@@ -174,11 +181,8 @@ namespace render::gpudriven
             vk::ShaderStageFlagBits::eCompute;
         boneBinding.pImmutableSamplers = nullptr;
 
-        vk::DescriptorSetLayoutCreateInfo layoutInfo{};
-        layoutInfo.bindingCount = 1;
-        layoutInfo.pBindings = &boneBinding;
-
-        descriptorSetLayout = vkDevice.createDescriptorSetLayout(layoutInfo);
+        descriptorSetLayout = core::PipelineUtilities::createUpdateAfterBindLayout(
+            vkDevice, &boneBinding, 1);
     }
 
     void BoneMatrixManager::createDescriptorPool()
@@ -189,12 +193,8 @@ namespace render::gpudriven
         poolSize.type = vk::DescriptorType::eStorageBuffer;
         poolSize.descriptorCount = 1;
 
-        vk::DescriptorPoolCreateInfo poolInfo{};
-        poolInfo.maxSets = 1;
-        poolInfo.poolSizeCount = 1;
-        poolInfo.pPoolSizes = &poolSize;
-
-        descriptorPool = vkDevice.createDescriptorPool(poolInfo);
+        descriptorPool = core::PipelineUtilities::createUpdateAfterBindPool(
+            vkDevice, 1, &poolSize, 1);
     }
 
     void BoneMatrixManager::allocateDescriptorSet()
@@ -356,6 +356,8 @@ namespace render::gpudriven
             return;
         }
 
+        auto& sf = stagingFrames[currentStagingFrame];
+
         std::vector<vk::BufferCopy> copyRegions;
         copyRegions.reserve(dirtyEntities.size());
 
@@ -370,7 +372,7 @@ namespace render::gpudriven
 
             size_t copyOffset = offset * sizeof(glm::mat4);
             size_t copySize = count * sizeof(glm::mat4);
-            std::memcpy(static_cast<char*>(stagingMapped) + copyOffset,
+            std::memcpy(static_cast<char*>(sf.mapped) + copyOffset,
                         &cpuBoneMatrices[offset],
                         copySize);
 
@@ -385,7 +387,7 @@ namespace render::gpudriven
 
         if (!copyRegions.empty())
         {
-            cmd.copyBuffer(stagingBuffer, boneBuffer, copyRegions);
+            cmd.copyBuffer(sf.buffer, boneBuffer, copyRegions);
         }
 
         vk::BufferMemoryBarrier barrier{};

@@ -80,6 +80,7 @@ namespace render::mesh
 
         vk::Buffer cameraUBO;
         vk::DeviceMemory cameraUBOMemory;
+        bool externalCameraBuffer = false;
 
         mutable float currentTime{0.0f};
 
@@ -136,6 +137,12 @@ namespace render::mesh
 
         void updateCameraUBO(const glm::mat4& view, const glm::mat4& projection,
                              const glm::vec3& cameraPos, float time = 0.0f) const;
+
+        void setExternalCameraBuffer(vk::Buffer buffer)
+        {
+            cameraUBO = buffer;
+            externalCameraBuffer = true;
+        }
 
         std::string loadMesh(std::string_view meshPath);
         std::string uploadMesh(const std::string& meshId, const resource::MeshesData& meshData);

@@ -258,6 +258,8 @@ namespace core
         vulkan12Features.descriptorBindingPartiallyBound = VK_TRUE;
         vulkan12Features.descriptorBindingVariableDescriptorCount = VK_TRUE;
         vulkan12Features.descriptorBindingSampledImageUpdateAfterBind = VK_TRUE;
+        vulkan12Features.descriptorBindingStorageBufferUpdateAfterBind = VK_TRUE;
+        vulkan12Features.descriptorBindingUniformBufferUpdateAfterBind = VK_TRUE;
         vulkan12Features.bufferDeviceAddress = VK_TRUE; // Required for acceleration structures
         vulkan12Features.timelineSemaphore = VK_TRUE; // Required for async compute synchronization
         vulkan12Features.pNext = &vulkan11Features;
