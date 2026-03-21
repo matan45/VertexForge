@@ -34,6 +34,8 @@ namespace core {
 		// Poll first to clean up any completed transfers
 		pollTransfers();
 
+		std::lock_guard lock(transferMutex);
+
 		TransferOperation op{};
 
 		// Create fence for this transfer
@@ -76,6 +78,8 @@ namespace core {
 
 	void TransferManager::pollTransfers()
 	{
+		std::lock_guard lock(transferMutex);
+
 		auto it = pendingTransfers.begin();
 		while (it != pendingTransfers.end()) {
 			// Check if transfer is complete (non-blocking)
@@ -91,6 +95,8 @@ namespace core {
 
 	void TransferManager::waitAll()
 	{
+		std::lock_guard lock(transferMutex);
+
 		if (pendingTransfers.empty()) {
 			return;
 		}

@@ -77,7 +77,8 @@ namespace render::shadow
             core::BufferUtilities::createBuffer(request, shadowDataBuffer, shadowDataMemory);
         }
 
-        // Staging buffer
+        // Per-frame staging buffers
+        for (auto& sf : stagingFrames)
         {
             core::BufferInfoRequest request(
                 logicalDevice,
@@ -86,31 +87,20 @@ namespace render::shadow
                 vk::BufferUsageFlagBits::eTransferSrc,
                 vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
             );
-            core::BufferUtilities::createBuffer(request, shadowDataStagingBuffer, shadowDataStagingMemory);
+            core::BufferUtilities::createBuffer(request, sf.buffer, sf.memory);
+            sf.mapped = logicalDevice.mapMemory(sf.memory, 0, bufferSize);
         }
-
-        shadowDataMapped = logicalDevice.mapMemory(shadowDataStagingMemory, 0, bufferSize);
     }
 
     void ShadowGPUDataManager::destroyShadowDataBuffer()
     {
         const auto& logicalDevice = device.getLogicalDevice();
 
-        if (shadowDataMapped)
+        for (auto& sf : stagingFrames)
         {
-            logicalDevice.unmapMemory(shadowDataStagingMemory);
-            shadowDataMapped = nullptr;
-        }
-
-        if (shadowDataStagingBuffer)
-        {
-            logicalDevice.destroyBuffer(shadowDataStagingBuffer);
-            shadowDataStagingBuffer = nullptr;
-        }
-        if (shadowDataStagingMemory)
-        {
-            logicalDevice.freeMemory(shadowDataStagingMemory);
-            shadowDataStagingMemory = nullptr;
+            if (sf.mapped) { logicalDevice.unmapMemory(sf.memory); sf.mapped = nullptr; }
+            if (sf.buffer) { logicalDevice.destroyBuffer(sf.buffer); sf.buffer = nullptr; }
+            if (sf.memory) { logicalDevice.freeMemory(sf.memory); sf.memory = nullptr; }
         }
 
         if (shadowDataBuffer)
@@ -562,15 +552,17 @@ namespace render::shadow
         if (!initialized || gpuShadowData.empty())
             return;
 
+        auto& sf = stagingFrames[currentStagingFrame];
+
         size_t dataSize = sizeof(vsm::GPUVSMLight) * gpuShadowData.size();
-        std::memcpy(shadowDataMapped, gpuShadowData.data(), dataSize);
+        std::memcpy(sf.mapped, gpuShadowData.data(), dataSize);
 
         vk::BufferCopy copyRegion{};
         copyRegion.srcOffset = 0;
         copyRegion.dstOffset = 0;
         copyRegion.size = dataSize;
 
-        cmd.copyBuffer(shadowDataStagingBuffer, shadowDataBuffer, 1, &copyRegion);
+        cmd.copyBuffer(sf.buffer, shadowDataBuffer, 1, &copyRegion);
 
         vk::BufferMemoryBarrier barrier{};
         barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;

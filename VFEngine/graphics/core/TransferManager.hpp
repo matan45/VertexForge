@@ -1,6 +1,7 @@
 #pragma once
 
 #include <vulkan/vulkan.hpp>
+#include <mutex>
 #include <vector>
 
 namespace core
@@ -24,6 +25,7 @@ namespace core
 		uint32_t transferQueueFamily;
 
 		vk::CommandPool commandPool;
+		mutable std::mutex transferMutex;
 		std::vector<TransferOperation> pendingTransfers;
 	public:
 		TransferManager(const vk::Device& device, const vk::PhysicalDevice& physicalDevice,
@@ -45,7 +47,7 @@ namespace core
 		void waitAll();
 
 		// Check if there are pending transfers
-		bool hasPendingTransfers() const { return !pendingTransfers.empty(); }
+		bool hasPendingTransfers() const { std::lock_guard lock(transferMutex); return !pendingTransfers.empty(); }
 
 	private:
 

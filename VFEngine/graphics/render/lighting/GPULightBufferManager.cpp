@@ -86,11 +86,15 @@ namespace render::lighting
             request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
             core::BufferUtilities::createBuffer(request, directionalBuffer, directionalMemory);
 
-            request.usage = vk::BufferUsageFlagBits::eTransferSrc;
-            request.properties = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
-            core::BufferUtilities::createBuffer(request, directionalStagingBuffer, directionalStagingMemory);
-
-            directionalStagingMapped = logicalDevice.mapMemory(directionalStagingMemory, 0, bufferSize, vk::MemoryMapFlags{});
+            for (auto& sf : stagingFrames)
+            {
+                core::BufferInfoRequest stagingReq(logicalDevice, physicalDevice);
+                stagingReq.size = bufferSize;
+                stagingReq.usage = vk::BufferUsageFlagBits::eTransferSrc;
+                stagingReq.properties = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
+                core::BufferUtilities::createBuffer(stagingReq, sf.directionalStagingBuffer, sf.directionalStagingMemory);
+                sf.directionalStagingMapped = logicalDevice.mapMemory(sf.directionalStagingMemory, 0, bufferSize, vk::MemoryMapFlags{});
+            }
         }
 
         {
@@ -102,11 +106,15 @@ namespace render::lighting
             request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
             core::BufferUtilities::createBuffer(request, pointBuffer, pointMemory);
 
-            request.usage = vk::BufferUsageFlagBits::eTransferSrc;
-            request.properties = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
-            core::BufferUtilities::createBuffer(request, pointStagingBuffer, pointStagingMemory);
-
-            pointStagingMapped = logicalDevice.mapMemory(pointStagingMemory, 0, bufferSize, vk::MemoryMapFlags{});
+            for (auto& sf : stagingFrames)
+            {
+                core::BufferInfoRequest stagingReq(logicalDevice, physicalDevice);
+                stagingReq.size = bufferSize;
+                stagingReq.usage = vk::BufferUsageFlagBits::eTransferSrc;
+                stagingReq.properties = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
+                core::BufferUtilities::createBuffer(stagingReq, sf.pointStagingBuffer, sf.pointStagingMemory);
+                sf.pointStagingMapped = logicalDevice.mapMemory(sf.pointStagingMemory, 0, bufferSize, vk::MemoryMapFlags{});
+            }
         }
 
         {
@@ -118,11 +126,15 @@ namespace render::lighting
             request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
             core::BufferUtilities::createBuffer(request, spotBuffer, spotMemory);
 
-            request.usage = vk::BufferUsageFlagBits::eTransferSrc;
-            request.properties = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
-            core::BufferUtilities::createBuffer(request, spotStagingBuffer, spotStagingMemory);
-
-            spotStagingMapped = logicalDevice.mapMemory(spotStagingMemory, 0, bufferSize, vk::MemoryMapFlags{});
+            for (auto& sf : stagingFrames)
+            {
+                core::BufferInfoRequest stagingReq(logicalDevice, physicalDevice);
+                stagingReq.size = bufferSize;
+                stagingReq.usage = vk::BufferUsageFlagBits::eTransferSrc;
+                stagingReq.properties = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
+                core::BufferUtilities::createBuffer(stagingReq, sf.spotStagingBuffer, sf.spotStagingMemory);
+                sf.spotStagingMapped = logicalDevice.mapMemory(sf.spotStagingMemory, 0, bufferSize, vk::MemoryMapFlags{});
+            }
         }
 
         {
@@ -146,32 +158,26 @@ namespace render::lighting
     {
         const auto& logicalDevice = device.getLogicalDevice();
 
-        if (directionalStagingMapped)
+        for (auto& sf : stagingFrames)
         {
-            logicalDevice.unmapMemory(directionalStagingMemory);
-            directionalStagingMapped = nullptr;
+            if (sf.directionalStagingMapped) { logicalDevice.unmapMemory(sf.directionalStagingMemory); sf.directionalStagingMapped = nullptr; }
+            core::BufferUtilities::destroyBuffer(logicalDevice, sf.directionalStagingBuffer, sf.directionalStagingMemory);
+
+            if (sf.pointStagingMapped) { logicalDevice.unmapMemory(sf.pointStagingMemory); sf.pointStagingMapped = nullptr; }
+            core::BufferUtilities::destroyBuffer(logicalDevice, sf.pointStagingBuffer, sf.pointStagingMemory);
+
+            if (sf.spotStagingMapped) { logicalDevice.unmapMemory(sf.spotStagingMemory); sf.spotStagingMapped = nullptr; }
+            core::BufferUtilities::destroyBuffer(logicalDevice, sf.spotStagingBuffer, sf.spotStagingMemory);
         }
-        if (pointStagingMapped)
-        {
-            logicalDevice.unmapMemory(pointStagingMemory);
-            pointStagingMapped = nullptr;
-        }
-        if (spotStagingMapped)
-        {
-            logicalDevice.unmapMemory(spotStagingMemory);
-            spotStagingMapped = nullptr;
-        }
+
         if (countsMapped)
         {
             logicalDevice.unmapMemory(countsMemory);
             countsMapped = nullptr;
         }
 
-        core::BufferUtilities::destroyBuffer(logicalDevice, directionalStagingBuffer, directionalStagingMemory);
         core::BufferUtilities::destroyBuffer(logicalDevice, directionalBuffer, directionalMemory);
-        core::BufferUtilities::destroyBuffer(logicalDevice, pointStagingBuffer, pointStagingMemory);
         core::BufferUtilities::destroyBuffer(logicalDevice, pointBuffer, pointMemory);
-        core::BufferUtilities::destroyBuffer(logicalDevice, spotStagingBuffer, spotStagingMemory);
         core::BufferUtilities::destroyBuffer(logicalDevice, spotBuffer, spotMemory);
         core::BufferUtilities::destroyBuffer(logicalDevice, countsBuffer, countsMemory);
     }

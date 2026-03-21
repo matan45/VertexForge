@@ -133,6 +133,7 @@
     <ClInclude Include="core\MappedMemoryGuard.hpp" />
     <ClInclude Include="core\MemoryUtilities.hpp" />
     <ClInclude Include="core\OffScreen.hpp" />
+    <ClInclude Include="core\PerFrameBuffer.hpp" />
     <ClInclude Include="core\PipelineUtilities.hpp" />
     <ClInclude Include="core\RenderManager.hpp" />
     <ClInclude Include="core\RenderThread.hpp" />
@@ -141,8 +142,10 @@
     <ClInclude Include="core\Texture.hpp" />
     <ClInclude Include="core\ThreadCommandPoolManager.hpp" />
     <ClInclude Include="core\TransferManager.hpp" />
+    <ClInclude Include="core\UploadQueue.hpp" />
     <ClInclude Include="core\Utilities.hpp" />
     <ClInclude Include="core\VulkanContext.hpp" />
+    <ClInclude Include="imguiPass\ImDrawDataSnapshot.hpp" />
     <ClInclude Include="imguiPass\ImguiRender.hpp" />
     <ClInclude Include="loaders\AsyncMeshLoader.hpp" />
     <ClInclude Include="loaders\AsyncTextureLoader.hpp" />

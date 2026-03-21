@@ -1,7 +1,9 @@
 #pragma once
 
 #include "VSMTypes.hpp"
+#include "../../core/RenderManager.hpp"
 #include <vulkan/vulkan.hpp>
+#include <array>
 #include <vector>
 #include <cstdint>
 
@@ -20,9 +22,16 @@ namespace render::shadow
         // GPU SSBO holding page table entries
         vk::Buffer pageTableBuffer;
         vk::DeviceMemory pageTableMemory;
-        vk::Buffer pageTableStagingBuffer;
-        vk::DeviceMemory pageTableStagingMemory;
-        void* pageTableMapped = nullptr;
+
+        struct PageTableStagingFrame
+        {
+            vk::Buffer buffer;
+            vk::DeviceMemory memory;
+            void* mapped = nullptr;
+        };
+
+        std::array<PageTableStagingFrame, core::MAX_FRAMES_IN_FLIGHT> stagingFrames{};
+        uint32_t currentStagingFrame = 0;
 
         // CPU mirror
         std::vector<uint32_t> cpuPageTable;

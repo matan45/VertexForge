@@ -63,7 +63,8 @@ namespace render::shadow
             core::BufferUtilities::createBuffer(request, pageTableBuffer, pageTableMemory);
         }
 
-        // Staging buffer
+        // Per-frame staging buffers
+        for (auto& sf : stagingFrames)
         {
             core::BufferInfoRequest request(
                 logicalDevice,
@@ -72,31 +73,20 @@ namespace render::shadow
                 vk::BufferUsageFlagBits::eTransferSrc,
                 vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
             );
-            core::BufferUtilities::createBuffer(request, pageTableStagingBuffer, pageTableStagingMemory);
+            core::BufferUtilities::createBuffer(request, sf.buffer, sf.memory);
+            sf.mapped = logicalDevice.mapMemory(sf.memory, 0, bufferSize);
         }
-
-        pageTableMapped = logicalDevice.mapMemory(pageTableStagingMemory, 0, bufferSize);
     }
 
     void VSMPageTable::destroyBuffers()
     {
         const auto& logicalDevice = device.getLogicalDevice();
 
-        if (pageTableMapped)
+        for (auto& sf : stagingFrames)
         {
-            logicalDevice.unmapMemory(pageTableStagingMemory);
-            pageTableMapped = nullptr;
-        }
-
-        if (pageTableStagingBuffer)
-        {
-            logicalDevice.destroyBuffer(pageTableStagingBuffer);
-            pageTableStagingBuffer = nullptr;
-        }
-        if (pageTableStagingMemory)
-        {
-            logicalDevice.freeMemory(pageTableStagingMemory);
-            pageTableStagingMemory = nullptr;
+            if (sf.mapped) { logicalDevice.unmapMemory(sf.memory); sf.mapped = nullptr; }
+            if (sf.buffer) { logicalDevice.destroyBuffer(sf.buffer); sf.buffer = nullptr; }
+            if (sf.memory) { logicalDevice.freeMemory(sf.memory); sf.memory = nullptr; }
         }
 
         if (pageTableBuffer)
@@ -188,14 +178,16 @@ namespace render::shadow
         if (dataSize == 0)
             dataSize = sizeof(uint32_t); // at least one entry
 
-        std::memcpy(pageTableMapped, cpuPageTable.data(), dataSize);
+        auto& sf = stagingFrames[currentStagingFrame];
+
+        std::memcpy(sf.mapped, cpuPageTable.data(), dataSize);
 
         vk::BufferCopy copyRegion{};
         copyRegion.srcOffset = 0;
         copyRegion.dstOffset = 0;
         copyRegion.size = dataSize;
 
-        cmd.copyBuffer(pageTableStagingBuffer, pageTableBuffer, 1, &copyRegion);
+        cmd.copyBuffer(sf.buffer, pageTableBuffer, 1, &copyRegion);
 
         vk::BufferMemoryBarrier barrier{};
         barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;

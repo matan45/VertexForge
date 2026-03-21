@@ -2,7 +2,9 @@
 
 #include "GPULightTypes.hpp"
 #include "../shadow/ShadowTypes.hpp"
+#include "../../core/RenderManager.hpp"
 #include <vulkan/vulkan.hpp>
+#include <array>
 #include <optional>
 #include <vector>
 #include <unordered_set>
@@ -27,21 +29,31 @@ namespace render::lighting
 
         vk::Buffer directionalBuffer;
         vk::DeviceMemory directionalMemory;
-        vk::Buffer directionalStagingBuffer;
-        vk::DeviceMemory directionalStagingMemory;
-        void* directionalStagingMapped = nullptr;
 
         vk::Buffer pointBuffer;
         vk::DeviceMemory pointMemory;
-        vk::Buffer pointStagingBuffer;
-        vk::DeviceMemory pointStagingMemory;
-        void* pointStagingMapped = nullptr;
 
         vk::Buffer spotBuffer;
         vk::DeviceMemory spotMemory;
-        vk::Buffer spotStagingBuffer;
-        vk::DeviceMemory spotStagingMemory;
-        void* spotStagingMapped = nullptr;
+
+        // Per-frame staging buffers for CPU→GPU light data uploads
+        struct LightStagingFrame
+        {
+            vk::Buffer directionalStagingBuffer;
+            vk::DeviceMemory directionalStagingMemory;
+            void* directionalStagingMapped = nullptr;
+
+            vk::Buffer pointStagingBuffer;
+            vk::DeviceMemory pointStagingMemory;
+            void* pointStagingMapped = nullptr;
+
+            vk::Buffer spotStagingBuffer;
+            vk::DeviceMemory spotStagingMemory;
+            void* spotStagingMapped = nullptr;
+        };
+
+        std::array<LightStagingFrame, core::MAX_FRAMES_IN_FLIGHT> stagingFrames{};
+        uint32_t currentStagingFrame = 0;
 
         vk::Buffer countsBuffer;
         vk::DeviceMemory countsMemory;
@@ -101,6 +113,7 @@ namespace render::lighting
         void updateFromScene();
         void updateFromScene(const std::unordered_set<uint32_t>& visibleLightIds);
         void uploadToGPU(vk::CommandBuffer cmd);
+        void advanceStagingFrame() { currentStagingFrame = (currentStagingFrame + 1) % core::MAX_FRAMES_IN_FLIGHT; }
 
         vk::DescriptorSetLayout getDescriptorSetLayout() const { return descriptorSetLayout; }
         vk::DescriptorSet getDescriptorSet() const { return descriptorSet; }

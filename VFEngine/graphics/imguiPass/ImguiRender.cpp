@@ -95,9 +95,19 @@ namespace imguiPass {
 
 	void ImguiRender::render(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const
 	{
-
 		ImGui::Render();
 		ImDrawData* drawData = ImGui::GetDrawData();
+
+		renderFromSnapshot(commandBuffer, imageIndex, drawData);
+
+		drawData->Clear();
+	}
+
+	void ImguiRender::renderFromSnapshot(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex,
+	                                      ImDrawData* snapshotDrawData) const
+	{
+		if (!snapshotDrawData)
+			return;
 
 		vk::ClearValue clearColor = { std::array<float, 4>{0.0f, 0.0f, 0.0f, 0.0f} };
 
@@ -111,11 +121,9 @@ namespace imguiPass {
 
 		commandBuffer.beginRenderPass(renderPassinfo, vk::SubpassContents::eInline);
 
-		ImGui_ImplVulkan_RenderDrawData(drawData, commandBuffer);
+		ImGui_ImplVulkan_RenderDrawData(snapshotDrawData, commandBuffer);
 
 		commandBuffer.endRenderPass();
-
-		drawData->Clear();
 	}
 
 	void ImguiRender::theme() const

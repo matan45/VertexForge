@@ -36,6 +36,10 @@ namespace imguiPass {
 		void recreate();
 		void render(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
 
+		/// Render from a pre-snapshotted ImDrawData (for render thread usage).
+		void renderFromSnapshot(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex,
+		                        ImDrawData* snapshotDrawData) const;
+
 	private:
 		
 		void theme() const;
