@@ -368,7 +368,7 @@ namespace render::water
             vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
             vk::ImageAspectFlagBits::eColor);
 
-        core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), cmd);
+        core::Utilities::endSingleTimeCommands(device, cmd);
 
         device.getLogicalDevice().destroyBuffer(stagingBuffer);
         device.getLogicalDevice().freeMemory(stagingMemory);
@@ -471,7 +471,7 @@ namespace render::water
         core::ImageUtilities::transitionImageLayout(cmd.get(), oceanDummyImage,
             vk::ImageLayout::eUndefined, vk::ImageLayout::eShaderReadOnlyOptimal,
             vk::ImageAspectFlagBits::eColor);
-        core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), cmd);
+        core::Utilities::endSingleTimeCommands(device, cmd);
 
         // Create sampler
         vk::SamplerCreateInfo samplerInfo{};

@@ -274,7 +274,7 @@ namespace render::ibl
         commandBuffer->endRenderPass();
 
         vk::Fence renderFence = device.getLogicalDevice().createFence({});
-        core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), commandBuffer, renderFence);
+        core::Utilities::endSingleTimeCommands(device, commandBuffer, renderFence);
         if (vk::Result result = device.getLogicalDevice().waitForFences(renderFence, VK_TRUE, UINT64_MAX); result !=
             vk::Result::eSuccess)
         {
@@ -291,7 +291,7 @@ namespace render::ibl
             vk::ImageLayout::eShaderReadOnlyOptimal,
             vk::ImageAspectFlagBits::eColor
         );
-        core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), transitionCommandBuffer);
+        core::Utilities::endSingleTimeCommands(device, transitionCommandBuffer);
 
         device.getLogicalDevice().destroyFramebuffer(framebuffer);
         device.getLogicalDevice().destroyFence(renderFence);

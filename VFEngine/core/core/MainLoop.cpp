@@ -38,9 +38,6 @@ namespace core {
 
 		if (imguiEnabled) {
 			imguiDrawFn = [this]() {
-				// Wait for render thread to finish previous frame's ImGui::Render + RenderDrawData
-				// before starting NewFrame. Scene update tasks already ran in parallel.
-				renderController->beginFrame();
 				newFrame();
 				editorDraw();
 				endFrame();
@@ -63,8 +60,9 @@ namespace core {
 
 			engineTime::Timer::update();
 
-			// beginFrame() is called inside imguiDrawFn, allowing scene update tasks
-			// to run in parallel with the render thread before ImGui needs exclusivity.
+			// Wait for render thread to finish previous frame before starting new frame.
+			// This ensures descriptor sets aren't updated while the GPU is still using them.
+			renderController->beginFrame();
 
 			// The frame callback orchestrates the entire frame pipeline
 			// (service updates, scene graph, post-update, imgui, render)

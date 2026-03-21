@@ -150,7 +150,7 @@ namespace render::text
                 vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
                 vk::ImageAspectFlagBits::eColor);
 
-            core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), cmd);
+            core::Utilities::endSingleTimeCommands(device, cmd);
 
             cleanupStaging();
         }
@@ -310,7 +310,7 @@ namespace render::text
                 vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
                 vk::ImageAspectFlagBits::eColor);
 
-            core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), cmd);
+            core::Utilities::endSingleTimeCommands(device, cmd);
 
             cleanupStaging();
         }

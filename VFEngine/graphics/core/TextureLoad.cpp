@@ -108,7 +108,7 @@ namespace core
             auto cmdA = Utilities::beginSingleTimeCommands(p.device.getLogicalDevice(), p.commandPool.get());
             ImageUtilities::transitionImageLayout(cmdA.get(), p.image, vk::ImageLayout::eUndefined,
                                                   vk::ImageLayout::eTransferDstOptimal, vk::ImageAspectFlagBits::eColor, 1, p.mipLevels);
-            Utilities::endSingleTimeCommands(p.device.getGraphicsQueue(), cmdA);
+            Utilities::endSingleTimeCommands(p.device, cmdA);
 
             {
                 auto copyCmd = Utilities::beginSingleTimeCommands(p.device.getLogicalDevice(), p.commandPool.get());
@@ -132,13 +132,13 @@ namespace core
                 }
 
                 copyCmd.get().copyBufferToImage(stagingBuffer, p.image, vk::ImageLayout::eTransferDstOptimal, regions);
-                Utilities::endSingleTimeCommands(p.device.getGraphicsQueue(), copyCmd);
+                Utilities::endSingleTimeCommands(p.device, copyCmd);
             }
 
             auto cmdB = Utilities::beginSingleTimeCommands(p.device.getLogicalDevice(), p.commandPool.get());
             ImageUtilities::transitionImageLayout(cmdB.get(), p.image, vk::ImageLayout::eTransferDstOptimal,
                                                   vk::ImageLayout::eShaderReadOnlyOptimal, vk::ImageAspectFlagBits::eColor, 1, p.mipLevels);
-            Utilities::endSingleTimeCommands(p.device.getGraphicsQueue(), cmdB);
+            Utilities::endSingleTimeCommands(p.device, cmdB);
 
             cleanupStaging();
             return true;

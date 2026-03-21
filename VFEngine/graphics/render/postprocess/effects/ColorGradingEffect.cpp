@@ -508,7 +508,7 @@ namespace render::postprocess
             vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
             vk::ImageAspectFlagBits::eColor);
 
-        core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), cmd);
+        core::Utilities::endSingleTimeCommands(device, cmd);
 
         vkDevice.destroyBuffer(stagingBuffer);
         vkDevice.freeMemory(stagingMemory);

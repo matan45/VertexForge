@@ -172,7 +172,7 @@ namespace controllers
                                                     vk::ImageLayout::eDepthStencilAttachmentOptimal,
                                                     vk::ImageAspectFlagBits::eDepth |
                                                     vk::ImageAspectFlagBits::eStencil);
-        core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), transitionDepthImage);
+        core::Utilities::endSingleTimeCommands(device, transitionDepthImage);
 
         offscreenResources->depthImage = std::move(depth);
 
@@ -193,7 +193,7 @@ namespace controllers
                                                         vk::ImageLayout::eUndefined,
                                                         vk::ImageLayout::eShaderReadOnlyOptimal,
                                                         vk::ImageAspectFlagBits::eColor);
-            core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), transitionColorImage);
+            core::Utilities::endSingleTimeCommands(device, transitionColorImage);
 
             updateDescriptorSet(color.descriptorSet, color.colorImageView);
 

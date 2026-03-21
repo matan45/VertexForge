@@ -137,7 +137,7 @@ namespace controllers
         core::ImageUtilities::transitionImageLayout(cmdA.get(), image, vk::ImageLayout::eUndefined,
                                                     vk::ImageLayout::eTransferDstOptimal,
                                                     vk::ImageAspectFlagBits::eColor);
-        core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), cmdA);
+        core::Utilities::endSingleTimeCommands(device, cmdA);
 
         auto cmdCopy = core::Utilities::beginSingleTimeCommands(device.getLogicalDevice(), commandPool.get());
         vk::BufferImageCopy region{};
@@ -148,13 +148,13 @@ namespace controllers
         region.imageSubresource.layerCount = 1;
         region.imageExtent = vk::Extent3D(width, height, 1);
         cmdCopy.get().copyBufferToImage(stagingBuffer, image, vk::ImageLayout::eTransferDstOptimal, region);
-        core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), cmdCopy);
+        core::Utilities::endSingleTimeCommands(device, cmdCopy);
 
         auto cmdB = core::Utilities::beginSingleTimeCommands(device.getLogicalDevice(), commandPool.get());
         core::ImageUtilities::transitionImageLayout(cmdB.get(), image, vk::ImageLayout::eTransferDstOptimal,
                                                     vk::ImageLayout::eShaderReadOnlyOptimal,
                                                     vk::ImageAspectFlagBits::eColor);
-        core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), cmdB);
+        core::Utilities::endSingleTimeCommands(device, cmdB);
     }
 
     static void createSamplerAndView(core::Device& device, PreviewTextureGPU& tex,

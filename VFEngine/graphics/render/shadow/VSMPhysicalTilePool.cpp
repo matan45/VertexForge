@@ -59,7 +59,7 @@ namespace render::shadow
                 1, &barrier
             );
 
-            core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), cmd, nullptr);
+            core::Utilities::endSingleTimeCommands(device, cmd, nullptr);
         }
 
         initialized = true;

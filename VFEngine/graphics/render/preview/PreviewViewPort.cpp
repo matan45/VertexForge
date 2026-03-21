@@ -191,7 +191,7 @@ namespace render::preview
         core::ImageUtilities::transitionImageLayout(trasitionDepthImage.get(), depth.depthImage, vk::ImageLayout::eUndefined,
                                                vk::ImageLayout::eDepthStencilAttachmentOptimal,
                                                vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil);
-        core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), trasitionDepthImage);
+        core::Utilities::endSingleTimeCommands(device, trasitionDepthImage);
 
         offscreenResources.depthImage = std::move(depth);
 
@@ -210,7 +210,7 @@ namespace render::preview
             core::ImageUtilities::transitionImageLayout(trasitionColorImage.get(), color.colorImage,
                                                    vk::ImageLayout::eUndefined, vk::ImageLayout::eShaderReadOnlyOptimal,
                                                    vk::ImageAspectFlagBits::eColor);
-            core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), trasitionColorImage);
+            core::Utilities::endSingleTimeCommands(device, trasitionColorImage);
 
             updateDescriptorSets(color.descriptorSet, color.colorImageView);
 

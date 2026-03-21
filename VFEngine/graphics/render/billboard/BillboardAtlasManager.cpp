@@ -147,7 +147,7 @@ namespace render::billboard
                 vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
                 vk::ImageAspectFlagBits::eColor);
 
-            core::Utilities::endSingleTimeCommands(device.getGraphicsQueue(), cmd);
+            core::Utilities::endSingleTimeCommands(device, cmd);
 
             cleanupStaging();
         }

@@ -10,6 +10,8 @@ constexpr bool debug = true;
 
 namespace core
 {
+	class Device;  // Forward declaration for thread-safe endSingleTimeCommands
+
 	struct QueueFamilyIndices
 	{
 		std::optional<uint32_t> presentFamily;
@@ -72,6 +74,10 @@ namespace core
 		static vk::UniqueCommandBuffer beginSingleTimeCommands(const vk::Device& device,
 			const vk::CommandPool& commandPool);
 		static void endSingleTimeCommands(const vk::Queue& queue, const vk::UniqueCommandBuffer& commandBuffer,
+			const vk::Fence& renderFence = nullptr);
+
+		// Thread-safe version that locks the graphics queue mutex
+		static void endSingleTimeCommands(const Device& device, const vk::UniqueCommandBuffer& commandBuffer,
 			const vk::Fence& renderFence = nullptr);
 	};
 }

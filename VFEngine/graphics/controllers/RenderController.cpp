@@ -67,8 +67,11 @@ namespace controllers {
 			renderThread->start([this](uint32_t /*frameSlot*/) {
 				using Clock = std::chrono::high_resolution_clock;
 
-				// Use a dedicated thread ID for the render thread (assigned once on first frame)
 				static uint32_t renderThreadId = threading::TaskProfiler::instance().getMaxThreadId() + 1;
+
+				// Get the base time from the latest profiler frame so our timestamps align
+				// with the task graph entries (they use relative time from frame start).
+				auto baseTime = Clock::now();
 
 				std::vector<threading::TaskProfileEntry> entries;
 
@@ -81,8 +84,10 @@ namespace controllers {
 					threading::TaskProfileEntry entry;
 					entry.name = "OffScreenRender";
 					entry.threadId = renderThreadId;
-					entry.startTimeNs = static_cast<uint64_t>(t0.time_since_epoch().count());
-					entry.endTimeNs = static_cast<uint64_t>(t1.time_since_epoch().count());
+					entry.startTimeNs = static_cast<uint64_t>(
+						std::chrono::duration_cast<std::chrono::nanoseconds>(t0 - baseTime).count());
+					entry.endTimeNs = static_cast<uint64_t>(
+						std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - baseTime).count());
 					entries.push_back(entry);
 				}
 
@@ -94,12 +99,13 @@ namespace controllers {
 					threading::TaskProfileEntry entry;
 					entry.name = "SwapchainPresent";
 					entry.threadId = renderThreadId;
-					entry.startTimeNs = static_cast<uint64_t>(t0.time_since_epoch().count());
-					entry.endTimeNs = static_cast<uint64_t>(t1.time_since_epoch().count());
+					entry.startTimeNs = static_cast<uint64_t>(
+						std::chrono::duration_cast<std::chrono::nanoseconds>(t0 - baseTime).count());
+					entry.endTimeNs = static_cast<uint64_t>(
+						std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - baseTime).count());
 					entries.push_back(entry);
 				}
 
-				// Inject render thread entries into the profiler (append to current frame)
 				threading::TaskProfiler::instance().appendToLatestFrame(entries);
 			});
 			vfLogInfo("RenderController: Render thread enabled");

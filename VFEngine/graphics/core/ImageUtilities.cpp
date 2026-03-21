@@ -213,7 +213,7 @@ namespace core
 			vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
 			vk::ImageAspectFlagBits::eColor);
 
-		Utilities::endSingleTimeCommands(device.getGraphicsQueue(), cmd);
+		Utilities::endSingleTimeCommands(device, cmd);
 
 		vkDevice.destroyBuffer(stagingBuffer);
 		vkDevice.freeMemory(stagingMemory);
