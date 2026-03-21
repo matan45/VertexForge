@@ -78,17 +78,7 @@ namespace terrain
             layerWeights[i].assign(texelCount, 0.0f);
         }
 
-        layerIndices = {0, 1, 2, 3};
-    }
-
-    TileWeightMapData::PackedRGBA TileWeightMapData::packRGBA(uint32_t x, uint32_t z) const
-    {
-        PackedRGBA result;
-        result.r = (0 < layerWeights.size()) ? getWeight(0, x, z) : 0.0f;
-        result.g = (1 < layerWeights.size()) ? getWeight(1, x, z) : 0.0f;
-        result.b = (2 < layerWeights.size()) ? getWeight(2, x, z) : 0.0f;
-        result.a = (3 < layerWeights.size()) ? getWeight(3, x, z) : 0.0f;
-        return result;
+        layerIndices = {0, 1, 2, 3, 4, 5, 6, 7};
     }
 
     uint8_t TileWeightMapData::findChannel(uint8_t paletteLayer) const
@@ -143,9 +133,9 @@ namespace terrain
             }
         }
 
-        vfLogWarning("TerrainWeightMap: Tile has all 4 channels occupied. "
+        vfLogWarning("TerrainWeightMap: Tile has all {} channels occupied. "
                      "Evicting palette layer {} (channel {}, weight sum {:.3f}) to assign palette layer {}",
-                     layerIndices[minCh], minCh, minSum, paletteLayer);
+                     WEIGHT_CHANNELS, layerIndices[minCh], minCh, minSum, paletteLayer);
 
         if (minCh < layerWeights.size())
         {

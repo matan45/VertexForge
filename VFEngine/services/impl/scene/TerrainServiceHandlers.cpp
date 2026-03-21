@@ -185,6 +185,24 @@ namespace services
                 return bakeTerrainSVT(cmd.terrainEntity);
             });
 
+        dispatcher.registerCommandHandler<events::terrain::BeginBakeTerrainSVTCommand>(
+            [this](const events::terrain::BeginBakeTerrainSVTCommand& cmd)
+            {
+                return beginBakeTerrainSVTAsync(cmd.terrainEntity);
+            });
+
+        dispatcher.registerQueryHandler<events::terrain::PollBakeTerrainSVTQuery>(
+            [this](const events::terrain::PollBakeTerrainSVTQuery&)
+            {
+                return pollBakeTerrainSVT();
+            });
+
+        dispatcher.registerCommandHandler<events::terrain::CancelBakeTerrainSVTCommand>(
+            [this](const events::terrain::CancelBakeTerrainSVTCommand&)
+            {
+                cancelBakeTerrainSVT();
+            });
+
         dispatcher.registerCommandHandler<events::terrain::SetTerrainSVTEnabledCommand>(
             [this](const events::terrain::SetTerrainSVTEnabledCommand& cmd)
             {

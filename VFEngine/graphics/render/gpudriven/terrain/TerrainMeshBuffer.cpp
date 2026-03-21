@@ -181,11 +181,11 @@ namespace render::gpudriven
 
     TerrainTileGeometry* TerrainMeshBuffer::allocateTile(
         const std::string& tileKey,
-        const std::array<uint32_t, LOD_LEVEL_COUNT>& vertexCounts,
-        const std::array<uint32_t, LOD_LEVEL_COUNT>& indexCounts,
-        const std::array<uint32_t, LOD_LEVEL_COUNT>& meshletCounts,
-        const std::array<uint32_t, LOD_LEVEL_COUNT>& meshletVertexCounts,
-        const std::array<uint32_t, LOD_LEVEL_COUNT>& meshletPrimitiveCounts,
+        const std::array<uint32_t, TERRAIN_LOD_LEVEL_COUNT>& vertexCounts,
+        const std::array<uint32_t, TERRAIN_LOD_LEVEL_COUNT>& indexCounts,
+        const std::array<uint32_t, TERRAIN_LOD_LEVEL_COUNT>& meshletCounts,
+        const std::array<uint32_t, TERRAIN_LOD_LEVEL_COUNT>& meshletVertexCounts,
+        const std::array<uint32_t, TERRAIN_LOD_LEVEL_COUNT>& meshletPrimitiveCounts,
         const glm::vec3& aabbMin,
         const glm::vec3& aabbMax)
     {
@@ -210,7 +210,7 @@ namespace render::gpudriven
         float radius = glm::length(aabbMax - center);
         tile.boundingSphere = glm::vec4(center, radius);
 
-        for (uint32_t lod = 0; lod < LOD_LEVEL_COUNT; ++lod)
+        for (uint32_t lod = 0; lod < TERRAIN_LOD_LEVEL_COUNT; ++lod)
         {
             if (vertexCounts[lod] > 0)
             {
@@ -343,7 +343,7 @@ namespace render::gpudriven
     bool TerrainMeshBuffer::uploadLODVertices(const std::string& tileKey, uint32_t lodLevel,
                                                const resource::Vertex* vertices, uint32_t count)
     {
-        if (!initialized_ || lodLevel >= LOD_LEVEL_COUNT) return false;
+        if (!initialized_ || lodLevel >= TERRAIN_LOD_LEVEL_COUNT) return false;
 
         auto it = tileAllocations_.find(tileKey);
         if (it == tileAllocations_.end()) return false;
@@ -362,7 +362,7 @@ namespace render::gpudriven
     bool TerrainMeshBuffer::uploadLODIndices(const std::string& tileKey, uint32_t lodLevel,
                                               const uint32_t* indices, uint32_t count)
     {
-        if (!initialized_ || lodLevel >= LOD_LEVEL_COUNT) return false;
+        if (!initialized_ || lodLevel >= TERRAIN_LOD_LEVEL_COUNT) return false;
 
         auto it = tileAllocations_.find(tileKey);
         if (it == tileAllocations_.end()) return false;
@@ -383,7 +383,7 @@ namespace render::gpudriven
                                                const uint32_t* meshletVertices, uint32_t meshletVertexCount,
                                                const uint32_t* meshletPrimitives, uint32_t meshletPrimitiveCount)
     {
-        if (!initialized_ || lodLevel >= LOD_LEVEL_COUNT) return false;
+        if (!initialized_ || lodLevel >= TERRAIN_LOD_LEVEL_COUNT) return false;
 
         auto it = tileAllocations_.find(tileKey);
         if (it == tileAllocations_.end()) return false;
@@ -468,7 +468,7 @@ namespace render::gpudriven
                                              const glm::vec3& aabbMin,
                                              const glm::vec3& aabbMax)
     {
-        if (!initialized_ || lodLevel >= LOD_LEVEL_COUNT)
+        if (!initialized_ || lodLevel >= TERRAIN_LOD_LEVEL_COUNT)
         {
             return false;
         }
@@ -503,7 +503,7 @@ namespace render::gpudriven
 
     void TerrainMeshBuffer::freeTileLOD(const std::string& tileKey, uint32_t lodLevel)
     {
-        if (lodLevel >= LOD_LEVEL_COUNT) return;
+        if (lodLevel >= TERRAIN_LOD_LEVEL_COUNT) return;
 
         auto it = tileAllocations_.find(tileKey);
         if (it == tileAllocations_.end()) return;

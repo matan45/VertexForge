@@ -1,6 +1,6 @@
 // Generated terrain material shader code
 // Generated terrain material code
-// Per-tile palette: 4 channels with runtime indirection into palette of 1 layer(s)
+// Per-tile palette: 8 channels with runtime indirection into palette of 5 layer(s)
 vec3 ls_Albedo = vec3(0.0);
 vec3 ls_Normal = vec3(0.0);
 float ls_Roughness = 0.0;
@@ -9,9 +9,10 @@ float ls_AO = 0.0;
 float ls_Emission = 0.0;
 float ls_TotalW = 0.0;
 uint packedLI = floatBitsToUint(tiles[fragTileIndex].aabbMax.w);
-// Must match WEIGHT_CHANNELS (terrain/TerrainWeightMap.hpp) — 4 channels, 8 bits each
-for (int ch = 0; ch < 4; ch++) {
-    uint paletteIdx = (packedLI >> (ch * 8u)) & 0xFFu;
+uint packedLI2 = floatBitsToUint(tiles[fragTileIndex].lodGeometricErrors2.z);
+for (int ch = 0; ch < 8; ch++) {
+    uint packedWord = (ch < 4) ? packedLI : packedLI2;
+    uint paletteIdx = (packedWord >> ((ch % 4) * 8u)) & 0xFFu;
     float w = sampleTileWeight(tiles[fragTileIndex].weightMapOffset, uint(tiles[fragTileIndex].aabbMin.w), uint(ch), fragTexCoord);
     if (w < 0.001) continue;
     vec2 layerUV = fragWorldUV * terrainLayers[paletteIdx].tilingScale;

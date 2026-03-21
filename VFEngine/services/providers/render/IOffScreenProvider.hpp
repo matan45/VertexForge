@@ -93,6 +93,8 @@ namespace services {
         uint32_t lodCount1 = 0;
         uint32_t lodCount2 = 0;
         uint32_t lodCount3 = 0;
+        uint32_t lodCount4 = 0;
+        uint32_t lodCount5 = 0;
 
         uint32_t tilesLoaded = 0;
         uint32_t tilesStreaming = 0;

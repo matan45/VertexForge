@@ -118,8 +118,10 @@ namespace windows
                 ImGui::EndDisabled();
 
                 bool canUseTerrain = isTerrainSelected();
+                auto svtBakeStatus = dispatcher.query(events::terrain::PollBakeTerrainSVTQuery{});
+                bool bakeBlocked = svtBakeStatus.active;
 
-                ImGui::BeginDisabled(!isSculptMode && !canUseTerrain);
+                ImGui::BeginDisabled(bakeBlocked || (!isSculptMode && !canUseTerrain));
                 if (iconButton(ViewportIcon::Sculpt, isSculptMode, isSculptMode ? "Exit Sculpt Mode" : "Enter Sculpt Mode"))
                 {
                     events::sculpt::SetSculptModeActiveCommand cmd;
@@ -130,7 +132,7 @@ namespace windows
 
                 ImGui::SameLine();
 
-                ImGui::BeginDisabled(!isPaintMode && !canUseTerrain);
+                ImGui::BeginDisabled(bakeBlocked || (!isPaintMode && !canUseTerrain));
                 if (iconButton(ViewportIcon::Paint, isPaintMode, isPaintMode ? "Exit Paint Mode" : "Enter Paint Mode"))
                 {
                     events::paint::SetPaintModeActiveCommand cmd;
@@ -141,7 +143,7 @@ namespace windows
 
                 ImGui::SameLine();
 
-                ImGui::BeginDisabled(!isHoleMode && !canUseTerrain);
+                ImGui::BeginDisabled(bakeBlocked || (!isHoleMode && !canUseTerrain));
                 if (iconButton(ViewportIcon::Hole, isHoleMode, isHoleMode ? "Exit Hole Mode" : "Enter Hole Mode"))
                 {
                     events::hole::SetHoleModeActiveCommand cmd;
@@ -152,7 +154,7 @@ namespace windows
 
                 ImGui::SameLine();
 
-                ImGui::BeginDisabled(!isVegBrushMode && !canUseTerrain);
+                ImGui::BeginDisabled(bakeBlocked || (!isVegBrushMode && !canUseTerrain));
                 if (iconButton(ViewportIcon::Vegetation, isVegBrushMode, isVegBrushMode ? "Exit Vegetation Brush" : "Enter Vegetation Brush"))
                 {
                     events::vegetationBrush::SetVegetationBrushModeActiveCommand cmd;
@@ -163,7 +165,7 @@ namespace windows
 
                 ImGui::SameLine();
 
-                ImGui::BeginDisabled(!isMeshBrushMode && !canUseTerrain);
+                ImGui::BeginDisabled(bakeBlocked || (!isMeshBrushMode && !canUseTerrain));
                 if (iconButton(ViewportIcon::MeshBrush, isMeshBrushMode, isMeshBrushMode ? "Exit Mesh Brush" : "Enter Mesh Brush"))
                 {
                     events::meshBrush::SetMeshBrushModeActiveCommand cmd;

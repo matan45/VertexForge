@@ -39,6 +39,7 @@ namespace terrain
         auto tile = generator->generateTile(coord);
         TerrainTile* tilePtr = tile.get();
         tiles.emplace(coord, std::move(tile));
+        quadtree.insert(tilePtr);
 
         updateNeighborReferences(*tilePtr);
 
@@ -73,6 +74,7 @@ namespace terrain
         tile->initializeMetadataOnly();
         TerrainTile* tilePtr = tile.get();
         tiles.emplace(coord, std::move(tile));
+        quadtree.insert(tilePtr);
 
         updateNeighborReferences(*tilePtr);
 
@@ -120,6 +122,7 @@ namespace terrain
             }
         }
 
+        quadtree.remove(coord);
         tiles.erase(it);
         return true;
     }
@@ -132,17 +135,7 @@ namespace terrain
             return;
         }
 
-        auto it = tiles.begin();
-        minX = maxX = it->first.x;
-        minZ = maxZ = it->first.z;
-
-        for (++it; it != tiles.end(); ++it)
-        {
-            minX = std::min(minX, it->first.x);
-            maxX = std::max(maxX, it->first.x);
-            minZ = std::min(minZ, it->first.z);
-            maxZ = std::max(maxZ, it->first.z);
-        }
+        quadtree.getBounds(minX, minZ, maxX, maxZ);
     }
 
     TerrainTile* TerrainGrid::getOrCreateTile(const TileCoord& coord)
@@ -156,6 +149,7 @@ namespace terrain
         auto tile = generator->generateTile(coord);
         TerrainTile* tilePtr = tile.get();
         tiles.emplace(coord, std::move(tile));
+        quadtree.insert(tilePtr);
 
         updateNeighborReferences(*tilePtr);
 
@@ -248,22 +242,31 @@ namespace terrain
 
     std::vector<TerrainTile*> TerrainGrid::getVisibleTiles(const math::Frustum& frustum)
     {
+        for (auto* prev : lastVisibleTiles)
+            prev->isVisible = false;
+
         std::vector<TerrainTile*> result;
-        result.reserve(tiles.size());
+        quadtree.queryFrustum(frustum, config.worldTileSize, result);
 
-        for (auto& [coord, tile] : tiles)
-        {
-            if (frustum.intersectsAABB(tile->worldBounds))
-            {
-                tile->isVisible = true;
-                result.push_back(tile.get());
-            }
-            else
-            {
-                tile->isVisible = false;
-            }
-        }
+        for (auto* tile : result)
+            tile->isVisible = true;
 
+        lastVisibleTiles = result;
+        return result;
+    }
+
+    std::vector<TerrainTile*> TerrainGrid::getTilesInRange(const glm::vec3& center, float radius)
+    {
+        std::vector<TerrainTile*> result;
+        quadtree.queryRange(center, radius, config.worldTileSize, result);
+        return result;
+    }
+
+    std::vector<TerrainTile*> TerrainGrid::getTilesInCone(const glm::vec3& apex, const glm::vec3& dir,
+                                                          float halfAngle, float maxDist)
+    {
+        std::vector<TerrainTile*> result;
+        quadtree.queryCone(apex, dir, halfAngle, maxDist, config.worldTileSize, result);
         return result;
     }
 
@@ -378,6 +381,8 @@ namespace terrain
             ++currentTile;
         }
 
+        quadtree.rebuild(tiles);
+
         if (progress)
         {
             progress(1.0f, "Complete");
@@ -439,6 +444,7 @@ namespace terrain
         }
 
         updateAllNeighborReferences();
+        quadtree.rebuild(tiles);
 
         if (progress)
         {
@@ -463,6 +469,7 @@ namespace terrain
         }
 
         updateAllNeighborReferences();
+        quadtree.rebuild(tiles);
 
         vfLogInfo("TerrainGrid: Created {} metadata-only tiles for streaming", tiles.size());
         return !tiles.empty();

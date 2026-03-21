@@ -219,8 +219,7 @@ float readWeightByte(uint byteOffset) {
 }
 
 float sampleWeightTexel(uint tileOffset, uint res, uint channel, uint x, uint z) {
-    // Single RGBA texture, channel is 0-3 directly
-    return readWeightByte(tileOffset + (z * res + x) * 4u + channel);
+    return readWeightByte(tileOffset + (z * res + x) * 8u + channel);
 }
 
 float sampleTileWeight(uint tileOffset, uint res, uint channel, vec2 uv) {
@@ -418,8 +417,7 @@ void main() {
     multiScatterCompensation(F0, brdf, metallic, specularScale, kD);
 
     vec3 diffuse = irradiance * albedo;
-    // Match mesh shader default iblSpecular (0.5) to avoid over-bright terrain reflections
-    vec3 specular = prefilteredColor * specularScale * 0.5;
+    vec3 specular = prefilteredColor * specularScale * 0.5;  // VK-1019
 
     float so = specularOcclusion(NdotV, ao, roughness);
     vec3 ambient = kD * diffuse * ao + specular * so;
@@ -518,13 +516,15 @@ void main() {
     }
 
     if (viewModeValue == 2u) {
-        vec3 lodColors[4] = vec3[4](
-            vec3(0.0, 1.0, 0.0),
-            vec3(1.0, 1.0, 0.0),
-            vec3(1.0, 0.5, 0.0),
-            vec3(1.0, 0.0, 0.0)
+        vec3 lodColors[6] = vec3[6](
+            vec3(0.0, 1.0, 0.0),   // LOD0: green
+            vec3(1.0, 1.0, 0.0),   // LOD1: yellow
+            vec3(1.0, 0.5, 0.0),   // LOD2: orange
+            vec3(1.0, 0.0, 0.0),   // LOD3: red
+            vec3(0.5, 0.0, 0.5),   // LOD4: purple
+            vec3(0.0, 0.0, 1.0)    // LOD5: blue
         );
-        uint lod = min(fragLODLevel, 3u);
+        uint lod = min(fragLODLevel, 5u);
         color = mix(color, lodColors[lod], 0.5);
     }
 

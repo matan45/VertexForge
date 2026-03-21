@@ -35,13 +35,13 @@ namespace render::gpudriven
         float radius = glm::length(alloc.aabbMax - center);
         alloc.boundingSphere = glm::vec4(center, radius);
 
-        std::array<uint32_t, LOD_LEVEL_COUNT> vertexCounts{};
-        std::array<uint32_t, LOD_LEVEL_COUNT> indexCounts{};
-        std::array<uint32_t, LOD_LEVEL_COUNT> meshletCounts{};
-        std::array<uint32_t, LOD_LEVEL_COUNT> meshletVertexCounts{};
-        std::array<uint32_t, LOD_LEVEL_COUNT> meshletPrimitiveCounts{};
+        std::array<uint32_t, TERRAIN_LOD_LEVEL_COUNT> vertexCounts{};
+        std::array<uint32_t, TERRAIN_LOD_LEVEL_COUNT> indexCounts{};
+        std::array<uint32_t, TERRAIN_LOD_LEVEL_COUNT> meshletCounts{};
+        std::array<uint32_t, TERRAIN_LOD_LEVEL_COUNT> meshletVertexCounts{};
+        std::array<uint32_t, TERRAIN_LOD_LEVEL_COUNT> meshletPrimitiveCounts{};
 
-        for (uint32_t lod = 0; lod < LOD_LEVEL_COUNT; ++lod)
+        for (uint32_t lod = 0; lod < TERRAIN_LOD_LEVEL_COUNT; ++lod)
         {
             const auto& lodData = tile.lodLevels[lod];
             vertexCounts[lod] = static_cast<uint32_t>(lodData.vertices.size());
@@ -73,7 +73,7 @@ namespace render::gpudriven
             return nullptr;
         }
 
-        for (uint32_t lod = 0; lod < LOD_LEVEL_COUNT; ++lod)
+        for (uint32_t lod = 0; lod < TERRAIN_LOD_LEVEL_COUNT; ++lod)
         {
             if (!uploadLODData(alloc, tile.lodLevels[lod], lod, tile.worldOrigin))
             {
@@ -83,7 +83,7 @@ namespace render::gpudriven
             }
         }
 
-        for (uint32_t lod = 0; lod < LOD_LEVEL_COUNT; ++lod)
+        for (uint32_t lod = 0; lod < TERRAIN_LOD_LEVEL_COUNT; ++lod)
         {
             const auto& geomLod = tileGeom->lods[lod];
             alloc.lodAllocs[lod].vertexOffset = geomLod.vertexOffset;
@@ -107,7 +107,7 @@ namespace render::gpudriven
 
     bool TerrainGPUAdapter::uploadTileAddLOD(const terrain::TerrainTile& tile, uint32_t lodLevel)
     {
-        if (lodLevel >= LOD_LEVEL_COUNT)
+        if (lodLevel >= TERRAIN_LOD_LEVEL_COUNT)
         {
             vfLogError("TerrainGPUAdapter: Invalid LOD level {}", lodLevel);
             return false;
@@ -156,7 +156,7 @@ namespace render::gpudriven
         float radius = glm::length(it->second.aabbMax - center);
         it->second.boundingSphere = glm::vec4(center, radius);
 
-        for (uint32_t lod = 0; lod < LOD_LEVEL_COUNT; ++lod)
+        for (uint32_t lod = 0; lod < TERRAIN_LOD_LEVEL_COUNT; ++lod)
         {
             it->second.geometricErrors[lod] = tile.lodLevels[lod].geometricError;
         }
@@ -194,7 +194,7 @@ namespace render::gpudriven
 
     void TerrainGPUAdapter::removeTileLOD(const TerrainTileKey& key, uint32_t lodLevel)
     {
-        if (lodLevel >= LOD_LEVEL_COUNT) return;
+        if (lodLevel >= TERRAIN_LOD_LEVEL_COUNT) return;
 
         auto it = allocations_.find(key);
         if (it == allocations_.end()) return;
@@ -334,8 +334,7 @@ namespace render::gpudriven
         auto& alloc = it->second;
         const auto& wm = tile.weightMap;
 
-        // Always 1 RGBA texture (4 channels)
-        uint32_t totalBytes = wm.resolution * wm.resolution * 4; // RGBA uint8 per texel
+        uint32_t totalBytes = wm.resolution * wm.resolution * terrain::WEIGHT_CHANNELS;
 
         std::string tileKey = alloc.getMeshPath();
         uint32_t offsetElements = terrainBuffer_.allocateWeightMap(tileKey, totalBytes);
@@ -346,20 +345,18 @@ namespace render::gpudriven
             return false;
         }
 
-        // Pack weight data: convert float channels 0-3 -> uint8 RGBA
         std::vector<uint8_t> packedData(totalBytes);
 
         for (uint32_t z = 0; z < wm.resolution; ++z)
         {
             for (uint32_t x = 0; x < wm.resolution; ++x)
             {
-                auto rgba = wm.packRGBA(x, z);
-
-                uint32_t pixelOffset = (z * wm.resolution + x) * 4;
-                packedData[pixelOffset + 0] = static_cast<uint8_t>(rgba.r * 255.0f + 0.5f);
-                packedData[pixelOffset + 1] = static_cast<uint8_t>(rgba.g * 255.0f + 0.5f);
-                packedData[pixelOffset + 2] = static_cast<uint8_t>(rgba.b * 255.0f + 0.5f);
-                packedData[pixelOffset + 3] = static_cast<uint8_t>(rgba.a * 255.0f + 0.5f);
+                uint32_t pixelOffset = (z * wm.resolution + x) * terrain::WEIGHT_CHANNELS;
+                for (uint8_t ch = 0; ch < terrain::WEIGHT_CHANNELS; ++ch)
+                {
+                    packedData[pixelOffset + ch] = static_cast<uint8_t>(
+                        wm.getWeight(ch, x, z) * 255.0f + 0.5f);
+                }
             }
         }
 
@@ -378,13 +375,63 @@ namespace render::gpudriven
         return true;
     }
 
+    static float packLayerIndicesAsFloat(const uint8_t* indices)
+    {
+        uint32_t packed = static_cast<uint32_t>(indices[0])
+            | (static_cast<uint32_t>(indices[1]) << 8)
+            | (static_cast<uint32_t>(indices[2]) << 16)
+            | (static_cast<uint32_t>(indices[3]) << 24);
+        float result;
+        std::memcpy(&result, &packed, sizeof(float));
+        return result;
+    }
+
+    void TerrainGPUAdapter::populateGPUTile(
+        TerrainTileGPUData& gpuTile,
+        const TerrainTileAllocation& alloc,
+        const terrain::TerrainTile& tile,
+        const TerrainTileKey& key)
+    {
+        gpuTile.modelMatrix = glm::translate(glm::mat4(1.0f),
+            glm::vec3(tile.worldOrigin.x, 0.0f, tile.worldOrigin.z));
+
+        glm::vec3 center = (tile.worldBounds.min + tile.worldBounds.max) * 0.5f;
+        gpuTile.boundingSphere = glm::vec4(center, glm::length(tile.worldBounds.max - center));
+        gpuTile.aabbMin = glm::vec4(tile.worldBounds.min, static_cast<float>(tile.weightMap.resolution));
+        gpuTile.aabbMax = glm::vec4(tile.worldBounds.max, packLayerIndicesAsFloat(&tile.weightMap.layerIndices[0]));
+
+        glm::uvec4* meshletPtrs[] = {
+            &gpuTile.lod0MeshletData, &gpuTile.lod1MeshletData,
+            &gpuTile.lod2MeshletData, &gpuTile.lod3MeshletData,
+            &gpuTile.lod4MeshletData, &gpuTile.lod5MeshletData
+        };
+        for (uint32_t i = 0; i < TERRAIN_LOD_LEVEL_COUNT; ++i)
+        {
+            *meshletPtrs[i] = glm::uvec4(
+                alloc.lodAllocs[i].meshletOffset, alloc.lodAllocs[i].meshletCount,
+                alloc.lodAllocs[i].vertexOffset, tile.lodLevels[i].mainMeshletCount);
+        }
+
+        gpuTile.lodGeometricErrors = glm::vec4(
+            tile.lodLevels[0].geometricError, tile.lodLevels[1].geometricError,
+            tile.lodLevels[2].geometricError, tile.lodLevels[3].geometricError);
+        gpuTile.lodGeometricErrors2 = glm::vec4(
+            tile.lodLevels[4].geometricError, tile.lodLevels[5].geometricError,
+            packLayerIndicesAsFloat(&tile.weightMap.layerIndices[4]), 0.0f);
+
+        gpuTile.coordX = key.coordX;
+        gpuTile.coordZ = key.coordZ;
+        gpuTile.flags = ObjectFlags::TerrainTile;
+        if (hasSelectedTile_ && key.coordX == selectedCoordX_ && key.coordZ == selectedCoordZ_)
+            gpuTile.flags |= ObjectFlags::Selected;
+        gpuTile.weightMapOffset = alloc.weightMapUploaded ? alloc.weightMapOffset : 0;
+    }
+
     const std::vector<TerrainTileGPUData>& TerrainGPUAdapter::buildGPUTileData(
         const std::vector<terrain::TerrainTile*>& tiles)
     {
         if (!gpuTileDataDirty_)
-        {
             return cachedGPUTileData_;
-        }
 
         cachedGPUTileData_.clear();
         cachedGPUTileData_.reserve(tiles.size());
@@ -392,83 +439,15 @@ namespace render::gpudriven
         for (const terrain::TerrainTile* tile : tiles)
         {
             if (!tile || !tile->isVisible)
-            {
                 continue;
-            }
 
             TerrainTileKey key{tile->coord.x, tile->coord.z};
             auto it = allocations_.find(key);
             if (it == allocations_.end() || !it->second.isUploaded)
-            {
                 continue;
-            }
-
-            const auto& alloc = it->second;
 
             TerrainTileGPUData gpuTile{};
-
-            // Model matrix translates tile-local vertices to world space
-            gpuTile.modelMatrix = glm::translate(glm::mat4(1.0f),
-                glm::vec3(tile->worldOrigin.x, 0.0f, tile->worldOrigin.z));
-
-            // Use current tile bounds (not stale allocation data) so sculpting updates are reflected
-            glm::vec3 currentCenter = (tile->worldBounds.min + tile->worldBounds.max) * 0.5f;
-            float currentRadius = glm::length(tile->worldBounds.max - currentCenter);
-            gpuTile.boundingSphere = glm::vec4(currentCenter, currentRadius);
-            gpuTile.aabbMin = glm::vec4(tile->worldBounds.min,
-                static_cast<float>(tile->weightMap.resolution));
-
-            // Pack layerIndices[4] into aabbMax.w as uint bits reinterpreted as float
-            uint32_t packedLI = static_cast<uint32_t>(tile->weightMap.layerIndices[0])
-                | (static_cast<uint32_t>(tile->weightMap.layerIndices[1]) << 8)
-                | (static_cast<uint32_t>(tile->weightMap.layerIndices[2]) << 16)
-                | (static_cast<uint32_t>(tile->weightMap.layerIndices[3]) << 24);
-            float packedLIFloat;
-            std::memcpy(&packedLIFloat, &packedLI, sizeof(float));
-            gpuTile.aabbMax = glm::vec4(tile->worldBounds.max, packedLIFloat);
-
-            // LOD meshlet data for each level
-            // Format: x = meshletOffset, y = meshletCount (total), z = baseVertexOffset, w = mainMeshletCount (surface only, no skirts)
-            gpuTile.lod0MeshletData = glm::uvec4(
-                alloc.lodAllocs[0].meshletOffset,
-                alloc.lodAllocs[0].meshletCount,
-                alloc.lodAllocs[0].vertexOffset,
-                tile->lodLevels[0].mainMeshletCount
-            );
-            gpuTile.lod1MeshletData = glm::uvec4(
-                alloc.lodAllocs[1].meshletOffset,
-                alloc.lodAllocs[1].meshletCount,
-                alloc.lodAllocs[1].vertexOffset,
-                tile->lodLevels[1].mainMeshletCount
-            );
-            gpuTile.lod2MeshletData = glm::uvec4(
-                alloc.lodAllocs[2].meshletOffset,
-                alloc.lodAllocs[2].meshletCount,
-                alloc.lodAllocs[2].vertexOffset,
-                tile->lodLevels[2].mainMeshletCount
-            );
-            gpuTile.lod3MeshletData = glm::uvec4(
-                alloc.lodAllocs[3].meshletOffset,
-                alloc.lodAllocs[3].meshletCount,
-                alloc.lodAllocs[3].vertexOffset,
-                tile->lodLevels[3].mainMeshletCount
-            );
-
-            // Use current geometric errors from tile (not stale allocation) for correct GPU LOD selection
-            gpuTile.lodGeometricErrors = glm::vec4(
-                tile->lodLevels[0].geometricError,
-                tile->lodLevels[1].geometricError,
-                tile->lodLevels[2].geometricError,
-                tile->lodLevels[3].geometricError
-            );
-
-            gpuTile.coordX = key.coordX;
-            gpuTile.coordZ = key.coordZ;
-            gpuTile.flags = ObjectFlags::TerrainTile;
-            if (hasSelectedTile_ && key.coordX == selectedCoordX_ && key.coordZ == selectedCoordZ_)
-                gpuTile.flags |= ObjectFlags::Selected;
-            gpuTile.weightMapOffset = alloc.weightMapUploaded ? alloc.weightMapOffset : 0;
-
+            populateGPUTile(gpuTile, it->second, *tile, key);
             cachedGPUTileData_.push_back(gpuTile);
         }
 

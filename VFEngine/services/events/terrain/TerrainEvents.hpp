@@ -359,6 +359,40 @@ namespace events::terrain
         std::string_view getName() const override { return "BakeTerrainSVT"; }
     };
 
+    struct BeginBakeTerrainSVTCommand : ICommand<bool>
+    {
+        services::EntityHandle terrainEntity;
+        std::string_view getName() const override { return "BeginBakeTerrainSVT"; }
+    };
+
+    struct CancelBakeTerrainSVTCommand : ICommand<>
+    {
+        std::string_view getName() const override { return "CancelBakeTerrainSVT"; }
+    };
+
+    struct SVTBakePollResult
+    {
+        float progress = 0.0f;
+        std::string stage;
+        bool active = false;
+        bool completed = false;
+        bool success = false;
+    };
+
+    struct PollBakeTerrainSVTQuery : IQuery<SVTBakePollResult>
+    {
+        std::string_view getName() const override { return "PollBakeTerrainSVT"; }
+    };
+
+    struct TerrainSVTBakeProgressNotification : INotification
+    {
+        float progress = 0.0f;
+        std::string stage;
+        bool completed = false;
+        bool success = false;
+        std::string_view getName() const override { return "TerrainSVTBakeProgress"; }
+    };
+
     struct SetTerrainSVTEnabledCommand : ICommand<>
     {
         services::EntityHandle terrainEntity;

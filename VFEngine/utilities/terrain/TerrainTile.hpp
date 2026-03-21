@@ -76,7 +76,7 @@ namespace terrain
 
         bool isLODDirty(uint32_t lod) const { return (dirtyLODMask & (1 << lod)) != 0; }
         void clearLODDirty(uint32_t lod) { dirtyLODMask &= ~(1 << lod); }
-        void setAllLODsDirty() { dirtyLODMask = 0x0F; isDirty = true; }
+        void setAllLODsDirty() { dirtyLODMask = 0x3F; isDirty = true; }
 
         bool isLODGPUDirty(uint32_t lod) const { return (gpuDirtyLODMask & (1 << lod)) != 0; }
         void setLODGPUDirty(uint32_t lod) { gpuDirtyLODMask |= (1 << lod); }

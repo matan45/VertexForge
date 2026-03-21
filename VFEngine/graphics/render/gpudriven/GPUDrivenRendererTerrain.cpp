@@ -149,7 +149,9 @@ namespace render::gpudriven
 
     void GPUDrivenRenderer::updateTerrain(const std::vector<terrain::TerrainTile*>& visibleTiles,
                                           const glm::vec3& cameraPosition,
-                                          const std::string& terrainMaterialPath)
+                                          const std::string& terrainMaterialPath,
+                                          const glm::vec2& terrainGridWorldMin,
+                                          const glm::vec2& terrainGridWorldMax)
     {
         auto frameStart = std::chrono::high_resolution_clock::now();
 
@@ -235,20 +237,11 @@ namespace render::gpudriven
         auto uploadEnd = std::chrono::high_resolution_clock::now();
         terrain.uploadTileDataUs = std::chrono::duration<float, std::micro>(uploadEnd - uploadStart).count();
 
-        // SVT: auto-compute terrain world bounds and update params
-        if (svt.enabled && svt.initialized && !visibleTiles.empty())
+        // SVT: use full terrain grid bounds (from TerrainComponent) for stable virtual texture mapping
+        if (svt.enabled && svt.initialized &&
+            terrainGridWorldMin != terrainGridWorldMax)
         {
-            glm::vec2 worldMin(std::numeric_limits<float>::max());
-            glm::vec2 worldMax(std::numeric_limits<float>::lowest());
-            for (const auto* tile : visibleTiles)
-            {
-                if (!tile) continue;
-                worldMin.x = std::min(worldMin.x, tile->worldBounds.min.x);
-                worldMin.y = std::min(worldMin.y, tile->worldBounds.min.z);
-                worldMax.x = std::max(worldMax.x, tile->worldBounds.max.x);
-                worldMax.y = std::max(worldMax.y, tile->worldBounds.max.z);
-            }
-            updateSVTParams(worldMin, worldMax);
+            updateSVTParams(terrainGridWorldMin, terrainGridWorldMax);
         }
 
         terrain.updateUs = std::chrono::duration<float, std::micro>(uploadEnd - frameStart).count();
@@ -291,7 +284,7 @@ namespace render::gpudriven
         else if (terrain.adapter)
         {
             render::gpudriven::TerrainTileKey key{coordX, coordZ};
-            for (uint32_t lod = 0; lod < 4; ++lod)
+            for (uint32_t lod = 0; lod < TERRAIN_LOD_LEVEL_COUNT; ++lod)
             {
                 terrain.adapter->removeTileLOD(key, lod);
             }

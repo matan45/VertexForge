@@ -59,13 +59,13 @@ namespace render::gpudriven
     struct TerrainTileAllocation
     {
         TerrainTileKey key;
-        std::array<TerrainLODAllocation, LOD_LEVEL_COUNT> lodAllocs;
+        std::array<TerrainLODAllocation, TERRAIN_LOD_LEVEL_COUNT> lodAllocs;
 
         glm::vec3 aabbMin{0.0f};
         glm::vec3 aabbMax{0.0f};
         glm::vec4 boundingSphere{0.0f}; // xyz = center, w = radius
 
-        std::array<float, LOD_LEVEL_COUNT> geometricErrors{0.0f};
+        std::array<float, TERRAIN_LOD_LEVEL_COUNT> geometricErrors{0.0f};
 
         uint32_t weightMapOffset = 0;      // Byte offset into weight map SSBO
         bool weightMapUploaded = false;
@@ -100,6 +100,11 @@ namespace render::gpudriven
         int32_t selectedCoordX_ = 0;
         int32_t selectedCoordZ_ = 0;
         bool hasSelectedTile_ = false;
+
+        void populateGPUTile(TerrainTileGPUData& gpuTile,
+                             const TerrainTileAllocation& alloc,
+                             const terrain::TerrainTile& tile,
+                             const TerrainTileKey& key);
 
     public:
         explicit TerrainGPUAdapter(TerrainMeshBuffer& terrainBuffer);

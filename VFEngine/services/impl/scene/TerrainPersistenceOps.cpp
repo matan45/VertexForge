@@ -12,6 +12,7 @@
 #include "../../events/terrain/TerrainEvents.hpp"
 #include "../../events/project/ResourceEvents.hpp"
 #include <asset/AssetRef.hpp>
+#include "threading/JobSystem.hpp"
 #include <asset/AssetDatabase.hpp>
 #include <asset/AssetMetadata.hpp>
 #include <asset/AssetMetadataSerializer.hpp>
@@ -408,6 +409,69 @@ namespace services
         return finishLoadTerrain(header, index, path, indexTableOffset);
     }
 
+    void TerrainService::loadInitialTiles(
+        terrain::TerrainGrid& grid,
+        const terrain::TerrainFileHeader& header,
+        const std::vector<terrain::TileIndexEntry>& index)
+    {
+        if (header.streamingConfig.enabled)
+        {
+            // Distance measured from world origin (0,0). The streamer corrects
+            // to actual camera position on the first frame after load.
+            float loadRadiusSq = header.streamingConfig.loadRadius * header.streamingConfig.loadRadius;
+            float tileSize = header.worldTileSize;
+
+            for (const auto& entry : index)
+            {
+                float cx = (static_cast<float>(entry.coordX) + 0.5f) * tileSize;
+                float cz = (static_cast<float>(entry.coordZ) + 0.5f) * tileSize;
+                if (cx * cx + cz * cz <= loadRadiusSq)
+                    grid.addTileFromFile(terrain::TileCoord{entry.coordX, entry.coordZ});
+            }
+        }
+        else
+        {
+            grid.loadMetadataOnly(header, index);
+        }
+    }
+
+    void TerrainService::initTerrainComponent(
+        components::TerrainComponent& comp,
+        const terrain::TerrainFileHeader& header,
+        const std::string& path,
+        uint32_t activeTileCount)
+    {
+        comp.resolution = header.resolution;
+        comp.worldTileSize = header.worldTileSize;
+        comp.maxHeight = header.maxHeight;
+        comp.minHeight = header.minHeight;
+        comp.gridMinX = header.gridMinX;
+        comp.gridMinZ = header.gridMinZ;
+        comp.gridMaxX = header.gridMaxX;
+        comp.gridMaxZ = header.gridMaxZ;
+        comp.terrainMaterialRef = asset::AssetRef::fromPath(header.materialPath);
+        comp.isActive = true;
+        comp.isDirty = false;
+        comp.activeTileCount = activeTileCount;
+        comp.visibleTileCount = 0;
+        comp.savePath = path;
+        comp.saveDirty = false;
+    }
+
+    void TerrainService::publishTerrainCreated(EntityHandle handle, const terrain::TerrainFileHeader& header)
+    {
+        events::terrain::TerrainCreatedNotification notification;
+        notification.terrainEntity = handle;
+        notification.config.resolution = header.resolution;
+        notification.config.worldTileSize = header.worldTileSize;
+        notification.config.maxHeight = header.maxHeight;
+        notification.config.minHeight = header.minHeight;
+        notification.config.terrainMaterialPath = header.materialPath;
+        notification.config.tilesX = header.gridMaxX - header.gridMinX + 1;
+        notification.config.tilesZ = header.gridMaxZ - header.gridMinZ + 1;
+        events::EventDispatcher::instance().publish(notification);
+    }
+
     EntityHandle TerrainService::finishLoadTerrain(
         terrain::TerrainFileHeader& header,
         std::vector<terrain::TileIndexEntry>& index,
@@ -422,63 +486,33 @@ namespace services
         tileConfig.skirtDepth = header.skirtDepth;
 
         auto grid = std::make_unique<terrain::TerrainGrid>(tileConfig);
-        grid->loadMetadataOnly(header, index);
-
         auto cache = std::make_shared<terrain::TerrainFileCache>(path, header, index, indexTableOffset);
         grid->setFileCache(cache);
+        loadInitialTiles(*grid, header, index);
 
         scene::Entity parentEntity("Terrain");
         sceneGraph->addChild(sceneGraph->GetRoot(), parentEntity);
 
         auto& terrainComp = parentEntity.addComponent<components::TerrainComponent>();
-        terrainComp.resolution = header.resolution;
-        terrainComp.worldTileSize = header.worldTileSize;
-        terrainComp.maxHeight = header.maxHeight;
-        terrainComp.minHeight = header.minHeight;
-        terrainComp.gridMinX = header.gridMinX;
-        terrainComp.gridMinZ = header.gridMinZ;
-        terrainComp.gridMaxX = header.gridMaxX;
-        terrainComp.gridMaxZ = header.gridMaxZ;
-        terrainComp.terrainMaterialRef = asset::AssetRef::fromPath(header.materialPath);
-        terrainComp.isActive = true;
-        terrainComp.isDirty = false;
-        terrainComp.activeTileCount = header.tileCount;
-        terrainComp.visibleTileCount = 0;
-        terrainComp.savePath = path;
-        terrainComp.saveDirty = false;
+        initTerrainComponent(terrainComp, header, path, static_cast<uint32_t>(grid->getTileCount()));
 
         EntityHandle parentHandle = internal::toHandle(parentEntity.getHandle());
-
         createTileEntities(parentHandle, *grid);
 
         terrainGrids[parentHandle.id] = std::move(grid);
         fileCaches[parentHandle.id] = cache;
-        {
-            terrain::StreamingConfig stCfg;
-            stCfg.loadRadius = header.streamingConfig.loadRadius;
-            stCfg.unloadRadius = header.streamingConfig.unloadRadius;
-            stCfg.maxLoadsPerFrame = header.streamingConfig.maxLoadsPerFrame;
-            stCfg.maxUnloadsPerFrame = header.streamingConfig.maxUnloadsPerFrame;
-            auto streamer = std::make_unique<terrain::TerrainWorldStreamer>(stCfg);
-            streamer->setEnabled(header.streamingConfig.enabled);
-            worldStreamers[parentHandle.id] = std::move(streamer);
-        }
+
+        terrain::StreamingConfig stCfg{
+            header.streamingConfig.loadRadius, header.streamingConfig.unloadRadius,
+            header.streamingConfig.maxLoadsPerFrame, header.streamingConfig.maxUnloadsPerFrame};
+        auto streamer = std::make_unique<terrain::TerrainWorldStreamer>(stCfg);
+        streamer->setEnabled(header.streamingConfig.enabled);
+        worldStreamers[parentHandle.id] = std::move(streamer);
 
         if (!header.materialPath.empty())
-        {
             syncWeightMapLayerCount(parentHandle.id, header.materialPath);
-        }
 
-        events::terrain::TerrainCreatedNotification notification;
-        notification.terrainEntity = parentHandle;
-        notification.config.resolution = header.resolution;
-        notification.config.worldTileSize = header.worldTileSize;
-        notification.config.maxHeight = header.maxHeight;
-        notification.config.minHeight = header.minHeight;
-        notification.config.terrainMaterialPath = header.materialPath;
-        notification.config.tilesX = header.gridMaxX - header.gridMinX + 1;
-        notification.config.tilesZ = header.gridMaxZ - header.gridMinZ + 1;
-        events::EventDispatcher::instance().publish(notification);
+        publishTerrainCreated(parentHandle, header);
 
         if (header.physicsConfig.hasCollider && physicsProvider)
         {
@@ -489,11 +523,13 @@ namespace services
             addTerrainCollider(parentHandle);
         }
 
-        vfLogInfo("TerrainService: Loaded terrain with {} tiles from {}", header.tileCount, path);
+        if (header.streamingConfig.enabled)
+            vfLogInfo("TerrainService: Loaded terrain with {}/{} initial tiles (streaming) from {}",
+                      terrainComp.activeTileCount, header.tileCount, path);
+        else
+            vfLogInfo("TerrainService: Loaded terrain with {} tiles from {}", header.tileCount, path);
 
-        // Load vegetation data (density + placement) for each tile
         loadVegetation(parentHandle.id, path);
-
         return parentHandle;
     }
 
@@ -636,8 +672,9 @@ namespace services
                 float worldX = params.wMinX + vx * texelToWorld;
                 float worldZ = params.wMinZ + vy * texelToWorld;
 
-                float weights[4] = {1.0f, 0.0f, 0.0f, 0.0f};
-                uint32_t packedLI = 0;
+                float weights[terrain::WEIGHT_CHANNELS] = {};
+                weights[0] = 1.0f;
+                std::array<uint8_t, terrain::WEIGHT_CHANNELS> tileLayerIndices = {0,1,2,3,4,5,6,7};
 
                 for (const auto* tile : allTiles)
                 {
@@ -654,25 +691,22 @@ namespace services
                         uint32_t x0 = std::min(static_cast<uint32_t>(u * (wm.resolution - 1)), wm.resolution - 1);
                         uint32_t z0 = std::min(static_cast<uint32_t>(v * (wm.resolution - 1)), wm.resolution - 1);
 
-                        for (int ch = 0; ch < 4; ++ch)
+                        for (int ch = 0; ch < terrain::WEIGHT_CHANNELS; ++ch)
                             weights[ch] = wm.getWeight(ch, x0, z0);
 
-                        packedLI = wm.layerIndices[0]
-                                 | (static_cast<uint32_t>(wm.layerIndices[1]) << 8)
-                                 | (static_cast<uint32_t>(wm.layerIndices[2]) << 16)
-                                 | (static_cast<uint32_t>(wm.layerIndices[3]) << 24);
+                        tileLayerIndices = wm.layerIndices;
                         break;
                     }
                 }
 
-                glm::vec3 albedo(0.0f), normal(0.0f);
-                float rough = 0.0f, metal = 0.0f, ao_val = 0.0f, totalW = 0.0f;
+                glm::vec3 albedo(0.5f), normal(0.0f, 0.0f, 1.0f);
+                float rough = 0.5f, metal = 0.0f, ao_val = 1.0f, totalW = 0.0f;
 
-                for (int ch = 0; ch < 4; ++ch)
+                for (int ch = 0; ch < terrain::WEIGHT_CHANNELS; ++ch)
                 {
                     float w = weights[ch];
                     if (w < 0.001f) continue;
-                    uint32_t li = (packedLI >> (ch * 8)) & 0xFFu;
+                    uint32_t li = tileLayerIndices[ch];
                     if (li >= layers.size()) continue;
 
                     const auto& layer = layers[li];
@@ -697,8 +731,14 @@ namespace services
                 if (totalW > 0.001f)
                 {
                     float inv = 1.0f / totalW;
-                    albedo *= inv; normal = glm::normalize(normal);
+                    albedo *= inv;
                     rough *= inv; metal *= inv; ao_val *= inv;
+                    float nLen = glm::length(normal);
+                    normal = (nLen > 0.001f) ? normal / nLen : glm::vec3(0.0f, 0.0f, 1.0f);
+                }
+                else
+                {
+                    normal = glm::vec3(0.0f, 0.0f, 1.0f);
                 }
 
                 size_t idx = (static_cast<size_t>(py) * pts + px) * 4;
@@ -779,19 +819,45 @@ namespace services
         auto allTilesRaw = grid.getAllTiles();
         std::vector<const terrain::TerrainTile*> allTiles(allTilesRaw.begin(), allTilesRaw.end());
 
+        uint32_t totalTiles = 0;
+        for (uint32_t m = 0; m < params.mipLevels; ++m)
+        {
+            uint32_t s = render::svt::computeTilesPerMipSide(m, params.virtualSizeLog2, params.tileSizeLog2);
+            if (s == 0) s = 1;
+            totalTiles += s * s;
+        }
+
         uint32_t totalWritten = 0;
-        for (uint32_t mip = 0; mip < params.mipLevels; ++mip)
+        bool cancelled = false;
+        for (uint32_t mip = 0; mip < params.mipLevels && !cancelled; ++mip)
         {
             uint32_t tilesPerSide = render::svt::computeTilesPerMipSide(mip, params.virtualSizeLog2, params.tileSizeLog2);
             if (tilesPerSide == 0) tilesPerSide = 1;
 
-            for (uint32_t ty = 0; ty < tilesPerSide; ++ty)
-                for (uint32_t tx = 0; tx < tilesPerSide; ++tx)
+            for (uint32_t ty = 0; ty < tilesPerSide && !cancelled; ++ty)
+                for (uint32_t tx = 0; tx < tilesPerSide && !cancelled; ++tx)
                 {
+                    if (pendingSVTBake && pendingSVTBake->cancelled.load(std::memory_order_relaxed))
+                    {
+                        cancelled = true;
+                        break;
+                    }
+
                     compositeAndWriteTile(params, layers, allTiles, mip, tx, ty,
                                           albedoWriter, normalWriter, ormWriter);
                     ++totalWritten;
+
+                    if (pendingSVTBake && totalTiles > 0)
+                        pendingSVTBake->progress.store(
+                            static_cast<float>(totalWritten) / static_cast<float>(totalTiles),
+                            std::memory_order_relaxed);
                 }
+        }
+
+        if (cancelled)
+        {
+            vfLogWarning("BakeTerrainSVT: Cancelled after {} tiles", totalWritten);
+            return false;
         }
 
         albedoWriter.finalize();
@@ -800,5 +866,88 @@ namespace services
 
         vfLogInfo("BakeTerrainSVT: Wrote {} tiles to SVT cache at {}", totalWritten, basePath);
         return true;
+    }
+
+    bool TerrainService::beginBakeTerrainSVTAsync(EntityHandle terrainEntity)
+    {
+        if (svtBakeInProgress.load(std::memory_order_acquire))
+            return false;
+
+        auto gridIt = terrainGrids.find(terrainEntity.id);
+        if (gridIt == terrainGrids.end() || !gridIt->second)
+            return false;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        entt::entity ent = internal::fromHandle(terrainEntity);
+        if (!registry.valid(ent) || !registry.all_of<components::TerrainComponent>(ent))
+            return false;
+
+        const auto& terrainComp = registry.get<components::TerrainComponent>(ent);
+        if (terrainComp.savePath.empty())
+            return false;
+
+        svtBakeInProgress.store(true, std::memory_order_release);
+        auto bake = std::make_shared<PendingSVTBake>();
+        pendingSVTBake = bake;
+
+        EntityHandle entityCopy = terrainEntity;
+        bake->future = threading::JobSystem::instance().submit(
+            [this, entityCopy, bake]() -> bool
+            {
+                {
+                    std::lock_guard lock(bake->stageMutex);
+                    bake->stage = "Starting SVT bake...";
+                }
+                bool result = bakeTerrainSVT(entityCopy);
+                bake->done.store(true, std::memory_order_release);
+                return result;
+            },
+            threading::JobPriority::LOW
+        );
+
+        return true;
+    }
+
+    events::terrain::SVTBakePollResult TerrainService::pollBakeTerrainSVT()
+    {
+        events::terrain::SVTBakePollResult result;
+
+        if (!pendingSVTBake)
+            return result;
+
+        result.active = true;
+        result.progress = pendingSVTBake->progress.load(std::memory_order_acquire);
+        {
+            std::lock_guard lock(pendingSVTBake->stageMutex);
+            result.stage = pendingSVTBake->stage;
+        }
+
+        if (pendingSVTBake->done.load(std::memory_order_acquire))
+        {
+            result.completed = true;
+            result.success = pendingSVTBake->future.get();
+            svtBakeInProgress.store(false, std::memory_order_release);
+            pendingSVTBake.reset();
+
+            events::terrain::TerrainSVTBakeProgressNotification notification;
+            notification.progress = 1.0f;
+            notification.completed = true;
+            notification.success = result.success;
+            events::EventDispatcher::instance().publish(notification);
+
+            if (result.success)
+            {
+                events::resource::AssetSavedNotification saved;
+                events::EventDispatcher::instance().publish(saved);
+            }
+        }
+
+        return result;
+    }
+
+    void TerrainService::cancelBakeTerrainSVT()
+    {
+        if (pendingSVTBake)
+            pendingSVTBake->cancelled.store(true, std::memory_order_release);
     }
 }

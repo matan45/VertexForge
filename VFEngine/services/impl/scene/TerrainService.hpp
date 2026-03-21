@@ -57,6 +57,7 @@ namespace services
         ITerrainBrushComputeProvider* brushComputeProvider = nullptr;
         IPhysicsProvider* physicsProvider = nullptr;
         std::atomic<bool> saveInProgress{false};
+        std::atomic<bool> svtBakeInProgress{false};
 
         bool distanceCullingEnabled_ = false;
         float maxTerrainDistSq_ = 0.0f;
@@ -75,6 +76,17 @@ namespace services
             std::atomic<bool> done{false};
         };
         std::shared_ptr<PendingTerrainCreation> pendingCreation;
+
+        struct PendingSVTBake
+        {
+            std::future<bool> future;
+            std::atomic<float> progress{0.0f};
+            std::atomic<bool> done{false};
+            std::atomic<bool> cancelled{false};
+            std::string stage;
+            std::mutex stageMutex;
+        };
+        std::shared_ptr<PendingSVTBake> pendingSVTBake;
 
     public:
         explicit TerrainService(std::shared_ptr<scene::SceneGraphSystem> sceneGraph);
@@ -104,6 +116,7 @@ namespace services
 
         bool hasActiveTerrain() const { return !terrainGrids.empty(); }
         std::string getTerrainMaterialPath() const;
+        void getTerrainGridWorldBounds(glm::vec2& outMin, glm::vec2& outMax) const;
 
         void setDistanceCullingEnabled(bool enabled) { distanceCullingEnabled_ = enabled; }
         void setMaxDrawDistance(float distance) { maxTerrainDistSq_ = distance * distance; }
@@ -139,6 +152,9 @@ namespace services
         void commitStreamingChanges(EntityHandle terrainEntity);
         void loadAllTiles(EntityHandle terrainEntity);
         bool bakeTerrainSVT(EntityHandle terrainEntity);
+        bool beginBakeTerrainSVTAsync(EntityHandle terrainEntity);
+        ::events::terrain::SVTBakePollResult pollBakeTerrainSVT();
+        void cancelBakeTerrainSVT();
 
         bool ensureTileLODData(terrain::TerrainTile& tile, uint8_t lodLevel);
         void releaseTileRAMData(terrain::TerrainTile& tile);
@@ -163,6 +179,14 @@ namespace services
                                        std::vector<terrain::TileIndexEntry>& index,
                                        const std::string& path,
                                        uint64_t indexTableOffset = 0);
+        void loadInitialTiles(terrain::TerrainGrid& grid,
+                              const terrain::TerrainFileHeader& header,
+                              const std::vector<terrain::TileIndexEntry>& index);
+        void initTerrainComponent(components::TerrainComponent& comp,
+                                  const terrain::TerrainFileHeader& header,
+                                  const std::string& path,
+                                  uint32_t activeTileCount);
+        void publishTerrainCreated(EntityHandle handle, const terrain::TerrainFileHeader& header);
 
         void createTileEntity(EntityHandle parentEntity, terrain::TerrainTile* tile, int32_t tileX, int32_t tileZ);
         TerrainTileColliderInfo buildTileColliderInfo(const terrain::TerrainTile& tile,

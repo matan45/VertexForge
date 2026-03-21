@@ -98,22 +98,24 @@ struct MeshTasksCommand {
     uint groupCountZ;
 };
 
-// Must match TerrainTileGPUData in GPUDrivenTypes.hpp (224 bytes)
+// Must match TerrainTileGPUData in GPUDrivenTypes.hpp (256 bytes)
 struct TerrainTileGPUData {
     mat4 modelMatrix;
     vec4 boundingSphere;        // xyz = world center, w = radius
     vec4 aabbMin;               // xyz = world AABB min, w = weightMapResolution (33/65/129)
-    vec4 aabbMax;               // xyz = world AABB max, w = packed layerIndices[4] (floatBitsToUint)
+    vec4 aabbMax;               // xyz = world AABB max, w = packed layerIndices[0-3] (floatBitsToUint)
     uvec4 lod0MeshletData;      // x = meshletOffset, y = meshletCount (total), z = baseVertexOffset, w = mainMeshletCount (surface only, no skirts)
     uvec4 lod1MeshletData;
     uvec4 lod2MeshletData;
     uvec4 lod3MeshletData;
-    vec4 lodGeometricErrors;    // Per-LOD geometric error thresholds (world units)
+    uvec4 lod4MeshletData;
+    uvec4 lod5MeshletData;
+    vec4 lodGeometricErrors;    // Per-LOD geometric error thresholds LOD 0-3 (world units)
+    vec4 lodGeometricErrors2;   // x=LOD4 error, y=LOD5 error, z=packed layerIndices[4-7], w=unused
     int coordX;
     int coordZ;
     uint flags;
     uint weightMapOffset;       // Byte offset into weight map SSBO
-    uvec4 reserved;
 };
 
 // Must match TerrainLayerGPUData in GPUDrivenTypes.hpp (32 bytes)
@@ -132,7 +134,9 @@ uvec4 getTerrainLODMeshletData(TerrainTileGPUData tile, uint lodLevel) {
     if (lodLevel == 0) return tile.lod0MeshletData;
     if (lodLevel == 1) return tile.lod1MeshletData;
     if (lodLevel == 2) return tile.lod2MeshletData;
-    return tile.lod3MeshletData;
+    if (lodLevel == 3) return tile.lod3MeshletData;
+    if (lodLevel == 4) return tile.lod4MeshletData;
+    return tile.lod5MeshletData;
 }
 
 #endif // GPU_TYPES_GLSL

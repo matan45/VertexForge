@@ -131,24 +131,22 @@ namespace services
 
         for (auto& [entityId, grid] : terrainGrids)
         {
-            for (auto* tile : grid->getAllTiles())
+            auto visible = grid->getVisibleTiles(frustum);
+
+            if (distanceCullingEnabled_ && maxTerrainDistSq_ > 0.0f)
             {
-                if (!tile)
-                    continue;
-
-                if (!frustum.intersectsAABB(tile->worldBounds))
-                    continue;
-
-                if (distanceCullingEnabled_ && maxTerrainDistSq_ > 0.0f)
+                for (auto* tile : visible)
                 {
                     glm::vec3 tileCenter = (tile->worldBounds.min + tile->worldBounds.max) * 0.5f;
                     glm::vec3 diff = tileCenter - cameraPosition;
                     float distSq = glm::dot(diff, diff);
-                    if (distSq > maxTerrainDistSq_)
-                        continue;
+                    if (distSq <= maxTerrainDistSq_)
+                        result.push_back(tile);
                 }
-
-                result.push_back(tile);
+            }
+            else
+            {
+                result.insert(result.end(), visible.begin(), visible.end());
             }
         }
 

@@ -42,6 +42,7 @@ namespace core
         bool hasActiveTerrain() const override;
 
         std::string getTerrainMaterialPath() const override;
+        void getTerrainGridWorldBounds(glm::vec2& outMin, glm::vec2& outMax) const override;
 
         void setDistanceCullingEnabled(bool enabled) override;
         void setMaxDrawDistance(float distance) override;

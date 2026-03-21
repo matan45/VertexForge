@@ -26,6 +26,7 @@ namespace render::gpudriven
     constexpr uint32_t MAX_BINDLESS_TEXTURES = 16384;
     constexpr uint32_t MAX_SHADER_GROUPS = 16;
     constexpr uint32_t LOD_LEVEL_COUNT = 4;
+    constexpr uint32_t TERRAIN_LOD_LEVEL_COUNT = 6;
     constexpr uint32_t CULL_WORKGROUP_SIZE = 64;
     constexpr uint32_t INVALID_TEXTURE_INDEX = 0xFFFFFFFF;
 
@@ -136,19 +137,21 @@ namespace render::gpudriven
         glm::mat4 modelMatrix;
         glm::vec4 boundingSphere;       // xyz = world center, w = radius
         glm::vec4 aabbMin;              // xyz = world AABB min, w = weightMapResolution (33/65/129)
-        glm::vec4 aabbMax;              // xyz = world AABB max, w = packed layerIndices[4] (uintBitsToFloat)
+        glm::vec4 aabbMax;              // xyz = world AABB max, w = packed layerIndices[0-3] (uintBitsToFloat)
         glm::uvec4 lod0MeshletData;     // x = meshletOffset, y = meshletCount (total), z = baseVertexOffset, w = mainMeshletCount (surface only, no skirts)
         glm::uvec4 lod1MeshletData;
         glm::uvec4 lod2MeshletData;
         glm::uvec4 lod3MeshletData;
-        glm::vec4 lodGeometricErrors;   // Per-LOD geometric error thresholds (world units)
+        glm::uvec4 lod4MeshletData;
+        glm::uvec4 lod5MeshletData;
+        glm::vec4 lodGeometricErrors;   // Per-LOD geometric error thresholds LOD 0-3 (world units)
+        glm::vec4 lodGeometricErrors2;  // x=LOD4 error, y=LOD5 error, z=packed layerIndices[4-7], w=unused
         int32_t coordX;
         int32_t coordZ;
         uint32_t flags;
         uint32_t weightMapOffset;       // Byte offset into weight map SSBO
-        glm::uvec4 reserved{0, 0, 0, 0}; // Reserved for future use
     };
-    static_assert(sizeof(TerrainTileGPUData) == 224);
+    static_assert(sizeof(TerrainTileGPUData) == 256);
 
     struct TerrainLayerGPUData
     {
@@ -174,10 +177,12 @@ namespace render::gpudriven
         uint32_t lodCount1;
         uint32_t lodCount2;
         uint32_t lodCount3;
+        uint32_t lodCount4;
+        uint32_t lodCount5;
         uint32_t culledByOcclusion;
-        uint32_t padding[2];
+        uint32_t padding[3];
     };
-    static_assert(sizeof(TerrainCullingStats) == 48);
+    static_assert(sizeof(TerrainCullingStats) == 64);
 
     struct alignas(16) PerDrawData
     {

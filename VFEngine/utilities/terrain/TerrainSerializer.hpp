@@ -17,7 +17,7 @@ namespace terrain
 
     static constexpr std::array<char, 4> TERRAIN_MAGIC = {'V', 'F', 'T', 'R'};
     static constexpr uint32_t TERRAIN_FORMAT_VERSION_MAJOR = 2;
-    static constexpr uint32_t TERRAIN_FORMAT_VERSION_MINOR = 1;
+    static constexpr uint32_t TERRAIN_FORMAT_VERSION_MINOR = 3;
     static constexpr uint32_t TERRAIN_FORMAT_VERSION_PATCH = 0;
     static constexpr uint32_t MAX_REASONABLE_TERRAIN_TILES = 10000;
 
@@ -75,7 +75,7 @@ namespace terrain
         float minHeight = -10.0f;
         float skirtDepth = 5.0f;
 
-        std::array<float, TERRAIN_LOD_COUNT> lodDistances = {100.0f, 300.0f, 600.0f, 1200.0f};
+        std::array<float, TERRAIN_LOD_COUNT> lodDistances = {100.0f, 300.0f, 600.0f, 1200.0f, 2000.0f, 3500.0f};
 
         int32_t gridMinX = 0;
         int32_t gridMinZ = 0;

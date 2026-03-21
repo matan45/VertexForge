@@ -18,10 +18,10 @@ namespace editor::graph {
     TerrainCompilationResult ShaderGraphCompiler::compileTerrainMaterial(const terrain::TerrainMaterialData& material) {
         TerrainCompilationResult result;
 
-        // Static 4-channel loop with per-tile palette indirection — no longer depends on activeLayerCount
+        // Static 8-channel loop with per-tile palette indirection
         std::string code;
         code += "// Generated terrain material code\n";
-        code += "// Per-tile palette: 4 channels with runtime indirection into palette of " + std::to_string(material.activeLayerCount) + " layer(s)\n";
+        code += "// Per-tile palette: 8 channels with runtime indirection into palette of " + std::to_string(material.activeLayerCount) + " layer(s)\n";
         code += "vec3 ls_Albedo = vec3(0.0);\n";
         code += "vec3 ls_Normal = vec3(0.0);\n";
         code += "float ls_Roughness = 0.0;\n";
@@ -30,9 +30,10 @@ namespace editor::graph {
         code += "float ls_Emission = 0.0;\n";
         code += "float ls_TotalW = 0.0;\n";
         code += "uint packedLI = floatBitsToUint(tiles[fragTileIndex].aabbMax.w);\n";
-        code += "// Must match WEIGHT_CHANNELS (terrain/TerrainWeightMap.hpp) — 4 channels, 8 bits each\n";
-        code += "for (int ch = 0; ch < 4; ch++) {\n";
-        code += "    uint paletteIdx = (packedLI >> (ch * 8u)) & 0xFFu;\n";
+        code += "uint packedLI2 = floatBitsToUint(tiles[fragTileIndex].lodGeometricErrors2.z);\n";
+        code += "for (int ch = 0; ch < 8; ch++) {\n";
+        code += "    uint packedWord = (ch < 4) ? packedLI : packedLI2;\n";
+        code += "    uint paletteIdx = (packedWord >> ((ch % 4) * 8u)) & 0xFFu;\n";
         code += "    float w = sampleTileWeight(tiles[fragTileIndex].weightMapOffset, "
                 "uint(tiles[fragTileIndex].aabbMin.w), uint(ch), fragTexCoord);\n";
         code += "    if (w < 0.001) continue;\n";

@@ -61,8 +61,11 @@ namespace render
                 }
             }
 
+            glm::vec2 gridWorldMin(0.0f), gridWorldMax(0.0f);
+            terrainRenderProvider->getTerrainGridWorldBounds(gridWorldMin, gridWorldMax);
             gpuDrivenRenderer->updateTerrain(visibleTiles, currentCameraPosition,
-                                              terrainRenderProvider->getTerrainMaterialPath());
+                                              terrainRenderProvider->getTerrainMaterialPath(),
+                                              gridWorldMin, gridWorldMax);
             gpuDrivenRenderer->updateVegetationStreaming(visibleTiles,
                                                           terrainRenderProvider->getAllLoadedTiles(),
                                                           currentCameraPosition);

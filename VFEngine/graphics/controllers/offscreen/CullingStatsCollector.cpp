@@ -114,6 +114,8 @@ namespace controllers::offscreen
             stats.terrain.lodCount1 = terrainCulling.lodCount1;
             stats.terrain.lodCount2 = terrainCulling.lodCount2;
             stats.terrain.lodCount3 = terrainCulling.lodCount3;
+            stats.terrain.lodCount4 = terrainCulling.lodCount4;
+            stats.terrain.lodCount5 = terrainCulling.lodCount5;
 
             const auto* streamStats = gpuDrivenRenderer->getTerrainStreamingStats();
             if (streamStats)
