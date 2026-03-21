@@ -170,6 +170,7 @@ namespace services
                                   const terrain::TerrainFileHeader& header,
                                   const std::string& path,
                                   uint32_t activeTileCount);
+        void publishTerrainCreated(EntityHandle handle, const terrain::TerrainFileHeader& header);
 
         void createTileEntity(EntityHandle parentEntity, terrain::TerrainTile* tile, int32_t tileX, int32_t tileZ);
         TerrainTileColliderInfo buildTileColliderInfo(const terrain::TerrainTile& tile,

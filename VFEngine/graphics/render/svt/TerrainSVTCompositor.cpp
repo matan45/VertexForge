@@ -84,7 +84,7 @@ namespace render::svt
                 float worldZ = terrainWorldMin.y + v * bounds.worldSize.y;
 
                 // Sample weights
-                float weights[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+                float weights[SVT_WEIGHT_CHANNELS] = {};
                 if (weightRegion.data)
                 {
                     sampleWeights(weightRegion, worldX, worldZ, weights);
@@ -101,13 +101,15 @@ namespace render::svt
                 float totalWeight = 0.0f;
 
                 uint32_t packedLI = weightRegion.packedLayerIndices;
+                uint32_t packedLI2 = weightRegion.packedLayerIndices2;
 
-                for (int ch = 0; ch < 4; ++ch)
+                for (int ch = 0; ch < SVT_WEIGHT_CHANNELS; ++ch)
                 {
                     float w = weights[ch];
                     if (w < 0.001f) continue;
 
-                    uint32_t paletteIdx = (packedLI >> (ch * 8)) & 0xFFu;
+                    uint32_t packedWord = (ch < 4) ? packedLI : packedLI2;
+                    uint32_t paletteIdx = (packedWord >> ((ch % 4) * 8)) & 0xFFu;
                     if (paletteIdx >= layers.size()) continue;
 
                     const auto& layer = layers[paletteIdx];
@@ -265,21 +267,20 @@ namespace render::svt
 
     void TerrainSVTCompositor::sampleWeights(const TerrainWeightMapRegion& region,
                                               float worldX, float worldZ,
-                                              float weights[4]) const
+                                              float weights[SVT_WEIGHT_CHANNELS]) const
     {
+        std::fill_n(weights, SVT_WEIGHT_CHANNELS, 0.0f);
+
         if (!region.data || region.resolution == 0)
         {
             weights[0] = 1.0f;
-            weights[1] = weights[2] = weights[3] = 0.0f;
             return;
         }
 
-        // Map world coords to weight map UV
         glm::vec2 regionSize = region.worldMax - region.worldMin;
         if (regionSize.x <= 0.0f || regionSize.y <= 0.0f)
         {
             weights[0] = 1.0f;
-            weights[1] = weights[2] = weights[3] = 0.0f;
             return;
         }
 
@@ -290,9 +291,8 @@ namespace render::svt
         uint32_t px = std::min(static_cast<uint32_t>(u * (res - 1)), res - 1);
         uint32_t py = std::min(static_cast<uint32_t>(v * (res - 1)), res - 1);
 
-        // RGBA packed: 4 bytes per texel
-        size_t idx = (static_cast<size_t>(py) * res + px) * 4;
-        for (int ch = 0; ch < 4; ++ch)
+        size_t idx = (static_cast<size_t>(py) * res + px) * SVT_WEIGHT_CHANNELS;
+        for (int ch = 0; ch < SVT_WEIGHT_CHANNELS; ++ch)
         {
             weights[ch] = region.data[idx + ch] / 255.0f;
         }

@@ -103,7 +103,7 @@ struct TerrainTileGPUData {
     mat4 modelMatrix;
     vec4 boundingSphere;        // xyz = world center, w = radius
     vec4 aabbMin;               // xyz = world AABB min, w = weightMapResolution (33/65/129)
-    vec4 aabbMax;               // xyz = world AABB max, w = packed layerIndices[4] (floatBitsToUint)
+    vec4 aabbMax;               // xyz = world AABB max, w = packed layerIndices[0-3] (floatBitsToUint)
     uvec4 lod0MeshletData;      // x = meshletOffset, y = meshletCount (total), z = baseVertexOffset, w = mainMeshletCount (surface only, no skirts)
     uvec4 lod1MeshletData;
     uvec4 lod2MeshletData;
@@ -111,7 +111,7 @@ struct TerrainTileGPUData {
     uvec4 lod4MeshletData;
     uvec4 lod5MeshletData;
     vec4 lodGeometricErrors;    // Per-LOD geometric error thresholds LOD 0-3 (world units)
-    vec4 lodGeometricErrors2;   // Per-LOD geometric error thresholds LOD 4-5 (x=LOD4, y=LOD5, z/w=unused)
+    vec4 lodGeometricErrors2;   // x=LOD4 error, y=LOD5 error, z=packed layerIndices[4-7], w=unused
     int coordX;
     int coordZ;
     uint flags;

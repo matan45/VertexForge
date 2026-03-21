@@ -29,11 +29,12 @@ namespace render::svt
     // Weight map data for a terrain tile region
     struct TerrainWeightMapRegion
     {
-        const uint8_t* data = nullptr;  // RGBA packed weights
-        uint32_t resolution = 0;        // Weight map texels per side
-        glm::vec2 worldMin{0.0f};       // World-space bounds of this weight map
+        const uint8_t* data = nullptr;   // 8-channel packed weights (8 bytes per texel)
+        uint32_t resolution = 0;         // Weight map texels per side
+        glm::vec2 worldMin{0.0f};        // World-space bounds of this weight map
         glm::vec2 worldMax{0.0f};
-        uint32_t packedLayerIndices = 0; // 4x8-bit palette indices packed
+        uint32_t packedLayerIndices = 0;  // Channels 0-3: 4x8-bit palette indices packed
+        uint32_t packedLayerIndices2 = 0; // Channels 4-7: 4x8-bit palette indices packed
     };
 
     // UV and world-space bounds for a virtual tile
@@ -95,9 +96,11 @@ namespace render::svt
                                       float tilingScale) const;
 
         // Sample weight map at world coordinates
+        static constexpr int SVT_WEIGHT_CHANNELS = 8;
+
         void sampleWeights(const TerrainWeightMapRegion& region,
                            float worldX, float worldZ,
-                           float weights[4]) const;
+                           float weights[SVT_WEIGHT_CHANNELS]) const;
 
         // Compress RGBA8 tile data to BC7
         std::vector<uint8_t> compressTileBC7(const std::vector<uint8_t>& rgbaData,

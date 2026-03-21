@@ -137,7 +137,7 @@ namespace render::gpudriven
         glm::mat4 modelMatrix;
         glm::vec4 boundingSphere;       // xyz = world center, w = radius
         glm::vec4 aabbMin;              // xyz = world AABB min, w = weightMapResolution (33/65/129)
-        glm::vec4 aabbMax;              // xyz = world AABB max, w = packed layerIndices[4] (uintBitsToFloat)
+        glm::vec4 aabbMax;              // xyz = world AABB max, w = packed layerIndices[0-3] (uintBitsToFloat)
         glm::uvec4 lod0MeshletData;     // x = meshletOffset, y = meshletCount (total), z = baseVertexOffset, w = mainMeshletCount (surface only, no skirts)
         glm::uvec4 lod1MeshletData;
         glm::uvec4 lod2MeshletData;
@@ -145,7 +145,7 @@ namespace render::gpudriven
         glm::uvec4 lod4MeshletData;
         glm::uvec4 lod5MeshletData;
         glm::vec4 lodGeometricErrors;   // Per-LOD geometric error thresholds LOD 0-3 (world units)
-        glm::vec4 lodGeometricErrors2;  // Per-LOD geometric error thresholds LOD 4-5 (x=LOD4, y=LOD5, z/w=unused)
+        glm::vec4 lodGeometricErrors2;  // x=LOD4 error, y=LOD5 error, z=packed layerIndices[4-7], w=unused
         int32_t coordX;
         int32_t coordZ;
         uint32_t flags;

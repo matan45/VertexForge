@@ -7,7 +7,7 @@
 
 namespace terrain
 {
-    static constexpr uint8_t WEIGHT_CHANNELS = 4;
+    static constexpr uint8_t WEIGHT_CHANNELS = 8;
 
     struct TileWeightMapData
     {
@@ -17,7 +17,7 @@ namespace terrain
         uint32_t resolution = 0; // matches tile vertex count (33, 65, 129)
 
         // Per-tile palette indirection: channel N maps to palette layer layerIndices[N]
-        std::array<uint8_t, WEIGHT_CHANNELS> layerIndices = {0, 1, 2, 3};
+        std::array<uint8_t, WEIGHT_CHANNELS> layerIndices = {0, 1, 2, 3, 4, 5, 6, 7};
 
         [[nodiscard]] bool isInitialized() const { return resolution > 0 && !layerWeights.empty(); }
         [[nodiscard]] size_t getTexelCount() const { return static_cast<size_t>(resolution) * resolution; }
@@ -29,17 +29,7 @@ namespace terrain
         void normalizeAll();
         void initializeDefault(uint32_t vertexResolution);
 
-        struct PackedRGBA
-        {
-            float r = 0.0f;
-            float g = 0.0f;
-            float b = 0.0f;
-            float a = 0.0f;
-        };
-
-        [[nodiscard]] PackedRGBA packRGBA(uint32_t x, uint32_t z) const;
-
-        // Returns channel [0-3] if paletteLayer is assigned, else 0xFF
+        // Returns channel [0-7] if paletteLayer is assigned, else 0xFF
         [[nodiscard]] uint8_t findChannel(uint8_t paletteLayer) const;
 
         // Assigns paletteLayer to a free or least-used channel. Returns channel index.

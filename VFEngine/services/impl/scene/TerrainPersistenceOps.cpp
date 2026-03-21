@@ -455,6 +455,20 @@ namespace services
         comp.saveDirty = false;
     }
 
+    void TerrainService::publishTerrainCreated(EntityHandle handle, const terrain::TerrainFileHeader& header)
+    {
+        events::terrain::TerrainCreatedNotification notification;
+        notification.terrainEntity = handle;
+        notification.config.resolution = header.resolution;
+        notification.config.worldTileSize = header.worldTileSize;
+        notification.config.maxHeight = header.maxHeight;
+        notification.config.minHeight = header.minHeight;
+        notification.config.terrainMaterialPath = header.materialPath;
+        notification.config.tilesX = header.gridMaxX - header.gridMinX + 1;
+        notification.config.tilesZ = header.gridMaxZ - header.gridMinZ + 1;
+        events::EventDispatcher::instance().publish(notification);
+    }
+
     EntityHandle TerrainService::finishLoadTerrain(
         terrain::TerrainFileHeader& header,
         std::vector<terrain::TileIndexEntry>& index,
@@ -471,7 +485,6 @@ namespace services
         auto grid = std::make_unique<terrain::TerrainGrid>(tileConfig);
         auto cache = std::make_shared<terrain::TerrainFileCache>(path, header, index, indexTableOffset);
         grid->setFileCache(cache);
-
         loadInitialTiles(*grid, header, index);
 
         scene::Entity parentEntity("Terrain");
@@ -488,8 +501,7 @@ namespace services
 
         terrain::StreamingConfig stCfg{
             header.streamingConfig.loadRadius, header.streamingConfig.unloadRadius,
-            header.streamingConfig.maxLoadsPerFrame, header.streamingConfig.maxUnloadsPerFrame
-        };
+            header.streamingConfig.maxLoadsPerFrame, header.streamingConfig.maxUnloadsPerFrame};
         auto streamer = std::make_unique<terrain::TerrainWorldStreamer>(stCfg);
         streamer->setEnabled(header.streamingConfig.enabled);
         worldStreamers[parentHandle.id] = std::move(streamer);
@@ -497,16 +509,7 @@ namespace services
         if (!header.materialPath.empty())
             syncWeightMapLayerCount(parentHandle.id, header.materialPath);
 
-        events::terrain::TerrainCreatedNotification notification;
-        notification.terrainEntity = parentHandle;
-        notification.config.resolution = header.resolution;
-        notification.config.worldTileSize = header.worldTileSize;
-        notification.config.maxHeight = header.maxHeight;
-        notification.config.minHeight = header.minHeight;
-        notification.config.terrainMaterialPath = header.materialPath;
-        notification.config.tilesX = header.gridMaxX - header.gridMinX + 1;
-        notification.config.tilesZ = header.gridMaxZ - header.gridMinZ + 1;
-        events::EventDispatcher::instance().publish(notification);
+        publishTerrainCreated(parentHandle, header);
 
         if (header.physicsConfig.hasCollider && physicsProvider)
         {

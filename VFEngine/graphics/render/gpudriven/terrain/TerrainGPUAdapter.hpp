@@ -101,6 +101,11 @@ namespace render::gpudriven
         int32_t selectedCoordZ_ = 0;
         bool hasSelectedTile_ = false;
 
+        void populateGPUTile(TerrainTileGPUData& gpuTile,
+                             const TerrainTileAllocation& alloc,
+                             const terrain::TerrainTile& tile,
+                             const TerrainTileKey& key);
+
     public:
         explicit TerrainGPUAdapter(TerrainMeshBuffer& terrainBuffer);
         ~TerrainGPUAdapter();

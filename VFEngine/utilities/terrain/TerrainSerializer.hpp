@@ -17,7 +17,7 @@ namespace terrain
 
     static constexpr std::array<char, 4> TERRAIN_MAGIC = {'V', 'F', 'T', 'R'};
     static constexpr uint32_t TERRAIN_FORMAT_VERSION_MAJOR = 2;
-    static constexpr uint32_t TERRAIN_FORMAT_VERSION_MINOR = 2;
+    static constexpr uint32_t TERRAIN_FORMAT_VERSION_MINOR = 3;
     static constexpr uint32_t TERRAIN_FORMAT_VERSION_PATCH = 0;
     static constexpr uint32_t MAX_REASONABLE_TERRAIN_TILES = 10000;
 

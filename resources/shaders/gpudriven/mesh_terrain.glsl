@@ -219,8 +219,7 @@ float readWeightByte(uint byteOffset) {
 }
 
 float sampleWeightTexel(uint tileOffset, uint res, uint channel, uint x, uint z) {
-    // Single RGBA texture, channel is 0-3 directly
-    return readWeightByte(tileOffset + (z * res + x) * 4u + channel);
+    return readWeightByte(tileOffset + (z * res + x) * 8u + channel);
 }
 
 float sampleTileWeight(uint tileOffset, uint res, uint channel, vec2 uv) {
