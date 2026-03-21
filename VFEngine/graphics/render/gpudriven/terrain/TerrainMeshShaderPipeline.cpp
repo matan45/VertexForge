@@ -105,9 +105,17 @@ namespace render::gpudriven
         bindings[1].descriptorCount = 1;
         bindings[1].stageFlags = vk::ShaderStageFlagBits::eFragment;
 
+        std::array<vk::DescriptorBindingFlags, 2> wmBindingFlags;
+        wmBindingFlags.fill(vk::DescriptorBindingFlagBits::eUpdateAfterBind);
+        vk::DescriptorSetLayoutBindingFlagsCreateInfo wmFlagsInfo{};
+        wmFlagsInfo.bindingCount = static_cast<uint32_t>(wmBindingFlags.size());
+        wmFlagsInfo.pBindingFlags = wmBindingFlags.data();
+
         vk::DescriptorSetLayoutCreateInfo layoutInfo{};
         layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
         layoutInfo.pBindings = bindings.data();
+        layoutInfo.pNext = &wmFlagsInfo;
+        layoutInfo.flags = vk::DescriptorSetLayoutCreateFlagBits::eUpdateAfterBindPool;
         weightMapLayout = vkDevice.createDescriptorSetLayout(layoutInfo);
 
         vk::DescriptorPoolSize poolSize{};
@@ -118,6 +126,7 @@ namespace render::gpudriven
         poolInfo.maxSets = 1;
         poolInfo.poolSizeCount = 1;
         poolInfo.pPoolSizes = &poolSize;
+        poolInfo.flags = vk::DescriptorPoolCreateFlagBits::eUpdateAfterBind;
         weightMapPool = vkDevice.createDescriptorPool(poolInfo);
 
         vk::DescriptorSetAllocateInfo allocInfo{};
@@ -349,9 +358,17 @@ namespace render::gpudriven
             bindings[2 + i].stageFlags = vk::ShaderStageFlagBits::eFragment;
         }
 
+        std::array<vk::DescriptorBindingFlags, 7> svtBindingFlags;
+        svtBindingFlags.fill(vk::DescriptorBindingFlagBits::eUpdateAfterBind);
+        vk::DescriptorSetLayoutBindingFlagsCreateInfo svtFlagsInfo{};
+        svtFlagsInfo.bindingCount = static_cast<uint32_t>(svtBindingFlags.size());
+        svtFlagsInfo.pBindingFlags = svtBindingFlags.data();
+
         vk::DescriptorSetLayoutCreateInfo layoutInfo{};
         layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
         layoutInfo.pBindings = bindings.data();
+        layoutInfo.pNext = &svtFlagsInfo;
+        layoutInfo.flags = vk::DescriptorSetLayoutCreateFlagBits::eUpdateAfterBindPool;
         svtLayout = vkDevice.createDescriptorSetLayout(layoutInfo);
     }
 
@@ -373,6 +390,7 @@ namespace render::gpudriven
             poolInfo.maxSets = 1;
             poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
             poolInfo.pPoolSizes = poolSizes.data();
+            poolInfo.flags = vk::DescriptorPoolCreateFlagBits::eUpdateAfterBind;
             svtPool = vkDevice.createDescriptorPool(poolInfo);
 
             vk::DescriptorSetAllocateInfo allocInfo{};
@@ -449,9 +467,17 @@ namespace render::gpudriven
         bindings[1].descriptorCount = 1;
         bindings[1].stageFlags = vk::ShaderStageFlagBits::eTaskEXT;
 
+        std::array<vk::DescriptorBindingFlags, 2> tdBindingFlags;
+        tdBindingFlags.fill(vk::DescriptorBindingFlagBits::eUpdateAfterBind);
+        vk::DescriptorSetLayoutBindingFlagsCreateInfo tdFlagsInfo{};
+        tdFlagsInfo.bindingCount = static_cast<uint32_t>(tdBindingFlags.size());
+        tdFlagsInfo.pBindingFlags = tdBindingFlags.data();
+
         vk::DescriptorSetLayoutCreateInfo layoutInfo{};
         layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
         layoutInfo.pBindings = bindings.data();
+        layoutInfo.pNext = &tdFlagsInfo;
+        layoutInfo.flags = vk::DescriptorSetLayoutCreateFlagBits::eUpdateAfterBindPool;
         terrainDataLayout = vkDevice.createDescriptorSetLayout(layoutInfo);
 
         vk::DescriptorPoolSize poolSize{};
@@ -462,6 +488,7 @@ namespace render::gpudriven
         poolInfo.maxSets = 1;
         poolInfo.poolSizeCount = 1;
         poolInfo.pPoolSizes = &poolSize;
+        poolInfo.flags = vk::DescriptorPoolCreateFlagBits::eUpdateAfterBind;
         terrainDataPool = vkDevice.createDescriptorPool(poolInfo);
 
         vk::DescriptorSetAllocateInfo allocInfo{};
@@ -588,6 +615,7 @@ namespace render::gpudriven
             poolInfo.maxSets = 2;
             poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
             poolInfo.pPoolSizes = poolSizes.data();
+            poolInfo.flags = vk::DescriptorPoolCreateFlagBits::eUpdateAfterBind;
 
             terrainBufferPool = vkDevice.createDescriptorPool(poolInfo);
 

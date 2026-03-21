@@ -135,9 +135,17 @@ namespace render::gpudriven
         bindings[6].descriptorCount = 1;
         bindings[6].stageFlags = vk::ShaderStageFlagBits::eCompute;
 
+        std::array<vk::DescriptorBindingFlags, 7> bindingFlags;
+        bindingFlags.fill(vk::DescriptorBindingFlagBits::eUpdateAfterBind);
+        vk::DescriptorSetLayoutBindingFlagsCreateInfo flagsInfo{};
+        flagsInfo.bindingCount = static_cast<uint32_t>(bindingFlags.size());
+        flagsInfo.pBindingFlags = bindingFlags.data();
+
         vk::DescriptorSetLayoutCreateInfo layoutInfo{};
         layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
         layoutInfo.pBindings = bindings.data();
+        layoutInfo.pNext = &flagsInfo;
+        layoutInfo.flags = vk::DescriptorSetLayoutCreateFlagBits::eUpdateAfterBindPool;
 
         descriptorSetLayout = vkDevice.createDescriptorSetLayout(layoutInfo);
         vfLogInfo("GPUCullLODPipeline: Created descriptor set layout");
@@ -205,6 +213,7 @@ namespace render::gpudriven
         poolInfo.maxSets = 1;
         poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
         poolInfo.pPoolSizes = poolSizes.data();
+        poolInfo.flags = vk::DescriptorPoolCreateFlagBits::eUpdateAfterBind;
 
         descriptorPool = vkDevice.createDescriptorPool(poolInfo);
         vfLogInfo("GPUCullLODPipeline: Created descriptor pool");

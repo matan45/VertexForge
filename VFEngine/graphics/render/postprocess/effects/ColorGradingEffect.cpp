@@ -272,7 +272,15 @@ namespace render::postprocess
             bindings[2].descriptorCount = 1;
             bindings[2].stageFlags = vk::ShaderStageFlagBits::eFragment;
 
+            std::array<vk::DescriptorBindingFlags, 3> bindingFlags;
+            bindingFlags.fill(vk::DescriptorBindingFlagBits::eUpdateAfterBind);
+            vk::DescriptorSetLayoutBindingFlagsCreateInfo flagsInfo{};
+            flagsInfo.bindingCount = static_cast<uint32_t>(bindingFlags.size());
+            flagsInfo.pBindingFlags = bindingFlags.data();
+
             vk::DescriptorSetLayoutCreateInfo layoutInfo{};
+            layoutInfo.pNext = &flagsInfo;
+            layoutInfo.flags = vk::DescriptorSetLayoutCreateFlagBits::eUpdateAfterBindPool;
             layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
             layoutInfo.pBindings = bindings.data();
 
@@ -340,7 +348,7 @@ namespace render::postprocess
         poolSizes[1].descriptorCount = 1;
 
         vk::DescriptorPoolCreateInfo poolInfo{};
-        poolInfo.flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet;
+        poolInfo.flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet | vk::DescriptorPoolCreateFlagBits::eUpdateAfterBind;
         poolInfo.maxSets = 1;
         poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
         poolInfo.pPoolSizes = poolSizes.data();

@@ -34,7 +34,15 @@ namespace animation
             bindings[i].stageFlags = vk::ShaderStageFlagBits::eCompute;
         }
 
+        std::array<vk::DescriptorBindingFlags, 8> bindingFlags;
+        bindingFlags.fill(vk::DescriptorBindingFlagBits::eUpdateAfterBind);
+        vk::DescriptorSetLayoutBindingFlagsCreateInfo flagsInfo{};
+        flagsInfo.bindingCount = static_cast<uint32_t>(bindingFlags.size());
+        flagsInfo.pBindingFlags = bindingFlags.data();
+
         vk::DescriptorSetLayoutCreateInfo layoutInfo{};
+        layoutInfo.pNext = &flagsInfo;
+        layoutInfo.flags = vk::DescriptorSetLayoutCreateFlagBits::eUpdateAfterBindPool;
         layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
         layoutInfo.pBindings = bindings.data();
         descriptorSetLayout = vkDevice.createDescriptorSetLayout(layoutInfo);
@@ -69,6 +77,7 @@ namespace animation
         poolSize.descriptorCount = 8;
 
         vk::DescriptorPoolCreateInfo poolInfo{};
+        poolInfo.flags = vk::DescriptorPoolCreateFlagBits::eUpdateAfterBind;
         poolInfo.maxSets = 1;
         poolInfo.poolSizeCount = 1;
         poolInfo.pPoolSizes = &poolSize;

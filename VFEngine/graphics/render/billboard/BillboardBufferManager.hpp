@@ -21,6 +21,7 @@ namespace render::billboard
     private:
         vk::Buffer cameraUBO;
         vk::DeviceMemory cameraUBOMemory;
+        bool externalCameraBuffer = false;
 
     public:
         explicit BillboardBufferManager(core::Device& device);
@@ -35,6 +36,12 @@ namespace render::billboard
         void updateInstanceBuffer(const std::vector<BillboardRenderData>& billboards);
 
         vk::Buffer getCameraUBO() const { return cameraUBO; }
+
+        void setExternalCameraBuffer(vk::Buffer buffer)
+        {
+            cameraUBO = buffer;
+            externalCameraBuffer = true;
+        }
 
     private:
         void createCameraUBO();

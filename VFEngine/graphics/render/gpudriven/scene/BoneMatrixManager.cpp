@@ -180,9 +180,16 @@ namespace render::gpudriven
             vk::ShaderStageFlagBits::eCompute;
         boneBinding.pImmutableSamplers = nullptr;
 
+        vk::DescriptorBindingFlags boneBindingFlag = vk::DescriptorBindingFlagBits::eUpdateAfterBind;
+        vk::DescriptorSetLayoutBindingFlagsCreateInfo boneFlagsInfo{};
+        boneFlagsInfo.bindingCount = 1;
+        boneFlagsInfo.pBindingFlags = &boneBindingFlag;
+
         vk::DescriptorSetLayoutCreateInfo layoutInfo{};
         layoutInfo.bindingCount = 1;
         layoutInfo.pBindings = &boneBinding;
+        layoutInfo.pNext = &boneFlagsInfo;
+        layoutInfo.flags = vk::DescriptorSetLayoutCreateFlagBits::eUpdateAfterBindPool;
 
         descriptorSetLayout = vkDevice.createDescriptorSetLayout(layoutInfo);
     }
@@ -199,6 +206,7 @@ namespace render::gpudriven
         poolInfo.maxSets = 1;
         poolInfo.poolSizeCount = 1;
         poolInfo.pPoolSizes = &poolSize;
+        poolInfo.flags = vk::DescriptorPoolCreateFlagBits::eUpdateAfterBind;
 
         descriptorPool = vkDevice.createDescriptorPool(poolInfo);
     }

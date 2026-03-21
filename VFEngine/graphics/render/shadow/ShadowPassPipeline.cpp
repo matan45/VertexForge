@@ -372,9 +372,16 @@ namespace render::shadow
         binding.descriptorCount = 1;
         binding.stageFlags = vk::ShaderStageFlagBits::eTaskEXT;
 
+        vk::DescriptorBindingFlags cameraBindingFlag = vk::DescriptorBindingFlagBits::eUpdateAfterBind;
+        vk::DescriptorSetLayoutBindingFlagsCreateInfo cameraFlagsInfo{};
+        cameraFlagsInfo.bindingCount = 1;
+        cameraFlagsInfo.pBindingFlags = &cameraBindingFlag;
+
         vk::DescriptorSetLayoutCreateInfo layoutInfo{};
         layoutInfo.bindingCount = 1;
         layoutInfo.pBindings = &binding;
+        layoutInfo.pNext = &cameraFlagsInfo;
+        layoutInfo.flags = vk::DescriptorSetLayoutCreateFlagBits::eUpdateAfterBindPool;
 
         cameraUBOLayout = vkDevice.createDescriptorSetLayout(layoutInfo);
 
@@ -387,6 +394,7 @@ namespace render::shadow
         poolInfo.maxSets = 1;
         poolInfo.poolSizeCount = 1;
         poolInfo.pPoolSizes = &poolSize;
+        poolInfo.flags = vk::DescriptorPoolCreateFlagBits::eUpdateAfterBind;
 
         cameraDescriptorPool = vkDevice.createDescriptorPool(poolInfo);
 

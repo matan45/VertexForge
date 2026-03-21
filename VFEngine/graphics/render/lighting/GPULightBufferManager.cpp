@@ -220,9 +220,17 @@ namespace render::lighting
                                  vk::ShaderStageFlagBits::eMeshEXT;
         bindings[3].pImmutableSamplers = nullptr;
 
+        std::array<vk::DescriptorBindingFlags, 4> lightBindingFlags;
+        lightBindingFlags.fill(vk::DescriptorBindingFlagBits::eUpdateAfterBind);
+        vk::DescriptorSetLayoutBindingFlagsCreateInfo lightFlagsInfo{};
+        lightFlagsInfo.bindingCount = static_cast<uint32_t>(lightBindingFlags.size());
+        lightFlagsInfo.pBindingFlags = lightBindingFlags.data();
+
         vk::DescriptorSetLayoutCreateInfo layoutInfo{};
         layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
         layoutInfo.pBindings = bindings.data();
+        layoutInfo.pNext = &lightFlagsInfo;
+        layoutInfo.flags = vk::DescriptorSetLayoutCreateFlagBits::eUpdateAfterBindPool;
 
         descriptorSetLayout = vkDevice.createDescriptorSetLayout(layoutInfo);
     }
@@ -241,6 +249,7 @@ namespace render::lighting
         poolInfo.maxSets = 1;
         poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
         poolInfo.pPoolSizes = poolSizes.data();
+        poolInfo.flags = vk::DescriptorPoolCreateFlagBits::eUpdateAfterBind;
 
         descriptorPool = vkDevice.createDescriptorPool(poolInfo);
     }

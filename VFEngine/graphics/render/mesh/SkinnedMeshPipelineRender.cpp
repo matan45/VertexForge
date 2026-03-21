@@ -256,6 +256,8 @@ namespace render::mesh
     void SkinnedMeshPipeline::updateCameraUBO(const glm::mat4& view, const glm::mat4& projection,
                                               const glm::vec3& cameraPos, float time) const
     {
+        if (externalCameraBuffer) return;
+
         CameraUBO ubo{};
         ubo.view = view;
         ubo.projection = projection;

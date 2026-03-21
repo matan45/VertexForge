@@ -78,10 +78,10 @@ namespace controllers::offscreen
             taaFrameIndex++;
         }
 
-        // Update mesh pipeline UBO only for the active camera (the one being rendered)
-        if (cameraId == renderHandler.getActiveCameraId() && renderHandler.isMeshPipelineInitialized())
+        // Update shared camera UBO (single buffer used by mesh, billboard, and text pipelines)
+        if (cameraId == renderHandler.getActiveCameraId())
         {
-            renderHandler.getMeshPipeline()->updateCameraUBO(view, effectiveProjection, cameraPos, time);
+            renderHandler.updateSharedCameraUBO(view, effectiveProjection, cameraPos, time);
 
             // Store the current view matrix for cluster debug visualization
             currentViewMatrix = view;
@@ -104,16 +104,6 @@ namespace controllers::offscreen
         renderHandler.setDebugCameraMatrices(view, effectiveProjection);
         renderHandler.setUnjitteredProjection(unjitteredProjection);
         renderHandler.setTAAJitterData(currentJitterOffset, taaFrameIndex);
-
-        if (renderHandler.isBillboardPipelineInitialized())
-        {
-            renderHandler.getBillboardPipeline()->updateCameraUBO(view, effectiveProjection, cameraPos);
-        }
-
-        if (renderHandler.isTextPipelineInitialized())
-        {
-            renderHandler.getTextPipeline()->updateCameraUBO(view, effectiveProjection, cameraPos);
-        }
 
         // Get or create camera data
         auto* cameraManager = renderHandler.getCameraOcclusionManager();

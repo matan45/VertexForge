@@ -338,9 +338,17 @@ namespace render::postprocess
             bindings[1].descriptorCount = 1;
             bindings[1].stageFlags = vk::ShaderStageFlagBits::eCompute;
 
+            std::array<vk::DescriptorBindingFlags, 2> histBindingFlags;
+            histBindingFlags.fill(vk::DescriptorBindingFlagBits::eUpdateAfterBind);
+            vk::DescriptorSetLayoutBindingFlagsCreateInfo histFlagsInfo{};
+            histFlagsInfo.bindingCount = static_cast<uint32_t>(histBindingFlags.size());
+            histFlagsInfo.pBindingFlags = histBindingFlags.data();
+
             vk::DescriptorSetLayoutCreateInfo layoutInfo{};
             layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
             layoutInfo.pBindings = bindings.data();
+            layoutInfo.pNext = &histFlagsInfo;
+            layoutInfo.flags = vk::DescriptorSetLayoutCreateFlagBits::eUpdateAfterBindPool;
 
             histogramDescriptorSetLayout = dev.createDescriptorSetLayout(layoutInfo);
         }
@@ -358,9 +366,17 @@ namespace render::postprocess
             bindings[1].descriptorCount = 1;
             bindings[1].stageFlags = vk::ShaderStageFlagBits::eCompute;
 
+            std::array<vk::DescriptorBindingFlags, 2> reduceBindingFlags;
+            reduceBindingFlags.fill(vk::DescriptorBindingFlagBits::eUpdateAfterBind);
+            vk::DescriptorSetLayoutBindingFlagsCreateInfo reduceFlagsInfo{};
+            reduceFlagsInfo.bindingCount = static_cast<uint32_t>(reduceBindingFlags.size());
+            reduceFlagsInfo.pBindingFlags = reduceBindingFlags.data();
+
             vk::DescriptorSetLayoutCreateInfo layoutInfo{};
             layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
             layoutInfo.pBindings = bindings.data();
+            layoutInfo.pNext = &reduceFlagsInfo;
+            layoutInfo.flags = vk::DescriptorSetLayoutCreateFlagBits::eUpdateAfterBindPool;
 
             reduceDescriptorSetLayout = dev.createDescriptorSetLayout(layoutInfo);
         }
@@ -390,7 +406,8 @@ namespace render::postprocess
         poolSizes[1].descriptorCount = 4;
 
         vk::DescriptorPoolCreateInfo poolInfo{};
-        poolInfo.flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet;
+        poolInfo.flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet |
+                         vk::DescriptorPoolCreateFlagBits::eUpdateAfterBind;
         poolInfo.maxSets = 2;
         poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
         poolInfo.pPoolSizes = poolSizes.data();

@@ -324,9 +324,17 @@ namespace render::gpudriven
         bindings[2].descriptorCount = 1;
         bindings[2].stageFlags = vk::ShaderStageFlagBits::eTaskEXT;
 
+        std::array<vk::DescriptorBindingFlags, 3> perDrawBindingFlags;
+        perDrawBindingFlags.fill(vk::DescriptorBindingFlagBits::eUpdateAfterBind);
+        vk::DescriptorSetLayoutBindingFlagsCreateInfo perDrawFlagsInfo{};
+        perDrawFlagsInfo.bindingCount = static_cast<uint32_t>(perDrawBindingFlags.size());
+        perDrawFlagsInfo.pBindingFlags = perDrawBindingFlags.data();
+
         vk::DescriptorSetLayoutCreateInfo layoutInfo{};
         layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
         layoutInfo.pBindings = bindings.data();
+        layoutInfo.pNext = &perDrawFlagsInfo;
+        layoutInfo.flags = vk::DescriptorSetLayoutCreateFlagBits::eUpdateAfterBindPool;
 
         perDrawDataLayout = vkDevice.createDescriptorSetLayout(layoutInfo);
 
@@ -338,6 +346,7 @@ namespace render::gpudriven
         poolInfo.maxSets = 1;
         poolInfo.poolSizeCount = 1;
         poolInfo.pPoolSizes = &poolSize;
+        poolInfo.flags = vk::DescriptorPoolCreateFlagBits::eUpdateAfterBind;
 
         perDrawDataPool = vkDevice.createDescriptorPool(poolInfo);
 
@@ -383,9 +392,17 @@ namespace render::gpudriven
         bindings[4].descriptorCount = 1;
         bindings[4].stageFlags = vk::ShaderStageFlagBits::eTaskEXT;
 
+        std::array<vk::DescriptorBindingFlags, 5> meshletBindingFlags;
+        meshletBindingFlags.fill(vk::DescriptorBindingFlagBits::eUpdateAfterBind);
+        vk::DescriptorSetLayoutBindingFlagsCreateInfo meshletFlagsInfo{};
+        meshletFlagsInfo.bindingCount = static_cast<uint32_t>(meshletBindingFlags.size());
+        meshletFlagsInfo.pBindingFlags = meshletBindingFlags.data();
+
         vk::DescriptorSetLayoutCreateInfo layoutInfo{};
         layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
         layoutInfo.pBindings = bindings.data();
+        layoutInfo.pNext = &meshletFlagsInfo;
+        layoutInfo.flags = vk::DescriptorSetLayoutCreateFlagBits::eUpdateAfterBindPool;
 
         meshletDataLayout = vkDevice.createDescriptorSetLayout(layoutInfo);
 
@@ -399,6 +416,7 @@ namespace render::gpudriven
         poolInfo.maxSets = 1;
         poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
         poolInfo.pPoolSizes = poolSizes.data();
+        poolInfo.flags = vk::DescriptorPoolCreateFlagBits::eUpdateAfterBind;
 
         meshletDataPool = vkDevice.createDescriptorPool(poolInfo);
 
@@ -437,9 +455,16 @@ namespace render::gpudriven
         vertexBinding.descriptorCount = 1;
         vertexBinding.stageFlags = vk::ShaderStageFlagBits::eMeshEXT;
 
+        vk::DescriptorBindingFlags vertexBindingFlag = vk::DescriptorBindingFlagBits::eUpdateAfterBind;
+        vk::DescriptorSetLayoutBindingFlagsCreateInfo vertexFlagsInfo{};
+        vertexFlagsInfo.bindingCount = 1;
+        vertexFlagsInfo.pBindingFlags = &vertexBindingFlag;
+
         vk::DescriptorSetLayoutCreateInfo layoutInfo{};
         layoutInfo.bindingCount = 1;
         layoutInfo.pBindings = &vertexBinding;
+        layoutInfo.pNext = &vertexFlagsInfo;
+        layoutInfo.flags = vk::DescriptorSetLayoutCreateFlagBits::eUpdateAfterBindPool;
 
         vertexDataLayout = vkDevice.createDescriptorSetLayout(layoutInfo);
 
@@ -451,6 +476,7 @@ namespace render::gpudriven
         poolInfo.maxSets = 1;
         poolInfo.poolSizeCount = 1;
         poolInfo.pPoolSizes = &poolSize;
+        poolInfo.flags = vk::DescriptorPoolCreateFlagBits::eUpdateAfterBind;
 
         vertexDataPool = vkDevice.createDescriptorPool(poolInfo);
 

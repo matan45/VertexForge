@@ -21,6 +21,7 @@ namespace render::text
     private:
         vk::Buffer cameraUBO;
         vk::DeviceMemory cameraUBOMemory;
+        bool externalCameraBuffer = false;
 
     public:
         explicit TextBufferManager(core::Device& device);
@@ -35,6 +36,12 @@ namespace render::text
         void updateInstanceBuffer(const std::vector<TextCharInstance>& instances);
 
         vk::Buffer getCameraUBO() const { return cameraUBO; }
+
+        void setExternalCameraBuffer(vk::Buffer buffer)
+        {
+            cameraUBO = buffer;
+            externalCameraBuffer = true;
+        }
 
     private:
         void createCameraUBO();

@@ -206,7 +206,15 @@ namespace render::water
         binding.stageFlags = vk::ShaderStageFlagBits::eVertex;
         binding.pImmutableSamplers = nullptr;
 
+        std::array<vk::DescriptorBindingFlags, 1> bindingFlags;
+        bindingFlags.fill(vk::DescriptorBindingFlagBits::eUpdateAfterBind);
+        vk::DescriptorSetLayoutBindingFlagsCreateInfo flagsInfo{};
+        flagsInfo.bindingCount = static_cast<uint32_t>(bindingFlags.size());
+        flagsInfo.pBindingFlags = bindingFlags.data();
+
         vk::DescriptorSetLayoutCreateInfo layoutInfo{};
+        layoutInfo.pNext = &flagsInfo;
+        layoutInfo.flags = vk::DescriptorSetLayoutCreateFlagBits::eUpdateAfterBindPool;
         layoutInfo.bindingCount = 1;
         layoutInfo.pBindings = &binding;
 
@@ -217,6 +225,7 @@ namespace render::water
         poolSize.descriptorCount = 1;
 
         vk::DescriptorPoolCreateInfo poolInfo{};
+        poolInfo.flags = vk::DescriptorPoolCreateFlagBits::eUpdateAfterBind;
         poolInfo.maxSets = 1;
         poolInfo.poolSizeCount = 1;
         poolInfo.pPoolSizes = &poolSize;
