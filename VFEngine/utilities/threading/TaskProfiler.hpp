@@ -38,6 +38,9 @@ namespace threading {
 		// Compute per-task statistics across the history
 		std::vector<TaskProfileStats> computeStats() const;
 
+		// Append entries to the most recent frame snapshot (for render thread injection)
+		void appendToLatestFrame(const std::vector<TaskProfileEntry>& entries);
+
 		// Get the thread count seen in profiling data
 		uint32_t getMaxThreadId() const;
 

@@ -29,9 +29,11 @@ namespace imguiPass {
 		vk::RenderPass imGuiRenderPass;
 		std::vector<vk::Framebuffer> imGuiFrameBuffers;
 
-		// Thread-safe draw data snapshot for render thread
-		mutable std::mutex snapshotMutex;
-		ImDrawDataSnapshot drawDataSnapshot;
+		// Double-buffered draw data snapshots for lock-free main/render thread handoff
+		ImDrawDataSnapshot snapshots[2];
+		std::atomic<uint32_t> writeIndex{0};   // main thread writes to this
+		std::atomic<uint32_t> readIndex{0};    // render thread reads from this
+		std::atomic<uint32_t> frameCount{0};   // frames rendered (skip snapshot for first frames)
 
 	public:
 		explicit ImguiRender(core::Device& device, core::SwapChain& swapChain, core::CommandPool& commandPool,const window::Window* window);
@@ -52,6 +54,9 @@ namespace imguiPass {
 		/// Render from externally provided ImDrawData.
 		void renderFromSnapshot(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex,
 		                        ImDrawData* snapshotDrawData) const;
+
+		/// Render an empty frame (clear only, no draw data). Used when ImGui data is stale.
+		void renderEmpty(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
 
 	private:
 		

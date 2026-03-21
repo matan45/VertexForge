@@ -5,6 +5,7 @@
 
 #include "../core/Device.hpp"
 #include "../core/SwapChain.hpp"
+#include "../core/CommandPool.hpp"
 #include "../window/Window.hpp"
 #include "../core/Utilities.hpp"
 #include "print/Log.hpp"
@@ -108,25 +109,50 @@ namespace imguiPass {
 		ImGui::Render();
 		ImDrawData* drawData = ImGui::GetDrawData();
 
-		{
-			std::lock_guard lock(snapshotMutex);
-			drawDataSnapshot.snapshot(drawData);
-		}
+		// Write to the current write slot (render thread reads from the other slot)
+		uint32_t wi = writeIndex.load(std::memory_order_relaxed);
+		snapshots[wi].snapshot(drawData);
+
+		// Publish: make the write slot the new read slot
+		readIndex.store(wi, std::memory_order_release);
+
+		// Flip write slot for next frame
+		writeIndex.store(1 - wi, std::memory_order_relaxed);
 
 		drawData->Clear();
 	}
 
 	void ImguiRender::renderSnapshotted(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex)
 	{
-		// The FrameSynchronizer ensures the main thread won't overwrite the snapshot
-		// while we're rendering (beginFrame blocks until frameComplete).
-		// No lock needed here — the snapshot is stable during render.
-		ImDrawData* snapshotData = drawDataSnapshot.getDrawData();
+		uint32_t ri = readIndex.load(std::memory_order_acquire);
+		ImDrawData* snapshotData = snapshots[ri].getDrawData();
 
 		if (snapshotData)
 		{
 			renderFromSnapshot(commandBuffer, imageIndex, snapshotData);
 		}
+		else
+		{
+			renderEmpty(commandBuffer, imageIndex);
+		}
+	}
+
+	void ImguiRender::renderEmpty(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const
+	{
+
+		// Record an empty render pass to transition swapchain image to present layout
+		vk::ClearValue clearColor = { std::array<float, 4>{0.0f, 0.0f, 0.0f, 1.0f} };
+
+		vk::RenderPassBeginInfo renderPassinfo = {};
+		renderPassinfo.renderPass = imGuiRenderPass;
+		renderPassinfo.framebuffer = imGuiFrameBuffers[imageIndex];
+		renderPassinfo.renderArea.extent.width = swapChain.getSwapchainExtent().width;
+		renderPassinfo.renderArea.extent.height = swapChain.getSwapchainExtent().height;
+		renderPassinfo.clearValueCount = 1;
+		renderPassinfo.pClearValues = &clearColor;
+
+		commandBuffer.beginRenderPass(renderPassinfo, vk::SubpassContents::eInline);
+		commandBuffer.endRenderPass();
 	}
 
 	void ImguiRender::renderFromSnapshot(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex,

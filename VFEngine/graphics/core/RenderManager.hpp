@@ -59,6 +59,7 @@ namespace core {
 
 		uint32_t currentFrame = 0;
 		inline static std::atomic<uint32_t> imageIndex{0};
+		std::atomic<bool> skipNextImguiRender{false};
 		inline static DeferredDeletionQueue* globalDeletionQueue;
 
 		void createPresentPass();
@@ -86,6 +87,9 @@ namespace core {
 
 		/// Whether ImGui is enabled (to know if snapshot is needed).
 		bool isImguiEnabled() const { return imguiEnabled; }
+
+		/// Skip ImGui rendering for the next frame (e.g. after resize invalidates draw data)
+		void skipImguiNextFrame() { skipNextImguiRender.store(true); }
 
 		// Access for systems that need deferred deletion
 		DeferredDeletionQueue* getDeletionQueue() { return deletionQueue.get(); }

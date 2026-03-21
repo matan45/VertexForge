@@ -10,12 +10,14 @@ namespace core
 {
     /// Manages frame handoff between the main (game) thread and the render thread.
     ///
-    /// Ensures strict sequencing: the main thread cannot start a new frame until
-    /// the render thread finishes the previous one. This is required because ImGui
-    /// has a single global context (NewFrame/Render must not overlap).
+    /// ImGui requires sequential access (NewFrame/Render must not overlap), so
+    /// beginFrame() blocks until the render thread finishes. However, beginFrame()
+    /// is called INSIDE the ImGuiDraw task (not at the start of the frame), so
+    /// scene update tasks run in parallel with the render thread.
     ///
-    /// The CPU/GPU overlap still happens: while the GPU executes frame N's commands
-    /// (after the render thread submits them), the CPU prepares frame N+1's data.
+    /// Timeline:
+    ///   Main:   [Scene+Physics+Scripts] [beginFrame:WAIT] [ImGui+signal]
+    ///   Render:        [OffScreen + Present]                      [OffScreen + Present]
     class FrameSynchronizer
     {
     public:
@@ -25,7 +27,7 @@ namespace core
         FrameSynchronizer(const FrameSynchronizer&) = delete;
         FrameSynchronizer& operator=(const FrameSynchronizer&) = delete;
 
-        /// Called by the main thread at the start of a frame.
+        /// Called by the main thread before ImGui::NewFrame().
         /// Blocks until the render thread has finished the previous frame.
         void beginFrame()
         {
@@ -47,7 +49,6 @@ namespace core
         }
 
         /// Called by the render thread to wait for a new frame.
-        /// Returns the current frame number.
         uint64_t waitForFrame()
         {
             std::unique_lock lock(mutex);
@@ -57,7 +58,6 @@ namespace core
         }
 
         /// Called by the render thread after rendering is complete.
-        /// Unblocks the main thread's beginFrame().
         void frameComplete()
         {
             {
@@ -67,7 +67,13 @@ namespace core
             cv.notify_all();
         }
 
-        /// Request the render thread to stop (for clean shutdown).
+        /// Wait until the render thread is idle (for resize/shutdown).
+        void waitUntilIdle()
+        {
+            std::unique_lock lock(mutex);
+            cv.wait(lock, [&] { return !renderInProgress || stopRequested; });
+        }
+
         void requestStop()
         {
             {

@@ -222,7 +222,14 @@ namespace core {
 	{
 		if (imguiEnabled)
 		{
-			imguiRender->render(commandBuffer, imageIdx);
+			if (skipNextImguiRender.exchange(false))
+			{
+				imguiRender->renderEmpty(commandBuffer, imageIdx);
+			}
+			else
+			{
+				imguiRender->render(commandBuffer, imageIdx);
+			}
 		}
 		else if (blitSourceProvider)
 		{
