@@ -452,23 +452,34 @@ namespace windows::details {
 
         if (ImGui::Button("Bake SVT Textures"))
         {
-            isBaking = true;
             saveStatusMessage.clear();
-
-            pendingBake = threading::JobSystem::instance().submit([handle]()
-            {
-                events::terrain::BakeTerrainSVTCommand cmd;
-                cmd.terrainEntity = handle;
-                return events::EventDispatcher::instance().execute(cmd);
-            }, threading::JobPriority::LOW);
+            events::terrain::BeginBakeTerrainSVTCommand cmd;
+            cmd.terrainEntity = handle;
+            isBaking = events::EventDispatcher::instance().execute(cmd);
         }
 
         ImGui::EndDisabled();
 
         if (isBaking)
         {
+            auto pollResult = events::EventDispatcher::instance().query(
+                events::terrain::PollBakeTerrainSVTQuery{});
+
             ImGui::SameLine();
-            ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.3f, 1.0f), "Baking...");
+            ImGui::ProgressBar(pollResult.progress, ImVec2(150, 0));
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel"))
+            {
+                events::EventDispatcher::instance().execute(
+                    events::terrain::CancelBakeTerrainSVTCommand{});
+            }
+
+            if (pollResult.completed)
+            {
+                isBaking = false;
+                saveStatusMessage = pollResult.success ? "SVT bake completed" : "SVT bake failed";
+                statusFrameCounter = pollResult.success ? 180 : 300;
+            }
         }
 
         if (ImGui::IsItemHovered() && hasSavePath)
@@ -553,25 +564,6 @@ namespace windows::details {
             }
         }
 
-        if (isBaking && pendingBake.valid())
-        {
-            if (pendingBake.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready)
-            {
-                bool success = pendingBake.get();
-                isBaking = false;
-
-                if (success)
-                {
-                    saveStatusMessage = "SVT bake completed";
-                    statusFrameCounter = 180;
-                }
-                else
-                {
-                    saveStatusMessage = "Failed to bake SVT textures";
-                    statusFrameCounter = 300;
-                }
-            }
-        }
     }
 
 }

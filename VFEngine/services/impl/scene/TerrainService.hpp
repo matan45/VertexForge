@@ -57,6 +57,7 @@ namespace services
         ITerrainBrushComputeProvider* brushComputeProvider = nullptr;
         IPhysicsProvider* physicsProvider = nullptr;
         std::atomic<bool> saveInProgress{false};
+        std::atomic<bool> svtBakeInProgress{false};
 
         bool distanceCullingEnabled_ = false;
         float maxTerrainDistSq_ = 0.0f;
@@ -75,6 +76,17 @@ namespace services
             std::atomic<bool> done{false};
         };
         std::shared_ptr<PendingTerrainCreation> pendingCreation;
+
+        struct PendingSVTBake
+        {
+            std::future<bool> future;
+            std::atomic<float> progress{0.0f};
+            std::atomic<bool> done{false};
+            std::atomic<bool> cancelled{false};
+            std::string stage;
+            std::mutex stageMutex;
+        };
+        std::shared_ptr<PendingSVTBake> pendingSVTBake;
 
     public:
         explicit TerrainService(std::shared_ptr<scene::SceneGraphSystem> sceneGraph);
@@ -139,6 +151,9 @@ namespace services
         void commitStreamingChanges(EntityHandle terrainEntity);
         void loadAllTiles(EntityHandle terrainEntity);
         bool bakeTerrainSVT(EntityHandle terrainEntity);
+        bool beginBakeTerrainSVTAsync(EntityHandle terrainEntity);
+        ::events::terrain::SVTBakePollResult pollBakeTerrainSVT();
+        void cancelBakeTerrainSVT();
 
         bool ensureTileLODData(terrain::TerrainTile& tile, uint8_t lodLevel);
         void releaseTileRAMData(terrain::TerrainTile& tile);

@@ -12,6 +12,7 @@
 #include "../../events/terrain/TerrainEvents.hpp"
 #include "../../events/project/ResourceEvents.hpp"
 #include <asset/AssetRef.hpp>
+#include "threading/JobSystem.hpp"
 #include <asset/AssetDatabase.hpp>
 #include <asset/AssetMetadata.hpp>
 #include <asset/AssetMetadataSerializer.hpp>
@@ -810,19 +811,45 @@ namespace services
         auto allTilesRaw = grid.getAllTiles();
         std::vector<const terrain::TerrainTile*> allTiles(allTilesRaw.begin(), allTilesRaw.end());
 
+        uint32_t totalTiles = 0;
+        for (uint32_t m = 0; m < params.mipLevels; ++m)
+        {
+            uint32_t s = render::svt::computeTilesPerMipSide(m, params.virtualSizeLog2, params.tileSizeLog2);
+            if (s == 0) s = 1;
+            totalTiles += s * s;
+        }
+
         uint32_t totalWritten = 0;
-        for (uint32_t mip = 0; mip < params.mipLevels; ++mip)
+        bool cancelled = false;
+        for (uint32_t mip = 0; mip < params.mipLevels && !cancelled; ++mip)
         {
             uint32_t tilesPerSide = render::svt::computeTilesPerMipSide(mip, params.virtualSizeLog2, params.tileSizeLog2);
             if (tilesPerSide == 0) tilesPerSide = 1;
 
-            for (uint32_t ty = 0; ty < tilesPerSide; ++ty)
-                for (uint32_t tx = 0; tx < tilesPerSide; ++tx)
+            for (uint32_t ty = 0; ty < tilesPerSide && !cancelled; ++ty)
+                for (uint32_t tx = 0; tx < tilesPerSide && !cancelled; ++tx)
                 {
+                    if (pendingSVTBake && pendingSVTBake->cancelled.load(std::memory_order_relaxed))
+                    {
+                        cancelled = true;
+                        break;
+                    }
+
                     compositeAndWriteTile(params, layers, allTiles, mip, tx, ty,
                                           albedoWriter, normalWriter, ormWriter);
                     ++totalWritten;
+
+                    if (pendingSVTBake && totalTiles > 0)
+                        pendingSVTBake->progress.store(
+                            static_cast<float>(totalWritten) / static_cast<float>(totalTiles),
+                            std::memory_order_relaxed);
                 }
+        }
+
+        if (cancelled)
+        {
+            vfLogWarning("BakeTerrainSVT: Cancelled after {} tiles", totalWritten);
+            return false;
         }
 
         albedoWriter.finalize();
@@ -831,5 +858,82 @@ namespace services
 
         vfLogInfo("BakeTerrainSVT: Wrote {} tiles to SVT cache at {}", totalWritten, basePath);
         return true;
+    }
+
+    bool TerrainService::beginBakeTerrainSVTAsync(EntityHandle terrainEntity)
+    {
+        if (svtBakeInProgress.load(std::memory_order_acquire))
+            return false;
+
+        auto gridIt = terrainGrids.find(terrainEntity.id);
+        if (gridIt == terrainGrids.end() || !gridIt->second)
+            return false;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        entt::entity ent = internal::fromHandle(terrainEntity);
+        if (!registry.valid(ent) || !registry.all_of<components::TerrainComponent>(ent))
+            return false;
+
+        const auto& terrainComp = registry.get<components::TerrainComponent>(ent);
+        if (terrainComp.savePath.empty())
+            return false;
+
+        svtBakeInProgress.store(true, std::memory_order_release);
+        auto bake = std::make_shared<PendingSVTBake>();
+        pendingSVTBake = bake;
+
+        EntityHandle entityCopy = terrainEntity;
+        bake->future = threading::JobSystem::instance().submit(
+            [this, entityCopy, bake]() -> bool
+            {
+                {
+                    std::lock_guard lock(bake->stageMutex);
+                    bake->stage = "Starting SVT bake...";
+                }
+                bool result = bakeTerrainSVT(entityCopy);
+                bake->done.store(true, std::memory_order_release);
+                return result;
+            },
+            threading::JobPriority::LOW
+        );
+
+        return true;
+    }
+
+    events::terrain::SVTBakePollResult TerrainService::pollBakeTerrainSVT()
+    {
+        events::terrain::SVTBakePollResult result;
+
+        if (!pendingSVTBake)
+            return result;
+
+        result.active = true;
+        result.progress = pendingSVTBake->progress.load(std::memory_order_acquire);
+        {
+            std::lock_guard lock(pendingSVTBake->stageMutex);
+            result.stage = pendingSVTBake->stage;
+        }
+
+        if (pendingSVTBake->done.load(std::memory_order_acquire))
+        {
+            result.completed = true;
+            result.success = pendingSVTBake->future.get();
+            svtBakeInProgress.store(false, std::memory_order_release);
+            pendingSVTBake.reset();
+
+            events::terrain::TerrainSVTBakeProgressNotification notification;
+            notification.progress = 1.0f;
+            notification.completed = true;
+            notification.success = result.success;
+            events::EventDispatcher::instance().publish(notification);
+        }
+
+        return result;
+    }
+
+    void TerrainService::cancelBakeTerrainSVT()
+    {
+        if (pendingSVTBake)
+            pendingSVTBake->cancelled.store(true, std::memory_order_release);
     }
 }
