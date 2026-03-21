@@ -1,7 +1,6 @@
 #pragma once
 
-#include "RenderManager.hpp"
-#include <atomic>
+#include "GraphicsConstants.hpp"
 #include <condition_variable>
 #include <cstdint>
 #include <mutex>
@@ -49,10 +48,12 @@ namespace core
         }
 
         /// Called by the render thread to wait for a new frame.
+        /// Returns 0 if stop was requested (caller should exit).
         uint64_t waitForFrame()
         {
             std::unique_lock lock(mutex);
             cv.wait(lock, [&] { return frameReady || stopRequested; });
+            if (stopRequested) return 0;
             frameReady = false;
             return frameNumber;
         }
@@ -83,7 +84,12 @@ namespace core
             cv.notify_all();
         }
 
-        bool isStopRequested() const { return stopRequested; }
+        bool isStopRequested()
+        {
+            std::lock_guard lock(mutex);
+            return stopRequested;
+        }
+
         uint64_t getFrameNumber() const { return frameNumber; }
 
     private:
@@ -91,7 +97,7 @@ namespace core
         std::condition_variable cv;
         bool frameReady = false;
         bool renderInProgress = false;
+        bool stopRequested = false;
         uint64_t frameNumber = 0;
-        std::atomic<bool> stopRequested{false};
     };
 }

@@ -33,7 +33,6 @@ namespace imguiPass {
 		ImDrawDataSnapshot snapshots[2];
 		std::atomic<uint32_t> writeIndex{0};   // main thread writes to this
 		std::atomic<uint32_t> readIndex{0};    // render thread reads from this
-		std::atomic<uint32_t> frameCount{0};   // frames rendered (skip snapshot for first frames)
 
 	public:
 		explicit ImguiRender(core::Device& device, core::SwapChain& swapChain, core::CommandPool& commandPool,const window::Window* window);

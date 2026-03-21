@@ -24,9 +24,13 @@ namespace imguiPass
             , valid(other.valid)
         {
             other.valid = false;
-            // Fix the pointer in drawData
+            other.drawData = ImDrawData();
             if (valid && !drawListPtrs.empty())
-                drawData.CmdLists = ImVector<ImDrawList*>();
+            {
+                drawData.CmdLists.Data = drawListPtrs.data();
+                drawData.CmdLists.Size = static_cast<int>(drawListPtrs.size());
+                drawData.CmdLists.Capacity = static_cast<int>(drawListPtrs.size());
+            }
         }
 
         /// Snapshot the current ImDrawData (deep copy all draw lists).

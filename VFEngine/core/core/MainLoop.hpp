@@ -27,7 +27,6 @@ namespace core {
 		std::function<void()> sceneGraphUpdateFn;
 		std::function<void()> imguiDrawFn;
 		std::function<void()> renderFn;
-		std::function<void()> beginFrameFn;
 
 	public:
 		explicit MainLoop(bool imguiEnabled = true);
@@ -37,6 +36,7 @@ namespace core {
 		void run();
 		void cleanUp();
 		void close();
+		void stopRenderThread();
 
 		// Get window pointer for service initialization
 		window::Window* getWindow() const { return mainWindow; }
@@ -51,7 +51,6 @@ namespace core {
 		std::function<void()> getSceneGraphUpdateFn() const { return sceneGraphUpdateFn; }
 		std::function<void()> getImguiDrawFn() const { return imguiDrawFn; }
 		std::function<void()> getRenderFn() const { return renderFn; }
-		std::function<void()> getBeginFrameFn() const { return beginFrameFn; }
 
 		// Set callback to be called on resize (for offscreen resource recreation)
 		void setResizeCallback(std::function<void()> callback);

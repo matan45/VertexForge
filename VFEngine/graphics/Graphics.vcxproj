@@ -129,6 +129,7 @@
     <ClInclude Include="core\DeferredDeletionQueue.hpp" />
     <ClInclude Include="core\Device.hpp" />
     <ClInclude Include="core\FrameSynchronizer.hpp" />
+    <ClInclude Include="core\GraphicsConstants.hpp" />
     <ClInclude Include="core\ImageUtilities.hpp" />
     <ClInclude Include="core\MappedMemoryGuard.hpp" />
     <ClInclude Include="core\MemoryUtilities.hpp" />

@@ -212,6 +212,9 @@ namespace core
         // Set callback to run on the render thread before swapchain present
         void setPreRenderCallback(std::function<void()> callback);
 
+        // Stop the render thread and wait for GPU idle. Call before destroying GPU resources.
+        void stopRenderThread();
+
         // Get internal frame step functions for task graph orchestration
         std::function<void()> getSceneGraphUpdateFn() const;
         std::function<void()> getImguiDrawFn() const;

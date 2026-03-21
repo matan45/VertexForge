@@ -70,17 +70,11 @@ namespace handlers
             frameTaskGraph->execute();
         });
 
-        // Move offscreen scene rendering to the render thread
+        editorRenderServiceImpl = dynamic_cast<services::EditorRenderServiceImpl*>(renderService.get());
         bootstrap->setPreRenderCallback([this]()
         {
-            if (renderService)
-            {
-                auto* editorRenderService = dynamic_cast<services::EditorRenderServiceImpl*>(renderService.get());
-                if (editorRenderService)
-                {
-                    editorRenderService->renderViewportDeferred();
-                }
-            }
+            if (editorRenderServiceImpl)
+                editorRenderServiceImpl->renderViewportDeferred();
         });
 
         if (physicsPlayModeHandler && scriptingService)
@@ -104,6 +98,8 @@ namespace handlers
 
     void EditorHandler::cleanUp()
     {
+        bootstrap->stopRenderThread();
+
         if (frameTaskGraph) {
             frameTaskGraph->unregisterEventHandlers();
             frameTaskGraph.reset();

@@ -51,6 +51,9 @@ namespace controllers {
 		// Set callback to run on the render thread before swapchain present
 		void setPreRenderCallback(std::function<void()> callback);
 
+		// Stop render thread and wait for GPU idle before destroying resources
+		void stopRenderThread();
+
 		// Get internal frame step functions for task graph orchestration
 		std::function<void()> getSceneGraphUpdateFn() const;
 		std::function<void()> getImguiDrawFn() const;

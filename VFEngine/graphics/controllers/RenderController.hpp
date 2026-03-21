@@ -39,6 +39,7 @@ namespace controllers
 
         void init();
         void cleanUp();
+        void stopRenderThread();
 
         void reSize();
 

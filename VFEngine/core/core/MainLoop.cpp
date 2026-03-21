@@ -47,10 +47,6 @@ namespace core {
 		renderFn = [this]() {
 			renderController->render();
 		};
-
-		beginFrameFn = [this]() {
-			renderController->beginFrame();
-		};
 	}
 
 	void MainLoop::run()
@@ -80,6 +76,11 @@ namespace core {
 	void MainLoop::setResizeCallback(std::function<void()> callback)
 	{
 		renderController->setResizeCallback(std::move(callback));
+	}
+
+	void MainLoop::stopRenderThread()
+	{
+		renderController->stopRenderThread();
 	}
 
 	void MainLoop::cleanUp()

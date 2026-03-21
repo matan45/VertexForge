@@ -64,7 +64,7 @@ namespace render
         {
             if (i != imageIndex && (i % core::MAX_FRAMES_IN_FLIGHT) == fi)
             {
-                device.getLogicalDevice().waitForFences(1, &inFlightFences[i], VK_TRUE, UINT64_MAX);
+                (void)device.getLogicalDevice().waitForFences(1, &inFlightFences[i], VK_TRUE, UINT64_MAX);
             }
         }
 

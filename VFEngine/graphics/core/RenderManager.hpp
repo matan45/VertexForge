@@ -1,6 +1,7 @@
 #pragma once
 #define VULKAN_HPP_DISPATCH_LOADER_DYNAMIC 1
 #include <vulkan/vulkan.hpp>
+#include "GraphicsConstants.hpp"
 #include <memory>
 #include <vector>
 #include <functional>
@@ -23,8 +24,6 @@ namespace core {
 	class SwapChain;
 	class CommandPool;
 	class DeferredDeletionQueue;
-
-	constexpr uint32_t MAX_FRAMES_IN_FLIGHT = 2;
 
 	using ResizeCallback = std::function<void()>;
 	// Returns the offscreen color image for the current frame (used to blit to swapchain in runtime)

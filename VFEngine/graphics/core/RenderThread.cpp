@@ -44,17 +44,14 @@ namespace core
 
     void RenderThread::threadLoop()
     {
-        while (!synchronizer.isStopRequested())
+        while (true)
         {
             uint64_t frame = synchronizer.waitForFrame();
-
-            if (synchronizer.isStopRequested())
+            if (frame == 0 && synchronizer.isStopRequested())
                 break;
 
             if (renderCallback)
-            {
                 renderCallback(static_cast<uint32_t>(frame % MAX_FRAMES_IN_FLIGHT));
-            }
 
             synchronizer.frameComplete();
         }

@@ -95,29 +95,25 @@ namespace core {
 
 	void TransferManager::waitAll()
 	{
-		std::lock_guard lock(transferMutex);
-
-		if (pendingTransfers.empty()) {
-			return;
+		std::vector<TransferOperation> localPending;
+		{
+			std::lock_guard lock(transferMutex);
+			localPending = std::move(pendingTransfers);
+			pendingTransfers.clear();
 		}
 
-		// Collect all fences
+		if (localPending.empty()) return;
+
 		std::vector<vk::Fence> fences;
-		fences.reserve(pendingTransfers.size());
-		for (const auto& op : pendingTransfers) {
+		fences.reserve(localPending.size());
+		for (const auto& op : localPending)
 			fences.push_back(op.fence);
-		}
 
-		// Wait for all fences
-		if (!fences.empty()) {
-			[[maybe_unused]] auto result = device.waitForFences(fences, VK_TRUE, UINT64_MAX);
-		}
+		if (!fences.empty())
+			(void)device.waitForFences(fences, VK_TRUE, UINT64_MAX);
 
-		// Clean up all transfers
-		for (auto& op : pendingTransfers) {
+		for (auto& op : localPending)
 			cleanupTransfer(op);
-		}
-		pendingTransfers.clear();
 	}
 
 	void TransferManager::cleanupTransfer(TransferOperation& op)

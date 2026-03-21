@@ -78,4 +78,12 @@ namespace core
             coreInterface->setPreRenderCallback(std::move(callback));
         }
     }
+
+    void EditorBootstrap::stopRenderThread()
+    {
+        if (coreInterface)
+        {
+            coreInterface->stopRenderThread();
+        }
+    }
 }

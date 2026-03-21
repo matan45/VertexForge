@@ -1,6 +1,6 @@
 #pragma once
 
-#include "RenderManager.hpp"
+#include "GraphicsConstants.hpp"
 #include "BufferUtilities.hpp"
 #include <vulkan/vulkan.hpp>
 #include <array>

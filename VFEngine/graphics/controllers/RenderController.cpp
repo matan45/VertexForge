@@ -83,12 +83,19 @@ namespace controllers {
 		threading::TaskProfiler::instance().appendToLatestFrame(entries);
 	}
 
+	void RenderController::stopRenderThread()
+	{
+		if (renderThread)
+		{
+			renderThread->stop();
+			renderThread.reset();
+		}
+		device.getLogicalDevice().waitIdle();
+	}
+
 	void RenderController::cleanUp()
 	{
-		// Stop render thread BEFORE any Vulkan cleanup
-		renderThread->stop();
-		renderThread.reset();
-
+		stopRenderThread();
 		renderManager->cleanUp();
 	}
 

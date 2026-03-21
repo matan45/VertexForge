@@ -69,6 +69,11 @@ namespace controllers {
 		mainLoop->setPreRenderCallback(std::move(callback));
 	}
 
+	void CoreInterface::stopRenderThread()
+	{
+		mainLoop->stopRenderThread();
+	}
+
 	std::function<void()> CoreInterface::getSceneGraphUpdateFn() const
 	{
 		return mainLoop->getSceneGraphUpdateFn();
