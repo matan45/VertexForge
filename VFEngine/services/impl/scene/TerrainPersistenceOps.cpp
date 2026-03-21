@@ -422,10 +422,34 @@ namespace services
         tileConfig.skirtDepth = header.skirtDepth;
 
         auto grid = std::make_unique<terrain::TerrainGrid>(tileConfig);
-        grid->loadMetadataOnly(header, index);
 
         auto cache = std::make_shared<terrain::TerrainFileCache>(path, header, index, indexTableOffset);
         grid->setFileCache(cache);
+
+        if (header.streamingConfig.enabled)
+        {
+            // Streaming mode: only add tiles within loadRadius of origin.
+            // The streamer will handle loading remaining tiles as the camera moves.
+            float loadRadiusSq = header.streamingConfig.loadRadius * header.streamingConfig.loadRadius;
+            float tileSize = header.worldTileSize;
+
+            for (const auto& entry : index)
+            {
+                float cx = (static_cast<float>(entry.coordX) + 0.5f) * tileSize;
+                float cz = (static_cast<float>(entry.coordZ) + 0.5f) * tileSize;
+                float distSq = cx * cx + cz * cz;
+
+                if (distSq <= loadRadiusSq)
+                {
+                    grid->addTileFromFile(terrain::TileCoord{entry.coordX, entry.coordZ});
+                }
+            }
+        }
+        else
+        {
+            // Non-streaming: load all tiles as metadata-only
+            grid->loadMetadataOnly(header, index);
+        }
 
         scene::Entity parentEntity("Terrain");
         sceneGraph->addChild(sceneGraph->GetRoot(), parentEntity);
@@ -442,7 +466,7 @@ namespace services
         terrainComp.terrainMaterialRef = asset::AssetRef::fromPath(header.materialPath);
         terrainComp.isActive = true;
         terrainComp.isDirty = false;
-        terrainComp.activeTileCount = header.tileCount;
+        terrainComp.activeTileCount = static_cast<uint32_t>(grid->getTileCount());
         terrainComp.visibleTileCount = 0;
         terrainComp.savePath = path;
         terrainComp.saveDirty = false;
@@ -489,7 +513,11 @@ namespace services
             addTerrainCollider(parentHandle);
         }
 
-        vfLogInfo("TerrainService: Loaded terrain with {} tiles from {}", header.tileCount, path);
+        if (header.streamingConfig.enabled)
+            vfLogInfo("TerrainService: Loaded terrain with {}/{} initial tiles (streaming) from {}",
+                      terrainComp.activeTileCount, header.tileCount, path);
+        else
+            vfLogInfo("TerrainService: Loaded terrain with {} tiles from {}", header.tileCount, path);
 
         // Load vegetation data (density + placement) for each tile
         loadVegetation(parentHandle.id, path);
