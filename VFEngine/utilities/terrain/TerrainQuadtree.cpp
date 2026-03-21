@@ -1,4 +1,5 @@
 #include "TerrainQuadtree.hpp"
+#include "../print/Log.hpp"
 #include <algorithm>
 #include <limits>
 
@@ -368,6 +369,8 @@ namespace terrain
                                     float, float, float,
                                     std::vector<TerrainTile*>& results) const
     {
+        // Stub — will be implemented in VK-984 (predictive streaming cone)
+        vfLogWarning("TerrainQuadtree::queryCone is not implemented yet (VK-984)");
         results.clear();
     }
 

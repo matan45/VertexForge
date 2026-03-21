@@ -416,6 +416,8 @@ namespace services
     {
         if (header.streamingConfig.enabled)
         {
+            // Distance measured from world origin (0,0). The streamer corrects
+            // to actual camera position on the first frame after load.
             float loadRadiusSq = header.streamingConfig.loadRadius * header.streamingConfig.loadRadius;
             float tileSize = header.worldTileSize;
 

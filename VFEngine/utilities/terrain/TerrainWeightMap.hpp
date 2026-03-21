@@ -16,7 +16,9 @@ namespace terrain
         std::vector<std::vector<float>> layerWeights;
         uint32_t resolution = 0; // matches tile vertex count (33, 65, 129)
 
-        // Per-tile palette indirection: channel N maps to palette layer layerIndices[N]
+        // Per-tile palette indirection: channel N maps to palette layer layerIndices[N].
+        // Inactive channels may reference palette indices beyond activeLayerCount —
+        // these are safely ignored by the weight loop (w < 0.001 or paletteIdx >= layers.size()).
         std::array<uint8_t, WEIGHT_CHANNELS> layerIndices = {0, 1, 2, 3, 4, 5, 6, 7};
 
         [[nodiscard]] bool isInitialized() const { return resolution > 0 && !layerWeights.empty(); }

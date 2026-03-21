@@ -5,7 +5,6 @@
 
 namespace render::gpudriven
 {
-    static constexpr uint8_t FALLBACK_LOD = TERRAIN_LOD_LEVEL_COUNT - 1;
     TerrainStreamManager::TerrainStreamManager(TerrainMeshBuffer& terrainBuf,
                                                TerrainGPUAdapter& gpuAdapter)
         : terrainBuffer(terrainBuf)

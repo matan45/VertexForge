@@ -100,6 +100,8 @@ namespace render::gpudriven
         uint64_t currentFrame = 0;
         size_t currentMemoryUsage = 0;
 
+        static constexpr uint8_t FALLBACK_LOD = TERRAIN_LOD_LEVEL_COUNT - 1;
+
         static constexpr size_t LOD_MEMORY_ESTIMATE[TERRAIN_LOD_LEVEL_COUNT] = {
             6 * 1024 * 1024,    // LOD0: ~6MB
             1536 * 1024,        // LOD1: ~1.5MB
