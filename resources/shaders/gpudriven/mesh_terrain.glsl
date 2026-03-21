@@ -417,8 +417,7 @@ void main() {
     multiScatterCompensation(F0, brdf, metallic, specularScale, kD);
 
     vec3 diffuse = irradiance * albedo;
-    // Match mesh shader default iblSpecular (0.5) to avoid over-bright terrain reflections
-    vec3 specular = prefilteredColor * specularScale * 0.5;
+    vec3 specular = prefilteredColor * specularScale * 0.5;  // VK-1019
 
     float so = specularOcclusion(NdotV, ao, roughness);
     vec3 ambient = kD * diffuse * ao + specular * so;

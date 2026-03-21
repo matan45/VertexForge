@@ -55,6 +55,10 @@ namespace terrain
         boundsMinZ = mnZ;
         boundsMaxX = mxX;
         boundsMaxZ = mxZ;
+
+        size_t estimatedNodes = tileMap.size() * 2 + 16;
+        nodePool.reserve(estimatedNodes);
+
         rootIndex = allocNode(mnX, mnZ, mxX, mxZ);
 
         for (auto& [coord, tile] : tileMap)
@@ -65,6 +69,7 @@ namespace terrain
                 count++;
             }
         }
+
     }
 
     void TerrainQuadtree::insert(TerrainTile* tile)
@@ -101,13 +106,14 @@ namespace terrain
 
     void TerrainQuadtree::expandRoot(int32_t x, int32_t z)
     {
-        auto& root = nodePool[rootIndex];
-        int32_t sz = std::max(root.maxX - root.minX + 1, root.maxZ - root.minZ + 1) * 2;
+        int32_t sz = std::max(nodePool[rootIndex].maxX - nodePool[rootIndex].minX + 1,
+                              nodePool[rootIndex].maxZ - nodePool[rootIndex].minZ + 1) * 2;
         if (sz < 2) sz = 2;
 
-        int32_t newMinX = (x < root.minX) ? root.maxX - sz + 1 : root.minX;
-        int32_t newMinZ = (z < root.minZ) ? root.maxZ - sz + 1 : root.minZ;
+        int32_t newMinX = (x < nodePool[rootIndex].minX) ? nodePool[rootIndex].maxX - sz + 1 : nodePool[rootIndex].minX;
+        int32_t newMinZ = (z < nodePool[rootIndex].minZ) ? nodePool[rootIndex].maxZ - sz + 1 : nodePool[rootIndex].minZ;
 
+        nodePool.reserve(nodePool.size() + 1);
         uint32_t newRootIdx = allocNode(newMinX, newMinZ, newMinX + sz - 1, newMinZ + sz - 1);
         nodePool[newRootIdx].minY = nodePool[rootIndex].minY;
         nodePool[newRootIdx].maxY = nodePool[rootIndex].maxY;
@@ -137,62 +143,63 @@ namespace terrain
 
     void TerrainQuadtree::splitNode(uint32_t nodeIdx)
     {
-        auto& node = nodePool[nodeIdx];
-        if (node.isSingleCell())
+        if (nodePool[nodeIdx].isSingleCell())
             return;
 
-        int32_t mx = node.midX();
-        int32_t mz = node.midZ();
+        int32_t mx = nodePool[nodeIdx].midX();
+        int32_t mz = nodePool[nodeIdx].midZ();
+        int32_t nMinX = nodePool[nodeIdx].minX, nMinZ = nodePool[nodeIdx].minZ;
+        int32_t nMaxX = nodePool[nodeIdx].maxX, nMaxZ = nodePool[nodeIdx].maxZ;
 
-        node.children[0] = allocNode(node.minX, node.minZ, mx, mz);
-        node.children[1] = allocNode(mx + 1, node.minZ, node.maxX, mz);
-        node.children[2] = allocNode(node.minX, mz + 1, mx, node.maxZ);
-        node.children[3] = allocNode(mx + 1, mz + 1, node.maxX, node.maxZ);
+        // Pre-reserve to prevent reallocation during allocNode calls
+        nodePool.reserve(nodePool.size() + 4);
 
-        std::vector<TerrainTile*> oldTiles = std::move(node.tiles);
-        auto& nodeRef = nodePool[nodeIdx];
-        nodeRef.tiles.clear();
+        nodePool[nodeIdx].children[0] = allocNode(nMinX, nMinZ, mx, mz);
+        nodePool[nodeIdx].children[1] = allocNode(mx + 1, nMinZ, nMaxX, mz);
+        nodePool[nodeIdx].children[2] = allocNode(nMinX, mz + 1, mx, nMaxZ);
+        nodePool[nodeIdx].children[3] = allocNode(mx + 1, mz + 1, nMaxX, nMaxZ);
+
+        std::vector<TerrainTile*> oldTiles = std::move(nodePool[nodeIdx].tiles);
+        nodePool[nodeIdx].tiles.clear();
 
         for (auto* tile : oldTiles)
         {
-            int q = getQuadrant(nodeRef, tile->coord.x, tile->coord.z);
-            if (q >= 0 && nodeRef.children[q] != 0)
+            int q = getQuadrant(nodePool[nodeIdx], tile->coord.x, tile->coord.z);
+            if (q >= 0 && nodePool[nodeIdx].children[q] != 0)
             {
-                auto& child = nodePool[nodeRef.children[q]];
-                child.tiles.push_back(tile);
-                child.minY = std::min(child.minY, tile->worldBounds.min.y);
-                child.maxY = std::max(child.maxY, tile->worldBounds.max.y);
+                uint32_t childIdx = nodePool[nodeIdx].children[q];
+                nodePool[childIdx].tiles.push_back(tile);
+                nodePool[childIdx].minY = std::min(nodePool[childIdx].minY, tile->worldBounds.min.y);
+                nodePool[childIdx].maxY = std::max(nodePool[childIdx].maxY, tile->worldBounds.max.y);
             }
             else
             {
-                nodeRef.tiles.push_back(tile);
+                nodePool[nodeIdx].tiles.push_back(tile);
             }
         }
     }
 
     void TerrainQuadtree::insertRecursive(uint32_t nodeIdx, TerrainTile* tile, int depth)
     {
-        auto& node = nodePool[nodeIdx];
-        node.minY = std::min(node.minY, tile->worldBounds.min.y);
-        node.maxY = std::max(node.maxY, tile->worldBounds.max.y);
+        nodePool[nodeIdx].minY = std::min(nodePool[nodeIdx].minY, tile->worldBounds.min.y);
+        nodePool[nodeIdx].maxY = std::max(nodePool[nodeIdx].maxY, tile->worldBounds.max.y);
 
-        if (node.isLeaf())
+        if (nodePool[nodeIdx].isLeaf())
         {
-            if (static_cast<int>(node.tiles.size()) < SPLIT_THRESHOLD ||
-                depth >= MAX_DEPTH || node.isSingleCell())
+            if (static_cast<int>(nodePool[nodeIdx].tiles.size()) < SPLIT_THRESHOLD ||
+                depth >= MAX_DEPTH || nodePool[nodeIdx].isSingleCell())
             {
-                node.tiles.push_back(tile);
+                nodePool[nodeIdx].tiles.push_back(tile);
                 return;
             }
             splitNode(nodeIdx);
         }
 
-        auto& nodeRef = nodePool[nodeIdx];
-        int q = getQuadrant(nodeRef, tile->coord.x, tile->coord.z);
-        if (q >= 0 && nodeRef.children[q] != 0)
-            insertRecursive(nodeRef.children[q], tile, depth + 1);
+        int q = getQuadrant(nodePool[nodeIdx], tile->coord.x, tile->coord.z);
+        if (q >= 0 && nodePool[nodeIdx].children[q] != 0)
+            insertRecursive(nodePool[nodeIdx].children[q], tile, depth + 1);
         else
-            nodeRef.tiles.push_back(tile);
+            nodePool[nodeIdx].tiles.push_back(tile);
     }
 
     void TerrainQuadtree::remove(const TileCoord& coord)
