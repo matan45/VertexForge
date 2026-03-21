@@ -46,17 +46,17 @@ namespace core
     {
         while (!synchronizer.isStopRequested())
         {
-            uint32_t slot = synchronizer.waitForFrame();
+            uint64_t frame = synchronizer.waitForFrame();
 
             if (synchronizer.isStopRequested())
                 break;
 
             if (renderCallback)
             {
-                renderCallback(slot);
+                renderCallback(static_cast<uint32_t>(frame % MAX_FRAMES_IN_FLIGHT));
             }
 
-            synchronizer.frameComplete(slot);
+            synchronizer.frameComplete();
         }
     }
 }

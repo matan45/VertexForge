@@ -70,7 +70,7 @@ namespace render::preview
             0, nullptr
         );
 
-        device.getGraphicsQueue().submit(submitInfo, inFlightFences[imageIndex]);
+        device.submitGraphics(submitInfo, inFlightFences[imageIndex]);
 
         // Fence-based sync: inFlightFences[imageIndex] is waited on at the top of render()
         // when this imageIndex comes around again. No need to stall the entire queue.

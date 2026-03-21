@@ -134,7 +134,7 @@ namespace core {
 		submitInfo.signalSemaphoreCount = static_cast<uint32_t>(signalSemaphores.size());
 		submitInfo.pSignalSemaphores = signalSemaphores.data();
 
-		device.getGraphicsQueue().submit(submitInfo, inFlightFences[currentFrame]);
+		device.submitGraphics(submitInfo, inFlightFences[currentFrame]);
 
 		// Present the rendered image (use per-image semaphore)
 		present(acquiredImageIndex);
@@ -210,7 +210,15 @@ namespace core {
 		}
 	}
 
-	void RenderManager::draw(const vk::CommandBuffer& commandBuffer, uint32_t imageIdx) const
+	void RenderManager::snapshotImGuiDrawData()
+	{
+		if (imguiEnabled && imguiRender)
+		{
+			imguiRender->generateAndSnapshotDrawData();
+		}
+	}
+
+	void RenderManager::draw(const vk::CommandBuffer& commandBuffer, uint32_t imageIdx)
 	{
 		if (imguiEnabled)
 		{

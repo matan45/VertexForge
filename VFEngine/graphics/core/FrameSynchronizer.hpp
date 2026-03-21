@@ -1,7 +1,6 @@
 #pragma once
 
 #include "RenderManager.hpp"
-#include <array>
 #include <atomic>
 #include <condition_variable>
 #include <cstdint>
@@ -11,9 +10,12 @@ namespace core
 {
     /// Manages frame handoff between the main (game) thread and the render thread.
     ///
-    /// The main thread writes frame data into slot `N % MAX_FRAMES_IN_FLIGHT`,
-    /// then signals the render thread. The render thread picks up the slot,
-    /// renders, and signals completion so the main thread can reuse the slot.
+    /// Ensures strict sequencing: the main thread cannot start a new frame until
+    /// the render thread finishes the previous one. This is required because ImGui
+    /// has a single global context (NewFrame/Render must not overlap).
+    ///
+    /// The CPU/GPU overlap still happens: while the GPU executes frame N's commands
+    /// (after the render thread submits them), the CPU prepares frame N+1's data.
     class FrameSynchronizer
     {
     public:
@@ -24,13 +26,11 @@ namespace core
         FrameSynchronizer& operator=(const FrameSynchronizer&) = delete;
 
         /// Called by the main thread at the start of a frame.
-        /// Blocks if the render thread hasn't finished consuming the slot we need.
+        /// Blocks until the render thread has finished the previous frame.
         void beginFrame()
         {
-            uint32_t slot = frameNumber % MAX_FRAMES_IN_FLIGHT;
-            std::unique_lock lock(slotMutex[slot]);
-            slotCV[slot].wait(lock, [&] { return !slotInUse[slot]; });
-            slotInUse[slot] = true;
+            std::unique_lock lock(mutex);
+            cv.wait(lock, [&] { return !renderInProgress || stopRequested; });
         }
 
         /// Called by the main thread after frame data is ready.
@@ -38,62 +38,54 @@ namespace core
         void endFrame()
         {
             {
-                std::lock_guard lock(frameMutex);
+                std::lock_guard lock(mutex);
                 frameReady = true;
-                currentSlot = frameNumber % MAX_FRAMES_IN_FLIGHT;
+                renderInProgress = true;
                 frameNumber++;
             }
-            frameCV.notify_one();
+            cv.notify_all();
         }
 
         /// Called by the render thread to wait for a new frame.
-        /// Returns the slot index to render.
-        uint32_t waitForFrame()
+        /// Returns the current frame number.
+        uint64_t waitForFrame()
         {
-            std::unique_lock lock(frameMutex);
-            frameCV.wait(lock, [&] { return frameReady || stopRequested; });
+            std::unique_lock lock(mutex);
+            cv.wait(lock, [&] { return frameReady || stopRequested; });
             frameReady = false;
-            return currentSlot;
+            return frameNumber;
         }
 
         /// Called by the render thread after rendering is complete.
-        /// Frees the slot for the main thread to reuse.
-        void frameComplete(uint32_t slot)
+        /// Unblocks the main thread's beginFrame().
+        void frameComplete()
         {
             {
-                std::lock_guard lock(slotMutex[slot]);
-                slotInUse[slot] = false;
+                std::lock_guard lock(mutex);
+                renderInProgress = false;
             }
-            slotCV[slot].notify_one();
+            cv.notify_all();
         }
 
         /// Request the render thread to stop (for clean shutdown).
         void requestStop()
         {
             {
-                std::lock_guard lock(frameMutex);
+                std::lock_guard lock(mutex);
                 stopRequested = true;
             }
-            frameCV.notify_one();
+            cv.notify_all();
         }
 
         bool isStopRequested() const { return stopRequested; }
-
         uint64_t getFrameNumber() const { return frameNumber; }
 
     private:
-        // Per-slot synchronization (main thread waits for slot to be free)
-        std::array<std::mutex, MAX_FRAMES_IN_FLIGHT> slotMutex;
-        std::array<std::condition_variable, MAX_FRAMES_IN_FLIGHT> slotCV;
-        std::array<bool, MAX_FRAMES_IN_FLIGHT> slotInUse{};
-
-        // Frame-level synchronization (render thread waits for new frame)
-        std::mutex frameMutex;
-        std::condition_variable frameCV;
+        std::mutex mutex;
+        std::condition_variable cv;
         bool frameReady = false;
-        uint32_t currentSlot = 0;
+        bool renderInProgress = false;
         uint64_t frameNumber = 0;
-
         std::atomic<bool> stopRequested{false};
     };
 }

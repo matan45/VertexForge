@@ -215,8 +215,8 @@ namespace render::svt
         vk::SubmitInfo submitInfo{};
         submitInfo.commandBufferCount = 1;
         submitInfo.pCommandBuffers = &cmdBuf;
-        device.getGraphicsQueue().submit(submitInfo);
-        device.getGraphicsQueue().waitIdle();
+        device.submitGraphics(submitInfo);
+        device.waitGraphicsIdle();
 
         dev.freeCommandBuffers(commandPool, cmdBuf);
     }
@@ -315,8 +315,8 @@ namespace render::svt
         vk::SubmitInfo submitInfo{};
         submitInfo.commandBufferCount = 1;
         submitInfo.pCommandBuffers = &cmdBuf;
-        device.getGraphicsQueue().submit(submitInfo);
-        device.getGraphicsQueue().waitIdle();
+        device.submitGraphics(submitInfo);
+        device.waitGraphicsIdle();
         dev.freeCommandBuffers(device.getStagingCommandPool(), cmdBuf);
     }
 
@@ -378,8 +378,8 @@ namespace render::svt
         vk::SubmitInfo submitInfo{};
         submitInfo.commandBufferCount = 1;
         submitInfo.pCommandBuffers = &cmdBuf;
-        device.getGraphicsQueue().submit(submitInfo);
-        device.getGraphicsQueue().waitIdle();
+        device.submitGraphics(submitInfo);
+        device.waitGraphicsIdle();
 
         dev.freeCommandBuffers(commandPool, cmdBuf);
     }

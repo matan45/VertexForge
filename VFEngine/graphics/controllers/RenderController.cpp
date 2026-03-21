@@ -90,4 +90,9 @@ namespace controllers {
 		renderManager->setBlitSourceProvider(std::move(provider));
 	}
 
+	void RenderController::snapshotImGuiDrawData()
+	{
+		renderManager->snapshotImGuiDrawData();
+	}
+
 }

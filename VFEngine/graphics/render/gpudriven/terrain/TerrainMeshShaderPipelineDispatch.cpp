@@ -234,7 +234,7 @@ namespace render::gpudriven
     {
         if (!statsBuffer) return cachedStats;
 
-        device.getGraphicsQueue().waitIdle();
+        device.waitGraphicsIdle();
 
         vk::Device vkDevice = device.getLogicalDevice();
         void* data = vkDevice.mapMemory(statsBufferMemory, 0, sizeof(TerrainCullingStats));

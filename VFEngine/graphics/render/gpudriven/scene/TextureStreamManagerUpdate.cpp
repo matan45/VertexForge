@@ -110,8 +110,8 @@ namespace render::gpudriven
         vk::SubmitInfo submitInfo{};
         submitInfo.commandBufferCount = 1;
         submitInfo.pCommandBuffers = &cmd;
-        device.getGraphicsQueue().submit(submitInfo);
-        device.getGraphicsQueue().waitIdle();
+        device.submitGraphics(submitInfo);
+        device.waitGraphicsIdle();
 
         vkDevice.freeCommandBuffers(commandPool, cmd);
 
@@ -294,8 +294,8 @@ namespace render::gpudriven
             vk::SubmitInfo submitInfo{};
             submitInfo.commandBufferCount = 1;
             submitInfo.pCommandBuffers = &cmd;
-            device.getGraphicsQueue().submit(submitInfo);
-            device.getGraphicsQueue().waitIdle();
+            device.submitGraphics(submitInfo);
+            device.waitGraphicsIdle();
 
             vkDevice.freeCommandBuffers(commandPool, cmd);
 

@@ -422,7 +422,7 @@ namespace controllers
             0, nullptr
         );
 
-        device.getGraphicsQueue().submit(submitInfo, inFlightFences[imageIndex]);
+        device.submitGraphics(submitInfo, inFlightFences[imageIndex]);
 
         return static_cast<void*>(offscreenResources->colorImages[imageIndex].descriptorSet);
     }

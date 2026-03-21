@@ -127,6 +127,20 @@ namespace core
         // Lock before submitting to the graphics queue from any thread
         std::mutex& getGraphicsQueueMutex() const { return graphicsQueueMutex; }
 
+        // Thread-safe graphics queue submit (locks internally)
+        void submitGraphics(const vk::SubmitInfo& submitInfo, vk::Fence fence = nullptr) const
+        {
+            std::lock_guard lock(graphicsQueueMutex);
+            graphicsAndComputeQueue.submit(submitInfo, fence);
+        }
+
+        // Thread-safe graphics queue waitIdle (locks internally)
+        void waitGraphicsIdle() const
+        {
+            std::lock_guard lock(graphicsQueueMutex);
+            graphicsAndComputeQueue.waitIdle();
+        }
+
         const vk::CommandPool& getStagingCommandPool() const { return stagingCommandPool.get(); }
 
         DeviceMemoryInfo getDeviceMemoryInfo() const;

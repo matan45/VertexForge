@@ -29,7 +29,7 @@ namespace controllers
         core::Device& device;
         std::unique_ptr<core::RenderManager> renderManager;
         std::unique_ptr<core::RenderThread> renderThread;
-        bool useRenderThread = false;
+        bool useRenderThread = true;
 
     public:
         explicit RenderController(bool imguiEnabled = true);
@@ -53,5 +53,11 @@ namespace controllers
 
         /// Enable/disable the dedicated render thread. Must be called before init().
         void setUseRenderThread(bool enabled) { useRenderThread = enabled; }
+
+        /// Main thread: generate ImGui draw data and snapshot for render thread.
+        /// Call after ImGui::EndFrame() on the main thread.
+        void snapshotImGuiDrawData();
+
+        bool isRenderThreadEnabled() const { return useRenderThread; }
     };
 }

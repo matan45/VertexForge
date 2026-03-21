@@ -103,6 +103,32 @@ namespace imguiPass {
 		drawData->Clear();
 	}
 
+	void ImguiRender::generateAndSnapshotDrawData()
+	{
+		ImGui::Render();
+		ImDrawData* drawData = ImGui::GetDrawData();
+
+		{
+			std::lock_guard lock(snapshotMutex);
+			drawDataSnapshot.snapshot(drawData);
+		}
+
+		drawData->Clear();
+	}
+
+	void ImguiRender::renderSnapshotted(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex)
+	{
+		// The FrameSynchronizer ensures the main thread won't overwrite the snapshot
+		// while we're rendering (beginFrame blocks until frameComplete).
+		// No lock needed here — the snapshot is stable during render.
+		ImDrawData* snapshotData = drawDataSnapshot.getDrawData();
+
+		if (snapshotData)
+		{
+			renderFromSnapshot(commandBuffer, imageIndex, snapshotData);
+		}
+	}
+
 	void ImguiRender::renderFromSnapshot(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex,
 	                                      ImDrawData* snapshotDrawData) const
 	{

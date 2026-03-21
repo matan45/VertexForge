@@ -405,7 +405,7 @@ namespace render::gpudriven
         submitInfo.pCommandBuffers = &cmd;
 
         vk::Fence fence = vkDevice.createFence({});
-        device.getGraphicsQueue().submit(submitInfo, fence);
+        device.submitGraphics(submitInfo, fence);
 
         auto waitResult = vkDevice.waitForFences(fence, VK_TRUE, UINT64_MAX);
         vkDevice.destroyFence(fence);

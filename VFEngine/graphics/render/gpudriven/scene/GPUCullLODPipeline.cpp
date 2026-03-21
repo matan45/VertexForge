@@ -390,7 +390,6 @@ namespace render::gpudriven
         descriptorsNeedUpdate = false;
         hiZDescriptorNeedsUpdate = false;
 
-        vfLogWarning("GPUCullLODPipeline: Updated descriptors (Hi-Z: {})", hasHiZ ? "yes" : "no");
     }
 
     void GPUCullLODPipeline::dispatch(vk::CommandBuffer cmd, uint32_t objectCount)

@@ -626,7 +626,7 @@ namespace render::gpudriven
             return cachedStats;
         }
 
-        device.getGraphicsQueue().waitIdle();
+        device.waitGraphicsIdle();
 
         vk::Device vkDevice = device.getLogicalDevice();
 

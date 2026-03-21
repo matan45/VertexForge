@@ -125,7 +125,7 @@ namespace render
             submitInfo.signalSemaphoreCount = 0;
             submitInfo.pSignalSemaphores = nullptr;
 
-            device.getGraphicsQueue().submit(submitInfo, inFlightFences[imageIndex]);
+            device.submitGraphics(submitInfo, inFlightFences[imageIndex]);
         }
         else
         {
@@ -135,7 +135,7 @@ namespace render
                 0, nullptr
             );
 
-            device.getGraphicsQueue().submit(submitInfo, inFlightFences[imageIndex]);
+            device.submitGraphics(submitInfo, inFlightFences[imageIndex]);
         }
 
         // Fence-based sync: inFlightFences[imageIndex] is waited on at the top of render()

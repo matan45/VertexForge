@@ -226,7 +226,7 @@ namespace render
             0, nullptr
         );
 
-        device.getGraphicsQueue().submit(submitInfo, inFlightFences[imageIndex]);
+        device.submitGraphics(submitInfo, inFlightFences[imageIndex]);
 
         // Wait for THIS submission only (not the entire queue).
         // A fence wait is required here because restoreMainCamera() and

@@ -81,13 +81,19 @@ namespace core {
 		void setResizeCallback(ResizeCallback callback) { onResizeCallback = std::move(callback); }
 		void setBlitSourceProvider(BlitSourceProvider provider) { blitSourceProvider = std::move(provider); }
 
+		/// Main thread: snapshot ImGui draw data for render thread consumption.
+		void snapshotImGuiDrawData();
+
+		/// Whether ImGui is enabled (to know if snapshot is needed).
+		bool isImguiEnabled() const { return imguiEnabled; }
+
 		// Access for systems that need deferred deletion
 		DeferredDeletionQueue* getDeletionQueue() { return deletionQueue.get(); }
 
 		void cleanUp() const;
 
 	private:
-		void draw(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
+		void draw(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex);
 
 		void present(uint32_t frameIndex);
 	};
