@@ -231,9 +231,17 @@ namespace render::gpudriven
             bindings[1].descriptorCount = 1;
             bindings[1].stageFlags = vk::ShaderStageFlagBits::eTaskEXT;
 
+            std::array<vk::DescriptorBindingFlags, 2> bindingFlags;
+            bindingFlags.fill(vk::DescriptorBindingFlagBits::eUpdateAfterBind);
+            vk::DescriptorSetLayoutBindingFlagsCreateInfo flagsInfo{};
+            flagsInfo.bindingCount = static_cast<uint32_t>(bindingFlags.size());
+            flagsInfo.pBindingFlags = bindingFlags.data();
+
             vk::DescriptorSetLayoutCreateInfo layoutInfo{};
             layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
             layoutInfo.pBindings = bindings.data();
+            layoutInfo.pNext = &flagsInfo;
+            layoutInfo.flags = vk::DescriptorSetLayoutCreateFlagBits::eUpdateAfterBindPool;
             instanceDataLayout = vkDevice.createDescriptorSetLayout(layoutInfo);
 
             vk::DescriptorPoolSize poolSize{};
@@ -244,6 +252,7 @@ namespace render::gpudriven
             poolInfo.maxSets = 1;
             poolInfo.poolSizeCount = 1;
             poolInfo.pPoolSizes = &poolSize;
+            poolInfo.flags = vk::DescriptorPoolCreateFlagBits::eUpdateAfterBind;
             instanceDataPool = vkDevice.createDescriptorPool(poolInfo);
 
             vk::DescriptorSetAllocateInfo allocInfo{};
@@ -262,9 +271,16 @@ namespace render::gpudriven
             binding.descriptorCount = 1;
             binding.stageFlags = vk::ShaderStageFlagBits::eTaskEXT | vk::ShaderStageFlagBits::eMeshEXT;
 
+            vk::DescriptorBindingFlags camBindingFlag = vk::DescriptorBindingFlagBits::eUpdateAfterBind;
+            vk::DescriptorSetLayoutBindingFlagsCreateInfo camFlagsInfo{};
+            camFlagsInfo.bindingCount = 1;
+            camFlagsInfo.pBindingFlags = &camBindingFlag;
+
             vk::DescriptorSetLayoutCreateInfo layoutInfo{};
             layoutInfo.bindingCount = 1;
             layoutInfo.pBindings = &binding;
+            layoutInfo.pNext = &camFlagsInfo;
+            layoutInfo.flags = vk::DescriptorSetLayoutCreateFlagBits::eUpdateAfterBindPool;
             cameraLayout = vkDevice.createDescriptorSetLayout(layoutInfo);
 
             vk::DescriptorPoolSize poolSize{};
@@ -275,6 +291,7 @@ namespace render::gpudriven
             poolInfo.maxSets = 1;
             poolInfo.poolSizeCount = 1;
             poolInfo.pPoolSizes = &poolSize;
+            poolInfo.flags = vk::DescriptorPoolCreateFlagBits::eUpdateAfterBind;
             cameraPool = vkDevice.createDescriptorPool(poolInfo);
 
             vk::DescriptorSetAllocateInfo allocInfo{};

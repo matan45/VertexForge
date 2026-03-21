@@ -186,9 +186,17 @@ namespace render::vegetation
             bindings[i].stageFlags = vk::ShaderStageFlagBits::eCompute;
         }
 
+        std::array<vk::DescriptorBindingFlags, 5> bindingFlags;
+        bindingFlags.fill(vk::DescriptorBindingFlagBits::eUpdateAfterBind);
+        vk::DescriptorSetLayoutBindingFlagsCreateInfo flagsInfo{};
+        flagsInfo.bindingCount = static_cast<uint32_t>(bindingFlags.size());
+        flagsInfo.pBindingFlags = bindingFlags.data();
+
         vk::DescriptorSetLayoutCreateInfo layoutInfo{};
         layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
         layoutInfo.pBindings = bindings.data();
+        layoutInfo.pNext = &flagsInfo;
+        layoutInfo.flags = vk::DescriptorSetLayoutCreateFlagBits::eUpdateAfterBindPool;
 
         descriptorSetLayout = vkDevice.createDescriptorSetLayout(layoutInfo);
         vfLogInfo("GrassComputePipeline: Created descriptor set layout");
@@ -254,6 +262,7 @@ namespace render::vegetation
         poolInfo.maxSets = 1;
         poolInfo.poolSizeCount = 1;
         poolInfo.pPoolSizes = &poolSize;
+        poolInfo.flags = vk::DescriptorPoolCreateFlagBits::eUpdateAfterBind;
 
         descriptorPool = vkDevice.createDescriptorPool(poolInfo);
         vfLogInfo("GrassComputePipeline: Created descriptor pool");

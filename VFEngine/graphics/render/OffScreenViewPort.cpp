@@ -54,6 +54,20 @@ namespace render
 
         vk::Result result = device.getLogicalDevice().waitForFences(
             1, &inFlightFences[imageIndex], VK_TRUE, UINT64_MAX);
+
+        // Also wait for any other swapchain image that shares the same frame-in-flight
+        // secondary command buffer slot (e.g., images 0 and 2 both map to fi=0 when
+        // MAX_FRAMES_IN_FLIGHT=2). Without this, resetFrame() may reset secondary
+        // command buffers still pending from a different image's submission.
+        uint32_t fi = imageIndex % core::MAX_FRAMES_IN_FLIGHT;
+        for (uint32_t i = 0; i < static_cast<uint32_t>(inFlightFences.size()); i++)
+        {
+            if (i != imageIndex && (i % core::MAX_FRAMES_IN_FLIGHT) == fi)
+            {
+                device.getLogicalDevice().waitForFences(1, &inFlightFences[i], VK_TRUE, UINT64_MAX);
+            }
+        }
+
         result = device.getLogicalDevice().resetFences(1, &inFlightFences[imageIndex]);
         (void)result;
 

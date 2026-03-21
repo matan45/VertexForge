@@ -132,9 +132,17 @@ namespace render::shadow
         bindings[1].descriptorCount = 1;
         bindings[1].stageFlags = vk::ShaderStageFlagBits::eFragment | vk::ShaderStageFlagBits::eCompute;
 
+        std::array<vk::DescriptorBindingFlags, 2> sdBindingFlags;
+        sdBindingFlags.fill(vk::DescriptorBindingFlagBits::eUpdateAfterBind);
+        vk::DescriptorSetLayoutBindingFlagsCreateInfo sdFlagsInfo{};
+        sdFlagsInfo.bindingCount = static_cast<uint32_t>(sdBindingFlags.size());
+        sdFlagsInfo.pBindingFlags = sdBindingFlags.data();
+
         vk::DescriptorSetLayoutCreateInfo layoutInfo{};
         layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
         layoutInfo.pBindings = bindings.data();
+        layoutInfo.pNext = &sdFlagsInfo;
+        layoutInfo.flags = vk::DescriptorSetLayoutCreateFlagBits::eUpdateAfterBindPool;
 
         shadowDataLayout = logicalDevice.createDescriptorSetLayout(layoutInfo);
 
@@ -146,6 +154,7 @@ namespace render::shadow
         poolInfo.maxSets = 1;
         poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
         poolInfo.pPoolSizes = poolSizes.data();
+        poolInfo.flags = vk::DescriptorPoolCreateFlagBits::eUpdateAfterBind;
 
         shadowDataPool = logicalDevice.createDescriptorPool(poolInfo);
 
@@ -249,15 +258,16 @@ namespace render::shadow
         layoutInfo.pBindings = bindings.data();
 
         std::array<vk::DescriptorBindingFlags, 4> bindingFlags{};
-        bindingFlags[0] = {};
-        bindingFlags[1] = {};
-        bindingFlags[2] = vk::DescriptorBindingFlagBits::ePartiallyBound;
-        bindingFlags[3] = vk::DescriptorBindingFlagBits::ePartiallyBound;
+        bindingFlags[0] = vk::DescriptorBindingFlagBits::eUpdateAfterBind;
+        bindingFlags[1] = vk::DescriptorBindingFlagBits::eUpdateAfterBind;
+        bindingFlags[2] = vk::DescriptorBindingFlagBits::ePartiallyBound | vk::DescriptorBindingFlagBits::eUpdateAfterBind;
+        bindingFlags[3] = vk::DescriptorBindingFlagBits::ePartiallyBound | vk::DescriptorBindingFlagBits::eUpdateAfterBind;
 
         vk::DescriptorSetLayoutBindingFlagsCreateInfo bindingFlagsInfo{};
         bindingFlagsInfo.bindingCount = static_cast<uint32_t>(bindingFlags.size());
         bindingFlagsInfo.pBindingFlags = bindingFlags.data();
         layoutInfo.pNext = &bindingFlagsInfo;
+        layoutInfo.flags = vk::DescriptorSetLayoutCreateFlagBits::eUpdateAfterBindPool;
 
         shadowTextureLayout = logicalDevice.createDescriptorSetLayout(layoutInfo);
 
@@ -269,6 +279,7 @@ namespace render::shadow
         poolInfo.maxSets = 1;
         poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
         poolInfo.pPoolSizes = poolSizes.data();
+        poolInfo.flags = vk::DescriptorPoolCreateFlagBits::eUpdateAfterBind;
 
         shadowTexturePool = logicalDevice.createDescriptorPool(poolInfo);
 
