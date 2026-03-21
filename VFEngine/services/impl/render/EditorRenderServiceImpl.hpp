@@ -27,6 +27,7 @@ namespace services
         uint64_t frameCounter = 0;
         bool showNavmeshDebug = false;
         ViewportTextureHandle lastViewportHandle{};
+        bool viewportPrepared = false;  // true after prepare, consumed by render thread
 
         std::unordered_map<void*, EditorTextureHandle> loadedTextures;
         events::SubscriptionToken meshDataChangedToken;
@@ -43,6 +44,9 @@ namespace services
 
         ViewportTextureHandle getViewportTexture() override;
         void resizeViewport(uint32_t width, uint32_t height) override;
+
+        // Called by render thread to execute the deferred GPU render
+        void renderViewportDeferred();
         void getViewportSize(uint32_t& width, uint32_t& height) const override;
 
         bool setIBL(const std::string& hdrPath) override;

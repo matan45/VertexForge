@@ -70,4 +70,12 @@ namespace core
     {
         return coreInterface ? coreInterface->getRenderFn() : nullptr;
     }
+
+    void EditorBootstrap::setPreRenderCallback(std::function<void()> callback)
+    {
+        if (coreInterface)
+        {
+            coreInterface->setPreRenderCallback(std::move(callback));
+        }
+    }
 }

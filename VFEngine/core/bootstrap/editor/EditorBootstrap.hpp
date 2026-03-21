@@ -209,6 +209,9 @@ namespace core
         void setPostUpdateCallback(std::function<void()> callback);
         void triggerResize();
 
+        // Set callback to run on the render thread before swapchain present
+        void setPreRenderCallback(std::function<void()> callback);
+
         // Get internal frame step functions for task graph orchestration
         std::function<void()> getSceneGraphUpdateFn() const;
         std::function<void()> getImguiDrawFn() const;

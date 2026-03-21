@@ -64,6 +64,11 @@ namespace controllers {
 		mainLoop->setBlitSourceProvider(std::move(provider));
 	}
 
+	void CoreInterface::setPreRenderCallback(std::function<void()> callback)
+	{
+		mainLoop->setPreRenderCallback(std::move(callback));
+	}
+
 	std::function<void()> CoreInterface::getSceneGraphUpdateFn() const
 	{
 		return mainLoop->getSceneGraphUpdateFn();

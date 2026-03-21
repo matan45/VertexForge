@@ -62,6 +62,8 @@ namespace controllers {
 		{
 			renderThread = std::make_unique<core::RenderThread>();
 			renderThread->start([this](uint32_t /*frameSlot*/) {
+				if (preRenderCallback)
+					preRenderCallback();
 				renderManager->render();
 			});
 			vfLogInfo("RenderController: Render thread enabled");

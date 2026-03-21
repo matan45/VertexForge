@@ -52,6 +52,7 @@ namespace services
 
         frameCounter++;
 
+        // Prepare CPU-side data (main thread)
         offScreenProvider->prepareGrid();
         offScreenProvider->prepareCameras();
 
@@ -66,6 +67,21 @@ namespace services
         offScreenProvider->prepareFrameUICanvasOutlines();
         offScreenProvider->prepareFrameUIImages();
 
+        // Mark that preparation is done; GPU render will happen on the render thread
+        viewportPrepared = true;
+
+        // Return PREVIOUS frame's result (1-frame latency)
+        // The render thread will update lastViewportHandle after rendering
+        return lastViewportHandle;
+    }
+
+    void EditorRenderServiceImpl::renderViewportDeferred()
+    {
+        if (!viewportPrepared || !offScreenProvider)
+            return;
+
+        viewportPrepared = false;
+
         void* descriptorSet = offScreenProvider->render();
 
         ViewportTextureHandle handle;
@@ -74,7 +90,6 @@ namespace services
         handle.height = viewportHeight;
 
         lastViewportHandle = handle;
-        return handle;
     }
 
     void EditorRenderServiceImpl::resizeViewport(uint32_t width, uint32_t height)
@@ -86,6 +101,9 @@ namespace services
 
         viewportWidth = width;
         viewportHeight = height;
+
+        // Clear stale descriptor set — old offscreen resources will be destroyed during recreate
+        lastViewportHandle = ViewportTextureHandle{};
     }
 
     void EditorRenderServiceImpl::getViewportSize(uint32_t& width, uint32_t& height) const

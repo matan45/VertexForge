@@ -29,6 +29,7 @@ namespace controllers
         core::Device& device;
         std::unique_ptr<core::RenderManager> renderManager;
         std::unique_ptr<core::RenderThread> renderThread;
+        std::function<void()> preRenderCallback;
         bool useRenderThread = true;
 
     public:
@@ -54,8 +55,11 @@ namespace controllers
         /// Enable/disable the dedicated render thread. Must be called before init().
         void setUseRenderThread(bool enabled) { useRenderThread = enabled; }
 
+        /// Set a callback to run on the render thread BEFORE swapchain present.
+        /// Use this to move GPU work (e.g. offscreen scene rendering) to the render thread.
+        void setPreRenderCallback(std::function<void()> callback) { preRenderCallback = std::move(callback); }
+
         /// Main thread: generate ImGui draw data and snapshot for render thread.
-        /// Call after ImGui::EndFrame() on the main thread.
         void snapshotImGuiDrawData();
 
         bool isRenderThreadEnabled() const { return useRenderThread; }

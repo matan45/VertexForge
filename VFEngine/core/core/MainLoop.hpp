@@ -62,6 +62,9 @@ namespace core {
 		// Set blit source provider for runtime (offscreen -> swapchain blit)
 		void setBlitSourceProvider(std::function<void*(uint32_t)> provider);
 
+		// Set callback to run on the render thread before swapchain present
+		void setPreRenderCallback(std::function<void()> callback);
+
 	private:
 		void newFrame() const;
 		void endFrame() const;

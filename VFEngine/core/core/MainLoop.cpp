@@ -9,6 +9,7 @@
 #include "scene/LevelHandler.hpp"
 #include "threading/JobSystem.hpp"
 
+#include <thread>
 #include <imgui.h>
 #include <imgui_impl_vulkan.h>
 #include <imgui_impl_glfw.h>
@@ -104,6 +105,11 @@ namespace core {
 			VkImage raw = static_cast<VkImage>(p(idx));
 			return vk::Image(raw);
 		});
+	}
+
+	void MainLoop::setPreRenderCallback(std::function<void()> callback)
+	{
+		renderController->setPreRenderCallback(std::move(callback));
 	}
 
 	void MainLoop::newFrame() const
