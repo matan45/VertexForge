@@ -669,8 +669,9 @@ namespace services
                 float worldX = params.wMinX + vx * texelToWorld;
                 float worldZ = params.wMinZ + vy * texelToWorld;
 
-                float weights[4] = {1.0f, 0.0f, 0.0f, 0.0f};
-                uint32_t packedLI = 0;
+                float weights[terrain::WEIGHT_CHANNELS] = {};
+                weights[0] = 1.0f;
+                std::array<uint8_t, terrain::WEIGHT_CHANNELS> tileLayerIndices = {0,1,2,3,4,5,6,7};
 
                 for (const auto* tile : allTiles)
                 {
@@ -687,13 +688,10 @@ namespace services
                         uint32_t x0 = std::min(static_cast<uint32_t>(u * (wm.resolution - 1)), wm.resolution - 1);
                         uint32_t z0 = std::min(static_cast<uint32_t>(v * (wm.resolution - 1)), wm.resolution - 1);
 
-                        for (int ch = 0; ch < 4; ++ch)
+                        for (int ch = 0; ch < terrain::WEIGHT_CHANNELS; ++ch)
                             weights[ch] = wm.getWeight(ch, x0, z0);
 
-                        packedLI = wm.layerIndices[0]
-                                 | (static_cast<uint32_t>(wm.layerIndices[1]) << 8)
-                                 | (static_cast<uint32_t>(wm.layerIndices[2]) << 16)
-                                 | (static_cast<uint32_t>(wm.layerIndices[3]) << 24);
+                        tileLayerIndices = wm.layerIndices;
                         break;
                     }
                 }
@@ -701,11 +699,11 @@ namespace services
                 glm::vec3 albedo(0.0f), normal(0.0f);
                 float rough = 0.0f, metal = 0.0f, ao_val = 0.0f, totalW = 0.0f;
 
-                for (int ch = 0; ch < 4; ++ch)
+                for (int ch = 0; ch < terrain::WEIGHT_CHANNELS; ++ch)
                 {
                     float w = weights[ch];
                     if (w < 0.001f) continue;
-                    uint32_t li = (packedLI >> (ch * 8)) & 0xFFu;
+                    uint32_t li = tileLayerIndices[ch];
                     if (li >= layers.size()) continue;
 
                     const auto& layer = layers[li];
