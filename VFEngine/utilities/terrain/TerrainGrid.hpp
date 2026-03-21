@@ -4,6 +4,7 @@
 #include "TerrainTileGenerator.hpp"
 #include "TerrainSerializer.hpp"
 #include "TerrainFileCache.hpp"
+#include "TerrainQuadtree.hpp"
 #include <unordered_map>
 #include <vector>
 #include <memory>
@@ -17,6 +18,8 @@ namespace terrain
         std::unique_ptr<TerrainTileGenerator> generator;
         std::unordered_map<TileCoord, std::unique_ptr<TerrainTile>, TileCoordHash> tiles;
         std::shared_ptr<TerrainFileCache> fileCache;
+        TerrainQuadtree quadtree;
+        std::vector<TerrainTile*> lastVisibleTiles;
 
     public:
         explicit TerrainGrid(const TerrainTileConfig& config);
@@ -28,6 +31,9 @@ namespace terrain
         [[nodiscard]] const TerrainTile* getTile(const TileCoord& coord) const;
 
         [[nodiscard]] std::vector<TerrainTile*> getVisibleTiles(const math::Frustum& frustum);
+        [[nodiscard]] std::vector<TerrainTile*> getTilesInRange(const glm::vec3& center, float radius);
+        [[nodiscard]] std::vector<TerrainTile*> getTilesInCone(const glm::vec3& apex, const glm::vec3& dir,
+                                                               float halfAngle, float maxDist);
 
         void regenerateDirtyTiles(const glm::vec3& cameraPosition);
 

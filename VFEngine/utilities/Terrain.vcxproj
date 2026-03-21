@@ -103,6 +103,7 @@
     <ClInclude Include="terrain\TerrainHitResult.hpp" />
     <ClInclude Include="terrain\TerrainMaterialAsset.hpp" />
     <ClInclude Include="terrain\TerrainMaterialTypes.hpp" />
+    <ClInclude Include="terrain\TerrainQuadtree.hpp" />
     <ClInclude Include="terrain\TerrainSerializer.hpp" />
     <ClInclude Include="terrain\TerrainTile.hpp" />
     <ClInclude Include="terrain\TerrainTileGenerator.hpp" />
@@ -121,6 +122,7 @@
     <ClCompile Include="terrain\TerrainGrid.cpp" />
     <ClCompile Include="terrain\TerrainMaterialAsset.cpp" />
     <ClCompile Include="terrain\TerrainMeshletGen.cpp" />
+    <ClCompile Include="terrain\TerrainQuadtree.cpp" />
     <ClCompile Include="terrain\TerrainSerializer.cpp" />
     <ClCompile Include="terrain\TerrainSerializerRead.cpp" />
     <ClCompile Include="terrain\TerrainSerializerSave.cpp" />

@@ -427,55 +427,27 @@ namespace render::gpudriven
             std::memcpy(&packedLIFloat, &packedLI, sizeof(float));
             gpuTile.aabbMax = glm::vec4(tile->worldBounds.max, packedLIFloat);
 
-            // LOD meshlet data for each level
-            // Format: x = meshletOffset, y = meshletCount (total), z = baseVertexOffset, w = mainMeshletCount (surface only, no skirts)
-            gpuTile.lod0MeshletData = glm::uvec4(
-                alloc.lodAllocs[0].meshletOffset,
-                alloc.lodAllocs[0].meshletCount,
-                alloc.lodAllocs[0].vertexOffset,
-                tile->lodLevels[0].mainMeshletCount
-            );
-            gpuTile.lod1MeshletData = glm::uvec4(
-                alloc.lodAllocs[1].meshletOffset,
-                alloc.lodAllocs[1].meshletCount,
-                alloc.lodAllocs[1].vertexOffset,
-                tile->lodLevels[1].mainMeshletCount
-            );
-            gpuTile.lod2MeshletData = glm::uvec4(
-                alloc.lodAllocs[2].meshletOffset,
-                alloc.lodAllocs[2].meshletCount,
-                alloc.lodAllocs[2].vertexOffset,
-                tile->lodLevels[2].mainMeshletCount
-            );
-            gpuTile.lod3MeshletData = glm::uvec4(
-                alloc.lodAllocs[3].meshletOffset,
-                alloc.lodAllocs[3].meshletCount,
-                alloc.lodAllocs[3].vertexOffset,
-                tile->lodLevels[3].mainMeshletCount
-            );
-            gpuTile.lod4MeshletData = glm::uvec4(
-                alloc.lodAllocs[4].meshletOffset,
-                alloc.lodAllocs[4].meshletCount,
-                alloc.lodAllocs[4].vertexOffset,
-                tile->lodLevels[4].mainMeshletCount
-            );
-            gpuTile.lod5MeshletData = glm::uvec4(
-                alloc.lodAllocs[5].meshletOffset,
-                alloc.lodAllocs[5].meshletCount,
-                alloc.lodAllocs[5].vertexOffset,
-                tile->lodLevels[5].mainMeshletCount
-            );
+            glm::uvec4* meshletPtrs[] = {
+                &gpuTile.lod0MeshletData, &gpuTile.lod1MeshletData,
+                &gpuTile.lod2MeshletData, &gpuTile.lod3MeshletData,
+                &gpuTile.lod4MeshletData, &gpuTile.lod5MeshletData
+            };
+            for (uint32_t i = 0; i < TERRAIN_LOD_LEVEL_COUNT; ++i)
+            {
+                *meshletPtrs[i] = glm::uvec4(
+                    alloc.lodAllocs[i].meshletOffset,
+                    alloc.lodAllocs[i].meshletCount,
+                    alloc.lodAllocs[i].vertexOffset,
+                    tile->lodLevels[i].mainMeshletCount
+                );
+            }
 
-            // Use current geometric errors from tile (not stale allocation) for correct GPU LOD selection
             gpuTile.lodGeometricErrors = glm::vec4(
-                tile->lodLevels[0].geometricError,
-                tile->lodLevels[1].geometricError,
-                tile->lodLevels[2].geometricError,
-                tile->lodLevels[3].geometricError
+                tile->lodLevels[0].geometricError, tile->lodLevels[1].geometricError,
+                tile->lodLevels[2].geometricError, tile->lodLevels[3].geometricError
             );
             gpuTile.lodGeometricErrors2 = glm::vec4(
-                tile->lodLevels[4].geometricError,
-                tile->lodLevels[5].geometricError,
+                tile->lodLevels[4].geometricError, tile->lodLevels[5].geometricError,
                 0.0f, 0.0f
             );
 

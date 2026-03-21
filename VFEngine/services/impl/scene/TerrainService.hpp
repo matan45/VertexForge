@@ -163,6 +163,13 @@ namespace services
                                        std::vector<terrain::TileIndexEntry>& index,
                                        const std::string& path,
                                        uint64_t indexTableOffset = 0);
+        void loadInitialTiles(terrain::TerrainGrid& grid,
+                              const terrain::TerrainFileHeader& header,
+                              const std::vector<terrain::TileIndexEntry>& index);
+        void initTerrainComponent(components::TerrainComponent& comp,
+                                  const terrain::TerrainFileHeader& header,
+                                  const std::string& path,
+                                  uint32_t activeTileCount);
 
         void createTileEntity(EntityHandle parentEntity, terrain::TerrainTile* tile, int32_t tileX, int32_t tileZ);
         TerrainTileColliderInfo buildTileColliderInfo(const terrain::TerrainTile& tile,

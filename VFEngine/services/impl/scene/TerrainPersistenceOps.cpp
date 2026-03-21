@@ -408,6 +408,53 @@ namespace services
         return finishLoadTerrain(header, index, path, indexTableOffset);
     }
 
+    void TerrainService::loadInitialTiles(
+        terrain::TerrainGrid& grid,
+        const terrain::TerrainFileHeader& header,
+        const std::vector<terrain::TileIndexEntry>& index)
+    {
+        if (header.streamingConfig.enabled)
+        {
+            float loadRadiusSq = header.streamingConfig.loadRadius * header.streamingConfig.loadRadius;
+            float tileSize = header.worldTileSize;
+
+            for (const auto& entry : index)
+            {
+                float cx = (static_cast<float>(entry.coordX) + 0.5f) * tileSize;
+                float cz = (static_cast<float>(entry.coordZ) + 0.5f) * tileSize;
+                if (cx * cx + cz * cz <= loadRadiusSq)
+                    grid.addTileFromFile(terrain::TileCoord{entry.coordX, entry.coordZ});
+            }
+        }
+        else
+        {
+            grid.loadMetadataOnly(header, index);
+        }
+    }
+
+    void TerrainService::initTerrainComponent(
+        components::TerrainComponent& comp,
+        const terrain::TerrainFileHeader& header,
+        const std::string& path,
+        uint32_t activeTileCount)
+    {
+        comp.resolution = header.resolution;
+        comp.worldTileSize = header.worldTileSize;
+        comp.maxHeight = header.maxHeight;
+        comp.minHeight = header.minHeight;
+        comp.gridMinX = header.gridMinX;
+        comp.gridMinZ = header.gridMinZ;
+        comp.gridMaxX = header.gridMaxX;
+        comp.gridMaxZ = header.gridMaxZ;
+        comp.terrainMaterialRef = asset::AssetRef::fromPath(header.materialPath);
+        comp.isActive = true;
+        comp.isDirty = false;
+        comp.activeTileCount = activeTileCount;
+        comp.visibleTileCount = 0;
+        comp.savePath = path;
+        comp.saveDirty = false;
+    }
+
     EntityHandle TerrainService::finishLoadTerrain(
         terrain::TerrainFileHeader& header,
         std::vector<terrain::TileIndexEntry>& index,
@@ -422,76 +469,33 @@ namespace services
         tileConfig.skirtDepth = header.skirtDepth;
 
         auto grid = std::make_unique<terrain::TerrainGrid>(tileConfig);
-
         auto cache = std::make_shared<terrain::TerrainFileCache>(path, header, index, indexTableOffset);
         grid->setFileCache(cache);
 
-        if (header.streamingConfig.enabled)
-        {
-            // Streaming mode: only add tiles within loadRadius of origin.
-            // The streamer will handle loading remaining tiles as the camera moves.
-            float loadRadiusSq = header.streamingConfig.loadRadius * header.streamingConfig.loadRadius;
-            float tileSize = header.worldTileSize;
-
-            for (const auto& entry : index)
-            {
-                float cx = (static_cast<float>(entry.coordX) + 0.5f) * tileSize;
-                float cz = (static_cast<float>(entry.coordZ) + 0.5f) * tileSize;
-                float distSq = cx * cx + cz * cz;
-
-                if (distSq <= loadRadiusSq)
-                {
-                    grid->addTileFromFile(terrain::TileCoord{entry.coordX, entry.coordZ});
-                }
-            }
-        }
-        else
-        {
-            // Non-streaming: load all tiles as metadata-only
-            grid->loadMetadataOnly(header, index);
-        }
+        loadInitialTiles(*grid, header, index);
 
         scene::Entity parentEntity("Terrain");
         sceneGraph->addChild(sceneGraph->GetRoot(), parentEntity);
 
         auto& terrainComp = parentEntity.addComponent<components::TerrainComponent>();
-        terrainComp.resolution = header.resolution;
-        terrainComp.worldTileSize = header.worldTileSize;
-        terrainComp.maxHeight = header.maxHeight;
-        terrainComp.minHeight = header.minHeight;
-        terrainComp.gridMinX = header.gridMinX;
-        terrainComp.gridMinZ = header.gridMinZ;
-        terrainComp.gridMaxX = header.gridMaxX;
-        terrainComp.gridMaxZ = header.gridMaxZ;
-        terrainComp.terrainMaterialRef = asset::AssetRef::fromPath(header.materialPath);
-        terrainComp.isActive = true;
-        terrainComp.isDirty = false;
-        terrainComp.activeTileCount = static_cast<uint32_t>(grid->getTileCount());
-        terrainComp.visibleTileCount = 0;
-        terrainComp.savePath = path;
-        terrainComp.saveDirty = false;
+        initTerrainComponent(terrainComp, header, path, static_cast<uint32_t>(grid->getTileCount()));
 
         EntityHandle parentHandle = internal::toHandle(parentEntity.getHandle());
-
         createTileEntities(parentHandle, *grid);
 
         terrainGrids[parentHandle.id] = std::move(grid);
         fileCaches[parentHandle.id] = cache;
-        {
-            terrain::StreamingConfig stCfg;
-            stCfg.loadRadius = header.streamingConfig.loadRadius;
-            stCfg.unloadRadius = header.streamingConfig.unloadRadius;
-            stCfg.maxLoadsPerFrame = header.streamingConfig.maxLoadsPerFrame;
-            stCfg.maxUnloadsPerFrame = header.streamingConfig.maxUnloadsPerFrame;
-            auto streamer = std::make_unique<terrain::TerrainWorldStreamer>(stCfg);
-            streamer->setEnabled(header.streamingConfig.enabled);
-            worldStreamers[parentHandle.id] = std::move(streamer);
-        }
+
+        terrain::StreamingConfig stCfg{
+            header.streamingConfig.loadRadius, header.streamingConfig.unloadRadius,
+            header.streamingConfig.maxLoadsPerFrame, header.streamingConfig.maxUnloadsPerFrame
+        };
+        auto streamer = std::make_unique<terrain::TerrainWorldStreamer>(stCfg);
+        streamer->setEnabled(header.streamingConfig.enabled);
+        worldStreamers[parentHandle.id] = std::move(streamer);
 
         if (!header.materialPath.empty())
-        {
             syncWeightMapLayerCount(parentHandle.id, header.materialPath);
-        }
 
         events::terrain::TerrainCreatedNotification notification;
         notification.terrainEntity = parentHandle;
@@ -519,9 +523,7 @@ namespace services
         else
             vfLogInfo("TerrainService: Loaded terrain with {} tiles from {}", header.tileCount, path);
 
-        // Load vegetation data (density + placement) for each tile
         loadVegetation(parentHandle.id, path);
-
         return parentHandle;
     }
 
