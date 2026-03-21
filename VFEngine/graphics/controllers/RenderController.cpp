@@ -19,32 +19,17 @@ namespace controllers {
 
 	void RenderController::render()
 	{
-		if (useRenderThread && renderThread)
-		{
-			// Signal the render thread that a new frame is ready
-			renderThread->getSynchronizer().endFrame();
-		}
-		else
-		{
-			renderManager->render();
-		}
+		renderThread->getSynchronizer().endFrame();
 	}
 
 	void RenderController::beginFrame()
 	{
-		if (useRenderThread && renderThread)
-		{
-			renderThread->getSynchronizer().beginFrame();
-		}
+		renderThread->getSynchronizer().beginFrame();
 	}
 
 	void RenderController::reSize()
 	{
-		if (useRenderThread && renderThread)
-		{
-			// Wait for the render thread to finish all pending frames
-			renderThread->getSynchronizer().waitUntilIdle();
-		}
+		renderThread->getSynchronizer().waitUntilIdle();
 
 		device.getLogicalDevice().waitIdle();
 		swapChain.recreate(window->getWidth(), window->getHeight());
@@ -61,10 +46,8 @@ namespace controllers {
 	{
 		renderManager->init();
 
-		if (useRenderThread)
-		{
-			renderThread = std::make_unique<core::RenderThread>();
-			renderThread->start([this](uint32_t /*frameSlot*/) {
+		renderThread = std::make_unique<core::RenderThread>();
+		renderThread->start([this](uint32_t /*frameSlot*/) {
 				using Clock = std::chrono::high_resolution_clock;
 
 				static uint32_t renderThreadId = threading::TaskProfiler::instance().getMaxThreadId() + 1;
@@ -108,18 +91,14 @@ namespace controllers {
 
 				threading::TaskProfiler::instance().appendToLatestFrame(entries);
 			});
-			vfLogInfo("RenderController: Render thread enabled");
-		}
+		vfLogInfo("RenderController: Render thread enabled");
 	}
 
 	void RenderController::cleanUp()
 	{
 		// Stop render thread BEFORE any Vulkan cleanup
-		if (renderThread)
-		{
-			renderThread->stop();
-			renderThread.reset();
-		}
+		renderThread->stop();
+		renderThread.reset();
 
 		renderManager->cleanUp();
 	}

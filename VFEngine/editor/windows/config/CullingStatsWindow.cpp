@@ -32,53 +32,38 @@ namespace windows
                 // Find render thread entries (OffScreenRender, SwapchainPresent)
                 float offscreenMs = 0.0f;
                 float presentMs = 0.0f;
-                bool hasRenderThread = false;
 
                 for (const auto& entry : latestFrame.entries)
                 {
                     float durationMs = static_cast<float>(entry.endTimeNs - entry.startTimeNs) / 1e6f;
                     if (entry.name == "OffScreenRender")
-                    {
                         offscreenMs = durationMs;
-                        hasRenderThread = true;
-                    }
                     else if (entry.name == "SwapchainPresent")
-                    {
                         presentMs = durationMs;
-                        hasRenderThread = true;
-                    }
                 }
 
-                ImGui::Text("Status:");
-                ImGui::SameLine();
-                ImGui::TextColored(hasRenderThread ? ImVec4(0, 1, 0, 1) : ImVec4(1, 0, 0, 1),
-                                   hasRenderThread ? "ACTIVE" : "INACTIVE");
+                float totalMs = offscreenMs + presentMs;
+                ImGui::Text("  OffScreen Render:   %.2f ms", offscreenMs);
+                ImGui::Text("  Swapchain Present:  %.2f ms", presentMs);
+                ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f),
+                                   "  Total Render Thread: %.2f ms", totalMs);
 
-                if (hasRenderThread)
+                // Find main thread total (non-render-thread entries)
+                float mainThreadMs = 0.0f;
+                uint64_t mainStart = UINT64_MAX, mainEnd = 0;
+                for (const auto& entry : latestFrame.entries)
                 {
-                    float totalMs = offscreenMs + presentMs;
-                    ImGui::Text("  OffScreen Render:   %.2f ms", offscreenMs);
-                    ImGui::Text("  Swapchain Present:  %.2f ms", presentMs);
-                    ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f),
-                                       "  Total Render Thread: %.2f ms", totalMs);
-
-                    // Find main thread total (non-render-thread entries)
-                    float mainThreadMs = 0.0f;
-                    uint64_t mainStart = UINT64_MAX, mainEnd = 0;
-                    for (const auto& entry : latestFrame.entries)
+                    if (entry.name != "OffScreenRender" && entry.name != "SwapchainPresent" && entry.endTimeNs > 0)
                     {
-                        if (entry.name != "OffScreenRender" && entry.name != "SwapchainPresent" && entry.endTimeNs > 0)
-                        {
-                            mainStart = std::min(mainStart, entry.startTimeNs);
-                            mainEnd = std::max(mainEnd, entry.endTimeNs);
-                        }
+                        mainStart = std::min(mainStart, entry.startTimeNs);
+                        mainEnd = std::max(mainEnd, entry.endTimeNs);
                     }
-                    if (mainEnd > mainStart)
-                        mainThreadMs = static_cast<float>(mainEnd - mainStart) / 1e6f;
-
-                    ImGui::Text("  Main Thread:         %.2f ms", mainThreadMs);
-                    ImGui::Text("  Frame Total:         %.2f ms", static_cast<float>(latestFrame.frameDurationNs) / 1e6f);
                 }
+                if (mainEnd > mainStart)
+                    mainThreadMs = static_cast<float>(mainEnd - mainStart) / 1e6f;
+
+                ImGui::Text("  Main Thread:         %.2f ms", mainThreadMs);
+                ImGui::Text("  Frame Total:         %.2f ms", static_cast<float>(latestFrame.frameDurationNs) / 1e6f);
 
                 ImGui::Unindent();
             }
