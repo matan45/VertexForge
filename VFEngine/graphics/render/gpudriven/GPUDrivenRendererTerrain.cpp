@@ -291,7 +291,7 @@ namespace render::gpudriven
         else if (terrain.adapter)
         {
             render::gpudriven::TerrainTileKey key{coordX, coordZ};
-            for (uint32_t lod = 0; lod < 4; ++lod)
+            for (uint32_t lod = 0; lod < TERRAIN_LOD_LEVEL_COUNT; ++lod)
             {
                 terrain.adapter->removeTileLOD(key, lod);
             }

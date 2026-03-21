@@ -44,7 +44,7 @@ namespace render::gpudriven
     struct TerrainTileGeometry
     {
         std::string tileKey;
-        std::array<TerrainLODGeometry, LOD_LEVEL_COUNT> lods;
+        std::array<TerrainLODGeometry, TERRAIN_LOD_LEVEL_COUNT> lods;
         glm::vec3 aabbMin{0.0f};
         glm::vec3 aabbMax{0.0f};
         glm::vec4 boundingSphere{0.0f};
@@ -133,11 +133,11 @@ namespace render::gpudriven
 
         TerrainTileGeometry* allocateTile(
             const std::string& tileKey,
-            const std::array<uint32_t, LOD_LEVEL_COUNT>& vertexCounts,
-            const std::array<uint32_t, LOD_LEVEL_COUNT>& indexCounts,
-            const std::array<uint32_t, LOD_LEVEL_COUNT>& meshletCounts,
-            const std::array<uint32_t, LOD_LEVEL_COUNT>& meshletVertexCounts,
-            const std::array<uint32_t, LOD_LEVEL_COUNT>& meshletPrimitiveCounts,
+            const std::array<uint32_t, TERRAIN_LOD_LEVEL_COUNT>& vertexCounts,
+            const std::array<uint32_t, TERRAIN_LOD_LEVEL_COUNT>& indexCounts,
+            const std::array<uint32_t, TERRAIN_LOD_LEVEL_COUNT>& meshletCounts,
+            const std::array<uint32_t, TERRAIN_LOD_LEVEL_COUNT>& meshletVertexCounts,
+            const std::array<uint32_t, TERRAIN_LOD_LEVEL_COUNT>& meshletPrimitiveCounts,
             const glm::vec3& aabbMin,
             const glm::vec3& aabbMax);
 

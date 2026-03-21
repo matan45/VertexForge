@@ -35,13 +35,13 @@ namespace render::gpudriven
         float radius = glm::length(alloc.aabbMax - center);
         alloc.boundingSphere = glm::vec4(center, radius);
 
-        std::array<uint32_t, LOD_LEVEL_COUNT> vertexCounts{};
-        std::array<uint32_t, LOD_LEVEL_COUNT> indexCounts{};
-        std::array<uint32_t, LOD_LEVEL_COUNT> meshletCounts{};
-        std::array<uint32_t, LOD_LEVEL_COUNT> meshletVertexCounts{};
-        std::array<uint32_t, LOD_LEVEL_COUNT> meshletPrimitiveCounts{};
+        std::array<uint32_t, TERRAIN_LOD_LEVEL_COUNT> vertexCounts{};
+        std::array<uint32_t, TERRAIN_LOD_LEVEL_COUNT> indexCounts{};
+        std::array<uint32_t, TERRAIN_LOD_LEVEL_COUNT> meshletCounts{};
+        std::array<uint32_t, TERRAIN_LOD_LEVEL_COUNT> meshletVertexCounts{};
+        std::array<uint32_t, TERRAIN_LOD_LEVEL_COUNT> meshletPrimitiveCounts{};
 
-        for (uint32_t lod = 0; lod < LOD_LEVEL_COUNT; ++lod)
+        for (uint32_t lod = 0; lod < TERRAIN_LOD_LEVEL_COUNT; ++lod)
         {
             const auto& lodData = tile.lodLevels[lod];
             vertexCounts[lod] = static_cast<uint32_t>(lodData.vertices.size());
@@ -73,7 +73,7 @@ namespace render::gpudriven
             return nullptr;
         }
 
-        for (uint32_t lod = 0; lod < LOD_LEVEL_COUNT; ++lod)
+        for (uint32_t lod = 0; lod < TERRAIN_LOD_LEVEL_COUNT; ++lod)
         {
             if (!uploadLODData(alloc, tile.lodLevels[lod], lod, tile.worldOrigin))
             {
@@ -83,7 +83,7 @@ namespace render::gpudriven
             }
         }
 
-        for (uint32_t lod = 0; lod < LOD_LEVEL_COUNT; ++lod)
+        for (uint32_t lod = 0; lod < TERRAIN_LOD_LEVEL_COUNT; ++lod)
         {
             const auto& geomLod = tileGeom->lods[lod];
             alloc.lodAllocs[lod].vertexOffset = geomLod.vertexOffset;
@@ -107,7 +107,7 @@ namespace render::gpudriven
 
     bool TerrainGPUAdapter::uploadTileAddLOD(const terrain::TerrainTile& tile, uint32_t lodLevel)
     {
-        if (lodLevel >= LOD_LEVEL_COUNT)
+        if (lodLevel >= TERRAIN_LOD_LEVEL_COUNT)
         {
             vfLogError("TerrainGPUAdapter: Invalid LOD level {}", lodLevel);
             return false;
@@ -156,7 +156,7 @@ namespace render::gpudriven
         float radius = glm::length(it->second.aabbMax - center);
         it->second.boundingSphere = glm::vec4(center, radius);
 
-        for (uint32_t lod = 0; lod < LOD_LEVEL_COUNT; ++lod)
+        for (uint32_t lod = 0; lod < TERRAIN_LOD_LEVEL_COUNT; ++lod)
         {
             it->second.geometricErrors[lod] = tile.lodLevels[lod].geometricError;
         }
@@ -194,7 +194,7 @@ namespace render::gpudriven
 
     void TerrainGPUAdapter::removeTileLOD(const TerrainTileKey& key, uint32_t lodLevel)
     {
-        if (lodLevel >= LOD_LEVEL_COUNT) return;
+        if (lodLevel >= TERRAIN_LOD_LEVEL_COUNT) return;
 
         auto it = allocations_.find(key);
         if (it == allocations_.end()) return;
@@ -453,6 +453,18 @@ namespace render::gpudriven
                 alloc.lodAllocs[3].vertexOffset,
                 tile->lodLevels[3].mainMeshletCount
             );
+            gpuTile.lod4MeshletData = glm::uvec4(
+                alloc.lodAllocs[4].meshletOffset,
+                alloc.lodAllocs[4].meshletCount,
+                alloc.lodAllocs[4].vertexOffset,
+                tile->lodLevels[4].mainMeshletCount
+            );
+            gpuTile.lod5MeshletData = glm::uvec4(
+                alloc.lodAllocs[5].meshletOffset,
+                alloc.lodAllocs[5].meshletCount,
+                alloc.lodAllocs[5].vertexOffset,
+                tile->lodLevels[5].mainMeshletCount
+            );
 
             // Use current geometric errors from tile (not stale allocation) for correct GPU LOD selection
             gpuTile.lodGeometricErrors = glm::vec4(
@@ -460,6 +472,11 @@ namespace render::gpudriven
                 tile->lodLevels[1].geometricError,
                 tile->lodLevels[2].geometricError,
                 tile->lodLevels[3].geometricError
+            );
+            gpuTile.lodGeometricErrors2 = glm::vec4(
+                tile->lodLevels[4].geometricError,
+                tile->lodLevels[5].geometricError,
+                0.0f, 0.0f
             );
 
             gpuTile.coordX = key.coordX;

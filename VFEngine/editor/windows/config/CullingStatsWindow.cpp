@@ -270,8 +270,8 @@ namespace windows
                 ImGui::Separator();
 
                 ImGui::Text("LOD Distribution:");
-                ImGui::Text("  LOD0: %u  LOD1: %u  LOD2: %u  LOD3: %u",
-                            t.lodCount0, t.lodCount1, t.lodCount2, t.lodCount3);
+                ImGui::Text("  LOD0: %u  LOD1: %u  LOD2: %u  LOD3: %u  LOD4: %u  LOD5: %u",
+                            t.lodCount0, t.lodCount1, t.lodCount2, t.lodCount3, t.lodCount4, t.lodCount5);
 
                 ImGui::Separator();
 

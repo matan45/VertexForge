@@ -36,8 +36,10 @@ layout(std430, set = 11, binding = 1) buffer TerrainStatsBuffer {
     uint lodCount1;
     uint lodCount2;
     uint lodCount3;
+    uint lodCount4;
+    uint lodCount5;
     uint culledByOcclusion;
-    uint padding[2];
+    uint padding[3];
 } stats;
 
 // Hi-Z texture for meshlet occlusion culling (from depth prepass)
@@ -96,8 +98,9 @@ uint selectLODByGeometricError(TerrainTileGPUData tile, float distance, float sc
     float screenFactor = screenHeight / distance * lodBias;
 
     // Select the COARSEST LOD where projected error is below threshold
-    // Check from coarsest (LOD 3) to finest (LOD 0)
-    // LOD 3 has the highest geometric error
+    // Check from coarsest (LOD 5) to finest (LOD 0)
+    if (tile.lodGeometricErrors2.y * screenFactor < threshold) return 5;
+    if (tile.lodGeometricErrors2.x * screenFactor < threshold) return 4;
     if (tile.lodGeometricErrors.w * screenFactor < threshold) return 3;
     if (tile.lodGeometricErrors.z * screenFactor < threshold) return 2;
     if (tile.lodGeometricErrors.y * screenFactor < threshold) return 1;
@@ -110,7 +113,7 @@ uint findBestAvailableLOD(TerrainTileGPUData tile, uint idealLOD) {
     if (data.y > 0) return idealLOD; // meshletCount > 0
 
     // Try finer LODs first (lower indices = higher detail)
-    for (uint lod = 0; lod < 4; lod++) {
+    for (uint lod = 0; lod < 6; lod++) {
         uvec4 lodData = getTerrainLODMeshletData(tile, lod);
         if (lodData.y > 0) return lod;
     }
@@ -189,7 +192,9 @@ void main() {
             if (selectedLOD == 0) atomicAdd(stats.lodCount0, 1);
             else if (selectedLOD == 1) atomicAdd(stats.lodCount1, 1);
             else if (selectedLOD == 2) atomicAdd(stats.lodCount2, 1);
-            else atomicAdd(stats.lodCount3, 1);
+            else if (selectedLOD == 3) atomicAdd(stats.lodCount3, 1);
+            else if (selectedLOD == 4) atomicAdd(stats.lodCount4, 1);
+            else atomicAdd(stats.lodCount5, 1);
 
             uvec4 meshletData = getTerrainLODMeshletData(tile, selectedLOD);
             meshletOffset = meshletData.x;

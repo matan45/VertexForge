@@ -100,11 +100,13 @@ namespace render::gpudriven
         uint64_t currentFrame = 0;
         size_t currentMemoryUsage = 0;
 
-        static constexpr size_t LOD_MEMORY_ESTIMATE[4] = {
+        static constexpr size_t LOD_MEMORY_ESTIMATE[TERRAIN_LOD_LEVEL_COUNT] = {
             6 * 1024 * 1024,    // LOD0: ~6MB
             1536 * 1024,        // LOD1: ~1.5MB
             400 * 1024,         // LOD2: ~400KB
-            100 * 1024          // LOD3: ~100KB
+            100 * 1024,         // LOD3: ~100KB
+            25 * 1024,          // LOD4: ~25KB
+            10 * 1024           // LOD5: ~10KB
         };
 
     public:

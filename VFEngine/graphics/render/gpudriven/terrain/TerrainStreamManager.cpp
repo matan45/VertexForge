@@ -5,6 +5,7 @@
 
 namespace render::gpudriven
 {
+    static constexpr uint8_t FALLBACK_LOD = TERRAIN_LOD_LEVEL_COUNT - 1;
     TerrainStreamManager::TerrainStreamManager(TerrainMeshBuffer& terrainBuf,
                                                TerrainGPUAdapter& gpuAdapter)
         : terrainBuffer(terrainBuf)
@@ -90,7 +91,7 @@ namespace render::gpudriven
                 infoIt->second.lastAccessFrame = currentFrame;
             }
 
-            if (!infoIt->second.hasLODLoaded(3))
+            if (!infoIt->second.hasLODLoaded(FALLBACK_LOD))
             {
                 if (fallbackUploads >= config.maxFallbackUploadsPerFrame ||
                     fallbackBytes >= config.maxFallbackBytesPerFrame)
@@ -98,25 +99,25 @@ namespace render::gpudriven
                     continue;
                 }
 
-                if (tile->lodLevels[3].isEmpty())
+                if (tile->lodLevels[FALLBACK_LOD].isEmpty())
                 {
                     if (!tileDataLoader || fileReadsThisFrame >= maxFileReadsPerFrame)
                         continue;
-                    if (!tileDataLoader(*tile, 3))
+                    if (!tileDataLoader(*tile, FALLBACK_LOD))
                         continue;
                     fileReadsThisFrame++;
                 }
 
-                if (adapter.uploadTileAddLOD(*tile, 3))
+                if (adapter.uploadTileAddLOD(*tile, FALLBACK_LOD))
                 {
-                    infoIt->second.setLODLoaded(3);
+                    infoIt->second.setLODLoaded(FALLBACK_LOD);
                     if (infoIt->second.currentLoadedLOD == 255)
                     {
-                        infoIt->second.currentLoadedLOD = 3;
+                        infoIt->second.currentLoadedLOD = FALLBACK_LOD;
                     }
                     infoIt->second.state = TerrainTileStreamState::FallbackOnly;
 
-                    size_t lodMemory = estimateLODMemory(*tile, 3);
+                    size_t lodMemory = estimateLODMemory(*tile, FALLBACK_LOD);
                     infoIt->second.gpuMemoryUsage += lodMemory;
                     currentMemoryUsage += lodMemory;
                     stats.uploadsThisFrame++;
@@ -143,7 +144,7 @@ namespace render::gpudriven
             TerrainTileKey key{tile->coord.x, tile->coord.z};
             auto infoIt = tileInfos.find(key);
 
-            for (uint8_t lod = 0; lod < LOD_LEVEL_COUNT; ++lod)
+            for (uint8_t lod = 0; lod < TERRAIN_LOD_LEVEL_COUNT; ++lod)
             {
                 if (!tile->isLODGPUDirty(lod))
                     continue;
@@ -200,7 +201,7 @@ namespace render::gpudriven
 
             uint8_t targetLOD = info.targetLOD;
 
-            for (uint8_t lod = 0; lod < 3; ++lod)
+            for (uint8_t lod = 0; lod < FALLBACK_LOD; ++lod)
             {
                 if (lod <= targetLOD && !info.hasLODLoaded(lod))
                 {
@@ -294,7 +295,7 @@ namespace render::gpudriven
 
             if (info.currentLoadedLOD == 0)
                 stats.fullDetailTiles++;
-            else if (info.currentLoadedLOD == 3)
+            else if (info.currentLoadedLOD == TERRAIN_LOD_LEVEL_COUNT - 1)
                 stats.fallbackTiles++;
         }
     }
@@ -304,7 +305,9 @@ namespace render::gpudriven
         if (distance < 50.0f)  return 0;
         if (distance < 150.0f) return 1;
         if (distance < 300.0f) return 2;
-        return 3;
+        if (distance < 500.0f) return 3;
+        if (distance < 800.0f) return 4;
+        return 5;
     }
 
     float TerrainStreamManager::calculatePriority(float distance,
@@ -349,7 +352,7 @@ namespace render::gpudriven
             if (info.lastAccessFrame == currentFrame)
                 continue;
 
-            for (uint8_t lod = 0; lod < (config.keepFallbackLoaded ? 3 : 4); ++lod)
+            for (uint8_t lod = 0; lod < (config.keepFallbackLoaded ? FALLBACK_LOD : TERRAIN_LOD_LEVEL_COUNT); ++lod)
             {
                 if (!info.hasLODLoaded(lod))
                     continue;
@@ -424,7 +427,7 @@ namespace render::gpudriven
                 }
             }
 
-            if (info.currentLoadedLOD == 3)
+            if (info.currentLoadedLOD == FALLBACK_LOD)
             {
                 info.state = TerrainTileStreamState::FallbackOnly;
             }
@@ -437,7 +440,7 @@ namespace render::gpudriven
 
     size_t TerrainStreamManager::estimateLODMemory(const terrain::TerrainTile& tile, uint8_t lodLevel) const
     {
-        if (lodLevel >= 4)
+        if (lodLevel >= TERRAIN_LOD_LEVEL_COUNT)
             return 0;
 
         const auto& lodData = tile.lodLevels[lodLevel];

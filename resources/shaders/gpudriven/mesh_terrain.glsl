@@ -518,13 +518,15 @@ void main() {
     }
 
     if (viewModeValue == 2u) {
-        vec3 lodColors[4] = vec3[4](
-            vec3(0.0, 1.0, 0.0),
-            vec3(1.0, 1.0, 0.0),
-            vec3(1.0, 0.5, 0.0),
-            vec3(1.0, 0.0, 0.0)
+        vec3 lodColors[6] = vec3[6](
+            vec3(0.0, 1.0, 0.0),   // LOD0: green
+            vec3(1.0, 1.0, 0.0),   // LOD1: yellow
+            vec3(1.0, 0.5, 0.0),   // LOD2: orange
+            vec3(1.0, 0.0, 0.0),   // LOD3: red
+            vec3(0.5, 0.0, 0.5),   // LOD4: purple
+            vec3(0.0, 0.0, 1.0)    // LOD5: blue
         );
-        uint lod = min(fragLODLevel, 3u);
+        uint lod = min(fragLODLevel, 5u);
         color = mix(color, lodColors[lod], 0.5);
     }
 

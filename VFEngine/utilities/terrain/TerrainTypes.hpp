@@ -19,7 +19,7 @@ namespace terrain
     constexpr std::array<uint32_t, 3> TILE_VERTEX_COUNTS = {33, 65, 129};
     constexpr std::array<uint32_t, 3> TILE_QUAD_COUNTS = {32, 64, 128};
 
-    constexpr uint32_t TERRAIN_LOD_COUNT = 4;
+    constexpr uint32_t TERRAIN_LOD_COUNT = 6;
 
     enum class TileEdge : uint8_t
     {
