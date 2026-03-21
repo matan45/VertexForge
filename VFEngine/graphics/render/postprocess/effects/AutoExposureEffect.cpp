@@ -338,19 +338,7 @@ namespace render::postprocess
             bindings[1].descriptorCount = 1;
             bindings[1].stageFlags = vk::ShaderStageFlagBits::eCompute;
 
-            std::array<vk::DescriptorBindingFlags, 2> histBindingFlags;
-            histBindingFlags.fill(vk::DescriptorBindingFlagBits::eUpdateAfterBind);
-            vk::DescriptorSetLayoutBindingFlagsCreateInfo histFlagsInfo{};
-            histFlagsInfo.bindingCount = static_cast<uint32_t>(histBindingFlags.size());
-            histFlagsInfo.pBindingFlags = histBindingFlags.data();
-
-            vk::DescriptorSetLayoutCreateInfo layoutInfo{};
-            layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
-            layoutInfo.pBindings = bindings.data();
-            layoutInfo.pNext = &histFlagsInfo;
-            layoutInfo.flags = vk::DescriptorSetLayoutCreateFlagBits::eUpdateAfterBindPool;
-
-            histogramDescriptorSetLayout = dev.createDescriptorSetLayout(layoutInfo);
+            histogramDescriptorSetLayout = core::PipelineUtilities::createUpdateAfterBindLayout(dev, bindings.data(), static_cast<uint32_t>(bindings.size()));
         }
 
         // Reduce layout: SSBO histogram (binding 0) + SSBO exposure (binding 1)
@@ -366,19 +354,7 @@ namespace render::postprocess
             bindings[1].descriptorCount = 1;
             bindings[1].stageFlags = vk::ShaderStageFlagBits::eCompute;
 
-            std::array<vk::DescriptorBindingFlags, 2> reduceBindingFlags;
-            reduceBindingFlags.fill(vk::DescriptorBindingFlagBits::eUpdateAfterBind);
-            vk::DescriptorSetLayoutBindingFlagsCreateInfo reduceFlagsInfo{};
-            reduceFlagsInfo.bindingCount = static_cast<uint32_t>(reduceBindingFlags.size());
-            reduceFlagsInfo.pBindingFlags = reduceBindingFlags.data();
-
-            vk::DescriptorSetLayoutCreateInfo layoutInfo{};
-            layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
-            layoutInfo.pBindings = bindings.data();
-            layoutInfo.pNext = &reduceFlagsInfo;
-            layoutInfo.flags = vk::DescriptorSetLayoutCreateFlagBits::eUpdateAfterBindPool;
-
-            reduceDescriptorSetLayout = dev.createDescriptorSetLayout(layoutInfo);
+            reduceDescriptorSetLayout = core::PipelineUtilities::createUpdateAfterBindLayout(dev, bindings.data(), static_cast<uint32_t>(bindings.size()));
         }
 
         // Passthrough layout: sampler2D (binding 0) - for the graphics passthrough
@@ -405,14 +381,7 @@ namespace render::postprocess
         poolSizes[1].type = vk::DescriptorType::eStorageBuffer;
         poolSizes[1].descriptorCount = 4;
 
-        vk::DescriptorPoolCreateInfo poolInfo{};
-        poolInfo.flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet |
-                         vk::DescriptorPoolCreateFlagBits::eUpdateAfterBind;
-        poolInfo.maxSets = 2;
-        poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
-        poolInfo.pPoolSizes = poolSizes.data();
-
-        descriptorPool = device.getLogicalDevice().createDescriptorPool(poolInfo);
+        descriptorPool = core::PipelineUtilities::createUpdateAfterBindPool(device.getLogicalDevice(), 2, poolSizes.data(), static_cast<uint32_t>(poolSizes.size()), vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet);
     }
 
     void AutoExposureEffect::createDescriptorSets()

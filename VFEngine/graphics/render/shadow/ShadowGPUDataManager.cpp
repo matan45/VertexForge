@@ -3,6 +3,7 @@
 #include "ShadowResourcePool.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/BufferUtilities.hpp"
+#include "../../core/PipelineUtilities.hpp"
 #include "print/Log.hpp"
 #include <cmath>
 
@@ -132,31 +133,13 @@ namespace render::shadow
         bindings[1].descriptorCount = 1;
         bindings[1].stageFlags = vk::ShaderStageFlagBits::eFragment | vk::ShaderStageFlagBits::eCompute;
 
-        std::array<vk::DescriptorBindingFlags, 2> sdBindingFlags;
-        sdBindingFlags.fill(vk::DescriptorBindingFlagBits::eUpdateAfterBind);
-        vk::DescriptorSetLayoutBindingFlagsCreateInfo sdFlagsInfo{};
-        sdFlagsInfo.bindingCount = static_cast<uint32_t>(sdBindingFlags.size());
-        sdFlagsInfo.pBindingFlags = sdBindingFlags.data();
+        shadowDataLayout = core::PipelineUtilities::createUpdateAfterBindLayout(logicalDevice, bindings.data(), static_cast<uint32_t>(bindings.size()));
 
-        vk::DescriptorSetLayoutCreateInfo layoutInfo{};
-        layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
-        layoutInfo.pBindings = bindings.data();
-        layoutInfo.pNext = &sdFlagsInfo;
-        layoutInfo.flags = vk::DescriptorSetLayoutCreateFlagBits::eUpdateAfterBindPool;
+        vk::DescriptorPoolSize shadowDataPoolSize{};
+        shadowDataPoolSize.type = vk::DescriptorType::eStorageBuffer;
+        shadowDataPoolSize.descriptorCount = 2;
 
-        shadowDataLayout = logicalDevice.createDescriptorSetLayout(layoutInfo);
-
-        std::array<vk::DescriptorPoolSize, 1> poolSizes{};
-        poolSizes[0].type = vk::DescriptorType::eStorageBuffer;
-        poolSizes[0].descriptorCount = 2;
-
-        vk::DescriptorPoolCreateInfo poolInfo{};
-        poolInfo.maxSets = 1;
-        poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
-        poolInfo.pPoolSizes = poolSizes.data();
-        poolInfo.flags = vk::DescriptorPoolCreateFlagBits::eUpdateAfterBind;
-
-        shadowDataPool = logicalDevice.createDescriptorPool(poolInfo);
+        shadowDataPool = core::PipelineUtilities::createUpdateAfterBindPool(logicalDevice, 1, &shadowDataPoolSize, 1);
 
         vk::DescriptorSetAllocateInfo allocInfo{};
         allocInfo.descriptorPool = shadowDataPool;
@@ -271,17 +254,11 @@ namespace render::shadow
 
         shadowTextureLayout = logicalDevice.createDescriptorSetLayout(layoutInfo);
 
-        std::array<vk::DescriptorPoolSize, 1> poolSizes{};
-        poolSizes[0].type = vk::DescriptorType::eCombinedImageSampler;
-        poolSizes[0].descriptorCount = 2 + 2 * ShadowConstants::MAX_POINT_SHADOW_CASTERS;
+        vk::DescriptorPoolSize shadowTexPoolSize{};
+        shadowTexPoolSize.type = vk::DescriptorType::eCombinedImageSampler;
+        shadowTexPoolSize.descriptorCount = 2 + 2 * ShadowConstants::MAX_POINT_SHADOW_CASTERS;
 
-        vk::DescriptorPoolCreateInfo poolInfo{};
-        poolInfo.maxSets = 1;
-        poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
-        poolInfo.pPoolSizes = poolSizes.data();
-        poolInfo.flags = vk::DescriptorPoolCreateFlagBits::eUpdateAfterBind;
-
-        shadowTexturePool = logicalDevice.createDescriptorPool(poolInfo);
+        shadowTexturePool = core::PipelineUtilities::createUpdateAfterBindPool(logicalDevice, 1, &shadowTexPoolSize, 1);
 
         vk::DescriptorSetAllocateInfo allocInfo{};
         allocInfo.descriptorPool = shadowTexturePool;

@@ -1,6 +1,7 @@
 #include "GPUCullLODPipeline.hpp"
 #include "../../../core/Device.hpp"
 #include "../../../core/Shader.hpp"
+#include "../../../core/PipelineUtilities.hpp"
 #include "../GPUDrivenTypes.hpp"
 #include "print/Log.hpp"
 #include <array>
@@ -135,19 +136,8 @@ namespace render::gpudriven
         bindings[6].descriptorCount = 1;
         bindings[6].stageFlags = vk::ShaderStageFlagBits::eCompute;
 
-        std::array<vk::DescriptorBindingFlags, 7> bindingFlags;
-        bindingFlags.fill(vk::DescriptorBindingFlagBits::eUpdateAfterBind);
-        vk::DescriptorSetLayoutBindingFlagsCreateInfo flagsInfo{};
-        flagsInfo.bindingCount = static_cast<uint32_t>(bindingFlags.size());
-        flagsInfo.pBindingFlags = bindingFlags.data();
-
-        vk::DescriptorSetLayoutCreateInfo layoutInfo{};
-        layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
-        layoutInfo.pBindings = bindings.data();
-        layoutInfo.pNext = &flagsInfo;
-        layoutInfo.flags = vk::DescriptorSetLayoutCreateFlagBits::eUpdateAfterBindPool;
-
-        descriptorSetLayout = vkDevice.createDescriptorSetLayout(layoutInfo);
+        descriptorSetLayout = core::PipelineUtilities::createUpdateAfterBindLayout(
+            vkDevice, bindings.data(), static_cast<uint32_t>(bindings.size()));
         vfLogInfo("GPUCullLODPipeline: Created descriptor set layout");
     }
 
@@ -209,13 +199,8 @@ namespace render::gpudriven
         poolSizes[2].type = vk::DescriptorType::eCombinedImageSampler;
         poolSizes[2].descriptorCount = 1;
 
-        vk::DescriptorPoolCreateInfo poolInfo{};
-        poolInfo.maxSets = 1;
-        poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
-        poolInfo.pPoolSizes = poolSizes.data();
-        poolInfo.flags = vk::DescriptorPoolCreateFlagBits::eUpdateAfterBind;
-
-        descriptorPool = vkDevice.createDescriptorPool(poolInfo);
+        descriptorPool = core::PipelineUtilities::createUpdateAfterBindPool(
+            vkDevice, 1, poolSizes.data(), static_cast<uint32_t>(poolSizes.size()));
         vfLogInfo("GPUCullLODPipeline: Created descriptor pool");
     }
 

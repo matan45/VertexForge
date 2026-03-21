@@ -121,5 +121,19 @@ namespace core
 		static WireframePipelineResult createWireframePipeline(const WireframePipelineConfig& config);
 		static GraphicsPipelineResult createGraphicsPipeline(const GraphicsPipelineConfig& config);
 		static MeshShaderPipelineResult createMeshShaderPipeline(const MeshShaderPipelineConfig& config);
+
+		/// Create a descriptor set layout with eUpdateAfterBind on all bindings.
+		static vk::DescriptorSetLayout createUpdateAfterBindLayout(
+			vk::Device device,
+			const vk::DescriptorSetLayoutBinding* bindings,
+			uint32_t bindingCount);
+
+		/// Create a descriptor pool with eUpdateAfterBind flag.
+		static vk::DescriptorPool createUpdateAfterBindPool(
+			vk::Device device,
+			uint32_t maxSets,
+			const vk::DescriptorPoolSize* poolSizes,
+			uint32_t poolSizeCount,
+			vk::DescriptorPoolCreateFlags extraFlags = {});
 	};
 }

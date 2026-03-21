@@ -2,6 +2,7 @@
 #include "../core/Device.hpp"
 #include "../core/Shader.hpp"
 #include "../core/BufferUtilities.hpp"
+#include "../core/PipelineUtilities.hpp"
 #include "print/Log.hpp"
 
 namespace animation
@@ -34,18 +35,7 @@ namespace animation
             bindings[i].stageFlags = vk::ShaderStageFlagBits::eCompute;
         }
 
-        std::array<vk::DescriptorBindingFlags, 8> bindingFlags;
-        bindingFlags.fill(vk::DescriptorBindingFlagBits::eUpdateAfterBind);
-        vk::DescriptorSetLayoutBindingFlagsCreateInfo flagsInfo{};
-        flagsInfo.bindingCount = static_cast<uint32_t>(bindingFlags.size());
-        flagsInfo.pBindingFlags = bindingFlags.data();
-
-        vk::DescriptorSetLayoutCreateInfo layoutInfo{};
-        layoutInfo.pNext = &flagsInfo;
-        layoutInfo.flags = vk::DescriptorSetLayoutCreateFlagBits::eUpdateAfterBindPool;
-        layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
-        layoutInfo.pBindings = bindings.data();
-        descriptorSetLayout = vkDevice.createDescriptorSetLayout(layoutInfo);
+        descriptorSetLayout = core::PipelineUtilities::createUpdateAfterBindLayout(vkDevice, bindings.data(), static_cast<uint32_t>(bindings.size()));
 
         vk::PipelineLayoutCreateInfo pipelineLayoutInfo{};
         pipelineLayoutInfo.setLayoutCount = 1;
@@ -76,12 +66,7 @@ namespace animation
         poolSize.type = vk::DescriptorType::eStorageBuffer;
         poolSize.descriptorCount = 8;
 
-        vk::DescriptorPoolCreateInfo poolInfo{};
-        poolInfo.flags = vk::DescriptorPoolCreateFlagBits::eUpdateAfterBind;
-        poolInfo.maxSets = 1;
-        poolInfo.poolSizeCount = 1;
-        poolInfo.pPoolSizes = &poolSize;
-        descriptorPool = vkDevice.createDescriptorPool(poolInfo);
+        descriptorPool = core::PipelineUtilities::createUpdateAfterBindPool(vkDevice, 1, &poolSize, 1);
 
         vk::DescriptorSetAllocateInfo allocInfo{};
         allocInfo.descriptorPool = descriptorPool;

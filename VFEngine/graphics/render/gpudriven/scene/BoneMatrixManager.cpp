@@ -1,6 +1,7 @@
 #include "BoneMatrixManager.hpp"
 #include "../../../core/Device.hpp"
 #include "../../../core/BufferUtilities.hpp"
+#include "../../../core/PipelineUtilities.hpp"
 #include "print/Log.hpp"
 #include "../GPUDrivenTypes.hpp"
 #include <algorithm>
@@ -180,18 +181,8 @@ namespace render::gpudriven
             vk::ShaderStageFlagBits::eCompute;
         boneBinding.pImmutableSamplers = nullptr;
 
-        vk::DescriptorBindingFlags boneBindingFlag = vk::DescriptorBindingFlagBits::eUpdateAfterBind;
-        vk::DescriptorSetLayoutBindingFlagsCreateInfo boneFlagsInfo{};
-        boneFlagsInfo.bindingCount = 1;
-        boneFlagsInfo.pBindingFlags = &boneBindingFlag;
-
-        vk::DescriptorSetLayoutCreateInfo layoutInfo{};
-        layoutInfo.bindingCount = 1;
-        layoutInfo.pBindings = &boneBinding;
-        layoutInfo.pNext = &boneFlagsInfo;
-        layoutInfo.flags = vk::DescriptorSetLayoutCreateFlagBits::eUpdateAfterBindPool;
-
-        descriptorSetLayout = vkDevice.createDescriptorSetLayout(layoutInfo);
+        descriptorSetLayout = core::PipelineUtilities::createUpdateAfterBindLayout(
+            vkDevice, &boneBinding, 1);
     }
 
     void BoneMatrixManager::createDescriptorPool()
@@ -202,13 +193,8 @@ namespace render::gpudriven
         poolSize.type = vk::DescriptorType::eStorageBuffer;
         poolSize.descriptorCount = 1;
 
-        vk::DescriptorPoolCreateInfo poolInfo{};
-        poolInfo.maxSets = 1;
-        poolInfo.poolSizeCount = 1;
-        poolInfo.pPoolSizes = &poolSize;
-        poolInfo.flags = vk::DescriptorPoolCreateFlagBits::eUpdateAfterBind;
-
-        descriptorPool = vkDevice.createDescriptorPool(poolInfo);
+        descriptorPool = core::PipelineUtilities::createUpdateAfterBindPool(
+            vkDevice, 1, &poolSize, 1);
     }
 
     void BoneMatrixManager::allocateDescriptorSet()

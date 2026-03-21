@@ -1,6 +1,7 @@
 #include "ShadowPassPipeline.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/Shader.hpp"
+#include "../../core/PipelineUtilities.hpp"
 #include "print/Log.hpp"
 #include <array>
 
@@ -372,31 +373,16 @@ namespace render::shadow
         binding.descriptorCount = 1;
         binding.stageFlags = vk::ShaderStageFlagBits::eTaskEXT;
 
-        vk::DescriptorBindingFlags cameraBindingFlag = vk::DescriptorBindingFlagBits::eUpdateAfterBind;
-        vk::DescriptorSetLayoutBindingFlagsCreateInfo cameraFlagsInfo{};
-        cameraFlagsInfo.bindingCount = 1;
-        cameraFlagsInfo.pBindingFlags = &cameraBindingFlag;
-
-        vk::DescriptorSetLayoutCreateInfo layoutInfo{};
-        layoutInfo.bindingCount = 1;
-        layoutInfo.pBindings = &binding;
-        layoutInfo.pNext = &cameraFlagsInfo;
-        layoutInfo.flags = vk::DescriptorSetLayoutCreateFlagBits::eUpdateAfterBindPool;
-
-        cameraUBOLayout = vkDevice.createDescriptorSetLayout(layoutInfo);
+        cameraUBOLayout = core::PipelineUtilities::createUpdateAfterBindLayout(
+            vkDevice, &binding, 1);
 
         // Create descriptor pool
         vk::DescriptorPoolSize poolSize{};
         poolSize.type = vk::DescriptorType::eUniformBuffer;
         poolSize.descriptorCount = 1;
 
-        vk::DescriptorPoolCreateInfo poolInfo{};
-        poolInfo.maxSets = 1;
-        poolInfo.poolSizeCount = 1;
-        poolInfo.pPoolSizes = &poolSize;
-        poolInfo.flags = vk::DescriptorPoolCreateFlagBits::eUpdateAfterBind;
-
-        cameraDescriptorPool = vkDevice.createDescriptorPool(poolInfo);
+        cameraDescriptorPool = core::PipelineUtilities::createUpdateAfterBindPool(
+            vkDevice, 1, &poolSize, 1);
 
         // Allocate descriptor set
         vk::DescriptorSetAllocateInfo allocInfo{};

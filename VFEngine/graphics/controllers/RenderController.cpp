@@ -47,51 +47,40 @@ namespace controllers {
 		renderManager->init();
 
 		renderThread = std::make_unique<core::RenderThread>();
-		renderThread->start([this](uint32_t /*frameSlot*/) {
-				using Clock = std::chrono::high_resolution_clock;
-
-				static uint32_t renderThreadId = threading::TaskProfiler::instance().getMaxThreadId() + 1;
-
-				// Get the base time from the latest profiler frame so our timestamps align
-				// with the task graph entries (they use relative time from frame start).
-				auto baseTime = Clock::now();
-
-				std::vector<threading::TaskProfileEntry> entries;
-
-				if (preRenderCallback)
-				{
-					auto t0 = Clock::now();
-					preRenderCallback();
-					auto t1 = Clock::now();
-
-					threading::TaskProfileEntry entry;
-					entry.name = "OffScreenRender";
-					entry.threadId = renderThreadId;
-					entry.startTimeNs = static_cast<uint64_t>(
-						std::chrono::duration_cast<std::chrono::nanoseconds>(t0 - baseTime).count());
-					entry.endTimeNs = static_cast<uint64_t>(
-						std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - baseTime).count());
-					entries.push_back(entry);
-				}
-
-				{
-					auto t0 = Clock::now();
-					renderManager->render();
-					auto t1 = Clock::now();
-
-					threading::TaskProfileEntry entry;
-					entry.name = "SwapchainPresent";
-					entry.threadId = renderThreadId;
-					entry.startTimeNs = static_cast<uint64_t>(
-						std::chrono::duration_cast<std::chrono::nanoseconds>(t0 - baseTime).count());
-					entry.endTimeNs = static_cast<uint64_t>(
-						std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - baseTime).count());
-					entries.push_back(entry);
-				}
-
-				threading::TaskProfiler::instance().appendToLatestFrame(entries);
-			});
+		renderThread->start([this](uint32_t) { renderThreadCallback(); });
 		vfLogInfo("RenderController: Render thread enabled");
+	}
+
+	void RenderController::renderThreadCallback()
+	{
+		using Clock = std::chrono::high_resolution_clock;
+
+		static uint32_t renderThreadId = threading::TaskProfiler::instance().getMaxThreadId() + 1;
+		auto baseTime = Clock::now();
+
+		std::vector<threading::TaskProfileEntry> entries;
+
+		auto profileBlock = [&](const char* name, auto&& fn) {
+			auto t0 = Clock::now();
+			fn();
+			auto t1 = Clock::now();
+
+			threading::TaskProfileEntry entry;
+			entry.name = name;
+			entry.threadId = renderThreadId;
+			entry.startTimeNs = static_cast<uint64_t>(
+				std::chrono::duration_cast<std::chrono::nanoseconds>(t0 - baseTime).count());
+			entry.endTimeNs = static_cast<uint64_t>(
+				std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - baseTime).count());
+			entries.push_back(entry);
+		};
+
+		if (preRenderCallback)
+			profileBlock("OffScreenRender", preRenderCallback);
+
+		profileBlock("SwapchainPresent", [this] { renderManager->render(); });
+
+		threading::TaskProfiler::instance().appendToLatestFrame(entries);
 	}
 
 	void RenderController::cleanUp()

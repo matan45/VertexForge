@@ -31,6 +31,8 @@ namespace controllers
         std::unique_ptr<core::RenderThread> renderThread;
         std::function<void()> preRenderCallback;
 
+        void renderThreadCallback();
+
     public:
         explicit RenderController(bool imguiEnabled = true);
         ~RenderController();
