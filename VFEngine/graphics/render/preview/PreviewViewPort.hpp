@@ -42,7 +42,7 @@ namespace render::preview
         PreviewRenderHandler* getRenderHandler() const { return renderHandler.get(); }
 
     private:
-        void draw(const vk::CommandBuffer& commandBuffer) const;
+        void draw(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
         void createOffscreenResources();
         void cleanupOffscreenResources();
         void updateDescriptorSets(vk::DescriptorSet& descriptorSet, const vk::ImageView& imageView) const;

@@ -1,9 +1,11 @@
 #pragma once
 
 #include "../FreeListAllocator.hpp"
+#include "../../../core/RenderManager.hpp"
 #include <vulkan/vulkan.hpp>
 #include <glm/glm.hpp>
 #include <entt/entt.hpp>
+#include <array>
 #include <unordered_map>
 #include <vector>
 
@@ -25,9 +27,16 @@ namespace render::gpudriven {
 
         vk::Buffer boneBuffer;
         vk::DeviceMemory boneBufferMemory;
-        vk::Buffer stagingBuffer;
-        vk::DeviceMemory stagingMemory;
-        void* stagingMapped = nullptr;
+
+        struct StagingFrame
+        {
+            vk::Buffer buffer;
+            vk::DeviceMemory memory;
+            void* mapped = nullptr;
+        };
+
+        std::array<StagingFrame, core::MAX_FRAMES_IN_FLIGHT> stagingFrames{};
+        uint32_t currentStagingFrame = 0;
 
         vk::DescriptorSetLayout descriptorSetLayout;
         vk::DescriptorPool descriptorPool;
@@ -60,6 +69,8 @@ namespace render::gpudriven {
 
         vk::DescriptorSetLayout getDescriptorSetLayout() const { return descriptorSetLayout; }
         vk::DescriptorSet getDescriptorSet() const { return descriptorSet; }
+
+        void advanceStagingFrame() { currentStagingFrame = (currentStagingFrame + 1) % core::MAX_FRAMES_IN_FLIGHT; }
 
         uint32_t getAllocatedCount() const { return static_cast<uint32_t>(allocations.size()); }
         uint32_t getCapacity() const { return maxBoneMatrices; }

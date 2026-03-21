@@ -21,7 +21,7 @@ namespace controllers {
 		mainLoop->run();
 	}
 
-	void CoreInterface::cleanUp() const
+	void CoreInterface::cleanUp()
 	{
 		animatorSystem->cleanUp();
 		mainLoop->cleanUp();

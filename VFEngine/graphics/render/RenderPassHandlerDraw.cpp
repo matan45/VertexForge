@@ -4,7 +4,6 @@
 #include "../core/SwapChain.hpp"
 #include "../core/Device.hpp"
 #include "../core/ThreadCommandPoolManager.hpp"
-#include "../core/RenderManager.hpp"
 #include "ClearColor.hpp"
 #include "IBL.hpp"
 #include "DebugRenderer.hpp"
@@ -279,8 +278,7 @@ namespace render
         bool hasCustomShaderMeshes, bool wboitActive) const
     {
         auto sceneRecordStart = std::chrono::high_resolution_clock::now();
-        uint32_t frameIndex = core::RenderManager::getImageIndex();
-        sceneThreadPoolManager->resetFrame(frameIndex);
+        sceneThreadPoolManager->resetFrame(imageIndex);
 
         vk::RenderPass rp = meshPipeline->getRenderPass();
         vk::Framebuffer fb = meshPipeline->getFramebuffer(imageIndex);
@@ -318,7 +316,7 @@ namespace render
         vk::CommandBuffer overlayCmd{nullptr};
 
         auto meshFuture = threading::JobSystem::instance().submit([&]() {
-            meshCmd = sceneThreadPoolManager->getSecondary(0, frameIndex);
+            meshCmd = sceneThreadPoolManager->getSecondary(0, imageIndex);
             setupSecondary(meshCmd);
             gpuDrivenRenderer->renderDraw(meshCmd, iblDescriptorSet);
             if (!wboitActive) gpuDrivenRenderer->renderTransparentDraw(meshCmd, iblDescriptorSet);
@@ -330,7 +328,7 @@ namespace render
         if (hasTerrain)
         {
             terrainFuture = threading::JobSystem::instance().submit([&]() {
-                terrainCmd = sceneThreadPoolManager->getSecondary(1, frameIndex);
+                terrainCmd = sceneThreadPoolManager->getSecondary(1, imageIndex);
                 setupSecondary(terrainCmd);
                 gpuDrivenRenderer->renderTerrainDraw(terrainCmd, iblDescriptorSet);
                 terrainCmd.end();
@@ -341,7 +339,7 @@ namespace render
         if (hasGrass)
         {
             grassFuture = threading::JobSystem::instance().submit([&]() {
-                grassCmd = sceneThreadPoolManager->getSecondary(2, frameIndex);
+                grassCmd = sceneThreadPoolManager->getSecondary(2, imageIndex);
                 setupSecondary(grassCmd);
                 gpuDrivenRenderer->renderGrassDraw(grassCmd, iblDescriptorSet);
                 grassCmd.end();
@@ -352,7 +350,7 @@ namespace render
         if (hasWater || hasBillboards)
         {
             waterFuture = threading::JobSystem::instance().submit([&]() {
-                waterCmd = sceneThreadPoolManager->getSecondary(3, frameIndex);
+                waterCmd = sceneThreadPoolManager->getSecondary(3, imageIndex);
                 setupSecondary(waterCmd);
                 if (hasWater) gpuDrivenRenderer->renderWaterDraw(waterCmd, iblDescriptorSet);
                 if (hasBillboards) gpuDrivenRenderer->renderBillboardDraw(waterCmd, iblDescriptorSet);
@@ -365,7 +363,7 @@ namespace render
         if (grassFuture.valid()) grassFuture.get();
         if (waterFuture.valid()) waterFuture.get();
 
-        overlayCmd = sceneThreadPoolManager->getSecondary(4, frameIndex);
+        overlayCmd = sceneThreadPoolManager->getSecondary(4, imageIndex);
         setupSecondary(overlayCmd);
         if (hasCustomShaderMeshes)
             meshPipeline->renderMeshList(overlayCmd, imageIndex, customShaderMeshDrawList, currentFrustum);

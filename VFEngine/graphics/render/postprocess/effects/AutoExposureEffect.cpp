@@ -65,7 +65,10 @@ namespace render::postprocess
         createPassthroughPipeline(renderPass, extent);
 
         ExposureData initialData{1.0f, 1.0f, 0.18f, 0.0f};
-        std::memcpy(exposureBufferMapped, &initialData, sizeof(ExposureData));
+        for (auto& ef : exposureFrames)
+        {
+            std::memcpy(ef.mapped, &initialData, sizeof(ExposureData));
+        }
 
         initialized = true;
     }
@@ -151,8 +154,10 @@ namespace render::postprocess
     void AutoExposureEffect::preRecord(const vk::CommandBuffer& commandBuffer,
                                         vk::DescriptorSet inputDescriptorSet)
     {
-        auto* mapped = static_cast<ExposureData*>(exposureBufferMapped);
-        computedExposure = mapped->currentExposure;
+        // Read exposure from the previous frame's buffer
+        uint32_t readFrame = (currentExposureFrame + core::MAX_FRAMES_IN_FLIGHT - 1) % core::MAX_FRAMES_IN_FLIGHT;
+        auto* readMapped = static_cast<ExposureData*>(exposureFrames[readFrame].mapped);
+        computedExposure = readMapped->currentExposure;
         if (computedExposure <= 0.0f || std::isnan(computedExposure))
             computedExposure = 1.0f;
 
@@ -213,6 +218,9 @@ namespace render::postprocess
             vk::PipelineStageFlagBits::eComputeShader,
             {}, {}, histBarrier, {});
 
+        // Update reduce descriptor set with current frame's exposure buffer
+        updateReduceDescriptorSet();
+
         // Dispatch histogram reduce
         ReducePushConstants reducePC{};
         reducePC.minLogLuminance = MIN_LOG_LUMINANCE;
@@ -239,13 +247,16 @@ namespace render::postprocess
         vk::BufferMemoryBarrier expBarrier{};
         expBarrier.srcAccessMask = vk::AccessFlagBits::eShaderWrite;
         expBarrier.dstAccessMask = vk::AccessFlagBits::eHostRead;
-        expBarrier.buffer = exposureBuffer;
+        expBarrier.buffer = exposureFrames[currentExposureFrame].buffer;
         expBarrier.size = VK_WHOLE_SIZE;
 
         commandBuffer.pipelineBarrier(
             vk::PipelineStageFlagBits::eComputeShader,
             vk::PipelineStageFlagBits::eHost,
             {}, {}, expBarrier, {});
+
+        // Advance to next frame
+        currentExposureFrame = (currentExposureFrame + 1) % core::MAX_FRAMES_IN_FLIGHT;
     }
 
     void AutoExposureEffect::record(const vk::CommandBuffer& commandBuffer,
@@ -297,14 +308,17 @@ namespace render::postprocess
 
         core::BufferUtilities::createBuffer(histReq, histogramBuffer, histogramBufferMemory);
 
-        // Exposure buffer - host visible for CPU readback
-        core::BufferInfoRequest expReq(dev, device.getPhysicalDevice());
-        expReq.size = sizeof(ExposureData);
-        expReq.usage = vk::BufferUsageFlagBits::eStorageBuffer;
-        expReq.properties = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
+        // Exposure buffers - host visible for CPU readback (per-frame)
+        for (auto& ef : exposureFrames)
+        {
+            core::BufferInfoRequest expReq(dev, device.getPhysicalDevice());
+            expReq.size = sizeof(ExposureData);
+            expReq.usage = vk::BufferUsageFlagBits::eStorageBuffer;
+            expReq.properties = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
 
-        core::BufferUtilities::createBuffer(expReq, exposureBuffer, exposureBufferMemory);
-        exposureBufferMapped = dev.mapMemory(exposureBufferMemory, 0, sizeof(ExposureData), {});
+            core::BufferUtilities::createBuffer(expReq, ef.buffer, ef.memory);
+            ef.mapped = dev.mapMemory(ef.memory, 0, sizeof(ExposureData), {});
+        }
     }
 
     void AutoExposureEffect::createDescriptorSetLayouts()
@@ -408,31 +422,8 @@ namespace render::postprocess
             reduceDescriptorSet = dev.allocateDescriptorSets(allocInfo)[0];
         }
 
-        // Update reduce descriptor set (buffers don't change)
-        vk::DescriptorBufferInfo histBufInfo{};
-        histBufInfo.buffer = histogramBuffer;
-        histBufInfo.offset = 0;
-        histBufInfo.range = VK_WHOLE_SIZE;
-
-        vk::DescriptorBufferInfo expBufInfo{};
-        expBufInfo.buffer = exposureBuffer;
-        expBufInfo.offset = 0;
-        expBufInfo.range = VK_WHOLE_SIZE;
-
-        std::array<vk::WriteDescriptorSet, 2> reduceWrites{};
-        reduceWrites[0].dstSet = reduceDescriptorSet;
-        reduceWrites[0].dstBinding = 0;
-        reduceWrites[0].descriptorType = vk::DescriptorType::eStorageBuffer;
-        reduceWrites[0].descriptorCount = 1;
-        reduceWrites[0].pBufferInfo = &histBufInfo;
-
-        reduceWrites[1].dstSet = reduceDescriptorSet;
-        reduceWrites[1].dstBinding = 1;
-        reduceWrites[1].descriptorType = vk::DescriptorType::eStorageBuffer;
-        reduceWrites[1].descriptorCount = 1;
-        reduceWrites[1].pBufferInfo = &expBufInfo;
-
-        dev.updateDescriptorSets(reduceWrites, nullptr);
+        // Update reduce descriptor set with histogram buffer (exposure buffer updated per-frame in preRecord)
+        updateReduceDescriptorSet();
     }
 
     void AutoExposureEffect::updateHistogramDescriptorSet(vk::ImageView sceneImageView)
@@ -467,6 +458,36 @@ namespace render::postprocess
         writes[1].pBufferInfo = &histBufInfo;
 
         dev.updateDescriptorSets(writes, nullptr);
+    }
+
+    void AutoExposureEffect::updateReduceDescriptorSet()
+    {
+        auto& dev = device.getLogicalDevice();
+
+        vk::DescriptorBufferInfo histBufInfo{};
+        histBufInfo.buffer = histogramBuffer;
+        histBufInfo.offset = 0;
+        histBufInfo.range = VK_WHOLE_SIZE;
+
+        vk::DescriptorBufferInfo expBufInfo{};
+        expBufInfo.buffer = exposureFrames[currentExposureFrame].buffer;
+        expBufInfo.offset = 0;
+        expBufInfo.range = VK_WHOLE_SIZE;
+
+        std::array<vk::WriteDescriptorSet, 2> reduceWrites{};
+        reduceWrites[0].dstSet = reduceDescriptorSet;
+        reduceWrites[0].dstBinding = 0;
+        reduceWrites[0].descriptorType = vk::DescriptorType::eStorageBuffer;
+        reduceWrites[0].descriptorCount = 1;
+        reduceWrites[0].pBufferInfo = &histBufInfo;
+
+        reduceWrites[1].dstSet = reduceDescriptorSet;
+        reduceWrites[1].dstBinding = 1;
+        reduceWrites[1].descriptorType = vk::DescriptorType::eStorageBuffer;
+        reduceWrites[1].descriptorCount = 1;
+        reduceWrites[1].pBufferInfo = &expBufInfo;
+
+        dev.updateDescriptorSets(reduceWrites, nullptr);
     }
 
     void AutoExposureEffect::loadShaders()
@@ -553,13 +574,16 @@ namespace render::postprocess
     {
         auto& dev = device.getLogicalDevice();
 
-        if (exposureBufferMapped)
+        for (auto& ef : exposureFrames)
         {
-            dev.unmapMemory(exposureBufferMemory);
-            exposureBufferMapped = nullptr;
+            if (ef.mapped)
+            {
+                dev.unmapMemory(ef.memory);
+                ef.mapped = nullptr;
+            }
+            core::BufferUtilities::destroyBuffer(dev, ef.buffer, ef.memory);
         }
 
-        core::BufferUtilities::destroyBuffer(dev, exposureBuffer, exposureBufferMemory);
         core::BufferUtilities::destroyBuffer(dev, histogramBuffer, histogramBufferMemory);
     }
 

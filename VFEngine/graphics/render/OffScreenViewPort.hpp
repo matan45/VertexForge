@@ -58,7 +58,7 @@ namespace render
         void setAsyncComputeManager(core::AsyncComputeManager* manager);
 
     private:
-        void draw(const vk::CommandBuffer& commandBuffer) const;
+        void draw(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
 
         void createOffscreenResources();
         void cleanupOffscreenResources();

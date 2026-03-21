@@ -90,7 +90,7 @@ namespace render
 
         commandBuffer.begin(vk::CommandBufferBeginInfo{});
 
-        draw(commandBuffer);
+        draw(commandBuffer, imageIndex);
 
         commandBuffer.end();
 
@@ -138,7 +138,8 @@ namespace render
             device.getGraphicsQueue().submit(submitInfo, inFlightFences[imageIndex]);
         }
 
-        device.getGraphicsQueue().waitIdle();
+        // Fence-based sync: inFlightFences[imageIndex] is waited on at the top of render()
+        // when this imageIndex comes around again. No need to stall the entire queue.
 
         return offscreenResources.colorImages[imageIndex].descriptorSet;
     }
@@ -254,9 +255,9 @@ namespace render
         return {};
     }
 
-    void OffScreenViewPort::draw(const vk::CommandBuffer& commandBuffer) const
+    void OffScreenViewPort::draw(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const
     {
-        renderPassHandler->draw(commandBuffer, core::RenderManager::getImageIndex());
+        renderPassHandler->draw(commandBuffer, imageIndex);
     }
 
     void OffScreenViewPort::createOffscreenResources()

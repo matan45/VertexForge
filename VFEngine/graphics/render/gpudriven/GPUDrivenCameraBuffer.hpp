@@ -1,8 +1,10 @@
 #pragma once
 
 #include "GPUDrivenTypes.hpp"
+#include "../../core/RenderManager.hpp"
 #include <vulkan/vulkan.hpp>
 #include <glm/glm.hpp>
+#include <array>
 
 namespace core
 {
@@ -43,11 +45,17 @@ namespace render::gpudriven
         core::Device& device;
         core::SwapChain& swapChain;
 
-        vk::Buffer buffer;
-        vk::DeviceMemory memory;
-        void* mapped = nullptr;
+        struct FrameBuffer
+        {
+            vk::Buffer buffer;
+            vk::DeviceMemory memory;
+            void* mapped = nullptr;
+        };
+
+        std::array<FrameBuffer, core::MAX_FRAMES_IN_FLIGHT> frameBuffers{};
         GPUCameraData data{};
-        uint32_t frameIndex = 0;
+        uint32_t frameCounter = 0;
+        uint32_t currentFrameSlot = 0;
 
     public:
         explicit GPUDrivenCameraBuffer(core::Device& device, core::SwapChain& swapChain);
@@ -61,8 +69,14 @@ namespace render::gpudriven
 
         void update(const CameraUpdateParams& params);
 
-        vk::Buffer getBuffer() const { return buffer; }
+        // Get buffer for the current frame slot (last updated)
+        vk::Buffer getBuffer() const { return frameBuffers[currentFrameSlot].buffer; }
+
+        // Get buffer for a specific frame slot
+        vk::Buffer getBuffer(uint32_t frameSlot) const { return frameBuffers[frameSlot % core::MAX_FRAMES_IN_FLIGHT].buffer; }
+
         const GPUCameraData& getData() const { return data; }
+        uint32_t getCurrentFrameSlot() const { return currentFrameSlot; }
 
     private:
         static void extractFrustumPlanes(const glm::mat4& viewProjection, glm::vec4 planes[6]);

@@ -1,6 +1,8 @@
 #pragma once
 
 #include "../PostProcessEffect.hpp"
+#include "../../../core/RenderManager.hpp"
+#include <array>
 #include <memory>
 
 namespace core
@@ -47,9 +49,15 @@ namespace render::postprocess
         vk::Buffer histogramBuffer;
         vk::DeviceMemory histogramBufferMemory;
 
-        vk::Buffer exposureBuffer;
-        vk::DeviceMemory exposureBufferMemory;
-        void* exposureBufferMapped = nullptr;
+        struct ExposureFrame
+        {
+            vk::Buffer buffer;
+            vk::DeviceMemory memory;
+            void* mapped = nullptr;
+        };
+
+        std::array<ExposureFrame, core::MAX_FRAMES_IN_FLIGHT> exposureFrames{};
+        uint32_t currentExposureFrame = 0;
 
         vk::Sampler sceneSampler;
 
@@ -101,6 +109,7 @@ namespace render::postprocess
         void createReducePipeline();
         void createPassthroughPipeline(vk::RenderPass renderPass, vk::Extent2D extent);
         void updateHistogramDescriptorSet(vk::ImageView sceneImageView);
+        void updateReduceDescriptorSet();
         void cleanupBuffers();
         void cleanupPipelines();
     };

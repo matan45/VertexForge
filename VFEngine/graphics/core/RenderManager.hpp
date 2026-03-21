@@ -4,6 +4,7 @@
 #include <memory>
 #include <vector>
 #include <functional>
+#include <atomic>
 
 namespace window {
 	class Window;
@@ -57,7 +58,7 @@ namespace core {
 		std::vector<vk::Fence> imagesInFlight;
 
 		uint32_t currentFrame = 0;
-		inline static uint32_t imageIndex;
+		inline static std::atomic<uint32_t> imageIndex{0};
 		inline static DeferredDeletionQueue* globalDeletionQueue;
 
 		void createPresentPass();
@@ -74,7 +75,7 @@ namespace core {
 
 		void recreate(uint32_t width, uint32_t height);
 
-		static uint32_t getImageIndex() { return imageIndex; }
+		static uint32_t getImageIndex() { return imageIndex.load(std::memory_order_acquire); }
 		static DeferredDeletionQueue* getGlobalDeletionQueue() { return globalDeletionQueue; }
 
 		void setResizeCallback(ResizeCallback callback) { onResizeCallback = std::move(callback); }
@@ -86,7 +87,7 @@ namespace core {
 		void cleanUp() const;
 
 	private:
-		void draw(const vk::CommandBuffer& commandBuffer) const;
+		void draw(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
 
 		void present(uint32_t frameIndex);
 	};

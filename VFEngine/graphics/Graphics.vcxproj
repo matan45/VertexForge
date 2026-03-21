@@ -128,12 +128,14 @@
     <ClInclude Include="core\CommandPool.hpp" />
     <ClInclude Include="core\DeferredDeletionQueue.hpp" />
     <ClInclude Include="core\Device.hpp" />
+    <ClInclude Include="core\FrameSynchronizer.hpp" />
     <ClInclude Include="core\ImageUtilities.hpp" />
     <ClInclude Include="core\MappedMemoryGuard.hpp" />
     <ClInclude Include="core\MemoryUtilities.hpp" />
     <ClInclude Include="core\OffScreen.hpp" />
     <ClInclude Include="core\PipelineUtilities.hpp" />
     <ClInclude Include="core\RenderManager.hpp" />
+    <ClInclude Include="core\RenderThread.hpp" />
     <ClInclude Include="core\Shader.hpp" />
     <ClInclude Include="core\SwapChain.hpp" />
     <ClInclude Include="core\Texture.hpp" />
@@ -363,6 +365,7 @@
     <ClCompile Include="core\MemoryUtilities.cpp" />
     <ClCompile Include="core\PipelineUtilities.cpp" />
     <ClCompile Include="core\RenderManager.cpp" />
+    <ClCompile Include="core\RenderThread.cpp" />
     <ClCompile Include="core\Shader.cpp" />
     <ClCompile Include="core\SwapChain.cpp" />
     <ClCompile Include="core\Texture.cpp" />

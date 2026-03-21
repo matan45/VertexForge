@@ -155,14 +155,15 @@ namespace render::gpudriven
             core::BufferUtilities::createBuffer(request, objectBuffer, objectBufferMemory);
         }
 
+        for (auto& sf : stagingFrames)
         {
             core::BufferInfoRequest request(logicalDevice, physicalDevice);
             request.size = maxObjectCount * sizeof(GPUObjectData);
             request.usage = vk::BufferUsageFlagBits::eTransferSrc;
             request.properties = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
-            core::BufferUtilities::createBuffer(request, objectStagingBuffer, objectStagingMemory);
+            core::BufferUtilities::createBuffer(request, sf.objectStagingBuffer, sf.objectStagingMemory);
 
-            objectStagingMapped = logicalDevice.mapMemory(objectStagingMemory, 0, request.size, vk::MemoryMapFlags{});
+            sf.objectStagingMapped = logicalDevice.mapMemory(sf.objectStagingMemory, 0, request.size, vk::MemoryMapFlags{});
         }
     }
 
@@ -179,14 +180,15 @@ namespace render::gpudriven
             core::BufferUtilities::createBuffer(request, instanceTransformBuffer, instanceTransformBufferMemory);
         }
 
+        for (auto& sf : stagingFrames)
         {
             core::BufferInfoRequest request(logicalDevice, physicalDevice);
             request.size = maxInstanceCount * sizeof(GPUInstanceTransform);
             request.usage = vk::BufferUsageFlagBits::eTransferSrc;
             request.properties = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
-            core::BufferUtilities::createBuffer(request, instanceStagingBuffer, instanceStagingMemory);
+            core::BufferUtilities::createBuffer(request, sf.instanceStagingBuffer, sf.instanceStagingMemory);
 
-            instanceStagingMapped = logicalDevice.mapMemory(instanceStagingMemory, 0, request.size, vk::MemoryMapFlags{});
+            sf.instanceStagingMapped = logicalDevice.mapMemory(sf.instanceStagingMemory, 0, request.size, vk::MemoryMapFlags{});
         }
     }
 
@@ -203,14 +205,15 @@ namespace render::gpudriven
             core::BufferUtilities::createBuffer(request, activeIndexBuffer, activeIndexBufferMemory);
         }
 
+        for (auto& sf : stagingFrames)
         {
             core::BufferInfoRequest request(logicalDevice, physicalDevice);
             request.size = maxObjectCount * sizeof(uint32_t);
             request.usage = vk::BufferUsageFlagBits::eTransferSrc;
             request.properties = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
-            core::BufferUtilities::createBuffer(request, activeIndexStagingBuffer, activeIndexStagingMemory);
+            core::BufferUtilities::createBuffer(request, sf.activeIndexStagingBuffer, sf.activeIndexStagingMemory);
 
-            activeIndexStagingMapped = logicalDevice.mapMemory(activeIndexStagingMemory, 0, request.size, vk::MemoryMapFlags{});
+            sf.activeIndexStagingMapped = logicalDevice.mapMemory(sf.activeIndexStagingMemory, 0, request.size, vk::MemoryMapFlags{});
         }
 
         activeObjectIndices.resize(maxObjectCount);
@@ -220,16 +223,20 @@ namespace render::gpudriven
     {
         const auto& logicalDevice = device.getLogicalDevice();
 
-        if (activeIndexStagingMapped) { logicalDevice.unmapMemory(activeIndexStagingMemory); activeIndexStagingMapped = nullptr; }
-        core::BufferUtilities::destroyBuffer(logicalDevice, activeIndexStagingBuffer, activeIndexStagingMemory);
+        for (auto& sf : stagingFrames)
+        {
+            if (sf.activeIndexStagingMapped) { logicalDevice.unmapMemory(sf.activeIndexStagingMemory); sf.activeIndexStagingMapped = nullptr; }
+            core::BufferUtilities::destroyBuffer(logicalDevice, sf.activeIndexStagingBuffer, sf.activeIndexStagingMemory);
+
+            if (sf.instanceStagingMapped) { logicalDevice.unmapMemory(sf.instanceStagingMemory); sf.instanceStagingMapped = nullptr; }
+            core::BufferUtilities::destroyBuffer(logicalDevice, sf.instanceStagingBuffer, sf.instanceStagingMemory);
+
+            if (sf.objectStagingMapped) { logicalDevice.unmapMemory(sf.objectStagingMemory); sf.objectStagingMapped = nullptr; }
+            core::BufferUtilities::destroyBuffer(logicalDevice, sf.objectStagingBuffer, sf.objectStagingMemory);
+        }
+
         core::BufferUtilities::destroyBuffer(logicalDevice, activeIndexBuffer, activeIndexBufferMemory);
-
-        if (instanceStagingMapped) { logicalDevice.unmapMemory(instanceStagingMemory); instanceStagingMapped = nullptr; }
-        core::BufferUtilities::destroyBuffer(logicalDevice, instanceStagingBuffer, instanceStagingMemory);
         core::BufferUtilities::destroyBuffer(logicalDevice, instanceTransformBuffer, instanceTransformBufferMemory);
-
-        if (objectStagingMapped) { logicalDevice.unmapMemory(objectStagingMemory); objectStagingMapped = nullptr; }
-        core::BufferUtilities::destroyBuffer(logicalDevice, objectStagingBuffer, objectStagingMemory);
         core::BufferUtilities::destroyBuffer(logicalDevice, objectBuffer, objectBufferMemory);
         core::BufferUtilities::destroyBuffer(logicalDevice, indexBuffer, indexBufferMemory);
         core::BufferUtilities::destroyBuffer(logicalDevice, vertexBuffer, vertexBufferMemory);
@@ -247,14 +254,16 @@ namespace render::gpudriven
 
         peakObjectCount = std::max(peakObjectCount, currentObjectCount);
 
+        auto& sf = stagingFrames[currentStagingFrame];
+
         size_t copySize = currentObjectCount * sizeof(GPUObjectData);
-        std::memcpy(objectStagingMapped, cpuObjectData.data(), copySize);
+        std::memcpy(sf.objectStagingMapped, cpuObjectData.data(), copySize);
 
         vk::BufferCopy copyRegion;
         copyRegion.srcOffset = 0;
         copyRegion.dstOffset = 0;
         copyRegion.size = copySize;
-        cmd.copyBuffer(objectStagingBuffer, objectBuffer, copyRegion);
+        cmd.copyBuffer(sf.objectStagingBuffer, objectBuffer, copyRegion);
 
         vk::BufferMemoryBarrier barrier;
         barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
@@ -270,7 +279,7 @@ namespace render::gpudriven
 
         // Upload identity active-index mapping for legacy (edit) mode
         {
-            auto* indices = static_cast<uint32_t*>(activeIndexStagingMapped);
+            auto* indices = static_cast<uint32_t*>(sf.activeIndexStagingMapped);
             for (uint32_t i = 0; i < currentObjectCount; ++i)
                 indices[i] = i;
 
@@ -278,7 +287,7 @@ namespace render::gpudriven
             idxCopy.srcOffset = 0;
             idxCopy.dstOffset = 0;
             idxCopy.size = currentObjectCount * sizeof(uint32_t);
-            cmd.copyBuffer(activeIndexStagingBuffer, activeIndexBuffer, idxCopy);
+            cmd.copyBuffer(sf.activeIndexStagingBuffer, activeIndexBuffer, idxCopy);
 
             vk::BufferMemoryBarrier idxBarrier;
             idxBarrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
@@ -304,14 +313,16 @@ namespace render::gpudriven
             return;
         }
 
+        auto& sf = stagingFrames[currentStagingFrame];
+
         size_t copySize = currentInstanceCount * sizeof(GPUInstanceTransform);
-        std::memcpy(instanceStagingMapped, cpuInstanceTransforms.data(), copySize);
+        std::memcpy(sf.instanceStagingMapped, cpuInstanceTransforms.data(), copySize);
 
         vk::BufferCopy copyRegion;
         copyRegion.srcOffset = 0;
         copyRegion.dstOffset = 0;
         copyRegion.size = copySize;
-        cmd.copyBuffer(instanceStagingBuffer, instanceTransformBuffer, copyRegion);
+        cmd.copyBuffer(sf.instanceStagingBuffer, instanceTransformBuffer, copyRegion);
 
         vk::BufferMemoryBarrier barrier;
         barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;

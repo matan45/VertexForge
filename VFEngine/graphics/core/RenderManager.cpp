@@ -72,12 +72,13 @@ namespace core {
 			vfLogError("failed to wait for in-flight fence");
 		}
 
+		uint32_t acquiredImageIndex = 0;
 		result = device.getLogicalDevice().acquireNextImageKHR(
 			swapChain.getSwapchain(),
 			UINT64_MAX,
 			imageAvailableSemaphores[currentFrame],
 			nullptr,
-			&imageIndex
+			&acquiredImageIndex
 		);
 
 		if (result == vk::Result::eErrorOutOfDateKHR) {
@@ -85,16 +86,18 @@ namespace core {
 			return;
 		}
 
+		imageIndex.store(acquiredImageIndex, std::memory_order_release);
+
 		// Check if a previous frame is using this image (wait for it)
-		if (imagesInFlight[imageIndex]) {
+		if (imagesInFlight[acquiredImageIndex]) {
 			result = device.getLogicalDevice().waitForFences(
-				1, &imagesInFlight[imageIndex], VK_TRUE, UINT64_MAX);
+				1, &imagesInFlight[acquiredImageIndex], VK_TRUE, UINT64_MAX);
 			if (result != vk::Result::eSuccess) {
 				vfLogError("failed to wait for image in flight fence");
 			}
 		}
 		// Mark this image as now being in use by this frame
-		imagesInFlight[imageIndex] = inFlightFences[currentFrame];
+		imagesInFlight[acquiredImageIndex] = inFlightFences[currentFrame];
 
 		// Reset the fence only after we know we will submit work
 		result = device.getLogicalDevice().resetFences(1, &inFlightFences[currentFrame]);
@@ -102,27 +105,27 @@ namespace core {
 			vfLogError("failed to reset fence");
 		}
 
-		commandPool->resetCommandBuffer(imageIndex);
+		commandPool->resetCommandBuffer(acquiredImageIndex);
 
-		vk::CommandBuffer commandBuffer = commandPool->getCommandBuffer(imageIndex);
+		vk::CommandBuffer commandBuffer = commandPool->getCommandBuffer(acquiredImageIndex);
 
 		// Begin recording commands for the acquired image
 		commandBuffer.begin(vk::CommandBufferBeginInfo{});
 
 		// Render the scene using the command buffer for this swapchain image
-		draw(commandBuffer);
+		draw(commandBuffer, acquiredImageIndex);
 
 		// End command buffer recording
-		commandPool->getCommandBuffer(imageIndex).end();
+		commandPool->getCommandBuffer(acquiredImageIndex).end();
 
 		// Submit the command buffer for rendering
 		// Use per-frame semaphore for wait, per-image semaphore for signal
 		vk::SubmitInfo submitInfo{};
 		std::array<vk::Semaphore, 1> waitSemaphores = { imageAvailableSemaphores[currentFrame] };
-		std::array<vk::Semaphore, 1> signalSemaphores = { renderFinishedSemaphores[imageIndex] };
+		std::array<vk::Semaphore, 1> signalSemaphores = { renderFinishedSemaphores[acquiredImageIndex] };
 		std::array<vk::PipelineStageFlags, 1> waitStages = { vk::PipelineStageFlagBits::eColorAttachmentOutput };
 
-		vk::CommandBuffer cmdBuffer = commandPool->getCommandBuffer(imageIndex);
+		vk::CommandBuffer cmdBuffer = commandPool->getCommandBuffer(acquiredImageIndex);
 		submitInfo.waitSemaphoreCount = static_cast<uint32_t>(waitSemaphores.size());
 		submitInfo.pWaitSemaphores = waitSemaphores.data();
 		submitInfo.pWaitDstStageMask = waitStages.data();
@@ -134,7 +137,7 @@ namespace core {
 		device.getGraphicsQueue().submit(submitInfo, inFlightFences[currentFrame]);
 
 		// Present the rendered image (use per-image semaphore)
-		present(imageIndex);
+		present(acquiredImageIndex);
 
 		// Process deferred deletions for resources that are now safe to destroy
 		if (deletionQueue)
@@ -207,17 +210,17 @@ namespace core {
 		}
 	}
 
-	void RenderManager::draw(const vk::CommandBuffer& commandBuffer) const
+	void RenderManager::draw(const vk::CommandBuffer& commandBuffer, uint32_t imageIdx) const
 	{
 		if (imguiEnabled)
 		{
-			imguiRender->render(commandBuffer, imageIndex);
+			imguiRender->render(commandBuffer, imageIdx);
 		}
 		else if (blitSourceProvider)
 		{
 			// Blit offscreen color image to swapchain image
-			vk::Image srcImage = blitSourceProvider(imageIndex);
-			vk::Image dstImage = swapChain.getSwapchainImage(imageIndex);
+			vk::Image srcImage = blitSourceProvider(imageIdx);
+			vk::Image dstImage = swapChain.getSwapchainImage(imageIdx);
 			auto extent = swapChain.getSwapchainExtent();
 
 			// Transition offscreen image: ShaderReadOnly -> TransferSrc
@@ -283,7 +286,7 @@ namespace core {
 
 			vk::RenderPassBeginInfo renderPassInfo{};
 			renderPassInfo.renderPass = presentRenderPass;
-			renderPassInfo.framebuffer = presentFrameBuffers[imageIndex];
+			renderPassInfo.framebuffer = presentFrameBuffers[imageIdx];
 			renderPassInfo.renderArea.extent = swapChain.getSwapchainExtent();
 			renderPassInfo.clearValueCount = 1;
 			renderPassInfo.pClearValues = &clearColor;
@@ -352,17 +355,17 @@ namespace core {
 		device.getLogicalDevice().destroyRenderPass(presentRenderPass);
 	}
 
-	void RenderManager::present(uint32_t frameIndex)
+	void RenderManager::present(uint32_t imgIndex)
 	{
 		// Present the image to the screen
 		vk::PresentInfoKHR presentInfo{};
-		std::array<vk::Semaphore, 1> waitSemaphores = { renderFinishedSemaphores[frameIndex] };
+		std::array<vk::Semaphore, 1> waitSemaphores = { renderFinishedSemaphores[imgIndex] };
 		presentInfo.waitSemaphoreCount = static_cast<uint32_t>(waitSemaphores.size());
 		presentInfo.pWaitSemaphores = waitSemaphores.data();
 		std::array<vk::SwapchainKHR, 1> swapChains = { swapChain.getSwapchain() };
 		presentInfo.swapchainCount = static_cast<uint32_t>(swapChains.size());
 		presentInfo.pSwapchains = swapChains.data();
-		presentInfo.pImageIndices = &imageIndex;
+		presentInfo.pImageIndices = &imgIndex;
 
 		vk::Result result = device.getPresentQueue().presentKHR(&presentInfo);
 

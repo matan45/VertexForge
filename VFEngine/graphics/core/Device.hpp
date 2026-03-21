@@ -2,6 +2,7 @@
 
 #include <vector>
 #include <array>
+#include <mutex>
 
 #include "Utilities.hpp"
 
@@ -77,6 +78,9 @@ namespace core
         // Shared staging command pool for one-time transfer operations
         vk::UniqueCommandPool stagingCommandPool;
 
+        // Mutex for graphics queue submission (shared between render thread and preview controllers)
+        mutable std::mutex graphicsQueueMutex;
+
         const std::array<const char*, 1> validationLayers = {"VK_LAYER_KHRONOS_validation"};
         const std::array<const char*, 5> deviceExtensions = {
             VK_KHR_SWAPCHAIN_EXTENSION_NAME,
@@ -119,6 +123,9 @@ namespace core
 
         const vk::Queue& getAsyncComputeQueue() const { return asyncComputeQueue; }
         bool hasAsyncComputeQueue() const { return queueFamilyIndices.hasAsyncComputeQueue(); }
+
+        // Lock before submitting to the graphics queue from any thread
+        std::mutex& getGraphicsQueueMutex() const { return graphicsQueueMutex; }
 
         const vk::CommandPool& getStagingCommandPool() const { return stagingCommandPool.get(); }
 

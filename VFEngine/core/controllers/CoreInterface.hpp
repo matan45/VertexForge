@@ -27,7 +27,7 @@ namespace controllers {
 
 		void init();
 		void run() const;
-		void cleanUp() const;
+		void cleanUp();
 		void closeWindow();
 
 		// Get window pointer for service initialization

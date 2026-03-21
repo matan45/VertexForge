@@ -25,31 +25,40 @@ namespace render::gpudriven
         const auto& logicalDevice = device.getLogicalDevice();
         const auto& physicalDevice = device.getPhysicalDevice();
 
-        core::BufferInfoRequest request(logicalDevice, physicalDevice);
-        request.size = sizeof(GPUCameraData);
-        request.usage = vk::BufferUsageFlagBits::eUniformBuffer;
-        request.properties = vk::MemoryPropertyFlagBits::eHostVisible |
-                            vk::MemoryPropertyFlagBits::eHostCoherent;
+        for (auto& fb : frameBuffers)
+        {
+            core::BufferInfoRequest request(logicalDevice, physicalDevice);
+            request.size = sizeof(GPUCameraData);
+            request.usage = vk::BufferUsageFlagBits::eUniformBuffer;
+            request.properties = vk::MemoryPropertyFlagBits::eHostVisible |
+                                vk::MemoryPropertyFlagBits::eHostCoherent;
 
-        core::BufferUtilities::createBuffer(request, buffer, memory);
-        mapped = logicalDevice.mapMemory(memory, 0, sizeof(GPUCameraData), vk::MemoryMapFlags{});
+            core::BufferUtilities::createBuffer(request, fb.buffer, fb.memory);
+            fb.mapped = logicalDevice.mapMemory(fb.memory, 0, sizeof(GPUCameraData), vk::MemoryMapFlags{});
+        }
     }
 
     void GPUDrivenCameraBuffer::cleanup()
     {
         const auto& logicalDevice = device.getLogicalDevice();
 
-        if (mapped)
+        for (auto& fb : frameBuffers)
         {
-            logicalDevice.unmapMemory(memory);
-            mapped = nullptr;
-        }
+            if (fb.mapped)
+            {
+                logicalDevice.unmapMemory(fb.memory);
+                fb.mapped = nullptr;
+            }
 
-        core::BufferUtilities::destroyBuffer(logicalDevice, buffer, memory);
+            core::BufferUtilities::destroyBuffer(logicalDevice, fb.buffer, fb.memory);
+        }
     }
 
     void GPUDrivenCameraBuffer::update(const CameraUpdateParams& params)
     {
+        // Advance to next frame slot
+        currentFrameSlot = frameCounter % core::MAX_FRAMES_IN_FLIGHT;
+
         glm::mat4 viewProjection = params.projection * params.view;
 
         data.view = params.view;
@@ -72,7 +81,7 @@ namespace render::gpudriven
         data.farPlane = params.farPlane;
         data.objectCount = params.objectCount;
         data.hiZMipLevels = params.hiZMipLevels;
-        data.frameIndex = frameIndex++;
+        data.frameIndex = frameCounter++;
 
         data.enableFrustumCulling = params.frustumCullingEnabled ? 1 : 0;
         data.enableOcclusionCulling = (params.occlusionCullingEnabled && params.hiZMipLevels > 0) ? 1 : 0;
@@ -90,7 +99,7 @@ namespace render::gpudriven
         data.categoryDistSq0 = glm::vec4(d[0] * d[0], d[1] * d[1], d[2] * d[2], d[3] * d[3]);
         data.categoryDistSq1 = glm::vec4(d[4] * d[4], d[5] * d[5], d[6] * d[6], params.shadowDistanceMultiplier);
 
-        std::memcpy(mapped, &data, sizeof(GPUCameraData));
+        std::memcpy(frameBuffers[currentFrameSlot].mapped, &data, sizeof(GPUCameraData));
     }
 
     void GPUDrivenCameraBuffer::extractFrustumPlanes(const glm::mat4& viewProjection, glm::vec4 planes[6])

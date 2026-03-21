@@ -46,6 +46,10 @@ namespace core {
 		renderFn = [this]() {
 			renderController->render();
 		};
+
+		beginFrameFn = [this]() {
+			renderController->beginFrame();
+		};
 	}
 
 	void MainLoop::run()
@@ -54,6 +58,9 @@ namespace core {
 			mainWindow->pollEvents();
 
 			engineTime::Timer::update();
+
+			// Block if render thread hasn't finished consuming the previous frame's slot
+			renderController->beginFrame();
 
 			// The frame callback orchestrates the entire frame pipeline
 			// (service updates, scene graph, post-update, imgui, render)
@@ -73,7 +80,7 @@ namespace core {
 		renderController->setResizeCallback(std::move(callback));
 	}
 
-	void MainLoop::cleanUp() const
+	void MainLoop::cleanUp()
 	{
 		renderController->cleanUp();
 		controllers::Graphics::destroyContext();
