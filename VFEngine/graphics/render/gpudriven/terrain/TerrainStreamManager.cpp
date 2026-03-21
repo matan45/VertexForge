@@ -91,6 +91,14 @@ namespace render::gpudriven
                 infoIt->second.lastAccessFrame = currentFrame;
             }
 
+            if (tile->hasWeightMap() && tile->weightMapGPUDirty)
+            {
+                if (adapter.uploadWeightMap(*tile))
+                {
+                    tile->weightMapGPUDirty = false;
+                }
+            }
+
             if (!infoIt->second.hasLODLoaded(FALLBACK_LOD))
             {
                 if (fallbackUploads >= config.maxFallbackUploadsPerFrame ||
@@ -124,14 +132,6 @@ namespace render::gpudriven
                     stats.bytesUploadedThisFrame += lodMemory;
                     fallbackUploads++;
                     fallbackBytes += lodMemory;
-                }
-            }
-
-                if (tile->hasWeightMap() && tile->weightMapGPUDirty)
-            {
-                if (adapter.uploadWeightMap(*tile))
-                {
-                    tile->weightMapGPUDirty = false;
                 }
             }
         }
