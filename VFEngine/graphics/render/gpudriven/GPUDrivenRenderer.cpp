@@ -459,6 +459,8 @@ namespace render::gpudriven
                 vegetation.grassMeshPipeline->recreate(
                     cachedIBLLayout,
                     vegetation.windSystem ? vegetation.windSystem->getDescriptorSetLayout() : vk::DescriptorSetLayout{},
+                    lightBufferManager ? lightBufferManager->getDescriptorSetLayout() : vk::DescriptorSetLayout{},
+                    bindlessTextures ? bindlessTextures->getDescriptorSetLayout() : vk::DescriptorSetLayout{},
                     cachedRenderPass);
             }
         }

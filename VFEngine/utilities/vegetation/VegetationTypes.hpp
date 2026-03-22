@@ -3,6 +3,8 @@
 #include "../terrain/BrushTypes.hpp"
 #include <cstdint>
 #include <algorithm>
+#include <array>
+#include <string>
 #include <glm/glm.hpp>
 
 namespace vegetation
@@ -13,6 +15,53 @@ namespace vegetation
         Erase = 1,
         Smooth = 2,
         Fill = 3
+    };
+
+    enum class VegetationType : uint8_t
+    {
+        Grass = 0,
+        Flower = 1,
+        Bush = 2,
+        Billboard = 3,
+        Count = 4
+    };
+
+    static constexpr uint32_t VEGETATION_TYPE_COUNT = static_cast<uint32_t>(VegetationType::Count);
+
+    struct VegetationTypeConfig
+    {
+        VegetationType type = VegetationType::Grass;
+        float scaleMin = 0.5f;
+        float scaleMax = 1.5f;
+        float rotationRandomization = 1.0f;  // 0=aligned, 1=fully random
+        float slopeLimit = 0.7f;
+        float densityMultiplier = 1.0f;
+        float fadeStartDistance = 80.0f;
+        float fadeEndDistance = 120.0f;
+        glm::vec4 colorTint{1.0f, 1.0f, 1.0f, 1.0f};
+        std::string texturePath;  // vfImage path for Billboard type
+        uint32_t bindlessTextureIndex = 0xFFFFFFFF; // Resolved at runtime
+    };
+
+    struct MixedBrushConfig
+    {
+        bool enabled = false;
+        std::array<float, VEGETATION_TYPE_COUNT> ratios = {1.0f, 0.0f, 0.0f, 0.0f};
+
+        void normalize()
+        {
+            float sum = 0.0f;
+            for (float r : ratios) sum += r;
+            if (sum > 0.0f)
+            {
+                for (float& r : ratios) r /= sum;
+            }
+            else
+            {
+                ratios[0] = 1.0f;
+                for (size_t i = 1; i < ratios.size(); ++i) ratios[i] = 0.0f;
+            }
+        }
     };
 
     struct DensityBrushParams

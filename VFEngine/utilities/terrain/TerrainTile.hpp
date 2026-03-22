@@ -4,6 +4,7 @@
 #include "TerrainWeightMap.hpp"
 #include "CaveSDFData.hpp"
 #include "../vegetation/VegetationDensityMap.hpp"
+#include "../vegetation/VegetationTypes.hpp"
 #include "../resource/Types.hpp"
 #include "../resource/MeshletTypes.hpp"
 #include "../math/Frustum.hpp"
@@ -65,9 +66,10 @@ namespace terrain
         bool weightMapDirty = false;
         bool weightMapGPUDirty = false;
 
-        vegetation::VegetationDensityMap vegetationDensity;
-        bool vegetationDensityDirty = false;
-        bool vegetationDensityGPUDirty = false;
+        // Per-vegetation-type density maps
+        std::array<vegetation::VegetationDensityMap, vegetation::VEGETATION_TYPE_COUNT> vegetationDensityMaps;
+        std::array<bool, vegetation::VEGETATION_TYPE_COUNT> vegetationDensityDirty{};
+        std::array<bool, vegetation::VEGETATION_TYPE_COUNT> vegetationDensityGPUDirty{};
 
         std::unique_ptr<CaveSDFData> caveData;
         TileLODData caveLOD;
@@ -121,7 +123,10 @@ namespace terrain
         [[nodiscard]] bool hasWeightMap() const { return weightMap.isInitialized(); }
 
         void initializeVegetationDensity();
-        [[nodiscard]] bool hasVegetationDensity() const { return vegetationDensity.isInitialized(); }
+        [[nodiscard]] bool hasVegetationDensity(uint32_t typeIndex = 0) const
+        {
+            return vegetationDensityMaps[typeIndex].isInitialized();
+        }
 
         void initializeCaveSDF();
         void initializeCaveSDFFromHeights();

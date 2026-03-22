@@ -21,5 +21,15 @@ namespace vegetation
         float windSpeed = 1.0f;
         float gustStrength = 0.3f;
         float gustFrequency = 0.5f;
+
+        // Distance-based density fadeout
+        float densityFadeStartFactor = 0.5f;  // density fade starts at fadeStartDistance * this factor
+        float minDensityScale = 0.1f;         // minimum density fraction at max distance
+        bool terrainLODIntegration = true;     // scale density with terrain LOD
+
+        // Subsurface scattering
+        float sssDistortion = 0.2f;   // normal distortion for translucency (0-1)
+        float sssPower = 4.0f;        // falloff exponent for translucency highlight (1-16)
+        float sssScale = 0.5f;        // overall SSS intensity (0-1)
     };
 }

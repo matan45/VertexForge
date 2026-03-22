@@ -39,6 +39,14 @@ layout(push_constant) uniform PushConstants {
     float widthMin;
     float widthMax;
     float time;
+    // Distance-based density fadeout
+    float cameraX;
+    float cameraZ;
+    float densityFadeStart;
+    float densityFadeEnd;
+    float minDensityScale;
+    // Multi-type vegetation
+    uint vegetationType; // 0=Grass, 1=Flower, 2=Bush, 3=Rock
 };
 
 float hash(vec2 p) {
@@ -85,10 +93,27 @@ void main() {
     float worldZ = tileWorldOrigin.y + float(tz) * vertexSpacing;
     float height = heightValues[idx];
 
+    // Distance-based density reduction (hash-based consistent culling)
+    float dx = worldX - cameraX;
+    float dz = worldZ - cameraZ;
+    float distSq = dx * dx + dz * dz;
+    float fadeStartSq = densityFadeStart * densityFadeStart;
+    float fadeEndSq = densityFadeEnd * densityFadeEnd;
+    float densityScale = 1.0;
+    if (distSq > fadeStartSq) {
+        float t = clamp((distSq - fadeStartSq) / (fadeEndSq - fadeStartSq), 0.0, 1.0);
+        densityScale = mix(1.0, minDensityScale, t);
+    }
+
     uint bladeCount = uint(ceil(density * 4.0));
 
     for (uint b = 0; b < bladeCount; b++) {
         vec2 seed = vec2(worldX, worldZ) + vec2(float(b) * 13.7, float(b) * 7.3);
+
+        // Deterministic hash per blade position -- no popping as camera moves
+        float survivalHash = hash(seed * 11.3);
+        if (survivalHash >= densityScale) continue;
+
         float jitterX = (hash(seed) - 0.5) * vertexSpacing;
         float jitterZ = (hash2(seed) - 0.5) * vertexSpacing;
 
@@ -115,6 +140,6 @@ void main() {
         uint base = outIdx * 3;
         grassInstances[base + 0] = vec4(bladeX, bladeHeight, bladeZ, rotation);
         grassInstances[base + 1] = vec4(bladeH, bladeW, density, windPhase);
-        grassInstances[base + 2] = vec4(1.0, 1.0, 1.0, 1.0); // Color tint (white = use material)
+        grassInstances[base + 2] = vec4(1.0, 1.0, 1.0, float(vegetationType));
     }
 }

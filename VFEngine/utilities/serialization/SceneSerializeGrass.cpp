@@ -37,6 +37,16 @@ namespace serialization
         j["gustStrength"] = cfg.gustStrength;
         j["gustFrequency"] = cfg.gustFrequency;
 
+        // Distance-based density fadeout
+        j["densityFadeStartFactor"] = cfg.densityFadeStartFactor;
+        j["minDensityScale"] = cfg.minDensityScale;
+        j["terrainLODIntegration"] = cfg.terrainLODIntegration;
+
+        // Subsurface scattering
+        j["sssDistortion"] = cfg.sssDistortion;
+        j["sssPower"] = cfg.sssPower;
+        j["sssScale"] = cfg.sssScale;
+
         return j;
     }
 
@@ -88,5 +98,21 @@ namespace serialization
             cfg.gustStrength = it->get<float>();
         if (auto it = j.find("gustFrequency"); it != j.end() && it->is_number())
             cfg.gustFrequency = it->get<float>();
+
+        // Distance-based density fadeout
+        if (auto it = j.find("densityFadeStartFactor"); it != j.end() && it->is_number())
+            cfg.densityFadeStartFactor = it->get<float>();
+        if (auto it = j.find("minDensityScale"); it != j.end() && it->is_number())
+            cfg.minDensityScale = it->get<float>();
+        if (auto it = j.find("terrainLODIntegration"); it != j.end() && it->is_boolean())
+            cfg.terrainLODIntegration = it->get<bool>();
+
+        // Subsurface scattering
+        if (auto it = j.find("sssDistortion"); it != j.end() && it->is_number())
+            cfg.sssDistortion = it->get<float>();
+        if (auto it = j.find("sssPower"); it != j.end() && it->is_number())
+            cfg.sssPower = it->get<float>();
+        if (auto it = j.find("sssScale"); it != j.end() && it->is_number())
+            cfg.sssScale = it->get<float>();
     }
 }

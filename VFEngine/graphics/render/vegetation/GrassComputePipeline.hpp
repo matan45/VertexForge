@@ -27,6 +27,14 @@ namespace render::vegetation
         float widthMin;
         float widthMax;
         float time;
+        // Distance-based density fadeout
+        float cameraX;
+        float cameraZ;
+        float densityFadeStart;
+        float densityFadeEnd;
+        float minDensityScale;
+        // Multi-type vegetation
+        uint32_t vegetationType; // 0=Grass, 1=Flower, 2=Bush, 3=Rock
     };
 
     class GrassComputePipeline

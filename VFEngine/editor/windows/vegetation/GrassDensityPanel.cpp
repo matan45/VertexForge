@@ -35,13 +35,18 @@ namespace windows
         if (!subscribed) subscribe();
         if (!visible) return;
 
-        ImGui::SetNextWindowSize(ImVec2(300, 0), ImGuiCond_FirstUseEver);
+        ImGui::SetNextWindowSize(ImVec2(320, 0), ImGuiCond_FirstUseEver);
 
-        if (!ImGui::Begin("Grass Density Brush", &visible))
+        if (!ImGui::Begin("Vegetation Brush", &visible))
         {
             ImGui::End();
             return;
         }
+
+        // Vegetation type palette
+        drawVegetationTypePalette();
+
+        ImGui::Separator();
 
         const char* brushTypes[] = {"Paint", "Erase", "Smooth", "Fill"};
         if (ImGui::Combo("Brush Type", &selectedBrushType, brushTypes, IM_ARRAYSIZE(brushTypes)))
@@ -82,6 +87,98 @@ namespace windows
             cmd.active = false;
             events::EventDispatcher::instance().execute(cmd);
         }
+    }
+
+    void GrassDensityPanel::drawVegetationTypePalette()
+    {
+        ImGui::Text("Vegetation Type");
+
+        const char* typeNames[] = {"Grass", "Flower", "Bush", "Billboard"};
+        const ImVec4 typeColors[] = {
+            {0.2f, 0.6f, 0.1f, 1.0f},   // Grass: green
+            {0.8f, 0.3f, 0.5f, 1.0f},   // Flower: pink
+            {0.15f, 0.45f, 0.1f, 1.0f}, // Bush: dark green
+            {0.3f, 0.6f, 0.8f, 1.0f}    // Billboard: blue
+        };
+
+        for (int i = 0; i < static_cast<int>(vegetation::VEGETATION_TYPE_COUNT); ++i)
+        {
+            if (i > 0) ImGui::SameLine();
+
+            bool isSelected = (selectedVegetationType == i);
+            if (isSelected)
+            {
+                ImGui::PushStyleColor(ImGuiCol_Button, typeColors[i]);
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, typeColors[i]);
+            }
+
+            if (ImGui::Button(typeNames[i], ImVec2(65, 25)))
+            {
+                selectedVegetationType = i;
+                pushVegetationType();
+            }
+
+            if (isSelected)
+            {
+                ImGui::PopStyleColor(2);
+            }
+        }
+
+        // Mixed mode
+        if (ImGui::Checkbox("Mixed Mode", &mixedModeEnabled))
+        {
+            pushMixedBrushConfig();
+        }
+
+        if (mixedModeEnabled)
+        {
+            bool ratioChanged = false;
+            for (int i = 0; i < static_cast<int>(vegetation::VEGETATION_TYPE_COUNT); ++i)
+            {
+                char label[32];
+                snprintf(label, sizeof(label), "%s Ratio", typeNames[i]);
+                ratioChanged |= ImGui::SliderFloat(label, &mixedRatios[i], 0.0f, 1.0f, "%.2f");
+            }
+
+            if (ratioChanged)
+            {
+                pushMixedBrushConfig();
+            }
+        }
+
+        // Billboard texture selection
+        if (selectedVegetationType == static_cast<int>(vegetation::VegetationType::Billboard))
+        {
+            ImGui::Spacing();
+            ImGui::Text("Billboard Texture");
+            ImGui::InputText("vfImage Path", billboardTexturePath, sizeof(billboardTexturePath));
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Path to .vfImage file for billboard texture");
+        }
+    }
+
+    void GrassDensityPanel::pushVegetationType()
+    {
+        events::vegetationBrush::SetActiveVegetationTypeCommand cmd;
+        cmd.type = static_cast<vegetation::VegetationType>(selectedVegetationType);
+        events::EventDispatcher::instance().execute(cmd);
+    }
+
+    void GrassDensityPanel::pushMixedBrushConfig()
+    {
+        vegetation::MixedBrushConfig config;
+        config.enabled = mixedModeEnabled;
+        for (int i = 0; i < static_cast<int>(vegetation::VEGETATION_TYPE_COUNT); ++i)
+            config.ratios[i] = mixedRatios[i];
+        config.normalize();
+
+        // Sync back normalized ratios
+        for (int i = 0; i < static_cast<int>(vegetation::VEGETATION_TYPE_COUNT); ++i)
+            mixedRatios[i] = config.ratios[i];
+
+        events::vegetationBrush::SetMixedBrushConfigCommand cmd;
+        cmd.config = config;
+        events::EventDispatcher::instance().execute(cmd);
     }
 
     void GrassDensityPanel::drawGrassConfigSection()
@@ -125,6 +222,41 @@ namespace windows
             changed |= ImGui::DragFloat("Strength", &grassConfig.windStrength, 0.1f, 0.0f, 10.0f);
             changed |= ImGui::DragFloat("Gust Strength", &grassConfig.gustStrength, 0.01f, 0.0f, 1.0f);
             changed |= ImGui::DragFloat("Gust Frequency", &grassConfig.gustFrequency, 0.1f, 0.0f, 5.0f);
+        }
+
+        if (ImGui::CollapsingHeader("Subsurface Scattering"))
+        {
+            changed |= ImGui::SliderFloat("SSS Distortion", &grassConfig.sssDistortion, 0.0f, 1.0f, "%.2f");
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Normal distortion for translucency (0=pure backlit, 1=normal-dependent)");
+
+            changed |= ImGui::SliderFloat("SSS Power", &grassConfig.sssPower, 1.0f, 16.0f, "%.1f");
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Falloff exponent for translucency highlight (lower=broader)");
+
+            changed |= ImGui::SliderFloat("SSS Scale", &grassConfig.sssScale, 0.0f, 1.0f, "%.2f");
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Overall translucency intensity (0=disabled)");
+        }
+
+        if (ImGui::CollapsingHeader("Density Fadeout"))
+        {
+            changed |= ImGui::SliderFloat("Fade Start Factor", &grassConfig.densityFadeStartFactor, 0.1f, 1.0f, "%.2f");
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Density fade starts at Fade Start Distance * this factor");
+
+            changed |= ImGui::SliderFloat("Min Density Scale", &grassConfig.minDensityScale, 0.0f, 1.0f, "%.2f");
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Minimum density fraction at max distance (0=none, 1=full)");
+
+            bool lodIntegration = grassConfig.terrainLODIntegration;
+            if (ImGui::Checkbox("Terrain LOD Integration", &lodIntegration))
+            {
+                grassConfig.terrainLODIntegration = lodIntegration;
+                changed = true;
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Scale vegetation density with terrain LOD level");
         }
 
         if (changed)

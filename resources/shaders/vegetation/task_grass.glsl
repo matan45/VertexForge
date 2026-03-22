@@ -27,6 +27,10 @@ layout(push_constant) uniform PushConstants {
     vec4 tipColor;
     float fadeStartDistance;
     float fadeEndDistance;
+    float sssDistortion;
+    float sssPower;
+    float sssScale;
+    uint billboardTextureIndex;
 };
 
 struct GrassPayload {

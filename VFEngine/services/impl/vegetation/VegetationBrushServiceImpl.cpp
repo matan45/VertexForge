@@ -30,9 +30,34 @@ namespace services
                 setDensityBrushType(cmd.type);
             });
 
+        // Vegetation type commands
+        dispatcher.registerCommandHandler<events::vegetationBrush::SetActiveVegetationTypeCommand>(
+            [this](const events::vegetationBrush::SetActiveVegetationTypeCommand& cmd)
+            {
+                activeVegetationType = cmd.type;
+            });
+
+        dispatcher.registerCommandHandler<events::vegetationBrush::SetMixedBrushConfigCommand>(
+            [this](const events::vegetationBrush::SetMixedBrushConfigCommand& cmd)
+            {
+                mixedBrushConfig = cmd.config;
+            });
+
         // Apply brush commands are handled by TerrainService (which has grid access)
 
         // Queries
+        dispatcher.registerQueryHandler<events::vegetationBrush::GetActiveVegetationTypeQuery>(
+            [this](const events::vegetationBrush::GetActiveVegetationTypeQuery&)
+            {
+                return activeVegetationType;
+            });
+
+        dispatcher.registerQueryHandler<events::vegetationBrush::GetMixedBrushConfigQuery>(
+            [this](const events::vegetationBrush::GetMixedBrushConfigQuery&)
+            {
+                return mixedBrushConfig;
+            });
+
         dispatcher.registerQueryHandler<events::vegetationBrush::GetDensityBrushParamsQuery>(
             [this](const events::vegetationBrush::GetDensityBrushParamsQuery&)
             {

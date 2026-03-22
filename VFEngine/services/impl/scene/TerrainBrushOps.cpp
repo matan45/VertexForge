@@ -508,9 +508,6 @@ namespace services
                     continue;
             }
 
-            if (!tile->vegetationDensity.isInitialized())
-                tile->vegetationDensity.initializeDefault(tile->config.getVertexCount());
-
             if (fileCache)
                 fileCache->markDirty(coord);
 
@@ -530,11 +527,48 @@ namespace services
             applyParams.deltaTime = deltaTime;
             applyParams.invert = invert;
 
-            if (vegetation::VegetationDensityBrushApplicator::apply(tile->vegetationDensity, applyParams))
+            // Apply brush to active vegetation type(s)
+            auto activeType = events::EventDispatcher::instance().query(
+                events::vegetationBrush::GetActiveVegetationTypeQuery{});
+            auto mixedConfig = events::EventDispatcher::instance().query(
+                events::vegetationBrush::GetMixedBrushConfigQuery{});
+
+            if (mixedConfig.enabled)
             {
-                tile->vegetationDensityDirty = true;
-                tile->vegetationDensityGPUDirty = true;
-                anyModified = true;
+                // Mixed brush: paint multiple types with configurable ratios
+                for (uint32_t t = 0; t < vegetation::VEGETATION_TYPE_COUNT; ++t)
+                {
+                    if (mixedConfig.ratios[t] <= 0.001f) continue;
+
+                    auto& densityMap = tile->vegetationDensityMaps[t];
+                    if (!densityMap.isInitialized())
+                        densityMap.initializeDefault(tile->config.getVertexCount());
+
+                    auto scaledParams = applyParams;
+                    scaledParams.brushStrength *= mixedConfig.ratios[t];
+
+                    if (vegetation::VegetationDensityBrushApplicator::apply(densityMap, scaledParams))
+                    {
+                        tile->vegetationDensityDirty[t] = true;
+                        tile->vegetationDensityGPUDirty[t] = true;
+                        anyModified = true;
+                    }
+                }
+            }
+            else
+            {
+                // Single type brush
+                uint32_t typeIdx = static_cast<uint32_t>(activeType);
+                auto& densityMap = tile->vegetationDensityMaps[typeIdx];
+                if (!densityMap.isInitialized())
+                    densityMap.initializeDefault(tile->config.getVertexCount());
+
+                if (vegetation::VegetationDensityBrushApplicator::apply(densityMap, applyParams))
+                {
+                    tile->vegetationDensityDirty[typeIdx] = true;
+                    tile->vegetationDensityGPUDirty[typeIdx] = true;
+                    anyModified = true;
+                }
             }
         }
 

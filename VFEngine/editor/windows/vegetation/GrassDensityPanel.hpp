@@ -2,6 +2,7 @@
 
 #include "events/EventTypes.hpp"
 #include "vegetation/GrassConfig.hpp"
+#include "vegetation/VegetationTypes.hpp"
 
 namespace windows
 {
@@ -15,6 +16,14 @@ namespace windows
         float brushOpacity = 1.0f;
         int falloffIndex = 2;
         int shapeIndex = 0;
+
+        // Vegetation type selection
+        int selectedVegetationType = 0;
+        bool mixedModeEnabled = false;
+        float mixedRatios[vegetation::VEGETATION_TYPE_COUNT] = {1.0f, 0.0f, 0.0f, 0.0f};
+
+        // Billboard texture path (for Billboard type)
+        char billboardTexturePath[256] = "";
 
         vegetation::GrassRenderConfig grassConfig;
         bool configLoaded = false;
@@ -33,7 +42,10 @@ namespace windows
 
     private:
         void subscribe();
+        void drawVegetationTypePalette();
         void drawGrassConfigSection();
         void pushGrassConfig();
+        void pushVegetationType();
+        void pushMixedBrushConfig();
     };
 }

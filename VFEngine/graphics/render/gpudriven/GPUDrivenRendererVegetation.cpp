@@ -1,5 +1,6 @@
 #include "GPUDrivenRenderer.hpp"
 #include "print/Log.hpp"
+#include <cmath>
 #include "../vegetation/GrassComputePipeline.hpp"
 #include "../vegetation/GrassMeshShaderPipeline.hpp"
 #include "../vegetation/WindSystem.hpp"
@@ -9,6 +10,7 @@
 #include "../../core/Device.hpp"
 #include "../../core/BufferUtilities.hpp"
 #include "terrain/TerrainTile.hpp"
+#include "vegetation/VegetationTypes.hpp"
 #include "vegetation/WindConfig.hpp"
 #include "scene/BindlessTextureManager.hpp"
 
@@ -74,10 +76,18 @@ namespace render::gpudriven
         vegetation.grassComputePipeline->init(device);
 
         vegetation.grassMeshPipeline = std::make_unique<vegetation::GrassMeshShaderPipeline>();
+        vk::DescriptorSetLayout lightLayout = lightBufferManager
+            ? lightBufferManager->getDescriptorSetLayout()
+            : vk::DescriptorSetLayout{};
+        vk::DescriptorSetLayout bindlessLayout = bindlessTextures
+            ? bindlessTextures->getDescriptorSetLayout()
+            : vk::DescriptorSetLayout{};
         vegetation.grassMeshPipeline->init(
             device,
             iblDescriptorSetLayout,
             vegetation.windSystem->getDescriptorSetLayout(),
+            lightLayout,
+            bindlessLayout,
             renderPass
         );
 
@@ -287,16 +297,42 @@ namespace render::gpudriven
         {
             const terrain::TerrainTile* tile;
             uint32_t texelCount;
+            uint32_t activeTypeMask; // bitmask of vegetation types with initialized density
         };
         std::vector<TileDispatchInfo> dispatchTiles;
+
+        float maxVegDist = vegetation.grassConfig.fadeEndDistance;
 
         uint32_t maxTexelCount = 0;
         for (const auto* tile : visibleTiles)
         {
-            if (!tile || !tile->vegetationDensity.isInitialized()) continue;
-            uint32_t tc = static_cast<uint32_t>(tile->vegetationDensity.getTexelCount());
-            if (tc == 0) continue;
-            dispatchTiles.push_back({tile, tc});
+            if (!tile) continue;
+
+            // Check which vegetation types have density data
+            uint32_t typeMask = 0;
+            uint32_t tc = 0;
+            for (uint32_t t = 0; t < ::vegetation::VEGETATION_TYPE_COUNT; ++t)
+            {
+                if (tile->vegetationDensityMaps[t].isInitialized())
+                {
+                    typeMask |= (1u << t);
+                    tc = static_cast<uint32_t>(tile->vegetationDensityMaps[t].getTexelCount());
+                }
+            }
+            if (typeMask == 0 || tc == 0) continue;
+
+            // CPU-side skip: tiles beyond vegetation draw distance produce zero instances
+            float tileCenterX = static_cast<float>(tile->coord.x) * tile->config.worldTileSize
+                              + tile->config.worldTileSize * 0.5f;
+            float tileCenterZ = static_cast<float>(tile->coord.z) * tile->config.worldTileSize
+                              + tile->config.worldTileSize * 0.5f;
+            float tdx = cachedCamera.position.x - tileCenterX;
+            float tdz = cachedCamera.position.z - tileCenterZ;
+            float tileDistSq = tdx * tdx + tdz * tdz;
+            float cullDist = maxVegDist + tile->config.worldTileSize;
+            if (tileDistSq > cullDist * cullDist) continue;
+
+            dispatchTiles.push_back({tile, tc, typeMask});
             if (tc > maxTexelCount) maxTexelCount = tc;
         }
 
@@ -317,7 +353,8 @@ namespace render::gpudriven
         vk::DeviceSize holePerTile = maxTexelCount * sizeof(uint32_t);
         vk::DeviceSize slotSize = densityPerTile + heightPerTile + holePerTile;
 
-        // Phase 1: Upload ALL tiles' data to staging buffer at different offsets (CPU side)
+        // Phase 1: Upload ALL tiles' height+hole data to staging buffer (CPU side)
+        // Density is uploaded per-type in the dispatch loop below
         auto* basePtr = static_cast<uint8_t*>(vegetation.tileStagingMapped);
 
         for (uint32_t i = 0; i < tileCount; ++i)
@@ -328,7 +365,11 @@ namespace render::gpudriven
             vk::DeviceSize actualHeightSize = info.texelCount * sizeof(float);
             vk::DeviceSize actualHoleSize = info.texelCount * sizeof(uint32_t);
 
-            std::memcpy(slotPtr, info.tile->vegetationDensity.densityData.data(), actualDensitySize);
+            // Upload type 0 (grass) density as default; will be overwritten per-type in dispatch loop
+            if (info.tile->vegetationDensityMaps[0].isInitialized())
+                std::memcpy(slotPtr, info.tile->vegetationDensityMaps[0].densityData.data(), actualDensitySize);
+            else
+                std::memset(slotPtr, 0, actualDensitySize);
 
             uint8_t* heightPtr = slotPtr + densityPerTile;
             if (info.tile->heightData.size() >= info.texelCount)
@@ -378,67 +419,114 @@ namespace render::gpudriven
             vegetation.grassInstanceBuffer,
             vegetation.grassCounterBuffer);
 
-        // Phase 3: Per-tile GPU copy from staging[offset] → compute buffer, then dispatch
+        // Phase 3: Per-tile, per-type GPU copy from staging[offset] → compute buffer, then dispatch
+        bool isFirstDispatch = true;
         for (uint32_t i = 0; i < tileCount; ++i)
         {
             const auto& info = dispatchTiles[i];
             vk::DeviceSize stagingOffset = static_cast<vk::DeviceSize>(i) * slotSize;
-            vk::DeviceSize actualDensitySize = info.texelCount * sizeof(float);
             vk::DeviceSize actualHeightSize = info.texelCount * sizeof(float);
             vk::DeviceSize actualHoleSize = info.texelCount * sizeof(uint32_t);
+            vk::DeviceSize actualDensitySize = info.texelCount * sizeof(float);
 
-            vk::BufferCopy densityCopy(stagingOffset, 0, actualDensitySize);
-            cmd.copyBuffer(vegetation.tileStagingBuffer, vegetation.tileComputeDensity, densityCopy);
-
-            vk::BufferCopy heightCopy(stagingOffset + densityPerTile, 0, actualHeightSize);
-            cmd.copyBuffer(vegetation.tileStagingBuffer, vegetation.tileComputeHeight, heightCopy);
-
-            vk::BufferCopy holeCopy(stagingOffset + densityPerTile + heightPerTile, 0, actualHoleSize);
-            cmd.copyBuffer(vegetation.tileStagingBuffer, vegetation.tileComputeHole, holeCopy);
-
-            // Barrier: transfer → compute
-            vk::MemoryBarrier copyBarrier(
-                vk::AccessFlagBits::eTransferWrite,
-                vk::AccessFlagBits::eShaderRead);
-            cmd.pipelineBarrier(
-                vk::PipelineStageFlagBits::eTransfer,
-                vk::PipelineStageFlagBits::eComputeShader,
-                vk::DependencyFlags{},
-                1, &copyBarrier,
-                0, nullptr,
-                0, nullptr);
-
-            vegetation::GrassComputePushConstants pushConstants{};
-            pushConstants.tileWorldOrigin = glm::vec2(
+            // Compute shared push constant fields once per tile
+            vegetation::GrassComputePushConstants basePushConstants{};
+            basePushConstants.tileWorldOrigin = glm::vec2(
                 static_cast<float>(info.tile->coord.x) * info.tile->config.worldTileSize,
                 static_cast<float>(info.tile->coord.z) * info.tile->config.worldTileSize);
-            pushConstants.tileWorldSize = info.tile->config.worldTileSize;
-            pushConstants.vertexSpacing = info.tile->config.getVertexSpacing();
-            pushConstants.verticesPerSide = info.tile->config.getVertexCount();
-            pushConstants.maxInstances = vegetation.grassInstanceCapacity;
-            pushConstants.slopeLimit = vegetation.grassConfig.slopeLimit;
-            pushConstants.densityMultiplier = vegetation.grassConfig.densityMultiplier;
-            pushConstants.heightMin = vegetation.grassConfig.heightMin;
-            pushConstants.heightMax = vegetation.grassConfig.heightMax;
-            pushConstants.widthMin = vegetation.grassConfig.widthMin;
-            pushConstants.widthMax = vegetation.grassConfig.widthMax;
-            pushConstants.time = cachedCamera.time;
+            basePushConstants.tileWorldSize = info.tile->config.worldTileSize;
+            basePushConstants.vertexSpacing = info.tile->config.getVertexSpacing();
+            basePushConstants.verticesPerSide = info.tile->config.getVertexCount();
+            basePushConstants.maxInstances = vegetation.grassInstanceCapacity;
+            basePushConstants.slopeLimit = vegetation.grassConfig.slopeLimit;
+            basePushConstants.heightMin = vegetation.grassConfig.heightMin;
+            basePushConstants.heightMax = vegetation.grassConfig.heightMax;
+            basePushConstants.widthMin = vegetation.grassConfig.widthMin;
+            basePushConstants.widthMax = vegetation.grassConfig.widthMax;
+            basePushConstants.time = cachedCamera.time;
+            basePushConstants.cameraX = cachedCamera.position.x;
+            basePushConstants.cameraZ = cachedCamera.position.z;
+            basePushConstants.densityFadeStart = vegetation.grassConfig.fadeStartDistance
+                                               * vegetation.grassConfig.densityFadeStartFactor;
+            basePushConstants.densityFadeEnd = vegetation.grassConfig.fadeEndDistance;
+            basePushConstants.minDensityScale = vegetation.grassConfig.minDensityScale;
 
-            vegetation.grassComputePipeline->dispatch(cmd, info.texelCount, pushConstants);
-
-            // Barrier: compute reads/writes must finish before next tile overwrites compute buffers
-            if (i + 1 < tileCount)
+            // Terrain LOD density scaling
+            float baseDensityMult = vegetation.grassConfig.densityMultiplier;
+            if (vegetation.grassConfig.terrainLODIntegration)
             {
-                vk::MemoryBarrier interTileBarrier(
-                    vk::AccessFlagBits::eShaderRead | vk::AccessFlagBits::eShaderWrite,
-                    vk::AccessFlagBits::eTransferWrite);
+                float tileCenterX = basePushConstants.tileWorldOrigin.x + basePushConstants.tileWorldSize * 0.5f;
+                float tileCenterZ = basePushConstants.tileWorldOrigin.y + basePushConstants.tileWorldSize * 0.5f;
+                float ldx = cachedCamera.position.x - tileCenterX;
+                float ldz = cachedCamera.position.z - tileCenterZ;
+                float tileDist = std::sqrt(ldx * ldx + ldz * ldz);
+
+                float lodScale = 1.0f;
+                if (tileDist > 320.0f) lodScale = 0.1f;
+                else if (tileDist > 160.0f) lodScale = 0.25f;
+                else if (tileDist > 80.0f) lodScale = 0.5f;
+                else if (tileDist > 40.0f) lodScale = 0.75f;
+
+                baseDensityMult *= lodScale;
+            }
+
+            // Dispatch for each active vegetation type on this tile
+            for (uint32_t vegType = 0; vegType < ::vegetation::VEGETATION_TYPE_COUNT; ++vegType)
+            {
+                if (!(info.activeTypeMask & (1u << vegType))) continue;
+
+                const auto& densityMap = info.tile->vegetationDensityMaps[vegType];
+                if (!densityMap.isInitialized()) continue;
+
+                // Inter-dispatch barrier (compute→transfer) before overwriting compute buffers
+                if (!isFirstDispatch)
+                {
+                    vk::MemoryBarrier interBarrier(
+                        vk::AccessFlagBits::eShaderRead | vk::AccessFlagBits::eShaderWrite,
+                        vk::AccessFlagBits::eTransferWrite);
+                    cmd.pipelineBarrier(
+                        vk::PipelineStageFlagBits::eComputeShader,
+                        vk::PipelineStageFlagBits::eTransfer,
+                        vk::DependencyFlags{},
+                        1, &interBarrier,
+                        0, nullptr,
+                        0, nullptr);
+                }
+
+                // Update density data in staging buffer for this vegetation type
+                {
+                    uint8_t* slotPtr = basePtr + static_cast<size_t>(i) * slotSize;
+                    std::memcpy(slotPtr, densityMap.densityData.data(), actualDensitySize);
+                }
+
+                // Copy tile data from staging → device-local compute buffers
+                vk::BufferCopy densityCopy(stagingOffset, 0, actualDensitySize);
+                cmd.copyBuffer(vegetation.tileStagingBuffer, vegetation.tileComputeDensity, densityCopy);
+
+                vk::BufferCopy heightCopy(stagingOffset + densityPerTile, 0, actualHeightSize);
+                cmd.copyBuffer(vegetation.tileStagingBuffer, vegetation.tileComputeHeight, heightCopy);
+
+                vk::BufferCopy holeCopy(stagingOffset + densityPerTile + heightPerTile, 0, actualHoleSize);
+                cmd.copyBuffer(vegetation.tileStagingBuffer, vegetation.tileComputeHole, holeCopy);
+
+                // Barrier: transfer → compute
+                vk::MemoryBarrier copyBarrier(
+                    vk::AccessFlagBits::eTransferWrite,
+                    vk::AccessFlagBits::eShaderRead);
                 cmd.pipelineBarrier(
-                    vk::PipelineStageFlagBits::eComputeShader,
                     vk::PipelineStageFlagBits::eTransfer,
+                    vk::PipelineStageFlagBits::eComputeShader,
                     vk::DependencyFlags{},
-                    1, &interTileBarrier,
+                    1, &copyBarrier,
                     0, nullptr,
                     0, nullptr);
+
+                auto pushConstants = basePushConstants;
+                pushConstants.densityMultiplier = baseDensityMult;
+                pushConstants.vegetationType = vegType;
+
+                vegetation.grassComputePipeline->dispatch(cmd, info.texelCount, pushConstants);
+                isFirstDispatch = false;
             }
         }
 
@@ -486,7 +574,9 @@ namespace render::gpudriven
 
         vegetation.grassMeshPipeline->updateSharedDescriptors(
             iblDescriptorSet,
-            vegetation.windSystem ? vegetation.windSystem->getDescriptorSet() : vk::DescriptorSet{}
+            vegetation.windSystem ? vegetation.windSystem->getDescriptorSet() : vk::DescriptorSet{},
+            lightBufferManager ? lightBufferManager->getDescriptorSet() : vk::DescriptorSet{},
+            bindlessTextures ? bindlessTextures->getDescriptorSet() : vk::DescriptorSet{}
         );
 
         vegetation.grassMeshPipeline->dispatch(
@@ -495,7 +585,10 @@ namespace render::gpudriven
             vegetation.grassConfig.fadeStartDistance,
             vegetation.grassConfig.fadeEndDistance,
             vegetation.grassConfig.baseColor,
-            vegetation.grassConfig.tipColor
+            vegetation.grassConfig.tipColor,
+            vegetation.grassConfig.sssDistortion,
+            vegetation.grassConfig.sssPower,
+            vegetation.grassConfig.sssScale
         );
     }
 

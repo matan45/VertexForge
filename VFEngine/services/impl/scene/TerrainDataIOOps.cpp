@@ -131,15 +131,18 @@ namespace services
         {
             if (!tile) continue;
 
-            if (tile->vegetationDensity.isInitialized())
+            for (uint32_t t = 0; t < vegetation::VEGETATION_TYPE_COUNT; ++t)
             {
-                anyData = true;
-                std::string densityPath = std::format("{}/tile_{}_{}.vfVegDensity",
-                    vegDir, tile->coord.x, tile->coord.z);
-                if (!vegetation::VegetationSerializer::saveDensityMap(densityPath, tile->vegetationDensity))
+                if (tile->vegetationDensityMaps[t].isInitialized())
                 {
-                    vfLogError("TerrainService: Failed to save vegetation density for tile ({}, {})",
-                               tile->coord.x, tile->coord.z);
+                    anyData = true;
+                    std::string densityPath = std::format("{}/tile_{}_{}_{}.vfVegDensity",
+                        vegDir, tile->coord.x, tile->coord.z, t);
+                    if (!vegetation::VegetationSerializer::saveDensityMap(densityPath, tile->vegetationDensityMaps[t]))
+                    {
+                        vfLogError("TerrainService: Failed to save vegetation density type {} for tile ({}, {})",
+                                   t, tile->coord.x, tile->coord.z);
+                    }
                 }
             }
 
@@ -170,15 +173,18 @@ namespace services
         {
             if (!tile) continue;
 
-            std::string densityPath = std::format("{}/tile_{}_{}.vfVegDensity",
-                vegDir, tile->coord.x, tile->coord.z);
-            if (fs::exists(densityPath))
+            for (uint32_t t = 0; t < vegetation::VEGETATION_TYPE_COUNT; ++t)
             {
-                if (vegetation::VegetationSerializer::loadDensityMap(densityPath, tile->vegetationDensity))
+                std::string densityPath = std::format("{}/tile_{}_{}_{}.vfVegDensity",
+                    vegDir, tile->coord.x, tile->coord.z, t);
+                if (fs::exists(densityPath))
                 {
-                    tile->vegetationDensityDirty = true;
-                    tile->vegetationDensityGPUDirty = true;
-                    loadedDensity++;
+                    if (vegetation::VegetationSerializer::loadDensityMap(densityPath, tile->vegetationDensityMaps[t]))
+                    {
+                        tile->vegetationDensityDirty[t] = true;
+                        tile->vegetationDensityGPUDirty[t] = true;
+                        loadedDensity++;
+                    }
                 }
             }
 

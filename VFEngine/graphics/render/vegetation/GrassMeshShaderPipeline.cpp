@@ -17,6 +17,8 @@ namespace render::vegetation
     void GrassMeshShaderPipeline::init(core::Device& device,
                                         vk::DescriptorSetLayout cameraLayout,
                                         vk::DescriptorSetLayout windLayout,
+                                        vk::DescriptorSetLayout lightLayout,
+                                        vk::DescriptorSetLayout bindlessLayout,
                                         vk::RenderPass renderPass)
     {
         if (initialized) return;
@@ -24,7 +26,7 @@ namespace render::vegetation
         devicePtr = &device;
 
         createGrassDataDescriptor();
-        createGrassPipeline(cameraLayout, windLayout, renderPass);
+        createGrassPipeline(cameraLayout, windLayout, lightLayout, bindlessLayout, renderPass);
 
         if (graphicsPipeline)
         {
@@ -79,6 +81,8 @@ namespace render::vegetation
 
     void GrassMeshShaderPipeline::recreate(vk::DescriptorSetLayout cameraLayout,
                                             vk::DescriptorSetLayout windLayout,
+                                            vk::DescriptorSetLayout lightLayout,
+                                            vk::DescriptorSetLayout bindlessLayout,
                                             vk::RenderPass renderPass)
     {
         if (!initialized || !devicePtr) return;
@@ -104,7 +108,7 @@ namespace render::vegetation
             pipelineLayout = nullptr;
         }
 
-        createGrassPipeline(cameraLayout, windLayout, renderPass);
+        createGrassPipeline(cameraLayout, windLayout, lightLayout, bindlessLayout, renderPass);
 
         vfLogInfo("GrassMeshShaderPipeline: Recreated pipeline");
     }
@@ -144,12 +148,16 @@ namespace render::vegetation
     }
 
     void GrassMeshShaderPipeline::updateSharedDescriptors(vk::DescriptorSet cameraDescSet,
-                                                           vk::DescriptorSet windDescSet)
+                                                           vk::DescriptorSet windDescSet,
+                                                           vk::DescriptorSet lightDescSet,
+                                                           vk::DescriptorSet bindlessDescSet)
     {
         if (!initialized) return;
 
         cameraDescriptorSet = cameraDescSet;
         windDescriptorSet = windDescSet;
+        lightDataDescriptorSet = lightDescSet;
+        bindlessDescriptorSet = bindlessDescSet;
     }
 
     void GrassMeshShaderPipeline::dispatch(vk::CommandBuffer cmd,
@@ -157,7 +165,11 @@ namespace render::vegetation
                                             float fadeStartDistance,
                                             float fadeEndDistance,
                                             const glm::vec4& baseColor,
-                                            const glm::vec4& tipColor)
+                                            const glm::vec4& tipColor,
+                                            float sssDistortion,
+                                            float sssPower,
+                                            float sssScale,
+                      uint32_t billboardTextureIndex)
     {
         if (!initialized || instanceCount == 0 || !graphicsPipeline) return;
 
@@ -168,14 +180,40 @@ namespace render::vegetation
 
         cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
 
-        std::array<vk::DescriptorSet, 3> sets = {
-            grassDataDescriptorSet,
-            cameraDescriptorSet,
-            windDescriptorSet
-        };
-        cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 0, sets, {});
+        // Bind sets 0-2 always; sets 3-4 (lights, bindless) when available
+        if (lightDataDescriptorSet && bindlessDescriptorSet)
+        {
+            std::array<vk::DescriptorSet, 5> sets = {
+                grassDataDescriptorSet,
+                cameraDescriptorSet,
+                windDescriptorSet,
+                lightDataDescriptorSet,
+                bindlessDescriptorSet
+            };
+            cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 0, sets, {});
+        }
+        else if (lightDataDescriptorSet)
+        {
+            std::array<vk::DescriptorSet, 4> sets = {
+                grassDataDescriptorSet,
+                cameraDescriptorSet,
+                windDescriptorSet,
+                lightDataDescriptorSet
+            };
+            cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 0, sets, {});
+        }
+        else
+        {
+            std::array<vk::DescriptorSet, 3> sets = {
+                grassDataDescriptorSet,
+                cameraDescriptorSet,
+                windDescriptorSet
+            };
+            cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 0, sets, {});
+        }
 
-        GrassMeshPushConstants pc{baseColor, tipColor, fadeStartDistance, fadeEndDistance};
+        GrassMeshPushConstants pc{baseColor, tipColor, fadeStartDistance, fadeEndDistance,
+                                   sssDistortion, sssPower, sssScale, billboardTextureIndex};
         cmd.pushConstants(pipelineLayout,
                           vk::ShaderStageFlagBits::eTaskEXT |
                           vk::ShaderStageFlagBits::eMeshEXT |
@@ -221,6 +259,8 @@ namespace render::vegetation
 
     void GrassMeshShaderPipeline::createGrassPipeline(vk::DescriptorSetLayout cameraLayout,
                                                        vk::DescriptorSetLayout windLayout,
+                                                       vk::DescriptorSetLayout lightLayout,
+                                                       vk::DescriptorSetLayout bindlessLayout,
                                                        vk::RenderPass renderPass)
     {
         if (!loadGrassShaders())
@@ -232,11 +272,15 @@ namespace render::vegetation
 
         this->cameraLayout = cameraLayout;
         this->windLayout = windLayout;
+        this->lightDataLayout = lightLayout;
+        this->bindlessLayout = bindlessLayout;
 
-        std::array<vk::DescriptorSetLayout, 3> setLayouts = {
+        std::array<vk::DescriptorSetLayout, 5> setLayouts = {
             grassDataLayout,
             cameraLayout,
-            windLayout
+            windLayout,
+            lightLayout,
+            bindlessLayout
         };
 
         vk::PushConstantRange pushRange{};

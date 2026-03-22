@@ -175,9 +175,9 @@ namespace terrain
 
     void TerrainTile::initializeVegetationDensity()
     {
-        vegetationDensity.initializeDefault(config.getVertexCount());
-        vegetationDensityDirty = true;
-        vegetationDensityGPUDirty = true;
+        vegetationDensityMaps[0].initializeDefault(config.getVertexCount());
+        vegetationDensityDirty[0] = true;
+        vegetationDensityGPUDirty[0] = true;
     }
 
     void TerrainTile::initializeHoleMask()

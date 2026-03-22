@@ -33,6 +33,20 @@ namespace events::vegetationBrush
         std::string_view getName() const override { return "SetDensityBrushType"; }
     };
 
+    struct SetActiveVegetationTypeCommand : ICommand<>
+    {
+        ::vegetation::VegetationType type;
+
+        std::string_view getName() const override { return "SetActiveVegetationType"; }
+    };
+
+    struct SetMixedBrushConfigCommand : ICommand<>
+    {
+        ::vegetation::MixedBrushConfig config;
+
+        std::string_view getName() const override { return "SetMixedBrushConfig"; }
+    };
+
     // ---- Mode Commands ----
 
     struct SetVegetationBrushModeActiveCommand : ICommand<>
@@ -52,6 +66,16 @@ namespace events::vegetationBrush
     struct GetDensityBrushTypeQuery : IQuery<::vegetation::DensityBrushType>
     {
         std::string_view getName() const override { return "GetDensityBrushType"; }
+    };
+
+    struct GetActiveVegetationTypeQuery : IQuery<::vegetation::VegetationType>
+    {
+        std::string_view getName() const override { return "GetActiveVegetationType"; }
+    };
+
+    struct GetMixedBrushConfigQuery : IQuery<::vegetation::MixedBrushConfig>
+    {
+        std::string_view getName() const override { return "GetMixedBrushConfig"; }
     };
 
     struct IsVegetationBrushModeActiveQuery : IQuery<bool>
