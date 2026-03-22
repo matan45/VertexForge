@@ -313,6 +313,20 @@ namespace services
                     return;
                 }
             });
+
+        // Get billboard instances for a tile
+        dispatcher.registerQueryHandler<events::vegetation::GetTileBillboardInstancesQuery>(
+            [this](const events::vegetation::GetTileBillboardInstancesQuery& query)
+                -> std::vector<vegetation::BillboardInstance>
+            {
+                terrain::TileCoord coord{query.tileX, query.tileZ};
+                for (auto& [entityId, grid] : terrainGrids)
+                {
+                    auto* tile = grid->getTile(coord);
+                    if (tile) return tile->billboardInstances;
+                }
+                return {};
+            });
     }
 
     void TerrainService::registerCaveBrushHandlers(::events::EventDispatcher& dispatcher)

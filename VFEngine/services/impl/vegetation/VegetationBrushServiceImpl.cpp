@@ -248,8 +248,23 @@ namespace services
 
         for (const auto& coord : affectedTiles)
         {
+            // Ensure spatial grid exists - rebuild from tile data if needed
             auto gridIt = spatialGrids.find(coord);
-            if (gridIt == spatialGrids.end()) continue;
+            if (gridIt == spatialGrids.end())
+            {
+                // Query tile instances to build grid
+                events::vegetation::GetTileBillboardInstancesQuery query;
+                query.tileX = coord.x;
+                query.tileZ = coord.z;
+                try {
+                    auto instances = dispatcher.query(query);
+                    if (instances.empty()) continue;
+                    auto& grid = spatialGrids[coord];
+                    grid.setCellSize(currentParams.spacing);
+                    grid.rebuild(instances);
+                    gridIt = spatialGrids.find(coord);
+                } catch (...) { continue; }
+            }
 
             auto entries = gridIt->second.queryRadius(worldPos, currentParams.radius);
             if (entries.empty()) continue;

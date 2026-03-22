@@ -70,6 +70,15 @@ namespace events::vegetation
         std::string_view getName() const override { return "AddBillboardInstancesToTile"; }
     };
 
+    // Get billboard instances for a tile (for spatial grid rebuild)
+    struct GetTileBillboardInstancesQuery : IQuery<std::vector<::vegetation::BillboardInstance>>
+    {
+        int32_t tileX = 0;
+        int32_t tileZ = 0;
+
+        std::string_view getName() const override { return "GetTileBillboardInstances"; }
+    };
+
     // Remove billboard instances from a specific tile by indices (sorted descending)
     struct RemoveBillboardInstancesFromTileCommand : ICommand<void>
     {
