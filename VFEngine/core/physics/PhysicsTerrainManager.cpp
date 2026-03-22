@@ -98,16 +98,28 @@ namespace core::physics
     {
         if (!ctx || !ctx->physicsSystem) return;
 
-        auto entityIt = terrainBodies.find(entityId);
-        if (entityIt == terrainBodies.end()) return;
-
         auto& bodyInterface = ctx->getBodyInterface();
-        for (auto& [tileKey, bodyId] : entityIt->second)
+
+        auto entityIt = terrainBodies.find(entityId);
+        if (entityIt != terrainBodies.end())
         {
-            removeAndDestroyBody(bodyInterface, bodyId);
+            for (auto& [tileKey, bodyId] : entityIt->second)
+            {
+                removeAndDestroyBody(bodyInterface, bodyId);
+            }
+            terrainBodies.erase(entityIt);
         }
 
-        terrainBodies.erase(entityIt);
+        // Also remove all cave bodies for this entity
+        auto caveIt = caveBodies.find(entityId);
+        if (caveIt != caveBodies.end())
+        {
+            for (auto& [tileKey, bodyId] : caveIt->second)
+            {
+                removeAndDestroyBody(bodyInterface, bodyId);
+            }
+            caveBodies.erase(caveIt);
+        }
     }
 
     bool PhysicsTerrainManager::hasTerrainBodies(uint64_t entityId) const

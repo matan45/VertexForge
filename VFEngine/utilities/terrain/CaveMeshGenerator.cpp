@@ -208,14 +208,22 @@ namespace terrain
                         }
                     }
 
-                    // Emit triangles with reversed winding order
-                    // Standard MC normals point toward solid; we flip so normals
-                    // face into the cave interior (toward the viewer inside)
+                    // Emit double-sided triangles — visible from both inside and outside the cave
                     for (int i = 0; triTable[cubeIndex][i] != -1; i += 3)
                     {
-                        indices.push_back(edgeVertices[triTable[cubeIndex][i]]);
-                        indices.push_back(edgeVertices[triTable[cubeIndex][i + 2]]);
-                        indices.push_back(edgeVertices[triTable[cubeIndex][i + 1]]);
+                        uint32_t a = edgeVertices[triTable[cubeIndex][i]];
+                        uint32_t b = edgeVertices[triTable[cubeIndex][i + 1]];
+                        uint32_t c = edgeVertices[triTable[cubeIndex][i + 2]];
+
+                        // Front face (visible from inside cave)
+                        indices.push_back(a);
+                        indices.push_back(c);
+                        indices.push_back(b);
+
+                        // Back face (visible from outside/below)
+                        indices.push_back(a);
+                        indices.push_back(b);
+                        indices.push_back(c);
                     }
                 }
             }

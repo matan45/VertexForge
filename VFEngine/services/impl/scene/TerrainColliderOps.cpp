@@ -82,6 +82,32 @@ namespace services
             }
         }
 
+        // Append cave mesh wireframe if cave geometry exists
+        if (tile.hasCaveGeometry() && !tile.caveLOD.isEmpty())
+        {
+            uint32_t baseVertex = static_cast<uint32_t>(out.vertices.size());
+            glm::vec3 tileOriginOffset(tile.worldOrigin.x, 0.0f, tile.worldOrigin.z);
+
+            for (const auto& v : tile.caveLOD.vertices)
+            {
+                out.vertices.push_back(v.position + tileOriginOffset);
+            }
+
+            // Add wireframe edges from cave triangles
+            for (size_t i = 0; i + 2 < tile.caveLOD.indices.size(); i += 3)
+            {
+                uint32_t a = baseVertex + tile.caveLOD.indices[i];
+                uint32_t b = baseVertex + tile.caveLOD.indices[i + 1];
+                uint32_t c = baseVertex + tile.caveLOD.indices[i + 2];
+                out.lineIndices.push_back(a);
+                out.lineIndices.push_back(b);
+                out.lineIndices.push_back(b);
+                out.lineIndices.push_back(c);
+                out.lineIndices.push_back(c);
+                out.lineIndices.push_back(a);
+            }
+        }
+
         out.version++;
     }
 
@@ -187,6 +213,31 @@ namespace services
             return false;
 
         physicsProvider->addTerrainCollider(terrainEntity, tileInfos);
+
+        // Add cave mesh colliders for tiles with cave geometry
+        for (auto* tile : allTiles)
+        {
+            if (!tile || !tile->hasCaveGeometry() || tile->caveLOD.isEmpty())
+                continue;
+
+            glm::vec3 tileOriginOffset(tile->worldOrigin.x, 0.0f, tile->worldOrigin.z);
+            std::vector<glm::vec3> worldPositions;
+            worldPositions.reserve(tile->caveLOD.vertices.size());
+            for (const auto& v : tile->caveLOD.vertices)
+            {
+                worldPositions.push_back(v.position + tileOriginOffset);
+            }
+
+            CaveTileColliderInfo caveInfo;
+            caveInfo.tileX = tile->coord.x;
+            caveInfo.tileZ = tile->coord.z;
+            caveInfo.vertices = worldPositions.data();
+            caveInfo.vertexCount = static_cast<uint32_t>(worldPositions.size());
+            caveInfo.indices = tile->caveLOD.indices.data();
+            caveInfo.indexCount = static_cast<uint32_t>(tile->caveLOD.indices.size());
+
+            physicsProvider->addCaveTileCollider(terrainEntity, caveInfo);
+        }
 
         auto& registry = scene::EntityRegistry::getRegistry();
         entt::entity ent = internal::fromHandle(terrainEntity);

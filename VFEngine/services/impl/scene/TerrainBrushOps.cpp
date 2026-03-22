@@ -655,6 +655,10 @@ namespace services
             {
                 for (uint32_t qx = 0; qx < quadCount; ++qx)
                 {
+                    // Only punch a hole if the cave reaches the heightmap surface itself.
+                    // Check the SDF AT the surface height — if it was carved from solid to air
+                    // at the surface, the surface is gone and should be a hole.
+                    // Deep caves below thick rock do NOT create surface holes.
                     bool shouldBeHole = false;
                     for (int dz = 0; dz <= 1 && !shouldBeHole; ++dz)
                     {
@@ -662,24 +666,20 @@ namespace services
                         {
                             uint32_t vx = qx + dx;
                             uint32_t vz = qz + dz;
-                            uint32_t sx = std::min(vx, sdf.config.resX - 1);
-                            uint32_t sz = std::min(vz, sdf.config.resZ - 1);
                             float surfaceHeight = tile->heightData[vz * vertexCount + vx];
 
-                            // Scan the SDF column at this XZ from bottom up to surface
-                            // If any originally-solid voxel is now air, there's a cave here
-                            for (uint32_t sy = 0; sy < sdf.config.resY; ++sy)
-                            {
-                                float worldY = sdf.getWorldY(sy);
-                                if (worldY > surfaceHeight + 0.1f)
-                                    break;
+                            glm::vec3 surfacePos(
+                                tile->worldOrigin.x + vx * tile->config.getVertexSpacing(),
+                                surfaceHeight,
+                                tile->worldOrigin.z + vz * tile->config.getVertexSpacing());
 
-                                size_t idx = sdf.getIndex(sx, sy, sz);
-                                if (sdf.originalSdfGrid[idx] <= 0.0f && sdf.sdfGrid[idx] > 0.0f)
-                                {
-                                    shouldBeHole = true;
-                                    break;
-                                }
+                            // Sample current SDF at the surface position
+                            float currentSdf = sdf.sampleSDF(surfacePos);
+
+                            // If the SDF at the surface is now positive (air), the surface was carved away
+                            if (currentSdf > 0.1f)
+                            {
+                                shouldBeHole = true;
                             }
                         }
                     }
@@ -709,6 +709,39 @@ namespace services
         {
             syncCaveBoundaries(grid, modifiedTiles);
             rebuildModifiedColliders(*targetEntity, grid, modifiedTiles);
+
+            // Rebuild cave mesh physics colliders
+            if (physicsProvider && physicsProvider->hasTerrainCollider(*targetEntity))
+            {
+                for (const auto& coord : modifiedTiles)
+                {
+                    auto* tile = grid->getTile(coord);
+                    if (tile && tile->hasCaveGeometry() && !tile->caveLOD.isEmpty())
+                    {
+                        glm::vec3 tileOriginOffset(tile->worldOrigin.x, 0.0f, tile->worldOrigin.z);
+                        std::vector<glm::vec3> worldPositions;
+                        worldPositions.reserve(tile->caveLOD.vertices.size());
+                        for (const auto& v : tile->caveLOD.vertices)
+                        {
+                            worldPositions.push_back(v.position + tileOriginOffset);
+                        }
+
+                        CaveTileColliderInfo caveInfo;
+                        caveInfo.tileX = coord.x;
+                        caveInfo.tileZ = coord.z;
+                        caveInfo.vertices = worldPositions.data();
+                        caveInfo.vertexCount = static_cast<uint32_t>(worldPositions.size());
+                        caveInfo.indices = tile->caveLOD.indices.data();
+                        caveInfo.indexCount = static_cast<uint32_t>(tile->caveLOD.indices.size());
+
+                        physicsProvider->rebuildCaveTileCollider(*targetEntity, caveInfo);
+                    }
+                    else
+                    {
+                        physicsProvider->removeCaveTileCollider(*targetEntity, coord.x, coord.z);
+                    }
+                }
+            }
 
             events::caveBrush::CaveBrushAppliedNotification notification;
             notification.position = worldPosition;
