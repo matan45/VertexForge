@@ -45,8 +45,13 @@ namespace events::vegetation
     struct SetBillboardPaletteCommand : ICommand<void>
     {
         std::vector<::vegetation::BillboardPaletteEntry> entries;
-        int32_t activeEntry = -1; // -1 = All (Random)
+        int32_t activeEntry = -1;
 
         std::string_view getName() const override { return "SetBillboardPalette"; }
+    };
+
+    struct GetBillboardPaletteQuery : IQuery<std::vector<::vegetation::BillboardPaletteEntry>>
+    {
+        std::string_view getName() const override { return "GetBillboardPalette"; }
     };
 }

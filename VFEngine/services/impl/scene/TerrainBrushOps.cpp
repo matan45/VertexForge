@@ -14,6 +14,7 @@
 #include "../../events/terrain/PaintBrushEvents.hpp"
 #include "../../events/terrain/HoleBrushEvents.hpp"
 #include "../../events/vegetation/VegetationBrushEvents.hpp"
+#include "../../events/vegetation/GrassEvents.hpp"
 #include "../../events/editor/SculptModeEvents.hpp"
 #include "../../events/terrain/PaintModeEvents.hpp"
 #include "../../events/terrain/HoleModeEvents.hpp"
@@ -493,15 +494,19 @@ namespace services
         auto cacheIt = fileCaches.find(targetEntity->id);
         auto fileCache = (cacheIt != fileCaches.end()) ? cacheIt->second : nullptr;
 
-        // Query active vegetation type and mixed config once before the tile loop
-        vegetation::VegetationType activeType = vegetation::VegetationType::Billboard;
-        vegetation::MixedBrushConfig mixedConfig;
+        // Query billboard palette to find paint-enabled entries
+        std::vector<uint32_t> paintSlots;
         try
         {
-            activeType = dispatcher.query(events::vegetationBrush::GetActiveVegetationTypeQuery{});
-            mixedConfig = dispatcher.query(events::vegetationBrush::GetMixedBrushConfigQuery{});
+            auto palette = dispatcher.query(events::vegetation::GetBillboardPaletteQuery{});
+            for (uint32_t i = 0; i < static_cast<uint32_t>(palette.size()) && i < vegetation::MAX_BILLBOARD_ENTRIES; ++i)
+            {
+                if (palette[i].paintEnabled) paintSlots.push_back(i);
+            }
         }
-        catch (...) { /* handlers not yet registered, use defaults */ }
+        catch (...) {}
+        // Fallback: if nothing enabled, paint to slot 0
+        if (paintSlots.empty()) paintSlots.push_back(0);
 
         bool anyModified = false;
         for (const auto& coord : affectedTiles)
@@ -537,40 +542,17 @@ namespace services
             applyParams.deltaTime = deltaTime;
             applyParams.invert = invert;
 
-            if (mixedConfig.enabled)
+            // Paint to all enabled billboard entry slots
+            for (uint32_t slot : paintSlots)
             {
-                // Mixed brush: paint multiple types with configurable ratios
-                for (uint32_t t = 0; t < vegetation::VEGETATION_TYPE_COUNT; ++t)
-                {
-                    if (mixedConfig.ratios[t] <= 0.001f) continue;
-
-                    auto& densityMap = tile->vegetationDensityMaps[t];
-                    if (!densityMap.isInitialized())
-                        densityMap.initializeDefault(tile->config.getVertexCount());
-
-                    auto scaledParams = applyParams;
-                    scaledParams.brushStrength *= mixedConfig.ratios[t];
-
-                    if (vegetation::VegetationDensityBrushApplicator::apply(densityMap, scaledParams))
-                    {
-                        tile->vegetationDensityDirty[t] = true;
-                        tile->vegetationDensityGPUDirty[t] = true;
-                        anyModified = true;
-                    }
-                }
-            }
-            else
-            {
-                // Single type brush
-                uint32_t typeIdx = static_cast<uint32_t>(activeType);
-                auto& densityMap = tile->vegetationDensityMaps[typeIdx];
+                auto& densityMap = tile->vegetationDensityMaps[slot];
                 if (!densityMap.isInitialized())
                     densityMap.initializeDefault(tile->config.getVertexCount());
 
                 if (vegetation::VegetationDensityBrushApplicator::apply(densityMap, applyParams))
                 {
-                    tile->vegetationDensityDirty[typeIdx] = true;
-                    tile->vegetationDensityGPUDirty[typeIdx] = true;
+                    tile->vegetationDensityDirty[slot] = true;
+                    tile->vegetationDensityGPUDirty[slot] = true;
                     anyModified = true;
                 }
             }

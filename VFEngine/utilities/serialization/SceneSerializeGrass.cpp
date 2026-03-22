@@ -47,6 +47,23 @@ namespace serialization
         j["sssPower"] = cfg.sssPower;
         j["sssScale"] = cfg.sssScale;
 
+        // Billboard palette
+        json paletteArr = json::array();
+        for (const auto& entry : grass.billboardPalette)
+        {
+            json e;
+            e["texturePath"] = entry.texturePath;
+            e["weight"] = entry.weight;
+            e["scaleMin"] = entry.scaleRange.x;
+            e["scaleMax"] = entry.scaleRange.y;
+            e["densityMultiplier"] = entry.densityMultiplier;
+            e["mode"] = static_cast<int>(entry.mode);
+            e["visible"] = entry.visible;
+            e["paintEnabled"] = entry.paintEnabled;
+            paletteArr.push_back(e);
+        }
+        j["billboardPalette"] = paletteArr;
+
         return j;
     }
 
@@ -114,5 +131,32 @@ namespace serialization
             cfg.sssPower = it->get<float>();
         if (auto it = j.find("sssScale"); it != j.end() && it->is_number())
             cfg.sssScale = it->get<float>();
+
+        // Billboard palette
+        if (auto it = j.find("billboardPalette"); it != j.end() && it->is_array())
+        {
+            grass.billboardPalette.clear();
+            for (const auto& e : *it)
+            {
+                vegetation::BillboardPaletteEntry entry;
+                if (e.contains("texturePath") && e["texturePath"].is_string())
+                    entry.texturePath = e["texturePath"].get<std::string>();
+                if (e.contains("weight") && e["weight"].is_number())
+                    entry.weight = e["weight"].get<float>();
+                if (e.contains("scaleMin") && e["scaleMin"].is_number())
+                    entry.scaleRange.x = e["scaleMin"].get<float>();
+                if (e.contains("scaleMax") && e["scaleMax"].is_number())
+                    entry.scaleRange.y = e["scaleMax"].get<float>();
+                if (e.contains("densityMultiplier") && e["densityMultiplier"].is_number())
+                    entry.densityMultiplier = e["densityMultiplier"].get<float>();
+                if (e.contains("mode") && e["mode"].is_number())
+                    entry.mode = static_cast<vegetation::BillboardMode>(e["mode"].get<int>());
+                if (e.contains("visible") && e["visible"].is_boolean())
+                    entry.visible = e["visible"].get<bool>();
+                if (e.contains("paintEnabled") && e["paintEnabled"].is_boolean())
+                    entry.paintEnabled = e["paintEnabled"].get<bool>();
+                grass.billboardPalette.push_back(entry);
+            }
+        }
     }
 }

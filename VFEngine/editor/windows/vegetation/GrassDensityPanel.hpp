@@ -22,7 +22,7 @@ namespace windows
 
         // Billboard palette
         std::vector<vegetation::BillboardPaletteEntry> billboardEntries;
-        int selectedBillboardIndex = -1; // -1 = All (Random)
+        int paintTargetEntry = 0; // Which entry the brush paints for
 
         vegetation::GrassRenderConfig grassConfig;
         bool configLoaded = false;

@@ -24,7 +24,9 @@ namespace vegetation
         Count = 1
     };
 
-    static constexpr uint32_t VEGETATION_TYPE_COUNT = static_cast<uint32_t>(VegetationType::Count);
+    // Max billboard entries per terrain - each gets its own density map slot
+    static constexpr uint32_t MAX_BILLBOARD_ENTRIES = 8;
+    static constexpr uint32_t VEGETATION_TYPE_COUNT = MAX_BILLBOARD_ENTRIES;
 
     enum class BillboardMode : uint8_t
     {
@@ -39,6 +41,8 @@ namespace vegetation
         glm::vec2 scaleRange{0.8f, 1.2f};           // Min/max random scale
         float densityMultiplier = 1.0f;              // Per-entry density
         BillboardMode mode = BillboardMode::Cross;   // Cross or camera-facing
+        bool visible = true;                         // Toggle rendering on/off
+        bool paintEnabled = true;                    // Include in multi-paint brush stroke
         uint32_t bindlessTextureIndex = 0xFFFFFFFF;  // Resolved at runtime
     };
 
@@ -59,7 +63,7 @@ namespace vegetation
     struct MixedBrushConfig
     {
         bool enabled = false;
-        std::array<float, VEGETATION_TYPE_COUNT> ratios = {1.0f};
+        std::array<float, VEGETATION_TYPE_COUNT> ratios = {};
 
         void normalize()
         {

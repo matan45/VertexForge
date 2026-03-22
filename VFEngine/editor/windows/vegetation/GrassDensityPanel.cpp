@@ -146,39 +146,6 @@ namespace windows
         ImGui::Text("Billboard Palette");
         ImGui::Separator();
 
-        // Paint entry selector
-        {
-            const char* preview = (selectedBillboardIndex < 0) ? "All (Random)" : "---";
-            if (selectedBillboardIndex >= 0 && selectedBillboardIndex < static_cast<int>(billboardEntries.size()))
-            {
-                auto& e = billboardEntries[selectedBillboardIndex];
-                preview = e.texturePath.empty() ? "(empty)" : e.texturePath.c_str();
-            }
-
-            if (ImGui::BeginCombo("Paint Entry", preview))
-            {
-                if (ImGui::Selectable("All (Random)", selectedBillboardIndex == -1))
-                {
-                    selectedBillboardIndex = -1;
-                    pushBillboardPalette();
-                }
-
-                for (int i = 0; i < static_cast<int>(billboardEntries.size()); ++i)
-                {
-                    auto& e = billboardEntries[i];
-                    std::string label = e.texturePath.empty()
-                        ? std::string("(empty) ##") + std::to_string(i)
-                        : std::filesystem::path(e.texturePath).filename().string() + "##" + std::to_string(i);
-                    if (ImGui::Selectable(label.c_str(), selectedBillboardIndex == i))
-                    {
-                        selectedBillboardIndex = i;
-                        pushBillboardPalette();
-                    }
-                }
-                ImGui::EndCombo();
-            }
-        }
-
         // Draw each entry
         int removeIndex = -1;
         for (int i = 0; i < static_cast<int>(billboardEntries.size()); ++i)
@@ -189,8 +156,6 @@ namespace windows
         if (removeIndex >= 0)
         {
             billboardEntries.erase(billboardEntries.begin() + removeIndex);
-            if (selectedBillboardIndex >= static_cast<int>(billboardEntries.size()))
-                selectedBillboardIndex = -1;
             pushBillboardPalette();
         }
 
@@ -205,10 +170,33 @@ namespace windows
         ImGui::PushID(index);
         auto& entry = billboardEntries[index];
 
-        bool isSelected = (selectedBillboardIndex == index);
-        ImVec4 headerColor = isSelected
+        // Visibility toggle (eye)
+        if (ImGui::Checkbox("##visible", &entry.visible))
+            pushBillboardPalette();
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Show/hide");
+        ImGui::SameLine();
+
+        // Paint enable checkbox
+        if (ImGui::Checkbox("##paint", &entry.paintEnabled))
+        {
+            // If this is the only paint-enabled entry, set it as active type
+            for (int pi = 0; pi < static_cast<int>(billboardEntries.size()); ++pi)
+            {
+                if (billboardEntries[pi].paintEnabled)
+                {
+                    events::vegetationBrush::SetActiveVegetationTypeCommand cmd;
+                    cmd.type = static_cast<vegetation::VegetationType>(pi);
+                    events::EventDispatcher::instance().execute(cmd);
+                    break;
+                }
+            }
+        }
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Include in paint brush");
+        ImGui::SameLine();
+
+        ImVec4 headerColor = entry.active
             ? ImVec4(0.2f, 0.4f, 0.8f, 1.0f)
-            : ImVec4(0.25f, 0.25f, 0.25f, 1.0f);
+            : ImVec4(0.4f, 0.4f, 0.4f, 1.0f); // Dimmed when inactive
         ImGui::PushStyleColor(ImGuiCol_Header, headerColor);
         ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(headerColor.x + 0.1f, headerColor.y + 0.1f, headerColor.z + 0.1f, 1.0f));
 
@@ -267,6 +255,15 @@ namespace windows
         {
             grassConfig = events::EventDispatcher::instance().query(
                 events::vegetation::GetGlobalGrassConfigQuery{});
+
+            try {
+                billboardEntries = events::EventDispatcher::instance().query(
+                    events::vegetation::GetBillboardPaletteQuery{});
+                // Push to renderer so textures get registered
+                if (!billboardEntries.empty())
+                    pushBillboardPalette();
+            } catch (...) {}
+
             configLoaded = true;
         }
     }
@@ -283,7 +280,7 @@ namespace windows
     {
         events::vegetation::SetBillboardPaletteCommand cmd;
         cmd.entries = billboardEntries;
-        cmd.activeEntry = selectedBillboardIndex;
+        cmd.activeEntry = -1; // All active entries render (controlled by per-entry checkbox)
         events::EventDispatcher::instance().execute(cmd);
     }
 }

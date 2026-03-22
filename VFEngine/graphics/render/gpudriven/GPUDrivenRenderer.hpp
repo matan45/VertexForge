@@ -209,11 +209,12 @@ namespace render::gpudriven
             struct BillboardGPUEntry
             {
                 uint32_t bindlessIndex = 0xFFFFFFFF;
-                uint32_t mode = 0; // 0=Cross, 1=CameraFacing
+                uint32_t mode = 0;
                 float weight = 1.0f;
                 float scaleMin = 0.0f;
                 float scaleMax = 0.0f;
                 float densityMultiplier = 1.0f;
+                bool visible = true;
             };
             std::vector<BillboardGPUEntry> billboardPalette;
             int32_t activeBillboardEntry = -1; // -1 = All (Random), >= 0 = specific entry
@@ -615,6 +616,7 @@ namespace render::gpudriven
                 gpu.scaleMin = e.scaleRange.x;
                 gpu.scaleMax = e.scaleRange.y;
                 gpu.densityMultiplier = e.densityMultiplier;
+                gpu.visible = e.visible;
 
                 // Register texture with bindless system if path is set
                 gpu.bindlessIndex = 0xFFFFFFFF;

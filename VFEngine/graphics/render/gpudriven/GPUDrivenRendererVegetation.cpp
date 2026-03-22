@@ -521,54 +521,33 @@ namespace render::gpudriven
                     0, nullptr,
                     0, nullptr);
 
+                // vegType = density map slot = billboard entry index
+                // Each entry has its own density map, dispatched independently
                 auto pushConstants = basePushConstants;
                 pushConstants.densityMultiplier = baseDensityMult;
-                pushConstants.vegetationType = vegType;
-                pushConstants.billboardTextureIndex = 0xFFFFFFFF;
-                pushConstants.billboardMode = 0;
+                pushConstants.vegetationType = 0; // Always billboard
                 pushConstants.paletteEntryIndex = 0;
-                pushConstants.paletteEntryCount = 0;
-                pushConstants.entryScaleMin = 0.0f;
-                pushConstants.entryScaleMax = 0.0f;
+                pushConstants.paletteEntryCount = 1; // Each entry dispatches independently, no hash partitioning
 
-                // For billboard type: dispatch once per palette entry
-                // Each blade is assigned to exactly one entry via hash (no duplicates)
-                if (vegType == static_cast<uint32_t>(::vegetation::VegetationType::Billboard)
-                    && !vegetation.billboardPalette.empty())
+                // Look up billboard palette entry for this slot
+                if (vegType < static_cast<uint32_t>(vegetation.billboardPalette.size()))
                 {
-                    uint32_t entryCount = static_cast<uint32_t>(vegetation.billboardPalette.size());
-
-                    for (uint32_t ei = 0; ei < entryCount; ++ei)
-                    {
-                        const auto& entry = vegetation.billboardPalette[ei];
-                        auto entryPC = pushConstants;
-                        entryPC.billboardTextureIndex = entry.bindlessIndex;
-                        entryPC.billboardMode = entry.mode;
-                        entryPC.paletteEntryIndex = ei;
-                        entryPC.paletteEntryCount = entryCount;
-                        entryPC.entryScaleMin = entry.scaleMin;
-                        entryPC.entryScaleMax = entry.scaleMax;
-                        entryPC.densityMultiplier = baseDensityMult * entry.densityMultiplier;
-
-                        vegetation.grassComputePipeline->dispatch(cmd, info.texelCount, entryPC);
-
-                        if (ei + 1 < entryCount)
-                        {
-                            vk::MemoryBarrier subBarrier(
-                                vk::AccessFlagBits::eShaderWrite,
-                                vk::AccessFlagBits::eShaderRead | vk::AccessFlagBits::eShaderWrite);
-                            cmd.pipelineBarrier(
-                                vk::PipelineStageFlagBits::eComputeShader,
-                                vk::PipelineStageFlagBits::eComputeShader,
-                                vk::DependencyFlags{},
-                                1, &subBarrier, 0, nullptr, 0, nullptr);
-                        }
-                    }
+                    const auto& entry = vegetation.billboardPalette[vegType];
+                    if (!entry.visible) { isFirstDispatch = false; continue; }
+                    pushConstants.billboardTextureIndex = entry.bindlessIndex;
+                    pushConstants.billboardMode = entry.mode;
+                    pushConstants.entryScaleMin = entry.scaleMin;
+                    pushConstants.entryScaleMax = entry.scaleMax;
+                    pushConstants.densityMultiplier = baseDensityMult * entry.densityMultiplier;
                 }
                 else
                 {
-                    vegetation.grassComputePipeline->dispatch(cmd, info.texelCount, pushConstants);
+                    // Density map exists but no palette entry for it - skip
+                    isFirstDispatch = false;
+                    continue;
                 }
+
+                vegetation.grassComputePipeline->dispatch(cmd, info.texelCount, pushConstants);
                 isFirstDispatch = false;
             }
         }
