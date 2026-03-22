@@ -67,6 +67,11 @@ namespace events::caveBrush
         std::string_view getName() const override { return "ApplyCaveBrush"; }
     };
 
+    struct FinalizeCaveBrushCommand : ICommand<>
+    {
+        std::string_view getName() const override { return "FinalizeCaveBrush"; }
+    };
+
     struct CaveBrushParamsChangedNotification : INotification
     {
         ::terrain::CaveBrushParams params;

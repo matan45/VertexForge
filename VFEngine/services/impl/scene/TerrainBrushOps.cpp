@@ -639,10 +639,49 @@ namespace services
             if (!terrain::CaveBrushApplicator::apply(*tile->caveData, applyParams))
                 continue;
 
-            // Regenerate cave mesh (Marching Cubes on modified regions only)
+            // Regenerate cave mesh (Marching Cubes on modified region only)
             terrain::CaveMeshGenerator::generate(*tile);
 
-            // Auto-punch holes in heightmap where cave intersects the surface
+            tile->caveDirty = true;
+            tile->caveGPUDirty = true;
+            tile->isDirty = true;
+            modifiedTiles.push_back(coord);
+        }
+
+        if (!modifiedTiles.empty())
+        {
+            events::caveBrush::CaveBrushAppliedNotification notification;
+            notification.position = worldPosition;
+            notification.type = brushType;
+            dispatcher.publish(notification);
+        }
+    }
+
+    void TerrainService::finalizeCaveBrush()
+    {
+        if (saveInProgress.load(std::memory_order_acquire) || svtBakeInProgress.load(std::memory_order_acquire))
+            return;
+
+        auto& dispatcher = events::EventDispatcher::instance();
+        auto targetEntity = dispatcher.query(events::cave::GetCaveTargetEntityQuery{});
+        if (!targetEntity.has_value())
+            return;
+
+        auto gridIt = terrainGrids.find(targetEntity->id);
+        if (gridIt == terrainGrids.end())
+            return;
+
+        terrain::TerrainGrid* grid = gridIt->second.get();
+        const auto& allTiles = grid->getAllTiles();
+
+        std::vector<terrain::TileCoord> caveTiles;
+
+        for (auto* tile : allTiles)
+        {
+            if (!tile || !tile->hasCaveData() || !tile->caveData->hasCaveGeometry())
+                continue;
+
+            // Punch holes in heightmap where cave reaches the surface
             if (!tile->hasHoleMask())
                 tile->initializeHoleMask();
 
@@ -655,10 +694,6 @@ namespace services
             {
                 for (uint32_t qx = 0; qx < quadCount; ++qx)
                 {
-                    // Only punch a hole if the cave reaches the heightmap surface itself.
-                    // Check the SDF AT the surface height — if it was carved from solid to air
-                    // at the surface, the surface is gone and should be a hole.
-                    // Deep caves below thick rock do NOT create surface holes.
                     bool shouldBeHole = false;
                     for (int dz = 0; dz <= 1 && !shouldBeHole; ++dz)
                     {
@@ -673,14 +708,9 @@ namespace services
                                 surfaceHeight,
                                 tile->worldOrigin.z + vz * tile->config.getVertexSpacing());
 
-                            // Sample current SDF at the surface position
                             float currentSdf = sdf.sampleSDF(surfacePos);
-
-                            // If the SDF at the surface is now positive (air), the surface was carved away
                             if (currentSdf > 0.1f)
-                            {
                                 shouldBeHole = true;
-                            }
                         }
                     }
 
@@ -697,23 +727,21 @@ namespace services
             {
                 tile->topologyDirty = true;
                 tile->setAllLODsDirty();
+                tile->isDirty = true;
             }
 
-            tile->caveDirty = true;
-            tile->caveGPUDirty = true;
-            tile->isDirty = true;
-            modifiedTiles.push_back(coord);
+            caveTiles.push_back(tile->coord);
         }
 
-        if (!modifiedTiles.empty())
+        if (!caveTiles.empty())
         {
-            syncCaveBoundaries(grid, modifiedTiles);
-            rebuildModifiedColliders(*targetEntity, grid, modifiedTiles);
+            syncCaveBoundaries(grid, caveTiles);
+            rebuildModifiedColliders(*targetEntity, grid, caveTiles);
 
-            // Rebuild cave mesh physics colliders
+            // Rebuild cave physics colliders
             if (physicsProvider && physicsProvider->hasTerrainCollider(*targetEntity))
             {
-                for (const auto& coord : modifiedTiles)
+                for (const auto& coord : caveTiles)
                 {
                     auto* tile = grid->getTile(coord);
                     if (tile && tile->hasCaveGeometry() && !tile->caveLOD.isEmpty())
@@ -722,9 +750,7 @@ namespace services
                         std::vector<glm::vec3> worldPositions;
                         worldPositions.reserve(tile->caveLOD.vertices.size());
                         for (const auto& v : tile->caveLOD.vertices)
-                        {
                             worldPositions.push_back(v.position + tileOriginOffset);
-                        }
 
                         CaveTileColliderInfo caveInfo;
                         caveInfo.tileX = coord.x;
@@ -736,17 +762,8 @@ namespace services
 
                         physicsProvider->rebuildCaveTileCollider(*targetEntity, caveInfo);
                     }
-                    else
-                    {
-                        physicsProvider->removeCaveTileCollider(*targetEntity, coord.x, coord.z);
-                    }
                 }
             }
-
-            events::caveBrush::CaveBrushAppliedNotification notification;
-            notification.position = worldPosition;
-            notification.type = brushType;
-            dispatcher.publish(notification);
 
             auto& registry = scene::EntityRegistry::getRegistry();
             entt::entity ent = internal::fromHandle(*targetEntity);

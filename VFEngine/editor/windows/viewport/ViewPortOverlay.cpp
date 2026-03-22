@@ -165,8 +165,6 @@ namespace windows
                 }
                 ImGui::EndDisabled();
 
-                ImGui::SameLine();
-
                 ImGui::BeginDisabled(bakeBlocked || (!isVegBrushMode && !canUseTerrain));
                 if (iconButton(ViewportIcon::Vegetation, isVegBrushMode, isVegBrushMode ? "Exit Vegetation Brush" : "Enter Vegetation Brush"))
                 {

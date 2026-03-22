@@ -125,6 +125,7 @@ namespace services
         void applyPaintBrush(const glm::vec3& worldPosition, float deltaTime, bool invert, bool isFirstApplication);
         void applyHoleBrush(const glm::vec3& worldPosition, bool erase);
         void applyCaveBrush(const glm::vec3& worldPosition, float deltaTime, bool invert, bool isFirstApplication);
+        void finalizeCaveBrush();
 
         void setBrushComputeProvider(ITerrainBrushComputeProvider* provider) { brushComputeProvider = provider; }
         void setPhysicsProvider(IPhysicsProvider* provider)

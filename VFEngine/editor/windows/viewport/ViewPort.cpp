@@ -467,6 +467,12 @@ namespace windows
                 caveDragging = true;
             }
         } else {
+            if (caveDragging)
+            {
+                // Mouse released — finalize: punch holes, rebuild physics
+                events::caveBrush::FinalizeCaveBrushCommand finalizeCmd;
+                dispatcher.execute(finalizeCmd);
+            }
             caveDragging = false;
         }
     }

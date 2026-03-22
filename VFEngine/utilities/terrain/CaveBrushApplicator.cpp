@@ -91,7 +91,12 @@ namespace terrain
                     float target = params.brushRadius * (1.0f - dist);
                     float newValue = current + influence;
                     newValue = std::min(newValue, target);
-                    sdf.setSDF(x, y, z, std::clamp(newValue, -10.0f, 10.0f));
+                    newValue = std::clamp(newValue, -10.0f, 10.0f);
+                    if (newValue != current)
+                    {
+                        sdf.setSDF(x, y, z, newValue);
+                        sdf.expandDirtyRegion(x, y, z);
+                    }
                 }
             }
         }
@@ -129,7 +134,12 @@ namespace terrain
                     float original = sdf.originalSdfGrid.empty() ? -1.0f : sdf.originalSdfGrid[idx];
                     float newValue = current - influence;
                     newValue = std::max(newValue, original);
-                    sdf.setSDF(x, y, z, std::clamp(newValue, -10.0f, 10.0f));
+                    newValue = std::clamp(newValue, -10.0f, 10.0f);
+                    if (newValue != current)
+                    {
+                        sdf.setSDF(x, y, z, newValue);
+                        sdf.expandDirtyRegion(x, y, z);
+                    }
                 }
             }
         }

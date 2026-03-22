@@ -50,6 +50,25 @@ namespace terrain
         glm::vec3 localOrigin{0.0f}; // World-space bottom corner of SDF volume
         bool isDirty = false;
 
+        // Dirty region tracking for incremental Marching Cubes
+        glm::uvec3 dirtyMin{UINT32_MAX};
+        glm::uvec3 dirtyMax{0};
+        bool hasDirtyRegion = false;
+
+        void expandDirtyRegion(uint32_t x, uint32_t y, uint32_t z)
+        {
+            dirtyMin = glm::min(dirtyMin, glm::uvec3(x, y, z));
+            dirtyMax = glm::max(dirtyMax, glm::uvec3(x, y, z));
+            hasDirtyRegion = true;
+        }
+
+        void clearDirtyRegion()
+        {
+            dirtyMin = glm::uvec3(UINT32_MAX);
+            dirtyMax = glm::uvec3(0);
+            hasDirtyRegion = false;
+        }
+
         CaveSDFData() = default;
 
         void initialize(const TerrainTileConfig& tileConfig, const glm::vec3& tileWorldOrigin)

@@ -270,6 +270,12 @@ namespace services
             {
                 applyCaveBrush(cmd.worldPosition, cmd.deltaTime, cmd.invert, cmd.isFirstApplication);
             });
+
+        dispatcher.registerCommandHandler<events::caveBrush::FinalizeCaveBrushCommand>(
+            [this](const events::caveBrush::FinalizeCaveBrushCommand&)
+            {
+                finalizeCaveBrush();
+            });
     }
 
     void TerrainService::registerTerrainDataHandlers(::events::EventDispatcher& dispatcher)

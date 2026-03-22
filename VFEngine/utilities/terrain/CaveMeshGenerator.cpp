@@ -125,15 +125,58 @@ namespace terrain
             {0, 4}, {1, 5}, {2, 6}, {3, 7}
         };
 
-        for (uint32_t z = 0; z + 1 < sdf.config.resZ; ++z)
+        // Iterate only the modified region (with 1-voxel margin for neighboring cubes)
+        uint32_t startX = 0, startY = 0, startZ = 0;
+        uint32_t endX = sdf.config.resX - 1;
+        uint32_t endY = sdf.config.resY - 1;
+        uint32_t endZ = sdf.config.resZ - 1;
+
+        if (!sdf.originalSdfGrid.empty())
         {
-            for (uint32_t y = 0; y + 1 < sdf.config.resY; ++y)
+            // Find bounds of all modified voxels
+            bool anyModified = false;
+            uint32_t mMinX = sdf.config.resX, mMinY = sdf.config.resY, mMinZ = sdf.config.resZ;
+            uint32_t mMaxX = 0, mMaxY = 0, mMaxZ = 0;
+
+            for (uint32_t z = 0; z < sdf.config.resZ; ++z)
             {
-                for (uint32_t x = 0; x + 1 < sdf.config.resX; ++x)
+                for (uint32_t y = 0; y < sdf.config.resY; ++y)
                 {
-                    // Skip cubes where the SDF was not modified by carving
-                    if (!sdf.isCubeModified(x, y, z))
-                        continue;
+                    for (uint32_t x = 0; x < sdf.config.resX; ++x)
+                    {
+                        size_t idx = sdf.getIndex(x, y, z);
+                        if (std::abs(sdf.sdfGrid[idx] - sdf.originalSdfGrid[idx]) > 1e-4f)
+                        {
+                            mMinX = std::min(mMinX, x);
+                            mMinY = std::min(mMinY, y);
+                            mMinZ = std::min(mMinZ, z);
+                            mMaxX = std::max(mMaxX, x);
+                            mMaxY = std::max(mMaxY, y);
+                            mMaxZ = std::max(mMaxZ, z);
+                            anyModified = true;
+                        }
+                    }
+                }
+            }
+
+            if (!anyModified)
+                return;
+
+            // Add 1-voxel margin and clamp
+            startX = mMinX > 1 ? mMinX - 1 : 0;
+            startY = mMinY > 1 ? mMinY - 1 : 0;
+            startZ = mMinZ > 1 ? mMinZ - 1 : 0;
+            endX = std::min(mMaxX + 1, sdf.config.resX - 1);
+            endY = std::min(mMaxY + 1, sdf.config.resY - 1);
+            endZ = std::min(mMaxZ + 1, sdf.config.resZ - 1);
+        }
+
+        for (uint32_t z = startZ; z < endZ; ++z)
+        {
+            for (uint32_t y = startY; y < endY; ++y)
+            {
+                for (uint32_t x = startX; x < endX; ++x)
+                {
 
                     // Get SDF values at 8 corners
                     float cornerValues[8];
