@@ -146,6 +146,17 @@ namespace terrain
             }
         }
 
+        if (entry->caveSdfDataOffset != 0)
+        {
+            auto caveData = std::make_unique<CaveSDFData>();
+            if (TerrainSerializer::readTileCaveData(filePath, *entry, *caveData))
+            {
+                tile.caveData = std::move(caveData);
+                tile.caveDirty = true;
+                tile.caveGPUDirty = true;
+            }
+        }
+
         size_t newUsage = estimateTileRAMUsage(tile);
         if (newUsage >= oldUsage)
             currentRAMUsage += (newUsage - oldUsage);
@@ -153,6 +164,25 @@ namespace terrain
             currentRAMUsage -= (oldUsage - newUsage);
         else
             currentRAMUsage = 0;
+        return true;
+    }
+
+    bool TerrainFileCache::ensureCaveDataLoaded(TerrainTile& tile)
+    {
+        if (tile.hasCaveData())
+            return true;
+
+        const TileIndexEntry* entry = findIndex(tile.coord);
+        if (!entry || entry->caveSdfDataOffset == 0)
+            return false;
+
+        auto caveData = std::make_unique<CaveSDFData>();
+        if (!TerrainSerializer::readTileCaveData(filePath, *entry, *caveData))
+            return false;
+
+        tile.caveData = std::move(caveData);
+        tile.caveDirty = true;
+        tile.caveGPUDirty = true;
         return true;
     }
 

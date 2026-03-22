@@ -245,6 +245,7 @@
     <ClInclude Include="windows\scene\EntityDetailsPanel.hpp" />
     <ClInclude Include="windows\scene\FolderStructureWindow.hpp" />
     <ClInclude Include="windows\scene\SceneHierarchyPanel.hpp" />
+    <ClInclude Include="windows\terrain\CaveToolPanel.hpp" />
     <ClInclude Include="windows\terrain\HoleToolPanel.hpp" />
     <ClInclude Include="windows\terrain\PaintToolPanel.hpp" />
     <ClInclude Include="windows\terrain\SculptToolPanel.hpp" />
@@ -409,6 +410,7 @@
     <ClCompile Include="windows\scene\EntityDetailsPanel.cpp" />
     <ClCompile Include="windows\scene\FolderStructureWindow.cpp" />
     <ClCompile Include="windows\scene\SceneHierarchyPanel.cpp" />
+    <ClCompile Include="windows\terrain\CaveToolPanel.cpp" />
     <ClCompile Include="windows\terrain\HoleToolPanel.cpp" />
     <ClCompile Include="windows\terrain\PaintToolPanel.cpp" />
     <ClCompile Include="windows\terrain\SculptToolPanel.cpp" />

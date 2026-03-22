@@ -93,6 +93,10 @@
   <ItemGroup>
     <ClInclude Include="terrain\BrushSampler.hpp" />
     <ClInclude Include="terrain\BrushTypes.hpp" />
+    <ClInclude Include="terrain\CaveBrushApplicator.hpp" />
+    <ClInclude Include="terrain\CaveBrushTypes.hpp" />
+    <ClInclude Include="terrain\CaveMeshGenerator.hpp" />
+    <ClInclude Include="terrain\CaveSDFData.hpp" />
     <ClInclude Include="terrain\HeightmapLoader.hpp" />
     <ClInclude Include="terrain\HoleBrushApplicator.hpp" />
     <ClInclude Include="terrain\HoleBrushTypes.hpp" />
@@ -115,6 +119,8 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="terrain\BrushSampler.cpp" />
+    <ClCompile Include="terrain\CaveBrushApplicator.cpp" />
+    <ClCompile Include="terrain\CaveMeshGenerator.cpp" />
     <ClCompile Include="terrain\HeightmapLoader.cpp" />
     <ClCompile Include="terrain\HoleBrushApplicator.cpp" />
     <ClCompile Include="terrain\TerrainEdgeStitching.cpp" />

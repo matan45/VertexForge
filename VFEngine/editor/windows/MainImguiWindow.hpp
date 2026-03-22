@@ -20,6 +20,7 @@
 #include "terrain/SculptToolPanel.hpp"
 #include "terrain/PaintToolPanel.hpp"
 #include "terrain/HoleToolPanel.hpp"
+#include "terrain/CaveToolPanel.hpp"
 #include "vegetation/GrassDensityPanel.hpp"
 #include "meshbrush/MeshBrushToolPanel.hpp"
 #include "config/GIConfigWindow.hpp"
@@ -66,6 +67,7 @@ namespace windows
         SculptToolPanel sculptToolPanel;
         PaintToolPanel paintToolPanel;
         HoleToolPanel holeToolPanel;
+        CaveToolPanel caveToolPanel;
         GrassDensityPanel grassDensityPanel;
         MeshBrushToolPanel meshBrushToolPanel;
         GIConfigWindow giConfigWindow;

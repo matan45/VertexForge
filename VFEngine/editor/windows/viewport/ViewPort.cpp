@@ -10,6 +10,8 @@
 #include "events/terrain/PaintBrushEvents.hpp"
 #include "events/terrain/HoleModeEvents.hpp"
 #include "events/terrain/HoleBrushEvents.hpp"
+#include "events/terrain/CaveModeEvents.hpp"
+#include "events/terrain/CaveBrushEvents.hpp"
 #include "events/vegetation/VegetationBrushEvents.hpp"
 #include "events/meshbrush/MeshBrushEvents.hpp"
 #include "events/audio/AudioEvents.hpp"
@@ -92,6 +94,7 @@ namespace windows
             handleSculptBrush();
             handlePaintBrush();
             handleHoleBrush();
+            handleCaveBrush();
             handleVegetationBrush();
             handleMeshBrush();
         }
@@ -329,10 +332,11 @@ namespace windows
         bool sculptActive = dispatcher.query(events::sculpt::IsSculptModeActiveQuery{});
         bool paintActive = dispatcher.query(events::paint::IsPaintModeActiveQuery{});
         bool holeActive = dispatcher.query(events::hole::IsHoleModeActiveQuery{});
+        bool caveActive = dispatcher.query(events::cave::IsCaveModeActiveQuery{});
         bool vegActive = dispatcher.query(events::vegetationBrush::IsVegetationBrushModeActiveQuery{});
         bool meshBrushActive = dispatcher.query(events::meshBrush::IsMeshBrushModeActiveQuery{});
 
-        bool anyActive = sculptActive || paintActive || holeActive || vegActive || meshBrushActive;
+        bool anyActive = sculptActive || paintActive || holeActive || caveActive || vegActive || meshBrushActive;
 
         if (!anyActive || !ImGui::IsWindowHovered())
         {
@@ -346,6 +350,7 @@ namespace windows
         if (sculptActive) updateSculptCursorUV(viewportPos, viewportSize);
         else if (paintActive) updatePaintCursorUV(viewportPos, viewportSize);
         else if (holeActive) updateHoleCursorUV(viewportPos, viewportSize);
+        else if (caveActive) sendCursorUV(viewportPos, viewportSize);
         else if (vegActive) updateVegetationCursorUV(viewportPos, viewportSize);
         else if (meshBrushActive) updateMeshBrushCursorUV(viewportPos, viewportSize);
     }
@@ -434,6 +439,46 @@ namespace windows
                 applyCmd.erase = ImGui::GetIO().KeyShift;
                 dispatcher.execute(applyCmd);
             }
+        }
+    }
+
+    void ViewPort::handleCaveBrush()
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+        if (!dispatcher.query(events::cave::IsCaveModeActiveQuery{}) || !ImGui::IsWindowHovered())
+        {
+            caveDragging = false;
+            return;
+        }
+        if (ImGui::IsMouseDown(ImGuiMouseButton_Left))
+        {
+            auto hitResult = dispatcher.query(events::terrainRaycast::GetTerrainHitQuery{});
+            if (hitResult.hit)
+            {
+                // Offset brush center INTO the mountain (opposite of surface normal)
+                // so the carve sphere is fully inside the solid, not half in air
+                auto brushParams = dispatcher.query(events::caveBrush::GetCaveBrushParamsQuery{});
+                float offset = brushParams.radius * 0.5f;
+                glm::vec3 carveCenter = hitResult.position - hitResult.normal * offset;
+
+                events::caveBrush::ApplyCaveBrushCommand applyCmd;
+                applyCmd.worldPosition = carveCenter;
+                applyCmd.deltaTime = ImGui::GetIO().DeltaTime;
+                applyCmd.invert = ImGui::GetIO().KeyShift;
+                applyCmd.isFirstApplication = !caveDragging;
+                dispatcher.execute(applyCmd);
+                caveDragging = true;
+            }
+        }
+        else
+        {
+            if (caveDragging)
+            {
+                // Mouse released — finalize: punch holes, rebuild physics
+                events::caveBrush::FinalizeCaveBrushCommand finalizeCmd;
+                dispatcher.execute(finalizeCmd);
+            }
+            caveDragging = false;
         }
     }
 

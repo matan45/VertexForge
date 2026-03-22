@@ -2,12 +2,14 @@
 
 #include "TerrainTypes.hpp"
 #include "TerrainWeightMap.hpp"
+#include "CaveSDFData.hpp"
 #include "../vegetation/VegetationDensityMap.hpp"
 #include "../resource/Types.hpp"
 #include "../resource/MeshletTypes.hpp"
 #include "../math/Frustum.hpp"
 #include <vector>
 #include <array>
+#include <memory>
 
 namespace terrain
 {
@@ -67,6 +69,11 @@ namespace terrain
         bool vegetationDensityDirty = false;
         bool vegetationDensityGPUDirty = false;
 
+        std::unique_ptr<CaveSDFData> caveData;
+        TileLODData caveLOD;
+        bool caveDirty = false;
+        bool caveGPUDirty = false;
+
         bool isDirty = true;
         bool isVisible = true;
 
@@ -115,6 +122,11 @@ namespace terrain
 
         void initializeVegetationDensity();
         [[nodiscard]] bool hasVegetationDensity() const { return vegetationDensity.isInitialized(); }
+
+        void initializeCaveSDF();
+        void initializeCaveSDFFromHeights();
+        [[nodiscard]] bool hasCaveData() const { return caveData && caveData->isInitialized(); }
+        [[nodiscard]] bool hasCaveGeometry() const { return caveData && caveData->hasCaveGeometry(); }
 
     private:
         void initializeFlat(float height = 0.0f);

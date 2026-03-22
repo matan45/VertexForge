@@ -1,6 +1,7 @@
 #include "TerrainStreamManager.hpp"
 #include "TerrainMeshBuffer.hpp"
 #include "terrain/TerrainTile.hpp"
+#include "terrain/CaveMeshGenerator.hpp"
 #include <algorithm>
 
 namespace render::gpudriven
@@ -185,6 +186,29 @@ namespace render::gpudriven
             if (adapter.uploadWeightMap(*tile))
             {
                 tile->weightMapGPUDirty = false;
+            }
+        }
+
+        for (terrain::TerrainTile* tile : visibleTiles)
+        {
+            if (!tile || !tile->caveGPUDirty)
+                continue;
+
+            // SDF loaded but cave mesh not yet generated
+            if (tile->hasCaveData() && tile->caveData->hasCaveGeometry() && tile->caveLOD.isEmpty())
+            {
+                terrain::CaveMeshGenerator::generate(*tile);
+            }
+
+            if (!tile->hasCaveGeometry() || tile->caveLOD.isEmpty())
+            {
+                tile->caveGPUDirty = false;
+                continue;
+            }
+
+            if (adapter.uploadCaveMesh(*tile))
+            {
+                tile->caveGPUDirty = false;
             }
         }
 

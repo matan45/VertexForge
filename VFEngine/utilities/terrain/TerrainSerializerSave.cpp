@@ -57,6 +57,15 @@ namespace terrain
             }
         }
 
+        for (const auto* tile : allTiles)
+        {
+            if (tile->hasCaveData() && tile->caveData->hasCaveGeometry())
+            {
+                flags = flags | TerrainFormatFlags::HAS_CAVE_DATA;
+                break;
+            }
+        }
+
         return flags;
     }
 

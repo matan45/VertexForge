@@ -90,6 +90,13 @@ namespace core
         void removeTerrainTileCollider(services::EntityHandle entity,
                                         int32_t tileX, int32_t tileZ) override;
 
+        void addCaveTileCollider(services::EntityHandle entity,
+                                  const services::CaveTileColliderInfo& cave) override;
+        void removeCaveTileCollider(services::EntityHandle entity,
+                                     int32_t tileX, int32_t tileZ) override;
+        void rebuildCaveTileCollider(services::EntityHandle entity,
+                                      const services::CaveTileColliderInfo& cave) override;
+
         void addVegetationTileColliders(int32_t tileX, int32_t tileZ,
                                          const std::vector<VegetationColliderInstance>& instances) override;
         void removeVegetationTileColliders(int32_t tileX, int32_t tileZ) override;

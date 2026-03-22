@@ -80,6 +80,7 @@ namespace terrain
             writeLE(file, entry.weightDataOffset);
             writeLE(file, entry.meshletDataOffset);
             writeLE(file, entry.holeMaskDataOffset);
+            writeLE(file, entry.caveSdfDataOffset);
         }
         return file.good();
     }
@@ -184,6 +185,13 @@ namespace terrain
         if (hasFlag(flags, TerrainFormatFlags::HAS_HOLE_MASK) && tile.hasHoleMask())
         {
             if (!writeTileHoleMaskData(file, tile, outEntry))
+                return false;
+        }
+
+        outEntry.caveSdfDataOffset = 0;
+        if (hasFlag(flags, TerrainFormatFlags::HAS_CAVE_DATA) && tile.hasCaveData())
+        {
+            if (!writeTileCaveData(file, tile, outEntry))
                 return false;
         }
 
@@ -353,6 +361,121 @@ namespace terrain
         catch (const std::exception& e)
         {
             vfLogError("TerrainSerializer: Failed to read heights for tile ({}, {}): {}",
+                       entry.coordX, entry.coordZ, e.what());
+            return false;
+        }
+    }
+
+    bool TerrainSerializer::writeTileCaveData(std::ostream& file,
+                                               const TerrainTile& tile,
+                                               TileIndexEntry& outEntry)
+    {
+        if (!tile.hasCaveData())
+            return true;
+
+        const auto& sdf = *tile.caveData;
+
+        uint64_t pos;
+        if (!safeTellp(file, pos))
+            return false;
+        outEntry.caveSdfDataOffset = pos;
+
+        // Write SDF config
+        writeLE<uint32_t>(file, sdf.config.resX);
+        writeLE<uint32_t>(file, sdf.config.resY);
+        writeLE<uint32_t>(file, sdf.config.resZ);
+        writeLE<float>(file, sdf.config.voxelSize);
+        writeLE<float>(file, sdf.config.yVoxelSize);
+        writeLE<float>(file, sdf.config.yExtentBelow);
+        writeLE<float>(file, 0.0f); // reserved
+
+        // Write local origin
+        writeLE<float>(file, sdf.localOrigin.x);
+        writeLE<float>(file, sdf.localOrigin.y);
+        writeLE<float>(file, sdf.localOrigin.z);
+
+        // Write SDF grid data (raw floats)
+        uint32_t gridSize = static_cast<uint32_t>(sdf.sdfGrid.size());
+        writeLE<uint32_t>(file, gridSize);
+
+        for (uint32_t i = 0; i < gridSize; ++i)
+        {
+            writeLE<float>(file, sdf.sdfGrid[i]);
+        }
+
+        // Write original SDF grid (for detecting carved regions)
+        uint32_t hasOriginal = sdf.originalSdfGrid.empty() ? 0u : 1u;
+        writeLE<uint32_t>(file, hasOriginal);
+        if (hasOriginal)
+        {
+            for (uint32_t i = 0; i < gridSize; ++i)
+            {
+                writeLE<float>(file, sdf.originalSdfGrid[i]);
+            }
+        }
+
+        return file.good();
+    }
+
+    bool TerrainSerializer::readTileCaveData(std::string_view path,
+                                              const TileIndexEntry& entry,
+                                              CaveSDFData& outCaveData)
+    {
+        if (entry.caveSdfDataOffset == 0)
+            return false;
+
+        try
+        {
+            std::ifstream file(std::string(path), std::ios::binary);
+            if (!file.is_open())
+                return false;
+
+            file.seekg(static_cast<std::streamoff>(entry.caveSdfDataOffset));
+
+            // Read SDF config
+            outCaveData.config.resX = readLE<uint32_t>(file);
+            outCaveData.config.resY = readLE<uint32_t>(file);
+            outCaveData.config.resZ = readLE<uint32_t>(file);
+            outCaveData.config.voxelSize = readLE<float>(file);
+            outCaveData.config.yVoxelSize = readLE<float>(file);
+            outCaveData.config.yExtentBelow = readLE<float>(file);
+            readLE<float>(file); // reserved
+
+            // Read local origin
+            outCaveData.localOrigin.x = readLE<float>(file);
+            outCaveData.localOrigin.y = readLE<float>(file);
+            outCaveData.localOrigin.z = readLE<float>(file);
+
+            // Read SDF grid data (raw floats)
+            uint32_t gridSize = readLE<uint32_t>(file);
+            uint32_t expectedSize = outCaveData.config.resX * outCaveData.config.resY * outCaveData.config.resZ;
+            if (gridSize != expectedSize || gridSize > 50000000) // ~200MB max
+                return false;
+            outCaveData.sdfGrid.resize(gridSize);
+
+            for (uint32_t i = 0; i < gridSize; ++i)
+            {
+                outCaveData.sdfGrid[i] = readLE<float>(file);
+            }
+
+            // Read original SDF grid
+            uint32_t hasOriginal = readLE<uint32_t>(file);
+            if (hasOriginal)
+            {
+                if (gridSize != expectedSize || gridSize > 50000000)
+                    return false;
+                outCaveData.originalSdfGrid.resize(gridSize);
+                for (uint32_t i = 0; i < gridSize; ++i)
+                {
+                    outCaveData.originalSdfGrid[i] = readLE<float>(file);
+                }
+            }
+
+            return file.good();
+        }
+        catch (const std::exception& e)
+        {
+            vfLogError("TerrainSerializer: Failed to read cave data for tile ({}, {}): {}",
                        entry.coordX, entry.coordZ, e.what());
             return false;
         }

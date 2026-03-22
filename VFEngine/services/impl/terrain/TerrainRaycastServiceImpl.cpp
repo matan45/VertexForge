@@ -8,6 +8,8 @@
 #include "../../events/terrain/PaintBrushEvents.hpp"
 #include "../../events/terrain/HoleModeEvents.hpp"
 #include "../../events/terrain/HoleBrushEvents.hpp"
+#include "../../events/terrain/CaveModeEvents.hpp"
+#include "../../events/terrain/CaveBrushEvents.hpp"
 #include "../../events/vegetation/VegetationBrushEvents.hpp"
 #include "../../events/meshbrush/MeshBrushEvents.hpp"
 
@@ -52,6 +54,16 @@ namespace services
             dispatcher.unsubscribe(holeBrushParamsToken);
         }
 
+        if (caveModeToken.isValid())
+        {
+            dispatcher.unsubscribe(caveModeToken);
+        }
+
+        if (caveBrushParamsToken.isValid())
+        {
+            dispatcher.unsubscribe(caveBrushParamsToken);
+        }
+
         if (vegBrushModeToken.isValid())
         {
             dispatcher.unsubscribe(vegBrushModeToken);
@@ -80,7 +92,7 @@ namespace services
         dispatcher.registerCommandHandler<events::terrainRaycast::SetCursorPositionCommand>(
             [this](const events::terrainRaycast::SetCursorPositionCommand& cmd)
             {
-                if ((!sculptModeActive && !paintModeActive && !holeModeActive && !vegBrushModeActive && !meshBrushModeActive) || !provider)
+                if ((!sculptModeActive && !paintModeActive && !holeModeActive && !caveModeActive && !vegBrushModeActive && !meshBrushModeActive) || !provider)
                 {
                     return;
                 }
@@ -217,6 +229,45 @@ namespace services
             [this](const events::holeBrush::HoleBrushParamsChangedNotification& n)
             {
                 if (holeModeActive && provider)
+                {
+                    provider->setBrushOverlayParams(
+                        n.params.radius,
+                        static_cast<float>(n.params.falloff),
+                        static_cast<float>(n.params.shape));
+                }
+            });
+
+        caveModeToken = dispatcher.subscribe<events::cave::CaveModeChangedNotification>(
+            [this](const events::cave::CaveModeChangedNotification& n)
+            {
+                if (n.isActive)
+                {
+                    caveModeActive = true;
+                    if (provider)
+                    {
+                        auto brushParams = events::EventDispatcher::instance().query(
+                            events::caveBrush::GetCaveBrushParamsQuery{});
+                        provider->setBrushOverlayParams(
+                            brushParams.radius,
+                            static_cast<float>(brushParams.falloff),
+                            static_cast<float>(brushParams.shape));
+                    }
+                }
+                else
+                {
+                    caveModeActive = false;
+                    if (provider)
+                    {
+                        provider->clearRaycastCursor();
+                        provider->setBrushOverlayParams(0.0f, 0.0f, 0.0f);
+                    }
+                }
+            });
+
+        caveBrushParamsToken = dispatcher.subscribe<events::caveBrush::CaveBrushParamsChangedNotification>(
+            [this](const events::caveBrush::CaveBrushParamsChangedNotification& n)
+            {
+                if (caveModeActive && provider)
                 {
                     provider->setBrushOverlayParams(
                         n.params.radius,

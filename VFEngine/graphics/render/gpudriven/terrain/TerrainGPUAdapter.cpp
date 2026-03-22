@@ -375,6 +375,117 @@ namespace render::gpudriven
         return true;
     }
 
+    bool TerrainGPUAdapter::uploadCaveMesh(const terrain::TerrainTile& tile)
+    {
+        if (!tile.hasCaveGeometry())
+            return false;
+
+        const auto& caveLOD = tile.caveLOD;
+        if (caveLOD.isEmpty() || !caveLOD.hasMeshlets())
+            return false;
+
+        TerrainTileKey key{tile.coord.x, tile.coord.z};
+        std::string caveKey = "terrain_" + std::to_string(key.coordX) + "_" + std::to_string(key.coordZ) + "_cave";
+
+        // Free previous cave allocation if any
+        terrainBuffer_.freeTileLOD(caveKey, 0);
+
+        // Allocate cave mesh as LOD 0 of a separate "cave tile" in the mesh buffer
+        if (!terrainBuffer_.allocateTileLOD(
+                caveKey,
+                0, // Use LOD 0 slot
+                static_cast<uint32_t>(caveLOD.vertices.size()),
+                static_cast<uint32_t>(caveLOD.indices.size()),
+                static_cast<uint32_t>(caveLOD.meshlets.size()),
+                static_cast<uint32_t>(caveLOD.meshletVertices.size()),
+                static_cast<uint32_t>(caveLOD.meshletPrimitives.size()),
+                tile.worldBounds.min,
+                tile.worldBounds.max))
+        {
+            vfLogError("TerrainGPUAdapter: Failed to allocate cave mesh for tile ({}, {})",
+                       key.coordX, key.coordZ);
+            return false;
+        }
+
+        auto it = allocations_.find(key);
+        if (it == allocations_.end())
+            return false;
+
+        // Upload vertices
+        if (!terrainBuffer_.uploadLODVertices(caveKey, 0,
+                                               caveLOD.vertices.data(),
+                                               static_cast<uint32_t>(caveLOD.vertices.size())))
+        {
+            terrainBuffer_.freeTileLOD(caveKey, 0);
+            return false;
+        }
+
+        // Upload indices
+        if (!terrainBuffer_.uploadLODIndices(caveKey, 0,
+                                              caveLOD.indices.data(),
+                                              static_cast<uint32_t>(caveLOD.indices.size())))
+        {
+            terrainBuffer_.freeTileLOD(caveKey, 0);
+            return false;
+        }
+
+        const TerrainTileGeometry* caveGeom = terrainBuffer_.getTileGeometry(caveKey);
+        if (!caveGeom)
+        {
+            terrainBuffer_.freeTileLOD(caveKey, 0);
+            return false;
+        }
+
+        const auto& geomLod = caveGeom->lods[0];
+        if (!uploadCaveMeshlets(caveKey, caveLOD, geomLod))
+        {
+            terrainBuffer_.freeTileLOD(caveKey, 0);
+            return false;
+        }
+
+        // Store allocation offsets
+        it->second.caveAlloc.vertexOffset = geomLod.vertexOffset;
+        it->second.caveAlloc.vertexCount = geomLod.vertexCount;
+        it->second.caveAlloc.indexOffset = geomLod.indexOffset;
+        it->second.caveAlloc.indexCount = geomLod.indexCount;
+        it->second.caveAlloc.meshletOffset = geomLod.meshletOffset;
+        it->second.caveAlloc.meshletCount = geomLod.meshletCount;
+        it->second.caveAlloc.meshletVertexOffset = geomLod.meshletVertexOffset;
+        it->second.caveAlloc.meshletVertexCount = geomLod.meshletVertexCount;
+        it->second.caveAlloc.meshletPrimitiveOffset = geomLod.meshletPrimitiveOffset;
+        it->second.caveAlloc.meshletPrimitiveCount = geomLod.meshletPrimitiveCount;
+        it->second.caveAlloc.isAllocated = true;
+
+        gpuTileDataDirty_ = true;
+        return true;
+    }
+
+    bool TerrainGPUAdapter::uploadCaveMeshlets(const std::string& caveKey,
+                                                const terrain::TileLODData& caveLOD,
+                                                const TerrainLODGeometry& geomLod)
+    {
+        uint32_t baseVertexOffset = geomLod.vertexOffset;
+
+        std::vector<GPUMeshlet> gpuMeshlets;
+        gpuMeshlets.reserve(caveLOD.meshlets.size());
+
+        for (const auto& srcMeshlet : caveLOD.meshlets)
+        {
+            GPUMeshlet meshlet = convertMeshlet(srcMeshlet, baseVertexOffset);
+            meshlet.vertexOffset += geomLod.meshletVertexOffset;
+            meshlet.primitiveOffset += geomLod.meshletPrimitiveOffset;
+            gpuMeshlets.push_back(meshlet);
+        }
+
+        return terrainBuffer_.uploadLODMeshlets(caveKey, 0,
+                                                 gpuMeshlets.data(),
+                                                 static_cast<uint32_t>(gpuMeshlets.size()),
+                                                 caveLOD.meshletVertices.data(),
+                                                 static_cast<uint32_t>(caveLOD.meshletVertices.size()),
+                                                 caveLOD.meshletPrimitives.data(),
+                                                 static_cast<uint32_t>(caveLOD.meshletPrimitives.size()));
+    }
+
     static float packLayerIndicesAsFloat(const uint8_t* indices)
     {
         uint32_t packed = static_cast<uint32_t>(indices[0])
@@ -425,6 +536,20 @@ namespace render::gpudriven
         if (hasSelectedTile_ && key.coordX == selectedCoordX_ && key.coordZ == selectedCoordZ_)
             gpuTile.flags |= ObjectFlags::Selected;
         gpuTile.weightMapOffset = alloc.weightMapUploaded ? alloc.weightMapOffset : 0;
+
+        // Cave meshlet data
+        if (alloc.caveAlloc.isAllocated)
+        {
+            gpuTile.caveMeshletData = glm::uvec4(
+                alloc.caveAlloc.meshletOffset,
+                alloc.caveAlloc.meshletCount,
+                alloc.caveAlloc.vertexOffset,
+                0u);
+        }
+        else
+        {
+            gpuTile.caveMeshletData = glm::uvec4(0u);
+        }
     }
 
     const std::vector<TerrainTileGPUData>& TerrainGPUAdapter::buildGPUTileData(

@@ -82,6 +82,8 @@ namespace services
             }
         }
 
+        appendCaveWireframe(tile, out);
+
         out.version++;
     }
 
@@ -187,6 +189,8 @@ namespace services
             return false;
 
         physicsProvider->addTerrainCollider(terrainEntity, tileInfos);
+
+        appendCaveColliders(terrainEntity, allTiles);
 
         auto& registry = scene::EntityRegistry::getRegistry();
         entt::entity ent = internal::fromHandle(terrainEntity);
@@ -323,6 +327,48 @@ namespace services
                     }
                 }
             }
+        }
+    }
+
+    void TerrainService::appendCaveWireframe(const terrain::TerrainTile& tile,
+                                              components::TerrainColliderDebugData& out)
+    {
+        if (!tile.hasCaveGeometry() || tile.caveLOD.isEmpty())
+            return;
+
+        uint32_t baseVertex = static_cast<uint32_t>(out.vertices.size());
+        glm::vec3 tileOriginOffset(tile.worldOrigin.x, 0.0f, tile.worldOrigin.z);
+
+        for (const auto& v : tile.caveLOD.vertices)
+        {
+            out.vertices.push_back(v.position + tileOriginOffset);
+        }
+
+        for (size_t i = 0; i + 2 < tile.caveLOD.indices.size(); i += 3)
+        {
+            uint32_t a = baseVertex + tile.caveLOD.indices[i];
+            uint32_t b = baseVertex + tile.caveLOD.indices[i + 1];
+            uint32_t c = baseVertex + tile.caveLOD.indices[i + 2];
+            out.lineIndices.push_back(a);
+            out.lineIndices.push_back(b);
+            out.lineIndices.push_back(b);
+            out.lineIndices.push_back(c);
+            out.lineIndices.push_back(c);
+            out.lineIndices.push_back(a);
+        }
+    }
+
+    void TerrainService::appendCaveColliders(EntityHandle terrainEntity,
+                                              const std::vector<terrain::TerrainTile*>& allTiles)
+    {
+        for (auto* tile : allTiles)
+        {
+            if (!tile || !tile->hasCaveGeometry() || tile->caveLOD.isEmpty())
+                continue;
+
+            std::vector<glm::vec3> worldPositions;
+            auto caveInfo = buildCaveTileColliderInfo(*tile, worldPositions);
+            physicsProvider->addCaveTileCollider(terrainEntity, caveInfo);
         }
     }
 }

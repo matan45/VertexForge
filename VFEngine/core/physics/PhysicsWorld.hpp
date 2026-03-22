@@ -122,6 +122,11 @@ namespace core::physics
         void removeAllTerrainBodies(uint64_t entityId);
         bool hasTerrainBodies(uint64_t entityId) const;
 
+        // Cave
+        void addCaveTileBody(uint64_t entityId, int32_t tileX, int32_t tileZ,
+                              const services::CaveTileColliderInfo& cave);
+        void removeCaveTileBody(uint64_t entityId, int32_t tileX, int32_t tileZ);
+
         // Vegetation
         void addVegetationTileColliders(int32_t tileX, int32_t tileZ,
                                          const std::vector<JPH::BodyID>& bodyIds);

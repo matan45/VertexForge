@@ -150,8 +150,9 @@ namespace render::gpudriven
         int32_t coordZ;
         uint32_t flags;
         uint32_t weightMapOffset;       // Byte offset into weight map SSBO
+        glm::uvec4 caveMeshletData;     // x = meshletOffset, y = meshletCount, z = baseVertexOffset, w = reserved
     };
-    static_assert(sizeof(TerrainTileGPUData) == 256);
+    static_assert(sizeof(TerrainTileGPUData) == 272);
 
     struct TerrainLayerGPUData
     {

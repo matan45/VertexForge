@@ -26,6 +26,8 @@
 #include "impl/terrain/PaintBrushServiceImpl.hpp"
 #include "impl/terrain/HoleModeServiceImpl.hpp"
 #include "impl/terrain/HoleBrushServiceImpl.hpp"
+#include "impl/terrain/CaveModeServiceImpl.hpp"
+#include "impl/terrain/CaveBrushServiceImpl.hpp"
 #include "impl/terrain/TerrainRaycastServiceImpl.hpp"
 #include "impl/render/RenderTextureServiceImpl.hpp"
 #include "impl/render/RenderTexturePlayModeHandler.hpp"
@@ -184,6 +186,8 @@ namespace handlers
         paintBrushService = std::make_shared<services::PaintBrushServiceImpl>();
         holeModeService = std::make_shared<services::HoleModeServiceImpl>();
         holeBrushService = std::make_shared<services::HoleBrushServiceImpl>();
+        caveModeService = std::make_shared<services::CaveModeServiceImpl>();
+        caveBrushService = std::make_shared<services::CaveBrushServiceImpl>();
         terrainRaycastService = std::make_shared<services::TerrainRaycastServiceImpl>(
             bootstrap->getTerrainRaycastProvider());
     }
@@ -261,6 +265,8 @@ namespace handlers
         paintBrushService->registerEventHandlers();
         holeModeService->registerEventHandlers();
         holeBrushService->registerEventHandlers();
+        caveModeService->registerEventHandlers();
+        caveBrushService->registerEventHandlers();
         terrainRaycastService->registerEventHandlers();
         renderTextureService->registerEventHandlers();
         controllerService->registerEventHandlers();

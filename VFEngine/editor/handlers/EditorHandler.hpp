@@ -25,6 +25,8 @@
 #include "interfaces/terrain/IPaintBrushService.hpp"
 #include "interfaces/terrain/IHoleModeService.hpp"
 #include "interfaces/terrain/IHoleBrushService.hpp"
+#include "interfaces/terrain/ICaveModeService.hpp"
+#include "interfaces/terrain/ICaveBrushService.hpp"
 #include "interfaces/terrain/ITerrainRaycastService.hpp"
 #include "interfaces/vegetation/IGrassService.hpp"
 #include "interfaces/vegetation/IVegetationBrushService.hpp"
@@ -108,6 +110,8 @@ namespace handlers {
 		std::shared_ptr<services::IPaintBrushService> paintBrushService;
 		std::shared_ptr<services::IHoleModeService> holeModeService;
 		std::shared_ptr<services::IHoleBrushService> holeBrushService;
+		std::shared_ptr<services::ICaveModeService> caveModeService;
+		std::shared_ptr<services::ICaveBrushService> caveBrushService;
 		std::shared_ptr<services::ITerrainRaycastService> terrainRaycastService;
 		std::shared_ptr<services::IPhysicsAnimationService> physicsAnimationService;
 		std::shared_ptr<services::INavmeshService> navmeshService;

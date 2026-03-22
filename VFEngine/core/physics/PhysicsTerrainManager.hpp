@@ -2,7 +2,9 @@
 
 #include <Jolt/Jolt.h>
 #include <Jolt/Physics/Body/BodyID.h>
+#include <Jolt/Geometry/Triangle.h>
 #include <glm/glm.hpp>
+#include "providers/physics/IPhysicsProvider.hpp"
 #include <unordered_map>
 #include <vector>
 #include <cstdint>
@@ -36,6 +38,10 @@ namespace core::physics
         void removeAllTerrainBodies(uint64_t entityId);
         bool hasTerrainBodies(uint64_t entityId) const;
 
+        void addCaveTileBody(uint64_t entityId, int32_t tileX, int32_t tileZ,
+                              const services::CaveTileColliderInfo& cave);
+        void removeCaveTileBody(uint64_t entityId, int32_t tileX, int32_t tileZ);
+
         JPH::BodyID addStaticCapsule(const glm::vec3& position, float yRotation, float scale,
                                       float radius, float height, uint8_t collisionLayer = 0);
         void addVegetationTileColliders(int32_t tileX, int32_t tileZ,
@@ -46,8 +52,11 @@ namespace core::physics
         static TileCoordKey makeTileKey(int32_t x, int32_t z);
 
     private:
+        static JPH::TriangleList buildJoltTriangleList(const services::CaveTileColliderInfo& cave);
+
         PhysicsContext* ctx = nullptr;
         std::unordered_map<uint64_t, std::unordered_map<TileCoordKey, JPH::BodyID>> terrainBodies;
+        std::unordered_map<uint64_t, std::unordered_map<TileCoordKey, JPH::BodyID>> caveBodies;
         std::unordered_map<TileCoordKey, std::vector<JPH::BodyID>> vegetationBodies;
     };
 }

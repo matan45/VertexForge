@@ -3,6 +3,7 @@
 #include "../../events/terrain/PaintModeEvents.hpp"
 #include "../../events/editor/SculptModeEvents.hpp"
 #include "../../events/terrain/HoleModeEvents.hpp"
+#include "../../events/terrain/CaveModeEvents.hpp"
 #include "../../events/vegetation/VegetationBrushEvents.hpp"
 #include "../../events/editor/EditorModeEvents.hpp"
 #include "../../events/project/SceneEvents.hpp"
@@ -33,6 +34,10 @@ namespace services
         if (holeModeToken.isValid())
         {
             dispatcher.unsubscribe(holeModeToken);
+        }
+        if (caveModeToken.isValid())
+        {
+            dispatcher.unsubscribe(caveModeToken);
         }
         if (vegetationBrushModeToken.isValid())
         {
@@ -108,6 +113,16 @@ namespace services
         // Auto-deactivate when hole mode activates
         holeModeToken = dispatcher.subscribe<events::hole::HoleModeChangedNotification>(
             [this](const events::hole::HoleModeChangedNotification& n)
+            {
+                if (n.isActive && paintActive)
+                {
+                    deactivate();
+                }
+            });
+
+        // Auto-deactivate when cave mode activates
+        caveModeToken = dispatcher.subscribe<events::cave::CaveModeChangedNotification>(
+            [this](const events::cave::CaveModeChangedNotification& n)
             {
                 if (n.isActive && paintActive)
                 {

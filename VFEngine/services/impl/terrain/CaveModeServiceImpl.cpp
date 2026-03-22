@@ -1,189 +1,126 @@
-#include "HoleModeServiceImpl.hpp"
+#include "CaveModeServiceImpl.hpp"
 #include "../../events/EventDispatcher.hpp"
-#include "../../events/terrain/HoleModeEvents.hpp"
 #include "../../events/terrain/CaveModeEvents.hpp"
 #include "../../events/editor/SculptModeEvents.hpp"
 #include "../../events/terrain/PaintModeEvents.hpp"
+#include "../../events/terrain/HoleModeEvents.hpp"
 #include "../../events/vegetation/VegetationBrushEvents.hpp"
+#include "../../events/meshbrush/MeshBrushEvents.hpp"
 #include "../../events/editor/EditorModeEvents.hpp"
 #include "../../events/project/SceneEvents.hpp"
 #include "../../events/terrain/TerrainEvents.hpp"
 
 namespace services
 {
-    HoleModeServiceImpl::~HoleModeServiceImpl()
+    CaveModeServiceImpl::~CaveModeServiceImpl()
     {
         auto& dispatcher = events::EventDispatcher::instance();
 
-        if (editorModeToken.isValid())
-        {
-            dispatcher.unsubscribe(editorModeToken);
-        }
-        if (entityDeletedToken.isValid())
-        {
-            dispatcher.unsubscribe(entityDeletedToken);
-        }
-        if (sceneClearedToken.isValid())
-        {
-            dispatcher.unsubscribe(sceneClearedToken);
-        }
-        if (sculptModeToken.isValid())
-        {
-            dispatcher.unsubscribe(sculptModeToken);
-        }
-        if (paintModeToken.isValid())
-        {
-            dispatcher.unsubscribe(paintModeToken);
-        }
-        if (caveModeToken.isValid())
-        {
-            dispatcher.unsubscribe(caveModeToken);
-        }
-        if (vegetationBrushModeToken.isValid())
-        {
-            dispatcher.unsubscribe(vegetationBrushModeToken);
-        }
+        if (editorModeToken.isValid()) dispatcher.unsubscribe(editorModeToken);
+        if (entityDeletedToken.isValid()) dispatcher.unsubscribe(entityDeletedToken);
+        if (sceneClearedToken.isValid()) dispatcher.unsubscribe(sceneClearedToken);
+        if (sculptModeToken.isValid()) dispatcher.unsubscribe(sculptModeToken);
+        if (paintModeToken.isValid()) dispatcher.unsubscribe(paintModeToken);
+        if (holeModeToken.isValid()) dispatcher.unsubscribe(holeModeToken);
+        if (vegetationBrushModeToken.isValid()) dispatcher.unsubscribe(vegetationBrushModeToken);
+        if (meshBrushModeToken.isValid()) dispatcher.unsubscribe(meshBrushModeToken);
     }
 
-    void HoleModeServiceImpl::registerEventHandlers()
+    void CaveModeServiceImpl::registerEventHandlers()
     {
         auto& dispatcher = events::EventDispatcher::instance();
 
-        dispatcher.registerCommandHandler<events::hole::SetHoleModeActiveCommand>(
-            [this](const events::hole::SetHoleModeActiveCommand& cmd)
+        dispatcher.registerCommandHandler<events::cave::SetCaveModeActiveCommand>(
+            [this](const events::cave::SetCaveModeActiveCommand& cmd)
             {
                 if (cmd.active)
-                {
                     activate();
-                }
                 else
-                {
                     deactivate();
-                }
             });
 
-        dispatcher.registerQueryHandler<events::hole::IsHoleModeActiveQuery>(
-            [this](const events::hole::IsHoleModeActiveQuery&)
+        dispatcher.registerQueryHandler<events::cave::IsCaveModeActiveQuery>(
+            [this](const events::cave::IsCaveModeActiveQuery&)
             {
                 return isActive();
             });
 
-        dispatcher.registerQueryHandler<events::hole::GetHoleTargetEntityQuery>(
-            [this](const events::hole::GetHoleTargetEntityQuery&)
+        dispatcher.registerQueryHandler<events::cave::GetCaveTargetEntityQuery>(
+            [this](const events::cave::GetCaveTargetEntityQuery&)
             {
                 return getTargetEntity();
             });
 
-        // Auto-deactivate on Play mode
         editorModeToken = dispatcher.subscribe<events::editor::EditorModeChangedNotification>(
             [this](const events::editor::EditorModeChangedNotification& n)
             {
-                if (n.currentMode == EditorMode::Play && holeActive)
-                {
+                if (n.currentMode == EditorMode::Play && caveActive)
                     deactivate();
-                }
             });
 
-        // Auto-deactivate on target terrain deletion
         entityDeletedToken = dispatcher.subscribe<events::scene::EntityDeletedNotification>(
             [this](const events::scene::EntityDeletedNotification& n)
             {
                 if (targetTerrain.has_value() && n.entity == *targetTerrain)
-                {
                     deactivate();
-                }
             });
 
-        // Auto-deactivate on scene clear
         sceneClearedToken = dispatcher.subscribe<events::scene::SceneClearedNotification>(
             [this](const events::scene::SceneClearedNotification&)
             {
-                if (holeActive)
-                {
-                    deactivate();
-                }
+                if (caveActive) deactivate();
             });
 
-        // Auto-deactivate when sculpt mode activates
+        subscribeToModeChanges(dispatcher);
+    }
+
+    void CaveModeServiceImpl::subscribeToModeChanges(events::EventDispatcher& dispatcher)
+    {
         sculptModeToken = dispatcher.subscribe<events::sculpt::SculptModeChangedNotification>(
             [this](const events::sculpt::SculptModeChangedNotification& n)
             {
-                if (n.isActive && holeActive)
-                {
-                    deactivate();
-                }
+                if (n.isActive && caveActive) deactivate();
             });
 
-        // Auto-deactivate when paint mode activates
         paintModeToken = dispatcher.subscribe<events::paint::PaintModeChangedNotification>(
             [this](const events::paint::PaintModeChangedNotification& n)
             {
-                if (n.isActive && holeActive)
-                {
-                    deactivate();
-                }
+                if (n.isActive && caveActive) deactivate();
             });
 
-        // Auto-deactivate when cave mode activates
-        caveModeToken = dispatcher.subscribe<events::cave::CaveModeChangedNotification>(
-            [this](const events::cave::CaveModeChangedNotification& n)
+        holeModeToken = dispatcher.subscribe<events::hole::HoleModeChangedNotification>(
+            [this](const events::hole::HoleModeChangedNotification& n)
             {
-                if (n.isActive && holeActive)
-                {
-                    deactivate();
-                }
+                if (n.isActive && caveActive) deactivate();
             });
 
-        // Auto-deactivate when vegetation brush mode activates
         vegetationBrushModeToken = dispatcher.subscribe<events::vegetationBrush::VegetationBrushModeChangedNotification>(
             [this](const events::vegetationBrush::VegetationBrushModeChangedNotification& n)
             {
-                if (n.isActive && holeActive)
-                {
-                    deactivate();
-                }
+                if (n.isActive && caveActive) deactivate();
+            });
+
+        meshBrushModeToken = dispatcher.subscribe<events::meshBrush::MeshBrushModeChangedNotification>(
+            [this](const events::meshBrush::MeshBrushModeChangedNotification& n)
+            {
+                if (n.isActive && caveActive) deactivate();
             });
     }
 
-    bool HoleModeServiceImpl::activate()
+    std::optional<EntityHandle> CaveModeServiceImpl::resolveTerrainEntity(events::EventDispatcher& dispatcher)
     {
-        if (holeActive)
-        {
-            return true;
-        }
-
-        auto& dispatcher = events::EventDispatcher::instance();
-
-        // Deactivate sculpt mode if active
-        {
-            events::sculpt::SetSculptModeActiveCommand cmd;
-            cmd.active = false;
-            dispatcher.execute(cmd);
-        }
-
-        // Deactivate paint mode if active
-        {
-            events::paint::SetPaintModeActiveCommand cmd;
-            cmd.active = false;
-            dispatcher.execute(cmd);
-        }
-
         auto selectedEntity = dispatcher.query(events::scene::GetSelectedEntityQuery{});
         if (!selectedEntity.has_value())
-        {
-            return false;
-        }
+            return std::nullopt;
 
         EntityHandle terrainEntity = *selectedEntity;
 
-        // Check if selected entity is a terrain parent
         events::terrain::HasTerrainComponentQuery terrainQuery;
         terrainQuery.entity = terrainEntity;
         bool isTerrain = dispatcher.query(terrainQuery);
 
         if (!isTerrain)
         {
-            // Check if it's a terrain tile and resolve to parent
             events::terrain::HasTerrainTileComponentQuery tileQuery;
             tileQuery.entity = terrainEntity;
             bool isTile = dispatcher.query(tileQuery);
@@ -197,8 +134,6 @@ namespace services
                 if (entityData.has_value() && entityData->parent.has_value())
                 {
                     terrainEntity = *entityData->parent;
-
-                    // Verify the parent is actually a terrain
                     events::terrain::HasTerrainComponentQuery parentTerrainQuery;
                     parentTerrainQuery.entity = terrainEntity;
                     isTerrain = dispatcher.query(parentTerrainQuery);
@@ -206,20 +141,32 @@ namespace services
             }
 
             if (!isTerrain)
-            {
-                return false;
-            }
+                return std::nullopt;
         }
 
-        targetTerrain = terrainEntity;
-        holeActive = true;
+        return terrainEntity;
+    }
 
-        // Force-select the terrain parent entity
+    bool CaveModeServiceImpl::activate()
+    {
+        if (caveActive)
+            return true;
+
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        auto resolved = resolveTerrainEntity(dispatcher);
+        if (!resolved.has_value())
+            return false;
+
+        EntityHandle terrainEntity = *resolved;
+        targetTerrain = terrainEntity;
+        caveActive = true;
+
         events::scene::SelectEntityCommand selectCmd;
         selectCmd.entity = terrainEntity;
         dispatcher.execute(selectCmd);
 
-        events::hole::HoleModeChangedNotification notification;
+        events::cave::CaveModeChangedNotification notification;
         notification.isActive = true;
         notification.terrainEntity = terrainEntity;
         dispatcher.publish(notification);
@@ -227,28 +174,26 @@ namespace services
         return true;
     }
 
-    void HoleModeServiceImpl::deactivate()
+    void CaveModeServiceImpl::deactivate()
     {
-        if (!holeActive)
-        {
+        if (!caveActive)
             return;
-        }
 
-        holeActive = false;
+        caveActive = false;
         targetTerrain.reset();
 
-        events::hole::HoleModeChangedNotification notification;
+        events::cave::CaveModeChangedNotification notification;
         notification.isActive = false;
         notification.terrainEntity = std::nullopt;
         events::EventDispatcher::instance().publish(notification);
     }
 
-    bool HoleModeServiceImpl::isActive() const
+    bool CaveModeServiceImpl::isActive() const
     {
-        return holeActive;
+        return caveActive;
     }
 
-    std::optional<EntityHandle> HoleModeServiceImpl::getTargetEntity() const
+    std::optional<EntityHandle> CaveModeServiceImpl::getTargetEntity() const
     {
         return targetTerrain;
     }
