@@ -5,6 +5,7 @@
 #include <Jolt/Physics/Body/BodyInterface.h>
 #include <Jolt/Physics/Collision/Shape/HeightFieldShape.h>
 #include <Jolt/Physics/Collision/Shape/CapsuleShape.h>
+#include <Jolt/Physics/Collision/Shape/MeshShape.h>
 #include "print/Log.hpp"
 
 namespace core::physics
@@ -212,5 +213,83 @@ namespace core::physics
             }
         }
         vegetationBodies.clear();
+    }
+
+    void PhysicsTerrainManager::addCaveTileBody(uint64_t entityId, int32_t tileX, int32_t tileZ,
+                                                  const services::CaveTileColliderInfo& cave)
+    {
+        if (!ctx || !ctx->physicsSystem) return;
+        if (!cave.vertices || cave.vertexCount == 0 || !cave.indices || cave.indexCount < 3) return;
+
+        // Build Jolt triangle list from cave mesh
+        JPH::TriangleList triangles;
+        triangles.reserve(cave.indexCount / 3);
+
+        for (uint32_t i = 0; i + 2 < cave.indexCount; i += 3)
+        {
+            const auto& v0 = cave.vertices[cave.indices[i]];
+            const auto& v1 = cave.vertices[cave.indices[i + 1]];
+            const auto& v2 = cave.vertices[cave.indices[i + 2]];
+
+            triangles.push_back(JPH::Triangle(
+                JPH::Float3(v0.x, v0.y, v0.z),
+                JPH::Float3(v1.x, v1.y, v1.z),
+                JPH::Float3(v2.x, v2.y, v2.z)));
+        }
+
+        if (triangles.empty()) return;
+
+        JPH::MeshShapeSettings settings(triangles);
+        auto result = settings.Create();
+        if (result.HasError())
+        {
+            vfLogWarning("PhysicsTerrainManager: Failed to create cave mesh shape for tile ({}, {}): {}",
+                          tileX, tileZ, result.GetError().c_str());
+            return;
+        }
+
+        JPH::BodyCreationSettings bodySettings(
+            result.Get(),
+            JPH::RVec3::sZero(),
+            JPH::Quat::sIdentity(),
+            JPH::EMotionType::Static,
+            static_cast<JPH::ObjectLayer>(cave.collisionLayer));
+
+        bodySettings.mFriction = cave.friction;
+        bodySettings.mRestitution = cave.restitution;
+
+        auto& bodyInterface = ctx->getBodyInterface();
+        JPH::BodyID bodyId = bodyInterface.CreateAndAddBody(bodySettings, JPH::EActivation::DontActivate);
+
+        if (bodyId.IsInvalid())
+        {
+            vfLogWarning("PhysicsTerrainManager: Failed to add cave body for tile ({}, {})", tileX, tileZ);
+            return;
+        }
+
+        auto key = makeTileKey(tileX, tileZ);
+        caveBodies[entityId][key] = bodyId;
+    }
+
+    void PhysicsTerrainManager::removeCaveTileBody(uint64_t entityId, int32_t tileX, int32_t tileZ)
+    {
+        if (!ctx || !ctx->physicsSystem) return;
+
+        auto entityIt = caveBodies.find(entityId);
+        if (entityIt == caveBodies.end()) return;
+
+        auto key = makeTileKey(tileX, tileZ);
+        auto tileIt = entityIt->second.find(key);
+        if (tileIt == entityIt->second.end()) return;
+
+        auto& bodyInterface = ctx->getBodyInterface();
+        if (!tileIt->second.IsInvalid())
+        {
+            removeAndDestroyBody(bodyInterface, tileIt->second);
+        }
+
+        entityIt->second.erase(tileIt);
+        if (entityIt->second.empty())
+            caveBodies.erase(entityIt);
     }
 }

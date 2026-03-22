@@ -547,6 +547,28 @@ namespace core
         physicsWorld->removeTerrainTileBody(entity.id, tileX, tileZ);
     }
 
+    void PhysicsAdapter::addCaveTileCollider(services::EntityHandle entity,
+                                              const services::CaveTileColliderInfo& cave)
+    {
+        if (!physicsWorld) return;
+        physicsWorld->addCaveTileBody(entity.id, cave.tileX, cave.tileZ, cave);
+    }
+
+    void PhysicsAdapter::removeCaveTileCollider(services::EntityHandle entity,
+                                                 int32_t tileX, int32_t tileZ)
+    {
+        if (!physicsWorld) return;
+        physicsWorld->removeCaveTileBody(entity.id, tileX, tileZ);
+    }
+
+    void PhysicsAdapter::rebuildCaveTileCollider(services::EntityHandle entity,
+                                                  const services::CaveTileColliderInfo& cave)
+    {
+        if (!physicsWorld) return;
+        physicsWorld->removeCaveTileBody(entity.id, cave.tileX, cave.tileZ);
+        physicsWorld->addCaveTileBody(entity.id, cave.tileX, cave.tileZ, cave);
+    }
+
     void PhysicsAdapter::addVegetationTileColliders(int32_t tileX, int32_t tileZ,
                                                      const std::vector<VegetationColliderInstance>& instances)
     {

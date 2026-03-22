@@ -452,8 +452,14 @@ namespace windows
         if (ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
             auto hitResult = dispatcher.query(events::terrainRaycast::GetTerrainHitQuery{});
             if (hitResult.hit) {
+                // Offset brush center INTO the mountain (opposite of surface normal)
+                // so the carve sphere is fully inside the solid, not half in air
+                auto brushParams = dispatcher.query(events::caveBrush::GetCaveBrushParamsQuery{});
+                float offset = brushParams.radius * 0.5f;
+                glm::vec3 carveCenter = hitResult.position - hitResult.normal * offset;
+
                 events::caveBrush::ApplyCaveBrushCommand applyCmd;
-                applyCmd.worldPosition = hitResult.position;
+                applyCmd.worldPosition = carveCenter;
                 applyCmd.deltaTime = ImGui::GetIO().DeltaTime;
                 applyCmd.invert = ImGui::GetIO().KeyShift;
                 applyCmd.isFirstApplication = !caveDragging;

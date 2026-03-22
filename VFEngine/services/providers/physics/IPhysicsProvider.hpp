@@ -26,6 +26,19 @@ namespace services
         uint8_t collisionLayer = 0;
     };
 
+    struct CaveTileColliderInfo
+    {
+        int32_t tileX = 0;
+        int32_t tileZ = 0;
+        const glm::vec3* vertices = nullptr;
+        uint32_t vertexCount = 0;
+        const uint32_t* indices = nullptr;
+        uint32_t indexCount = 0;
+        float friction = 0.5f;
+        float restitution = 0.0f;
+        uint8_t collisionLayer = 0;
+    };
+
     struct PhysicsTransformSnapshot
     {
         glm::vec3 position{0.0f};
@@ -96,6 +109,10 @@ namespace services
 
         virtual void addTerrainTileCollider(EntityHandle entity, const TerrainTileColliderInfo& tile) = 0;
         virtual void removeTerrainTileCollider(EntityHandle entity, int32_t tileX, int32_t tileZ) = 0;
+
+        virtual void addCaveTileCollider(EntityHandle entity, const CaveTileColliderInfo& cave) = 0;
+        virtual void removeCaveTileCollider(EntityHandle entity, int32_t tileX, int32_t tileZ) = 0;
+        virtual void rebuildCaveTileCollider(EntityHandle entity, const CaveTileColliderInfo& cave) = 0;
 
         // Vegetation colliders — bulk static capsules per tile
         struct VegetationColliderInstance

@@ -48,6 +48,15 @@ namespace terrain
             {
                 for (uint32_t x = 0; x < sdf.config.resX; ++x)
                 {
+                    // Only carve into originally-solid voxels (below terrain surface)
+                    // Never modify air voxels above the surface — prevents mesh poking through
+                    if (!sdf.originalSdfGrid.empty())
+                    {
+                        size_t idx = sdf.getIndex(x, y, z);
+                        if (sdf.originalSdfGrid[idx] > 0.0f)
+                            continue; // Above surface, skip
+                    }
+
                     glm::vec3 worldPos = sdf.getWorldPosition(x, y, z);
                     float dist = computeNormalizedDistance3D(
                         worldPos, params.brushCenter, params.brushRadius, params.shape);
@@ -59,9 +68,9 @@ namespace terrain
 
                     // Carve: push SDF toward positive (air/cave)
                     float current = sdf.getSDF(x, y, z);
-                    float target = params.brushRadius * (1.0f - dist); // Distance to brush surface
+                    float target = params.brushRadius * (1.0f - dist);
                     float newValue = current + influence;
-                    newValue = std::min(newValue, target); // Don't exceed brush surface distance
+                    newValue = std::min(newValue, target);
                     sdf.setSDF(x, y, z, std::clamp(newValue, -10.0f, 10.0f));
                 }
             }
@@ -78,6 +87,14 @@ namespace terrain
             {
                 for (uint32_t x = 0; x < sdf.config.resX; ++x)
                 {
+                    // Only fill voxels that were originally solid (don't fill above surface)
+                    if (!sdf.originalSdfGrid.empty())
+                    {
+                        size_t idx = sdf.getIndex(x, y, z);
+                        if (sdf.originalSdfGrid[idx] > 0.0f)
+                            continue;
+                    }
+
                     glm::vec3 worldPos = sdf.getWorldPosition(x, y, z);
                     float dist = computeNormalizedDistance3D(
                         worldPos, params.brushCenter, params.brushRadius, params.shape);
@@ -87,9 +104,12 @@ namespace terrain
 
                     float influence = applyFalloff(dist, params.falloff) * strength;
 
-                    // Fill: push SDF toward negative (solid)
+                    // Fill: push SDF back toward original (restore solid)
                     float current = sdf.getSDF(x, y, z);
+                    size_t idx = sdf.getIndex(x, y, z);
+                    float original = sdf.originalSdfGrid.empty() ? -1.0f : sdf.originalSdfGrid[idx];
                     float newValue = current - influence;
+                    newValue = std::max(newValue, original); // Don't go more solid than original
                     sdf.setSDF(x, y, z, std::clamp(newValue, -10.0f, 10.0f));
                 }
             }

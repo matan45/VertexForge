@@ -97,8 +97,10 @@ namespace services
 
         // Remove single-tile physics body if collider is active
         if (physicsProvider && physicsProvider->hasTerrainCollider(terrainEntity))
+        {
             physicsProvider->removeTerrainTileCollider(terrainEntity, tileX, tileZ);
-
+            physicsProvider->removeCaveTileCollider(terrainEntity, tileX, tileZ);
+        }
 
         // Remove from grid (clears neighbor refs, marks neighbors dirty)
         grid.removeTile(coord);
@@ -250,10 +252,12 @@ namespace services
             return false;
         }
 
-        // Remove physics body for this tile
+        // Remove physics bodies for this tile (surface + cave)
         if (physicsProvider && physicsProvider->hasTerrainCollider(terrainEntity))
+        {
             physicsProvider->removeTerrainTileCollider(terrainEntity, tileX, tileZ);
-
+            physicsProvider->removeCaveTileCollider(terrainEntity, tileX, tileZ);
+        }
 
         // Remove from pending queue if it was waiting for height data
         pendingPhysicsTiles.erase(

@@ -612,17 +612,17 @@ namespace services
                 if (!fileCache->ensureHeightsLoaded(*tile))
                     continue;
             }
+            if (fileCache)
+                fileCache->markDirty(coord);
 
-            // Initialize cave SDF from heightmap if not yet created
+            // Initialize SDF from heightmap (captures the terrain surface)
             if (!tile->hasCaveData())
                 tile->initializeCaveSDFFromHeights();
 
             if (!tile->hasCaveData())
                 continue;
 
-            if (fileCache)
-                fileCache->markDirty(coord);
-
+            // Apply 3D SDF carve — works in all directions (down, horizontal, up)
             terrain::CaveBrushApplicator::ApplyParams applyParams;
             applyParams.brushCenter = worldPosition;
             applyParams.tileWorldOrigin = glm::vec2(
@@ -636,16 +636,73 @@ namespace services
             applyParams.deltaTime = deltaTime;
             applyParams.invert = invert;
 
-            if (terrain::CaveBrushApplicator::apply(*tile->caveData, applyParams))
-            {
-                // Regenerate cave mesh from modified SDF
-                terrain::CaveMeshGenerator::generate(*tile);
+            if (!terrain::CaveBrushApplicator::apply(*tile->caveData, applyParams))
+                continue;
 
-                tile->caveDirty = true;
-                tile->caveGPUDirty = true;
-                tile->isDirty = true;
-                modifiedTiles.push_back(coord);
+            // Regenerate cave mesh (Marching Cubes on modified regions only)
+            terrain::CaveMeshGenerator::generate(*tile);
+
+            // Auto-punch holes in heightmap where cave intersects the surface
+            if (!tile->hasHoleMask())
+                tile->initializeHoleMask();
+
+            uint32_t vertexCount = tile->config.getVertexCount();
+            uint32_t quadCount = vertexCount - 1;
+            const auto& sdf = *tile->caveData;
+            bool holesChanged = false;
+
+            for (uint32_t qz = 0; qz < quadCount; ++qz)
+            {
+                for (uint32_t qx = 0; qx < quadCount; ++qx)
+                {
+                    bool shouldBeHole = false;
+                    for (int dz = 0; dz <= 1 && !shouldBeHole; ++dz)
+                    {
+                        for (int dx = 0; dx <= 1 && !shouldBeHole; ++dx)
+                        {
+                            uint32_t vx = qx + dx;
+                            uint32_t vz = qz + dz;
+                            uint32_t sx = std::min(vx, sdf.config.resX - 1);
+                            uint32_t sz = std::min(vz, sdf.config.resZ - 1);
+                            float surfaceHeight = tile->heightData[vz * vertexCount + vx];
+
+                            // Scan the SDF column at this XZ from bottom up to surface
+                            // If any originally-solid voxel is now air, there's a cave here
+                            for (uint32_t sy = 0; sy < sdf.config.resY; ++sy)
+                            {
+                                float worldY = sdf.getWorldY(sy);
+                                if (worldY > surfaceHeight + 0.1f)
+                                    break;
+
+                                size_t idx = sdf.getIndex(sx, sy, sz);
+                                if (sdf.originalSdfGrid[idx] <= 0.0f && sdf.sdfGrid[idx] > 0.0f)
+                                {
+                                    shouldBeHole = true;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+
+                    bool isCurrentlyHole = tile->isHole(qx, qz);
+                    if (shouldBeHole != isCurrentlyHole)
+                    {
+                        tile->setHole(qx, qz, shouldBeHole);
+                        holesChanged = true;
+                    }
+                }
             }
+
+            if (holesChanged)
+            {
+                tile->topologyDirty = true;
+                tile->setAllLODsDirty();
+            }
+
+            tile->caveDirty = true;
+            tile->caveGPUDirty = true;
+            tile->isDirty = true;
+            modifiedTiles.push_back(coord);
         }
 
         if (!modifiedTiles.empty())

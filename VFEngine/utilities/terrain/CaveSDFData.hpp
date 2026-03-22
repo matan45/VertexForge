@@ -9,19 +9,14 @@
 
 namespace terrain
 {
-    // Default SDF grid resolutions per tile resolution
-    // XZ matches tile vertex count, Y is lower (caves span limited vertical range)
-    constexpr uint32_t CAVE_SDF_Y_RESOLUTION = 16;
-
     struct CaveSDFConfig
     {
         uint32_t resX = 33;
-        uint32_t resY = CAVE_SDF_Y_RESOLUTION;
+        uint32_t resY = 33;
         uint32_t resZ = 33;
-        float voxelSize = 1.0f;      // World units per voxel (derived from tile config)
-        float yVoxelSize = 1.0f;     // Vertical voxel size (can differ from XZ)
-        float yExtentBelow = 50.0f;  // How far below minHeight the SDF extends
-        float yExtentAbove = 0.0f;   // How far above maxHeight (usually 0, surface handles above)
+        float voxelSize = 1.0f;      // World units per voxel (XZ, derived from tile config)
+        float yVoxelSize = 1.0f;     // Vertical voxel size (matched to XZ for uniform grid)
+        float yExtentBelow = 10.0f;  // How far below minHeight the SDF extends
 
         [[nodiscard]] size_t totalVoxels() const
         {
@@ -33,11 +28,14 @@ namespace terrain
             CaveSDFConfig cfg;
             cfg.resX = tileConfig.getVertexCount();
             cfg.resZ = tileConfig.getVertexCount();
-            cfg.resY = CAVE_SDF_Y_RESOLUTION;
             cfg.voxelSize = tileConfig.getVertexSpacing();
 
-            float totalYRange = tileConfig.maxHeight - tileConfig.minHeight + cfg.yExtentBelow + cfg.yExtentAbove;
-            cfg.yVoxelSize = totalYRange / static_cast<float>(cfg.resY - 1);
+            // Match Y voxel size to XZ for uniform grid — no blocky artifacts
+            cfg.yVoxelSize = cfg.voxelSize;
+
+            // Compute Y resolution from terrain height range
+            float totalYRange = tileConfig.maxHeight - tileConfig.minHeight + cfg.yExtentBelow;
+            cfg.resY = std::max(4u, static_cast<uint32_t>(totalYRange / cfg.yVoxelSize) + 1);
 
             return cfg;
         }
@@ -47,6 +45,7 @@ namespace terrain
     struct CaveSDFData
     {
         std::vector<float> sdfGrid;
+        std::vector<float> originalSdfGrid; // Unmodified heightmap SDF — used to detect carved regions
         CaveSDFConfig config;
         glm::vec3 localOrigin{0.0f}; // World-space bottom corner of SDF volume
         bool isDirty = false;
@@ -98,6 +97,9 @@ namespace terrain
                     }
                 }
             }
+
+            // Store original so we can detect which voxels were carved
+            originalSdfGrid = sdfGrid;
 
             isDirty = true;
         }
@@ -200,20 +202,69 @@ namespace terrain
             return len > 1e-6f ? grad / len : glm::vec3(0.0f, 1.0f, 0.0f);
         }
 
-        // Check if any voxel in the grid has positive SDF (cave exists)
+        // Check if any voxel was carved (differs from original heightmap SDF)
         [[nodiscard]] bool hasCaveGeometry() const
         {
-            for (float v : sdfGrid)
+            if (originalSdfGrid.empty())
             {
-                if (v > 0.0f)
+                // No original = all-solid init, any positive means cave
+                for (float v : sdfGrid)
+                {
+                    if (v > 0.0f)
+                        return true;
+                }
+                return false;
+            }
+
+            for (size_t i = 0; i < sdfGrid.size(); ++i)
+            {
+                if (std::abs(sdfGrid[i] - originalSdfGrid[i]) > 1e-4f)
                     return true;
             }
             return false;
         }
 
+        // Check if a specific cube was modified by carving AND touches the original solid volume.
+        // Skips cubes entirely above the original terrain surface (all original corners positive).
+        [[nodiscard]] bool isCubeModified(uint32_t x, uint32_t y, uint32_t z) const
+        {
+            if (originalSdfGrid.empty())
+                return true; // No original data, process all
+
+            bool anyModified = false;
+            bool anyOriginalSolid = false;
+
+            // Check all 8 corners of the cube
+            for (int dz = 0; dz <= 1; ++dz)
+            {
+                for (int dy = 0; dy <= 1; ++dy)
+                {
+                    for (int dx = 0; dx <= 1; ++dx)
+                    {
+                        uint32_t cx = x + dx;
+                        uint32_t cy = y + dy;
+                        uint32_t cz = z + dz;
+                        if (cx >= config.resX || cy >= config.resY || cz >= config.resZ)
+                            continue;
+                        size_t idx = getIndex(cx, cy, cz);
+
+                        if (originalSdfGrid[idx] <= 0.0f)
+                            anyOriginalSolid = true;
+
+                        if (std::abs(sdfGrid[idx] - originalSdfGrid[idx]) > 1e-4f)
+                            anyModified = true;
+                    }
+                }
+            }
+
+            // Only generate mesh in cubes that were originally part of the terrain volume
+            return anyModified && anyOriginalSolid;
+        }
+
         void clear()
         {
             sdfGrid.clear();
+            originalSdfGrid.clear();
             config = CaveSDFConfig{};
             localOrigin = glm::vec3(0.0f);
             isDirty = false;

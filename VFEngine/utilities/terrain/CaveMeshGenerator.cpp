@@ -23,6 +23,15 @@ namespace terrain
         if (tile.caveLOD.vertices.empty() || tile.caveLOD.indices.empty())
             return false;
 
+        // Convert from world space to tile-local space
+        // The mesh shader applies modelMatrix = translate(worldOrigin.x, 0, worldOrigin.z)
+        // so vertices must be relative to that origin
+        glm::vec3 tileOriginOffset(tile.worldOrigin.x, 0.0f, tile.worldOrigin.z);
+        for (auto& v : tile.caveLOD.vertices)
+        {
+            v.position -= tileOriginOffset;
+        }
+
         // Optimize mesh for better meshlet packing
         meshopt_optimizeVertexCache(
             tile.caveLOD.indices.data(),
@@ -122,6 +131,10 @@ namespace terrain
             {
                 for (uint32_t x = 0; x + 1 < sdf.config.resX; ++x)
                 {
+                    // Skip cubes where the SDF was not modified by carving
+                    if (!sdf.isCubeModified(x, y, z))
+                        continue;
+
                     // Get SDF values at 8 corners
                     float cornerValues[8];
                     glm::vec3 cornerPositions[8];
@@ -176,9 +189,10 @@ namespace terrain
                                 static_cast<uint32_t>(std::clamp(static_cast<int>((pos.y - sdf.localOrigin.y) / std::max(sdf.config.yVoxelSize, 1e-6f)), 0, static_cast<int>(sdf.config.resY - 1))),
                                 static_cast<uint32_t>(std::clamp(static_cast<int>((pos.z - sdf.localOrigin.z) / std::max(sdf.config.voxelSize, 1e-6f)), 0, static_cast<int>(sdf.config.resZ - 1))));
 
-                            // Cave surfaces face inward (gradient points into solid),
-                            // but we want normals pointing into the cave (toward positive SDF / air)
-                            // The gradient of SDF points from negative to positive, which is INTO the cave = correct
+                            // Negate gradient: SDF gradient points from solid to air,
+                            // but with flipped winding we need normals pointing from air to solid
+                            // (into the cave wall, matching the front face direction)
+                            normal = -normal;
 
                             resource::Vertex vert{};
                             vert.position = pos;
@@ -194,12 +208,14 @@ namespace terrain
                         }
                     }
 
-                    // Emit triangles
+                    // Emit triangles with reversed winding order
+                    // Standard MC normals point toward solid; we flip so normals
+                    // face into the cave interior (toward the viewer inside)
                     for (int i = 0; triTable[cubeIndex][i] != -1; i += 3)
                     {
                         indices.push_back(edgeVertices[triTable[cubeIndex][i]]);
-                        indices.push_back(edgeVertices[triTable[cubeIndex][i + 1]]);
                         indices.push_back(edgeVertices[triTable[cubeIndex][i + 2]]);
+                        indices.push_back(edgeVertices[triTable[cubeIndex][i + 1]]);
                     }
                 }
             }

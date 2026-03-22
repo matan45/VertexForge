@@ -387,7 +387,7 @@ namespace terrain
         writeLE<float>(file, sdf.config.voxelSize);
         writeLE<float>(file, sdf.config.yVoxelSize);
         writeLE<float>(file, sdf.config.yExtentBelow);
-        writeLE<float>(file, sdf.config.yExtentAbove);
+        writeLE<float>(file, 0.0f); // reserved
 
         // Write local origin
         writeLE<float>(file, sdf.localOrigin.x);
@@ -401,6 +401,17 @@ namespace terrain
         for (uint32_t i = 0; i < gridSize; ++i)
         {
             writeLE<float>(file, sdf.sdfGrid[i]);
+        }
+
+        // Write original SDF grid (for detecting carved regions)
+        uint32_t hasOriginal = sdf.originalSdfGrid.empty() ? 0u : 1u;
+        writeLE<uint32_t>(file, hasOriginal);
+        if (hasOriginal)
+        {
+            for (uint32_t i = 0; i < gridSize; ++i)
+            {
+                writeLE<float>(file, sdf.originalSdfGrid[i]);
+            }
         }
 
         return file.good();
@@ -428,7 +439,7 @@ namespace terrain
             outCaveData.config.voxelSize = readLE<float>(file);
             outCaveData.config.yVoxelSize = readLE<float>(file);
             outCaveData.config.yExtentBelow = readLE<float>(file);
-            outCaveData.config.yExtentAbove = readLE<float>(file);
+            readLE<float>(file); // reserved
 
             // Read local origin
             outCaveData.localOrigin.x = readLE<float>(file);
@@ -442,6 +453,17 @@ namespace terrain
             for (uint32_t i = 0; i < gridSize; ++i)
             {
                 outCaveData.sdfGrid[i] = readLE<float>(file);
+            }
+
+            // Read original SDF grid
+            uint32_t hasOriginal = readLE<uint32_t>(file);
+            if (hasOriginal)
+            {
+                outCaveData.originalSdfGrid.resize(gridSize);
+                for (uint32_t i = 0; i < gridSize; ++i)
+                {
+                    outCaveData.originalSdfGrid[i] = readLE<float>(file);
+                }
             }
 
             return file.good();

@@ -29,6 +29,7 @@ namespace terrain
                               const TileLookup& getTile = nullptr);
 
         bool ensureHeightsLoaded(TerrainTile& tile);
+        bool ensureCaveDataLoaded(TerrainTile& tile);
 
         void evictTileGeometry(TerrainTile& tile);
 

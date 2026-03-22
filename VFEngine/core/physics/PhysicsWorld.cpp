@@ -254,6 +254,17 @@ namespace core::physics
     void PhysicsWorld::removeAllTerrainBodies(uint64_t entityId) { terrainManager.removeAllTerrainBodies(entityId); }
     bool PhysicsWorld::hasTerrainBodies(uint64_t entityId) const { return terrainManager.hasTerrainBodies(entityId); }
 
+    void PhysicsWorld::addCaveTileBody(uint64_t entityId, int32_t tileX, int32_t tileZ,
+                                        const services::CaveTileColliderInfo& cave)
+    {
+        terrainManager.addCaveTileBody(entityId, tileX, tileZ, cave);
+    }
+
+    void PhysicsWorld::removeCaveTileBody(uint64_t entityId, int32_t tileX, int32_t tileZ)
+    {
+        terrainManager.removeCaveTileBody(entityId, tileX, tileZ);
+    }
+
     JPH::BodyID PhysicsWorld::addStaticCapsule(const glm::vec3& position, float yRotation, float scale,
                                                 float radius, float height, uint8_t collisionLayer)
     {
