@@ -2,7 +2,9 @@
 #include "events/EventDispatcher.hpp"
 #include "events/vegetation/VegetationBrushEvents.hpp"
 #include "events/vegetation/GrassEvents.hpp"
+#include "nfd/FileDialog.hpp"
 #include <imgui.h>
+#include <filesystem>
 
 namespace windows
 {
@@ -93,11 +95,9 @@ namespace windows
     {
         ImGui::Text("Vegetation Type");
 
-        const char* typeNames[] = {"Grass", "Flower", "Bush", "Billboard"};
+        const char* typeNames[] = {"Grass", "Billboard"};
         const ImVec4 typeColors[] = {
             {0.2f, 0.6f, 0.1f, 1.0f},   // Grass: green
-            {0.8f, 0.3f, 0.5f, 1.0f},   // Flower: pink
-            {0.15f, 0.45f, 0.1f, 1.0f}, // Bush: dark green
             {0.3f, 0.6f, 0.8f, 1.0f}    // Billboard: blue
         };
 
@@ -151,9 +151,25 @@ namespace windows
         {
             ImGui::Spacing();
             ImGui::Text("Billboard Texture");
-            ImGui::InputText("vfImage Path", billboardTexturePath, sizeof(billboardTexturePath));
-            if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("Path to .vfImage file for billboard texture");
+            ImGui::InputText("##billboardTex", billboardTexturePath, sizeof(billboardTexturePath),
+                             ImGuiInputTextFlags_ReadOnly);
+            ImGui::SameLine();
+            if (ImGui::SmallButton("Browse##billboard"))
+            {
+                nfd::FileDialog fileDialog;
+                std::vector<std::pair<std::wstring, std::wstring>> filters = {
+                    {L"VF Image", L"*.vfImage"}
+                };
+                std::string selectedPath = fileDialog.openFileDialog(filters);
+                if (!selectedPath.empty())
+                {
+                    // Make path relative to project
+                    namespace fs = std::filesystem;
+                    fs::path absPath(selectedPath);
+                    std::string relPath = absPath.filename().string();
+                    snprintf(billboardTexturePath, sizeof(billboardTexturePath), "%s", selectedPath.c_str());
+                }
+            }
         }
     }
 

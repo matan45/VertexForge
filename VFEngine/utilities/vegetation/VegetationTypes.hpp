@@ -20,10 +20,8 @@ namespace vegetation
     enum class VegetationType : uint8_t
     {
         Grass = 0,
-        Flower = 1,
-        Bush = 2,
-        Billboard = 3,
-        Count = 4
+        Billboard = 1,
+        Count = 2
     };
 
     static constexpr uint32_t VEGETATION_TYPE_COUNT = static_cast<uint32_t>(VegetationType::Count);
@@ -46,7 +44,7 @@ namespace vegetation
     struct MixedBrushConfig
     {
         bool enabled = false;
-        std::array<float, VEGETATION_TYPE_COUNT> ratios = {1.0f, 0.0f, 0.0f, 0.0f};
+        std::array<float, VEGETATION_TYPE_COUNT> ratios = {1.0f, 0.0f};
 
         void normalize()
         {

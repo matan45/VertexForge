@@ -17,8 +17,6 @@ namespace components
         bool enabled = true;
         std::array<vegetation::VegetationTypeConfig, vegetation::VEGETATION_TYPE_COUNT> typeConfigs = {{
             {vegetation::VegetationType::Grass, 0.3f, 0.8f, 1.0f, 0.7f, 1.0f, 80.0f, 120.0f, {0.2f, 0.6f, 0.1f, 1.0f}},
-            {vegetation::VegetationType::Flower, 0.2f, 0.5f, 1.0f, 0.6f, 0.5f, 60.0f, 100.0f, {0.8f, 0.3f, 0.5f, 1.0f}},
-            {vegetation::VegetationType::Bush, 0.5f, 1.5f, 0.8f, 0.5f, 0.3f, 50.0f, 90.0f, {0.15f, 0.45f, 0.1f, 1.0f}},
             {vegetation::VegetationType::Billboard, 0.3f, 1.0f, 1.0f, 0.5f, 0.3f, 60.0f, 100.0f, {1.0f, 1.0f, 1.0f, 1.0f}}
         }};
     };

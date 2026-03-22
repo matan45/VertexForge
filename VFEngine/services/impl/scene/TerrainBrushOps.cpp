@@ -493,6 +493,16 @@ namespace services
         auto cacheIt = fileCaches.find(targetEntity->id);
         auto fileCache = (cacheIt != fileCaches.end()) ? cacheIt->second : nullptr;
 
+        // Query active vegetation type and mixed config once before the tile loop
+        vegetation::VegetationType activeType = vegetation::VegetationType::Grass;
+        vegetation::MixedBrushConfig mixedConfig;
+        try
+        {
+            activeType = dispatcher.query(events::vegetationBrush::GetActiveVegetationTypeQuery{});
+            mixedConfig = dispatcher.query(events::vegetationBrush::GetMixedBrushConfigQuery{});
+        }
+        catch (...) { /* handlers not yet registered, use defaults */ }
+
         bool anyModified = false;
         for (const auto& coord : affectedTiles)
         {
@@ -526,12 +536,6 @@ namespace services
             applyParams.brushType = brushType;
             applyParams.deltaTime = deltaTime;
             applyParams.invert = invert;
-
-            // Apply brush to active vegetation type(s)
-            auto activeType = events::EventDispatcher::instance().query(
-                events::vegetationBrush::GetActiveVegetationTypeQuery{});
-            auto mixedConfig = events::EventDispatcher::instance().query(
-                events::vegetationBrush::GetMixedBrushConfigQuery{});
 
             if (mixedConfig.enabled)
             {

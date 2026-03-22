@@ -20,7 +20,7 @@ namespace windows
         // Vegetation type selection
         int selectedVegetationType = 0;
         bool mixedModeEnabled = false;
-        float mixedRatios[vegetation::VEGETATION_TYPE_COUNT] = {1.0f, 0.0f, 0.0f, 0.0f};
+        float mixedRatios[vegetation::VEGETATION_TYPE_COUNT] = {1.0f, 0.0f};
 
         // Billboard texture path (for Billboard type)
         char billboardTexturePath[256] = "";

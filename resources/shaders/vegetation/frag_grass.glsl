@@ -6,6 +6,7 @@ layout(location = 0) in vec3 inWorldPos;
 layout(location = 1) in vec3 inNormal;
 layout(location = 2) in vec2 inUV;
 layout(location = 3) in float inAlpha;
+layout(location = 4) flat in uint inVegType;
 
 layout(location = 0) out vec4 outColor;
 
@@ -82,13 +83,13 @@ void main() {
     // Gradient from base to tip using config colors
     vec3 albedo = mix(baseColor.rgb, tipColor.rgb, inUV.y);
 
-    // Billboard texture sampling (when billboardTextureIndex is valid)
+    // Billboard texture sampling (type 1, when billboardTextureIndex is valid)
     float finalAlpha = inAlpha;
-    if (billboardTextureIndex != 0xFFFFFFFFu) {
+    if (inVegType == 1u && billboardTextureIndex != 0xFFFFFFFFu) {
         vec4 texColor = texture(bindlessTextures[nonuniformEXT(billboardTextureIndex)], inUV);
         albedo = texColor.rgb;
         finalAlpha *= texColor.a;
-        if (finalAlpha < 0.1) discard; // Alpha test for billboard cutout
+        if (finalAlpha < 0.1) discard;
     }
 
     // Ambient term
