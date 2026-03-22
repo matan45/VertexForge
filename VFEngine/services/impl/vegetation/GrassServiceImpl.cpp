@@ -42,14 +42,17 @@ namespace services
 
         dispatcher.registerCommandHandler<events::vegetation::SetBillboardPaletteCommand>(
             [this](const events::vegetation::SetBillboardPaletteCommand& cmd) {
-                // Save to ECS component
+                // Save to ECS component (create if needed)
                 auto& registry = scene::EntityRegistry::getRegistry();
                 auto view = registry.view<components::GrassComponent>();
-                for (auto entity : view)
+                entt::entity target = entt::null;
+                for (auto entity : view) { target = entity; break; }
+                if (target == entt::null)
                 {
-                    registry.get<components::GrassComponent>(entity).billboardPalette = cmd.entries;
-                    break;
+                    target = registry.create();
+                    registry.emplace<components::GrassComponent>(target);
                 }
+                registry.get<components::GrassComponent>(target).billboardPalette = cmd.entries;
                 if (billboardPaletteCb) billboardPaletteCb(cmd.entries, cmd.activeEntry);
             });
 

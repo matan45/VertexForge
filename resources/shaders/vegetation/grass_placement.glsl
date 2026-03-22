@@ -131,11 +131,9 @@ void main() {
         float rotation = hash(seed * 2.7) * 6.28318;
 
         float scaleFactor = hash(seed * 3.1);
-        // Use per-entry scale range if available, otherwise fall back to global config
-        float scaleMin = (entryScaleMin > 0.0) ? entryScaleMin : heightMin;
-        float scaleMax = (entryScaleMax > 0.0) ? entryScaleMax : heightMax;
-        float bladeH = mix(scaleMin, scaleMax, scaleFactor);
-        float bladeW = mix(widthMin, widthMax, scaleFactor);
+        // Per-entry scale range (no fallback to old heightMin/heightMax)
+        float bladeH = mix(entryScaleMin, entryScaleMax, scaleFactor);
+        float bladeW = bladeH * 0.5; // Width proportional to height
 
         float windPhase = hash(seed * 5.3);
 

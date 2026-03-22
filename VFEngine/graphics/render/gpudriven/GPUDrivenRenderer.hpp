@@ -31,7 +31,6 @@
 #include "billboard/BillboardStreamManager.hpp"
 #include "vegetation/GrassConfig.hpp"
 #include "vegetation/VegetationTypes.hpp"
-#include "print/Log.hpp"
 #include "../vegetation/GrassStreamManager.hpp"
 #include "../occlusion/LightOcclusionCulling.hpp"
 #include "../volumetric/VolumetricPipeline.hpp"
@@ -624,8 +623,6 @@ namespace render::gpudriven
                 {
                     gpu.bindlessIndex = textureStreamManager->registerTexture(
                         e.texturePath, vk::Format::eR8G8B8A8Srgb);
-                    vfLogInfo("Billboard texture registered: {} -> bindlessIndex={}",
-                              e.texturePath, gpu.bindlessIndex);
                 }
 
                 vegetation.billboardPalette.push_back(gpu);

@@ -72,7 +72,7 @@ namespace windows
             events::EventDispatcher::instance().execute(cmd);
         }
 
-        ImGui::SliderFloat("Strength", &brushStrength, 0.0f, 100.0f);
+        ImGui::SliderFloat("Strength", &brushStrength, 0.0f, 10.0f);
         ImGui::SliderFloat("Opacity", &brushOpacity, 0.0f, 1.0f);
 
         const char* falloffTypes[] = {"Constant", "Linear", "Smooth", "Sharp"};
@@ -155,6 +155,11 @@ namespace windows
 
         if (removeIndex >= 0)
         {
+            // Clear density data for this slot on all terrain tiles
+            events::vegetation::ClearVegetationDensitySlotCommand clearCmd;
+            clearCmd.slotIndex = static_cast<uint32_t>(removeIndex);
+            events::EventDispatcher::instance().execute(clearCmd);
+
             billboardEntries.erase(billboardEntries.begin() + removeIndex);
             pushBillboardPalette();
         }
@@ -163,6 +168,18 @@ namespace windows
         {
             billboardEntries.emplace_back();
         }
+        ImGui::SameLine();
+        if (ImGui::Button("Clear All Density"))
+        {
+            for (uint32_t i = 0; i < vegetation::MAX_BILLBOARD_ENTRIES; ++i)
+            {
+                events::vegetation::ClearVegetationDensitySlotCommand clearCmd;
+                clearCmd.slotIndex = i;
+                events::EventDispatcher::instance().execute(clearCmd);
+            }
+        }
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Clear all painted vegetation from terrain");
     }
 
     void GrassDensityPanel::drawBillboardEntry(int index, int& removeIndex)
@@ -179,22 +196,12 @@ namespace windows
         // Paint enable checkbox
         if (ImGui::Checkbox("##paint", &entry.paintEnabled))
         {
-            // If this is the only paint-enabled entry, set it as active type
-            for (int pi = 0; pi < static_cast<int>(billboardEntries.size()); ++pi)
-            {
-                if (billboardEntries[pi].paintEnabled)
-                {
-                    events::vegetationBrush::SetActiveVegetationTypeCommand cmd;
-                    cmd.type = static_cast<vegetation::VegetationType>(pi);
-                    events::EventDispatcher::instance().execute(cmd);
-                    break;
-                }
-            }
+            pushBillboardPalette();
         }
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("Include in paint brush");
         ImGui::SameLine();
 
-        ImVec4 headerColor = entry.active
+        ImVec4 headerColor = entry.visible
             ? ImVec4(0.2f, 0.4f, 0.8f, 1.0f)
             : ImVec4(0.4f, 0.4f, 0.4f, 1.0f); // Dimmed when inactive
         ImGui::PushStyleColor(ImGuiCol_Header, headerColor);
@@ -236,9 +243,18 @@ namespace windows
                 pushBillboardPalette();
             if (ImGui::DragFloat2("Scale Range", &entry.scaleRange.x, 0.01f, 0.1f, 10.0f))
                 pushBillboardPalette();
-            if (ImGui::DragFloat("Density", &entry.densityMultiplier, 0.1f, 0.1f, 20.0f))
+            if (ImGui::DragFloat("Density", &entry.densityMultiplier, 0.01f, 0.01f, 5.0f, "%.2f"))
                 pushBillboardPalette();
 
+            if (ImGui::Button("Clear Density"))
+            {
+                events::vegetation::ClearVegetationDensitySlotCommand clearCmd;
+                clearCmd.slotIndex = static_cast<uint32_t>(index);
+                events::EventDispatcher::instance().execute(clearCmd);
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Clear this entry's painted density from all tiles");
+            ImGui::SameLine();
             if (ImGui::Button("Remove"))
                 removeIndex = index;
 

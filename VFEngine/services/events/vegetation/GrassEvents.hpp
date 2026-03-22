@@ -54,4 +54,11 @@ namespace events::vegetation
     {
         std::string_view getName() const override { return "GetBillboardPalette"; }
     };
+
+    struct ClearVegetationDensitySlotCommand : ICommand<void>
+    {
+        uint32_t slotIndex = 0;
+
+        std::string_view getName() const override { return "ClearVegetationDensitySlot"; }
+    };
 }

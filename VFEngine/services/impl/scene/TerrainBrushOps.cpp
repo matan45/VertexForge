@@ -505,7 +505,6 @@ namespace services
             }
         }
         catch (...) {}
-        // Fallback: if nothing enabled, paint to slot 0
         if (paintSlots.empty()) paintSlots.push_back(0);
 
         bool anyModified = false;
@@ -520,8 +519,12 @@ namespace services
                     tile = grid->getTile(coord);
                 }
                 if (!tile)
+                {
+                    vfLogError("VegBrush: tile ({},{}) not loaded, skipping", coord.x, coord.z);
                     continue;
+                }
             }
+
 
             if (fileCache)
                 fileCache->markDirty(coord);
@@ -542,7 +545,8 @@ namespace services
             applyParams.deltaTime = deltaTime;
             applyParams.invert = invert;
 
-            // Paint to all enabled billboard entry slots
+            // Each entry has its own independent density layer
+            // Paint/Erase/Smooth/Fill only affects paint-enabled slots
             for (uint32_t slot : paintSlots)
             {
                 auto& densityMap = tile->vegetationDensityMaps[slot];

@@ -38,11 +38,11 @@ namespace vegetation
     {
         std::string texturePath;                     // Path to .vfImage file
         float weight = 1.0f;                         // For weighted random selection
-        glm::vec2 scaleRange{0.8f, 1.2f};           // Min/max random scale
+        glm::vec2 scaleRange{0.2f, 0.4f};           // Min/max random scale
         float densityMultiplier = 1.0f;              // Per-entry density
         BillboardMode mode = BillboardMode::Cross;   // Cross or camera-facing
         bool visible = true;                         // Toggle rendering on/off
-        bool paintEnabled = true;                    // Include in multi-paint brush stroke
+        bool paintEnabled = false;                   // Include in paint brush (user must enable)
         uint32_t bindlessTextureIndex = 0xFFFFFFFF;  // Resolved at runtime
     };
 
@@ -84,7 +84,7 @@ namespace vegetation
     struct DensityBrushParams
     {
         float radius = 5.0f;
-        float strength = 10.0f;
+        float strength = 1.0f;
         float opacity = 1.0f;
         terrain::BrushFalloff falloff = terrain::BrushFalloff::Smooth;
         terrain::BrushShape shape = terrain::BrushShape::Circle;

@@ -14,6 +14,7 @@
 #include "../../events/terrain/PaintBrushEvents.hpp"
 #include "../../events/terrain/HoleBrushEvents.hpp"
 #include "../../events/vegetation/VegetationBrushEvents.hpp"
+#include "../../events/vegetation/GrassEvents.hpp"
 #include "../../events/terrain/CaveBrushEvents.hpp"
 #include "../../events/project/SceneEvents.hpp"
 #include "../../events/physics/PhysicsEvents.hpp"
@@ -260,6 +261,28 @@ namespace services
             [this](const events::vegetationBrush::ApplyVegetationDensityBrushCommand& cmd)
             {
                 applyVegetationDensityBrush(cmd.worldPosition, cmd.deltaTime, cmd.invert, cmd.isFirstApplication);
+            });
+
+        dispatcher.registerCommandHandler<events::vegetation::ClearVegetationDensitySlotCommand>(
+            [this](const events::vegetation::ClearVegetationDensitySlotCommand& cmd)
+            {
+                uint32_t slot = cmd.slotIndex;
+                if (slot >= vegetation::MAX_BILLBOARD_ENTRIES) return;
+
+                for (auto& [entityId, grid] : terrainGrids)
+                {
+                    for (auto* tile : grid->getAllTiles())
+                    {
+                        if (!tile) continue;
+                        auto& densityMap = tile->vegetationDensityMaps[slot];
+                        if (densityMap.isInitialized())
+                        {
+                            densityMap.clear();
+                            tile->vegetationDensityDirty[slot] = true;
+                            tile->vegetationDensityGPUDirty[slot] = true;
+                        }
+                    }
+                }
             });
     }
 

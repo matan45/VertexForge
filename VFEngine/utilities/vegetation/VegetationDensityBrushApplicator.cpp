@@ -107,7 +107,7 @@ namespace vegetation
         VegetationDensityMap& dm, uint32_t x, uint32_t z, float influence)
     {
         float current = dm.getDensity(x, z);
-        float newValue = std::min(current + influence, 1.0f);
+        float newValue = std::min(current + influence, 10.0f);
         dm.setDensity(x, z, newValue);
     }
 

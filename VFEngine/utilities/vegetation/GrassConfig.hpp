@@ -13,8 +13,8 @@ namespace vegetation
         float widthMax = 0.05f;
         float windStrength = 1.0f;
         float slopeLimit = 0.7f;
-        float fadeStartDistance = 80.0f;
-        float fadeEndDistance = 120.0f;
+        float fadeStartDistance = 200.0f;
+        float fadeEndDistance = 400.0f;
         float densityMultiplier = 1.0f;
 
         glm::vec3 windDirection{1.0f, 0.0f, 0.0f};
