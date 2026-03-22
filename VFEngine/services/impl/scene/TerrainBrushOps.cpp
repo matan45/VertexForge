@@ -519,10 +519,7 @@ namespace services
                     tile = grid->getTile(coord);
                 }
                 if (!tile)
-                {
-                    vfLogError("VegBrush: tile ({},{}) not loaded, skipping", coord.x, coord.z);
                     continue;
-                }
             }
 
 

@@ -69,7 +69,7 @@ namespace render::gpudriven
 
         // Grass instance buffers - start with reasonable capacity
         // Can be resized later when more tiles are streamed
-        constexpr uint32_t initialGrassCapacity = 1024 * 1024; // ~1M instances
+        constexpr uint32_t initialGrassCapacity = 4 * 1024 * 1024; // ~4M instances
         createGrassBuffers(initialGrassCapacity);
 
         vegetation.grassComputePipeline = std::make_unique<vegetation::GrassComputePipeline>();
@@ -321,7 +321,7 @@ namespace render::gpudriven
             }
             if (typeMask == 0 || tc == 0) continue;
 
-            // CPU-side skip: tiles beyond vegetation draw distance produce zero instances
+            // CPU-side skip: tiles beyond vegetation draw distance
             float tileCenterX = static_cast<float>(tile->coord.x) * tile->config.worldTileSize
                               + tile->config.worldTileSize * 0.5f;
             float tileCenterZ = static_cast<float>(tile->coord.z) * tile->config.worldTileSize
@@ -567,6 +567,12 @@ namespace render::gpudriven
         // Task shader reads actual count from GPU counter — estimate upper bound for dispatch
         uint32_t maxPossibleInstances = tileCount * maxTexelCount * 4;
         vegetation.currentGrassInstanceCount = std::min(maxPossibleInstances, vegetation.grassInstanceCapacity);
+
+        if (maxPossibleInstances > vegetation.grassInstanceCapacity)
+        {
+            vfLogError("Vegetation instance buffer overflow! Estimated {} instances, capacity {}. Reduce density or entry count.",
+                       maxPossibleInstances, vegetation.grassInstanceCapacity);
+        }
 
         if (vegetation.grassMeshPipeline)
         {
