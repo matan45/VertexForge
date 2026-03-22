@@ -524,24 +524,47 @@ namespace render::gpudriven
                 auto pushConstants = basePushConstants;
                 pushConstants.densityMultiplier = baseDensityMult;
                 pushConstants.vegetationType = vegType;
-                pushConstants.billboardTextureCount = 0;
-                std::memset(pushConstants.billboardTexIndices, 0xFF, sizeof(pushConstants.billboardTexIndices));
-                std::memset(pushConstants.billboardModes, 0, sizeof(pushConstants.billboardModes));
+                pushConstants.billboardTextureIndex = 0xFFFFFFFF;
+                pushConstants.billboardMode = 0;
 
-                // Fill billboard texture indices and modes from config
-                if (vegType == static_cast<uint32_t>(::vegetation::VegetationType::Billboard))
+                // For billboard type: dispatch once per palette entry with its texture+mode
+                // Each entry gets a fraction of the density multiplier based on weight
+                if (vegType == static_cast<uint32_t>(::vegetation::VegetationType::Billboard)
+                    && !vegetation.billboardPalette.empty())
                 {
-                    const auto& entries = vegetation.billboardPalette;
-                    uint32_t count = std::min(static_cast<uint32_t>(entries.size()), 5u);
-                    pushConstants.billboardTextureCount = count;
-                    for (uint32_t ei = 0; ei < count; ++ei)
+                    float totalWeight = 0.0f;
+                    for (const auto& e : vegetation.billboardPalette) totalWeight += e.weight;
+                    if (totalWeight <= 0.0f) totalWeight = 1.0f;
+
+                    for (size_t ei = 0; ei < vegetation.billboardPalette.size(); ++ei)
                     {
-                        pushConstants.billboardTexIndices[ei] = entries[ei].bindlessIndex;
-                        pushConstants.billboardModes[ei] = entries[ei].mode;
+                        const auto& entry = vegetation.billboardPalette[ei];
+                        auto entryPC = pushConstants;
+                        entryPC.billboardTextureIndex = entry.bindlessIndex;
+                        entryPC.billboardMode = entry.mode;
+                        // Scale density by this entry's weight fraction
+                        entryPC.densityMultiplier = baseDensityMult * (entry.weight / totalWeight);
+
+                        vegetation.grassComputePipeline->dispatch(cmd, info.texelCount, entryPC);
+
+                        // Barrier between sub-dispatches (compute buffers are read-only, instances use atomic)
+                        if (ei + 1 < vegetation.billboardPalette.size())
+                        {
+                            vk::MemoryBarrier subBarrier(
+                                vk::AccessFlagBits::eShaderWrite,
+                                vk::AccessFlagBits::eShaderRead | vk::AccessFlagBits::eShaderWrite);
+                            cmd.pipelineBarrier(
+                                vk::PipelineStageFlagBits::eComputeShader,
+                                vk::PipelineStageFlagBits::eComputeShader,
+                                vk::DependencyFlags{},
+                                1, &subBarrier, 0, nullptr, 0, nullptr);
+                        }
                     }
                 }
-
-                vegetation.grassComputePipeline->dispatch(cmd, info.texelCount, pushConstants);
+                else
+                {
+                    vegetation.grassComputePipeline->dispatch(cmd, info.texelCount, pushConstants);
+                }
                 isFirstDispatch = false;
             }
         }

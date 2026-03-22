@@ -31,5 +31,6 @@ namespace vegetation
         float sssDistortion = 0.2f;   // normal distortion for translucency (0-1)
         float sssPower = 4.0f;        // falloff exponent for translucency highlight (1-16)
         float sssScale = 0.5f;        // overall SSS intensity (0-1)
+
     };
 }

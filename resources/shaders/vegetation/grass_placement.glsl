@@ -47,9 +47,8 @@ layout(push_constant) uniform PushConstants {
     float minDensityScale;
     // Multi-type vegetation
     uint vegetationType;         // 0=Grass, 1=Billboard
-    uint billboardTextureCount;  // Total textures in palette (max 5)
-    uint billboardTexIndices[5]; // Bindless texture indices
-    uint billboardModes[5];      // 0=Cross, 1=CameraFacing (per entry)
+    uint billboardTextureIndex;  // Bindless texture index for this dispatch
+    uint billboardMode;          // 0=Cross, 1=CameraFacing
 };
 
 float hash(vec2 p) {
@@ -139,16 +138,6 @@ void main() {
             return;
         }
 
-        // Pick billboard texture+mode randomly from palette
-        uint texIdx = 0xFFFFFFFFu;
-        uint bbMode = 0u; // 0=Cross, 1=CameraFacing
-        if (vegetationType == 1u && billboardTextureCount > 0u) {
-            uint pick = uint(hash(seed * 7.7) * float(billboardTextureCount));
-            pick = min(pick, billboardTextureCount - 1u);
-            texIdx = billboardTexIndices[pick];
-            bbMode = billboardModes[pick];
-        }
-
         // Write 3 vec4s per instance (matches GrassInstanceGPU)
         // color.x = bindless texture index (as float bits)
         // color.y = billboard mode (as float: 0=Cross, 1=CameraFacing)
@@ -156,6 +145,6 @@ void main() {
         uint base = outIdx * 3;
         grassInstances[base + 0] = vec4(bladeX, bladeHeight, bladeZ, rotation);
         grassInstances[base + 1] = vec4(bladeH, bladeW, density, windPhase);
-        grassInstances[base + 2] = vec4(uintBitsToFloat(texIdx), float(bbMode), 1.0, float(vegetationType));
+        grassInstances[base + 2] = vec4(uintBitsToFloat(billboardTextureIndex), float(billboardMode), 1.0, float(vegetationType));
     }
 }

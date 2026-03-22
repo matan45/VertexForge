@@ -12,6 +12,7 @@ namespace core::adapters
         TileCallback removeTileCallback;
         TileCallback markDirtyCallback;
         GetConfigCallback getConfigCallback;
+        BillboardPaletteCallback billboardPaletteCallback;
         
     public:
         GrassRenderAdapter() = default;
@@ -30,6 +31,10 @@ namespace core::adapters
         void setRemoveTileCallback(TileCallback cb) override { removeTileCallback = std::move(cb); }
         void setMarkDirtyCallback(TileCallback cb) override { markDirtyCallback = std::move(cb); }
         void setGetConfigCallback(GetConfigCallback cb) override { getConfigCallback = std::move(cb); }
-        
+        void setBillboardPalette(const std::vector<vegetation::BillboardPaletteEntry>& entries) override
+        {
+            if (billboardPaletteCallback) billboardPaletteCallback(entries);
+        }
+        void setOnBillboardPaletteChanged(BillboardPaletteCallback cb) override { billboardPaletteCallback = std::move(cb); }
     };
 }

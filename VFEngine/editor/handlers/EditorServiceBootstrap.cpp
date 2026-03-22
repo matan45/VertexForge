@@ -207,7 +207,8 @@ namespace handlers
 
     void EditorHandler::createVegetationServices()
     {
-        grassService = std::make_shared<services::GrassServiceImpl>();
+        auto grassServiceImpl = std::make_shared<services::GrassServiceImpl>();
+        grassService = grassServiceImpl;
         vegetationBrushService = std::make_shared<services::VegetationBrushServiceImpl>();
         vegetationBrushModeService = std::make_shared<services::VegetationBrushModeServiceImpl>();
         auto* grassProvider = bootstrap->getGrassRenderProvider();
@@ -217,6 +218,13 @@ namespace handlers
                 return events::EventDispatcher::instance().query(
                     events::vegetation::GetGlobalGrassConfigQuery{});
             });
+
+            // Wire billboard palette: event → provider → adapter → renderer
+            grassServiceImpl->setBillboardPaletteCallback(
+                [grassProvider](const std::vector<vegetation::BillboardPaletteEntry>& entries)
+                {
+                    grassProvider->setBillboardPalette(entries);
+                });
         }
     }
 

@@ -218,6 +218,9 @@ namespace render::vegetation
         shader = std::make_unique<core::Shader>(*devicePtr);
         shader->readShader("../../resources/shaders/vegetation/grass_placement.glsl");
 
+        vfLogInfo("GrassComputePipeline: stages={} error: {}",
+                  shader->getShaderStages().size(), shader->getLastCompilationError());
+
         const auto& stages = shader->getShaderStages();
         if (stages.empty())
         {

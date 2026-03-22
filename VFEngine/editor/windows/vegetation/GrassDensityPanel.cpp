@@ -198,6 +198,7 @@ namespace windows
             billboardEntries.erase(billboardEntries.begin() + removeIndex);
             if (selectedBillboardIndex >= static_cast<int>(billboardEntries.size()))
                 selectedBillboardIndex = -1;
+            pushBillboardPalette();
         }
 
         if (ImGui::Button("Add Billboard Entry"))
@@ -238,16 +239,22 @@ namespace windows
                 if (!selectedPath.empty())
                 {
                     entry.texturePath = selectedPath;
+                    pushBillboardPalette();
                 }
             }
 
             int modeIdx = static_cast<int>(entry.mode);
             const char* modeNames[] = {"Cross (X)", "Camera Facing"};
-            ImGui::Combo("Mode", &modeIdx, modeNames, IM_ARRAYSIZE(modeNames));
-            entry.mode = static_cast<vegetation::BillboardMode>(modeIdx);
+            if (ImGui::Combo("Mode", &modeIdx, modeNames, IM_ARRAYSIZE(modeNames)))
+            {
+                entry.mode = static_cast<vegetation::BillboardMode>(modeIdx);
+                pushBillboardPalette();
+            }
 
-            ImGui::DragFloat("Weight", &entry.weight, 0.1f, 0.01f, 100.0f);
-            ImGui::DragFloat2("Scale Range", &entry.scaleRange.x, 0.01f, 0.1f, 5.0f);
+            if (ImGui::DragFloat("Weight", &entry.weight, 0.1f, 0.01f, 100.0f))
+                pushBillboardPalette();
+            if (ImGui::DragFloat2("Scale Range", &entry.scaleRange.x, 0.01f, 0.1f, 5.0f))
+                pushBillboardPalette();
 
             if (ImGui::Button("Remove"))
                 removeIndex = index;
@@ -283,7 +290,7 @@ namespace windows
         events::EventDispatcher::instance().execute(cmd);
     }
 
-    void GrassDensityPanel::drawGrassConfigSection()
+    void GrassDensityPanel::ensureConfigLoaded()
     {
         if (!configLoaded)
         {
@@ -291,6 +298,11 @@ namespace windows
                 events::vegetation::GetGlobalGrassConfigQuery{});
             configLoaded = true;
         }
+    }
+
+    void GrassDensityPanel::drawGrassConfigSection()
+    {
+        ensureConfigLoaded();
 
         if (!ImGui::CollapsingHeader("Grass Appearance", ImGuiTreeNodeFlags_DefaultOpen))
             return;
@@ -369,8 +381,16 @@ namespace windows
 
     void GrassDensityPanel::pushGrassConfig()
     {
+        ensureConfigLoaded();
         events::vegetation::SetGlobalGrassConfigCommand cmd;
         cmd.config = grassConfig;
+        events::EventDispatcher::instance().execute(cmd);
+    }
+
+    void GrassDensityPanel::pushBillboardPalette()
+    {
+        events::vegetation::SetBillboardPaletteCommand cmd;
+        cmd.entries = billboardEntries;
         events::EventDispatcher::instance().execute(cmd);
     }
 }

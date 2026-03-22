@@ -2,6 +2,8 @@
 #include "../EventTypes.hpp"
 #include "../../data/EntityHandle.hpp"
 #include "vegetation/GrassConfig.hpp"
+#include "vegetation/VegetationTypes.hpp"
+#include <vector>
 
 namespace events::vegetation
 {
@@ -38,5 +40,12 @@ namespace events::vegetation
     struct GetGlobalGrassConfigQuery : IQuery<::vegetation::GrassRenderConfig>
     {
         std::string_view getName() const override { return "GetGlobalGrassConfig"; }
+    };
+
+    struct SetBillboardPaletteCommand : ICommand<void>
+    {
+        std::vector<::vegetation::BillboardPaletteEntry> entries;
+
+        std::string_view getName() const override { return "SetBillboardPalette"; }
     };
 }

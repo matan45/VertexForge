@@ -43,11 +43,13 @@ namespace windows
 
     private:
         void subscribe();
+        void ensureConfigLoaded();
         void drawVegetationTypePalette();
         void drawBillboardPalette();
         void drawBillboardEntry(int index, int& removeIndex);
         void drawGrassConfigSection();
         void pushGrassConfig();
+        void pushBillboardPalette();
         void pushVegetationType();
         void pushMixedBrushConfig();
     };

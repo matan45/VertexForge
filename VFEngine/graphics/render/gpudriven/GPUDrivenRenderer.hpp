@@ -30,6 +30,7 @@
 #include "billboard/BillboardGPUTypes.hpp"
 #include "billboard/BillboardStreamManager.hpp"
 #include "vegetation/GrassConfig.hpp"
+#include "vegetation/VegetationTypes.hpp"
 #include "../vegetation/GrassStreamManager.hpp"
 #include "../occlusion/LightOcclusionCulling.hpp"
 #include "../volumetric/VolumetricPipeline.hpp"
@@ -208,6 +209,7 @@ namespace render::gpudriven
             {
                 uint32_t bindlessIndex = 0xFFFFFFFF;
                 uint32_t mode = 0; // 0=Cross, 1=CameraFacing
+                float weight = 1.0f;
             };
             std::vector<BillboardGPUEntry> billboardPalette;
 
@@ -596,6 +598,18 @@ namespace render::gpudriven
         bool isGrassRenderingEnabled() const { return vegetation.grassRenderingEnabled; }
         void setGrassRenderConfig(const ::vegetation::GrassRenderConfig& config) { vegetation.grassConfig = config; }
         void setBillboardPalette(const std::vector<VegetationState::BillboardGPUEntry>& entries) { vegetation.billboardPalette = entries; }
+        void setBillboardPaletteFromEntries(const std::vector<::vegetation::BillboardPaletteEntry>& entries)
+        {
+            vegetation.billboardPalette.clear();
+            for (const auto& e : entries)
+            {
+                VegetationState::BillboardGPUEntry gpu;
+                gpu.bindlessIndex = e.bindlessTextureIndex;
+                gpu.mode = static_cast<uint32_t>(e.mode);
+                gpu.weight = e.weight;
+                vegetation.billboardPalette.push_back(gpu);
+            }
+        }
         void addVegetationTile(int32_t coordX, int32_t coordZ);
         void removeVegetationTile(int32_t coordX, int32_t coordZ);
         void clearVegetationData();

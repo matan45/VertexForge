@@ -39,6 +39,11 @@ namespace services
             [this](const events::vegetation::GetGlobalGrassConfigQuery&) {
                 return getGlobalGrassConfig();
             });
+
+        dispatcher.registerCommandHandler<events::vegetation::SetBillboardPaletteCommand>(
+            [this](const events::vegetation::SetBillboardPaletteCommand& cmd) {
+                if (billboardPaletteCb) billboardPaletteCb(cmd.entries);
+            });
     }
 
     void GrassServiceImpl::setGrassConfig(EntityHandle entityId, const vegetation::GrassRenderConfig& config)

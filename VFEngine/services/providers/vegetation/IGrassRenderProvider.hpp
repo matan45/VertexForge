@@ -2,8 +2,10 @@
 
 #include <cstdint>
 #include <functional>
+#include <vector>
 #include <glm/glm.hpp>
 #include "vegetation/GrassConfig.hpp"
+#include "vegetation/VegetationTypes.hpp"
 
 namespace services
 {
@@ -12,6 +14,7 @@ namespace services
     public:
         using TileCallback = std::function<void(int32_t, int32_t)>;
         using GetConfigCallback = std::function<vegetation::GrassRenderConfig()>;
+        using BillboardPaletteCallback = std::function<void(const std::vector<vegetation::BillboardPaletteEntry>&)>;
 
         virtual ~IGrassRenderProvider() = default;
 
@@ -31,5 +34,9 @@ namespace services
 
         // Callback for config retrieval (set by service layer to avoid direct ECS access)
         virtual void setGetConfigCallback(GetConfigCallback) {}
+
+        // Billboard palette update
+        virtual void setBillboardPalette(const std::vector<vegetation::BillboardPaletteEntry>&) {}
+        virtual void setOnBillboardPaletteChanged(BillboardPaletteCallback) {}
     };
 }

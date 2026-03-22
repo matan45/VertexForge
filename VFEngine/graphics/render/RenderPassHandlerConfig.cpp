@@ -1,4 +1,6 @@
 #include "RenderPassHandler.hpp"
+#include "gpudriven/GPUDrivenRenderer.hpp"
+#include "vegetation/VegetationTypes.hpp"
 #include "../core/Device.hpp"
 #include "../core/SwapChain.hpp"
 #include "mesh/StaticMeshPipeline.hpp"
@@ -69,6 +71,10 @@ namespace render
             provider->setAddTileCallback([renderer](int32_t x, int32_t z) { renderer->addVegetationTile(x, z); });
             provider->setRemoveTileCallback([renderer](int32_t x, int32_t z) { renderer->removeVegetationTile(x, z); });
             provider->setMarkDirtyCallback([renderer](int32_t x, int32_t z) { renderer->markVegetationTileDirty(x, z); });
+            provider->setOnBillboardPaletteChanged([renderer](const std::vector<::vegetation::BillboardPaletteEntry>& entries)
+            {
+                renderer->setBillboardPaletteFromEntries(entries);
+            });
         }
     }
 
