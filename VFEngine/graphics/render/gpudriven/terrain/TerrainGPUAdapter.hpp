@@ -146,5 +146,9 @@ namespace render::gpudriven
         GPUMeshlet convertMeshlet(
             const resource::Meshlet& srcMeshlet,
             uint32_t globalVertexOffset) const;
+
+        bool uploadCaveMeshlets(const std::string& caveKey,
+                                const terrain::TileLODData& caveLOD,
+                                const TerrainLODGeometry& geomLod);
     };
 }

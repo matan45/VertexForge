@@ -30,14 +30,18 @@ namespace terrain
         static void applyFill(CaveSDFData& sdf, const ApplyParams& params);
         static void applySmooth(CaveSDFData& sdf, const ApplyParams& params);
 
-        // Compute 3D normalized distance from voxel world position to brush center
+        // Iterates voxels within brush bounds, computes distance/falloff, optionally checks
+        // originalSdfGrid for solid, and calls update(sdf, x, y, z, influence) for each affected voxel.
+        template<typename UpdateFn>
+        static void forEachBrushVoxel(CaveSDFData& sdf, const ApplyParams& params,
+                                      float strength, bool checkOriginalSolid, UpdateFn&& update);
+
         static float computeNormalizedDistance3D(
             const glm::vec3& worldPos,
             const glm::vec3& brushCenter,
             float brushRadius,
             BrushShape shape);
 
-        // Must match other brush applicators
         static float applyFalloff(float t, BrushFalloff falloff);
     };
 }

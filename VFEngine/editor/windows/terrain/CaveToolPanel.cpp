@@ -89,6 +89,22 @@ namespace windows
 
         auto& dispatcher = events::EventDispatcher::instance();
 
+        drawBrushTypeSelector(dispatcher);
+        drawBrushParams(dispatcher);
+
+        ImGui::End();
+
+        // If user closed the panel, deactivate cave mode
+        if (!visible)
+        {
+            events::cave::SetCaveModeActiveCommand cmd;
+            cmd.active = false;
+            dispatcher.execute(cmd);
+        }
+    }
+
+    void CaveToolPanel::drawBrushTypeSelector(events::EventDispatcher& dispatcher)
+    {
         ImGui::Text("Brush Type");
         ImGui::Separator();
 
@@ -113,7 +129,10 @@ namespace windows
             cmd.type = static_cast<terrain::CaveBrushType>(selectedBrushType);
             dispatcher.execute(cmd);
         }
+    }
 
+    void CaveToolPanel::drawBrushParams(events::EventDispatcher& dispatcher)
+    {
         ImGui::Spacing();
         ImGui::Text("Brush Parameters");
         ImGui::Separator();
@@ -152,15 +171,5 @@ namespace windows
         ImGui::Separator();
         ImGui::TextDisabled("Left-click to carve/fill");
         ImGui::TextDisabled("Hold Shift to invert");
-
-        ImGui::End();
-
-        // If user closed the panel, deactivate cave mode
-        if (!visible)
-        {
-            events::cave::SetCaveModeActiveCommand cmd;
-            cmd.active = false;
-            dispatcher.execute(cmd);
-        }
     }
 }

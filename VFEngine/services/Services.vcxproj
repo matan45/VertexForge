@@ -421,6 +421,7 @@
     <ClCompile Include="impl\scene\HierarchyService.cpp" />
     <ClCompile Include="impl\scene\ScenePersistenceService.cpp" />
     <ClCompile Include="impl\scene\TerrainBrushOps.cpp" />
+    <ClCompile Include="impl\scene\TerrainCaveBrushOps.cpp" />
     <ClCompile Include="impl\scene\TerrainColliderOps.cpp" />
     <ClCompile Include="impl\scene\TerrainCreationOps.cpp" />
     <ClCompile Include="impl\scene\TerrainDataIOOps.cpp" />

@@ -429,7 +429,6 @@ namespace render::gpudriven
             return false;
         }
 
-        // Upload meshlets
         const TerrainTileGeometry* caveGeom = terrainBuffer_.getTileGeometry(caveKey);
         if (!caveGeom)
         {
@@ -438,26 +437,7 @@ namespace render::gpudriven
         }
 
         const auto& geomLod = caveGeom->lods[0];
-        uint32_t baseVertexOffset = geomLod.vertexOffset;
-
-        std::vector<GPUMeshlet> gpuMeshlets;
-        gpuMeshlets.reserve(caveLOD.meshlets.size());
-
-        for (const auto& srcMeshlet : caveLOD.meshlets)
-        {
-            GPUMeshlet meshlet = convertMeshlet(srcMeshlet, baseVertexOffset);
-            meshlet.vertexOffset += geomLod.meshletVertexOffset;
-            meshlet.primitiveOffset += geomLod.meshletPrimitiveOffset;
-            gpuMeshlets.push_back(meshlet);
-        }
-
-        if (!terrainBuffer_.uploadLODMeshlets(caveKey, 0,
-                                               gpuMeshlets.data(),
-                                               static_cast<uint32_t>(gpuMeshlets.size()),
-                                               caveLOD.meshletVertices.data(),
-                                               static_cast<uint32_t>(caveLOD.meshletVertices.size()),
-                                               caveLOD.meshletPrimitives.data(),
-                                               static_cast<uint32_t>(caveLOD.meshletPrimitives.size())))
+        if (!uploadCaveMeshlets(caveKey, caveLOD, geomLod))
         {
             terrainBuffer_.freeTileLOD(caveKey, 0);
             return false;
@@ -478,6 +458,32 @@ namespace render::gpudriven
 
         gpuTileDataDirty_ = true;
         return true;
+    }
+
+    bool TerrainGPUAdapter::uploadCaveMeshlets(const std::string& caveKey,
+                                                const terrain::TileLODData& caveLOD,
+                                                const TerrainLODGeometry& geomLod)
+    {
+        uint32_t baseVertexOffset = geomLod.vertexOffset;
+
+        std::vector<GPUMeshlet> gpuMeshlets;
+        gpuMeshlets.reserve(caveLOD.meshlets.size());
+
+        for (const auto& srcMeshlet : caveLOD.meshlets)
+        {
+            GPUMeshlet meshlet = convertMeshlet(srcMeshlet, baseVertexOffset);
+            meshlet.vertexOffset += geomLod.meshletVertexOffset;
+            meshlet.primitiveOffset += geomLod.meshletPrimitiveOffset;
+            gpuMeshlets.push_back(meshlet);
+        }
+
+        return terrainBuffer_.uploadLODMeshlets(caveKey, 0,
+                                                 gpuMeshlets.data(),
+                                                 static_cast<uint32_t>(gpuMeshlets.size()),
+                                                 caveLOD.meshletVertices.data(),
+                                                 static_cast<uint32_t>(caveLOD.meshletVertices.size()),
+                                                 caveLOD.meshletPrimitives.data(),
+                                                 static_cast<uint32_t>(caveLOD.meshletPrimitives.size()));
     }
 
     static float packLayerIndicesAsFloat(const uint8_t* indices)

@@ -2,6 +2,7 @@
 
 #include <Jolt/Jolt.h>
 #include <Jolt/Physics/Body/BodyID.h>
+#include <Jolt/Geometry/Triangle.h>
 #include <glm/glm.hpp>
 #include "providers/physics/IPhysicsProvider.hpp"
 #include <unordered_map>
@@ -51,6 +52,8 @@ namespace core::physics
         static TileCoordKey makeTileKey(int32_t x, int32_t z);
 
     private:
+        static JPH::TriangleList buildJoltTriangleList(const services::CaveTileColliderInfo& cave);
+
         PhysicsContext* ctx = nullptr;
         std::unordered_map<uint64_t, std::unordered_map<TileCoordKey, JPH::BodyID>> terrainBodies;
         std::unordered_map<uint64_t, std::unordered_map<TileCoordKey, JPH::BodyID>> caveBodies;

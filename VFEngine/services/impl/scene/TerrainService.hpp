@@ -26,6 +26,7 @@ namespace terrain
 {
     class TerrainGrid;
     class TerrainTile;
+    struct CaveSDFData;
 }
 
 namespace render::svt
@@ -203,6 +204,10 @@ namespace services
         static bool isVertexAdjacentToHole(const terrain::TerrainTile& tile, uint32_t vx, uint32_t vz);
         static void generateTileColliderWireframe(const terrain::TerrainTile& tile,
                                                   components::TerrainColliderDebugData& out);
+        static void appendCaveWireframe(const terrain::TerrainTile& tile,
+                                        components::TerrainColliderDebugData& out);
+        void appendCaveColliders(EntityHandle terrainEntity,
+                                 const std::vector<terrain::TerrainTile*>& allTiles);
 
         bool saveVegetation(uint64_t terrainEntityId, const std::string& terrainPath);
         bool loadVegetation(uint64_t terrainEntityId, const std::string& terrainPath);
@@ -213,6 +218,12 @@ namespace services
 
         void registerCaveBrushHandlers(::events::EventDispatcher& dispatcher);
         void syncCaveBoundaries(terrain::TerrainGrid* grid, const std::vector<terrain::TileCoord>& modifiedTiles);
+        void syncCaveNeighborEdge(terrain::CaveSDFData& sdf, terrain::TerrainTile& neighbor, int axis);
+        void punchCaveHolesForTile(terrain::TerrainTile& tile);
+        void rebuildCaveColliders(EntityHandle entity, terrain::TerrainGrid* grid,
+                                  const std::vector<terrain::TileCoord>& caveTiles);
+        static CaveTileColliderInfo buildCaveTileColliderInfo(const terrain::TerrainTile& tile,
+                                                              std::vector<glm::vec3>& worldPositionsOut);
 
         // SVT bake helpers
         struct BakeLayerCPU;

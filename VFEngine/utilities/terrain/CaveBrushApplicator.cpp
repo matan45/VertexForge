@@ -38,7 +38,6 @@ namespace terrain
         return true;
     }
 
-    // Compute voxel index bounds for the brush sphere — avoids iterating the entire grid
     struct VoxelBounds
     {
         uint32_t minX, maxX, minY, maxY, minZ, maxZ;
@@ -60,9 +59,10 @@ namespace terrain
         return b;
     }
 
-    void CaveBrushApplicator::applyCarve(CaveSDFData& sdf, const ApplyParams& params)
+    template<typename UpdateFn>
+    void CaveBrushApplicator::forEachBrushVoxel(CaveSDFData& sdf, const ApplyParams& params,
+                                                 float strength, bool checkOriginalSolid, UpdateFn&& update)
     {
-        float strength = params.brushStrength * params.deltaTime;
         auto bounds = computeBrushVoxelBounds(sdf, params.brushCenter, params.brushRadius);
 
         for (uint32_t z = bounds.minZ; z <= bounds.maxZ; ++z)
@@ -71,7 +71,7 @@ namespace terrain
             {
                 for (uint32_t x = bounds.minX; x <= bounds.maxX; ++x)
                 {
-                    if (!sdf.originalSdfGrid.empty())
+                    if (checkOriginalSolid && !sdf.originalSdfGrid.empty())
                     {
                         size_t idx = sdf.getIndex(x, y, z);
                         if (sdf.originalSdfGrid[idx] > 0.0f)
@@ -86,106 +86,78 @@ namespace terrain
                         continue;
 
                     float influence = applyFalloff(dist, params.falloff) * strength;
-
-                    float current = sdf.getSDF(x, y, z);
-                    float target = params.brushRadius * (1.0f - dist);
-                    float newValue = current + influence;
-                    newValue = std::min(newValue, target);
-                    newValue = std::clamp(newValue, -10.0f, 10.0f);
-                    if (newValue != current)
-                    {
-                        sdf.setSDF(x, y, z, newValue);
-                        sdf.expandDirtyRegion(x, y, z);
-                    }
+                    update(sdf, x, y, z, influence, dist);
                 }
             }
         }
+    }
+
+    void CaveBrushApplicator::applyCarve(CaveSDFData& sdf, const ApplyParams& params)
+    {
+        float strength = params.brushStrength * params.deltaTime;
+
+        forEachBrushVoxel(sdf, params, strength, true,
+            [&params](CaveSDFData& sdf, uint32_t x, uint32_t y, uint32_t z, float influence, float dist)
+            {
+                float current = sdf.getSDF(x, y, z);
+                float target = params.brushRadius * (1.0f - dist);
+                float newValue = std::min(current + influence, target);
+                newValue = std::clamp(newValue, -10.0f, 10.0f);
+                if (newValue != current)
+                {
+                    sdf.setSDF(x, y, z, newValue);
+                    sdf.expandDirtyRegion(x, y, z);
+                }
+            });
     }
 
     void CaveBrushApplicator::applyFill(CaveSDFData& sdf, const ApplyParams& params)
     {
         float strength = params.brushStrength * params.deltaTime;
-        auto bounds = computeBrushVoxelBounds(sdf, params.brushCenter, params.brushRadius);
 
-        for (uint32_t z = bounds.minZ; z <= bounds.maxZ; ++z)
-        {
-            for (uint32_t y = bounds.minY; y <= bounds.maxY; ++y)
+        forEachBrushVoxel(sdf, params, strength, true,
+            [](CaveSDFData& sdf, uint32_t x, uint32_t y, uint32_t z, float influence, float /*dist*/)
             {
-                for (uint32_t x = bounds.minX; x <= bounds.maxX; ++x)
+                float current = sdf.getSDF(x, y, z);
+                size_t idx = sdf.getIndex(x, y, z);
+                float original = sdf.originalSdfGrid.empty() ? -1.0f : sdf.originalSdfGrid[idx];
+                float newValue = std::max(current - influence, original);
+                newValue = std::clamp(newValue, -10.0f, 10.0f);
+                if (newValue != current)
                 {
-                    if (!sdf.originalSdfGrid.empty())
-                    {
-                        size_t idx = sdf.getIndex(x, y, z);
-                        if (sdf.originalSdfGrid[idx] > 0.0f)
-                            continue;
-                    }
-
-                    glm::vec3 worldPos = sdf.getWorldPosition(x, y, z);
-                    float dist = computeNormalizedDistance3D(
-                        worldPos, params.brushCenter, params.brushRadius, params.shape);
-
-                    if (dist >= 1.0f)
-                        continue;
-
-                    float influence = applyFalloff(dist, params.falloff) * strength;
-
-                    float current = sdf.getSDF(x, y, z);
-                    size_t idx = sdf.getIndex(x, y, z);
-                    float original = sdf.originalSdfGrid.empty() ? -1.0f : sdf.originalSdfGrid[idx];
-                    float newValue = current - influence;
-                    newValue = std::max(newValue, original);
-                    newValue = std::clamp(newValue, -10.0f, 10.0f);
-                    if (newValue != current)
-                    {
-                        sdf.setSDF(x, y, z, newValue);
-                        sdf.expandDirtyRegion(x, y, z);
-                    }
+                    sdf.setSDF(x, y, z, newValue);
+                    sdf.expandDirtyRegion(x, y, z);
                 }
-            }
-        }
+            });
     }
 
     void CaveBrushApplicator::applySmooth(CaveSDFData& sdf, const ApplyParams& params)
     {
         float strength = params.brushStrength * params.deltaTime * 0.1f;
-        auto bounds = computeBrushVoxelBounds(sdf, params.brushCenter, params.brushRadius);
-
-        // Clamp to interior (need neighbors for Laplacian)
-        bounds.minX = std::max(bounds.minX, 1u);
-        bounds.minY = std::max(bounds.minY, 1u);
-        bounds.minZ = std::max(bounds.minZ, 1u);
-        bounds.maxX = std::min(bounds.maxX, sdf.config.resX - 2);
-        bounds.maxY = std::min(bounds.maxY, sdf.config.resY - 2);
-        bounds.maxZ = std::min(bounds.maxZ, sdf.config.resZ - 2);
-
         std::vector<float> smoothed = sdf.sdfGrid;
 
-        for (uint32_t z = bounds.minZ; z <= bounds.maxZ; ++z)
-        {
-            for (uint32_t y = bounds.minY; y <= bounds.maxY; ++y)
+        // Use adjusted params with clamped bounds for interior voxels (need neighbors for Laplacian).
+        // The helper iterates the brush region; the lambda skips boundary voxels.
+        uint32_t lastX = sdf.config.resX - 2;
+        uint32_t lastY = sdf.config.resY - 2;
+        uint32_t lastZ = sdf.config.resZ - 2;
+
+        forEachBrushVoxel(sdf, params, strength, false,
+            [&smoothed, lastX, lastY, lastZ](CaveSDFData& sdf, uint32_t x, uint32_t y, uint32_t z,
+                                              float influence, float /*dist*/)
             {
-                for (uint32_t x = bounds.minX; x <= bounds.maxX; ++x)
-                {
-                    glm::vec3 worldPos = sdf.getWorldPosition(x, y, z);
-                    float dist = computeNormalizedDistance3D(
-                        worldPos, params.brushCenter, params.brushRadius, params.shape);
+                if (x < 1 || y < 1 || z < 1 || x > lastX || y > lastY || z > lastZ)
+                    return;
 
-                    if (dist >= 1.0f)
-                        continue;
+                // 6-neighbor Laplacian average
+                float avg = (sdf.getSDF(x - 1, y, z) + sdf.getSDF(x + 1, y, z) +
+                             sdf.getSDF(x, y - 1, z) + sdf.getSDF(x, y + 1, z) +
+                             sdf.getSDF(x, y, z - 1) + sdf.getSDF(x, y, z + 1)) / 6.0f;
 
-                    float influence = applyFalloff(dist, params.falloff) * strength;
-
-                    // 6-neighbor Laplacian average
-                    float avg = (sdf.getSDF(x - 1, y, z) + sdf.getSDF(x + 1, y, z) +
-                                 sdf.getSDF(x, y - 1, z) + sdf.getSDF(x, y + 1, z) +
-                                 sdf.getSDF(x, y, z - 1) + sdf.getSDF(x, y, z + 1)) / 6.0f;
-
-                    float current = sdf.getSDF(x, y, z);
-                    float newValue = current + (avg - current) * influence;
-                    smoothed[sdf.getIndex(x, y, z)] = std::clamp(newValue, -10.0f, 10.0f);
-                }
-            }
-        }
+                float current = sdf.getSDF(x, y, z);
+                float newValue = current + (avg - current) * influence;
+                smoothed[sdf.getIndex(x, y, z)] = std::clamp(newValue, -10.0f, 10.0f);
+            });
 
         sdf.sdfGrid = std::move(smoothed);
     }
@@ -208,7 +180,6 @@ namespace terrain
         }
     }
 
-    // Must match GPU shader brush_influence.glsl and other applicators
     float CaveBrushApplicator::applyFalloff(float t, BrushFalloff falloff)
     {
         switch (falloff)

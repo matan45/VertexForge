@@ -2,6 +2,8 @@
 #include "../../interfaces/terrain/ICaveModeService.hpp"
 #include "../../events/EventTypes.hpp"
 
+namespace events { class EventDispatcher; }
+
 namespace services
 {
     class CaveModeServiceImpl : public ICaveModeService
@@ -29,5 +31,9 @@ namespace services
         bool isActive() const override;
 
         std::optional<EntityHandle> getTargetEntity() const override;
+
+    private:
+        void subscribeToModeChanges(::events::EventDispatcher& dispatcher);
+        std::optional<EntityHandle> resolveTerrainEntity(::events::EventDispatcher& dispatcher);
     };
 }

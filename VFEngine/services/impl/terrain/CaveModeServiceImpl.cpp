@@ -69,6 +69,11 @@ namespace services
                 if (caveActive) deactivate();
             });
 
+        subscribeToModeChanges(dispatcher);
+    }
+
+    void CaveModeServiceImpl::subscribeToModeChanges(events::EventDispatcher& dispatcher)
+    {
         sculptModeToken = dispatcher.subscribe<events::sculpt::SculptModeChangedNotification>(
             [this](const events::sculpt::SculptModeChangedNotification& n)
             {
@@ -94,33 +99,11 @@ namespace services
             });
     }
 
-    bool CaveModeServiceImpl::activate()
+    std::optional<EntityHandle> CaveModeServiceImpl::resolveTerrainEntity(events::EventDispatcher& dispatcher)
     {
-        if (caveActive)
-            return true;
-
-        auto& dispatcher = events::EventDispatcher::instance();
-
-        // Deactivate other modes
-        {
-            events::sculpt::SetSculptModeActiveCommand cmd;
-            cmd.active = false;
-            dispatcher.execute(cmd);
-        }
-        {
-            events::paint::SetPaintModeActiveCommand cmd;
-            cmd.active = false;
-            dispatcher.execute(cmd);
-        }
-        {
-            events::hole::SetHoleModeActiveCommand cmd;
-            cmd.active = false;
-            dispatcher.execute(cmd);
-        }
-
         auto selectedEntity = dispatcher.query(events::scene::GetSelectedEntityQuery{});
         if (!selectedEntity.has_value())
-            return false;
+            return std::nullopt;
 
         EntityHandle terrainEntity = *selectedEntity;
 
@@ -150,9 +133,41 @@ namespace services
             }
 
             if (!isTerrain)
-                return false;
+                return std::nullopt;
         }
 
+        return terrainEntity;
+    }
+
+    bool CaveModeServiceImpl::activate()
+    {
+        if (caveActive)
+            return true;
+
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        // Deactivate other modes
+        {
+            events::sculpt::SetSculptModeActiveCommand cmd;
+            cmd.active = false;
+            dispatcher.execute(cmd);
+        }
+        {
+            events::paint::SetPaintModeActiveCommand cmd;
+            cmd.active = false;
+            dispatcher.execute(cmd);
+        }
+        {
+            events::hole::SetHoleModeActiveCommand cmd;
+            cmd.active = false;
+            dispatcher.execute(cmd);
+        }
+
+        auto resolved = resolveTerrainEntity(dispatcher);
+        if (!resolved.has_value())
+            return false;
+
+        EntityHandle terrainEntity = *resolved;
         targetTerrain = terrainEntity;
         caveActive = true;
 

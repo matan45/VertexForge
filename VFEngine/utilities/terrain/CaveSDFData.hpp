@@ -101,7 +101,6 @@ namespace terrain
             {
                 for (uint32_t x = 0; x < config.resX; ++x)
                 {
-                    // Sample heightmap at this XZ
                     uint32_t hx = std::min(x, vertexCount - 1);
                     uint32_t hz = std::min(z, vertexCount - 1);
                     float surfaceHeight = heightData[hz * vertexCount + hx];
@@ -117,7 +116,6 @@ namespace terrain
                 }
             }
 
-            // Store original so we can detect which voxels were carved
             originalSdfGrid = sdfGrid;
 
             isDirty = true;
@@ -146,13 +144,11 @@ namespace terrain
             sdfGrid[getIndex(x, y, z)] = value;
         }
 
-        // Get world-space Y coordinate for a given Y index
         [[nodiscard]] float getWorldY(uint32_t yIndex) const
         {
             return localOrigin.y + static_cast<float>(yIndex) * config.yVoxelSize;
         }
 
-        // Get world-space position for a voxel
         [[nodiscard]] glm::vec3 getWorldPosition(uint32_t x, uint32_t y, uint32_t z) const
         {
             return glm::vec3(
@@ -161,7 +157,6 @@ namespace terrain
                 localOrigin.z + static_cast<float>(z) * config.voxelSize);
         }
 
-        // Trilinear interpolation of SDF at world position
         [[nodiscard]] float sampleSDF(const glm::vec3& worldPos) const
         {
             glm::vec3 local = worldPos - localOrigin;
@@ -206,7 +201,6 @@ namespace terrain
             return c0 * (1.0f - tz) + c1 * tz;
         }
 
-        // Compute SDF gradient (approximate normal) at voxel position
         [[nodiscard]] glm::vec3 computeGradient(uint32_t x, uint32_t y, uint32_t z) const
         {
             float dx = getSDF(std::min(x + 1, config.resX - 1), y, z) -
@@ -221,7 +215,6 @@ namespace terrain
             return len > 1e-6f ? grad / len : glm::vec3(0.0f, 1.0f, 0.0f);
         }
 
-        // Check if any voxel was carved (differs from original heightmap SDF)
         [[nodiscard]] bool hasCaveGeometry() const
         {
             if (originalSdfGrid.empty())

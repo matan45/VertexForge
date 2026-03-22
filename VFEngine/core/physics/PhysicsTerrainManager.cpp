@@ -227,13 +227,8 @@ namespace core::physics
         vegetationBodies.clear();
     }
 
-    void PhysicsTerrainManager::addCaveTileBody(uint64_t entityId, int32_t tileX, int32_t tileZ,
-                                                  const services::CaveTileColliderInfo& cave)
+    JPH::TriangleList PhysicsTerrainManager::buildJoltTriangleList(const services::CaveTileColliderInfo& cave)
     {
-        if (!ctx || !ctx->physicsSystem) return;
-        if (!cave.vertices || cave.vertexCount == 0 || !cave.indices || cave.indexCount < 3) return;
-
-        // Build Jolt triangle list from cave mesh
         JPH::TriangleList triangles;
         triangles.reserve(cave.indexCount / 3);
 
@@ -249,6 +244,16 @@ namespace core::physics
                 JPH::Float3(v2.x, v2.y, v2.z)));
         }
 
+        return triangles;
+    }
+
+    void PhysicsTerrainManager::addCaveTileBody(uint64_t entityId, int32_t tileX, int32_t tileZ,
+                                                  const services::CaveTileColliderInfo& cave)
+    {
+        if (!ctx || !ctx->physicsSystem) return;
+        if (!cave.vertices || cave.vertexCount == 0 || !cave.indices || cave.indexCount < 3) return;
+
+        JPH::TriangleList triangles = buildJoltTriangleList(cave);
         if (triangles.empty()) return;
 
         JPH::MeshShapeSettings settings(triangles);

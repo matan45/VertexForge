@@ -2,6 +2,8 @@
 
 #include "events/EventTypes.hpp"
 
+namespace events { class EventDispatcher; }
+
 namespace windows
 {
     class CaveToolPanel
@@ -28,5 +30,7 @@ namespace windows
 
     private:
         void subscribe();
+        void drawBrushTypeSelector(events::EventDispatcher& dispatcher);
+        void drawBrushParams(events::EventDispatcher& dispatcher);
     };
 }
