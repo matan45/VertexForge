@@ -595,7 +595,7 @@ namespace render::gpudriven
         void setGrassRenderingEnabled(bool enabled) { vegetation.grassRenderingEnabled = enabled; }
         bool isGrassRenderingEnabled() const { return vegetation.grassRenderingEnabled; }
         void setGrassRenderConfig(const ::vegetation::GrassRenderConfig& config) { vegetation.grassConfig = config; }
-        void setBillboardPalette(const std::vector<VegetationSubsystems::BillboardGPUEntry>& entries) { vegetation.billboardPalette = entries; }
+        void setBillboardPalette(const std::vector<VegetationState::BillboardGPUEntry>& entries) { vegetation.billboardPalette = entries; }
         void addVegetationTile(int32_t coordX, int32_t coordZ);
         void removeVegetationTile(int32_t coordX, int32_t coordZ);
         void clearVegetationData();
