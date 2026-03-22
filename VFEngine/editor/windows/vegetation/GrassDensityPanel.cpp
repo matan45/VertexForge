@@ -146,15 +146,89 @@ namespace windows
             }
         }
 
-        // Billboard texture selection
+        // Billboard palette
         if (selectedVegetationType == static_cast<int>(vegetation::VegetationType::Billboard))
         {
             ImGui::Spacing();
-            ImGui::Text("Billboard Texture");
-            ImGui::InputText("##billboardTex", billboardTexturePath, sizeof(billboardTexturePath),
-                             ImGuiInputTextFlags_ReadOnly);
+            drawBillboardPalette();
+        }
+    }
+
+    void GrassDensityPanel::drawBillboardPalette()
+    {
+        ImGui::Text("Billboard Palette");
+        ImGui::Separator();
+
+        // Paint entry selector
+        {
+            const char* preview = (selectedBillboardIndex < 0) ? "All (Random)" : "---";
+            if (selectedBillboardIndex >= 0 && selectedBillboardIndex < static_cast<int>(billboardEntries.size()))
+            {
+                auto& e = billboardEntries[selectedBillboardIndex];
+                preview = e.texturePath.empty() ? "(empty)" : e.texturePath.c_str();
+            }
+
+            if (ImGui::BeginCombo("Paint Entry", preview))
+            {
+                if (ImGui::Selectable("All (Random)", selectedBillboardIndex == -1))
+                    selectedBillboardIndex = -1;
+
+                for (int i = 0; i < static_cast<int>(billboardEntries.size()); ++i)
+                {
+                    auto& e = billboardEntries[i];
+                    std::string label = e.texturePath.empty()
+                        ? std::string("(empty) ##") + std::to_string(i)
+                        : std::filesystem::path(e.texturePath).filename().string() + "##" + std::to_string(i);
+                    if (ImGui::Selectable(label.c_str(), selectedBillboardIndex == i))
+                        selectedBillboardIndex = i;
+                }
+                ImGui::EndCombo();
+            }
+        }
+
+        // Draw each entry
+        int removeIndex = -1;
+        for (int i = 0; i < static_cast<int>(billboardEntries.size()); ++i)
+        {
+            drawBillboardEntry(i, removeIndex);
+        }
+
+        if (removeIndex >= 0)
+        {
+            billboardEntries.erase(billboardEntries.begin() + removeIndex);
+            if (selectedBillboardIndex >= static_cast<int>(billboardEntries.size()))
+                selectedBillboardIndex = -1;
+        }
+
+        if (ImGui::Button("Add Billboard Entry"))
+        {
+            billboardEntries.emplace_back();
+        }
+    }
+
+    void GrassDensityPanel::drawBillboardEntry(int index, int& removeIndex)
+    {
+        ImGui::PushID(index);
+        auto& entry = billboardEntries[index];
+
+        bool isSelected = (selectedBillboardIndex == index);
+        ImVec4 headerColor = isSelected
+            ? ImVec4(0.2f, 0.4f, 0.8f, 1.0f)
+            : ImVec4(0.25f, 0.25f, 0.25f, 1.0f);
+        ImGui::PushStyleColor(ImGuiCol_Header, headerColor);
+        ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(headerColor.x + 0.1f, headerColor.y + 0.1f, headerColor.z + 0.1f, 1.0f));
+
+        std::string label = entry.texturePath.empty()
+            ? "Entry " + std::to_string(index)
+            : std::filesystem::path(entry.texturePath).filename().string();
+
+        if (ImGui::TreeNode("Entry", "%s", label.c_str()))
+        {
+            // Texture path with browse
+            std::string displayPath = entry.texturePath.empty() ? "(none)" : entry.texturePath;
+            ImGui::Text("Texture: %s", displayPath.c_str());
             ImGui::SameLine();
-            if (ImGui::SmallButton("Browse##billboard"))
+            if (ImGui::SmallButton("Browse"))
             {
                 nfd::FileDialog fileDialog;
                 std::vector<std::pair<std::wstring, std::wstring>> filters = {
@@ -163,14 +237,26 @@ namespace windows
                 std::string selectedPath = fileDialog.openFileDialog(filters);
                 if (!selectedPath.empty())
                 {
-                    // Make path relative to project
-                    namespace fs = std::filesystem;
-                    fs::path absPath(selectedPath);
-                    std::string relPath = absPath.filename().string();
-                    snprintf(billboardTexturePath, sizeof(billboardTexturePath), "%s", selectedPath.c_str());
+                    entry.texturePath = selectedPath;
                 }
             }
+
+            int modeIdx = static_cast<int>(entry.mode);
+            const char* modeNames[] = {"Cross (X)", "Camera Facing"};
+            ImGui::Combo("Mode", &modeIdx, modeNames, IM_ARRAYSIZE(modeNames));
+            entry.mode = static_cast<vegetation::BillboardMode>(modeIdx);
+
+            ImGui::DragFloat("Weight", &entry.weight, 0.1f, 0.01f, 100.0f);
+            ImGui::DragFloat2("Scale Range", &entry.scaleRange.x, 0.01f, 0.1f, 5.0f);
+
+            if (ImGui::Button("Remove"))
+                removeIndex = index;
+
+            ImGui::TreePop();
         }
+
+        ImGui::PopStyleColor(2);
+        ImGui::PopID();
     }
 
     void GrassDensityPanel::pushVegetationType()

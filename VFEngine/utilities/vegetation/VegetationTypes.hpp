@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <algorithm>
 #include <array>
+#include <vector>
 #include <string>
 #include <glm/glm.hpp>
 
@@ -26,6 +27,21 @@ namespace vegetation
 
     static constexpr uint32_t VEGETATION_TYPE_COUNT = static_cast<uint32_t>(VegetationType::Count);
 
+    enum class BillboardMode : uint8_t
+    {
+        Cross = 0,       // Two perpendicular quads (X shape) - good for bushes, grass clumps
+        CameraFacing = 1 // Always faces camera - good for flowers, small decals
+    };
+
+    struct BillboardPaletteEntry
+    {
+        std::string texturePath;                     // Path to .vfImage file
+        float weight = 1.0f;                         // For weighted random selection
+        glm::vec2 scaleRange{0.8f, 1.2f};           // Min/max random scale
+        BillboardMode mode = BillboardMode::Cross;   // Cross or camera-facing
+        uint32_t bindlessTextureIndex = 0xFFFFFFFF;  // Resolved at runtime
+    };
+
     struct VegetationTypeConfig
     {
         VegetationType type = VegetationType::Grass;
@@ -37,8 +53,7 @@ namespace vegetation
         float fadeStartDistance = 80.0f;
         float fadeEndDistance = 120.0f;
         glm::vec4 colorTint{1.0f, 1.0f, 1.0f, 1.0f};
-        std::string texturePath;  // vfImage path for Billboard type
-        uint32_t bindlessTextureIndex = 0xFFFFFFFF; // Resolved at runtime
+        std::vector<BillboardPaletteEntry> billboardEntries; // Billboard palette
     };
 
     struct MixedBrushConfig

@@ -7,6 +7,7 @@ layout(location = 1) in vec3 inNormal;
 layout(location = 2) in vec2 inUV;
 layout(location = 3) in float inAlpha;
 layout(location = 4) flat in uint inVegType;
+layout(location = 5) flat in uint inTexIndex;
 
 layout(location = 0) out vec4 outColor;
 
@@ -83,10 +84,10 @@ void main() {
     // Gradient from base to tip using config colors
     vec3 albedo = mix(baseColor.rgb, tipColor.rgb, inUV.y);
 
-    // Billboard texture sampling (type 1, when billboardTextureIndex is valid)
+    // Billboard texture sampling (type 1, per-instance texture index)
     float finalAlpha = inAlpha;
-    if (inVegType == 1u && billboardTextureIndex != 0xFFFFFFFFu) {
-        vec4 texColor = texture(bindlessTextures[nonuniformEXT(billboardTextureIndex)], inUV);
+    if (inVegType == 1u && inTexIndex != 0xFFFFFFFFu) {
+        vec4 texColor = texture(bindlessTextures[nonuniformEXT(inTexIndex)], inUV);
         albedo = texColor.rgb;
         finalAlpha *= texColor.a;
         if (finalAlpha < 0.1) discard;

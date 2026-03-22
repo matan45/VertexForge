@@ -22,8 +22,9 @@ namespace windows
         bool mixedModeEnabled = false;
         float mixedRatios[vegetation::VEGETATION_TYPE_COUNT] = {1.0f, 0.0f};
 
-        // Billboard texture path (for Billboard type)
-        char billboardTexturePath[256] = "";
+        // Billboard palette
+        std::vector<vegetation::BillboardPaletteEntry> billboardEntries;
+        int selectedBillboardIndex = -1; // -1 = All (Random)
 
         vegetation::GrassRenderConfig grassConfig;
         bool configLoaded = false;
@@ -43,6 +44,8 @@ namespace windows
     private:
         void subscribe();
         void drawVegetationTypePalette();
+        void drawBillboardPalette();
+        void drawBillboardEntry(int index, int& removeIndex);
         void drawGrassConfigSection();
         void pushGrassConfig();
         void pushVegetationType();

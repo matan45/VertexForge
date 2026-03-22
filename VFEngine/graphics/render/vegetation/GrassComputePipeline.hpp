@@ -34,7 +34,10 @@ namespace render::vegetation
         float densityFadeEnd;
         float minDensityScale;
         // Multi-type vegetation
-        uint32_t vegetationType; // 0=Grass, 1=Flower, 2=Bush, 3=Rock
+        uint32_t vegetationType;        // 0=Grass, 1=Billboard
+        uint32_t billboardTextureCount; // Number of textures in palette (max 5)
+        uint32_t billboardTexIndices[5]; // Bindless texture indices
+        uint32_t billboardModes[5];     // 0=Cross, 1=CameraFacing (per entry)
     };
 
     class GrassComputePipeline

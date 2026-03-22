@@ -203,6 +203,14 @@ namespace render::gpudriven
 
             ::vegetation::GrassRenderConfig grassConfig;
 
+            // Billboard palette: resolved entries
+            struct BillboardGPUEntry
+            {
+                uint32_t bindlessIndex = 0xFFFFFFFF;
+                uint32_t mode = 0; // 0=Cross, 1=CameraFacing
+            };
+            std::vector<BillboardGPUEntry> billboardPalette;
+
             vk::DescriptorSetLayout cachedIBLLayout;
             vk::RenderPass cachedRenderPass;
 
@@ -587,6 +595,7 @@ namespace render::gpudriven
         void setGrassRenderingEnabled(bool enabled) { vegetation.grassRenderingEnabled = enabled; }
         bool isGrassRenderingEnabled() const { return vegetation.grassRenderingEnabled; }
         void setGrassRenderConfig(const ::vegetation::GrassRenderConfig& config) { vegetation.grassConfig = config; }
+        void setBillboardPalette(const std::vector<VegetationSubsystems::BillboardGPUEntry>& entries) { vegetation.billboardPalette = entries; }
         void addVegetationTile(int32_t coordX, int32_t coordZ);
         void removeVegetationTile(int32_t coordX, int32_t coordZ);
         void clearVegetationData();

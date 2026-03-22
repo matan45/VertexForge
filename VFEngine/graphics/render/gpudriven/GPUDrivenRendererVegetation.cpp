@@ -524,6 +524,22 @@ namespace render::gpudriven
                 auto pushConstants = basePushConstants;
                 pushConstants.densityMultiplier = baseDensityMult;
                 pushConstants.vegetationType = vegType;
+                pushConstants.billboardTextureCount = 0;
+                std::memset(pushConstants.billboardTexIndices, 0xFF, sizeof(pushConstants.billboardTexIndices));
+                std::memset(pushConstants.billboardModes, 0, sizeof(pushConstants.billboardModes));
+
+                // Fill billboard texture indices and modes from config
+                if (vegType == static_cast<uint32_t>(::vegetation::VegetationType::Billboard))
+                {
+                    const auto& entries = vegetation.billboardPalette;
+                    uint32_t count = std::min(static_cast<uint32_t>(entries.size()), 5u);
+                    pushConstants.billboardTextureCount = count;
+                    for (uint32_t ei = 0; ei < count; ++ei)
+                    {
+                        pushConstants.billboardTexIndices[ei] = entries[ei].bindlessIndex;
+                        pushConstants.billboardModes[ei] = entries[ei].mode;
+                    }
+                }
 
                 vegetation.grassComputePipeline->dispatch(cmd, info.texelCount, pushConstants);
                 isFirstDispatch = false;
