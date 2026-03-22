@@ -51,6 +51,8 @@ layout(push_constant) uniform PushConstants {
     uint billboardMode;          // 0=Cross, 1=CameraFacing
     uint paletteEntryIndex;      // Which palette entry this dispatch is for
     uint paletteEntryCount;      // Total entries in palette
+    float entryScaleMin;         // Per-entry scale range
+    float entryScaleMax;
 };
 
 float hash(vec2 p) {
@@ -136,7 +138,10 @@ void main() {
         float rotation = hash(seed * 2.7) * 6.28318;
 
         float scaleFactor = hash(seed * 3.1);
-        float bladeH = mix(heightMin, heightMax, scaleFactor);
+        // Use per-entry scale range if available, otherwise fall back to global config
+        float scaleMin = (entryScaleMin > 0.0) ? entryScaleMin : heightMin;
+        float scaleMax = (entryScaleMax > 0.0) ? entryScaleMax : heightMax;
+        float bladeH = mix(scaleMin, scaleMax, scaleFactor);
         float bladeW = mix(widthMin, widthMax, scaleFactor);
 
         float windPhase = hash(seed * 5.3);
@@ -154,6 +159,7 @@ void main() {
         uint base = outIdx * 3;
         grassInstances[base + 0] = vec4(bladeX, bladeHeight, bladeZ, rotation);
         grassInstances[base + 1] = vec4(bladeH, bladeW, density, windPhase);
-        grassInstances[base + 2] = vec4(uintBitsToFloat(billboardTextureIndex), float(billboardMode), 1.0, float(vegetationType));
+        // Store texture index as float (not uintBitsToFloat - denormals get flushed to zero on GPU)
+        grassInstances[base + 2] = vec4(float(billboardTextureIndex), float(billboardMode), 1.0, float(vegetationType));
     }
 }

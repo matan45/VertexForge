@@ -42,7 +42,7 @@ namespace services
 
         dispatcher.registerCommandHandler<events::vegetation::SetBillboardPaletteCommand>(
             [this](const events::vegetation::SetBillboardPaletteCommand& cmd) {
-                if (billboardPaletteCb) billboardPaletteCb(cmd.entries);
+                if (billboardPaletteCb) billboardPaletteCb(cmd.entries, cmd.activeEntry);
             });
     }
 

@@ -494,7 +494,7 @@ namespace services
         auto fileCache = (cacheIt != fileCaches.end()) ? cacheIt->second : nullptr;
 
         // Query active vegetation type and mixed config once before the tile loop
-        vegetation::VegetationType activeType = vegetation::VegetationType::Grass;
+        vegetation::VegetationType activeType = vegetation::VegetationType::Billboard;
         vegetation::MixedBrushConfig mixedConfig;
         try
         {

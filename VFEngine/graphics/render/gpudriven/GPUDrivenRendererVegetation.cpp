@@ -521,9 +521,6 @@ namespace render::gpudriven
                     0, nullptr,
                     0, nullptr);
 
-                vfLogInfo("VegDispatch: tile({},{}) vegType={} typeMask={:#x}",
-                          info.tile->coord.x, info.tile->coord.z, vegType, info.activeTypeMask);
-
                 auto pushConstants = basePushConstants;
                 pushConstants.densityMultiplier = baseDensityMult;
                 pushConstants.vegetationType = vegType;
@@ -531,6 +528,8 @@ namespace render::gpudriven
                 pushConstants.billboardMode = 0;
                 pushConstants.paletteEntryIndex = 0;
                 pushConstants.paletteEntryCount = 0;
+                pushConstants.entryScaleMin = 0.0f;
+                pushConstants.entryScaleMax = 0.0f;
 
                 // For billboard type: dispatch once per palette entry
                 // Each blade is assigned to exactly one entry via hash (no duplicates)
@@ -547,6 +546,9 @@ namespace render::gpudriven
                         entryPC.billboardMode = entry.mode;
                         entryPC.paletteEntryIndex = ei;
                         entryPC.paletteEntryCount = entryCount;
+                        entryPC.entryScaleMin = entry.scaleMin;
+                        entryPC.entryScaleMax = entry.scaleMax;
+                        entryPC.densityMultiplier = baseDensityMult * entry.densityMultiplier;
 
                         vegetation.grassComputePipeline->dispatch(cmd, info.texelCount, entryPC);
 

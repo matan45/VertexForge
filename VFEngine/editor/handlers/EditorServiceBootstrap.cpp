@@ -221,9 +221,9 @@ namespace handlers
 
             // Wire billboard palette: event → provider → adapter → renderer
             grassServiceImpl->setBillboardPaletteCallback(
-                [grassProvider](const std::vector<vegetation::BillboardPaletteEntry>& entries)
+                [grassProvider](const std::vector<vegetation::BillboardPaletteEntry>& entries, int32_t activeEntry)
                 {
-                    grassProvider->setBillboardPalette(entries);
+                    grassProvider->setBillboardPalette(entries, activeEntry);
                 });
         }
     }

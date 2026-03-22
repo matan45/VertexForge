@@ -14,7 +14,7 @@ namespace services
     public:
         using TileCallback = std::function<void(int32_t, int32_t)>;
         using GetConfigCallback = std::function<vegetation::GrassRenderConfig()>;
-        using BillboardPaletteCallback = std::function<void(const std::vector<vegetation::BillboardPaletteEntry>&)>;
+        using BillboardPaletteCallback = std::function<void(const std::vector<vegetation::BillboardPaletteEntry>&, int32_t activeEntry)>;
 
         virtual ~IGrassRenderProvider() = default;
 
@@ -36,7 +36,7 @@ namespace services
         virtual void setGetConfigCallback(GetConfigCallback) {}
 
         // Billboard palette update
-        virtual void setBillboardPalette(const std::vector<vegetation::BillboardPaletteEntry>&) {}
+        virtual void setBillboardPalette(const std::vector<vegetation::BillboardPaletteEntry>&, int32_t activeEntry = -1) {}
         virtual void setOnBillboardPaletteChanged(BillboardPaletteCallback) {}
     };
 }

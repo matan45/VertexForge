@@ -84,13 +84,16 @@ void main() {
     // Gradient from base to tip using config colors
     vec3 albedo = mix(baseColor.rgb, tipColor.rgb, inUV.y);
 
-    // Billboard texture sampling (type 1, per-instance texture index)
+    // Billboard texture sampling
     float finalAlpha = inAlpha;
-    if (inVegType == 1u && inTexIndex != 0xFFFFFFFFu) {
+    if (inTexIndex < 16384u) {
         vec4 texColor = texture(bindlessTextures[nonuniformEXT(inTexIndex)], inUV);
         albedo = texColor.rgb;
         finalAlpha *= texColor.a;
         if (finalAlpha < 0.1) discard;
+    } else {
+        // No texture assigned - discard
+        discard;
     }
 
     // Ambient term

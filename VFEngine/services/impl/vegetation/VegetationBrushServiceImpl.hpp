@@ -10,7 +10,7 @@ namespace services
     private:
         vegetation::DensityBrushParams currentDensityParams;
         vegetation::DensityBrushType currentDensityBrushType = vegetation::DensityBrushType::Paint;
-        vegetation::VegetationType activeVegetationType = vegetation::VegetationType::Grass;
+        vegetation::VegetationType activeVegetationType = vegetation::VegetationType::Billboard;
         vegetation::MixedBrushConfig mixedBrushConfig;
         bool vegetationModeActive = false;
 

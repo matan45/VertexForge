@@ -20,9 +20,8 @@ namespace vegetation
 
     enum class VegetationType : uint8_t
     {
-        Grass = 0,
-        Billboard = 1,
-        Count = 2
+        Billboard = 0,
+        Count = 1
     };
 
     static constexpr uint32_t VEGETATION_TYPE_COUNT = static_cast<uint32_t>(VegetationType::Count);
@@ -38,13 +37,14 @@ namespace vegetation
         std::string texturePath;                     // Path to .vfImage file
         float weight = 1.0f;                         // For weighted random selection
         glm::vec2 scaleRange{0.8f, 1.2f};           // Min/max random scale
+        float densityMultiplier = 1.0f;              // Per-entry density
         BillboardMode mode = BillboardMode::Cross;   // Cross or camera-facing
         uint32_t bindlessTextureIndex = 0xFFFFFFFF;  // Resolved at runtime
     };
 
     struct VegetationTypeConfig
     {
-        VegetationType type = VegetationType::Grass;
+        VegetationType type = VegetationType::Billboard;
         float scaleMin = 0.5f;
         float scaleMax = 1.5f;
         float rotationRandomization = 1.0f;  // 0=aligned, 1=fully random
@@ -59,7 +59,7 @@ namespace vegetation
     struct MixedBrushConfig
     {
         bool enabled = false;
-        std::array<float, VEGETATION_TYPE_COUNT> ratios = {1.0f, 0.0f};
+        std::array<float, VEGETATION_TYPE_COUNT> ratios = {1.0f};
 
         void normalize()
         {

@@ -31,6 +31,7 @@
 #include "billboard/BillboardStreamManager.hpp"
 #include "vegetation/GrassConfig.hpp"
 #include "vegetation/VegetationTypes.hpp"
+#include "print/Log.hpp"
 #include "../vegetation/GrassStreamManager.hpp"
 #include "../occlusion/LightOcclusionCulling.hpp"
 #include "../volumetric/VolumetricPipeline.hpp"
@@ -210,8 +211,12 @@ namespace render::gpudriven
                 uint32_t bindlessIndex = 0xFFFFFFFF;
                 uint32_t mode = 0; // 0=Cross, 1=CameraFacing
                 float weight = 1.0f;
+                float scaleMin = 0.0f;
+                float scaleMax = 0.0f;
+                float densityMultiplier = 1.0f;
             };
             std::vector<BillboardGPUEntry> billboardPalette;
+            int32_t activeBillboardEntry = -1; // -1 = All (Random), >= 0 = specific entry
 
             vk::DescriptorSetLayout cachedIBLLayout;
             vk::RenderPass cachedRenderPass;
@@ -598,15 +603,29 @@ namespace render::gpudriven
         bool isGrassRenderingEnabled() const { return vegetation.grassRenderingEnabled; }
         void setGrassRenderConfig(const ::vegetation::GrassRenderConfig& config) { vegetation.grassConfig = config; }
         void setBillboardPalette(const std::vector<VegetationState::BillboardGPUEntry>& entries) { vegetation.billboardPalette = entries; }
+        void setActiveBillboardEntry(int32_t index) { vegetation.activeBillboardEntry = index; }
         void setBillboardPaletteFromEntries(const std::vector<::vegetation::BillboardPaletteEntry>& entries)
         {
             vegetation.billboardPalette.clear();
             for (const auto& e : entries)
             {
                 VegetationState::BillboardGPUEntry gpu;
-                gpu.bindlessIndex = e.bindlessTextureIndex;
                 gpu.mode = static_cast<uint32_t>(e.mode);
                 gpu.weight = e.weight;
+                gpu.scaleMin = e.scaleRange.x;
+                gpu.scaleMax = e.scaleRange.y;
+                gpu.densityMultiplier = e.densityMultiplier;
+
+                // Register texture with bindless system if path is set
+                gpu.bindlessIndex = 0xFFFFFFFF;
+                if (!e.texturePath.empty() && textureStreamManager)
+                {
+                    gpu.bindlessIndex = textureStreamManager->registerTexture(
+                        e.texturePath, vk::Format::eR8G8B8A8Srgb);
+                    vfLogInfo("Billboard texture registered: {} -> bindlessIndex={}",
+                              e.texturePath, gpu.bindlessIndex);
+                }
+
                 vegetation.billboardPalette.push_back(gpu);
             }
         }

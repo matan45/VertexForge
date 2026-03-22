@@ -17,10 +17,8 @@ namespace windows
         int falloffIndex = 2;
         int shapeIndex = 0;
 
-        // Vegetation type selection
-        int selectedVegetationType = 0;
-        bool mixedModeEnabled = false;
-        float mixedRatios[vegetation::VEGETATION_TYPE_COUNT] = {1.0f, 0.0f};
+        // Billboard palette
+        int selectedVegetationType = 0; // Always Billboard (0)
 
         // Billboard palette
         std::vector<vegetation::BillboardPaletteEntry> billboardEntries;
@@ -44,13 +42,9 @@ namespace windows
     private:
         void subscribe();
         void ensureConfigLoaded();
-        void drawVegetationTypePalette();
         void drawBillboardPalette();
         void drawBillboardEntry(int index, int& removeIndex);
-        void drawGrassConfigSection();
         void pushGrassConfig();
         void pushBillboardPalette();
-        void pushVegetationType();
-        void pushMixedBrushConfig();
     };
 }

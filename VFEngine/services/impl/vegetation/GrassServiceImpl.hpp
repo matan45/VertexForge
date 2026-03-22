@@ -8,7 +8,7 @@
 
 namespace services
 {
-    using BillboardPaletteCallback = std::function<void(const std::vector<vegetation::BillboardPaletteEntry>&)>;
+    using BillboardPaletteCallback = std::function<void(const std::vector<vegetation::BillboardPaletteEntry>&, int32_t activeEntry)>;
 
     class GrassServiceImpl : public IGrassService
     {
