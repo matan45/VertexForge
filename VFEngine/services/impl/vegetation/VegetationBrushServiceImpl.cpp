@@ -5,6 +5,7 @@
 #include "../../events/vegetation/VegetationBrushEvents.hpp"
 #include "../../events/vegetation/GrassEvents.hpp"
 #include "../../events/terrain/TerrainEvents.hpp"
+#include "../../events/scene/ScenePersistenceEvents.hpp"
 #include "terrain/BrushSampler.hpp"
 #include <cmath>
 #include <algorithm>
@@ -61,15 +62,25 @@ namespace services
             [this](const events::vegetation::SetBillboardPaletteCommand& cmd)
             {
                 auto& registry = scene::EntityRegistry::getRegistry();
-                auto view = registry.view<components::GrassComponent>();
+
+                // Find entity with GrassComponent, or add to terrain entity
+                auto grassView = registry.view<components::GrassComponent>();
                 entt::entity target = entt::null;
-                for (auto entity : view) { target = entity; break; }
+                for (auto entity : grassView) { target = entity; break; }
+
                 if (target == entt::null)
                 {
-                    target = registry.create();
-                    registry.emplace<components::GrassComponent>(target);
+                    // Add GrassComponent to the terrain entity
+                    auto terrainView = registry.view<components::TerrainComponent>();
+                    for (auto entity : terrainView) { target = entity; break; }
+
+                    if (target != entt::null)
+                        registry.emplace<components::GrassComponent>(target);
                 }
-                registry.get<components::GrassComponent>(target).billboardPalette = cmd.entries;
+
+                if (target != entt::null)
+                    registry.get<components::GrassComponent>(target).billboardPalette = cmd.entries;
+
                 if (billboardPaletteCb) billboardPaletteCb(cmd.entries, cmd.activeEntry);
             });
 
@@ -88,6 +99,24 @@ namespace services
                 vegetationModeActive = n.isActive;
                 if (!vegetationModeActive)
                     hasLastPlacement = false;
+            });
+
+        // Auto-push billboard palette to renderer when scene loads
+        dispatcher.subscribe<events::scene::SceneLoadedNotification>(
+            [this](const events::scene::SceneLoadedNotification&)
+            {
+                auto& registry = scene::EntityRegistry::getRegistry();
+                auto view = registry.view<components::GrassComponent>();
+                for (auto entity : view)
+                {
+                    auto& palette = view.get<components::GrassComponent>(entity).billboardPalette;
+                    if (!palette.empty() && billboardPaletteCb)
+                    {
+                        vfLogInfo("VegetationBrushService: Auto-pushing {} billboard palette entries on scene load", palette.size());
+                        billboardPaletteCb(palette, -1);
+                    }
+                    break;
+                }
             });
     }
 

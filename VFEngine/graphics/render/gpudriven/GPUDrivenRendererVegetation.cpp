@@ -1,5 +1,7 @@
 #include "GPUDrivenRenderer.hpp"
 #include "print/Log.hpp"
+#include "scene/EntityRegistry.hpp"
+#include "components/VegetationComponents.hpp"
 #include <cmath>
 #include <algorithm>
 #include <cstring>
@@ -112,6 +114,23 @@ namespace render::gpudriven
                                                        const glm::vec3& cameraPosition)
     {
         if (!initialized || !vegetation.grassInitialized) return;
+
+        // Auto-load billboard palette from ECS if not yet loaded
+        if (vegetation.billboardPalette.empty())
+        {
+            auto& registry = scene::EntityRegistry::getRegistry();
+            auto view = registry.view<components::GrassComponent>();
+            for (auto entity : view)
+            {
+                const auto& palette = view.get<components::GrassComponent>(entity).billboardPalette;
+                if (!palette.empty())
+                {
+                    vfLogInfo("Auto-loading billboard palette: {} entries", palette.size());
+                    setBillboardPaletteFromEntries(palette);
+                }
+                break;
+            }
+        }
 
         // Cache ALL loaded tiles for grass compute dispatch later in the frame
         // Using allLoadedTiles instead of visibleTiles prevents grass from disappearing
@@ -291,6 +310,23 @@ namespace render::gpudriven
     {
         if (!initialized || !vegetation.grassInitialized) return;
         if (!vegetation.grassRenderingEnabled) return;
+
+        // Auto-load billboard palette from ECS if not yet loaded
+        if (vegetation.billboardPalette.empty())
+        {
+            auto& registry = scene::EntityRegistry::getRegistry();
+            auto view = registry.view<components::GrassComponent>();
+            for (auto entity : view)
+            {
+                const auto& palette = view.get<components::GrassComponent>(entity).billboardPalette;
+                if (!palette.empty())
+                {
+                    vfLogInfo("dispatchGrassCompute: Auto-loading billboard palette: {} entries", palette.size());
+                    setBillboardPaletteFromEntries(palette);
+                }
+                break;
+            }
+        }
 
         // Check if any tile needs re-upload
         bool anyDirty = false;

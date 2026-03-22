@@ -27,6 +27,8 @@ namespace windows
             [this](const auto& n)
             {
                 visible = n.isActive;
+                if (visible)
+                    configLoaded = false; // Force reload palette when panel opens
             });
 
         subscribed = true;
@@ -246,6 +248,10 @@ namespace windows
 
     void GrassDensityPanel::ensureConfigLoaded()
     {
+        // Re-query if palette is empty (scene may have loaded after initial query)
+        if (configLoaded && billboardEntries.empty())
+            configLoaded = false;
+
         if (!configLoaded)
         {
             grassConfig = events::EventDispatcher::instance().query(

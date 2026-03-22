@@ -217,6 +217,9 @@ namespace render::gpudriven
             std::vector<BillboardGPUEntry> billboardPalette;
             int32_t activeBillboardEntry = -1; // -1 = All (Random), >= 0 = specific entry
 
+            // Palette loader callback (for auto-load on scene load)
+            std::function<std::vector<::vegetation::BillboardPaletteEntry>()> billboardPaletteLoader;
+
             // Instance staging buffer for direct upload
             vk::Buffer instanceStagingBuffer;
             vk::DeviceMemory instanceStagingMemory;
@@ -609,6 +612,11 @@ namespace render::gpudriven
         void setGrassRenderConfig(const ::vegetation::GrassRenderConfig& config) { vegetation.grassConfig = config; }
         void setBillboardPalette(const std::vector<VegetationState::BillboardGPUEntry>& entries) { vegetation.billboardPalette = entries; }
         void setActiveBillboardEntry(int32_t index) { vegetation.activeBillboardEntry = index; }
+        uint32_t getBillboardPaletteSize() const { return static_cast<uint32_t>(vegetation.billboardPalette.size()); }
+        void setBillboardPaletteLoader(std::function<std::vector<::vegetation::BillboardPaletteEntry>()> loader)
+        {
+            vegetation.billboardPaletteLoader = std::move(loader);
+        }
         void setBillboardPaletteFromEntries(const std::vector<::vegetation::BillboardPaletteEntry>& entries)
         {
             vegetation.billboardPalette.clear();

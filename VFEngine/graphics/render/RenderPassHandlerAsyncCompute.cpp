@@ -1,4 +1,5 @@
 #include "RenderPassHandler.hpp"
+#include "gpudriven/GPUDrivenRenderer.hpp"
 #include "print/Log.hpp"
 #include "../core/SwapChain.hpp"
 #include "../core/Device.hpp"
@@ -74,6 +75,17 @@ namespace render
             {
                 auto grassConfig = grassRenderProvider->getGrassRenderConfig();
                 gpuDrivenRenderer->setGrassRenderConfig(grassConfig);
+
+                // Sync billboard palette from provider to renderer
+                {
+                    auto palette = grassRenderProvider->getBillboardPalette();
+                    if (!palette.empty())
+                    {
+                        if (gpuDrivenRenderer->getBillboardPaletteSize() == 0)
+                            vfLogInfo("Auto-syncing billboard palette: {} entries", palette.size());
+                        gpuDrivenRenderer->setBillboardPaletteFromEntries(palette);
+                    }
+                }
 
                 ::vegetation::WindConfig windConfig;
                 windConfig.direction = grassConfig.windDirection;

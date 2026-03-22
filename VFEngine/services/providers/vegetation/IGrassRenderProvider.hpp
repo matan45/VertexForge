@@ -35,8 +35,12 @@ namespace services
         // Callback for config retrieval (set by service layer to avoid direct ECS access)
         virtual void setGetConfigCallback(GetConfigCallback) {}
 
-        // Billboard palette update
+        // Billboard palette
         virtual void setBillboardPalette(const std::vector<vegetation::BillboardPaletteEntry>&, int32_t activeEntry = -1) {}
         virtual void setOnBillboardPaletteChanged(BillboardPaletteCallback) {}
+        virtual std::vector<vegetation::BillboardPaletteEntry> getBillboardPalette() const { return {}; }
+
+        using GetBillboardPaletteCallback = std::function<std::vector<vegetation::BillboardPaletteEntry>()>;
+        virtual void setGetBillboardPaletteCallback(GetBillboardPaletteCallback) {}
     };
 }

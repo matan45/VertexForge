@@ -1,6 +1,8 @@
 #include "RenderPassHandler.hpp"
 #include "gpudriven/GPUDrivenRenderer.hpp"
 #include "vegetation/VegetationTypes.hpp"
+#include "scene/EntityRegistry.hpp"
+#include "components/VegetationComponents.hpp"
 #include "../core/Device.hpp"
 #include "../core/SwapChain.hpp"
 #include "mesh/StaticMeshPipeline.hpp"
@@ -75,6 +77,15 @@ namespace render
             {
                 renderer->setBillboardPaletteFromEntries(entries);
                 renderer->setActiveBillboardEntry(activeEntry);
+            });
+
+            // Set palette loader - reads directly from ECS registry
+            renderer->setBillboardPaletteLoader([]() -> std::vector<::vegetation::BillboardPaletteEntry> {
+                auto& registry = scene::EntityRegistry::getRegistry();
+                auto view = registry.view<components::GrassComponent>();
+                for (auto entity : view)
+                    return view.get<components::GrassComponent>(entity).billboardPalette;
+                return {};
             });
         }
     }

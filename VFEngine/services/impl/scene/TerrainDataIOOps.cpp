@@ -181,7 +181,7 @@ namespace services
 
         if (loadedCount > 0)
         {
-            vfLogInfo("TerrainService: Loaded vegetation density data ({} tiles) from {}",
+            vfLogInfo("TerrainService: Loaded billboard instances ({} tiles) from {}",
                       loadedCount, vegDir);
         }
 
