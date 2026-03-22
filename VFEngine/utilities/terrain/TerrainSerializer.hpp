@@ -31,6 +31,7 @@ namespace terrain
         HAS_STREAMING_CONFIG = 1 << 4,
         HAS_COMPRESSED_DATA  = 1 << 5,
         HAS_SVT_CACHE        = 1 << 6,
+        HAS_CAVE_DATA        = 1 << 7,
     };
 
     inline TerrainFormatFlags operator|(TerrainFormatFlags a, TerrainFormatFlags b)
@@ -97,6 +98,7 @@ namespace terrain
         uint64_t weightDataOffset = 0;
         uint64_t meshletDataOffset = 0;
         uint64_t holeMaskDataOffset = 0;
+        uint64_t caveSdfDataOffset = 0;
     };
 
     // On-disk serialized size of TileIndexEntry (sum of field sizes, no padding)
@@ -104,8 +106,9 @@ namespace terrain
         sizeof(int32_t) + sizeof(int32_t) +     // coordX, coordZ
         sizeof(uint64_t) + sizeof(uint32_t) +    // heightDataOffset, heightDataSize
         sizeof(uint64_t) + sizeof(uint64_t) +    // weightDataOffset, meshletDataOffset
-        sizeof(uint64_t);                         // holeMaskDataOffset
-    static_assert(TILE_INDEX_ENTRY_SIZE == 44, "TileIndexEntry on-disk size changed — update serialization code");
+        sizeof(uint64_t) +                        // holeMaskDataOffset
+        sizeof(uint64_t);                         // caveSdfDataOffset
+    static_assert(TILE_INDEX_ENTRY_SIZE == 52, "TileIndexEntry on-disk size changed — update serialization code");
 
     struct TileLoadResult
     {
@@ -117,6 +120,9 @@ namespace terrain
 
         std::array<TileLODData, TERRAIN_LOD_COUNT> lodData;
         bool hasLODCache = false;
+
+        std::unique_ptr<CaveSDFData> caveData;
+        bool hasCaveData = false;
     };
 
     struct TerrainSaveParams
@@ -177,6 +183,16 @@ namespace terrain
             std::string_view path,
             const TileIndexEntry& entry,
             std::vector<uint8_t>& outHoleMask);
+
+        static bool readTileCaveData(
+            std::string_view path,
+            const TileIndexEntry& entry,
+            CaveSDFData& outCaveData);
+
+        static bool writeTileCaveData(
+            std::ostream& file,
+            const TerrainTile& tile,
+            TileIndexEntry& outEntry);
 
     private:
         static bool writeHeader(std::ostream& file, const TerrainFileHeader& header);

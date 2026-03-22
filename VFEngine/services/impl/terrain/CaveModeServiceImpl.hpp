@@ -1,13 +1,13 @@
 #pragma once
-#include "../../interfaces/terrain/IHoleModeService.hpp"
+#include "../../interfaces/terrain/ICaveModeService.hpp"
 #include "../../events/EventTypes.hpp"
 
 namespace services
 {
-    class HoleModeServiceImpl : public IHoleModeService
+    class CaveModeServiceImpl : public ICaveModeService
     {
     private:
-        bool holeActive = false;
+        bool caveActive = false;
         std::optional<EntityHandle> targetTerrain;
 
         ::events::SubscriptionToken editorModeToken;
@@ -15,12 +15,12 @@ namespace services
         ::events::SubscriptionToken sceneClearedToken;
         ::events::SubscriptionToken sculptModeToken;
         ::events::SubscriptionToken paintModeToken;
-        ::events::SubscriptionToken caveModeToken;
+        ::events::SubscriptionToken holeModeToken;
         ::events::SubscriptionToken vegetationBrushModeToken;
 
     public:
-        HoleModeServiceImpl() = default;
-        ~HoleModeServiceImpl() override;
+        CaveModeServiceImpl() = default;
+        ~CaveModeServiceImpl() override;
 
         void registerEventHandlers() override;
 

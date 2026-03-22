@@ -163,6 +163,8 @@
     <ClInclude Include="events\scene\ScenePersistenceEvents.hpp" />
     <ClInclude Include="events\scripting\ScriptingEvents.hpp" />
     <ClInclude Include="events\terrain\BrushEvents.hpp" />
+    <ClInclude Include="events\terrain\CaveBrushEvents.hpp" />
+    <ClInclude Include="events\terrain\CaveModeEvents.hpp" />
     <ClInclude Include="events\terrain\HoleBrushEvents.hpp" />
     <ClInclude Include="events\terrain\HoleModeEvents.hpp" />
     <ClInclude Include="events\terrain\PaintBrushEvents.hpp" />
@@ -250,6 +252,8 @@
     <ClInclude Include="impl\scene\WaterService.hpp" />
     <ClInclude Include="impl\scripting\ScriptingServiceImpl.hpp" />
     <ClInclude Include="impl\terrain\BrushServiceImpl.hpp" />
+    <ClInclude Include="impl\terrain\CaveBrushServiceImpl.hpp" />
+    <ClInclude Include="impl\terrain\CaveModeServiceImpl.hpp" />
     <ClInclude Include="impl\terrain\HoleBrushServiceImpl.hpp" />
     <ClInclude Include="impl\terrain\HoleModeServiceImpl.hpp" />
     <ClInclude Include="impl\terrain\PaintBrushServiceImpl.hpp" />
@@ -295,6 +299,8 @@
     <ClInclude Include="interfaces\render\IRenderTextureService.hpp" />
     <ClInclude Include="interfaces\scripting\IScriptingService.hpp" />
     <ClInclude Include="interfaces\terrain\IBrushService.hpp" />
+    <ClInclude Include="interfaces\terrain\ICaveBrushService.hpp" />
+    <ClInclude Include="interfaces\terrain\ICaveModeService.hpp" />
     <ClInclude Include="interfaces\terrain\IHoleBrushService.hpp" />
     <ClInclude Include="interfaces\terrain\IHoleModeService.hpp" />
     <ClInclude Include="interfaces\terrain\IPaintBrushService.hpp" />
@@ -433,6 +439,8 @@
     <ClCompile Include="impl\scene\WaterVisibilityOps.cpp" />
     <ClCompile Include="impl\scripting\ScriptingServiceImpl.cpp" />
     <ClCompile Include="impl\terrain\BrushServiceImpl.cpp" />
+    <ClCompile Include="impl\terrain\CaveBrushServiceImpl.cpp" />
+    <ClCompile Include="impl\terrain\CaveModeServiceImpl.cpp" />
     <ClCompile Include="impl\terrain\HoleBrushServiceImpl.cpp" />
     <ClCompile Include="impl\terrain\HoleModeServiceImpl.cpp" />
     <ClCompile Include="impl\terrain\PaintBrushServiceImpl.cpp" />

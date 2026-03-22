@@ -60,6 +60,7 @@ namespace render::gpudriven
     {
         TerrainTileKey key;
         std::array<TerrainLODAllocation, TERRAIN_LOD_LEVEL_COUNT> lodAllocs;
+        TerrainLODAllocation caveAlloc;    // Cave meshlet allocation (single LOD)
 
         glm::vec3 aabbMin{0.0f};
         glm::vec3 aabbMax{0.0f};
@@ -118,6 +119,7 @@ namespace render::gpudriven
         bool uploadTileAddLOD(const terrain::TerrainTile& tile, uint32_t lodLevel);
 
         bool uploadWeightMap(const terrain::TerrainTile& tile);
+        bool uploadCaveMesh(const terrain::TerrainTile& tile);
 
         // Keeps other LODs intact
         void removeTileLOD(const TerrainTileKey& key, uint32_t lodLevel);

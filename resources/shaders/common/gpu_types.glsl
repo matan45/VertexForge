@@ -98,7 +98,7 @@ struct MeshTasksCommand {
     uint groupCountZ;
 };
 
-// Must match TerrainTileGPUData in GPUDrivenTypes.hpp (256 bytes)
+// Must match TerrainTileGPUData in GPUDrivenTypes.hpp (272 bytes)
 struct TerrainTileGPUData {
     mat4 modelMatrix;
     vec4 boundingSphere;        // xyz = world center, w = radius
@@ -116,6 +116,7 @@ struct TerrainTileGPUData {
     int coordZ;
     uint flags;
     uint weightMapOffset;       // Byte offset into weight map SSBO
+    uvec4 caveMeshletData;      // x = meshletOffset, y = meshletCount, z = baseVertexOffset, w = reserved
 };
 
 // Must match TerrainLayerGPUData in GPUDrivenTypes.hpp (32 bytes)

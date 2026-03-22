@@ -10,6 +10,8 @@
 #include "events/terrain/PaintBrushEvents.hpp"
 #include "events/terrain/HoleModeEvents.hpp"
 #include "events/terrain/HoleBrushEvents.hpp"
+#include "events/terrain/CaveModeEvents.hpp"
+#include "events/terrain/CaveBrushEvents.hpp"
 #include "events/vegetation/VegetationBrushEvents.hpp"
 #include "events/meshbrush/MeshBrushEvents.hpp"
 #include "events/audio/AudioEvents.hpp"
@@ -92,6 +94,7 @@ namespace windows
             handleSculptBrush();
             handlePaintBrush();
             handleHoleBrush();
+            handleCaveBrush();
             handleVegetationBrush();
             handleMeshBrush();
         }
@@ -434,6 +437,29 @@ namespace windows
                 applyCmd.erase = ImGui::GetIO().KeyShift;
                 dispatcher.execute(applyCmd);
             }
+        }
+    }
+
+    void ViewPort::handleCaveBrush()
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+        if (!dispatcher.query(events::cave::IsCaveModeActiveQuery{}) || !ImGui::IsWindowHovered()) {
+            caveDragging = false;
+            return;
+        }
+        if (ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
+            auto hitResult = dispatcher.query(events::terrainRaycast::GetTerrainHitQuery{});
+            if (hitResult.hit) {
+                events::caveBrush::ApplyCaveBrushCommand applyCmd;
+                applyCmd.worldPosition = hitResult.position;
+                applyCmd.deltaTime = ImGui::GetIO().DeltaTime;
+                applyCmd.invert = ImGui::GetIO().KeyShift;
+                applyCmd.isFirstApplication = !caveDragging;
+                dispatcher.execute(applyCmd);
+                caveDragging = true;
+            }
+        } else {
+            caveDragging = false;
         }
     }
 

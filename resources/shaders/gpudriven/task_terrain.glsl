@@ -234,15 +234,26 @@ void main() {
         return;
     }
 
-    // Stage 3: Meshlet-level culling within the tile
-    // Each thread processes multiple meshlets if needed
-    uint meshletsPerThread = (meshletCount + TASK_WORKGROUP_SIZE - 1) / TASK_WORKGROUP_SIZE;
+    // Stage 3: Meshlet-level culling within the tile (surface + cave)
+    // Combine surface and cave meshlet counts for unified processing
+    uint caveMeshletOffset = tile.caveMeshletData.x;
+    uint caveMeshletCount = tile.caveMeshletData.y;
+    uint totalMeshletCount = meshletCount + caveMeshletCount;
+
+    uint meshletsPerThread = (totalMeshletCount + TASK_WORKGROUP_SIZE - 1) / TASK_WORKGROUP_SIZE;
 
     for (uint i = 0; i < meshletsPerThread; i++) {
         uint localMeshletIndex = gl_LocalInvocationID.x + i * TASK_WORKGROUP_SIZE;
 
-        if (localMeshletIndex < meshletCount) {
-            uint globalMeshletIndex = meshletOffset + localMeshletIndex;
+        if (localMeshletIndex < totalMeshletCount) {
+            // Determine if this is a surface meshlet or a cave meshlet
+            uint globalMeshletIndex;
+            if (localMeshletIndex < meshletCount) {
+                globalMeshletIndex = meshletOffset + localMeshletIndex;
+            } else {
+                globalMeshletIndex = caveMeshletOffset + (localMeshletIndex - meshletCount);
+            }
+
             GPUMeshlet meshlet = meshlets[globalMeshletIndex];
 
             atomicAdd(stats.totalMeshlets, 1);

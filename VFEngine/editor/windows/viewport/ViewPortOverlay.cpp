@@ -5,6 +5,7 @@
 #include "events/editor/SculptModeEvents.hpp"
 #include "events/terrain/PaintModeEvents.hpp"
 #include "events/terrain/HoleModeEvents.hpp"
+#include "events/terrain/CaveModeEvents.hpp"
 #include "events/vegetation/VegetationBrushEvents.hpp"
 #include "events/meshbrush/MeshBrushEvents.hpp"
 #include "events/project/SceneEvents.hpp"
@@ -92,9 +93,10 @@ namespace windows
                 bool isSculptMode = dispatcher.query(events::sculpt::IsSculptModeActiveQuery{});
                 bool isPaintMode = dispatcher.query(events::paint::IsPaintModeActiveQuery{});
                 bool isHoleMode = dispatcher.query(events::hole::IsHoleModeActiveQuery{});
+                bool isCaveMode = dispatcher.query(events::cave::IsCaveModeActiveQuery{});
                 bool isVegBrushMode = dispatcher.query(events::vegetationBrush::IsVegetationBrushModeActiveQuery{});
                 bool isMeshBrushMode = dispatcher.query(events::meshBrush::IsMeshBrushModeActiveQuery{});
-                ImGui::BeginDisabled(isSculptMode || isPaintMode || isHoleMode || isVegBrushMode || isMeshBrushMode);
+                ImGui::BeginDisabled(isSculptMode || isPaintMode || isHoleMode || isCaveMode || isVegBrushMode || isMeshBrushMode);
 
                 if (iconButton(ViewportIcon::Rotate, gizmo.getOperation() == GizmoOperation::Rotate, "Rotate tool"))
                 {
@@ -148,6 +150,17 @@ namespace windows
                 {
                     events::hole::SetHoleModeActiveCommand cmd;
                     cmd.active = !isHoleMode;
+                    dispatcher.execute(cmd);
+                }
+                ImGui::EndDisabled();
+
+                ImGui::SameLine();
+
+                ImGui::BeginDisabled(bakeBlocked || (!isCaveMode && !canUseTerrain));
+                if (iconButton(ViewportIcon::Hole, isCaveMode, isCaveMode ? "Exit Cave Mode" : "Enter Cave Mode"))
+                {
+                    events::cave::SetCaveModeActiveCommand cmd;
+                    cmd.active = !isCaveMode;
                     dispatcher.execute(cmd);
                 }
                 ImGui::EndDisabled();

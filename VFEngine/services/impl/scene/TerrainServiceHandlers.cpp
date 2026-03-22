@@ -14,6 +14,7 @@
 #include "../../events/terrain/PaintBrushEvents.hpp"
 #include "../../events/terrain/HoleBrushEvents.hpp"
 #include "../../events/vegetation/VegetationBrushEvents.hpp"
+#include "../../events/terrain/CaveBrushEvents.hpp"
 #include "../../events/project/SceneEvents.hpp"
 #include "../../events/physics/PhysicsEvents.hpp"
 
@@ -26,6 +27,7 @@ namespace services
         registerTerrainCoreHandlers(dispatcher);
         registerBrushHandlers(dispatcher);
         registerVegetationBrushHandlers(dispatcher);
+        registerCaveBrushHandlers(dispatcher);
         registerTerrainDataHandlers(dispatcher);
         registerAsyncLoadHandlers(dispatcher);
 
@@ -258,6 +260,15 @@ namespace services
             [this](const events::vegetationBrush::ApplyVegetationDensityBrushCommand& cmd)
             {
                 applyVegetationDensityBrush(cmd.worldPosition, cmd.deltaTime, cmd.invert, cmd.isFirstApplication);
+            });
+    }
+
+    void TerrainService::registerCaveBrushHandlers(::events::EventDispatcher& dispatcher)
+    {
+        dispatcher.registerCommandHandler<events::caveBrush::ApplyCaveBrushCommand>(
+            [this](const events::caveBrush::ApplyCaveBrushCommand& cmd)
+            {
+                applyCaveBrush(cmd.worldPosition, cmd.deltaTime, cmd.invert, cmd.isFirstApplication);
             });
     }
 

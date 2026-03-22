@@ -124,6 +124,7 @@ namespace services
         void applyBrush(const glm::vec3& worldPosition, float deltaTime, bool invert, bool isFirstApplication);
         void applyPaintBrush(const glm::vec3& worldPosition, float deltaTime, bool invert, bool isFirstApplication);
         void applyHoleBrush(const glm::vec3& worldPosition, bool erase);
+        void applyCaveBrush(const glm::vec3& worldPosition, float deltaTime, bool invert, bool isFirstApplication);
 
         void setBrushComputeProvider(ITerrainBrushComputeProvider* provider) { brushComputeProvider = provider; }
         void setPhysicsProvider(IPhysicsProvider* provider)
@@ -208,6 +209,9 @@ namespace services
 
         void applyVegetationDensityBrush(const glm::vec3& worldPosition, float deltaTime, bool invert, bool isFirstApplication);
         void registerVegetationBrushHandlers(::events::EventDispatcher& dispatcher);
+
+        void registerCaveBrushHandlers(::events::EventDispatcher& dispatcher);
+        void syncCaveBoundaries(terrain::TerrainGrid* grid, const std::vector<terrain::TileCoord>& modifiedTiles);
 
         // SVT bake helpers
         struct BakeLayerCPU;

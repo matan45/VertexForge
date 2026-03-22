@@ -117,6 +117,7 @@ namespace windows
             sculptToolPanel.draw();
             paintToolPanel.draw();
             holeToolPanel.draw();
+            caveToolPanel.draw();
             grassDensityPanel.draw();
             meshBrushToolPanel.draw();
             giConfigWindow.draw();

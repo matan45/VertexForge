@@ -7,12 +7,16 @@
 #include "terrain/BrushSampler.hpp"
 #include "terrain/WeightBrushApplicator.hpp"
 #include "terrain/HoleBrushApplicator.hpp"
+#include "terrain/CaveBrushApplicator.hpp"
+#include "terrain/CaveMeshGenerator.hpp"
 #include "vegetation/VegetationDensityBrushApplicator.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/terrain/BrushEvents.hpp"
 #include "../../events/terrain/PaintBrushEvents.hpp"
 #include "../../events/terrain/HoleBrushEvents.hpp"
+#include "../../events/terrain/CaveBrushEvents.hpp"
+#include "../../events/terrain/CaveModeEvents.hpp"
 #include "../../events/vegetation/VegetationBrushEvents.hpp"
 #include "../../events/editor/SculptModeEvents.hpp"
 #include "../../events/terrain/PaintModeEvents.hpp"
@@ -550,6 +554,184 @@ namespace services
             if (registry.valid(ent) && registry.all_of<components::TerrainComponent>(ent))
             {
                 registry.get<components::TerrainComponent>(ent).saveDirty = true;
+            }
+        }
+    }
+
+    void TerrainService::applyCaveBrush(const glm::vec3& worldPosition, float deltaTime, bool invert, bool isFirstApplication)
+    {
+        if (saveInProgress.load(std::memory_order_acquire) || svtBakeInProgress.load(std::memory_order_acquire))
+            return;
+
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        auto targetEntity = dispatcher.query(events::cave::GetCaveTargetEntityQuery{});
+        if (!targetEntity.has_value())
+            return;
+
+        auto gridIt = terrainGrids.find(targetEntity->id);
+        if (gridIt == terrainGrids.end())
+            return;
+
+        terrain::TerrainGrid* grid = gridIt->second.get();
+
+        auto brushType = dispatcher.query(events::caveBrush::GetCaveBrushTypeQuery{});
+        auto brushParams = dispatcher.query(events::caveBrush::GetCaveBrushParamsQuery{});
+
+        float worldTileSize = 32.0f;
+        const auto& allTiles = grid->getAllTiles();
+        if (!allTiles.empty())
+        {
+            worldTileSize = allTiles[0]->config.worldTileSize;
+        }
+
+        glm::vec2 brushCenter(worldPosition.x, worldPosition.z);
+        auto affectedTiles = terrain::BrushSampler::getAffectedTiles(
+            brushCenter, brushParams.radius, worldTileSize);
+
+        auto cacheIt = fileCaches.find(targetEntity->id);
+        auto fileCache = (cacheIt != fileCaches.end()) ? cacheIt->second : nullptr;
+
+        std::vector<terrain::TileCoord> modifiedTiles;
+        for (const auto& coord : affectedTiles)
+        {
+            terrain::TerrainTile* tile = grid->getTile(coord);
+            if (!tile)
+            {
+                if (fileCache && fileCache->hasCoord(coord))
+                {
+                    streamInTile(*targetEntity, coord.x, coord.z);
+                    tile = grid->getTile(coord);
+                }
+                if (!tile)
+                    continue;
+            }
+
+            if (fileCache && !tile->hasHeightData())
+            {
+                if (!fileCache->ensureHeightsLoaded(*tile))
+                    continue;
+            }
+
+            // Initialize cave SDF from heightmap if not yet created
+            if (!tile->hasCaveData())
+                tile->initializeCaveSDFFromHeights();
+
+            if (!tile->hasCaveData())
+                continue;
+
+            if (fileCache)
+                fileCache->markDirty(coord);
+
+            terrain::CaveBrushApplicator::ApplyParams applyParams;
+            applyParams.brushCenter = worldPosition;
+            applyParams.tileWorldOrigin = glm::vec2(
+                static_cast<float>(tile->coord.x) * tile->config.worldTileSize,
+                static_cast<float>(tile->coord.z) * tile->config.worldTileSize);
+            applyParams.brushRadius = brushParams.radius;
+            applyParams.brushStrength = brushParams.strength;
+            applyParams.brushType = brushType;
+            applyParams.falloff = brushParams.falloff;
+            applyParams.shape = brushParams.shape;
+            applyParams.deltaTime = deltaTime;
+            applyParams.invert = invert;
+
+            if (terrain::CaveBrushApplicator::apply(*tile->caveData, applyParams))
+            {
+                // Regenerate cave mesh from modified SDF
+                terrain::CaveMeshGenerator::generate(*tile);
+
+                tile->caveDirty = true;
+                tile->caveGPUDirty = true;
+                tile->isDirty = true;
+                modifiedTiles.push_back(coord);
+            }
+        }
+
+        if (!modifiedTiles.empty())
+        {
+            syncCaveBoundaries(grid, modifiedTiles);
+            rebuildModifiedColliders(*targetEntity, grid, modifiedTiles);
+
+            events::caveBrush::CaveBrushAppliedNotification notification;
+            notification.position = worldPosition;
+            notification.type = brushType;
+            dispatcher.publish(notification);
+
+            auto& registry = scene::EntityRegistry::getRegistry();
+            entt::entity ent = internal::fromHandle(*targetEntity);
+            if (registry.valid(ent) && registry.all_of<components::TerrainComponent>(ent))
+            {
+                registry.get<components::TerrainComponent>(ent).saveDirty = true;
+            }
+        }
+    }
+
+    void TerrainService::syncCaveBoundaries(terrain::TerrainGrid* grid, const std::vector<terrain::TileCoord>& modifiedTiles)
+    {
+        // Sync SDF ghost voxels at tile boundaries for seamless Marching Cubes
+        for (const auto& coord : modifiedTiles)
+        {
+            terrain::TerrainTile* tile = grid->getTile(coord);
+            if (!tile || !tile->hasCaveData())
+                continue;
+
+            auto& sdf = *tile->caveData;
+
+            // Sync +X neighbor: copy last column of this tile to first column of neighbor
+            terrain::TerrainTile* neighborPX = grid->getTile({coord.x + 1, coord.z});
+            if (neighborPX && neighborPX->hasCaveData())
+            {
+                auto& nSdf = *neighborPX->caveData;
+                uint32_t lastX = sdf.config.resX - 1;
+                bool changed = false;
+                for (uint32_t y = 0; y < sdf.config.resY; ++y)
+                {
+                    for (uint32_t z = 0; z < sdf.config.resZ; ++z)
+                    {
+                        float myVal = sdf.getSDF(lastX, y, z);
+                        float nVal = nSdf.getSDF(0, y, z);
+                        float avg = (myVal + nVal) * 0.5f;
+                        sdf.setSDF(lastX, y, z, avg);
+                        nSdf.setSDF(0, y, z, avg);
+                        changed = true;
+                    }
+                }
+                if (changed)
+                {
+                    nSdf.isDirty = true;
+                    terrain::CaveMeshGenerator::generate(*neighborPX);
+                    neighborPX->caveDirty = true;
+                    neighborPX->caveGPUDirty = true;
+                }
+            }
+
+            // Sync +Z neighbor: copy last row of this tile to first row of neighbor
+            terrain::TerrainTile* neighborPZ = grid->getTile({coord.x, coord.z + 1});
+            if (neighborPZ && neighborPZ->hasCaveData())
+            {
+                auto& nSdf = *neighborPZ->caveData;
+                uint32_t lastZ = sdf.config.resZ - 1;
+                bool changed = false;
+                for (uint32_t y = 0; y < sdf.config.resY; ++y)
+                {
+                    for (uint32_t x = 0; x < sdf.config.resX; ++x)
+                    {
+                        float myVal = sdf.getSDF(x, y, lastZ);
+                        float nVal = nSdf.getSDF(x, y, 0);
+                        float avg = (myVal + nVal) * 0.5f;
+                        sdf.setSDF(x, y, lastZ, avg);
+                        nSdf.setSDF(x, y, 0, avg);
+                        changed = true;
+                    }
+                }
+                if (changed)
+                {
+                    nSdf.isDirty = true;
+                    terrain::CaveMeshGenerator::generate(*neighborPZ);
+                    neighborPZ->caveDirty = true;
+                    neighborPZ->caveGPUDirty = true;
+                }
             }
         }
     }

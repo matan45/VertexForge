@@ -203,4 +203,23 @@ namespace terrain
             return;
         holeMask[static_cast<size_t>(z) * quadCount + x] = isHoleValue ? 1 : 0;
     }
+
+    void TerrainTile::initializeCaveSDF()
+    {
+        caveData = std::make_unique<CaveSDFData>();
+        caveData->initialize(config, worldOrigin);
+        caveDirty = true;
+        caveGPUDirty = true;
+    }
+
+    void TerrainTile::initializeCaveSDFFromHeights()
+    {
+        if (!hasHeightData())
+            return;
+
+        caveData = std::make_unique<CaveSDFData>();
+        caveData->initializeFromHeightData(config, worldOrigin, heightData);
+        caveDirty = true;
+        caveGPUDirty = true;
+    }
 }

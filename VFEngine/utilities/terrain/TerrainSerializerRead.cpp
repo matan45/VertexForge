@@ -122,6 +122,7 @@ namespace terrain
             outIndex[i].weightDataOffset = readLE<uint64_t>(file);
             outIndex[i].meshletDataOffset = readLE<uint64_t>(file);
             outIndex[i].holeMaskDataOffset = readLE<uint64_t>(file);
+            outIndex[i].caveSdfDataOffset = readLE<uint64_t>(file);
         }
         return file.good();
     }

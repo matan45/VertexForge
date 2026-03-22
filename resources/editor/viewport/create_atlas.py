@@ -37,7 +37,8 @@ ICON_FILES = {
     6: "paint",               # scene
     7: "hole",               # scene
     8: "grass",               # scene
-    9: "tree"               # scene
+    9: "tree",               # scene
+    10: "cave",               # scene
 }
 
 def find_icon_file(base_name):
