@@ -73,6 +73,19 @@ namespace terrain
         if (sdf.originalSdfGrid.empty())
             return mb;
 
+        // Use tracked dirty region if available (set during brush application)
+        if (sdf.hasDirtyRegion)
+        {
+            mb.startX = sdf.dirtyMin.x > 1 ? sdf.dirtyMin.x - 1 : 0;
+            mb.startY = sdf.dirtyMin.y > 1 ? sdf.dirtyMin.y - 1 : 0;
+            mb.startZ = sdf.dirtyMin.z > 1 ? sdf.dirtyMin.z - 1 : 0;
+            mb.endX = std::min(sdf.dirtyMax.x + 1, sdf.config.resX - 1);
+            mb.endY = std::min(sdf.dirtyMax.y + 1, sdf.config.resY - 1);
+            mb.endZ = std::min(sdf.dirtyMax.z + 1, sdf.config.resZ - 1);
+            return mb;
+        }
+
+        // Fall back to full scan (e.g., loaded from file)
         uint32_t mMinX = sdf.config.resX, mMinY = sdf.config.resY, mMinZ = sdf.config.resZ;
         uint32_t mMaxX = 0, mMaxY = 0, mMaxZ = 0;
         bool anyModified = false;
@@ -215,7 +228,6 @@ namespace terrain
                     uint32_t b = ev[triTable[cubeIndex][i + 1]];
                     uint32_t c = ev[triTable[cubeIndex][i + 2]];
                     indices.push_back(a); indices.push_back(c); indices.push_back(b);
-                    indices.push_back(a); indices.push_back(b); indices.push_back(c);
                 }
             }
     }

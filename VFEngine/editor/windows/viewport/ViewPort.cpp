@@ -445,13 +445,16 @@ namespace windows
     void ViewPort::handleCaveBrush()
     {
         auto& dispatcher = events::EventDispatcher::instance();
-        if (!dispatcher.query(events::cave::IsCaveModeActiveQuery{}) || !ImGui::IsWindowHovered()) {
+        if (!dispatcher.query(events::cave::IsCaveModeActiveQuery{}) || !ImGui::IsWindowHovered())
+        {
             caveDragging = false;
             return;
         }
-        if (ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
+        if (ImGui::IsMouseDown(ImGuiMouseButton_Left))
+        {
             auto hitResult = dispatcher.query(events::terrainRaycast::GetTerrainHitQuery{});
-            if (hitResult.hit) {
+            if (hitResult.hit)
+            {
                 // Offset brush center INTO the mountain (opposite of surface normal)
                 // so the carve sphere is fully inside the solid, not half in air
                 auto brushParams = dispatcher.query(events::caveBrush::GetCaveBrushParamsQuery{});
@@ -466,7 +469,9 @@ namespace windows
                 dispatcher.execute(applyCmd);
                 caveDragging = true;
             }
-        } else {
+        }
+        else
+        {
             if (caveDragging)
             {
                 // Mouse released — finalize: punch holes, rebuild physics

@@ -448,6 +448,9 @@ namespace terrain
 
             // Read SDF grid data (raw floats)
             uint32_t gridSize = readLE<uint32_t>(file);
+            uint32_t expectedSize = outCaveData.config.resX * outCaveData.config.resY * outCaveData.config.resZ;
+            if (gridSize != expectedSize || gridSize > 50000000) // ~200MB max
+                return false;
             outCaveData.sdfGrid.resize(gridSize);
 
             for (uint32_t i = 0; i < gridSize; ++i)
@@ -459,6 +462,8 @@ namespace terrain
             uint32_t hasOriginal = readLE<uint32_t>(file);
             if (hasOriginal)
             {
+                if (gridSize != expectedSize || gridSize > 50000000)
+                    return false;
                 outCaveData.originalSdfGrid.resize(gridSize);
                 for (uint32_t i = 0; i < gridSize; ++i)
                 {

@@ -11,9 +11,12 @@
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/terrain/CaveBrushEvents.hpp"
 #include "../../events/terrain/CaveModeEvents.hpp"
+#include <cmath>
 
 namespace services
 {
+    static constexpr float CAVE_HOLE_PUNCH_THRESHOLD = 0.1f;
+
     void TerrainService::applyCaveBrush(const glm::vec3& worldPosition, float deltaTime, bool invert, bool isFirstApplication)
     {
         if (saveInProgress.load(std::memory_order_acquire) || svtBakeInProgress.load(std::memory_order_acquire))
@@ -81,9 +84,6 @@ namespace services
             // Apply 3D SDF carve — works in all directions (down, horizontal, up)
             terrain::CaveBrushApplicator::ApplyParams applyParams;
             applyParams.brushCenter = worldPosition;
-            applyParams.tileWorldOrigin = glm::vec2(
-                static_cast<float>(tile->coord.x) * tile->config.worldTileSize,
-                static_cast<float>(tile->coord.z) * tile->config.worldTileSize);
             applyParams.brushRadius = brushParams.radius;
             applyParams.brushStrength = brushParams.strength;
             applyParams.brushType = brushType;
@@ -142,7 +142,7 @@ namespace services
                             tile.worldOrigin.z + vz * tile.config.getVertexSpacing());
 
                         float currentSdf = sdf.sampleSDF(surfacePos);
-                        if (currentSdf > 0.1f)
+                        if (currentSdf > CAVE_HOLE_PUNCH_THRESHOLD)
                             shouldBeHole = true;
                     }
                 }
@@ -225,7 +225,10 @@ namespace services
 
         for (auto* tile : allTiles)
         {
-            if (!tile || !tile->hasCaveData() || !tile->caveData->hasCaveGeometry())
+            if (!tile || !tile->hasCaveData() || !tile->caveData->hasDirtyRegion)
+                continue;
+
+            if (!tile->caveData->hasCaveGeometry())
                 continue;
 
             punchCaveHolesForTile(*tile);
@@ -262,10 +265,15 @@ namespace services
             {
                 for (uint32_t z = 0; z < sdf.config.resZ; ++z)
                 {
-                    float avg = (sdf.getSDF(lastX, y, z) + nSdf.getSDF(0, y, z)) * 0.5f;
-                    sdf.setSDF(lastX, y, z, avg);
-                    nSdf.setSDF(0, y, z, avg);
-                    changed = true;
+                    float myVal = sdf.getSDF(lastX, y, z);
+                    float nVal = nSdf.getSDF(0, y, z);
+                    float avg = (myVal + nVal) * 0.5f;
+                    if (std::abs(avg - myVal) > 1e-6f || std::abs(avg - nVal) > 1e-6f)
+                    {
+                        sdf.setSDF(lastX, y, z, avg);
+                        nSdf.setSDF(0, y, z, avg);
+                        changed = true;
+                    }
                 }
             }
         }
@@ -276,10 +284,15 @@ namespace services
             {
                 for (uint32_t x = 0; x < sdf.config.resX; ++x)
                 {
-                    float avg = (sdf.getSDF(x, y, lastZ) + nSdf.getSDF(x, y, 0)) * 0.5f;
-                    sdf.setSDF(x, y, lastZ, avg);
-                    nSdf.setSDF(x, y, 0, avg);
-                    changed = true;
+                    float myVal = sdf.getSDF(x, y, lastZ);
+                    float nVal = nSdf.getSDF(x, y, 0);
+                    float avg = (myVal + nVal) * 0.5f;
+                    if (std::abs(avg - myVal) > 1e-6f || std::abs(avg - nVal) > 1e-6f)
+                    {
+                        sdf.setSDF(x, y, lastZ, avg);
+                        nSdf.setSDF(x, y, 0, avg);
+                        changed = true;
+                    }
                 }
             }
         }

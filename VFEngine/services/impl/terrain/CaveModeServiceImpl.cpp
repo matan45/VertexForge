@@ -5,6 +5,7 @@
 #include "../../events/terrain/PaintModeEvents.hpp"
 #include "../../events/terrain/HoleModeEvents.hpp"
 #include "../../events/vegetation/VegetationBrushEvents.hpp"
+#include "../../events/meshbrush/MeshBrushEvents.hpp"
 #include "../../events/editor/EditorModeEvents.hpp"
 #include "../../events/project/SceneEvents.hpp"
 #include "../../events/terrain/TerrainEvents.hpp"
@@ -22,6 +23,7 @@ namespace services
         if (paintModeToken.isValid()) dispatcher.unsubscribe(paintModeToken);
         if (holeModeToken.isValid()) dispatcher.unsubscribe(holeModeToken);
         if (vegetationBrushModeToken.isValid()) dispatcher.unsubscribe(vegetationBrushModeToken);
+        if (meshBrushModeToken.isValid()) dispatcher.unsubscribe(meshBrushModeToken);
     }
 
     void CaveModeServiceImpl::registerEventHandlers()
@@ -97,6 +99,12 @@ namespace services
             {
                 if (n.isActive && caveActive) deactivate();
             });
+
+        meshBrushModeToken = dispatcher.subscribe<events::meshBrush::MeshBrushModeChangedNotification>(
+            [this](const events::meshBrush::MeshBrushModeChangedNotification& n)
+            {
+                if (n.isActive && caveActive) deactivate();
+            });
     }
 
     std::optional<EntityHandle> CaveModeServiceImpl::resolveTerrainEntity(events::EventDispatcher& dispatcher)
@@ -145,23 +153,6 @@ namespace services
             return true;
 
         auto& dispatcher = events::EventDispatcher::instance();
-
-        // Deactivate other modes
-        {
-            events::sculpt::SetSculptModeActiveCommand cmd;
-            cmd.active = false;
-            dispatcher.execute(cmd);
-        }
-        {
-            events::paint::SetPaintModeActiveCommand cmd;
-            cmd.active = false;
-            dispatcher.execute(cmd);
-        }
-        {
-            events::hole::SetHoleModeActiveCommand cmd;
-            cmd.active = false;
-            dispatcher.execute(cmd);
-        }
 
         auto resolved = resolveTerrainEntity(dispatcher);
         if (!resolved.has_value())

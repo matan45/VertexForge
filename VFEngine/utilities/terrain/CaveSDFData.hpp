@@ -244,9 +244,11 @@ namespace terrain
                 return true; // No original data, process all
 
             bool anyModified = false;
-            bool anyOriginalSolid = false;
+            bool anyBelowSurface = false;
 
-            // Check all 8 corners of the cube
+            // Minimum depth below surface to avoid z-fighting with heightmap
+            constexpr float surfaceMargin = -0.3f;
+
             for (int dz = 0; dz <= 1; ++dz)
             {
                 for (int dy = 0; dy <= 1; ++dy)
@@ -260,17 +262,17 @@ namespace terrain
                             continue;
                         size_t idx = getIndex(cx, cy, cz);
 
-                        if (originalSdfGrid[idx] <= 0.0f)
-                            anyOriginalSolid = true;
+                        // Must be well below surface, not right at it
+                        if (originalSdfGrid[idx] < surfaceMargin)
+                            anyBelowSurface = true;
 
-                        if (std::abs(sdfGrid[idx] - originalSdfGrid[idx]) > 1e-4f)
+                        if (std::abs(sdfGrid[idx] - originalSdfGrid[idx]) > 0.05f)
                             anyModified = true;
                     }
                 }
             }
 
-            // Only generate mesh in cubes that were originally part of the terrain volume
-            return anyModified && anyOriginalSolid;
+            return anyModified && anyBelowSurface;
         }
 
         void clear()

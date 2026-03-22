@@ -26,6 +26,7 @@ namespace services
         uint8_t collisionLayer = 0;
     };
 
+    // Raw pointers valid only for the duration of synchronous collider creation calls
     struct CaveTileColliderInfo
     {
         int32_t tileX = 0;

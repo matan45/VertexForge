@@ -12,7 +12,6 @@ namespace terrain
         struct ApplyParams
         {
             glm::vec3 brushCenter;       // World position of brush center (3D)
-            glm::vec2 tileWorldOrigin;   // World XZ origin of this tile
             float brushRadius;
             float brushStrength;
             CaveBrushType brushType;
