@@ -37,6 +37,8 @@ namespace render::vegetation
         uint32_t vegetationType;         // 0=Grass, 1=Billboard
         uint32_t billboardTextureIndex;  // Bindless texture index for this dispatch
         uint32_t billboardMode;          // 0=Cross, 1=CameraFacing
+        uint32_t paletteEntryIndex;      // Which palette entry this dispatch is for
+        uint32_t paletteEntryCount;      // Total entries in palette
     };
 
     class GrassComputePipeline

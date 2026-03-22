@@ -49,6 +49,8 @@ layout(push_constant) uniform PushConstants {
     uint vegetationType;         // 0=Grass, 1=Billboard
     uint billboardTextureIndex;  // Bindless texture index for this dispatch
     uint billboardMode;          // 0=Cross, 1=CameraFacing
+    uint paletteEntryIndex;      // Which palette entry this dispatch is for
+    uint paletteEntryCount;      // Total entries in palette
 };
 
 float hash(vec2 p) {
@@ -115,6 +117,13 @@ void main() {
         // Deterministic hash per blade position -- no popping as camera moves
         float survivalHash = hash(seed * 11.3);
         if (survivalHash >= densityScale) continue;
+
+        // For billboard palette: assign each blade to exactly one entry via hash
+        if (paletteEntryCount > 1u) {
+            uint assignedEntry = uint(hash(seed * 17.3) * float(paletteEntryCount));
+            assignedEntry = min(assignedEntry, paletteEntryCount - 1u);
+            if (assignedEntry != paletteEntryIndex) continue;
+        }
 
         float jitterX = (hash(seed) - 0.5) * vertexSpacing;
         float jitterZ = (hash2(seed) - 0.5) * vertexSpacing;

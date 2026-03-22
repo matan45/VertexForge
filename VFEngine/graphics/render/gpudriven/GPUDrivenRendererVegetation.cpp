@@ -521,34 +521,36 @@ namespace render::gpudriven
                     0, nullptr,
                     0, nullptr);
 
+                vfLogInfo("VegDispatch: tile({},{}) vegType={} typeMask={:#x}",
+                          info.tile->coord.x, info.tile->coord.z, vegType, info.activeTypeMask);
+
                 auto pushConstants = basePushConstants;
                 pushConstants.densityMultiplier = baseDensityMult;
                 pushConstants.vegetationType = vegType;
                 pushConstants.billboardTextureIndex = 0xFFFFFFFF;
                 pushConstants.billboardMode = 0;
+                pushConstants.paletteEntryIndex = 0;
+                pushConstants.paletteEntryCount = 0;
 
-                // For billboard type: dispatch once per palette entry with its texture+mode
-                // Each entry gets a fraction of the density multiplier based on weight
+                // For billboard type: dispatch once per palette entry
+                // Each blade is assigned to exactly one entry via hash (no duplicates)
                 if (vegType == static_cast<uint32_t>(::vegetation::VegetationType::Billboard)
                     && !vegetation.billboardPalette.empty())
                 {
-                    float totalWeight = 0.0f;
-                    for (const auto& e : vegetation.billboardPalette) totalWeight += e.weight;
-                    if (totalWeight <= 0.0f) totalWeight = 1.0f;
+                    uint32_t entryCount = static_cast<uint32_t>(vegetation.billboardPalette.size());
 
-                    for (size_t ei = 0; ei < vegetation.billboardPalette.size(); ++ei)
+                    for (uint32_t ei = 0; ei < entryCount; ++ei)
                     {
                         const auto& entry = vegetation.billboardPalette[ei];
                         auto entryPC = pushConstants;
                         entryPC.billboardTextureIndex = entry.bindlessIndex;
                         entryPC.billboardMode = entry.mode;
-                        // Scale density by this entry's weight fraction
-                        entryPC.densityMultiplier = baseDensityMult * (entry.weight / totalWeight);
+                        entryPC.paletteEntryIndex = ei;
+                        entryPC.paletteEntryCount = entryCount;
 
                         vegetation.grassComputePipeline->dispatch(cmd, info.texelCount, entryPC);
 
-                        // Barrier between sub-dispatches (compute buffers are read-only, instances use atomic)
-                        if (ei + 1 < vegetation.billboardPalette.size())
+                        if (ei + 1 < entryCount)
                         {
                             vk::MemoryBarrier subBarrier(
                                 vk::AccessFlagBits::eShaderWrite,
