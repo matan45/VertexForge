@@ -67,14 +67,8 @@ void main() {
 
         dist = distance(worldPos, cameraPos);
         if (dist < fadeEndDistance) {
-            // Frustum culling with bounding sphere centered at mid-blade
-            // Use minimum radius of 2.0 to avoid over-culling small blades at frustum edges
-            vec3 sphereCenter = worldPos + vec3(0.0, bladeHeight * 0.5, 0.0);
-            float sphereRadius = max(bladeHeight * 0.6, 2.0);
-
-            if (sphereInFrustum(sphereCenter, sphereRadius)) {
-                visible = true;
-            }
+            // Distance-only culling (frustum culling disabled - caused false rejections)
+            visible = true;
         }
     }
 

@@ -1,6 +1,7 @@
 #include "GPUDrivenRenderer.hpp"
 #include "print/Log.hpp"
 #include <cmath>
+#include <algorithm>
 #include "../vegetation/GrassComputePipeline.hpp"
 #include "../vegetation/GrassMeshShaderPipeline.hpp"
 #include "../vegetation/WindSystem.hpp"
@@ -297,7 +298,8 @@ namespace render::gpudriven
         {
             const terrain::TerrainTile* tile;
             uint32_t texelCount;
-            uint32_t activeTypeMask; // bitmask of vegetation types with initialized density
+            uint32_t activeTypeMask;
+            float distSq; // Distance squared to camera for priority sorting
         };
         std::vector<TileDispatchInfo> dispatchTiles;
 
@@ -332,7 +334,7 @@ namespace render::gpudriven
             float cullDist = maxVegDist + tile->config.worldTileSize;
             if (tileDistSq > cullDist * cullDist) continue;
 
-            dispatchTiles.push_back({tile, tc, typeMask});
+            dispatchTiles.push_back({tile, tc, typeMask, tileDistSq});
             if (tc > maxTexelCount) maxTexelCount = tc;
         }
 
@@ -341,6 +343,10 @@ namespace render::gpudriven
             vegetation.currentGrassInstanceCount = 0;
             return;
         }
+
+        // Sort by distance: closer tiles get dispatched first (buffer priority)
+        std::sort(dispatchTiles.begin(), dispatchTiles.end(),
+            [](const TileDispatchInfo& a, const TileDispatchInfo& b) { return a.distSq < b.distSq; });
 
         uint32_t tileCount = static_cast<uint32_t>(dispatchTiles.size());
 
