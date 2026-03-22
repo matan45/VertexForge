@@ -55,10 +55,28 @@ namespace events::vegetation
         std::string_view getName() const override { return "GetBillboardPalette"; }
     };
 
-    struct ClearVegetationDensitySlotCommand : ICommand<void>
+    struct ClearAllBillboardInstancesCommand : ICommand<void>
     {
-        uint32_t slotIndex = 0;
+        std::string_view getName() const override { return "ClearAllBillboardInstances"; }
+    };
 
-        std::string_view getName() const override { return "ClearVegetationDensitySlot"; }
+    // Add billboard instances to a specific tile
+    struct AddBillboardInstancesToTileCommand : ICommand<void>
+    {
+        int32_t tileX = 0;
+        int32_t tileZ = 0;
+        std::vector<::vegetation::BillboardInstance> instances;
+
+        std::string_view getName() const override { return "AddBillboardInstancesToTile"; }
+    };
+
+    // Remove billboard instances from a specific tile by indices (sorted descending)
+    struct RemoveBillboardInstancesFromTileCommand : ICommand<void>
+    {
+        int32_t tileX = 0;
+        int32_t tileZ = 0;
+        std::vector<uint32_t> indicesToRemove; // Must be sorted descending
+
+        std::string_view getName() const override { return "RemoveBillboardInstancesFromTile"; }
     };
 }

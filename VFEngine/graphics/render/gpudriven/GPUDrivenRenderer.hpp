@@ -103,7 +103,7 @@ namespace vegetation
 
 namespace render::vegetation
 {
-    class GrassComputePipeline;
+    // GrassComputePipeline removed - instances uploaded directly
     class GrassMeshShaderPipeline;
     class WindSystem;
 }
@@ -181,7 +181,7 @@ namespace render::gpudriven
 
         struct VegetationState
         {
-            std::unique_ptr<render::vegetation::GrassComputePipeline> grassComputePipeline;
+            // Compute pipeline removed - instances uploaded directly
             std::unique_ptr<render::vegetation::GrassMeshShaderPipeline> grassMeshPipeline;
             std::unique_ptr<render::vegetation::WindSystem> windSystem;
 
@@ -212,11 +212,16 @@ namespace render::gpudriven
                 float weight = 1.0f;
                 float scaleMin = 0.0f;
                 float scaleMax = 0.0f;
-                float densityMultiplier = 1.0f;
                 bool visible = true;
             };
             std::vector<BillboardGPUEntry> billboardPalette;
             int32_t activeBillboardEntry = -1; // -1 = All (Random), >= 0 = specific entry
+
+            // Instance staging buffer for direct upload
+            vk::Buffer instanceStagingBuffer;
+            vk::DeviceMemory instanceStagingMemory;
+            void* instanceStagingMapped = nullptr;
+            uint32_t instanceStagingCapacity = 0;
 
             vk::DescriptorSetLayout cachedIBLLayout;
             vk::RenderPass cachedRenderPass;
@@ -614,7 +619,6 @@ namespace render::gpudriven
                 gpu.weight = e.weight;
                 gpu.scaleMin = e.scaleRange.x;
                 gpu.scaleMax = e.scaleRange.y;
-                gpu.densityMultiplier = e.densityMultiplier;
                 gpu.visible = e.visible;
 
                 // Register texture with bindless system if path is set

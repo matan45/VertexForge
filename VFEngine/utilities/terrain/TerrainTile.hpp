@@ -3,7 +3,6 @@
 #include "TerrainTypes.hpp"
 #include "TerrainWeightMap.hpp"
 #include "CaveSDFData.hpp"
-#include "../vegetation/VegetationDensityMap.hpp"
 #include "../vegetation/VegetationTypes.hpp"
 #include "../resource/Types.hpp"
 #include "../resource/MeshletTypes.hpp"
@@ -66,10 +65,10 @@ namespace terrain
         bool weightMapDirty = false;
         bool weightMapGPUDirty = false;
 
-        // Per-vegetation-type density maps
-        std::array<vegetation::VegetationDensityMap, vegetation::VEGETATION_TYPE_COUNT> vegetationDensityMaps;
-        std::array<bool, vegetation::VEGETATION_TYPE_COUNT> vegetationDensityDirty{};
-        std::array<bool, vegetation::VEGETATION_TYPE_COUNT> vegetationDensityGPUDirty{};
+        // Billboard vegetation instances placed by brush
+        std::vector<vegetation::BillboardInstance> billboardInstances;
+        bool billboardInstancesDirty = false;
+        bool billboardInstancesGPUDirty = false;
 
         std::unique_ptr<CaveSDFData> caveData;
         TileLODData caveLOD;
@@ -122,11 +121,7 @@ namespace terrain
         void initializeWeightMap();
         [[nodiscard]] bool hasWeightMap() const { return weightMap.isInitialized(); }
 
-        void initializeVegetationDensity();
-        [[nodiscard]] bool hasVegetationDensity(uint32_t typeIndex = 0) const
-        {
-            return vegetationDensityMaps[typeIndex].isInitialized();
-        }
+        [[nodiscard]] bool hasBillboardInstances() const { return !billboardInstances.empty(); }
 
         void initializeCaveSDF();
         void initializeCaveSDFFromHeights();

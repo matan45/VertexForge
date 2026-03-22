@@ -1,23 +1,22 @@
 #pragma once
 
-#include "VegetationDensityMap.hpp"
+#include "VegetationTypes.hpp"
 #include <string>
+#include <vector>
 #include <cstdint>
 #include <array>
 
 namespace vegetation
 {
-    static constexpr std::array<char, 4> VEGETATION_DENSITY_MAGIC = {'V', 'F', 'V', 'D'};
-    static constexpr uint32_t VEGETATION_FORMAT_VERSION = 1;
-
-    // Sanity caps for file-read sizes to guard against corrupt data
-    static constexpr uint32_t MAX_DENSITY_RESOLUTION = 512;
+    static constexpr std::array<char, 4> VEGETATION_INSTANCE_MAGIC = {'V', 'F', 'V', 'I'};
+    static constexpr uint32_t VEGETATION_INSTANCE_FORMAT_VERSION = 1;
 
     class VegetationSerializer
     {
     public:
-        // Save vegetation density map for a tile to binary file
-        static bool saveDensityMap(const std::string& filePath, const VegetationDensityMap& densityMap);
-        static bool loadDensityMap(const std::string& filePath, VegetationDensityMap& densityMap);
+        static bool saveBillboardInstances(const std::string& filePath,
+                                            const std::vector<BillboardInstance>& instances);
+        static bool loadBillboardInstances(const std::string& filePath,
+                                            std::vector<BillboardInstance>& instances);
     };
 }

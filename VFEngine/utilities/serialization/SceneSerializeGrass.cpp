@@ -56,7 +56,6 @@ namespace serialization
             e["weight"] = entry.weight;
             e["scaleMin"] = entry.scaleRange.x;
             e["scaleMax"] = entry.scaleRange.y;
-            e["densityMultiplier"] = entry.densityMultiplier;
             e["mode"] = static_cast<int>(entry.mode);
             e["visible"] = entry.visible;
             e["paintEnabled"] = entry.paintEnabled;
@@ -147,8 +146,6 @@ namespace serialization
                     entry.scaleRange.x = e["scaleMin"].get<float>();
                 if (e.contains("scaleMax") && e["scaleMax"].is_number())
                     entry.scaleRange.y = e["scaleMax"].get<float>();
-                if (e.contains("densityMultiplier") && e["densityMultiplier"].is_number())
-                    entry.densityMultiplier = e["densityMultiplier"].get<float>();
                 if (e.contains("mode") && e["mode"].is_number())
                     entry.mode = static_cast<vegetation::BillboardMode>(e["mode"].get<int>());
                 if (e.contains("visible") && e["visible"].is_boolean())

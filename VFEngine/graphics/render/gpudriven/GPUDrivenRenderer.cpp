@@ -3,7 +3,7 @@
 #include "../occlusion/DepthPrepassPipeline.hpp"
 #include "../occlusion/HiZBuffer.hpp"
 #include "../mesh/MeshStreamManager.hpp"
-#include "../vegetation/GrassComputePipeline.hpp"
+// GrassComputePipeline removed - instance-based upload
 #include "../vegetation/GrassMeshShaderPipeline.hpp"
 #include "../vegetation/WindSystem.hpp"
 #include "../vegetation/VegetationBufferManager.hpp"

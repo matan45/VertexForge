@@ -213,7 +213,6 @@ namespace services
         bool loadVegetation(uint64_t terrainEntityId, const std::string& terrainPath);
         static std::string getVegetationDirectory(const std::string& terrainPath);
 
-        void applyVegetationDensityBrush(const glm::vec3& worldPosition, float deltaTime, bool invert, bool isFirstApplication);
         void registerVegetationBrushHandlers(::events::EventDispatcher& dispatcher);
 
         void registerCaveBrushHandlers(::events::EventDispatcher& dispatcher);

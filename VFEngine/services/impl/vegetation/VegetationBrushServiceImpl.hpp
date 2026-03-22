@@ -2,18 +2,47 @@
 #include "../../interfaces/vegetation/IVegetationBrushService.hpp"
 #include "../../events/EventTypes.hpp"
 #include "../../../utilities/vegetation/VegetationTypes.hpp"
+#include "../../../utilities/vegetation/VegetationSpatialGrid.hpp"
+#include "../../../utilities/terrain/TerrainTypes.hpp"
+#include <random>
+#include <unordered_map>
+#include <functional>
 
 namespace services
 {
+    using BillboardPaletteCallback = std::function<void(const std::vector<vegetation::BillboardPaletteEntry>&, int32_t activeEntry)>;
+
     class VegetationBrushServiceImpl : public IVegetationBrushService
     {
     private:
-        vegetation::DensityBrushParams currentDensityParams;
-        vegetation::DensityBrushType currentDensityBrushType = vegetation::DensityBrushType::Paint;
-        vegetation::VegetationType activeVegetationType = vegetation::VegetationType::Billboard;
-        vegetation::MixedBrushConfig mixedBrushConfig;
+        vegetation::VegetationBrushParams currentParams;
+        vegetation::VegetationBrushType currentBrushType = vegetation::VegetationBrushType::Paint;
         bool vegetationModeActive = false;
 
+        // Spatial grids per tile for erase queries and spacing checks
+        struct TileCoordHash
+        {
+            size_t operator()(const terrain::TileCoord& c) const
+            {
+                return std::hash<int>{}(c.x) ^ (std::hash<int>{}(c.z) << 16);
+            }
+        };
+        struct TileCoordEqual
+        {
+            bool operator()(const terrain::TileCoord& a, const terrain::TileCoord& b) const
+            {
+                return a.x == b.x && a.z == b.z;
+            }
+        };
+        std::unordered_map<terrain::TileCoord, vegetation::VegetationSpatialGrid, TileCoordHash, TileCoordEqual> spatialGrids;
+
+        // Placement state
+        std::mt19937 rng{std::random_device{}()};
+        glm::vec3 lastPlacementPos{0.0f};
+        bool hasLastPlacement = false;
+        float worldTileSize = 32.0f;
+
+        BillboardPaletteCallback billboardPaletteCb;
         ::events::SubscriptionToken vegetationModeToken;
 
     public:
@@ -21,15 +50,16 @@ namespace services
         ~VegetationBrushServiceImpl() override;
 
         void registerEventHandlers() override;
+        void setBillboardPaletteCallback(BillboardPaletteCallback cb) { billboardPaletteCb = std::move(cb); }
+        void setWorldTileSize(float size) { worldTileSize = size; }
 
     private:
-        void setDensityParams(const vegetation::DensityBrushParams& params);
-        void setDensityBrushType(vegetation::DensityBrushType type);
+        void applyBrush(const glm::vec3& worldPos, float deltaTime, bool isFirstApplication);
+        void placeBillboards(const glm::vec3& worldPos,
+                             const std::vector<vegetation::BillboardPaletteEntry>& palette);
+        void eraseBillboards(const glm::vec3& worldPos);
 
-        vegetation::DensityBrushParams getDensityParams() const;
-        vegetation::DensityBrushType getDensityBrushType() const;
-
-        void publishDensityParamsChanged();
-        void publishDensityTypeChanged();
+        terrain::TileCoord worldToTileCoord(float worldX, float worldZ) const;
+        vegetation::VegetationSpatialGrid& ensureSpatialGrid(const terrain::TileCoord& coord);
     };
 }

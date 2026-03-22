@@ -201,9 +201,8 @@
     <ClInclude Include="types\RenderSettings.hpp" />
     <ClInclude Include="uuid\UUID.hpp" />
     <ClInclude Include="vegetation\GrassConfig.hpp" />
-    <ClInclude Include="vegetation\VegetationDensityBrushApplicator.hpp" />
-    <ClInclude Include="vegetation\VegetationDensityMap.hpp" />
     <ClInclude Include="vegetation\VegetationSerializer.hpp" />
+    <ClInclude Include="vegetation\VegetationSpatialGrid.hpp" />
     <ClInclude Include="vegetation\VegetationTypes.hpp" />
     <ClInclude Include="vegetation\WindConfig.hpp" />
     <ClInclude Include="water\WaterDefinitionMap.hpp" />
@@ -266,8 +265,6 @@
     <ClCompile Include="threading\TaskGraphBuilder.cpp" />
     <ClCompile Include="threading\TaskProfiler.cpp" />
     <ClCompile Include="time\Timer.cpp" />
-    <ClCompile Include="vegetation\VegetationDensityBrushApplicator.cpp" />
-    <ClCompile Include="vegetation\VegetationDensityMap.cpp" />
     <ClCompile Include="vegetation\VegetationSerializer.cpp" />
     <ClCompile Include="water\WaterGrid.cpp" />
     <ClCompile Include="water\WaterSerializer.cpp" />

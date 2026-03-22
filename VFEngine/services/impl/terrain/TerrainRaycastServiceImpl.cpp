@@ -285,11 +285,11 @@ namespace services
                     if (provider)
                     {
                         auto brushParams = events::EventDispatcher::instance().query(
-                            events::vegetationBrush::GetDensityBrushParamsQuery{});
+                            events::vegetationBrush::GetVegetationBrushParamsQuery{});
                         provider->setBrushOverlayParams(
                             brushParams.radius,
                             static_cast<float>(brushParams.falloff),
-                            static_cast<float>(brushParams.shape));
+                            0.0f);
                     }
                 }
                 else
@@ -303,17 +303,7 @@ namespace services
                 }
             });
 
-        vegBrushParamsToken = dispatcher.subscribe<events::vegetationBrush::DensityBrushParamsChangedNotification>(
-            [this](const events::vegetationBrush::DensityBrushParamsChangedNotification& n)
-            {
-                if (vegBrushModeActive && provider)
-                {
-                    provider->setBrushOverlayParams(
-                        n.params.radius,
-                        static_cast<float>(n.params.falloff),
-                        static_cast<float>(n.params.shape));
-                }
-            });
+        // Vegetation brush params change subscription removed - params now handled by VegetationBrushServiceImpl
 
         meshBrushModeToken = dispatcher.subscribe<events::meshBrush::MeshBrushModeChangedNotification>(
             [this](const events::meshBrush::MeshBrushModeChangedNotification& n)

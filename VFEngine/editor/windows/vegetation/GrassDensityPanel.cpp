@@ -50,33 +50,33 @@ namespace windows
 
         ImGui::Separator();
 
-        const char* brushTypes[] = {"Paint", "Erase", "Smooth", "Fill"};
+        // Brush type: Paint / Erase
+        const char* brushTypes[] = {"Paint", "Erase"};
         if (ImGui::Combo("Brush Type", &selectedBrushType, brushTypes, IM_ARRAYSIZE(brushTypes)))
         {
-            events::vegetationBrush::SetDensityBrushTypeCommand cmd;
-            cmd.type = static_cast<vegetation::DensityBrushType>(selectedBrushType);
+            events::vegetationBrush::SetVegetationBrushTypeCommand cmd;
+            cmd.type = static_cast<vegetation::VegetationBrushType>(selectedBrushType);
             events::EventDispatcher::instance().execute(cmd);
         }
 
-        if (ImGui::SliderFloat("Radius", &brushRadius, 0.1f, 100.0f))
-        {
-            vegetation::DensityBrushParams params;
-            params.radius = brushRadius;
-            params.strength = brushStrength;
-            params.opacity = brushOpacity;
-            params.falloff = static_cast<terrain::BrushFalloff>(falloffIndex);
-            params.shape = static_cast<terrain::BrushShape>(shapeIndex);
+        bool paramsChanged = false;
+        paramsChanged |= ImGui::SliderFloat("Radius", &brushRadius, 0.1f, 100.0f);
+        paramsChanged |= ImGui::SliderFloat("Spacing", &brushSpacing, 0.1f, 5.0f);
+        paramsChanged |= ImGui::SliderFloat("Density", &brushDensity, 0.1f, 10.0f);
+        paramsChanged |= ImGui::SliderFloat("Jitter", &brushJitter, 0.0f, 1.0f);
 
-            events::vegetationBrush::SetDensityBrushParamsCommand cmd;
+        if (paramsChanged)
+        {
+            vegetation::VegetationBrushParams params;
+            params.radius = brushRadius;
+            params.spacing = brushSpacing;
+            params.density = brushDensity;
+            params.positionJitter = brushJitter;
+
+            events::vegetationBrush::SetVegetationBrushParamsCommand cmd;
             cmd.params = params;
             events::EventDispatcher::instance().execute(cmd);
         }
-
-        ImGui::SliderFloat("Strength", &brushStrength, 0.0f, 10.0f);
-        ImGui::SliderFloat("Opacity", &brushOpacity, 0.0f, 1.0f);
-
-        const char* falloffTypes[] = {"Constant", "Linear", "Smooth", "Sharp"};
-        ImGui::Combo("Falloff", &falloffIndex, falloffTypes, IM_ARRAYSIZE(falloffTypes));
 
         ImGui::Separator();
 
@@ -155,11 +155,6 @@ namespace windows
 
         if (removeIndex >= 0)
         {
-            // Clear density data for this slot on all terrain tiles
-            events::vegetation::ClearVegetationDensitySlotCommand clearCmd;
-            clearCmd.slotIndex = static_cast<uint32_t>(removeIndex);
-            events::EventDispatcher::instance().execute(clearCmd);
-
             billboardEntries.erase(billboardEntries.begin() + removeIndex);
             pushBillboardPalette();
         }
@@ -169,17 +164,13 @@ namespace windows
             billboardEntries.emplace_back();
         }
         ImGui::SameLine();
-        if (ImGui::Button("Clear All Density"))
+        if (ImGui::Button("Clear All"))
         {
-            for (uint32_t i = 0; i < vegetation::MAX_BILLBOARD_ENTRIES; ++i)
-            {
-                events::vegetation::ClearVegetationDensitySlotCommand clearCmd;
-                clearCmd.slotIndex = i;
-                events::EventDispatcher::instance().execute(clearCmd);
-            }
+            events::vegetation::ClearAllBillboardInstancesCommand clearCmd;
+            events::EventDispatcher::instance().execute(clearCmd);
         }
         if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("Clear all painted vegetation from terrain");
+            ImGui::SetTooltip("Remove all placed billboard instances from terrain");
     }
 
     void GrassDensityPanel::drawBillboardEntry(int index, int& removeIndex)
@@ -243,18 +234,6 @@ namespace windows
                 pushBillboardPalette();
             if (ImGui::DragFloat2("Scale Range", &entry.scaleRange.x, 0.01f, 0.1f, 10.0f))
                 pushBillboardPalette();
-            if (ImGui::DragFloat("Density", &entry.densityMultiplier, 0.01f, 0.01f, 5.0f, "%.2f"))
-                pushBillboardPalette();
-
-            if (ImGui::Button("Clear Density"))
-            {
-                events::vegetation::ClearVegetationDensitySlotCommand clearCmd;
-                clearCmd.slotIndex = static_cast<uint32_t>(index);
-                events::EventDispatcher::instance().execute(clearCmd);
-            }
-            if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("Clear this entry's painted density from all tiles");
-            ImGui::SameLine();
             if (ImGui::Button("Remove"))
                 removeIndex = index;
 

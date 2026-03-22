@@ -129,23 +129,16 @@ namespace services
 
         for (const auto* tile : allTiles)
         {
-            if (!tile) continue;
+            if (!tile || tile->billboardInstances.empty()) continue;
 
-            for (uint32_t t = 0; t < vegetation::VEGETATION_TYPE_COUNT; ++t)
+            anyData = true;
+            std::string instancesPath = std::format("{}/tile_{}_{}.vfVegInstances",
+                vegDir, tile->coord.x, tile->coord.z);
+            if (!vegetation::VegetationSerializer::saveBillboardInstances(instancesPath, tile->billboardInstances))
             {
-                if (tile->vegetationDensityMaps[t].isInitialized())
-                {
-                    anyData = true;
-                    std::string densityPath = std::format("{}/tile_{}_{}_{}.vfVegDensity",
-                        vegDir, tile->coord.x, tile->coord.z, t);
-                    if (!vegetation::VegetationSerializer::saveDensityMap(densityPath, tile->vegetationDensityMaps[t]))
-                    {
-                        vfLogError("TerrainService: Failed to save vegetation density type {} for tile ({}, {})",
-                                   t, tile->coord.x, tile->coord.z);
-                    }
-                }
+                vfLogError("TerrainService: Failed to save billboard instances for tile ({}, {})",
+                           tile->coord.x, tile->coord.z);
             }
-
         }
 
         if (anyData)
@@ -167,33 +160,29 @@ namespace services
             return true; // No vegetation data — not an error
 
         auto allTiles = gridIt->second->getAllTiles();
-        uint32_t loadedDensity = 0;
+        uint32_t loadedCount = 0;
 
         for (auto* tile : allTiles)
         {
             if (!tile) continue;
 
-            for (uint32_t t = 0; t < vegetation::VEGETATION_TYPE_COUNT; ++t)
+            std::string instancesPath = std::format("{}/tile_{}_{}.vfVegInstances",
+                vegDir, tile->coord.x, tile->coord.z);
+            if (fs::exists(instancesPath))
             {
-                std::string densityPath = std::format("{}/tile_{}_{}_{}.vfVegDensity",
-                    vegDir, tile->coord.x, tile->coord.z, t);
-                if (fs::exists(densityPath))
+                if (vegetation::VegetationSerializer::loadBillboardInstances(instancesPath, tile->billboardInstances))
                 {
-                    if (vegetation::VegetationSerializer::loadDensityMap(densityPath, tile->vegetationDensityMaps[t]))
-                    {
-                        tile->vegetationDensityDirty[t] = true;
-                        tile->vegetationDensityGPUDirty[t] = true;
-                        loadedDensity++;
-                    }
+                    tile->billboardInstancesDirty = true;
+                    tile->billboardInstancesGPUDirty = true;
+                    loadedCount++;
                 }
             }
-
         }
 
-        if (loadedDensity > 0)
+        if (loadedCount > 0)
         {
             vfLogInfo("TerrainService: Loaded vegetation density data ({} tiles) from {}",
-                      loadedDensity, vegDir);
+                      loadedCount, vegDir);
         }
 
         return true;

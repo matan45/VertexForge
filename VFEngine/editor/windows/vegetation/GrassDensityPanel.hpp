@@ -12,23 +12,17 @@ namespace windows
         bool visible = false;
         int selectedBrushType = 0;
         float brushRadius = 5.0f;
-        float brushStrength = 10.0f;
-        float brushOpacity = 1.0f;
-        int falloffIndex = 2;
-        int shapeIndex = 0;
-
-        // Billboard palette
-        int selectedVegetationType = 0; // Always Billboard (0)
+        float brushSpacing = 0.5f;
+        float brushDensity = 1.0f;
+        float brushJitter = 0.5f;
 
         // Billboard palette
         std::vector<vegetation::BillboardPaletteEntry> billboardEntries;
-        int paintTargetEntry = 0; // Which entry the brush paints for
 
         vegetation::GrassRenderConfig grassConfig;
         bool configLoaded = false;
 
         events::SubscriptionToken modeToken;
-
         bool subscribed = false;
 
     public:

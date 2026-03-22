@@ -192,16 +192,13 @@ namespace services
                     namespace fs = std::filesystem;
                     std::string vegDir = getVegetationDirectory(tc.savePath);
 
-                    for (uint32_t t = 0; t < vegetation::VEGETATION_TYPE_COUNT; ++t)
+                    std::string instancesPath = std::format("{}/tile_{}_{}.vfVegInstances",
+                        vegDir, tileX, tileZ);
+                    if (fs::exists(instancesPath))
                     {
-                        std::string densityPath = std::format("{}/tile_{}_{}_{}.vfVegDensity",
-                            vegDir, tileX, tileZ, t);
-                        if (fs::exists(densityPath))
-                        {
-                            vegetation::VegetationSerializer::loadDensityMap(densityPath, tile->vegetationDensityMaps[t]);
-                            tile->vegetationDensityDirty[t] = true;
-                            tile->vegetationDensityGPUDirty[t] = true;
-                        }
+                        vegetation::VegetationSerializer::loadBillboardInstances(instancesPath, tile->billboardInstances);
+                        tile->billboardInstancesDirty = true;
+                        tile->billboardInstancesGPUDirty = true;
                     }
 
                 }

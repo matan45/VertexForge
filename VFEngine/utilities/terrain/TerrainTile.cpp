@@ -173,12 +173,6 @@ namespace terrain
         weightMapGPUDirty = true;
     }
 
-    void TerrainTile::initializeVegetationDensity()
-    {
-        vegetationDensityMaps[0].initializeDefault(config.getVertexCount());
-        vegetationDensityDirty[0] = true;
-        vegetationDensityGPUDirty[0] = true;
-    }
 
     void TerrainTile::initializeHoleMask()
     {

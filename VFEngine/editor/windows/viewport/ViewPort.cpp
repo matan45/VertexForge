@@ -497,10 +497,10 @@ namespace windows
         if (ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
             auto hitResult = dispatcher.query(events::terrainRaycast::GetTerrainHitQuery{});
             if (hitResult.hit) {
-                events::vegetationBrush::ApplyVegetationDensityBrushCommand applyCmd;
+                events::vegetationBrush::ApplyVegetationBrushCommand applyCmd;
                 applyCmd.worldPosition = hitResult.position;
+                applyCmd.surfaceNormal = hitResult.normal;
                 applyCmd.deltaTime = ImGui::GetIO().DeltaTime;
-                applyCmd.invert = ImGui::GetIO().KeyShift;
                 applyCmd.isFirstApplication = !vegetationDragging;
                 dispatcher.execute(applyCmd);
                 vegetationDragging = true;

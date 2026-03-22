@@ -40,32 +40,7 @@ namespace services
                 return getGlobalGrassConfig();
             });
 
-        dispatcher.registerCommandHandler<events::vegetation::SetBillboardPaletteCommand>(
-            [this](const events::vegetation::SetBillboardPaletteCommand& cmd) {
-                // Save to ECS component (create if needed)
-                auto& registry = scene::EntityRegistry::getRegistry();
-                auto view = registry.view<components::GrassComponent>();
-                entt::entity target = entt::null;
-                for (auto entity : view) { target = entity; break; }
-                if (target == entt::null)
-                {
-                    target = registry.create();
-                    registry.emplace<components::GrassComponent>(target);
-                }
-                registry.get<components::GrassComponent>(target).billboardPalette = cmd.entries;
-                if (billboardPaletteCb) billboardPaletteCb(cmd.entries, cmd.activeEntry);
-            });
-
-        dispatcher.registerQueryHandler<events::vegetation::GetBillboardPaletteQuery>(
-            [](const events::vegetation::GetBillboardPaletteQuery&) -> std::vector<vegetation::BillboardPaletteEntry> {
-                auto& registry = scene::EntityRegistry::getRegistry();
-                auto view = registry.view<components::GrassComponent>();
-                for (auto entity : view)
-                {
-                    return view.get<components::GrassComponent>(entity).billboardPalette;
-                }
-                return {};
-            });
+        // Billboard palette handlers moved to VegetationBrushServiceImpl
     }
 
     void GrassServiceImpl::setGrassConfig(EntityHandle entityId, const vegetation::GrassRenderConfig& config)

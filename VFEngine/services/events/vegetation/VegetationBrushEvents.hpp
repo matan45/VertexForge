@@ -9,42 +9,28 @@ namespace events::vegetationBrush
 {
     // ---- Commands ----
 
-    struct ApplyVegetationDensityBrushCommand : ICommand<>
+    struct ApplyVegetationBrushCommand : ICommand<>
     {
         glm::vec3 worldPosition{0.0f};
+        glm::vec3 surfaceNormal{0.0f, 1.0f, 0.0f};
         float deltaTime = 0.0f;
-        bool invert = false;
         bool isFirstApplication = false;
 
-        std::string_view getName() const override { return "ApplyVegetationDensityBrush"; }
+        std::string_view getName() const override { return "ApplyVegetationBrush"; }
     };
 
-    struct SetDensityBrushParamsCommand : ICommand<>
+    struct SetVegetationBrushParamsCommand : ICommand<>
     {
-        ::vegetation::DensityBrushParams params;
+        ::vegetation::VegetationBrushParams params;
 
-        std::string_view getName() const override { return "SetDensityBrushParams"; }
+        std::string_view getName() const override { return "SetVegetationBrushParams"; }
     };
 
-    struct SetDensityBrushTypeCommand : ICommand<>
+    struct SetVegetationBrushTypeCommand : ICommand<>
     {
-        ::vegetation::DensityBrushType type;
+        ::vegetation::VegetationBrushType type;
 
-        std::string_view getName() const override { return "SetDensityBrushType"; }
-    };
-
-    struct SetActiveVegetationTypeCommand : ICommand<>
-    {
-        ::vegetation::VegetationType type;
-
-        std::string_view getName() const override { return "SetActiveVegetationType"; }
-    };
-
-    struct SetMixedBrushConfigCommand : ICommand<>
-    {
-        ::vegetation::MixedBrushConfig config;
-
-        std::string_view getName() const override { return "SetMixedBrushConfig"; }
+        std::string_view getName() const override { return "SetVegetationBrushType"; }
     };
 
     // ---- Mode Commands ----
@@ -58,24 +44,14 @@ namespace events::vegetationBrush
 
     // ---- Queries ----
 
-    struct GetDensityBrushParamsQuery : IQuery<::vegetation::DensityBrushParams>
+    struct GetVegetationBrushParamsQuery : IQuery<::vegetation::VegetationBrushParams>
     {
-        std::string_view getName() const override { return "GetDensityBrushParams"; }
+        std::string_view getName() const override { return "GetVegetationBrushParams"; }
     };
 
-    struct GetDensityBrushTypeQuery : IQuery<::vegetation::DensityBrushType>
+    struct GetVegetationBrushTypeQuery : IQuery<::vegetation::VegetationBrushType>
     {
-        std::string_view getName() const override { return "GetDensityBrushType"; }
-    };
-
-    struct GetActiveVegetationTypeQuery : IQuery<::vegetation::VegetationType>
-    {
-        std::string_view getName() const override { return "GetActiveVegetationType"; }
-    };
-
-    struct GetMixedBrushConfigQuery : IQuery<::vegetation::MixedBrushConfig>
-    {
-        std::string_view getName() const override { return "GetMixedBrushConfig"; }
+        std::string_view getName() const override { return "GetVegetationBrushType"; }
     };
 
     struct IsVegetationBrushModeActiveQuery : IQuery<bool>
@@ -90,26 +66,13 @@ namespace events::vegetationBrush
 
     // ---- Notifications ----
 
-    struct VegetationDensityBrushAppliedNotification : INotification
+    struct VegetationBrushAppliedNotification : INotification
     {
         glm::vec3 position{0.0f};
-        ::vegetation::DensityBrushType type;
+        uint32_t placedCount = 0;
+        uint32_t erasedCount = 0;
 
-        std::string_view getName() const override { return "VegetationDensityBrushApplied"; }
-    };
-
-    struct DensityBrushParamsChangedNotification : INotification
-    {
-        ::vegetation::DensityBrushParams params;
-
-        std::string_view getName() const override { return "DensityBrushParamsChanged"; }
-    };
-
-    struct DensityBrushTypeChangedNotification : INotification
-    {
-        ::vegetation::DensityBrushType type;
-
-        std::string_view getName() const override { return "DensityBrushTypeChanged"; }
+        std::string_view getName() const override { return "VegetationBrushApplied"; }
     };
 
     struct VegetationBrushModeChangedNotification : INotification
