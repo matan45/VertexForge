@@ -15,6 +15,7 @@ namespace services
         ::events::SubscriptionToken sceneClearedToken;
         ::events::SubscriptionToken sculptModeToken;
         ::events::SubscriptionToken holeModeToken;
+        ::events::SubscriptionToken caveModeToken;
         ::events::SubscriptionToken vegetationBrushModeToken;
 
     public:

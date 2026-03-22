@@ -13,11 +13,14 @@ namespace services
         bool sculptModeActive = false;
         bool paintModeActive = false;
         bool holeModeActive = false;
+        bool caveModeActive = false;
         bool vegBrushModeActive = false;
         bool meshBrushModeActive = false;
         ::events::SubscriptionToken sculptModeToken;
         ::events::SubscriptionToken paintModeToken;
         ::events::SubscriptionToken holeModeToken;
+        ::events::SubscriptionToken caveModeToken;
+        ::events::SubscriptionToken caveBrushParamsToken;
         ::events::SubscriptionToken brushParamsToken;
         ::events::SubscriptionToken paintBrushParamsToken;
         ::events::SubscriptionToken holeBrushParamsToken;

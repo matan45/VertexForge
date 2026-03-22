@@ -157,7 +157,7 @@ namespace windows
                 ImGui::SameLine();
 
                 ImGui::BeginDisabled(bakeBlocked || (!isCaveMode && !canUseTerrain));
-                if (iconButton(ViewportIcon::Hole, isCaveMode, isCaveMode ? "Exit Cave Mode" : "Enter Cave Mode"))
+                if (iconButton(ViewportIcon::Cave, isCaveMode, isCaveMode ? "Exit Cave Mode" : "Enter Cave Mode"))
                 {
                     events::cave::SetCaveModeActiveCommand cmd;
                     cmd.active = !isCaveMode;

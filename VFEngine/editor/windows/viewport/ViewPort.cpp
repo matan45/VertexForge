@@ -332,10 +332,11 @@ namespace windows
         bool sculptActive = dispatcher.query(events::sculpt::IsSculptModeActiveQuery{});
         bool paintActive = dispatcher.query(events::paint::IsPaintModeActiveQuery{});
         bool holeActive = dispatcher.query(events::hole::IsHoleModeActiveQuery{});
+        bool caveActive = dispatcher.query(events::cave::IsCaveModeActiveQuery{});
         bool vegActive = dispatcher.query(events::vegetationBrush::IsVegetationBrushModeActiveQuery{});
         bool meshBrushActive = dispatcher.query(events::meshBrush::IsMeshBrushModeActiveQuery{});
 
-        bool anyActive = sculptActive || paintActive || holeActive || vegActive || meshBrushActive;
+        bool anyActive = sculptActive || paintActive || holeActive || caveActive || vegActive || meshBrushActive;
 
         if (!anyActive || !ImGui::IsWindowHovered())
         {
@@ -349,6 +350,7 @@ namespace windows
         if (sculptActive) updateSculptCursorUV(viewportPos, viewportSize);
         else if (paintActive) updatePaintCursorUV(viewportPos, viewportSize);
         else if (holeActive) updateHoleCursorUV(viewportPos, viewportSize);
+        else if (caveActive) sendCursorUV(viewportPos, viewportSize);
         else if (vegActive) updateVegetationCursorUV(viewportPos, viewportSize);
         else if (meshBrushActive) updateMeshBrushCursorUV(viewportPos, viewportSize);
     }
