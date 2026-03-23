@@ -218,7 +218,7 @@ namespace render::shadow
             ctx.terrainShadowPipeline == nullptr || !ctx.terrainShadowPipeline->isInitialized())
             return;
 
-        constexpr float terrainBiasScale = 4.0f;
+        constexpr float terrainBiasScale = 2.5f;
         ctx.terrainShadowPipeline->dispatch(
             cmd,
             ctx.terrainParams->terrainDataDescSet,

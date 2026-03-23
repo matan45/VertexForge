@@ -102,7 +102,7 @@ namespace windows
                                   "16 levels = ~65km range with 2m base extent.");
             }
 
-            if (ImGui::DragFloat("Base Extent (m)", &settings.shadows.clipmapBaseExtent, 0.1f, 0.5f, 10.0f, "%.1f"))
+            if (ImGui::DragFloat("Base Extent (m)", &settings.shadows.clipmapBaseExtent, 0.5f, 0.5f, 100.0f, "%.1f"))
             {
                 isDirty = true;
             }

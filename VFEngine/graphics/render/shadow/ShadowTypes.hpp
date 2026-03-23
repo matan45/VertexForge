@@ -110,7 +110,7 @@ namespace render::shadow
 
         // Clipmap settings
         uint32_t clipmapLevelCount = 16;
-        float clipmapBaseExtent = 2.0f;
+        float clipmapBaseExtent = 5.0f;
     };
 
     struct ShadowView
@@ -245,7 +245,7 @@ namespace render::shadow
         vk::DescriptorSet terrainMeshletDescSet; // Terrain meshlet buffer
         vk::DescriptorSet terrainVertexDescSet;  // Terrain vertex buffer
         uint32_t tileCount = 0;
-        uint32_t shadowLOD = 2;  // Default to LOD 2 (coarse) for shadows
+        uint32_t shadowLOD = 0;  // LOD 0 for accurate terrain self-shadows
     };
 
 }

@@ -155,33 +155,21 @@ namespace render::shadow
         const auto& lightRight = axes.lightRight;
         const auto& lightUp = axes.lightUp;
 
-        // Step 4: Compute texel size from sphere diameter
-        float sphereDiameter = 2.0f * radius;
-        float stableTexelSize = sphereDiameter / static_cast<float>(shadowMapResolution);
+        // Step 4: Compute stable extent and texel size
+        // The ortho projection uses stableExtent (with margin), so texelSize MUST match
+        // what the projection actually maps — otherwise snapping and projection are misaligned.
+        float stableExtent = radius * 1.1f;
+        float stableTexelSize = (2.0f * stableExtent) / static_cast<float>(shadowMapResolution);
         result.texelSize = stableTexelSize;
 
         // Step 5: SNAP frustum center to WORLD-ANCHORED grid in light space
-        // Project frustum center onto light-space axes (relative to world origin 0,0,0)
         float lightSpaceX = glm::dot(frustumCenter, lightRight);
         float lightSpaceY = glm::dot(frustumCenter, lightUp);
         float lightSpaceZ = glm::dot(frustumCenter, lightDir);
 
-        // CRITICAL: Use a FIXED snap grid that doesn't depend on the current texel size
-        // The snap grid must be stable even when radius/texelSize changes
-        // Snap to the texel size, but quantize the texel size itself to a power of 2
-        // This ensures the snap grid spacing is always consistent
+        // Snap to exact texel size. The radius is already quantized to sqrt(2) buckets,
+        // which keeps stableTexelSize stable. No further quantization on snap grid needed.
         float snapGridSize = stableTexelSize;
-        if (snapGridSize > 0.0f)
-        {
-            // Quantize snap grid to power-of-2 for absolute stability
-            float log2Grid = std::log2(snapGridSize);
-            float quantizedLog = std::ceil(log2Grid);  // Round up to next power of 2
-            snapGridSize = std::pow(2.0f, quantizedLog);
-        }
-        else
-        {
-            snapGridSize = 1.0f;
-        }
 
         // Snap X and Y to the stable grid
         float snappedX = snapToTexel(lightSpaceX, snapGridSize);
@@ -206,12 +194,7 @@ namespace render::shadow
             maxZ = std::max(maxZ, lightSpaceCorner.z);
         }
 
-        // Step 9: Use SPHERE-BASED stable XY bounds instead of tight AABB
-        // This prevents scale changes when the frustum rotates.
-        // 10% margin compensates for texel snapping offsets that can shift the
-        // frustum center by up to half a texel, which at coarser VSM page
-        // resolutions (e.g. 512px) is enough to clip shadow casters at edges.
-        float stableExtent = radius * 1.1f;
+        // Step 9: Use SPHERE-BASED stable XY bounds (stableExtent computed in Step 4)
 
         // Step 10: Stabilize Z range to prevent depth precision shifts during movement
         // Quantize Z bounds to reduce frame-to-frame variation
