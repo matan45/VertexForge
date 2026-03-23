@@ -4,6 +4,7 @@
 #include "WorldSectorManager.hpp"
 #include <glm/glm.hpp>
 #include <vector>
+#include <unordered_set>
 
 namespace world
 {
@@ -24,9 +25,12 @@ namespace world
 
         SectorStreamingConfig config;
         bool enabled = false;
+        bool needsSeed = true;
 
         std::vector<Candidate> loadCandidates;
         std::vector<Candidate> unloadCandidates;
+        std::unordered_set<SectorCoord, SectorCoordHash> loadedSectors;
+
     public:
         explicit SectorStreamer(const SectorStreamingConfig& config = {});
 
@@ -39,11 +43,12 @@ namespace world
             std::vector<SectorStreamingAction>& outActions);
 
         [[nodiscard]] bool isEnabled() const { return enabled; }
-        void setEnabled(bool value) { enabled = value; }
+        void setEnabled(bool value);
 
     private:
         [[nodiscard]] float sectorDistanceSq(const SectorCoord& coord, const glm::vec3& cameraPos,
                                               float sectorWorldSize) const;
+        void seedLoadedSectors(const WorldSectorManager& manager);
     };
 
 } // namespace world

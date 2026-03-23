@@ -1,5 +1,6 @@
 #include "SectorStreamer.hpp"
 #include <algorithm>
+#include <cmath>
 
 namespace world
 {
@@ -15,6 +16,24 @@ namespace world
             this->config.unloadRadius = this->config.loadRadius + 1.0f;
     }
 
+    void SectorStreamer::setEnabled(bool value)
+    {
+        enabled = value;
+        if (value)
+            needsSeed = true;
+    }
+
+    void SectorStreamer::seedLoadedSectors(const WorldSectorManager& manager)
+    {
+        loadedSectors.clear();
+        manager.forEachSector([&](const WorldSector& sector)
+        {
+            if (sector.state == SectorState::Loaded || sector.state == SectorState::Loading)
+                loadedSectors.insert(sector.coord);
+        });
+        needsSeed = false;
+    }
+
     void SectorStreamer::update(
         const glm::vec3& cameraPos,
         const WorldSectorManager& manager,
@@ -25,8 +44,10 @@ namespace world
         if (!enabled)
             return;
 
+        if (needsSeed)
+            seedLoadedSectors(manager);
+
         float sectorSize = manager.getConfig().sectorWorldSize;
-        // loadRadius/unloadRadius are in sector counts — convert to world units
         float loadWorldRadius = config.loadRadius * sectorSize;
         float unloadWorldRadius = config.unloadRadius * sectorSize;
         float loadRadiusSq = loadWorldRadius * loadWorldRadius;
@@ -35,26 +56,44 @@ namespace world
         loadCandidates.clear();
         unloadCandidates.clear();
 
-        // Collect load/unload candidates by iterating all known sectors
-        manager.forEachSector([&](const WorldSector& sector)
-        {
-            float distSq = sectorDistanceSq(sector.coord, cameraPos, sectorSize);
+        // Load candidates: scan coordinate range around camera
+        int minX = static_cast<int>(std::floor((cameraPos.x - loadWorldRadius) / sectorSize));
+        int maxX = static_cast<int>(std::floor((cameraPos.x + loadWorldRadius) / sectorSize));
+        int minZ = static_cast<int>(std::floor((cameraPos.z - loadWorldRadius) / sectorSize));
+        int maxZ = static_cast<int>(std::floor((cameraPos.z + loadWorldRadius) / sectorSize));
 
-            if (sector.state == SectorState::Unloaded && !sector.filePath.empty())
+        for (int x = minX; x <= maxX; ++x)
+        {
+            for (int z = minZ; z <= maxZ; ++z)
             {
-                if (distSq <= loadRadiusSq)
+                SectorCoord coord{x, z};
+                float distSq = sectorDistanceSq(coord, cameraPos, sectorSize);
+                if (distSq > loadRadiusSq)
+                    continue;
+
+                const WorldSector* sector = manager.getSector(coord);
+                if (sector && sector->state == SectorState::Unloaded && !sector->filePath.empty())
                 {
-                    loadCandidates.push_back({sector.coord, distSq});
+                    loadCandidates.push_back({coord, distSq});
                 }
             }
-            else if (sector.state == SectorState::Loaded)
+        }
+
+        // Unload candidates: iterate only loaded sectors
+        for (const auto& coord : loadedSectors)
+        {
+            const WorldSector* sector = manager.getSector(coord);
+            if (!sector) continue;
+
+            if (sector->state == SectorState::Loaded)
             {
-                if (distSq > unloadRadiusSq && !sector.dirty)
+                float distSq = sectorDistanceSq(coord, cameraPos, sectorSize);
+                if (distSq > unloadRadiusSq && !sector->dirty)
                 {
-                    unloadCandidates.push_back({sector.coord, distSq});
+                    unloadCandidates.push_back({coord, distSq});
                 }
             }
-        });
+        }
 
         // Sort: load nearest first, unload farthest first
         std::sort(loadCandidates.begin(), loadCandidates.end(),
@@ -71,11 +110,13 @@ namespace world
 
         for (int i = 0; i < unloadCount; ++i)
         {
+            loadedSectors.erase(unloadCandidates[i].coord);
             outActions.push_back({unloadCandidates[i].coord, false});
         }
 
         for (int i = 0; i < loadCount; ++i)
         {
+            loadedSectors.insert(loadCandidates[i].coord);
             outActions.push_back({loadCandidates[i].coord, true});
         }
     }
