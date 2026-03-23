@@ -35,6 +35,8 @@ struct DirectionalLight {
     float intensity;
     vec3 color;
     int shadowIndex;
+    int shadowMode;   // 0 = cascade, 1 = clipmap
+    uint _pad[3];
 };
 
 struct LightCounts {

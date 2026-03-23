@@ -344,6 +344,16 @@ float sampleDirectionalClipmapShadow(int baseShadowIndex, vec3 worldPos, vec3 wo
 }
 
 // ============================================================
+// Unified Directional Shadow Dispatch (cascade or clipmap)
+// ============================================================
+float sampleDirectionalShadowAuto(int baseShadowIndex, int shadowMode, vec3 worldPos, vec3 worldNormal, float viewZ) {
+    if (shadowMode == 1) {
+        return sampleDirectionalClipmapShadow(baseShadowIndex, worldPos, worldNormal, viewZ);
+    }
+    return sampleDirectionalShadow(baseShadowIndex, worldPos, worldNormal, viewZ);
+}
+
+// ============================================================
 // Point Light Shadow (Cubemap PCSS - unchanged)
 // ============================================================
 float samplePointShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal, vec3 lightPos, float lightRadius) {

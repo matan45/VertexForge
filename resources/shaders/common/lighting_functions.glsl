@@ -12,12 +12,14 @@ const float MAX_REFLECTION_LOD = 4.0;
 // Light Structures (must match GPULightTypes.hpp)
 //-----------------------------------------------------------------------------
 
-// Matches GPUDirectionalLight (32 bytes)
+// Matches GPUDirectionalLight (48 bytes)
 struct DirectionalLight {
     vec3 direction;
     float intensity;
     vec3 color;
     int shadowIndex;
+    int shadowMode;   // 0 = cascade, 1 = clipmap
+    uint _pad[3];
 };
 
 // Matches GPUPointLight (48 bytes)

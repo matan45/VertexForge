@@ -121,6 +121,8 @@ namespace render::lighting
             gpuLight.intensity = light.intensity;
             gpuLight.color = light.color;
             gpuLight.shadowIndex = shadowSystem ? shadowSystem->getShadowViewIndex(entityId) : -1;
+            gpuLight.shadowMode = (shadowSystem &&
+                shadowSystem->getGlobalDirectionalMode() == types::DirectionalShadowMode::Clipmap) ? 1 : 0;
 
             ++directionalCount;
         }

@@ -17,8 +17,10 @@ namespace render::lighting
         float intensity;
         glm::vec3 color;
         int32_t shadowIndex;  // -1 = no shadow
+        int32_t shadowMode;   // 0 = cascade, 1 = clipmap
+        uint32_t padding[3];
     };
-    static_assert(sizeof(GPUDirectionalLight) == 32);
+    static_assert(sizeof(GPUDirectionalLight) == 48);
 
     struct alignas(16) GPUPointLight
     {
