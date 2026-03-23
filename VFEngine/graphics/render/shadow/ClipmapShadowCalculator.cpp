@@ -8,7 +8,7 @@
 namespace render::shadow
 {
     // Minimum Z-snap grid size in meters — prevents sub-meter Z oscillation on small levels
-    static constexpr float MIN_Z_SNAP_METERS = 50.0f;
+    static constexpr float MIN_Z_SNAP_METERS = 5.0f;
     // Minimum depth half-range — ensures shadow casters behind camera are captured even for small levels
     static constexpr float MIN_DEPTH_HALF_RANGE_METERS = 1000.0f;
     // Depth range multiplier — each level covers N× its extent in the light direction
@@ -41,7 +41,9 @@ namespace render::shadow
         float snappedY = snapToTexel(lightSpaceY, result.texelSize);
         result.snapPosition = glm::vec2(snappedX, snappedY);
 
-        float zSnapGrid = std::max(result.worldExtent, MIN_Z_SNAP_METERS);
+        // Snap Z to a grid proportional to the texel size (same stability as XY snap)
+        // but no smaller than MIN_Z_SNAP_METERS for precision
+        float zSnapGrid = std::max(result.texelSize * 4.0f, MIN_Z_SNAP_METERS);
         float snappedZ = snapToTexel(lightSpaceZ, zSnapGrid);
 
         glm::vec3 snappedCenter = snappedX * axes.lightRight +
