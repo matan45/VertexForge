@@ -67,32 +67,44 @@ namespace world
             for (int z = minZ; z <= maxZ; ++z)
             {
                 SectorCoord coord{x, z};
+                const WorldSector* sector = manager.getSector(coord);
+                if (!sector) continue;
+
+                // Sync: track any loaded/loading sectors we encounter
+                if (sector->state == SectorState::Loaded || sector->state == SectorState::Loading)
+                    loadedSectors.insert(coord);
+
                 float distSq = sectorDistanceSq(coord, cameraPos, sectorSize);
                 if (distSq > loadRadiusSq)
                     continue;
 
-                const WorldSector* sector = manager.getSector(coord);
-                if (sector && sector->state == SectorState::Unloaded && !sector->filePath.empty())
+                if (sector->state == SectorState::Unloaded && !sector->filePath.empty())
                 {
                     loadCandidates.push_back({coord, distSq});
                 }
             }
         }
 
-        // Unload candidates: iterate only loaded sectors
-        for (const auto& coord : loadedSectors)
+        // Unload candidates: iterate only tracked loaded sectors
+        auto it = loadedSectors.begin();
+        while (it != loadedSectors.end())
         {
-            const WorldSector* sector = manager.getSector(coord);
-            if (!sector) continue;
+            const WorldSector* sector = manager.getSector(*it);
+            if (!sector || sector->state == SectorState::Unloaded)
+            {
+                it = loadedSectors.erase(it);
+                continue;
+            }
 
             if (sector->state == SectorState::Loaded)
             {
-                float distSq = sectorDistanceSq(coord, cameraPos, sectorSize);
+                float distSq = sectorDistanceSq(*it, cameraPos, sectorSize);
                 if (distSq > unloadRadiusSq && !sector->dirty)
                 {
-                    unloadCandidates.push_back({coord, distSq});
+                    unloadCandidates.push_back({*it, distSq});
                 }
             }
+            ++it;
         }
 
         // Sort: load nearest first, unload farthest first

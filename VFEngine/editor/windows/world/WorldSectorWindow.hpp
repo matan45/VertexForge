@@ -20,7 +20,7 @@ namespace windows
         float sectorSize = 128.0f;
         int tilesPerSector = 4;
         bool autoAlignToTerrain = true;
-        float cachedTerrainTileSize = 0.0f;
+        float terrainTileSize = 0.0f;
         float loadRadius = 4.0f;
         float unloadRadius = 5.0f;
         bool gpuObjectStreaming = true;

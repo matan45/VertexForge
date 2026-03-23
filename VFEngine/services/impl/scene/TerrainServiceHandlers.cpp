@@ -77,6 +77,7 @@ namespace services
             [this](const events::terrain::GetActiveTerrainTileSizeQuery&) -> float
             {
                 if (terrainGrids.empty()) return 0.0f;
+                // Assumes single terrain per scene; returns first grid's tile size
                 return terrainGrids.begin()->second->getTileConfig().worldTileSize;
             });
 

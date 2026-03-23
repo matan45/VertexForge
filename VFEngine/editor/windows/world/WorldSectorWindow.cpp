@@ -91,6 +91,8 @@ namespace windows
                 if (ImGui::Button("Create New World"))
                 {
                     showCreationWizard = true;
+                    terrainTileSize = events::EventDispatcher::instance().query(
+                        events::terrain::GetActiveTerrainTileSizeQuery{});
                 }
                 ImGui::SameLine();
                 if (ImGui::Button("Load World..."))
@@ -225,12 +227,9 @@ namespace windows
         ImGui::SetNextWindowSize(ImVec2(400, 350), ImGuiCond_FirstUseEver);
         if (ImGui::Begin("Create World", &showCreationWizard))
         {
-            cachedTerrainTileSize = events::EventDispatcher::instance().query(
-                events::terrain::GetActiveTerrainTileSizeQuery{});
-
             ImGui::InputText("World Name", worldName, sizeof(worldName));
 
-            if (cachedTerrainTileSize > 0.0f)
+            if (terrainTileSize > 0.0f)
             {
                 ImGui::Checkbox("Align to Terrain Grid", &autoAlignToTerrain);
                 if (ImGui::IsItemHovered())
@@ -240,13 +239,13 @@ namespace windows
             ImGui::InputInt("Tiles Per Sector", &tilesPerSector);
             if (tilesPerSector < 1) tilesPerSector = 1;
 
-            if (autoAlignToTerrain && cachedTerrainTileSize > 0.0f)
+            if (autoAlignToTerrain && terrainTileSize > 0.0f)
             {
-                sectorSize = cachedTerrainTileSize * static_cast<float>(tilesPerSector);
+                sectorSize = terrainTileSize * static_cast<float>(tilesPerSector);
                 ImGui::BeginDisabled();
                 ImGui::InputFloat("Sector Size (auto)", &sectorSize);
                 ImGui::EndDisabled();
-                ImGui::TextDisabled("= %d tiles x %.0f tile size", tilesPerSector, cachedTerrainTileSize);
+                ImGui::TextDisabled("= %d tiles x %.0f tile size", tilesPerSector, terrainTileSize);
             }
             else
             {
@@ -267,7 +266,7 @@ namespace windows
                 std::string path = fileDialog.saveFileDialog(WORLD_FILE_TYPES, L"vfworld");
                 if (!path.empty())
                 {
-                    bool aligned = autoAlignToTerrain && cachedTerrainTileSize > 0.0f;
+                    bool aligned = autoAlignToTerrain && terrainTileSize > 0.0f;
                     events::world::CreateWorldCommand cmd;
                     cmd.name = worldName;
                     cmd.filePath = path;

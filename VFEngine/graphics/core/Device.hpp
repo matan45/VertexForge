@@ -142,19 +142,16 @@ namespace core
 
         void submitTransfer(const vk::SubmitInfo& submitInfo, vk::Fence fence = nullptr) const
         {
-            std::lock_guard lock(getTransferQueueMutex());
+            auto& mtx = queueFamilyIndices.hasDedicatedTransferQueue() ? transferQueueMutex : graphicsQueueMutex;
+            std::lock_guard lock(mtx);
             transferQueue.submit(submitInfo, fence);
         }
 
         void waitTransferIdle() const
         {
-            std::lock_guard lock(getTransferQueueMutex());
+            auto& mtx = queueFamilyIndices.hasDedicatedTransferQueue() ? transferQueueMutex : graphicsQueueMutex;
+            std::lock_guard lock(mtx);
             transferQueue.waitIdle();
-        }
-
-        std::mutex& getTransferQueueMutex() const
-        {
-            return queueFamilyIndices.hasDedicatedTransferQueue() ? transferQueueMutex : graphicsQueueMutex;
         }
 
         const vk::CommandPool& getStagingCommandPool() const { return stagingCommandPool.get(); }
