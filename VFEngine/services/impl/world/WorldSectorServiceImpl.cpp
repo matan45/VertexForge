@@ -13,6 +13,7 @@
 #include "../../events/render/ObjectStreamingEvents.hpp"
 #include "../../events/physics/PhysicsEvents.hpp"
 #include "../../data/EditorMode.hpp"
+#include "../../events/terrain/TerrainEvents.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "resource/AssetLifecycleManager.hpp"
 #include "resource/AssetLifecycleHelpers.hpp"
@@ -496,6 +497,53 @@ namespace services
                     currentWorldPath.clear();
                 }
             });
+
+        terrainCreatedToken = dispatcher.subscribe<::events::terrain::TerrainCreatedNotification>(
+            [this](const ::events::terrain::TerrainCreatedNotification& notif)
+            {
+                onTerrainAvailable(notif.config.worldTileSize);
+            });
+
+        terrainLoadedToken = dispatcher.subscribe<::events::terrain::TerrainLoadedNotification>(
+            [this](const ::events::terrain::TerrainLoadedNotification&)
+            {
+                float tileSize = ::events::EventDispatcher::instance().query(
+                    ::events::terrain::GetActiveTerrainTileSizeQuery{});
+                if (tileSize > 0.0f)
+                {
+                    onTerrainAvailable(tileSize);
+                }
+            });
+    }
+
+    void WorldSectorServiceImpl::onTerrainAvailable(float worldTileSize)
+    {
+        if (!worldMode || worldTileSize <= 0.0f) return;
+
+        const auto& config = sectorManager.getConfig();
+        if (config.alignedToTerrain)
+        {
+            float expected = worldTileSize * static_cast<float>(config.tilesPerSector);
+            if (!world::isSectorAlignedToTerrain(config, worldTileSize))
+            {
+                vfLogWarning("Sector grid misaligned with terrain (sector={}, expected={}). Updating.",
+                          config.sectorWorldSize, expected);
+
+                world::SectorConfig newConfig = config;
+                newConfig.sectorWorldSize = expected;
+                sectorManager.setConfig(newConfig);
+                worldDefinition.sectorConfig = newConfig;
+            }
+        }
+        else
+        {
+            if (!world::isSectorAlignedToTerrain(config, worldTileSize))
+            {
+                vfLogWarning("Sector grid not aligned to terrain. sectorWorldSize={} but tilesPerSector*worldTileSize={}.",
+                          config.sectorWorldSize,
+                          worldTileSize * static_cast<float>(config.tilesPerSector));
+            }
+        }
     }
 
 } // namespace services

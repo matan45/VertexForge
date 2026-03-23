@@ -53,6 +53,7 @@ namespace services
         dispatcher.unregisterCommandHandler<events::physics::AddTerrainColliderCommand>();
         dispatcher.unregisterCommandHandler<events::physics::RemoveTerrainColliderCommand>();
         dispatcher.unregisterQueryHandler<events::terrain::GetTerrainDataQuery>();
+        dispatcher.unregisterQueryHandler<events::terrain::GetActiveTerrainTileSizeQuery>();
         dispatcher.unregisterQueryHandler<events::terrain::HasTerrainComponentQuery>();
         dispatcher.unregisterQueryHandler<events::terrain::HasTerrainTileComponentQuery>();
         dispatcher.unregisterQueryHandler<events::terrain::GetTerrainTileDataQuery>();

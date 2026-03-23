@@ -40,6 +40,7 @@ namespace terrain
         [[nodiscard]] std::vector<TerrainTile*> getAllTiles();
         [[nodiscard]] std::vector<const TerrainTile*> getAllTiles() const;
         [[nodiscard]] size_t getTileCount() const { return tiles.size(); }
+        [[nodiscard]] const TerrainTileConfig& getTileConfig() const { return config; }
 
         void createGrid(int32_t minX, int32_t minZ, int32_t maxX, int32_t maxZ,
                         ProgressCallback progress = nullptr);

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <cmath>
 #include <functional>
 
 namespace world
@@ -65,7 +66,23 @@ namespace world
     {
         float sectorWorldSize = 128.0f;
         int32_t tilesPerSector = 4;
+        bool alignedToTerrain = false;
     };
+
+    inline SectorConfig alignSectorConfigToTerrain(float worldTileSize, int32_t tilesPerSector)
+    {
+        SectorConfig config;
+        config.tilesPerSector = tilesPerSector;
+        config.sectorWorldSize = worldTileSize * static_cast<float>(tilesPerSector);
+        config.alignedToTerrain = true;
+        return config;
+    }
+
+    inline bool isSectorAlignedToTerrain(const SectorConfig& config, float worldTileSize)
+    {
+        float expected = worldTileSize * static_cast<float>(config.tilesPerSector);
+        return std::abs(config.sectorWorldSize - expected) < 0.001f;
+    }
 
     struct SectorStreamingConfig
     {

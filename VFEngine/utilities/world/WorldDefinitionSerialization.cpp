@@ -20,6 +20,7 @@ namespace world
             json sectorConfigJson;
             sectorConfigJson["sectorWorldSize"] = definition.sectorConfig.sectorWorldSize;
             sectorConfigJson["tilesPerSector"] = definition.sectorConfig.tilesPerSector;
+            sectorConfigJson["alignedToTerrain"] = definition.sectorConfig.alignedToTerrain;
             worldJson["sectorConfig"] = sectorConfigJson;
 
             json streamingJson;
@@ -85,6 +86,7 @@ namespace world
                 const auto& sc = worldJson["sectorConfig"];
                 outDefinition.sectorConfig.sectorWorldSize = sc.value("sectorWorldSize", 128.0f);
                 outDefinition.sectorConfig.tilesPerSector = sc.value("tilesPerSector", 4);
+                outDefinition.sectorConfig.alignedToTerrain = sc.value("alignedToTerrain", false);
             }
 
             if (worldJson.contains("streamingConfig"))

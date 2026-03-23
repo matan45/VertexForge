@@ -29,6 +29,11 @@ namespace events::terrain
         std::string_view getName() const override { return "GetTerrainData"; }
     };
 
+    struct GetActiveTerrainTileSizeQuery : IQuery<float>
+    {
+        std::string_view getName() const override { return "GetActiveTerrainTileSize"; }
+    };
+
     struct HasTerrainComponentQuery : IQuery<bool>
     {
         services::EntityHandle entity;
