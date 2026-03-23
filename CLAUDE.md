@@ -22,7 +22,7 @@ msbuild VFEngine/VertexForge.sln /p:Configuration=Release /p:Platform=x64
 ### Module Dependency Graph
 
 ```
-Editor   ──> Services, Import, Core (ONLY)
+Editor   ──> Services, Import, Core, ProceduralGen, ImageProcessing (ONLY)
 Import   ──> Utilities (SharedLib/DLL, requires CMake-built libs: assimp, freetype, libogg, libvorbis)
 Runtime  ──> Services, Core (ONLY)
 Services ──> Utilities, Terrain, Serialization, World, Window
@@ -30,7 +30,7 @@ Core     ──> Graphics, Audio, Physics, Animation, mType, jolt, recast
 Graphics ──> Window, VFX, imgui
 ```
 
-All modules are static libraries except Editor and Runtime (ConsoleApp executables), Import (SharedLib/DLL), jolt and meshoptimizer (SharedLib/DLL).
+All modules are static libraries except Editor and Runtime (ConsoleApp executables), Import, ProceduralGen, ImageProcessing (SharedLib/DLL), jolt and meshoptimizer (SharedLib/DLL).
 
 ### Subsystem Extraction
 
@@ -46,6 +46,8 @@ Large modules are split into separately compiled subsystem projects using `remov
 | Serialization | Utilities | `utilities/serialization/**` + `utilities/world/World*Serialization.*` |
 | World | Utilities | `utilities/world/**` (excluding serialization files) |
 | DataTypes | Services | `services/data/**` (header-only, `kind "None"`) |
+| ProceduralGen | Utilities | `utilities/procedural/**` (SharedLib/DLL) |
+| ImageProcessing | Utilities | `utilities/imageprocessing/**` (SharedLib/DLL) |
 
 **Key constraints**:
 - Editor accesses rendering/scene/input through Services layer APIs (never directly include Core or Graphics)
@@ -84,6 +86,8 @@ VFEngine/
 │   └── controllers/         # MaterialPreviewController, MeshPreviewController, etc.
 ├── window/                  # GLFW window, input handling
 ├── utilities/               # ECS components, scene graph, resource loading, serialization
+│   ├── procedural/          # ProceduralGen DLL - heightmap noise generation
+│   └── imageprocessing/     # ImageProcessing DLL - background removal
 ├── import/                  # Asset import pipeline (mesh, texture, audio, animation)
 ├── services/                # Service layer - abstraction for Editor/Runtime
 │   ├── providers/           # Provider interfaces (IOffScreenProvider, IPreviewProvider, etc.)
@@ -94,6 +98,8 @@ VFEngine/
 ├── editor/                  # Editor application
 │   ├── handlers/            # EditorHandler, WindowImguiHandler
 │   ├── windows/             # ImGui panels (MaterialEditorWindow, MeshPreviewWindow, etc.)
+│   │   ├── procedural/      # Heightmap generator tool window
+│   │   └── imageprocessing/ # Background removal tool window
 │   └── run/                 # Main.cpp entry point
 └── runtime/                 # Standalone game runtime
     ├── handlers/            # RuntimeHandler
@@ -212,6 +218,17 @@ meshProcessor.loadFromFile(file, fileName, location, progressCallback);
 1. Create class in `editor/windows/`
 2. Register in `WindowImguiHandler`
 3. Use `EventDispatcher` to access engine functionality (never include Core/Graphics directly)
+
+### New Editor Tool (DLL-backed, e.g., ProceduralGen, ImageProcessing)
+1. Create DLL subsystem under `utilities/<toolname>/` with export header (`VF_<NAME>_BUILD_DLL` / `VF_<NAME>_API`)
+2. Add SharedLib project to `premake5.lua` in "Subsystems" group, add `removefiles` to Utilities, link from Editor
+3. Postbuild: copy DLL to `bin/Editor/{Debug,Release}/x64/`
+4. Create editor window in `editor/windows/<toolname>/` — member of `MainImguiWindow`, toggled via `show()` from `MainMenuBar`
+5. Add to `handleToolsMenu()` in `MainMenuBar.cpp`
+6. Wire into `MainImguiWindow.hpp/cpp`: include, member, setter, `draw()` call
+7. For async work: use `std::async` + `std::future`, poll in `draw()`. Wait for futures in destructor to avoid dangling pointers
+8. For GPU preview: use `LoadEditorTextureFromDataCommand` / `ReleaseEditorTextureCommand`. Update preview BEFORE `ImGui::Image()` (not after) to avoid invalid descriptor sets
+9. Export via `nfd::FileDialog::saveFileDialog()` + `.vfmeta` sidecar via `AssetMetadataSerializer`
 
 ### New Service
 1. Create interface in `services/interfaces/I<Name>Service.hpp`
