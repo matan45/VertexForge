@@ -2,6 +2,9 @@
 #version 460
 #extension GL_EXT_mesh_shader : require
 #extension GL_KHR_shader_subgroup_ballot : require
+#extension GL_GOOGLE_include_directive : require
+
+#include "../common/culling_functions.glsl"
 
 layout(local_size_x = 32) in;
 
@@ -25,6 +28,7 @@ layout(std430, set = 0, binding = 1) readonly buffer BillboardCountBuffer {
     uint instanceCount;
 };
 
+// Camera — matches GPUCameraData in GPUDrivenTypes.hpp (464 bytes)
 layout(set = 1, binding = 0) uniform CameraUBO {
     mat4 view;
     mat4 projection;
@@ -36,7 +40,17 @@ layout(set = 1, binding = 0) uniform CameraUBO {
     float farPlane;
     uint objectCount;
     uint hiZMipLevels;
-    float time;
+    uint frameIndex;
+    uint enableFrustumCulling;
+    uint enableOcclusionCulling;
+    uint enableLODSelection;
+    uint batchCount;
+    uint commandsPerBatch;
+    uint shaderGroupCount;
+    uint enableDistanceCulling;
+    float globalLodBias;
+    vec4 categoryDistSq0;
+    vec4 categoryDistSq1;
 };
 
 struct BillboardPayload {
@@ -44,15 +58,6 @@ struct BillboardPayload {
 };
 
 taskPayloadSharedEXT BillboardPayload payload;
-
-bool isInsideFrustum(vec3 center, float radius) {
-    for (int i = 0; i < 6; ++i) {
-        if (dot(frustumPlanes[i].xyz, center) + frustumPlanes[i].w < -radius) {
-            return false;
-        }
-    }
-    return true;
-}
 
 void main() {
     uint tid = gl_LocalInvocationID.x;
@@ -66,7 +71,7 @@ void main() {
         float maxDim = max(inst.size.x, inst.size.y) * inst.positionAndScale.w;
         float boundRadius = maxDim * 0.707; // ~sqrt(2)/2 for billboard diagonal
 
-        visible = isInsideFrustum(worldPos, boundRadius);
+        visible = sphereInFrustum(vec4(worldPos, boundRadius), frustumPlanes);
 
         // Distance culling (use far plane as max render distance)
         if (visible) {

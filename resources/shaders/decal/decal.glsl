@@ -8,10 +8,29 @@ layout(push_constant) uniform PushConstants {
     uint decalIndex;
 } pc;
 
+// Matches render::common::GPUCameraData (464 bytes)
 layout(set = 0, binding = 0) uniform CameraUBO {
+    mat4 view;
+    mat4 projection;
     mat4 viewProjection;
-    mat4 inverseViewProjection;
-    vec4 cameraParams;
+    mat4 invViewProjection;
+    vec4 cameraPosition;    // xyz = pos, w = nearPlane
+    vec4 screenParams;      // xy = size, zw = 1/size
+    vec4 frustumPlanes[6];
+    float farPlane;
+    uint objectCount;
+    uint hiZMipLevels;
+    uint frameIndex;
+    uint enableFrustumCulling;
+    uint enableOcclusionCulling;
+    uint enableLODSelection;
+    uint batchCount;
+    uint commandsPerBatch;
+    uint shaderGroupCount;
+    uint enableDistanceCulling;
+    float globalLodBias;
+    vec4 categoryDistSq0;
+    vec4 categoryDistSq1;
 } camera;
 
 void main()
@@ -30,10 +49,29 @@ layout(push_constant) uniform PushConstants {
     uint decalIndex;
 } pc;
 
+// Matches render::common::GPUCameraData (464 bytes)
 layout(set = 0, binding = 0) uniform CameraUBO {
+    mat4 view;
+    mat4 projection;
     mat4 viewProjection;
-    mat4 inverseViewProjection;
-    vec4 cameraParams;
+    mat4 invViewProjection;
+    vec4 cameraPosition;    // xyz = pos, w = nearPlane
+    vec4 screenParams;      // xy = size, zw = 1/size
+    vec4 frustumPlanes[6];
+    float farPlane;
+    uint objectCount;
+    uint hiZMipLevels;
+    uint frameIndex;
+    uint enableFrustumCulling;
+    uint enableOcclusionCulling;
+    uint enableLODSelection;
+    uint batchCount;
+    uint commandsPerBatch;
+    uint shaderGroupCount;
+    uint enableDistanceCulling;
+    float globalLodBias;
+    vec4 categoryDistSq0;
+    vec4 categoryDistSq1;
 } camera;
 
 layout(set = 0, binding = 1) uniform sampler2D depthTexture;
@@ -57,7 +95,7 @@ layout(set = 1, binding = 2) uniform sampler2D ormTexture;
 vec3 reconstructWorldPos(vec2 screenUV, float depth)
 {
     vec4 clipPos = vec4(screenUV * 2.0 - 1.0, depth, 1.0);
-    vec4 worldPos = camera.inverseViewProjection * clipPos;
+    vec4 worldPos = camera.invViewProjection * clipPos;
     return worldPos.xyz / worldPos.w;
 }
 
@@ -80,7 +118,7 @@ void main()
 {
     DecalData decal = decals[pc.decalIndex];
 
-    vec2 screenUV = gl_FragCoord.xy / camera.cameraParams.zw;
+    vec2 screenUV = gl_FragCoord.xy / camera.screenParams.xy;
 
     float depth = texture(depthTexture, screenUV).r;
     if (depth >= 1.0)
@@ -118,7 +156,7 @@ void main()
     }
 
     // Reconstruct surface normal from depth
-    vec2 texelSize = 1.0 / camera.cameraParams.zw;
+    vec2 texelSize = camera.screenParams.zw;
     vec3 surfaceNormal = reconstructNormalFromDepth(screenUV, texelSize);
 
     // Decal projection direction (local Z axis in world space)

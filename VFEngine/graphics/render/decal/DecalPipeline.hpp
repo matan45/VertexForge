@@ -7,6 +7,7 @@
 #include <memory>
 #include <string>
 #include "../../../services/providers/render/IDecalRenderProvider.hpp"
+#include "../common/CameraTypes.hpp"
 
 namespace core
 {
@@ -70,12 +71,7 @@ namespace render::decal
         vk::DeviceMemory cubeIndexMemory;
         uint32_t cubeIndexCount = 0;
 
-        struct CameraUBO
-        {
-            glm::mat4 viewProjection;
-            glm::mat4 inverseViewProjection;
-            glm::vec4 cameraParams; // x=nearPlane, y=farPlane, z=screenWidth, w=screenHeight
-        };
+        using CameraUBO = render::common::GPUCameraData;
 
         vk::Buffer cameraUBOBuffer;
         vk::DeviceMemory cameraUBOMemory;

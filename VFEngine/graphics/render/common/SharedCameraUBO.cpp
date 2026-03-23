@@ -22,10 +22,10 @@ namespace render::common
         request.usage = vk::BufferUsageFlagBits::eUniformBuffer;
         request.properties = vk::MemoryPropertyFlagBits::eHostVisible |
                              vk::MemoryPropertyFlagBits::eHostCoherent;
-        request.size = sizeof(mesh::CameraUBO);
+        request.size = sizeof(CameraUBO);
 
         core::BufferUtilities::createBuffer(request, buffer, memory);
-        mapped = device.getLogicalDevice().mapMemory(memory, 0, sizeof(mesh::CameraUBO));
+        mapped = device.getLogicalDevice().mapMemory(memory, 0, sizeof(CameraUBO));
     }
 
     void SharedCameraUBO::cleanup()
@@ -44,13 +44,13 @@ namespace render::common
     {
         if (!mapped) return;
 
-        mesh::CameraUBO ubo{};
+        CameraUBO ubo{};
         ubo.view = view;
         ubo.projection = projection;
         ubo.cameraPos = cameraPos;
         ubo.time = time;
         math::extractFrustumPlanes(projection * view, ubo.frustumPlanes);
 
-        std::memcpy(mapped, &ubo, sizeof(mesh::CameraUBO));
+        std::memcpy(mapped, &ubo, sizeof(CameraUBO));
     }
 }

@@ -83,12 +83,17 @@ namespace render::gpudriven
             : vk::DescriptorSetLayout{};
         vegetation.grassMeshPipeline->init(
             device,
-            iblDescriptorSetLayout,
             vegetation.windSystem->getDescriptorSetLayout(),
             lightLayout,
             bindlessLayout,
             renderPass
         );
+
+        // Bind the shared camera buffer so grass reads correct camera data
+        if (cameraBuffer)
+        {
+            vegetation.grassMeshPipeline->updateCameraDescriptor(cameraBuffer->getBuffer());
+        }
 
         vegetation.grassInitialized = true;
 
@@ -401,8 +406,13 @@ namespace render::gpudriven
             return;
         }
 
+        // Update camera buffer each frame (data may have changed)
+        if (cameraBuffer)
+        {
+            vegetation.grassMeshPipeline->updateCameraDescriptor(cameraBuffer->getBuffer());
+        }
+
         vegetation.grassMeshPipeline->updateSharedDescriptors(
-            iblDescriptorSet,
             vegetation.windSystem ? vegetation.windSystem->getDescriptorSet() : vk::DescriptorSet{},
             lightBufferManager ? lightBufferManager->getDescriptorSet() : vk::DescriptorSet{},
             bindlessTextures ? bindlessTextures->getDescriptorSet() : vk::DescriptorSet{}

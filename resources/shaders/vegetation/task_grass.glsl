@@ -2,6 +2,9 @@
 #version 460 core
 #extension GL_EXT_mesh_shader : require
 #extension GL_KHR_shader_subgroup_ballot : require
+#extension GL_GOOGLE_include_directive : require
+
+#include "../common/culling_functions.glsl"
 
 layout(local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
 
@@ -13,13 +16,30 @@ layout(std430, set = 0, binding = 1) readonly buffer GrassCountBuffer {
     uint totalInstances;
 };
 
-// Camera — matches CameraUBO (240 bytes): view, projection, cameraPos, time, frustumPlanes[6]
+// Camera — matches GPUCameraData in GPUDrivenTypes.hpp
+// Uses the shared GPUDrivenCameraBuffer so frustum planes are always current-frame
 layout(set = 1, binding = 0) uniform CameraUBO {
     mat4 view;
     mat4 projection;
-    vec3 cameraPos;
-    float time;
+    mat4 viewProjection;
+    mat4 invViewProjection;
+    vec4 cameraPosition;    // xyz = pos, w = nearPlane
+    vec4 screenParams;
     vec4 frustumPlanes[6];
+    float farPlane;
+    uint objectCount;
+    uint hiZMipLevels;
+    uint frameIndex;
+    uint enableFrustumCulling;
+    uint enableOcclusionCulling;
+    uint enableLODSelection;
+    uint batchCount;
+    uint commandsPerBatch;
+    uint shaderGroupCount;
+    uint enableDistanceCulling;
+    float globalLodBias;
+    vec4 categoryDistSq0;
+    vec4 categoryDistSq1;
 };
 
 layout(push_constant) uniform PushConstants {
@@ -40,17 +60,6 @@ struct GrassPayload {
 
 taskPayloadSharedEXT GrassPayload payload;
 
-// Frustum cull using pre-normalized planes from UBO (same as gpu_cull_lod / task_gpudriven)
-bool sphereInFrustum(vec3 center, float radius) {
-    for (int i = 0; i < 6; i++) {
-        float d = dot(frustumPlanes[i].xyz, center) + frustumPlanes[i].w;
-        if (d < -radius) {
-            return false;
-        }
-    }
-    return true;
-}
-
 void main() {
     uint tid = gl_LocalInvocationID.x;
     uint groupBase = gl_WorkGroupID.x * 32;
@@ -62,11 +71,16 @@ void main() {
     if (instanceIdx < totalInstances) {
         vec4 posAndRot = grassInstances[instanceIdx * 3];
         vec3 worldPos = posAndRot.xyz;
+        vec4 scaleAndDensity = grassInstances[instanceIdx * 3 + 1];
+        float grassHeight = scaleAndDensity.x;
 
-        dist = distance(worldPos, cameraPos);
+        dist = distance(worldPos, cameraPosition.xyz);
         if (dist < fadeEndDistance) {
-            // Distance culling
-            visible = true;
+            // Frustum culling using shared implementation
+            vec4 boundingSphere = vec4(worldPos + vec3(0.0, grassHeight * 0.5, 0.0), grassHeight);
+            if (sphereInFrustum(boundingSphere, frustumPlanes)) {
+                visible = true;
+            }
         }
     }
 

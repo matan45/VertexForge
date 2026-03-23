@@ -22,13 +22,29 @@ layout(push_constant) uniform PushConstants {
     uint billboardTextureIndex;
 };
 
-// Camera (set 1)
+// Camera — matches GPUCameraData in GPUDrivenTypes.hpp
 layout(set = 1, binding = 0) uniform CameraUBO {
     mat4 view;
     mat4 projection;
-    vec3 cameraPos;
-    float time;
+    mat4 viewProjection;
+    mat4 invViewProjection;
+    vec4 cameraPosition;    // xyz = pos, w = nearPlane
+    vec4 screenParams;
     vec4 frustumPlanes[6];
+    float farPlane;
+    uint objectCount;
+    uint hiZMipLevels;
+    uint frameIndex;
+    uint enableFrustumCulling;
+    uint enableOcclusionCulling;
+    uint enableLODSelection;
+    uint batchCount;
+    uint commandsPerBatch;
+    uint shaderGroupCount;
+    uint enableDistanceCulling;
+    float globalLodBias;
+    vec4 categoryDistSq0;
+    vec4 categoryDistSq1;
 };
 
 // Light data (set 3) - matches GPULightBufferManager layout
@@ -79,7 +95,7 @@ void main() {
         N = -N;
     }
 
-    vec3 V = normalize(cameraPos - inWorldPos);
+    vec3 V = normalize(cameraPosition.xyz - inWorldPos);
 
     // Gradient from base to tip using config colors
     vec3 albedo = mix(baseColor.rgb, tipColor.rgb, inUV.y);

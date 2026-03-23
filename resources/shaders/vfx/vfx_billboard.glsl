@@ -16,11 +16,13 @@ layout(location = 1) out vec4 fragColor;
 layout(location = 2) out float fragLifetimeRatio;
 layout(location = 3) out float fragGlowIntensity;
 
+// Matches render::common::CameraUBO (240 bytes)
 layout(binding = 0) uniform CameraUBO {
     mat4 view;
     mat4 projection;
     vec3 cameraPos;
     float time;
+    vec4 frustumPlanes[6];
 } camera;
 
 const uint RENDER_MODE_BILLBOARD = 0u;

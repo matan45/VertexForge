@@ -5,6 +5,7 @@
 
 #include "../common/gpu_types.glsl"
 #include "../common/camera_types.glsl"
+#include "../common/culling_functions.glsl"
 
 layout(local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
 
@@ -62,26 +63,6 @@ shared uint sharedVisibleCount;
 shared uint sharedMeshletIndices[TASK_WORKGROUP_SIZE];
 shared vec4 sharedFrustumPlanes[6];
 
-vec4 transformBoundingSphere(vec4 localSphere, mat4 modelMatrix) {
-    vec3 worldCenter = (modelMatrix * vec4(localSphere.xyz, 1.0)).xyz;
-    float scaleX = length(modelMatrix[0].xyz);
-    float scaleY = length(modelMatrix[1].xyz);
-    float scaleZ = length(modelMatrix[2].xyz);
-    float maxScale = max(max(scaleX, scaleY), scaleZ);
-    float worldRadius = localSphere.w * maxScale;
-    return vec4(worldCenter, worldRadius);
-}
-
-bool sphereInFrustum(vec4 sphere, vec4 frustumPlanes[6]) {
-    for (int i = 0; i < 6; i++) {
-        float distance = dot(frustumPlanes[i].xyz, sphere.xyz) + frustumPlanes[i].w;
-        if (distance < -sphere.w) {
-            return false;
-        }
-    }
-    return true;
-}
-
 void main() {
     uint drawIndex = pc.baseDrawIndex + gl_DrawID;
     PerDrawData drawData = perDrawData[drawIndex];
@@ -116,18 +97,8 @@ void main() {
         float localRadius = length(obj.aabbMax.xyz - localCenter);
         vec4 worldSphere = transformBoundingSphere(vec4(localCenter, localRadius), modelMatrix);
 
-        mat4 vp = pc.lightViewProjection;
         vec4 lightPlanes[6];
-        lightPlanes[0] = vec4(vp[0][3] + vp[0][0], vp[1][3] + vp[1][0], vp[2][3] + vp[2][0], vp[3][3] + vp[3][0]);
-        lightPlanes[1] = vec4(vp[0][3] - vp[0][0], vp[1][3] - vp[1][0], vp[2][3] - vp[2][0], vp[3][3] - vp[3][0]);
-        lightPlanes[2] = vec4(vp[0][3] + vp[0][1], vp[1][3] + vp[1][1], vp[2][3] + vp[2][1], vp[3][3] + vp[3][1]);
-        lightPlanes[3] = vec4(vp[0][3] - vp[0][1], vp[1][3] - vp[1][1], vp[2][3] - vp[2][1], vp[3][3] - vp[3][1]);
-        lightPlanes[4] = vec4(vp[0][3] + vp[0][2], vp[1][3] + vp[1][2], vp[2][3] + vp[2][2], vp[3][3] + vp[3][2]);
-        lightPlanes[5] = vec4(vp[0][3] - vp[0][2], vp[1][3] - vp[1][2], vp[2][3] - vp[2][2], vp[3][3] - vp[3][2]);
-        for (int i = 0; i < 6; i++) {
-            float len = max(length(lightPlanes[i].xyz), 0.0001);
-            lightPlanes[i] /= len;
-        }
+        extractFrustumPlanesFromVP(pc.lightViewProjection, lightPlanes);
 
         if (!sphereInFrustum(worldSphere, lightPlanes)) {
             if (gl_LocalInvocationID.x == 0) {
@@ -147,19 +118,7 @@ void main() {
     if (gl_LocalInvocationID.x == 0) {
         sharedVisibleCount = 0;
 
-        mat4 vp = pc.lightViewProjection;
-        sharedFrustumPlanes[0] = vec4(vp[0][3] + vp[0][0], vp[1][3] + vp[1][0], vp[2][3] + vp[2][0], vp[3][3] + vp[3][0]);
-        sharedFrustumPlanes[1] = vec4(vp[0][3] - vp[0][0], vp[1][3] - vp[1][0], vp[2][3] - vp[2][0], vp[3][3] - vp[3][0]);
-        sharedFrustumPlanes[2] = vec4(vp[0][3] + vp[0][1], vp[1][3] + vp[1][1], vp[2][3] + vp[2][1], vp[3][3] + vp[3][1]);
-        sharedFrustumPlanes[3] = vec4(vp[0][3] - vp[0][1], vp[1][3] - vp[1][1], vp[2][3] - vp[2][1], vp[3][3] - vp[3][1]);
-        sharedFrustumPlanes[4] = vec4(vp[0][3] + vp[0][2], vp[1][3] + vp[1][2], vp[2][3] + vp[2][2], vp[3][3] + vp[3][2]);
-        sharedFrustumPlanes[5] = vec4(vp[0][3] - vp[0][2], vp[1][3] - vp[1][2], vp[2][3] - vp[2][2], vp[3][3] - vp[3][2]);
-
-        const float PLANE_NORMALIZE_EPSILON = 0.0001;
-        for (int i = 0; i < 6; i++) {
-            float len = max(length(sharedFrustumPlanes[i].xyz), PLANE_NORMALIZE_EPSILON);
-            sharedFrustumPlanes[i] /= len;
-        }
+        extractFrustumPlanesFromVP(pc.lightViewProjection, sharedFrustumPlanes);
     }
     barrier();
 

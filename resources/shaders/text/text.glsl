@@ -16,11 +16,13 @@ layout(location = 0) out vec2 fragTexCoord;
 layout(location = 1) out vec4 fragColor;
 layout(location = 2) out vec2 fragSdfParams;
 
+// Matches render::common::CameraUBO (240 bytes)
 layout(binding = 0) uniform CameraUBO {
     mat4 view;
     mat4 projection;
     vec3 cameraPos;
-    float padding;
+    float time;
+    vec4 frustumPlanes[6];
 } camera;
 
 layout(push_constant) uniform PushConstants {

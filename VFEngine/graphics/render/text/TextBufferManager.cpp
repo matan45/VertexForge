@@ -49,6 +49,7 @@ namespace render::text
         ubo.view = view;
         ubo.projection = projection;
         ubo.cameraPos = cameraPos;
+        ubo.time = 0.0f;
 
         void* data;
         vk::Result result = device.getLogicalDevice().mapMemory(cameraUBOMemory, 0, sizeof(ubo), {}, &data);

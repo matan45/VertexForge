@@ -9,12 +9,29 @@ layout(std430, set = 0, binding = 0) readonly buffer GrassInstanceBuffer {
     vec4 grassInstances[];
 };
 
+// Camera — matches GPUCameraData in GPUDrivenTypes.hpp
 layout(set = 1, binding = 0) uniform CameraUBO {
     mat4 view;
     mat4 projection;
-    vec3 cameraPos;
-    float time;
+    mat4 viewProjection;
+    mat4 invViewProjection;
+    vec4 cameraPosition;    // xyz = pos, w = nearPlane
+    vec4 screenParams;
     vec4 frustumPlanes[6];
+    float farPlane;
+    uint objectCount;
+    uint hiZMipLevels;
+    uint frameIndex;
+    uint enableFrustumCulling;
+    uint enableOcclusionCulling;
+    uint enableLODSelection;
+    uint batchCount;
+    uint commandsPerBatch;
+    uint shaderGroupCount;
+    uint enableDistanceCulling;
+    float globalLodBias;
+    vec4 categoryDistSq0;
+    vec4 categoryDistSq1;
 };
 
 layout(set = 2, binding = 0) uniform WindUBO {
@@ -111,7 +128,7 @@ void main() {
 
     if (bbMode == 1u) {
         // Camera-facing quad
-        vec3 toCamera = normalize(cameraPos - rootPos);
+        vec3 toCamera = normalize(cameraPosition.xyz - rootPos);
         vec3 up = vec3(0.0, 1.0, 0.0);
         vec3 right = normalize(cross(up, toCamera));
         float hw = bbSize;

@@ -15,7 +15,6 @@ namespace render::vegetation
     }
 
     void GrassMeshShaderPipeline::init(core::Device& device,
-                                        vk::DescriptorSetLayout cameraLayout,
                                         vk::DescriptorSetLayout windLayout,
                                         vk::DescriptorSetLayout lightLayout,
                                         vk::DescriptorSetLayout bindlessLayout,
@@ -26,7 +25,8 @@ namespace render::vegetation
         devicePtr = &device;
 
         createGrassDataDescriptor();
-        createGrassPipeline(cameraLayout, windLayout, lightLayout, bindlessLayout, renderPass);
+        createCameraDescriptor();
+        createGrassPipeline(windLayout, lightLayout, bindlessLayout, renderPass);
 
         if (graphicsPipeline)
         {
@@ -75,12 +75,23 @@ namespace render::vegetation
             grassDataLayout = nullptr;
         }
 
+        if (cameraPool)
+        {
+            vkDevice.destroyDescriptorPool(cameraPool);
+            cameraPool = nullptr;
+        }
+
+        if (cameraLayout)
+        {
+            vkDevice.destroyDescriptorSetLayout(cameraLayout);
+            cameraLayout = nullptr;
+        }
+
         initialized = false;
         devicePtr = nullptr;
     }
 
-    void GrassMeshShaderPipeline::recreate(vk::DescriptorSetLayout cameraLayout,
-                                            vk::DescriptorSetLayout windLayout,
+    void GrassMeshShaderPipeline::recreate(vk::DescriptorSetLayout windLayout,
                                             vk::DescriptorSetLayout lightLayout,
                                             vk::DescriptorSetLayout bindlessLayout,
                                             vk::RenderPass renderPass)
@@ -108,7 +119,7 @@ namespace render::vegetation
             pipelineLayout = nullptr;
         }
 
-        createGrassPipeline(cameraLayout, windLayout, lightLayout, bindlessLayout, renderPass);
+        createGrassPipeline(windLayout, lightLayout, bindlessLayout, renderPass);
 
         vfLogInfo("GrassMeshShaderPipeline: Recreated pipeline");
     }
@@ -147,14 +158,34 @@ namespace render::vegetation
         vkDevice.updateDescriptorSets(writes, {});
     }
 
-    void GrassMeshShaderPipeline::updateSharedDescriptors(vk::DescriptorSet cameraDescSet,
-                                                           vk::DescriptorSet windDescSet,
+    void GrassMeshShaderPipeline::updateCameraDescriptor(vk::Buffer cameraBuffer)
+    {
+        if (!initialized || !devicePtr) return;
+
+        vk::Device vkDevice = devicePtr->getLogicalDevice();
+
+        vk::DescriptorBufferInfo bufferInfo{};
+        bufferInfo.buffer = cameraBuffer;
+        bufferInfo.offset = 0;
+        bufferInfo.range = VK_WHOLE_SIZE;
+
+        vk::WriteDescriptorSet write{};
+        write.dstSet = cameraDescriptorSet;
+        write.dstBinding = 0;
+        write.dstArrayElement = 0;
+        write.descriptorCount = 1;
+        write.descriptorType = vk::DescriptorType::eUniformBuffer;
+        write.pBufferInfo = &bufferInfo;
+
+        vkDevice.updateDescriptorSets(1, &write, 0, nullptr);
+    }
+
+    void GrassMeshShaderPipeline::updateSharedDescriptors(vk::DescriptorSet windDescSet,
                                                            vk::DescriptorSet lightDescSet,
                                                            vk::DescriptorSet bindlessDescSet)
     {
         if (!initialized) return;
 
-        cameraDescriptorSet = cameraDescSet;
         windDescriptorSet = windDescSet;
         lightDataDescriptorSet = lightDescSet;
         bindlessDescriptorSet = bindlessDescSet;
@@ -248,8 +279,35 @@ namespace render::vegetation
         grassDataDescriptorSet = sets[0];
     }
 
-    void GrassMeshShaderPipeline::createGrassPipeline(vk::DescriptorSetLayout cameraLayout,
-                                                       vk::DescriptorSetLayout windLayout,
+    void GrassMeshShaderPipeline::createCameraDescriptor()
+    {
+        vk::Device vkDevice = devicePtr->getLogicalDevice();
+
+        vk::DescriptorSetLayoutBinding binding{};
+        binding.binding = 0;
+        binding.descriptorType = vk::DescriptorType::eUniformBuffer;
+        binding.descriptorCount = 1;
+        binding.stageFlags = vk::ShaderStageFlagBits::eTaskEXT |
+                             vk::ShaderStageFlagBits::eMeshEXT |
+                             vk::ShaderStageFlagBits::eFragment;
+
+        cameraLayout = core::PipelineUtilities::createUpdateAfterBindLayout(vkDevice, &binding, 1);
+
+        vk::DescriptorPoolSize poolSize{};
+        poolSize.type = vk::DescriptorType::eUniformBuffer;
+        poolSize.descriptorCount = 1;
+
+        cameraPool = core::PipelineUtilities::createUpdateAfterBindPool(vkDevice, 1, &poolSize, 1);
+
+        vk::DescriptorSetAllocateInfo allocInfo{};
+        allocInfo.descriptorPool = cameraPool;
+        allocInfo.descriptorSetCount = 1;
+        allocInfo.pSetLayouts = &cameraLayout;
+        auto sets = vkDevice.allocateDescriptorSets(allocInfo);
+        cameraDescriptorSet = sets[0];
+    }
+
+    void GrassMeshShaderPipeline::createGrassPipeline(vk::DescriptorSetLayout windLayout,
                                                        vk::DescriptorSetLayout lightLayout,
                                                        vk::DescriptorSetLayout bindlessLayout,
                                                        vk::RenderPass renderPass)
@@ -261,7 +319,6 @@ namespace render::vegetation
 
         vk::Device vkDevice = devicePtr->getLogicalDevice();
 
-        this->cameraLayout = cameraLayout;
         this->windLayout = windLayout;
         this->lightDataLayout = lightLayout;
         this->bindlessLayout = bindlessLayout;

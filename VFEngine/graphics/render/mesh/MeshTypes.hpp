@@ -8,6 +8,7 @@
 #include "material/MaterialTypes.hpp"
 #include <array>
 #include <cstddef>
+#include "../common/CameraTypes.hpp"
 #include <string>
 #include <unordered_map>
 
@@ -215,21 +216,7 @@ namespace render::mesh
         glm::vec4 color;
     };
 
-    struct CameraUBO
-    {
-        alignas(16) glm::mat4 view;
-        alignas(16) glm::mat4 projection;
-        alignas(16) glm::vec3 cameraPos;
-        float time;
-        alignas(16) glm::vec4 frustumPlanes[6];
-    };
-
-    static_assert(sizeof(CameraUBO) == 240, "CameraUBO must be 240 bytes to match GLSL CameraData");
-    static_assert(offsetof(CameraUBO, view) == 0, "CameraUBO::view offset mismatch");
-    static_assert(offsetof(CameraUBO, projection) == 64, "CameraUBO::projection offset mismatch");
-    static_assert(offsetof(CameraUBO, cameraPos) == 128, "CameraUBO::cameraPos offset mismatch");
-    static_assert(offsetof(CameraUBO, time) == 140, "CameraUBO::time offset mismatch");
-    static_assert(offsetof(CameraUBO, frustumPlanes) == 144, "CameraUBO::frustumPlanes offset mismatch");
+    using CameraUBO = ::render::common::CameraUBO;
 
     struct MeshPushConstants
     {

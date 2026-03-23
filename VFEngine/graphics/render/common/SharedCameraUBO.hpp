@@ -3,7 +3,7 @@
 #define VULKAN_HPP_DISPATCH_LOADER_DYNAMIC 1
 #include <vulkan/vulkan.hpp>
 #include <glm/glm.hpp>
-#include "../mesh/MeshTypes.hpp"
+#include "CameraTypes.hpp"
 
 namespace core
 {

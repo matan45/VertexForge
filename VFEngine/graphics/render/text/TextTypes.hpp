@@ -5,6 +5,7 @@
 #include <array>
 #include <cstdint>
 #include <string>
+#include "../common/CameraTypes.hpp"
 
 namespace render::text
 {
@@ -106,13 +107,7 @@ namespace render::text
         }
     };
 
-    struct TextCameraUBO
-    {
-        alignas(16) glm::mat4 view;
-        alignas(16) glm::mat4 projection;
-        alignas(16) glm::vec3 cameraPos;
-        float padding;
-    };
+    using TextCameraUBO = render::common::CameraUBO;
 
     struct TextPushConstants
     {

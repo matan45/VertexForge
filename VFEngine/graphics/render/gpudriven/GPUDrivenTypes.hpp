@@ -7,6 +7,7 @@
 #include <string>
 #include "MeshletBufferTypes.hpp"
 #include "../../../services/data/CullingCategories.hpp"
+#include "../common/CameraTypes.hpp"
 
 namespace render::gpudriven
 {
@@ -209,31 +210,7 @@ namespace render::gpudriven
     };
     static_assert(sizeof(PerDrawData) == 256);
 
-    struct alignas(16) GPUCameraData
-    {
-        glm::mat4 view;
-        glm::mat4 projection;
-        glm::mat4 viewProjection;
-        glm::mat4 invViewProjection;
-        glm::vec4 cameraPosition;
-        glm::vec4 screenParams;
-        glm::vec4 frustumPlanes[6];
-        float farPlane;
-        uint32_t objectCount;
-        uint32_t hiZMipLevels;
-        uint32_t frameIndex;
-        uint32_t enableFrustumCulling;
-        uint32_t enableOcclusionCulling;
-        uint32_t enableLODSelection;
-        uint32_t batchCount;
-        uint32_t commandsPerBatch;
-        uint32_t shaderGroupCount;
-        uint32_t enableDistanceCulling;
-        float globalLodBias;
-        glm::vec4 categoryDistSq0;     // [staticMesh^2, terrain^2, foliage^2, vfx^2]
-        glm::vec4 categoryDistSq1;     // [decals^2, 0, 0, shadowMultiplier]
-    };
-    static_assert(sizeof(GPUCameraData) == 464);
+    using GPUCameraData = ::render::common::GPUCameraData;
 
     struct SubmeshLocation
     {
