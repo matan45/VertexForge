@@ -191,18 +191,18 @@ namespace services
         }
 
         sector->entityUUIDs.clear();
-        std::vector<std::pair<std::string, std::string>> entityNamesAndJson;
+        std::vector<std::pair<std::string, nlohmann::json>> entityNamesAndJson;
         entityNamesAndJson.reserve(entityData.size());
-        for (const auto& data : entityData)
+        for (auto& data : entityData)
         {
             if (data.contains("uuid") && data["uuid"].is_number_unsigned())
             {
                 sector->entityUUIDs.push_back(data["uuid"].get<uint64_t>());
             }
-            entityNamesAndJson.emplace_back(data.value("name", "Unnamed"), data.dump());
+            std::string name = data.value("name", "Unnamed");
+            entityNamesAndJson.emplace_back(std::move(name), std::move(data));
         }
 
-        // Queue deferred entity loading using pre-parsed data (avoids reading file twice)
         entityLoader.queueSectorLoadFromData(coord, entityNamesAndJson);
 
         // State stays Loading until all entities are processed (checked in update())
