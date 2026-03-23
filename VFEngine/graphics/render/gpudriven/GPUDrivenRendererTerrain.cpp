@@ -33,10 +33,10 @@ namespace render::gpudriven
             terrain.streamManager->setTileRAMEvictor(std::move(terrain.pendingTileRAMEvictor));
             terrain.pendingTileRAMEvictor = nullptr;
         }
-        if (terrain.pendingTileAsyncDataLoader)
+        if (terrain.pendingTileLoadContextProvider)
         {
-            terrain.streamManager->setTileAsyncDataLoader(std::move(terrain.pendingTileAsyncDataLoader));
-            terrain.pendingTileAsyncDataLoader = nullptr;
+            terrain.streamManager->setTileLoadContextProvider(std::move(terrain.pendingTileLoadContextProvider));
+            terrain.pendingTileLoadContextProvider = nullptr;
         }
 
         terrain.pipeline = std::make_unique<TerrainMeshShaderPipeline>(device, swapChain);
@@ -404,15 +404,15 @@ namespace render::gpudriven
         }
     }
 
-    void GPUDrivenRenderer::setTileAsyncDataLoader(TerrainStreamManager::TileAsyncDataLoader loader)
+    void GPUDrivenRenderer::setTileLoadContextProvider(TerrainStreamManager::TileLoadContextProvider loader)
     {
         if (terrain.streamManager)
         {
-            terrain.streamManager->setTileAsyncDataLoader(std::move(loader));
+            terrain.streamManager->setTileLoadContextProvider(std::move(loader));
         }
         else
         {
-            terrain.pendingTileAsyncDataLoader = std::move(loader);
+            terrain.pendingTileLoadContextProvider = std::move(loader);
         }
     }
 

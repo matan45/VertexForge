@@ -34,5 +34,8 @@ namespace services
         ~TerrainRaycastServiceImpl() override;
 
         void registerEventHandlers() override;
+
+    private:
+        void unsubscribeAll();
     };
 }

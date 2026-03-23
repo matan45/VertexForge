@@ -7,7 +7,6 @@
 #include "terrain/BrushSampler.hpp"
 #include "terrain/WeightBrushApplicator.hpp"
 #include "terrain/HoleBrushApplicator.hpp"
-// VegetationDensityBrushApplicator removed - instance-based placement
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/terrain/BrushEvents.hpp"

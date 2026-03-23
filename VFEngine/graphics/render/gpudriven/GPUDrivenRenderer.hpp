@@ -133,7 +133,7 @@ namespace render::gpudriven
             float uploadTileDataUs = 0.0f;
             TerrainStreamManager::TileDataLoader pendingTileDataLoader;
             TerrainStreamManager::TileRAMEvictor pendingTileRAMEvictor;
-            TerrainStreamManager::TileAsyncDataLoader pendingTileAsyncDataLoader;
+            TerrainStreamManager::TileLoadContextProvider pendingTileLoadContextProvider;
         };
 
         struct SVTState
@@ -651,7 +651,7 @@ namespace render::gpudriven
         void releaseMaterialAsset(const std::string& materialPath);
 
         void setTileRAMEvictor(TerrainStreamManager::TileRAMEvictor evictor);
-        void setTileAsyncDataLoader(TerrainStreamManager::TileAsyncDataLoader loader);
+        void setTileLoadContextProvider(TerrainStreamManager::TileLoadContextProvider loader);
 
         float getTerrainUpdateUs() const { return terrain.updateUs; }
         float getTerrainStreamingUs() const { return terrain.streamingUs; }

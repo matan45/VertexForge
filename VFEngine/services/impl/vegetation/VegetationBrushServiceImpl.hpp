@@ -44,6 +44,7 @@ namespace services
 
         BillboardPaletteCallback billboardPaletteCb;
         ::events::SubscriptionToken vegetationModeToken;
+        ::events::SubscriptionToken sceneLoadedToken;
 
     public:
         VegetationBrushServiceImpl() = default;
@@ -61,5 +62,21 @@ namespace services
 
         terrain::TileCoord worldToTileCoord(float worldX, float worldZ) const;
         vegetation::VegetationSpatialGrid& ensureSpatialGrid(const terrain::TileCoord& coord);
+        bool ensureSpatialGridForTile(const terrain::TileCoord& coord);
+
+        using TileInstanceMap = std::unordered_map<terrain::TileCoord,
+            std::vector<vegetation::BillboardInstance>, TileCoordHash, TileCoordEqual>;
+
+        struct PlacementContext
+        {
+            const std::vector<uint32_t>& enabledIndices;
+            const std::vector<vegetation::BillboardPaletteEntry>& palette;
+            std::discrete_distribution<uint32_t>& paletteDist;
+            uint32_t maxCandidates;
+            TileInstanceMap& tileInstances;
+            uint32_t& placedCount;
+        };
+
+        void generateAndPlaceCandidates(const glm::vec3& worldPos, PlacementContext& ctx);
     };
 }

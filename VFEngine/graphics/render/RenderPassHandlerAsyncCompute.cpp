@@ -76,7 +76,6 @@ namespace render
                 auto grassConfig = grassRenderProvider->getGrassRenderConfig();
                 gpuDrivenRenderer->setGrassRenderConfig(grassConfig);
 
-
                 ::vegetation::WindConfig windConfig;
                 windConfig.direction = grassConfig.windDirection;
                 windConfig.speed = grassConfig.windSpeed * grassConfig.windStrength;

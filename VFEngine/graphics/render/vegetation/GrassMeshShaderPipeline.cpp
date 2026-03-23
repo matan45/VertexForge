@@ -171,7 +171,6 @@ namespace render::vegetation
 
         cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
 
-        // Bind sets 0-2 always; sets 3-4 (lights, bindless) when available
         if (lightDataDescriptorSet && bindlessDescriptorSet)
         {
             std::array<vk::DescriptorSet, 5> sets = {

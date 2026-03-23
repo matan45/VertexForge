@@ -1,6 +1,7 @@
 #include "VegetationBrushServiceImpl.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
+#include "components/TerrainComponents.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/vegetation/VegetationBrushEvents.hpp"
 #include "../../events/vegetation/GrassEvents.hpp"
@@ -21,6 +22,8 @@ namespace services
         auto& dispatcher = events::EventDispatcher::instance();
         if (vegetationModeToken.isValid())
             dispatcher.unsubscribe(vegetationModeToken);
+        if (sceneLoadedToken.isValid())
+            dispatcher.unsubscribe(sceneLoadedToken);
     }
 
     void VegetationBrushServiceImpl::registerEventHandlers()
@@ -102,7 +105,7 @@ namespace services
             });
 
         // Auto-push billboard palette to renderer when scene loads
-        dispatcher.subscribe<events::scene::SceneLoadedNotification>(
+        sceneLoadedToken = dispatcher.subscribe<events::scene::SceneLoadedNotification>(
             [this](const events::scene::SceneLoadedNotification&)
             {
                 auto& registry = scene::EntityRegistry::getRegistry();
@@ -124,6 +127,15 @@ namespace services
 
         if (isFirstApplication)
             hasLastPlacement = false;
+
+        // Query actual tile size from terrain
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto terrainView = registry.view<components::TerrainComponent>();
+        for (auto entity : terrainView)
+        {
+            worldTileSize = terrainView.get<components::TerrainComponent>(entity).worldTileSize;
+            break;
+        }
 
         std::vector<vegetation::BillboardPaletteEntry> palette;
         try {
@@ -150,40 +162,19 @@ namespace services
         }
     }
 
-    void VegetationBrushServiceImpl::placeBillboards(
-        const glm::vec3& worldPos,
-        const std::vector<vegetation::BillboardPaletteEntry>& palette)
+    void VegetationBrushServiceImpl::generateAndPlaceCandidates(
+        const glm::vec3& worldPos, PlacementContext& ctx)
     {
-        // Build list of paint-enabled entries
-        std::vector<uint32_t> enabledIndices;
-        std::vector<float> weights;
-        for (uint32_t i = 0; i < static_cast<uint32_t>(palette.size()); ++i)
-        {
-            if (palette[i].paintEnabled && !palette[i].texturePath.empty())
-            {
-                enabledIndices.push_back(i);
-                weights.push_back(palette[i].weight);
-            }
-        }
-        if (enabledIndices.empty()) return;
-
-        std::discrete_distribution<uint32_t> paletteDist(weights.begin(), weights.end());
-
-        // Calculate candidates
-        float area = static_cast<float>(M_PI) * currentParams.radius * currentParams.radius;
-        float spacingSq = std::max(currentParams.spacing * currentParams.spacing, 0.01f);
-        uint32_t maxCandidates = std::clamp(
-            static_cast<uint32_t>(currentParams.density * area / spacingSq), 1u, 100u);
-
+        const auto& enabledIndices = ctx.enabledIndices;
+        const auto& palette = ctx.palette;
+        auto& paletteDist = ctx.paletteDist;
+        uint32_t maxCandidates = ctx.maxCandidates;
+        auto& tileInstances = ctx.tileInstances;
+        auto& placedCount = ctx.placedCount;
         std::uniform_real_distribution<float> angleDist(0.0f, static_cast<float>(2.0 * M_PI));
         std::uniform_real_distribution<float> radiusDist(0.0f, 1.0f);
         std::uniform_real_distribution<float> jitterDist(-0.5f, 0.5f);
         std::uniform_real_distribution<float> unitDist(0.0f, 1.0f);
-
-        std::unordered_map<terrain::TileCoord, std::vector<vegetation::BillboardInstance>,
-                           TileCoordHash, TileCoordEqual> tileInstances;
-
-        uint32_t placedCount = 0;
 
         for (uint32_t c = 0; c < maxCandidates; ++c)
         {
@@ -232,6 +223,39 @@ namespace services
             grid.insert(static_cast<uint32_t>(grid.queryRadius(candidatePos, 0.0f).size()), candidatePos);
             ++placedCount;
         }
+    }
+
+    void VegetationBrushServiceImpl::placeBillboards(
+        const glm::vec3& worldPos,
+        const std::vector<vegetation::BillboardPaletteEntry>& palette)
+    {
+        // Build list of paint-enabled entries
+        std::vector<uint32_t> enabledIndices;
+        std::vector<float> weights;
+        for (uint32_t i = 0; i < static_cast<uint32_t>(palette.size()); ++i)
+        {
+            if (palette[i].paintEnabled && !palette[i].texturePath.empty())
+            {
+                enabledIndices.push_back(i);
+                weights.push_back(palette[i].weight);
+            }
+        }
+        if (enabledIndices.empty()) return;
+
+        std::discrete_distribution<uint32_t> paletteDist(weights.begin(), weights.end());
+
+        // Calculate candidates
+        float area = static_cast<float>(M_PI) * currentParams.radius * currentParams.radius;
+        float spacingSq = std::max(currentParams.spacing * currentParams.spacing, 0.01f);
+        uint32_t maxCandidates = std::clamp(
+            static_cast<uint32_t>(currentParams.density * area / spacingSq), 1u, 100u);
+
+        TileInstanceMap tileInstances;
+        uint32_t placedCount = 0;
+
+        PlacementContext ctx{enabledIndices, palette, paletteDist,
+                             maxCandidates, tileInstances, placedCount};
+        generateAndPlaceCandidates(worldPos, ctx);
 
         // Send instances to terrain tiles via events
         auto& dispatcher = events::EventDispatcher::instance();
@@ -253,6 +277,25 @@ namespace services
         }
     }
 
+    bool VegetationBrushServiceImpl::ensureSpatialGridForTile(const terrain::TileCoord& coord)
+    {
+        auto gridIt = spatialGrids.find(coord);
+        if (gridIt != spatialGrids.end())
+            return true;
+
+        events::vegetation::GetTileBillboardInstancesQuery query;
+        query.tileX = coord.x;
+        query.tileZ = coord.z;
+        try {
+            auto instances = events::EventDispatcher::instance().query(query);
+            if (instances.empty()) return false;
+            auto& grid = spatialGrids[coord];
+            grid.setCellSize(currentParams.spacing);
+            grid.rebuild(instances);
+            return true;
+        } catch (...) { return false; }
+    }
+
     void VegetationBrushServiceImpl::eraseBillboards(const glm::vec3& worldPos)
     {
         auto affectedTiles = terrain::BrushSampler::getAffectedTiles(
@@ -263,24 +306,10 @@ namespace services
 
         for (const auto& coord : affectedTiles)
         {
-            // Ensure spatial grid exists - rebuild from tile data if needed
-            auto gridIt = spatialGrids.find(coord);
-            if (gridIt == spatialGrids.end())
-            {
-                // Query tile instances to build grid
-                events::vegetation::GetTileBillboardInstancesQuery query;
-                query.tileX = coord.x;
-                query.tileZ = coord.z;
-                try {
-                    auto instances = dispatcher.query(query);
-                    if (instances.empty()) continue;
-                    auto& grid = spatialGrids[coord];
-                    grid.setCellSize(currentParams.spacing);
-                    grid.rebuild(instances);
-                    gridIt = spatialGrids.find(coord);
-                } catch (...) { continue; }
-            }
+            if (!ensureSpatialGridForTile(coord))
+                continue;
 
+            auto gridIt = spatialGrids.find(coord);
             auto entries = gridIt->second.queryRadius(worldPos, currentParams.radius);
             if (entries.empty()) continue;
 

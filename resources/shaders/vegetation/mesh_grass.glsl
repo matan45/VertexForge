@@ -95,8 +95,8 @@ void main() {
     float bW = scaleAndDensity.y;
     float wp = scaleAndDensity.w;
     uint vt = uint(colorTint.w + 0.5); // round to nearest uint
-    uint ti = uint(colorTint.x + 0.5); // texture index stored as float
-    uint bbMode = uint(colorTint.y + 0.5);
+    uint ti = floatBitsToUint(colorTint.x); // texture index packed as uint bits
+    uint bbMode = floatBitsToUint(colorTint.y);
 
     float alpha = 1.0;
     if (dist > fadeStartDistance) {

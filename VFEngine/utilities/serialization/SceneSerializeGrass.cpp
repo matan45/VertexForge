@@ -1,6 +1,60 @@
 #include "SceneSerialization.hpp"
 #include "../components/Components.hpp"
 
+namespace {
+    template<typename T>
+    void readField(const nlohmann::json& j, const char* key, T& out)
+    {
+        if (auto it = j.find(key); it != j.end())
+            out = it->get<T>();
+    }
+
+    void deserializeColor4(const nlohmann::json& j, const char* key, glm::vec4& out)
+    {
+        if (auto it = j.find(key); it != j.end() && it->is_array() && it->size() >= 4)
+            out = glm::vec4((*it)[0].get<float>(), (*it)[1].get<float>(),
+                            (*it)[2].get<float>(), (*it)[3].get<float>());
+    }
+
+    void deserializeWind(const nlohmann::json& j, vegetation::GrassRenderConfig& cfg)
+    {
+        readField(j, "windStrength", cfg.windStrength);
+        if (auto it = j.find("windDirection"); it != j.end() && it->is_array() && it->size() >= 3)
+            cfg.windDirection = glm::vec3((*it)[0].get<float>(), (*it)[1].get<float>(), (*it)[2].get<float>());
+        readField(j, "windSpeed", cfg.windSpeed);
+        readField(j, "gustStrength", cfg.gustStrength);
+        readField(j, "gustFrequency", cfg.gustFrequency);
+    }
+
+    void deserializeBillboardPalette(const nlohmann::json& j,
+                                     std::vector<vegetation::BillboardPaletteEntry>& palette)
+    {
+        if (auto it = j.find("billboardPalette"); it != j.end() && it->is_array())
+        {
+            palette.clear();
+            for (const auto& e : *it)
+            {
+                vegetation::BillboardPaletteEntry entry;
+                if (e.contains("texturePath") && e["texturePath"].is_string())
+                    entry.texturePath = e["texturePath"].get<std::string>();
+                if (e.contains("weight") && e["weight"].is_number())
+                    entry.weight = e["weight"].get<float>();
+                if (e.contains("scaleMin") && e["scaleMin"].is_number())
+                    entry.scaleRange.x = e["scaleMin"].get<float>();
+                if (e.contains("scaleMax") && e["scaleMax"].is_number())
+                    entry.scaleRange.y = e["scaleMax"].get<float>();
+                if (e.contains("mode") && e["mode"].is_number())
+                    entry.mode = static_cast<vegetation::BillboardMode>(e["mode"].get<int>());
+                if (e.contains("visible") && e["visible"].is_boolean())
+                    entry.visible = e["visible"].get<bool>();
+                if (e.contains("paintEnabled") && e["paintEnabled"].is_boolean())
+                    entry.paintEnabled = e["paintEnabled"].get<bool>();
+                palette.push_back(entry);
+            }
+        }
+    }
+}
+
 namespace serialization
 {
     json SceneSerialization::serializeGrass(const components::GrassComponent& grass)
@@ -70,90 +124,40 @@ namespace serialization
     {
         auto& cfg = grass.config;
 
-        if (auto it = j.find("enabled"); it != j.end() && it->is_boolean())
-            grass.enabled = it->get<bool>();
+        readField(j, "enabled", grass.enabled);
 
         // Colors
-        if (auto it = j.find("baseColor"); it != j.end() && it->is_array() && it->size() >= 4)
-            cfg.baseColor = glm::vec4((*it)[0].get<float>(), (*it)[1].get<float>(),
-                                       (*it)[2].get<float>(), (*it)[3].get<float>());
-        if (auto it = j.find("tipColor"); it != j.end() && it->is_array() && it->size() >= 4)
-            cfg.tipColor = glm::vec4((*it)[0].get<float>(), (*it)[1].get<float>(),
-                                      (*it)[2].get<float>(), (*it)[3].get<float>());
+        deserializeColor4(j, "baseColor", cfg.baseColor);
+        deserializeColor4(j, "tipColor", cfg.tipColor);
 
         // Blade dimensions
-        if (auto it = j.find("heightMin"); it != j.end() && it->is_number())
-            cfg.heightMin = it->get<float>();
-        if (auto it = j.find("heightMax"); it != j.end() && it->is_number())
-            cfg.heightMax = it->get<float>();
-        if (auto it = j.find("widthMin"); it != j.end() && it->is_number())
-            cfg.widthMin = it->get<float>();
-        if (auto it = j.find("widthMax"); it != j.end() && it->is_number())
-            cfg.widthMax = it->get<float>();
+        readField(j, "heightMin", cfg.heightMin);
+        readField(j, "heightMax", cfg.heightMax);
+        readField(j, "widthMin", cfg.widthMin);
+        readField(j, "widthMax", cfg.widthMax);
 
         // Terrain limits
-        if (auto it = j.find("slopeLimit"); it != j.end() && it->is_number())
-            cfg.slopeLimit = it->get<float>();
-        if (auto it = j.find("densityMultiplier"); it != j.end() && it->is_number())
-            cfg.densityMultiplier = it->get<float>();
+        readField(j, "slopeLimit", cfg.slopeLimit);
+        readField(j, "densityMultiplier", cfg.densityMultiplier);
 
         // Fade distances
-        if (auto it = j.find("fadeStartDistance"); it != j.end() && it->is_number())
-            cfg.fadeStartDistance = it->get<float>();
-        if (auto it = j.find("fadeEndDistance"); it != j.end() && it->is_number())
-            cfg.fadeEndDistance = it->get<float>();
+        readField(j, "fadeStartDistance", cfg.fadeStartDistance);
+        readField(j, "fadeEndDistance", cfg.fadeEndDistance);
 
         // Wind
-        if (auto it = j.find("windStrength"); it != j.end() && it->is_number())
-            cfg.windStrength = it->get<float>();
-        if (auto it = j.find("windDirection"); it != j.end() && it->is_array() && it->size() >= 3)
-            cfg.windDirection = glm::vec3((*it)[0].get<float>(), (*it)[1].get<float>(), (*it)[2].get<float>());
-        if (auto it = j.find("windSpeed"); it != j.end() && it->is_number())
-            cfg.windSpeed = it->get<float>();
-        if (auto it = j.find("gustStrength"); it != j.end() && it->is_number())
-            cfg.gustStrength = it->get<float>();
-        if (auto it = j.find("gustFrequency"); it != j.end() && it->is_number())
-            cfg.gustFrequency = it->get<float>();
+        deserializeWind(j, cfg);
 
         // Distance-based density fadeout
-        if (auto it = j.find("densityFadeStartFactor"); it != j.end() && it->is_number())
-            cfg.densityFadeStartFactor = it->get<float>();
-        if (auto it = j.find("minDensityScale"); it != j.end() && it->is_number())
-            cfg.minDensityScale = it->get<float>();
-        if (auto it = j.find("terrainLODIntegration"); it != j.end() && it->is_boolean())
-            cfg.terrainLODIntegration = it->get<bool>();
+        readField(j, "densityFadeStartFactor", cfg.densityFadeStartFactor);
+        readField(j, "minDensityScale", cfg.minDensityScale);
+        readField(j, "terrainLODIntegration", cfg.terrainLODIntegration);
 
         // Subsurface scattering
-        if (auto it = j.find("sssDistortion"); it != j.end() && it->is_number())
-            cfg.sssDistortion = it->get<float>();
-        if (auto it = j.find("sssPower"); it != j.end() && it->is_number())
-            cfg.sssPower = it->get<float>();
-        if (auto it = j.find("sssScale"); it != j.end() && it->is_number())
-            cfg.sssScale = it->get<float>();
+        readField(j, "sssDistortion", cfg.sssDistortion);
+        readField(j, "sssPower", cfg.sssPower);
+        readField(j, "sssScale", cfg.sssScale);
 
         // Billboard palette
-        if (auto it = j.find("billboardPalette"); it != j.end() && it->is_array())
-        {
-            grass.billboardPalette.clear();
-            for (const auto& e : *it)
-            {
-                vegetation::BillboardPaletteEntry entry;
-                if (e.contains("texturePath") && e["texturePath"].is_string())
-                    entry.texturePath = e["texturePath"].get<std::string>();
-                if (e.contains("weight") && e["weight"].is_number())
-                    entry.weight = e["weight"].get<float>();
-                if (e.contains("scaleMin") && e["scaleMin"].is_number())
-                    entry.scaleRange.x = e["scaleMin"].get<float>();
-                if (e.contains("scaleMax") && e["scaleMax"].is_number())
-                    entry.scaleRange.y = e["scaleMax"].get<float>();
-                if (e.contains("mode") && e["mode"].is_number())
-                    entry.mode = static_cast<vegetation::BillboardMode>(e["mode"].get<int>());
-                if (e.contains("visible") && e["visible"].is_boolean())
-                    entry.visible = e["visible"].get<bool>();
-                if (e.contains("paintEnabled") && e["paintEnabled"].is_boolean())
-                    entry.paintEnabled = e["paintEnabled"].get<bool>();
-                grass.billboardPalette.push_back(entry);
-            }
-        }
+        deserializeBillboardPalette(j, grass.billboardPalette);
     }
 }

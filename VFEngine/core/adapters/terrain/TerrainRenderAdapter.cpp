@@ -101,10 +101,10 @@ namespace core
         terrainService->releaseTileRAMData(tile);
     }
 
-    services::TileAsyncLoadResult TerrainRenderAdapter::asyncLoadTileLODData(int32_t coordX, int32_t coordZ)
+    services::TileLoadContextResult TerrainRenderAdapter::prepareTileLoadContext(int32_t coordX, int32_t coordZ)
     {
         if (!terrainService) return {};
-        return terrainService->asyncLoadTileLODData(coordX, coordZ);
+        return terrainService->prepareTileLoadContext(coordX, coordZ);
     }
 
     void TerrainRenderAdapter::markTerrainMaterialDirty()

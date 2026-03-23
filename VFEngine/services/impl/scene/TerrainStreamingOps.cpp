@@ -6,6 +6,7 @@
 #include "terrain/TerrainGrid.hpp"
 #include "terrain/TerrainTypes.hpp"
 #include "terrain/TerrainTile.hpp"
+#include "terrain/TerrainSerializer.hpp"
 #include "vegetation/VegetationSerializer.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
@@ -16,6 +17,39 @@
 
 namespace services
 {
+    TileLoadContextResult TerrainService::prepareTileLoadContext(int32_t coordX, int32_t coordZ)
+    {
+        TileLoadContextResult result;
+        terrain::TileCoord coord{coordX, coordZ};
+
+        for (auto& [entityId, grid] : terrainGrids)
+        {
+            if (!grid->getTile(coord))
+                continue;
+
+            auto cacheIt = fileCaches.find(entityId);
+            if (cacheIt == fileCaches.end() || !cacheIt->second)
+                return result;
+
+            auto& cache = *cacheIt->second;
+            const auto& indexMap = cache.getIndexMap();
+            auto indexIt = indexMap.find(coord);
+            if (indexIt == indexMap.end())
+                return result;
+
+            if (indexIt->second.heightDataOffset == 0)
+                return result;
+
+            result.filePath = cache.getFilePath();
+            result.indexEntry = indexIt->second;
+            result.hasMeshletCache = cache.hasMeshletCache();
+            result.valid = true;
+            return result;
+        }
+
+        return result;
+    }
+
     bool TerrainService::addTile(EntityHandle terrainEntity, int32_t tileX, int32_t tileZ)
     {
         if (!terrainEntity.isValid())

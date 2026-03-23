@@ -50,7 +50,7 @@ namespace core
         bool ensureTileLODData(terrain::TerrainTile& tile, uint8_t lodLevel) override;
         void releaseTileRAMData(terrain::TerrainTile& tile) override;
 
-        services::TileAsyncLoadResult asyncLoadTileLODData(int32_t coordX, int32_t coordZ) override;
+        services::TileLoadContextResult prepareTileLoadContext(int32_t coordX, int32_t coordZ) override;
 
         void markTerrainMaterialDirty() override;
         bool consumeTerrainMaterialDirty() override;

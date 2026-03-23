@@ -40,19 +40,31 @@ namespace windows
         if (!visible) return;
 
         ImGui::SetNextWindowSize(ImVec2(320, 0), ImGuiCond_FirstUseEver);
-
         if (!ImGui::Begin("Vegetation Brush", &visible))
         {
             ImGui::End();
             return;
         }
 
-        // Billboard palette
         drawBillboardPalette();
-
         ImGui::Separator();
+        drawBrushControls();
+        ImGui::Separator();
+        ensureConfigLoaded();
+        drawWindControls();
+        drawSSSControls();
+        ImGui::End();
 
-        // Brush type: Paint / Erase
+        if (!visible)
+        {
+            events::vegetationBrush::SetVegetationBrushModeActiveCommand cmd;
+            cmd.active = false;
+            events::EventDispatcher::instance().execute(cmd);
+        }
+    }
+
+    void GrassDensityPanel::drawBrushControls()
+    {
         const char* brushTypes[] = {"Paint", "Erase"};
         if (ImGui::Combo("Brush Type", &selectedBrushType, brushTypes, IM_ARRAYSIZE(brushTypes)))
         {
@@ -79,11 +91,10 @@ namespace windows
             cmd.params = params;
             events::EventDispatcher::instance().execute(cmd);
         }
+    }
 
-        ImGui::Separator();
-
-        // Wind & SSS settings
-        ensureConfigLoaded();
+    void GrassDensityPanel::drawWindControls()
+    {
         bool configChanged = false;
         if (ImGui::CollapsingHeader("Wind"))
         {
@@ -115,6 +126,13 @@ namespace windows
             }
         }
 
+        if (configChanged)
+            pushGrassConfig();
+    }
+
+    void GrassDensityPanel::drawSSSControls()
+    {
+        bool configChanged = false;
         if (ImGui::CollapsingHeader("Subsurface Scattering"))
         {
             configChanged |= ImGui::SliderFloat("SSS Distortion", &grassConfig.sssDistortion, 0.0f, 1.0f, "%.2f");
@@ -132,15 +150,6 @@ namespace windows
 
         if (configChanged)
             pushGrassConfig();
-
-        ImGui::End();
-
-        if (!visible)
-        {
-            events::vegetationBrush::SetVegetationBrushModeActiveCommand cmd;
-            cmd.active = false;
-            events::EventDispatcher::instance().execute(cmd);
-        }
     }
 
     void GrassDensityPanel::drawBillboardPalette()
@@ -248,10 +257,6 @@ namespace windows
 
     void GrassDensityPanel::ensureConfigLoaded()
     {
-        // Re-query if palette is empty (scene may have loaded after initial query)
-        if (configLoaded && billboardEntries.empty())
-            configLoaded = false;
-
         if (!configLoaded)
         {
             grassConfig = events::EventDispatcher::instance().query(
@@ -260,8 +265,6 @@ namespace windows
             try {
                 billboardEntries = events::EventDispatcher::instance().query(
                     events::vegetation::GetBillboardPaletteQuery{});
-                if (!billboardEntries.empty())
-                    pushBillboardPalette();
             } catch (...) {}
 
             configLoaded = true;

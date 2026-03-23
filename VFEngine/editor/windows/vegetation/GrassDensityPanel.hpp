@@ -38,6 +38,9 @@ namespace windows
         void ensureConfigLoaded();
         void drawBillboardPalette();
         void drawBillboardEntry(int index, int& removeIndex);
+        void drawBrushControls();
+        void drawWindControls();
+        void drawSSSControls();
         void pushGrassConfig();
         void pushBillboardPalette();
     };

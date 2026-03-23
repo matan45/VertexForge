@@ -22,67 +22,48 @@ namespace services
 
     TerrainRaycastServiceImpl::~TerrainRaycastServiceImpl()
     {
+        unsubscribeAll();
+    }
+
+    void TerrainRaycastServiceImpl::unsubscribeAll()
+    {
         auto& dispatcher = events::EventDispatcher::instance();
 
         if (sculptModeToken.isValid())
-        {
             dispatcher.unsubscribe(sculptModeToken);
-        }
 
         if (paintModeToken.isValid())
-        {
             dispatcher.unsubscribe(paintModeToken);
-        }
 
         if (brushParamsToken.isValid())
-        {
             dispatcher.unsubscribe(brushParamsToken);
-        }
 
         if (paintBrushParamsToken.isValid())
-        {
             dispatcher.unsubscribe(paintBrushParamsToken);
-        }
 
         if (holeModeToken.isValid())
-        {
             dispatcher.unsubscribe(holeModeToken);
-        }
 
         if (holeBrushParamsToken.isValid())
-        {
             dispatcher.unsubscribe(holeBrushParamsToken);
-        }
 
         if (caveModeToken.isValid())
-        {
             dispatcher.unsubscribe(caveModeToken);
-        }
 
         if (caveBrushParamsToken.isValid())
-        {
             dispatcher.unsubscribe(caveBrushParamsToken);
-        }
 
         if (vegBrushModeToken.isValid())
-        {
             dispatcher.unsubscribe(vegBrushModeToken);
-        }
 
         if (vegBrushParamsToken.isValid())
-        {
             dispatcher.unsubscribe(vegBrushParamsToken);
-        }
 
         if (meshBrushModeToken.isValid())
-        {
             dispatcher.unsubscribe(meshBrushModeToken);
-        }
 
         if (meshBrushParamsToken.isValid())
-        {
             dispatcher.unsubscribe(meshBrushParamsToken);
-        }
     }
 
     void TerrainRaycastServiceImpl::registerEventHandlers()

@@ -62,18 +62,16 @@ namespace render
                 [provider](terrain::TerrainTile& tile, uint8_t lod) -> bool { return provider->ensureTileLODData(tile, lod); });
             gpuDrivenRenderer->setTileRAMEvictor(
                 [provider](terrain::TerrainTile& tile) { provider->releaseTileRAMData(tile); });
-            gpuDrivenRenderer->setTileAsyncDataLoader(
-                [provider](const render::gpudriven::TerrainTileKey& key) -> render::gpudriven::TileLODLoadResult {
-                    auto serviceResult = provider->asyncLoadTileLODData(key.coordX, key.coordZ);
-                    render::gpudriven::TileLODLoadResult result;
-                    result.key = key;
-                    result.lodData = std::move(serviceResult.lodData);
-                    result.weightMap = std::move(serviceResult.weightMap);
-                    result.holeMask = std::move(serviceResult.holeMask);
-                    result.hasWeightMap = serviceResult.hasWeightMap;
-                    result.hasHoleMask = serviceResult.hasHoleMask;
-                    result.success = serviceResult.success;
-                    return result;
+            gpuDrivenRenderer->setTileLoadContextProvider(
+                [provider](const render::gpudriven::TerrainTileKey& key) -> render::gpudriven::TileLoadContext {
+                    auto serviceResult = provider->prepareTileLoadContext(key.coordX, key.coordZ);
+                    render::gpudriven::TileLoadContext ctx;
+                    ctx.key = key;
+                    ctx.filePath = std::move(serviceResult.filePath);
+                    ctx.indexEntry = serviceResult.indexEntry;
+                    ctx.hasMeshletCache = serviceResult.hasMeshletCache;
+                    ctx.valid = serviceResult.valid;
+                    return ctx;
                 });
         }
     }
@@ -93,7 +91,6 @@ namespace render
                 renderer->setActiveBillboardEntry(activeEntry);
             });
 
-            // Set palette loader - reads directly from ECS registry
             renderer->setBillboardPaletteLoader([]() -> std::vector<::vegetation::BillboardPaletteEntry> {
                 auto& registry = scene::EntityRegistry::getRegistry();
                 auto view = registry.view<components::GrassComponent>();

@@ -70,9 +70,8 @@ namespace render::gpudriven
         vegetation.grassStreamManager = std::make_unique<vegetation::GrassStreamManager>();
         vegetation.grassStreamManager->init(device, *vegetation.bufferManager);
 
-        // Grass instance buffers - start with reasonable capacity
-        // Can be resized later when more tiles are streamed
-        constexpr uint32_t initialGrassCapacity = 4 * 1024 * 1024; // ~4M instances
+        // Grass instance buffers - start with moderate capacity, grows on demand
+        constexpr uint32_t initialGrassCapacity = 512 * 1024; // ~512K instances (~24MB)
         createGrassBuffers(initialGrassCapacity);
 
         vegetation.grassMeshPipeline = std::make_unique<vegetation::GrassMeshShaderPipeline>();
@@ -303,7 +302,10 @@ namespace render::gpudriven
                 vegetation::GrassInstanceGPU gpu;
                 gpu.positionAndRotation = glm::vec4(inst.position, inst.rotation);
                 gpu.scaleAndDensity = glm::vec4(inst.scale, inst.scale * 0.5f, 1.0f, inst.windPhase);
-                gpu.color = glm::vec4(static_cast<float>(texIdx), static_cast<float>(bbMode), 1.0f, 0.0f);
+                gpu.color = glm::vec4(
+                    glm::uintBitsToFloat(texIdx),
+                    glm::uintBitsToFloat(bbMode),
+                    1.0f, 0.0f);
                 result.push_back(gpu);
             }
 
@@ -355,6 +357,14 @@ namespace render::gpudriven
         if (instanceCount == 0) return;
 
         vk::DeviceSize dataSize = instanceCount * sizeof(vegetation::GrassInstanceGPU);
+
+        if (instanceCount > vegetation.grassInstanceCapacity)
+        {
+            instanceCount = vegetation.grassInstanceCapacity;
+            vegetation.currentGrassInstanceCount = instanceCount;
+            dataSize = instanceCount * sizeof(vegetation::GrassInstanceGPU);
+        }
+
         ensureInstanceStagingCapacity(dataSize);
 
         std::memcpy(vegetation.instanceStagingMapped, allInstances.data(), dataSize);

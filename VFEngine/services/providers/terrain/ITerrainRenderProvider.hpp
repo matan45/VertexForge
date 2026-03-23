@@ -1,7 +1,6 @@
 #pragma once
 
-#include "terrain/TerrainTile.hpp"
-#include <array>
+#include "terrain/TerrainSerializer.hpp"
 #include <vector>
 #include <string>
 #include <glm/glm.hpp>
@@ -11,18 +10,19 @@ namespace math
     class Frustum;
 }
 
+namespace terrain
+{
+    class TerrainTile;
+}
+
 namespace services
 {
-    struct TileAsyncLoadResult
+    struct TileLoadContextResult
     {
-        int32_t coordX = 0;
-        int32_t coordZ = 0;
-        std::array<terrain::TileLODData, 6> lodData;
-        terrain::TileWeightMapData weightMap;
-        std::vector<uint8_t> holeMask;
-        bool hasWeightMap = false;
-        bool hasHoleMask = false;
-        bool success = false;
+        std::string filePath;
+        terrain::TileIndexEntry indexEntry{};
+        bool hasMeshletCache = false;
+        bool valid = false;
     };
 
     class ITerrainRenderProvider
@@ -56,7 +56,7 @@ namespace services
         virtual bool ensureTileLODData(terrain::TerrainTile& tile, uint8_t lodLevel) = 0;
         virtual void releaseTileRAMData(terrain::TerrainTile& tile) = 0;
 
-        virtual TileAsyncLoadResult asyncLoadTileLODData(int32_t coordX, int32_t coordZ) = 0;
+        virtual TileLoadContextResult prepareTileLoadContext(int32_t coordX, int32_t coordZ) = 0;
 
         virtual void markTerrainMaterialDirty() = 0;
         virtual bool consumeTerrainMaterialDirty() = 0;

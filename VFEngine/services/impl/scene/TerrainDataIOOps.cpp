@@ -202,15 +202,8 @@ namespace services
             {
                 // Store on a GrassComponent so the renderer can find it
                 auto& registry = scene::EntityRegistry::getRegistry();
-                // Find terrain entity
-                entt::entity terrainEntity = entt::null;
-                for (auto& [id, grid] : terrainGrids)
-                {
-                    auto terrainView = registry.view<components::TerrainComponent>();
-                    for (auto e : terrainView) { terrainEntity = e; break; }
-                    break;
-                }
-                if (terrainEntity != entt::null)
+                entt::entity terrainEntity = internal::fromHandle(EntityHandle{terrainEntityId});
+                if (registry.valid(terrainEntity))
                 {
                     if (!registry.all_of<components::GrassComponent>(terrainEntity))
                         registry.emplace<components::GrassComponent>(terrainEntity);
