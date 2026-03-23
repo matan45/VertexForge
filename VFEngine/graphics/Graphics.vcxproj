@@ -651,7 +651,6 @@
     <None Include="..\..\resources\shaders\postprocess\vignette.glsl" />
     <None Include="..\..\resources\shaders\postprocess\volumetric_fog_sample.glsl" />
     <None Include="..\..\resources\shaders\shadow\shadow.glsl" />
-    <None Include="..\..\resources\shaders\shadow\shadow_grass.glsl" />
     <None Include="..\..\resources\shaders\shadow\shadow_terrain.glsl" />
     <None Include="..\..\resources\shaders\shadow\vsm_feedback.glsl" />
     <None Include="..\..\resources\shaders\svt\svt_feedback.glsl" />

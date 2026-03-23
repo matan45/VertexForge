@@ -75,8 +75,6 @@ namespace render::gpudriven
         constexpr uint32_t initialGrassCapacity = 4 * 1024 * 1024; // ~4M instances
         createGrassBuffers(initialGrassCapacity);
 
-        // No compute pipeline needed - instances are uploaded directly
-
         vegetation.grassMeshPipeline = std::make_unique<vegetation::GrassMeshShaderPipeline>();
         vk::DescriptorSetLayout lightLayout = lightBufferManager
             ? lightBufferManager->getDescriptorSetLayout()
@@ -115,22 +113,7 @@ namespace render::gpudriven
     {
         if (!initialized || !vegetation.grassInitialized) return;
 
-        // Auto-load billboard palette from ECS if not yet loaded
-        if (vegetation.billboardPalette.empty())
-        {
-            auto& registry = scene::EntityRegistry::getRegistry();
-            auto view = registry.view<components::GrassComponent>();
-            for (auto entity : view)
-            {
-                const auto& palette = view.get<components::GrassComponent>(entity).billboardPalette;
-                if (!palette.empty())
-                {
-                    vfLogInfo("Auto-loading billboard palette: {} entries", palette.size());
-                    setBillboardPaletteFromEntries(palette);
-                }
-                break;
-            }
-        }
+        autoLoadBillboardPaletteFromECS();
 
         // Cache ALL loaded tiles for grass compute dispatch later in the frame
         // Using allLoadedTiles instead of visibleTiles prevents grass from disappearing
@@ -252,145 +235,60 @@ namespace render::gpudriven
         }
     }
 
-    void GPUDrivenRenderer::ensureTileStagingBuffers(uint32_t texelsPerTile, uint32_t tileCount)
+    void GPUDrivenRenderer::autoLoadBillboardPaletteFromECS()
     {
-        bool needsResize = (vegetation.tileComputeCapacity < texelsPerTile) ||
-                           (vegetation.tileStagingTileSlots < tileCount);
-        if (!needsResize) return;
-
-        vk::Device vkDevice = device.getLogicalDevice();
-        vkDevice.waitIdle();
-
-        if (vegetation.tileStagingMapped)
+        if (!vegetation.billboardPalette.empty()) return;
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto view = registry.view<components::GrassComponent>();
+        for (auto entity : view)
         {
-            vkDevice.unmapMemory(vegetation.tileStagingBufferMemory);
-            vegetation.tileStagingMapped = nullptr;
+            const auto& palette = view.get<components::GrassComponent>(entity).billboardPalette;
+            if (!palette.empty())
+                setBillboardPaletteFromEntries(palette);
+            break;
         }
-        core::BufferUtilities::destroyBuffer(vkDevice, vegetation.tileStagingBuffer, vegetation.tileStagingBufferMemory);
-        core::BufferUtilities::destroyBuffer(vkDevice, vegetation.tileComputeDensity, vegetation.tileComputeDensityMemory);
-        core::BufferUtilities::destroyBuffer(vkDevice, vegetation.tileComputeHeight, vegetation.tileComputeHeightMemory);
-        core::BufferUtilities::destroyBuffer(vkDevice, vegetation.tileComputeHole, vegetation.tileComputeHoleMemory);
-
-        vk::DeviceSize densityPerTile = texelsPerTile * sizeof(float);
-        vk::DeviceSize heightPerTile = texelsPerTile * sizeof(float);
-        vk::DeviceSize holePerTile = texelsPerTile * sizeof(uint32_t);
-        vk::DeviceSize perTileTotal = densityPerTile + heightPerTile + holePerTile;
-
-        // Single large staging buffer with room for all tiles (persistently mapped)
-        {
-            core::BufferInfoRequest request(vkDevice, device.getPhysicalDevice());
-            request.size = perTileTotal * tileCount;
-            request.usage = vk::BufferUsageFlagBits::eTransferSrc;
-            request.properties = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
-            core::BufferUtilities::createBuffer(request, vegetation.tileStagingBuffer, vegetation.tileStagingBufferMemory);
-            vegetation.tileStagingMapped = vkDevice.mapMemory(vegetation.tileStagingBufferMemory, 0, request.size);
-        }
-
-        // Device-local compute input buffers (single tile — copied per dispatch)
-        auto createComputeBuffer = [&](vk::DeviceSize size, vk::Buffer& buffer, vk::DeviceMemory& memory)
-        {
-            core::BufferInfoRequest request(vkDevice, device.getPhysicalDevice());
-            request.size = size;
-            request.usage = vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst;
-            request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-            core::BufferUtilities::createBuffer(request, buffer, memory);
-        };
-
-        createComputeBuffer(densityPerTile, vegetation.tileComputeDensity, vegetation.tileComputeDensityMemory);
-        createComputeBuffer(heightPerTile, vegetation.tileComputeHeight, vegetation.tileComputeHeightMemory);
-        createComputeBuffer(holePerTile, vegetation.tileComputeHole, vegetation.tileComputeHoleMemory);
-
-        vegetation.tileComputeCapacity = texelsPerTile;
-        vegetation.tileStagingTileSlots = tileCount;
-        vegetation.tileStagingTexelsPerSlot = texelsPerTile;
     }
 
-    void GPUDrivenRenderer::dispatchGrassCompute(vk::CommandBuffer cmd,
-                                                 const std::vector<terrain::TerrainTile*>& visibleTiles)
+    bool GPUDrivenRenderer::needsVegetationUpload(const std::vector<terrain::TerrainTile*>& tiles) const
     {
-        if (!initialized || !vegetation.grassInitialized) return;
-        if (!vegetation.grassRenderingEnabled) return;
-
-        // Auto-load billboard palette from ECS if not yet loaded
-        if (vegetation.billboardPalette.empty())
-        {
-            auto& registry = scene::EntityRegistry::getRegistry();
-            auto view = registry.view<components::GrassComponent>();
-            bool found = false;
-            for (auto entity : view)
-            {
-                found = true;
-                const auto& palette = view.get<components::GrassComponent>(entity).billboardPalette;
-                vfLogInfo("dispatchGrassCompute: Found GrassComponent, palette size={}", palette.size());
-                if (!palette.empty())
-                {
-                    vfLogInfo("dispatchGrassCompute: Auto-loading billboard palette: {} entries", palette.size());
-                    setBillboardPaletteFromEntries(palette);
-                }
-                break;
-            }
-            if (!found)
-            {
-                static int logCount = 0;
-                if (logCount++ < 3)
-                    vfLogInfo("dispatchGrassCompute: No GrassComponent found in registry");
-            }
-        }
-
-        // Check if any tile needs re-upload
-        bool anyDirty = false;
-        for (const auto* tile : visibleTiles)
+        for (const auto* tile : tiles)
         {
             if (tile && tile->billboardInstancesGPUDirty)
-            {
-                anyDirty = true;
-                break;
-            }
+                return true;
         }
-
-        // Skip upload if nothing changed and we already have data
-        if (!anyDirty && vegetation.currentGrassInstanceCount > 0)
-            return;
-
-        // Only rebuild when dirty
-        if (!anyDirty && vegetation.currentGrassInstanceCount == 0)
+        if (vegetation.currentGrassInstanceCount == 0)
         {
-            // First frame or no instances - check if any tiles have instances
-            for (const auto* tile : visibleTiles)
+            for (const auto* tile : tiles)
             {
                 if (tile && !tile->billboardInstances.empty())
-                {
-                    anyDirty = true;
-                    break;
-                }
+                    return true;
             }
-            if (!anyDirty) return;
         }
+        return false;
+    }
 
-        // Collect all billboard instances from visible tiles
-        std::vector<vegetation::GrassInstanceGPU> allInstances;
-
+    std::vector<vegetation::GrassInstanceGPU> GPUDrivenRenderer::collectBillboardInstances(
+        const std::vector<terrain::TerrainTile*>& tiles)
+    {
+        std::vector<vegetation::GrassInstanceGPU> result;
         float maxVegDist = vegetation.grassConfig.fadeEndDistance;
 
-        for (auto* tile : visibleTiles)
+        for (auto* tile : tiles)
         {
             if (!tile || tile->billboardInstances.empty()) continue;
 
-            // Distance check per tile
             float tileCenterX = static_cast<float>(tile->coord.x) * tile->config.worldTileSize
                               + tile->config.worldTileSize * 0.5f;
             float tileCenterZ = static_cast<float>(tile->coord.z) * tile->config.worldTileSize
                               + tile->config.worldTileSize * 0.5f;
             float tdx = cachedCamera.position.x - tileCenterX;
             float tdz = cachedCamera.position.z - tileCenterZ;
-            float tileDistSq = tdx * tdx + tdz * tdz;
             float cullDist = maxVegDist + tile->config.worldTileSize;
-            if (tileDistSq > cullDist * cullDist) continue;
+            if (tdx * tdx + tdz * tdz > cullDist * cullDist) continue;
 
-            // Convert BillboardInstance → GrassInstanceGPU
             for (const auto& inst : tile->billboardInstances)
             {
-                if (allInstances.size() >= vegetation.grassInstanceCapacity) break;
+                if (result.size() >= vegetation.grassInstanceCapacity) break;
 
                 uint32_t texIdx = 0xFFFFFFFF;
                 uint32_t bbMode = 0;
@@ -406,68 +304,72 @@ namespace render::gpudriven
                 gpu.positionAndRotation = glm::vec4(inst.position, inst.rotation);
                 gpu.scaleAndDensity = glm::vec4(inst.scale, inst.scale * 0.5f, 1.0f, inst.windPhase);
                 gpu.color = glm::vec4(static_cast<float>(texIdx), static_cast<float>(bbMode), 1.0f, 0.0f);
-                allInstances.push_back(gpu);
+                result.push_back(gpu);
             }
 
-            // Clear dirty flag
             tile->billboardInstancesGPUDirty = false;
         }
+        return result;
+    }
 
+    void GPUDrivenRenderer::ensureInstanceStagingCapacity(vk::DeviceSize requiredSize)
+    {
+        if (requiredSize <= vegetation.instanceStagingCapacity) return;
+
+        vk::Device vkDevice = device.getLogicalDevice();
+        vkDevice.waitIdle();
+
+        if (vegetation.instanceStagingMapped)
+        {
+            vkDevice.unmapMemory(vegetation.instanceStagingMemory);
+            vegetation.instanceStagingMapped = nullptr;
+        }
+        core::BufferUtilities::destroyBuffer(vkDevice,
+            vegetation.instanceStagingBuffer, vegetation.instanceStagingMemory);
+
+        vk::DeviceSize allocSize = requiredSize * 2;
+        core::BufferInfoRequest request(vkDevice, device.getPhysicalDevice());
+        request.size = allocSize;
+        request.usage = vk::BufferUsageFlagBits::eTransferSrc;
+        request.properties = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
+        core::BufferUtilities::createBuffer(request,
+            vegetation.instanceStagingBuffer, vegetation.instanceStagingMemory);
+        vegetation.instanceStagingMapped = vkDevice.mapMemory(vegetation.instanceStagingMemory, 0, allocSize);
+        vegetation.instanceStagingCapacity = static_cast<uint32_t>(allocSize);
+    }
+
+    void GPUDrivenRenderer::dispatchGrassCompute(vk::CommandBuffer cmd,
+                                                 const std::vector<terrain::TerrainTile*>& visibleTiles)
+    {
+        if (!initialized || !vegetation.grassInitialized) return;
+        if (!vegetation.grassRenderingEnabled) return;
+
+        autoLoadBillboardPaletteFromECS();
+
+        if (!needsVegetationUpload(visibleTiles) && vegetation.currentGrassInstanceCount > 0)
+            return;
+
+        auto allInstances = collectBillboardInstances(visibleTiles);
         uint32_t instanceCount = static_cast<uint32_t>(allInstances.size());
         vegetation.currentGrassInstanceCount = instanceCount;
-
         if (instanceCount == 0) return;
 
         vk::DeviceSize dataSize = instanceCount * sizeof(vegetation::GrassInstanceGPU);
-
-        // Ensure staging buffer is large enough
-        if (dataSize > vegetation.instanceStagingCapacity)
-        {
-            vk::Device vkDevice = device.getLogicalDevice();
-            vkDevice.waitIdle();
-
-            if (vegetation.instanceStagingMapped)
-            {
-                vkDevice.unmapMemory(vegetation.instanceStagingMemory);
-                vegetation.instanceStagingMapped = nullptr;
-            }
-            core::BufferUtilities::destroyBuffer(vkDevice,
-                vegetation.instanceStagingBuffer, vegetation.instanceStagingMemory);
-
-            vk::DeviceSize allocSize = dataSize * 2;
-            core::BufferInfoRequest request(vkDevice, device.getPhysicalDevice());
-            request.size = allocSize;
-            request.usage = vk::BufferUsageFlagBits::eTransferSrc;
-            request.properties = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
-            core::BufferUtilities::createBuffer(request,
-                vegetation.instanceStagingBuffer, vegetation.instanceStagingMemory);
-            vegetation.instanceStagingMapped = vkDevice.mapMemory(vegetation.instanceStagingMemory, 0, allocSize);
-            vegetation.instanceStagingCapacity = static_cast<uint32_t>(allocSize);
-        }
+        ensureInstanceStagingCapacity(dataSize);
 
         std::memcpy(vegetation.instanceStagingMapped, allInstances.data(), dataSize);
-
-        vk::BufferCopy copyRegion(0, 0, dataSize);
-        cmd.copyBuffer(vegetation.instanceStagingBuffer, vegetation.grassInstanceBuffer, copyRegion);
-
+        cmd.copyBuffer(vegetation.instanceStagingBuffer, vegetation.grassInstanceBuffer, vk::BufferCopy(0, 0, dataSize));
         cmd.updateBuffer(vegetation.grassCounterBuffer, 0, sizeof(uint32_t), &instanceCount);
 
-        vk::MemoryBarrier barrier(
-            vk::AccessFlagBits::eTransferWrite,
-            vk::AccessFlagBits::eShaderRead);
-        cmd.pipelineBarrier(
-            vk::PipelineStageFlagBits::eTransfer,
+        vk::MemoryBarrier barrier(vk::AccessFlagBits::eTransferWrite, vk::AccessFlagBits::eShaderRead);
+        cmd.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer,
             vk::PipelineStageFlagBits::eTaskShaderEXT | vk::PipelineStageFlagBits::eMeshShaderEXT,
-            vk::DependencyFlags{},
-            1, &barrier,
-            0, nullptr,
-            0, nullptr);
+            {}, 1, &barrier, 0, nullptr, 0, nullptr);
 
         if (vegetation.grassMeshPipeline)
         {
             vegetation.grassMeshPipeline->updateGrassDataDescriptors(
-                vegetation.grassInstanceBuffer,
-                vegetation.grassCounterBuffer);
+                vegetation.grassInstanceBuffer, vegetation.grassCounterBuffer);
         }
     }
 
@@ -496,17 +398,16 @@ namespace render::gpudriven
             bindlessTextures ? bindlessTextures->getDescriptorSet() : vk::DescriptorSet{}
         );
 
-        vegetation.grassMeshPipeline->dispatch(
-            cmd,
-            vegetation.currentGrassInstanceCount,
-            vegetation.grassConfig.fadeStartDistance,
-            vegetation.grassConfig.fadeEndDistance,
-            vegetation.grassConfig.baseColor,
-            vegetation.grassConfig.tipColor,
-            vegetation.grassConfig.sssDistortion,
-            vegetation.grassConfig.sssPower,
-            vegetation.grassConfig.sssScale
-        );
+        vegetation::GrassDispatchParams params;
+        params.instanceCount = vegetation.currentGrassInstanceCount;
+        params.fadeStartDistance = vegetation.grassConfig.fadeStartDistance;
+        params.fadeEndDistance = vegetation.grassConfig.fadeEndDistance;
+        params.baseColor = vegetation.grassConfig.baseColor;
+        params.tipColor = vegetation.grassConfig.tipColor;
+        params.sssDistortion = vegetation.grassConfig.sssDistortion;
+        params.sssPower = vegetation.grassConfig.sssPower;
+        params.sssScale = vegetation.grassConfig.sssScale;
+        vegetation.grassMeshPipeline->dispatch(cmd, params);
     }
 
     void GPUDrivenRenderer::cleanupVegetation()
@@ -544,7 +445,6 @@ namespace render::gpudriven
                                              vegetation.grassCounterBuffer,
                                              vegetation.grassCounterBufferMemory);
 
-        // Clean up instance staging buffer
         if (vegetation.instanceStagingMapped)
         {
             vkDevice.unmapMemory(vegetation.instanceStagingMemory);
@@ -553,17 +453,6 @@ namespace render::gpudriven
         core::BufferUtilities::destroyBuffer(vkDevice,
             vegetation.instanceStagingBuffer, vegetation.instanceStagingMemory);
         vegetation.instanceStagingCapacity = 0;
-
-        // Clean up old density staging buffers (if still present)
-        if (vegetation.tileStagingMapped)
-        {
-            vkDevice.unmapMemory(vegetation.tileStagingBufferMemory);
-            vegetation.tileStagingMapped = nullptr;
-        }
-        core::BufferUtilities::destroyBuffer(vkDevice, vegetation.tileStagingBuffer, vegetation.tileStagingBufferMemory);
-        core::BufferUtilities::destroyBuffer(vkDevice, vegetation.tileComputeDensity, vegetation.tileComputeDensityMemory);
-        core::BufferUtilities::destroyBuffer(vkDevice, vegetation.tileComputeHeight, vegetation.tileComputeHeightMemory);
-        core::BufferUtilities::destroyBuffer(vkDevice, vegetation.tileComputeHole, vegetation.tileComputeHoleMemory);
 
         vegetation.registeredTileKeys.clear();
         vegetation.grassInitialized = false;

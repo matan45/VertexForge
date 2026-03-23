@@ -23,7 +23,20 @@ namespace render::vegetation
         float sssDistortion;
         float sssPower;
         float sssScale;
-        uint32_t billboardTextureIndex; // Bindless texture index for billboard type (0xFFFFFFFF = none)
+        uint32_t billboardTextureIndex;
+    };
+
+    struct GrassDispatchParams
+    {
+        uint32_t instanceCount = 0;
+        float fadeStartDistance = 150.0f;
+        float fadeEndDistance = 300.0f;
+        glm::vec4 baseColor{0.1f, 0.4f, 0.05f, 1.0f};
+        glm::vec4 tipColor{0.2f, 0.6f, 0.1f, 1.0f};
+        float sssDistortion = 0.2f;
+        float sssPower = 4.0f;
+        float sssScale = 0.5f;
+        uint32_t billboardTextureIndex = 0xFFFFFFFF;
     };
 
     class GrassMeshShaderPipeline
@@ -82,16 +95,7 @@ namespace render::vegetation
                                       vk::DescriptorSet lightDescSet,
                                       vk::DescriptorSet bindlessDescSet);
 
-        void dispatch(vk::CommandBuffer cmd,
-                      uint32_t instanceCount,
-                      float fadeStartDistance,
-                      float fadeEndDistance,
-                      const glm::vec4& baseColor,
-                      const glm::vec4& tipColor,
-                      float sssDistortion,
-                      float sssPower,
-                      float sssScale,
-                      uint32_t billboardTextureIndex = 0xFFFFFFFF);
+        void dispatch(vk::CommandBuffer cmd, const GrassDispatchParams& params);
 
         bool isInitialized() const { return initialized; }
 

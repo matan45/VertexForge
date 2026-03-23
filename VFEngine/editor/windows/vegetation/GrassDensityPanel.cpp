@@ -261,13 +261,8 @@ namespace windows
                 billboardEntries = events::EventDispatcher::instance().query(
                     events::vegetation::GetBillboardPaletteQuery{});
                 if (!billboardEntries.empty())
-                {
-                    vfLogInfo("GrassDensityPanel: Loaded {} billboard entries from scene", billboardEntries.size());
                     pushBillboardPalette();
-                }
-            } catch (const std::exception& e) {
-                vfLogError("GrassDensityPanel: palette query failed: {}", e.what());
-            }
+            } catch (...) {}
 
             configLoaded = true;
         }

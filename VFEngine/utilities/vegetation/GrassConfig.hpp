@@ -5,6 +5,7 @@ namespace vegetation
 {
     struct GrassRenderConfig
     {
+        // Legacy fields - kept for serialization compatibility
         glm::vec4 baseColor{0.1f, 0.4f, 0.05f, 1.0f};
         glm::vec4 tipColor{0.2f, 0.6f, 0.1f, 1.0f};
         float heightMin = 0.3f;

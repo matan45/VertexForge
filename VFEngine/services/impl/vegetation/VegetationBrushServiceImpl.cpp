@@ -111,10 +111,7 @@ namespace services
                 {
                     auto& palette = view.get<components::GrassComponent>(entity).billboardPalette;
                     if (!palette.empty() && billboardPaletteCb)
-                    {
-                        vfLogInfo("VegetationBrushService: Auto-pushing {} billboard palette entries on scene load", palette.size());
                         billboardPaletteCb(palette, -1);
-                    }
                     break;
                 }
             });
@@ -183,17 +180,6 @@ namespace services
         std::uniform_real_distribution<float> jitterDist(-0.5f, 0.5f);
         std::uniform_real_distribution<float> unitDist(0.0f, 1.0f);
 
-        // Group new instances by tile
-        struct TileCoordHash {
-            size_t operator()(const terrain::TileCoord& c) const {
-                return std::hash<int>{}(c.x) ^ (std::hash<int>{}(c.z) << 16);
-            }
-        };
-        struct TileCoordEqual {
-            bool operator()(const terrain::TileCoord& a, const terrain::TileCoord& b) const {
-                return a.x == b.x && a.z == b.z;
-            }
-        };
         std::unordered_map<terrain::TileCoord, std::vector<vegetation::BillboardInstance>,
                            TileCoordHash, TileCoordEqual> tileInstances;
 

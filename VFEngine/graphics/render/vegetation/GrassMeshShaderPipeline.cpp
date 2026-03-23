@@ -160,18 +160,9 @@ namespace render::vegetation
         bindlessDescriptorSet = bindlessDescSet;
     }
 
-    void GrassMeshShaderPipeline::dispatch(vk::CommandBuffer cmd,
-                                            uint32_t instanceCount,
-                                            float fadeStartDistance,
-                                            float fadeEndDistance,
-                                            const glm::vec4& baseColor,
-                                            const glm::vec4& tipColor,
-                                            float sssDistortion,
-                                            float sssPower,
-                                            float sssScale,
-                      uint32_t billboardTextureIndex)
+    void GrassMeshShaderPipeline::dispatch(vk::CommandBuffer cmd, const GrassDispatchParams& params)
     {
-        if (!initialized || instanceCount == 0 || !graphicsPipeline) return;
+        if (!initialized || params.instanceCount == 0 || !graphicsPipeline) return;
 
         if (!grassDataDescriptorSet || !cameraDescriptorSet || !windDescriptorSet)
         {
@@ -212,15 +203,16 @@ namespace render::vegetation
             cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 0, sets, {});
         }
 
-        GrassMeshPushConstants pc{baseColor, tipColor, fadeStartDistance, fadeEndDistance,
-                                   sssDistortion, sssPower, sssScale, billboardTextureIndex};
+        GrassMeshPushConstants pc{params.baseColor, params.tipColor, params.fadeStartDistance,
+                                   params.fadeEndDistance, params.sssDistortion, params.sssPower,
+                                   params.sssScale, params.billboardTextureIndex};
         cmd.pushConstants(pipelineLayout,
                           vk::ShaderStageFlagBits::eTaskEXT |
                           vk::ShaderStageFlagBits::eMeshEXT |
                           vk::ShaderStageFlagBits::eFragment,
                           0, sizeof(GrassMeshPushConstants), &pc);
 
-        uint32_t taskGroups = (instanceCount + 31) / 32;
+        uint32_t taskGroups = (params.instanceCount + 31) / 32;
         cmd.drawMeshTasksEXT(taskGroups, 1, 1);
     }
 

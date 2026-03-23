@@ -1,5 +1,4 @@
 #include "EditorHandler.hpp"
-#include "print/Log.hpp"
 #include "editor/EditorBootstrap.hpp"
 #include "impl/project/SceneServiceImpl.hpp"
 #include "impl/render/EditorRenderServiceImpl.hpp"
@@ -232,16 +231,9 @@ namespace handlers
             // Wire palette query: renderer can read palette from ECS on scene load
             grassProvider->setGetBillboardPaletteCallback([]() -> std::vector<vegetation::BillboardPaletteEntry> {
                 try {
-                    auto result = events::EventDispatcher::instance().query(
+                    return events::EventDispatcher::instance().query(
                         events::vegetation::GetBillboardPaletteQuery{});
-                    return result;
-                } catch (const std::exception& e) {
-                    vfLogError("getBillboardPalette callback failed: {}", e.what());
-                    return {};
-                } catch (...) {
-                    vfLogError("getBillboardPalette callback failed (unknown)");
-                    return {};
-                }
+                } catch (...) { return {}; }
             });
         }
     }

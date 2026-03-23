@@ -103,7 +103,6 @@ namespace vegetation
 
 namespace render::vegetation
 {
-    // GrassComputePipeline removed - instances uploaded directly
     class GrassMeshShaderPipeline;
     class WindSystem;
 }
@@ -228,23 +227,6 @@ namespace render::gpudriven
 
             vk::DescriptorSetLayout cachedIBLLayout;
             vk::RenderPass cachedRenderPass;
-
-            // Staging buffer (host-visible, transfer src) — holds ALL tiles' data at offsets
-            vk::Buffer tileStagingBuffer;
-            vk::DeviceMemory tileStagingBufferMemory;
-            void* tileStagingMapped = nullptr;
-
-            // Device-local compute input buffers (storage + transfer dst) — single tile at a time
-            vk::Buffer tileComputeDensity;
-            vk::DeviceMemory tileComputeDensityMemory;
-            vk::Buffer tileComputeHeight;
-            vk::DeviceMemory tileComputeHeightMemory;
-            vk::Buffer tileComputeHole;
-            vk::DeviceMemory tileComputeHoleMemory;
-
-            uint32_t tileComputeCapacity = 0;   // per-tile texel capacity for compute buffers
-            uint32_t tileStagingTileSlots = 0;   // number of tile slots in staging buffer
-            uint32_t tileStagingTexelsPerSlot = 0; // texels per slot
 
             // Track which terrain tiles have vegetation registered
             std::unordered_set<uint64_t> registeredTileKeys;
@@ -644,8 +626,11 @@ namespace render::gpudriven
         void removeVegetationTile(int32_t coordX, int32_t coordZ);
         void clearVegetationData();
         void markVegetationTileDirty(int32_t coordX, int32_t coordZ);
-        void ensureTileStagingBuffers(uint32_t texelsPerTile, uint32_t tileCount);
         void dispatchGrassCompute(vk::CommandBuffer cmd, const std::vector<terrain::TerrainTile*>& visibleTiles);
+        void autoLoadBillboardPaletteFromECS();
+        bool needsVegetationUpload(const std::vector<terrain::TerrainTile*>& tiles) const;
+        std::vector<vegetation::GrassInstanceGPU> collectBillboardInstances(const std::vector<terrain::TerrainTile*>& tiles);
+        void ensureInstanceStagingCapacity(vk::DeviceSize requiredSize);
         void cleanupVegetation();
 
         // Billboard rendering

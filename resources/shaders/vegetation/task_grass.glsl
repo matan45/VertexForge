@@ -61,13 +61,11 @@ void main() {
 
     if (instanceIdx < totalInstances) {
         vec4 posAndRot = grassInstances[instanceIdx * 3];
-        vec4 dimensions = grassInstances[instanceIdx * 3 + 1];
         vec3 worldPos = posAndRot.xyz;
-        float bladeHeight = dimensions.x;
 
         dist = distance(worldPos, cameraPos);
         if (dist < fadeEndDistance) {
-            // Distance-only culling (frustum culling disabled - caused false rejections)
+            // Distance culling
             visible = true;
         }
     }
