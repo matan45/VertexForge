@@ -22,6 +22,7 @@ namespace core
 		const vk::Device& device;
 		const vk::PhysicalDevice& physicalDevice;
 		const vk::Queue& transferQueue;
+		std::mutex& queueMutex;
 		uint32_t transferQueueFamily;
 
 		vk::CommandPool commandPool;
@@ -29,7 +30,8 @@ namespace core
 		std::vector<TransferOperation> pendingTransfers;
 	public:
 		TransferManager(const vk::Device& device, const vk::PhysicalDevice& physicalDevice,
-		                const vk::Queue& transferQueue, uint32_t transferQueueFamily);
+		                const vk::Queue& transferQueue, std::mutex& queueMutex,
+		                uint32_t transferQueueFamily);
 		~TransferManager();
 
 		// Non-copyable

@@ -193,9 +193,8 @@ namespace animation
             vk::SubmitInfo submitInfo{};
             submitInfo.commandBufferCount = 1;
             submitInfo.pCommandBuffers = &cmd;
-            vk::Queue queue = device.getGraphicsQueue();
-            queue.submit(submitInfo, nullptr);
-            queue.waitIdle();
+            device.submitGraphics(submitInfo);
+            device.waitGraphicsIdle();
 
             vkDevice.freeCommandBuffers(cmdPool, 1, &cmd);
             core::BufferUtilities::destroyBuffer(vkDevice, staging, stagingMem);

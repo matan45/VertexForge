@@ -17,6 +17,7 @@ namespace render::mesh
             device.getLogicalDevice(),
             device.getPhysicalDevice(),
             device.getTransferQueue(),
+            device.getTransferQueueMutex(),
             transferQueueFamily
         );
     }

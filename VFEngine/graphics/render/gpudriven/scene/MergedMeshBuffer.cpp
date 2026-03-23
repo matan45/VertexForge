@@ -20,6 +20,7 @@ namespace render::gpudriven
             device.getLogicalDevice(),
             device.getPhysicalDevice(),
             device.getTransferQueue(),
+            device.getTransferQueueMutex(),
             transferQueueFamily
         );
     }

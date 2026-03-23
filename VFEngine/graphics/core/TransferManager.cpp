@@ -5,9 +5,10 @@
 namespace core {
 
 	TransferManager::TransferManager(const vk::Device& device, const vk::PhysicalDevice& physicalDevice,
-	                                 const vk::Queue& transferQueue, uint32_t transferQueueFamily)
+	                                 const vk::Queue& transferQueue, std::mutex& queueMutex,
+	                                 uint32_t transferQueueFamily)
 		: device(device), physicalDevice(physicalDevice), transferQueue(transferQueue),
-		  transferQueueFamily(transferQueueFamily)
+		  queueMutex(queueMutex), transferQueueFamily(transferQueueFamily)
 	{
 		vk::CommandPoolCreateInfo poolInfo{};
 		poolInfo.queueFamilyIndex = transferQueueFamily;
@@ -71,7 +72,10 @@ namespace core {
 		vk::SubmitInfo submitInfo{};
 		submitInfo.commandBufferCount = 1;
 		submitInfo.pCommandBuffers = &op.commandBuffer;
-		transferQueue.submit(submitInfo, op.fence);
+		{
+			std::lock_guard lock(queueMutex);
+			transferQueue.submit(submitInfo, op.fence);
+		}
 
 		pendingTransfers.push_back(op);
 	}
