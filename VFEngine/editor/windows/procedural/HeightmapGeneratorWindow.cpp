@@ -13,6 +13,10 @@ namespace windows
 {
     HeightmapGeneratorWindow::~HeightmapGeneratorWindow()
     {
+        if (generationFuture.valid())
+            generationFuture.wait();
+        if (exportFuture.valid())
+            exportFuture.wait();
         releasePreviewTexture();
     }
 
@@ -130,7 +134,7 @@ namespace windows
 
         // Seed
         ImGui::Separator();
-        if (ImGui::InputInt("Seed", reinterpret_cast<int*>(&params.seed)))
+        if (ImGui::InputScalar("Seed", ImGuiDataType_U32, &params.seed))
             previewDirty = true;
 
         ImGui::SameLine();
@@ -200,20 +204,7 @@ namespace windows
         ImGui::Text("Export");
         ImGui::Separator();
 
-        // Export format
-        const char* formats[] = {
-            "Uncompressed .vfImage",
-            "BC7 .vfImage",
-            ".vfSVT (tiled BC7)",
-            "Both BC7 + SVT"
-        };
-        ImGui::Combo("Format", &exportFormatIndex, formats, 4);
-
-        if (exportFormatIndex == 1 || exportFormatIndex == 3)
-        {
-            ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f),
-                "Warning: BC7 compression causes minor height precision loss");
-        }
+        ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Format: Uncompressed .vfImage");
 
         // Output path
         if (ImGui::Button("Browse..."))
@@ -357,14 +348,13 @@ namespace windows
         }
 
         pendingExportPath = basePath + ".vfImage";
-        int format = exportFormatIndex;
 
         // Capture result by value for the async task
         auto resultCopy = lastResult;
         auto path = pendingExportPath;
 
         exportFuture = std::async(std::launch::async,
-            [resultCopy = std::move(resultCopy), path, format]()
+            [resultCopy = std::move(resultCopy), path]()
             {
                 bool ok = procedural::HeightmapGenerator::saveAsVFImage(resultCopy, path);
                 if (ok)
@@ -408,10 +398,7 @@ namespace windows
 
         if (success)
         {
-            if (exportFormatIndex != 0)
-                exportStatusMessage = "Exported as uncompressed .vfImage (BC7/SVT export pending): " + pendingExportPath;
-            else
-                exportStatusMessage = "Exported: " + pendingExportPath;
+            exportStatusMessage = "Exported: " + pendingExportPath;
         }
         else
         {

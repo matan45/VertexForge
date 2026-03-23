@@ -14,6 +14,10 @@ namespace windows
 {
     BackgroundRemovalWindow::~BackgroundRemovalWindow()
     {
+        if (processFuture.valid())
+            processFuture.wait();
+        if (exportFuture.valid())
+            exportFuture.wait();
         releaseTextures();
     }
 
@@ -33,17 +37,19 @@ namespace windows
         if (!visible)
             return;
 
-        // Poll export
+        // Poll async tasks
+        if (processing)
+            pollProcessing();
         if (exporting)
             pollExport();
 
-        // Process if dirty (with debounce)
-        if (processDirty && !sourcePixels.empty())
+        // Start processing if dirty (with debounce)
+        if (processDirty && !sourcePixels.empty() && !processing)
         {
             float currentTime = static_cast<float>(ImGui::GetTime());
             if (currentTime - lastProcessTime >= processDebounceTime)
             {
-                processImage();
+                startProcessing();
                 processDirty = false;
                 lastProcessTime = currentTime;
             }
@@ -256,62 +262,86 @@ namespace windows
         processDirty = true;
     }
 
-    void BackgroundRemovalWindow::processImage()
+    void BackgroundRemovalWindow::startProcessing()
     {
-        if (sourcePixels.empty())
+        if (sourcePixels.empty() || processing)
             return;
 
-        lastResult = imageprocessing::BackgroundRemover::process(
-            sourcePixels.data(), sourceWidth, sourceHeight, params);
+        processing = true;
 
-        if (lastResult.valid())
+        // Copy data for the async task
+        auto pixels = sourcePixels;
+        auto w = sourceWidth;
+        auto h = sourceHeight;
+        auto p = params;
+
+        processFuture = std::async(std::launch::async,
+            [pixels = std::move(pixels), w, h, p]()
+            {
+                return imageprocessing::BackgroundRemover::process(pixels.data(), w, h, p);
+            });
+    }
+
+    void BackgroundRemovalWindow::pollProcessing()
+    {
+        if (!processFuture.valid())
+            return;
+
+        auto status = processFuture.wait_for(std::chrono::milliseconds(0));
+        if (status != std::future_status::ready)
+            return;
+
+        lastResult = processFuture.get();
+        processing = false;
+
+        if (!lastResult.valid())
+            return;
+
+        // Composite result over checkerboard for preview (main thread — fast)
+        std::vector<uint8_t> previewData(lastResult.rgbaData.size());
+        for (size_t i = 0; i < static_cast<size_t>(lastResult.width) * lastResult.height; ++i)
         {
-            // Composite result over checkerboard for preview
-            std::vector<uint8_t> previewData(lastResult.rgbaData.size());
-            for (size_t i = 0; i < static_cast<size_t>(lastResult.width) * lastResult.height; ++i)
-            {
-                size_t idx = i * 4;
-                uint32_t px = static_cast<uint32_t>(i % lastResult.width);
-                uint32_t py = static_cast<uint32_t>(i / lastResult.width);
-                bool dark = ((px / 16) + (py / 16)) % 2 == 0;
-                uint8_t checker = dark ? 40 : 60;
+            size_t idx = i * 4;
+            uint32_t px = static_cast<uint32_t>(i % lastResult.width);
+            uint32_t py = static_cast<uint32_t>(i / lastResult.width);
+            bool dark = ((px / 16) + (py / 16)) % 2 == 0;
+            uint8_t checker = dark ? 40 : 60;
 
-                float alpha = lastResult.rgbaData[idx + 3] / 255.0f;
-                previewData[idx + 0] = static_cast<uint8_t>(lastResult.rgbaData[idx + 0] * alpha + checker * (1.0f - alpha));
-                previewData[idx + 1] = static_cast<uint8_t>(lastResult.rgbaData[idx + 1] * alpha + checker * (1.0f - alpha));
-                previewData[idx + 2] = static_cast<uint8_t>(lastResult.rgbaData[idx + 2] * alpha + checker * (1.0f - alpha));
-                previewData[idx + 3] = 255;
-            }
-
-            // Upload composited preview to GPU
-            if (resultHandle.isValid())
-            {
-                auto& dispatcher = events::EventDispatcher::instance();
-                events::render::ReleaseEditorTextureCommand releaseCmd;
-                releaseCmd.handle = resultHandle.imguiDescriptorSet;
-                dispatcher.execute(releaseCmd);
-                resultHandle = {};
-            }
-
-            resource::TextureData texData;
-            texData.width = lastResult.width;
-            texData.height = lastResult.height;
-            texData.numbersOfChannels = 4;
-            texData.mipLevels = 1;
-            texData.compressionFormat = resource::TextureCompressionFormat::Uncompressed;
-
-            resource::MipLevelData mip;
-            mip.width = lastResult.width;
-            mip.height = lastResult.height;
-            mip.dataSize = static_cast<uint32_t>(previewData.size());
-            mip.data = std::move(previewData);
-            texData.mipData.push_back(std::move(mip));
-
-            auto& dispatcher = events::EventDispatcher::instance();
-            events::render::LoadEditorTextureFromDataCommand cmd;
-            cmd.textureData = std::move(texData);
-            resultHandle = dispatcher.execute(cmd);
+            float alpha = lastResult.rgbaData[idx + 3] / 255.0f;
+            previewData[idx + 0] = static_cast<uint8_t>(lastResult.rgbaData[idx + 0] * alpha + checker * (1.0f - alpha));
+            previewData[idx + 1] = static_cast<uint8_t>(lastResult.rgbaData[idx + 1] * alpha + checker * (1.0f - alpha));
+            previewData[idx + 2] = static_cast<uint8_t>(lastResult.rgbaData[idx + 2] * alpha + checker * (1.0f - alpha));
+            previewData[idx + 3] = 255;
         }
+
+        // Upload composited preview to GPU (must be on main thread)
+        if (resultHandle.isValid())
+        {
+            auto& dispatcher = events::EventDispatcher::instance();
+            events::render::ReleaseEditorTextureCommand releaseCmd;
+            releaseCmd.handle = resultHandle.imguiDescriptorSet;
+            dispatcher.execute(releaseCmd);
+            resultHandle = {};
+        }
+
+        resource::TextureData texData;
+        texData.width = lastResult.width;
+        texData.height = lastResult.height;
+        texData.numbersOfChannels = 4;
+        texData.mipLevels = 1;
+        texData.compressionFormat = resource::TextureCompressionFormat::Uncompressed;
+
+        resource::MipLevelData mip;
+        mip.width = lastResult.width;
+        mip.height = lastResult.height;
+        mip.dataSize = static_cast<uint32_t>(previewData.size());
+        mip.data = std::move(previewData);
+        texData.mipData.push_back(std::move(mip));
+
+        auto& dispatcher = events::EventDispatcher::instance();
+        events::render::LoadEditorTextureFromDataCommand cmd;
+        cmd.textureData = std::move(texData);
+        resultHandle = dispatcher.execute(cmd);
     }
 
     void BackgroundRemovalWindow::uploadOriginalToGPU()

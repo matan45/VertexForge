@@ -33,6 +33,10 @@ namespace windows
         float lastProcessTime = 0.0f;
         static constexpr float processDebounceTime = 0.3f;
 
+        // Processing state
+        bool processing = false;
+        std::future<imageprocessing::RemovalResult> processFuture;
+
         // Result
         imageprocessing::RemovalResult lastResult;
 
@@ -54,9 +58,9 @@ namespace windows
         void drawPreview();
         void drawExportSection();
         void loadInputImage(const std::string& path);
-        void processImage();
+        void startProcessing();
+        void pollProcessing();
         void uploadOriginalToGPU();
-        void uploadResultToGPU();
         void releaseTextures();
         void startExport();
         void pollExport();

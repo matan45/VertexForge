@@ -25,7 +25,6 @@ namespace windows
         int presetIndex = 0;
 
         // Export settings
-        int exportFormatIndex = 0; // 0=Uncompressed .vfImage, 1=BC7 .vfImage, 2=.vfSVT, 3=Both
         std::string exportPath;
 
         // Preview state

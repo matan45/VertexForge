@@ -173,7 +173,7 @@ project "Import"
 
    defines { "_CRT_SECURE_NO_WARNINGS", "VF_IMPORT_BUILD_DLL", "MESHOPTIMIZER_API=__declspec(dllimport)" }
 
-   links { "Utilities", "meshoptimizer", "ispc_texcomp", "ProceduralGen" }
+   links { "Utilities", "meshoptimizer", "ispc_texcomp" }
 
    -- Debug configuration
    filter "configurations:Debug"
