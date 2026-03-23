@@ -41,14 +41,13 @@ namespace render::shadow
         float snappedY = snapToTexel(lightSpaceY, result.texelSize);
         result.snapPosition = glm::vec2(snappedX, snappedY);
 
-        // Snap Z to a grid proportional to the texel size (same stability as XY snap)
-        // but no smaller than MIN_Z_SNAP_METERS for precision
-        float zSnapGrid = std::max(result.texelSize * 4.0f, MIN_Z_SNAP_METERS);
-        float snappedZ = snapToTexel(lightSpaceZ, zSnapGrid);
-
+        // Z is NOT snapped — for directional lights with orthographic projection,
+        // the depth range is large enough that Z movement doesn't cause shimmer.
+        // Snapping Z causes visible "jumping" when the camera crosses snap boundaries
+        // because the entire depth range shifts, changing every pixel's shadow depth.
         glm::vec3 snappedCenter = snappedX * axes.lightRight +
                                    snappedY * axes.lightUp +
-                                   snappedZ * axes.lightDir;
+                                   lightSpaceZ * axes.lightDir;
 
         float zHalfRange = std::max(result.worldExtent * DEPTH_RANGE_EXTENT_MULTIPLIER,
                                      MIN_DEPTH_HALF_RANGE_METERS);
