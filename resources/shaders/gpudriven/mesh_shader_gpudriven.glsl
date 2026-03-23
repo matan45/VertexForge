@@ -502,7 +502,7 @@ void main() {
 
     for (uint i = 0u; i < lightCounts.directionalCount; ++i) {
         DirectionalLight light = directionalLights[i];
-        float shadow = sampleDirectionalShadowAuto(light.shadowIndex, light.shadowMode, fragWorldPos, N, linearZ);
+        float shadow = sampleDirectionalShadowAuto(light.shadowIndex, light.shadowMode, fragWorldPos, N, linearZ, camera.cameraPos);
         minShadow = min(minShadow, shadow);
         directLighting += evaluateDirectionalLight(N, V, albedo, metallic, roughness, F0, light) * shadow;
     }
@@ -623,7 +623,7 @@ void main() {
 
         for (uint i = 0u; i < lightCounts.directionalCount; ++i) {
             DirectionalLight light = directionalLights[i];
-            float shadow = sampleDirectionalShadowAuto(light.shadowIndex, light.shadowMode, fragWorldPos, N, linearZ);
+            float shadow = sampleDirectionalShadowAuto(light.shadowIndex, light.shadowMode, fragWorldPos, N, linearZ, camera.cameraPos);
             totalShadow = min(totalShadow, shadow);
         }
 

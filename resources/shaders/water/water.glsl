@@ -332,7 +332,7 @@ void main() {
 
         float shadow = 1.0;
         if (light.shadowIndex >= 0) {
-            shadow = sampleDirectionalShadowAuto(light.shadowIndex, light.shadowMode, fragWorldPos, N, linearZ);
+            shadow = sampleDirectionalShadowAuto(light.shadowIndex, light.shadowMode, fragWorldPos, N, linearZ, camera.cameraPos);
         }
         minShadow = min(minShadow, shadow);
 

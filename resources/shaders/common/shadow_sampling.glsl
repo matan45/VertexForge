@@ -307,7 +307,7 @@ const float CLIPMAP_BLEND_START = 0.6;  // fract > this → blend toward next le
 const float CLIPMAP_BLEND_END   = 0.4;  // fract < this → blend toward prev level
 const float CLIPMAP_FADE_START  = 0.8;  // fraction of max extent where distance fade begins
 
-float sampleDirectionalClipmapShadow(int baseShadowIndex, vec3 worldPos, vec3 worldNormal, float viewZ) {
+float sampleDirectionalClipmapShadow(int baseShadowIndex, vec3 worldPos, vec3 worldNormal, float worldDist) {
     if (baseShadowIndex < 0 || baseShadowIndex >= MAX_SHADOW_VIEWS) return 1.0;
 
     int levelCount = int(SHADOW_BUFFER[baseShadowIndex].rangeParams.z);
@@ -321,7 +321,9 @@ float sampleDirectionalClipmapShadow(int baseShadowIndex, vec3 worldPos, vec3 wo
     float baseExtent = SHADOW_BUFFER[baseShadowIndex].rangeParams.x;
     if (baseExtent <= 0.0) baseExtent = 2.0;
 
-    float continuousLevel = max(log2(max(viewZ, baseExtent) / baseExtent), 0.0);
+    // Use world-space distance (rotation-invariant) instead of camera-space viewZ
+    // This prevents level selection from changing when the camera rotates
+    float continuousLevel = max(log2(max(worldDist, baseExtent) / baseExtent), 0.0);
     int levelIdx = clamp(int(continuousLevel), 0, levelCount - 1);
     int shadowIndex = baseShadowIndex + levelIdx;
 
@@ -339,16 +341,17 @@ float sampleDirectionalClipmapShadow(int baseShadowIndex, vec3 worldPos, vec3 wo
     }
 
     float maxExtent = baseExtent * exp2(float(levelCount - 1));
-    float fadeFactor = 1.0 - smoothstep(maxExtent * CLIPMAP_FADE_START, maxExtent, viewZ);
+    float fadeFactor = 1.0 - smoothstep(maxExtent * CLIPMAP_FADE_START, maxExtent, worldDist);
     return mix(1.0, shadow, fadeFactor);
 }
 
 // ============================================================
 // Unified Directional Shadow Dispatch (cascade or clipmap)
 // ============================================================
-float sampleDirectionalShadowAuto(int baseShadowIndex, int shadowMode, vec3 worldPos, vec3 worldNormal, float viewZ) {
+float sampleDirectionalShadowAuto(int baseShadowIndex, int shadowMode, vec3 worldPos, vec3 worldNormal, float viewZ, vec3 cameraPos) {
     if (shadowMode == 1) {
-        return sampleDirectionalClipmapShadow(baseShadowIndex, worldPos, worldNormal, viewZ);
+        float worldDist = length(worldPos - cameraPos);
+        return sampleDirectionalClipmapShadow(baseShadowIndex, worldPos, worldNormal, worldDist);
     }
     return sampleDirectionalShadow(baseShadowIndex, worldPos, worldNormal, viewZ);
 }

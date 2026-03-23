@@ -355,10 +355,10 @@ float sampleTerrainCascadeShadow(int shadowIndex, vec3 worldPos, vec3 worldNorma
     return sampleVSMShadow(shadowIndex, worldPos, biasedNormal);
 }
 
-float sampleTerrainDirectionalShadow(int baseShadowIndex, int shadowMode, vec3 worldPos, vec3 worldNormal, float viewZ) {
+float sampleTerrainDirectionalShadow(int baseShadowIndex, int shadowMode, vec3 worldPos, vec3 worldNormal, float viewZ, vec3 cameraPos) {
     // Apply terrain-specific normal bias scaling before delegating to VSM sampling
     vec3 biasedNormal = worldNormal * getTerrainNormalBiasScale();
-    return sampleDirectionalShadowAuto(baseShadowIndex, shadowMode, worldPos, biasedNormal, viewZ);
+    return sampleDirectionalShadowAuto(baseShadowIndex, shadowMode, worldPos, biasedNormal, viewZ, cameraPos);
 }
 
 float sampleTerrainPointShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal,
@@ -474,7 +474,7 @@ void main() {
 
         float shadow = 1.0;
         if (light.shadowIndex >= 0) {
-            shadow = sampleTerrainDirectionalShadow(light.shadowIndex, light.shadowMode, fragWorldPos, N, linearZ);
+            shadow = sampleTerrainDirectionalShadow(light.shadowIndex, light.shadowMode, fragWorldPos, N, linearZ, camera.cameraPos);
         }
         minShadow = min(minShadow, shadow);
 
