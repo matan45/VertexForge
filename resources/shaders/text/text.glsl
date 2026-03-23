@@ -1,5 +1,8 @@
 #type VERTEX
 #version 460 core
+#extension GL_GOOGLE_include_directive : require
+
+#include "../common/camera_types.glsl"
 
 layout(location = 0) in vec2 inPosition;   // Quad corner offset (-0.5 to 0.5)
 layout(location = 1) in vec2 inTexCoord;
@@ -17,11 +20,8 @@ layout(location = 1) out vec4 fragColor;
 layout(location = 2) out vec2 fragSdfParams;
 
 layout(binding = 0) uniform CameraUBO {
-    mat4 view;
-    mat4 projection;
-    vec3 cameraPos;
-    float padding;
-} camera;
+    CameraData camera;
+};
 
 layout(push_constant) uniform PushConstants {
     vec2 viewportSize;

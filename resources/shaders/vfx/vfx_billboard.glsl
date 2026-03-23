@@ -1,5 +1,8 @@
 #type VERTEX
 #version 460 core
+#extension GL_GOOGLE_include_directive : require
+
+#include "../common/camera_types.glsl"
 
 layout(location = 0) in vec2 inPosition;
 layout(location = 1) in vec2 inTexCoord;
@@ -17,11 +20,8 @@ layout(location = 2) out float fragLifetimeRatio;
 layout(location = 3) out float fragGlowIntensity;
 
 layout(binding = 0) uniform CameraUBO {
-    mat4 view;
-    mat4 projection;
-    vec3 cameraPos;
-    float time;
-} camera;
+    CameraData camera;
+};
 
 const uint RENDER_MODE_BILLBOARD = 0u;
 const uint RENDER_MODE_HORIZONTAL = 2u;

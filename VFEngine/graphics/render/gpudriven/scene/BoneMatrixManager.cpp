@@ -160,9 +160,8 @@ namespace render::gpudriven
         submitInfo.commandBufferCount = 1;
         submitInfo.pCommandBuffers = &commandBuffer;
 
-        vk::Queue graphicsQueue = device.getGraphicsQueue();
-        graphicsQueue.submit(submitInfo, nullptr);
-        graphicsQueue.waitIdle();
+        device.submitGraphics(submitInfo);
+        device.waitGraphicsIdle();
 
         vkDevice.freeCommandBuffers(cmdPool, 1, &commandBuffer);
 

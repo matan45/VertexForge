@@ -1,6 +1,7 @@
 #include "WorldSectorWindow.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/world/WorldSectorEvents.hpp"
+#include "events/terrain/TerrainEvents.hpp"
 #include "events/render/ObjectStreamingEvents.hpp"
 #include "imgui.h"
 #include "nfd/FileDialog.hpp"
@@ -90,6 +91,8 @@ namespace windows
                 if (ImGui::Button("Create New World"))
                 {
                     showCreationWizard = true;
+                    terrainTileSize = events::EventDispatcher::instance().query(
+                        events::terrain::GetActiveTerrainTileSizeQuery{});
                 }
                 ImGui::SameLine();
                 if (ImGui::Button("Load World..."))
@@ -221,12 +224,34 @@ namespace windows
 
     void WorldSectorWindow::drawCreationWizard()
     {
-        ImGui::SetNextWindowSize(ImVec2(400, 300), ImGuiCond_FirstUseEver);
+        ImGui::SetNextWindowSize(ImVec2(400, 350), ImGuiCond_FirstUseEver);
         if (ImGui::Begin("Create World", &showCreationWizard))
         {
             ImGui::InputText("World Name", worldName, sizeof(worldName));
-            ImGui::InputFloat("Sector Size", &sectorSize, 16.0f, 64.0f);
+
+            if (terrainTileSize > 0.0f)
+            {
+                ImGui::Checkbox("Align to Terrain Grid", &autoAlignToTerrain);
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Derive sector size from terrain tile size.\nsectorWorldSize = tilesPerSector * worldTileSize");
+            }
+
             ImGui::InputInt("Tiles Per Sector", &tilesPerSector);
+            if (tilesPerSector < 1) tilesPerSector = 1;
+
+            if (autoAlignToTerrain && terrainTileSize > 0.0f)
+            {
+                sectorSize = terrainTileSize * static_cast<float>(tilesPerSector);
+                ImGui::BeginDisabled();
+                ImGui::InputFloat("Sector Size (auto)", &sectorSize);
+                ImGui::EndDisabled();
+                ImGui::TextDisabled("= %d tiles x %.0f tile size", tilesPerSector, terrainTileSize);
+            }
+            else
+            {
+                ImGui::InputFloat("Sector Size", &sectorSize, 16.0f, 64.0f);
+            }
+
             ImGui::Separator();
             ImGui::InputFloat("Load Radius (sectors)", &loadRadius, 1.0f, 2.0f);
             ImGui::InputFloat("Unload Radius (sectors)", &unloadRadius, 1.0f, 2.0f);
@@ -241,11 +266,13 @@ namespace windows
                 std::string path = fileDialog.saveFileDialog(WORLD_FILE_TYPES, L"vfworld");
                 if (!path.empty())
                 {
+                    bool aligned = autoAlignToTerrain && terrainTileSize > 0.0f;
                     events::world::CreateWorldCommand cmd;
                     cmd.name = worldName;
                     cmd.filePath = path;
                     cmd.sectorConfig.sectorWorldSize = sectorSize;
                     cmd.sectorConfig.tilesPerSector = tilesPerSector;
+                    cmd.sectorConfig.alignedToTerrain = aligned;
                     cmd.streamingConfig.loadRadius = loadRadius;
                     cmd.streamingConfig.unloadRadius = unloadRadius;
                     cmd.streamingConfig.enableGPUObjectStreaming = gpuObjectStreaming;

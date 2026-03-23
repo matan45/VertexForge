@@ -226,7 +226,6 @@ namespace render::gpudriven
             void* instanceStagingMapped = nullptr;
             uint32_t instanceStagingCapacity = 0;
 
-            vk::DescriptorSetLayout cachedIBLLayout;
             vk::RenderPass cachedRenderPass;
 
             // Track which terrain tiles have vegetation registered
@@ -584,7 +583,7 @@ namespace render::gpudriven
 
         // Vegetation rendering
         void initVegetationSubsystems(vk::DescriptorSetLayout iblDescriptorSetLayout, vk::RenderPass renderPass);
-        void renderGrassDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet,
+        void renderGrassDraw(vk::CommandBuffer cmd,
                              uint32_t screenWidth = 0, uint32_t screenHeight = 0);
         void updateWind(float deltaTime, const ::vegetation::WindConfig& config);
         void updateVegetationStreaming(const std::vector<terrain::TerrainTile*>& visibleTiles,

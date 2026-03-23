@@ -1,12 +1,14 @@
 #include "TransferManager.hpp"
+#include "Device.hpp"
 #include "BufferUtilities.hpp"
 #include <cstring>
 
 namespace core {
 
-	TransferManager::TransferManager(const vk::Device& device, const vk::PhysicalDevice& physicalDevice,
-	                                 const vk::Queue& transferQueue, uint32_t transferQueueFamily)
-		: device(device), physicalDevice(physicalDevice), transferQueue(transferQueue),
+	TransferManager::TransferManager(Device& ownerDevice, uint32_t transferQueueFamily)
+		: ownerDevice(ownerDevice),
+		  device(ownerDevice.getLogicalDevice()),
+		  physicalDevice(ownerDevice.getPhysicalDevice()),
 		  transferQueueFamily(transferQueueFamily)
 	{
 		vk::CommandPoolCreateInfo poolInfo{};
@@ -31,18 +33,15 @@ namespace core {
 			return;
 		}
 
-		// Poll first to clean up any completed transfers
 		pollTransfers();
 
 		std::lock_guard lock(transferMutex);
 
 		TransferOperation op{};
 
-		// Create fence for this transfer
 		vk::FenceCreateInfo fenceInfo{};
 		op.fence = device.createFence(fenceInfo);
 
-		// Create staging buffer
 		BufferInfoRequest stagingInfo(device, physicalDevice, size,
 			vk::BufferUsageFlagBits::eTransferSrc,
 			vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
@@ -59,7 +58,6 @@ namespace core {
 		auto cmdBuffers = device.allocateCommandBuffers(allocInfo);
 		op.commandBuffer = cmdBuffers[0];
 
-		// Record copy command
 		vk::CommandBufferBeginInfo beginInfo{};
 		beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
 		op.commandBuffer.begin(beginInfo);
@@ -67,11 +65,10 @@ namespace core {
 		op.commandBuffer.copyBuffer(op.stagingBuffer, dstBuffer, copyRegion);
 		op.commandBuffer.end();
 
-		// Submit to transfer queue with fence
 		vk::SubmitInfo submitInfo{};
 		submitInfo.commandBufferCount = 1;
 		submitInfo.pCommandBuffers = &op.commandBuffer;
-		transferQueue.submit(submitInfo, op.fence);
+		ownerDevice.submitTransfer(submitInfo, op.fence);
 
 		pendingTransfers.push_back(op);
 	}
@@ -82,7 +79,6 @@ namespace core {
 
 		auto it = pendingTransfers.begin();
 		while (it != pendingTransfers.end()) {
-			// Check if transfer is complete (non-blocking)
 			vk::Result result = device.getFenceStatus(it->fence);
 			if (result == vk::Result::eSuccess) {
 				cleanupTransfer(*it);

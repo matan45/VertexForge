@@ -1,5 +1,8 @@
 #type VERTEX
 #version 460 core
+#extension GL_GOOGLE_include_directive : require
+
+#include "../common/camera_types.glsl"
 
 layout(location = 0) in vec3 inPosition;
 
@@ -9,10 +12,8 @@ layout(push_constant) uniform PushConstants {
 } pc;
 
 layout(set = 0, binding = 0) uniform CameraUBO {
-    mat4 viewProjection;
-    mat4 inverseViewProjection;
-    vec4 cameraParams;
-} camera;
+    GPUCameraData camera;
+};
 
 void main()
 {
@@ -22,6 +23,9 @@ void main()
 
 #type FRAGMENT
 #version 460 core
+#extension GL_GOOGLE_include_directive : require
+
+#include "../common/camera_types.glsl"
 
 layout(location = 0) out vec4 outColor;
 
@@ -31,10 +35,8 @@ layout(push_constant) uniform PushConstants {
 } pc;
 
 layout(set = 0, binding = 0) uniform CameraUBO {
-    mat4 viewProjection;
-    mat4 inverseViewProjection;
-    vec4 cameraParams;
-} camera;
+    GPUCameraData camera;
+};
 
 layout(set = 0, binding = 1) uniform sampler2D depthTexture;
 
@@ -57,7 +59,7 @@ layout(set = 1, binding = 2) uniform sampler2D ormTexture;
 vec3 reconstructWorldPos(vec2 screenUV, float depth)
 {
     vec4 clipPos = vec4(screenUV * 2.0 - 1.0, depth, 1.0);
-    vec4 worldPos = camera.inverseViewProjection * clipPos;
+    vec4 worldPos = camera.invViewProjection * clipPos;
     return worldPos.xyz / worldPos.w;
 }
 
@@ -80,7 +82,7 @@ void main()
 {
     DecalData decal = decals[pc.decalIndex];
 
-    vec2 screenUV = gl_FragCoord.xy / camera.cameraParams.zw;
+    vec2 screenUV = gl_FragCoord.xy / camera.screenParams.xy;
 
     float depth = texture(depthTexture, screenUV).r;
     if (depth >= 1.0)
@@ -118,7 +120,7 @@ void main()
     }
 
     // Reconstruct surface normal from depth
-    vec2 texelSize = 1.0 / camera.cameraParams.zw;
+    vec2 texelSize = camera.screenParams.zw;
     vec3 surfaceNormal = reconstructNormalFromDepth(screenUV, texelSize);
 
     // Decal projection direction (local Z axis in world space)

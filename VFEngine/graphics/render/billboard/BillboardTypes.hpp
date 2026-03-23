@@ -4,6 +4,7 @@
 #include <glm/glm.hpp>
 #include <array>
 #include <cstdint>
+#include "../common/CameraTypes.hpp"
 
 namespace render::billboard
 {
@@ -93,13 +94,7 @@ namespace render::billboard
         }
     };
     
-    struct BillboardCameraUBO
-    {
-        alignas(16) glm::mat4 view;
-        alignas(16) glm::mat4 projection;
-        alignas(16) glm::vec3 cameraPos;
-        float padding;
-    };
+    using BillboardCameraUBO = render::common::CameraUBO;
     
     struct BillboardPushConstants
     {

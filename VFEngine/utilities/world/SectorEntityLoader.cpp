@@ -10,14 +10,14 @@
 
 namespace world
 {
-    void SectorEntityLoader::queueSectorLoadFromData(const SectorCoord& coord, const std::vector<std::pair<std::string, std::string>>& entityNamesAndJson)
+    void SectorEntityLoader::queueSectorLoadFromData(const SectorCoord& coord, std::vector<std::pair<std::string, nlohmann::json>>& entityNamesAndJson)
     {
-        for (const auto& [name, json] : entityNamesAndJson)
+        for (auto& [name, json] : entityNamesAndJson)
         {
             PendingLoad load;
             load.coord = coord;
-            load.entityName = name;
-            load.rawJson = json;
+            load.entityName = std::move(name);
+            load.entityJson = std::move(json);
             pendingLoads.push_back(std::move(load));
         }
     }
@@ -94,7 +94,7 @@ namespace world
 
             try
             {
-                nlohmann::json entityJson = nlohmann::json::parse(pending.rawJson);
+                const auto& entityJson = pending.entityJson;
 
                 if (entityJson.contains("uuid") && entityJson["uuid"].is_number_unsigned())
                 {

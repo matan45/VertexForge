@@ -10,13 +10,8 @@ namespace render::gpudriven
     TerrainMeshBuffer::TerrainMeshBuffer(core::Device& device)
         : device_(device)
     {
-        uint32_t transferQueueFamily = device.getQueueFamilyIndices().transferFamily.value();
         transferManager_ = std::make_unique<core::TransferManager>(
-            device.getLogicalDevice(),
-            device.getPhysicalDevice(),
-            device.getTransferQueue(),
-            transferQueueFamily
-        );
+            device, device.getQueueFamilyIndices().transferFamily.value());
     }
 
     TerrainMeshBuffer::~TerrainMeshBuffer()

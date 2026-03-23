@@ -11,14 +11,8 @@ namespace render::mesh
     MeshGPUCache::MeshGPUCache(core::Device& device)
         : device(device)
     {
-        // Create async transfer manager - uses dedicated transfer queue if available
-        uint32_t transferQueueFamily = device.getQueueFamilyIndices().transferFamily.value();
         transferManager = std::make_unique<core::TransferManager>(
-            device.getLogicalDevice(),
-            device.getPhysicalDevice(),
-            device.getTransferQueue(),
-            transferQueueFamily
-        );
+            device, device.getQueueFamilyIndices().transferFamily.value());
     }
 
     MeshGPUCache::~MeshGPUCache()

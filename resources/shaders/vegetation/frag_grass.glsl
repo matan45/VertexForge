@@ -1,6 +1,9 @@
 #type FRAGMENT
 #version 460
 #extension GL_EXT_nonuniform_qualifier : require
+#extension GL_GOOGLE_include_directive : require
+
+#include "../common/camera_types.glsl"
 
 layout(location = 0) in vec3 inWorldPos;
 layout(location = 1) in vec3 inNormal;
@@ -22,13 +25,8 @@ layout(push_constant) uniform PushConstants {
     uint billboardTextureIndex;
 };
 
-// Camera (set 1)
 layout(set = 1, binding = 0) uniform CameraUBO {
-    mat4 view;
-    mat4 projection;
-    vec3 cameraPos;
-    float time;
-    vec4 frustumPlanes[6];
+    GPUCameraData camera;
 };
 
 // Light data (set 3) - matches GPULightBufferManager layout
@@ -79,7 +77,7 @@ void main() {
         N = -N;
     }
 
-    vec3 V = normalize(cameraPos - inWorldPos);
+    vec3 V = normalize(camera.cameraPosition.xyz - inWorldPos);
 
     // Gradient from base to tip using config colors
     vec3 albedo = mix(baseColor.rgb, tipColor.rgb, inUV.y);

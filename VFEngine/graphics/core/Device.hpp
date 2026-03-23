@@ -78,8 +78,8 @@ namespace core
         // Shared staging command pool for one-time transfer operations
         vk::UniqueCommandPool stagingCommandPool;
 
-        // Mutex for graphics queue submission (shared between render thread and preview controllers)
         mutable std::mutex graphicsQueueMutex;
+        mutable std::mutex transferQueueMutex;
 
         const std::array<const char*, 1> validationLayers = {"VK_LAYER_KHRONOS_validation"};
         const std::array<const char*, 5> deviceExtensions = {
@@ -134,11 +134,24 @@ namespace core
             graphicsAndComputeQueue.submit(submitInfo, fence);
         }
 
-        // Thread-safe graphics queue waitIdle (locks internally)
         void waitGraphicsIdle() const
         {
             std::lock_guard lock(graphicsQueueMutex);
             graphicsAndComputeQueue.waitIdle();
+        }
+
+        void submitTransfer(const vk::SubmitInfo& submitInfo, vk::Fence fence = nullptr) const
+        {
+            auto& mtx = queueFamilyIndices.hasDedicatedTransferQueue() ? transferQueueMutex : graphicsQueueMutex;
+            std::lock_guard lock(mtx);
+            transferQueue.submit(submitInfo, fence);
+        }
+
+        void waitTransferIdle() const
+        {
+            auto& mtx = queueFamilyIndices.hasDedicatedTransferQueue() ? transferQueueMutex : graphicsQueueMutex;
+            std::lock_guard lock(mtx);
+            transferQueue.waitIdle();
         }
 
         const vk::CommandPool& getStagingCommandPool() const { return stagingCommandPool.get(); }

@@ -4,6 +4,7 @@
 #extension GL_GOOGLE_include_directive : require
 
 #include "../common/gpu_types.glsl"
+#include "../common/culling_functions.glsl"
 
 layout(local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
 
@@ -41,41 +42,6 @@ shared uint sharedMeshletIndices[MAX_MESHLETS_PER_PAYLOAD];
 shared vec4 sharedFrustumPlanes[6];
 shared uint sharedTileData[5];
 
-bool aabbInFrustum(vec3 aabbMin, vec3 aabbMax, vec4 frustumPlanes[6]) {
-    for (int i = 0; i < 6; i++) {
-        vec3 positive = vec3(
-            frustumPlanes[i].x > 0.0 ? aabbMax.x : aabbMin.x,
-            frustumPlanes[i].y > 0.0 ? aabbMax.y : aabbMin.y,
-            frustumPlanes[i].z > 0.0 ? aabbMax.z : aabbMin.z
-        );
-        float distance = dot(frustumPlanes[i].xyz, positive) + frustumPlanes[i].w;
-        if (distance < 0.0) {
-            return false;
-        }
-    }
-    return true;
-}
-
-bool sphereInFrustum(vec4 sphere, vec4 frustumPlanes[6]) {
-    for (int i = 0; i < 6; i++) {
-        float distance = dot(frustumPlanes[i].xyz, sphere.xyz) + frustumPlanes[i].w;
-        if (distance < -sphere.w) {
-            return false;
-        }
-    }
-    return true;
-}
-
-vec4 transformBoundingSphere(vec4 localSphere, mat4 modelMatrix) {
-    vec3 worldCenter = (modelMatrix * vec4(localSphere.xyz, 1.0)).xyz;
-    float scaleX = length(modelMatrix[0].xyz);
-    float scaleY = length(modelMatrix[1].xyz);
-    float scaleZ = length(modelMatrix[2].xyz);
-    float maxScale = max(max(scaleX, scaleY), scaleZ);
-    float worldRadius = localSphere.w * maxScale;
-    return vec4(worldCenter, worldRadius);
-}
-
 // Find best available LOD (for streaming support)
 // Uses mainMeshletCount (.w) to check availability - shadows only render surface meshlets
 uint findBestAvailableLOD(TerrainTileGPUData tile, uint targetLOD) {
@@ -105,20 +71,7 @@ void main() {
         sharedVisibleCount = 0;
 
         // Extract frustum planes from light view-projection matrix
-        mat4 vp = pc.lightViewProjection;
-        sharedFrustumPlanes[0] = vec4(vp[0][3] + vp[0][0], vp[1][3] + vp[1][0], vp[2][3] + vp[2][0], vp[3][3] + vp[3][0]); // Left
-        sharedFrustumPlanes[1] = vec4(vp[0][3] - vp[0][0], vp[1][3] - vp[1][0], vp[2][3] - vp[2][0], vp[3][3] - vp[3][0]); // Right
-        sharedFrustumPlanes[2] = vec4(vp[0][3] + vp[0][1], vp[1][3] + vp[1][1], vp[2][3] + vp[2][1], vp[3][3] + vp[3][1]); // Bottom
-        sharedFrustumPlanes[3] = vec4(vp[0][3] - vp[0][1], vp[1][3] - vp[1][1], vp[2][3] - vp[2][1], vp[3][3] - vp[3][1]); // Top
-        sharedFrustumPlanes[4] = vec4(vp[0][3] + vp[0][2], vp[1][3] + vp[1][2], vp[2][3] + vp[2][2], vp[3][3] + vp[3][2]); // Near
-        sharedFrustumPlanes[5] = vec4(vp[0][3] - vp[0][2], vp[1][3] - vp[1][2], vp[2][3] - vp[2][2], vp[3][3] - vp[3][2]); // Far
-
-        // Normalize planes
-        const float PLANE_NORMALIZE_EPSILON = 0.0001;
-        for (int i = 0; i < 6; i++) {
-            float len = max(length(sharedFrustumPlanes[i].xyz), PLANE_NORMALIZE_EPSILON);
-            sharedFrustumPlanes[i] /= len;
-        }
+        extractFrustumPlanesFromVP(pc.lightViewProjection, sharedFrustumPlanes);
     }
     barrier();
 

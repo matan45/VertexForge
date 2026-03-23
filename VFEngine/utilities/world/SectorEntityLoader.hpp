@@ -1,6 +1,7 @@
 #pragma once
 
 #include "WorldTypes.hpp"
+#include <nlohmann/json.hpp>
 #include <deque>
 #include <vector>
 #include <cstdint>
@@ -27,7 +28,7 @@ namespace world
         {
             SectorCoord coord;
             std::string entityName;
-            std::string rawJson;
+            nlohmann::json entityJson;
         };
 
         struct PendingUnload
@@ -46,7 +47,7 @@ namespace world
     public:
         SectorEntityLoader() = default;
 
-        void queueSectorLoadFromData(const SectorCoord& coord, const std::vector<std::pair<std::string, std::string>>& entityNamesAndJson);
+        void queueSectorLoadFromData(const SectorCoord& coord, std::vector<std::pair<std::string, nlohmann::json>>& entityNamesAndJson);
         void queueSectorUnload(const SectorCoord& coord, const std::vector<uint64_t>& uuids);
 
         void update(scene::SceneGraphSystem& sceneGraph, int maxEntitiesPerFrame = 8);

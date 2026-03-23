@@ -12,13 +12,8 @@ namespace render::gpudriven
     MeshletBuffer::MeshletBuffer(core::Device& device)
         : device(device)
     {
-        uint32_t transferQueueFamily = device.getQueueFamilyIndices().transferFamily.value();
         transferManager = std::make_unique<core::TransferManager>(
-            device.getLogicalDevice(),
-            device.getPhysicalDevice(),
-            device.getTransferQueue(),
-            transferQueueFamily
-        );
+            device, device.getQueueFamilyIndices().transferFamily.value());
     }
 
     MeshletBuffer::~MeshletBuffer()

@@ -17,19 +17,20 @@ namespace core
 
 	// TransferManager: Handles async buffer/image transfers using fences
 	// Uses dedicated transfer queue if available, falls back to graphics queue
+	class Device;
+
 	class TransferManager {
 	private:
+		Device& ownerDevice;
 		const vk::Device& device;
 		const vk::PhysicalDevice& physicalDevice;
-		const vk::Queue& transferQueue;
 		uint32_t transferQueueFamily;
 
 		vk::CommandPool commandPool;
 		mutable std::mutex transferMutex;
 		std::vector<TransferOperation> pendingTransfers;
 	public:
-		TransferManager(const vk::Device& device, const vk::PhysicalDevice& physicalDevice,
-		                const vk::Queue& transferQueue, uint32_t transferQueueFamily);
+		TransferManager(Device& ownerDevice, uint32_t transferQueueFamily);
 		~TransferManager();
 
 		// Non-copyable

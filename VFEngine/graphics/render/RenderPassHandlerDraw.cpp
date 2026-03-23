@@ -341,7 +341,7 @@ namespace render
             grassFuture = threading::JobSystem::instance().submit([&]() {
                 grassCmd = sceneThreadPoolManager->getSecondary(2, imageIndex);
                 setupSecondary(grassCmd);
-                gpuDrivenRenderer->renderGrassDraw(grassCmd, iblDescriptorSet);
+                gpuDrivenRenderer->renderGrassDraw(grassCmd);
                 grassCmd.end();
             }, threading::JobPriority::HIGH);
         }
@@ -423,7 +423,7 @@ namespace render
             gpuDrivenRenderer->renderTerrainDraw(commandBuffer, iblDescriptorSet);
 
         if (gpuDrivenRenderer->isGrassRenderingEnabled())
-            gpuDrivenRenderer->renderGrassDraw(commandBuffer, iblDescriptorSet);
+            gpuDrivenRenderer->renderGrassDraw(commandBuffer);
 
         if (gpuDrivenRenderer->isWaterRenderingEnabled())
             gpuDrivenRenderer->renderWaterDraw(commandBuffer, iblDescriptorSet);

@@ -2,6 +2,10 @@
 #version 460
 #extension GL_EXT_mesh_shader : require
 #extension GL_KHR_shader_subgroup_ballot : require
+#extension GL_GOOGLE_include_directive : require
+
+#include "../common/camera_types.glsl"
+#include "../common/culling_functions.glsl"
 
 layout(local_size_x = 32) in;
 
@@ -26,17 +30,7 @@ layout(std430, set = 0, binding = 1) readonly buffer BillboardCountBuffer {
 };
 
 layout(set = 1, binding = 0) uniform CameraUBO {
-    mat4 view;
-    mat4 projection;
-    mat4 viewProjection;
-    mat4 invViewProjection;
-    vec4 cameraPosition;     // .w = nearPlane
-    vec4 screenParams;
-    vec4 frustumPlanes[6];
-    float farPlane;
-    uint objectCount;
-    uint hiZMipLevels;
-    float time;
+    GPUCameraData camera;
 };
 
 struct BillboardPayload {
@@ -44,15 +38,6 @@ struct BillboardPayload {
 };
 
 taskPayloadSharedEXT BillboardPayload payload;
-
-bool isInsideFrustum(vec3 center, float radius) {
-    for (int i = 0; i < 6; ++i) {
-        if (dot(frustumPlanes[i].xyz, center) + frustumPlanes[i].w < -radius) {
-            return false;
-        }
-    }
-    return true;
-}
 
 void main() {
     uint tid = gl_LocalInvocationID.x;
@@ -66,12 +51,11 @@ void main() {
         float maxDim = max(inst.size.x, inst.size.y) * inst.positionAndScale.w;
         float boundRadius = maxDim * 0.707; // ~sqrt(2)/2 for billboard diagonal
 
-        visible = isInsideFrustum(worldPos, boundRadius);
+        visible = sphereInFrustum(vec4(worldPos, boundRadius), camera.frustumPlanes);
 
-        // Distance culling (use far plane as max render distance)
         if (visible) {
-            float dist = distance(worldPos, cameraPosition.xyz);
-            visible = (dist < farPlane);
+            float dist = distance(worldPos, camera.cameraPosition.xyz);
+            visible = (dist < camera.farPlane);
         }
     }
 

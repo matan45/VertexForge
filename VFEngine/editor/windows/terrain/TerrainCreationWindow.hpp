@@ -1,7 +1,9 @@
 #pragma once
 #include "nfd/FileDialog.hpp"
+#include "data/EntityHandle.hpp"
 #include <string>
 #include <array>
+#include <future>
 
 namespace windows
 {
@@ -23,6 +25,11 @@ namespace windows
         float creationProgress = 0.0f;
         std::string creationStage;
 
+        bool pendingSaveDialog = false;
+        bool saveInProgress = false;
+        services::EntityHandle createdTerrainEntity;
+        std::future<bool> pendingSave;
+
     public:
         void draw();
 
@@ -34,5 +41,7 @@ namespace windows
         void browseHeightmap();
         void loadTerrain();
         void pollTerrainCreation();
+        void promptSaveAfterCreation();
+        void pollSaveResult();
     };
 }

@@ -70,6 +70,8 @@ namespace services
         ::events::SubscriptionToken sceneLoadedToken;
         ::events::SubscriptionToken sceneClearedToken;
         ::events::SubscriptionToken entityCreatedToken;
+        ::events::SubscriptionToken terrainCreatedToken;
+        ::events::SubscriptionToken terrainLoadedToken;
 
         glm::vec3 cachedCameraPos{0.0f};
 
@@ -80,6 +82,7 @@ namespace services
         void handleSectorLoad(const world::SectorCoord& coord);
         void handleSectorUnload(const world::SectorCoord& coord);
         void onTransformChanged(uint64_t uuid, const glm::vec3& newPosition);
+        void onTerrainAvailable(float worldTileSize);
         glm::vec3 getPrimaryCameraPosition() const;
         void drawDebugSectors() const;
     };

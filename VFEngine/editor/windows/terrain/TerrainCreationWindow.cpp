@@ -1,6 +1,8 @@
 #include "TerrainCreationWindow.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/terrain/TerrainEvents.hpp"
+#include "threading/JobSystem.hpp"
+#include "print/Log.hpp"
 #include <imgui.h>
 
 namespace windows
@@ -84,6 +86,16 @@ namespace windows
                 pollTerrainCreation();
                 ImGui::ProgressBar(creationProgress, ImVec2(-1, 0), creationStage.c_str());
             }
+            else if (pendingSaveDialog)
+            {
+                promptSaveAfterCreation();
+            }
+            else if (saveInProgress)
+            {
+                pollSaveResult();
+                ImGui::ProgressBar(-1.0f * static_cast<float>(ImGui::GetTime()),
+                                   ImVec2(-1, 0), "Saving terrain...");
+            }
             else
             {
                 if (ImGui::Button("Create", ImVec2(buttonWidth, 0)))
@@ -160,7 +172,15 @@ namespace windows
         if (!result.inProgress)
         {
             creationInProgress = false;
-            visible = false;
+            if (result.result.has_value())
+            {
+                createdTerrainEntity = result.result.value();
+                pendingSaveDialog = true;
+            }
+            else
+            {
+                visible = false;
+            }
         }
     }
 
@@ -189,6 +209,80 @@ namespace windows
         if (!selectedFile.empty())
         {
             heightmapPath = selectedFile;
+        }
+    }
+
+    void TerrainCreationWindow::promptSaveAfterCreation()
+    {
+        pendingSaveDialog = false;
+
+        std::vector<std::pair<std::wstring, std::wstring>> fileTypes = {
+            {L"VF Terrain (*.vfTerrain)", L"*.vfTerrain"}
+        };
+
+        std::string path = fileDialog.saveFileDialog(fileTypes, L"vfTerrain");
+        if (path.empty())
+        {
+            vfLogWarning("Terrain created without saving. Streaming unavailable until saved.");
+            visible = false;
+            return;
+        }
+
+        saveInProgress = true;
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        events::terrain::SetTerrainSaveLockCommand lockCmd;
+        lockCmd.locked = true;
+        dispatcher.execute(lockCmd);
+
+        events::terrain::PrepareTerrainSaveCommand prepCmd;
+        prepCmd.terrainEntity = createdTerrainEntity;
+        prepCmd.incremental = false;
+        dispatcher.execute(prepCmd);
+
+        auto handle = createdTerrainEntity;
+        pendingSave = threading::JobSystem::instance().submit(
+            [handle, path]()
+            {
+                events::terrain::SaveTerrainCommand cmd;
+                cmd.terrainEntity = handle;
+                cmd.path = path;
+                cmd.incremental = false;
+                return events::EventDispatcher::instance().execute(cmd);
+            },
+            threading::JobPriority::LOW);
+    }
+
+    void TerrainCreationWindow::pollSaveResult()
+    {
+        if (!pendingSave.valid()) return;
+
+        if (pendingSave.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready)
+        {
+            bool success = pendingSave.get();
+            saveInProgress = false;
+
+            auto& dispatcher = events::EventDispatcher::instance();
+
+            events::terrain::SetTerrainSaveLockCommand lockCmd;
+            lockCmd.locked = false;
+            dispatcher.execute(lockCmd);
+
+            if (success)
+            {
+                events::terrain::SetTerrainStreamingEnabledCommand streamCmd;
+                streamCmd.terrainEntity = createdTerrainEntity;
+                streamCmd.enabled = true;
+                dispatcher.execute(streamCmd);
+
+                vfLogInfo("Terrain saved and streaming enabled from file.");
+            }
+            else
+            {
+                vfLogError("Failed to save terrain after creation.");
+            }
+
+            visible = false;
         }
     }
 }

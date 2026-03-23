@@ -6,6 +6,7 @@
 #include <string>
 #include "vfx/VFXModifierTypes.hpp"
 #include "vfx/VFXForceTypes.hpp"
+#include "../../common/CameraTypes.hpp"
 #include "vfx/VFXShapeTypes.hpp"
 #include "vfx/VFXEventTypes.hpp"
 
@@ -129,13 +130,7 @@ namespace render::vfx
         }
     };
 
-    struct VFXCameraUBO
-    {
-        alignas(16) glm::mat4 view;
-        alignas(16) glm::mat4 projection;
-        alignas(16) glm::vec3 cameraPos;
-        alignas(4) float time;
-    };
+    using VFXCameraUBO = render::common::CameraUBO;
 
     struct VFXRibbonSegmentData
     {

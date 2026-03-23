@@ -231,9 +231,12 @@ namespace render::decal
         auto extent = swapChain.getSwapchainExtent();
         CameraUBO ubo{};
         ubo.viewProjection = currentViewProjection;
-        ubo.inverseViewProjection = currentInverseViewProjection;
-        ubo.cameraParams = glm::vec4(currentNearPlane, currentFarPlane,
-                                      static_cast<float>(extent.width), static_cast<float>(extent.height));
+        ubo.invViewProjection = currentInverseViewProjection;
+        ubo.screenParams = glm::vec4(
+            static_cast<float>(extent.width), static_cast<float>(extent.height),
+            1.0f / static_cast<float>(extent.width), 1.0f / static_cast<float>(extent.height));
+        ubo.cameraPosition = glm::vec4(0.0f, 0.0f, 0.0f, currentNearPlane);
+        ubo.farPlane = currentFarPlane;
 
         vk::Device vkDevice = device.getLogicalDevice();
         void* mapped = vkDevice.mapMemory(cameraUBOMemory, 0, sizeof(CameraUBO));
