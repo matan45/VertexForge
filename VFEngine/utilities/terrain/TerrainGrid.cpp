@@ -381,6 +381,27 @@ namespace terrain
             ++currentTile;
         }
 
+        // Phase 3: regenerate LODs with neighbor context for correct boundary normals/stitching
+        // During Phase 1, tiles were generated without neighbors (getTile = nullptr),
+        // so boundary normals and edge stitching were skipped. Now that all neighbors are
+        // established, regenerate all LODs with the TileLookup callback.
+        TileLookup lookup = [this](const TileCoord& coord) -> const TerrainTile* {
+            return getTile(coord);
+        };
+
+        currentTile = 0;
+        for (auto& [coord, tile] : tiles)
+        {
+            if (progress)
+            {
+                progress(static_cast<float>(currentTile) / static_cast<float>(totalTiles),
+                         "Syncing boundaries (" + std::to_string(coord.x) + ", " + std::to_string(coord.z) + ")");
+            }
+
+            generator->generateAllLODs(*tile, nullptr, lookup);
+            ++currentTile;
+        }
+
         quadtree.rebuild(tiles);
 
         if (progress)
