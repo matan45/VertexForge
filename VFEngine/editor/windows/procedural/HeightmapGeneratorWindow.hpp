@@ -21,6 +21,9 @@ namespace windows
         int noiseTypeIndex = 0;    // 0=Perlin, 1=Simplex
         int fractalTypeIndex = 1;  // 0=None, 1=FBM, 2=Ridged
 
+        // Presets
+        int presetIndex = 0;
+
         // Export settings
         int exportFormatIndex = 0; // 0=Uncompressed .vfImage, 1=BC7 .vfImage, 2=.vfSVT, 3=Both
         std::string exportPath;
@@ -60,5 +63,6 @@ namespace windows
         void pollExport();
         void startExport();
         void syncParamsFromUI();
+        void applyPreset(int preset);
     };
 }

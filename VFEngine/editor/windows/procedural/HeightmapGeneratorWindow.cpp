@@ -2,9 +2,12 @@
 #include "events/render/RenderEvents.hpp"
 #include "resource/Types.hpp"
 #include <imgui.h>
+#include "asset/AssetMetadataSerializer.hpp"
+#include "asset/AssetMetadata.hpp"
 #include <random>
 #include <chrono>
 #include <filesystem>
+#include <ctime>
 
 namespace windows
 {
@@ -64,6 +67,27 @@ namespace windows
 
     void HeightmapGeneratorWindow::drawParameterControls()
     {
+        // Presets
+        const char* presets[] = {
+            "Custom",
+            "Flat Hills",
+            "Rolling Plains",
+            "Mountains",
+            "Sharp Peaks",
+            "Deep Valleys",
+            "Plateaus",
+            "Islands"
+        };
+        if (ImGui::Combo("Preset", &presetIndex, presets, 8))
+        {
+            if (presetIndex != 0)
+            {
+                applyPreset(presetIndex);
+                previewDirty = true;
+            }
+        }
+
+        ImGui::Separator();
         ImGui::Text("Noise Parameters");
         ImGui::Separator();
 
@@ -75,33 +99,33 @@ namespace windows
         // Noise type
         const char* noiseTypes[] = { "Perlin", "Simplex" };
         if (ImGui::Combo("Noise Type", &noiseTypeIndex, noiseTypes, 2))
-            previewDirty = true;
+        { previewDirty = true; presetIndex = 0; }
 
         // Fractal type
         const char* fractalTypes[] = { "None", "FBM", "Ridged", "Billowy" };
         if (ImGui::Combo("Fractal Type", &fractalTypeIndex, fractalTypes, 4))
-            previewDirty = true;
+        { previewDirty = true; presetIndex = 0; }
 
         // Octaves (only for fractal types)
         if (fractalTypeIndex != 0)
         {
             if (ImGui::SliderInt("Octaves", &params.octaves, 1, 16))
-                previewDirty = true;
+            { previewDirty = true; presetIndex = 0; }
         }
 
         if (ImGui::DragFloat("Frequency", &params.frequency, 0.0001f, 0.001f, 0.1f, "%.4f"))
-            previewDirty = true;
+        { previewDirty = true; presetIndex = 0; }
 
         if (ImGui::SliderFloat("Amplitude", &params.amplitude, 0.0f, 1.0f))
-            previewDirty = true;
+        { previewDirty = true; presetIndex = 0; }
 
         if (fractalTypeIndex != 0)
         {
             if (ImGui::DragFloat("Lacunarity", &params.lacunarity, 0.01f, 1.0f, 4.0f, "%.2f"))
-                previewDirty = true;
+            { previewDirty = true; presetIndex = 0; }
 
             if (ImGui::SliderFloat("Persistence", &params.persistence, 0.0f, 1.0f))
-                previewDirty = true;
+            { previewDirty = true; presetIndex = 0; }
         }
 
         // Seed
@@ -342,7 +366,31 @@ namespace windows
         exportFuture = std::async(std::launch::async,
             [resultCopy = std::move(resultCopy), path, format]()
             {
-                return procedural::HeightmapGenerator::saveAsVFImage(resultCopy, path);
+                bool ok = procedural::HeightmapGenerator::saveAsVFImage(resultCopy, path);
+                if (ok)
+                {
+                    // Generate .vfmeta sidecar
+                    auto metaPath = asset::AssetMetadataSerializer::getMetaPath(path);
+                    asset::AssetMetadata metadata;
+                    metadata.guid = asset::AssetGUID::generate();
+                    metadata.type = resource::AssetType::Texture;
+                    metadata.importSourcePath = "procedural://heightmap";
+                    metadata.formatVersion = 1;
+
+                    auto time = std::time(nullptr);
+                    std::tm tm{};
+#ifdef _WIN32
+                    localtime_s(&tm, &time);
+#else
+                    localtime_r(&time, &tm);
+#endif
+                    char buf[32];
+                    std::strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", &tm);
+                    metadata.importTimestamp = buf;
+
+                    asset::AssetMetadataSerializer::save(metadata, metaPath);
+                }
+                return ok;
             });
     }
 
@@ -368,6 +416,110 @@ namespace windows
         else
         {
             exportStatusMessage = "Export failed!";
+        }
+    }
+
+    void HeightmapGeneratorWindow::applyPreset(int preset)
+    {
+        // Reset post-processing
+        params.domainWarp.enabled = false;
+        params.invert = false;
+        params.terracing = false;
+        params.terraceSteps = 8;
+
+        switch (preset)
+        {
+        case 1: // Flat Hills — gentle rolling terrain
+            noiseTypeIndex = 1;  // Simplex
+            fractalTypeIndex = 1; // FBM
+            params.octaves = 4;
+            params.frequency = 0.002f;
+            params.amplitude = 0.6f;
+            params.lacunarity = 2.0f;
+            params.persistence = 0.35f;
+            params.heightExponent = 0.7f;
+            break;
+
+        case 2: // Rolling Plains — wide open terrain with mild variation
+            noiseTypeIndex = 0;  // Perlin
+            fractalTypeIndex = 1; // FBM
+            params.octaves = 6;
+            params.frequency = 0.003f;
+            params.amplitude = 0.8f;
+            params.lacunarity = 2.2f;
+            params.persistence = 0.4f;
+            params.heightExponent = 0.6f;
+            params.domainWarp.enabled = true;
+            params.domainWarp.amplitude = 30.0f;
+            params.domainWarp.frequency = 0.003f;
+            break;
+
+        case 3: // Mountains — dramatic terrain with peaks
+            noiseTypeIndex = 1;  // Simplex
+            fractalTypeIndex = 2; // Ridged
+            params.octaves = 8;
+            params.frequency = 0.004f;
+            params.amplitude = 1.0f;
+            params.lacunarity = 2.2f;
+            params.persistence = 0.5f;
+            params.heightExponent = 1.4f;
+            params.domainWarp.enabled = true;
+            params.domainWarp.amplitude = 60.0f;
+            params.domainWarp.frequency = 0.004f;
+            break;
+
+        case 4: // Sharp Peaks — aggressive jagged mountains
+            noiseTypeIndex = 0;  // Perlin
+            fractalTypeIndex = 2; // Ridged
+            params.octaves = 10;
+            params.frequency = 0.006f;
+            params.amplitude = 1.0f;
+            params.lacunarity = 2.5f;
+            params.persistence = 0.55f;
+            params.heightExponent = 2.0f;
+            break;
+
+        case 5: // Deep Valleys — inverted ridged for canyon-like terrain
+            noiseTypeIndex = 1;  // Simplex
+            fractalTypeIndex = 2; // Ridged
+            params.octaves = 8;
+            params.frequency = 0.004f;
+            params.amplitude = 1.0f;
+            params.lacunarity = 2.0f;
+            params.persistence = 0.5f;
+            params.heightExponent = 1.5f;
+            params.invert = true;
+            params.domainWarp.enabled = true;
+            params.domainWarp.amplitude = 40.0f;
+            params.domainWarp.frequency = 0.003f;
+            break;
+
+        case 6: // Plateaus — flat-topped mesa terrain
+            noiseTypeIndex = 0;  // Perlin
+            fractalTypeIndex = 1; // FBM
+            params.octaves = 5;
+            params.frequency = 0.003f;
+            params.amplitude = 0.8f;
+            params.lacunarity = 2.0f;
+            params.persistence = 0.45f;
+            params.heightExponent = 0.4f;
+            params.terracing = true;
+            params.terraceSteps = 6;
+            break;
+
+        case 7: // Islands — smooth rounded landmasses with low areas
+            noiseTypeIndex = 1;  // Simplex
+            fractalTypeIndex = 3; // Billowy
+            params.octaves = 6;
+            params.frequency = 0.003f;
+            params.amplitude = 0.9f;
+            params.lacunarity = 2.0f;
+            params.persistence = 0.4f;
+            params.heightExponent = 1.8f;
+            params.domainWarp.enabled = true;
+            params.domainWarp.amplitude = 50.0f;
+            params.domainWarp.frequency = 0.002f;
+            break;
         }
     }
 

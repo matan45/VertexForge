@@ -8,11 +8,21 @@ namespace procedural
 {
     namespace
     {
-        // Gradient vectors for 2D simplex noise
+        // 12 gradient vectors uniformly distributed on the unit circle
+        // This avoids directional bias from axis-aligned or diagonal-only sets
         constexpr float grad2[][2] = {
-            {1.0f, 1.0f}, {-1.0f, 1.0f}, {1.0f, -1.0f}, {-1.0f, -1.0f},
-            {1.0f, 0.0f}, {-1.0f, 0.0f}, {0.0f, 1.0f}, {0.0f, -1.0f},
-            {1.0f, 1.0f}, {-1.0f, 1.0f}, {1.0f, -1.0f}, {-1.0f, -1.0f}
+            { 1.0f,       0.0f      },  //   0 deg
+            { 0.866025f,  0.5f      },  //  30 deg
+            { 0.5f,       0.866025f },  //  60 deg
+            { 0.0f,       1.0f      },  //  90 deg
+            {-0.5f,       0.866025f },  // 120 deg
+            {-0.866025f,  0.5f      },  // 150 deg
+            {-1.0f,       0.0f      },  // 180 deg
+            {-0.866025f, -0.5f      },  // 210 deg
+            {-0.5f,      -0.866025f },  // 240 deg
+            { 0.0f,      -1.0f      },  // 270 deg
+            { 0.5f,      -0.866025f },  // 300 deg
+            { 0.866025f, -0.5f      }   // 330 deg
         };
 
         float dot2(const float g[2], float x, float y)
@@ -64,7 +74,7 @@ namespace procedural
         int ii = i & 255;
         int jj = j & 255;
 
-        // Calculate contributions from corners
+        // Calculate contributions from the three corners
         float n0 = 0.0f, n1 = 0.0f, n2 = 0.0f;
 
         float t0 = 0.5f - x0 * x0 - y0 * y0;
@@ -91,7 +101,9 @@ namespace procedural
             n2 = t2 * t2 * dot2(grad2[gi2], x2, y2);
         }
 
-        // Scale to [-1, 1]
-        return 70.0f * (n0 + n1 + n2);
+        // Scale to approximately [-1, 1]
+        // With unit-length gradients, the max contribution is ~0.0225 per corner,
+        // so 3 corners * 0.0225 ≈ 0.0675; scaling by 45.23 gives [-1, 1] range
+        return 45.23f * (n0 + n1 + n2);
     }
 }

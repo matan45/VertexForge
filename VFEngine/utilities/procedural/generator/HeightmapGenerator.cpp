@@ -30,6 +30,27 @@ namespace procedural
             return perlin->evaluate(x, y);
         }
 
+        // Per-octave offsets to break alignment between octaves
+        // Each octave samples from a different region, preventing repetitive patterns
+        constexpr float octaveOffsets[][2] = {
+            {   0.0f,    0.0f  },
+            { 137.2f,  251.7f  },
+            { -83.4f,  419.3f  },
+            { 312.8f, -147.6f  },
+            {-201.5f, -309.1f  },
+            { 467.3f,  178.9f  },
+            {-156.7f,  523.4f  },
+            { 289.1f, -412.8f  },
+            {-378.6f,  167.2f  },
+            { 534.9f, -283.5f  },
+            {-423.1f, -198.7f  },
+            { 195.4f,  376.8f  },
+            {-267.3f,  491.2f  },
+            { 412.6f,  -56.9f  },
+            {-149.8f, -467.3f  },
+            { 356.2f,  234.1f  },
+        };
+
         // FBM (Fractal Brownian Motion)
         float fbm(const PerlinNoise* perlin, const SimplexNoise* simplex,
                   NoiseType type, float x, float y,
@@ -42,7 +63,9 @@ namespace procedural
 
             for (int i = 0; i < octaves; ++i)
             {
-                sum += evaluateNoise(perlin, simplex, type, x * freq, y * freq) * amp;
+                float ox = x * freq + octaveOffsets[i & 15][0];
+                float oy = y * freq + octaveOffsets[i & 15][1];
+                sum += evaluateNoise(perlin, simplex, type, ox, oy) * amp;
                 maxAmp += amp;
                 amp *= persistence;
                 freq *= lacunarity;
@@ -63,7 +86,9 @@ namespace procedural
 
             for (int i = 0; i < octaves; ++i)
             {
-                float n = evaluateNoise(perlin, simplex, type, x * freq, y * freq);
+                float ox = x * freq + octaveOffsets[i & 15][0];
+                float oy = y * freq + octaveOffsets[i & 15][1];
+                float n = evaluateNoise(perlin, simplex, type, ox, oy);
                 n = 1.0f - std::abs(n); // Ridge
                 n *= n;                   // Square for sharper ridges
                 n *= weight;
@@ -88,7 +113,9 @@ namespace procedural
 
             for (int i = 0; i < octaves; ++i)
             {
-                float n = evaluateNoise(perlin, simplex, type, x * freq, y * freq);
+                float ox = x * freq + octaveOffsets[i & 15][0];
+                float oy = y * freq + octaveOffsets[i & 15][1];
+                float n = evaluateNoise(perlin, simplex, type, ox, oy);
                 n = std::abs(n); // Smooth rounded valleys
                 sum += n * amp;
                 maxAmp += amp;

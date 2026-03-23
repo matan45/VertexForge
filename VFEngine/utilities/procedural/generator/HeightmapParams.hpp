@@ -14,11 +14,11 @@ namespace procedural
         NoiseType noiseType = NoiseType::Perlin;
         FractalType fractalType = FractalType::FBM;
 
-        int octaves = 6;
-        float frequency = 0.005f;
-        float amplitude = 1.0f;
+        int octaves = 4;
+        float frequency = 0.002f;
+        float amplitude = 0.8f;
         float lacunarity = 2.0f;
-        float persistence = 0.5f;
+        float persistence = 0.35f;
 
         DomainWarpParams domainWarp;
 
