@@ -57,4 +57,9 @@ namespace events::application {
         std::string_view getName() const override { return "OpenInputMappingWindow"; }
     };
 
+    struct OpenBackgroundRemovalNotification : INotification {
+        std::string filePath;
+        std::string_view getName() const override { return "OpenBackgroundRemoval"; }
+    };
+
 }

@@ -55,7 +55,8 @@ project "Editor"
 	  "VFEngine/import/types",            -- For MeshSocketWriter, AnimationEventIO
 	  "VFEngine/services",                -- Services layer interfaces
 	  "VFEngine/plugin",                  -- Plugin system
-	  "VFEngine/utilities/procedural"     -- Procedural heightmap generation
+	  "VFEngine/utilities/procedural",    -- Procedural heightmap generation
+	  "VFEngine/utilities/imageprocessing" -- Image background removal
    }
 
    links {
@@ -64,7 +65,8 @@ project "Editor"
 	  "Services",                       -- Link Services project
 	  "Plugin",                         -- Plugin system
 	  "imgui",                          -- For imgui-node-editor in ShaderGraphEditor
-	  "ProceduralGen"                   -- Procedural heightmap generation
+	  "ProceduralGen",                  -- Procedural heightmap generation
+	  "ImageProcessing"                 -- Image background removal
    }
 
    defines { "_CRT_SECURE_NO_WARNINGS" }
@@ -326,7 +328,8 @@ project "Utilities"
       "VFEngine/utilities/world/**",
       "VFEngine/utilities/animator/**",
       "VFEngine/utilities/vfx/**",
-      "VFEngine/utilities/procedural/**"
+      "VFEngine/utilities/procedural/**",
+      "VFEngine/utilities/imageprocessing/**"
    }
 
    includedirs {
@@ -597,6 +600,41 @@ project "ProceduralGen"
       postbuildcommands {
          "{MKDIR} ../../bin/Editor/Release/x64",
          "{COPY} ../../bin/ProceduralGen/Release/x64/ProceduralGen.dll ../../bin/Editor/Release/x64/"
+      }
+
+
+-- ImageProcessing subsystem (extracted from Utilities, SharedLib/DLL)
+project "ImageProcessing"
+   kind "SharedLib"
+   language "C++"
+   cppdialect "C++20"
+   location "VFEngine/utilities"
+   targetdir "bin/%{prj.name}/%{cfg.buildcfg}/%{cfg.platform}"
+
+   files { "VFEngine/utilities/imageprocessing/**.hpp", "VFEngine/utilities/imageprocessing/**.cpp" }
+
+   includedirs {
+      "dependencies/spdlog/include",
+      "dependencies/glm",
+      "VFEngine/utilities"
+   }
+
+   defines { "_CRT_SECURE_NO_WARNINGS", "VF_IMAGEPROCESSING_BUILD_DLL" }
+
+   filter "configurations:Debug"
+      defines { "DEBUG" }
+      symbols "On"
+      postbuildcommands {
+         "{MKDIR} ../../bin/Editor/Debug/x64",
+         "{COPY} ../../bin/ImageProcessing/Debug/x64/ImageProcessing.dll ../../bin/Editor/Debug/x64/"
+      }
+
+   filter "configurations:Release"
+      defines { "NDEBUG" }
+      optimize "On"
+      postbuildcommands {
+         "{MKDIR} ../../bin/Editor/Release/x64",
+         "{COPY} ../../bin/ImageProcessing/Release/x64/ImageProcessing.dll ../../bin/Editor/Release/x64/"
       }
 
 

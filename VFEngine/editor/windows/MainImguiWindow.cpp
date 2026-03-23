@@ -34,6 +34,7 @@ namespace windows
         menuBar.setTaskGraphWindow(&taskGraphWindow);
         menuBar.setInputActionMappingWindow(&inputActionMappingWindow);
         menuBar.setHeightmapGeneratorWindow(&heightmapGeneratorWindow);
+        menuBar.setBackgroundRemovalWindow(&backgroundRemovalWindow);
         subscribeToEvents();
     }
 
@@ -44,6 +45,7 @@ namespace windows
         dispatcher.unsubscribe(sceneLoadedToken);
         dispatcher.unsubscribe(openImportDialogToken);
         dispatcher.unsubscribe(openInputMappingToken);
+        dispatcher.unsubscribe(openBackgroundRemovalToken);
     }
 
     void MainImguiWindow::subscribeToEvents()
@@ -77,6 +79,12 @@ namespace windows
             [this](const events::application::OpenInputMappingWindowNotification&)
             {
                 inputActionMappingWindow.show();
+            });
+
+        openBackgroundRemovalToken = dispatcher.subscribe<events::application::OpenBackgroundRemovalNotification>(
+            [this](const events::application::OpenBackgroundRemovalNotification& n)
+            {
+                backgroundRemovalWindow.showWithFile(n.filePath);
             });
     }
 
@@ -130,6 +138,7 @@ namespace windows
             taskGraphWindow.draw();
             inputActionMappingWindow.draw();
             heightmapGeneratorWindow.draw();
+            backgroundRemovalWindow.draw();
         }
         ImGui::End();
     }

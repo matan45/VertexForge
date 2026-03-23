@@ -31,6 +31,7 @@ namespace windows
     class InputActionMappingWindow;
     class TaskGraphWindow;
     class HeightmapGeneratorWindow;
+    class BackgroundRemovalWindow;
     class MainMenuBar
     {
     private:
@@ -65,6 +66,7 @@ namespace windows
         InputActionMappingWindow* inputActionMappingWindow = nullptr;
         TaskGraphWindow* taskGraphWindow = nullptr;
         HeightmapGeneratorWindow* heightmapGeneratorWindow = nullptr;
+        BackgroundRemovalWindow* backgroundRemovalWindow = nullptr;
     public:
         MainMenuBar();
         ~MainMenuBar();
@@ -177,6 +179,11 @@ namespace windows
         void setHeightmapGeneratorWindow(HeightmapGeneratorWindow* window)
         {
             heightmapGeneratorWindow = window;
+        }
+
+        void setBackgroundRemovalWindow(BackgroundRemovalWindow* window)
+        {
+            backgroundRemovalWindow = window;
         }
 
     private:

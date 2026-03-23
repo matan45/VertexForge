@@ -191,6 +191,7 @@ namespace windows
                         dependenciesGuid = ref.getGUID();
                         dependenciesAssetPath = selectedPath;
                     }
+
                 }
             }
 
