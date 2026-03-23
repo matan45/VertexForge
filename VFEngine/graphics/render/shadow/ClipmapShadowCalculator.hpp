@@ -27,8 +27,13 @@ namespace render::shadow
             const glm::vec3& lightDirection,
             uint32_t resolution);
 
-        // Returns how many texels the center moved since last frame
+        // Returns how many texels the center moved since last frame (magnitude)
         static float computeSnapDelta(
+            const ClipmapLevelData& current,
+            const glm::vec2& previousSnapPosition);
+
+        // Returns per-axis texel shift (for incremental scrolling)
+        static glm::ivec2 computeSnapDeltaTexels(
             const ClipmapLevelData& current,
             const glm::vec2& previousSnapPosition);
 

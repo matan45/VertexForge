@@ -245,6 +245,7 @@ namespace render::shadow
         {
             return value;
         }
-        return std::floor(value / texelSize) * texelSize;
+        // Snap to texel CENTER to match Vulkan's half-pixel sampling convention
+        return (std::floor(value / texelSize + 0.5f) - 0.5f) * texelSize;
     }
 }

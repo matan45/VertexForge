@@ -141,7 +141,14 @@ vec2 blockerSearchCube(int cubeMapIndex, vec3 sampleDir, float receiverDepth,
 // Penumbra Estimation
 // ============================================================
 float estimatePenumbra(float receiverDepth, float avgBlockerDepth, float lightSize) {
-    float penumbra = lightSize * (receiverDepth - avgBlockerDepth) / avgBlockerDepth;
+    // Quantize receiver depth to discrete steps to stabilize penumbra calculation.
+    // Without this, sub-texel floating-point drift in receiverDepth causes the
+    // penumbra width to fluctuate frame-to-frame ("breathing" shadow edges).
+    const float depthSteps = 4096.0;
+    float stableDepth = round(receiverDepth * depthSteps) / depthSteps;
+    float stableBlocker = round(avgBlockerDepth * depthSteps) / depthSteps;
+
+    float penumbra = lightSize * (stableDepth - stableBlocker) / max(stableBlocker, 0.0001);
     return min(penumbra, 30.0);
 }
 

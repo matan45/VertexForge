@@ -429,23 +429,29 @@ namespace render::shadow
         if (level >= data.clipmapLastSnapPositions.size())
             return;
 
-        float snapDelta = ClipmapShadowCalculator::computeSnapDelta(
-            levelData, data.clipmapLastSnapPositions[level]);
-
-        if (snapDelta < 0.5f)
+        if (level >= data.clipmapLevelPageOffsets.size() || level >= data.clipmapLevelPagesPerSide.size())
             return;
 
-        if (level < data.clipmapLevelPageOffsets.size() && level < data.clipmapLevelPagesPerSide.size())
+        glm::ivec2 texelShift = ClipmapShadowCalculator::computeSnapDeltaTexels(
+            levelData, data.clipmapLastSnapPositions[level]);
+
+        if (texelShift.x == 0 && texelShift.y == 0)
+            return; // No movement — all cached pages remain valid
+
+        // When the clipmap snaps by any amount, the view-projection matrix changes.
+        // Since each page's cropViewProjection = cropMatrix * VP, all pages become
+        // stale and must be re-rendered. This is the minimal correct invalidation —
+        // frames with zero snap delta skip entirely (the common case when the camera
+        // moves less than one texel in light space).
+        uint32_t basePageIdx = data.clipmapLevelPageOffsets[level];
+        uint32_t pps = data.clipmapLevelPagesPerSide[level];
+        for (uint32_t p = 0; p < pps * pps; ++p)
         {
-            uint32_t basePageIdx = data.clipmapLevelPageOffsets[level];
-            uint32_t pps = data.clipmapLevelPagesPerSide[level];
-            for (uint32_t p = 0; p < pps * pps; ++p)
-            {
-                uint32_t pageIdx = basePageIdx + p;
-                if (pageIdx < data.vsmPageDirty.size())
-                    data.vsmPageDirty[pageIdx] = true;
-            }
+            uint32_t pageIdx = basePageIdx + p;
+            if (pageIdx < data.vsmPageDirty.size())
+                data.vsmPageDirty[pageIdx] = true;
         }
+
         data.clipmapLastSnapPositions[level] = levelData.snapPosition;
     }
 }

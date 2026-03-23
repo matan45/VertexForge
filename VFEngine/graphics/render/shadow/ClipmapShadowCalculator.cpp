@@ -77,9 +77,24 @@ namespace render::shadow
         return glm::length(delta) / current.texelSize;
     }
 
+    glm::ivec2 ClipmapShadowCalculator::computeSnapDeltaTexels(
+        const ClipmapLevelData& current,
+        const glm::vec2& previousSnapPosition)
+    {
+        if (current.texelSize <= 0.0f) return glm::ivec2(0);
+        glm::vec2 delta = current.snapPosition - previousSnapPosition;
+        return glm::ivec2(
+            static_cast<int>(std::round(delta.x / current.texelSize)),
+            static_cast<int>(std::round(delta.y / current.texelSize))
+        );
+    }
+
     float ClipmapShadowCalculator::snapToTexel(float value, float texelSize)
     {
         if (texelSize <= 0.0f) return value;
-        return std::floor(value / texelSize) * texelSize;
+        // Snap to texel CENTER (not corner) to match Vulkan's half-pixel sampling offset.
+        // Without the +0.5, the snap grid sits on texel boundaries, and the hardware
+        // sampler at the boundary can oscillate between two texels due to FP rounding.
+        return (std::floor(value / texelSize + 0.5f) - 0.5f) * texelSize;
     }
 }
