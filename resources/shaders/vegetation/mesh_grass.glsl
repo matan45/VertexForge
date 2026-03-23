@@ -119,10 +119,10 @@ void main() {
         vec3 w1 = calcWind(rootPos, 1.0, wp);
 
         SetMeshOutputsEXT(4, 2);
-        emitVert(0, rootPos - right*hw + w0,          toCamera, vec2(0,0), alpha, vt, ti);
-        emitVert(1, rootPos + right*hw + w0,          toCamera, vec2(1,0), alpha, vt, ti);
-        emitVert(2, rootPos - right*hw + up*bH + w1,  toCamera, vec2(0,1), alpha, vt, ti);
-        emitVert(3, rootPos + right*hw + up*bH + w1,  toCamera, vec2(1,1), alpha, vt, ti);
+        emitVert(0, rootPos - right*hw + w0,          toCamera, vec2(0,1), alpha, vt, ti);
+        emitVert(1, rootPos + right*hw + w0,          toCamera, vec2(1,1), alpha, vt, ti);
+        emitVert(2, rootPos - right*hw + up*bH + w1,  toCamera, vec2(0,0), alpha, vt, ti);
+        emitVert(3, rootPos + right*hw + up*bH + w1,  toCamera, vec2(1,0), alpha, vt, ti);
         gl_PrimitiveTriangleIndicesEXT[0] = uvec3(0,1,2);
         gl_PrimitiveTriangleIndicesEXT[1] = uvec3(1,3,2);
     } else {
@@ -146,14 +146,14 @@ void main() {
         vec3 b3 = vec3( hw*cr90, bH,  hw*sr90);
 
         SetMeshOutputsEXT(8, 4);
-        emitVert(0, rootPos+a0+w0, nA, vec2(0,0), alpha, vt, ti);
-        emitVert(1, rootPos+a1+w0, nA, vec2(1,0), alpha, vt, ti);
-        emitVert(2, rootPos+a2+w1, nA, vec2(0,1), alpha, vt, ti);
-        emitVert(3, rootPos+a3+w1, nA, vec2(1,1), alpha, vt, ti);
-        emitVert(4, rootPos+b0+w0, nB, vec2(0,0), alpha, vt, ti);
-        emitVert(5, rootPos+b1+w0, nB, vec2(1,0), alpha, vt, ti);
-        emitVert(6, rootPos+b2+w1, nB, vec2(0,1), alpha, vt, ti);
-        emitVert(7, rootPos+b3+w1, nB, vec2(1,1), alpha, vt, ti);
+        emitVert(0, rootPos+a0+w0, nA, vec2(0,1), alpha, vt, ti);
+        emitVert(1, rootPos+a1+w0, nA, vec2(1,1), alpha, vt, ti);
+        emitVert(2, rootPos+a2+w1, nA, vec2(0,0), alpha, vt, ti);
+        emitVert(3, rootPos+a3+w1, nA, vec2(1,0), alpha, vt, ti);
+        emitVert(4, rootPos+b0+w0, nB, vec2(0,1), alpha, vt, ti);
+        emitVert(5, rootPos+b1+w0, nB, vec2(1,1), alpha, vt, ti);
+        emitVert(6, rootPos+b2+w1, nB, vec2(0,0), alpha, vt, ti);
+        emitVert(7, rootPos+b3+w1, nB, vec2(1,0), alpha, vt, ti);
         gl_PrimitiveTriangleIndicesEXT[0] = uvec3(0,1,2);
         gl_PrimitiveTriangleIndicesEXT[1] = uvec3(1,3,2);
         gl_PrimitiveTriangleIndicesEXT[2] = uvec3(4,5,6);
