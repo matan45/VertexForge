@@ -2,7 +2,9 @@
 #include "TerrainMeshBuffer.hpp"
 #include "terrain/TerrainTile.hpp"
 #include "terrain/CaveMeshGenerator.hpp"
+#include "threading/JobSystem.hpp"
 #include <algorithm>
+#include <chrono>
 
 namespace render::gpudriven
 {
@@ -27,8 +29,6 @@ namespace render::gpudriven
         stats.bytesUploadedThisFrame = 0;
         stats.tilesStreaming = 0;
 
-        uint32_t fileReadsThisFrame = 0;
-
         std::unordered_map<TerrainTileKey, terrain::TerrainTile*, TerrainTileKeyHash> tileMap;
         for (terrain::TerrainTile* tile : visibleTiles)
         {
@@ -37,6 +37,10 @@ namespace render::gpudriven
                 tileMap[{tile->coord.x, tile->coord.z}] = tile;
             }
         }
+
+        pollCompletions(tileMap);
+
+        uint32_t fileReadsThisFrame = 0;
 
         struct TileWithDistance
         {
@@ -109,11 +113,13 @@ namespace render::gpudriven
 
                 if (tile->lodLevels[FALLBACK_LOD].isEmpty())
                 {
-                    if (!tileDataLoader || fileReadsThisFrame >= maxFileReadsPerFrame)
-                        continue;
-                    if (!tileDataLoader(*tile, FALLBACK_LOD))
-                        continue;
-                    fileReadsThisFrame++;
+                    if (tileAsyncDataLoader &&
+                        pendingLoads.size() < maxFileReadsPerFrame &&
+                        !hasPendingLoad(key))
+                    {
+                        submitAsyncLoad(key, LOD_MEMORY_ESTIMATE[FALLBACK_LOD]);
+                    }
+                    continue;
                 }
 
                 if (adapter.uploadTileAddLOD(*tile, FALLBACK_LOD))
@@ -241,7 +247,7 @@ namespace render::gpudriven
                uploadsCount < config.maxUploadsPerFrame &&
                bytesUploaded < config.maxBytesPerFrame)
         {
-            if (currentMemoryUsage >= config.memoryBudgetBytes * config.evictionThreshold)
+            if (currentMemoryUsage + pendingMemoryReserved >= static_cast<size_t>(config.memoryBudgetBytes * config.evictionThreshold))
             {
                 break;
             }
@@ -268,11 +274,13 @@ namespace render::gpudriven
 
             if (tile->lodLevels[entry.targetLOD].isEmpty())
             {
-                if (!tileDataLoader || fileReadsThisFrame >= maxFileReadsPerFrame)
-                    continue;
-                if (!tileDataLoader(*tile, entry.targetLOD))
-                    continue;
-                fileReadsThisFrame++;
+                if (tileAsyncDataLoader &&
+                    pendingLoads.size() < maxFileReadsPerFrame &&
+                    !hasPendingLoad(entry.key))
+                {
+                    submitAsyncLoad(entry.key, lodMemory);
+                }
+                continue;
             }
 
             if (adapter.uploadTileAddLOD(*tile, entry.targetLOD))
@@ -321,6 +329,9 @@ namespace render::gpudriven
             else if (info.currentLoadedLOD == TERRAIN_LOD_LEVEL_COUNT - 1)
                 stats.fallbackTiles++;
         }
+
+        stats.pendingAsyncLoads = static_cast<uint32_t>(pendingLoads.size());
+        stats.pendingMemoryBytes = pendingMemoryReserved;
     }
 
     uint8_t TerrainStreamManager::selectTargetLOD(float distance) const
@@ -401,6 +412,7 @@ namespace render::gpudriven
                 break;
 
             evictTileLOD(candidate.key, candidate.lodLevel);
+            cancelPendingLoadsForTile(candidate.key);
 
             if (tileRAMEvictor)
             {
@@ -489,6 +501,8 @@ namespace render::gpudriven
             uploadQueue.pop();
         }
 
+        pendingLoads.clear();
+        pendingMemoryReserved = 0;
         currentMemoryUsage = 0;
         stats = TerrainStreamingStats{};
     }
@@ -496,6 +510,9 @@ namespace render::gpudriven
     void TerrainStreamManager::evictTile(int32_t coordX, int32_t coordZ)
     {
         TerrainTileKey key{coordX, coordZ};
+
+        cancelPendingLoadsForTile(key);
+
         auto infoIt = tileInfos.find(key);
         if (infoIt == tileInfos.end())
             return;
@@ -509,6 +526,169 @@ namespace render::gpudriven
         }
 
         tileInfos.erase(infoIt);
+    }
+
+    void TerrainStreamManager::pollCompletions(
+        const std::unordered_map<TerrainTileKey, terrain::TerrainTile*, TerrainTileKeyHash>& tileMap)
+    {
+        uint32_t uploadsThisPoll = 0;
+
+        auto it = pendingLoads.begin();
+        while (it != pendingLoads.end())
+        {
+            if (it->cancelled)
+            {
+                if (it->future.wait_for(std::chrono::seconds(0)) == std::future_status::ready)
+                {
+                    it->future.get(); // discard
+                    pendingMemoryReserved -= std::min(it->estimatedMemory, pendingMemoryReserved);
+                    it = pendingLoads.erase(it);
+                }
+                else
+                {
+                    ++it;
+                }
+                continue;
+            }
+
+            if (it->future.wait_for(std::chrono::seconds(0)) != std::future_status::ready)
+            {
+                ++it;
+                continue;
+            }
+
+            auto result = it->future.get();
+            pendingMemoryReserved -= std::min(it->estimatedMemory, pendingMemoryReserved);
+
+            if (!result.success)
+            {
+                it = pendingLoads.erase(it);
+                continue;
+            }
+
+            auto tileIt = tileMap.find(result.key);
+            if (tileIt == tileMap.end() || !tileIt->second)
+            {
+                it = pendingLoads.erase(it);
+                continue;
+            }
+
+            terrain::TerrainTile* tile = tileIt->second;
+
+            // If tile was dirtied by a brush while we were loading, discard stale data
+            if (tile->hasAnyGPUDirtyLOD())
+            {
+                it = pendingLoads.erase(it);
+                continue;
+            }
+
+            if (uploadsThisPoll >= config.maxUploadsPerFrame)
+            {
+                ++it;
+                continue;
+            }
+
+            // Apply loaded data to tile
+            tile->lodLevels = std::move(result.lodData);
+            tile->isDirty = false;
+            tile->dirtyLODMask = 0;
+            if (tile->hasHeightData())
+                tile->updateWorldBounds();
+
+            if (result.hasWeightMap)
+            {
+                tile->weightMap = std::move(result.weightMap);
+                tile->weightMapGPUDirty = true;
+            }
+
+            if (result.hasHoleMask)
+            {
+                tile->holeMask = std::move(result.holeMask);
+                tile->topologyDirty = true;
+            }
+
+            // Upload all available LODs to GPU
+            for (uint8_t lod = 0; lod < TERRAIN_LOD_LEVEL_COUNT; ++lod)
+            {
+                if (tile->lodLevels[lod].isEmpty())
+                    continue;
+
+                auto infoIt = tileInfos.find(result.key);
+                if (infoIt == tileInfos.end())
+                    continue;
+
+                if (infoIt->second.hasLODLoaded(lod))
+                {
+                    // Re-upload (evict old, upload new)
+                    evictTileLOD(result.key, lod);
+                }
+
+                if (adapter.uploadTileAddLOD(*tile, lod))
+                {
+                    infoIt->second.setLODLoaded(lod);
+
+                    if (lod < infoIt->second.currentLoadedLOD || infoIt->second.currentLoadedLOD == 255)
+                        infoIt->second.currentLoadedLOD = lod;
+
+                    size_t lodMemory = estimateLODMemory(*tile, lod);
+                    infoIt->second.gpuMemoryUsage += lodMemory;
+                    currentMemoryUsage += lodMemory;
+                    stats.uploadsThisFrame++;
+                    stats.bytesUploadedThisFrame += lodMemory;
+                    uploadsThisPoll++;
+                }
+            }
+
+            // Update state
+            auto infoIt = tileInfos.find(result.key);
+            if (infoIt != tileInfos.end())
+            {
+                if (infoIt->second.loadedLODMask == 0)
+                    infoIt->second.state = TerrainTileStreamState::NotLoaded;
+                else if (infoIt->second.currentLoadedLOD == infoIt->second.targetLOD)
+                    infoIt->second.state = TerrainTileStreamState::FullyLoaded;
+                else if (infoIt->second.currentLoadedLOD == FALLBACK_LOD)
+                    infoIt->second.state = TerrainTileStreamState::FallbackOnly;
+                else
+                    infoIt->second.state = TerrainTileStreamState::Streaming;
+            }
+
+            it = pendingLoads.erase(it);
+        }
+    }
+
+    void TerrainStreamManager::submitAsyncLoad(const TerrainTileKey& key, size_t memEstimate)
+    {
+        if (!tileAsyncDataLoader)
+            return;
+
+        auto loader = tileAsyncDataLoader; // copy for lambda capture
+        auto future = threading::JobSystem::instance().submit(
+            [loader, key]() -> TileLODLoadResult {
+                return loader(key);
+            }, threading::JobPriority::NORMAL);
+
+        pendingLoads.push_back({key, std::move(future), memEstimate, false});
+        pendingMemoryReserved += memEstimate;
+    }
+
+    bool TerrainStreamManager::hasPendingLoad(const TerrainTileKey& key) const
+    {
+        for (const auto& pending : pendingLoads)
+        {
+            if (pending.key == key && !pending.cancelled)
+                return true;
+        }
+        return false;
+    }
+
+    void TerrainStreamManager::cancelPendingLoadsForTile(const TerrainTileKey& key)
+    {
+        for (auto& pending : pendingLoads)
+        {
+            if (pending.key == key)
+                pending.cancelled = true;
+        }
     }
 
 }

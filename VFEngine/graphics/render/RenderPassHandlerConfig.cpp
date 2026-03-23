@@ -24,6 +24,7 @@
 #include "IBL.hpp"
 #include "material/MaterialTextureCache.hpp"
 #include "../../services/providers/terrain/ITerrainRenderProvider.hpp"
+#include "gpudriven/terrain/TerrainStreamManager.hpp"
 #include "../../services/providers/terrain/IWaterRenderProvider.hpp"
 #include "../../services/providers/vegetation/IGrassRenderProvider.hpp"
 #include "../../services/providers/vegetation/IVegetationRenderProvider.hpp"
@@ -61,6 +62,19 @@ namespace render
                 [provider](terrain::TerrainTile& tile, uint8_t lod) -> bool { return provider->ensureTileLODData(tile, lod); });
             gpuDrivenRenderer->setTileRAMEvictor(
                 [provider](terrain::TerrainTile& tile) { provider->releaseTileRAMData(tile); });
+            gpuDrivenRenderer->setTileAsyncDataLoader(
+                [provider](const render::gpudriven::TerrainTileKey& key) -> render::gpudriven::TileLODLoadResult {
+                    auto serviceResult = provider->asyncLoadTileLODData(key.coordX, key.coordZ);
+                    render::gpudriven::TileLODLoadResult result;
+                    result.key = key;
+                    result.lodData = std::move(serviceResult.lodData);
+                    result.weightMap = std::move(serviceResult.weightMap);
+                    result.holeMask = std::move(serviceResult.holeMask);
+                    result.hasWeightMap = serviceResult.hasWeightMap;
+                    result.hasHoleMask = serviceResult.hasHoleMask;
+                    result.success = serviceResult.success;
+                    return result;
+                });
         }
     }
 

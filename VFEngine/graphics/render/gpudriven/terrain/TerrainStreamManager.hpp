@@ -1,11 +1,13 @@
 #pragma once
 
 #include "TerrainGPUAdapter.hpp"
+#include "terrain/TerrainTile.hpp"
 #include <glm/glm.hpp>
 #include <vector>
 #include <unordered_map>
 #include <queue>
 #include <functional>
+#include <future>
 
 namespace terrain
 {
@@ -63,6 +65,8 @@ namespace render::gpudriven
         size_t bytesUploadedThisFrame = 0;
         uint32_t fallbackTiles = 0;
         uint32_t fullDetailTiles = 0;
+        uint32_t pendingAsyncLoads = 0;
+        size_t pendingMemoryBytes = 0;
     };
 
     struct StreamPriorityEntry
@@ -77,11 +81,31 @@ namespace render::gpudriven
         }
     };
 
+    struct TileLODLoadResult
+    {
+        TerrainTileKey key;
+        std::array<terrain::TileLODData, TERRAIN_LOD_LEVEL_COUNT> lodData;
+        terrain::TileWeightMapData weightMap;
+        std::vector<uint8_t> holeMask;
+        bool hasWeightMap = false;
+        bool hasHoleMask = false;
+        bool success = false;
+    };
+
+    struct PendingTileLoad
+    {
+        TerrainTileKey key;
+        std::future<TileLODLoadResult> future;
+        size_t estimatedMemory = 0;
+        bool cancelled = false;
+    };
+
     class TerrainStreamManager
     {
     public:
         using TileDataLoader = std::function<bool(terrain::TerrainTile&, uint8_t lodLevel)>;
         using TileRAMEvictor = std::function<void(terrain::TerrainTile&)>;
+        using TileAsyncDataLoader = std::function<TileLODLoadResult(const TerrainTileKey&)>;
 
     private:
         TerrainMeshBuffer& terrainBuffer;
@@ -92,7 +116,11 @@ namespace render::gpudriven
 
         TileDataLoader tileDataLoader;
         TileRAMEvictor tileRAMEvictor;
+        TileAsyncDataLoader tileAsyncDataLoader;
         uint32_t maxFileReadsPerFrame = 4;
+
+        std::vector<PendingTileLoad> pendingLoads;
+        size_t pendingMemoryReserved = 0;
 
         std::unordered_map<TerrainTileKey, TerrainTileStreamInfo, TerrainTileKeyHash> tileInfos;
         std::priority_queue<StreamPriorityEntry> uploadQueue;
@@ -124,6 +152,7 @@ namespace render::gpudriven
 
         void setTileDataLoader(TileDataLoader loader) { tileDataLoader = std::move(loader); }
         void setTileRAMEvictor(TileRAMEvictor evictor) { tileRAMEvictor = std::move(evictor); }
+        void setTileAsyncDataLoader(TileAsyncDataLoader loader) { tileAsyncDataLoader = std::move(loader); }
 
         const TerrainStreamingStats& getStats() const { return stats; }
 
@@ -144,5 +173,10 @@ namespace render::gpudriven
         void evictTileLOD(const TerrainTileKey& key, uint8_t lodLevel);
 
         size_t estimateLODMemory(const terrain::TerrainTile& tile, uint8_t lodLevel) const;
+
+        void pollCompletions(const std::unordered_map<TerrainTileKey, terrain::TerrainTile*, TerrainTileKeyHash>& tileMap);
+        void submitAsyncLoad(const TerrainTileKey& key, size_t memEstimate);
+        bool hasPendingLoad(const TerrainTileKey& key) const;
+        void cancelPendingLoadsForTile(const TerrainTileKey& key);
     };
 }

@@ -262,6 +262,59 @@ namespace services
         return false;
     }
 
+    TileAsyncLoadResult TerrainService::asyncLoadTileLODData(int32_t coordX, int32_t coordZ)
+    {
+        TileAsyncLoadResult result;
+        result.coordX = coordX;
+        result.coordZ = coordZ;
+
+        terrain::TileCoord coord{coordX, coordZ};
+
+        for (auto& [entityId, grid] : terrainGrids)
+        {
+            if (!grid->getTile(coord))
+                continue;
+
+            auto cacheIt = fileCaches.find(entityId);
+            if (cacheIt == fileCaches.end() || !cacheIt->second)
+                return result;
+
+            auto& cache = *cacheIt->second;
+            const auto& indexMap = cache.getIndexMap();
+            auto indexIt = indexMap.find(coord);
+            if (indexIt == indexMap.end())
+                return result;
+
+            const auto& entry = indexIt->second;
+            if (entry.heightDataOffset == 0)
+                return result;
+
+            if (cache.hasMeshletCache() && entry.meshletDataOffset != 0)
+            {
+                if (terrain::TerrainSerializer::readTileLODData(cache.getFilePath(), entry, result.lodData))
+                {
+                    result.success = true;
+
+                    if (entry.weightDataOffset != 0)
+                    {
+                        if (terrain::TerrainSerializer::readTileWeights(cache.getFilePath(), entry, result.weightMap))
+                            result.hasWeightMap = true;
+                    }
+
+                    if (entry.holeMaskDataOffset != 0)
+                    {
+                        if (terrain::TerrainSerializer::readTileHoleMask(cache.getFilePath(), entry, result.holeMask))
+                            result.hasHoleMask = true;
+                    }
+                }
+            }
+
+            return result;
+        }
+
+        return result;
+    }
+
     void TerrainService::releaseTileRAMData(terrain::TerrainTile& tile)
     {
         for (auto& [entityId, grid] : terrainGrids)
