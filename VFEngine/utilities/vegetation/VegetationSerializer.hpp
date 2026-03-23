@@ -18,5 +18,10 @@ namespace vegetation
                                             const std::vector<BillboardInstance>& instances);
         static bool loadBillboardInstances(const std::string& filePath,
                                             std::vector<BillboardInstance>& instances);
+
+        static bool saveBillboardPalette(const std::string& filePath,
+                                          const std::vector<BillboardPaletteEntry>& palette);
+        static bool loadBillboardPalette(const std::string& filePath,
+                                          std::vector<BillboardPaletteEntry>& palette);
     };
 }

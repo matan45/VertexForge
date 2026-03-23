@@ -9,6 +9,8 @@
 #include "vegetation/VegetationSerializer.hpp"
 #include <asset/AssetRef.hpp>
 #include "../../data/EntityConversion.hpp"
+#include "../../events/EventDispatcher.hpp"
+#include "../../events/vegetation/GrassEvents.hpp"
 #include <filesystem>
 #include <format>
 
@@ -141,6 +143,18 @@ namespace services
             }
         }
 
+        // Save billboard palette alongside instance data
+        try {
+            auto palette = events::EventDispatcher::instance().query(
+                events::vegetation::GetBillboardPaletteQuery{});
+            if (!palette.empty())
+            {
+                vegetation::VegetationSerializer::saveBillboardPalette(
+                    vegDir + "/billboard_palette.vfBillboard", palette);
+                anyData = true;
+            }
+        } catch (...) {}
+
         if (anyData)
             vfLogInfo("TerrainService: Saved vegetation data to {}", vegDir);
 
@@ -175,6 +189,33 @@ namespace services
                     tile->billboardInstancesDirty = true;
                     tile->billboardInstancesGPUDirty = true;
                     loadedCount++;
+                }
+            }
+        }
+
+        // Load billboard palette
+        std::string palettePath = vegDir + "/billboard_palette.vfBillboard";
+        if (fs::exists(palettePath))
+        {
+            std::vector<vegetation::BillboardPaletteEntry> palette;
+            if (vegetation::VegetationSerializer::loadBillboardPalette(palettePath, palette))
+            {
+                // Store on a GrassComponent so the renderer can find it
+                auto& registry = scene::EntityRegistry::getRegistry();
+                // Find terrain entity
+                entt::entity terrainEntity = entt::null;
+                for (auto& [id, grid] : terrainGrids)
+                {
+                    auto terrainView = registry.view<components::TerrainComponent>();
+                    for (auto e : terrainView) { terrainEntity = e; break; }
+                    break;
+                }
+                if (terrainEntity != entt::null)
+                {
+                    if (!registry.all_of<components::GrassComponent>(terrainEntity))
+                        registry.emplace<components::GrassComponent>(terrainEntity);
+                    registry.get<components::GrassComponent>(terrainEntity).billboardPalette = palette;
+                    vfLogInfo("TerrainService: Loaded billboard palette ({} entries)", palette.size());
                 }
             }
         }

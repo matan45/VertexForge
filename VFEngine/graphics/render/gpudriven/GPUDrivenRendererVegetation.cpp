@@ -316,15 +316,24 @@ namespace render::gpudriven
         {
             auto& registry = scene::EntityRegistry::getRegistry();
             auto view = registry.view<components::GrassComponent>();
+            bool found = false;
             for (auto entity : view)
             {
+                found = true;
                 const auto& palette = view.get<components::GrassComponent>(entity).billboardPalette;
+                vfLogInfo("dispatchGrassCompute: Found GrassComponent, palette size={}", palette.size());
                 if (!palette.empty())
                 {
                     vfLogInfo("dispatchGrassCompute: Auto-loading billboard palette: {} entries", palette.size());
                     setBillboardPaletteFromEntries(palette);
                 }
                 break;
+            }
+            if (!found)
+            {
+                static int logCount = 0;
+                if (logCount++ < 3)
+                    vfLogInfo("dispatchGrassCompute: No GrassComponent found in registry");
             }
         }
 

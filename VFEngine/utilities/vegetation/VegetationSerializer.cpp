@@ -3,6 +3,7 @@
 #include <fstream>
 #include <filesystem>
 #include <random>
+#include <nlohmann/json.hpp>
 
 namespace vegetation
 {
@@ -80,5 +81,61 @@ namespace vegetation
         }
 
         return file.good();
+    }
+
+    bool VegetationSerializer::saveBillboardPalette(const std::string& filePath,
+                                                      const std::vector<BillboardPaletteEntry>& palette)
+    {
+        namespace fs = std::filesystem;
+        fs::path dir = fs::path(filePath).parent_path();
+        if (!dir.empty() && !fs::exists(dir))
+            fs::create_directories(dir);
+
+        nlohmann::json j = nlohmann::json::array();
+        for (const auto& entry : palette)
+        {
+            nlohmann::json e;
+            e["texturePath"] = entry.texturePath;
+            e["weight"] = entry.weight;
+            e["scaleMin"] = entry.scaleRange.x;
+            e["scaleMax"] = entry.scaleRange.y;
+            e["mode"] = static_cast<int>(entry.mode);
+            e["visible"] = entry.visible;
+            e["paintEnabled"] = entry.paintEnabled;
+            j.push_back(e);
+        }
+
+        std::ofstream file(filePath);
+        if (!file.is_open()) return false;
+        file << j.dump(2);
+        return file.good();
+    }
+
+    bool VegetationSerializer::loadBillboardPalette(const std::string& filePath,
+                                                      std::vector<BillboardPaletteEntry>& palette)
+    {
+        std::ifstream file(filePath);
+        if (!file.is_open()) return false;
+
+        try {
+            nlohmann::json j = nlohmann::json::parse(file);
+            palette.clear();
+            for (const auto& e : j)
+            {
+                BillboardPaletteEntry entry;
+                if (e.contains("texturePath")) entry.texturePath = e["texturePath"].get<std::string>();
+                if (e.contains("weight")) entry.weight = e["weight"].get<float>();
+                if (e.contains("scaleMin")) entry.scaleRange.x = e["scaleMin"].get<float>();
+                if (e.contains("scaleMax")) entry.scaleRange.y = e["scaleMax"].get<float>();
+                if (e.contains("mode")) entry.mode = static_cast<BillboardMode>(e["mode"].get<int>());
+                if (e.contains("visible")) entry.visible = e["visible"].get<bool>();
+                if (e.contains("paintEnabled")) entry.paintEnabled = e["paintEnabled"].get<bool>();
+                palette.push_back(entry);
+            }
+            return true;
+        } catch (...) {
+            vfLogError("VegetationSerializer: Failed to parse palette JSON: {}", filePath);
+            return false;
+        }
     }
 }

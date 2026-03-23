@@ -260,10 +260,14 @@ namespace windows
             try {
                 billboardEntries = events::EventDispatcher::instance().query(
                     events::vegetation::GetBillboardPaletteQuery{});
-                // Push to renderer so textures get registered
                 if (!billboardEntries.empty())
+                {
+                    vfLogInfo("GrassDensityPanel: Loaded {} billboard entries from scene", billboardEntries.size());
                     pushBillboardPalette();
-            } catch (...) {}
+                }
+            } catch (const std::exception& e) {
+                vfLogError("GrassDensityPanel: palette query failed: {}", e.what());
+            }
 
             configLoaded = true;
         }
