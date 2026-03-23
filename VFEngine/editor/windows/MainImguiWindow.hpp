@@ -31,6 +31,8 @@
 #include "plugin/PluginManagerWindow.hpp"
 #include "debug/TaskGraphWindow.hpp"
 #include "config/InputActionMappingWindow.hpp"
+#include "procedural/HeightmapGeneratorWindow.hpp"
+#include "imageprocessing/BackgroundRemovalWindow.hpp"
 #include "MainMenuBar.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/terrain/TerrainEvents.hpp"
@@ -78,12 +80,15 @@ namespace windows
         PluginManagerWindow pluginManagerWindow;
         TaskGraphWindow taskGraphWindow;
         InputActionMappingWindow inputActionMappingWindow;
+        HeightmapGeneratorWindow heightmapGeneratorWindow;
+        BackgroundRemovalWindow backgroundRemovalWindow;
         MainMenuBar menuBar;
 
         events::SubscriptionToken sceneClearedToken;
         events::SubscriptionToken sceneLoadedToken;
         events::SubscriptionToken openImportDialogToken;
         events::SubscriptionToken openInputMappingToken;
+        events::SubscriptionToken openBackgroundRemovalToken;
 
     public:
         explicit MainImguiWindow();
