@@ -191,34 +191,20 @@ namespace render::vegetation
         bindlessDescriptorSet = bindlessDescSet;
     }
 
-    void GrassMeshShaderPipeline::dispatch(vk::CommandBuffer cmd, const GrassDispatchParams& params)
+    void GrassMeshShaderPipeline::bindDescriptorSets(vk::CommandBuffer cmd)
     {
-        if (!initialized || params.instanceCount == 0 || !graphicsPipeline) return;
-
-        if (!grassDataDescriptorSet || !cameraDescriptorSet || !windDescriptorSet)
-        {
-            return;
-        }
-
-        cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
-
         if (lightDataDescriptorSet && bindlessDescriptorSet)
         {
             std::array<vk::DescriptorSet, 5> sets = {
-                grassDataDescriptorSet,
-                cameraDescriptorSet,
-                windDescriptorSet,
-                lightDataDescriptorSet,
-                bindlessDescriptorSet
+                grassDataDescriptorSet, cameraDescriptorSet, windDescriptorSet,
+                lightDataDescriptorSet, bindlessDescriptorSet
             };
             cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 0, sets, {});
         }
         else if (lightDataDescriptorSet)
         {
             std::array<vk::DescriptorSet, 4> sets = {
-                grassDataDescriptorSet,
-                cameraDescriptorSet,
-                windDescriptorSet,
+                grassDataDescriptorSet, cameraDescriptorSet, windDescriptorSet,
                 lightDataDescriptorSet
             };
             cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 0, sets, {});
@@ -226,12 +212,19 @@ namespace render::vegetation
         else
         {
             std::array<vk::DescriptorSet, 3> sets = {
-                grassDataDescriptorSet,
-                cameraDescriptorSet,
-                windDescriptorSet
+                grassDataDescriptorSet, cameraDescriptorSet, windDescriptorSet
             };
             cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 0, sets, {});
         }
+    }
+
+    void GrassMeshShaderPipeline::dispatch(vk::CommandBuffer cmd, const GrassDispatchParams& params)
+    {
+        if (!initialized || params.instanceCount == 0 || !graphicsPipeline) return;
+        if (!grassDataDescriptorSet || !cameraDescriptorSet || !windDescriptorSet) return;
+
+        cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
+        bindDescriptorSets(cmd);
 
         GrassMeshPushConstants pc{params.baseColor, params.tipColor, params.fadeStartDistance,
                                    params.fadeEndDistance, params.sssDistortion, params.sssPower,
@@ -307,16 +300,10 @@ namespace render::vegetation
         cameraDescriptorSet = sets[0];
     }
 
-    void GrassMeshShaderPipeline::createGrassPipeline(vk::DescriptorSetLayout windLayout,
-                                                       vk::DescriptorSetLayout lightLayout,
-                                                       vk::DescriptorSetLayout bindlessLayout,
-                                                       vk::RenderPass renderPass)
+    void GrassMeshShaderPipeline::createPipelineLayout(vk::DescriptorSetLayout windLayout,
+                                                        vk::DescriptorSetLayout lightLayout,
+                                                        vk::DescriptorSetLayout bindlessLayout)
     {
-        if (!loadGrassShaders())
-        {
-            return;
-        }
-
         vk::Device vkDevice = devicePtr->getLogicalDevice();
 
         this->windLayout = windLayout;
@@ -324,11 +311,7 @@ namespace render::vegetation
         this->bindlessLayout = bindlessLayout;
 
         std::array<vk::DescriptorSetLayout, 5> setLayouts = {
-            grassDataLayout,
-            cameraLayout,
-            windLayout,
-            lightLayout,
-            bindlessLayout
+            grassDataLayout, cameraLayout, windLayout, lightLayout, bindlessLayout
         };
 
         vk::PushConstantRange pushRange{};
@@ -345,9 +328,19 @@ namespace render::vegetation
         layoutCreateInfo.pPushConstantRanges = &pushRange;
 
         pipelineLayout = vkDevice.createPipelineLayout(layoutCreateInfo);
+    }
+
+    void GrassMeshShaderPipeline::createGrassPipeline(vk::DescriptorSetLayout windLayout,
+                                                       vk::DescriptorSetLayout lightLayout,
+                                                       vk::DescriptorSetLayout bindlessLayout,
+                                                       vk::RenderPass renderPass)
+    {
+        if (!loadGrassShaders()) return;
+
+        createPipelineLayout(windLayout, lightLayout, bindlessLayout);
 
         core::MeshShaderPipelineConfig config{};
-        config.device = vkDevice;
+        config.device = devicePtr->getLogicalDevice();
         config.renderPass = renderPass;
         config.extent = vk::Extent2D{1, 1};
         config.shaderStages = grassShader->getShaderStages();

@@ -208,7 +208,7 @@ namespace render
 
         if (gpuRenderer->isGrassRenderingEnabled())
         {
-            gpuRenderer->renderGrassDraw(commandBuffer, iblDescriptorSet, width, height);
+            gpuRenderer->renderGrassDraw(commandBuffer, width, height);
         }
 
         if (gpuRenderer->isWaterRenderingEnabled())

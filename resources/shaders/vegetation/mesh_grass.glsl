@@ -1,6 +1,9 @@
 #type MESH
 #version 460 core
 #extension GL_EXT_mesh_shader : require
+#extension GL_GOOGLE_include_directive : require
+
+#include "../common/camera_types.glsl"
 
 layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
 layout(triangles, max_vertices = 8, max_primitives = 4) out;
@@ -9,29 +12,8 @@ layout(std430, set = 0, binding = 0) readonly buffer GrassInstanceBuffer {
     vec4 grassInstances[];
 };
 
-// Camera — matches GPUCameraData in GPUDrivenTypes.hpp
 layout(set = 1, binding = 0) uniform CameraUBO {
-    mat4 view;
-    mat4 projection;
-    mat4 viewProjection;
-    mat4 invViewProjection;
-    vec4 cameraPosition;    // xyz = pos, w = nearPlane
-    vec4 screenParams;
-    vec4 frustumPlanes[6];
-    float farPlane;
-    uint objectCount;
-    uint hiZMipLevels;
-    uint frameIndex;
-    uint enableFrustumCulling;
-    uint enableOcclusionCulling;
-    uint enableLODSelection;
-    uint batchCount;
-    uint commandsPerBatch;
-    uint shaderGroupCount;
-    uint enableDistanceCulling;
-    float globalLodBias;
-    vec4 categoryDistSq0;
-    vec4 categoryDistSq1;
+    GPUCameraData camera;
 };
 
 layout(set = 2, binding = 0) uniform WindUBO {
@@ -88,7 +70,7 @@ vec3 calcWind(vec3 worldPos, float vertH, float windPhase) {
 }
 
 void emitVert(uint i, vec3 wp, vec3 n, vec2 uv, float a, uint vt, uint ti) {
-    gl_MeshVerticesEXT[i].gl_Position = projection * view * vec4(wp, 1.0);
+    gl_MeshVerticesEXT[i].gl_Position = camera.projection * camera.view * vec4(wp, 1.0);
     outWorldPos[i] = wp;
     outNormal[i] = n;
     outUV[i] = uv;
@@ -128,7 +110,7 @@ void main() {
 
     if (bbMode == 1u) {
         // Camera-facing quad
-        vec3 toCamera = normalize(cameraPosition.xyz - rootPos);
+        vec3 toCamera = normalize(camera.cameraPosition.xyz - rootPos);
         vec3 up = vec3(0.0, 1.0, 0.0);
         vec3 right = normalize(cross(up, toCamera));
         float hw = bbSize;

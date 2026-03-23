@@ -96,8 +96,6 @@ namespace render::gpudriven
         }
 
         vegetation.grassInitialized = true;
-
-        vegetation.cachedIBLLayout = iblDescriptorSetLayout;
         vegetation.cachedRenderPass = renderPass;
 
         vfLogInfo("GPUDrivenRenderer: Vegetation subsystems initialized");
@@ -388,7 +386,7 @@ namespace render::gpudriven
         }
     }
 
-    void GPUDrivenRenderer::renderGrassDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet,
+    void GPUDrivenRenderer::renderGrassDraw(vk::CommandBuffer cmd,
                                              uint32_t screenWidth, uint32_t screenHeight)
     {
         if (!initialized || !vegetation.grassRenderingEnabled || !vegetation.grassInitialized)

@@ -4,6 +4,7 @@
 #extension GL_KHR_shader_subgroup_ballot : require
 #extension GL_GOOGLE_include_directive : require
 
+#include "../common/camera_types.glsl"
 #include "../common/culling_functions.glsl"
 
 layout(local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
@@ -16,30 +17,8 @@ layout(std430, set = 0, binding = 1) readonly buffer GrassCountBuffer {
     uint totalInstances;
 };
 
-// Camera — matches GPUCameraData in GPUDrivenTypes.hpp
-// Uses the shared GPUDrivenCameraBuffer so frustum planes are always current-frame
 layout(set = 1, binding = 0) uniform CameraUBO {
-    mat4 view;
-    mat4 projection;
-    mat4 viewProjection;
-    mat4 invViewProjection;
-    vec4 cameraPosition;    // xyz = pos, w = nearPlane
-    vec4 screenParams;
-    vec4 frustumPlanes[6];
-    float farPlane;
-    uint objectCount;
-    uint hiZMipLevels;
-    uint frameIndex;
-    uint enableFrustumCulling;
-    uint enableOcclusionCulling;
-    uint enableLODSelection;
-    uint batchCount;
-    uint commandsPerBatch;
-    uint shaderGroupCount;
-    uint enableDistanceCulling;
-    float globalLodBias;
-    vec4 categoryDistSq0;
-    vec4 categoryDistSq1;
+    GPUCameraData camera;
 };
 
 layout(push_constant) uniform PushConstants {
@@ -74,11 +53,10 @@ void main() {
         vec4 scaleAndDensity = grassInstances[instanceIdx * 3 + 1];
         float grassHeight = scaleAndDensity.x;
 
-        dist = distance(worldPos, cameraPosition.xyz);
+        dist = distance(worldPos, camera.cameraPosition.xyz);
         if (dist < fadeEndDistance) {
-            // Frustum culling using shared implementation
             vec4 boundingSphere = vec4(worldPos + vec3(0.0, grassHeight * 0.5, 0.0), grassHeight);
-            if (sphereInFrustum(boundingSphere, frustumPlanes)) {
+            if (sphereInFrustum(boundingSphere, camera.frustumPlanes)) {
                 visible = true;
             }
         }

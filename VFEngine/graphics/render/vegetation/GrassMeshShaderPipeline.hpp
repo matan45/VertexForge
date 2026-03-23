@@ -103,10 +103,14 @@ namespace render::vegetation
     private:
         void createGrassDataDescriptor();
         void createCameraDescriptor();
+        void createPipelineLayout(vk::DescriptorSetLayout windLayout,
+                                   vk::DescriptorSetLayout lightLayout,
+                                   vk::DescriptorSetLayout bindlessLayout);
         void createGrassPipeline(vk::DescriptorSetLayout windLayout,
                                   vk::DescriptorSetLayout lightLayout,
                                   vk::DescriptorSetLayout bindlessLayout,
                                   vk::RenderPass renderPass);
+        void bindDescriptorSets(vk::CommandBuffer cmd);
         bool loadGrassShaders();
     };
 }

@@ -1,5 +1,8 @@
 #type VERTEX
 #version 460 core
+#extension GL_GOOGLE_include_directive : require
+
+#include "../common/camera_types.glsl"
 
 layout(location = 0) in vec3 inPosition;
 
@@ -8,30 +11,9 @@ layout(push_constant) uniform PushConstants {
     uint decalIndex;
 } pc;
 
-// Matches render::common::GPUCameraData (464 bytes)
 layout(set = 0, binding = 0) uniform CameraUBO {
-    mat4 view;
-    mat4 projection;
-    mat4 viewProjection;
-    mat4 invViewProjection;
-    vec4 cameraPosition;    // xyz = pos, w = nearPlane
-    vec4 screenParams;      // xy = size, zw = 1/size
-    vec4 frustumPlanes[6];
-    float farPlane;
-    uint objectCount;
-    uint hiZMipLevels;
-    uint frameIndex;
-    uint enableFrustumCulling;
-    uint enableOcclusionCulling;
-    uint enableLODSelection;
-    uint batchCount;
-    uint commandsPerBatch;
-    uint shaderGroupCount;
-    uint enableDistanceCulling;
-    float globalLodBias;
-    vec4 categoryDistSq0;
-    vec4 categoryDistSq1;
-} camera;
+    GPUCameraData camera;
+};
 
 void main()
 {
@@ -41,6 +23,9 @@ void main()
 
 #type FRAGMENT
 #version 460 core
+#extension GL_GOOGLE_include_directive : require
+
+#include "../common/camera_types.glsl"
 
 layout(location = 0) out vec4 outColor;
 
@@ -49,30 +34,9 @@ layout(push_constant) uniform PushConstants {
     uint decalIndex;
 } pc;
 
-// Matches render::common::GPUCameraData (464 bytes)
 layout(set = 0, binding = 0) uniform CameraUBO {
-    mat4 view;
-    mat4 projection;
-    mat4 viewProjection;
-    mat4 invViewProjection;
-    vec4 cameraPosition;    // xyz = pos, w = nearPlane
-    vec4 screenParams;      // xy = size, zw = 1/size
-    vec4 frustumPlanes[6];
-    float farPlane;
-    uint objectCount;
-    uint hiZMipLevels;
-    uint frameIndex;
-    uint enableFrustumCulling;
-    uint enableOcclusionCulling;
-    uint enableLODSelection;
-    uint batchCount;
-    uint commandsPerBatch;
-    uint shaderGroupCount;
-    uint enableDistanceCulling;
-    float globalLodBias;
-    vec4 categoryDistSq0;
-    vec4 categoryDistSq1;
-} camera;
+    GPUCameraData camera;
+};
 
 layout(set = 0, binding = 1) uniform sampler2D depthTexture;
 
