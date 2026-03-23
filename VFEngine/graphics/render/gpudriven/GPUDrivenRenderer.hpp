@@ -30,6 +30,7 @@
 #include "billboard/BillboardGPUTypes.hpp"
 #include "billboard/BillboardStreamManager.hpp"
 #include "vegetation/GrassConfig.hpp"
+#include "vegetation/VegetationTypes.hpp"
 #include "../vegetation/GrassStreamManager.hpp"
 #include "../occlusion/LightOcclusionCulling.hpp"
 #include "../volumetric/VolumetricPipeline.hpp"
@@ -102,7 +103,6 @@ namespace vegetation
 
 namespace render::vegetation
 {
-    class GrassComputePipeline;
     class GrassMeshShaderPipeline;
     class WindSystem;
 }
@@ -133,6 +133,7 @@ namespace render::gpudriven
             float uploadTileDataUs = 0.0f;
             TerrainStreamManager::TileDataLoader pendingTileDataLoader;
             TerrainStreamManager::TileRAMEvictor pendingTileRAMEvictor;
+            TerrainStreamManager::TileLoadContextProvider pendingTileLoadContextProvider;
         };
 
         struct SVTState
@@ -180,7 +181,7 @@ namespace render::gpudriven
 
         struct VegetationState
         {
-            std::unique_ptr<render::vegetation::GrassComputePipeline> grassComputePipeline;
+            // Compute pipeline removed - instances uploaded directly
             std::unique_ptr<render::vegetation::GrassMeshShaderPipeline> grassMeshPipeline;
             std::unique_ptr<render::vegetation::WindSystem> windSystem;
 
@@ -203,25 +204,30 @@ namespace render::gpudriven
 
             ::vegetation::GrassRenderConfig grassConfig;
 
+            // Billboard palette: resolved entries
+            struct BillboardGPUEntry
+            {
+                uint32_t bindlessIndex = 0xFFFFFFFF;
+                uint32_t mode = 0;
+                float weight = 1.0f;
+                float scaleMin = 0.0f;
+                float scaleMax = 0.0f;
+                bool visible = true;
+            };
+            std::vector<BillboardGPUEntry> billboardPalette;
+            int32_t activeBillboardEntry = -1; // -1 = All (Random), >= 0 = specific entry
+
+            // Palette loader callback (for auto-load on scene load)
+            std::function<std::vector<::vegetation::BillboardPaletteEntry>()> billboardPaletteLoader;
+
+            // Instance staging buffer for direct upload
+            vk::Buffer instanceStagingBuffer;
+            vk::DeviceMemory instanceStagingMemory;
+            void* instanceStagingMapped = nullptr;
+            uint32_t instanceStagingCapacity = 0;
+
             vk::DescriptorSetLayout cachedIBLLayout;
             vk::RenderPass cachedRenderPass;
-
-            // Staging buffer (host-visible, transfer src) — holds ALL tiles' data at offsets
-            vk::Buffer tileStagingBuffer;
-            vk::DeviceMemory tileStagingBufferMemory;
-            void* tileStagingMapped = nullptr;
-
-            // Device-local compute input buffers (storage + transfer dst) — single tile at a time
-            vk::Buffer tileComputeDensity;
-            vk::DeviceMemory tileComputeDensityMemory;
-            vk::Buffer tileComputeHeight;
-            vk::DeviceMemory tileComputeHeightMemory;
-            vk::Buffer tileComputeHole;
-            vk::DeviceMemory tileComputeHoleMemory;
-
-            uint32_t tileComputeCapacity = 0;   // per-tile texel capacity for compute buffers
-            uint32_t tileStagingTileSlots = 0;   // number of tile slots in staging buffer
-            uint32_t tileStagingTexelsPerSlot = 0; // texels per slot
 
             // Track which terrain tiles have vegetation registered
             std::unordered_set<uint64_t> registeredTileKeys;
@@ -587,12 +593,45 @@ namespace render::gpudriven
         void setGrassRenderingEnabled(bool enabled) { vegetation.grassRenderingEnabled = enabled; }
         bool isGrassRenderingEnabled() const { return vegetation.grassRenderingEnabled; }
         void setGrassRenderConfig(const ::vegetation::GrassRenderConfig& config) { vegetation.grassConfig = config; }
+        void setBillboardPalette(const std::vector<VegetationState::BillboardGPUEntry>& entries) { vegetation.billboardPalette = entries; }
+        void setActiveBillboardEntry(int32_t index) { vegetation.activeBillboardEntry = index; }
+        uint32_t getBillboardPaletteSize() const { return static_cast<uint32_t>(vegetation.billboardPalette.size()); }
+        void setBillboardPaletteLoader(std::function<std::vector<::vegetation::BillboardPaletteEntry>()> loader)
+        {
+            vegetation.billboardPaletteLoader = std::move(loader);
+        }
+        void setBillboardPaletteFromEntries(const std::vector<::vegetation::BillboardPaletteEntry>& entries)
+        {
+            vegetation.billboardPalette.clear();
+            for (const auto& e : entries)
+            {
+                VegetationState::BillboardGPUEntry gpu;
+                gpu.mode = static_cast<uint32_t>(e.mode);
+                gpu.weight = e.weight;
+                gpu.scaleMin = e.scaleRange.x;
+                gpu.scaleMax = e.scaleRange.y;
+                gpu.visible = e.visible;
+
+                // Register texture with bindless system if path is set
+                gpu.bindlessIndex = 0xFFFFFFFF;
+                if (!e.texturePath.empty() && textureStreamManager)
+                {
+                    gpu.bindlessIndex = textureStreamManager->registerTexture(
+                        e.texturePath, vk::Format::eR8G8B8A8Srgb);
+                }
+
+                vegetation.billboardPalette.push_back(gpu);
+            }
+        }
         void addVegetationTile(int32_t coordX, int32_t coordZ);
         void removeVegetationTile(int32_t coordX, int32_t coordZ);
         void clearVegetationData();
         void markVegetationTileDirty(int32_t coordX, int32_t coordZ);
-        void ensureTileStagingBuffers(uint32_t texelsPerTile, uint32_t tileCount);
         void dispatchGrassCompute(vk::CommandBuffer cmd, const std::vector<terrain::TerrainTile*>& visibleTiles);
+        void autoLoadBillboardPaletteFromECS();
+        bool needsVegetationUpload(const std::vector<terrain::TerrainTile*>& tiles) const;
+        std::vector<vegetation::GrassInstanceGPU> collectBillboardInstances(const std::vector<terrain::TerrainTile*>& tiles);
+        void ensureInstanceStagingCapacity(vk::DeviceSize requiredSize);
         void cleanupVegetation();
 
         // Billboard rendering
@@ -612,6 +651,7 @@ namespace render::gpudriven
         void releaseMaterialAsset(const std::string& materialPath);
 
         void setTileRAMEvictor(TerrainStreamManager::TileRAMEvictor evictor);
+        void setTileLoadContextProvider(TerrainStreamManager::TileLoadContextProvider loader);
 
         float getTerrainUpdateUs() const { return terrain.updateUs; }
         float getTerrainStreamingUs() const { return terrain.streamingUs; }

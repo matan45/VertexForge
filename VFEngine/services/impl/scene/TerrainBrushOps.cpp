@@ -7,13 +7,13 @@
 #include "terrain/BrushSampler.hpp"
 #include "terrain/WeightBrushApplicator.hpp"
 #include "terrain/HoleBrushApplicator.hpp"
-#include "vegetation/VegetationDensityBrushApplicator.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/terrain/BrushEvents.hpp"
 #include "../../events/terrain/PaintBrushEvents.hpp"
 #include "../../events/terrain/HoleBrushEvents.hpp"
 #include "../../events/vegetation/VegetationBrushEvents.hpp"
+#include "../../events/vegetation/GrassEvents.hpp"
 #include "../../events/editor/SculptModeEvents.hpp"
 #include "../../events/terrain/PaintModeEvents.hpp"
 #include "../../events/terrain/HoleModeEvents.hpp"
@@ -460,98 +460,6 @@ namespace services
         }
     }
 
-    void TerrainService::applyVegetationDensityBrush(
-        const glm::vec3& worldPosition, float deltaTime, bool invert, bool isFirstApplication)
-    {
-        if (saveInProgress.load(std::memory_order_acquire) || svtBakeInProgress.load(std::memory_order_acquire))
-            return;
-
-        auto& dispatcher = events::EventDispatcher::instance();
-
-        auto targetEntity = dispatcher.query(events::vegetationBrush::GetVegetationBrushTargetEntityQuery{});
-        if (!targetEntity.has_value())
-            return;
-
-        auto gridIt = terrainGrids.find(targetEntity->id);
-        if (gridIt == terrainGrids.end())
-            return;
-
-        terrain::TerrainGrid* grid = gridIt->second.get();
-
-        auto brushParams = dispatcher.query(events::vegetationBrush::GetDensityBrushParamsQuery{});
-        auto brushType = dispatcher.query(events::vegetationBrush::GetDensityBrushTypeQuery{});
-
-        float worldTileSize = 32.0f;
-        const auto& allTiles = grid->getAllTiles();
-        if (!allTiles.empty())
-            worldTileSize = allTiles[0]->config.worldTileSize;
-
-        glm::vec2 brushCenter(worldPosition.x, worldPosition.z);
-        auto affectedTiles = terrain::BrushSampler::getAffectedTiles(
-            brushCenter, brushParams.radius, worldTileSize);
-
-        auto cacheIt = fileCaches.find(targetEntity->id);
-        auto fileCache = (cacheIt != fileCaches.end()) ? cacheIt->second : nullptr;
-
-        bool anyModified = false;
-        for (const auto& coord : affectedTiles)
-        {
-            terrain::TerrainTile* tile = grid->getTile(coord);
-            if (!tile)
-            {
-                if (fileCache && fileCache->hasCoord(coord))
-                {
-                    streamInTile(*targetEntity, coord.x, coord.z);
-                    tile = grid->getTile(coord);
-                }
-                if (!tile)
-                    continue;
-            }
-
-            if (!tile->vegetationDensity.isInitialized())
-                tile->vegetationDensity.initializeDefault(tile->config.getVertexCount());
-
-            if (fileCache)
-                fileCache->markDirty(coord);
-
-            vegetation::VegetationDensityBrushApplicator::ApplyParams applyParams;
-            applyParams.brushCenter = brushCenter;
-            applyParams.tileWorldOrigin = glm::vec2(
-                static_cast<float>(tile->coord.x) * tile->config.worldTileSize,
-                static_cast<float>(tile->coord.z) * tile->config.worldTileSize);
-            applyParams.brushRadius = brushParams.radius;
-            applyParams.brushStrength = brushParams.strength;
-            applyParams.brushOpacity = brushParams.opacity;
-            applyParams.vertexSpacing = tile->config.getVertexSpacing();
-            applyParams.verticesPerSide = tile->config.getVertexCount();
-            applyParams.falloff = brushParams.falloff;
-            applyParams.shape = brushParams.shape;
-            applyParams.brushType = brushType;
-            applyParams.deltaTime = deltaTime;
-            applyParams.invert = invert;
-
-            if (vegetation::VegetationDensityBrushApplicator::apply(tile->vegetationDensity, applyParams))
-            {
-                tile->vegetationDensityDirty = true;
-                tile->vegetationDensityGPUDirty = true;
-                anyModified = true;
-            }
-        }
-
-        if (anyModified)
-        {
-            events::vegetationBrush::VegetationDensityBrushAppliedNotification notification;
-            notification.position = worldPosition;
-            notification.type = brushType;
-            dispatcher.publish(notification);
-
-            auto& registry = scene::EntityRegistry::getRegistry();
-            entt::entity ent = internal::fromHandle(*targetEntity);
-            if (registry.valid(ent) && registry.all_of<components::TerrainComponent>(ent))
-            {
-                registry.get<components::TerrainComponent>(ent).saveDirty = true;
-            }
-        }
-    }
+    // Vegetation brush is now handled by VegetationBrushServiceImpl (instance-based placement)
 
 }

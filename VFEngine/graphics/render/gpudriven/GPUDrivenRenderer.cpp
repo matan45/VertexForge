@@ -3,7 +3,6 @@
 #include "../occlusion/DepthPrepassPipeline.hpp"
 #include "../occlusion/HiZBuffer.hpp"
 #include "../mesh/MeshStreamManager.hpp"
-#include "../vegetation/GrassComputePipeline.hpp"
 #include "../vegetation/GrassMeshShaderPipeline.hpp"
 #include "../vegetation/WindSystem.hpp"
 #include "../vegetation/VegetationBufferManager.hpp"
@@ -459,6 +458,8 @@ namespace render::gpudriven
                 vegetation.grassMeshPipeline->recreate(
                     cachedIBLLayout,
                     vegetation.windSystem ? vegetation.windSystem->getDescriptorSetLayout() : vk::DescriptorSetLayout{},
+                    lightBufferManager ? lightBufferManager->getDescriptorSetLayout() : vk::DescriptorSetLayout{},
+                    bindlessTextures ? bindlessTextures->getDescriptorSetLayout() : vk::DescriptorSetLayout{},
                     cachedRenderPass);
             }
         }

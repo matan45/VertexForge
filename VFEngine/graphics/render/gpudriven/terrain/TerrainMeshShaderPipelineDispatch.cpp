@@ -203,6 +203,7 @@ namespace render::gpudriven
                                               float textureScale)
     {
         if (!initialized || !graphicsPipeline || currentTileCount == 0) return;
+        if (!validateDescriptorsForDispatch()) return;
 
         cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
 
@@ -213,8 +214,6 @@ namespace render::gpudriven
             shadowDataDescriptorSet, shadowTextureDescriptorSet, terrainDataDescriptorSet,
             svtEnabled ? svtDescriptorSet : vk::DescriptorSet{nullptr}  // Set 12: SVT (optional)
         };
-
-        if (!validateDescriptorsForDispatch()) return;
 
         bindDescriptorSetsInBatches(cmd, currentSets.data(), static_cast<uint32_t>(currentSets.size()));
 

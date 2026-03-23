@@ -14,6 +14,7 @@
 #include "../../events/terrain/PaintBrushEvents.hpp"
 #include "../../events/terrain/HoleBrushEvents.hpp"
 #include "../../events/vegetation/VegetationBrushEvents.hpp"
+#include "../../events/vegetation/GrassEvents.hpp"
 #include "../../events/terrain/CaveBrushEvents.hpp"
 #include "../../events/project/SceneEvents.hpp"
 #include "../../events/physics/PhysicsEvents.hpp"
@@ -256,10 +257,75 @@ namespace services
 
     void TerrainService::registerVegetationBrushHandlers(::events::EventDispatcher& dispatcher)
     {
-        dispatcher.registerCommandHandler<events::vegetationBrush::ApplyVegetationDensityBrushCommand>(
-            [this](const events::vegetationBrush::ApplyVegetationDensityBrushCommand& cmd)
+        // Clear all billboard instances
+        dispatcher.registerCommandHandler<events::vegetation::ClearAllBillboardInstancesCommand>(
+            [this](const events::vegetation::ClearAllBillboardInstancesCommand&)
             {
-                applyVegetationDensityBrush(cmd.worldPosition, cmd.deltaTime, cmd.invert, cmd.isFirstApplication);
+                for (auto& [entityId, grid] : terrainGrids)
+                {
+                    for (auto* tile : grid->getAllTiles())
+                    {
+                        if (!tile) continue;
+                        tile->billboardInstances.clear();
+                        tile->billboardInstancesDirty = true;
+                        tile->billboardInstancesGPUDirty = true;
+                    }
+                }
+            });
+
+        // Add billboard instances to a tile
+        dispatcher.registerCommandHandler<events::vegetation::AddBillboardInstancesToTileCommand>(
+            [this](const events::vegetation::AddBillboardInstancesToTileCommand& cmd)
+            {
+                terrain::TileCoord coord{cmd.tileX, cmd.tileZ};
+                for (auto& [entityId, grid] : terrainGrids)
+                {
+                    auto* tile = grid->getTile(coord);
+                    if (!tile) continue;
+                    tile->billboardInstances.insert(tile->billboardInstances.end(),
+                                                     cmd.instances.begin(), cmd.instances.end());
+                    tile->billboardInstancesDirty = true;
+                    tile->billboardInstancesGPUDirty = true;
+                    return;
+                }
+            });
+
+        // Remove billboard instances from a tile (indices sorted descending)
+        dispatcher.registerCommandHandler<events::vegetation::RemoveBillboardInstancesFromTileCommand>(
+            [this](const events::vegetation::RemoveBillboardInstancesFromTileCommand& cmd)
+            {
+                terrain::TileCoord coord{cmd.tileX, cmd.tileZ};
+                for (auto& [entityId, grid] : terrainGrids)
+                {
+                    auto* tile = grid->getTile(coord);
+                    if (!tile) continue;
+                    // Swap-and-pop (indices must be sorted descending)
+                    for (uint32_t idx : cmd.indicesToRemove)
+                    {
+                        if (idx < tile->billboardInstances.size())
+                        {
+                            tile->billboardInstances[idx] = tile->billboardInstances.back();
+                            tile->billboardInstances.pop_back();
+                        }
+                    }
+                    tile->billboardInstancesDirty = true;
+                    tile->billboardInstancesGPUDirty = true;
+                    return;
+                }
+            });
+
+        // Get billboard instances for a tile
+        dispatcher.registerQueryHandler<events::vegetation::GetTileBillboardInstancesQuery>(
+            [this](const events::vegetation::GetTileBillboardInstancesQuery& query)
+                -> std::vector<vegetation::BillboardInstance>
+            {
+                terrain::TileCoord coord{query.tileX, query.tileZ};
+                for (auto& [entityId, grid] : terrainGrids)
+                {
+                    auto* tile = grid->getTile(coord);
+                    if (tile) return tile->billboardInstances;
+                }
+                return {};
             });
     }
 

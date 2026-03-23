@@ -2,6 +2,7 @@
 
 #include "events/EventTypes.hpp"
 #include "vegetation/GrassConfig.hpp"
+#include "vegetation/VegetationTypes.hpp"
 
 namespace windows
 {
@@ -11,16 +12,17 @@ namespace windows
         bool visible = false;
         int selectedBrushType = 0;
         float brushRadius = 5.0f;
-        float brushStrength = 10.0f;
-        float brushOpacity = 1.0f;
-        int falloffIndex = 2;
-        int shapeIndex = 0;
+        float brushSpacing = 0.5f;
+        float brushDensity = 1.0f;
+        float brushJitter = 0.5f;
+
+        // Billboard palette
+        std::vector<vegetation::BillboardPaletteEntry> billboardEntries;
 
         vegetation::GrassRenderConfig grassConfig;
         bool configLoaded = false;
 
         events::SubscriptionToken modeToken;
-
         bool subscribed = false;
 
     public:
@@ -33,7 +35,13 @@ namespace windows
 
     private:
         void subscribe();
-        void drawGrassConfigSection();
+        void ensureConfigLoaded();
+        void drawBillboardPalette();
+        void drawBillboardEntry(int index, int& removeIndex);
+        void drawBrushControls();
+        void drawWindControls();
+        void drawSSSControls();
         void pushGrassConfig();
+        void pushBillboardPalette();
     };
 }

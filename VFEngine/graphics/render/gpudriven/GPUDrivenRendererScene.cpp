@@ -607,7 +607,7 @@ namespace render::gpudriven
         }
 
         if (terrain.renderingEnabled && terrain.pipeline && terrain.meshBuffer &&
-            terrain.meshBuffer->isInitialized() && terrain.pipeline->getCurrentTileCount() > 0)
+            terrain.meshBuffer->isInitialized())
         {
             terrain.pipeline->updateTerrainBufferDescriptors(*terrain.meshBuffer);
             terrain.pipeline->updateWeightMapDescriptor(terrain.meshBuffer->getWeightMapBuffer());

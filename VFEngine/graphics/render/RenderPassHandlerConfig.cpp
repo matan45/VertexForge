@@ -1,4 +1,8 @@
 #include "RenderPassHandler.hpp"
+#include "gpudriven/GPUDrivenRenderer.hpp"
+#include "vegetation/VegetationTypes.hpp"
+#include "scene/EntityRegistry.hpp"
+#include "components/VegetationComponents.hpp"
 #include "../core/Device.hpp"
 #include "../core/SwapChain.hpp"
 #include "mesh/StaticMeshPipeline.hpp"
@@ -20,6 +24,7 @@
 #include "IBL.hpp"
 #include "material/MaterialTextureCache.hpp"
 #include "../../services/providers/terrain/ITerrainRenderProvider.hpp"
+#include "gpudriven/terrain/TerrainStreamManager.hpp"
 #include "../../services/providers/terrain/IWaterRenderProvider.hpp"
 #include "../../services/providers/vegetation/IGrassRenderProvider.hpp"
 #include "../../services/providers/vegetation/IVegetationRenderProvider.hpp"
@@ -57,6 +62,17 @@ namespace render
                 [provider](terrain::TerrainTile& tile, uint8_t lod) -> bool { return provider->ensureTileLODData(tile, lod); });
             gpuDrivenRenderer->setTileRAMEvictor(
                 [provider](terrain::TerrainTile& tile) { provider->releaseTileRAMData(tile); });
+            gpuDrivenRenderer->setTileLoadContextProvider(
+                [provider](const render::gpudriven::TerrainTileKey& key) -> render::gpudriven::TileLoadContext {
+                    auto serviceResult = provider->prepareTileLoadContext(key.coordX, key.coordZ);
+                    render::gpudriven::TileLoadContext ctx;
+                    ctx.key = key;
+                    ctx.filePath = std::move(serviceResult.filePath);
+                    ctx.indexEntry = serviceResult.indexEntry;
+                    ctx.hasMeshletCache = serviceResult.hasMeshletCache;
+                    ctx.valid = serviceResult.valid;
+                    return ctx;
+                });
         }
     }
 
@@ -69,6 +85,19 @@ namespace render
             provider->setAddTileCallback([renderer](int32_t x, int32_t z) { renderer->addVegetationTile(x, z); });
             provider->setRemoveTileCallback([renderer](int32_t x, int32_t z) { renderer->removeVegetationTile(x, z); });
             provider->setMarkDirtyCallback([renderer](int32_t x, int32_t z) { renderer->markVegetationTileDirty(x, z); });
+            provider->setOnBillboardPaletteChanged([renderer](const std::vector<::vegetation::BillboardPaletteEntry>& entries, int32_t activeEntry)
+            {
+                renderer->setBillboardPaletteFromEntries(entries);
+                renderer->setActiveBillboardEntry(activeEntry);
+            });
+
+            renderer->setBillboardPaletteLoader([]() -> std::vector<::vegetation::BillboardPaletteEntry> {
+                auto& registry = scene::EntityRegistry::getRegistry();
+                auto view = registry.view<components::GrassComponent>();
+                for (auto entity : view)
+                    return view.get<components::GrassComponent>(entity).billboardPalette;
+                return {};
+            });
         }
     }
 

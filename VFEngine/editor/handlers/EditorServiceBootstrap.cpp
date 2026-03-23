@@ -208,14 +208,32 @@ namespace handlers
     void EditorHandler::createVegetationServices()
     {
         grassService = std::make_shared<services::GrassServiceImpl>();
-        vegetationBrushService = std::make_shared<services::VegetationBrushServiceImpl>();
+
+        auto brushServiceImpl = std::make_shared<services::VegetationBrushServiceImpl>();
+        vegetationBrushService = brushServiceImpl;
         vegetationBrushModeService = std::make_shared<services::VegetationBrushModeServiceImpl>();
+
         auto* grassProvider = bootstrap->getGrassRenderProvider();
         if (grassProvider)
         {
             grassProvider->setGetConfigCallback([]() {
                 return events::EventDispatcher::instance().query(
                     events::vegetation::GetGlobalGrassConfigQuery{});
+            });
+
+            // Wire billboard palette: event → brush service → provider → adapter → renderer
+            brushServiceImpl->setBillboardPaletteCallback(
+                [grassProvider](const std::vector<vegetation::BillboardPaletteEntry>& entries, int32_t activeEntry)
+                {
+                    grassProvider->setBillboardPalette(entries, activeEntry);
+                });
+
+            // Wire palette query: renderer can read palette from ECS on scene load
+            grassProvider->setGetBillboardPaletteCallback([]() -> std::vector<vegetation::BillboardPaletteEntry> {
+                try {
+                    return events::EventDispatcher::instance().query(
+                        events::vegetation::GetBillboardPaletteQuery{});
+                } catch (...) { return {}; }
             });
         }
     }

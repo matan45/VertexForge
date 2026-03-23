@@ -1,11 +1,15 @@
 #pragma once
 
 #include "TerrainGPUAdapter.hpp"
+#include "terrain/TerrainTile.hpp"
+#include "terrain/TerrainSerializer.hpp"
 #include <glm/glm.hpp>
 #include <vector>
 #include <unordered_map>
+#include <unordered_set>
 #include <queue>
 #include <functional>
+#include <future>
 
 namespace terrain
 {
@@ -63,6 +67,8 @@ namespace render::gpudriven
         size_t bytesUploadedThisFrame = 0;
         uint32_t fallbackTiles = 0;
         uint32_t fullDetailTiles = 0;
+        uint32_t pendingAsyncLoads = 0;
+        size_t pendingMemoryBytes = 0;
     };
 
     struct StreamPriorityEntry
@@ -77,11 +83,45 @@ namespace render::gpudriven
         }
     };
 
+    struct TileLODLoadResult
+    {
+        TerrainTileKey key;
+        std::array<terrain::TileLODData, TERRAIN_LOD_LEVEL_COUNT> lodData;
+        terrain::TileWeightMapData weightMap;
+        std::vector<uint8_t> holeMask;
+        bool hasWeightMap = false;
+        bool hasHoleMask = false;
+        bool success = false;
+    };
+
+    struct TileLoadContext
+    {
+        TerrainTileKey key;
+        std::string filePath;
+        terrain::TileIndexEntry indexEntry;
+        bool hasMeshletCache = false;
+        bool valid = false;
+    };
+
+    struct PendingTileLoad
+    {
+        TerrainTileKey key;
+        std::future<TileLODLoadResult> future;
+        size_t estimatedMemory = 0;
+    };
+
     class TerrainStreamManager
     {
     public:
         using TileDataLoader = std::function<bool(terrain::TerrainTile&, uint8_t lodLevel)>;
         using TileRAMEvictor = std::function<void(terrain::TerrainTile&)>;
+        using TileLoadContextProvider = std::function<TileLoadContext(const TerrainTileKey&)>;
+
+        struct TileWithDistance
+        {
+            terrain::TerrainTile* tile;
+            float distance;
+        };
 
     private:
         TerrainMeshBuffer& terrainBuffer;
@@ -92,10 +132,16 @@ namespace render::gpudriven
 
         TileDataLoader tileDataLoader;
         TileRAMEvictor tileRAMEvictor;
+        TileLoadContextProvider tileLoadContextProvider;
         uint32_t maxFileReadsPerFrame = 4;
+
+        std::vector<PendingTileLoad> pendingLoads;
+        std::unordered_set<TerrainTileKey, TerrainTileKeyHash> pendingLoadKeys;
+        size_t pendingMemoryReserved = 0;
 
         std::unordered_map<TerrainTileKey, TerrainTileStreamInfo, TerrainTileKeyHash> tileInfos;
         std::priority_queue<StreamPriorityEntry> uploadQueue;
+        std::unordered_map<TerrainTileKey, terrain::TerrainTile*, TerrainTileKeyHash> tileMap_;
 
         uint64_t currentFrame = 0;
         size_t currentMemoryUsage = 0;
@@ -124,6 +170,7 @@ namespace render::gpudriven
 
         void setTileDataLoader(TileDataLoader loader) { tileDataLoader = std::move(loader); }
         void setTileRAMEvictor(TileRAMEvictor evictor) { tileRAMEvictor = std::move(evictor); }
+        void setTileLoadContextProvider(TileLoadContextProvider provider) { tileLoadContextProvider = std::move(provider); }
 
         const TerrainStreamingStats& getStats() const { return stats; }
 
@@ -138,11 +185,40 @@ namespace render::gpudriven
 
         uint8_t selectTargetLOD(float distance) const;
 
-        void processEvictions(const glm::vec3& cameraPosition,
-                              const std::unordered_map<TerrainTileKey, terrain::TerrainTile*, TerrainTileKeyHash>& tileMap);
+        void processEvictions(const glm::vec3& cameraPosition);
 
         void evictTileLOD(const TerrainTileKey& key, uint8_t lodLevel);
 
         size_t estimateLODMemory(const terrain::TerrainTile& tile, uint8_t lodLevel) const;
+
+        void pollCompletions();
+        void submitAsyncLoad(const TerrainTileKey& key, size_t memEstimate);
+        bool hasPendingLoad(const TerrainTileKey& key) const;
+        void cancelPendingLoadsForTile(const TerrainTileKey& key);
+
+        void buildSortedTileList(const std::vector<terrain::TerrainTile*>& visibleTiles,
+                                 const glm::vec3& cameraPosition,
+                                 std::vector<TileWithDistance>& outSorted);
+
+        void updateFallbackLODs(const std::vector<TileWithDistance>& sortedTiles);
+
+        void updateGPUDirtyLODs(const std::vector<terrain::TerrainTile*>& visibleTiles,
+                                uint32_t& fileReadsThisFrame);
+
+        void updateWeightMapsAndCaves(const std::vector<terrain::TerrainTile*>& visibleTiles);
+
+        void updateDetailLODs();
+
+        void updateStats();
+
+        struct EvictionCandidate
+        {
+            TerrainTileKey key;
+            uint8_t lodLevel;
+            float evictionScore;
+            size_t memorySize;
+        };
+
+        void buildEvictionCandidates(std::vector<EvictionCandidate>& candidates);
     };
 }

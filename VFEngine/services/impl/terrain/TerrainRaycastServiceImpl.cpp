@@ -22,67 +22,48 @@ namespace services
 
     TerrainRaycastServiceImpl::~TerrainRaycastServiceImpl()
     {
+        unsubscribeAll();
+    }
+
+    void TerrainRaycastServiceImpl::unsubscribeAll()
+    {
         auto& dispatcher = events::EventDispatcher::instance();
 
         if (sculptModeToken.isValid())
-        {
             dispatcher.unsubscribe(sculptModeToken);
-        }
 
         if (paintModeToken.isValid())
-        {
             dispatcher.unsubscribe(paintModeToken);
-        }
 
         if (brushParamsToken.isValid())
-        {
             dispatcher.unsubscribe(brushParamsToken);
-        }
 
         if (paintBrushParamsToken.isValid())
-        {
             dispatcher.unsubscribe(paintBrushParamsToken);
-        }
 
         if (holeModeToken.isValid())
-        {
             dispatcher.unsubscribe(holeModeToken);
-        }
 
         if (holeBrushParamsToken.isValid())
-        {
             dispatcher.unsubscribe(holeBrushParamsToken);
-        }
 
         if (caveModeToken.isValid())
-        {
             dispatcher.unsubscribe(caveModeToken);
-        }
 
         if (caveBrushParamsToken.isValid())
-        {
             dispatcher.unsubscribe(caveBrushParamsToken);
-        }
 
         if (vegBrushModeToken.isValid())
-        {
             dispatcher.unsubscribe(vegBrushModeToken);
-        }
 
         if (vegBrushParamsToken.isValid())
-        {
             dispatcher.unsubscribe(vegBrushParamsToken);
-        }
 
         if (meshBrushModeToken.isValid())
-        {
             dispatcher.unsubscribe(meshBrushModeToken);
-        }
 
         if (meshBrushParamsToken.isValid())
-        {
             dispatcher.unsubscribe(meshBrushParamsToken);
-        }
     }
 
     void TerrainRaycastServiceImpl::registerEventHandlers()
@@ -285,11 +266,11 @@ namespace services
                     if (provider)
                     {
                         auto brushParams = events::EventDispatcher::instance().query(
-                            events::vegetationBrush::GetDensityBrushParamsQuery{});
+                            events::vegetationBrush::GetVegetationBrushParamsQuery{});
                         provider->setBrushOverlayParams(
                             brushParams.radius,
                             static_cast<float>(brushParams.falloff),
-                            static_cast<float>(brushParams.shape));
+                            0.0f);
                     }
                 }
                 else
@@ -303,17 +284,7 @@ namespace services
                 }
             });
 
-        vegBrushParamsToken = dispatcher.subscribe<events::vegetationBrush::DensityBrushParamsChangedNotification>(
-            [this](const events::vegetationBrush::DensityBrushParamsChangedNotification& n)
-            {
-                if (vegBrushModeActive && provider)
-                {
-                    provider->setBrushOverlayParams(
-                        n.params.radius,
-                        static_cast<float>(n.params.falloff),
-                        static_cast<float>(n.params.shape));
-                }
-            });
+        // Vegetation brush params change subscription removed - params now handled by VegetationBrushServiceImpl
 
         meshBrushModeToken = dispatcher.subscribe<events::meshBrush::MeshBrushModeChangedNotification>(
             [this](const events::meshBrush::MeshBrushModeChangedNotification& n)

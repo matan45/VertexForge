@@ -3,7 +3,7 @@
 #include "TerrainTypes.hpp"
 #include "TerrainWeightMap.hpp"
 #include "CaveSDFData.hpp"
-#include "../vegetation/VegetationDensityMap.hpp"
+#include "../vegetation/VegetationTypes.hpp"
 #include "../resource/Types.hpp"
 #include "../resource/MeshletTypes.hpp"
 #include "../math/Frustum.hpp"
@@ -65,9 +65,10 @@ namespace terrain
         bool weightMapDirty = false;
         bool weightMapGPUDirty = false;
 
-        vegetation::VegetationDensityMap vegetationDensity;
-        bool vegetationDensityDirty = false;
-        bool vegetationDensityGPUDirty = false;
+        // Billboard vegetation instances placed by brush
+        std::vector<vegetation::BillboardInstance> billboardInstances;
+        bool billboardInstancesDirty = false;
+        bool billboardInstancesGPUDirty = false;
 
         std::unique_ptr<CaveSDFData> caveData;
         TileLODData caveLOD;
@@ -120,8 +121,7 @@ namespace terrain
         void initializeWeightMap();
         [[nodiscard]] bool hasWeightMap() const { return weightMap.isInitialized(); }
 
-        void initializeVegetationDensity();
-        [[nodiscard]] bool hasVegetationDensity() const { return vegetationDensity.isInitialized(); }
+        [[nodiscard]] bool hasBillboardInstances() const { return !billboardInstances.empty(); }
 
         void initializeCaveSDF();
         void initializeCaveSDFFromHeights();

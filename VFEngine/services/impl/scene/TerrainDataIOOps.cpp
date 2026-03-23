@@ -9,6 +9,8 @@
 #include "vegetation/VegetationSerializer.hpp"
 #include <asset/AssetRef.hpp>
 #include "../../data/EntityConversion.hpp"
+#include "../../events/EventDispatcher.hpp"
+#include "../../events/vegetation/GrassEvents.hpp"
 #include <filesystem>
 #include <format>
 
@@ -129,21 +131,29 @@ namespace services
 
         for (const auto* tile : allTiles)
         {
-            if (!tile) continue;
+            if (!tile || tile->billboardInstances.empty()) continue;
 
-            if (tile->vegetationDensity.isInitialized())
+            anyData = true;
+            std::string instancesPath = std::format("{}/tile_{}_{}.vfVegInstances",
+                vegDir, tile->coord.x, tile->coord.z);
+            if (!vegetation::VegetationSerializer::saveBillboardInstances(instancesPath, tile->billboardInstances))
             {
-                anyData = true;
-                std::string densityPath = std::format("{}/tile_{}_{}.vfVegDensity",
-                    vegDir, tile->coord.x, tile->coord.z);
-                if (!vegetation::VegetationSerializer::saveDensityMap(densityPath, tile->vegetationDensity))
-                {
-                    vfLogError("TerrainService: Failed to save vegetation density for tile ({}, {})",
-                               tile->coord.x, tile->coord.z);
-                }
+                vfLogError("TerrainService: Failed to save billboard instances for tile ({}, {})",
+                           tile->coord.x, tile->coord.z);
             }
-
         }
+
+        // Save billboard palette alongside instance data
+        try {
+            auto palette = events::EventDispatcher::instance().query(
+                events::vegetation::GetBillboardPaletteQuery{});
+            if (!palette.empty())
+            {
+                vegetation::VegetationSerializer::saveBillboardPalette(
+                    vegDir + "/billboard_palette.vfBillboard", palette);
+                anyData = true;
+            }
+        } catch (...) {}
 
         if (anyData)
             vfLogInfo("TerrainService: Saved vegetation data to {}", vegDir);
@@ -164,30 +174,49 @@ namespace services
             return true; // No vegetation data — not an error
 
         auto allTiles = gridIt->second->getAllTiles();
-        uint32_t loadedDensity = 0;
+        uint32_t loadedCount = 0;
 
         for (auto* tile : allTiles)
         {
             if (!tile) continue;
 
-            std::string densityPath = std::format("{}/tile_{}_{}.vfVegDensity",
+            std::string instancesPath = std::format("{}/tile_{}_{}.vfVegInstances",
                 vegDir, tile->coord.x, tile->coord.z);
-            if (fs::exists(densityPath))
+            if (fs::exists(instancesPath))
             {
-                if (vegetation::VegetationSerializer::loadDensityMap(densityPath, tile->vegetationDensity))
+                if (vegetation::VegetationSerializer::loadBillboardInstances(instancesPath, tile->billboardInstances))
                 {
-                    tile->vegetationDensityDirty = true;
-                    tile->vegetationDensityGPUDirty = true;
-                    loadedDensity++;
+                    tile->billboardInstancesDirty = true;
+                    tile->billboardInstancesGPUDirty = true;
+                    loadedCount++;
                 }
             }
-
         }
 
-        if (loadedDensity > 0)
+        // Load billboard palette
+        std::string palettePath = vegDir + "/billboard_palette.vfBillboard";
+        if (fs::exists(palettePath))
         {
-            vfLogInfo("TerrainService: Loaded vegetation density data ({} tiles) from {}",
-                      loadedDensity, vegDir);
+            std::vector<vegetation::BillboardPaletteEntry> palette;
+            if (vegetation::VegetationSerializer::loadBillboardPalette(palettePath, palette))
+            {
+                // Store on a GrassComponent so the renderer can find it
+                auto& registry = scene::EntityRegistry::getRegistry();
+                entt::entity terrainEntity = internal::fromHandle(EntityHandle{terrainEntityId});
+                if (registry.valid(terrainEntity))
+                {
+                    if (!registry.all_of<components::GrassComponent>(terrainEntity))
+                        registry.emplace<components::GrassComponent>(terrainEntity);
+                    registry.get<components::GrassComponent>(terrainEntity).billboardPalette = palette;
+                    vfLogInfo("TerrainService: Loaded billboard palette ({} entries)", palette.size());
+                }
+            }
+        }
+
+        if (loadedCount > 0)
+        {
+            vfLogInfo("TerrainService: Loaded billboard instances ({} tiles) from {}",
+                      loadedCount, vegDir);
         }
 
         return true;

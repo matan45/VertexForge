@@ -1,102 +1,363 @@
 #include "VegetationBrushServiceImpl.hpp"
+#include "scene/EntityRegistry.hpp"
+#include "components/Components.hpp"
+#include "components/TerrainComponents.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/vegetation/VegetationBrushEvents.hpp"
+#include "../../events/vegetation/GrassEvents.hpp"
+#include "../../events/terrain/TerrainEvents.hpp"
+#include "../../events/scene/ScenePersistenceEvents.hpp"
+#include "terrain/BrushSampler.hpp"
+#include <cmath>
+#include <algorithm>
+
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 
 namespace services
 {
     VegetationBrushServiceImpl::~VegetationBrushServiceImpl()
     {
         auto& dispatcher = events::EventDispatcher::instance();
-
         if (vegetationModeToken.isValid())
             dispatcher.unsubscribe(vegetationModeToken);
+        if (sceneLoadedToken.isValid())
+            dispatcher.unsubscribe(sceneLoadedToken);
     }
 
     void VegetationBrushServiceImpl::registerEventHandlers()
     {
         auto& dispatcher = events::EventDispatcher::instance();
 
-        // Density brush param commands
-        dispatcher.registerCommandHandler<events::vegetationBrush::SetDensityBrushParamsCommand>(
-            [this](const events::vegetationBrush::SetDensityBrushParamsCommand& cmd)
+        dispatcher.registerCommandHandler<events::vegetationBrush::SetVegetationBrushParamsCommand>(
+            [this](const events::vegetationBrush::SetVegetationBrushParamsCommand& cmd)
             {
-                setDensityParams(cmd.params);
+                currentParams = cmd.params;
             });
 
-        // Density brush type command
-        dispatcher.registerCommandHandler<events::vegetationBrush::SetDensityBrushTypeCommand>(
-            [this](const events::vegetationBrush::SetDensityBrushTypeCommand& cmd)
+        dispatcher.registerCommandHandler<events::vegetationBrush::SetVegetationBrushTypeCommand>(
+            [this](const events::vegetationBrush::SetVegetationBrushTypeCommand& cmd)
             {
-                setDensityBrushType(cmd.type);
+                currentBrushType = cmd.type;
             });
 
-        // Apply brush commands are handled by TerrainService (which has grid access)
-
-        // Queries
-        dispatcher.registerQueryHandler<events::vegetationBrush::GetDensityBrushParamsQuery>(
-            [this](const events::vegetationBrush::GetDensityBrushParamsQuery&)
+        dispatcher.registerCommandHandler<events::vegetationBrush::ApplyVegetationBrushCommand>(
+            [this](const events::vegetationBrush::ApplyVegetationBrushCommand& cmd)
             {
-                return getDensityParams();
+                applyBrush(cmd.worldPosition, cmd.deltaTime, cmd.isFirstApplication);
             });
 
-        dispatcher.registerQueryHandler<events::vegetationBrush::GetDensityBrushTypeQuery>(
-            [this](const events::vegetationBrush::GetDensityBrushTypeQuery&)
+        dispatcher.registerQueryHandler<events::vegetationBrush::GetVegetationBrushParamsQuery>(
+            [this](const events::vegetationBrush::GetVegetationBrushParamsQuery&)
             {
-                return getDensityBrushType();
+                return currentParams;
             });
 
-        // Subscribe to vegetation brush mode changes
+        dispatcher.registerQueryHandler<events::vegetationBrush::GetVegetationBrushTypeQuery>(
+            [this](const events::vegetationBrush::GetVegetationBrushTypeQuery&)
+            {
+                return currentBrushType;
+            });
+
+        // Billboard palette management
+        dispatcher.registerCommandHandler<events::vegetation::SetBillboardPaletteCommand>(
+            [this](const events::vegetation::SetBillboardPaletteCommand& cmd)
+            {
+                auto& registry = scene::EntityRegistry::getRegistry();
+
+                // Find entity with GrassComponent, or add to terrain entity
+                auto grassView = registry.view<components::GrassComponent>();
+                entt::entity target = entt::null;
+                for (auto entity : grassView) { target = entity; break; }
+
+                if (target == entt::null)
+                {
+                    // Add GrassComponent to the terrain entity
+                    auto terrainView = registry.view<components::TerrainComponent>();
+                    for (auto entity : terrainView) { target = entity; break; }
+
+                    if (target != entt::null)
+                        registry.emplace<components::GrassComponent>(target);
+                }
+
+                if (target != entt::null)
+                    registry.get<components::GrassComponent>(target).billboardPalette = cmd.entries;
+
+                if (billboardPaletteCb) billboardPaletteCb(cmd.entries, cmd.activeEntry);
+            });
+
+        dispatcher.registerQueryHandler<events::vegetation::GetBillboardPaletteQuery>(
+            [](const events::vegetation::GetBillboardPaletteQuery&) -> std::vector<vegetation::BillboardPaletteEntry> {
+                auto& registry = scene::EntityRegistry::getRegistry();
+                auto view = registry.view<components::GrassComponent>();
+                for (auto entity : view)
+                    return view.get<components::GrassComponent>(entity).billboardPalette;
+                return {};
+            });
+
         vegetationModeToken = dispatcher.subscribe<events::vegetationBrush::VegetationBrushModeChangedNotification>(
             [this](const events::vegetationBrush::VegetationBrushModeChangedNotification& n)
             {
                 vegetationModeActive = n.isActive;
+                if (!vegetationModeActive)
+                    hasLastPlacement = false;
+            });
+
+        // Auto-push billboard palette to renderer when scene loads
+        sceneLoadedToken = dispatcher.subscribe<events::scene::SceneLoadedNotification>(
+            [this](const events::scene::SceneLoadedNotification&)
+            {
+                auto& registry = scene::EntityRegistry::getRegistry();
+                auto view = registry.view<components::GrassComponent>();
+                for (auto entity : view)
+                {
+                    auto& palette = view.get<components::GrassComponent>(entity).billboardPalette;
+                    if (!palette.empty() && billboardPaletteCb)
+                        billboardPaletteCb(palette, -1);
+                    break;
+                }
             });
     }
 
-    void VegetationBrushServiceImpl::setDensityParams(const vegetation::DensityBrushParams& params)
+    void VegetationBrushServiceImpl::applyBrush(const glm::vec3& worldPos,
+                                                  float deltaTime, bool isFirstApplication)
     {
-        if (!vegetationModeActive)
+        if (!vegetationModeActive) return;
+
+        if (isFirstApplication)
+            hasLastPlacement = false;
+
+        // Query actual tile size from terrain
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto terrainView = registry.view<components::TerrainComponent>();
+        for (auto entity : terrainView)
         {
-            return;
+            worldTileSize = terrainView.get<components::TerrainComponent>(entity).worldTileSize;
+            break;
         }
 
-        currentDensityParams = params;
-        currentDensityParams.validate();
-        publishDensityParamsChanged();
+        std::vector<vegetation::BillboardPaletteEntry> palette;
+        try {
+            palette = events::EventDispatcher::instance().query(
+                events::vegetation::GetBillboardPaletteQuery{});
+        } catch (...) { return; }
+
+        if (currentBrushType == vegetation::VegetationBrushType::Paint)
+        {
+            if (hasLastPlacement)
+            {
+                float movedDist = glm::distance(glm::vec2(worldPos.x, worldPos.z),
+                                                 glm::vec2(lastPlacementPos.x, lastPlacementPos.z));
+                if (movedDist < currentParams.spacing * 0.5f)
+                    return;
+            }
+            placeBillboards(worldPos, palette);
+            lastPlacementPos = worldPos;
+            hasLastPlacement = true;
+        }
+        else
+        {
+            eraseBillboards(worldPos);
+        }
     }
 
-    void VegetationBrushServiceImpl::setDensityBrushType(vegetation::DensityBrushType type)
+    void VegetationBrushServiceImpl::generateAndPlaceCandidates(
+        const glm::vec3& worldPos, PlacementContext& ctx)
     {
-        if (!vegetationModeActive)
+        const auto& enabledIndices = ctx.enabledIndices;
+        const auto& palette = ctx.palette;
+        auto& paletteDist = ctx.paletteDist;
+        uint32_t maxCandidates = ctx.maxCandidates;
+        auto& tileInstances = ctx.tileInstances;
+        auto& placedCount = ctx.placedCount;
+        std::uniform_real_distribution<float> angleDist(0.0f, static_cast<float>(2.0 * M_PI));
+        std::uniform_real_distribution<float> radiusDist(0.0f, 1.0f);
+        std::uniform_real_distribution<float> jitterDist(-0.5f, 0.5f);
+        std::uniform_real_distribution<float> unitDist(0.0f, 1.0f);
+
+        for (uint32_t c = 0; c < maxCandidates; ++c)
         {
-            return;
+            // Uniform disk sampling
+            float angle = angleDist(rng);
+            float r = currentParams.radius * std::sqrt(radiusDist(rng));
+            float candX = worldPos.x + r * std::cos(angle);
+            float candZ = worldPos.z + r * std::sin(angle);
+
+            // Jitter
+            candX += jitterDist(rng) * currentParams.positionJitter * currentParams.spacing;
+            candZ += jitterDist(rng) * currentParams.positionJitter * currentParams.spacing;
+
+            // Terrain height query
+            events::terrain::GetTerrainHeightAtQuery heightQuery;
+            heightQuery.worldX = candX;
+            heightQuery.worldZ = candZ;
+            float candY = 0.0f;
+            try {
+                auto result = events::EventDispatcher::instance().query(heightQuery);
+                if (!result.valid) continue;
+                candY = result.height;
+            } catch (...) { continue; }
+
+            glm::vec3 candidatePos(candX, candY, candZ);
+            terrain::TileCoord tileCoord = worldToTileCoord(candX, candZ);
+
+            // Spacing check
+            auto& grid = ensureSpatialGrid(tileCoord);
+            if (grid.hasNeighborWithin(candidatePos, currentParams.spacing))
+                continue;
+
+            // Select palette entry
+            uint32_t paletteIdx = enabledIndices[paletteDist(rng)];
+            const auto& entry = palette[paletteIdx];
+
+            // Random rotation + scale
+            vegetation::BillboardInstance instance;
+            instance.position = candidatePos;
+            instance.rotation = unitDist(rng) * static_cast<float>(2.0 * M_PI);
+            instance.scale = entry.scaleRange.x + unitDist(rng) * (entry.scaleRange.y - entry.scaleRange.x);
+            instance.paletteEntryIndex = paletteIdx;
+            instance.windPhase = unitDist(rng);
+
+            tileInstances[tileCoord].push_back(instance);
+            grid.insert(static_cast<uint32_t>(grid.queryRadius(candidatePos, 0.0f).size()), candidatePos);
+            ++placedCount;
+        }
+    }
+
+    void VegetationBrushServiceImpl::placeBillboards(
+        const glm::vec3& worldPos,
+        const std::vector<vegetation::BillboardPaletteEntry>& palette)
+    {
+        // Build list of paint-enabled entries
+        std::vector<uint32_t> enabledIndices;
+        std::vector<float> weights;
+        for (uint32_t i = 0; i < static_cast<uint32_t>(palette.size()); ++i)
+        {
+            if (palette[i].paintEnabled && !palette[i].texturePath.empty())
+            {
+                enabledIndices.push_back(i);
+                weights.push_back(palette[i].weight);
+            }
+        }
+        if (enabledIndices.empty()) return;
+
+        std::discrete_distribution<uint32_t> paletteDist(weights.begin(), weights.end());
+
+        // Calculate candidates
+        float area = static_cast<float>(M_PI) * currentParams.radius * currentParams.radius;
+        float spacingSq = std::max(currentParams.spacing * currentParams.spacing, 0.01f);
+        uint32_t maxCandidates = std::clamp(
+            static_cast<uint32_t>(currentParams.density * area / spacingSq), 1u, 100u);
+
+        TileInstanceMap tileInstances;
+        uint32_t placedCount = 0;
+
+        PlacementContext ctx{enabledIndices, palette, paletteDist,
+                             maxCandidates, tileInstances, placedCount};
+        generateAndPlaceCandidates(worldPos, ctx);
+
+        // Send instances to terrain tiles via events
+        auto& dispatcher = events::EventDispatcher::instance();
+        for (auto& [coord, instances] : tileInstances)
+        {
+            events::vegetation::AddBillboardInstancesToTileCommand cmd;
+            cmd.tileX = coord.x;
+            cmd.tileZ = coord.z;
+            cmd.instances = std::move(instances);
+            dispatcher.execute(cmd);
         }
 
-        currentDensityBrushType = type;
-        publishDensityTypeChanged();
+        if (placedCount > 0)
+        {
+            events::vegetationBrush::VegetationBrushAppliedNotification notif;
+            notif.position = worldPos;
+            notif.placedCount = placedCount;
+            dispatcher.publish(notif);
+        }
     }
 
-    vegetation::DensityBrushParams VegetationBrushServiceImpl::getDensityParams() const
+    bool VegetationBrushServiceImpl::ensureSpatialGridForTile(const terrain::TileCoord& coord)
     {
-        return currentDensityParams;
+        auto gridIt = spatialGrids.find(coord);
+        if (gridIt != spatialGrids.end())
+            return true;
+
+        events::vegetation::GetTileBillboardInstancesQuery query;
+        query.tileX = coord.x;
+        query.tileZ = coord.z;
+        try {
+            auto instances = events::EventDispatcher::instance().query(query);
+            if (instances.empty()) return false;
+            auto& grid = spatialGrids[coord];
+            grid.setCellSize(currentParams.spacing);
+            grid.rebuild(instances);
+            return true;
+        } catch (...) { return false; }
     }
 
-    vegetation::DensityBrushType VegetationBrushServiceImpl::getDensityBrushType() const
+    void VegetationBrushServiceImpl::eraseBillboards(const glm::vec3& worldPos)
     {
-        return currentDensityBrushType;
+        auto affectedTiles = terrain::BrushSampler::getAffectedTiles(
+            glm::vec2(worldPos.x, worldPos.z), currentParams.radius, worldTileSize);
+
+        auto& dispatcher = events::EventDispatcher::instance();
+        uint32_t erasedCount = 0;
+
+        for (const auto& coord : affectedTiles)
+        {
+            if (!ensureSpatialGridForTile(coord))
+                continue;
+
+            auto gridIt = spatialGrids.find(coord);
+            auto entries = gridIt->second.queryRadius(worldPos, currentParams.radius);
+            if (entries.empty()) continue;
+
+            // Collect indices, sort descending, remove duplicates
+            std::vector<uint32_t> toRemove;
+            for (const auto& e : entries)
+                toRemove.push_back(e.instanceIndex);
+            std::sort(toRemove.begin(), toRemove.end(), std::greater<uint32_t>());
+            toRemove.erase(std::unique(toRemove.begin(), toRemove.end()), toRemove.end());
+
+            events::vegetation::RemoveBillboardInstancesFromTileCommand cmd;
+            cmd.tileX = coord.x;
+            cmd.tileZ = coord.z;
+            cmd.indicesToRemove = toRemove;
+            dispatcher.execute(cmd);
+
+            erasedCount += static_cast<uint32_t>(toRemove.size());
+
+            // Rebuild spatial grid (indices changed due to swap-and-pop)
+            // Need to re-read tile data - for now just clear the grid
+            // It will be rebuilt on next brush application
+            spatialGrids.erase(gridIt);
+        }
+
+        if (erasedCount > 0)
+        {
+            events::vegetationBrush::VegetationBrushAppliedNotification notif;
+            notif.position = worldPos;
+            notif.erasedCount = erasedCount;
+            dispatcher.publish(notif);
+        }
     }
 
-    void VegetationBrushServiceImpl::publishDensityParamsChanged()
+    terrain::TileCoord VegetationBrushServiceImpl::worldToTileCoord(float worldX, float worldZ) const
     {
-        events::vegetationBrush::DensityBrushParamsChangedNotification notification;
-        notification.params = currentDensityParams;
-        events::EventDispatcher::instance().publish(notification);
+        return {static_cast<int32_t>(std::floor(worldX / worldTileSize)),
+                static_cast<int32_t>(std::floor(worldZ / worldTileSize))};
     }
 
-    void VegetationBrushServiceImpl::publishDensityTypeChanged()
+    vegetation::VegetationSpatialGrid& VegetationBrushServiceImpl::ensureSpatialGrid(
+        const terrain::TileCoord& coord)
     {
-        events::vegetationBrush::DensityBrushTypeChangedNotification notification;
-        notification.type = currentDensityBrushType;
-        events::EventDispatcher::instance().publish(notification);
+        auto it = spatialGrids.find(coord);
+        if (it != spatialGrids.end())
+            return it->second;
+
+        auto& grid = spatialGrids[coord];
+        grid.setCellSize(currentParams.spacing);
+        return grid;
     }
 }

@@ -1,119 +1,141 @@
 #include "VegetationSerializer.hpp"
 #include "../print/Log.hpp"
-#include "../resource/EndianUtils.hpp"
 #include <fstream>
 #include <filesystem>
+#include <random>
+#include <nlohmann/json.hpp>
 
 namespace vegetation
 {
-    namespace fs = std::filesystem;
-    using namespace resource::endian;
-
-    static bool ensureParentDirectory(const std::string& filePath)
+    bool VegetationSerializer::saveBillboardInstances(const std::string& filePath,
+                                                       const std::vector<BillboardInstance>& instances)
     {
-        fs::path path(filePath);
-        if (path.has_parent_path())
-        {
-            std::error_code ec;
-            fs::create_directories(path.parent_path(), ec);
-            if (ec)
-            {
-                vfLogError("VegetationSerializer: Failed to create directory {}: {}",
-                           path.parent_path().string(), ec.message());
-                return false;
-            }
-        }
-        return true;
-    }
-
-    bool VegetationSerializer::saveDensityMap(const std::string& filePath,
-                                              const VegetationDensityMap& densityMap)
-    {
-        if (!densityMap.isInitialized())
-        {
-            vfLogError("VegetationSerializer: Cannot save uninitialized density map");
-            return false;
-        }
-
-        if (!ensureParentDirectory(filePath)) return false;
+        namespace fs = std::filesystem;
+        fs::path dir = fs::path(filePath).parent_path();
+        if (!dir.empty() && !fs::exists(dir))
+            fs::create_directories(dir);
 
         std::ofstream file(filePath, std::ios::binary);
-        if (!file.is_open())
+        if (!file.is_open()) return false;
+
+        file.write(VEGETATION_INSTANCE_MAGIC.data(), 4);
+        uint32_t version = VEGETATION_INSTANCE_FORMAT_VERSION;
+        file.write(reinterpret_cast<const char*>(&version), sizeof(version));
+        uint32_t count = static_cast<uint32_t>(instances.size());
+        file.write(reinterpret_cast<const char*>(&count), sizeof(count));
+
+        for (const auto& inst : instances)
         {
-            vfLogError("VegetationSerializer: Failed to open file for writing: {}", filePath);
-            return false;
+            file.write(reinterpret_cast<const char*>(&inst.position), sizeof(glm::vec3));
+            file.write(reinterpret_cast<const char*>(&inst.rotation), sizeof(float));
+            file.write(reinterpret_cast<const char*>(&inst.scale), sizeof(float));
+            file.write(reinterpret_cast<const char*>(&inst.paletteEntryIndex), sizeof(uint32_t));
         }
 
-        // Magic number
-        file.write(VEGETATION_DENSITY_MAGIC.data(), 4);
-
-        // Version
-        writeLE(file, VEGETATION_FORMAT_VERSION);
-
-        // Resolution
-        writeLE(file, densityMap.resolution);
-
-        // Density data: resolution * resolution floats
-        writeVectorLE(file, densityMap.densityData);
-
-        if (!file.good())
-        {
-            vfLogError("VegetationSerializer: Write error saving density map to {}", filePath);
-            return false;
-        }
-
-        return true;
+        return file.good();
     }
 
-    bool VegetationSerializer::loadDensityMap(const std::string& filePath,
-                                              VegetationDensityMap& densityMap)
+    bool VegetationSerializer::loadBillboardInstances(const std::string& filePath,
+                                                       std::vector<BillboardInstance>& instances)
     {
         std::ifstream file(filePath, std::ios::binary);
-        if (!file.is_open())
-        {
-            vfLogError("VegetationSerializer: Failed to open file for reading: {}", filePath);
-            return false;
-        }
+        if (!file.is_open()) return false;
 
-        // Validate magic number
         std::array<char, 4> magic{};
         file.read(magic.data(), 4);
-        if (magic != VEGETATION_DENSITY_MAGIC)
+        if (magic != VEGETATION_INSTANCE_MAGIC)
         {
-            vfLogError("VegetationSerializer: Invalid magic bytes in density map file: {}", filePath);
+            vfLogError("VegetationSerializer: Invalid magic in {}", filePath);
             return false;
         }
 
-        // Version check
-        uint32_t version = readLE<uint32_t>(file);
-        if (version != VEGETATION_FORMAT_VERSION)
+        uint32_t version = 0;
+        file.read(reinterpret_cast<char*>(&version), sizeof(version));
+        if (version != VEGETATION_INSTANCE_FORMAT_VERSION)
         {
-            vfLogError("VegetationSerializer: Incompatible density map version {}, expected {}. Re-import required.",
-                       version, VEGETATION_FORMAT_VERSION);
+            vfLogError("VegetationSerializer: Unsupported version {} in {}", version, filePath);
             return false;
         }
 
-        // Resolution
-        uint32_t resolution = readLE<uint32_t>(file);
-        if (resolution == 0 || resolution > MAX_DENSITY_RESOLUTION)
+        uint32_t count = 0;
+        file.read(reinterpret_cast<char*>(&count), sizeof(count));
+
+        if (count > 1000000)
         {
-            vfLogError("VegetationSerializer: Invalid density map resolution {} in file: {}",
-                       resolution, filePath);
+            vfLogError("VegetationSerializer: Instance count {} exceeds limit in {}", count, filePath);
             return false;
         }
 
-        // Density data
-        size_t texelCount = static_cast<size_t>(resolution) * resolution;
-        readVectorLE(file, densityMap.densityData, texelCount);
+        instances.resize(count);
+        std::mt19937 rng(std::random_device{}());
+        std::uniform_real_distribution<float> windDist(0.0f, 1.0f);
 
-        if (!file.good())
+        for (uint32_t i = 0; i < count; ++i)
         {
-            vfLogError("VegetationSerializer: Read error loading density map from {}", filePath);
-            densityMap.clear();
-            return false;
+            auto& inst = instances[i];
+            file.read(reinterpret_cast<char*>(&inst.position), sizeof(glm::vec3));
+            file.read(reinterpret_cast<char*>(&inst.rotation), sizeof(float));
+            file.read(reinterpret_cast<char*>(&inst.scale), sizeof(float));
+            file.read(reinterpret_cast<char*>(&inst.paletteEntryIndex), sizeof(uint32_t));
+            inst.windPhase = windDist(rng);
         }
 
-        densityMap.resolution = resolution;
-        return true;
+        return file.good();
+    }
+
+    bool VegetationSerializer::saveBillboardPalette(const std::string& filePath,
+                                                      const std::vector<BillboardPaletteEntry>& palette)
+    {
+        namespace fs = std::filesystem;
+        fs::path dir = fs::path(filePath).parent_path();
+        if (!dir.empty() && !fs::exists(dir))
+            fs::create_directories(dir);
+
+        nlohmann::json j = nlohmann::json::array();
+        for (const auto& entry : palette)
+        {
+            nlohmann::json e;
+            e["texturePath"] = entry.texturePath;
+            e["weight"] = entry.weight;
+            e["scaleMin"] = entry.scaleRange.x;
+            e["scaleMax"] = entry.scaleRange.y;
+            e["mode"] = static_cast<int>(entry.mode);
+            e["visible"] = entry.visible;
+            e["paintEnabled"] = entry.paintEnabled;
+            j.push_back(e);
+        }
+
+        std::ofstream file(filePath);
+        if (!file.is_open()) return false;
+        file << j.dump(2);
+        return file.good();
+    }
+
+    bool VegetationSerializer::loadBillboardPalette(const std::string& filePath,
+                                                      std::vector<BillboardPaletteEntry>& palette)
+    {
+        std::ifstream file(filePath);
+        if (!file.is_open()) return false;
+
+        try {
+            nlohmann::json j = nlohmann::json::parse(file);
+            palette.clear();
+            for (const auto& e : j)
+            {
+                BillboardPaletteEntry entry;
+                if (e.contains("texturePath")) entry.texturePath = e["texturePath"].get<std::string>();
+                if (e.contains("weight")) entry.weight = e["weight"].get<float>();
+                if (e.contains("scaleMin")) entry.scaleRange.x = e["scaleMin"].get<float>();
+                if (e.contains("scaleMax")) entry.scaleRange.y = e["scaleMax"].get<float>();
+                if (e.contains("mode")) entry.mode = static_cast<BillboardMode>(e["mode"].get<int>());
+                if (e.contains("visible")) entry.visible = e["visible"].get<bool>();
+                if (e.contains("paintEnabled")) entry.paintEnabled = e["paintEnabled"].get<bool>();
+                palette.push_back(entry);
+            }
+            return true;
+        } catch (...) {
+            vfLogError("VegetationSerializer: Failed to parse palette JSON: {}", filePath);
+            return false;
+        }
     }
 }

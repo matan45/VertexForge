@@ -1,5 +1,6 @@
 #pragma once
 #include "../../interfaces/terrain/ITerrainService.hpp"
+#include "../../providers/terrain/ITerrainRenderProvider.hpp"
 #include "../../data/EntityHandle.hpp"
 #include "../../events/terrain/TerrainEvents.hpp"
 #include "../../events/EventDispatcher.hpp"
@@ -161,6 +162,7 @@ namespace services
 
         bool ensureTileLODData(terrain::TerrainTile& tile, uint8_t lodLevel);
         void releaseTileRAMData(terrain::TerrainTile& tile);
+        TileLoadContextResult prepareTileLoadContext(int32_t coordX, int32_t coordZ);
 
         ::events::terrain::TerrainGeometryResult getTerrainGeometryForNavmesh();
         ::events::terrain::TerrainBakeGeometryResult getTerrainBakeGeometry();
@@ -213,7 +215,6 @@ namespace services
         bool loadVegetation(uint64_t terrainEntityId, const std::string& terrainPath);
         static std::string getVegetationDirectory(const std::string& terrainPath);
 
-        void applyVegetationDensityBrush(const glm::vec3& worldPosition, float deltaTime, bool invert, bool isFirstApplication);
         void registerVegetationBrushHandlers(::events::EventDispatcher& dispatcher);
 
         void registerCaveBrushHandlers(::events::EventDispatcher& dispatcher);

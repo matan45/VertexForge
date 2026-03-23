@@ -27,6 +27,10 @@ layout(push_constant) uniform PushConstants {
     vec4 tipColor;
     float fadeStartDistance;
     float fadeEndDistance;
+    float sssDistortion;
+    float sssPower;
+    float sssScale;
+    uint billboardTextureIndex;
 };
 
 struct GrassPayload {
@@ -57,20 +61,12 @@ void main() {
 
     if (instanceIdx < totalInstances) {
         vec4 posAndRot = grassInstances[instanceIdx * 3];
-        vec4 dimensions = grassInstances[instanceIdx * 3 + 1];
         vec3 worldPos = posAndRot.xyz;
-        float bladeHeight = dimensions.x;
 
         dist = distance(worldPos, cameraPos);
         if (dist < fadeEndDistance) {
-            // Frustum culling with bounding sphere centered at mid-blade
-            // Use minimum radius of 2.0 to avoid over-culling small blades at frustum edges
-            vec3 sphereCenter = worldPos + vec3(0.0, bladeHeight * 0.5, 0.0);
-            float sphereRadius = max(bladeHeight * 0.6, 2.0);
-
-            if (sphereInFrustum(sphereCenter, sphereRadius)) {
-                visible = true;
-            }
+            // Distance culling
+            visible = true;
         }
     }
 

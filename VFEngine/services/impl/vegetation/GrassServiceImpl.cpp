@@ -39,6 +39,8 @@ namespace services
             [this](const events::vegetation::GetGlobalGrassConfigQuery&) {
                 return getGlobalGrassConfig();
             });
+
+        // Billboard palette handlers moved to VegetationBrushServiceImpl
     }
 
     void GrassServiceImpl::setGrassConfig(EntityHandle entityId, const vegetation::GrassRenderConfig& config)

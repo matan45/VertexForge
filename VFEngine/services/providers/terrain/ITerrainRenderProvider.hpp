@@ -1,5 +1,6 @@
 #pragma once
 
+#include "terrain/TerrainSerializer.hpp"
 #include <vector>
 #include <string>
 #include <glm/glm.hpp>
@@ -16,6 +17,14 @@ namespace terrain
 
 namespace services
 {
+    struct TileLoadContextResult
+    {
+        std::string filePath;
+        terrain::TileIndexEntry indexEntry{};
+        bool hasMeshletCache = false;
+        bool valid = false;
+    };
+
     class ITerrainRenderProvider
     {
     public:
@@ -46,6 +55,8 @@ namespace services
 
         virtual bool ensureTileLODData(terrain::TerrainTile& tile, uint8_t lodLevel) = 0;
         virtual void releaseTileRAMData(terrain::TerrainTile& tile) = 0;
+
+        virtual TileLoadContextResult prepareTileLoadContext(int32_t coordX, int32_t coordZ) = 0;
 
         virtual void markTerrainMaterialDirty() = 0;
         virtual bool consumeTerrainMaterialDirty() = 0;

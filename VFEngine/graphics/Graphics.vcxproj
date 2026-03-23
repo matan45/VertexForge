@@ -300,7 +300,6 @@
     <ClInclude Include="render\ui\UITextBufferManager.hpp" />
     <ClInclude Include="render\ui\UITextPipeline.hpp" />
     <ClInclude Include="render\ui\UITextRenderTypes.hpp" />
-    <ClInclude Include="render\vegetation\GrassComputePipeline.hpp" />
     <ClInclude Include="render\vegetation\GrassMeshShaderPipeline.hpp" />
     <ClInclude Include="render\vegetation\GrassStreamManager.hpp" />
     <ClInclude Include="render\vegetation\VegetationBufferManager.hpp" />
@@ -545,7 +544,6 @@
     <ClCompile Include="render\ui\UITextBufferManager.cpp" />
     <ClCompile Include="render\ui\UITextPipeline.cpp" />
     <ClCompile Include="render\ui\UITextPipelineSetup.cpp" />
-    <ClCompile Include="render\vegetation\GrassComputePipeline.cpp" />
     <ClCompile Include="render\vegetation\GrassMeshShaderPipeline.cpp" />
     <ClCompile Include="render\vegetation\GrassStreamManager.cpp" />
     <ClCompile Include="render\vegetation\VegetationBufferManager.cpp" />
@@ -653,7 +651,6 @@
     <None Include="..\..\resources\shaders\postprocess\vignette.glsl" />
     <None Include="..\..\resources\shaders\postprocess\volumetric_fog_sample.glsl" />
     <None Include="..\..\resources\shaders\shadow\shadow.glsl" />
-    <None Include="..\..\resources\shaders\shadow\shadow_grass.glsl" />
     <None Include="..\..\resources\shaders\shadow\shadow_terrain.glsl" />
     <None Include="..\..\resources\shaders\shadow\vsm_feedback.glsl" />
     <None Include="..\..\resources\shaders\svt\svt_feedback.glsl" />
@@ -672,7 +669,6 @@
     <None Include="..\..\resources\shaders\ui\ui_image.glsl" />
     <None Include="..\..\resources\shaders\ui\ui_text.glsl" />
     <None Include="..\..\resources\shaders\vegetation\frag_grass.glsl" />
-    <None Include="..\..\resources\shaders\vegetation\grass_placement.glsl" />
     <None Include="..\..\resources\shaders\vegetation\mesh_grass.glsl" />
     <None Include="..\..\resources\shaders\vegetation\task_grass.glsl" />
     <None Include="..\..\resources\shaders\vegetation\wind_common.glsl" />
