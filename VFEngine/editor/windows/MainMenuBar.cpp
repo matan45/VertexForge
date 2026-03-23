@@ -24,6 +24,7 @@
 #include "debug/TaskGraphWindow.hpp"
 #include "config/InputActionMappingWindow.hpp"
 #include "animation/AnimationDebugWindow.hpp"
+#include "procedural/HeightmapGeneratorWindow.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/project/SceneEvents.hpp"
 #include "events/render/RenderEvents.hpp"
@@ -75,6 +76,7 @@ namespace windows
             handleFileMenu();
             handleSettingsMenu();
             handleAddMenu();
+            handleToolsMenu();
             handleScriptsMenu();
             handleDebug();
             handlePlayControls();
@@ -189,6 +191,13 @@ namespace windows
         else if (ImGui::MenuItem("Atmosphere") && atmosphereConfigWindow) atmosphereConfigWindow->show();
         else if (ImGui::MenuItem("Clouds") && cloudConfigWindow) cloudConfigWindow->show();
         else if (ImGui::MenuItem("Global Illumination") && giConfigWindow) giConfigWindow->show();
+        ImGui::EndMenu();
+    }
+
+    void MainMenuBar::handleToolsMenu()
+    {
+        if (!ImGui::BeginMenu("Tools")) return;
+        if (ImGui::MenuItem("Generate Heightmap") && heightmapGeneratorWindow) heightmapGeneratorWindow->show();
         ImGui::EndMenu();
     }
 

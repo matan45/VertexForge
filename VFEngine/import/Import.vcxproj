@@ -172,6 +172,9 @@ IF EXIST ..\..\bin\Import\Release\x64\Import.dll\ (xcopy /Q /E /Y /I ..\..\bin\I
     <ProjectReference Include="..\ispc_texcomp.vcxproj">
       <Project>{73EAF6A7-5F4D-864C-08D3-BE02F41452CF}</Project>
     </ProjectReference>
+    <ProjectReference Include="..\utilities\ProceduralGen.vcxproj">
+      <Project>{10F087E8-7CB0-031F-45EB-4C9CB16A48FB}</Project>
+    </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

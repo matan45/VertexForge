@@ -33,6 +33,7 @@ namespace windows
         menuBar.setPluginManagerWindow(&pluginManagerWindow);
         menuBar.setTaskGraphWindow(&taskGraphWindow);
         menuBar.setInputActionMappingWindow(&inputActionMappingWindow);
+        menuBar.setHeightmapGeneratorWindow(&heightmapGeneratorWindow);
         subscribeToEvents();
     }
 
@@ -128,6 +129,7 @@ namespace windows
             pluginManagerWindow.draw();
             taskGraphWindow.draw();
             inputActionMappingWindow.draw();
+            heightmapGeneratorWindow.draw();
         }
         ImGui::End();
     }

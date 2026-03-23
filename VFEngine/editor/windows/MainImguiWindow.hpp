@@ -31,6 +31,7 @@
 #include "plugin/PluginManagerWindow.hpp"
 #include "debug/TaskGraphWindow.hpp"
 #include "config/InputActionMappingWindow.hpp"
+#include "procedural/HeightmapGeneratorWindow.hpp"
 #include "MainMenuBar.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/terrain/TerrainEvents.hpp"
@@ -78,6 +79,7 @@ namespace windows
         PluginManagerWindow pluginManagerWindow;
         TaskGraphWindow taskGraphWindow;
         InputActionMappingWindow inputActionMappingWindow;
+        HeightmapGeneratorWindow heightmapGeneratorWindow;
         MainMenuBar menuBar;
 
         events::SubscriptionToken sceneClearedToken;

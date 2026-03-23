@@ -54,7 +54,8 @@ project "Editor"
 	  "VFEngine/import/controllers",
 	  "VFEngine/import/types",            -- For MeshSocketWriter, AnimationEventIO
 	  "VFEngine/services",                -- Services layer interfaces
-	  "VFEngine/plugin"                   -- Plugin system
+	  "VFEngine/plugin",                  -- Plugin system
+	  "VFEngine/utilities/procedural"     -- Procedural heightmap generation
    }
 
    links {
@@ -62,7 +63,8 @@ project "Editor"
 	  "Import",
 	  "Services",                       -- Link Services project
 	  "Plugin",                         -- Plugin system
-	  "imgui"                           -- For imgui-node-editor in ShaderGraphEditor
+	  "imgui",                          -- For imgui-node-editor in ShaderGraphEditor
+	  "ProceduralGen"                   -- Procedural heightmap generation
    }
 
    defines { "_CRT_SECURE_NO_WARNINGS" }
@@ -169,7 +171,7 @@ project "Import"
 
    defines { "_CRT_SECURE_NO_WARNINGS", "VF_IMPORT_BUILD_DLL", "MESHOPTIMIZER_API=__declspec(dllimport)" }
 
-   links { "Utilities", "meshoptimizer", "ispc_texcomp" }
+   links { "Utilities", "meshoptimizer", "ispc_texcomp", "ProceduralGen" }
 
    -- Debug configuration
    filter "configurations:Debug"
@@ -323,7 +325,8 @@ project "Utilities"
       "VFEngine/utilities/world/WorldSectorSerialization.*",
       "VFEngine/utilities/world/**",
       "VFEngine/utilities/animator/**",
-      "VFEngine/utilities/vfx/**"
+      "VFEngine/utilities/vfx/**",
+      "VFEngine/utilities/procedural/**"
    }
 
    includedirs {
@@ -560,6 +563,41 @@ project "Terrain"
    filter "configurations:Release"
       defines { "NDEBUG" }
       optimize "On"
+
+
+-- ProceduralGen subsystem (extracted from Utilities, SharedLib/DLL)
+project "ProceduralGen"
+   kind "SharedLib"
+   language "C++"
+   cppdialect "C++20"
+   location "VFEngine/utilities"
+   targetdir "bin/%{prj.name}/%{cfg.buildcfg}/%{cfg.platform}"
+
+   files { "VFEngine/utilities/procedural/**.hpp", "VFEngine/utilities/procedural/**.cpp" }
+
+   includedirs {
+      "dependencies/spdlog/include",
+      "dependencies/glm",
+      "VFEngine/utilities"
+   }
+
+   defines { "_CRT_SECURE_NO_WARNINGS", "VF_PROCEDURAL_BUILD_DLL" }
+
+   filter "configurations:Debug"
+      defines { "DEBUG" }
+      symbols "On"
+      postbuildcommands {
+         "{MKDIR} ../../bin/Editor/Debug/x64",
+         "{COPY} ../../bin/ProceduralGen/Debug/x64/ProceduralGen.dll ../../bin/Editor/Debug/x64/"
+      }
+
+   filter "configurations:Release"
+      defines { "NDEBUG" }
+      optimize "On"
+      postbuildcommands {
+         "{MKDIR} ../../bin/Editor/Release/x64",
+         "{COPY} ../../bin/ProceduralGen/Release/x64/ProceduralGen.dll ../../bin/Editor/Release/x64/"
+      }
 
 
 -- Serialization subsystem (extracted from Utilities)

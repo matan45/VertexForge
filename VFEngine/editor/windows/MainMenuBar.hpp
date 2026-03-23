@@ -30,6 +30,7 @@ namespace windows
     class PluginManagerWindow;
     class InputActionMappingWindow;
     class TaskGraphWindow;
+    class HeightmapGeneratorWindow;
     class MainMenuBar
     {
     private:
@@ -63,6 +64,7 @@ namespace windows
         PluginManagerWindow* pluginManagerWindow = nullptr;
         InputActionMappingWindow* inputActionMappingWindow = nullptr;
         TaskGraphWindow* taskGraphWindow = nullptr;
+        HeightmapGeneratorWindow* heightmapGeneratorWindow = nullptr;
     public:
         MainMenuBar();
         ~MainMenuBar();
@@ -172,11 +174,17 @@ namespace windows
             taskGraphWindow = window;
         }
 
+        void setHeightmapGeneratorWindow(HeightmapGeneratorWindow* window)
+        {
+            heightmapGeneratorWindow = window;
+        }
+
     private:
         void handleFileMenu();
         void handleSettingsMenu();
         void handleAddMenu();
         void handleScriptsMenu();
+        void handleToolsMenu();
         void handleDebug();
         void handlePlayControls();
     };
