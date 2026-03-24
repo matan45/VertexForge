@@ -173,6 +173,17 @@ namespace services
 
                     ::events::EventDispatcher::instance().execute(cmd);
                 }
+
+                // Queue animation state restore (applied after animator init in RuntimeAnimatorSystem)
+                auto animSnapIt = animationSnapshots.find(uuid);
+                if (animSnapIt != animationSnapshots.end())
+                {
+                    ::events::animation::snapshot::RestoreAnimationSnapshotCommand animCmd;
+                    animCmd.entity = internal::toHandle(entity);
+                    animCmd.snapshot = std::move(animSnapIt->second);
+                    ::events::EventDispatcher::instance().execute(animCmd);
+                    animationSnapshots.erase(animSnapIt);
+                }
             }
         });
 
@@ -223,6 +234,21 @@ namespace services
                 ::events::physics::RemoveRigidBodyCommand removeCmd;
                 removeCmd.entity = handle;
                 dispatcher.execute(removeCmd);
+            }
+
+            // Capture animation state before entity destruction
+            {
+                ::events::animation::snapshot::CaptureAnimationSnapshotQuery animQuery;
+                animQuery.entity = handle;
+                auto animSnap = dispatcher.query(animQuery);
+                if (animSnap.has_value())
+                {
+                    auto ent2 = static_cast<entt::entity>(static_cast<uint32_t>(entityHandleId));
+                    auto& reg = scene::EntityRegistry::getRegistry();
+                    auto* uc = reg.try_get<components::UUIDComponent>(ent2);
+                    if (uc)
+                        animationSnapshots[uc->id.getValue()] = std::move(*animSnap);
+                }
             }
 
             ::events::scene::EntityDeletedNotification notif;
@@ -409,6 +435,7 @@ namespace services
                 {
                     isPlayMode = false;
                     physicsSnapshots.clear();
+                    animationSnapshots.clear();
 
                     // Returning to edit mode — snapshot was restored, re-assign entities to sectors
                     entityLoader.clear();

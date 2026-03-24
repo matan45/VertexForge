@@ -94,6 +94,18 @@ namespace animation
                 continue;
 
             initializeEntityAnimator(pending.entity, pending.animatorPath);
+
+            // Apply pending animation state restore if available
+            auto* uuidComp = registry.try_get<components::UUIDComponent>(pending.entity);
+            if (uuidComp)
+            {
+                auto restoreIt = pendingRestores.find(uuidComp->id.getValue());
+                if (restoreIt != pendingRestores.end())
+                {
+                    restoreSnapshot(pending.entity, restoreIt->second);
+                    pendingRestores.erase(restoreIt);
+                }
+            }
         }
     }
 
@@ -327,6 +339,7 @@ namespace animation
 
         animators.clear();
         entityLODStates.clear();
+        pendingRestores.clear();
         dataCache.clearAll();
     }
 

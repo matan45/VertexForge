@@ -98,6 +98,10 @@ namespace animation
         bool isPlaying() const { return state.isPlaying; }
         bool isBlending() const { return state.isBlending; }
 
+        const AnimatorStateMachineState& getMachineState() const { return state; }
+        void setMachineState(const AnimatorStateMachineState& newState);
+        bool isRootMotionEnabled() const { return rootMotionEnabled; }
+
         float getCurrentStateDuration() const;
         float getNormalizedStateTime() const;
 

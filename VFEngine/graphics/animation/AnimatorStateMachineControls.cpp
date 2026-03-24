@@ -134,6 +134,19 @@ namespace animation
         forceTransitionTo(targetState->id, blendDuration);
     }
 
+    void AnimatorStateMachine::setMachineState(const AnimatorStateMachineState& newState)
+    {
+        state = newState;
+
+        // Ensure animations for current (and previous if blending) states are loaded
+        if (activeGraph)
+        {
+            loadAnimationForState(state.currentStateId);
+            if (state.isBlending)
+                loadAnimationForState(state.previousStateId);
+        }
+    }
+
     void AnimatorStateMachine::setRootMotionEnabled(bool enabled)
     {
         rootMotionEnabled = enabled;

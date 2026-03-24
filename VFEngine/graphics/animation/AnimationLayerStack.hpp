@@ -10,6 +10,7 @@
 #include <vector>
 #include <memory>
 #include <string>
+#include <variant>
 
 namespace animation
 {
@@ -99,6 +100,13 @@ namespace animation
         // Socket computation
         void computeSocketTransforms(const std::vector<animator::SocketDefinition>& sockets,
                                       std::vector<glm::mat4>& outSocketModelTransforms) const;
+
+        // Snapshot/restore support
+        const std::vector<AnimationLayerRuntime>& getLayers() const { return layers; }
+        const animator::AnimatorRuntimeParameters& getSharedParameters() const { return sharedParameters; }
+        void restoreLayerState(uint32_t layerIndex, const AnimatorStateMachineState& machineState,
+                               float clipTime, bool clipPlaying, float weight);
+        void restoreSharedParameters(const std::unordered_map<std::string, std::variant<float, int32_t, bool>>& params);
 
         // Access to animator data for editor/service layer
         const animator::AnimatorData* getAnimatorData() const { return animatorData; }

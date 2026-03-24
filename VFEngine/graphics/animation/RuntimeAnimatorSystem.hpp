@@ -6,11 +6,13 @@
 #include "AnimationDataCache.hpp"
 #include "SocketAttachmentUpdater.hpp"
 #include "../../services/events/EventDispatcher.hpp"
+#include "../../services/events/animation/AnimationSnapshotEvents.hpp"
 #include "math/Frustum.hpp"
 #include <entt/entt.hpp>
 #include <unordered_map>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 
 namespace animation
@@ -54,6 +56,9 @@ namespace animation
 
         bool initialized = false;
         bool pendingCacheCleanup = false;
+
+        // Pending animation state restores (keyed by entity UUID, consumed after animator init)
+        std::unordered_map<uint64_t, events::animation::snapshot::AnimationSnapshot> pendingRestores;
 
         struct AnimationInstanceGroup
         {
@@ -140,6 +145,9 @@ namespace animation
                                      ActiveAnimatorList& activeAnimators, float deltaTime);
         void cachePosesAndInterpolate(ActiveAnimatorList& activeAnimators,
                                        std::vector<std::pair<entt::entity, AnimationLayerStack*>>& lodInterpolateEntities);
+
+        std::optional<events::animation::snapshot::AnimationSnapshot> captureSnapshot(entt::entity entity);
+        void restoreSnapshot(entt::entity entity, const events::animation::snapshot::AnimationSnapshot& snapshot);
 
         void subscribeToEvents();
         void subscribeToWorldEvents();

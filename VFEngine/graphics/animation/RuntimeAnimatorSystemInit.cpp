@@ -63,6 +63,27 @@ namespace animation
             });
 
         subscribeToWorldEvents();
+
+        // Animation snapshot events for sector streaming
+        dispatcher.registerQueryHandler<events::animation::snapshot::CaptureAnimationSnapshotQuery>(
+            [this](const events::animation::snapshot::CaptureAnimationSnapshotQuery& query)
+            {
+                auto entity = static_cast<entt::entity>(static_cast<uint32_t>(query.entity.id));
+                return captureSnapshot(entity);
+            });
+
+        dispatcher.registerCommandHandler<events::animation::snapshot::RestoreAnimationSnapshotCommand>(
+            [this](const events::animation::snapshot::RestoreAnimationSnapshotCommand& cmd)
+            {
+                auto entity = static_cast<entt::entity>(static_cast<uint32_t>(cmd.entity.id));
+                auto& registry = scene::EntityRegistry::getRegistry();
+                if (!registry.valid(entity))
+                    return;
+
+                auto* uuidComp = registry.try_get<components::UUIDComponent>(entity);
+                if (uuidComp)
+                    pendingRestores[uuidComp->id.getValue()] = cmd.snapshot;
+            });
     }
 
     void RuntimeAnimatorSystem::subscribeToWorldEvents()
@@ -104,6 +125,112 @@ namespace animation
                         }),
                     pendingInitQueue.end());
             });
+    }
+
+    std::optional<events::animation::snapshot::AnimationSnapshot> RuntimeAnimatorSystem::captureSnapshot(entt::entity entity)
+    {
+        auto it = animators.find(entity);
+        if (it == animators.end() || !it->second || !it->second->isInitialized())
+            return std::nullopt;
+
+        auto& layerStack = *it->second;
+        events::animation::snapshot::AnimationSnapshot snapshot;
+
+        // Capture per-layer state
+        const auto& layers = layerStack.getLayers();
+        snapshot.layers.resize(layers.size());
+        for (size_t i = 0; i < layers.size(); ++i)
+        {
+            auto& layerSnap = snapshot.layers[i];
+            layerSnap.weight = layers[i].weight;
+            layerSnap.clipTime = layers[i].clipTime;
+            layerSnap.clipPlaying = layers[i].clipPlaying;
+
+            if (layers[i].stateMachine)
+            {
+                const auto& machineState = layers[i].stateMachine->getMachineState();
+                layerSnap.currentStateId = machineState.currentStateId;
+                layerSnap.previousStateId = machineState.previousStateId;
+                layerSnap.stateTime = machineState.stateTime;
+                layerSnap.previousStateTime = machineState.previousStateTime;
+                layerSnap.blendWeight = machineState.blendWeight;
+                layerSnap.blendDuration = machineState.blendDuration;
+                layerSnap.blendElapsed = machineState.blendElapsed;
+                layerSnap.isBlending = machineState.isBlending;
+                layerSnap.isPlaying = machineState.isPlaying;
+                layerSnap.currentLoopCount = machineState.currentLoopCount;
+                layerSnap.previousNormalizedTime = machineState.previousNormalizedTime;
+            }
+        }
+
+        // Capture shared parameters
+        const auto& params = layerStack.getSharedParameters();
+        for (const auto& [name, value] : params.values)
+        {
+            snapshot.parameters[name] = value;
+        }
+
+        // Capture root motion state from base layer
+        auto* baseSM = layerStack.getBaseStateMachine();
+        if (baseSM)
+            snapshot.rootMotionEnabled = baseSM->isRootMotionEnabled();
+
+        // Capture frozen pose for LOD3 entities
+        auto lodIt = entityLODStates.find(entity);
+        if (lodIt != entityLODStates.end() &&
+            lodIt->second.currentLOD == AnimationLODLevel::LOD3)
+        {
+            snapshot.frozenPose = layerStack.getBoneMatrices();
+        }
+
+        return snapshot;
+    }
+
+    void RuntimeAnimatorSystem::restoreSnapshot(entt::entity entity,
+                                                 const events::animation::snapshot::AnimationSnapshot& snapshot)
+    {
+        auto it = animators.find(entity);
+        if (it == animators.end() || !it->second || !it->second->isInitialized())
+            return;
+
+        auto& layerStack = *it->second;
+
+        // Restore shared parameters first (affects transition evaluation)
+        layerStack.restoreSharedParameters(snapshot.parameters);
+
+        // Restore per-layer state
+        for (size_t i = 0; i < snapshot.layers.size() && i < layerStack.getLayers().size(); ++i)
+        {
+            const auto& layerSnap = snapshot.layers[i];
+
+            AnimatorStateMachineState machineState;
+            machineState.currentStateId = layerSnap.currentStateId;
+            machineState.previousStateId = layerSnap.previousStateId;
+            machineState.stateTime = layerSnap.stateTime;
+            machineState.previousStateTime = layerSnap.previousStateTime;
+            machineState.blendWeight = layerSnap.blendWeight;
+            machineState.blendDuration = layerSnap.blendDuration;
+            machineState.blendElapsed = layerSnap.blendElapsed;
+            machineState.isBlending = layerSnap.isBlending;
+            machineState.isPlaying = layerSnap.isPlaying;
+            machineState.currentLoopCount = layerSnap.currentLoopCount;
+            machineState.previousNormalizedTime = layerSnap.previousNormalizedTime;
+
+            layerStack.restoreLayerState(static_cast<uint32_t>(i), machineState,
+                                          layerSnap.clipTime, layerSnap.clipPlaying, layerSnap.weight);
+        }
+
+        // Restore root motion
+        if (snapshot.rootMotionEnabled)
+            layerStack.setRootMotionEnabled(true);
+
+        // Restore frozen pose for LOD3
+        if (!snapshot.frozenPose.empty())
+        {
+            auto& matrices = layerStack.getMutableBoneMatrices();
+            if (matrices.size() == snapshot.frozenPose.size())
+                matrices = snapshot.frozenPose;
+        }
     }
 
     const resource::SkeletonData* RuntimeAnimatorSystem::resolveEntitySkeleton(entt::entity entity, std::string& outMeshPath)

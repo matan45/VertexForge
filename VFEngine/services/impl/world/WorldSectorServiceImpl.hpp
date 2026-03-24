@@ -2,6 +2,7 @@
 
 #include "../../interfaces/world/IWorldSectorService.hpp"
 #include "../../events/EventTypes.hpp"
+#include "../../events/animation/AnimationSnapshotEvents.hpp"
 #include "world/WorldSectorManager.hpp"
 #include "world/WorldDefinition.hpp"
 #include "world/SectorStreamer.hpp"
@@ -104,6 +105,9 @@ namespace services
             bool wasSleeping = false;
         };
         std::unordered_map<uint64_t, PhysicsSnapshot> physicsSnapshots; // keyed by entity UUID
+
+        // Animation state snapshots for state preservation across sector streaming
+        std::unordered_map<uint64_t, ::events::animation::snapshot::AnimationSnapshot> animationSnapshots;
 
         void handleSectorLoad(const world::SectorCoord& coord);
         void handleSectorUnload(const world::SectorCoord& coord);
