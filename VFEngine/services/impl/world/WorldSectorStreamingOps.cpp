@@ -264,7 +264,9 @@ namespace services
         if (!sector)
             return;
 
-        // Cancel any in-flight async file I/O for this sector
+        // Cancel any in-flight async file I/O for this sector.
+        // The background thread still runs to completion (std::async has no cooperative
+        // cancellation), but pollAsyncSectorLoads() will discard the result.
         auto asyncIt = pendingAsyncLoads.find(coord);
         if (asyncIt != pendingAsyncLoads.end())
         {

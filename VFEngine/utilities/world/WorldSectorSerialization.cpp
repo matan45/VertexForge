@@ -1,6 +1,5 @@
 #include "WorldSectorSerialization.hpp"
 #include "../serialization/SceneSerialization.hpp"
-#include "../scene/SceneGraphSystem.hpp"
 #include "../scene/Entity.hpp"
 #include "../scene/EntityRegistry.hpp"
 #include "../components/Components.hpp"
@@ -102,25 +101,9 @@ namespace world
         return file.good();
     }
 
-    // ── Format detection ─────────────────────────────────────────────────
-
-    bool WorldSectorSerialization::isBinaryFormat(const std::string& filePath)
-    {
-        std::ifstream file(filePath, std::ios::binary);
-        if (!file.is_open())
-            return false;
-
-        char magic[4] = {};
-        file.read(magic, 4);
-        return file.gcount() == 4
-            && magic[0] == 'V' && magic[1] == 'F'
-            && magic[2] == 'S' && magic[3] == 'C';
-    }
-
     // ── Binary save ──────────────────────────────────────────────────────
 
     bool WorldSectorSerialization::saveSectorBinary(WorldSector& sector,
-                                                     scene::SceneGraphSystem& sceneGraph,
                                                      const std::string& filePath)
     {
         try
@@ -171,16 +154,14 @@ namespace world
     }
 
     bool WorldSectorSerialization::saveSector(WorldSector& sector,
-                                               scene::SceneGraphSystem& sceneGraph,
                                                const std::string& filePath)
     {
-        return saveSectorBinary(sector, sceneGraph, filePath);
+        return saveSectorBinary(sector, filePath);
     }
 
     // ── JSON save (debug fallback) ───────────────────────────────────────
 
     bool WorldSectorSerialization::saveSectorJson(WorldSector& sector,
-                                                   scene::SceneGraphSystem& sceneGraph,
                                                    const std::string& filePath)
     {
         try
@@ -210,42 +191,18 @@ namespace world
         }
     }
 
-    // ── Binary load ──────────────────────────────────────────────────────
+    // ── Binary load (file already opened and header already read) ────────
 
-    bool WorldSectorSerialization::loadSectorBinary(const std::string& filePath,
+    bool WorldSectorSerialization::loadSectorBinary(std::ifstream& file,
                                                      std::vector<json>& outEntityData)
     {
         try
         {
-            std::ifstream file(filePath, std::ios::binary);
-            if (!file.is_open())
-            {
-                vfLogError("Failed to open sector file for binary reading: {}", filePath);
-                return false;
-            }
-
-            SectorFileHeader header;
-            if (!readHeader(file, header))
-            {
-                vfLogError("Invalid binary sector header: {}", filePath);
-                return false;
-            }
-
-            if (header.version != SECTOR_FORMAT_VERSION)
-            {
-                vfLogError("Unsupported sector format version {} in: {}", header.version, filePath);
-                return false;
-            }
-
-            size_t payloadSize = header.totalFileSize - SECTOR_HEADER_SIZE;
-            std::vector<uint8_t> msgpackData(payloadSize);
-            file.read(reinterpret_cast<char*>(msgpackData.data()), payloadSize);
-
-            if (static_cast<size_t>(file.gcount()) != payloadSize)
-            {
-                vfLogError("Truncated binary sector file: {}", filePath);
-                return false;
-            }
+            // Header already consumed by caller; file position is at payload start.
+            // Read remaining bytes as MessagePack.
+            std::vector<uint8_t> msgpackData(
+                (std::istreambuf_iterator<char>(file)),
+                std::istreambuf_iterator<char>());
 
             json sectorJson = json::from_msgpack(msgpackData);
 
@@ -313,24 +270,55 @@ namespace world
         }
     }
 
-    // ── Auto-detecting load ──────────────────────────────────────────────
+    // ── Auto-detecting load (single file open) ──────────────────────────
 
     bool WorldSectorSerialization::loadSector(const std::string& filePath,
                                                std::vector<json>& outEntityData)
     {
-        if (isBinaryFormat(filePath))
-            return loadSectorBinary(filePath, outEntityData);
+        // Open once in binary mode and read magic bytes to detect format
+        std::ifstream file(filePath, std::ios::binary);
+        if (!file.is_open())
+        {
+            vfLogError("Failed to open sector file: {}", filePath);
+            return false;
+        }
+
+        SectorFileHeader header;
+        if (readHeader(file, header))
+        {
+            // Binary format — file is already positioned past the header
+            if (header.version != SECTOR_FORMAT_VERSION)
+            {
+                vfLogError("Unsupported sector format version {} in: {}", header.version, filePath);
+                return false;
+            }
+
+            if (header.totalFileSize < SECTOR_HEADER_SIZE)
+            {
+                vfLogError("Corrupted sector header (totalFileSize < header size): {}", filePath);
+                return false;
+            }
+
+            static constexpr uint64_t MAX_SECTOR_FILE_SIZE = 256ULL * 1024 * 1024; // 256 MB
+            if (header.totalFileSize > MAX_SECTOR_FILE_SIZE)
+            {
+                vfLogError("Sector file exceeds maximum size ({} bytes): {}", header.totalFileSize, filePath);
+                return false;
+            }
+
+            return loadSectorBinary(file, outEntityData);
+        }
+
+        // Not binary — close and re-open as JSON text
+        file.close();
         return loadSectorJson(filePath, outEntityData);
     }
 
-    // ── Metadata read (header only) ──────────────────────────────────────
+    // ── Metadata read (single open, header only) ─────────────────────────
 
     bool WorldSectorSerialization::readSectorMetadata(const std::string& filePath,
                                                        SectorMetadata& outMetadata)
     {
-        if (!isBinaryFormat(filePath))
-            return false;
-
         std::ifstream file(filePath, std::ios::binary);
         if (!file.is_open())
             return false;

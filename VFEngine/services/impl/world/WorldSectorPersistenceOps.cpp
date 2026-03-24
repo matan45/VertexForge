@@ -150,7 +150,7 @@ namespace services
                     std::to_string(sector.coord.z) + ".vfsector";
                 std::string sectorPath = (sectorsDir / sectorFileName).string();
 
-                if (world::WorldSectorSerialization::saveSector(sector, *sceneGraph, sectorPath))
+                if (world::WorldSectorSerialization::saveSector(sector, sectorPath))
                 {
                     sector.filePath = sectorPath;
                     worldDefinition.sectorFilePaths[sector.coord] = sectorPath;
@@ -242,7 +242,7 @@ namespace services
             return false;
         }
 
-        bool result = world::WorldSectorSerialization::saveSector(*sector, *sceneGraph, filePath);
+        bool result = world::WorldSectorSerialization::saveSector(*sector, filePath);
         if (result)
         {
             worldDefinition.sectorFilePaths[coord] = filePath;

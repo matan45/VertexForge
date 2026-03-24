@@ -44,6 +44,7 @@ namespace scene {
 			auto it = entityToUuid.find(static_cast<uint32_t>(entity));
 			if (it != entityToUuid.end()) {
 				uuidToEntity.erase(it->second);
+				entityToUuid.erase(it);
 			}
 		}
 
