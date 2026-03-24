@@ -70,6 +70,13 @@ namespace render::gpudriven {
 
         uint32_t getFreeBlockCount() const { std::lock_guard<std::mutex> lock(mtx); return static_cast<uint32_t>(freeList.size()); }
 
+        void rebuildCompacted(uint32_t newUsedCount) {
+            std::lock_guard<std::mutex> lock(mtx);
+            freeList.clear();
+            usedCount = newUsedCount;
+            reservedCount = 0;
+        }
+
         float getFragmentationPercent() const {
             std::lock_guard<std::mutex> lock(mtx);
             if (freeList.empty()) return 0.0f;

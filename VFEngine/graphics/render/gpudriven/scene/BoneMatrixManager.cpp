@@ -5,6 +5,7 @@
 #include "print/Log.hpp"
 #include "../GPUDrivenTypes.hpp"
 #include <algorithm>
+#include <cstring>
 
 
 namespace render::gpudriven
@@ -409,5 +410,99 @@ namespace render::gpudriven
         );
 
         dirtyEntities.clear();
+    }
+
+    bool BoneMatrixManager::shouldDefragment() const
+    {
+        if (defragActive || defragCooldown > 0 || allocations.empty())
+            return false;
+        return boneAllocator.getFragmentationPercent() > DEFRAG_THRESHOLD;
+    }
+
+    std::vector<BoneDefragResult> BoneMatrixManager::defragStep(uint32_t maxMoves)
+    {
+        std::vector<BoneDefragResult> results;
+
+        // Tick cooldown
+        if (defragCooldown > 0)
+        {
+            --defragCooldown;
+            return results;
+        }
+
+        // Initialize defrag pass
+        if (!defragActive)
+        {
+            sortedAllocations.clear();
+            sortedAllocations.reserve(allocations.size());
+            for (const auto& [entity, data] : allocations)
+                sortedAllocations.emplace_back(data.boneMatrixOffset, entity);
+
+            std::sort(sortedAllocations.begin(), sortedAllocations.end(),
+                [](const auto& a, const auto& b) { return a.first < b.first; });
+
+            defragCursor = 0;
+            defragWriteHead = 0;
+            defragActive = true;
+
+            vfLogInfo("BoneMatrixManager: Defrag started, {} allocations, {:.1f}% fragmented",
+                      allocations.size(), boneAllocator.getFragmentationPercent());
+        }
+
+        // Process up to maxMoves entities
+        uint32_t moved = 0;
+        while (defragCursor < sortedAllocations.size() && moved < maxMoves)
+        {
+            auto [currentOffset, entity] = sortedAllocations[defragCursor];
+            ++defragCursor;
+
+            // Entity may have been freed mid-defrag
+            auto it = allocations.find(entity);
+            if (it == allocations.end())
+                continue;
+
+            auto& data = it->second;
+            uint32_t boneCount = data.boneCount;
+
+            if (data.boneMatrixOffset == defragWriteHead)
+            {
+                // Already in position, no move needed
+                defragWriteHead += boneCount;
+                continue;
+            }
+
+            // Slide bone matrices leftward
+            std::memmove(
+                &cpuBoneMatrices[defragWriteHead],
+                &cpuBoneMatrices[data.boneMatrixOffset],
+                boneCount * sizeof(glm::mat4));
+
+            uint32_t oldOffset = data.boneMatrixOffset;
+            data.boneMatrixOffset = defragWriteHead;
+            data.dirty = true;
+
+            // Track for dirtyEntities upload
+            if (std::find(dirtyEntities.begin(), dirtyEntities.end(), entity) == dirtyEntities.end())
+                dirtyEntities.push_back(entity);
+
+            results.push_back({entity, oldOffset, defragWriteHead});
+            defragWriteHead += boneCount;
+            ++moved;
+        }
+
+        // Finalize when all allocations processed
+        if (defragCursor >= sortedAllocations.size())
+        {
+            float oldFrag = boneAllocator.getFragmentationPercent();
+            boneAllocator.rebuildCompacted(defragWriteHead);
+            defragActive = false;
+            defragCooldown = DEFRAG_COOLDOWN_FRAMES;
+            sortedAllocations.clear();
+
+            vfLogInfo("BoneMatrixManager: Defrag complete, {:.1f}% -> {:.1f}%",
+                      oldFrag, boneAllocator.getFragmentationPercent());
+        }
+
+        return results;
     }
 }
