@@ -471,9 +471,12 @@ namespace services
             {
                 anyChanged = true;
                 changedTerrains.insert(it->terrainEntityId);
+                it = pendingSectorTileActions.erase(it);
             }
-
-            it = pendingSectorTileActions.erase(it);
+            else
+            {
+                ++it; // Keep for retry next frame
+            }
         }
 
         for (uint64_t terrainId : changedTerrains)

@@ -537,6 +537,12 @@ namespace services
                     it->second.position = cmd.position;
             });
 
+        dispatcher.registerQueryHandler<::events::world::IsStreamingSourceValidQuery>(
+            [this](const ::events::world::IsStreamingSourceValidQuery& query) -> bool
+            {
+                return streamingSources.contains(query.sourceId);
+            });
+
         dispatcher.registerQueryHandler<::events::vfx::snapshot::GetVFXSnapshotQuery>(
             [this](const ::events::vfx::snapshot::GetVFXSnapshotQuery& query)
                 -> std::optional<::events::vfx::snapshot::VFXPlaybackSnapshot>

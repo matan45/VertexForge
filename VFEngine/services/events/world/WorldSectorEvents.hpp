@@ -95,6 +95,13 @@ namespace events::world
         std::string_view getName() const override { return "UpdateStreamingSourcePosition"; }
     };
 
+    struct IsStreamingSourceValidQuery : IQuery<bool>
+    {
+        uint32_t sourceId = 0;
+
+        std::string_view getName() const override { return "IsStreamingSourceValid"; }
+    };
+
     // ============================================
     // Queries
     // ============================================

@@ -8,6 +8,7 @@
 #include <vulkan/vulkan.hpp>
 #include <entt/entt.hpp>
 #include <array>
+#include <cassert>
 #include <functional>
 #include <memory>
 #include <string>
@@ -221,7 +222,11 @@ namespace render::gpudriven
             auto it = entityToSlot.find(uuid);
             return it != entityToSlot.end() ? it->second : UINT32_MAX;
         }
-        GPUObjectData& getMutableObjectData(uint32_t slot) { return cpuObjectData[slot]; }
+        GPUObjectData& getMutableObjectData(uint32_t slot)
+        {
+            assert(slot < cpuObjectData.size() && "MergedMeshBuffer: slot out of bounds");
+            return cpuObjectData[slot];
+        }
         void markSlotDirty(uint32_t slot) { dirtySlots.push_back(slot); }
 
         MergedMeshInfo* reserveMesh(const std::string& meshPath,

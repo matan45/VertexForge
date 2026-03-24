@@ -221,8 +221,7 @@ namespace animation
         }
 
         // Restore root motion
-        if (snapshot.rootMotionEnabled)
-            layerStack.setRootMotionEnabled(true);
+        layerStack.setRootMotionEnabled(snapshot.rootMotionEnabled);
 
         // Restore frozen pose for LOD3
         if (!snapshot.frozenPose.empty())

@@ -189,8 +189,7 @@ namespace windows
 
                 if (ImGui::IsItemHovered())
                 {
-                    auto sectorConfig = dispatcher.query(events::world::GetSectorConfigQuery{});
-                    int tps = sectorConfig.tilesPerSector;
+                    int tps = cachedTilesPerSector;
                     const char* stateStr = "Unloaded";
                     if (info.state == world::SectorState::Loaded) stateStr = "Loaded";
                     else if (info.state == world::SectorState::Loading) stateStr = "Loading";
@@ -322,6 +321,9 @@ namespace windows
             cachedGrid.clear();
             return;
         }
+
+        auto sectorConfig = dispatcher.query(events::world::GetSectorConfigQuery{});
+        cachedTilesPerSector = sectorConfig.tilesPerSector;
 
         totalSectors = 0;
         loadedSectors = 0;

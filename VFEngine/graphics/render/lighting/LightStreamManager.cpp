@@ -416,6 +416,10 @@ namespace render::lighting
 
         if (!defragActive)
         {
+            // Light slots are logical budget-tracking indices, not GPU buffer positions.
+            // GPULightBufferManager rebuilds GPU arrays each frame from ECS — no GPU data
+            // movement needed. We only compact the allocator metadata and entry.slotIndex.
+
             // Pick the more fragmented allocator
             float pointFrag = pointAllocator.getFragmentationPercent();
             float spotFrag = spotAllocator.getFragmentationPercent();

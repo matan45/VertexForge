@@ -481,9 +481,7 @@ namespace render::gpudriven
             data.boneMatrixOffset = defragWriteHead;
             data.dirty = true;
 
-            // Track for dirtyEntities upload
-            if (std::find(dirtyEntities.begin(), dirtyEntities.end(), entity) == dirtyEntities.end())
-                dirtyEntities.push_back(entity);
+            dirtyEntities.push_back(entity);
 
             results.push_back({entity, oldOffset, defragWriteHead});
             defragWriteHead += boneCount;

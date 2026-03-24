@@ -315,17 +315,25 @@ namespace core::audio
             else if constexpr (std::is_same_v<T, FadeOutAndReleaseCmd>)
             {
                 AudioHandle internal = resolveHandle(command.handle);
-                if (internal != InvalidAudioHandle && !StreamingAudioManager::isStreamingHandle(internal))
+                if (internal != InvalidAudioHandle)
                 {
-                    // Unroute from reverb before fading
-                    if (deps.reverbZoneManager)
+                    if (StreamingAudioManager::isStreamingHandle(internal))
                     {
-                        AudioSource* source = deps.sourceManager->getSource(internal);
-                        if (source)
-                            deps.reverbZoneManager->unrouteSource(source->getId());
+                        // Streaming sources cannot be faded — stop immediately
+                        deps.streamingManager->stop(internal);
                     }
-                    deps.busManager->removeSource(internal);
-                    deps.sourceManager->startFadeOut(internal, command.fadeDurationMs);
+                    else
+                    {
+                        // Unroute from reverb before fading
+                        if (deps.reverbZoneManager)
+                        {
+                            AudioSource* source = deps.sourceManager->getSource(internal);
+                            if (source)
+                                deps.reverbZoneManager->unrouteSource(source->getId());
+                        }
+                        deps.busManager->removeSource(internal);
+                        deps.sourceManager->startFadeOut(internal, command.fadeDurationMs);
+                    }
                 }
                 activeHandles.erase(command.handle);
                 externalToInternal.erase(command.handle);

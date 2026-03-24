@@ -45,6 +45,7 @@ namespace core::audio
 
         void initPool(size_t poolSize);
 
+    private:
         struct FadingSource
         {
             AudioHandle handle;
@@ -55,7 +56,6 @@ namespace core::audio
         };
         std::vector<FadingSource> fadingQueue;
 
-    private:
         void growPool(size_t additionalSources);
         AudioHandle generateHandle();
     };
