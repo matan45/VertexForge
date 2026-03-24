@@ -277,6 +277,27 @@ namespace services
                 return streamer.getConfig();
             });
 
+        dispatcher.registerQueryHandler<::events::world::GetSectorConfigQuery>(
+            [this](const ::events::world::GetSectorConfigQuery&)
+            {
+                return sectorManager.getConfig();
+            });
+
+        dispatcher.registerQueryHandler<::events::world::GetLoadedSectorCoordsQuery>(
+            [this](const ::events::world::GetLoadedSectorCoordsQuery&)
+            {
+                std::vector<world::SectorCoord> result;
+                sectorManager.forEachSector([&](const world::WorldSector& sector)
+                {
+                    if (sector.state == world::SectorState::Loaded ||
+                        sector.state == world::SectorState::Loading)
+                    {
+                        result.push_back(sector.coord);
+                    }
+                });
+                return result;
+            });
+
         dispatcher.registerCommandHandler<::events::world::SetSectorDebugDrawCommand>(
             [this](const ::events::world::SetSectorDebugDrawCommand& cmd)
             {

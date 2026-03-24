@@ -18,6 +18,7 @@
 #include "../../events/terrain/CaveBrushEvents.hpp"
 #include "../../events/project/SceneEvents.hpp"
 #include "../../events/physics/PhysicsEvents.hpp"
+#include "../../events/world/WorldSectorEvents.hpp"
 
 namespace services
 {
@@ -45,6 +46,29 @@ namespace services
                 onSceneCleared();
             });
         sceneClearedSubscription = std::make_unique<events::SubscriptionToken>(sceneToken);
+
+        // When world loads, check if terrain already exists and activate tiles for loaded sectors
+        auto worldLoadedToken = dispatcher.subscribe<events::world::WorldLoadedNotification>(
+            [this](const events::world::WorldLoadedNotification&)
+            {
+                activateTilesForLoadedSectors();
+            });
+        worldLoadedSub = std::make_unique<events::SubscriptionToken>(worldLoadedToken);
+
+        // Sector-driven terrain streaming subscriptions
+        auto activatedToken = dispatcher.subscribe<events::world::SectorActivatedNotification>(
+            [this](const events::world::SectorActivatedNotification& notif)
+            {
+                onSectorActivated(notif.coord, notif.sectorConfig);
+            });
+        sectorActivatedSub = std::make_unique<events::SubscriptionToken>(activatedToken);
+
+        auto deactivatedToken = dispatcher.subscribe<events::world::SectorDeactivatedNotification>(
+            [this](const events::world::SectorDeactivatedNotification& notif)
+            {
+                onSectorDeactivated(notif.coord, notif.sectorConfig);
+            });
+        sectorDeactivatedSub = std::make_unique<events::SubscriptionToken>(deactivatedToken);
     }
 
     void TerrainService::registerTerrainCoreHandlers(::events::EventDispatcher& dispatcher)
@@ -138,6 +162,7 @@ namespace services
         dispatcher.registerCommandHandler<events::terrain::SetTerrainStreamingEnabledCommand>(
             [this](const events::terrain::SetTerrainStreamingEnabledCommand& cmd)
             {
+                if (worldModeActive) return; // terrain streaming controlled by SectorStreamer in world mode
                 auto it = worldStreamers.find(cmd.terrainEntity.id);
                 if (it != worldStreamers.end() && it->second)
                     it->second->setEnabled(cmd.enabled);
@@ -146,6 +171,7 @@ namespace services
         dispatcher.registerCommandHandler<events::terrain::SetTerrainStreamingConfigCommand>(
             [this](const events::terrain::SetTerrainStreamingConfigCommand& cmd)
             {
+                if (worldModeActive) return; // terrain streaming controlled by SectorStreamer in world mode
                 auto it = worldStreamers.find(cmd.terrainEntity.id);
                 if (it != worldStreamers.end() && it->second)
                 {

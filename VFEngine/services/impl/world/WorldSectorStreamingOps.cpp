@@ -183,6 +183,14 @@ namespace services
 
         sector->state = world::SectorState::Loading;
 
+        // Notify subsystems (e.g. terrain) that this sector is now active
+        {
+            ::events::world::SectorActivatedNotification notif;
+            notif.coord = coord;
+            notif.sectorConfig = sectorManager.getConfig();
+            ::events::EventDispatcher::instance().publish(notif);
+        }
+
         std::string filePath = sector->filePath;
 
         auto future = std::async(std::launch::async, [filePath]() -> AsyncSectorLoadResult {
@@ -274,6 +282,14 @@ namespace services
         }
 
         sector->state = world::SectorState::Unloading;
+
+        // Notify subsystems (e.g. terrain) that this sector is now inactive
+        {
+            ::events::world::SectorDeactivatedNotification notif;
+            notif.coord = coord;
+            notif.sectorConfig = sectorManager.getConfig();
+            ::events::EventDispatcher::instance().publish(notif);
+        }
 
         // Unregister sector objects and lights before entities are destroyed
         {

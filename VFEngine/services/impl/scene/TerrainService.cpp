@@ -280,6 +280,8 @@ namespace services
         fileCaches.clear();
         worldStreamers.clear();
         pendingPhysicsTiles.clear();
+        pendingSectorTileActions.clear();
+        worldModeActive = false;
 
         vfLogInfo("TerrainService: Cleared all terrains on scene clear");
     }

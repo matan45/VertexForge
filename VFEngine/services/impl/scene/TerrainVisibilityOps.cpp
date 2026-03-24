@@ -14,35 +14,45 @@ namespace services
     {
         std::vector<terrain::TerrainTile*> result;
 
-        for (auto& [entityId, grid] : terrainGrids)
+        // Process sector-driven terrain streaming (world mode) or standalone streaming
+        if (worldModeActive)
         {
-            // Run world streaming before LOD updates (skip during save to avoid data races)
-            auto streamerIt = worldStreamers.find(entityId);
-            if (streamerIt != worldStreamers.end() && streamerIt->second && streamerIt->second->isEnabled()
-                && !saveInProgress.load(std::memory_order_acquire))
+            processPendingSectorTileActions();
+        }
+        else if (!saveInProgress.load(std::memory_order_acquire))
+        {
+            for (auto& [entityId, grid] : terrainGrids)
             {
-                auto cacheIt = fileCaches.find(entityId);
-                if (cacheIt != fileCaches.end() && cacheIt->second)
+                auto streamerIt = worldStreamers.find(entityId);
+                if (streamerIt != worldStreamers.end() && streamerIt->second && streamerIt->second->isEnabled())
                 {
-                    EntityHandle terrainHandle{entityId};
-                    auto& comp = scene::EntityRegistry::getRegistry()
-                        .get<components::TerrainComponent>(internal::fromHandle(terrainHandle));
-
-                    streamerIt->second->update(
-                        cameraPosition, comp.worldTileSize, *cacheIt->second, *grid, streamingActions);
-
-                    for (const auto& action : streamingActions)
+                    auto cacheIt = fileCaches.find(entityId);
+                    if (cacheIt != fileCaches.end() && cacheIt->second)
                     {
-                        if (action.isLoad)
-                            streamInTile(terrainHandle, action.coord.x, action.coord.z);
-                        else
-                            streamOutTile(terrainHandle, action.coord.x, action.coord.z);
-                    }
+                        EntityHandle terrainHandle{entityId};
+                        auto& comp = scene::EntityRegistry::getRegistry()
+                            .get<components::TerrainComponent>(internal::fromHandle(terrainHandle));
 
-                    if (!streamingActions.empty())
-                        commitStreamingChanges(terrainHandle);
+                        streamerIt->second->update(
+                            cameraPosition, comp.worldTileSize, *cacheIt->second, *grid, streamingActions);
+
+                        for (const auto& action : streamingActions)
+                        {
+                            if (action.isLoad)
+                                streamInTile(terrainHandle, action.coord.x, action.coord.z);
+                            else
+                                streamOutTile(terrainHandle, action.coord.x, action.coord.z);
+                        }
+
+                        if (!streamingActions.empty())
+                            commitStreamingChanges(terrainHandle);
+                    }
                 }
             }
+        }
+
+        for (auto& [entityId, grid] : terrainGrids)
+        {
 
             grid->regenerateDirtyTiles(cameraPosition);
 

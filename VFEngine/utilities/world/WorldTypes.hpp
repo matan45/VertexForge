@@ -91,6 +91,8 @@ namespace world
         int maxLoadsPerFrame = 1;
         int maxUnloadsPerFrame = 1;
         int maxEntitiesPerFrame = 8;
+        int maxTerrainLoadsPerFrame = 4;    // terrain tiles loaded per frame via sector activation
+        int maxTerrainUnloadsPerFrame = 4;  // terrain tiles unloaded per frame via sector deactivation
         bool enableGPUObjectStreaming = true; // Use persistent GPU slots with priority-based streaming
     };
 

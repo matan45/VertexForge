@@ -187,6 +187,24 @@ namespace windows
                     }
                 }
 
+                if (ImGui::IsItemHovered())
+                {
+                    auto sectorConfig = dispatcher.query(events::world::GetSectorConfigQuery{});
+                    int tps = sectorConfig.tilesPerSector;
+                    const char* stateStr = "Unloaded";
+                    if (info.state == world::SectorState::Loaded) stateStr = "Loaded";
+                    else if (info.state == world::SectorState::Loading) stateStr = "Loading";
+                    else if (info.state == world::SectorState::Unloading) stateStr = "Unloading";
+
+                    ImGui::SetTooltip("Sector (%d, %d) - %s\n"
+                                      "Terrain tiles: (%d,%d) to (%d,%d)\n"
+                                      "Click to %s",
+                                      x, z, stateStr,
+                                      x * tps, z * tps,
+                                      (x + 1) * tps - 1, (z + 1) * tps - 1,
+                                      info.state == world::SectorState::Loaded ? "unload" : "load");
+                }
+
                 ImGui::PopStyleColor();
             }
 
@@ -207,6 +225,11 @@ namespace windows
         ImGui::Text("Max Loads/Frame: %d", config.maxLoadsPerFrame);
         ImGui::Text("Max Unloads/Frame: %d", config.maxUnloadsPerFrame);
         ImGui::Text("Max Entities/Frame: %d", config.maxEntitiesPerFrame);
+
+        ImGui::Separator();
+        ImGui::Text("Terrain Tile Streaming (via Sector)");
+        ImGui::Text("Max Terrain Loads/Frame: %d", config.maxTerrainLoadsPerFrame);
+        ImGui::Text("Max Terrain Unloads/Frame: %d", config.maxTerrainUnloadsPerFrame);
 
         ImGui::Separator();
         ImGui::Text("GPU Object Streaming: %s", config.enableGPUObjectStreaming ? "Enabled" : "Disabled");

@@ -129,7 +129,8 @@ namespace services
         createTileEntities(parentHandle, *grid);
 
         terrainGrids[parentHandle.id] = std::move(grid);
-        worldStreamers[parentHandle.id] = std::make_unique<terrain::TerrainWorldStreamer>();
+        if (!worldModeActive)
+            worldStreamers[parentHandle.id] = std::make_unique<terrain::TerrainWorldStreamer>();
 
         if (!config.weightMapPath.empty())
         {
@@ -488,7 +489,8 @@ namespace services
         createTileEntities(parentHandle, *grid);
 
         terrainGrids[parentHandle.id] = std::move(grid);
-        worldStreamers[parentHandle.id] = std::make_unique<terrain::TerrainWorldStreamer>();
+        if (!worldModeActive)
+            worldStreamers[parentHandle.id] = std::make_unique<terrain::TerrainWorldStreamer>();
 
         if (!config.weightMapPath.empty())
             loadWeightMaps(parentHandle.id, config.weightMapPath);
