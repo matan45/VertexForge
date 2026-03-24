@@ -87,6 +87,8 @@ namespace services
         virtual void setAngularVelocity(EntityHandle entity, const glm::vec3& velocity) = 0;
         virtual glm::vec3 getAngularVelocity(EntityHandle entity) const = 0;
 
+        virtual bool isBodySleeping(EntityHandle entity) const = 0;
+
         virtual glm::vec3 getPosition(EntityHandle entity) const = 0;
         virtual glm::quat getRotation(EntityHandle entity) const = 0;
         virtual void setPosition(EntityHandle entity, const glm::vec3& position) = 0;

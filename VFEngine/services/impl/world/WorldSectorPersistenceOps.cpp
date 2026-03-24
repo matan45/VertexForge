@@ -271,6 +271,7 @@ namespace services
         pendingAsyncLoads.clear();
 
         entityLoader.clear();
+        physicsSnapshots.clear();
         sectorManager.clear();
 
         auto& root = sceneGraph->GetRoot();

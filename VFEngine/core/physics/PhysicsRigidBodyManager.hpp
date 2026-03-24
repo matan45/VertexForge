@@ -29,6 +29,7 @@ namespace core::physics
         float angularDamping = 0.05f;
         glm::vec3 linearVelocity{0.0f};
         glm::vec3 angularVelocity{0.0f};
+        bool activate = true;
     };
 
     struct ColliderCreateInfo
@@ -87,6 +88,7 @@ namespace core::physics
         std::vector<RaycastResult> raycastAll(const glm::vec3& origin, const glm::vec3& direction,
                                               float maxDistance, uint16_t layerMask = 0xFFFF) const;
         bool areBodiesInContact(JPH::BodyID bodyA, JPH::BodyID bodyB) const;
+        bool isBodyActive(JPH::BodyID bodyId) const;
 
     private:
         PhysicsContext* ctx = nullptr;

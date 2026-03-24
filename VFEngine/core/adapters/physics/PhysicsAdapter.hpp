@@ -64,6 +64,8 @@ namespace core
         void setAngularVelocity(services::EntityHandle entity, const glm::vec3& velocity) override;
         glm::vec3 getAngularVelocity(services::EntityHandle entity) const override;
 
+        bool isBodySleeping(services::EntityHandle entity) const override;
+
         glm::vec3 getPosition(services::EntityHandle entity) const override;
         glm::quat getRotation(services::EntityHandle entity) const override;
         void setPosition(services::EntityHandle entity, const glm::vec3& position) override;

@@ -387,6 +387,13 @@ namespace core
             glm::vec3(0.0f));
     }
 
+    bool PhysicsAdapter::isBodySleeping(services::EntityHandle entity) const
+    {
+        return queryBody(physicsWorld.get(), entity.id,
+            [&](auto bodyId) { return !physicsWorld->isBodyActive(bodyId); },
+            false);
+    }
+
     glm::vec3 PhysicsAdapter::getPosition(services::EntityHandle entity) const
     {
         return queryBody(physicsWorld.get(), entity.id,

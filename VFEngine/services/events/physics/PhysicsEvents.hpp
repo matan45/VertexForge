@@ -163,6 +163,11 @@ namespace events::physics {
         std::string_view getName() const override { return "GetBodyType"; }
     };
 
+    struct IsBodySleepingQuery : ::events::IQuery<bool> {
+        services::EntityHandle entity;
+        std::string_view getName() const override { return "IsBodySleeping"; }
+    };
+
     struct CollisionStartNotification : ::events::INotification {
         services::EntityHandle entityA;
         services::EntityHandle entityB;

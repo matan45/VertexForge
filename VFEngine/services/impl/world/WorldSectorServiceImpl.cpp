@@ -69,7 +69,7 @@ namespace services
             sectorManager.removeEntityFromSector(uuid, coord);
         });
 
-        entityLoader.setOnEntityPostLoad([](uint64_t uuid, const std::string& meshPath, const std::string& animatorPath)
+        entityLoader.setOnEntityPostLoad([this](uint64_t uuid, const std::string& meshPath, const std::string& animatorPath)
         {
             auto entity = scene::EntityRegistry::findByUUID(uuid);
             if (entity != entt::null)
@@ -106,6 +106,16 @@ namespace services
                     cmd.rigidBody.mass = rigidBody.mass;
                     cmd.rigidBody.linearDamping = rigidBody.linearDamping;
                     cmd.rigidBody.angularDamping = rigidBody.angularDamping;
+
+                    // Restore velocity and sleep state from snapshot if available
+                    auto snapIt = physicsSnapshots.find(uuid);
+                    if (snapIt != physicsSnapshots.end())
+                    {
+                        cmd.rigidBody.linearVelocity = snapIt->second.linearVelocity;
+                        cmd.rigidBody.angularVelocity = snapIt->second.angularVelocity;
+                        cmd.rigidBody.activateOnAdd = !snapIt->second.wasSleeping;
+                        physicsSnapshots.erase(snapIt);
+                    }
 
                     if (sceneEntity.hasComponent<components::ColliderComponent>())
                     {
@@ -170,23 +180,54 @@ namespace services
         // AssetLifecycleServiceImpl releases all asset types (mesh, material, audio, VFX, animator).
         // SceneGraphSystem::removeEntity() doesn't publish this — only HierarchyService does.
         // Also remove physics bodies for streamed entities.
-        entityLoader.setOnEntityPreDestroy([](uint64_t entityHandleId)
+        entityLoader.setOnEntityPreDestroy([this](uint64_t entityHandleId)
         {
             services::EntityHandle handle{ entityHandleId };
+            auto& dispatcher = ::events::EventDispatcher::instance();
 
             ::events::physics::HasRigidBodyQuery hasBodyQuery;
             hasBodyQuery.entity = handle;
-            auto hasBody = ::events::EventDispatcher::instance().query(hasBodyQuery);
+            auto hasBody = dispatcher.query(hasBodyQuery);
             if (hasBody)
             {
+                // Capture velocity and sleep state for dynamic bodies before removal
+                auto ent = static_cast<entt::entity>(static_cast<uint32_t>(entityHandleId));
+                auto& registry = scene::EntityRegistry::getRegistry();
+                if (registry.valid(ent) && registry.any_of<components::RigidBodyComponent>(ent))
+                {
+                    const auto& rb = registry.get<components::RigidBodyComponent>(ent);
+                    if (rb.type == components::RigidBodyType::Dynamic)
+                    {
+                        auto* uuidComp = registry.try_get<components::UUIDComponent>(ent);
+                        if (uuidComp)
+                        {
+                            PhysicsSnapshot snap;
+
+                            ::events::physics::GetLinearVelocityQuery linVelQuery;
+                            linVelQuery.entity = handle;
+                            snap.linearVelocity = dispatcher.query(linVelQuery);
+
+                            ::events::physics::GetAngularVelocityQuery angVelQuery;
+                            angVelQuery.entity = handle;
+                            snap.angularVelocity = dispatcher.query(angVelQuery);
+
+                            ::events::physics::IsBodySleepingQuery sleepQuery;
+                            sleepQuery.entity = handle;
+                            snap.wasSleeping = dispatcher.query(sleepQuery);
+
+                            physicsSnapshots[uuidComp->id.getValue()] = snap;
+                        }
+                    }
+                }
+
                 ::events::physics::RemoveRigidBodyCommand removeCmd;
                 removeCmd.entity = handle;
-                ::events::EventDispatcher::instance().execute(removeCmd);
+                dispatcher.execute(removeCmd);
             }
 
             ::events::scene::EntityDeletedNotification notif;
             notif.entity = handle;
-            ::events::EventDispatcher::instance().publish(notif);
+            dispatcher.publish(notif);
         });
     }
 
@@ -367,6 +408,7 @@ namespace services
                 else if (notif.currentMode == services::EditorMode::Edit)
                 {
                     isPlayMode = false;
+                    physicsSnapshots.clear();
 
                     // Returning to edit mode — snapshot was restored, re-assign entities to sectors
                     entityLoader.clear();

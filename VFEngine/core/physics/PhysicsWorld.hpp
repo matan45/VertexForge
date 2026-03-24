@@ -89,6 +89,9 @@ namespace core::physics
         void setAngularVelocity(JPH::BodyID bodyId, const glm::vec3& velocity);
         glm::vec3 getAngularVelocity(JPH::BodyID bodyId) const;
 
+        // Body state
+        bool isBodyActive(JPH::BodyID bodyId) const;
+
         // Body properties
         BodyType getBodyType(JPH::BodyID bodyId) const;
         float getMass(JPH::BodyID bodyId) const;

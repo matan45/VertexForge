@@ -134,6 +134,10 @@ namespace services
                     }
                 }
 
+                // Clear any unconsumed physics snapshots for this sector's entities
+                for (uint64_t uuid : sector.entityUUIDs)
+                    physicsSnapshots.erase(uuid);
+
                 ::events::world::SectorLoadedNotification notif;
                 notif.coord = sector.coord;
                 notif.entityCount = static_cast<uint32_t>(sector.entityUUIDs.size());

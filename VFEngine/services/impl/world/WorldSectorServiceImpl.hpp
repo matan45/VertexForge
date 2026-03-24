@@ -96,6 +96,15 @@ namespace services
 
         std::unordered_map<world::SectorCoord, PendingAsyncSectorLoad, world::SectorCoordHash> pendingAsyncLoads;
 
+        // Physics state snapshots for velocity/sleep preservation across sector streaming
+        struct PhysicsSnapshot
+        {
+            glm::vec3 linearVelocity{0.0f};
+            glm::vec3 angularVelocity{0.0f};
+            bool wasSleeping = false;
+        };
+        std::unordered_map<uint64_t, PhysicsSnapshot> physicsSnapshots; // keyed by entity UUID
+
         void handleSectorLoad(const world::SectorCoord& coord);
         void handleSectorUnload(const world::SectorCoord& coord);
         void pollAsyncSectorLoads();
