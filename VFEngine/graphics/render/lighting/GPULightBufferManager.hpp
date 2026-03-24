@@ -153,6 +153,9 @@ namespace render::lighting
         void updateShadowRegistration(uint32_t entityId, shadow::ShadowMapType type,
                                        const shadow::ShadowSettings& settings);
         void cleanupStaleShadowRegistrations();
+    public:
+        void preWarmShadowsForLights(const std::vector<uint32_t>& entityIds);
+    private:
         void updateCountsBuffer();
         bool detectChanges();
     };

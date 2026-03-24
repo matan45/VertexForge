@@ -314,6 +314,7 @@ namespace services
         float intensity = 1.0f;
         float radius = 10.0f;
         float lightSize = 0.1f;
+        bool castsShadow = true;
         bool showGizmo = false;
     };
 
@@ -325,6 +326,7 @@ namespace services
         float outerAngle = 45.0f;
         float range = 20.0f;
         float lightSize = 0.1f;
+        bool castsShadow = true;
         bool showGizmo = false;
     };
 
