@@ -255,6 +255,27 @@ namespace core
         }
     }
 
+    std::optional<services::IVFXRuntimeProvider::PlaybackState> VFXRuntimeAdapter::capturePlaybackState(services::VFXInstanceId id) const
+    {
+        if (!renderer)
+            return std::nullopt;
+        auto state = renderer->capturePlaybackState(id);
+        if (!state)
+            return std::nullopt;
+        PlaybackState result;
+        result.emissionTime = state->emissionTime;
+        result.spawnAccumulator = state->spawnAccumulator;
+        result.wasPlaying = state->wasPlaying;
+        result.wasActive = state->wasActive;
+        return result;
+    }
+
+    void VFXRuntimeAdapter::seekInstance(services::VFXInstanceId id, float emissionTime, float spawnAccumulator)
+    {
+        if (renderer)
+            renderer->seekInstance(id, emissionTime, spawnAccumulator);
+    }
+
     void VFXRuntimeAdapter::updateSceneColliders()
     {
         // Skip if no VFX instances are active

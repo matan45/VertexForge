@@ -29,6 +29,8 @@ namespace world
             streamingJson["maxLoadsPerFrame"] = definition.streamingConfig.maxLoadsPerFrame;
             streamingJson["maxUnloadsPerFrame"] = definition.streamingConfig.maxUnloadsPerFrame;
             streamingJson["maxEntitiesPerFrame"] = definition.streamingConfig.maxEntitiesPerFrame;
+            streamingJson["maxTerrainLoadsPerFrame"] = definition.streamingConfig.maxTerrainLoadsPerFrame;
+            streamingJson["maxTerrainUnloadsPerFrame"] = definition.streamingConfig.maxTerrainUnloadsPerFrame;
             streamingJson["enableGPUObjectStreaming"] = definition.streamingConfig.enableGPUObjectStreaming;
             worldJson["streamingConfig"] = streamingJson;
 
@@ -97,6 +99,8 @@ namespace world
                 outDefinition.streamingConfig.maxLoadsPerFrame = stc.value("maxLoadsPerFrame", 1);
                 outDefinition.streamingConfig.maxUnloadsPerFrame = stc.value("maxUnloadsPerFrame", 1);
                 outDefinition.streamingConfig.maxEntitiesPerFrame = stc.value("maxEntitiesPerFrame", 8);
+                outDefinition.streamingConfig.maxTerrainLoadsPerFrame = stc.value("maxTerrainLoadsPerFrame", 4);
+                outDefinition.streamingConfig.maxTerrainUnloadsPerFrame = stc.value("maxTerrainUnloadsPerFrame", 4);
                 outDefinition.streamingConfig.enableGPUObjectStreaming = stc.value("enableGPUObjectStreaming", true);
             }
 

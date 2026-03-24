@@ -55,7 +55,7 @@ namespace render::lighting
                 const auto& light = registry.get<components::PointLightComponent>(entity);
                 entry.intensity = light.intensity;
                 entry.radius = light.radius;
-                entry.castsShadow = false;
+                entry.castsShadow = light.castsShadow;
             }
             else if (registry.all_of<components::SpotLightComponent>(entity))
             {
@@ -63,7 +63,7 @@ namespace render::lighting
                 const auto& light = registry.get<components::SpotLightComponent>(entity);
                 entry.intensity = light.intensity;
                 entry.radius = light.range;
-                entry.castsShadow = false;
+                entry.castsShadow = light.castsShadow;
             }
             else
             {
@@ -393,5 +393,90 @@ namespace render::lighting
             ? pointAllocator : spotAllocator;
 
         allocator.free(entry.slotIndex, 1);
+    }
+
+    bool LightStreamManager::shouldDefragment() const
+    {
+        if (defragActive || defragCooldown > 0 || registeredLights.empty())
+            return false;
+        return pointAllocator.getFragmentationPercent() > DEFRAG_THRESHOLD
+            || spotAllocator.getFragmentationPercent() > DEFRAG_THRESHOLD;
+    }
+
+    std::vector<LightDefragResult> LightStreamManager::defragStep(uint32_t maxMoves)
+    {
+        std::vector<LightDefragResult> results;
+        std::lock_guard<std::mutex> lock(mtx);
+
+        if (defragCooldown > 0)
+        {
+            --defragCooldown;
+            return results;
+        }
+
+        if (!defragActive)
+        {
+            // Light slots are logical budget-tracking indices, not GPU buffer positions.
+            // GPULightBufferManager rebuilds GPU arrays each frame from ECS — no GPU data
+            // movement needed. We only compact the allocator metadata and entry.slotIndex.
+
+            // Pick the more fragmented allocator
+            float pointFrag = pointAllocator.getFragmentationPercent();
+            float spotFrag = spotAllocator.getFragmentationPercent();
+            defragType = (pointFrag >= spotFrag)
+                ? LightStreamEntry::LightType::Point
+                : LightStreamEntry::LightType::Spot;
+
+            sortedDefragAllocations.clear();
+            for (const auto& [entityId, entry] : registeredLights)
+            {
+                if (entry.type == defragType && entry.active)
+                    sortedDefragAllocations.emplace_back(entry.slotIndex, entityId);
+            }
+
+            std::sort(sortedDefragAllocations.begin(), sortedDefragAllocations.end(),
+                [](const auto& a, const auto& b) { return a.first < b.first; });
+
+            defragCursor = 0;
+            defragWriteHead = 0;
+            defragActive = true;
+        }
+
+        uint32_t moved = 0;
+        while (defragCursor < sortedDefragAllocations.size() && moved < maxMoves)
+        {
+            auto [currentSlot, entityId] = sortedDefragAllocations[defragCursor];
+            ++defragCursor;
+
+            auto it = registeredLights.find(entityId);
+            if (it == registeredLights.end())
+                continue;
+
+            auto& entry = it->second;
+
+            if (entry.slotIndex == defragWriteHead)
+            {
+                defragWriteHead += 1;
+                continue;
+            }
+
+            uint32_t oldSlot = entry.slotIndex;
+            entry.slotIndex = defragWriteHead;
+            results.push_back({entityId, oldSlot, defragWriteHead});
+            defragWriteHead += 1;
+            ++moved;
+        }
+
+        if (defragCursor >= sortedDefragAllocations.size())
+        {
+            auto& allocator = (defragType == LightStreamEntry::LightType::Point)
+                ? pointAllocator : spotAllocator;
+            allocator.rebuildCompacted(defragWriteHead);
+            defragActive = false;
+            defragCooldown = DEFRAG_COOLDOWN_FRAMES;
+            sortedDefragAllocations.clear();
+        }
+
+        return results;
     }
 }

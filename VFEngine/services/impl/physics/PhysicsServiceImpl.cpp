@@ -162,6 +162,12 @@ namespace services {
                 return rb ? rb->type : RigidBodyData::Type::Dynamic;
             });
 
+        dispatcher.registerQueryHandler<events::physics::IsBodySleepingQuery>(
+            [this](const auto& query) -> bool {
+                if (!physicsProvider) return false;
+                return physicsProvider->isBodySleeping(query.entity);
+            });
+
         // === Physics Settings Commands ===
 
         dispatcher.registerCommandHandler<events::physics::ApplyPhysicsSettingsCommand>(

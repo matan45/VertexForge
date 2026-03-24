@@ -452,10 +452,43 @@ namespace render::gpudriven
             }
         }
 
+        // Defragmentation pass
+        if (boneMatrixManager->shouldDefragment() || boneMatrixManager->isDefragInProgress())
+        {
+            auto moves = boneMatrixManager->defragStep(4);
+            if (!moves.empty())
+                patchBoneOffsetsInGPUData(moves);
+        }
+
         return [this](entt::entity entity) -> uint32_t
         {
             return boneMatrixManager->getBoneOffset(entity);
         };
+    }
+
+    void GPUDrivenRenderer::patchBoneOffsetsInGPUData(const std::vector<BoneDefragResult>& moves)
+    {
+        if (!mergedBuffer || !mergedBuffer->isPersistentMode())
+            return;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        for (const auto& move : moves)
+        {
+            if (!registry.valid(move.entity))
+                continue;
+
+            auto* uuidComp = registry.try_get<components::UUIDComponent>(move.entity);
+            if (!uuidComp)
+                continue;
+
+            uint32_t slot = mergedBuffer->getSlotForEntityUUID(uuidComp->id.getValue());
+            if (slot == UINT32_MAX)
+                continue;
+
+            auto& obj = mergedBuffer->getMutableObjectData(slot);
+            obj.meshletLod3.w = move.newOffset;
+            mergedBuffer->markSlotDirty(slot);
+        }
     }
 
     void GPUDrivenRenderer::updateClusterGrid(const glm::mat4& projection, float nearPlane, float farPlane)

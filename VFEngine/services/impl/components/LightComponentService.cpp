@@ -194,6 +194,7 @@ namespace services {
         data.intensity = comp.intensity;
         data.radius = comp.radius;
         data.lightSize = comp.lightSize;
+        data.castsShadow = comp.castsShadow;
         data.showGizmo = comp.showGizmo;
         return data;
     }
@@ -221,6 +222,7 @@ namespace services {
         comp.intensity = lightData.intensity;
         comp.radius = lightData.radius;
         comp.lightSize = lightData.lightSize;
+        comp.castsShadow = lightData.castsShadow;
         comp.showGizmo = lightData.showGizmo;
 
         events::lighting::LightDataChangedNotification notification;
@@ -268,6 +270,7 @@ namespace services {
         data.outerAngle = comp.outerAngle;
         data.range = comp.range;
         data.lightSize = comp.lightSize;
+        data.castsShadow = comp.castsShadow;
         data.showGizmo = comp.showGizmo;
         return data;
     }
@@ -300,6 +303,7 @@ namespace services {
         comp.outerAngle = lightData.outerAngle;
         comp.range = lightData.range;
         comp.lightSize = lightData.lightSize;
+        comp.castsShadow = lightData.castsShadow;
         comp.showGizmo = lightData.showGizmo;
 
         events::lighting::LightDataChangedNotification notification;

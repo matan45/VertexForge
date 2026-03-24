@@ -3,6 +3,7 @@
 #include "../../providers/vfx/IVFXRuntimeProvider.hpp"
 #include "../../events/editor/EditorModeEvents.hpp"
 #include "../../events/vfx/VFXRuntimeEvents.hpp"
+#include "../../events/vfx/VFXSnapshotEvents.hpp"
 #include "../../events/project/SceneEvents.hpp"
 #include "../../events/world/WorldSectorEvents.hpp"
 #include "../../data/EditorMode.hpp"
@@ -342,6 +343,31 @@ namespace services
                         playCmd.instanceId = instanceId;
                         dispatcher.execute(playCmd);
                         vfxComp.isPlaying = true;
+                    }
+
+                    // Restore VFX playback state from snapshot if available
+                    auto* uuidComp = registry.try_get<components::UUIDComponent>(enttEntity);
+                    if (uuidComp)
+                    {
+                        ::events::vfx::snapshot::GetVFXSnapshotQuery snapQuery;
+                        snapQuery.entityUUID = uuidComp->id.getValue();
+                        auto snapshot = dispatcher.query(snapQuery);
+                        if (snapshot.has_value())
+                        {
+                            ::events::vfx::snapshot::SeekVFXInstanceCommand seekCmd;
+                            seekCmd.instanceId = instanceId;
+                            seekCmd.emissionTime = snapshot->emissionTime;
+                            seekCmd.spawnAccumulator = snapshot->spawnAccumulator;
+                            dispatcher.execute(seekCmd);
+
+                            if (!snapshot->wasPlaying)
+                            {
+                                events::vfxruntime::StopVFXInstanceCommand stopCmd;
+                                stopCmd.instanceId = instanceId;
+                                dispatcher.execute(stopCmd);
+                                vfxComp.isPlaying = false;
+                            }
+                        }
                     }
                 }
                 created++;

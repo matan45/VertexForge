@@ -11,6 +11,7 @@
 #include "terrain/TerrainSerializer.hpp"
 #include "terrain/TerrainFileCache.hpp"
 #include "terrain/TerrainWorldStreamer.hpp"
+#include "world/WorldTypes.hpp"
 #include <glm/glm.hpp>
 #include <atomic>
 #include <future>
@@ -68,6 +69,27 @@ namespace services
         std::unordered_map<uint64_t, std::unique_ptr<terrain::TerrainWorldStreamer>> worldStreamers;
         std::vector<terrain::StreamingAction> streamingActions; // persistent scratch buffer
         std::vector<std::pair<uint64_t, terrain::TileCoord>> pendingPhysicsTiles;
+
+        // Sector-driven terrain streaming (world mode)
+        bool worldModeActive = false;
+        world::SectorConfig cachedSectorConfig;
+        world::SectorStreamingConfig cachedStreamingConfig;
+        std::unique_ptr<::events::SubscriptionToken> sectorActivatedSub;
+        std::unique_ptr<::events::SubscriptionToken> sectorDeactivatedSub;
+        std::unique_ptr<::events::SubscriptionToken> worldLoadedSub;
+
+        struct PendingTileStreamAction
+        {
+            uint64_t terrainEntityId;
+            terrain::TileCoord coord;
+            bool isLoad;
+        };
+        std::vector<PendingTileStreamAction> pendingSectorTileActions;
+
+        void onSectorActivated(const world::SectorCoord& coord, const world::SectorConfig& config);
+        void onSectorDeactivated(const world::SectorCoord& coord, const world::SectorConfig& config);
+        void processPendingSectorTileActions();
+        void activateTilesForLoadedSectors();
 
         // Async terrain creation state
         struct PendingTerrainCreation

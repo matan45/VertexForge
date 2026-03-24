@@ -151,7 +151,13 @@ namespace controllers
 
         auto* gpu = renderHandler->getGPUDrivenRenderer();
         if (gpu && gpu->getLightStreamManager())
+        {
             gpu->getLightStreamManager()->registerSectorLights(sectorId, lightEntityIds);
+
+            // Pre-warm shadow maps for shadow-casting lights in the loaded sector
+            if (gpu->getLightBufferManager())
+                gpu->getLightBufferManager()->preWarmShadowsForLights(lightEntityIds);
+        }
     }
 
     void OffScreenController::unregisterSectorLights(uint32_t sectorId)

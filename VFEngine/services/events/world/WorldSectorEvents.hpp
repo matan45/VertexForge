@@ -5,6 +5,7 @@
 #include <glm/glm.hpp>
 #include <string>
 #include <optional>
+#include <vector>
 
 namespace events::world
 {
@@ -70,6 +71,37 @@ namespace events::world
         std::string_view getName() const override { return "UpdateWorldStreaming"; }
     };
 
+    struct RegisterStreamingSourceCommand : ICommand<uint32_t>
+    {
+        glm::vec3 position{0.0f};
+        float radiusMultiplier = 1.0f;
+        uint8_t priority = 0;
+
+        std::string_view getName() const override { return "RegisterStreamingSource"; }
+    };
+
+    struct UnregisterStreamingSourceCommand : ICommand<>
+    {
+        uint32_t sourceId = 0;
+
+        std::string_view getName() const override { return "UnregisterStreamingSource"; }
+    };
+
+    struct UpdateStreamingSourcePositionCommand : ICommand<>
+    {
+        uint32_t sourceId = 0;
+        glm::vec3 position{0.0f};
+
+        std::string_view getName() const override { return "UpdateStreamingSourcePosition"; }
+    };
+
+    struct IsStreamingSourceValidQuery : IQuery<bool>
+    {
+        uint32_t sourceId = 0;
+
+        std::string_view getName() const override { return "IsStreamingSourceValid"; }
+    };
+
     // ============================================
     // Queries
     // ============================================
@@ -105,6 +137,16 @@ namespace events::world
         std::string_view getName() const override { return "GetWorldStreamingStats"; }
     };
 
+    struct GetSectorConfigQuery : IQuery<::world::SectorConfig>
+    {
+        std::string_view getName() const override { return "GetSectorConfig"; }
+    };
+
+    struct GetLoadedSectorCoordsQuery : IQuery<std::vector<::world::SectorCoord>>
+    {
+        std::string_view getName() const override { return "GetLoadedSectorCoords"; }
+    };
+
     struct SetSectorDebugDrawCommand : ICommand<>
     {
         bool enabled = false;
@@ -126,6 +168,22 @@ namespace events::world
         std::string worldPath;
 
         std::string_view getName() const override { return "WorldLoaded"; }
+    };
+
+    struct SectorActivatedNotification : INotification
+    {
+        ::world::SectorCoord coord;
+        ::world::SectorConfig sectorConfig;
+
+        std::string_view getName() const override { return "SectorActivated"; }
+    };
+
+    struct SectorDeactivatedNotification : INotification
+    {
+        ::world::SectorCoord coord;
+        ::world::SectorConfig sectorConfig;
+
+        std::string_view getName() const override { return "SectorDeactivated"; }
     };
 
     struct SectorLoadedNotification : INotification

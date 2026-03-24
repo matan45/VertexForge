@@ -49,6 +49,7 @@ namespace serialization
         j["intensity"] = light.intensity;
         j["radius"] = light.radius;
         j["lightSize"] = light.lightSize;
+        j["castsShadow"] = light.castsShadow;
         j["showGizmo"] = light.showGizmo;
         return j;
     }
@@ -71,6 +72,10 @@ namespace serialization
         {
             light.lightSize = it->get<float>();
         }
+        if (auto it = j.find("castsShadow"); it != j.end() && it->is_boolean())
+        {
+            light.castsShadow = it->get<bool>();
+        }
         if (auto it = j.find("showGizmo"); it != j.end() && it->is_boolean())
         {
             light.showGizmo = it->get<bool>();
@@ -86,6 +91,7 @@ namespace serialization
         j["outerAngle"] = light.outerAngle;
         j["range"] = light.range;
         j["lightSize"] = light.lightSize;
+        j["castsShadow"] = light.castsShadow;
         j["showGizmo"] = light.showGizmo;
         return j;
     }
@@ -115,6 +121,10 @@ namespace serialization
         if (auto it = j.find("lightSize"); it != j.end() && it->is_number())
         {
             light.lightSize = it->get<float>();
+        }
+        if (auto it = j.find("castsShadow"); it != j.end() && it->is_boolean())
+        {
+            light.castsShadow = it->get<bool>();
         }
         if (auto it = j.find("showGizmo"); it != j.end() && it->is_boolean())
         {

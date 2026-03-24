@@ -113,12 +113,14 @@
     <ClInclude Include="events\animation\AnimationBudgetEvents.hpp" />
     <ClInclude Include="events\animation\AnimationEventEvents.hpp" />
     <ClInclude Include="events\animation\AnimationPreviewEvents.hpp" />
+    <ClInclude Include="events\animation\AnimationSnapshotEvents.hpp" />
     <ClInclude Include="events\animation\AnimatorEvents.hpp" />
     <ClInclude Include="events\asset\AssetDatabaseEvents.hpp" />
     <ClInclude Include="events\audio\AudioBusEvents.hpp" />
     <ClInclude Include="events\audio\AudioEffectEvents.hpp" />
     <ClInclude Include="events\audio\AudioEvents.hpp" />
     <ClInclude Include="events\audio\AudioSettingsEvents.hpp" />
+    <ClInclude Include="events\audio\AudioSnapshotEvents.hpp" />
     <ClInclude Include="events\editor\EditorModeEvents.hpp" />
     <ClInclude Include="events\editor\SculptModeEvents.hpp" />
     <ClInclude Include="events\editor\UndoRedoEvents.hpp" />
@@ -189,6 +191,7 @@
     <ClInclude Include="events\vfx\VFXEventNotifications.hpp" />
     <ClInclude Include="events\vfx\VFXPreviewEvents.hpp" />
     <ClInclude Include="events\vfx\VFXRuntimeEvents.hpp" />
+    <ClInclude Include="events\vfx\VFXSnapshotEvents.hpp" />
     <ClInclude Include="events\world\WorldSectorEvents.hpp" />
     <ClInclude Include="impl\ai\BehaviorTreePlayModeHandler.hpp" />
     <ClInclude Include="impl\ai\BehaviorTreeServiceImpl.hpp" />

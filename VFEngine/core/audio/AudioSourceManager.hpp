@@ -37,12 +37,25 @@ namespace core::audio
         void update();
         void updateFilters(const glm::vec3& listenerPos, float deltaTime);
 
+        void startFadeOut(AudioHandle handle, float durationMs);
+        void updateFades(float deltaTimeMs);
+
         size_t getActiveCount() const { return activeHandles.size(); }
         size_t getPoolSize() const { return sourcePool.size(); }
 
         void initPool(size_t poolSize);
 
     private:
+        struct FadingSource
+        {
+            AudioHandle handle;
+            size_t poolIndex;
+            float originalVolume;
+            float remainingMs;
+            float totalMs;
+        };
+        std::vector<FadingSource> fadingQueue;
+
         void growPool(size_t additionalSources);
         AudioHandle generateHandle();
     };

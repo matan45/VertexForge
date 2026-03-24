@@ -271,6 +271,12 @@ namespace services
         pendingAsyncLoads.clear();
 
         entityLoader.clear();
+        physicsSnapshots.clear();
+        animationSnapshots.clear();
+        vfxSnapshots.clear();
+        audioSnapshots.clear();
+        streamingSources.clear();
+        nextStreamingSourceId = 1;
         sectorManager.clear();
 
         auto& root = sceneGraph->GetRoot();

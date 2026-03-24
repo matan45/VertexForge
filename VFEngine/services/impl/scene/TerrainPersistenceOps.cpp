@@ -502,12 +502,15 @@ namespace services
         terrainGrids[parentHandle.id] = std::move(grid);
         fileCaches[parentHandle.id] = cache;
 
-        terrain::StreamingConfig stCfg{
-            header.streamingConfig.loadRadius, header.streamingConfig.unloadRadius,
-            header.streamingConfig.maxLoadsPerFrame, header.streamingConfig.maxUnloadsPerFrame};
-        auto streamer = std::make_unique<terrain::TerrainWorldStreamer>(stCfg);
-        streamer->setEnabled(header.streamingConfig.enabled);
-        worldStreamers[parentHandle.id] = std::move(streamer);
+        if (!worldModeActive)
+        {
+            terrain::StreamingConfig stCfg{
+                header.streamingConfig.loadRadius, header.streamingConfig.unloadRadius,
+                header.streamingConfig.maxLoadsPerFrame, header.streamingConfig.maxUnloadsPerFrame};
+            auto streamer = std::make_unique<terrain::TerrainWorldStreamer>(stCfg);
+            streamer->setEnabled(header.streamingConfig.enabled);
+            worldStreamers[parentHandle.id] = std::move(streamer);
+        }
 
         if (!header.materialPath.empty())
             syncWeightMapLayerCount(parentHandle.id, header.materialPath);
@@ -530,6 +533,10 @@ namespace services
             vfLogInfo("TerrainService: Loaded terrain with {} tiles from {}", header.tileCount, path);
 
         loadVegetation(parentHandle.id, path);
+
+        // If world mode is already active with loaded sectors, activate their terrain tiles
+        activateTilesForLoadedSectors();
+
         return parentHandle;
     }
 

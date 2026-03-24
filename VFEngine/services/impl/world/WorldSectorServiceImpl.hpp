@@ -2,6 +2,7 @@
 
 #include "../../interfaces/world/IWorldSectorService.hpp"
 #include "../../events/EventTypes.hpp"
+#include "../../events/animation/AnimationSnapshotEvents.hpp"
 #include "world/WorldSectorManager.hpp"
 #include "world/WorldDefinition.hpp"
 #include "world/SectorStreamer.hpp"
@@ -65,6 +66,10 @@ namespace services
 
         std::vector<world::SectorStreamingAction> streamingActions;
 
+        // Multiple streaming sources (camera + gameplay-registered sources)
+        std::unordered_map<uint32_t, world::StreamingSource> streamingSources;
+        uint32_t nextStreamingSourceId = 1;
+
         ::events::SubscriptionToken transformChangedToken;
         ::events::SubscriptionToken editorModeChangedToken;
         ::events::SubscriptionToken cameraPositionToken;
@@ -95,6 +100,42 @@ namespace services
         };
 
         std::unordered_map<world::SectorCoord, PendingAsyncSectorLoad, world::SectorCoordHash> pendingAsyncLoads;
+
+        // Physics state snapshots for velocity/sleep preservation across sector streaming
+        struct PhysicsSnapshot
+        {
+            glm::vec3 linearVelocity{0.0f};
+            glm::vec3 angularVelocity{0.0f};
+            bool wasSleeping = false;
+        };
+        std::unordered_map<uint64_t, PhysicsSnapshot> physicsSnapshots; // keyed by entity UUID
+
+        // Animation state snapshots for state preservation across sector streaming
+        std::unordered_map<uint64_t, ::events::animation::snapshot::AnimationSnapshot> animationSnapshots;
+
+        // VFX playback snapshots for state preservation across sector streaming
+        struct VFXSnapshot
+        {
+            float emissionTime = 0.0f;
+            float spawnAccumulator = 0.0f;
+            bool wasPlaying = true;
+            bool wasActive = true;
+        };
+        std::unordered_map<uint64_t, VFXSnapshot> vfxSnapshots; // keyed by entity UUID
+
+        // Audio playback snapshots for state preservation across sector streaming
+        struct AudioSnapshot
+        {
+            bool wasPlaying = false;
+            float playbackPosition = 0.0f;
+            float volume = 1.0f;
+            float pitch = 1.0f;
+            bool loop = false;
+            bool is3D = false;
+            std::string audioPath;
+            std::string busName;
+        };
+        std::unordered_map<uint64_t, AudioSnapshot> audioSnapshots; // keyed by entity UUID
 
         void handleSectorLoad(const world::SectorCoord& coord);
         void handleSectorUnload(const world::SectorCoord& coord);

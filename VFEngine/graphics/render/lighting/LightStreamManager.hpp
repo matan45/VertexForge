@@ -44,6 +44,13 @@ namespace render::lighting
         float hysteresisMargin = 0.05f;
     };
 
+    struct LightDefragResult
+    {
+        uint32_t entityId;
+        uint32_t oldSlot;
+        uint32_t newSlot;
+    };
+
     struct LightStreamingStats
     {
         uint32_t registeredPointLights = 0;
@@ -105,7 +112,22 @@ namespace render::lighting
 
         LightStreamingStats getStats() const;
 
+        bool shouldDefragment() const;
+        std::vector<LightDefragResult> defragStep(uint32_t maxMoves = 4);
+        bool isDefragInProgress() const { return defragActive; }
+
     private:
+        // Defragmentation state
+        bool defragActive = false;
+        std::vector<std::pair<uint32_t, uint32_t>> sortedDefragAllocations; // (slotIndex, entityId)
+        size_t defragCursor = 0;
+        uint32_t defragWriteHead = 0;
+        uint32_t defragCooldown = 0;
+        LightStreamEntry::LightType defragType = LightStreamEntry::LightType::Point;
+
+        static constexpr float DEFRAG_THRESHOLD = 30.0f;
+        static constexpr uint32_t DEFRAG_COOLDOWN_FRAMES = 300;
+
         float computePriority(const LightStreamEntry& entry) const;
         bool allocateSlot(LightStreamEntry& entry);
         void freeSlot(LightStreamEntry& entry);

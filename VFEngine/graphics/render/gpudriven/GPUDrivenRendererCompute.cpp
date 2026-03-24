@@ -300,6 +300,9 @@ namespace render::gpudriven
         {
             lightStreamManager->updatePriorities(cachedCamera.position);
             lightStreamManager->applyBudget();
+
+            if (lightStreamManager->shouldDefragment() || lightStreamManager->isDefragInProgress())
+                lightStreamManager->defragStep(4);
         }
     }
 }

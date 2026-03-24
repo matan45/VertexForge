@@ -212,6 +212,8 @@ namespace core::physics
     void PhysicsWorld::setAngularVelocity(JPH::BodyID bodyId, const glm::vec3& velocity) { rigidBodyManager.setAngularVelocity(bodyId, velocity); }
     glm::vec3 PhysicsWorld::getAngularVelocity(JPH::BodyID bodyId) const { return rigidBodyManager.getAngularVelocity(bodyId); }
 
+    bool PhysicsWorld::isBodyActive(JPH::BodyID bodyId) const { return rigidBodyManager.isBodyActive(bodyId); }
+
     BodyType PhysicsWorld::getBodyType(JPH::BodyID bodyId) const { return rigidBodyManager.getBodyType(bodyId); }
     float PhysicsWorld::getMass(JPH::BodyID bodyId) const { return rigidBodyManager.getMass(bodyId); }
     float PhysicsWorld::getLinearDamping(JPH::BodyID bodyId) const { return rigidBodyManager.getLinearDamping(bodyId); }

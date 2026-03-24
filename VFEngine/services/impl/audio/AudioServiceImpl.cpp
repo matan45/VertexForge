@@ -3,6 +3,7 @@
 #include "../../events/audio/AudioSettingsEvents.hpp"
 #include "../../events/audio/AudioBusEvents.hpp"
 #include "../../events/audio/AudioEffectEvents.hpp"
+#include "../../events/audio/AudioSnapshotEvents.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include <cassert>
 
@@ -33,6 +34,61 @@ namespace services {
         dispatcher.registerCommandHandler<events::audio::StopSoundCommand>(
             [this](const auto& cmd) {
                 stopSound(cmd.handle);
+            });
+
+        dispatcher.registerCommandHandler<events::audio::FadeOutAndReleaseSoundCommand>(
+            [this](const auto& cmd) {
+                if (audioProvider)
+                    audioProvider->fadeOutAndRelease(cmd.handle.id, cmd.fadeDurationMs);
+            });
+
+        dispatcher.registerCommandHandler<::events::audio::snapshot::FadeOutAudioCommand>(
+            [this](const ::events::audio::snapshot::FadeOutAudioCommand& cmd) {
+                if (audioProvider)
+                    audioProvider->fadeOutAndRelease(cmd.handleId, cmd.fadeDurationMs);
+            });
+
+        dispatcher.registerCommandHandler<::events::audio::snapshot::PlayRestoredAudio3DCommand>(
+            [this](const ::events::audio::snapshot::PlayRestoredAudio3DCommand& cmd) -> uint64_t {
+                if (!audioProvider) return 0;
+                AudioPlayParams params;
+                params.volume = cmd.volume;
+                params.pitch = cmd.pitch;
+                params.loop = cmd.loop;
+                params.is3D = true;
+                params.minDistance = cmd.minDistance;
+                params.maxDistance = cmd.maxDistance;
+                params.busName = cmd.busName;
+                return audioProvider->playSound3D(cmd.path, cmd.position, params);
+            });
+
+        dispatcher.registerCommandHandler<::events::audio::snapshot::PlayRestoredAudio2DCommand>(
+            [this](const ::events::audio::snapshot::PlayRestoredAudio2DCommand& cmd) -> uint64_t {
+                if (!audioProvider) return 0;
+                AudioPlayParams params;
+                params.volume = cmd.volume;
+                params.pitch = cmd.pitch;
+                params.loop = cmd.loop;
+                params.busName = cmd.busName;
+                return audioProvider->playStreamingSound(cmd.path, params);
+            });
+
+        dispatcher.registerQueryHandler<::events::audio::snapshot::GetAudioPlaybackPositionQuery>(
+            [this](const ::events::audio::snapshot::GetAudioPlaybackPositionQuery& query) -> float {
+                if (!audioProvider) return 0.0f;
+                return audioProvider->getPlaybackPosition(query.handleId);
+            });
+
+        dispatcher.registerQueryHandler<::events::audio::snapshot::IsAudioPlayingQuery>(
+            [this](const ::events::audio::snapshot::IsAudioPlayingQuery& query) -> bool {
+                if (!audioProvider) return false;
+                return audioProvider->isPlaying(query.handleId);
+            });
+
+        dispatcher.registerCommandHandler<::events::audio::snapshot::SeekAudioCommand>(
+            [this](const ::events::audio::snapshot::SeekAudioCommand& cmd) {
+                if (audioProvider)
+                    audioProvider->setPlaybackPosition(cmd.handleId, cmd.seconds);
             });
 
         dispatcher.registerCommandHandler<events::audio::PauseSoundCommand>(

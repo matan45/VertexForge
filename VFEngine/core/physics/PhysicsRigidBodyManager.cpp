@@ -121,7 +121,8 @@ namespace core::physics
         auto settings = buildRigidBodySettings(shape, bodyInfo, colliderInfo, entityId);
 
         auto& bodyInterface = ctx->getBodyInterface();
-        JPH::BodyID bodyId = bodyInterface.CreateAndAddBody(settings, JPH::EActivation::Activate);
+        JPH::BodyID bodyId = bodyInterface.CreateAndAddBody(settings,
+            bodyInfo.activate ? JPH::EActivation::Activate : JPH::EActivation::DontActivate);
 
         if (!bodyId.IsInvalid())
         {
@@ -331,5 +332,11 @@ namespace core::physics
     {
         if (!ctx || !ctx->physicsSystem || bodyA.IsInvalid() || bodyB.IsInvalid()) return false;
         return ctx->physicsSystem->WereBodiesInContact(bodyA, bodyB);
+    }
+
+    bool PhysicsRigidBodyManager::isBodyActive(JPH::BodyID bodyId) const
+    {
+        if (!ctx || !ctx->physicsSystem || bodyId.IsInvalid()) return false;
+        return ctx->getBodyInterface().IsActive(bodyId);
     }
 }

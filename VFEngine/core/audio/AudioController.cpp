@@ -94,6 +94,7 @@ namespace core::audio
         deps.effectManager = effectManager.get();
         deps.bufferManager = bufferManager.get();
         deps.listener = listener.get();
+        deps.reverbZoneManager = reverbZoneManager.get();
 
         audioThread = std::make_unique<AudioThread>(*commandQueue, deps);
 
@@ -184,6 +185,12 @@ namespace core::audio
     {
         if (!initialized || !commandQueue) return;
         commandQueue->enqueue(StopSoundCmd{handle});
+    }
+
+    void AudioController::fadeOutAndRelease(AudioHandle handle, float fadeDurationMs)
+    {
+        if (!initialized || !commandQueue) return;
+        commandQueue->enqueue(FadeOutAndReleaseCmd{handle, fadeDurationMs});
     }
 
     void AudioController::pauseSound(AudioHandle handle)

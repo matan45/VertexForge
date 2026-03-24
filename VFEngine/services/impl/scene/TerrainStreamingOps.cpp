@@ -11,9 +11,11 @@
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/terrain/TerrainEvents.hpp"
+#include "../../events/world/WorldSectorEvents.hpp"
 #include <algorithm>
 #include <filesystem>
 #include <format>
+#include <unordered_set>
 
 namespace services
 {
@@ -359,6 +361,146 @@ namespace services
             comp.gridMaxX = maxX;
             comp.gridMaxZ = maxZ;
             comp.activeTileCount = static_cast<uint32_t>(gridIt->second->getTileCount());
+        }
+    }
+
+    void TerrainService::onSectorActivated(const world::SectorCoord& coord, const world::SectorConfig& config)
+    {
+        if (terrainGrids.empty())
+            return;
+
+        int32_t tps = config.tilesPerSector;
+
+        for (auto& [entityId, grid] : terrainGrids)
+        {
+            auto cacheIt = fileCaches.find(entityId);
+            if (cacheIt == fileCaches.end() || !cacheIt->second)
+                continue;
+
+            auto& fileCache = *cacheIt->second;
+
+            for (int32_t tx = coord.x * tps; tx < (coord.x + 1) * tps; ++tx)
+            {
+                for (int32_t tz = coord.z * tps; tz < (coord.z + 1) * tps; ++tz)
+                {
+                    terrain::TileCoord tileCoord{tx, tz};
+                    if (!grid->hasTile(tileCoord) && fileCache.hasCoord(tileCoord))
+                    {
+                        pendingSectorTileActions.push_back({entityId, tileCoord, true});
+                    }
+                }
+            }
+        }
+    }
+
+    void TerrainService::onSectorDeactivated(const world::SectorCoord& coord, const world::SectorConfig& config)
+    {
+        if (terrainGrids.empty())
+            return;
+
+        int32_t tps = config.tilesPerSector;
+
+        for (auto& [entityId, grid] : terrainGrids)
+        {
+            auto cacheIt = fileCaches.find(entityId);
+
+            for (int32_t tx = coord.x * tps; tx < (coord.x + 1) * tps; ++tx)
+            {
+                for (int32_t tz = coord.z * tps; tz < (coord.z + 1) * tps; ++tz)
+                {
+                    terrain::TileCoord tileCoord{tx, tz};
+                    if (!grid->hasTile(tileCoord))
+                        continue;
+
+                    // Skip dirty tiles
+                    if (cacheIt != fileCaches.end() && cacheIt->second
+                        && cacheIt->second->isTileDirty(tileCoord))
+                        continue;
+
+                    pendingSectorTileActions.push_back({entityId, tileCoord, false});
+                }
+            }
+        }
+    }
+
+    void TerrainService::processPendingSectorTileActions()
+    {
+        if (pendingSectorTileActions.empty())
+            return;
+
+        if (saveInProgress.load(std::memory_order_acquire))
+            return;
+
+        int loadsRemaining = cachedStreamingConfig.maxTerrainLoadsPerFrame;
+        int unloadsRemaining = cachedStreamingConfig.maxTerrainUnloadsPerFrame;
+
+        bool anyChanged = false;
+        std::unordered_set<uint64_t> changedTerrains;
+
+        auto it = pendingSectorTileActions.begin();
+        while (it != pendingSectorTileActions.end())
+        {
+            if (it->isLoad && loadsRemaining <= 0)
+            {
+                ++it;
+                continue;
+            }
+            if (!it->isLoad && unloadsRemaining <= 0)
+            {
+                ++it;
+                continue;
+            }
+
+            EntityHandle handle{it->terrainEntityId};
+            bool success = false;
+
+            if (it->isLoad)
+            {
+                success = streamInTile(handle, it->coord.x, it->coord.z);
+                if (success)
+                    --loadsRemaining;
+            }
+            else
+            {
+                success = streamOutTile(handle, it->coord.x, it->coord.z);
+                if (success)
+                    --unloadsRemaining;
+            }
+
+            if (success)
+            {
+                anyChanged = true;
+                changedTerrains.insert(it->terrainEntityId);
+                it = pendingSectorTileActions.erase(it);
+            }
+            else
+            {
+                ++it; // Keep for retry next frame
+            }
+        }
+
+        for (uint64_t terrainId : changedTerrains)
+        {
+            commitStreamingChanges(EntityHandle{terrainId});
+        }
+    }
+
+    void TerrainService::activateTilesForLoadedSectors()
+    {
+        auto& dispatcher = ::events::EventDispatcher::instance();
+
+        bool isWorld = dispatcher.query(::events::world::IsWorldModeQuery{});
+        worldModeActive = isWorld;
+        if (!isWorld)
+            return;
+
+        cachedSectorConfig = dispatcher.query(::events::world::GetSectorConfigQuery{});
+        cachedStreamingConfig = dispatcher.query(::events::world::GetWorldStreamingStatsQuery{});
+
+        auto loadedCoords = dispatcher.query(::events::world::GetLoadedSectorCoordsQuery{});
+        for (const auto& coord : loadedCoords)
+        {
+            onSectorActivated(coord, cachedSectorConfig);
         }
     }
 

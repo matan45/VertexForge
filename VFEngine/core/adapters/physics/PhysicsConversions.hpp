@@ -62,6 +62,7 @@ namespace core
         info.angularDamping = data.angularDamping;
         info.linearVelocity = data.linearVelocity;
         info.angularVelocity = data.angularVelocity;
+        info.activate = data.activateOnAdd;
 
         return info;
     }

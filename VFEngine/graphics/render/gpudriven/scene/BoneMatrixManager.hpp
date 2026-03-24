@@ -21,6 +21,12 @@ namespace render::gpudriven {
         bool dirty = false;
     };
 
+    struct BoneDefragResult {
+        entt::entity entity;
+        uint32_t oldOffset;
+        uint32_t newOffset;
+    };
+
     class BoneMatrixManager {
     private:
         core::Device& device;
@@ -50,6 +56,16 @@ namespace render::gpudriven {
         uint32_t maxBoneMatrices = 0;
         bool initialized = false;
 
+        // Defragmentation state
+        bool defragActive = false;
+        std::vector<std::pair<uint32_t, entt::entity>> sortedAllocations;
+        size_t defragCursor = 0;
+        uint32_t defragWriteHead = 0;
+        uint32_t defragCooldown = 0;
+
+        static constexpr float DEFRAG_THRESHOLD = 30.0f;
+        static constexpr uint32_t DEFRAG_COOLDOWN_FRAMES = 300;
+
     public:
         explicit BoneMatrixManager(core::Device& device);
         ~BoneMatrixManager();
@@ -76,6 +92,10 @@ namespace render::gpudriven {
         uint32_t getCapacity() const { return maxBoneMatrices; }
         float getFragmentationPercent() const { return boneAllocator.getFragmentationPercent(); }
         uint32_t getUsedBoneCount() const { return boneAllocator.getUsedCount() + boneAllocator.getReservedCount(); }
+
+        bool shouldDefragment() const;
+        std::vector<BoneDefragResult> defragStep(uint32_t maxMoves = 4);
+        bool isDefragInProgress() const { return defragActive; }
 
     private:
         void createBuffers();

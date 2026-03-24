@@ -34,9 +34,20 @@ namespace services
         // In edit mode, sectors stay as-is — no auto load/unload from editor camera.
         if (isPlayMode)
         {
-            glm::vec3 cameraPos = getPrimaryCameraPosition();
-            
-            streamer.update(cameraPos, sectorManager, streamingActions);
+            // Build streaming sources: camera is always source[0]
+            std::vector<world::StreamingSource> sources;
+            {
+                world::StreamingSource cameraSrc;
+                cameraSrc.position = getPrimaryCameraPosition();
+                cameraSrc.radiusMultiplier = 1.0f;
+                cameraSrc.priority = 0;
+                cameraSrc.id = 0;
+                sources.push_back(cameraSrc);
+            }
+            for (const auto& [id, src] : streamingSources)
+                sources.push_back(src);
+
+            streamer.update(sources, sectorManager, streamingActions);
 
             for (const auto& action : streamingActions)
             {
@@ -134,6 +145,15 @@ namespace services
                     }
                 }
 
+                // Clear any unconsumed snapshots for this sector's entities
+                for (uint64_t uuid : sector.entityUUIDs)
+                {
+                    physicsSnapshots.erase(uuid);
+                    animationSnapshots.erase(uuid);
+                    vfxSnapshots.erase(uuid);
+                    audioSnapshots.erase(uuid);
+                }
+
                 ::events::world::SectorLoadedNotification notif;
                 notif.coord = sector.coord;
                 notif.entityCount = static_cast<uint32_t>(sector.entityUUIDs.size());
@@ -182,6 +202,14 @@ namespace services
             return;
 
         sector->state = world::SectorState::Loading;
+
+        // Notify subsystems (e.g. terrain) that this sector is now active
+        {
+            ::events::world::SectorActivatedNotification notif;
+            notif.coord = coord;
+            notif.sectorConfig = sectorManager.getConfig();
+            ::events::EventDispatcher::instance().publish(notif);
+        }
 
         std::string filePath = sector->filePath;
 
@@ -274,6 +302,14 @@ namespace services
         }
 
         sector->state = world::SectorState::Unloading;
+
+        // Notify subsystems (e.g. terrain) that this sector is now inactive
+        {
+            ::events::world::SectorDeactivatedNotification notif;
+            notif.coord = coord;
+            notif.sectorConfig = sectorManager.getConfig();
+            ::events::EventDispatcher::instance().publish(notif);
+        }
 
         // Unregister sector objects and lights before entities are destroyed
         {

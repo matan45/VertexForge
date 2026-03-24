@@ -17,6 +17,7 @@ namespace services {
         float angularDamping = 0.05f;
         glm::vec3 linearVelocity{ 0.0f };
         glm::vec3 angularVelocity{ 0.0f };
+        bool activateOnAdd = true; // false = create sleeping (JPH::EActivation::DontActivate)
     };
 
     struct ColliderData {

@@ -225,4 +225,41 @@ namespace animation
             }
         }
     }
+
+    void AnimationLayerStack::restoreLayerState(uint32_t layerIndex,
+                                                 const AnimatorStateMachineState& machineState,
+                                                 float clipTime, bool clipPlaying, float weight)
+    {
+        if (layerIndex >= layers.size())
+            return;
+
+        auto& layer = layers[layerIndex];
+        layer.weight = weight;
+
+        if (layer.stateMachine)
+        {
+            layer.stateMachine->setMachineState(machineState);
+        }
+
+        layer.clipTime = clipTime;
+        layer.clipPlaying = clipPlaying;
+    }
+
+    void AnimationLayerStack::restoreSharedParameters(
+        const std::unordered_map<std::string, std::variant<float, int32_t, bool>>& params)
+    {
+        for (const auto& [name, value] : params)
+        {
+            std::visit([&](auto&& v)
+            {
+                using T = std::decay_t<decltype(v)>;
+                if constexpr (std::is_same_v<T, float>)
+                    sharedParameters.setFloat(name, v);
+                else if constexpr (std::is_same_v<T, int32_t>)
+                    sharedParameters.setInt(name, v);
+                else if constexpr (std::is_same_v<T, bool>)
+                    sharedParameters.setBool(name, v);
+            }, value);
+        }
+    }
 }

@@ -675,6 +675,7 @@ namespace render::gpudriven
         void registerSceneMaterialTextures(const std::vector<mesh::MeshRenderData>& opaqueObjects);
         TextureIndexResolver createTextureResolver();
         BoneOffsetResolver updateAnimationBones();
+        void patchBoneOffsetsInGPUData(const std::vector<BoneDefragResult>& moves);
         void updateClusterGrid(const glm::mat4& projection, float nearPlane, float farPlane);
         void updatePipelineDescriptors();
         void updateAllPipelinesHiZ();

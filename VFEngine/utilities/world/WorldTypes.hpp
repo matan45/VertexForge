@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <cmath>
 #include <functional>
+#include <glm/glm.hpp>
 
 namespace world
 {
@@ -84,6 +85,14 @@ namespace world
         return std::abs(config.sectorWorldSize - expected) < 0.001f;
     }
 
+    struct StreamingSource
+    {
+        glm::vec3 position{0.0f};
+        float radiusMultiplier = 1.0f;
+        uint8_t priority = 0;
+        uint32_t id = 0;
+    };
+
     struct SectorStreamingConfig
     {
         float loadRadius = 4.0f;    // in sector counts (e.g. 4 = load sectors within 4 sectors of camera)
@@ -91,6 +100,8 @@ namespace world
         int maxLoadsPerFrame = 1;
         int maxUnloadsPerFrame = 1;
         int maxEntitiesPerFrame = 8;
+        int maxTerrainLoadsPerFrame = 4;    // terrain tiles loaded per frame via sector activation
+        int maxTerrainUnloadsPerFrame = 4;  // terrain tiles unloaded per frame via sector deactivation
         bool enableGPUObjectStreaming = true; // Use persistent GPU slots with priority-based streaming
     };
 

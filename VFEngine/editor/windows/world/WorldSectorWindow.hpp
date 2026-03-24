@@ -36,6 +36,7 @@ namespace windows
             world::SectorState state = world::SectorState::Unloaded;
         };
         std::vector<CachedSectorInfo> cachedGrid;
+        int cachedTilesPerSector = 4;
 
     public:
         WorldSectorWindow() = default;

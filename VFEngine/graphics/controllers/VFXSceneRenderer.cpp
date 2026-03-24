@@ -451,6 +451,33 @@ namespace controllers
         return false;
     }
 
+    std::optional<VFXSceneRenderer::PlaybackState> VFXSceneRenderer::capturePlaybackState(VFXInstanceId id) const
+    {
+        auto it = instances.find(id);
+        if (it == instances.end())
+            return std::nullopt;
+
+        const auto& inst = it->second;
+        PlaybackState state;
+        state.emissionTime = inst.emissionTime;
+        state.spawnAccumulator = inst.spawnAccumulator;
+        state.wasActive = inst.active;
+        state.wasPlaying = inst.active && (inst.loop || inst.emissionTime < inst.config.lifetime);
+        return state;
+    }
+
+    void VFXSceneRenderer::seekInstance(VFXInstanceId id, float emissionTime, float spawnAccumulator)
+    {
+        auto it = instances.find(id);
+        if (it == instances.end())
+            return;
+
+        auto& inst = it->second;
+        inst.emissionTime = emissionTime;
+        inst.spawnAccumulator = spawnAccumulator;
+        inst.firstFrame = false;
+    }
+
     void VFXSceneRenderer::update(float deltaTime)
     {
         processPendingEmitterFrees();

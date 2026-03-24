@@ -3,6 +3,7 @@
 #include "../EventTypes.hpp"
 #include "../../data/VFXTypes.hpp"
 #include <glm/glm.hpp>
+#include <optional>
 #include <string>
 
 namespace services::events::vfxruntime
@@ -99,4 +100,5 @@ namespace services::events::vfxruntime
         float transitionZone = 10.0f;
         std::string_view getName() const override { return "SetVFXLODConfig"; }
     };
+
 }

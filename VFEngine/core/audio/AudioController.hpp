@@ -57,6 +57,7 @@ namespace core::audio {
 
         // === Sound Control ===
         void stopSound(AudioHandle handle);
+        void fadeOutAndRelease(AudioHandle handle, float fadeDurationMs);
         void pauseSound(AudioHandle handle);
         void resumeSound(AudioHandle handle);
         bool isPlaying(AudioHandle handle) const;

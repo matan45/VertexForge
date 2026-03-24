@@ -8,6 +8,7 @@
 #include "AudioBufferManager.hpp"
 #include "AudioListener.hpp"
 #include "AudioSystem.hpp"
+#include "ReverbZoneManager.hpp"
 #include <thread>
 #include <atomic>
 #include <unordered_map>
@@ -39,6 +40,7 @@ namespace core::audio
             AudioEffectManager* effectManager = nullptr;
             AudioBufferManager* bufferManager = nullptr;
             AudioListener* listener = nullptr;
+            ReverbZoneManager* reverbZoneManager = nullptr;
         };
 
         explicit AudioThread(AudioCommandQueue& commandQueue, Dependencies deps);

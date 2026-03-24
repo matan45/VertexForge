@@ -167,7 +167,7 @@ namespace render::lighting
             const auto& light = view.get<components::PointLightComponent>(entity);
 
             uint32_t entityId = static_cast<uint32_t>(entity);
-            if (shadowSystem)
+            if (shadowSystem && light.castsShadow)
             {
                 shadow::ShadowSettings settings{};
                 settings.depthBias = shadowSystem->getGlobalDepthBias();
@@ -241,7 +241,7 @@ namespace render::lighting
             const auto& light = view.get<components::SpotLightComponent>(entity);
 
             uint32_t entityId = static_cast<uint32_t>(entity);
-            if (shadowSystem)
+            if (shadowSystem && light.castsShadow)
             {
                 shadow::ShadowSettings settings{};
                 settings.depthBias = shadowSystem->getGlobalDepthBias();
@@ -526,5 +526,51 @@ namespace render::lighting
         }
 
         return false;
+    }
+
+    void GPULightBufferManager::preWarmShadowsForLights(const std::vector<uint32_t>& entityIds)
+    {
+        if (!shadowSystem)
+            return;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+
+        for (uint32_t entityId : entityIds)
+        {
+            auto entity = static_cast<entt::entity>(entityId);
+            if (!registry.valid(entity))
+                continue;
+
+            if (registry.all_of<components::PointLightComponent>(entity))
+            {
+                const auto& light = registry.get<components::PointLightComponent>(entity);
+                if (!light.castsShadow)
+                    continue;
+
+                shadow::ShadowSettings settings{};
+                settings.depthBias = shadowSystem->getGlobalDepthBias();
+                settings.normalBias = shadowSystem->getGlobalNormalBias();
+                settings.farPlane = light.radius;
+                settings.lightSize = light.lightSize;
+                settings.enabled = true;
+                settings.castShadows = true;
+                updateShadowRegistration(entityId, shadow::ShadowMapType::PointCube, settings);
+            }
+            else if (registry.all_of<components::SpotLightComponent>(entity))
+            {
+                const auto& light = registry.get<components::SpotLightComponent>(entity);
+                if (!light.castsShadow)
+                    continue;
+
+                shadow::ShadowSettings settings{};
+                settings.depthBias = shadowSystem->getGlobalDepthBias();
+                settings.normalBias = shadowSystem->getGlobalNormalBias();
+                settings.farPlane = light.range;
+                settings.lightSize = light.lightSize;
+                settings.enabled = true;
+                settings.castShadows = true;
+                updateShadowRegistration(entityId, shadow::ShadowMapType::Spot2D, settings);
+            }
+        }
     }
 }
