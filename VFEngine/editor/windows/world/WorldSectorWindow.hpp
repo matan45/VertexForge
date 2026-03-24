@@ -38,6 +38,14 @@ namespace windows
         std::vector<CachedSectorInfo> cachedGrid;
         int cachedTilesPerSector = 4;
 
+        // Grid navigation
+        int gridCenterX = 0;
+        int gridCenterZ = 0;
+        int cameraSectorX = 0;
+        int cameraSectorZ = 0;
+        bool followCamera = true;
+        int gridRange = 8;
+
     public:
         WorldSectorWindow() = default;
         ~WorldSectorWindow() override = default;

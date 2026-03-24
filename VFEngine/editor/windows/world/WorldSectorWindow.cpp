@@ -3,7 +3,9 @@
 #include "events/world/WorldSectorEvents.hpp"
 #include "events/terrain/TerrainEvents.hpp"
 #include "events/render/ObjectStreamingEvents.hpp"
+#include "events/scene/EntityTransformEvents.hpp"
 #include "imgui.h"
+#include <cmath>
 #include "nfd/FileDialog.hpp"
 
 namespace windows
@@ -124,13 +126,35 @@ namespace windows
 
     void WorldSectorWindow::drawSectorGrid()
     {
-        ImGui::TextDisabled("Color: Green=Loaded, Gray=Unloaded, Yellow=Loading");
-        ImGui::TextDisabled("Only sectors with saved data are shown as clickable.");
+        // Navigation controls
+        if (ImGui::Checkbox("Follow Camera", &followCamera))
+        {
+            if (followCamera)
+            {
+                gridCenterX = cameraSectorX;
+                gridCenterZ = cameraSectorZ;
+            }
+        }
+
+        if (!followCamera)
+        {
+            ImGui::SameLine();
+            if (ImGui::ArrowButton("##left", ImGuiDir_Left)) { --gridCenterX; }
+            ImGui::SameLine();
+            if (ImGui::ArrowButton("##right", ImGuiDir_Right)) { ++gridCenterX; }
+            ImGui::SameLine();
+            if (ImGui::ArrowButton("##up", ImGuiDir_Up)) { ++gridCenterZ; }
+            ImGui::SameLine();
+            if (ImGui::ArrowButton("##down", ImGuiDir_Down)) { --gridCenterZ; }
+            ImGui::SameLine();
+            ImGui::Text("Center: (%d, %d)", gridCenterX, gridCenterZ);
+        }
+
+        ImGui::TextDisabled("Color: Green=Loaded, Gray=Unloaded, Yellow=Loading, Blue outline=Camera");
         ImGui::Spacing();
 
         auto& dispatcher = events::EventDispatcher::instance();
-        int range = 8;
-        int gridWidth = range * 2 + 1;
+        int gridWidth = gridRange * 2 + 1;
 
         for (size_t i = 0; i < cachedGrid.size(); ++i)
         {
@@ -169,6 +193,8 @@ namespace windows
 
                 ImGui::PushStyleColor(ImGuiCol_Button, color);
 
+                bool isCameraSector = (x == cameraSectorX && z == cameraSectorZ);
+
                 char label[32];
                 snprintf(label, sizeof(label), "%d,%d", x, z);
                 if (ImGui::Button(label, ImVec2(40, 20)))
@@ -202,6 +228,16 @@ namespace windows
                                       x * tps, z * tps,
                                       (x + 1) * tps - 1, (z + 1) * tps - 1,
                                       info.state == world::SectorState::Loaded ? "unload" : "load");
+                }
+
+                // Draw blue outline for camera sector
+                if (isCameraSector)
+                {
+                    ImVec2 btnMin = ImGui::GetItemRectMin();
+                    ImVec2 btnMax = ImGui::GetItemRectMax();
+                    ImGui::GetWindowDrawList()->AddRect(
+                        btnMin, btnMax,
+                        IM_COL32(80, 140, 255, 255), 0.0f, 0, 2.0f);
                 }
 
                 ImGui::PopStyleColor();
@@ -325,16 +361,44 @@ namespace windows
         auto sectorConfig = dispatcher.query(events::world::GetSectorConfigQuery{});
         cachedTilesPerSector = sectorConfig.tilesPerSector;
 
+        // Compute camera sector from editor camera position
+        {
+            events::world::GetSectorAtPositionQuery posQuery;
+            posQuery.position = glm::vec3(0.0f); // fallback
+            // Use the scene's primary camera or editor camera
+            auto cameraOpt = dispatcher.query(events::scene::GetPrimaryCameraQuery{});
+            if (cameraOpt.has_value())
+            {
+                events::scene::GetWorldTransformQuery transformQuery;
+                transformQuery.entity = *cameraOpt;
+                auto transformOpt = dispatcher.query(transformQuery);
+                if (transformOpt.has_value())
+                    posQuery.position = transformOpt->position;
+            }
+
+            float sectorSize = sectorConfig.sectorWorldSize;
+            if (sectorSize > 0.0f)
+            {
+                cameraSectorX = static_cast<int>(std::floor(posQuery.position.x / sectorSize));
+                cameraSectorZ = static_cast<int>(std::floor(posQuery.position.z / sectorSize));
+            }
+
+            if (followCamera)
+            {
+                gridCenterX = cameraSectorX;
+                gridCenterZ = cameraSectorZ;
+            }
+        }
+
         totalSectors = 0;
         loadedSectors = 0;
         unloadedSectors = 0;
         loadingSectors = 0;
         cachedGrid.clear();
 
-        int range = 8;
-        for (int z = range; z >= -range; --z)
+        for (int z = gridCenterZ + gridRange; z >= gridCenterZ - gridRange; --z)
         {
-            for (int x = -range; x <= range; ++x)
+            for (int x = gridCenterX - gridRange; x <= gridCenterX + gridRange; ++x)
             {
                 CachedSectorInfo info;
                 info.coord = world::SectorCoord(x, z);
