@@ -11,6 +11,7 @@
 #include "ScriptVFXEventBridge.hpp"
 #include "ScriptNavigationEventBridge.hpp"
 #include "ScriptInputActionEventBridge.hpp"
+#include "ScriptSceneEventBridge.hpp"
 #include "NativeAPIRegistry.hpp"
 #include "CoroutineManager.hpp"
 #include "ScriptCommunicationManager.hpp"
@@ -18,6 +19,9 @@
 #include "../api/ScriptCommunicationAPI.hpp"
 #include <runtime/EventLoop.hpp>
 #include <vm/runtime/VirtualMachine.hpp>
+#include <json/JsonSerializer.hpp>
+#include <json/JsonDeserializer.hpp>
+#include <runtimeTypes/klass/ObjectInstance.hpp>
 #include <filesystem>
 #include <fstream>
 #include <regex>
@@ -73,6 +77,9 @@ namespace core
             inputActionEventBridge = std::make_unique<ScriptInputActionEventBridge>(
                 interpreter.get(), instanceToInterfaces, instanceToObject, instanceToEntity, instanceToPriority);
 
+            sceneEventBridge = std::make_unique<ScriptSceneEventBridge>(
+                interpreter.get(), instanceToInterfaces, instanceToObject, instanceToEntity);
+
             physicsEventBridge->subscribeAll();
             uiEventBridge->subscribeAll();
             animationEventBridge->subscribeAll();
@@ -80,6 +87,7 @@ namespace core
             vfxEventBridge->subscribeAll();
             navigationEventBridge->subscribeAll();
             inputActionEventBridge->subscribeAll();
+            sceneEventBridge->subscribeAll();
 
             initialized = true;
             return true;
@@ -97,6 +105,7 @@ namespace core
     {
         if (!initialized) return;
 
+        if (sceneEventBridge) sceneEventBridge->unsubscribeAll();
         if (inputActionEventBridge) inputActionEventBridge->unsubscribeAll();
         if (navigationEventBridge) navigationEventBridge->unsubscribeAll();
         if (vfxEventBridge) vfxEventBridge->unsubscribeAll();
@@ -432,6 +441,118 @@ namespace core
         {
             vfLogError("[ScriptingAdapter] Failed to register '{}': invalid function type", name);
         }
+    }
+
+    std::string ScriptingAdapter::getInstanceState(uint64_t instanceId)
+    {
+        auto objIt = instanceToObject.find(instanceId);
+        if (objIt == instanceToObject.end()) return "{}";
+
+        try
+        {
+            auto& instanceValue = std::any_cast<value::Value&>(objIt->second);
+            auto env = interpreter->getEnvironment();
+            json::JsonSerializer serializer(env);
+            return serializer.serialize(instanceValue);
+        }
+        catch (const std::exception& e)
+        {
+            vfLogError("[ScriptingAdapter] getInstanceState failed for {}: {}", instanceId, e.what());
+            return "{}";
+        }
+    }
+
+    bool ScriptingAdapter::setInstanceState(uint64_t instanceId, const std::string& jsonState)
+    {
+        auto objIt = instanceToObject.find(instanceId);
+        if (objIt == instanceToObject.end()) return false;
+
+        auto classIt = instanceToClassName.find(instanceId);
+        if (classIt == instanceToClassName.end()) return false;
+
+        try
+        {
+            auto env = interpreter->getEnvironment();
+            json::JsonDeserializer deserializer(env);
+            value::Value restored = deserializer.deserializeAs(jsonState, classIt->second);
+
+            // Copy fields from deserialized value to the live instance
+            if (auto restoredObj = std::get_if<std::shared_ptr<runtimeTypes::klass::ObjectInstance>>(&restored))
+            {
+                auto& liveValue = std::any_cast<value::Value&>(objIt->second);
+                if (auto liveObj = std::get_if<std::shared_ptr<runtimeTypes::klass::ObjectInstance>>(&liveValue))
+                {
+                    const auto& restoredFields = (*restoredObj)->getAllFieldValues();
+                    for (const auto& [fieldName, fieldValue] : restoredFields)
+                    {
+                        (*liveObj)->setField(fieldName, fieldValue);
+                    }
+                    return true;
+                }
+            }
+            return false;
+        }
+        catch (const std::exception& e)
+        {
+            vfLogError("[ScriptingAdapter] setInstanceState failed for {}: {}", instanceId, e.what());
+            return false;
+        }
+    }
+
+    bool ScriptingAdapter::isSaveableInstance(uint64_t instanceId) const
+    {
+        auto classIt = instanceToClassName.find(instanceId);
+        if (classIt == instanceToClassName.end()) return false;
+
+        try
+        {
+            auto env = interpreter->getEnvironment();
+            auto classDef = env->findClass(classIt->second);
+            if (classDef)
+            {
+                return classDef->hasAnnotation("Saveable");
+            }
+        }
+        catch (const std::exception&) {}
+        return false;
+    }
+
+    std::vector<uint64_t> ScriptingAdapter::getAllInstanceIds() const
+    {
+        std::vector<uint64_t> ids;
+        ids.reserve(instanceToObject.size());
+        for (const auto& [id, obj] : instanceToObject)
+        {
+            ids.push_back(id);
+        }
+        return ids;
+    }
+
+    ::services::EntityHandle ScriptingAdapter::getInstanceEntity(uint64_t instanceId) const
+    {
+        auto it = instanceToEntity.find(instanceId);
+        if (it != instanceToEntity.end()) return it->second;
+        return ::services::EntityHandle::invalid();
+    }
+
+    std::string ScriptingAdapter::getInstanceClassName(uint64_t instanceId) const
+    {
+        auto it = instanceToClassName.find(instanceId);
+        if (it != instanceToClassName.end()) return it->second;
+        return "";
+    }
+
+    std::string ScriptingAdapter::getInstanceScriptPath(uint64_t instanceId) const
+    {
+        auto it = instanceToClassName.find(instanceId);
+        if (it == instanceToClassName.end()) return "";
+
+        // Reverse lookup: find path from className
+        for (const auto& [path, className] : pathToClassName)
+        {
+            if (className == it->second) return path;
+        }
+        return "";
     }
 
     void ScriptingAdapter::setError(services::ScriptError::Type type, const std::string& message,

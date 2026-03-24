@@ -63,6 +63,7 @@
     <ClInclude Include="data\PluginGraphicsTypes.hpp" />
     <ClInclude Include="data\RenderHookContext.hpp" />
     <ClInclude Include="data\RenderHookTypes.hpp" />
+    <ClInclude Include="data\SaveTypes.hpp" />
     <ClInclude Include="data\ScriptTypes.hpp" />
     <ClInclude Include="data\TerrainData.hpp" />
     <ClInclude Include="data\UndoTypes.hpp" />

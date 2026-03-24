@@ -30,6 +30,10 @@
 #include "../api/InputContextAPI.hpp"
 #include "../api/AtmosphereAPI.hpp"
 #include "../api/CloudAPI.hpp"
+#include "../api/SceneAPI.hpp"
+#include "../api/StreamingAPI.hpp"
+#include "../api/SaveAPI.hpp"
+#include "../api/GameConfigAPI.hpp"
 
 #include "print/Log.hpp"
 namespace core
@@ -92,6 +96,10 @@ namespace core
         api::InputContextAPI::registerAPI(interpreter);
         api::AtmosphereAPI::registerAPI(interpreter);
         api::CloudAPI::registerAPI(interpreter);
+        api::SceneAPI::registerAPI(interpreter);
+        api::StreamingAPI::registerAPI(interpreter);
+        api::SaveAPI::registerAPI(interpreter);
+        api::GameConfigAPI::registerAPI(interpreter);
 
         vfLogInfo("[NativeAPIRegistry] Registered native engine APIs");
     }

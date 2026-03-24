@@ -107,6 +107,7 @@
     <ClInclude Include="adapters\api\EntityAPI.hpp" />
     <ClInclude Include="adapters\api\EntityComponentAPI.hpp" />
     <ClInclude Include="adapters\api\FootIKAPI.hpp" />
+    <ClInclude Include="adapters\api\GameConfigAPI.hpp" />
     <ClInclude Include="adapters\api\HandIKAPI.hpp" />
     <ClInclude Include="adapters\api\IKAPI.hpp" />
     <ClInclude Include="adapters\api\InputAPI.hpp" />
@@ -124,8 +125,11 @@
     <ClInclude Include="adapters\api\PostProcessAPI.hpp" />
     <ClInclude Include="adapters\api\PostProcessAPIHelpers.hpp" />
     <ClInclude Include="adapters\api\RenderTextureAPI.hpp" />
+    <ClInclude Include="adapters\api\SaveAPI.hpp" />
+    <ClInclude Include="adapters\api\SceneAPI.hpp" />
     <ClInclude Include="adapters\api\ScriptCommunicationAPI.hpp" />
     <ClInclude Include="adapters\api\SocketAPI.hpp" />
+    <ClInclude Include="adapters\api\StreamingAPI.hpp" />
     <ClInclude Include="adapters\api\UIAPI.hpp" />
     <ClInclude Include="adapters\api\UIAnimationAPI.hpp" />
     <ClInclude Include="adapters\api\UIButtonLabelAPI.hpp" />
@@ -159,6 +163,7 @@
     <ClInclude Include="adapters\scripting\ScriptInputActionEventBridge.hpp" />
     <ClInclude Include="adapters\scripting\ScriptNavigationEventBridge.hpp" />
     <ClInclude Include="adapters\scripting\ScriptPhysicsEventBridge.hpp" />
+    <ClInclude Include="adapters\scripting\ScriptSceneEventBridge.hpp" />
     <ClInclude Include="adapters\scripting\ScriptSocketEventBridge.hpp" />
     <ClInclude Include="adapters\scripting\ScriptUIEventBridge.hpp" />
     <ClInclude Include="adapters\scripting\ScriptVFXEventBridge.hpp" />
@@ -197,6 +202,7 @@
     <ClCompile Include="adapters\api\EntityAPI.cpp" />
     <ClCompile Include="adapters\api\EntityComponentAPI.cpp" />
     <ClCompile Include="adapters\api\FootIKAPI.cpp" />
+    <ClCompile Include="adapters\api\GameConfigAPI.cpp" />
     <ClCompile Include="adapters\api\HandIKAPI.cpp" />
     <ClCompile Include="adapters\api\IKAPI.cpp" />
     <ClCompile Include="adapters\api\InputAPI.cpp" />
@@ -214,8 +220,11 @@
     <ClCompile Include="adapters\api\PostProcessAPIAdvanced.cpp" />
     <ClCompile Include="adapters\api\PostProcessAPIAdvanced2.cpp" />
     <ClCompile Include="adapters\api\RenderTextureAPI.cpp" />
+    <ClCompile Include="adapters\api\SaveAPI.cpp" />
+    <ClCompile Include="adapters\api\SceneAPI.cpp" />
     <ClCompile Include="adapters\api\ScriptCommunicationAPI.cpp" />
     <ClCompile Include="adapters\api\SocketAPI.cpp" />
+    <ClCompile Include="adapters\api\StreamingAPI.cpp" />
     <ClCompile Include="adapters\api\UIAPI.cpp" />
     <ClCompile Include="adapters\api\UIAnimationAPI.cpp" />
     <ClCompile Include="adapters\api\UIButtonLabelAPI.cpp" />
@@ -251,6 +260,7 @@
     <ClCompile Include="adapters\scripting\ScriptInputActionEventBridge.cpp" />
     <ClCompile Include="adapters\scripting\ScriptNavigationEventBridge.cpp" />
     <ClCompile Include="adapters\scripting\ScriptPhysicsEventBridge.cpp" />
+    <ClCompile Include="adapters\scripting\ScriptSceneEventBridge.cpp" />
     <ClCompile Include="adapters\scripting\ScriptSocketEventBridge.cpp" />
     <ClCompile Include="adapters\scripting\ScriptUIEventBridge.cpp" />
     <ClCompile Include="adapters\scripting\ScriptVFXEventBridge.cpp" />

@@ -45,6 +45,9 @@ namespace serialization
         static scene::SceneGraphSystem loadScene(std::string_view filename);
         static bool loadSceneInto(std::string_view filename, scene::SceneGraphSystem& sceneGraph,
                                   SceneLoadProgressCallback progressCallback = nullptr);
+        static bool loadSceneAdditive(std::string_view filename, scene::SceneGraphSystem& sceneGraph,
+                                      scene::Entity& containerParent,
+                                      SceneLoadProgressCallback progressCallback = nullptr);
         static bool saveScene(scene::SceneGraphSystem& sceneGraph, std::string_view filename);
 
         static json createSnapshot(scene::SceneGraphSystem& sceneGraph);

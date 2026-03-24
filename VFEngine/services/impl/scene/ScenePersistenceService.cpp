@@ -1,4 +1,5 @@
 #include "ScenePersistenceService.hpp"
+#include "StreamingZoneManager.hpp"
 #include "EntityStateService.hpp"
 #include "scene/SceneGraphSystem.hpp"
 #include "scene/Entity.hpp"
@@ -9,6 +10,8 @@
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/project/SceneEvents.hpp"
+#include "../../events/scene/SceneManagementEvents.hpp"
+#include "../../events/scene/StreamingZoneEvents.hpp"
 #include "../../events/render/RenderEvents.hpp"
 #include "../../events/terrain/TerrainEvents.hpp"
 #include "../../events/terrain/WaterEvents.hpp"
@@ -27,8 +30,11 @@ namespace services
                                                      EntityStateService* entityStateService)
         : sceneGraph(sceneGraph)
           , entityStateService(entityStateService)
+          , streamingZoneManager(std::make_unique<StreamingZoneManager>())
     {
     }
+
+    ScenePersistenceService::~ScenePersistenceService() = default;
 
     void ScenePersistenceService::registerEventHandlers(events::EventDispatcher& dispatcher)
     {
@@ -97,6 +103,46 @@ namespace services
             {
                 return setRenderSettings(cmd.settings);
             });
+
+        // Additive scene management
+        dispatcher.registerCommandHandler<events::scene::LoadSceneAdditiveCommand>(
+            [this](const events::scene::LoadSceneAdditiveCommand& cmd)
+            {
+                return loadSceneAdditive(cmd.scenePath, cmd.sceneName);
+            });
+
+        dispatcher.registerCommandHandler<events::scene::UnloadAdditiveSceneCommand>(
+            [this](const events::scene::UnloadAdditiveSceneCommand& cmd)
+            {
+                return unloadAdditiveScene(cmd.sceneName);
+            });
+
+        dispatcher.registerCommandHandler<events::scene::SetActiveSceneCommand>(
+            [this](const events::scene::SetActiveSceneCommand& cmd)
+            {
+                return setActiveScene(cmd.sceneName);
+            });
+
+        dispatcher.registerQueryHandler<events::scene::GetActiveSceneQuery>(
+            [this](const events::scene::GetActiveSceneQuery&)
+            {
+                return getActiveScene();
+            });
+
+        dispatcher.registerQueryHandler<events::scene::GetLoadedScenesQuery>(
+            [this](const events::scene::GetLoadedScenesQuery&)
+            {
+                return getLoadedScenes();
+            });
+
+        dispatcher.registerQueryHandler<events::scene::IsSceneLoadedQuery>(
+            [this](const events::scene::IsSceneLoadedQuery& q)
+            {
+                return isSceneLoaded(q.sceneName);
+            });
+
+        // Streaming zone events
+        streamingZoneManager->registerEventHandlers(dispatcher);
     }
 
     bool ScenePersistenceService::newScene()
@@ -108,6 +154,17 @@ namespace services
         }
 
         scene::EntityRegistry::setSceneTransitioning(true);
+
+        // Clear all additive scenes
+        loadedAdditiveScenes.clear();
+        activeSceneName = "Main";
+        while (!pendingAdditiveLoads.empty()) pendingAdditiveLoads.pop();
+
+        // Clear streaming zones
+        if (streamingZoneManager)
+        {
+            streamingZoneManager->clear();
+        }
 
         auto& dispatcher = events::EventDispatcher::instance();
 
@@ -175,15 +232,24 @@ namespace services
 
     void ScenePersistenceService::update()
     {
-        if (!pendingLoadPath.has_value())
+        if (pendingLoadPath.has_value())
         {
-            return;
+            std::string filePath = std::move(pendingLoadPath.value());
+            pendingLoadPath.reset();
+            performDeferredLoad(filePath);
         }
 
-        std::string filePath = std::move(pendingLoadPath.value());
-        pendingLoadPath.reset();
+        if (!pendingAdditiveLoads.empty())
+        {
+            PendingAdditiveLoad load = std::move(pendingAdditiveLoads.front());
+            pendingAdditiveLoads.pop();
+            performDeferredAdditiveLoad(load);
+        }
 
-        performDeferredLoad(filePath);
+        if (streamingZoneManager)
+        {
+            streamingZoneManager->update();
+        }
     }
 
     bool ScenePersistenceService::loadScene(const std::string& filePath)
@@ -474,6 +540,172 @@ namespace services
         }
 
         return std::nullopt;
+    }
+
+    bool ScenePersistenceService::loadSceneAdditive(const std::string& scenePath, const std::string& sceneName)
+    {
+        if (!sceneGraph)
+        {
+            vfLogError("SceneGraph is null, cannot load additive scene.");
+            return false;
+        }
+
+        if (scenePath.empty() || sceneName.empty())
+        {
+            vfLogError("Scene path or name is empty, cannot load additive scene.");
+            return false;
+        }
+
+        if (loadedAdditiveScenes.count(sceneName) > 0)
+        {
+            vfLogWarning("Additive scene '{}' is already loaded.", sceneName);
+            return false;
+        }
+
+        // Queue for deferred loading
+        pendingAdditiveLoads.push(PendingAdditiveLoad{scenePath, sceneName});
+        return true;
+    }
+
+    void ScenePersistenceService::performDeferredAdditiveLoad(const PendingAdditiveLoad& load)
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        // Create a container entity under the scene root
+        scene::Entity& root = sceneGraph->GetRoot();
+        scene::Entity container(load.sceneName);
+
+        if (!container.isValid())
+        {
+            vfLogError("Failed to create container entity for additive scene '{}'", load.sceneName);
+            return;
+        }
+
+        sceneGraph->addChild(root, container);
+
+        // Tag the container with AdditiveSceneComponent
+        container.addComponent<components::AdditiveSceneComponent>(
+            components::AdditiveSceneComponent{load.sceneName, load.scenePath});
+
+        auto progressCallback = [&dispatcher](const std::string& entityName, size_t loaded, size_t total)
+        {
+            events::scene::SceneLoadingProgressUpdatedNotification progressNotif;
+            progressNotif.currentEntityName = entityName;
+            progressNotif.progress = (total > 0) ? static_cast<float>(loaded) / static_cast<float>(total) : 0.0f;
+            dispatcher.publish(progressNotif);
+        };
+
+        bool success = serialization::SceneSerialization::loadSceneAdditive(
+            load.scenePath, *sceneGraph, container, progressCallback);
+
+        if (!success)
+        {
+            vfLogError("Failed to load additive scene '{}' from '{}'", load.sceneName, load.scenePath);
+            sceneGraph->removeEntity(container);
+            return;
+        }
+
+        auto handle = internal::toHandle(container.getHandle());
+        loadedAdditiveScenes[load.sceneName] = handle;
+
+        // Trigger resource loading for all entities in the additive scene
+        triggerResourceLoadingForEntity(container);
+
+        events::scene::AdditiveSceneLoadedNotification notification;
+        notification.sceneName = load.sceneName;
+        notification.scenePath = load.scenePath;
+        notification.rootEntity = handle;
+        dispatcher.publish(notification);
+    }
+
+    bool ScenePersistenceService::unloadAdditiveScene(const std::string& sceneName)
+    {
+        if (!sceneGraph)
+        {
+            vfLogError("SceneGraph is null, cannot unload additive scene.");
+            return false;
+        }
+
+        auto it = loadedAdditiveScenes.find(sceneName);
+        if (it == loadedAdditiveScenes.end())
+        {
+            vfLogWarning("Additive scene '{}' is not loaded.", sceneName);
+            return false;
+        }
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto entityHandle = it->second;
+        loadedAdditiveScenes.erase(it);
+
+        if (internal::isValidHandle(entityHandle, registry))
+        {
+            scene::Entity container(internal::fromHandle(entityHandle));
+            sceneGraph->removeEntity(container);
+        }
+
+        auto& dispatcher = events::EventDispatcher::instance();
+        events::scene::AdditiveSceneUnloadedNotification notification;
+        notification.sceneName = sceneName;
+        dispatcher.publish(notification);
+
+        return true;
+    }
+
+    std::string ScenePersistenceService::getActiveScene() const
+    {
+        return activeSceneName;
+    }
+
+    bool ScenePersistenceService::setActiveScene(const std::string& sceneName)
+    {
+        if (sceneName == "Main" || loadedAdditiveScenes.count(sceneName) > 0)
+        {
+            activeSceneName = sceneName;
+            return true;
+        }
+
+        vfLogWarning("Cannot set active scene to '{}': scene not loaded.", sceneName);
+        return false;
+    }
+
+    std::vector<std::string> ScenePersistenceService::getLoadedScenes() const
+    {
+        std::vector<std::string> scenes;
+        scenes.push_back("Main");
+        for (const auto& [name, handle] : loadedAdditiveScenes)
+        {
+            scenes.push_back(name);
+        }
+        return scenes;
+    }
+
+    bool ScenePersistenceService::isSceneLoaded(const std::string& sceneName) const
+    {
+        if (sceneName == "Main") return true;
+        return loadedAdditiveScenes.count(sceneName) > 0;
+    }
+
+    void ScenePersistenceService::triggerResourceLoadingForEntity(scene::Entity& entity) const
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        if (entity.hasComponent<components::MeshComponent>())
+        {
+            const auto& meshComp = entity.getComponent<components::MeshComponent>();
+            if (meshComp.meshRef.isValid())
+            {
+                events::scene::MeshDataChangedNotification meshNotif;
+                meshNotif.entity = internal::toHandle(entity.getHandle());
+                meshNotif.meshPath = meshComp.meshRef.resolve();
+                meshNotif.animatorPath = meshComp.animatorRef.resolve();
+                dispatcher.publish(meshNotif);
+            }
+        }
+
+        for (auto& child : entity.getChildren())
+        {
+            triggerResourceLoadingForEntity(child);
+        }
     }
 
     types::PhysicsSettings ScenePersistenceService::getPhysicsSettings() const

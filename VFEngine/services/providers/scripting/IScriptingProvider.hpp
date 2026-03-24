@@ -74,6 +74,22 @@ namespace services {
         // The function is type-erased as std::any wrapping a NativeFunction
         // (std::function<value::Value(const std::vector<value::Value>&)>)
         virtual void registerPluginNativeFunction(const std::string& name, std::any function) = 0;
+
+        // === Save/Load State ===
+        // Get JSON representation of a script instance's fields
+        virtual std::string getInstanceState(uint64_t instanceId) = 0;
+        // Restore script instance fields from JSON
+        virtual bool setInstanceState(uint64_t instanceId, const std::string& jsonState) = 0;
+        // Check if an instance's class has @Saveable annotation
+        virtual bool isSaveableInstance(uint64_t instanceId) const = 0;
+        // Get all live script instance IDs
+        virtual std::vector<uint64_t> getAllInstanceIds() const = 0;
+        // Get the entity handle for a script instance
+        virtual EntityHandle getInstanceEntity(uint64_t instanceId) const = 0;
+        // Get the class name for a script instance
+        virtual std::string getInstanceClassName(uint64_t instanceId) const = 0;
+        // Get the script path for a script instance
+        virtual std::string getInstanceScriptPath(uint64_t instanceId) const = 0;
     };
 
 }
