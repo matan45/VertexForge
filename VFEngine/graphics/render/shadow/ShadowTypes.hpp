@@ -192,6 +192,7 @@ namespace render::shadow
         std::vector<glm::vec2>  clipmapPageGridOrigin;   // light-space XY origin snapped to page boundaries
         std::vector<glm::mat4>  clipmapRenderVP;         // page-grid-snapped VP for rendering (stable)
         std::vector<glm::vec2>  clipmapUVOffset;         // per-level UV offset: (texelSnapped - pageGrid) / (2*worldExtent)
+        std::vector<bool>       clipmapLevelInitialized; // per-level: true after first dirty-flag pass
 
         void invalidate()
         {

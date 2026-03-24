@@ -462,6 +462,9 @@ namespace render::shadow
         if (level >= data.clipmapScrollOffset.size() || level >= data.clipmapPageGridOrigin.size())
             return;
 
+        if (level >= data.clipmapLevelInitialized.size())
+            return;
+
         uint32_t pps = data.clipmapLevelPagesPerSide[level];
         uint32_t basePageIdx = data.clipmapLevelPageOffsets[level];
 
@@ -469,9 +472,8 @@ namespace render::shadow
         auto pgUpdate = ClipmapShadowCalculator::computePageGridShift(
             levelData, pps, data.clipmapPageGridOrigin[level]);
 
-        // Always update the page-grid origin (may be first frame with origin at 0,0)
-        bool isFirstFrame = (data.clipmapPageGridOrigin[level] == glm::vec2(0.0f) &&
-                             pgUpdate.newPageGridOrigin != glm::vec2(0.0f));
+        bool isFirstFrame = !data.clipmapLevelInitialized[level];
+        data.clipmapLevelInitialized[level] = true;
         data.clipmapPageGridOrigin[level] = pgUpdate.newPageGridOrigin;
         data.clipmapLastSnapPositions[level] = levelData.snapPosition;
 

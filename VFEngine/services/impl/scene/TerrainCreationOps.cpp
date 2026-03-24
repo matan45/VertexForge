@@ -45,14 +45,8 @@ namespace services
         if (!config.heightmapRegions.empty())
         {
             // Multi-region tiled heightmaps
-            std::vector<terrain::HeightmapRegion> regions;
-            regions.reserve(config.heightmapRegions.size());
-            for (const auto& r : config.heightmapRegions)
-            {
-                regions.push_back({r.filePath, r.tileMinX, r.tileMinZ, r.tileMaxX, r.tileMaxZ});
-            }
             auto sampler = terrain::createCompositeHeightSampler(
-                regions, config.worldTileSize, config.minHeight, config.maxHeight);
+                config.heightmapRegions, config.worldTileSize, config.minHeight, config.maxHeight);
             grid->setHeightSampler(std::move(sampler));
         }
         else if (config.heightmapPath.empty())
@@ -122,10 +116,7 @@ namespace services
         terrainComp.gridMaxX = maxX;
         terrainComp.gridMaxZ = maxZ;
         terrainComp.heightmapPath = config.heightmapPath;
-        for (const auto& r : config.heightmapRegions)
-        {
-            terrainComp.heightmapRegions.push_back({r.filePath, r.tileMinX, r.tileMinZ, r.tileMaxX, r.tileMaxZ});
-        }
+        terrainComp.heightmapRegions = config.heightmapRegions;
         terrainComp.terrainMaterialRef = asset::AssetRef::fromPath(config.terrainMaterialPath);
         terrainComp.weightMapPath = config.weightMapPath;
         terrainComp.isActive = true;
@@ -485,10 +476,7 @@ namespace services
         terrainComp.gridMaxX = maxX;
         terrainComp.gridMaxZ = maxZ;
         terrainComp.heightmapPath = config.heightmapPath;
-        for (const auto& r : config.heightmapRegions)
-        {
-            terrainComp.heightmapRegions.push_back({r.filePath, r.tileMinX, r.tileMinZ, r.tileMaxX, r.tileMaxZ});
-        }
+        terrainComp.heightmapRegions = config.heightmapRegions;
         terrainComp.terrainMaterialRef = asset::AssetRef::fromPath(config.terrainMaterialPath);
         terrainComp.weightMapPath = config.weightMapPath;
         terrainComp.isActive = true;

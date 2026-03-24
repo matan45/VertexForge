@@ -350,6 +350,8 @@ float sampleDirectionalClipmapShadow(int baseShadowIndex, vec3 worldPos, vec3 wo
     // Compute light-space Chebyshev distance for cross-fade:
     // this is the max of |ndc.x|, |ndc.y| which maps directly to how close
     // the fragment is to the edge of this level's shadow map coverage.
+    // Note: assumes orthographic projection (w == 1.0) — directional lights only.
+    // For perspective projections this would need a perspective divide (lsPos.xy / lsPos.w).
     ShadowData sd = SHADOW_BUFFER[shadowIndex];
     vec4 lsPos = sd.viewProjection * vec4(worldPos, 1.0);
     float chebyshev = max(abs(lsPos.x), abs(lsPos.y));

@@ -351,6 +351,7 @@ namespace render::shadow
             data.clipmapPageGridOrigin.resize(levelCount, glm::vec2(0.0f));
             data.clipmapRenderVP.resize(levelCount, glm::mat4(1.0f));
             data.clipmapUVOffset.resize(levelCount, glm::vec2(0.0f));
+            data.clipmapLevelInitialized.resize(levelCount, false);
 
             uint32_t totalPages = 0;
             for (uint32_t i = 0; i < levelCount; ++i)

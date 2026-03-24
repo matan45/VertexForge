@@ -149,7 +149,7 @@ namespace windows
         regionsX = 1;
         regionsZ = 1;
         regionFiles.clear();
-        regionFiles.resize(1);
+        rebuildRegionGrid();
     }
 
     void TerrainCreationWindow::createTerrain()
@@ -183,7 +183,7 @@ namespace windows
                     int32_t tileStartZ = gridMinZ + (tilesZ * rz) / regionsZ;
                     int32_t tileEndZ = gridMinZ + (tilesZ * (rz + 1)) / regionsZ - 1;
 
-                    services::HeightmapRegionData region;
+                    terrain::HeightmapRegion region;
                     region.filePath = regionFiles[cellIndex];
                     region.tileMinX = tileStartX;
                     region.tileMinZ = tileStartZ;

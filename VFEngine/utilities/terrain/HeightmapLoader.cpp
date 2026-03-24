@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cmath>
 #include <filesystem>
+#include <limits>
 #include <mutex>
 
 namespace terrain
@@ -415,6 +416,7 @@ namespace terrain
         float minHeight,
         float maxHeight)
     {
+        // Build per-region samplers
         struct RegionSampler
         {
             int32_t tileMinX, tileMinZ, tileMaxX, tileMaxZ;
@@ -436,14 +438,21 @@ namespace terrain
             regionBounds.minHeight = minHeight;
             regionBounds.maxHeight = maxHeight;
 
-            bool isSVT = region.filePath.size() > 6 &&
-                         region.filePath.substr(region.filePath.size() - 6) == ".vfSVT";
+            std::string ext = std::filesystem::path(region.filePath).extension().string();
+            std::transform(ext.begin(), ext.end(), ext.begin(),
+                           [](unsigned char c) { return std::tolower(c); });
+            bool isSVT = (ext == ".vfsvt");
 
             HeightSampler sampler;
 
             if (isSVT)
             {
                 sampler = createStreamingHeightSamplerFromSVT(region.filePath, regionBounds);
+                if (!sampler)
+                {
+                    vfLogWarning("CompositeHeightSampler: SVT streaming failed for: {}, trying standard load",
+                                 region.filePath);
+                }
             }
 
             if (!sampler)
@@ -469,31 +478,65 @@ namespace terrain
                       region.filePath);
         }
 
-        float flatHeight = minHeight;
-
-        // Blend zone: 1 tile width at region boundaries
-        float blendDistance = worldTileSize;
-
-        return [regionSamplers, worldTileSize, flatHeight, blendDistance]
-        (float worldX, float worldZ) -> float
+        // Build O(1) tile→region lookup grid
+        int32_t gridMinX = std::numeric_limits<int32_t>::max();
+        int32_t gridMinZ = std::numeric_limits<int32_t>::max();
+        int32_t gridMaxX = std::numeric_limits<int32_t>::min();
+        int32_t gridMaxZ = std::numeric_limits<int32_t>::min();
+        for (const auto& rs : *regionSamplers)
         {
-            // Find the primary region (last region that contains this point)
-            const RegionSampler* primaryRegion = nullptr;
-            for (auto it = regionSamplers->rbegin(); it != regionSamplers->rend(); ++it)
-            {
-                float regionMinX = static_cast<float>(it->tileMinX) * worldTileSize;
-                float regionMinZ = static_cast<float>(it->tileMinZ) * worldTileSize;
-                float regionMaxX = static_cast<float>(it->tileMaxX + 1) * worldTileSize;
-                float regionMaxZ = static_cast<float>(it->tileMaxZ + 1) * worldTileSize;
+            gridMinX = std::min(gridMinX, rs.tileMinX);
+            gridMinZ = std::min(gridMinZ, rs.tileMinZ);
+            gridMaxX = std::max(gridMaxX, rs.tileMaxX);
+            gridMaxZ = std::max(gridMaxZ, rs.tileMaxZ);
+        }
 
-                if (worldX >= regionMinX && worldX < regionMaxX &&
-                    worldZ >= regionMinZ && worldZ < regionMaxZ)
+        int32_t gridW = (regionSamplers->empty()) ? 0 : (gridMaxX - gridMinX + 1);
+        int32_t gridH = (regionSamplers->empty()) ? 0 : (gridMaxZ - gridMinZ + 1);
+
+        // -1 = no region, otherwise index into regionSamplers
+        auto tileGrid = std::make_shared<std::vector<int32_t>>(
+            static_cast<size_t>(gridW) * gridH, -1);
+
+        // Last region wins for overlaps
+        for (size_t i = 0; i < regionSamplers->size(); ++i)
+        {
+            const auto& rs = (*regionSamplers)[i];
+            for (int32_t tz = rs.tileMinZ; tz <= rs.tileMaxZ; ++tz)
+            {
+                for (int32_t tx = rs.tileMinX; tx <= rs.tileMaxX; ++tx)
                 {
-                    primaryRegion = &(*it);
-                    break;
+                    int32_t gx = tx - gridMinX;
+                    int32_t gz = tz - gridMinZ;
+                    (*tileGrid)[static_cast<size_t>(gz) * gridW + gx] = static_cast<int32_t>(i);
                 }
             }
+        }
 
+        float flatHeight = minHeight;
+        float blendDistance = worldTileSize;
+        float probeOffset = worldTileSize * 0.01f;
+
+        // O(1) lookup lambda
+        auto lookupRegion = [regionSamplers, tileGrid, gridMinX, gridMinZ, gridW, gridH, worldTileSize]
+        (int32_t tileX, int32_t tileZ) -> const RegionSampler*
+        {
+            int32_t gx = tileX - gridMinX;
+            int32_t gz = tileZ - gridMinZ;
+            if (gx < 0 || gz < 0 || gx >= gridW || gz >= gridH)
+                return nullptr;
+            int32_t idx = (*tileGrid)[static_cast<size_t>(gz) * gridW + gx];
+            return (idx >= 0) ? &(*regionSamplers)[idx] : nullptr;
+        };
+
+        return [regionSamplers, tileGrid, lookupRegion, worldTileSize, flatHeight, blendDistance, probeOffset,
+                gridMinX, gridMinZ, gridW, gridH]
+        (float worldX, float worldZ) -> float
+        {
+            int32_t tileX = static_cast<int32_t>(std::floor(worldX / worldTileSize));
+            int32_t tileZ = static_cast<int32_t>(std::floor(worldZ / worldTileSize));
+
+            const RegionSampler* primaryRegion = lookupRegion(tileX, tileZ);
             if (!primaryRegion)
                 return flatHeight;
 
@@ -512,12 +555,10 @@ namespace terrain
                 regionMaxZ - worldZ
             });
 
-            // If far from edge, no blending needed
             if (distToEdge >= blendDistance)
                 return primaryHeight;
 
-            // Find the neighboring region across the nearest edge
-            // Check which edge we're closest to and sample the neighbor there
+            // Probe into the neighboring tile across the nearest edge
             float probeX = worldX;
             float probeZ = worldZ;
             float edgeDistX = std::min(worldX - regionMinX, regionMaxX - worldX);
@@ -525,55 +566,32 @@ namespace terrain
 
             if (edgeDistX < edgeDistZ)
             {
-                // Closer to X edge
                 if (worldX - regionMinX < regionMaxX - worldX)
-                    probeX = regionMinX - 0.1f; // probe left
+                    probeX = regionMinX - probeOffset;
                 else
-                    probeX = regionMaxX + 0.1f; // probe right
+                    probeX = regionMaxX + probeOffset;
             }
             else
             {
-                // Closer to Z edge
                 if (worldZ - regionMinZ < regionMaxZ - worldZ)
-                    probeZ = regionMinZ - 0.1f; // probe south
+                    probeZ = regionMinZ - probeOffset;
                 else
-                    probeZ = regionMaxZ + 0.1f; // probe north
+                    probeZ = regionMaxZ + probeOffset;
             }
 
-            // Find region at probe point
-            const RegionSampler* neighborRegion = nullptr;
-            for (auto it = regionSamplers->rbegin(); it != regionSamplers->rend(); ++it)
-            {
-                if (&(*it) == primaryRegion)
-                    continue;
+            int32_t probeTileX = static_cast<int32_t>(std::floor(probeX / worldTileSize));
+            int32_t probeTileZ = static_cast<int32_t>(std::floor(probeZ / worldTileSize));
+            const RegionSampler* neighborRegion = lookupRegion(probeTileX, probeTileZ);
 
-                float nMinX = static_cast<float>(it->tileMinX) * worldTileSize;
-                float nMinZ = static_cast<float>(it->tileMinZ) * worldTileSize;
-                float nMaxX = static_cast<float>(it->tileMaxX + 1) * worldTileSize;
-                float nMaxZ = static_cast<float>(it->tileMaxZ + 1) * worldTileSize;
-
-                if (probeX >= nMinX && probeX < nMaxX &&
-                    probeZ >= nMinZ && probeZ < nMaxZ)
-                {
-                    neighborRegion = &(*it);
-                    break;
-                }
-            }
+            float t = distToEdge / blendDistance;
+            t = t * t * (3.0f - 2.0f * t); // smoothstep
 
             if (!neighborRegion)
             {
-                // Blend toward flat terrain at edge
-                float t = distToEdge / blendDistance;
-                // Smooth hermite interpolation
-                t = t * t * (3.0f - 2.0f * t);
                 return flatHeight + t * (primaryHeight - flatHeight);
             }
 
-            // Blend between primary and neighbor
             float neighborHeight = neighborRegion->sampler(worldX, worldZ);
-            float t = distToEdge / blendDistance;
-            // Smooth hermite interpolation
-            t = t * t * (3.0f - 2.0f * t);
             return neighborHeight + t * (primaryHeight - neighborHeight);
         };
     }

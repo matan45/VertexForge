@@ -201,7 +201,7 @@ namespace serialization
             terrain.heightmapRegions.clear();
             for (const auto& rj : *it)
             {
-                components::HeightmapRegionEntry region;
+                terrain::HeightmapRegion region;
                 if (auto fp = rj.find("filePath"); fp != rj.end() && fp->is_string())
                     region.filePath = fp->get<std::string>();
                 if (auto v = rj.find("tileMinX"); v != rj.end() && v->is_number_integer())

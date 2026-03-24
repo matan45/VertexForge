@@ -5,18 +5,10 @@
 #include <array>
 #include <cstdint>
 #include "../asset/AssetRef.hpp"
+#include "../terrain/HeightmapLoader.hpp"
 
 namespace components
 {
-    struct HeightmapRegionEntry
-    {
-        std::string filePath;
-        int32_t tileMinX = 0;
-        int32_t tileMinZ = 0;
-        int32_t tileMaxX = 0;
-        int32_t tileMaxZ = 0;
-    };
-
     struct TerrainComponent
     {
         uint8_t resolution = 0;
@@ -30,7 +22,7 @@ namespace components
         int32_t gridMaxZ = 0;
 
         std::string heightmapPath;
-        std::vector<HeightmapRegionEntry> heightmapRegions;
+        std::vector<terrain::HeightmapRegion> heightmapRegions;
         asset::AssetRef terrainMaterialRef;
         std::string weightMapPath;
 
