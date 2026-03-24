@@ -82,5 +82,8 @@ namespace core
 
         LODConfig getLODConfig() const override;
         void setLODConfig(const LODConfig& config) override;
+
+        std::optional<PlaybackState> capturePlaybackState(services::VFXInstanceId id) const override;
+        void seekInstance(services::VFXInstanceId id, float emissionTime, float spawnAccumulator) override;
     };
 }

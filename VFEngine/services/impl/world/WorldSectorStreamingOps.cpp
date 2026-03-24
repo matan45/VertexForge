@@ -139,6 +139,7 @@ namespace services
                 {
                     physicsSnapshots.erase(uuid);
                     animationSnapshots.erase(uuid);
+                    vfxSnapshots.erase(uuid);
                 }
 
                 ::events::world::SectorLoadedNotification notif;

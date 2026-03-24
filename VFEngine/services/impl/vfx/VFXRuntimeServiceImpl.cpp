@@ -2,6 +2,7 @@
 #include "../../providers/vfx/IVFXRuntimeProvider.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/vfx/VFXRuntimeEvents.hpp"
+#include "../../events/vfx/VFXSnapshotEvents.hpp"
 #include "../../events/scene/ScenePersistenceEvents.hpp"
 #include "../../events/scene/ComponentPhysicsLightEvents.hpp"
 #include <algorithm>
@@ -109,6 +110,28 @@ namespace services
                     config.transitionZone = cmd.transitionZone;
                     vfxProvider->setLODConfig(config);
                 }
+            });
+
+        dispatcher.registerQueryHandler<::events::vfx::snapshot::CaptureVFXSnapshotQuery>(
+            [this](const ::events::vfx::snapshot::CaptureVFXSnapshotQuery& query)
+                -> std::optional<::events::vfx::snapshot::VFXPlaybackSnapshot>
+            {
+                if (!vfxProvider) return std::nullopt;
+                auto state = vfxProvider->capturePlaybackState(query.instanceId);
+                if (!state) return std::nullopt;
+                ::events::vfx::snapshot::VFXPlaybackSnapshot snap;
+                snap.emissionTime = state->emissionTime;
+                snap.spawnAccumulator = state->spawnAccumulator;
+                snap.wasPlaying = state->wasPlaying;
+                snap.wasActive = state->wasActive;
+                return snap;
+            });
+
+        dispatcher.registerCommandHandler<::events::vfx::snapshot::SeekVFXInstanceCommand>(
+            [this](const ::events::vfx::snapshot::SeekVFXInstanceCommand& cmd)
+            {
+                if (vfxProvider)
+                    vfxProvider->seekInstance(cmd.instanceId, cmd.emissionTime, cmd.spawnAccumulator);
             });
 
         dispatcher.subscribe<::events::scene::SceneLoadedNotification>(

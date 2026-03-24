@@ -1,6 +1,7 @@
 #pragma once
 
 #include <vulkan/vulkan.hpp>
+#include <optional>
 #include "../../data/VFXTypes.hpp"
 
 namespace services
@@ -44,6 +45,17 @@ namespace services
         virtual void recordDrawCommands(const vk::CommandBuffer& cmd) = 0;
 
         virtual size_t getInstanceCount() const = 0;
+
+        // Playback state capture/seek for sector streaming
+        struct PlaybackState
+        {
+            float emissionTime = 0.0f;
+            float spawnAccumulator = 0.0f;
+            bool wasPlaying = true;
+            bool wasActive = true;
+        };
+        virtual std::optional<PlaybackState> capturePlaybackState(VFXInstanceId id) const = 0;
+        virtual void seekInstance(VFXInstanceId id, float emissionTime, float spawnAccumulator) = 0;
 
         // Lighting resources (shared from main renderer)
         virtual void setLightingLayouts(vk::DescriptorSetLayout lightBufferLayout,

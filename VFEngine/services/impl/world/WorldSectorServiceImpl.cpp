@@ -14,6 +14,7 @@
 #include "../../events/physics/PhysicsEvents.hpp"
 #include "../../data/EditorMode.hpp"
 #include "../../events/terrain/TerrainEvents.hpp"
+#include "../../events/vfx/VFXSnapshotEvents.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "resource/AssetLifecycleManager.hpp"
 #include "resource/AssetLifecycleHelpers.hpp"
@@ -251,6 +252,30 @@ namespace services
                 }
             }
 
+            // Capture VFX playback state before entity destruction
+            {
+                auto ent3 = static_cast<entt::entity>(static_cast<uint32_t>(entityHandleId));
+                auto& reg = scene::EntityRegistry::getRegistry();
+                if (reg.valid(ent3) && reg.any_of<components::VFXComponent>(ent3))
+                {
+                    const auto& vfxComp = reg.get<components::VFXComponent>(ent3);
+                    if (vfxComp.runtimeInstanceId != 0)
+                    {
+                        ::events::vfx::snapshot::CaptureVFXSnapshotQuery vfxQuery;
+                        vfxQuery.instanceId = vfxComp.runtimeInstanceId;
+                        auto vfxSnap = dispatcher.query(vfxQuery);
+                        if (vfxSnap.has_value())
+                        {
+                            auto* uc = reg.try_get<components::UUIDComponent>(ent3);
+                            if (uc)
+                                vfxSnapshots[uc->id.getValue()] = {
+                                    vfxSnap->emissionTime, vfxSnap->spawnAccumulator,
+                                    vfxSnap->wasPlaying, vfxSnap->wasActive};
+                        }
+                    }
+                }
+            }
+
             ::events::scene::EntityDeletedNotification notif;
             notif.entity = handle;
             dispatcher.publish(notif);
@@ -377,6 +402,22 @@ namespace services
                 return debugDrawSectors;
             });
 
+        dispatcher.registerQueryHandler<::events::vfx::snapshot::GetVFXSnapshotQuery>(
+            [this](const ::events::vfx::snapshot::GetVFXSnapshotQuery& query)
+                -> std::optional<::events::vfx::snapshot::VFXPlaybackSnapshot>
+            {
+                auto it = vfxSnapshots.find(query.entityUUID);
+                if (it == vfxSnapshots.end())
+                    return std::nullopt;
+                ::events::vfx::snapshot::VFXPlaybackSnapshot snap;
+                snap.emissionTime = it->second.emissionTime;
+                snap.spawnAccumulator = it->second.spawnAccumulator;
+                snap.wasPlaying = it->second.wasPlaying;
+                snap.wasActive = it->second.wasActive;
+                vfxSnapshots.erase(it);
+                return snap;
+            });
+
         // Handle play/stop transitions — snapshot restore creates new entity handles
         editorModeChangedToken = dispatcher.subscribe<::events::editor::EditorModeChangedNotification>(
             [this](const ::events::editor::EditorModeChangedNotification& notif)
@@ -436,6 +477,7 @@ namespace services
                     isPlayMode = false;
                     physicsSnapshots.clear();
                     animationSnapshots.clear();
+                    vfxSnapshots.clear();
 
                     // Returning to edit mode — snapshot was restored, re-assign entities to sectors
                     entityLoader.clear();

@@ -6,6 +6,7 @@
 #include <glm/glm.hpp>
 #include <vulkan/vulkan.hpp>
 #include <memory>
+#include <optional>
 #include <unordered_map>
 #include <vector>
 #include <cstdint>
@@ -171,6 +172,16 @@ namespace controllers
         void resetInstance(VFXInstanceId id);
         bool isInstancePlaying(VFXInstanceId id) const;
         bool isInstanceActive(VFXInstanceId id) const;
+
+        struct PlaybackState
+        {
+            float emissionTime = 0.0f;
+            float spawnAccumulator = 0.0f;
+            bool wasPlaying = true;
+            bool wasActive = true;
+        };
+        std::optional<PlaybackState> capturePlaybackState(VFXInstanceId id) const;
+        void seekInstance(VFXInstanceId id, float emissionTime, float spawnAccumulator);
 
         void update(float deltaTime);
         void setCamera(const services::VFXCameraParams& camera);

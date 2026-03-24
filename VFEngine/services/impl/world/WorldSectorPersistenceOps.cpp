@@ -273,6 +273,7 @@ namespace services
         entityLoader.clear();
         physicsSnapshots.clear();
         animationSnapshots.clear();
+        vfxSnapshots.clear();
         sectorManager.clear();
 
         auto& root = sceneGraph->GetRoot();

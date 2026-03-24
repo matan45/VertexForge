@@ -109,6 +109,16 @@ namespace services
         // Animation state snapshots for state preservation across sector streaming
         std::unordered_map<uint64_t, ::events::animation::snapshot::AnimationSnapshot> animationSnapshots;
 
+        // VFX playback snapshots for state preservation across sector streaming
+        struct VFXSnapshot
+        {
+            float emissionTime = 0.0f;
+            float spawnAccumulator = 0.0f;
+            bool wasPlaying = true;
+            bool wasActive = true;
+        };
+        std::unordered_map<uint64_t, VFXSnapshot> vfxSnapshots; // keyed by entity UUID
+
         void handleSectorLoad(const world::SectorCoord& coord);
         void handleSectorUnload(const world::SectorCoord& coord);
         void pollAsyncSectorLoads();
