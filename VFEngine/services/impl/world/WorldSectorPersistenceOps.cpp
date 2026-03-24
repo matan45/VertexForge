@@ -221,6 +221,9 @@ namespace services
             auto& sector = sectorManager.getOrCreateSector(coord);
             sector.filePath = sectorPath;
             sector.state = world::SectorState::Unloaded;
+
+            // Pre-cache metadata from binary header (44 bytes, fast)
+            world::WorldSectorSerialization::readSectorMetadata(sectorPath, sector.metadata);
         }
 
         ::events::world::WorldLoadedNotification notif;
