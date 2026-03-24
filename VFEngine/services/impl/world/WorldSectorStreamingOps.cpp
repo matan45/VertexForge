@@ -17,6 +17,8 @@
 
 namespace
 {
+    static constexpr uint32_t kMaxConcurrentSectorLoads = 4;
+
     // O(N) lookup — consider replacing with a UUID→entity cache if this becomes a bottleneck
     entt::entity findEntityByUUID(uint64_t uuid)
     {
@@ -37,6 +39,9 @@ namespace services
     {
         if (!worldMode)
             return;
+
+        // Poll completed async sector loads (works in both edit and play mode)
+        pollAsyncSectorLoads();
 
         // Only stream sectors during play mode (based on primary camera distance).
         // In edit mode, sectors stay as-is — no auto load/unload from editor camera.
@@ -181,14 +186,71 @@ namespace services
         if (!sector || sector->filePath.empty())
             return;
 
+        // Already have a pending async load for this sector
+        if (pendingAsyncLoads.contains(coord))
+            return;
+
+        // Respect concurrency limit — streamer will re-emit next frame
+        if (pendingAsyncLoads.size() >= kMaxConcurrentSectorLoads)
+            return;
+
         sector->state = world::SectorState::Loading;
 
-        std::vector<nlohmann::json> entityData;
-        if (!world::WorldSectorSerialization::loadSector(sector->filePath, entityData))
+        std::string filePath = sector->filePath;
+
+        auto future = std::async(std::launch::async, [filePath]() -> AsyncSectorLoadResult {
+            AsyncSectorLoadResult result;
+            result.success = world::WorldSectorSerialization::loadSector(filePath, result.entityData);
+            return result;
+        });
+
+        PendingAsyncSectorLoad pending;
+        pending.coord = coord;
+        pending.future = std::move(future);
+        pending.cancelled = false;
+        pendingAsyncLoads.emplace(coord, std::move(pending));
+    }
+
+    void WorldSectorServiceImpl::pollAsyncSectorLoads()
+    {
+        auto it = pendingAsyncLoads.begin();
+        while (it != pendingAsyncLoads.end())
         {
-            sector->state = world::SectorState::Unloaded;
-            return;
+            if (it->second.future.wait_for(std::chrono::seconds(0)) != std::future_status::ready)
+            {
+                ++it;
+                continue;
+            }
+
+            auto result = it->second.future.get();
+            auto coord = it->second.coord;
+            bool wasCancelled = it->second.cancelled;
+            it = pendingAsyncLoads.erase(it);
+
+            if (wasCancelled)
+                continue;
+
+            auto* sector = sectorManager.getSector(coord);
+            if (!sector)
+                continue;
+
+            if (!result.success)
+            {
+                sector->state = world::SectorState::Unloaded;
+                vfLogError("Async sector load failed for ({},{})", coord.x, coord.z);
+                continue;
+            }
+
+            finalizeSectorLoad(coord, result.entityData);
         }
+    }
+
+    void WorldSectorServiceImpl::finalizeSectorLoad(const world::SectorCoord& coord,
+                                                     std::vector<nlohmann::json>& entityData)
+    {
+        auto* sector = sectorManager.getSector(coord);
+        if (!sector)
+            return;
 
         sector->entityUUIDs.clear();
         std::vector<std::pair<std::string, nlohmann::json>> entityNamesAndJson;
@@ -214,6 +276,13 @@ namespace services
         auto* sector = sectorManager.getSector(coord);
         if (!sector)
             return;
+
+        // Cancel any in-flight async file I/O for this sector
+        auto asyncIt = pendingAsyncLoads.find(coord);
+        if (asyncIt != pendingAsyncLoads.end())
+        {
+            asyncIt->second.cancelled = true;
+        }
 
         sector->state = world::SectorState::Unloading;
 
