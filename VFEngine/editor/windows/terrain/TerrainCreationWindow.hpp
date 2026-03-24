@@ -24,7 +24,9 @@ namespace windows
         std::string heightmapPath;
 
         bool useTiledHeightmaps = false;
-        std::vector<services::HeightmapRegionData> heightmapRegions;
+        int regionsX = 1;
+        int regionsZ = 1;
+        std::vector<std::string> regionFiles; // regionsX * regionsZ file paths
 
         bool creationInProgress = false;
         float creationProgress = 0.0f;
@@ -44,8 +46,9 @@ namespace windows
         void resetDefaults();
         void createTerrain();
         void browseHeightmap();
-        void browseRegionHeightmap(size_t regionIndex);
+        void browseRegionHeightmap(size_t cellIndex);
         void drawTiledHeightmapUI();
+        void rebuildRegionGrid();
         void loadTerrain();
         void pollTerrainCreation();
         void promptSaveAfterCreation();

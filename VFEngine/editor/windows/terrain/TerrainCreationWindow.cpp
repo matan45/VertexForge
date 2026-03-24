@@ -146,7 +146,10 @@ namespace windows
         minHeight = -10.0f;
         heightmapPath.clear();
         useTiledHeightmaps = false;
-        heightmapRegions.clear();
+        regionsX = 1;
+        regionsZ = 1;
+        regionFiles.clear();
+        regionFiles.resize(1);
     }
 
     void TerrainCreationWindow::createTerrain()
@@ -161,7 +164,34 @@ namespace windows
 
         if (useTiledHeightmaps)
         {
-            config.heightmapRegions = heightmapRegions;
+            int32_t halfX = tilesX / 2;
+            int32_t halfZ = tilesZ / 2;
+            int32_t gridMinX = -halfX;
+            int32_t gridMinZ = -halfZ;
+
+            for (int rz = 0; rz < regionsZ; ++rz)
+            {
+                for (int rx = 0; rx < regionsX; ++rx)
+                {
+                    size_t cellIndex = static_cast<size_t>(rz) * regionsX + rx;
+                    if (cellIndex >= regionFiles.size() || regionFiles[cellIndex].empty())
+                        continue;
+
+                    // Evenly divide tiles among regions
+                    int32_t tileStartX = gridMinX + (tilesX * rx) / regionsX;
+                    int32_t tileEndX = gridMinX + (tilesX * (rx + 1)) / regionsX - 1;
+                    int32_t tileStartZ = gridMinZ + (tilesZ * rz) / regionsZ;
+                    int32_t tileEndZ = gridMinZ + (tilesZ * (rz + 1)) / regionsZ - 1;
+
+                    services::HeightmapRegionData region;
+                    region.filePath = regionFiles[cellIndex];
+                    region.tileMinX = tileStartX;
+                    region.tileMinZ = tileStartZ;
+                    region.tileMaxX = tileEndX;
+                    region.tileMaxZ = tileEndZ;
+                    config.heightmapRegions.push_back(region);
+                }
+            }
         }
         else
         {
@@ -204,97 +234,116 @@ namespace windows
 
     void TerrainCreationWindow::drawTiledHeightmapUI()
     {
-        int32_t halfX = tilesX / 2;
-        int32_t halfZ = tilesZ / 2;
-        int32_t gridMinX = -halfX;
-        int32_t gridMinZ = -halfZ;
-        int32_t gridMaxX = tilesX - halfX - 1;
-        int32_t gridMaxZ = tilesZ - halfZ - 1;
+        ImGui::Text("Region Grid:");
+        bool gridChanged = false;
+        ImGui::PushItemWidth(100.0f);
+        gridChanged |= ImGui::SliderInt("Regions X", &regionsX, 1, 10);
+        gridChanged |= ImGui::SliderInt("Regions Z", &regionsZ, 1, 10);
+        ImGui::PopItemWidth();
 
-        if (ImGui::Button("Add Region"))
+        if (gridChanged)
         {
-            services::HeightmapRegionData region;
-            region.tileMinX = gridMinX;
-            region.tileMinZ = gridMinZ;
-            region.tileMaxX = gridMaxX;
-            region.tileMaxZ = gridMaxZ;
-            heightmapRegions.push_back(region);
+            rebuildRegionGrid();
         }
 
-        int coveredTiles = 0;
-        int totalTiles = tilesX * tilesZ;
+        int tilesPerRegionX = tilesX / regionsX;
+        int tilesPerRegionZ = tilesZ / regionsZ;
+        ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f),
+            "~%d x %d tiles per region", tilesPerRegionX, tilesPerRegionZ);
 
-        ImGui::BeginChild("RegionList", ImVec2(0, 200), true);
-        int removeIndex = -1;
-        for (size_t i = 0; i < heightmapRegions.size(); ++i)
+        if (ImGui::Button("Fill All..."))
         {
-            auto& region = heightmapRegions[i];
-            ImGui::PushID(static_cast<int>(i));
-
-            ImGui::Text("Region %zu", i + 1);
-            ImGui::SameLine(ImGui::GetContentRegionAvail().x - 20.0f);
-            if (ImGui::SmallButton("X"))
+            std::vector<std::pair<std::wstring, std::wstring>> fileTypes = {
+                {L"Heightmap Files (*.vfImage;*.vfSVT)", L"*.vfImage;*.vfSVT"}
+            };
+            std::string selectedFile = fileDialog.openFileDialog(fileTypes);
+            if (!selectedFile.empty())
             {
-                removeIndex = static_cast<int>(i);
+                for (auto& f : regionFiles)
+                    f = selectedFile;
             }
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Clear All"))
+        {
+            for (auto& f : regionFiles)
+                f.clear();
+        }
 
-            std::string browseLabel = "Browse##" + std::to_string(i);
-            if (ImGui::Button(browseLabel.c_str()))
+        ImGui::Spacing();
+
+        float cellHeight = 50.0f;
+        float listHeight = static_cast<float>(regionsZ) * cellHeight + 10.0f;
+        listHeight = std::min(listHeight, 250.0f);
+
+        ImGui::BeginChild("RegionGrid", ImVec2(0, listHeight), true);
+        for (int rz = 0; rz < regionsZ; ++rz)
+        {
+            for (int rx = 0; rx < regionsX; ++rx)
             {
-                browseRegionHeightmap(i);
+                size_t cellIndex = static_cast<size_t>(rz) * regionsX + rx;
+                ImGui::PushID(static_cast<int>(cellIndex));
+
+                std::string label = "[" + std::to_string(rx) + "," + std::to_string(rz) + "]";
+
+                if (ImGui::Button("Browse"))
+                {
+                    browseRegionHeightmap(cellIndex);
+                }
+                ImGui::SameLine();
+                ImGui::Text("%s", label.c_str());
+                ImGui::SameLine();
+
+                if (cellIndex < regionFiles.size() && !regionFiles[cellIndex].empty())
+                {
+                    size_t lastSlash = regionFiles[cellIndex].find_last_of("/\\");
+                    std::string filename = (lastSlash != std::string::npos)
+                        ? regionFiles[cellIndex].substr(lastSlash + 1)
+                        : regionFiles[cellIndex];
+                    ImGui::Text("%s", filename.c_str());
+                    ImGui::SameLine();
+                    if (ImGui::SmallButton("X"))
+                    {
+                        regionFiles[cellIndex].clear();
+                    }
+                    ImGui::SameLine();
+                    if (ImGui::SmallButton("Fill Empty"))
+                    {
+                        for (auto& f : regionFiles)
+                        {
+                            if (f.empty())
+                                f = regionFiles[cellIndex];
+                        }
+                    }
+                }
+                else
+                {
+                    ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "(empty - flat)");
+                }
+
+                ImGui::PopID();
             }
-            ImGui::SameLine();
-            if (region.filePath.empty())
-            {
-                ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "No file selected");
-            }
-            else
-            {
-                size_t lastSlash = region.filePath.find_last_of("/\\");
-                std::string filename = (lastSlash != std::string::npos)
-                    ? region.filePath.substr(lastSlash + 1)
-                    : region.filePath;
-                ImGui::Text("%s", filename.c_str());
-            }
-
-            ImGui::Text("Tile Range:");
-            ImGui::PushItemWidth(80.0f);
-            ImGui::InputInt("MinX", &region.tileMinX, 0, 0);
-            ImGui::SameLine();
-            ImGui::InputInt("MinZ", &region.tileMinZ, 0, 0);
-            ImGui::InputInt("MaxX", &region.tileMaxX, 0, 0);
-            ImGui::SameLine();
-            ImGui::InputInt("MaxZ", &region.tileMaxZ, 0, 0);
-            ImGui::PopItemWidth();
-
-            // Clamp to grid bounds
-            region.tileMinX = std::max(region.tileMinX, gridMinX);
-            region.tileMinZ = std::max(region.tileMinZ, gridMinZ);
-            region.tileMaxX = std::min(region.tileMaxX, gridMaxX);
-            region.tileMaxZ = std::min(region.tileMaxZ, gridMaxZ);
-            if (region.tileMinX > region.tileMaxX) region.tileMinX = region.tileMaxX;
-            if (region.tileMinZ > region.tileMaxZ) region.tileMinZ = region.tileMaxZ;
-
-            int regionTiles = (region.tileMaxX - region.tileMinX + 1) * (region.tileMaxZ - region.tileMinZ + 1);
-            coveredTiles += regionTiles;
-
-            ImGui::Separator();
-            ImGui::PopID();
         }
         ImGui::EndChild();
 
-        if (removeIndex >= 0)
+        int assigned = 0;
+        for (const auto& f : regionFiles)
         {
-            heightmapRegions.erase(heightmapRegions.begin() + removeIndex);
+            if (!f.empty()) ++assigned;
         }
-
         ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f),
-            "%zu region(s), ~%d/%d tiles covered", heightmapRegions.size(), coveredTiles, totalTiles);
+            "%d/%d regions assigned", assigned, regionsX * regionsZ);
     }
 
-    void TerrainCreationWindow::browseRegionHeightmap(size_t regionIndex)
+    void TerrainCreationWindow::rebuildRegionGrid()
     {
-        if (regionIndex >= heightmapRegions.size())
+        size_t newSize = static_cast<size_t>(regionsX) * regionsZ;
+        regionFiles.resize(newSize);
+    }
+
+    void TerrainCreationWindow::browseRegionHeightmap(size_t cellIndex)
+    {
+        if (cellIndex >= regionFiles.size())
             return;
 
         std::vector<std::pair<std::wstring, std::wstring>> fileTypes = {
@@ -304,7 +353,7 @@ namespace windows
         std::string selectedFile = fileDialog.openFileDialog(fileTypes);
         if (!selectedFile.empty())
         {
-            heightmapRegions[regionIndex].filePath = selectedFile;
+            regionFiles[cellIndex] = selectedFile;
         }
     }
 
