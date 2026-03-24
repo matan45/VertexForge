@@ -347,6 +347,11 @@ namespace render::shadow
             data.clipmapLevelPagesPerSide.resize(levelCount);
             data.clipmapLevelPageOffsets.resize(levelCount);
             data.clipmapLastSnapPositions.resize(levelCount, glm::vec2(0.0f));
+            data.clipmapScrollOffset.resize(levelCount, glm::ivec2(0));
+            data.clipmapPageGridOrigin.resize(levelCount, glm::vec2(0.0f));
+            data.clipmapRenderVP.resize(levelCount, glm::mat4(1.0f));
+            data.clipmapUVOffset.resize(levelCount, glm::vec2(0.0f));
+            data.clipmapLevelInitialized.resize(levelCount, false);
 
             uint32_t totalPages = 0;
             for (uint32_t i = 0; i < levelCount; ++i)
@@ -469,6 +474,10 @@ namespace render::shadow
         data.clipmapLastSnapPositions.clear();
         data.clipmapLevelPageOffsets.clear();
         data.clipmapLevelPagesPerSide.clear();
+        data.clipmapScrollOffset.clear();
+        data.clipmapPageGridOrigin.clear();
+        data.clipmapRenderVP.clear();
+        data.clipmapUVOffset.clear();
     }
 
     void ShadowSystem::setDeletionQueue(core::DeferredDeletionQueue* queue)

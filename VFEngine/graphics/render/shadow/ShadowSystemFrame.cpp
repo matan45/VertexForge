@@ -392,6 +392,9 @@ namespace render::shadow
 
         glm::vec3 cameraWorldPos = -glm::vec3(camera.view[3]) * glm::mat3(camera.view);
 
+        auto axes = LightSpaceAxes::fromDirection(lightDirection);
+        float lightSpaceZ = glm::dot(cameraWorldPos, axes.lightDir);
+
         uint32_t levelCount = std::min(static_cast<uint32_t>(data.views.size()),
                                         data.settings.clipmapLevelCount);
 
@@ -401,25 +404,49 @@ namespace render::shadow
                 ? data.clipmapLevelPagesPerSide[i] : 1;
             uint32_t levelResolution = pagesPerSide * vsm::PAGE_SIZE;
 
-            auto levelData = ClipmapShadowCalculator::computeClipmapLevel(
+            // Texel-snapped level: follows camera closely, used for GPU lookup VP
+            auto texelSnapped = ClipmapShadowCalculator::computeClipmapLevel(
                 i, data.settings.clipmapBaseExtent, cameraWorldPos, lightDirection, levelResolution);
 
+            // Update toroidal dirty flags using page-grid shift detection
+            updateClipmapDirtyFlags(data, i, texelSnapped);
+
+            // Page-grid-snapped level: stable VP for rendering (only changes on page crossing)
+            glm::vec2 pageGridOrigin = (i < data.clipmapPageGridOrigin.size())
+                ? data.clipmapPageGridOrigin[i] : glm::vec2(0.0f);
+            auto pageGridLevel = ClipmapShadowCalculator::computeClipmapLevelStable(
+                i, data.settings.clipmapBaseExtent, pageGridOrigin, lightSpaceZ,
+                lightDirection, levelResolution);
+
+            // Store render VP for use in buildClipmapPageRenderList()
+            if (i < data.clipmapRenderVP.size())
+                data.clipmapRenderVP[i] = pageGridLevel.viewProjMatrix;
+
+            // Compute UV offset: difference between texel-snapped and page-grid centers
+            // in UV space [0,1]. GPU applies this to convert lookup UV to render UV.
+            if (i < data.clipmapUVOffset.size())
+            {
+                glm::vec2 delta = texelSnapped.snapPosition - pageGridOrigin;
+                float diameter = 2.0f * texelSnapped.worldExtent;
+                data.clipmapUVOffset[i] = (diameter > 0.0f)
+                    ? delta / diameter : glm::vec2(0.0f);
+            }
+
+            // Upload texel-snapped VP to GPU for shadow lookup (full camera coverage)
             auto& view = data.views[i];
-            view.viewMatrix = levelData.viewMatrix;
-            view.projectionMatrix = levelData.projMatrix;
-            view.viewProjectionMatrix = levelData.viewProjMatrix;
-            view.nearPlane = levelData.nearDistance;
-            view.farPlane = levelData.farDistance;
+            view.viewMatrix = texelSnapped.viewMatrix;
+            view.projectionMatrix = texelSnapped.projMatrix;
+            view.viewProjectionMatrix = texelSnapped.viewProjMatrix;
+            view.nearPlane = texelSnapped.nearDistance;
+            view.farPlane = texelSnapped.farDistance;
             view.lightDirection = glm::vec4(lightDirection, 0.0f);
             view.cascadeIndex = static_cast<uint16_t>(i);
-            view.texelSize = levelData.texelSize;
+            view.texelSize = texelSnapped.texelSize;
 
             float biasScale = 1.0f + static_cast<float>(i) * 0.3f;
             view.depthBias = data.settings.depthBias * biasScale;
             view.slopeBias = data.settings.slopeBias * biasScale;
             view.normalBias = data.settings.normalBias * biasScale;
-
-            updateClipmapDirtyFlags(data, i, levelData);
         }
     }
 
@@ -429,23 +456,75 @@ namespace render::shadow
         if (level >= data.clipmapLastSnapPositions.size())
             return;
 
-        float snapDelta = ClipmapShadowCalculator::computeSnapDelta(
-            levelData, data.clipmapLastSnapPositions[level]);
-
-        if (snapDelta < 0.5f)
+        if (level >= data.clipmapLevelPageOffsets.size() || level >= data.clipmapLevelPagesPerSide.size())
             return;
 
-        if (level < data.clipmapLevelPageOffsets.size() && level < data.clipmapLevelPagesPerSide.size())
+        if (level >= data.clipmapScrollOffset.size() || level >= data.clipmapPageGridOrigin.size())
+            return;
+
+        if (level >= data.clipmapLevelInitialized.size())
+            return;
+
+        uint32_t pps = data.clipmapLevelPagesPerSide[level];
+        uint32_t basePageIdx = data.clipmapLevelPageOffsets[level];
+
+        // Compute page-grid shift (how many whole pages the origin moved)
+        auto pgUpdate = ClipmapShadowCalculator::computePageGridShift(
+            levelData, pps, data.clipmapPageGridOrigin[level]);
+
+        bool isFirstFrame = !data.clipmapLevelInitialized[level];
+        data.clipmapLevelInitialized[level] = true;
+        data.clipmapPageGridOrigin[level] = pgUpdate.newPageGridOrigin;
+        data.clipmapLastSnapPositions[level] = levelData.snapPosition;
+
+        if (pgUpdate.pageShift.x == 0 && pgUpdate.pageShift.y == 0 && !isFirstFrame)
+            return; // No page boundary crossed — all cached pages remain valid
+
+        // Teleport or first frame: full invalidation
+        if (pgUpdate.fullInvalidation || isFirstFrame)
         {
-            uint32_t basePageIdx = data.clipmapLevelPageOffsets[level];
-            uint32_t pps = data.clipmapLevelPagesPerSide[level];
             for (uint32_t p = 0; p < pps * pps; ++p)
             {
                 uint32_t pageIdx = basePageIdx + p;
                 if (pageIdx < data.vsmPageDirty.size())
                     data.vsmPageDirty[pageIdx] = true;
             }
+            data.clipmapScrollOffset[level] = glm::ivec2(0);
+            return;
         }
-        data.clipmapLastSnapPositions[level] = levelData.snapPosition;
+
+        // Update scroll offset with positive modulo wrapping
+        glm::ivec2& scroll = data.clipmapScrollOffset[level];
+        int ipps = static_cast<int>(pps);
+        scroll.x = ((scroll.x + pgUpdate.pageShift.x) % ipps + ipps) % ipps;
+        scroll.y = ((scroll.y + pgUpdate.pageShift.y) % ipps + ipps) % ipps;
+
+        // Mark only newly exposed columns (X-axis scroll)
+        for (int col = 0; col < std::abs(pgUpdate.pageShift.x); ++col)
+        {
+            int vx = (pgUpdate.pageShift.x > 0)
+                ? ((scroll.x - 1 - col) % ipps + ipps) % ipps
+                : (scroll.x + col) % ipps;
+            for (uint32_t vy = 0; vy < pps; ++vy)
+            {
+                uint32_t pageIdx = basePageIdx + vy * pps + static_cast<uint32_t>(vx);
+                if (pageIdx < data.vsmPageDirty.size())
+                    data.vsmPageDirty[pageIdx] = true;
+            }
+        }
+
+        // Mark only newly exposed rows (Y-axis scroll)
+        for (int row = 0; row < std::abs(pgUpdate.pageShift.y); ++row)
+        {
+            int vy = (pgUpdate.pageShift.y > 0)
+                ? ((scroll.y - 1 - row) % ipps + ipps) % ipps
+                : (scroll.y + row) % ipps;
+            for (uint32_t vx = 0; vx < pps; ++vx)
+            {
+                uint32_t pageIdx = basePageIdx + static_cast<uint32_t>(vy) * pps + vx;
+                if (pageIdx < data.vsmPageDirty.size())
+                    data.vsmPageDirty[pageIdx] = true;
+            }
+        }
     }
 }

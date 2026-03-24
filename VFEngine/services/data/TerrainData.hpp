@@ -1,6 +1,8 @@
 #pragma once
 #include "EntityHandle.hpp"
+#include "terrain/HeightmapLoader.hpp"
 #include <string>
+#include <vector>
 #include <array>
 #include <cstdint>
 #include <optional>
@@ -19,6 +21,7 @@ namespace services
         float minHeight = -10.0f;
 
         std::string heightmapPath;
+        std::vector<terrain::HeightmapRegion> heightmapRegions;
         std::string terrainMaterialPath;
         std::string weightMapPath;
     };
@@ -42,6 +45,7 @@ namespace services
         int32_t gridMaxX = 0;
         int32_t gridMaxZ = 0;
         std::string heightmapPath;
+        std::vector<terrain::HeightmapRegion> heightmapRegions;
         std::string terrainMaterialPath;
         std::string weightMapPath;
         uint32_t tileCount = 0;

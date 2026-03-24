@@ -104,6 +104,7 @@ namespace services
         data.gridMaxX = comp.gridMaxX;
         data.gridMaxZ = comp.gridMaxZ;
         data.heightmapPath = comp.heightmapPath;
+        data.heightmapRegions = comp.heightmapRegions;
         data.terrainMaterialPath = comp.terrainMaterialRef.resolve();
         data.weightMapPath = comp.weightMapPath;
         auto gridIt = terrainGrids.find(entity.id);

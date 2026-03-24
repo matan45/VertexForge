@@ -51,28 +51,36 @@ namespace windows
             ImGui::Separator();
 
             ImGui::Text("Heightmap (optional):");
+            ImGui::Checkbox("Use Tiled Heightmaps", &useTiledHeightmaps);
 
-            if (ImGui::Button("Browse..."))
+            if (useTiledHeightmaps)
             {
-                browseHeightmap();
-            }
-            ImGui::SameLine();
-
-            if (heightmapPath.empty())
-            {
-                ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "No heightmap (flat terrain)");
+                drawTiledHeightmapUI();
             }
             else
             {
-                size_t lastSlash = heightmapPath.find_last_of("/\\");
-                std::string filename = (lastSlash != std::string::npos)
-                    ? heightmapPath.substr(lastSlash + 1)
-                    : heightmapPath;
-                ImGui::Text("%s", filename.c_str());
-                ImGui::SameLine();
-                if (ImGui::SmallButton("Clear"))
+                if (ImGui::Button("Browse..."))
                 {
-                    heightmapPath.clear();
+                    browseHeightmap();
+                }
+                ImGui::SameLine();
+
+                if (heightmapPath.empty())
+                {
+                    ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "No heightmap (flat terrain)");
+                }
+                else
+                {
+                    size_t lastSlash = heightmapPath.find_last_of("/\\");
+                    std::string filename = (lastSlash != std::string::npos)
+                        ? heightmapPath.substr(lastSlash + 1)
+                        : heightmapPath;
+                    ImGui::Text("%s", filename.c_str());
+                    ImGui::SameLine();
+                    if (ImGui::SmallButton("Clear"))
+                    {
+                        heightmapPath.clear();
+                    }
                 }
             }
 
@@ -137,6 +145,11 @@ namespace windows
         maxHeight = 100.0f;
         minHeight = -10.0f;
         heightmapPath.clear();
+        useTiledHeightmaps = false;
+        regionsX = 1;
+        regionsZ = 1;
+        regionFiles.clear();
+        rebuildRegionGrid();
     }
 
     void TerrainCreationWindow::createTerrain()
@@ -148,7 +161,42 @@ namespace windows
         config.worldTileSize = worldTileSize;
         config.maxHeight = maxHeight;
         config.minHeight = minHeight;
-        config.heightmapPath = heightmapPath;
+
+        if (useTiledHeightmaps)
+        {
+            int32_t halfX = tilesX / 2;
+            int32_t halfZ = tilesZ / 2;
+            int32_t gridMinX = -halfX;
+            int32_t gridMinZ = -halfZ;
+
+            for (int rz = 0; rz < regionsZ; ++rz)
+            {
+                for (int rx = 0; rx < regionsX; ++rx)
+                {
+                    size_t cellIndex = static_cast<size_t>(rz) * regionsX + rx;
+                    if (cellIndex >= regionFiles.size() || regionFiles[cellIndex].empty())
+                        continue;
+
+                    // Evenly divide tiles among regions
+                    int32_t tileStartX = gridMinX + (tilesX * rx) / regionsX;
+                    int32_t tileEndX = gridMinX + (tilesX * (rx + 1)) / regionsX - 1;
+                    int32_t tileStartZ = gridMinZ + (tilesZ * rz) / regionsZ;
+                    int32_t tileEndZ = gridMinZ + (tilesZ * (rz + 1)) / regionsZ - 1;
+
+                    terrain::HeightmapRegion region;
+                    region.filePath = regionFiles[cellIndex];
+                    region.tileMinX = tileStartX;
+                    region.tileMinZ = tileStartZ;
+                    region.tileMaxX = tileEndX;
+                    region.tileMaxZ = tileEndZ;
+                    config.heightmapRegions.push_back(region);
+                }
+            }
+        }
+        else
+        {
+            config.heightmapPath = heightmapPath;
+        }
 
         events::terrain::BeginCreateTerrainCommand cmd;
         cmd.config = config;
@@ -181,6 +229,131 @@ namespace windows
             {
                 visible = false;
             }
+        }
+    }
+
+    void TerrainCreationWindow::drawTiledHeightmapUI()
+    {
+        ImGui::Text("Region Grid:");
+        bool gridChanged = false;
+        ImGui::PushItemWidth(100.0f);
+        gridChanged |= ImGui::SliderInt("Regions X", &regionsX, 1, 10);
+        gridChanged |= ImGui::SliderInt("Regions Z", &regionsZ, 1, 10);
+        ImGui::PopItemWidth();
+
+        if (gridChanged)
+        {
+            rebuildRegionGrid();
+        }
+
+        int tilesPerRegionX = tilesX / regionsX;
+        int tilesPerRegionZ = tilesZ / regionsZ;
+        ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f),
+            "~%d x %d tiles per region", tilesPerRegionX, tilesPerRegionZ);
+
+        if (ImGui::Button("Fill All..."))
+        {
+            std::vector<std::pair<std::wstring, std::wstring>> fileTypes = {
+                {L"Heightmap Files (*.vfImage;*.vfSVT)", L"*.vfImage;*.vfSVT"}
+            };
+            std::string selectedFile = fileDialog.openFileDialog(fileTypes);
+            if (!selectedFile.empty())
+            {
+                for (auto& f : regionFiles)
+                    f = selectedFile;
+            }
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Clear All"))
+        {
+            for (auto& f : regionFiles)
+                f.clear();
+        }
+
+        ImGui::Spacing();
+
+        float cellHeight = 50.0f;
+        float listHeight = static_cast<float>(regionsZ) * cellHeight + 10.0f;
+        listHeight = std::min(listHeight, 250.0f);
+
+        ImGui::BeginChild("RegionGrid", ImVec2(0, listHeight), true);
+        for (int rz = 0; rz < regionsZ; ++rz)
+        {
+            for (int rx = 0; rx < regionsX; ++rx)
+            {
+                size_t cellIndex = static_cast<size_t>(rz) * regionsX + rx;
+                ImGui::PushID(static_cast<int>(cellIndex));
+
+                std::string label = "[" + std::to_string(rx) + "," + std::to_string(rz) + "]";
+
+                if (ImGui::Button("Browse"))
+                {
+                    browseRegionHeightmap(cellIndex);
+                }
+                ImGui::SameLine();
+                ImGui::Text("%s", label.c_str());
+                ImGui::SameLine();
+
+                if (cellIndex < regionFiles.size() && !regionFiles[cellIndex].empty())
+                {
+                    size_t lastSlash = regionFiles[cellIndex].find_last_of("/\\");
+                    std::string filename = (lastSlash != std::string::npos)
+                        ? regionFiles[cellIndex].substr(lastSlash + 1)
+                        : regionFiles[cellIndex];
+                    ImGui::Text("%s", filename.c_str());
+                    ImGui::SameLine();
+                    if (ImGui::SmallButton("X"))
+                    {
+                        regionFiles[cellIndex].clear();
+                    }
+                    ImGui::SameLine();
+                    if (ImGui::SmallButton("Fill Empty"))
+                    {
+                        for (auto& f : regionFiles)
+                        {
+                            if (f.empty())
+                                f = regionFiles[cellIndex];
+                        }
+                    }
+                }
+                else
+                {
+                    ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "(empty - flat)");
+                }
+
+                ImGui::PopID();
+            }
+        }
+        ImGui::EndChild();
+
+        int assigned = 0;
+        for (const auto& f : regionFiles)
+        {
+            if (!f.empty()) ++assigned;
+        }
+        ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f),
+            "%d/%d regions assigned", assigned, regionsX * regionsZ);
+    }
+
+    void TerrainCreationWindow::rebuildRegionGrid()
+    {
+        size_t newSize = static_cast<size_t>(regionsX) * regionsZ;
+        regionFiles.resize(newSize);
+    }
+
+    void TerrainCreationWindow::browseRegionHeightmap(size_t cellIndex)
+    {
+        if (cellIndex >= regionFiles.size())
+            return;
+
+        std::vector<std::pair<std::wstring, std::wstring>> fileTypes = {
+            {L"Heightmap Files (*.vfImage;*.vfSVT)", L"*.vfImage;*.vfSVT"}
+        };
+
+        std::string selectedFile = fileDialog.openFileDialog(fileTypes);
+        if (!selectedFile.empty())
+        {
+            regionFiles[cellIndex] = selectedFile;
         }
     }
 

@@ -99,6 +99,22 @@ namespace windows::details {
             ImGui::Text("Heightmap:");
             ImGui::TextWrapped("%s", terrain.heightmapPath.c_str());
         }
+
+        if (!terrain.heightmapRegions.empty())
+        {
+            ImGui::Separator();
+            if (ImGui::TreeNode("Heightmap Regions"))
+            {
+                for (size_t i = 0; i < terrain.heightmapRegions.size(); ++i)
+                {
+                    const auto& region = terrain.heightmapRegions[i];
+                    ImGui::Text("Region %zu: [%d,%d] - [%d,%d]",
+                        i + 1, region.tileMinX, region.tileMinZ, region.tileMaxX, region.tileMaxZ);
+                    ImGui::TextWrapped("  %s", region.filePath.c_str());
+                }
+                ImGui::TreePop();
+            }
+        }
     }
 
     void TerrainDrawer::drawSaveLoad(services::EntityHandle handle, const services::TerrainData& terrain)

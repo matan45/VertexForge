@@ -5,6 +5,7 @@
 #include <array>
 #include <cstdint>
 #include "../asset/AssetRef.hpp"
+#include "../terrain/HeightmapLoader.hpp"
 
 namespace components
 {
@@ -21,6 +22,7 @@ namespace components
         int32_t gridMaxZ = 0;
 
         std::string heightmapPath;
+        std::vector<terrain::HeightmapRegion> heightmapRegions;
         asset::AssetRef terrainMaterialRef;
         std::string weightMapPath;
 

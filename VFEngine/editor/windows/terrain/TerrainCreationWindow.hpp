@@ -1,7 +1,9 @@
 #pragma once
 #include "nfd/FileDialog.hpp"
 #include "data/EntityHandle.hpp"
+#include "data/TerrainData.hpp"
 #include <string>
+#include <vector>
 #include <array>
 #include <future>
 
@@ -21,6 +23,11 @@ namespace windows
         float minHeight = -10.0f;
         std::string heightmapPath;
 
+        bool useTiledHeightmaps = false;
+        int regionsX = 1;
+        int regionsZ = 1;
+        std::vector<std::string> regionFiles; // regionsX * regionsZ file paths
+
         bool creationInProgress = false;
         float creationProgress = 0.0f;
         std::string creationStage;
@@ -39,6 +46,9 @@ namespace windows
         void resetDefaults();
         void createTerrain();
         void browseHeightmap();
+        void browseRegionHeightmap(size_t cellIndex);
+        void drawTiledHeightmapUI();
+        void rebuildRegionGrid();
         void loadTerrain();
         void pollTerrainCreation();
         void promptSaveAfterCreation();

@@ -6,7 +6,9 @@
 
 #include <fstream>
 #include <algorithm>
+#include <cmath>
 #include <filesystem>
+#include <limits>
 #include <mutex>
 
 namespace terrain
@@ -405,6 +407,192 @@ namespace terrain
 
             float normalizedHeight = tileCache->sampleHeight(u, v);
             return bounds.minHeight + normalizedHeight * (bounds.maxHeight - bounds.minHeight);
+        };
+    }
+
+    HeightSampler createCompositeHeightSampler(
+        const std::vector<HeightmapRegion>& regions,
+        float worldTileSize,
+        float minHeight,
+        float maxHeight)
+    {
+        // Build per-region samplers
+        struct RegionSampler
+        {
+            int32_t tileMinX, tileMinZ, tileMaxX, tileMaxZ;
+            HeightSampler sampler;
+        };
+
+        auto regionSamplers = std::make_shared<std::vector<RegionSampler>>();
+
+        for (const auto& region : regions)
+        {
+            if (region.filePath.empty())
+                continue;
+
+            TerrainBounds regionBounds;
+            regionBounds.minX = static_cast<float>(region.tileMinX) * worldTileSize;
+            regionBounds.minZ = static_cast<float>(region.tileMinZ) * worldTileSize;
+            regionBounds.width = static_cast<float>(region.tileMaxX - region.tileMinX + 1) * worldTileSize;
+            regionBounds.depth = static_cast<float>(region.tileMaxZ - region.tileMinZ + 1) * worldTileSize;
+            regionBounds.minHeight = minHeight;
+            regionBounds.maxHeight = maxHeight;
+
+            std::string ext = std::filesystem::path(region.filePath).extension().string();
+            std::transform(ext.begin(), ext.end(), ext.begin(),
+                           [](unsigned char c) { return std::tolower(c); });
+            bool isSVT = (ext == ".vfsvt");
+
+            HeightSampler sampler;
+
+            if (isSVT)
+            {
+                sampler = createStreamingHeightSamplerFromSVT(region.filePath, regionBounds);
+                if (!sampler)
+                {
+                    vfLogWarning("CompositeHeightSampler: SVT streaming failed for: {}, trying standard load",
+                                 region.filePath);
+                }
+            }
+
+            if (!sampler)
+            {
+                auto heightmapData = HeightmapLoader::load(region.filePath);
+                if (heightmapData && heightmapData->isValid())
+                {
+                    sampler = createHeightSamplerFromMap(heightmapData, regionBounds);
+                }
+                else
+                {
+                    vfLogWarning("CompositeHeightSampler: Failed to load region heightmap: {}", region.filePath);
+                    continue;
+                }
+            }
+
+            regionSamplers->push_back({region.tileMinX, region.tileMinZ,
+                                       region.tileMaxX, region.tileMaxZ,
+                                       std::move(sampler)});
+
+            vfLogInfo("CompositeHeightSampler: Loaded region [{},{} -> {},{}] from {}",
+                      region.tileMinX, region.tileMinZ, region.tileMaxX, region.tileMaxZ,
+                      region.filePath);
+        }
+
+        // Build O(1) tile→region lookup grid
+        int32_t gridMinX = std::numeric_limits<int32_t>::max();
+        int32_t gridMinZ = std::numeric_limits<int32_t>::max();
+        int32_t gridMaxX = std::numeric_limits<int32_t>::min();
+        int32_t gridMaxZ = std::numeric_limits<int32_t>::min();
+        for (const auto& rs : *regionSamplers)
+        {
+            gridMinX = std::min(gridMinX, rs.tileMinX);
+            gridMinZ = std::min(gridMinZ, rs.tileMinZ);
+            gridMaxX = std::max(gridMaxX, rs.tileMaxX);
+            gridMaxZ = std::max(gridMaxZ, rs.tileMaxZ);
+        }
+
+        int32_t gridW = (regionSamplers->empty()) ? 0 : (gridMaxX - gridMinX + 1);
+        int32_t gridH = (regionSamplers->empty()) ? 0 : (gridMaxZ - gridMinZ + 1);
+
+        // -1 = no region, otherwise index into regionSamplers
+        auto tileGrid = std::make_shared<std::vector<int32_t>>(
+            static_cast<size_t>(gridW) * gridH, -1);
+
+        // Last region wins for overlaps
+        for (size_t i = 0; i < regionSamplers->size(); ++i)
+        {
+            const auto& rs = (*regionSamplers)[i];
+            for (int32_t tz = rs.tileMinZ; tz <= rs.tileMaxZ; ++tz)
+            {
+                for (int32_t tx = rs.tileMinX; tx <= rs.tileMaxX; ++tx)
+                {
+                    int32_t gx = tx - gridMinX;
+                    int32_t gz = tz - gridMinZ;
+                    (*tileGrid)[static_cast<size_t>(gz) * gridW + gx] = static_cast<int32_t>(i);
+                }
+            }
+        }
+
+        float flatHeight = minHeight;
+        float blendDistance = worldTileSize;
+        float probeOffset = worldTileSize * 0.01f;
+
+        // O(1) lookup lambda
+        auto lookupRegion = [regionSamplers, tileGrid, gridMinX, gridMinZ, gridW, gridH, worldTileSize]
+        (int32_t tileX, int32_t tileZ) -> const RegionSampler*
+        {
+            int32_t gx = tileX - gridMinX;
+            int32_t gz = tileZ - gridMinZ;
+            if (gx < 0 || gz < 0 || gx >= gridW || gz >= gridH)
+                return nullptr;
+            int32_t idx = (*tileGrid)[static_cast<size_t>(gz) * gridW + gx];
+            return (idx >= 0) ? &(*regionSamplers)[idx] : nullptr;
+        };
+
+        return [regionSamplers, tileGrid, lookupRegion, worldTileSize, flatHeight, blendDistance, probeOffset,
+                gridMinX, gridMinZ, gridW, gridH]
+        (float worldX, float worldZ) -> float
+        {
+            int32_t tileX = static_cast<int32_t>(std::floor(worldX / worldTileSize));
+            int32_t tileZ = static_cast<int32_t>(std::floor(worldZ / worldTileSize));
+
+            const RegionSampler* primaryRegion = lookupRegion(tileX, tileZ);
+            if (!primaryRegion)
+                return flatHeight;
+
+            float primaryHeight = primaryRegion->sampler(worldX, worldZ);
+
+            // Calculate distance to nearest edge of primary region (in world units)
+            float regionMinX = static_cast<float>(primaryRegion->tileMinX) * worldTileSize;
+            float regionMinZ = static_cast<float>(primaryRegion->tileMinZ) * worldTileSize;
+            float regionMaxX = static_cast<float>(primaryRegion->tileMaxX + 1) * worldTileSize;
+            float regionMaxZ = static_cast<float>(primaryRegion->tileMaxZ + 1) * worldTileSize;
+
+            float distToEdge = std::min({
+                worldX - regionMinX,
+                regionMaxX - worldX,
+                worldZ - regionMinZ,
+                regionMaxZ - worldZ
+            });
+
+            if (distToEdge >= blendDistance)
+                return primaryHeight;
+
+            // Probe into the neighboring tile across the nearest edge
+            float probeX = worldX;
+            float probeZ = worldZ;
+            float edgeDistX = std::min(worldX - regionMinX, regionMaxX - worldX);
+            float edgeDistZ = std::min(worldZ - regionMinZ, regionMaxZ - worldZ);
+
+            if (edgeDistX < edgeDistZ)
+            {
+                if (worldX - regionMinX < regionMaxX - worldX)
+                    probeX = regionMinX - probeOffset;
+                else
+                    probeX = regionMaxX + probeOffset;
+            }
+            else
+            {
+                if (worldZ - regionMinZ < regionMaxZ - worldZ)
+                    probeZ = regionMinZ - probeOffset;
+                else
+                    probeZ = regionMaxZ + probeOffset;
+            }
+
+            int32_t probeTileX = static_cast<int32_t>(std::floor(probeX / worldTileSize));
+            int32_t probeTileZ = static_cast<int32_t>(std::floor(probeZ / worldTileSize));
+            const RegionSampler* neighborRegion = lookupRegion(probeTileX, probeTileZ);
+
+            float t = distToEdge / blendDistance;
+            t = t * t * (3.0f - 2.0f * t); // smoothstep
+
+            if (!neighborRegion)
+            {
+                return flatHeight + t * (primaryHeight - flatHeight);
+            }
+
+            float neighborHeight = neighborRegion->sampler(worldX, worldZ);
+            return neighborHeight + t * (primaryHeight - neighborHeight);
         };
     }
 }

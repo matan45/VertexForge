@@ -46,6 +46,15 @@ const vec2 poissonDisk[32] = vec2[](
 // VSM Page Table Lookup
 // ============================================================
 vec2 vsmLookupPhysicalUV(ShadowData sd, vec2 uv, out bool valid) {
+    // For clipmap lights (lightType == 3): apply toroidal UV offset.
+    // The GPU lookup VP is texel-snapped (follows camera for full coverage),
+    // but pages are rendered with a page-grid-snapped VP (stable, world-anchored).
+    // The UV offset converts lookup UV to render-aligned UV.
+    if (sd.pageTableInfo.w == 3) {
+        vec2 uvOffset = unpackHalf2x16(floatBitsToUint(sd.rangeParams.y));
+        uv -= uvOffset;
+    }
+
     // Clamp UV to valid range (matches old atlas clamping behavior)
     uv = clamp(uv, vec2(0.0), vec2(0.999));
 
@@ -141,7 +150,14 @@ vec2 blockerSearchCube(int cubeMapIndex, vec3 sampleDir, float receiverDepth,
 // Penumbra Estimation
 // ============================================================
 float estimatePenumbra(float receiverDepth, float avgBlockerDepth, float lightSize) {
-    float penumbra = lightSize * (receiverDepth - avgBlockerDepth) / avgBlockerDepth;
+    // Quantize receiver depth to discrete steps to stabilize penumbra calculation.
+    // Without this, sub-texel floating-point drift in receiverDepth causes the
+    // penumbra width to fluctuate frame-to-frame ("breathing" shadow edges).
+    const float depthSteps = 4096.0;
+    float stableDepth = round(receiverDepth * depthSteps) / depthSteps;
+    float stableBlocker = round(avgBlockerDepth * depthSteps) / depthSteps;
+
+    float penumbra = lightSize * (stableDepth - stableBlocker) / max(stableBlocker, 0.0001);
     return min(penumbra, 30.0);
 }
 
@@ -298,14 +314,16 @@ float sampleDirectionalShadow(int baseShadowIndex, vec3 worldPos, vec3 worldNorm
 }
 
 // ============================================================
-// Directional Shadow (Clipmap with level selection + blending)
+// Directional Shadow (Clipmap with level selection + cross-fade)
 // Reuses sampleVSMShadow — per-level bias is applied on CPU side.
 // ============================================================
 
-// Blend in outer 40% of each level to avoid popping at level transitions
-const float CLIPMAP_BLEND_START = 0.6;  // fract > this → blend toward next level
-const float CLIPMAP_BLEND_END   = 0.4;  // fract < this → blend toward prev level
-const float CLIPMAP_FADE_START  = 0.8;  // fraction of max extent where distance fade begins
+// Linear cross-fade between adjacent levels in the outer 10% of each level's
+// coverage. Uses light-space Chebyshev distance (max of |x|, |y| in NDC) for
+// the blend factor — this directly maps to the shadow map's UV coverage boundary
+// and is more precise than world-space Euclidean distance.
+const float CLIPMAP_BLEND_START = 0.9;   // fraction of level edge where cross-fade begins
+const float CLIPMAP_FADE_START  = 0.8;   // fraction of max extent where distance fade begins
 
 float sampleDirectionalClipmapShadow(int baseShadowIndex, vec3 worldPos, vec3 worldNormal, float worldDist) {
     if (baseShadowIndex < 0 || baseShadowIndex >= MAX_SHADOW_VIEWS) return 1.0;
@@ -321,25 +339,31 @@ float sampleDirectionalClipmapShadow(int baseShadowIndex, vec3 worldPos, vec3 wo
     float baseExtent = SHADOW_BUFFER[baseShadowIndex].rangeParams.x;
     if (baseExtent <= 0.0) baseExtent = 2.0;
 
-    // Use world-space distance (rotation-invariant) instead of camera-space viewZ
-    // This prevents level selection from changing when the camera rotates
+    // Use world-space distance (rotation-invariant) for level selection
     float continuousLevel = max(log2(max(worldDist, baseExtent) / baseExtent), 0.0);
     int levelIdx = clamp(int(continuousLevel), 0, levelCount - 1);
     int shadowIndex = baseShadowIndex + levelIdx;
 
+    // Sample the primary level
     float shadow = sampleVSMShadow(shadowIndex, worldPos, worldNormal);
 
-    // Symmetric blending at level boundaries to prevent popping
-    float levelFrac = fract(continuousLevel);
-    if (levelFrac > CLIPMAP_BLEND_START && levelIdx < levelCount - 1) {
+    // Compute light-space Chebyshev distance for cross-fade:
+    // this is the max of |ndc.x|, |ndc.y| which maps directly to how close
+    // the fragment is to the edge of this level's shadow map coverage.
+    // Note: assumes orthographic projection (w == 1.0) — directional lights only.
+    // For perspective projections this would need a perspective divide (lsPos.xy / lsPos.w).
+    ShadowData sd = SHADOW_BUFFER[shadowIndex];
+    vec4 lsPos = sd.viewProjection * vec4(worldPos, 1.0);
+    float chebyshev = max(abs(lsPos.x), abs(lsPos.y));
+
+    // Cross-fade to next coarser level in the outer blend zone
+    if (chebyshev > CLIPMAP_BLEND_START && levelIdx < levelCount - 1) {
+        float alpha = clamp((chebyshev - CLIPMAP_BLEND_START) / (1.0 - CLIPMAP_BLEND_START), 0.0, 1.0);
         float nextShadow = sampleVSMShadow(shadowIndex + 1, worldPos, worldNormal);
-        shadow = mix(shadow, nextShadow, smoothstep(CLIPMAP_BLEND_START, 1.0, levelFrac));
-    }
-    if (levelFrac < CLIPMAP_BLEND_END && levelIdx > 0) {
-        float prevShadow = sampleVSMShadow(shadowIndex - 1, worldPos, worldNormal);
-        shadow = mix(shadow, prevShadow, smoothstep(CLIPMAP_BLEND_END, 0.0, levelFrac));
+        shadow = mix(shadow, nextShadow, alpha);
     }
 
+    // Fade the outermost level to fully lit so shadows don't hard-cut at the edge
     float maxExtent = baseExtent * exp2(float(levelCount - 1));
     float fadeFactor = 1.0 - smoothstep(maxExtent * CLIPMAP_FADE_START, maxExtent, worldDist);
     return mix(1.0, shadow, fadeFactor);

@@ -229,16 +229,52 @@ namespace render::shadow
             uint32_t pagesPerSide = data.clipmapLevelPagesPerSide[level];
             uint32_t basePageIdx = data.clipmapLevelPageOffsets[level];
 
+            // Get toroidal scroll offset for this level
+            glm::ivec2 scroll(0);
+            if (level < data.clipmapScrollOffset.size())
+                scroll = data.clipmapScrollOffset[level];
+
+            // Remap page table entries for this level (toroidal virtual-to-physical mapping)
+            uint32_t ptOffset = data.vsmPageTableOffset + basePageIdx;
             for (uint32_t py = 0; py < pagesPerSide; ++py)
             {
                 for (uint32_t px = 0; px < pagesPerSide; ++px)
                 {
-                    uint32_t pageIdx = basePageIdx + py * pagesPerSide + px;
-                    if (pageIdx >= data.vsmPhysicalTiles.size())
+                    // Virtual page (px,py) in current VP maps to storage slot (sx,sy)
+                    uint32_t sx = (px + scroll.x) % pagesPerSide;
+                    uint32_t sy = (py + scroll.y) % pagesPerSide;
+                    uint32_t storageIdx = basePageIdx + sy * pagesPerSide + sx;
+
+                    if (storageIdx < data.vsmPhysicalTiles.size())
+                    {
+                        uint32_t physTile = data.vsmPhysicalTiles[storageIdx];
+                        if (physTile != vsm::INVALID_TILE)
+                            pageTable->mapPage(ptOffset, px, py, pagesPerSide, physTile);
+                        else
+                            pageTable->unmapPage(ptOffset, px, py, pagesPerSide);
+                    }
+                }
+            }
+
+            // Use page-grid-snapped VP for rendering (stable, world-anchored depth)
+            glm::mat4 renderVP = (level < data.clipmapRenderVP.size())
+                ? data.clipmapRenderVP[level] : view.viewProjectionMatrix;
+
+            // Build render list with toroidal page indexing
+            for (uint32_t py = 0; py < pagesPerSide; ++py)
+            {
+                for (uint32_t px = 0; px < pagesPerSide; ++px)
+                {
+                    // Toroidal wrap: virtual (px,py) → storage (sx,sy)
+                    uint32_t sx = (px + scroll.x) % pagesPerSide;
+                    uint32_t sy = (py + scroll.y) % pagesPerSide;
+                    uint32_t storageIdx = basePageIdx + sy * pagesPerSide + sx;
+                    if (storageIdx >= data.vsmPhysicalTiles.size())
                         continue;
 
+                    // Crop matrix uses virtual position (px,py) in the page-grid VP space
                     glm::mat4 cropMatrix = vsm::computePageCropMatrix(px, py, pagesPerSide, pagesPerSide);
-                    addPageToRenderLists(data, pageIdx, cropMatrix * view.viewProjectionMatrix, view, false);
+                    addPageToRenderLists(data, storageIdx, cropMatrix * renderVP, view, false);
                 }
             }
         }
