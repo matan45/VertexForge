@@ -274,6 +274,7 @@ namespace services
         physicsSnapshots.clear();
         animationSnapshots.clear();
         vfxSnapshots.clear();
+        audioSnapshots.clear();
         sectorManager.clear();
 
         auto& root = sceneGraph->GetRoot();

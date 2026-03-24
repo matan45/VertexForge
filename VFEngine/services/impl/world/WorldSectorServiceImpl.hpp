@@ -119,6 +119,20 @@ namespace services
         };
         std::unordered_map<uint64_t, VFXSnapshot> vfxSnapshots; // keyed by entity UUID
 
+        // Audio playback snapshots for state preservation across sector streaming
+        struct AudioSnapshot
+        {
+            bool wasPlaying = false;
+            float playbackPosition = 0.0f;
+            float volume = 1.0f;
+            float pitch = 1.0f;
+            bool loop = false;
+            bool is3D = false;
+            std::string audioPath;
+            std::string busName;
+        };
+        std::unordered_map<uint64_t, AudioSnapshot> audioSnapshots; // keyed by entity UUID
+
         void handleSectorLoad(const world::SectorCoord& coord);
         void handleSectorUnload(const world::SectorCoord& coord);
         void pollAsyncSectorLoads();

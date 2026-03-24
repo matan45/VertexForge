@@ -15,6 +15,7 @@
 #include "../../data/EditorMode.hpp"
 #include "../../events/terrain/TerrainEvents.hpp"
 #include "../../events/vfx/VFXSnapshotEvents.hpp"
+#include "../../events/audio/AudioSnapshotEvents.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "resource/AssetLifecycleManager.hpp"
 #include "resource/AssetLifecycleHelpers.hpp"
@@ -185,6 +186,62 @@ namespace services
                     ::events::EventDispatcher::instance().execute(animCmd);
                     animationSnapshots.erase(animSnapIt);
                 }
+
+                // Restore audio playback state from snapshot
+                auto audioSnapIt = audioSnapshots.find(uuid);
+                if (audioSnapIt != audioSnapshots.end())
+                {
+                    const auto& snap = audioSnapIt->second;
+                    if (snap.wasPlaying && snap.loop && !snap.audioPath.empty())
+                    {
+                        auto& disp = ::events::EventDispatcher::instance();
+                        uint64_t newHandle = 0;
+
+                        if (snap.is3D && sceneEntity.hasComponent<components::AudioSource3DComponent>())
+                        {
+                            auto& audioComp = sceneEntity.getComponent<components::AudioSource3DComponent>();
+                            const auto& transform = sceneEntity.getComponent<components::TransformComponent>();
+
+                            ::events::audio::snapshot::PlayRestoredAudio3DCommand playCmd;
+                            playCmd.path = snap.audioPath;
+                            playCmd.position = transform.position;
+                            playCmd.volume = snap.volume;
+                            playCmd.pitch = snap.pitch;
+                            playCmd.loop = snap.loop;
+                            playCmd.minDistance = audioComp.minDistance;
+                            playCmd.maxDistance = audioComp.maxDistance;
+                            playCmd.busName = snap.busName;
+                            newHandle = disp.execute(playCmd);
+
+                            audioComp.activeHandle = newHandle;
+                            audioComp.isPlaying = true;
+                        }
+                        else if (!snap.is3D && sceneEntity.hasComponent<components::AudioSource2DComponent>())
+                        {
+                            auto& audioComp = sceneEntity.getComponent<components::AudioSource2DComponent>();
+
+                            ::events::audio::snapshot::PlayRestoredAudio2DCommand playCmd;
+                            playCmd.path = snap.audioPath;
+                            playCmd.volume = snap.volume;
+                            playCmd.pitch = snap.pitch;
+                            playCmd.loop = snap.loop;
+                            playCmd.busName = snap.busName;
+                            newHandle = disp.execute(playCmd);
+
+                            audioComp.activeHandle = newHandle;
+                            audioComp.isPlaying = true;
+                        }
+
+                        if (newHandle != 0 && snap.playbackPosition > 0.0f)
+                        {
+                            ::events::audio::snapshot::SeekAudioCommand seekCmd;
+                            seekCmd.handleId = newHandle;
+                            seekCmd.seconds = snap.playbackPosition;
+                            ::events::EventDispatcher::instance().execute(seekCmd);
+                        }
+                    }
+                    audioSnapshots.erase(audioSnapIt);
+                }
             }
         });
 
@@ -273,6 +330,57 @@ namespace services
                                     vfxSnap->wasPlaying, vfxSnap->wasActive};
                         }
                     }
+                }
+            }
+
+            // Capture audio state and fade-out before entity destruction
+            {
+                auto ent4 = static_cast<entt::entity>(static_cast<uint32_t>(entityHandleId));
+                auto& reg4 = scene::EntityRegistry::getRegistry();
+
+                auto captureAudio = [&](auto& audioComp, bool is3D)
+                {
+                    if (audioComp.activeHandle == 0)
+                        return;
+                    auto* uc4 = reg4.try_get<components::UUIDComponent>(ent4);
+                    if (!uc4)
+                        return;
+
+                    AudioSnapshot snap;
+                    snap.is3D = is3D;
+                    snap.volume = audioComp.volume;
+                    snap.pitch = audioComp.pitch;
+                    snap.loop = audioComp.loop;
+                    snap.busName = audioComp.busName;
+                    if (audioComp.audioRef.isValid())
+                        snap.audioPath = audioComp.audioRef.resolve();
+
+                    ::events::audio::snapshot::GetAudioPlaybackPositionQuery posQuery;
+                    posQuery.handleId = audioComp.activeHandle;
+                    snap.playbackPosition = dispatcher.query(posQuery);
+
+                    ::events::audio::snapshot::IsAudioPlayingQuery playQuery;
+                    playQuery.handleId = audioComp.activeHandle;
+                    snap.wasPlaying = dispatcher.query(playQuery);
+
+                    audioSnapshots[uc4->id.getValue()] = std::move(snap);
+
+                    // Fade-out instead of hard stop
+                    ::events::audio::snapshot::FadeOutAudioCommand fadeCmd;
+                    fadeCmd.handleId = audioComp.activeHandle;
+                    fadeCmd.fadeDurationMs = 300.0f;
+                    dispatcher.execute(fadeCmd);
+
+                    audioComp.activeHandle = 0;
+                    audioComp.isPlaying = false;
+                };
+
+                if (reg4.valid(ent4))
+                {
+                    if (reg4.all_of<components::AudioSource3DComponent>(ent4))
+                        captureAudio(reg4.get<components::AudioSource3DComponent>(ent4), true);
+                    if (reg4.all_of<components::AudioSource2DComponent>(ent4))
+                        captureAudio(reg4.get<components::AudioSource2DComponent>(ent4), false);
                 }
             }
 
@@ -478,6 +586,7 @@ namespace services
                     physicsSnapshots.clear();
                     animationSnapshots.clear();
                     vfxSnapshots.clear();
+                    audioSnapshots.clear();
 
                     // Returning to edit mode — snapshot was restored, re-assign entities to sectors
                     entityLoader.clear();

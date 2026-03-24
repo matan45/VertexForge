@@ -87,6 +87,7 @@ namespace core::audio
     struct SaveSnapshotCmd { std::string name; };
     struct DeleteSnapshotCmd { std::string name; };
     struct UnloadBufferCmd { std::string path; };
+    struct FadeOutAndReleaseCmd { AudioHandle handle; float fadeDurationMs = 300.0f; };
     struct StopAllCmd {};
     struct ShutdownCmd {};
 
@@ -97,7 +98,7 @@ namespace core::audio
         AddBusEffectCmd, RemoveBusEffectCmd, UpdateBusEffectCmd,
         SetBusEffectEnabledCmd, SetBusEffectWetDryCmd,
         LoadSnapshotCmd, SaveSnapshotCmd, DeleteSnapshotCmd,
-        UnloadBufferCmd, StopAllCmd, ShutdownCmd
+        UnloadBufferCmd, FadeOutAndReleaseCmd, StopAllCmd, ShutdownCmd
     >;
 
     class AudioCommandQueue

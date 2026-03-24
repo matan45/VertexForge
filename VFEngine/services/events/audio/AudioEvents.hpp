@@ -33,6 +33,12 @@ namespace events::audio {
         std::string_view getName() const override { return "StopSound"; }
     };
 
+    struct FadeOutAndReleaseSoundCommand : ::events::ICommand<void> {
+        services::AudioHandle handle;
+        float fadeDurationMs = 300.0f;
+        std::string_view getName() const override { return "FadeOutAndReleaseSound"; }
+    };
+
     struct PauseSoundCommand : ::events::ICommand<void> {
         services::AudioHandle handle;
         std::string_view getName() const override { return "PauseSound"; }

@@ -84,6 +84,7 @@ namespace core::audio
             deps.sourceManager->update();
             deps.streamingManager->update();
             deps.sourceManager->updateFilters(listenerPosition, deltaTime);
+            deps.sourceManager->updateFades(deltaTime * 1000.0f);
 
             // Publish state snapshot for main-thread queries
             publishSnapshot();
@@ -310,6 +311,24 @@ namespace core::audio
             else if constexpr (std::is_same_v<T, UnloadBufferCmd>)
             {
                 deps.bufferManager->unloadBuffer(command.path);
+            }
+            else if constexpr (std::is_same_v<T, FadeOutAndReleaseCmd>)
+            {
+                AudioHandle internal = resolveHandle(command.handle);
+                if (internal != InvalidAudioHandle && !StreamingAudioManager::isStreamingHandle(internal))
+                {
+                    // Unroute from reverb before fading
+                    if (deps.reverbZoneManager)
+                    {
+                        AudioSource* source = deps.sourceManager->getSource(internal);
+                        if (source)
+                            deps.reverbZoneManager->unrouteSource(source->getId());
+                    }
+                    deps.busManager->removeSource(internal);
+                    deps.sourceManager->startFadeOut(internal, command.fadeDurationMs);
+                }
+                activeHandles.erase(command.handle);
+                externalToInternal.erase(command.handle);
             }
             else if constexpr (std::is_same_v<T, StopAllCmd>)
             {

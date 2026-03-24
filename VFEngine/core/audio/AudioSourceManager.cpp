@@ -131,6 +131,54 @@ namespace core::audio {
         }
     }
 
+    void AudioSourceManager::startFadeOut(AudioHandle handle, float durationMs)
+    {
+        auto it = activeHandles.find(handle);
+        if (it == activeHandles.end())
+            return;
+
+        size_t index = it->second;
+        auto* source = sourcePool[index].get();
+        float currentVolume = source->getVolume();
+
+        fadingQueue.push_back({handle, index, currentVolume, durationMs, durationMs});
+
+        // Remove from activeHandles so normal update() doesn't auto-release it
+        activeHandles.erase(it);
+    }
+
+    void AudioSourceManager::updateFades(float deltaTimeMs)
+    {
+        auto it = fadingQueue.begin();
+        while (it != fadingQueue.end())
+        {
+            it->remainingMs -= deltaTimeMs;
+
+            if (it->remainingMs <= 0.0f)
+            {
+                // Fade complete — stop and release
+                if (it->poolIndex < sourcePool.size())
+                {
+                    auto* source = sourcePool[it->poolIndex].get();
+                    source->stop();
+                    source->detachFilter();
+                    source->setBuffer(0);
+                    freeIndices.push_back(it->poolIndex);
+                }
+                it = fadingQueue.erase(it);
+            }
+            else
+            {
+                // Ramp volume down
+                float t = it->remainingMs / it->totalMs;
+                float fadedVolume = it->originalVolume * t;
+                if (it->poolIndex < sourcePool.size())
+                    sourcePool[it->poolIndex]->setVolume(fadedVolume);
+                ++it;
+            }
+        }
+    }
+
     void AudioSourceManager::updateFilters(const glm::vec3& listenerPos, float deltaTime) {
         for (auto& [handle, index] : activeHandles) {
             if (index < sourcePool.size()) {

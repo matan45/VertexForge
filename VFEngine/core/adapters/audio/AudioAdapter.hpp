@@ -35,6 +35,7 @@ namespace core
 
         // === Sound Control ===
         void stopSound(services::AudioHandleId handle) override;
+        void fadeOutAndRelease(services::AudioHandleId handle, float fadeDurationMs) override;
         void pauseSound(services::AudioHandleId handle) override;
         void resumeSound(services::AudioHandleId handle) override;
         bool isPlaying(services::AudioHandleId handle) const override;

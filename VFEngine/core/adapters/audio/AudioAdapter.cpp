@@ -102,6 +102,10 @@ namespace core {
         audioController->stopSound(handle);
     }
 
+    void AudioAdapter::fadeOutAndRelease(services::AudioHandleId handle, float fadeDurationMs) {
+        audioController->fadeOutAndRelease(handle, fadeDurationMs);
+    }
+
     void AudioAdapter::pauseSound(services::AudioHandleId handle) {
         audioController->pauseSound(handle);
     }

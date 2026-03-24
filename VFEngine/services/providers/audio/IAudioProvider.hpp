@@ -52,6 +52,7 @@ namespace services {
 
         // === Sound Control ===
         virtual void stopSound(AudioHandleId handle) = 0;
+        virtual void fadeOutAndRelease(AudioHandleId handle, float fadeDurationMs) = 0;
         virtual void pauseSound(AudioHandleId handle) = 0;
         virtual void resumeSound(AudioHandleId handle) = 0;
         virtual bool isPlaying(AudioHandleId handle) const = 0;
