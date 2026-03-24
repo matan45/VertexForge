@@ -34,51 +34,67 @@ namespace services
     {
         if (sceneLoadToken.isValid())
         {
-            events::EventDispatcher::instance().unsubscribe(sceneLoadToken);
+            ::events::EventDispatcher::instance().unsubscribe(sceneLoadToken);
         }
     }
 
     void SaveService::registerEventHandlers(::events::EventDispatcher& dispatcher)
     {
-        dispatcher.registerCommandHandler<events::save::CreateSaveSlotCommand>(
-            [this](const events::save::CreateSaveSlotCommand& cmd)
+        dispatcher.registerCommandHandler<::events::save::CreateSaveSlotCommand>(
+            [this](const ::events::save::CreateSaveSlotCommand& cmd)
             {
                 return createSlot(cmd.slotName);
             });
 
-        dispatcher.registerCommandHandler<events::save::SaveGameCommand>(
-            [this](const events::save::SaveGameCommand& cmd)
+        dispatcher.registerCommandHandler<::events::save::SaveGameCommand>(
+            [this](const ::events::save::SaveGameCommand& cmd)
             {
                 return saveGame(cmd.slotName);
             });
 
-        dispatcher.registerCommandHandler<events::save::LoadGameCommand>(
-            [this](const events::save::LoadGameCommand& cmd)
+        dispatcher.registerCommandHandler<::events::save::LoadGameCommand>(
+            [this](const ::events::save::LoadGameCommand& cmd)
             {
                 return loadGame(cmd.slotName);
             });
 
-        dispatcher.registerCommandHandler<events::save::DeleteSaveSlotCommand>(
-            [this](const events::save::DeleteSaveSlotCommand& cmd)
+        dispatcher.registerCommandHandler<::events::save::DeleteSaveSlotCommand>(
+            [this](const ::events::save::DeleteSaveSlotCommand& cmd)
             {
                 return deleteSlot(cmd.slotName);
             });
 
-        dispatcher.registerQueryHandler<events::save::ListSaveSlotsQuery>(
-            [this](const events::save::ListSaveSlotsQuery&)
+        dispatcher.registerQueryHandler<::events::save::ListSaveSlotsQuery>(
+            [this](const ::events::save::ListSaveSlotsQuery&)
             {
                 return listSlots();
             });
 
-        dispatcher.registerQueryHandler<events::save::GetSaveMetadataQuery>(
-            [this](const events::save::GetSaveMetadataQuery& q)
+        dispatcher.registerQueryHandler<::events::save::GetSaveMetadataQuery>(
+            [this](const ::events::save::GetSaveMetadataQuery& q)
             {
                 return getMetadata(q.slotName);
             });
     }
 
+    bool SaveService::isValidSlotName(const std::string& slotName)
+    {
+        if (slotName.empty()) return false;
+        if (slotName.find("..") != std::string::npos) return false;
+        if (slotName.find('/') != std::string::npos) return false;
+        if (slotName.find('\\') != std::string::npos) return false;
+        if (slotName.find(':') != std::string::npos) return false;
+        return true;
+    }
+
     bool SaveService::createSlot(const std::string& slotName)
     {
+        if (!isValidSlotName(slotName))
+        {
+            vfLogError("[SaveService] Invalid slot name: '{}'", slotName);
+            return false;
+        }
+
         std::string slotDir = getSlotDirectory(slotName);
         try
         {
@@ -94,6 +110,12 @@ namespace services
 
     bool SaveService::saveGame(const std::string& slotName)
     {
+        if (!isValidSlotName(slotName))
+        {
+            vfLogError("[SaveService] Invalid slot name: '{}'", slotName);
+            return false;
+        }
+
         if (!sceneGraph || !scriptingProvider)
         {
             vfLogError("[SaveService] Cannot save: missing sceneGraph or scriptingProvider");
@@ -112,7 +134,7 @@ namespace services
             return false;
         }
 
-        auto& dispatcher = events::EventDispatcher::instance();
+        auto& dispatcher = ::events::EventDispatcher::instance();
 
         // 1. Save scene
         std::string scenePath = slotDir + "/scene.vfScene";
@@ -129,21 +151,29 @@ namespace services
         // 3. Write metadata
         writeMetadata(slotDir, slotName);
 
-        events::save::SaveGameCompletedNotification notif;
+        bool overallSuccess = sceneSuccess && scriptsSuccess;
+
+        ::events::save::SaveGameCompletedNotification notif;
         notif.slotName = slotName;
-        notif.success = sceneSuccess && scriptsSuccess;
-        if (!notif.success)
+        notif.success = overallSuccess;
+        if (!overallSuccess)
         {
-            notif.errorMessage = "Partial save failure";
+            notif.errorMessage = "Failed to save script states";
         }
         dispatcher.publish(notif);
 
         vfLogInfo("[SaveService] Game saved to slot '{}'", slotName);
-        return true;
+        return overallSuccess;
     }
 
     bool SaveService::loadGame(const std::string& slotName)
     {
+        if (!isValidSlotName(slotName))
+        {
+            vfLogError("[SaveService] Invalid slot name: '{}'", slotName);
+            return false;
+        }
+
         std::string slotDir = getSlotDirectory(slotName);
         std::string scenePath = slotDir + "/scene.vfScene";
 
@@ -153,10 +183,11 @@ namespace services
             return false;
         }
 
-        auto& dispatcher = events::EventDispatcher::instance();
+        auto& dispatcher = ::events::EventDispatcher::instance();
 
-        // Store the slot directory for later script state restoration
-        pendingLoadSlot = slotDir;
+        // Store both name and directory for later restoration
+        pendingLoadSlotName = slotName;
+        pendingLoadSlotDir = slotDir;
         waitingForSceneLoad = true;
 
         // Subscribe to scene load completion to restore script states
@@ -165,44 +196,42 @@ namespace services
             dispatcher.unsubscribe(sceneLoadToken);
         }
 
-        sceneLoadToken = dispatcher.subscribe<events::scene::SceneLoadingCompletedNotification>(
-            [this](const events::scene::SceneLoadingCompletedNotification& notif)
+        sceneLoadToken = dispatcher.subscribe<::events::scene::SceneLoadingCompletedNotification>(
+            [this](const ::events::scene::SceneLoadingCompletedNotification& notif)
             {
                 if (!waitingForSceneLoad) return;
                 waitingForSceneLoad = false;
 
                 if (notif.success)
                 {
-                    onSceneLoadCompleted(pendingLoadSlot);
+                    onSceneLoadCompleted();
                 }
                 else
                 {
-                    auto& disp = events::EventDispatcher::instance();
-                    events::save::LoadGameCompletedNotification loadNotif;
-                    loadNotif.slotName = pendingLoadSlot;
+                    auto& disp = ::events::EventDispatcher::instance();
+                    ::events::save::LoadGameCompletedNotification loadNotif;
+                    loadNotif.slotName = pendingLoadSlotName;
                     loadNotif.success = false;
                     loadNotif.errorMessage = "Scene load failed";
                     disp.publish(loadNotif);
                 }
             });
 
-        // Trigger scene load (deferred)
-        events::scene::LoadSceneCommand loadCmd;
+        // Trigger scene load (deferred — runs on next update() tick, not background-threaded)
+        ::events::scene::LoadSceneCommand loadCmd;
         loadCmd.filePath = scenePath;
         dispatcher.execute(loadCmd);
 
         return true;
     }
 
-    void SaveService::onSceneLoadCompleted(const std::string& slotDir)
+    void SaveService::onSceneLoadCompleted()
     {
-        // Scene loaded, scripts should be instantiated now
-        // Restore script states
-        bool success = restoreScriptStates(slotDir);
+        bool success = restoreScriptStates(pendingLoadSlotDir);
 
-        auto& dispatcher = events::EventDispatcher::instance();
-        events::save::LoadGameCompletedNotification notif;
-        notif.slotName = slotDir;
+        auto& dispatcher = ::events::EventDispatcher::instance();
+        ::events::save::LoadGameCompletedNotification notif;
+        notif.slotName = pendingLoadSlotName;
         notif.success = success;
         if (!success)
         {
@@ -210,11 +239,17 @@ namespace services
         }
         dispatcher.publish(notif);
 
-        vfLogInfo("[SaveService] Game loaded from save slot");
+        vfLogInfo("[SaveService] Game loaded from slot '{}'", pendingLoadSlotName);
     }
 
     bool SaveService::deleteSlot(const std::string& slotName)
     {
+        if (!isValidSlotName(slotName))
+        {
+            vfLogError("[SaveService] Invalid slot name: '{}'", slotName);
+            return false;
+        }
+
         std::string slotDir = getSlotDirectory(slotName);
         try
         {
@@ -261,6 +296,8 @@ namespace services
         SaveSlotMetadata metadata;
         metadata.slotName = slotName;
 
+        if (!isValidSlotName(slotName)) return metadata;
+
         std::string metaPath = getSlotDirectory(slotName) + "/metadata.json";
         if (!fs::exists(metaPath)) return metadata;
 
@@ -283,8 +320,8 @@ namespace services
 
     std::string SaveService::getSavesDirectory() const
     {
-        auto& dispatcher = events::EventDispatcher::instance();
-        events::project::GetProjectPathQuery pathQuery;
+        auto& dispatcher = ::events::EventDispatcher::instance();
+        ::events::project::GetProjectPathQuery pathQuery;
         auto projectPath = dispatcher.query(pathQuery);
 
         if (projectPath.has_value())
@@ -426,7 +463,7 @@ namespace services
             auto now = std::chrono::system_clock::now();
             auto timeT = std::chrono::system_clock::to_time_t(now);
             std::tm tm{};
-            localtime_s(&tm, &timeT);
+            localtime_s(&tm, &timeT); // Windows-only; use localtime_r on POSIX
 
             std::ostringstream oss;
             oss << std::put_time(&tm, "%Y-%m-%dT%H:%M:%S");

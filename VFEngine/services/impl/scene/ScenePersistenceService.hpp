@@ -8,6 +8,7 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include <queue>
 
 namespace scene
 {
@@ -36,13 +37,13 @@ namespace services
         std::string activeSceneName = "Main";
         std::unordered_map<std::string, EntityHandle> loadedAdditiveScenes;
 
-        // Async additive load queue
+        // Async additive load queue (supports multiple per frame)
         struct PendingAdditiveLoad
         {
             std::string scenePath;
             std::string sceneName;
         };
-        std::optional<PendingAdditiveLoad> pendingAdditiveLoad;
+        std::queue<PendingAdditiveLoad> pendingAdditiveLoads;
 
         // Streaming zone manager
         std::unique_ptr<StreamingZoneManager> streamingZoneManager;

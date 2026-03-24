@@ -17,54 +17,54 @@ namespace services
 
     void ConfigService::registerEventHandlers(::events::EventDispatcher& dispatcher)
     {
-        dispatcher.registerCommandHandler<events::save::SetConfigIntCommand>(
-            [this](const events::save::SetConfigIntCommand& cmd)
+        dispatcher.registerCommandHandler<::events::save::SetConfigIntCommand>(
+            [this](const ::events::save::SetConfigIntCommand& cmd)
             {
                 setInt(cmd.key, cmd.value);
                 return true;
             });
 
-        dispatcher.registerQueryHandler<events::save::GetConfigIntQuery>(
-            [this](const events::save::GetConfigIntQuery& q)
+        dispatcher.registerQueryHandler<::events::save::GetConfigIntQuery>(
+            [this](const ::events::save::GetConfigIntQuery& q)
             {
                 return getInt(q.key, q.defaultValue);
             });
 
-        dispatcher.registerCommandHandler<events::save::SetConfigFloatCommand>(
-            [this](const events::save::SetConfigFloatCommand& cmd)
+        dispatcher.registerCommandHandler<::events::save::SetConfigFloatCommand>(
+            [this](const ::events::save::SetConfigFloatCommand& cmd)
             {
                 setFloat(cmd.key, cmd.value);
                 return true;
             });
 
-        dispatcher.registerQueryHandler<events::save::GetConfigFloatQuery>(
-            [this](const events::save::GetConfigFloatQuery& q)
+        dispatcher.registerQueryHandler<::events::save::GetConfigFloatQuery>(
+            [this](const ::events::save::GetConfigFloatQuery& q)
             {
                 return getFloat(q.key, q.defaultValue);
             });
 
-        dispatcher.registerCommandHandler<events::save::SetConfigStringCommand>(
-            [this](const events::save::SetConfigStringCommand& cmd)
+        dispatcher.registerCommandHandler<::events::save::SetConfigStringCommand>(
+            [this](const ::events::save::SetConfigStringCommand& cmd)
             {
                 setString(cmd.key, cmd.value);
                 return true;
             });
 
-        dispatcher.registerQueryHandler<events::save::GetConfigStringQuery>(
-            [this](const events::save::GetConfigStringQuery& q)
+        dispatcher.registerQueryHandler<::events::save::GetConfigStringQuery>(
+            [this](const ::events::save::GetConfigStringQuery& q)
             {
                 return getString(q.key, q.defaultValue);
             });
 
-        dispatcher.registerCommandHandler<events::save::SetConfigBoolCommand>(
-            [this](const events::save::SetConfigBoolCommand& cmd)
+        dispatcher.registerCommandHandler<::events::save::SetConfigBoolCommand>(
+            [this](const ::events::save::SetConfigBoolCommand& cmd)
             {
                 setBool(cmd.key, cmd.value);
                 return true;
             });
 
-        dispatcher.registerQueryHandler<events::save::GetConfigBoolQuery>(
-            [this](const events::save::GetConfigBoolQuery& q)
+        dispatcher.registerQueryHandler<::events::save::GetConfigBoolQuery>(
+            [this](const ::events::save::GetConfigBoolQuery& q)
             {
                 return getBool(q.key, q.defaultValue);
             });
@@ -81,7 +81,7 @@ namespace services
     int64_t ConfigService::getInt(const std::string& key, int64_t defaultValue) const
     {
         std::lock_guard<std::mutex> lock(configMutex);
-        const_cast<ConfigService*>(this)->ensureLoaded();
+        ensureLoaded();
         if (configData.contains(key) && configData[key].is_number_integer())
         {
             return configData[key].get<int64_t>();
@@ -100,8 +100,9 @@ namespace services
     double ConfigService::getFloat(const std::string& key, double defaultValue) const
     {
         std::lock_guard<std::mutex> lock(configMutex);
-        const_cast<ConfigService*>(this)->ensureLoaded();
-        if (configData.contains(key) && configData[key].is_number())
+        ensureLoaded();
+        // is_number_float() matches only float JSON values, not integers
+        if (configData.contains(key) && configData[key].is_number_float())
         {
             return configData[key].get<double>();
         }
@@ -119,7 +120,7 @@ namespace services
     std::string ConfigService::getString(const std::string& key, const std::string& defaultValue) const
     {
         std::lock_guard<std::mutex> lock(configMutex);
-        const_cast<ConfigService*>(this)->ensureLoaded();
+        ensureLoaded();
         if (configData.contains(key) && configData[key].is_string())
         {
             return configData[key].get<std::string>();
@@ -138,7 +139,7 @@ namespace services
     bool ConfigService::getBool(const std::string& key, bool defaultValue) const
     {
         std::lock_guard<std::mutex> lock(configMutex);
-        const_cast<ConfigService*>(this)->ensureLoaded();
+        ensureLoaded();
         if (configData.contains(key) && configData[key].is_boolean())
         {
             return configData[key].get<bool>();
@@ -146,7 +147,7 @@ namespace services
         return defaultValue;
     }
 
-    void ConfigService::ensureLoaded()
+    void ConfigService::ensureLoaded() const
     {
         if (loaded) return;
         loaded = true;
@@ -186,8 +187,8 @@ namespace services
 
     std::string ConfigService::getConfigPath() const
     {
-        auto& dispatcher = events::EventDispatcher::instance();
-        events::project::GetProjectPathQuery pathQuery;
+        auto& dispatcher = ::events::EventDispatcher::instance();
+        ::events::project::GetProjectPathQuery pathQuery;
         auto projectPath = dispatcher.query(pathQuery);
 
         if (projectPath.has_value())

@@ -9,10 +9,9 @@ namespace services
     class ConfigService
     {
     private:
-        nlohmann::json configData;
-        std::string configFilePath;
+        mutable nlohmann::json configData;
         mutable std::mutex configMutex;
-        bool loaded = false;
+        mutable bool loaded = false;
 
     public:
         ConfigService();
@@ -33,7 +32,7 @@ namespace services
         bool getBool(const std::string& key, bool defaultValue) const;
 
     private:
-        void ensureLoaded();
+        void ensureLoaded() const;
         void flush();
         std::string getConfigPath() const;
     };

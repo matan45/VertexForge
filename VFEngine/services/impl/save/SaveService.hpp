@@ -21,7 +21,8 @@ namespace services
         IScriptingProvider* scriptingProvider;
 
         // Pending load state (deferred until scene loads)
-        std::string pendingLoadSlot;
+        std::string pendingLoadSlotName;
+        std::string pendingLoadSlotDir;
         bool waitingForSceneLoad = false;
         ::events::SubscriptionToken sceneLoadToken;
 
@@ -42,9 +43,10 @@ namespace services
     private:
         std::string getSavesDirectory() const;
         std::string getSlotDirectory(const std::string& slotName) const;
+        static bool isValidSlotName(const std::string& slotName);
         bool saveScriptStates(const std::string& slotDir);
         bool restoreScriptStates(const std::string& slotDir);
         void writeMetadata(const std::string& slotDir, const std::string& slotName);
-        void onSceneLoadCompleted(const std::string& slotDir);
+        void onSceneLoadCompleted();
     };
 }

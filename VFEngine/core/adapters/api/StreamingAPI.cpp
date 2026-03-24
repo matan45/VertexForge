@@ -81,10 +81,10 @@ namespace core::api
                     return value::Value(false);
                 }
 
-                std::string name = extractString(args[0], "Streaming.isLoaded");
+                std::string scenePath = extractString(args[0], "Streaming.isLoaded");
 
-                events::scene::IsSceneLoadedQuery query;
-                query.sceneName = name;
+                events::scene::IsStreamingSceneLoadedQuery query;
+                query.scenePath = scenePath;
                 return value::Value(dispatcher.query(query));
             });
     }

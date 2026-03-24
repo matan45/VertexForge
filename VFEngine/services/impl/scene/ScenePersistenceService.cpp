@@ -158,6 +158,7 @@ namespace services
         // Clear all additive scenes
         loadedAdditiveScenes.clear();
         activeSceneName = "Main";
+        while (!pendingAdditiveLoads.empty()) pendingAdditiveLoads.pop();
 
         // Clear streaming zones
         if (streamingZoneManager)
@@ -238,10 +239,10 @@ namespace services
             performDeferredLoad(filePath);
         }
 
-        if (pendingAdditiveLoad.has_value())
+        if (!pendingAdditiveLoads.empty())
         {
-            PendingAdditiveLoad load = std::move(pendingAdditiveLoad.value());
-            pendingAdditiveLoad.reset();
+            PendingAdditiveLoad load = std::move(pendingAdditiveLoads.front());
+            pendingAdditiveLoads.pop();
             performDeferredAdditiveLoad(load);
         }
 
@@ -562,7 +563,7 @@ namespace services
         }
 
         // Queue for deferred loading
-        pendingAdditiveLoad = PendingAdditiveLoad{scenePath, sceneName};
+        pendingAdditiveLoads.push(PendingAdditiveLoad{scenePath, sceneName});
         return true;
     }
 

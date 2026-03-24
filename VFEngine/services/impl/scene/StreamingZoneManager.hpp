@@ -36,6 +36,7 @@ namespace services
         uint32_t addZone(const glm::vec3& boundsMin, const glm::vec3& boundsMax, const std::string& scenePath);
         bool removeZone(uint32_t zoneId);
         void clear();
+        bool isScenePathLoaded(const std::string& scenePath) const;
 
         void update();
 

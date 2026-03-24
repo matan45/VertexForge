@@ -25,6 +25,16 @@ namespace events::scene {
     };
 
     // ============================================
+    // Streaming Zone Queries
+    // ============================================
+
+    struct IsStreamingSceneLoadedQuery : IQuery<bool> {
+        std::string scenePath;
+
+        std::string_view getName() const override { return "IsStreamingSceneLoaded"; }
+    };
+
+    // ============================================
     // Streaming Zone Notifications
     // ============================================
 

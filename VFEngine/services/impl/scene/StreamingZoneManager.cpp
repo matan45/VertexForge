@@ -30,6 +30,12 @@ namespace services
                 // to load on demand. Can be extended to cache parsed JSON later.
                 return true;
             });
+
+        dispatcher.registerQueryHandler<events::scene::IsStreamingSceneLoadedQuery>(
+            [this](const events::scene::IsStreamingSceneLoadedQuery& q)
+            {
+                return isScenePathLoaded(q.scenePath);
+            });
     }
 
     uint32_t StreamingZoneManager::addZone(const glm::vec3& boundsMin, const glm::vec3& boundsMax,
@@ -82,6 +88,16 @@ namespace services
             }
         }
         zones.clear();
+    }
+
+    bool StreamingZoneManager::isScenePathLoaded(const std::string& scenePath) const
+    {
+        for (const auto& [id, zone] : zones)
+        {
+            if (zone.scenePath == scenePath && zone.isLoaded)
+                return true;
+        }
+        return false;
     }
 
     void StreamingZoneManager::update()

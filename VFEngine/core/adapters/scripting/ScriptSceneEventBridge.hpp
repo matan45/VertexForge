@@ -29,7 +29,8 @@ namespace core
         void subscribeAll();
         void unsubscribeAll();
 
-        // Static callback storage for async scene loads
+        // Static callback storage for async scene loads.
+        // Shared across all bridge instances — assumes single-interpreter model.
         static void storeAsyncCallback(const std::string& scenePath, const value::Value& callback);
 
     private:
