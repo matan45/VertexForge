@@ -60,6 +60,12 @@ namespace components
         std::string worldFilePath;
     };
 
+    struct AdditiveSceneComponent
+    {
+        std::string sceneName;
+        std::string scenePath;
+    };
+
     struct TransformComponent
     {
         glm::vec3 position{0.0f};

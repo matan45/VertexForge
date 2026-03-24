@@ -11,6 +11,7 @@
 #include "ScriptVFXEventBridge.hpp"
 #include "ScriptNavigationEventBridge.hpp"
 #include "ScriptInputActionEventBridge.hpp"
+#include "ScriptSceneEventBridge.hpp"
 #include "NativeAPIRegistry.hpp"
 #include "CoroutineManager.hpp"
 #include "ScriptCommunicationManager.hpp"
@@ -73,6 +74,9 @@ namespace core
             inputActionEventBridge = std::make_unique<ScriptInputActionEventBridge>(
                 interpreter.get(), instanceToInterfaces, instanceToObject, instanceToEntity, instanceToPriority);
 
+            sceneEventBridge = std::make_unique<ScriptSceneEventBridge>(
+                interpreter.get(), instanceToInterfaces, instanceToObject, instanceToEntity);
+
             physicsEventBridge->subscribeAll();
             uiEventBridge->subscribeAll();
             animationEventBridge->subscribeAll();
@@ -80,6 +84,7 @@ namespace core
             vfxEventBridge->subscribeAll();
             navigationEventBridge->subscribeAll();
             inputActionEventBridge->subscribeAll();
+            sceneEventBridge->subscribeAll();
 
             initialized = true;
             return true;
@@ -97,6 +102,7 @@ namespace core
     {
         if (!initialized) return;
 
+        if (sceneEventBridge) sceneEventBridge->unsubscribeAll();
         if (inputActionEventBridge) inputActionEventBridge->unsubscribeAll();
         if (navigationEventBridge) navigationEventBridge->unsubscribeAll();
         if (vfxEventBridge) vfxEventBridge->unsubscribeAll();

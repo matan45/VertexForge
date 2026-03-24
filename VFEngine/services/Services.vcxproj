@@ -162,7 +162,9 @@
     <ClInclude Include="events\scene\ComponentPhysicsLightEvents.hpp" />
     <ClInclude Include="events\scene\EntityTransformEvents.hpp" />
     <ClInclude Include="events\scene\ReverbZoneEvents.hpp" />
+    <ClInclude Include="events\scene\SceneManagementEvents.hpp" />
     <ClInclude Include="events\scene\ScenePersistenceEvents.hpp" />
+    <ClInclude Include="events\scene\StreamingZoneEvents.hpp" />
     <ClInclude Include="events\scripting\ScriptingEvents.hpp" />
     <ClInclude Include="events\terrain\BrushEvents.hpp" />
     <ClInclude Include="events\terrain\CaveBrushEvents.hpp" />
@@ -250,6 +252,7 @@
     <ClInclude Include="impl\scene\EntityStateService.hpp" />
     <ClInclude Include="impl\scene\HierarchyService.hpp" />
     <ClInclude Include="impl\scene\ScenePersistenceService.hpp" />
+    <ClInclude Include="impl\scene\StreamingZoneManager.hpp" />
     <ClInclude Include="impl\scene\TerrainService.hpp" />
     <ClInclude Include="impl\scene\TransformComponentService.hpp" />
     <ClInclude Include="impl\scene\WaterService.hpp" />
@@ -423,6 +426,7 @@
     <ClCompile Include="impl\scene\EntityStateService.cpp" />
     <ClCompile Include="impl\scene\HierarchyService.cpp" />
     <ClCompile Include="impl\scene\ScenePersistenceService.cpp" />
+    <ClCompile Include="impl\scene\StreamingZoneManager.cpp" />
     <ClCompile Include="impl\scene\TerrainBrushOps.cpp" />
     <ClCompile Include="impl\scene\TerrainCaveBrushOps.cpp" />
     <ClCompile Include="impl\scene\TerrainColliderOps.cpp" />

@@ -205,6 +205,103 @@ namespace serialization
         }
     }
 
+    bool SceneSerialization::loadSceneAdditive(std::string_view filename, scene::SceneGraphSystem& sceneGraph,
+                                              scene::Entity& containerParent,
+                                              SceneLoadProgressCallback progressCallback)
+    {
+        json sceneJson;
+
+        try
+        {
+            std::string filePath{filename};
+            std::ifstream file{filePath};
+            if (!file.is_open())
+            {
+                vfLogError("Failed to open file for additive loading: {}", filename);
+                return false;
+            }
+
+            sceneJson = json::parse(file);
+            file.close();
+
+            if (!sceneJson.is_object())
+            {
+                vfLogError("Invalid scene file for additive load: root is not a JSON object");
+                return false;
+            }
+
+            if (!sceneJson.contains("root") || !sceneJson["root"].is_object())
+            {
+                vfLogError("Invalid scene file for additive load: missing or invalid 'root' object");
+                return false;
+            }
+        }
+        catch (const json::parse_error& e)
+        {
+            vfLogError("JSON parse error while loading additive scene: {}", e.what());
+            return false;
+        }
+        catch (const std::exception& e)
+        {
+            vfLogError("Failed to read scene file for additive load: {}", e.what());
+            return false;
+        }
+
+        try
+        {
+            const auto& rootJson = sceneJson["root"];
+
+            // Skip scene settings (physics/audio/render) - those belong to the main scene.
+            // Only deserialize entity children from the root into the container.
+
+            if (rootJson.contains("children") && rootJson["children"].is_array())
+            {
+                size_t totalEntities = 0;
+                for (const auto& childJson : rootJson["children"])
+                {
+                    totalEntities += countEntities(childJson);
+                }
+
+                size_t entitiesLoaded = 0;
+                DeserializeEntityContext ctx{sceneGraph, false, progressCallback,
+                                             entitiesLoaded, totalEntities};
+
+                for (const auto& childJson : rootJson["children"])
+                {
+                    if (!childJson.is_object()) continue;
+
+                    std::string childName = childJson.value("name", "Unnamed");
+                    scene::Entity child(childName); // Generates new UUID
+
+                    if (!child.isValid())
+                    {
+                        vfLogError("Failed to create entity '{}' during additive scene load", childName);
+                        continue;
+                    }
+
+                    sceneGraph.addChild(containerParent, child);
+                    deserializeEntity(childJson, child, ctx);
+                }
+            }
+
+            // Also deserialize root-level components (IBL, camera, etc.) onto the container
+            // if the source scene root had them
+            if (rootJson.contains("components"))
+            {
+                deserializeEntityComponents(rootJson["components"], containerParent);
+            }
+
+            resolveRenderTextureSourceNames();
+
+            return true;
+        }
+        catch (const std::exception& e)
+        {
+            vfLogError("Failed to deserialize additive scene: {}", e.what());
+            return false;
+        }
+    }
+
     json SceneSerialization::serializeRootEntity(scene::Entity& root)
     {
         auto children = root.getChildren();
