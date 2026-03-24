@@ -66,6 +66,10 @@ namespace services
 
         std::vector<world::SectorStreamingAction> streamingActions;
 
+        // Multiple streaming sources (camera + gameplay-registered sources)
+        std::unordered_map<uint32_t, world::StreamingSource> streamingSources;
+        uint32_t nextStreamingSourceId = 1;
+
         ::events::SubscriptionToken transformChangedToken;
         ::events::SubscriptionToken editorModeChangedToken;
         ::events::SubscriptionToken cameraPositionToken;

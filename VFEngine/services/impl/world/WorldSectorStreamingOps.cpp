@@ -34,9 +34,20 @@ namespace services
         // In edit mode, sectors stay as-is — no auto load/unload from editor camera.
         if (isPlayMode)
         {
-            glm::vec3 cameraPos = getPrimaryCameraPosition();
-            
-            streamer.update(cameraPos, sectorManager, streamingActions);
+            // Build streaming sources: camera is always source[0]
+            std::vector<world::StreamingSource> sources;
+            {
+                world::StreamingSource cameraSrc;
+                cameraSrc.position = getPrimaryCameraPosition();
+                cameraSrc.radiusMultiplier = 1.0f;
+                cameraSrc.priority = 0;
+                cameraSrc.id = 0;
+                sources.push_back(cameraSrc);
+            }
+            for (const auto& [id, src] : streamingSources)
+                sources.push_back(src);
+
+            streamer.update(sources, sectorManager, streamingActions);
 
             for (const auto& action : streamingActions)
             {

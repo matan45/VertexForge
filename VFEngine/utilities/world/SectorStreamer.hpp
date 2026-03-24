@@ -38,7 +38,7 @@ namespace world
         [[nodiscard]] const SectorStreamingConfig& getConfig() const { return config; }
 
         void update(
-            const glm::vec3& cameraPos,
+            const std::vector<StreamingSource>& sources,
             const WorldSectorManager& manager,
             std::vector<SectorStreamingAction>& outActions);
 

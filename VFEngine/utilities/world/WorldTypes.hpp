@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <cmath>
 #include <functional>
+#include <glm/glm.hpp>
 
 namespace world
 {
@@ -83,6 +84,14 @@ namespace world
         float expected = worldTileSize * static_cast<float>(config.tilesPerSector);
         return std::abs(config.sectorWorldSize - expected) < 0.001f;
     }
+
+    struct StreamingSource
+    {
+        glm::vec3 position{0.0f};
+        float radiusMultiplier = 1.0f;
+        uint8_t priority = 0;
+        uint32_t id = 0;
+    };
 
     struct SectorStreamingConfig
     {

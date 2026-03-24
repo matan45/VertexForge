@@ -510,6 +510,33 @@ namespace services
                 return debugDrawSectors;
             });
 
+        dispatcher.registerCommandHandler<::events::world::RegisterStreamingSourceCommand>(
+            [this](const ::events::world::RegisterStreamingSourceCommand& cmd) -> uint32_t
+            {
+                uint32_t id = nextStreamingSourceId++;
+                world::StreamingSource source;
+                source.position = cmd.position;
+                source.radiusMultiplier = cmd.radiusMultiplier;
+                source.priority = cmd.priority;
+                source.id = id;
+                streamingSources[id] = source;
+                return id;
+            });
+
+        dispatcher.registerCommandHandler<::events::world::UnregisterStreamingSourceCommand>(
+            [this](const ::events::world::UnregisterStreamingSourceCommand& cmd)
+            {
+                streamingSources.erase(cmd.sourceId);
+            });
+
+        dispatcher.registerCommandHandler<::events::world::UpdateStreamingSourcePositionCommand>(
+            [this](const ::events::world::UpdateStreamingSourcePositionCommand& cmd)
+            {
+                auto it = streamingSources.find(cmd.sourceId);
+                if (it != streamingSources.end())
+                    it->second.position = cmd.position;
+            });
+
         dispatcher.registerQueryHandler<::events::vfx::snapshot::GetVFXSnapshotQuery>(
             [this](const ::events::vfx::snapshot::GetVFXSnapshotQuery& query)
                 -> std::optional<::events::vfx::snapshot::VFXPlaybackSnapshot>
@@ -587,6 +614,8 @@ namespace services
                     animationSnapshots.clear();
                     vfxSnapshots.clear();
                     audioSnapshots.clear();
+                    streamingSources.clear();
+                    nextStreamingSourceId = 1;
 
                     // Returning to edit mode — snapshot was restored, re-assign entities to sectors
                     entityLoader.clear();

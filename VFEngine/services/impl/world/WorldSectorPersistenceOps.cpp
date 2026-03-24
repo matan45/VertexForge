@@ -275,6 +275,8 @@ namespace services
         animationSnapshots.clear();
         vfxSnapshots.clear();
         audioSnapshots.clear();
+        streamingSources.clear();
+        nextStreamingSourceId = 1;
         sectorManager.clear();
 
         auto& root = sceneGraph->GetRoot();

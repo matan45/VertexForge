@@ -35,57 +35,66 @@ namespace world
     }
 
     void SectorStreamer::update(
-        const glm::vec3& cameraPos,
+        const std::vector<StreamingSource>& sources,
         const WorldSectorManager& manager,
         std::vector<SectorStreamingAction>& outActions)
     {
         outActions.clear();
 
-        if (!enabled)
+        if (!enabled || sources.empty())
             return;
 
         if (needsSeed)
             seedLoadedSectors(manager);
 
         float sectorSize = manager.getConfig().sectorWorldSize;
-        float loadWorldRadius = config.loadRadius * sectorSize;
-        float unloadWorldRadius = config.unloadRadius * sectorSize;
-        float loadRadiusSq = loadWorldRadius * loadWorldRadius;
-        float unloadRadiusSq = unloadWorldRadius * unloadWorldRadius;
 
         loadCandidates.clear();
         unloadCandidates.clear();
 
-        // Load candidates: scan coordinate range around camera
-        int minX = static_cast<int>(std::floor((cameraPos.x - loadWorldRadius) / sectorSize));
-        int maxX = static_cast<int>(std::floor((cameraPos.x + loadWorldRadius) / sectorSize));
-        int minZ = static_cast<int>(std::floor((cameraPos.z - loadWorldRadius) / sectorSize));
-        int maxZ = static_cast<int>(std::floor((cameraPos.z + loadWorldRadius) / sectorSize));
+        // Load candidates: scan merged bounding box of all sources
+        // Use a set to avoid duplicate candidates from overlapping source radii
+        std::unordered_set<SectorCoord, SectorCoordHash> visitedCoords;
 
-        for (int x = minX; x <= maxX; ++x)
+        for (const auto& source : sources)
         {
-            for (int z = minZ; z <= maxZ; ++z)
+            float loadWorldRadius = config.loadRadius * sectorSize * source.radiusMultiplier;
+            float loadRadiusSq = loadWorldRadius * loadWorldRadius;
+
+            int minX = static_cast<int>(std::floor((source.position.x - loadWorldRadius) / sectorSize));
+            int maxX = static_cast<int>(std::floor((source.position.x + loadWorldRadius) / sectorSize));
+            int minZ = static_cast<int>(std::floor((source.position.z - loadWorldRadius) / sectorSize));
+            int maxZ = static_cast<int>(std::floor((source.position.z + loadWorldRadius) / sectorSize));
+
+            for (int x = minX; x <= maxX; ++x)
             {
-                SectorCoord coord{x, z};
-                const WorldSector* sector = manager.getSector(coord);
-                if (!sector) continue;
-
-                // Sync: track any loaded/loading sectors we encounter
-                if (sector->state == SectorState::Loaded || sector->state == SectorState::Loading)
-                    loadedSectors.insert(coord);
-
-                float distSq = sectorDistanceSq(coord, cameraPos, sectorSize);
-                if (distSq > loadRadiusSq)
-                    continue;
-
-                if (sector->state == SectorState::Unloaded && !sector->filePath.empty())
+                for (int z = minZ; z <= maxZ; ++z)
                 {
-                    loadCandidates.push_back({coord, distSq});
+                    SectorCoord coord{x, z};
+
+                    // Skip already-visited coords from other sources
+                    if (!visitedCoords.insert(coord).second)
+                        continue;
+
+                    const WorldSector* sector = manager.getSector(coord);
+                    if (!sector) continue;
+
+                    if (sector->state == SectorState::Loaded || sector->state == SectorState::Loading)
+                        loadedSectors.insert(coord);
+
+                    float distSq = sectorDistanceSq(coord, source.position, sectorSize);
+                    if (distSq > loadRadiusSq)
+                        continue;
+
+                    if (sector->state == SectorState::Unloaded && !sector->filePath.empty())
+                    {
+                        loadCandidates.push_back({coord, distSq});
+                    }
                 }
             }
         }
 
-        // Unload candidates: iterate only tracked loaded sectors
+        // Unload candidates: only unload if outside ALL sources' unload radii
         auto it = loadedSectors.begin();
         while (it != loadedSectors.end())
         {
@@ -96,12 +105,28 @@ namespace world
                 continue;
             }
 
-            if (sector->state == SectorState::Loaded)
+            if (sector->state == SectorState::Loaded && !sector->dirty)
             {
-                float distSq = sectorDistanceSq(*it, cameraPos, sectorSize);
-                if (distSq > unloadRadiusSq && !sector->dirty)
+                bool outsideAllSources = true;
+                float maxDistSq = 0.0f;
+
+                for (const auto& source : sources)
                 {
-                    unloadCandidates.push_back({*it, distSq});
+                    float unloadWorldRadius = config.unloadRadius * sectorSize * source.radiusMultiplier;
+                    float unloadRadiusSq = unloadWorldRadius * unloadWorldRadius;
+                    float distSq = sectorDistanceSq(*it, source.position, sectorSize);
+
+                    if (distSq <= unloadRadiusSq)
+                    {
+                        outsideAllSources = false;
+                        break;
+                    }
+                    maxDistSq = std::max(maxDistSq, distSq);
+                }
+
+                if (outsideAllSources)
+                {
+                    unloadCandidates.push_back({*it, maxDistSq});
                 }
             }
             ++it;
