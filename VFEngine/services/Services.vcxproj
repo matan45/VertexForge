@@ -190,6 +190,7 @@
     <ClInclude Include="events\vfx\VFXEventNotifications.hpp" />
     <ClInclude Include="events\vfx\VFXPreviewEvents.hpp" />
     <ClInclude Include="events\vfx\VFXRuntimeEvents.hpp" />
+    <ClInclude Include="events\vfx\VFXSnapshotEvents.hpp" />
     <ClInclude Include="events\world\WorldSectorEvents.hpp" />
     <ClInclude Include="impl\ai\BehaviorTreePlayModeHandler.hpp" />
     <ClInclude Include="impl\ai\BehaviorTreeServiceImpl.hpp" />
