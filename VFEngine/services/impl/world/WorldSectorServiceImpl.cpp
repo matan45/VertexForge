@@ -32,18 +32,6 @@ namespace
             || entity.hasComponent<components::CameraComponent>();
     }
 
-    // O(N) lookup — consider replacing with a UUID→entity cache if this becomes a bottleneck
-    entt::entity findEntityByUUID(uint64_t uuid)
-    {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        auto uuidView = registry.view<components::UUIDComponent>();
-        for (auto entity : uuidView)
-        {
-            if (uuidView.get<components::UUIDComponent>(entity).id.getValue() == uuid)
-                return entity;
-        }
-        return entt::null;
-    }
 }
 
 namespace services
@@ -60,7 +48,7 @@ namespace services
                 (static_cast<float>(coord.z) + 0.5f) * sectorManager.getConfig().sectorWorldSize
             );
 
-            auto entity = findEntityByUUID(uuid);
+            auto entity = scene::EntityRegistry::findByUUID(uuid);
             if (entity != entt::null)
             {
                 scene::Entity sceneEntity(entity);
@@ -83,7 +71,7 @@ namespace services
 
         entityLoader.setOnEntityPostLoad([](uint64_t uuid, const std::string& meshPath, const std::string& animatorPath)
         {
-            auto entity = findEntityByUUID(uuid);
+            auto entity = scene::EntityRegistry::findByUUID(uuid);
             if (entity != entt::null)
             {
                 scene::Entity sceneEntity(entity);
@@ -332,7 +320,7 @@ namespace services
                         for (uint64_t uuid : sector.entityUUIDs)
                         {
                             bool isDynamic = false;
-                            auto ent = findEntityByUUID(uuid);
+                            auto ent = scene::EntityRegistry::findByUUID(uuid);
                             if (ent != entt::null)
                             {
                                 scene::Entity sceneEntity(ent);

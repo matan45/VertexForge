@@ -88,20 +88,11 @@ namespace services
                 std::vector<std::pair<uint64_t, entt::entity>> meshEntities;
                 std::vector<uint32_t> lightEntityIds;
 
-                // Build UUID -> entity lookup map once (O(N)), then resolve each UUID in O(1)
-                auto uuidView = registry.view<components::UUIDComponent>();
-                std::unordered_map<uint64_t, entt::entity> uuidToEntity;
-                for (auto ent : uuidView)
-                {
-                    uuidToEntity[uuidView.get<components::UUIDComponent>(ent).id.getValue()] = ent;
-                }
-
                 for (uint64_t uuid : sector.entityUUIDs)
                 {
-                    auto it = uuidToEntity.find(uuid);
-                    if (it != uuidToEntity.end())
+                    auto ent = scene::EntityRegistry::findByUUID(uuid);
+                    if (ent != entt::null)
                     {
-                        auto ent = it->second;
                         if (registry.any_of<components::MeshComponent>(ent))
                             meshEntities.emplace_back(uuid, ent);
                         if (registry.any_of<components::PointLightComponent, components::SpotLightComponent>(ent))
@@ -159,7 +150,7 @@ namespace services
                     std::to_string(sector.coord.z) + ".vfsector";
                 std::string sectorPath = (sectorsDir / sectorFileName).string();
 
-                if (world::WorldSectorSerialization::saveSector(sector, *sceneGraph, sectorPath))
+                if (world::WorldSectorSerialization::saveSector(sector, sectorPath))
                 {
                     sector.filePath = sectorPath;
                     worldDefinition.sectorFilePaths[sector.coord] = sectorPath;
@@ -230,6 +221,9 @@ namespace services
             auto& sector = sectorManager.getOrCreateSector(coord);
             sector.filePath = sectorPath;
             sector.state = world::SectorState::Unloaded;
+
+            // Pre-cache metadata from binary header (44 bytes, fast)
+            world::WorldSectorSerialization::readSectorMetadata(sectorPath, sector.metadata);
         }
 
         ::events::world::WorldLoadedNotification notif;
@@ -248,7 +242,7 @@ namespace services
             return false;
         }
 
-        bool result = world::WorldSectorSerialization::saveSector(*sector, *sceneGraph, filePath);
+        bool result = world::WorldSectorSerialization::saveSector(*sector, filePath);
         if (result)
         {
             worldDefinition.sectorFilePaths[coord] = filePath;
@@ -267,6 +261,14 @@ namespace services
             cmd.enabled = false;
             ::events::EventDispatcher::instance().execute(cmd);
         }
+
+        // Drain all pending async sector loads before clearing
+        for (auto& [coord, pending] : pendingAsyncLoads)
+        {
+            if (pending.future.valid())
+                pending.future.get();
+        }
+        pendingAsyncLoads.clear();
 
         entityLoader.clear();
         sectorManager.clear();

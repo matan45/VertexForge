@@ -7,9 +7,11 @@
 #include "world/SectorStreamer.hpp"
 #include "world/SectorEntityLoader.hpp"
 #include "world/PendingReferenceResolver.hpp"
+#include <future>
 #include <memory>
 #include <optional>
 #include <string>
+#include <nlohmann/json.hpp>
 
 namespace scene
 {
@@ -79,8 +81,25 @@ namespace services
         world::WorldDefinition savedWorldDefinition;
         std::string savedWorldPath;
 
+        struct AsyncSectorLoadResult
+        {
+            std::vector<nlohmann::json> entityData;
+            bool success = false;
+        };
+
+        struct PendingAsyncSectorLoad
+        {
+            world::SectorCoord coord;
+            std::future<AsyncSectorLoadResult> future;
+            bool cancelled = false;
+        };
+
+        std::unordered_map<world::SectorCoord, PendingAsyncSectorLoad, world::SectorCoordHash> pendingAsyncLoads;
+
         void handleSectorLoad(const world::SectorCoord& coord);
         void handleSectorUnload(const world::SectorCoord& coord);
+        void pollAsyncSectorLoads();
+        void finalizeSectorLoad(const world::SectorCoord& coord, std::vector<nlohmann::json>& entityData);
         void onTransformChanged(uint64_t uuid, const glm::vec3& newPosition);
         void onTerrainAvailable(float worldTileSize);
         glm::vec3 getPrimaryCameraPosition() const;

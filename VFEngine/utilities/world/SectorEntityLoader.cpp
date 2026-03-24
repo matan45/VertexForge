@@ -50,35 +50,24 @@ namespace world
             auto pending = pendingUnloads.front();
             pendingUnloads.pop_front();
 
-            auto& registry = scene::EntityRegistry::getRegistry();
-            auto uuidView = registry.view<components::UUIDComponent>();
-            bool found = false;
-
-            for (auto entity : uuidView)
+            auto entity = scene::EntityRegistry::findByUUID(pending.uuid);
+            if (entity != entt::null)
             {
-                const auto& uuidComp = uuidView.get<components::UUIDComponent>(entity);
-                if (uuidComp.id.getValue() == pending.uuid)
+                scene::Entity sceneEntity(entity);
+
+                if (onEntityPreDestroy)
                 {
-                    scene::Entity sceneEntity(entity);
+                    onEntityPreDestroy(static_cast<uint64_t>(static_cast<uint32_t>(entity)));
+                }
 
-                    if (onEntityPreDestroy)
-                    {
-                        onEntityPreDestroy(static_cast<uint64_t>(static_cast<uint32_t>(entity)));
-                    }
+                sceneGraph.removeEntity(sceneEntity);
 
-                    sceneGraph.removeEntity(sceneEntity);
-
-                    if (onEntityUnloaded)
-                    {
-                        onEntityUnloaded(pending.uuid, pending.coord);
-                    }
-
-                    found = true;
-                    break;
+                if (onEntityUnloaded)
+                {
+                    onEntityUnloaded(pending.uuid, pending.coord);
                 }
             }
-
-            if (!found)
+            else
             {
                 vfLogWarning("Sector unload: entity UUID {} not found in registry", pending.uuid);
             }
@@ -106,18 +95,7 @@ namespace world
                         continue;
                     }
 
-                    auto& reg = scene::EntityRegistry::getRegistry();
-                    auto uuidView = reg.view<components::UUIDComponent>();
-                    bool alreadyExists = false;
-                    for (auto ent : uuidView)
-                    {
-                        if (uuidView.get<components::UUIDComponent>(ent).id.getValue() == uuidValue)
-                        {
-                            alreadyExists = true;
-                            break;
-                        }
-                    }
-                    if (alreadyExists)
+                    if (scene::EntityRegistry::findByUUID(uuidValue) != entt::null)
                     {
                         ++processed;
                         continue;
