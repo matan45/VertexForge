@@ -59,6 +59,8 @@
 #include "events/render/RenderEvents.hpp"
 #include "ExportHandler.hpp"
 #include "resource/PathResolver.hpp"
+#include "impl/save/SaveService.hpp"
+#include "impl/save/ConfigService.hpp"
 
 namespace handlers
 {
@@ -135,6 +137,12 @@ namespace handlers
         auto* reverbZoneMgr = static_cast<core::audio::ReverbZoneManager*>(
             bootstrap->getAudioProvider()->getReverbZoneManager());
         audioSceneUpdater->setReverbZoneManager(reverbZoneMgr);
+
+        saveService = std::make_unique<services::SaveService>(
+            bootstrap->getSceneGraphSystem(),
+            bootstrap->getScriptingProvider()
+        );
+        configService = std::make_unique<services::ConfigService>();
     }
 
     void EditorHandler::createPhysicsServices()
@@ -305,6 +313,8 @@ namespace handlers
         objectStreamingService->registerEventHandlers();
         giService->registerEventHandlers();
         behaviorTreeService->registerEventHandlers();
+        saveService->registerEventHandlers(events::EventDispatcher::instance());
+        configService->registerEventHandlers(events::EventDispatcher::instance());
 
         events::render::LoadBillboardAtlasCommand atlasCmd;
         atlasCmd.atlasPath = resource::PathResolver::resolveEnginePath("../../resources/editor/billboardAtlas.vfImage");

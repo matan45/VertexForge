@@ -73,6 +73,8 @@ namespace services {
 	class RenderTexturePlayModeHandler;
 	class BehaviorTreePlayModeHandler;
 	class EditorRenderServiceImpl;
+	class SaveService;
+	class ConfigService;
 }
 
 namespace handlers {
@@ -142,6 +144,9 @@ namespace handlers {
 		std::unique_ptr<services::BehaviorTreePlayModeHandler> behaviorTreePlayModeHandler;
 
 		std::unique_ptr<handlers::ExportHandler> exportHandler;
+
+		std::unique_ptr<services::SaveService> saveService;
+		std::unique_ptr<services::ConfigService> configService;
 
 		std::unique_ptr<plugin::PluginManager> pluginManager;
 

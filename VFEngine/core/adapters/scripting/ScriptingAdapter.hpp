@@ -108,6 +108,15 @@ namespace core
 
         void registerPluginNativeFunction(const std::string& name, std::any function) override;
 
+        // === Save/Load State ===
+        std::string getInstanceState(uint64_t instanceId) override;
+        bool setInstanceState(uint64_t instanceId, const std::string& jsonState) override;
+        bool isSaveableInstance(uint64_t instanceId) const override;
+        std::vector<uint64_t> getAllInstanceIds() const override;
+        ::services::EntityHandle getInstanceEntity(uint64_t instanceId) const override;
+        std::string getInstanceClassName(uint64_t instanceId) const override;
+        std::string getInstanceScriptPath(uint64_t instanceId) const override;
+
     private:
         void setError(::services::ScriptError::Type type, const std::string& message,
                       const std::string& file = "", int line = 0);
