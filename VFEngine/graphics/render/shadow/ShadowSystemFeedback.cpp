@@ -256,6 +256,10 @@ namespace render::shadow
                 }
             }
 
+            // Use page-grid-snapped VP for rendering (stable, world-anchored depth)
+            glm::mat4 renderVP = (level < data.clipmapRenderVP.size())
+                ? data.clipmapRenderVP[level] : view.viewProjectionMatrix;
+
             // Build render list with toroidal page indexing
             for (uint32_t py = 0; py < pagesPerSide; ++py)
             {
@@ -268,9 +272,9 @@ namespace render::shadow
                     if (storageIdx >= data.vsmPhysicalTiles.size())
                         continue;
 
-                    // Crop matrix uses virtual position (px,py) — matches UV in current VP
+                    // Crop matrix uses virtual position (px,py) in the page-grid VP space
                     glm::mat4 cropMatrix = vsm::computePageCropMatrix(px, py, pagesPerSide, pagesPerSide);
-                    addPageToRenderLists(data, storageIdx, cropMatrix * view.viewProjectionMatrix, view, false);
+                    addPageToRenderLists(data, storageIdx, cropMatrix * renderVP, view, false);
                 }
             }
         }

@@ -392,7 +392,6 @@ namespace render::shadow
 
         glm::vec3 cameraWorldPos = -glm::vec3(camera.view[3]) * glm::mat3(camera.view);
 
-        // Project camera Z onto light axis (unsnapped, shared across levels)
         auto axes = LightSpaceAxes::fromDirection(lightDirection);
         float lightSpaceZ = glm::dot(cameraWorldPos, axes.lightDir);
 
@@ -405,30 +404,44 @@ namespace render::shadow
                 ? data.clipmapLevelPagesPerSide[i] : 1;
             uint32_t levelResolution = pagesPerSide * vsm::PAGE_SIZE;
 
-            // First compute texel-snapped level to get snapPosition for page-grid shift detection
+            // Texel-snapped level: follows camera closely, used for GPU lookup VP
             auto texelSnapped = ClipmapShadowCalculator::computeClipmapLevel(
                 i, data.settings.clipmapBaseExtent, cameraWorldPos, lightDirection, levelResolution);
 
-            // Compute page-grid shift and update origin
+            // Update toroidal dirty flags using page-grid shift detection
             updateClipmapDirtyFlags(data, i, texelSnapped);
 
-            // Build the actual VP from the page-grid-snapped origin (stable across texel snaps)
+            // Page-grid-snapped level: stable VP for rendering (only changes on page crossing)
             glm::vec2 pageGridOrigin = (i < data.clipmapPageGridOrigin.size())
                 ? data.clipmapPageGridOrigin[i] : glm::vec2(0.0f);
-
-            auto levelData = ClipmapShadowCalculator::computeClipmapLevelStable(
+            auto pageGridLevel = ClipmapShadowCalculator::computeClipmapLevelStable(
                 i, data.settings.clipmapBaseExtent, pageGridOrigin, lightSpaceZ,
                 lightDirection, levelResolution);
 
+            // Store render VP for use in buildClipmapPageRenderList()
+            if (i < data.clipmapRenderVP.size())
+                data.clipmapRenderVP[i] = pageGridLevel.viewProjMatrix;
+
+            // Compute UV offset: difference between texel-snapped and page-grid centers
+            // in UV space [0,1]. GPU applies this to convert lookup UV to render UV.
+            if (i < data.clipmapUVOffset.size())
+            {
+                glm::vec2 delta = texelSnapped.snapPosition - pageGridOrigin;
+                float diameter = 2.0f * texelSnapped.worldExtent;
+                data.clipmapUVOffset[i] = (diameter > 0.0f)
+                    ? delta / diameter : glm::vec2(0.0f);
+            }
+
+            // Upload texel-snapped VP to GPU for shadow lookup (full camera coverage)
             auto& view = data.views[i];
-            view.viewMatrix = levelData.viewMatrix;
-            view.projectionMatrix = levelData.projMatrix;
-            view.viewProjectionMatrix = levelData.viewProjMatrix;
-            view.nearPlane = levelData.nearDistance;
-            view.farPlane = levelData.farDistance;
+            view.viewMatrix = texelSnapped.viewMatrix;
+            view.projectionMatrix = texelSnapped.projMatrix;
+            view.viewProjectionMatrix = texelSnapped.viewProjMatrix;
+            view.nearPlane = texelSnapped.nearDistance;
+            view.farPlane = texelSnapped.farDistance;
             view.lightDirection = glm::vec4(lightDirection, 0.0f);
             view.cascadeIndex = static_cast<uint16_t>(i);
-            view.texelSize = levelData.texelSize;
+            view.texelSize = texelSnapped.texelSize;
 
             float biasScale = 1.0f + static_cast<float>(i) * 0.3f;
             view.depthBias = data.settings.depthBias * biasScale;

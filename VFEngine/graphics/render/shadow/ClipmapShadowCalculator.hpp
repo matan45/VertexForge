@@ -35,13 +35,13 @@ namespace render::shadow
             const glm::vec3& lightDirection,
             uint32_t resolution);
 
-        // Stable VP variant: uses page-grid-snapped origin instead of texel-snapped camera pos.
-        // The VP only changes when the camera crosses a page boundary.
+        // Page-grid-snapped VP: stable across texel snaps, only changes on page-boundary crossings.
+        // Used for rendering pages so depth content is world-anchored.
         static ClipmapLevelData computeClipmapLevelStable(
             uint32_t level,
             float baseExtent,
-            const glm::vec2& pageGridOrigin,  // page-grid-snapped light-space XY
-            float lightSpaceZ,                // unsnapped Z from camera projection
+            const glm::vec2& pageGridOrigin,
+            float lightSpaceZ,
             const glm::vec3& lightDirection,
             uint32_t resolution);
 

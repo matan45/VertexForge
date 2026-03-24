@@ -69,15 +69,6 @@ namespace render::shadow
         return result;
     }
 
-    float ClipmapShadowCalculator::computeSnapDelta(
-        const ClipmapLevelData& current,
-        const glm::vec2& previousSnapPosition)
-    {
-        glm::vec2 delta = current.snapPosition - previousSnapPosition;
-        if (current.texelSize <= 0.0f) return 0.0f;
-        return glm::length(delta) / current.texelSize;
-    }
-
     ClipmapLevelData ClipmapShadowCalculator::computeClipmapLevelStable(
         uint32_t level,
         float baseExtent,
@@ -121,6 +112,15 @@ namespace render::shadow
         result.viewProjMatrix = result.projMatrix * result.viewMatrix;
 
         return result;
+    }
+
+    float ClipmapShadowCalculator::computeSnapDelta(
+        const ClipmapLevelData& current,
+        const glm::vec2& previousSnapPosition)
+    {
+        glm::vec2 delta = current.snapPosition - previousSnapPosition;
+        if (current.texelSize <= 0.0f) return 0.0f;
+        return glm::length(delta) / current.texelSize;
     }
 
     PageGridUpdate ClipmapShadowCalculator::computePageGridShift(

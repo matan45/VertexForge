@@ -5,6 +5,7 @@
 #include "../../core/BufferUtilities.hpp"
 #include "../../core/PipelineUtilities.hpp"
 #include "print/Log.hpp"
+#include <glm/gtc/packing.hpp>
 #include <cmath>
 
 namespace render::shadow
@@ -423,9 +424,21 @@ namespace render::shadow
             if (isClipmap && ld)
             {
                 float baseExtent = ld->settings.clipmapBaseExtent;
-                float worldExtent = baseExtent * std::pow(2.0f, static_cast<float>(view.cascadeIndex));
                 float levelCount = static_cast<float>(ld->settings.clipmapLevelCount);
-                gpu.rangeParams = glm::vec4(baseExtent, worldExtent, levelCount,
+
+                // Pack per-level UV offset for toroidal scrolling into rangeParams.y
+                // UV offset = (texelSnapped - pageGridOrigin) / (2 * worldExtent)
+                // GPU applies this to convert lookup UV to render-aligned UV
+                glm::vec2 uvOffset(0.0f);
+                uint32_t levelIdx = view.cascadeIndex;
+                if (levelIdx < ld->clipmapUVOffset.size())
+                    uvOffset = ld->clipmapUVOffset[levelIdx];
+
+                // Pack two floats as half-floats via intBitsToFloat
+                uint32_t packed = glm::packHalf2x16(uvOffset);
+                float packedAsFloat = glm::intBitsToFloat(static_cast<int>(packed));
+
+                gpu.rangeParams = glm::vec4(baseExtent, packedAsFloat, levelCount,
                                              static_cast<float>(view.cascadeIndex));
             }
             else if (viewType == ViewType::Directional)
