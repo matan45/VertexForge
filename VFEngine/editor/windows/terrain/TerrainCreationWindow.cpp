@@ -51,28 +51,36 @@ namespace windows
             ImGui::Separator();
 
             ImGui::Text("Heightmap (optional):");
+            ImGui::Checkbox("Use Tiled Heightmaps", &useTiledHeightmaps);
 
-            if (ImGui::Button("Browse..."))
+            if (useTiledHeightmaps)
             {
-                browseHeightmap();
-            }
-            ImGui::SameLine();
-
-            if (heightmapPath.empty())
-            {
-                ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "No heightmap (flat terrain)");
+                drawTiledHeightmapUI();
             }
             else
             {
-                size_t lastSlash = heightmapPath.find_last_of("/\\");
-                std::string filename = (lastSlash != std::string::npos)
-                    ? heightmapPath.substr(lastSlash + 1)
-                    : heightmapPath;
-                ImGui::Text("%s", filename.c_str());
-                ImGui::SameLine();
-                if (ImGui::SmallButton("Clear"))
+                if (ImGui::Button("Browse..."))
                 {
-                    heightmapPath.clear();
+                    browseHeightmap();
+                }
+                ImGui::SameLine();
+
+                if (heightmapPath.empty())
+                {
+                    ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "No heightmap (flat terrain)");
+                }
+                else
+                {
+                    size_t lastSlash = heightmapPath.find_last_of("/\\");
+                    std::string filename = (lastSlash != std::string::npos)
+                        ? heightmapPath.substr(lastSlash + 1)
+                        : heightmapPath;
+                    ImGui::Text("%s", filename.c_str());
+                    ImGui::SameLine();
+                    if (ImGui::SmallButton("Clear"))
+                    {
+                        heightmapPath.clear();
+                    }
                 }
             }
 
@@ -137,6 +145,8 @@ namespace windows
         maxHeight = 100.0f;
         minHeight = -10.0f;
         heightmapPath.clear();
+        useTiledHeightmaps = false;
+        heightmapRegions.clear();
     }
 
     void TerrainCreationWindow::createTerrain()
@@ -148,7 +158,15 @@ namespace windows
         config.worldTileSize = worldTileSize;
         config.maxHeight = maxHeight;
         config.minHeight = minHeight;
-        config.heightmapPath = heightmapPath;
+
+        if (useTiledHeightmaps)
+        {
+            config.heightmapRegions = heightmapRegions;
+        }
+        else
+        {
+            config.heightmapPath = heightmapPath;
+        }
 
         events::terrain::BeginCreateTerrainCommand cmd;
         cmd.config = config;
@@ -181,6 +199,112 @@ namespace windows
             {
                 visible = false;
             }
+        }
+    }
+
+    void TerrainCreationWindow::drawTiledHeightmapUI()
+    {
+        int32_t halfX = tilesX / 2;
+        int32_t halfZ = tilesZ / 2;
+        int32_t gridMinX = -halfX;
+        int32_t gridMinZ = -halfZ;
+        int32_t gridMaxX = tilesX - halfX - 1;
+        int32_t gridMaxZ = tilesZ - halfZ - 1;
+
+        if (ImGui::Button("Add Region"))
+        {
+            services::HeightmapRegionData region;
+            region.tileMinX = gridMinX;
+            region.tileMinZ = gridMinZ;
+            region.tileMaxX = gridMaxX;
+            region.tileMaxZ = gridMaxZ;
+            heightmapRegions.push_back(region);
+        }
+
+        int coveredTiles = 0;
+        int totalTiles = tilesX * tilesZ;
+
+        ImGui::BeginChild("RegionList", ImVec2(0, 200), true);
+        int removeIndex = -1;
+        for (size_t i = 0; i < heightmapRegions.size(); ++i)
+        {
+            auto& region = heightmapRegions[i];
+            ImGui::PushID(static_cast<int>(i));
+
+            ImGui::Text("Region %zu", i + 1);
+            ImGui::SameLine(ImGui::GetContentRegionAvail().x - 20.0f);
+            if (ImGui::SmallButton("X"))
+            {
+                removeIndex = static_cast<int>(i);
+            }
+
+            std::string browseLabel = "Browse##" + std::to_string(i);
+            if (ImGui::Button(browseLabel.c_str()))
+            {
+                browseRegionHeightmap(i);
+            }
+            ImGui::SameLine();
+            if (region.filePath.empty())
+            {
+                ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "No file selected");
+            }
+            else
+            {
+                size_t lastSlash = region.filePath.find_last_of("/\\");
+                std::string filename = (lastSlash != std::string::npos)
+                    ? region.filePath.substr(lastSlash + 1)
+                    : region.filePath;
+                ImGui::Text("%s", filename.c_str());
+            }
+
+            ImGui::Text("Tile Range:");
+            ImGui::PushItemWidth(80.0f);
+            ImGui::InputInt("MinX", &region.tileMinX, 0, 0);
+            ImGui::SameLine();
+            ImGui::InputInt("MinZ", &region.tileMinZ, 0, 0);
+            ImGui::InputInt("MaxX", &region.tileMaxX, 0, 0);
+            ImGui::SameLine();
+            ImGui::InputInt("MaxZ", &region.tileMaxZ, 0, 0);
+            ImGui::PopItemWidth();
+
+            // Clamp to grid bounds
+            region.tileMinX = std::max(region.tileMinX, gridMinX);
+            region.tileMinZ = std::max(region.tileMinZ, gridMinZ);
+            region.tileMaxX = std::min(region.tileMaxX, gridMaxX);
+            region.tileMaxZ = std::min(region.tileMaxZ, gridMaxZ);
+            if (region.tileMinX > region.tileMaxX) region.tileMinX = region.tileMaxX;
+            if (region.tileMinZ > region.tileMaxZ) region.tileMinZ = region.tileMaxZ;
+
+            int regionTiles = (region.tileMaxX - region.tileMinX + 1) * (region.tileMaxZ - region.tileMinZ + 1);
+            coveredTiles += regionTiles;
+
+            ImGui::Separator();
+            ImGui::PopID();
+        }
+        ImGui::EndChild();
+
+        if (removeIndex >= 0)
+        {
+            heightmapRegions.erase(heightmapRegions.begin() + removeIndex);
+        }
+
+        ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f),
+            "%zu region(s), ~%d/%d tiles covered", heightmapRegions.size(), coveredTiles, totalTiles);
+    }
+
+    void TerrainCreationWindow::browseRegionHeightmap(size_t regionIndex)
+    {
+        if (regionIndex >= heightmapRegions.size())
+            return;
+
+        std::vector<std::pair<std::wstring, std::wstring>> fileTypes = {
+            {L"Heightmap Files (*.vfImage;*.vfSVT)", L"*.vfImage;*.vfSVT"}
+        };
+
+        std::string selectedFile = fileDialog.openFileDialog(fileTypes);
+        if (!selectedFile.empty())
+        {
+            heightmapRegions[regionIndex].filePath = selectedFile;
         }
     }
 

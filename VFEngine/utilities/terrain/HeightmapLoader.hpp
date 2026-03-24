@@ -54,4 +54,24 @@ namespace terrain
         const std::string& svtPath,
         const TerrainBounds& bounds
     );
+
+    // A rectangular tile region covered by a single heightmap file
+    struct HeightmapRegion
+    {
+        std::string filePath;
+        int32_t tileMinX = 0;
+        int32_t tileMinZ = 0;
+        int32_t tileMaxX = 0;
+        int32_t tileMaxZ = 0;
+    };
+
+    // Creates a composite sampler from multiple heightmap regions.
+    // Each region maps its heightmap to its tile range. For overlapping regions,
+    // the last region in the vector wins. Uncovered tiles return minHeight (flat).
+    HeightSampler createCompositeHeightSampler(
+        const std::vector<HeightmapRegion>& regions,
+        float worldTileSize,
+        float minHeight,
+        float maxHeight
+    );
 }

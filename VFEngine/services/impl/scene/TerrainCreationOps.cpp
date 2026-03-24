@@ -42,7 +42,20 @@ namespace services
 
         auto grid = std::make_unique<terrain::TerrainGrid>(tileConfig);
 
-        if (config.heightmapPath.empty())
+        if (!config.heightmapRegions.empty())
+        {
+            // Multi-region tiled heightmaps
+            std::vector<terrain::HeightmapRegion> regions;
+            regions.reserve(config.heightmapRegions.size());
+            for (const auto& r : config.heightmapRegions)
+            {
+                regions.push_back({r.filePath, r.tileMinX, r.tileMinZ, r.tileMaxX, r.tileMaxZ});
+            }
+            auto sampler = terrain::createCompositeHeightSampler(
+                regions, config.worldTileSize, config.minHeight, config.maxHeight);
+            grid->setHeightSampler(std::move(sampler));
+        }
+        else if (config.heightmapPath.empty())
         {
             grid->setHeightSampler([](float /*worldX*/, float /*worldZ*/) -> float {
                 return 0.0f;
@@ -109,6 +122,10 @@ namespace services
         terrainComp.gridMaxX = maxX;
         terrainComp.gridMaxZ = maxZ;
         terrainComp.heightmapPath = config.heightmapPath;
+        for (const auto& r : config.heightmapRegions)
+        {
+            terrainComp.heightmapRegions.push_back({r.filePath, r.tileMinX, r.tileMinZ, r.tileMaxX, r.tileMaxZ});
+        }
         terrainComp.terrainMaterialRef = asset::AssetRef::fromPath(config.terrainMaterialPath);
         terrainComp.weightMapPath = config.weightMapPath;
         terrainComp.isActive = true;
@@ -340,8 +357,21 @@ namespace services
 
                 progressPtr->progress.store(0.05f);
 
-                // Load heightmap (I/O heavy)
-                if (!config.heightmapPath.empty())
+                // Load heightmap(s) (I/O heavy)
+                if (!config.heightmapRegions.empty())
+                {
+                    // Multi-region tiled heightmaps
+                    std::vector<terrain::HeightmapRegion> regions;
+                    regions.reserve(config.heightmapRegions.size());
+                    for (const auto& r : config.heightmapRegions)
+                    {
+                        regions.push_back({r.filePath, r.tileMinX, r.tileMinZ, r.tileMaxX, r.tileMaxZ});
+                    }
+                    auto sampler = terrain::createCompositeHeightSampler(
+                        regions, config.worldTileSize, config.minHeight, config.maxHeight);
+                    grid->setHeightSampler(std::move(sampler));
+                }
+                else if (!config.heightmapPath.empty())
                 {
                     float terrainMinX = static_cast<float>(minX) * config.worldTileSize;
                     float terrainMinZ = static_cast<float>(minZ) * config.worldTileSize;
@@ -455,6 +485,10 @@ namespace services
         terrainComp.gridMaxX = maxX;
         terrainComp.gridMaxZ = maxZ;
         terrainComp.heightmapPath = config.heightmapPath;
+        for (const auto& r : config.heightmapRegions)
+        {
+            terrainComp.heightmapRegions.push_back({r.filePath, r.tileMinX, r.tileMinZ, r.tileMaxX, r.tileMaxZ});
+        }
         terrainComp.terrainMaterialRef = asset::AssetRef::fromPath(config.terrainMaterialPath);
         terrainComp.weightMapPath = config.weightMapPath;
         terrainComp.isActive = true;

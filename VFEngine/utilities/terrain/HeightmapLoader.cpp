@@ -6,6 +6,7 @@
 
 #include <fstream>
 #include <algorithm>
+#include <cmath>
 #include <filesystem>
 #include <mutex>
 
@@ -405,6 +406,88 @@ namespace terrain
 
             float normalizedHeight = tileCache->sampleHeight(u, v);
             return bounds.minHeight + normalizedHeight * (bounds.maxHeight - bounds.minHeight);
+        };
+    }
+
+    HeightSampler createCompositeHeightSampler(
+        const std::vector<HeightmapRegion>& regions,
+        float worldTileSize,
+        float minHeight,
+        float maxHeight)
+    {
+        struct RegionSampler
+        {
+            int32_t tileMinX, tileMinZ, tileMaxX, tileMaxZ;
+            HeightSampler sampler;
+        };
+
+        auto regionSamplers = std::make_shared<std::vector<RegionSampler>>();
+
+        for (const auto& region : regions)
+        {
+            if (region.filePath.empty())
+                continue;
+
+            TerrainBounds regionBounds;
+            regionBounds.minX = static_cast<float>(region.tileMinX) * worldTileSize;
+            regionBounds.minZ = static_cast<float>(region.tileMinZ) * worldTileSize;
+            regionBounds.width = static_cast<float>(region.tileMaxX - region.tileMinX + 1) * worldTileSize;
+            regionBounds.depth = static_cast<float>(region.tileMaxZ - region.tileMinZ + 1) * worldTileSize;
+            regionBounds.minHeight = minHeight;
+            regionBounds.maxHeight = maxHeight;
+
+            bool isSVT = region.filePath.size() > 6 &&
+                         region.filePath.substr(region.filePath.size() - 6) == ".vfSVT";
+
+            HeightSampler sampler;
+
+            if (isSVT)
+            {
+                sampler = createStreamingHeightSamplerFromSVT(region.filePath, regionBounds);
+            }
+
+            if (!sampler)
+            {
+                auto heightmapData = HeightmapLoader::load(region.filePath);
+                if (heightmapData && heightmapData->isValid())
+                {
+                    sampler = createHeightSamplerFromMap(heightmapData, regionBounds);
+                }
+                else
+                {
+                    vfLogWarning("CompositeHeightSampler: Failed to load region heightmap: {}", region.filePath);
+                    continue;
+                }
+            }
+
+            regionSamplers->push_back({region.tileMinX, region.tileMinZ,
+                                       region.tileMaxX, region.tileMaxZ,
+                                       std::move(sampler)});
+
+            vfLogInfo("CompositeHeightSampler: Loaded region [{},{} -> {},{}] from {}",
+                      region.tileMinX, region.tileMinZ, region.tileMaxX, region.tileMaxZ,
+                      region.filePath);
+        }
+
+        float flatHeight = minHeight;
+
+        return [regionSamplers, worldTileSize, flatHeight]
+        (float worldX, float worldZ) -> float
+        {
+            int32_t tileX = static_cast<int32_t>(std::floor(worldX / worldTileSize));
+            int32_t tileZ = static_cast<int32_t>(std::floor(worldZ / worldTileSize));
+
+            // Last region wins (iterate in reverse)
+            for (auto it = regionSamplers->rbegin(); it != regionSamplers->rend(); ++it)
+            {
+                if (tileX >= it->tileMinX && tileX <= it->tileMaxX &&
+                    tileZ >= it->tileMinZ && tileZ <= it->tileMaxZ)
+                {
+                    return it->sampler(worldX, worldZ);
+                }
+            }
+
+            return flatHeight;
         };
     }
 }

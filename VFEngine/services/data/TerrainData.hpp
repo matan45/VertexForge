@@ -1,12 +1,22 @@
 #pragma once
 #include "EntityHandle.hpp"
 #include <string>
+#include <vector>
 #include <array>
 #include <cstdint>
 #include <optional>
 
 namespace services
 {
+    struct HeightmapRegionData
+    {
+        std::string filePath;
+        int32_t tileMinX = 0;
+        int32_t tileMinZ = 0;
+        int32_t tileMaxX = 0;
+        int32_t tileMaxZ = 0;
+    };
+
     struct TerrainCreationData
     {
         int32_t tilesX = 4;
@@ -19,6 +29,7 @@ namespace services
         float minHeight = -10.0f;
 
         std::string heightmapPath;
+        std::vector<HeightmapRegionData> heightmapRegions;
         std::string terrainMaterialPath;
         std::string weightMapPath;
     };
@@ -42,6 +53,7 @@ namespace services
         int32_t gridMaxX = 0;
         int32_t gridMaxZ = 0;
         std::string heightmapPath;
+        std::vector<HeightmapRegionData> heightmapRegions;
         std::string terrainMaterialPath;
         std::string weightMapPath;
         uint32_t tileCount = 0;

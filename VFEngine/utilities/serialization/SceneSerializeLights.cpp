@@ -136,6 +136,23 @@ namespace serialization
         std::string cleanPath = terrain.heightmapPath;
         cleanNullTerminators(cleanPath);
         j["heightmapPath"] = cleanPath;
+        if (!terrain.heightmapRegions.empty())
+        {
+            json regionsArray = json::array();
+            for (const auto& region : terrain.heightmapRegions)
+            {
+                json rj;
+                std::string cleanRegionPath = region.filePath;
+                cleanNullTerminators(cleanRegionPath);
+                rj["filePath"] = cleanRegionPath;
+                rj["tileMinX"] = region.tileMinX;
+                rj["tileMinZ"] = region.tileMinZ;
+                rj["tileMaxX"] = region.tileMaxX;
+                rj["tileMaxZ"] = region.tileMaxZ;
+                regionsArray.push_back(rj);
+            }
+            j["heightmapRegions"] = regionsArray;
+        }
         if (terrain.terrainMaterialRef.isValid())
         {
             writeAssetRef(j, "terrainMaterialRef", terrain.terrainMaterialRef);
@@ -179,6 +196,25 @@ namespace serialization
         // lodDistances ignored (GPU-only LOD selection)
         if (auto it = j.find("heightmapPath"); it != j.end() && it->is_string())
             terrain.heightmapPath = it->get<std::string>();
+        if (auto it = j.find("heightmapRegions"); it != j.end() && it->is_array())
+        {
+            terrain.heightmapRegions.clear();
+            for (const auto& rj : *it)
+            {
+                components::HeightmapRegionEntry region;
+                if (auto fp = rj.find("filePath"); fp != rj.end() && fp->is_string())
+                    region.filePath = fp->get<std::string>();
+                if (auto v = rj.find("tileMinX"); v != rj.end() && v->is_number_integer())
+                    region.tileMinX = v->get<int32_t>();
+                if (auto v = rj.find("tileMinZ"); v != rj.end() && v->is_number_integer())
+                    region.tileMinZ = v->get<int32_t>();
+                if (auto v = rj.find("tileMaxX"); v != rj.end() && v->is_number_integer())
+                    region.tileMaxX = v->get<int32_t>();
+                if (auto v = rj.find("tileMaxZ"); v != rj.end() && v->is_number_integer())
+                    region.tileMaxZ = v->get<int32_t>();
+                terrain.heightmapRegions.push_back(region);
+            }
+        }
         terrain.terrainMaterialRef = readAssetRef(j, "terrainMaterialRef");
         if (auto it = j.find("weightMapPath"); it != j.end() && it->is_string())
             terrain.weightMapPath = it->get<std::string>();
