@@ -88,20 +88,11 @@ namespace services
                 std::vector<std::pair<uint64_t, entt::entity>> meshEntities;
                 std::vector<uint32_t> lightEntityIds;
 
-                // Build UUID -> entity lookup map once (O(N)), then resolve each UUID in O(1)
-                auto uuidView = registry.view<components::UUIDComponent>();
-                std::unordered_map<uint64_t, entt::entity> uuidToEntity;
-                for (auto ent : uuidView)
-                {
-                    uuidToEntity[uuidView.get<components::UUIDComponent>(ent).id.getValue()] = ent;
-                }
-
                 for (uint64_t uuid : sector.entityUUIDs)
                 {
-                    auto it = uuidToEntity.find(uuid);
-                    if (it != uuidToEntity.end())
+                    auto ent = scene::EntityRegistry::findByUUID(uuid);
+                    if (ent != entt::null)
                     {
-                        auto ent = it->second;
                         if (registry.any_of<components::MeshComponent>(ent))
                             meshEntities.emplace_back(uuid, ent);
                         if (registry.any_of<components::PointLightComponent, components::SpotLightComponent>(ent))

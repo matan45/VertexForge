@@ -19,20 +19,14 @@ namespace world
             sectorJson["coord"] = {{"x", sector.coord.x}, {"z", sector.coord.z}};
 
             json entitiesJson = json::array();
-            auto& registry = scene::EntityRegistry::getRegistry();
 
             for (uint64_t uuid : sector.entityUUIDs)
             {
-                auto uuidView = registry.view<components::UUIDComponent>();
-                for (auto entity : uuidView)
+                auto entity = scene::EntityRegistry::findByUUID(uuid);
+                if (entity != entt::null)
                 {
-                    const auto& uuidComp = uuidView.get<components::UUIDComponent>(entity);
-                    if (uuidComp.id.getValue() == uuid)
-                    {
-                        scene::Entity sceneEntity(entity);
-                        entitiesJson.push_back(serialization::SceneSerialization::serializeEntity(sceneEntity));
-                        break;
-                    }
+                    scene::Entity sceneEntity(entity);
+                    entitiesJson.push_back(serialization::SceneSerialization::serializeEntity(sceneEntity));
                 }
             }
 

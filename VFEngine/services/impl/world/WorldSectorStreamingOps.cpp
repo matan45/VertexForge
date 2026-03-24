@@ -18,19 +18,6 @@
 namespace
 {
     static constexpr uint32_t kMaxConcurrentSectorLoads = 4;
-
-    // O(N) lookup — consider replacing with a UUID→entity cache if this becomes a bottleneck
-    entt::entity findEntityByUUID(uint64_t uuid)
-    {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        auto uuidView = registry.view<components::UUIDComponent>();
-        for (auto entity : uuidView)
-        {
-            if (uuidView.get<components::UUIDComponent>(entity).id.getValue() == uuid)
-                return entity;
-        }
-        return entt::null;
-    }
 }
 
 namespace services
@@ -82,7 +69,7 @@ namespace services
                     std::vector<uint32_t> lightEntityIds;
                     for (uint64_t uuid : sector.entityUUIDs)
                     {
-                        auto ent = findEntityByUUID(uuid);
+                        auto ent = scene::EntityRegistry::findByUUID(uuid);
                         if (ent != entt::null)
                         {
                             if (registry.any_of<components::PointLightComponent,
@@ -131,7 +118,7 @@ namespace services
 
                     for (uint64_t uuid : sector.entityUUIDs)
                     {
-                        auto ent = findEntityByUUID(uuid);
+                        auto ent = scene::EntityRegistry::findByUUID(uuid);
                         if (ent != entt::null)
                         {
                             collectMeshEntities(collectMeshEntities, ent);
@@ -308,7 +295,7 @@ namespace services
         for (uint64_t uuid : sector->entityUUIDs)
         {
             bool isDynamic = false;
-            auto ent = findEntityByUUID(uuid);
+            auto ent = scene::EntityRegistry::findByUUID(uuid);
             if (ent != entt::null)
             {
                 scene::Entity sceneEntity(ent);
@@ -388,7 +375,7 @@ namespace services
             bool hasEntities = false;
             for (uint64_t uuid : sector.entityUUIDs)
             {
-                auto ent = findEntityByUUID(uuid);
+                auto ent = scene::EntityRegistry::findByUUID(uuid);
                 if (ent != entt::null && registry.any_of<components::TransformComponent>(ent))
                 {
                     float y = registry.get<components::TransformComponent>(ent).position.y;

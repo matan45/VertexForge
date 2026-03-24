@@ -1,4 +1,5 @@
 #include "EditorBootstrap.hpp"
+#include "scene/EntityRegistry.hpp"
 #include "../../controllers/CoreInterface.hpp"
 #include "../../controllers/OffScreen.hpp"
 #include "../../adapters/render/OffScreenAdapter.hpp"
@@ -44,6 +45,7 @@ namespace core
 
     void EditorBootstrap::init()
     {
+        scene::EntityRegistry::init();
         coreInterface->init();
 
         offScreenAdapter = std::make_unique<OffScreenAdapter>(offScreen.get());

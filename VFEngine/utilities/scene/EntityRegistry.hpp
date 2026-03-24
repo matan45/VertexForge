@@ -1,6 +1,7 @@
 #pragma once
 #include <entt/entt.hpp>
 #include <atomic>
+#include <unordered_map>
 
 namespace scene {
 	class EntityRegistry {
@@ -9,13 +10,41 @@ namespace scene {
 		inline static std::atomic<bool> sceneTransitioning{ false };
 		inline static std::atomic<int> transitionSkipsRemaining{ 0 };
 
+		inline static std::unordered_map<uint64_t, entt::entity> uuidToEntity;
+		inline static std::unordered_map<uint32_t, uint64_t> entityToUuid;
+		inline static bool initialized = false;
+
 		// If the viewport is hidden/closed during a transition, the flag could stay
 		// stuck forever. This cap ensures it auto-clears after N skip attempts.
 		static constexpr int MAX_TRANSITION_SKIPS = 4;
 
 	public:
+		static void init();
+
 		inline static entt::registry& getRegistry() {
 			return registry;
+		}
+
+		static entt::entity findByUUID(uint64_t uuid) {
+			auto it = uuidToEntity.find(uuid);
+			return (it != uuidToEntity.end()) ? it->second : entt::null;
+		}
+
+		static void insertUUID(uint64_t uuid, entt::entity entity) {
+			uuidToEntity[uuid] = entity;
+			entityToUuid[static_cast<uint32_t>(entity)] = uuid;
+		}
+
+		static void removeUUID(uint64_t uuid, entt::entity entity) {
+			uuidToEntity.erase(uuid);
+			entityToUuid.erase(static_cast<uint32_t>(entity));
+		}
+
+		static void removeEntityMapping(entt::entity entity) {
+			auto it = entityToUuid.find(static_cast<uint32_t>(entity));
+			if (it != entityToUuid.end()) {
+				uuidToEntity.erase(it->second);
+			}
 		}
 
 		static void setSceneTransitioning(bool value) {

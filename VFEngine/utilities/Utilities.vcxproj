@@ -252,6 +252,7 @@
     <ClCompile Include="resource\TextureResource.cpp" />
     <ClCompile Include="resource\TextureStreamHandle.cpp" />
     <ClCompile Include="resource\VorbisDecoder.cpp" />
+    <ClCompile Include="scene\EntityRegistry.cpp" />
     <ClCompile Include="scene\Level.cpp" />
     <ClCompile Include="scene\LevelHandler.cpp" />
     <ClCompile Include="scene\LightBVH.cpp" />
