@@ -17,6 +17,14 @@ namespace render::shadow
         float farDistance = 0.0f;
     };
 
+    // Result of page-grid shift computation for toroidal scrolling
+    struct PageGridUpdate
+    {
+        glm::ivec2 pageShift{0};        // how many whole pages the origin shifted
+        glm::vec2  newPageGridOrigin{0.0f};
+        bool       fullInvalidation = false; // true if shift >= pagesPerSide (teleport)
+    };
+
     class ClipmapShadowCalculator
     {
     public:
@@ -26,6 +34,22 @@ namespace render::shadow
             const glm::vec3& cameraWorldPos,
             const glm::vec3& lightDirection,
             uint32_t resolution);
+
+        // Stable VP variant: uses page-grid-snapped origin instead of texel-snapped camera pos.
+        // The VP only changes when the camera crosses a page boundary.
+        static ClipmapLevelData computeClipmapLevelStable(
+            uint32_t level,
+            float baseExtent,
+            const glm::vec2& pageGridOrigin,  // page-grid-snapped light-space XY
+            float lightSpaceZ,                // unsnapped Z from camera projection
+            const glm::vec3& lightDirection,
+            uint32_t resolution);
+
+        // Compute page-grid shift for toroidal scrolling
+        static PageGridUpdate computePageGridShift(
+            const ClipmapLevelData& levelData,
+            uint32_t pagesPerSide,
+            const glm::vec2& previousPageGridOrigin);
 
         // Returns how many texels the center moved since last frame (magnitude)
         static float computeSnapDelta(

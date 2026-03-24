@@ -392,6 +392,10 @@ namespace render::shadow
 
         glm::vec3 cameraWorldPos = -glm::vec3(camera.view[3]) * glm::mat3(camera.view);
 
+        // Project camera Z onto light axis (unsnapped, shared across levels)
+        auto axes = LightSpaceAxes::fromDirection(lightDirection);
+        float lightSpaceZ = glm::dot(cameraWorldPos, axes.lightDir);
+
         uint32_t levelCount = std::min(static_cast<uint32_t>(data.views.size()),
                                         data.settings.clipmapLevelCount);
 
@@ -401,8 +405,20 @@ namespace render::shadow
                 ? data.clipmapLevelPagesPerSide[i] : 1;
             uint32_t levelResolution = pagesPerSide * vsm::PAGE_SIZE;
 
-            auto levelData = ClipmapShadowCalculator::computeClipmapLevel(
+            // First compute texel-snapped level to get snapPosition for page-grid shift detection
+            auto texelSnapped = ClipmapShadowCalculator::computeClipmapLevel(
                 i, data.settings.clipmapBaseExtent, cameraWorldPos, lightDirection, levelResolution);
+
+            // Compute page-grid shift and update origin
+            updateClipmapDirtyFlags(data, i, texelSnapped);
+
+            // Build the actual VP from the page-grid-snapped origin (stable across texel snaps)
+            glm::vec2 pageGridOrigin = (i < data.clipmapPageGridOrigin.size())
+                ? data.clipmapPageGridOrigin[i] : glm::vec2(0.0f);
+
+            auto levelData = ClipmapShadowCalculator::computeClipmapLevelStable(
+                i, data.settings.clipmapBaseExtent, pageGridOrigin, lightSpaceZ,
+                lightDirection, levelResolution);
 
             auto& view = data.views[i];
             view.viewMatrix = levelData.viewMatrix;
@@ -418,8 +434,6 @@ namespace render::shadow
             view.depthBias = data.settings.depthBias * biasScale;
             view.slopeBias = data.settings.slopeBias * biasScale;
             view.normalBias = data.settings.normalBias * biasScale;
-
-            updateClipmapDirtyFlags(data, i, levelData);
         }
     }
 
@@ -432,26 +446,70 @@ namespace render::shadow
         if (level >= data.clipmapLevelPageOffsets.size() || level >= data.clipmapLevelPagesPerSide.size())
             return;
 
-        glm::ivec2 texelShift = ClipmapShadowCalculator::computeSnapDeltaTexels(
-            levelData, data.clipmapLastSnapPositions[level]);
+        if (level >= data.clipmapScrollOffset.size() || level >= data.clipmapPageGridOrigin.size())
+            return;
 
-        if (texelShift.x == 0 && texelShift.y == 0)
-            return; // No movement — all cached pages remain valid
-
-        // When the clipmap snaps by any amount, the view-projection matrix changes.
-        // Since each page's cropViewProjection = cropMatrix * VP, all pages become
-        // stale and must be re-rendered. This is the minimal correct invalidation —
-        // frames with zero snap delta skip entirely (the common case when the camera
-        // moves less than one texel in light space).
-        uint32_t basePageIdx = data.clipmapLevelPageOffsets[level];
         uint32_t pps = data.clipmapLevelPagesPerSide[level];
-        for (uint32_t p = 0; p < pps * pps; ++p)
+        uint32_t basePageIdx = data.clipmapLevelPageOffsets[level];
+
+        // Compute page-grid shift (how many whole pages the origin moved)
+        auto pgUpdate = ClipmapShadowCalculator::computePageGridShift(
+            levelData, pps, data.clipmapPageGridOrigin[level]);
+
+        // Always update the page-grid origin (may be first frame with origin at 0,0)
+        bool isFirstFrame = (data.clipmapPageGridOrigin[level] == glm::vec2(0.0f) &&
+                             pgUpdate.newPageGridOrigin != glm::vec2(0.0f));
+        data.clipmapPageGridOrigin[level] = pgUpdate.newPageGridOrigin;
+        data.clipmapLastSnapPositions[level] = levelData.snapPosition;
+
+        if (pgUpdate.pageShift.x == 0 && pgUpdate.pageShift.y == 0 && !isFirstFrame)
+            return; // No page boundary crossed — all cached pages remain valid
+
+        // Teleport or first frame: full invalidation
+        if (pgUpdate.fullInvalidation || isFirstFrame)
         {
-            uint32_t pageIdx = basePageIdx + p;
-            if (pageIdx < data.vsmPageDirty.size())
-                data.vsmPageDirty[pageIdx] = true;
+            for (uint32_t p = 0; p < pps * pps; ++p)
+            {
+                uint32_t pageIdx = basePageIdx + p;
+                if (pageIdx < data.vsmPageDirty.size())
+                    data.vsmPageDirty[pageIdx] = true;
+            }
+            data.clipmapScrollOffset[level] = glm::ivec2(0);
+            return;
         }
 
-        data.clipmapLastSnapPositions[level] = levelData.snapPosition;
+        // Update scroll offset with positive modulo wrapping
+        glm::ivec2& scroll = data.clipmapScrollOffset[level];
+        int ipps = static_cast<int>(pps);
+        scroll.x = ((scroll.x + pgUpdate.pageShift.x) % ipps + ipps) % ipps;
+        scroll.y = ((scroll.y + pgUpdate.pageShift.y) % ipps + ipps) % ipps;
+
+        // Mark only newly exposed columns (X-axis scroll)
+        for (int col = 0; col < std::abs(pgUpdate.pageShift.x); ++col)
+        {
+            int vx = (pgUpdate.pageShift.x > 0)
+                ? ((scroll.x - 1 - col) % ipps + ipps) % ipps
+                : (scroll.x + col) % ipps;
+            for (uint32_t vy = 0; vy < pps; ++vy)
+            {
+                uint32_t pageIdx = basePageIdx + vy * pps + static_cast<uint32_t>(vx);
+                if (pageIdx < data.vsmPageDirty.size())
+                    data.vsmPageDirty[pageIdx] = true;
+            }
+        }
+
+        // Mark only newly exposed rows (Y-axis scroll)
+        for (int row = 0; row < std::abs(pgUpdate.pageShift.y); ++row)
+        {
+            int vy = (pgUpdate.pageShift.y > 0)
+                ? ((scroll.y - 1 - row) % ipps + ipps) % ipps
+                : (scroll.y + row) % ipps;
+            for (uint32_t vx = 0; vx < pps; ++vx)
+            {
+                uint32_t pageIdx = basePageIdx + static_cast<uint32_t>(vy) * pps + vx;
+                if (pageIdx < data.vsmPageDirty.size())
+                    data.vsmPageDirty[pageIdx] = true;
+            }
+        }
     }
 }

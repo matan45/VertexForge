@@ -187,6 +187,10 @@ namespace render::shadow
         std::vector<uint32_t> clipmapLevelPageOffsets;     // per-level offset within page table block
         std::vector<uint32_t> clipmapLevelPagesPerSide;    // per-level page grid dimension (variable density)
 
+        // Toroidal scrolling state (per-level, only for DirectionalClipmap)
+        std::vector<glm::ivec2> clipmapScrollOffset;     // scroll offset in page units, [0, pps)
+        std::vector<glm::vec2>  clipmapPageGridOrigin;   // light-space XY origin snapped to page boundaries
+
         void invalidate()
         {
             for (auto& view : views)
@@ -211,6 +215,11 @@ namespace render::shadow
             {
                 vsmPageDirty[i] = true;
             }
+            // Reset toroidal scroll state
+            for (auto& s : clipmapScrollOffset)
+                s = glm::ivec2(0);
+            for (auto& o : clipmapPageGridOrigin)
+                o = glm::vec2(0.0f);
         }
 
         [[nodiscard]] bool usesVSM() const
