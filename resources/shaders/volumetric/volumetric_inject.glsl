@@ -206,16 +206,29 @@ float henyeyGreenstein(float cosTheta, float g) {
     return (1.0 - g2) / (4.0 * VOL_PI * pow(denom, 1.5));
 }
 
+// Halton low-discrepancy sequence for sub-voxel jittering
+float halton(uint index, uint base) {
+    float result = 0.0;
+    float f = 1.0 / float(base);
+    uint i = index;
+    while (i > 0u) {
+        result += f * float(i % base);
+        i /= base;
+        f /= float(base);
+    }
+    return result;
+}
+
 float sliceToDepth(float slice, float near, float far, float numSlices) {
     float t = slice / numSlices;
     return near * pow(far / near, t);
 }
 
-vec3 froxelToWorld(ivec3 froxelCoord, uvec3 dims) {
-    vec2 uv = (vec2(froxelCoord.xy) + 0.5) / vec2(dims.xy);
+vec3 froxelToWorld(ivec3 froxelCoord, uvec3 dims, vec3 jitter) {
+    vec2 uv = (vec2(froxelCoord.xy) + 0.5 + jitter.xy) / vec2(dims.xy);
     float near = depthParams.x;
     float far = depthParams.y;
-    float depth = sliceToDepth(float(froxelCoord.z) + 0.5, near, far, float(dims.z));
+    float depth = sliceToDepth(float(froxelCoord.z) + 0.5 + jitter.z, near, far, float(dims.z));
 
     vec2 ndc = uv * 2.0 - 1.0;
     float ndcDepth = (far * (depth - near)) / (depth * (far - near));
@@ -378,7 +391,15 @@ void main() {
     if (froxelCoord.x >= int(dims.x) || froxelCoord.y >= int(dims.y) || froxelCoord.z >= int(dims.z))
         return;
 
-    vec3 worldPos = froxelToWorld(froxelCoord, dims);
+    // Sub-voxel jitter using Halton(2,3,5) sequence for temporal super-sampling
+    uint jitterIdx = pc.frameIndex % 16u;
+    vec3 jitter = vec3(
+        halton(jitterIdx + 1u, 2u) - 0.5,
+        halton(jitterIdx + 1u, 3u) - 0.5,
+        halton(jitterIdx + 1u, 5u) - 0.5
+    );
+
+    vec3 worldPos = froxelToWorld(froxelCoord, dims, jitter);
     float distFromCamera = length(worldPos - cameraPosition.xyz);
     if (distFromCamera > scatterParams.w) {
         imageStore(scatteringVolume, froxelCoord, vec4(0.0));
