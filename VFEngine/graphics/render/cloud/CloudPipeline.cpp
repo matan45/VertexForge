@@ -128,6 +128,9 @@ namespace render::cloud
         if (!initialized)
             return;
 
+        // Wait for GPU to finish using cloud resources before destroying them
+        device.getLogicalDevice().waitIdle();
+
         if (cloudComposite) { cloudComposite->cleanup(); cloudComposite.reset(); }
         if (cloudTemporal) { cloudTemporal->cleanup(); cloudTemporal.reset(); }
         if (cloudRayMarch) { cloudRayMarch->cleanup(); cloudRayMarch.reset(); }

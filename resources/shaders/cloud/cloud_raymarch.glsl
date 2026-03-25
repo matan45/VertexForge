@@ -109,8 +109,9 @@ float sampleCloudDensity(vec3 worldPos, float heightFrac, bool detailPass)
     float shapeValue = remap(shapeNoise.r, shapeFBM - 1.0, 1.0, 0.0, 1.0);
     shapeValue = clamp(shapeValue, 0.0, 1.0);
 
-    // Apply height gradient and local coverage
-    float baseCloud = shapeValue * gradient * localCoverage;
+    // Apply height gradient and coverage, then use coverage to carve out gaps
+    // Subtract (1 - localCoverage) so that low-coverage areas become zero
+    float baseCloud = remap(shapeValue * gradient, 1.0 - localCoverage, 1.0, 0.0, 1.0);
     float density = clamp(baseCloud, 0.0, 1.0);
 
     if (density < 0.01)
@@ -348,9 +349,9 @@ void main()
             }
 
             // Interior boost: brightens deeply embedded cloud samples
-            float depthInCloud = density * absorption * 500.0;
-            float interiorBoost = (1.0 - exp(-depthInCloud)) * params.lightParams2.z;
-            multiScatterLight += vec3(interiorBoost * 0.15);
+            // Uses lightDensity (accumulated toward sun) — high when deep inside cloud
+            float interiorBoost = (1.0 - exp(-lightDensity * absorption * 0.5)) * params.lightParams2.z;
+            multiScatterLight += vec3(interiorBoost * 0.1);
 
             // Sample atmosphere transmittance for sun at this altitude
             float cosZenith = dot(normalize(samplePos - planetCenter), sunDir);
@@ -364,7 +365,7 @@ void main()
             }
 
             // Sun illumination with multi-scattering
-            vec3 sunColor = params.lightColor.xyz * 6.0;
+            vec3 sunColor = params.lightColor.xyz * 3.5;
             vec3 directSun = sunColor * sunTransmittance * multiScatterLight;
 
             // Silver lining: bright rim when looking toward sun through thin cloud edges
