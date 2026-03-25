@@ -43,16 +43,8 @@ const vec2 poissonDisk[32] = vec2[](
 // VSM Page Table Lookup
 // ============================================================
 vec2 vsmLookupPhysicalUV(ShadowData sd, vec2 uv, out bool valid) {
-    // For clipmap lights (lightType == 3): apply toroidal UV offset.
-    // lookAt negates lightRight (s = -lightRight), so UV_page = UV_texel - offset
-    // Use fract() for toroidal wrapping (pages wrap around in the virtual grid)
-    if (sd.pageTableInfo.w == 3) {
-        vec2 uvOffset = unpackHalf2x16(floatBitsToUint(sd.rangeParams.y));
-        uv -= uvOffset;
-        uv = fract(uv);
-    } else {
-        uv = clamp(uv, vec2(0.0), vec2(0.999));
-    }
+    // Clamp UV to valid range
+    uv = clamp(uv, vec2(0.0), vec2(0.999));
 
     ivec2 pageCoord = ivec2(uv * vec2(sd.pageTableInfo.xy));
     pageCoord = clamp(pageCoord, ivec2(0), sd.pageTableInfo.xy - 1);

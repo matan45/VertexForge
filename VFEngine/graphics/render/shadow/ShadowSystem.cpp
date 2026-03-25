@@ -296,7 +296,15 @@ namespace render::shadow
 
     ShadowSystem::PageDimensions ShadowSystem::allocateClipmapPages(LightShadowData& data)
     {
-        static constexpr uint32_t MAX_DIR_PAGES = 4;
+        // Near level resolution scales with quality
+        uint32_t nearPagesPerSide = 4;
+        switch (globalQuality)
+        {
+        case ShadowQuality::High:  nearPagesPerSide = 8;  break; // 1024
+        case ShadowQuality::Ultra: nearPagesPerSide = 16; break; // 2048
+        default: break;
+        }
+
         uint32_t levelCount = data.settings.clipmapLevelCount;
         data.clipmapLevelPagesPerSide.resize(levelCount);
         data.clipmapLevelPageOffsets.resize(levelCount);
@@ -311,8 +319,8 @@ namespace render::shadow
         for (uint32_t i = 0; i < levelCount; ++i)
         {
             uint32_t pps;
-            if (i < 4)       pps = MAX_DIR_PAGES;
-            else if (i < 8)  pps = 2;
+            if (i < 4)       pps = nearPagesPerSide;
+            else if (i < 8)  pps = std::max(2u, nearPagesPerSide / 4);
             else             pps = 1;
 
             data.clipmapLevelPagesPerSide[i] = pps;
