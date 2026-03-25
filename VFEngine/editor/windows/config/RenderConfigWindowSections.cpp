@@ -225,8 +225,9 @@ namespace windows
 
             ImGui::Text("Pool Utilization:");
             ImGui::SameLine();
-            ImGui::ProgressBar(shadowStats.atlasUtilization, ImVec2(-1, 0),
-                (std::to_string(static_cast<int>(shadowStats.atlasUtilization * 100)) + "%%").c_str());
+            char utilBuf[16];
+            snprintf(utilBuf, sizeof(utilBuf), "%.1f%%", shadowStats.atlasUtilization * 100.0f);
+            ImGui::ProgressBar(shadowStats.atlasUtilization, ImVec2(-1, 0), utilBuf);
 
             float poolMB = (shadowStats.atlasWidth * shadowStats.atlasHeight * 4) / (1024.0f * 1024.0f);
             ImGui::Text("Pool VRAM: %.1f MB", poolMB);

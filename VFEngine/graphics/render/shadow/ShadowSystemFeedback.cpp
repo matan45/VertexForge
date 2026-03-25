@@ -54,7 +54,8 @@ namespace render::shadow
             if (data.vsmPageDirty.size() != totalPages)
                 data.vsmPageDirty.resize(totalPages, true);
 
-            if (!data.isStatic)
+            bool needsDynamicArrays = !data.isStatic || data.type == ShadowMapType::PointCube;
+            if (needsDynamicArrays)
             {
                 if (data.vsmDynamicTiles.size() != totalPages)
                     data.vsmDynamicTiles.resize(totalPages, vsm::INVALID_TILE);
@@ -187,7 +188,7 @@ namespace render::shadow
         ++lastCacheStats.totalPages;
         bool forceRender = data.renderedFrameCount < 3;
 
-        if (data.isStatic)
+        if (data.isStatic && data.type != ShadowMapType::PointCube)
             addStaticLightPage(data, pageIdx, cropViewProjection, view, isDirty, forceRender);
         else
             addDualLayerPage(data, pageIdx, cropViewProjection, view, isDirty, forceRender);
@@ -338,12 +339,8 @@ namespace render::shadow
                     if (pageIdx >= data.vsmPhysicalTiles.size())
                         continue;
 
-                    // Point lights always re-render — 6-face VSM needs consistent
-                    // depth across all faces each frame to avoid stale face artifacts
-                    data.vsmPageDirty[pageIdx] = true;
-
                     glm::mat4 cropMatrix = vsm::computePageCropMatrix(fx, fy, pagesPerFace, faceHeight);
-                    addPageToRenderLists(data, pageIdx, cropMatrix * view.viewProjectionMatrix, view, true);
+                    addPageToRenderLists(data, pageIdx, cropMatrix * view.viewProjectionMatrix, view, lightMoved);
                 }
             }
         }

@@ -366,28 +366,26 @@ namespace render::shadow
             return false;
 
         uint32_t totalPages = pagesX * pagesY;
-        data.vsmPhysicalTiles.resize(totalPages, vsm::INVALID_TILE);
+        data.vsmPhysicalTiles.resize(totalPages);
 
         for (uint32_t i = 0; i < totalPages; ++i)
         {
-            // Budget check: defer remaining tiles to next frame
-            if (newPagesAllocatedThisFrame >= MAX_NEW_PAGES_PER_FRAME)
-                break;
-
             uint32_t tile = tilePool->allocateTile();
             if (tile == vsm::INVALID_TILE)
             {
-                // Try eviction before giving up
                 tile = evictLowestPriorityPage(data.shadowPriority);
             }
             if (tile == vsm::INVALID_TILE)
             {
-                // Partial allocation is OK — remaining tiles filled next frame
-                break;
+                for (uint32_t j = 0; j < i; ++j)
+                    tilePool->freeTile(data.vsmPhysicalTiles[j]);
+                pageTable->freeBlock(offset, pagesX, pagesY);
+                data.vsmPhysicalTiles.clear();
+                vfLogError("ShadowSystem: Ran out of physical tiles, allocated {}/{}", i, totalPages);
+                return false;
             }
             data.vsmPhysicalTiles[i] = tile;
             pageTable->mapPage(offset, i % pagesX, i / pagesX, pagesX, tile);
-            ++newPagesAllocatedThisFrame;
         }
 
         data.vsmPagesX = pagesX;
@@ -549,7 +547,10 @@ namespace render::shadow
             bool wasStatic = data.isStatic;
             if (registry.valid(entity) && registry.all_of<components::TransformComponent>(entity))
             {
-                data.isStatic = registry.get<components::TransformComponent>(entity).isStatic;
+                // Point lights always non-static in shadow system — their 6-face VSM
+                // layout doesn't work with the static page rendering path
+                bool entityStatic = registry.get<components::TransformComponent>(entity).isStatic;
+                data.isStatic = (data.type != ShadowMapType::PointCube) && entityStatic;
             }
             else
             {
