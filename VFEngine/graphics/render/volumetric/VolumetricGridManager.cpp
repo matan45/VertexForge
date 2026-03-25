@@ -84,13 +84,13 @@ namespace render::volumetric
             core::BufferUtilities::destroyBuffer(dev, paramsBuffer, paramsMemory);
         }
 
+        destroyImages();
+
         if (fogNoise)
         {
             fogNoise->cleanup();
             fogNoise.reset();
         }
-
-        destroyImages();
 
         if (trilinearSampler)
         {

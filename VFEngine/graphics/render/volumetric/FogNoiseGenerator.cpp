@@ -60,6 +60,9 @@ namespace render::volumetric
     {
         if (!initialized || generated) return;
 
+        if (!genPipeline)
+            return;
+
         // Transition to GENERAL for compute write
         core::ImageUtilities::transitionImageLayout(*cmd, noiseImage,
             vk::ImageLayout::eUndefined, vk::ImageLayout::eGeneral,

@@ -225,25 +225,6 @@ vec3 froxelToWorld(ivec3 froxelCoord, uvec3 dims) {
     return worldPos.xyz / worldPos.w;
 }
 
-float sampleFogNoise(vec3 worldPos) {
-    vec3 uvw = worldPos * noiseParams.x + vec3(noiseParams.z * 0.6, noiseParams.z * 0.2, noiseParams.z * 0.4);
-    int octaves = int(noiseParams.w);
-
-    float noise = 0.0;
-    float amplitude = 1.0;
-    float frequency = 1.0;
-    float totalAmplitude = 0.0;
-
-    for (int i = 0; i < octaves; i++) {
-        noise += amplitude * texture(fogNoiseTexture, uvw * frequency).a;
-        totalAmplitude += amplitude;
-        amplitude *= 0.5;
-        frequency *= 2.0;
-    }
-
-    return noise / totalAmplitude;
-}
-
 float computeFogDensity(vec3 worldPos) {
     float density = fogParams.x;
 
@@ -258,8 +239,11 @@ float computeFogDensity(vec3 worldPos) {
 
     // 3D noise modulation
     if (noiseParams.y > 0.0) {
-        float noise = sampleFogNoise(worldPos);
-        density *= mix(1.0, noise * 2.0, noiseParams.y);
+        vec3 uvw = worldPos * noiseParams.x;
+        uvw += vec3(noiseParams.z * 0.6, noiseParams.z * 0.2, noiseParams.z * 0.4);
+        float noise = texture(fogNoiseTexture, uvw).r;
+        float noiseModulation = 1.0 + (noise - 0.5) * 2.0 * noiseParams.y;
+        density *= max(noiseModulation, 0.0);
     }
 
     return max(density, 0.0);
