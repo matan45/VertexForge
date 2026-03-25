@@ -33,12 +33,15 @@ namespace render::gi
         vk::DescriptorSetLayout probeDataLayout;
         vk::DescriptorSetLayout cascadeInfoLayout;
         vk::DescriptorSetLayout samplingLayout;  // Combined layout for fragment shader GI sampling
+        vk::DescriptorSetLayout computeSamplingLayout; // Combined layout for compute shader GI sampling
         vk::DescriptorPool descriptorPool;
         vk::DescriptorSet probeDataDescSetA;  // Read from A
         vk::DescriptorSet probeDataDescSetB;  // Read from B
         vk::DescriptorSet cascadeInfoDescSet;
         vk::DescriptorSet samplingDescSetA;   // Fragment sampling: read A + cascade
         vk::DescriptorSet samplingDescSetB;   // Fragment sampling: read B + cascade
+        vk::DescriptorSet computeSamplingDescSetA; // Compute sampling: read A + cascade
+        vk::DescriptorSet computeSamplingDescSetB; // Compute sampling: read B + cascade
 
         uint32_t probeCount = 0;
         uint32_t cascadeCount = 0;
@@ -81,6 +84,13 @@ namespace render::gi
         vk::DescriptorSet getSamplingDescSet() const
         {
             return currentReadBuffer == 0 ? samplingDescSetA : samplingDescSetB;
+        }
+
+        // Combined sampling layout/set for compute shaders (volumetric fog GI injection)
+        vk::DescriptorSetLayout getComputeSamplingLayout() const { return computeSamplingLayout; }
+        vk::DescriptorSet getComputeSamplingDescSet() const
+        {
+            return currentReadBuffer == 0 ? computeSamplingDescSetA : computeSamplingDescSetB;
         }
 
         uint32_t getProbeCount() const { return probeCount; }

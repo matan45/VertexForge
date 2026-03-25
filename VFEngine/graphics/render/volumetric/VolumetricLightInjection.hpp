@@ -31,6 +31,7 @@ namespace render::volumetric
         vk::DescriptorSetLayout shadowTextureLayout;     // Set 5
         vk::DescriptorSetLayout fogVolumeLayout;          // Set 6
         vk::DescriptorSetLayout giSamplingLayout;           // Set 7
+        vk::DescriptorSetLayout ownedGiDummyLayout;         // Owned fallback if GI not available
 
         VolumetricGridDimensions dims{};
         bool initialized = false;

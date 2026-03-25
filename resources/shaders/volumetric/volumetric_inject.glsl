@@ -180,7 +180,7 @@ float evaluateFogVolume(GPUFogVolume vol, vec3 worldPos) {
     return vol.albedoAndDensity.a * weight;
 }
 
-// Set 7: GI Probe Data (radiance cascade probes for ambient injection)
+// Set 7: GI Probe Data (compute-compatible layout for ambient injection)
 struct GIProbeData {
     vec4 shR0; vec4 shR1; vec4 shR2;
     vec4 shG0; vec4 shG1; vec4 shG2;
@@ -189,8 +189,8 @@ struct GIProbeData {
 };
 
 struct GICascadeInfo {
-    vec4 gridOriginSpacing;  // xyz=origin, w=spacing
-    ivec4 gridDimsOffset;    // xyz=dims, w=probeOffset
+    vec4 gridOriginSpacing;
+    ivec4 gridDimsOffset;
 };
 
 layout(std430, set = 7, binding = 0) readonly buffer GIProbeBuffer {
@@ -199,24 +199,21 @@ layout(std430, set = 7, binding = 0) readonly buffer GIProbeBuffer {
 
 layout(std430, set = 7, binding = 1) readonly buffer GICascadeBuffer {
     uint giCascadeCount;
-    uint _giPad0;
-    uint _giPad1;
-    uint _giPad2;
+    uint _giPad0; uint _giPad1; uint _giPad2;
     GICascadeInfo giCascades[];
 };
 
-// SH basis constants
-const float GI_SH_C0  = 0.282095;
-const float GI_SH_C1  = 0.488603;
-const float GI_SH_C2  = 1.092548;
+const float GI_SH_C0 = 0.282095;
+const float GI_SH_C1 = 0.488603;
+const float GI_SH_C2 = 1.092548;
 const float GI_SH_C20 = 0.315392;
 const float GI_SH_C22 = 0.546274;
 
-vec3 evaluateGISH(GIProbeData probe, vec3 normal) {
-    vec4 b0 = vec4(GI_SH_C0, GI_SH_C1 * normal.y, GI_SH_C1 * normal.z, GI_SH_C1 * normal.x);
-    vec4 b1 = vec4(GI_SH_C2 * normal.x * normal.y, GI_SH_C2 * normal.y * normal.z,
-                   GI_SH_C20 * (3.0 * normal.z * normal.z - 1.0), GI_SH_C2 * normal.x * normal.z);
-    float b2 = GI_SH_C22 * (normal.x * normal.x - normal.y * normal.y);
+vec3 evaluateGISH(GIProbeData probe, vec3 n) {
+    vec4 b0 = vec4(GI_SH_C0, GI_SH_C1 * n.y, GI_SH_C1 * n.z, GI_SH_C1 * n.x);
+    vec4 b1 = vec4(GI_SH_C2 * n.x * n.y, GI_SH_C2 * n.y * n.z,
+                   GI_SH_C20 * (3.0 * n.z * n.z - 1.0), GI_SH_C2 * n.x * n.z);
+    float b2 = GI_SH_C22 * (n.x * n.x - n.y * n.y);
     return max(vec3(
         dot(probe.shR0, b0) + dot(probe.shR1, b1) + probe.shR2.x * b2,
         dot(probe.shG0, b0) + dot(probe.shG1, b1) + probe.shG2.x * b2,
@@ -227,14 +224,10 @@ vec3 evaluateGISH(GIProbeData probe, vec3 normal) {
 vec3 sampleFogGI(vec3 worldPos, float cameraDist) {
     if (giCascadeCount == 0u) return vec3(0.0);
 
-    // For fog, average SH over 6 axis directions for omnidirectional irradiance
-    const vec3 dirs[6] = vec3[](vec3(1,0,0), vec3(-1,0,0), vec3(0,1,0), vec3(0,-1,0), vec3(0,0,1), vec3(0,0,-1));
-
-    // Select cascade based on camera distance
     uint selectedCascade = 0u;
     for (uint i = 1u; i < giCascadeCount; ++i) {
-        float cascadeRange = giCascades[i].gridOriginSpacing.w * float(giCascades[i].gridDimsOffset.x) * 0.5;
-        if (cameraDist > cascadeRange * 0.7) selectedCascade = i;
+        float range = giCascades[i].gridOriginSpacing.w * float(giCascades[i].gridDimsOffset.x) * 0.5;
+        if (cameraDist > range * 0.7) selectedCascade = i;
     }
 
     GICascadeInfo cascade = giCascades[selectedCascade];
@@ -254,16 +247,13 @@ vec3 sampleFogGI(vec3 worldPos, float cameraDist) {
         for (int dy = 0; dy <= 1; ++dy) {
             for (int dx = 0; dx <= 1; ++dx) {
                 ivec3 coord = baseCoord + ivec3(dx, dy, dz);
-                uint probeIdx = uint(probeOffset) +
-                    uint(coord.x + coord.y * gridDims.x + coord.z * gridDims.x * gridDims.y);
-                GIProbeData probe = giProbes[probeIdx];
+                uint idx = uint(probeOffset) + uint(coord.x + coord.y * gridDims.x + coord.z * gridDims.x * gridDims.y);
+                GIProbeData probe = giProbes[idx];
                 vec3 w = mix(vec3(1.0) - alpha, alpha, vec3(dx, dy, dz));
                 float weight = w.x * w.y * w.z * probe.validity.x;
                 if (weight > 0.0) {
-                    // Average over 6 directions for omnidirectional fog scattering
-                    vec3 probeIrr = vec3(0.0);
-                    for (int d = 0; d < 6; ++d) probeIrr += evaluateGISH(probe, dirs[d]);
-                    irradiance += (probeIrr / 6.0) * weight;
+                    // Average SH over up direction for omnidirectional fog scattering
+                    irradiance += evaluateGISH(probe, vec3(0, 1, 0)) * weight;
                     totalWeight += weight;
                 }
             }
@@ -545,11 +535,10 @@ void main() {
     float ambientIntensity = ambientParams.x;
     float giIntensity = ambientParams.w;
 
-    // GI probe injection: replace flat ambient with spatially-varying bounced light
+    // GI probe injection: spatially-varying bounced light
     if (giIntensity > 0.0 && giCascadeCount > 0u) {
         vec3 giIrradiance = sampleFogGI(worldPos, distFromCamera);
         inScattered += giIrradiance * giIntensity;
-        // Add remaining flat ambient (scaled down since GI provides the bulk)
         inScattered += effectiveFogColor * fogColor.a * ambientIntensity * 0.2;
     } else {
         inScattered += effectiveFogColor * fogColor.a * ambientIntensity;

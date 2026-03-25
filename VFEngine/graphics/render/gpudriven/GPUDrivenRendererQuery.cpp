@@ -208,7 +208,7 @@ namespace render::gpudriven
             shadowSystem ? shadowSystem->getShadowTextureLayout() : vk::DescriptorSetLayout{},
             fogVolumeBufferManager->getDescriptorSetLayout(),
             (giCascadeManager && giCascadeManager->getProbeStorage())
-                ? giCascadeManager->getProbeStorage()->getSamplingLayout()
+                ? giCascadeManager->getProbeStorage()->getComputeSamplingLayout()
                 : vk::DescriptorSetLayout{});
 
     }

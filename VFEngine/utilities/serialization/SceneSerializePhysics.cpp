@@ -187,7 +187,8 @@ namespace serialization
     {
         if (auto it = j.find("shape"); it != j.end() && it->is_number())
         {
-            fog.shape = static_cast<components::FogVolumeShape>(it->get<int>());
+            int val = std::clamp(it->get<int>(), 0, 2);
+            fog.shape = static_cast<components::FogVolumeShape>(val);
         }
         if (j.contains("halfExtents") && j["halfExtents"].is_array() && j["halfExtents"].size() == 3)
         {
@@ -217,7 +218,8 @@ namespace serialization
         }
         if (auto it = j.find("blendMode"); it != j.end() && it->is_number())
         {
-            fog.blendMode = static_cast<components::FogVolumeBlendMode>(it->get<int>());
+            int val = std::clamp(it->get<int>(), 0, 1);
+            fog.blendMode = static_cast<components::FogVolumeBlendMode>(val);
         }
         if (auto it = j.find("showGizmo"); it != j.end() && it->is_boolean())
         {

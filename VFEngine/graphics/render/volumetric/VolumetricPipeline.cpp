@@ -1,6 +1,7 @@
 #include "VolumetricPipeline.hpp"
 #include "../../core/Device.hpp"
 #include "print/Log.hpp"
+#include <cmath>
 
 // Windows defines MemoryBarrier as a macro - undefine it to use vk::MemoryBarrier
 #ifdef MemoryBarrier
@@ -142,7 +143,7 @@ namespace render::volumetric
             settings.giInjectionIntensity);
         params.cameraPosition = glm::vec4(cameraPos, 0.0f);
 
-        elapsedTime += 1.0f / 60.0f;
+        elapsedTime = std::fmod(elapsedTime + 1.0f / 60.0f, 1000.0f);
         params.noiseParams = glm::vec4(
             settings.noiseScale,
             settings.noiseEnabled ? settings.noiseIntensity : 0.0f,

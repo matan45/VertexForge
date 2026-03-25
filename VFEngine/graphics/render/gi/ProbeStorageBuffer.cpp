@@ -72,6 +72,11 @@ namespace render::gi
             vkDevice.destroyDescriptorSetLayout(samplingLayout);
             samplingLayout = nullptr;
         }
+        if (computeSamplingLayout)
+        {
+            vkDevice.destroyDescriptorSetLayout(computeSamplingLayout);
+            computeSamplingLayout = nullptr;
+        }
 
         destroyBuffers();
         initialized = false;
@@ -183,23 +188,42 @@ namespace render::gi
             cascadeInfoLayout = vkDevice.createDescriptorSetLayout(layoutInfo);
         }
 
-        // Sampling layout for fragment/compute shaders: binding 0 = probe read SSBO, binding 1 = cascade SSBO
+        // Sampling layout for fragment shaders: binding 0 = probe read SSBO, binding 1 = cascade SSBO
         {
             std::array<vk::DescriptorSetLayoutBinding, 2> bindings{};
             bindings[0].binding = 0;
             bindings[0].descriptorType = vk::DescriptorType::eStorageBuffer;
             bindings[0].descriptorCount = 1;
-            bindings[0].stageFlags = vk::ShaderStageFlagBits::eFragment | vk::ShaderStageFlagBits::eCompute;
+            bindings[0].stageFlags = vk::ShaderStageFlagBits::eFragment;
 
             bindings[1].binding = 1;
             bindings[1].descriptorType = vk::DescriptorType::eStorageBuffer;
             bindings[1].descriptorCount = 1;
-            bindings[1].stageFlags = vk::ShaderStageFlagBits::eFragment | vk::ShaderStageFlagBits::eCompute;
+            bindings[1].stageFlags = vk::ShaderStageFlagBits::eFragment;
 
             vk::DescriptorSetLayoutCreateInfo layoutInfo{};
             layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
             layoutInfo.pBindings = bindings.data();
             samplingLayout = vkDevice.createDescriptorSetLayout(layoutInfo);
+        }
+
+        // Compute sampling layout: same bindings but with eCompute stage flags
+        {
+            std::array<vk::DescriptorSetLayoutBinding, 2> bindings{};
+            bindings[0].binding = 0;
+            bindings[0].descriptorType = vk::DescriptorType::eStorageBuffer;
+            bindings[0].descriptorCount = 1;
+            bindings[0].stageFlags = vk::ShaderStageFlagBits::eCompute;
+
+            bindings[1].binding = 1;
+            bindings[1].descriptorType = vk::DescriptorType::eStorageBuffer;
+            bindings[1].descriptorCount = 1;
+            bindings[1].stageFlags = vk::ShaderStageFlagBits::eCompute;
+
+            vk::DescriptorSetLayoutCreateInfo layoutInfo{};
+            layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
+            layoutInfo.pBindings = bindings.data();
+            computeSamplingLayout = vkDevice.createDescriptorSetLayout(layoutInfo);
         }
     }
 
@@ -209,12 +233,12 @@ namespace render::gi
 
         std::array<vk::DescriptorPoolSize, 2> poolSizes{};
         poolSizes[0].type = vk::DescriptorType::eStorageBuffer;
-        poolSizes[0].descriptorCount = 8; // 2 per probe set x 2 + 2 per sampling set x 2
+        poolSizes[0].descriptorCount = 12; // 2 per probe set x 2 + 2 per sampling set x 2 + 2 per compute sampling x 2
         poolSizes[1].type = vk::DescriptorType::eUniformBuffer;
         poolSizes[1].descriptorCount = 1;
 
         vk::DescriptorPoolCreateInfo poolInfo{};
-        poolInfo.maxSets = 5; // 2 probe sets + 1 cascade + 2 sampling sets
+        poolInfo.maxSets = 7; // 2 probe sets + 1 cascade + 2 sampling sets + 2 compute sampling sets
         poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
         poolInfo.pPoolSizes = poolSizes.data();
 
@@ -272,6 +296,26 @@ namespace render::gi
             allocInfo.pSetLayouts = &samplingLayout;
             auto sets = vkDevice.allocateDescriptorSets(allocInfo);
             samplingDescSetB = sets[0];
+        }
+
+        // Compute sampling set A (reads from probe A + cascade, compute stage)
+        {
+            vk::DescriptorSetAllocateInfo allocInfo{};
+            allocInfo.descriptorPool = descriptorPool;
+            allocInfo.descriptorSetCount = 1;
+            allocInfo.pSetLayouts = &computeSamplingLayout;
+            auto sets = vkDevice.allocateDescriptorSets(allocInfo);
+            computeSamplingDescSetA = sets[0];
+        }
+
+        // Compute sampling set B (reads from probe B + cascade, compute stage)
+        {
+            vk::DescriptorSetAllocateInfo allocInfo{};
+            allocInfo.descriptorPool = descriptorPool;
+            allocInfo.descriptorSetCount = 1;
+            allocInfo.pSetLayouts = &computeSamplingLayout;
+            auto sets = vkDevice.allocateDescriptorSets(allocInfo);
+            computeSamplingDescSetB = sets[0];
         }
     }
 
@@ -362,6 +406,48 @@ namespace render::gi
             writes[0].pBufferInfo = &probeInfo;
 
             writes[1].dstSet = samplingDescSetB;
+            writes[1].dstBinding = 1;
+            writes[1].descriptorType = vk::DescriptorType::eStorageBuffer;
+            writes[1].descriptorCount = 1;
+            writes[1].pBufferInfo = &cascadeInfo;
+
+            vkDevice.updateDescriptorSets(writes, {});
+        }
+
+        // Compute sampling set A: same data, compute-compatible layout
+        {
+            vk::DescriptorBufferInfo probeInfo(probeBufferA, 0, probeBufferSize);
+            vk::DescriptorBufferInfo cascadeInfo(cascadeInfoBuffer, 0, CASCADE_BUFFER_SIZE);
+
+            std::array<vk::WriteDescriptorSet, 2> writes{};
+            writes[0].dstSet = computeSamplingDescSetA;
+            writes[0].dstBinding = 0;
+            writes[0].descriptorType = vk::DescriptorType::eStorageBuffer;
+            writes[0].descriptorCount = 1;
+            writes[0].pBufferInfo = &probeInfo;
+
+            writes[1].dstSet = computeSamplingDescSetA;
+            writes[1].dstBinding = 1;
+            writes[1].descriptorType = vk::DescriptorType::eStorageBuffer;
+            writes[1].descriptorCount = 1;
+            writes[1].pBufferInfo = &cascadeInfo;
+
+            vkDevice.updateDescriptorSets(writes, {});
+        }
+
+        // Compute sampling set B: same data, compute-compatible layout
+        {
+            vk::DescriptorBufferInfo probeInfo(probeBufferB, 0, probeBufferSize);
+            vk::DescriptorBufferInfo cascadeInfo(cascadeInfoBuffer, 0, CASCADE_BUFFER_SIZE);
+
+            std::array<vk::WriteDescriptorSet, 2> writes{};
+            writes[0].dstSet = computeSamplingDescSetB;
+            writes[0].dstBinding = 0;
+            writes[0].descriptorType = vk::DescriptorType::eStorageBuffer;
+            writes[0].descriptorCount = 1;
+            writes[0].pBufferInfo = &probeInfo;
+
+            writes[1].dstSet = computeSamplingDescSetB;
             writes[1].dstBinding = 1;
             writes[1].descriptorType = vk::DescriptorType::eStorageBuffer;
             writes[1].descriptorCount = 1;

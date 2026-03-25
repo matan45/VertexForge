@@ -41,7 +41,23 @@ namespace render::volumetric
         shadowDataLayout = shadowDataDescLayout;
         shadowTextureLayout = shadowTextureDescLayout;
         fogVolumeLayout = fogVolumeDescLayout;
-        giSamplingLayout = giSamplingDescLayout;
+
+        // If GI is not available, create a dummy layout with matching bindings
+        if (giSamplingDescLayout)
+        {
+            giSamplingLayout = giSamplingDescLayout;
+        }
+        else
+        {
+            std::array<vk::DescriptorSetLayoutBinding, 2> bindings{};
+            bindings[0] = {0, vk::DescriptorType::eStorageBuffer, 1, vk::ShaderStageFlagBits::eCompute};
+            bindings[1] = {1, vk::DescriptorType::eStorageBuffer, 1, vk::ShaderStageFlagBits::eCompute};
+            vk::DescriptorSetLayoutCreateInfo layoutInfo{};
+            layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
+            layoutInfo.pBindings = bindings.data();
+            ownedGiDummyLayout = device.getLogicalDevice().createDescriptorSetLayout(layoutInfo);
+            giSamplingLayout = ownedGiDummyLayout;
+        }
 
         createPipelineLayout();
         createComputePipeline();
@@ -76,6 +92,12 @@ namespace render::volumetric
             shader.reset();
         }
 
+        if (ownedGiDummyLayout)
+        {
+            dev.destroyDescriptorSetLayout(ownedGiDummyLayout);
+            ownedGiDummyLayout = nullptr;
+        }
+
         initialized = false;
     }
 
@@ -94,7 +116,7 @@ namespace render::volumetric
             shadowDataLayout,        // Set 4: Shadow data buffer
             shadowTextureLayout,     // Set 5: Shadow textures (atlas, cascades, cubes)
             fogVolumeLayout,         // Set 6: Fog volume SSBO
-            giSamplingLayout         // Set 7: GI probe data for ambient injection
+            giSamplingLayout         // Set 7: GI probe data (compute-compatible)
         };
 
         vk::PipelineLayoutCreateInfo layoutInfo{};
@@ -149,43 +171,40 @@ namespace render::volumetric
 
         cmd.bindPipeline(vk::PipelineBindPoint::eCompute, computePipeline);
 
-        // Bind core sets (0-3) always; bind shadow sets (4-5) only when available
-        bool hasShadows = shadowDataDescSet && shadowTextureDescSet;
-        if (hasShadows)
+        // Bind sets 0-3 always (core sets)
+        std::array<vk::DescriptorSet, 4> coreSets = {
+            volumetricGridDescSet,
+            clusterGridDescSet,
+            lightBufferDescSet,
+            lightCullingDescSet
+        };
+        cmd.bindDescriptorSets(
+            vk::PipelineBindPoint::eCompute, pipelineLayout, 0,
+            static_cast<uint32_t>(coreSets.size()), coreSets.data(),
+            0, nullptr);
+
+        // Bind shadow sets 4-5 only when available
+        if (shadowDataDescSet && shadowTextureDescSet)
         {
-            std::array<vk::DescriptorSet, 8> descSets = {
-                volumetricGridDescSet,
-                clusterGridDescSet,
-                lightBufferDescSet,
-                lightCullingDescSet,
-                shadowDataDescSet,
-                shadowTextureDescSet,
-                fogVolumeDescSet,
-                giSamplingDescSet
-            };
+            std::array<vk::DescriptorSet, 2> shadowSets = {shadowDataDescSet, shadowTextureDescSet};
             cmd.bindDescriptorSets(
-                vk::PipelineBindPoint::eCompute, pipelineLayout, 0,
-                static_cast<uint32_t>(descSets.size()), descSets.data(),
+                vk::PipelineBindPoint::eCompute, pipelineLayout, 4,
+                static_cast<uint32_t>(shadowSets.size()), shadowSets.data(),
                 0, nullptr);
         }
-        else
+
+        // Bind fog volume (set 6)
+        cmd.bindDescriptorSets(
+            vk::PipelineBindPoint::eCompute, pipelineLayout, 6,
+            1, &fogVolumeDescSet,
+            0, nullptr);
+
+        // Bind GI (set 7) only when available
+        if (giSamplingDescSet)
         {
-            // Bind sets 0-3, skip 4-5, bind sets 6-7 separately
-            std::array<vk::DescriptorSet, 4> coreSets = {
-                volumetricGridDescSet,
-                clusterGridDescSet,
-                lightBufferDescSet,
-                lightCullingDescSet
-            };
             cmd.bindDescriptorSets(
-                vk::PipelineBindPoint::eCompute, pipelineLayout, 0,
-                static_cast<uint32_t>(coreSets.size()), coreSets.data(),
-                0, nullptr);
-            // Bind fog volume and GI at sets 6-7
-            std::array<vk::DescriptorSet, 2> extSets = {fogVolumeDescSet, giSamplingDescSet};
-            cmd.bindDescriptorSets(
-                vk::PipelineBindPoint::eCompute, pipelineLayout, 6,
-                static_cast<uint32_t>(extSets.size()), extSets.data(),
+                vk::PipelineBindPoint::eCompute, pipelineLayout, 7,
+                1, &giSamplingDescSet,
                 0, nullptr);
         }
 

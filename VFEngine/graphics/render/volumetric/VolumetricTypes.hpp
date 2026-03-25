@@ -39,7 +39,7 @@ namespace render::volumetric
         glm::vec4 fogParams{0.0f};           // x = uniformDensity, y = heightFogDensity, z = heightFogFalloff, w = heightFogOffset
         glm::vec4 scatterParams{0.0f};       // x = scatteringCoeff, y = absorptionCoeff, z = anisotropy (HG g), w = maxDistance
         glm::vec4 fogColor{0.8f, 0.85f, 0.9f, 1.0f}; // rgb = fog color, a = intensity
-        glm::vec4 ambientParams{0.0f};       // x = ambientIntensity, y = temporalBlendFactor, z = frameIndex (as float), w = unused
+        glm::vec4 ambientParams{0.0f};       // x = ambientIntensity, y = temporalBlendFactor, z = frameIndex (as float), w = giInjectionIntensity
         glm::vec4 cameraPosition{0.0f};      // xyz = world pos, w = unused
         glm::vec4 noiseParams{0.0f};         // x = scale, y = intensity, z = timeOffset, w = octaves
     };

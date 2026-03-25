@@ -71,6 +71,8 @@ namespace services {
         if (!internal::isValidHandle(entity, registry)) return false;
 
         scene::Entity sceneEntity(internal::fromHandle(entity));
+        // Note: auto-creates component if missing (deserialization path).
+        // Billboard is NOT attached here — use addFogVolumeComponent() for editor creation.
         if (!sceneEntity.hasComponent<components::FogVolumeComponent>()) {
             sceneEntity.addComponent<components::FogVolumeComponent>();
         }

@@ -220,8 +220,9 @@ namespace render::gpudriven
                                      shadowSystem ? shadowSystem->getShadowDataDescSet() : vk::DescriptorSet{},
                                      shadowSystem ? shadowSystem->getShadowTextureDescSet() : vk::DescriptorSet{},
                                      fogVolumeBufferManager ? fogVolumeBufferManager->getDescriptorSet() : vk::DescriptorSet{},
-                                     (giCascadeManager && giCascadeManager->getProbeStorage())
-                                         ? giCascadeManager->getProbeStorage()->getSamplingDescSet()
+                                     (giCascadeManager && giCascadeManager->getProbeStorage()
+                                         && giCascadeManager->getProbeStorage()->isInitialized())
+                                         ? giCascadeManager->getProbeStorage()->getComputeSamplingDescSet()
                                          : vk::DescriptorSet{});
     }
 

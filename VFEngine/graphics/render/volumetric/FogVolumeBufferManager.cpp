@@ -2,6 +2,7 @@
 #include "../../core/Device.hpp"
 #include "../../core/BufferUtilities.hpp"
 #include "scene/EntityRegistry.hpp"
+#include "scene/Entity.hpp"
 #include "components/Components.hpp"
 #include <glm/gtc/matrix_inverse.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -159,6 +160,7 @@ namespace render::volumetric
         for (auto entity : view)
         {
             if (volumeCount >= MAX_FOG_VOLUMES) break;
+            if (!scene::Entity::isEffectivelyActive(registry, entity)) continue;
 
             const auto& fog = view.get<components::FogVolumeComponent>(entity);
             const auto& world = view.get<components::WorldTransformComponent>(entity);
