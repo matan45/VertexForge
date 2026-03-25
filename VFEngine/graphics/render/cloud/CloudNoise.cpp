@@ -31,6 +31,7 @@ namespace render::cloud
         create2DImage(1024, 1024, weatherImage, weatherMemory, weatherView);
 
         createSampler();
+        createBlueNoiseTexture();
         createNoiseGenPipeline();
         createWeatherGenPipeline();
 
@@ -70,6 +71,7 @@ namespace render::cloud
         destroyImage(shapeImage, shapeMemory, shapeView);
         destroyImage(detailImage, detailMemory, detailView);
         destroyImage(weatherImage, weatherMemory, weatherView);
+        destroyImage(blueNoiseImage, blueNoiseMemory, blueNoiseView);
 
         initialized = false;
         generated = false;
@@ -200,6 +202,60 @@ namespace render::cloud
         if (view) { dev.destroyImageView(view); view = nullptr; }
         if (image) { dev.destroyImage(image); image = nullptr; }
         if (memory) { dev.freeMemory(memory); memory = nullptr; }
+    }
+
+    void CloudNoise::createBlueNoiseTexture()
+    {
+        auto& dev = device.getLogicalDevice();
+        auto& physDev = device.getPhysicalDevice();
+
+        // Create 128x128 R8 image for blue noise
+        vk::ImageCreateInfo imageInfo{};
+        imageInfo.imageType = vk::ImageType::e2D;
+        imageInfo.extent = vk::Extent3D{128, 128, 1};
+        imageInfo.mipLevels = 1;
+        imageInfo.arrayLayers = 1;
+        imageInfo.format = vk::Format::eR8Unorm;
+        imageInfo.tiling = vk::ImageTiling::eOptimal;
+        imageInfo.initialLayout = vk::ImageLayout::eUndefined;
+        imageInfo.usage = vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst;
+        imageInfo.samples = vk::SampleCountFlagBits::e1;
+        imageInfo.sharingMode = vk::SharingMode::eExclusive;
+
+        blueNoiseImage = dev.createImage(imageInfo);
+        vk::MemoryRequirements memReqs = dev.getImageMemoryRequirements(blueNoiseImage);
+        vk::MemoryAllocateInfo allocInfo{};
+        allocInfo.allocationSize = memReqs.size;
+        allocInfo.memoryTypeIndex = core::MemoryUtilities::findMemoryType(
+            physDev, memReqs.memoryTypeBits, vk::MemoryPropertyFlagBits::eDeviceLocal);
+        blueNoiseMemory = dev.allocateMemory(allocInfo);
+        dev.bindImageMemory(blueNoiseImage, blueNoiseMemory, 0);
+
+        core::ImageViewInfoRequest viewReq(dev, blueNoiseImage);
+        viewReq.format = vk::Format::eR8Unorm;
+        viewReq.imageType = vk::ImageViewType::e2D;
+        viewReq.aspectFlags = vk::ImageAspectFlagBits::eColor;
+        core::ImageUtilities::createImageView(viewReq, blueNoiseView);
+
+        // Generate blue noise via interleaved gradient noise (deterministic, GPU-friendly)
+        // This is a simple spatially uniform noise that approximates blue noise properties
+        std::vector<uint8_t> noiseData(128 * 128);
+        for (uint32_t y = 0; y < 128; ++y)
+        {
+            for (uint32_t x = 0; x < 128; ++x)
+            {
+                // Interleaved gradient noise (Jimenez 2014) seeded per-texel
+                // Combined with golden ratio hashing for better spectral distribution
+                float fx = static_cast<float>(x) + 0.5f;
+                float fy = static_cast<float>(y) + 0.5f;
+                float noise = std::fmod(52.9829189f * std::fmod(0.06711056f * fx + 0.00583715f * fy, 1.0f), 1.0f);
+                noiseData[y * 128 + x] = static_cast<uint8_t>(noise * 255.0f);
+            }
+        }
+
+        // Upload via staging buffer
+        core::ImageUtilities::uploadStagedPixelData(device, blueNoiseImage,
+            noiseData.data(), noiseData.size(), 128, 128);
     }
 
     void CloudNoise::createSampler()

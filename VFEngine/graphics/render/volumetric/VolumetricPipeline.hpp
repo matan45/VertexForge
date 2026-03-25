@@ -29,6 +29,7 @@ namespace render::volumetric
 
         glm::mat4 prevViewProjection{1.0f};
         uint32_t frameIndex = 0;
+        float elapsedTime = 0.0f;
         bool enabled = false;
         bool initialized = false;
 
@@ -44,14 +45,18 @@ namespace render::volumetric
                   vk::DescriptorSetLayout lightBufferLayout,
                   vk::DescriptorSetLayout lightCullingLayout,
                   vk::DescriptorSetLayout shadowDataLayout,
-                  vk::DescriptorSetLayout shadowTextureLayout);
+                  vk::DescriptorSetLayout shadowTextureLayout,
+                  vk::DescriptorSetLayout fogVolumeLayout,
+                  vk::DescriptorSetLayout giSamplingLayout);
         void cleanup();
         void recreate(VolumetricQuality quality,
                       vk::DescriptorSetLayout clusterGridLayout,
                       vk::DescriptorSetLayout lightBufferLayout,
                       vk::DescriptorSetLayout lightCullingLayout,
                       vk::DescriptorSetLayout shadowDataLayout,
-                      vk::DescriptorSetLayout shadowTextureLayout);
+                      vk::DescriptorSetLayout shadowTextureLayout,
+                      vk::DescriptorSetLayout fogVolumeLayout,
+                      vk::DescriptorSetLayout giSamplingLayout);
 
         void update(const glm::mat4& viewProj, const glm::mat4& invViewProj,
                     const glm::vec3& cameraPos, float nearPlane, float farPlane,
@@ -62,7 +67,9 @@ namespace render::volumetric
                       vk::DescriptorSet lightBufferDescSet,
                       vk::DescriptorSet lightCullingDescSet,
                       vk::DescriptorSet shadowDataDescSet,
-                      vk::DescriptorSet shadowTextureDescSet);
+                      vk::DescriptorSet shadowTextureDescSet,
+                      vk::DescriptorSet fogVolumeDescSet,
+                      vk::DescriptorSet giSamplingDescSet);
 
         void setEnabled(bool value) { enabled = value; }
         [[nodiscard]] bool isEnabled() const { return enabled && initialized; }

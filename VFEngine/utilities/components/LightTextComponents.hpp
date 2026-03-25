@@ -36,6 +36,31 @@ namespace components
         bool showGizmo = false;
     };
 
+    enum class FogVolumeShape : uint8_t
+    {
+        Box = 0,
+        Sphere = 1,
+        Cylinder = 2
+    };
+
+    enum class FogVolumeBlendMode : uint8_t
+    {
+        Additive = 0,
+        Subtractive = 1
+    };
+
+    struct FogVolumeComponent
+    {
+        FogVolumeShape shape = FogVolumeShape::Box;
+        glm::vec3 halfExtents{5.0f};
+        float density = 0.5f;
+        glm::vec3 albedo{0.8f, 0.85f, 0.9f};
+        glm::vec3 emission{0.0f};
+        float edgeFalloff = 0.5f;
+        FogVolumeBlendMode blendMode = FogVolumeBlendMode::Additive;
+        bool showGizmo = false;
+    };
+
     struct TextComponent
     {
         asset::AssetRef fontRef;

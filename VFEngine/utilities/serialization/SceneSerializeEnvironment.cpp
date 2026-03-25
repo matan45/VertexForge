@@ -120,6 +120,9 @@ namespace serialization
                 {"phaseBackward", s.phaseBackward},
                 {"phaseBlend", s.phaseBlend},
                 {"ambientIntensity", s.ambientIntensity},
+                {"silverLiningIntensity", s.silverLiningIntensity},
+                {"silverLiningSpread", s.silverLiningSpread},
+                {"multiScatterBoost", s.multiScatterBoost},
                 {"temporalBlendFactor", s.temporalBlendFactor},
                 {"maxMarchSteps", s.maxMarchSteps},
                 {"lightMarchSteps", s.lightMarchSteps},
@@ -167,6 +170,12 @@ namespace serialization
                 s.phaseBlend = std::clamp(c["phaseBlend"].get<float>(), 0.0f, 1.0f);
             if (c.contains("ambientIntensity") && c["ambientIntensity"].is_number())
                 s.ambientIntensity = std::clamp(c["ambientIntensity"].get<float>(), 0.0f, 2.0f);
+            if (c.contains("silverLiningIntensity") && c["silverLiningIntensity"].is_number())
+                s.silverLiningIntensity = std::clamp(c["silverLiningIntensity"].get<float>(), 0.0f, 2.0f);
+            if (c.contains("silverLiningSpread") && c["silverLiningSpread"].is_number())
+                s.silverLiningSpread = std::clamp(c["silverLiningSpread"].get<float>(), 1.0f, 20.0f);
+            if (c.contains("multiScatterBoost") && c["multiScatterBoost"].is_number())
+                s.multiScatterBoost = std::clamp(c["multiScatterBoost"].get<float>(), 0.0f, 2.0f);
             if (c.contains("temporalBlendFactor") && c["temporalBlendFactor"].is_number())
                 s.temporalBlendFactor = std::clamp(c["temporalBlendFactor"].get<float>(), 0.0f, 1.0f);
             if (c.contains("maxMarchSteps") && c["maxMarchSteps"].is_number_unsigned())

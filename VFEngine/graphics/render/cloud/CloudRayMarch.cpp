@@ -26,7 +26,8 @@ namespace render::cloud
 
     void CloudRayMarch::init(vk::ImageView shapeNoiseView, vk::ImageView detailNoiseView,
                              vk::ImageView weatherMapView, vk::Sampler noiseSampler,
-                             vk::ImageView transmittanceView, vk::Sampler lutSampler)
+                             vk::ImageView transmittanceView, vk::Sampler lutSampler,
+                             vk::ImageView blueNoiseView)
     {
         auto& dev = device.getLogicalDevice();
         auto& physDev = device.getPhysicalDevice();
@@ -83,13 +84,15 @@ namespace render::cloud
         // Binding 3: weather map (combined image sampler)
         // Binding 4: transmittance LUT (combined image sampler)
         // Binding 5: UBO
+        // Binding 6: blue noise (combined image sampler)
         std::vector<vk::DescriptorSetLayoutBinding> bindings{
             {0, vk::DescriptorType::eStorageImage, 1, vk::ShaderStageFlagBits::eCompute},
             {1, vk::DescriptorType::eCombinedImageSampler, 1, vk::ShaderStageFlagBits::eCompute},
             {2, vk::DescriptorType::eCombinedImageSampler, 1, vk::ShaderStageFlagBits::eCompute},
             {3, vk::DescriptorType::eCombinedImageSampler, 1, vk::ShaderStageFlagBits::eCompute},
             {4, vk::DescriptorType::eCombinedImageSampler, 1, vk::ShaderStageFlagBits::eCompute},
-            {5, vk::DescriptorType::eUniformBuffer, 1, vk::ShaderStageFlagBits::eCompute}
+            {5, vk::DescriptorType::eUniformBuffer, 1, vk::ShaderStageFlagBits::eCompute},
+            {6, vk::DescriptorType::eCombinedImageSampler, 1, vk::ShaderStageFlagBits::eCompute}
         };
 
         vk::DescriptorSetLayoutCreateInfo layoutInfo{};
@@ -100,7 +103,7 @@ namespace render::cloud
         // --- Create descriptor pool ---
         std::vector<vk::DescriptorPoolSize> poolSizes{
             {vk::DescriptorType::eStorageImage, 1},
-            {vk::DescriptorType::eCombinedImageSampler, 4},
+            {vk::DescriptorType::eCombinedImageSampler, 5},
             {vk::DescriptorType::eUniformBuffer, 1}
         };
 
@@ -125,14 +128,16 @@ namespace render::cloud
         vk::DescriptorImageInfo weatherMapInfo{noiseSampler, weatherMapView, vk::ImageLayout::eGeneral};
         vk::DescriptorImageInfo transmittanceInfo{lutSampler, transmittanceView, vk::ImageLayout::eGeneral};
         vk::DescriptorBufferInfo bufInfo{paramsBuffer, 0, sizeof(GPUCloudParams)};
+        vk::DescriptorImageInfo blueNoiseInfo{noiseSampler, blueNoiseView, vk::ImageLayout::eShaderReadOnlyOptimal};
 
-        std::array<vk::WriteDescriptorSet, 6> writes{};
+        std::array<vk::WriteDescriptorSet, 7> writes{};
         writes[0] = {descriptorSet, 0, 0, 1, vk::DescriptorType::eStorageImage, &resultImgInfo};
         writes[1] = {descriptorSet, 1, 0, 1, vk::DescriptorType::eCombinedImageSampler, &shapeNoiseInfo};
         writes[2] = {descriptorSet, 2, 0, 1, vk::DescriptorType::eCombinedImageSampler, &detailNoiseInfo};
         writes[3] = {descriptorSet, 3, 0, 1, vk::DescriptorType::eCombinedImageSampler, &weatherMapInfo};
         writes[4] = {descriptorSet, 4, 0, 1, vk::DescriptorType::eCombinedImageSampler, &transmittanceInfo};
         writes[5] = {descriptorSet, 5, 0, 1, vk::DescriptorType::eUniformBuffer, nullptr, &bufInfo};
+        writes[6] = {descriptorSet, 6, 0, 1, vk::DescriptorType::eCombinedImageSampler, &blueNoiseInfo};
         dev.updateDescriptorSets(writes, nullptr);
 
         // --- Create compute pipeline ---
@@ -186,7 +191,8 @@ namespace render::cloud
 
     void CloudRayMarch::recreate(vk::ImageView shapeNoiseView, vk::ImageView detailNoiseView,
                                  vk::ImageView weatherMapView, vk::Sampler noiseSampler,
-                                 vk::ImageView transmittanceView, vk::Sampler lutSampler)
+                                 vk::ImageView transmittanceView, vk::Sampler lutSampler,
+                                 vk::ImageView blueNoiseView)
     {
         if (!initialized) return;
 
@@ -239,7 +245,7 @@ namespace render::cloud
 
         std::vector<vk::DescriptorPoolSize> poolSizes{
             {vk::DescriptorType::eStorageImage, 1},
-            {vk::DescriptorType::eCombinedImageSampler, 4},
+            {vk::DescriptorType::eCombinedImageSampler, 5},
             {vk::DescriptorType::eUniformBuffer, 1}
         };
 
@@ -263,14 +269,16 @@ namespace render::cloud
         vk::DescriptorImageInfo weatherMapInfo{noiseSampler, weatherMapView, vk::ImageLayout::eGeneral};
         vk::DescriptorImageInfo transmittanceInfo{lutSampler, transmittanceView, vk::ImageLayout::eGeneral};
         vk::DescriptorBufferInfo bufInfoDesc{paramsBuffer, 0, sizeof(GPUCloudParams)};
+        vk::DescriptorImageInfo blueNoiseInfo{noiseSampler, blueNoiseView, vk::ImageLayout::eShaderReadOnlyOptimal};
 
-        std::array<vk::WriteDescriptorSet, 6> writes{};
+        std::array<vk::WriteDescriptorSet, 7> writes{};
         writes[0] = {descriptorSet, 0, 0, 1, vk::DescriptorType::eStorageImage, &resultImgInfo};
         writes[1] = {descriptorSet, 1, 0, 1, vk::DescriptorType::eCombinedImageSampler, &shapeNoiseInfo};
         writes[2] = {descriptorSet, 2, 0, 1, vk::DescriptorType::eCombinedImageSampler, &detailNoiseInfo};
         writes[3] = {descriptorSet, 3, 0, 1, vk::DescriptorType::eCombinedImageSampler, &weatherMapInfo};
         writes[4] = {descriptorSet, 4, 0, 1, vk::DescriptorType::eCombinedImageSampler, &transmittanceInfo};
         writes[5] = {descriptorSet, 5, 0, 1, vk::DescriptorType::eUniformBuffer, nullptr, &bufInfoDesc};
+        writes[6] = {descriptorSet, 6, 0, 1, vk::DescriptorType::eCombinedImageSampler, &blueNoiseInfo};
         dev.updateDescriptorSets(writes, nullptr);
 
         needsInitialTransition = true;

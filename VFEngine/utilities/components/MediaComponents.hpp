@@ -30,6 +30,7 @@ namespace components
         Billboard,
         Text,
         ReverbZone,
+        FogVolume,
         Custom
     };
 
@@ -70,6 +71,7 @@ namespace components
             case BillboardIconType::Billboard: return 7;
             case BillboardIconType::Text: return 8;
             case BillboardIconType::ReverbZone: return 9;
+            case BillboardIconType::FogVolume: return 10;
             default: return atlasIndex;
             }
         }

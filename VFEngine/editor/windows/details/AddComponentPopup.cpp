@@ -7,6 +7,7 @@
 #include "events/physics/SocketEvents.hpp"
 #include "events/physics/IKEvents.hpp"
 #include "events/scene/ReverbZoneEvents.hpp"
+#include "events/scene/FogVolumeEvents.hpp"
 #include <imgui.h>
 
 namespace windows::details
@@ -56,7 +57,8 @@ namespace windows::details
                            c.hasUITabs && c.hasUISlider && c.hasUIProgressBar && c.hasUIAnimation && c.hasUIMask &&
                            c.hasUIDraggable && c.hasUIDropTarget &&
                            c.hasNavmeshAgent && c.hasRenderTexture && c.hasController &&
-                           c.hasIK && c.hasBehaviorTree && c.hasDecal && c.hasReverbZone;
+                           c.hasIK && c.hasBehaviorTree && c.hasDecal && c.hasReverbZone &&
+                           c.hasFogVolume;
             if (allAdded)
             {
                 ImGui::Spacing();
@@ -367,6 +369,18 @@ namespace windows::details
             }
             if (ImGui::IsItemHovered())
                 ImGui::SetTooltip("Cone-shaped light with inner/outer angles");
+        }
+
+        if (!c.hasFogVolume)
+        {
+            if (ImGui::Selectable("  Fog Volume"))
+            {
+                events::scene::AddFogVolumeComponentCommand cmd;
+                cmd.entity = handle;
+                dispatcher.execute(cmd);
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Localized fog region (Box, Sphere, or Cylinder) with density control");
         }
     }
 }

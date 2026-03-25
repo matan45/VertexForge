@@ -75,11 +75,30 @@ void main()
 
     if (validReproject)
     {
-        history = clamp(history, minVal, maxVal);
+        // AABB clip-towards-center (preserves more temporal information than hard clamp)
+        vec4 center = (minVal + maxVal) * 0.5;
+        vec4 halfExtent = (maxVal - minVal) * 0.5 + 0.001;
+        vec4 offset = history - center;
+        vec4 ts = abs(offset / halfExtent);
+        float maxScale = max(max(ts.r, ts.g), max(ts.b, ts.a));
+        if (maxScale > 1.0)
+            history = center + offset / maxScale;
     }
 
-    // Blend: high blend factor = more temporal stability
+    // Adaptive blend: reduce blend when reprojection confidence is low
     float blendFactor = validReproject ? params.temporalParams.x : 0.0;
+    if (validReproject)
+    {
+        // Transmittance-based disocclusion detection
+        float transmittanceDiff = abs(history.a - current.a);
+        float confidence = 1.0 - smoothstep(0.05, 0.3, transmittanceDiff);
+
+        // Reduce blend in high-variance regions (cloud edges)
+        vec4 variance = maxVal - minVal;
+        float varMag = dot(variance.rgb, vec3(0.333));
+        blendFactor *= confidence * mix(0.3, 1.0, exp(-varMag * 5.0));
+    }
+
     vec4 result = mix(current, history, blendFactor);
 
     // Write blended result back to history (ping-pong)

@@ -48,6 +48,7 @@
 #include "../details/BehaviorTreeDrawer.hpp"
 #include "../details/DecalDrawer.hpp"
 #include "../details/ReverbZoneDrawer.hpp"
+#include "../details/FogVolumeDrawer.hpp"
 #include "../details/NavmeshRootDrawer.hpp"
 #include "../details/WorldSectorDrawer.hpp"
 #include "../details/PluginComponentDrawer.hpp"
@@ -106,6 +107,7 @@ namespace windows
         details::BehaviorTreeDrawer behaviorTreeDrawer;
         details::DecalDrawer decalDrawer;
         details::ReverbZoneDrawer reverbZoneDrawer;
+        details::FogVolumeDrawer fogVolumeDrawer;
         details::NavmeshRootDrawer navmeshRootDrawer;
         details::WorldSectorDrawer worldSectorDrawer;
         details::PluginComponentDrawer pluginComponentDrawer;

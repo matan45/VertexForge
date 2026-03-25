@@ -28,8 +28,37 @@ float linearizeDepth(float d, float near, float far)
 
 void main()
 {
-    // Sample cloud result (bilinear upscale from half-res)
-    vec4 cloud = texture(cloudTexture, texCoord);
+    // Edge-aware upscale from half-res cloud result
+    // Sample the 4 nearest half-res texels and pick nearest if there's a large
+    // transmittance difference (cloud edge), otherwise use bilinear
+    vec2 cloudTexSize = vec2(textureSize(cloudTexture, 0));
+    vec2 halfTexelPos = texCoord * cloudTexSize - 0.5;
+    ivec2 baseTexel = ivec2(floor(halfTexelPos));
+    vec2 frac = halfTexelPos - vec2(baseTexel);
+
+    vec4 s00 = texelFetch(cloudTexture, baseTexel, 0);
+    vec4 s10 = texelFetch(cloudTexture, baseTexel + ivec2(1, 0), 0);
+    vec4 s01 = texelFetch(cloudTexture, baseTexel + ivec2(0, 1), 0);
+    vec4 s11 = texelFetch(cloudTexture, baseTexel + ivec2(1, 1), 0);
+
+    // Detect edge: large transmittance spread means cloud boundary
+    float tMin = min(min(s00.a, s10.a), min(s01.a, s11.a));
+    float tMax = max(max(s00.a, s10.a), max(s01.a, s11.a));
+    float edgeStrength = tMax - tMin;
+
+    vec4 cloud;
+    if (edgeStrength > 0.1)
+    {
+        // At cloud edge: use nearest to avoid halo
+        ivec2 nearestTexel = baseTexel + ivec2(step(0.5, frac));
+        cloud = texelFetch(cloudTexture, nearestTexel, 0);
+    }
+    else
+    {
+        // Interior/exterior: bilinear is fine
+        cloud = texture(cloudTexture, texCoord);
+    }
+
     vec3 cloudScattering = cloud.rgb;
     float cloudTransmittance = cloud.a;
     // Depth masking: only occlude clouds if real geometry is closer than cloud layer
@@ -45,6 +74,13 @@ void main()
         }
     }
 
+    // Suppress thin cloud fringe: very low opacity edges add white halo
+    // because HDR scattering is high while transmittance is still near 1
+    float opacity = 1.0 - cloudTransmittance;
+    float edgeMask = smoothstep(0.0, 0.08, opacity);
+    cloudScattering *= edgeMask;
+    opacity *= edgeMask;
+
     // Blend: scene * transmittance + scattering (premultiplied alpha)
-    outColor = vec4(cloudScattering, 1.0 - cloudTransmittance);
+    outColor = vec4(cloudScattering, opacity);
 }

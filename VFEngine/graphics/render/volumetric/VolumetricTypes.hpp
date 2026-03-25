@@ -39,8 +39,25 @@ namespace render::volumetric
         glm::vec4 fogParams{0.0f};           // x = uniformDensity, y = heightFogDensity, z = heightFogFalloff, w = heightFogOffset
         glm::vec4 scatterParams{0.0f};       // x = scatteringCoeff, y = absorptionCoeff, z = anisotropy (HG g), w = maxDistance
         glm::vec4 fogColor{0.8f, 0.85f, 0.9f, 1.0f}; // rgb = fog color, a = intensity
-        glm::vec4 ambientParams{0.0f};       // x = ambientIntensity, y = temporalBlendFactor, z = frameIndex (as float), w = unused
+        glm::vec4 ambientParams{0.0f};       // x = ambientIntensity, y = temporalBlendFactor, z = frameIndex (as float), w = giInjectionIntensity
         glm::vec4 cameraPosition{0.0f};      // xyz = world pos, w = unused
+        glm::vec4 noiseParams{0.0f};         // x = scale, y = intensity, z = timeOffset, w = octaves
     };
-    static_assert(sizeof(GPUVolumetricParams) == 240, "GPUVolumetricParams size mismatch");
+    static_assert(sizeof(GPUVolumetricParams) == 256, "GPUVolumetricParams size mismatch");
+
+    static constexpr uint32_t MAX_FOG_VOLUMES = 64;
+
+    struct alignas(16) GPUFogVolume
+    {
+        glm::mat4 worldToLocal{1.0f};                          // 64 bytes
+        glm::vec4 boundsMin{0.0f};                              // 16 bytes (world AABB min)
+        glm::vec4 boundsMax{0.0f};                              // 16 bytes (world AABB max)
+        glm::vec4 albedoAndDensity{0.8f, 0.85f, 0.9f, 0.5f};  // 16 bytes
+        glm::vec4 emissionAndFalloff{0.0f, 0.0f, 0.0f, 0.5f}; // 16 bytes
+        uint32_t shapeType = 0;                                 // 4 bytes
+        uint32_t blendMode = 0;                                 // 4 bytes
+        int32_t densityTextureIndex = -1;                       // 4 bytes (stub: always -1)
+        uint32_t padding = 0;                                   // 4 bytes
+    };
+    static_assert(sizeof(GPUFogVolume) == 144, "GPUFogVolume size mismatch");
 }

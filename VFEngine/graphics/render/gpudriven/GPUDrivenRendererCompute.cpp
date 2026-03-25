@@ -206,12 +206,24 @@ namespace render::gpudriven
                                    glm::vec3(camData.cameraPosition),
                                    cachedCamera.nearPlane, cachedCamera.farPlane,
                                    cachedVolumetricSettings);
+        // Update fog volumes from scene before dispatch
+        if (fogVolumeBufferManager && fogVolumeBufferManager->isInitialized())
+        {
+            fogVolumeBufferManager->updateFromScene();
+            fogVolumeBufferManager->uploadToGPU();
+        }
+
         volumetricPipeline->dispatch(cmd,
                                      clusterGridManager->getDescriptorSet(),
                                      lightBufferManager->getDescriptorSet(),
                                      lightCullingPipeline->getDescriptorSet(),
                                      shadowSystem ? shadowSystem->getShadowDataDescSet() : vk::DescriptorSet{},
-                                     shadowSystem ? shadowSystem->getShadowTextureDescSet() : vk::DescriptorSet{});
+                                     shadowSystem ? shadowSystem->getShadowTextureDescSet() : vk::DescriptorSet{},
+                                     fogVolumeBufferManager ? fogVolumeBufferManager->getDescriptorSet() : vk::DescriptorSet{},
+                                     (giCascadeManager && giCascadeManager->getProbeStorage()
+                                         && giCascadeManager->getProbeStorage()->isInitialized())
+                                         ? giCascadeManager->getProbeStorage()->getComputeSamplingDescSet()
+                                         : vk::DescriptorSet{});
     }
 
     void GPUDrivenRenderer::initLightStreaming(const lighting::LightStreamingConfig& config)

@@ -164,6 +164,7 @@
     <ClInclude Include="events\scene\ComponentMediaEvents.hpp" />
     <ClInclude Include="events\scene\ComponentPhysicsLightEvents.hpp" />
     <ClInclude Include="events\scene\EntityTransformEvents.hpp" />
+    <ClInclude Include="events\scene\FogVolumeEvents.hpp" />
     <ClInclude Include="events\scene\ReverbZoneEvents.hpp" />
     <ClInclude Include="events\scene\SceneManagementEvents.hpp" />
     <ClInclude Include="events\scene\ScenePersistenceEvents.hpp" />
@@ -208,6 +209,7 @@
     <ClInclude Include="impl\components\BillboardComponentService.hpp" />
     <ClInclude Include="impl\components\CameraComponentService.hpp" />
     <ClInclude Include="impl\components\DecalComponentService.hpp" />
+    <ClInclude Include="impl\components\FogVolumeComponentService.hpp" />
     <ClInclude Include="impl\components\IBLComponentService.hpp" />
     <ClInclude Include="impl\components\IKComponentService.hpp" />
     <ClInclude Include="impl\components\LightComponentService.hpp" />
@@ -369,6 +371,7 @@
     <ClCompile Include="impl\components\BillboardComponentService.cpp" />
     <ClCompile Include="impl\components\CameraComponentService.cpp" />
     <ClCompile Include="impl\components\DecalComponentService.cpp" />
+    <ClCompile Include="impl\components\FogVolumeComponentService.cpp" />
     <ClCompile Include="impl\components\IBLComponentService.cpp" />
     <ClCompile Include="impl\components\IKComponentService.cpp" />
     <ClCompile Include="impl\components\LightComponentService.cpp" />

@@ -19,9 +19,11 @@ layout(std140, set = 0, binding = 0) uniform VolumetricParamsUBO {
     vec4 fogColor;               // rgb = fog color, a = intensity
     vec4 ambientParams;          // x = ambientIntensity, y = temporalBlendFactor, z = frameIndex, w = unused
     vec4 cameraPosition;         // xyz = world pos
+    vec4 noiseParams;            // x = scale, y = intensity, z = timeOffset, w = octaves
 };
 
 layout(rgba16f, set = 0, binding = 1) uniform writeonly image3D scatteringVolume;
+layout(set = 0, binding = 5) uniform sampler3D fogNoiseTexture;
 
 // Set 1: Cluster Grid Data
 struct ClusterGridParams {
@@ -129,6 +131,138 @@ layout(set = 5, binding = 1) uniform sampler2D physicalPoolDepth;
 layout(set = 5, binding = 2) uniform samplerCubeShadow shadowCubes[32];
 layout(set = 5, binding = 3) uniform samplerCube shadowCubesDepth[32];
 
+// Set 6: Fog Volumes
+struct GPUFogVolume {
+    mat4 worldToLocal;
+    vec4 boundsMin;
+    vec4 boundsMax;
+    vec4 albedoAndDensity;   // rgb = albedo, a = density
+    vec4 emissionAndFalloff; // rgb = emission, a = edge falloff
+    uint shapeType;          // 0=Box, 1=Sphere, 2=Cylinder
+    uint blendMode;          // 0=Additive, 1=Subtractive
+    int densityTextureIndex;
+    uint _fvPad;
+};
+
+layout(std430, set = 6, binding = 0) readonly buffer FogVolumeBuffer {
+    uint fogVolumeCount;
+    uint _fvPad0;
+    uint _fvPad1;
+    uint _fvPad2;
+    GPUFogVolume fogVolumes[];
+};
+
+float evaluateFogVolume(GPUFogVolume vol, vec3 worldPos) {
+    // Quick AABB rejection
+    if (any(lessThan(worldPos, vol.boundsMin.xyz)) || any(greaterThan(worldPos, vol.boundsMax.xyz)))
+        return 0.0;
+
+    // Transform to local unit space
+    vec3 localPos = (vol.worldToLocal * vec4(worldPos, 1.0)).xyz;
+    float dist;
+
+    if (vol.shapeType == 0u) { // Box
+        vec3 d = abs(localPos);
+        dist = max(d.x, max(d.y, d.z));
+    } else if (vol.shapeType == 1u) { // Sphere
+        dist = length(localPos);
+    } else { // Cylinder
+        float radialDist = length(localPos.xz);
+        dist = max(radialDist, abs(localPos.y));
+    }
+
+    if (dist > 1.0) return 0.0;
+
+    // Edge falloff
+    float falloff = vol.emissionAndFalloff.a;
+    float weight = 1.0 - smoothstep(1.0 - falloff, 1.0, dist);
+
+    return vol.albedoAndDensity.a * weight;
+}
+
+// Set 7: GI Probe Data (compute-compatible layout for ambient injection)
+struct GIProbeData {
+    vec4 shR0; vec4 shR1; vec4 shR2;
+    vec4 shG0; vec4 shG1; vec4 shG2;
+    vec4 shB0; vec4 shB1; vec4 shB2;
+    vec4 validity;
+};
+
+struct GICascadeInfo {
+    vec4 gridOriginSpacing;
+    ivec4 gridDimsOffset;
+};
+
+layout(std430, set = 7, binding = 0) readonly buffer GIProbeBuffer {
+    GIProbeData giProbes[];
+};
+
+layout(std430, set = 7, binding = 1) readonly buffer GICascadeBuffer {
+    uint giCascadeCount;
+    uint _giPad0; uint _giPad1; uint _giPad2;
+    GICascadeInfo giCascades[];
+};
+
+const float GI_SH_C0 = 0.282095;
+const float GI_SH_C1 = 0.488603;
+const float GI_SH_C2 = 1.092548;
+const float GI_SH_C20 = 0.315392;
+const float GI_SH_C22 = 0.546274;
+
+vec3 evaluateGISH(GIProbeData probe, vec3 n) {
+    vec4 b0 = vec4(GI_SH_C0, GI_SH_C1 * n.y, GI_SH_C1 * n.z, GI_SH_C1 * n.x);
+    vec4 b1 = vec4(GI_SH_C2 * n.x * n.y, GI_SH_C2 * n.y * n.z,
+                   GI_SH_C20 * (3.0 * n.z * n.z - 1.0), GI_SH_C2 * n.x * n.z);
+    float b2 = GI_SH_C22 * (n.x * n.x - n.y * n.y);
+    return max(vec3(
+        dot(probe.shR0, b0) + dot(probe.shR1, b1) + probe.shR2.x * b2,
+        dot(probe.shG0, b0) + dot(probe.shG1, b1) + probe.shG2.x * b2,
+        dot(probe.shB0, b0) + dot(probe.shB1, b1) + probe.shB2.x * b2
+    ), vec3(0.0));
+}
+
+vec3 sampleFogGI(vec3 worldPos, float cameraDist) {
+    if (giCascadeCount == 0u) return vec3(0.0);
+
+    uint selectedCascade = 0u;
+    for (uint i = 1u; i < giCascadeCount; ++i) {
+        float range = giCascades[i].gridOriginSpacing.w * float(giCascades[i].gridDimsOffset.x) * 0.5;
+        if (cameraDist > range * 0.7) selectedCascade = i;
+    }
+
+    GICascadeInfo cascade = giCascades[selectedCascade];
+    float spacing = cascade.gridOriginSpacing.w;
+    vec3 origin = cascade.gridOriginSpacing.xyz;
+    ivec3 gridDims = cascade.gridDimsOffset.xyz;
+    int probeOffset = cascade.gridDimsOffset.w;
+
+    vec3 localPos = (worldPos - origin) / spacing;
+    ivec3 baseCoord = clamp(ivec3(floor(localPos)), ivec3(0), gridDims - ivec3(2));
+    vec3 alpha = fract(localPos);
+
+    vec3 irradiance = vec3(0.0);
+    float totalWeight = 0.0;
+
+    for (int dz = 0; dz <= 1; ++dz) {
+        for (int dy = 0; dy <= 1; ++dy) {
+            for (int dx = 0; dx <= 1; ++dx) {
+                ivec3 coord = baseCoord + ivec3(dx, dy, dz);
+                uint idx = uint(probeOffset) + uint(coord.x + coord.y * gridDims.x + coord.z * gridDims.x * gridDims.y);
+                GIProbeData probe = giProbes[idx];
+                vec3 w = mix(vec3(1.0) - alpha, alpha, vec3(dx, dy, dz));
+                float weight = w.x * w.y * w.z * probe.validity.x;
+                if (weight > 0.0) {
+                    // Average SH over up direction for omnidirectional fog scattering
+                    irradiance += evaluateGISH(probe, vec3(0, 1, 0)) * weight;
+                    totalWeight += weight;
+                }
+            }
+        }
+    }
+
+    return totalWeight > 0.0 ? clamp(irradiance / totalWeight, vec3(0.0), vec3(5.0)) : vec3(0.0);
+}
+
 // VSM Page Table constants and lookup
 #define SHADOW_BUFFER shadowData
 #define PAGE_TABLE pageTableVol
@@ -155,16 +289,29 @@ float henyeyGreenstein(float cosTheta, float g) {
     return (1.0 - g2) / (4.0 * VOL_PI * pow(denom, 1.5));
 }
 
+// Halton low-discrepancy sequence for sub-voxel jittering
+float halton(uint index, uint base) {
+    float result = 0.0;
+    float f = 1.0 / float(base);
+    uint i = index;
+    while (i > 0u) {
+        result += f * float(i % base);
+        i /= base;
+        f /= float(base);
+    }
+    return result;
+}
+
 float sliceToDepth(float slice, float near, float far, float numSlices) {
     float t = slice / numSlices;
     return near * pow(far / near, t);
 }
 
-vec3 froxelToWorld(ivec3 froxelCoord, uvec3 dims) {
-    vec2 uv = (vec2(froxelCoord.xy) + 0.5) / vec2(dims.xy);
+vec3 froxelToWorld(ivec3 froxelCoord, uvec3 dims, vec3 jitter) {
+    vec2 uv = (vec2(froxelCoord.xy) + 0.5 + jitter.xy) / vec2(dims.xy);
     float near = depthParams.x;
     float far = depthParams.y;
-    float depth = sliceToDepth(float(froxelCoord.z) + 0.5, near, far, float(dims.z));
+    float depth = sliceToDepth(float(froxelCoord.z) + 0.5 + jitter.z, near, far, float(dims.z));
 
     vec2 ndc = uv * 2.0 - 1.0;
     float ndcDepth = (far * (depth - near)) / (depth * (far - near));
@@ -184,6 +331,15 @@ float computeFogDensity(vec3 worldPos) {
         density += fogParams.y * exp(-heightFalloff * max(heightAboveOffset, 0.0));
     } else {
         density += fogParams.y;
+    }
+
+    // 3D noise modulation
+    if (noiseParams.y > 0.0) {
+        vec3 uvw = worldPos * noiseParams.x;
+        uvw += vec3(noiseParams.z * 0.6, noiseParams.z * 0.2, noiseParams.z * 0.4);
+        float noise = texture(fogNoiseTexture, uvw).r;
+        float noiseModulation = 1.0 + (noise - 0.5) * 2.0 * noiseParams.y;
+        density *= max(noiseModulation, 0.0);
     }
 
     return max(density, 0.0);
@@ -318,7 +474,15 @@ void main() {
     if (froxelCoord.x >= int(dims.x) || froxelCoord.y >= int(dims.y) || froxelCoord.z >= int(dims.z))
         return;
 
-    vec3 worldPos = froxelToWorld(froxelCoord, dims);
+    // Sub-voxel jitter using Halton(2,3,5) sequence for temporal super-sampling
+    uint jitterIdx = pc.frameIndex % 16u;
+    vec3 jitter = vec3(
+        halton(jitterIdx + 1u, 2u) - 0.5,
+        halton(jitterIdx + 1u, 3u) - 0.5,
+        halton(jitterIdx + 1u, 5u) - 0.5
+    );
+
+    vec3 worldPos = froxelToWorld(froxelCoord, dims, jitter);
     float distFromCamera = length(worldPos - cameraPosition.xyz);
     if (distFromCamera > scatterParams.w) {
         imageStore(scatteringVolume, froxelCoord, vec4(0.0));
@@ -326,6 +490,28 @@ void main() {
     }
 
     float density = computeFogDensity(worldPos);
+
+    // Inject fog volume contributions
+    vec3 fogVolumeEmission = vec3(0.0);
+    vec3 fogVolumeAlbedo = vec3(0.0);
+    float fogVolumeDensityTotal = 0.0;
+
+    for (uint v = 0u; v < fogVolumeCount && v < 64u; ++v) {
+        GPUFogVolume vol = fogVolumes[v];
+        float volDensity = evaluateFogVolume(vol, worldPos);
+        if (abs(volDensity) < 0.001) continue;
+
+        if (vol.blendMode == 1u || volDensity < 0.0) { // Subtractive blend or negative density
+            density -= abs(volDensity);
+        } else { // Additive
+            density += volDensity;
+            fogVolumeAlbedo += vol.albedoAndDensity.rgb * volDensity;
+            fogVolumeEmission += vol.emissionAndFalloff.rgb * volDensity;
+            fogVolumeDensityTotal += volDensity;
+        }
+    }
+    density = max(density, 0.0);
+
     if (density <= 0.0) {
         imageStore(scatteringVolume, froxelCoord, vec4(0.0));
         return;
@@ -339,8 +525,27 @@ void main() {
     vec3 viewDir = normalize(worldPos - cameraPosition.xyz);
     vec3 inScattered = vec3(0.0);
 
+    // Blend fog color with fog volume albedo
+    vec3 effectiveFogColor = fogColor.rgb;
+    if (fogVolumeDensityTotal > 0.0) {
+        float volumeWeight = fogVolumeDensityTotal / density;
+        effectiveFogColor = mix(fogColor.rgb, fogVolumeAlbedo / fogVolumeDensityTotal, volumeWeight);
+    }
+
     float ambientIntensity = ambientParams.x;
-    inScattered += fogColor.rgb * fogColor.a * ambientIntensity;
+    float giIntensity = ambientParams.w;
+
+    // GI probe injection: spatially-varying bounced light
+    if (giIntensity > 0.0 && giCascadeCount > 0u) {
+        vec3 giIrradiance = sampleFogGI(worldPos, distFromCamera);
+        inScattered += giIrradiance * giIntensity;
+        inScattered += effectiveFogColor * fogColor.a * ambientIntensity * 0.2;
+    } else {
+        inScattered += effectiveFogColor * fogColor.a * ambientIntensity;
+    }
+
+    // Add fog volume emission
+    inScattered += fogVolumeEmission;
 
     float viewZ = distFromCamera;
 

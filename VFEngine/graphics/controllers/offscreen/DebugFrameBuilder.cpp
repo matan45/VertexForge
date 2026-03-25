@@ -159,6 +159,65 @@ namespace controllers::offscreen
         }
     }
 
+    void DebugFrameBuilder::prepareFogVolumes(const FrameContext& ctx)
+    {
+        if (ctx.playModeActive || !ctx.showDebugRendering) return;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto& dispatcher = events::EventDispatcher::instance();
+        auto view = registry.view<components::FogVolumeComponent, components::WorldTransformComponent>();
+
+        for (auto entity : view)
+        {
+            if (!scene::Entity::isEffectivelyActive(registry, entity)) continue;
+            const auto& fog = view.get<components::FogVolumeComponent>(entity);
+            if (!fog.showGizmo) continue;
+            const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
+            glm::vec3 position = glm::vec3(worldTransform.worldMatrix[3]);
+
+            glm::vec4 innerColor(0.4f, 0.7f, 1.0f, 1.0f);
+            glm::vec4 outerColor(0.2f, 0.35f, 0.5f, 1.0f);
+
+            if (fog.shape == components::FogVolumeShape::Sphere)
+            {
+                // Use max half-extent as radius for sphere visualization
+                float radius = glm::max(fog.halfExtents.x, glm::max(fog.halfExtents.y, fog.halfExtents.z));
+                events::debugdraw::DrawSphereCommand innerCmd;
+                innerCmd.center = position;
+                innerCmd.radius = radius;
+                innerCmd.color = innerColor;
+                dispatcher.execute(innerCmd);
+
+                if (fog.edgeFalloff > 0.0f)
+                {
+                    events::debugdraw::DrawSphereCommand outerCmd;
+                    outerCmd.center = position;
+                    outerCmd.radius = radius * (1.0f + fog.edgeFalloff);
+                    outerCmd.color = outerColor;
+                    dispatcher.execute(outerCmd);
+                }
+            }
+            else
+            {
+                // Box and Cylinder both use box gizmo for bounds
+                events::debugdraw::DrawBoxCommand innerCmd;
+                innerCmd.center = position;
+                innerCmd.halfExtents = fog.halfExtents;
+                innerCmd.color = innerColor;
+                dispatcher.execute(innerCmd);
+
+                if (fog.edgeFalloff > 0.0f)
+                {
+                    events::debugdraw::DrawBoxCommand outerCmd;
+                    outerCmd.center = position;
+                    outerCmd.halfExtents = fog.halfExtents * (1.0f + fog.edgeFalloff);
+                    outerCmd.color = outerColor;
+                    dispatcher.execute(outerCmd);
+                }
+            }
+        }
+    }
+
     void DebugFrameBuilder::prepareGrid(const FrameContext& ctx)
     {
         if (!ctx.showGrid || ctx.playModeActive) return;

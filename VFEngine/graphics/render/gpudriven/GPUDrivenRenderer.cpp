@@ -254,6 +254,7 @@ namespace render::gpudriven
         if (objectStreamManager) objectStreamManager->cleanup();
         if (lightStreamManager) lightStreamManager->cleanup();
         if (volumetricPipeline) volumetricPipeline->cleanup();
+        if (fogVolumeBufferManager) fogVolumeBufferManager->cleanup();
         if (water.oceanFFT) water.oceanFFT->cleanup();
         if (water.pipeline) water.pipeline->cleanup();
         if (water.meshBuffer) water.meshBuffer->cleanup();
@@ -288,6 +289,7 @@ namespace render::gpudriven
         billboard.streamManager.reset();
         billboard.initialized = false;
         volumetricPipeline.reset();
+        fogVolumeBufferManager.reset();
         meshStreamManager.reset();
         terrain.streamManager.reset();
         terrain.adapter.reset();

@@ -4,8 +4,14 @@
 #include "../../core/BufferUtilities.hpp"
 #include "../../core/MemoryUtilities.hpp"
 #include "../../core/Utilities.hpp"
+#include "print/Log.hpp"
 #include <cstring>
 #include <array>
+
+// Windows defines MemoryBarrier as a macro
+#ifdef MemoryBarrier
+#undef MemoryBarrier
+#endif
 
 namespace render::volumetric
 {
@@ -27,6 +33,17 @@ namespace render::volumetric
         createSampler();
         createImages();
         transitionImagesToGeneral();
+
+        // Initialize and generate fog noise texture
+        fogNoise = std::make_unique<FogNoiseGenerator>(device);
+        fogNoise->init();
+        {
+            auto& dev = device.getLogicalDevice();
+            auto cmd = core::Utilities::beginSingleTimeCommands(dev, device.getStagingCommandPool());
+            fogNoise->generate(cmd);
+            core::Utilities::endSingleTimeCommands(device, cmd);
+        }
+
         createParamsBuffer();
         createDescriptorSetLayout();
         createDescriptorPool();
@@ -68,6 +85,12 @@ namespace render::volumetric
         }
 
         destroyImages();
+
+        if (fogNoise)
+        {
+            fogNoise->cleanup();
+            fogNoise.reset();
+        }
 
         if (trilinearSampler)
         {
@@ -261,7 +284,7 @@ namespace render::volumetric
 
     void VolumetricGridManager::createDescriptorSetLayout()
     {
-        std::array<vk::DescriptorSetLayoutBinding, 5> bindings{};
+        std::array<vk::DescriptorSetLayoutBinding, 6> bindings{};
 
         // Binding 0: Params UBO
         bindings[0].binding = 0;
@@ -293,6 +316,12 @@ namespace render::volumetric
         bindings[4].descriptorCount = 1;
         bindings[4].stageFlags = vk::ShaderStageFlagBits::eCompute;
 
+        // Binding 5: 3D fog noise texture (combined image sampler)
+        bindings[5].binding = 5;
+        bindings[5].descriptorType = vk::DescriptorType::eCombinedImageSampler;
+        bindings[5].descriptorCount = 1;
+        bindings[5].stageFlags = vk::ShaderStageFlagBits::eCompute;
+
         vk::DescriptorSetLayoutCreateInfo layoutInfo{};
         layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
         layoutInfo.pBindings = bindings.data();
@@ -311,7 +340,7 @@ namespace render::volumetric
         poolSizes[1].descriptorCount = 6; // (scattering + history write + integrated) x 2 sets
 
         poolSizes[2].type = vk::DescriptorType::eCombinedImageSampler;
-        poolSizes[2].descriptorCount = 2; // history read x 2 sets
+        poolSizes[2].descriptorCount = 4; // (history read + noise) x 2 sets
 
         vk::DescriptorPoolCreateInfo poolInfo{};
         poolInfo.flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet;
@@ -357,6 +386,15 @@ namespace render::volumetric
         // Write both descriptor sets, each with its own history read/write config
         // descriptorSets[i] is used when currentHistoryIndex == i:
         //   historyRead = historyViews[1-i] (previous), historyWrite = historyViews[i] (current)
+        // Fog noise texture info
+        vk::DescriptorImageInfo fogNoiseInfo{};
+        if (fogNoise && fogNoise->isGenerated())
+        {
+            fogNoiseInfo.imageView = fogNoise->getNoiseView();
+            fogNoiseInfo.imageLayout = vk::ImageLayout::eGeneral;
+            fogNoiseInfo.sampler = fogNoise->getNoiseSampler();
+        }
+
         for (uint32_t i = 0; i < 2; ++i)
         {
             vk::DescriptorImageInfo historyReadInfo{};
@@ -368,7 +406,7 @@ namespace render::volumetric
             historyWriteInfo.imageView = historyViews[i];
             historyWriteInfo.imageLayout = vk::ImageLayout::eGeneral;
 
-            std::array<vk::WriteDescriptorSet, 5> writes{};
+            std::array<vk::WriteDescriptorSet, 6> writes{};
 
             writes[0].dstSet = descriptorSets[i];
             writes[0].dstBinding = 0;
@@ -399,6 +437,12 @@ namespace render::volumetric
             writes[4].descriptorType = vk::DescriptorType::eStorageImage;
             writes[4].descriptorCount = 1;
             writes[4].pImageInfo = &integratedInfo;
+
+            writes[5].dstSet = descriptorSets[i];
+            writes[5].dstBinding = 5;
+            writes[5].descriptorType = vk::DescriptorType::eCombinedImageSampler;
+            writes[5].descriptorCount = 1;
+            writes[5].pImageInfo = &fogNoiseInfo;
 
             dev.updateDescriptorSets(writes, nullptr);
         }

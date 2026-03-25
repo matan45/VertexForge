@@ -1,6 +1,7 @@
 #include "VolumetricPipeline.hpp"
 #include "../../core/Device.hpp"
 #include "print/Log.hpp"
+#include <cmath>
 
 // Windows defines MemoryBarrier as a macro - undefine it to use vk::MemoryBarrier
 #ifdef MemoryBarrier
@@ -25,7 +26,9 @@ namespace render::volumetric
         vk::DescriptorSetLayout lightBufferLayout,
         vk::DescriptorSetLayout lightCullingLayout,
         vk::DescriptorSetLayout shadowDataLayout,
-        vk::DescriptorSetLayout shadowTextureLayout)
+        vk::DescriptorSetLayout shadowTextureLayout,
+        vk::DescriptorSetLayout fogVolumeLayout,
+        vk::DescriptorSetLayout giSamplingLayout)
     {
         if (initialized)
         {
@@ -41,7 +44,7 @@ namespace render::volumetric
 
         lightInjection = std::make_unique<VolumetricLightInjection>(device);
         lightInjection->init(dims, gridDescLayout, clusterGridLayout, lightBufferLayout, lightCullingLayout,
-                             shadowDataLayout, shadowTextureLayout);
+                             shadowDataLayout, shadowTextureLayout, fogVolumeLayout, giSamplingLayout);
 
         temporalFilter = std::make_unique<VolumetricTemporalFilter>(device);
         temporalFilter->init(dims, gridDescLayout);
@@ -94,11 +97,13 @@ namespace render::volumetric
         vk::DescriptorSetLayout lightBufferLayout,
         vk::DescriptorSetLayout lightCullingLayout,
         vk::DescriptorSetLayout shadowDataLayout,
-        vk::DescriptorSetLayout shadowTextureLayout)
+        vk::DescriptorSetLayout shadowTextureLayout,
+        vk::DescriptorSetLayout fogVolumeLayout,
+        vk::DescriptorSetLayout giSamplingLayout)
     {
         cleanup();
         init(quality, clusterGridLayout, lightBufferLayout, lightCullingLayout,
-             shadowDataLayout, shadowTextureLayout);
+             shadowDataLayout, shadowTextureLayout, fogVolumeLayout, giSamplingLayout);
     }
 
     void VolumetricPipeline::update(
@@ -135,8 +140,15 @@ namespace render::volumetric
             settings.ambientIntensity,
             settings.temporalBlendFactor,
             static_cast<float>(frameIndex),
-            0.0f);
+            settings.giInjectionIntensity);
         params.cameraPosition = glm::vec4(cameraPos, 0.0f);
+
+        elapsedTime = std::fmod(elapsedTime + 1.0f / 60.0f, 1000.0f);
+        params.noiseParams = glm::vec4(
+            settings.noiseScale,
+            settings.noiseEnabled ? settings.noiseIntensity : 0.0f,
+            elapsedTime * settings.noiseSpeed,
+            static_cast<float>(settings.noiseOctaves));
 
         gridManager->updateParams(params);
         gridManager->swapHistory();
@@ -152,7 +164,9 @@ namespace render::volumetric
         vk::DescriptorSet lightBufferDescSet,
         vk::DescriptorSet lightCullingDescSet,
         vk::DescriptorSet shadowDataDescSet,
-        vk::DescriptorSet shadowTextureDescSet)
+        vk::DescriptorSet shadowTextureDescSet,
+        vk::DescriptorSet fogVolumeDescSet,
+        vk::DescriptorSet giSamplingDescSet)
     {
         if (!initialized || !enabled)
             return;
@@ -176,10 +190,11 @@ namespace render::volumetric
                 0, nullptr);
         }
 
-        // Pass 1: Light Injection (with shadow sampling)
+        // Pass 1: Light Injection (with shadow sampling + fog volumes + GI)
         lightInjection->dispatch(cmd, gridDescSet, clusterGridDescSet,
                                  lightBufferDescSet, lightCullingDescSet,
-                                 shadowDataDescSet, shadowTextureDescSet, frameIndex);
+                                 shadowDataDescSet, shadowTextureDescSet,
+                                 fogVolumeDescSet, giSamplingDescSet, frameIndex);
 
         // Barrier: injection write -> temporal read
         {

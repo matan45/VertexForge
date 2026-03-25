@@ -34,6 +34,7 @@
 #include "../vegetation/GrassStreamManager.hpp"
 #include "../occlusion/LightOcclusionCulling.hpp"
 #include "../volumetric/VolumetricPipeline.hpp"
+#include "../volumetric/FogVolumeBufferManager.hpp"
 #include "../lighting/LightStreamManager.hpp"
 #include "../gi/GITypes.hpp"
 #include "../gi/RadianceCascadeManager.hpp"
@@ -319,6 +320,7 @@ namespace render::gpudriven
         std::unique_ptr<occlusion::HiZBuffer> prepassHiZ;
         uint32_t prepassHiZMipLevels = 0;
         std::unique_ptr<volumetric::VolumetricPipeline> volumetricPipeline;
+        std::unique_ptr<volumetric::FogVolumeBufferManager> fogVolumeBufferManager;
         ::postprocess::VolumetricFogSettings cachedVolumetricSettings;
 
         // Light streaming

@@ -13,15 +13,15 @@ namespace render::cloud
         float cloudMaxAltitude = 4000.0f;
 
         // Density & coverage
-        float globalDensity = 0.8f;          // [0, 1]
-        float globalCoverage = 0.6f;         // [0, 1]
-        float cloudType = 0.5f;              // [0, 1] stratus(0) to cumulus(1)
+        float globalDensity = 0.5f;           // [0, 1]
+        float globalCoverage = 0.45f;        // [0, 1]
+        float cloudType = 0.7f;              // [0, 1] stratus(0) to cumulus(1)
 
         // Noise shaping
         float shapeScale = 0.0003f;
         float detailScale = 0.003f;
-        float erosionStrength = 0.3f;
-        float curlStrength = 0.2f;
+        float erosionStrength = 0.45f;
+        float curlStrength = 0.3f;
 
         // Wind
         float windSpeed = 25.0f;             // m/s
@@ -35,7 +35,14 @@ namespace render::cloud
         float phaseForward = 0.8f;           // HG forward lobe
         float phaseBackward = -0.3f;         // HG backward lobe
         float phaseBlend = 0.5f;
-        float ambientIntensity = 0.8f;
+        float ambientIntensity = 0.45f;
+
+        // Silver lining (bright rim when looking toward sun through thin cloud edges)
+        float silverLiningIntensity = 0.5f;  // [0, 2]
+        float silverLiningSpread = 5.0f;     // [1, 20] exponent for angular falloff
+
+        // Multi-scattering interior boost
+        float multiScatterBoost = 0.3f;      // [0, 2]
 
         // Performance
         float temporalBlendFactor = 0.8f;

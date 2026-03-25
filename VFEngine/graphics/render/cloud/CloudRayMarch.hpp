@@ -45,11 +45,13 @@ namespace render::cloud
 
         void init(vk::ImageView shapeNoiseView, vk::ImageView detailNoiseView,
                   vk::ImageView weatherMapView, vk::Sampler noiseSampler,
-                  vk::ImageView transmittanceView, vk::Sampler lutSampler);
+                  vk::ImageView transmittanceView, vk::Sampler lutSampler,
+                  vk::ImageView blueNoiseView);
         void cleanup();
         void recreate(vk::ImageView shapeNoiseView, vk::ImageView detailNoiseView,
                       vk::ImageView weatherMapView, vk::Sampler noiseSampler,
-                      vk::ImageView transmittanceView, vk::Sampler lutSampler);
+                      vk::ImageView transmittanceView, vk::Sampler lutSampler,
+                      vk::ImageView blueNoiseView);
 
         void updateParams(const GPUCloudParams& params);
         void dispatch(const vk::CommandBuffer& cmd);

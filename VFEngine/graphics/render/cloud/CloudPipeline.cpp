@@ -109,7 +109,8 @@ namespace render::cloud
             cloudNoise->getWeatherView(),
             cloudNoise->getSampler(),
             transmittanceView,
-            lutSampler);
+            lutSampler,
+            cloudNoise->getBlueNoiseView());
 
         // Create temporal reprojection
         cloudTemporal = std::make_unique<CloudTemporal>(device, swapChain);
@@ -126,6 +127,9 @@ namespace render::cloud
     {
         if (!initialized)
             return;
+
+        // Wait for GPU to finish using cloud resources before destroying them
+        device.getLogicalDevice().waitIdle();
 
         if (cloudComposite) { cloudComposite->cleanup(); cloudComposite.reset(); }
         if (cloudTemporal) { cloudTemporal->cleanup(); cloudTemporal.reset(); }
@@ -156,7 +160,8 @@ namespace render::cloud
             cloudNoise->getWeatherView(),
             cloudNoise->getSampler(),
             transmittanceView,
-            lutSampler);
+            lutSampler,
+            cloudNoise->getBlueNoiseView());
 
         cloudTemporal->recreate(cloudRayMarch->getResultView(), cloudRayMarch->getResultImage());
         cloudComposite->recreate(cloudTemporal->getHistoryView(), cloudNoise->getSampler());
@@ -234,6 +239,8 @@ namespace render::cloud
         params.marchParams = glm::vec4(static_cast<float>(settings.maxMarchSteps),
                                         static_cast<float>(settings.lightMarchSteps), 0.0f, 0.0f);
         params.cloudColorTint = glm::vec4(settings.cloudColorTint, 0.0f);
+        params.lightParams2 = glm::vec4(settings.silverLiningIntensity, settings.silverLiningSpread,
+                                         settings.multiScatterBoost, 0.0f);
 
         return params;
     }
