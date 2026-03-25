@@ -170,9 +170,9 @@ float sampleVSMShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal) {
     vec3 biasedPos = worldPos + worldNormal * sd.biasParams.z * 0.3;
     vec4 lsPos = sd.viewProjection * vec4(biasedPos, 1.0);
 
-    // For orthographic projections (directional lights), w is always 1.0
-    // For perspective (spot), reject behind-camera pixels
-    if (sd.pageTableInfo.w == 1 && lsPos.w <= 0.0) return 1.0;
+    // For perspective projections (spot/point), reject behind-camera pixels
+    bool isPerspective = (sd.pageTableInfo.w == 1 || sd.pageTableInfo.w == 2);
+    if (isPerspective && lsPos.w <= 0.0) return 1.0;
 
     float w = max(lsPos.w, 0.0001);
     vec3 ndc = lsPos.xyz / w;
@@ -181,8 +181,12 @@ float sampleVSMShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal) {
     float receiverDepth = clamp(ndc.z, 0.0, 1.0);
 
     // For spot lights, reject pixels outside frustum
+    // For point lights (type 2), clamp instead — face selection guarantees correct hemisphere
     if (sd.pageTableInfo.w == 1) {
         if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) return 1.0;
+    }
+    if (sd.pageTableInfo.w == 2) {
+        uv = clamp(uv, vec2(0.001), vec2(0.999));
     }
 
     // Look up page table

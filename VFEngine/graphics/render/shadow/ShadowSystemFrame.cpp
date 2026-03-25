@@ -225,13 +225,6 @@ namespace render::shadow
                 continue;
             if (data.isStatic)
                 ++lastCacheStats.totalStaticLights;
-            if (data.isStatic && data.shadowCached && !data.isDirectionalType())
-            {
-                for (auto& view : data.views) view.cached = true;
-                ++lastCacheStats.cachedShadowMaps;
-                ++lastCacheStats.skippedThisFrame;
-                continue;
-            }
             const auto& wm = registry.get<components::WorldTransformComponent>(entity).worldMatrix;
             if (data.type == ShadowMapType::PointCube)
             {
@@ -263,15 +256,6 @@ namespace render::shadow
 
             if (data.renderedFrameCount < 10)
                 ++data.renderedFrameCount;
-
-            if (data.isStatic && !data.shadowCached && !data.isDirectionalType())
-            {
-                if (data.renderedFrameCount >= 4)
-                {
-                    data.shadowCached = true;
-                    data.lastRenderedFrame = frameCounter;
-                }
-            }
         }
     }
 

@@ -338,9 +338,12 @@ namespace render::shadow
                     if (pageIdx >= data.vsmPhysicalTiles.size())
                         continue;
 
-                    // Crop within this face's page region
+                    // Point lights always re-render — 6-face VSM needs consistent
+                    // depth across all faces each frame to avoid stale face artifacts
+                    data.vsmPageDirty[pageIdx] = true;
+
                     glm::mat4 cropMatrix = vsm::computePageCropMatrix(fx, fy, pagesPerFace, faceHeight);
-                    addPageToRenderLists(data, pageIdx, cropMatrix * view.viewProjectionMatrix, view, false);
+                    addPageToRenderLists(data, pageIdx, cropMatrix * view.viewProjectionMatrix, view, true);
                 }
             }
         }

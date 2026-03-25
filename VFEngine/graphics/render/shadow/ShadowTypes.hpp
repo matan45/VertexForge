@@ -31,11 +31,10 @@ namespace render::shadow
             // Use dot product for robust pole detection (not just Y component)
             glm::vec3 worldUp = (std::abs(glm::dot(axes.lightDir, glm::vec3(0.0f, 1.0f, 0.0f))) < 0.999f)
                 ? glm::vec3(0.0f, 1.0f, 0.0f)
-                : glm::vec3(0.0f, 0.0f, 1.0f);
+                : glm::vec3(1.0f, 0.0f, 0.0f);
 
-            // Consistent right-handed basis: right = dir x up, then recompute up
-            axes.lightRight = glm::normalize(glm::cross(axes.lightDir, worldUp));
-            axes.lightUp = glm::normalize(glm::cross(axes.lightRight, axes.lightDir));
+            axes.lightRight = glm::normalize(glm::cross(worldUp, axes.lightDir));
+            axes.lightUp = glm::normalize(glm::cross(axes.lightDir, axes.lightRight));
             return axes;
         }
     };
