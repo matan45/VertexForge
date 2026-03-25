@@ -372,9 +372,13 @@ namespace render::shadow
         if (level < data.clipmapRenderVP.size())
             data.clipmapRenderVP[level] = pageGridLevel.viewProjMatrix;
 
-        // Use zero UV offset — both lookup and rendering use compatible VPs
         if (level < data.clipmapUVOffset.size())
-            data.clipmapUVOffset[level] = glm::vec2(0.0f);
+        {
+            glm::vec2 delta = texelSnapped.snapPosition - pageGridOrigin;
+            float diameter = 2.0f * texelSnapped.worldExtent;
+            data.clipmapUVOffset[level] = (diameter > 0.0f)
+                ? delta / diameter : glm::vec2(0.0f);
+        }
 
         auto& view = data.views[level];
         view.viewMatrix = texelSnapped.viewMatrix;

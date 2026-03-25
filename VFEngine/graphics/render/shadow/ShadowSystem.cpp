@@ -510,6 +510,7 @@ namespace render::shadow
         data.clipmapPageGridOrigin.clear();
         data.clipmapRenderVP.clear();
         data.clipmapUVOffset.clear();
+        data.clipmapLevelInitialized.clear();
     }
 
     void ShadowSystem::setDeletionQueue(core::DeferredDeletionQueue* queue)
