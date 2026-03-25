@@ -105,6 +105,7 @@ namespace controllers
 
         framePreparation->prepareAudioSpheres(ctx);
         framePreparation->prepareReverbZones(ctx);
+        framePreparation->prepareFogVolumes(ctx);
     }
 
     void OffScreenController::prepareFrameLightGizmos()
