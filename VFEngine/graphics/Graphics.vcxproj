@@ -306,6 +306,7 @@
     <ClInclude Include="render\vegetation\VegetationBufferManager.hpp" />
     <ClInclude Include="render\vegetation\VegetationGPUTypes.hpp" />
     <ClInclude Include="render\vegetation\WindSystem.hpp" />
+    <ClInclude Include="render\volumetric\FogNoiseGenerator.hpp" />
     <ClInclude Include="render\volumetric\FogVolumeBufferManager.hpp" />
     <ClInclude Include="render\volumetric\VolumetricFogComposite.hpp" />
     <ClInclude Include="render\volumetric\VolumetricGridManager.hpp" />
@@ -550,6 +551,7 @@
     <ClCompile Include="render\vegetation\GrassStreamManager.cpp" />
     <ClCompile Include="render\vegetation\VegetationBufferManager.cpp" />
     <ClCompile Include="render\vegetation\WindSystem.cpp" />
+    <ClCompile Include="render\volumetric\FogNoiseGenerator.cpp" />
     <ClCompile Include="render\volumetric\FogVolumeBufferManager.cpp" />
     <ClCompile Include="render\volumetric\VolumetricFogComposite.cpp" />
     <ClCompile Include="render\volumetric\VolumetricGridManager.cpp" />
@@ -683,6 +685,7 @@
     <None Include="..\..\resources\shaders\vfx\vfx_particle_sim.glsl" />
     <None Include="..\..\resources\shaders\vfx\vfx_ribbon_gpu.glsl" />
     <None Include="..\..\resources\shaders\vfx\vfx_ribbon_preview.glsl" />
+    <None Include="..\..\resources\shaders\volumetric\fog_noise_gen.glsl" />
     <None Include="..\..\resources\shaders\volumetric\volumetric_inject.glsl" />
     <None Include="..\..\resources\shaders\volumetric\volumetric_raymarch.glsl" />
     <None Include="..\..\resources\shaders\volumetric\volumetric_temporal.glsl" />

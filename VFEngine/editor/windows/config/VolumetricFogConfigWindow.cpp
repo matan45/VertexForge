@@ -113,6 +113,61 @@ namespace windows
         }
     }
 
+    void VolumetricFogConfigWindow::drawNoiseSection()
+    {
+        ImGui::Spacing();
+        ImGui::Text("Noise / Turbulence");
+        ImGui::Separator();
+
+        if (ImGui::Checkbox("Enable Noise##vfog", &settings.noiseEnabled))
+        {
+            isDirty = true;
+        }
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip("Modulate fog density with 3D noise for organic look.");
+        }
+
+        if (settings.noiseEnabled)
+        {
+            if (ImGui::DragFloat("Noise Scale", &settings.noiseScale, 0.001f, 0.001f, 1.0f, "%.4f"))
+            {
+                isDirty = true;
+            }
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("World-space scale for noise UVW.\nSmaller = larger noise features.");
+            }
+
+            if (ImGui::SliderFloat("Noise Intensity", &settings.noiseIntensity, 0.0f, 1.0f, "%.2f"))
+            {
+                isDirty = true;
+            }
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("How strongly noise modulates fog density.\n0 = no effect, 1 = full modulation.");
+            }
+
+            if (ImGui::DragFloat("Noise Speed", &settings.noiseSpeed, 0.01f, 0.0f, 2.0f, "%.3f"))
+            {
+                isDirty = true;
+            }
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("Animation speed of the noise pattern.\n0 = static noise.");
+            }
+
+            if (ImGui::SliderInt("Noise Octaves", &settings.noiseOctaves, 1, 4))
+            {
+                isDirty = true;
+            }
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("FBM octaves for noise sampling.\nMore octaves = finer detail but higher cost.");
+            }
+        }
+    }
+
     void VolumetricFogConfigWindow::drawScatteringSection()
     {
         ImGui::Spacing();
@@ -226,6 +281,7 @@ namespace windows
 
                 drawDensitySection();
                 drawHeightFogSection();
+                drawNoiseSection();
                 drawScatteringSection();
                 drawGeneralSection();
             }

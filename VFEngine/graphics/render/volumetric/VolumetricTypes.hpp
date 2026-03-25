@@ -41,8 +41,9 @@ namespace render::volumetric
         glm::vec4 fogColor{0.8f, 0.85f, 0.9f, 1.0f}; // rgb = fog color, a = intensity
         glm::vec4 ambientParams{0.0f};       // x = ambientIntensity, y = temporalBlendFactor, z = frameIndex (as float), w = unused
         glm::vec4 cameraPosition{0.0f};      // xyz = world pos, w = unused
+        glm::vec4 noiseParams{0.0f};         // x = scale, y = intensity, z = timeOffset, w = octaves
     };
-    static_assert(sizeof(GPUVolumetricParams) == 240, "GPUVolumetricParams size mismatch");
+    static_assert(sizeof(GPUVolumetricParams) == 256, "GPUVolumetricParams size mismatch");
 
     static constexpr uint32_t MAX_FOG_VOLUMES = 64;
 

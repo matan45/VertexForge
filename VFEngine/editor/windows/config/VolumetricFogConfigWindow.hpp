@@ -13,6 +13,7 @@ namespace windows
 
         void drawDensitySection();
         void drawHeightFogSection();
+        void drawNoiseSection();
         void drawScatteringSection();
         void drawGeneralSection();
 

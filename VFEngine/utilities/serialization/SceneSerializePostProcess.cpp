@@ -175,7 +175,12 @@ namespace serialization
                 {"temporalBlendFactor", s.temporalBlendFactor},
                 {"intensity", s.intensity},
                 {"ambientIntensity", s.ambientIntensity},
-                {"maxDistance", s.maxDistance}
+                {"maxDistance", s.maxDistance},
+                {"noiseEnabled", s.noiseEnabled},
+                {"noiseScale", s.noiseScale},
+                {"noiseIntensity", s.noiseIntensity},
+                {"noiseSpeed", s.noiseSpeed},
+                {"noiseOctaves", s.noiseOctaves}
             };
         }
 
@@ -353,6 +358,16 @@ namespace serialization
                 s.ambientIntensity = std::clamp(vf["ambientIntensity"].get<float>(), 0.0f, 2.0f);
             if (vf.contains("maxDistance") && vf["maxDistance"].is_number())
                 s.maxDistance = std::clamp(vf["maxDistance"].get<float>(), 10.0f, 5000.0f);
+            if (vf.contains("noiseEnabled") && vf["noiseEnabled"].is_boolean())
+                s.noiseEnabled = vf["noiseEnabled"].get<bool>();
+            if (vf.contains("noiseScale") && vf["noiseScale"].is_number())
+                s.noiseScale = std::clamp(vf["noiseScale"].get<float>(), 0.001f, 1.0f);
+            if (vf.contains("noiseIntensity") && vf["noiseIntensity"].is_number())
+                s.noiseIntensity = std::clamp(vf["noiseIntensity"].get<float>(), 0.0f, 1.0f);
+            if (vf.contains("noiseSpeed") && vf["noiseSpeed"].is_number())
+                s.noiseSpeed = std::clamp(vf["noiseSpeed"].get<float>(), 0.0f, 2.0f);
+            if (vf.contains("noiseOctaves") && vf["noiseOctaves"].is_number_integer())
+                s.noiseOctaves = std::clamp(vf["noiseOctaves"].get<int>(), 1, 4);
         }
 
         void deserializeSSAO(const json& j, postprocess::SSAOSettings& s)

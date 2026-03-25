@@ -122,6 +122,13 @@ namespace postprocess
         float intensity = 1.0f;
         float ambientIntensity = 0.15f;
         float maxDistance = 500.0f;
+
+        // Noise/turbulence modulation
+        bool noiseEnabled = false;
+        float noiseScale = 0.01f;
+        float noiseIntensity = 0.5f;
+        float noiseSpeed = 0.05f;
+        int noiseOctaves = 3;
     };
 
     struct SSAOSettings

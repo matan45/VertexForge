@@ -140,6 +140,13 @@ namespace render::volumetric
             0.0f);
         params.cameraPosition = glm::vec4(cameraPos, 0.0f);
 
+        elapsedTime += 1.0f / 60.0f;
+        params.noiseParams = glm::vec4(
+            settings.noiseScale,
+            settings.noiseEnabled ? settings.noiseIntensity : 0.0f,
+            elapsedTime * settings.noiseSpeed,
+            static_cast<float>(settings.noiseOctaves));
+
         gridManager->updateParams(params);
         gridManager->swapHistory();
 

@@ -29,6 +29,7 @@ namespace render::volumetric
 
         glm::mat4 prevViewProjection{1.0f};
         uint32_t frameIndex = 0;
+        float elapsedTime = 0.0f;
         bool enabled = false;
         bool initialized = false;
 

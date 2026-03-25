@@ -19,9 +19,11 @@ layout(std140, set = 0, binding = 0) uniform VolumetricParamsUBO {
     vec4 fogColor;               // rgb = fog color, a = intensity
     vec4 ambientParams;          // x = ambientIntensity, y = temporalBlendFactor, z = frameIndex, w = unused
     vec4 cameraPosition;         // xyz = world pos
+    vec4 noiseParams;            // x = scale, y = intensity, z = timeOffset, w = octaves
 };
 
 layout(rgba16f, set = 0, binding = 1) uniform writeonly image3D scatteringVolume;
+layout(set = 0, binding = 5) uniform sampler3D fogNoiseTexture;
 
 // Set 1: Cluster Grid Data
 struct ClusterGridParams {
@@ -223,6 +225,25 @@ vec3 froxelToWorld(ivec3 froxelCoord, uvec3 dims) {
     return worldPos.xyz / worldPos.w;
 }
 
+float sampleFogNoise(vec3 worldPos) {
+    vec3 uvw = worldPos * noiseParams.x + vec3(noiseParams.z * 0.6, noiseParams.z * 0.2, noiseParams.z * 0.4);
+    int octaves = int(noiseParams.w);
+
+    float noise = 0.0;
+    float amplitude = 1.0;
+    float frequency = 1.0;
+    float totalAmplitude = 0.0;
+
+    for (int i = 0; i < octaves; i++) {
+        noise += amplitude * texture(fogNoiseTexture, uvw * frequency).a;
+        totalAmplitude += amplitude;
+        amplitude *= 0.5;
+        frequency *= 2.0;
+    }
+
+    return noise / totalAmplitude;
+}
+
 float computeFogDensity(vec3 worldPos) {
     float density = fogParams.x;
 
@@ -233,6 +254,12 @@ float computeFogDensity(vec3 worldPos) {
         density += fogParams.y * exp(-heightFalloff * max(heightAboveOffset, 0.0));
     } else {
         density += fogParams.y;
+    }
+
+    // 3D noise modulation
+    if (noiseParams.y > 0.0) {
+        float noise = sampleFogNoise(worldPos);
+        density *= mix(1.0, noise * 2.0, noiseParams.y);
     }
 
     return max(density, 0.0);

@@ -1,7 +1,9 @@
 #pragma once
 
 #include "VolumetricTypes.hpp"
+#include "FogNoiseGenerator.hpp"
 #include <vulkan/vulkan.hpp>
+#include <memory>
 
 namespace core
 {
@@ -33,6 +35,9 @@ namespace render::volumetric
         vk::ImageView integratedView;
 
         vk::Sampler trilinearSampler;
+
+        // Fog noise texture generator
+        std::unique_ptr<FogNoiseGenerator> fogNoise;
 
         vk::Buffer paramsBuffer;
         vk::DeviceMemory paramsMemory;
