@@ -416,10 +416,10 @@ void main() {
     for (uint v = 0u; v < fogVolumeCount && v < 64u; ++v) {
         GPUFogVolume vol = fogVolumes[v];
         float volDensity = evaluateFogVolume(vol, worldPos);
-        if (volDensity <= 0.0) continue;
+        if (abs(volDensity) < 0.001) continue;
 
-        if (vol.blendMode == 1u) { // Subtractive
-            density -= volDensity;
+        if (vol.blendMode == 1u || volDensity < 0.0) { // Subtractive blend or negative density
+            density -= abs(volDensity);
         } else { // Additive
             density += volDensity;
             fogVolumeAlbedo += vol.albedoAndDensity.rgb * volDensity;

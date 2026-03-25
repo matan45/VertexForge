@@ -130,13 +130,13 @@ namespace windows::details
         ImGui::Text("Fog Properties:");
         ImGui::Indent(10.0f);
 
-        if (ImGui::DragFloat("Density##FV", &data.density, 0.01f, 0.0f, 10.0f, "%.3f"))
+        if (ImGui::DragFloat("Density##FV", &data.density, 0.01f, -10.0f, 10.0f, "%.3f"))
         {
             changed = true;
         }
         if (ImGui::IsItemHovered())
         {
-            ImGui::SetTooltip("Fog density within the volume");
+            ImGui::SetTooltip("Fog density within the volume.\nNegative values carve/subtract from global fog.");
         }
 
         if (ImGui::ColorEdit3("Albedo##FV", &data.albedo.x))
