@@ -46,6 +46,8 @@ namespace serialization
             out["audioSource3D"] = serializeAudioSource3D(entity.getComponent<components::AudioSource3DComponent>());
         if (entity.hasComponent<components::ReverbZoneComponent>())
             out["reverbZone"] = serializeReverbZone(entity.getComponent<components::ReverbZoneComponent>());
+        if (entity.hasComponent<components::FogVolumeComponent>())
+            out["fogVolume"] = serializeFogVolume(entity.getComponent<components::FogVolumeComponent>());
         if (entity.hasComponent<components::ScriptComponent>())
             out["script"] = serializeScript(entity.getComponent<components::ScriptComponent>());
         if (entity.hasComponent<components::ColliderComponent>())

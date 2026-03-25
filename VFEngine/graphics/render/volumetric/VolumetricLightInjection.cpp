@@ -23,7 +23,8 @@ namespace render::volumetric
         vk::DescriptorSetLayout lightBufferDescLayout,
         vk::DescriptorSetLayout lightCullingDescLayout,
         vk::DescriptorSetLayout shadowDataDescLayout,
-        vk::DescriptorSetLayout shadowTextureDescLayout)
+        vk::DescriptorSetLayout shadowTextureDescLayout,
+        vk::DescriptorSetLayout fogVolumeDescLayout)
     {
         if (initialized)
         {
@@ -38,6 +39,7 @@ namespace render::volumetric
         lightCullingLayout = lightCullingDescLayout;
         shadowDataLayout = shadowDataDescLayout;
         shadowTextureLayout = shadowTextureDescLayout;
+        fogVolumeLayout = fogVolumeDescLayout;
 
         createPipelineLayout();
         createComputePipeline();
@@ -82,13 +84,14 @@ namespace render::volumetric
         pushConstantRange.offset = 0;
         pushConstantRange.size = sizeof(uint32_t);
 
-        std::array<vk::DescriptorSetLayout, 6> setLayouts = {
+        std::array<vk::DescriptorSetLayout, 7> setLayouts = {
             volumetricGridLayout,   // Set 0: Volumetric grid params + scattering volume
             clusterGridLayout,       // Set 1: Cluster grid data
             lightBufferLayout,       // Set 2: Light buffers
             lightCullingLayout,      // Set 3: Light culling output
             shadowDataLayout,        // Set 4: Shadow data buffer
-            shadowTextureLayout      // Set 5: Shadow textures (atlas, cascades, cubes)
+            shadowTextureLayout,     // Set 5: Shadow textures (atlas, cascades, cubes)
+            fogVolumeLayout          // Set 6: Fog volume SSBO
         };
 
         vk::PipelineLayoutCreateInfo layoutInfo{};
@@ -134,6 +137,7 @@ namespace render::volumetric
         vk::DescriptorSet lightCullingDescSet,
         vk::DescriptorSet shadowDataDescSet,
         vk::DescriptorSet shadowTextureDescSet,
+        vk::DescriptorSet fogVolumeDescSet,
         uint32_t frameIndex)
     {
         if (!initialized || !computePipeline)
@@ -145,13 +149,14 @@ namespace render::volumetric
         bool hasShadows = shadowDataDescSet && shadowTextureDescSet;
         if (hasShadows)
         {
-            std::array<vk::DescriptorSet, 6> descSets = {
+            std::array<vk::DescriptorSet, 7> descSets = {
                 volumetricGridDescSet,
                 clusterGridDescSet,
                 lightBufferDescSet,
                 lightCullingDescSet,
                 shadowDataDescSet,
-                shadowTextureDescSet
+                shadowTextureDescSet,
+                fogVolumeDescSet
             };
             cmd.bindDescriptorSets(
                 vk::PipelineBindPoint::eCompute, pipelineLayout, 0,
@@ -160,7 +165,8 @@ namespace render::volumetric
         }
         else
         {
-            std::array<vk::DescriptorSet, 4> descSets = {
+            // Bind sets 0-3, skip 4-5, bind set 6 separately
+            std::array<vk::DescriptorSet, 4> coreSets = {
                 volumetricGridDescSet,
                 clusterGridDescSet,
                 lightBufferDescSet,
@@ -168,7 +174,12 @@ namespace render::volumetric
             };
             cmd.bindDescriptorSets(
                 vk::PipelineBindPoint::eCompute, pipelineLayout, 0,
-                static_cast<uint32_t>(descSets.size()), descSets.data(),
+                static_cast<uint32_t>(coreSets.size()), coreSets.data(),
+                0, nullptr);
+            // Bind fog volume at set 6
+            cmd.bindDescriptorSets(
+                vk::PipelineBindPoint::eCompute, pipelineLayout, 6,
+                1, &fogVolumeDescSet,
                 0, nullptr);
         }
 

@@ -169,6 +169,62 @@ namespace serialization
         zone.currentBlendWeight = 0.0f;
     }
 
+    json SceneSerialization::serializeFogVolume(const components::FogVolumeComponent& fog)
+    {
+        json j;
+        j["shape"] = static_cast<int>(fog.shape);
+        j["halfExtents"] = json::array({fog.halfExtents.x, fog.halfExtents.y, fog.halfExtents.z});
+        j["density"] = fog.density;
+        j["albedo"] = json::array({fog.albedo.x, fog.albedo.y, fog.albedo.z});
+        j["emission"] = json::array({fog.emission.x, fog.emission.y, fog.emission.z});
+        j["edgeFalloff"] = fog.edgeFalloff;
+        j["blendMode"] = static_cast<int>(fog.blendMode);
+        j["showGizmo"] = fog.showGizmo;
+        return j;
+    }
+
+    void SceneSerialization::deserializeFogVolume(const json& j, components::FogVolumeComponent& fog)
+    {
+        if (auto it = j.find("shape"); it != j.end() && it->is_number())
+        {
+            fog.shape = static_cast<components::FogVolumeShape>(it->get<int>());
+        }
+        if (j.contains("halfExtents") && j["halfExtents"].is_array() && j["halfExtents"].size() == 3)
+        {
+            fog.halfExtents.x = j["halfExtents"][0].get<float>();
+            fog.halfExtents.y = j["halfExtents"][1].get<float>();
+            fog.halfExtents.z = j["halfExtents"][2].get<float>();
+        }
+        if (auto it = j.find("density"); it != j.end() && it->is_number())
+        {
+            fog.density = it->get<float>();
+        }
+        if (j.contains("albedo") && j["albedo"].is_array() && j["albedo"].size() == 3)
+        {
+            fog.albedo.x = j["albedo"][0].get<float>();
+            fog.albedo.y = j["albedo"][1].get<float>();
+            fog.albedo.z = j["albedo"][2].get<float>();
+        }
+        if (j.contains("emission") && j["emission"].is_array() && j["emission"].size() == 3)
+        {
+            fog.emission.x = j["emission"][0].get<float>();
+            fog.emission.y = j["emission"][1].get<float>();
+            fog.emission.z = j["emission"][2].get<float>();
+        }
+        if (auto it = j.find("edgeFalloff"); it != j.end() && it->is_number())
+        {
+            fog.edgeFalloff = it->get<float>();
+        }
+        if (auto it = j.find("blendMode"); it != j.end() && it->is_number())
+        {
+            fog.blendMode = static_cast<components::FogVolumeBlendMode>(it->get<int>());
+        }
+        if (auto it = j.find("showGizmo"); it != j.end() && it->is_boolean())
+        {
+            fog.showGizmo = it->get<bool>();
+        }
+    }
+
     json SceneSerialization::serializeScript(const components::ScriptComponent& script)
     {
         json j;

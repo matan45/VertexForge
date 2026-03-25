@@ -306,6 +306,7 @@
     <ClInclude Include="render\vegetation\VegetationBufferManager.hpp" />
     <ClInclude Include="render\vegetation\VegetationGPUTypes.hpp" />
     <ClInclude Include="render\vegetation\WindSystem.hpp" />
+    <ClInclude Include="render\volumetric\FogVolumeBufferManager.hpp" />
     <ClInclude Include="render\volumetric\VolumetricFogComposite.hpp" />
     <ClInclude Include="render\volumetric\VolumetricGridManager.hpp" />
     <ClInclude Include="render\volumetric\VolumetricLightInjection.hpp" />
@@ -549,6 +550,7 @@
     <ClCompile Include="render\vegetation\GrassStreamManager.cpp" />
     <ClCompile Include="render\vegetation\VegetationBufferManager.cpp" />
     <ClCompile Include="render\vegetation\WindSystem.cpp" />
+    <ClCompile Include="render\volumetric\FogVolumeBufferManager.cpp" />
     <ClCompile Include="render\volumetric\VolumetricFogComposite.cpp" />
     <ClCompile Include="render\volumetric\VolumetricGridManager.cpp" />
     <ClCompile Include="render\volumetric\VolumetricLightInjection.cpp" />

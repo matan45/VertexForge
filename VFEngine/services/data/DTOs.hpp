@@ -211,6 +211,18 @@ namespace services
         bool showDebugVolume = false;
     };
 
+    struct FogVolumeData
+    {
+        uint8_t shape = 0; // 0=Box, 1=Sphere, 2=Cylinder
+        glm::vec3 halfExtents{5.0f};
+        float density = 0.5f;
+        glm::vec3 albedo{0.8f, 0.85f, 0.9f};
+        glm::vec3 emission{0.0f};
+        float edgeFalloff = 0.5f;
+        uint8_t blendMode = 0; // 0=Additive, 1=Subtractive
+        bool showGizmo = false;
+    };
+
     struct ColliderComponentData
     {
         types::ColliderShape shape = types::ColliderShape::Box;

@@ -129,6 +129,55 @@ layout(set = 5, binding = 1) uniform sampler2D physicalPoolDepth;
 layout(set = 5, binding = 2) uniform samplerCubeShadow shadowCubes[32];
 layout(set = 5, binding = 3) uniform samplerCube shadowCubesDepth[32];
 
+// Set 6: Fog Volumes
+struct GPUFogVolume {
+    mat4 worldToLocal;
+    vec4 boundsMin;
+    vec4 boundsMax;
+    vec4 albedoAndDensity;   // rgb = albedo, a = density
+    vec4 emissionAndFalloff; // rgb = emission, a = edge falloff
+    uint shapeType;          // 0=Box, 1=Sphere, 2=Cylinder
+    uint blendMode;          // 0=Additive, 1=Subtractive
+    int densityTextureIndex;
+    uint _fvPad;
+};
+
+layout(std430, set = 6, binding = 0) readonly buffer FogVolumeBuffer {
+    uint fogVolumeCount;
+    uint _fvPad0;
+    uint _fvPad1;
+    uint _fvPad2;
+    GPUFogVolume fogVolumes[];
+};
+
+float evaluateFogVolume(GPUFogVolume vol, vec3 worldPos) {
+    // Quick AABB rejection
+    if (any(lessThan(worldPos, vol.boundsMin.xyz)) || any(greaterThan(worldPos, vol.boundsMax.xyz)))
+        return 0.0;
+
+    // Transform to local unit space
+    vec3 localPos = (vol.worldToLocal * vec4(worldPos, 1.0)).xyz;
+    float dist;
+
+    if (vol.shapeType == 0u) { // Box
+        vec3 d = abs(localPos);
+        dist = max(d.x, max(d.y, d.z));
+    } else if (vol.shapeType == 1u) { // Sphere
+        dist = length(localPos);
+    } else { // Cylinder
+        float radialDist = length(localPos.xz);
+        dist = max(radialDist, abs(localPos.y));
+    }
+
+    if (dist > 1.0) return 0.0;
+
+    // Edge falloff
+    float falloff = vol.emissionAndFalloff.a;
+    float weight = 1.0 - smoothstep(1.0 - falloff, 1.0, dist);
+
+    return vol.albedoAndDensity.a * weight;
+}
+
 // VSM Page Table constants and lookup
 #define SHADOW_BUFFER shadowData
 #define PAGE_TABLE pageTableVol
@@ -326,6 +375,28 @@ void main() {
     }
 
     float density = computeFogDensity(worldPos);
+
+    // Inject fog volume contributions
+    vec3 fogVolumeEmission = vec3(0.0);
+    vec3 fogVolumeAlbedo = vec3(0.0);
+    float fogVolumeDensityTotal = 0.0;
+
+    for (uint v = 0u; v < fogVolumeCount && v < 64u; ++v) {
+        GPUFogVolume vol = fogVolumes[v];
+        float volDensity = evaluateFogVolume(vol, worldPos);
+        if (volDensity <= 0.0) continue;
+
+        if (vol.blendMode == 1u) { // Subtractive
+            density -= volDensity;
+        } else { // Additive
+            density += volDensity;
+            fogVolumeAlbedo += vol.albedoAndDensity.rgb * volDensity;
+            fogVolumeEmission += vol.emissionAndFalloff.rgb * volDensity;
+            fogVolumeDensityTotal += volDensity;
+        }
+    }
+    density = max(density, 0.0);
+
     if (density <= 0.0) {
         imageStore(scatteringVolume, froxelCoord, vec4(0.0));
         return;
@@ -339,8 +410,18 @@ void main() {
     vec3 viewDir = normalize(worldPos - cameraPosition.xyz);
     vec3 inScattered = vec3(0.0);
 
+    // Blend fog color with fog volume albedo
+    vec3 effectiveFogColor = fogColor.rgb;
+    if (fogVolumeDensityTotal > 0.0) {
+        float volumeWeight = fogVolumeDensityTotal / density;
+        effectiveFogColor = mix(fogColor.rgb, fogVolumeAlbedo / fogVolumeDensityTotal, volumeWeight);
+    }
+
     float ambientIntensity = ambientParams.x;
-    inScattered += fogColor.rgb * fogColor.a * ambientIntensity;
+    inScattered += effectiveFogColor * fogColor.a * ambientIntensity;
+
+    // Add fog volume emission
+    inScattered += fogVolumeEmission;
 
     float viewZ = distFromCamera;
 

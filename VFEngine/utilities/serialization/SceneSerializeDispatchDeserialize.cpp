@@ -79,6 +79,11 @@ namespace serialization
             auto& reverbComp = entity.addOrReplaceComponent<components::ReverbZoneComponent>();
             deserializeReverbZone(c["reverbZone"], reverbComp);
         }
+        if (c.contains("fogVolume"))
+        {
+            auto& fogComp = entity.addOrReplaceComponent<components::FogVolumeComponent>();
+            deserializeFogVolume(c["fogVolume"], fogComp);
+        }
     }
 
     void SceneSerialization::deserializePhysicsComponents(const json& c, scene::Entity& entity)

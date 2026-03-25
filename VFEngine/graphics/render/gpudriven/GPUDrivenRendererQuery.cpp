@@ -192,6 +192,12 @@ namespace render::gpudriven
 
         auto volQuality = static_cast<volumetric::VolumetricQuality>(static_cast<uint8_t>(quality));
 
+        if (!fogVolumeBufferManager)
+        {
+            fogVolumeBufferManager = std::make_unique<volumetric::FogVolumeBufferManager>(device);
+            fogVolumeBufferManager->init();
+        }
+
         volumetricPipeline = std::make_unique<volumetric::VolumetricPipeline>(device);
         volumetricPipeline->init(
             volQuality,
@@ -199,7 +205,8 @@ namespace render::gpudriven
             lightBufferManager->getDescriptorSetLayout(),
             lightCullingPipeline->getDescriptorSetLayout(),
             shadowSystem ? shadowSystem->getShadowDataLayout() : vk::DescriptorSetLayout{},
-            shadowSystem ? shadowSystem->getShadowTextureLayout() : vk::DescriptorSetLayout{});
+            shadowSystem ? shadowSystem->getShadowTextureLayout() : vk::DescriptorSetLayout{},
+            fogVolumeBufferManager->getDescriptorSetLayout());
 
     }
 

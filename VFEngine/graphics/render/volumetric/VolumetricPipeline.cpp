@@ -25,7 +25,8 @@ namespace render::volumetric
         vk::DescriptorSetLayout lightBufferLayout,
         vk::DescriptorSetLayout lightCullingLayout,
         vk::DescriptorSetLayout shadowDataLayout,
-        vk::DescriptorSetLayout shadowTextureLayout)
+        vk::DescriptorSetLayout shadowTextureLayout,
+        vk::DescriptorSetLayout fogVolumeLayout)
     {
         if (initialized)
         {
@@ -41,7 +42,7 @@ namespace render::volumetric
 
         lightInjection = std::make_unique<VolumetricLightInjection>(device);
         lightInjection->init(dims, gridDescLayout, clusterGridLayout, lightBufferLayout, lightCullingLayout,
-                             shadowDataLayout, shadowTextureLayout);
+                             shadowDataLayout, shadowTextureLayout, fogVolumeLayout);
 
         temporalFilter = std::make_unique<VolumetricTemporalFilter>(device);
         temporalFilter->init(dims, gridDescLayout);
@@ -94,11 +95,12 @@ namespace render::volumetric
         vk::DescriptorSetLayout lightBufferLayout,
         vk::DescriptorSetLayout lightCullingLayout,
         vk::DescriptorSetLayout shadowDataLayout,
-        vk::DescriptorSetLayout shadowTextureLayout)
+        vk::DescriptorSetLayout shadowTextureLayout,
+        vk::DescriptorSetLayout fogVolumeLayout)
     {
         cleanup();
         init(quality, clusterGridLayout, lightBufferLayout, lightCullingLayout,
-             shadowDataLayout, shadowTextureLayout);
+             shadowDataLayout, shadowTextureLayout, fogVolumeLayout);
     }
 
     void VolumetricPipeline::update(
@@ -152,7 +154,8 @@ namespace render::volumetric
         vk::DescriptorSet lightBufferDescSet,
         vk::DescriptorSet lightCullingDescSet,
         vk::DescriptorSet shadowDataDescSet,
-        vk::DescriptorSet shadowTextureDescSet)
+        vk::DescriptorSet shadowTextureDescSet,
+        vk::DescriptorSet fogVolumeDescSet)
     {
         if (!initialized || !enabled)
             return;
@@ -176,10 +179,11 @@ namespace render::volumetric
                 0, nullptr);
         }
 
-        // Pass 1: Light Injection (with shadow sampling)
+        // Pass 1: Light Injection (with shadow sampling + fog volumes)
         lightInjection->dispatch(cmd, gridDescSet, clusterGridDescSet,
                                  lightBufferDescSet, lightCullingDescSet,
-                                 shadowDataDescSet, shadowTextureDescSet, frameIndex);
+                                 shadowDataDescSet, shadowTextureDescSet,
+                                 fogVolumeDescSet, frameIndex);
 
         // Barrier: injection write -> temporal read
         {

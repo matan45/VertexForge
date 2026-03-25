@@ -41,6 +41,7 @@ namespace windows::details {
         bool hasBehaviorTree = false;
         bool hasDecal = false;
         bool hasReverbZone = false;
+        bool hasFogVolume = false;
         bool hasUIAnimation = false;
         bool hasUIMask = false;
         bool hasUIDraggable = false;
