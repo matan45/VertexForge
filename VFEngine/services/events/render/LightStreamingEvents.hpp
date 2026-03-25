@@ -39,6 +39,27 @@ namespace events::render::lightstreaming
         std::string_view getName() const override { return "GetLightStreamingConfig"; }
     };
 
+    // ---- Shadow Streaming ----
+
+    struct ShadowStreamingStats
+    {
+        uint32_t pagesAllocatedThisFrame = 0;
+        uint32_t pagesEvictedThisFrame = 0;
+        uint32_t pendingPages = 0;
+        float poolUtilization = 0.0f;
+    };
+
+    struct SetShadowStreamingConfigCommand : ::events::ICommand<>
+    {
+        uint32_t maxNewPagesPerFrame = 32;
+        std::string_view getName() const override { return "SetShadowStreamingConfig"; }
+    };
+
+    struct GetShadowStreamingStatsQuery : ::events::IQuery<ShadowStreamingStats>
+    {
+        std::string_view getName() const override { return "GetShadowStreamingStats"; }
+    };
+
     // ---- Notifications ----
 
     struct LightBudgetExceededNotification : ::events::INotification

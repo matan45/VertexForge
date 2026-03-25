@@ -213,7 +213,6 @@ namespace render::shadow
             ctx.terrainParams->terrainVertexDescSet,
             viewProj,
             ctx.terrainParams->tileCount,
-            ctx.terrainParams->shadowLOD,
             depthBias * terrainBiasScale,
             slopeBias * terrainBiasScale);
     }

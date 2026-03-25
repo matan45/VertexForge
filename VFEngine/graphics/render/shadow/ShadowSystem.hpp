@@ -40,6 +40,10 @@ namespace render
 
             static constexpr float FRAME_BUDGET_WARNING_MS = 16.0f;
 
+            // Shadow streaming: per-frame tile allocation budget
+            static constexpr uint32_t MAX_NEW_PAGES_PER_FRAME = 32;
+            uint32_t newPagesAllocatedThisFrame = 0;
+
             std::unique_ptr<VSMPhysicalTilePool> tilePool;
             std::unique_ptr<VSMPageTable> pageTable;
             std::unique_ptr<ShadowPassPipeline> shadowPassPipeline;
@@ -200,6 +204,16 @@ namespace render
             [[nodiscard]] std::vector<ShadowDebugInfo> getShadowDebugInfo() const;
             [[nodiscard]] ShadowRecordingStats getShadowRecordingStats() const;
 
+            struct PerLightStats
+            {
+                uint32_t entityId = 0;
+                uint32_t type = 0; // 0=dir, 1=spot, 2=point
+                uint32_t pagesAllocated = 0;
+                uint32_t pagesDirty = 0;
+                uint32_t pagesCached = 0;
+            };
+            [[nodiscard]] std::vector<PerLightStats> getPerLightStats() const;
+
             // GPU Feedback (Phase 2)
             void dispatchFeedback(vk::CommandBuffer cmd, vk::ImageView depthView,
                                   const glm::mat4& invViewProjection,
@@ -220,6 +234,9 @@ namespace render
             void applyFeedbackAllocations();
             bool allocateVSMPages(LightShadowData& data);
             void freeVSMPages(LightShadowData& data);
+
+            // Shadow streaming: evict lowest-priority page to make room
+            uint32_t evictLowestPriorityPage(float requestingPriority);
 
             // Per-type VSM page allocation helpers
             PageDimensions allocateCSMPages(LightShadowData& data);

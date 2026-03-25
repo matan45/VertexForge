@@ -147,6 +147,16 @@ namespace windows
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip("Enable/disable PCSS contact-hardening soft shadows globally.\nWhen off, hard shadows are used (single tap).");
 
+        if (ImGui::DragFloat("Light Size", &settings.shadows.globalLightSize, 0.01f, 0.01f, 10.0f))
+            isDirty = true;
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Controls penumbra width for soft shadows (PCSS)");
+
+        if (ImGui::DragFloat("Search Radius", &settings.shadows.searchRadiusMultiplier, 0.01f, 0.1f, 5.0f))
+            isDirty = true;
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Multiplier for PCSS blocker search radius");
+
         ImGui::Separator();
         ImGui::Text("Shadow Darkness");
         ImGui::Spacing();
@@ -182,6 +192,21 @@ namespace windows
                               "- Directional: Cascade boxes (red->green)\n"
                               "- Spot: Perspective frustum (cyan)\n"
                               "- Point: Sphere radius (magenta)");
+        }
+
+        const char* debugModes[] = { "None", "Cascade Overlay", "Tile Pool Heatmap", "Bias Visualization" };
+        int currentMode = static_cast<int>(settings.shadows.debugMode);
+        if (ImGui::Combo("Debug Mode", &currentMode, debugModes, 4))
+        {
+            settings.shadows.debugMode = static_cast<types::ShadowDebugMode>(currentMode);
+            isDirty = true;
+        }
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip("None: No overlay\n"
+                              "Cascade Overlay: Color-code cascade/clipmap levels\n"
+                              "Tile Pool Heatmap: Show VSM page allocation density\n"
+                              "Bias Visualization: Highlight bias-affected regions");
         }
     }
 
@@ -255,6 +280,21 @@ namespace windows
             ImGui::Text("  Tile copies/frame: %u", shadowStats.tileCopiesThisFrame);
             ImGui::Text("  Dynamic tiles allocated: %u", shadowStats.dynamicTilesAllocated);
         }
+
+        if (!shadowStats.perLightInfo.empty() && ImGui::TreeNode("Per-Light Details"))
+        {
+            for (const auto& info : shadowStats.perLightInfo)
+            {
+                const char* typeNames[] = {"Directional", "Spot", "Point"};
+                const char* typeName = (info.type < 3) ? typeNames[info.type] : "Unknown";
+
+                ImGui::Text("%s (ID: %u)", typeName, info.entityId);
+                ImGui::SameLine(200);
+                ImGui::Text("Pages: %u alloc, %u dirty, %u cached",
+                           info.pagesAllocated, info.pagesDirty, info.pagesCached);
+            }
+            ImGui::TreePop();
+        }
     }
 
     void RenderConfigWindow::drawTerrainSection()
@@ -312,27 +352,6 @@ namespace windows
                 }
                 if (ImGui::IsItemHovered())
                     ImGui::SetTooltip("UV scale for terrain textures.\nLower = larger texture tiles.");
-
-                ImGui::Separator();
-                ImGui::Text("Shadow Settings");
-                ImGui::Spacing();
-
-                int shadowLOD = static_cast<int>(settings.terrain.shadowLOD);
-                if (ImGui::SliderInt("Shadow LOD", &shadowLOD, 0, 3))
-                {
-                    settings.terrain.shadowLOD = static_cast<uint32_t>(shadowLOD);
-                    isDirty = true;
-                    events::render::SetTerrainShadowLODCommand cmd;
-                    cmd.lod = settings.terrain.shadowLOD;
-                    dispatcher.execute(cmd);
-                }
-                if (ImGui::IsItemHovered())
-                {
-                    ImGui::SetTooltip("LOD level used for terrain shadow rendering.\n"
-                                      "0 = Highest detail (slowest)\n"
-                                      "3 = Lowest detail (fastest)\n"
-                                      "Recommended: 2 (shadows don't need high detail)");
-                }
 
             }
 

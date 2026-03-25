@@ -143,6 +143,18 @@ namespace services
                 return offScreenProvider ? offScreenProvider->getShowShadowDebug() : false;
             });
 
+        dispatcher.registerCommandHandler<events::render::SetShadowDebugModeCommand>(
+            [this](const events::render::SetShadowDebugModeCommand& cmd)
+            {
+                shadowDebugMode = cmd.mode;
+            });
+
+        dispatcher.registerQueryHandler<events::render::GetShadowDebugModeQuery>(
+            [this](const events::render::GetShadowDebugModeQuery&)
+            {
+                return shadowDebugMode;
+            });
+
         dispatcher.registerQueryHandler<events::render::GetCullingStatsQuery>(
             [this](const events::render::GetCullingStatsQuery&)
             {

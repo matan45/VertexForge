@@ -14,7 +14,6 @@ const uint MAX_MESHLETS_PER_PAYLOAD = 512;
 layout(push_constant) uniform TerrainShadowPushConstants {
     mat4 lightViewProjection;
     uint tileCount;
-    uint shadowLOD;
     float depthBias;
     float slopeBias;
 } pc;
@@ -97,8 +96,7 @@ void main() {
         tileVisible = aabbInFrustum(tile.aabbMin.xyz, tile.aabbMax.xyz, sharedFrustumPlanes);
 
         if (tileVisible) {
-            // Use fixed LOD for shadows (configurable, default to coarse)
-            uint targetLOD = min(pc.shadowLOD, 3u);
+            uint targetLOD = 0u;
             selectedLOD = findBestAvailableLOD(tile, targetLOD);
 
             uvec4 meshletData = getTerrainLODMeshletData(tile, selectedLOD);
@@ -196,7 +194,6 @@ layout(triangles, max_vertices = 64, max_primitives = 124) out;
 layout(push_constant) uniform TerrainShadowPushConstants {
     mat4 lightViewProjection;
     uint tileCount;
-    uint shadowLOD;
     float depthBias;
     float slopeBias;
 } pc;

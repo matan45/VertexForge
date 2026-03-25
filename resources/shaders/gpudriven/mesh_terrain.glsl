@@ -70,7 +70,7 @@ layout(push_constant) uniform PushConstants {
     float brushWorldRadius;
     float brushFalloff;
     float brushShape;
-    float shadowLOD;
+    float _shadowLODRemoved;
     uint hiZMipLevels;           // Mip levels in the Hi-Z pyramid (0 = disabled)
     float _pad3;                 // Align mat4 to 16-byte boundary
     mat4 viewProjection;         // CPU-precomputed view-projection (matches raycast invViewProjection)
@@ -281,7 +281,7 @@ layout(push_constant) uniform PushConstants {
     float brushWorldRadius;
     float brushFalloff;
     float brushShape;
-    float shadowLOD;
+    float _shadowLODRemoved;
     uint hiZMipLevels;           // Mip levels in the Hi-Z pyramid (0 = disabled)
     float _pad3;                 // Align mat4 to 16-byte boundary
     mat4 viewProjection;         // CPU-precomputed view-projection (matches raycast invViewProjection)
@@ -328,12 +328,7 @@ layout(set = 10, binding = 0) uniform sampler2DShadow physicalPoolShadow;
 layout(set = 10, binding = 1) uniform sampler2D physicalPoolDepth;
 
 // Terrain needs higher normal bias than regular meshes to avoid self-shadow artifacts
-// Bias scales with shadow LOD to compensate for geometry mismatch between shadow and render LODs
-// pc.shadowLOD is uniform — GPU evaluates this once per wavefront, not per fragment
 float getTerrainNormalBiasScale() {
-    if (pc.shadowLOD < 0.5) return 3.0;
-    if (pc.shadowLOD < 1.5) return 8.0;
-    if (pc.shadowLOD < 2.5) return 12.0;
     return 3.0;
 }
 

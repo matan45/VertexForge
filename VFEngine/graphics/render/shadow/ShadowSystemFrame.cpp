@@ -226,6 +226,21 @@ namespace render::shadow
             if (data.isStatic)
                 ++lastCacheStats.totalStaticLights;
             const auto& wm = registry.get<components::WorldTransformComponent>(entity).worldMatrix;
+
+            // Compute distance-based shadow priority for streaming
+            float dist = glm::length(glm::vec3(wm[3]) - lastCameraPosition);
+            data.shadowPriority = 1.0f / (1.0f + dist * 0.01f);
+            if (data.isStatic) data.shadowPriority += 0.3f;
+
+            // Apply per-light shadow overrides each frame
+            if (registry.all_of<components::ShadowOverrideComponent>(entity))
+            {
+                const auto& ovr = registry.get<components::ShadowOverrideComponent>(entity);
+                if (ovr.depthBias >= 0.0f) data.settings.depthBias = ovr.depthBias;
+                if (ovr.slopeBias >= 0.0f) data.settings.slopeBias = ovr.slopeBias;
+                if (ovr.normalBias >= 0.0f) data.settings.normalBias = ovr.normalBias;
+            }
+
             if (data.type == ShadowMapType::PointCube)
             {
                 float r = registry.all_of<components::PointLightComponent>(entity)
@@ -266,6 +281,7 @@ namespace render::shadow
     {
         if (!shadowsEnabled) return;
         ++frameCounter;
+        newPagesAllocatedThisFrame = 0;
 
         glm::vec3 camPos = -glm::vec3(cameraView[3]) * glm::mat3(cameraView);
         glm::vec3 camFwd = -glm::vec3(cameraView[0][2], cameraView[1][2], cameraView[2][2]);
@@ -356,13 +372,9 @@ namespace render::shadow
         if (level < data.clipmapRenderVP.size())
             data.clipmapRenderVP[level] = pageGridLevel.viewProjMatrix;
 
+        // Use zero UV offset — both lookup and rendering use compatible VPs
         if (level < data.clipmapUVOffset.size())
-        {
-            glm::vec2 delta = texelSnapped.snapPosition - pageGridOrigin;
-            float diameter = 2.0f * texelSnapped.worldExtent;
-            data.clipmapUVOffset[level] = (diameter > 0.0f)
-                ? delta / diameter : glm::vec2(0.0f);
-        }
+            data.clipmapUVOffset[level] = glm::vec2(0.0f);
 
         auto& view = data.views[level];
         view.viewMatrix = texelSnapped.viewMatrix;

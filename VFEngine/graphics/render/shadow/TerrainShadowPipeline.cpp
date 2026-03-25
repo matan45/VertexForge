@@ -192,7 +192,6 @@ namespace render::shadow
                                           vk::DescriptorSet vertexDescSet,
                                           const glm::mat4& lightViewProjection,
                                           uint32_t tileCount,
-                                          uint32_t shadowLOD,
                                           float depthBias,
                                           float slopeBias)
     {
@@ -220,7 +219,6 @@ namespace render::shadow
         TerrainShadowPushConstants pushConstants{};
         pushConstants.lightViewProjection = lightViewProjection;
         pushConstants.tileCount = tileCount;
-        pushConstants.shadowLOD = shadowLOD;
         pushConstants.depthBias = depthBias;
         pushConstants.slopeBias = slopeBias;
 

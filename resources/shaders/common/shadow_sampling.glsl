@@ -46,10 +46,10 @@ vec2 vsmLookupPhysicalUV(ShadowData sd, vec2 uv, out bool valid) {
     // For clipmap lights (lightType == 3): apply toroidal UV offset.
     // The GPU lookup VP is texel-snapped (follows camera for full coverage),
     // but pages are rendered with a page-grid-snapped VP (stable, world-anchored).
-    // The UV offset converts lookup UV to render-aligned UV.
+    // UV_pageGrid = UV_texel + offset, where offset = (texelSnap - pageGridOrigin) / diameter
     if (sd.pageTableInfo.w == 3) {
         vec2 uvOffset = unpackHalf2x16(floatBitsToUint(sd.rangeParams.y));
-        uv -= uvOffset;
+        uv += uvOffset;
     }
 
     // Clamp UV to valid range

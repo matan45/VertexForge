@@ -157,6 +157,10 @@ namespace render::shadow
         bool matricesDirty = true;
         bool settingsDirty = true;
 
+        // Shadow streaming priority (computed per frame based on distance/importance)
+        float shadowPriority = 1.0f;
+        uint32_t maxPagesOverride = 0;
+
         // VSM page tracking
         uint32_t vsmLightIndex = 0;
         uint32_t vsmPagesX = 0;
@@ -251,7 +255,6 @@ namespace render::shadow
         vk::DescriptorSet terrainMeshletDescSet; // Terrain meshlet buffer
         vk::DescriptorSet terrainVertexDescSet;  // Terrain vertex buffer
         uint32_t tileCount = 0;
-        uint32_t shadowLOD = 0;  // LOD 0 for accurate terrain self-shadows
     };
 
 }

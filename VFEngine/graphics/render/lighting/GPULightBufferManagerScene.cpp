@@ -312,10 +312,16 @@ namespace render::lighting
         {
             auto entity = static_cast<entt::entity>(entityId);
 
-            bool shouldKeep = registry.valid(entity) &&
-                              registry.any_of<components::DirectionalLightComponent,
-                                              components::PointLightComponent,
-                                              components::SpotLightComponent>(entity);
+            bool shouldKeep = false;
+            if (registry.valid(entity))
+            {
+                if (registry.all_of<components::PointLightComponent>(entity))
+                    shouldKeep = registry.get<components::PointLightComponent>(entity).castsShadow;
+                else if (registry.all_of<components::SpotLightComponent>(entity))
+                    shouldKeep = registry.get<components::SpotLightComponent>(entity).castsShadow;
+                else if (registry.all_of<components::DirectionalLightComponent>(entity))
+                    shouldKeep = true; // directional always casts
+            }
 
             if (!shouldKeep)
             {

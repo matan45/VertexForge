@@ -314,6 +314,75 @@ namespace services {
         return true;
     }
 
+    // ========== Shadow Override ==========
+
+    bool LightComponentService::hasShadowOverride(EntityHandle entity) const {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        return sceneEntity.hasComponent<components::ShadowOverrideComponent>();
+    }
+
+    std::optional<ShadowOverrideData> LightComponentService::getShadowOverrideData(EntityHandle entity) const {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return std::nullopt;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (!sceneEntity.hasComponent<components::ShadowOverrideComponent>()) {
+            return std::nullopt;
+        }
+
+        const auto& comp = sceneEntity.getComponent<components::ShadowOverrideComponent>();
+        ShadowOverrideData data;
+        data.depthBias = comp.depthBias;
+        data.slopeBias = comp.slopeBias;
+        data.normalBias = comp.normalBias;
+        data.maxPages = comp.maxPages;
+        data.softShadows = comp.softShadows;
+        data.hasSoftShadowOverride = comp.hasSoftShadowOverride;
+        return data;
+    }
+
+    bool LightComponentService::setShadowOverrideData(EntityHandle entity, const ShadowOverrideData& overrideData) {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (!sceneEntity.hasComponent<components::ShadowOverrideComponent>()) {
+            sceneEntity.addComponent<components::ShadowOverrideComponent>();
+        }
+
+        auto& comp = sceneEntity.getComponent<components::ShadowOverrideComponent>();
+        comp.depthBias = overrideData.depthBias;
+        comp.slopeBias = overrideData.slopeBias;
+        comp.normalBias = overrideData.normalBias;
+        comp.maxPages = overrideData.maxPages;
+        comp.softShadows = overrideData.softShadows;
+        comp.hasSoftShadowOverride = overrideData.hasSoftShadowOverride;
+        return true;
+    }
+
+    bool LightComponentService::removeShadowOverride(EntityHandle entity) {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (sceneEntity.hasComponent<components::ShadowOverrideComponent>()) {
+            sceneEntity.removeComponent<components::ShadowOverrideComponent>();
+            return true;
+        }
+        return false;
+    }
+
     // ========== Shared Helpers ==========
 
     bool LightComponentService::hasAnyLightComponent(EntityHandle entity) const {
@@ -434,6 +503,26 @@ namespace services {
         dispatcher.registerQueryHandler<events::scene::GetSpotLightDataQuery>(
             [this](const events::scene::GetSpotLightDataQuery& query) {
                 return getSpotLightData(query.entity);
+            });
+
+        dispatcher.registerQueryHandler<events::scene::HasShadowOverrideQuery>(
+            [this](const events::scene::HasShadowOverrideQuery& query) {
+                return hasShadowOverride(query.entity);
+            });
+
+        dispatcher.registerQueryHandler<events::scene::GetShadowOverrideDataQuery>(
+            [this](const events::scene::GetShadowOverrideDataQuery& query) {
+                return getShadowOverrideData(query.entity);
+            });
+
+        dispatcher.registerCommandHandler<events::scene::SetShadowOverrideDataCommand>(
+            [this](const events::scene::SetShadowOverrideDataCommand& cmd) {
+                return setShadowOverrideData(cmd.entity, cmd.data);
+            });
+
+        dispatcher.registerCommandHandler<events::scene::RemoveShadowOverrideCommand>(
+            [this](const events::scene::RemoveShadowOverrideCommand& cmd) {
+                return removeShadowOverride(cmd.entity);
             });
     }
 

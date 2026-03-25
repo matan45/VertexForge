@@ -211,6 +211,14 @@ namespace render::shadow
             data.isStatic = registry.get<components::TransformComponent>(entity).isStatic;
         }
 
+        if (registry.valid(entity) && registry.all_of<components::ShadowOverrideComponent>(entity))
+        {
+            const auto& override = registry.get<components::ShadowOverrideComponent>(entity);
+            if (override.depthBias >= 0.0f) data.settings.depthBias = override.depthBias;
+            if (override.slopeBias >= 0.0f) data.settings.slopeBias = override.slopeBias;
+            if (override.normalBias >= 0.0f) data.settings.normalBias = override.normalBias;
+        }
+
         uint32_t viewCount = 1;
         switch (type)
         {
@@ -335,9 +343,11 @@ namespace render::shadow
         return {pages, pages, true};
     }
 
-    ShadowSystem::PageDimensions ShadowSystem::allocatePointPages(LightShadowData& data, uint32_t maxPages)
+    ShadowSystem::PageDimensions ShadowSystem::allocatePointPages(LightShadowData& data, uint32_t /*maxPages*/)
     {
-        uint32_t pagesPerFace = std::clamp(data.settings.resolution / vsm::PAGE_SIZE, 1u, maxPages);
+        // Point lights use 1 page per face (6 total) to keep tile usage reasonable
+        // Each face covers 90 degrees — higher resolution can be added later
+        uint32_t pagesPerFace = 1;
         data.settings.resolution = pagesPerFace * vsm::PAGE_SIZE;
 
         for (size_t i = 0; i < data.views.size(); ++i)
@@ -356,22 +366,28 @@ namespace render::shadow
             return false;
 
         uint32_t totalPages = pagesX * pagesY;
-        data.vsmPhysicalTiles.resize(totalPages);
+        data.vsmPhysicalTiles.resize(totalPages, vsm::INVALID_TILE);
 
         for (uint32_t i = 0; i < totalPages; ++i)
         {
+            // Budget check: defer remaining tiles to next frame
+            if (newPagesAllocatedThisFrame >= MAX_NEW_PAGES_PER_FRAME)
+                break;
+
             uint32_t tile = tilePool->allocateTile();
             if (tile == vsm::INVALID_TILE)
             {
-                for (uint32_t j = 0; j < i; ++j)
-                    tilePool->freeTile(data.vsmPhysicalTiles[j]);
-                pageTable->freeBlock(offset, pagesX, pagesY);
-                data.vsmPhysicalTiles.clear();
-                vfLogError("ShadowSystem: Ran out of physical tiles, allocated {}/{}", i, totalPages);
-                return false;
+                // Try eviction before giving up
+                tile = evictLowestPriorityPage(data.shadowPriority);
+            }
+            if (tile == vsm::INVALID_TILE)
+            {
+                // Partial allocation is OK — remaining tiles filled next frame
+                break;
             }
             data.vsmPhysicalTiles[i] = tile;
             pageTable->mapPage(offset, i % pagesX, i / pagesX, pagesX, tile);
+            ++newPagesAllocatedThisFrame;
         }
 
         data.vsmPagesX = pagesX;
@@ -381,6 +397,48 @@ namespace render::shadow
         data.vsmPageLastUsedFrame.resize(totalPages, frameCounter + EVICTION_THRESHOLD + 120);
         data.vsmPageDirty.resize(totalPages, true);
         return true;
+    }
+
+    uint32_t ShadowSystem::evictLowestPriorityPage(float requestingPriority)
+    {
+        float lowestPriority = requestingPriority * 0.5f;
+        LightShadowData* victimData = nullptr;
+        uint32_t victimPageIdx = 0;
+        uint32_t oldestFrame = UINT32_MAX;
+
+        for (auto& [entityId, data] : lightShadowData)
+        {
+            if (data.shadowPriority >= lowestPriority)
+                continue;
+            if (data.vsmPhysicalTiles.empty())
+                continue;
+
+            for (uint32_t i = 0; i < data.vsmPhysicalTiles.size(); ++i)
+            {
+                if (data.vsmPhysicalTiles[i] == vsm::INVALID_TILE)
+                    continue;
+                uint32_t lastUsed = (i < data.vsmPageLastUsedFrame.size())
+                    ? data.vsmPageLastUsedFrame[i] : 0;
+                if (lastUsed < oldestFrame)
+                {
+                    oldestFrame = lastUsed;
+                    victimData = &data;
+                    victimPageIdx = i;
+                }
+            }
+        }
+
+        if (!victimData)
+            return vsm::INVALID_TILE;
+
+        uint32_t tile = victimData->vsmPhysicalTiles[victimPageIdx];
+        victimData->vsmPhysicalTiles[victimPageIdx] = vsm::INVALID_TILE;
+
+        uint32_t px = victimPageIdx % victimData->vsmPagesX;
+        uint32_t py = victimPageIdx / victimData->vsmPagesX;
+        pageTable->unmapPage(victimData->vsmPageTableOffset, px, py, victimData->vsmPagesX);
+
+        return tile;
     }
 
     bool ShadowSystem::allocateVSMPages(LightShadowData& data)
@@ -508,6 +566,50 @@ namespace render::shadow
     ShadowSystem::ShadowCacheStats ShadowSystem::getShadowCacheStats() const
     {
         return lastCacheStats;
+    }
+
+    std::vector<ShadowSystem::PerLightStats> ShadowSystem::getPerLightStats() const
+    {
+        std::vector<PerLightStats> result;
+        result.reserve(lightShadowData.size());
+
+        for (const auto& [entityId, data] : lightShadowData)
+        {
+            PerLightStats info;
+            info.entityId = entityId;
+
+            switch (data.type)
+            {
+            case ShadowMapType::DirectionalCSM:
+            case ShadowMapType::DirectionalClipmap:
+                info.type = 0;
+                break;
+            case ShadowMapType::Spot2D:
+                info.type = 1;
+                break;
+            case ShadowMapType::PointCube:
+                info.type = 2;
+                break;
+            default:
+                info.type = 3;
+                break;
+            }
+
+            info.pagesAllocated = static_cast<uint32_t>(data.vsmPhysicalTiles.size());
+            uint32_t dirty = 0;
+            uint32_t cached = 0;
+            for (size_t i = 0; i < data.vsmPageDirty.size(); ++i)
+            {
+                if (data.vsmPageDirty[i])
+                    ++dirty;
+                else
+                    ++cached;
+            }
+            info.pagesDirty = dirty;
+            info.pagesCached = cached;
+            result.push_back(info);
+        }
+        return result;
     }
 
     int32_t ShadowSystem::getShadowViewIndex(uint32_t entityId) const

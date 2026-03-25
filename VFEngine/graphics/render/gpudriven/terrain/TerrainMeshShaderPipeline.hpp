@@ -118,7 +118,7 @@ namespace render::gpudriven
         float brushFalloff = 0.0f;
         float brushShape = 0.0f;
         float terrainMaxDrawDistSq = 0.0f;
-        uint32_t shadowLOD = 2;
+        uint32_t shadowLOD = 0;
         glm::mat4 viewProjection{1.0f};
 
     public:

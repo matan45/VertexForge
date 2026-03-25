@@ -124,7 +124,7 @@ namespace render::gpudriven
             float lodBias = 1.0f;
             float errorThreshold = 2.0f;
             float textureScale = 0.1f;
-            uint32_t shadowLOD = 2;
+            uint32_t shadowLOD = 0;
             std::string currentMaterialPath;
             std::vector<TerrainLayerGPUData> layerData;
             bool layerDataDirty = false;

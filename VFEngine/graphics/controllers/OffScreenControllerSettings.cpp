@@ -115,6 +115,19 @@ namespace controllers
         stats.tileCopiesThisFrame = cacheStats.tileCopiesThisFrame;
         stats.dynamicTilesAllocated = cacheStats.dynamicTilesAllocated;
 
+        auto perLight = shadowSystem->getPerLightStats();
+        stats.perLightInfo.reserve(perLight.size());
+        for (const auto& pl : perLight)
+        {
+            services::PerLightShadowInfo info;
+            info.entityId = pl.entityId;
+            info.type = pl.type;
+            info.pagesAllocated = pl.pagesAllocated;
+            info.pagesDirty = pl.pagesDirty;
+            info.pagesCached = pl.pagesCached;
+            stats.perLightInfo.push_back(info);
+        }
+
         return stats;
     }
 

@@ -372,6 +372,16 @@ namespace render::lighting
                staticFactor;
     }
 
+    float LightStreamManager::getShadowPriority(uint32_t entityId) const
+    {
+        std::lock_guard<std::mutex> lock(mtx);
+        auto it = registeredLights.find(entityId);
+        if (it == registeredLights.end())
+            return 0.0f;
+
+        return computePriority(it->second);
+    }
+
     bool LightStreamManager::allocateSlot(LightStreamEntry& entry)
     {
         auto& allocator = (entry.type == LightStreamEntry::LightType::Point)
