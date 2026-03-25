@@ -127,6 +127,24 @@ public class Cloud {
         _native_cloud_setAmbientIntensity(value);
     }
 
+    // Silver lining intensity 0..2 (default: 0.5)
+    // Bright rim on cloud edges when looking toward the sun
+    public static function setSilverLiningIntensity(float value): void {
+        _native_cloud_setSilverLiningIntensity(value);
+    }
+
+    // Silver lining angular spread 1..20 (default: 5)
+    // Higher = narrower highlight toward the sun
+    public static function setSilverLiningSpread(float value): void {
+        _native_cloud_setSilverLiningSpread(value);
+    }
+
+    // Multi-scatter interior boost 0..2 (default: 0.5)
+    // Brightens thick cloud interiors to prevent unnaturally dark centers
+    public static function setMultiScatterBoost(float value): void {
+        _native_cloud_setMultiScatterBoost(value);
+    }
+
     // ============================================
     // Performance
     // ============================================

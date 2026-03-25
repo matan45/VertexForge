@@ -84,6 +84,11 @@ namespace windows
             isDirty |= ImGui::SliderFloat("Phase Backward (g2)", &settings.phaseBackward, -0.999f, 0.0f);
             isDirty |= ImGui::SliderFloat("Phase Blend", &settings.phaseBlend, 0.0f, 1.0f);
             isDirty |= ImGui::SliderFloat("Ambient Intensity", &settings.ambientIntensity, 0.0f, 2.0f);
+
+            ImGui::Separator();
+            isDirty |= ImGui::SliderFloat("Silver Lining Intensity", &settings.silverLiningIntensity, 0.0f, 2.0f);
+            isDirty |= ImGui::SliderFloat("Silver Lining Spread", &settings.silverLiningSpread, 1.0f, 20.0f);
+            isDirty |= ImGui::SliderFloat("Multi-Scatter Boost", &settings.multiScatterBoost, 0.0f, 2.0f);
         }
     }
 

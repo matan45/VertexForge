@@ -35,6 +35,11 @@ namespace render::cloud
         vk::DeviceMemory weatherMemory;
         vk::ImageView weatherView;
 
+        // Blue noise 2D (128x128, R8)
+        vk::Image blueNoiseImage;
+        vk::DeviceMemory blueNoiseMemory;
+        vk::ImageView blueNoiseView;
+
         // Shared sampler
         vk::Sampler noiseSampler;
 
@@ -64,6 +69,7 @@ namespace render::cloud
         void createSampler();
         void createNoiseGenPipeline();
         void createWeatherGenPipeline();
+        void createBlueNoiseTexture();
 
     public:
         explicit CloudNoise(core::Device& device);
@@ -84,6 +90,7 @@ namespace render::cloud
         [[nodiscard]] vk::ImageView getShapeView() const { return shapeView; }
         [[nodiscard]] vk::ImageView getDetailView() const { return detailView; }
         [[nodiscard]] vk::ImageView getWeatherView() const { return weatherView; }
+        [[nodiscard]] vk::ImageView getBlueNoiseView() const { return blueNoiseView; }
         [[nodiscard]] vk::Sampler getSampler() const { return noiseSampler; }
     };
 }

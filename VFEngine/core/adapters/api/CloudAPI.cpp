@@ -167,6 +167,29 @@ namespace core::api
                 { s.ambientIntensity = extractFloat(args[0]); });
             });
 
+        // ── Silver Lining ──
+
+        interpreter->registerNativeFunction("_native_cloud_setSilverLiningIntensity",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                return modifyCloud(dispatcher, [&](render::cloud::CloudSettings& s)
+                { s.silverLiningIntensity = extractFloat(args[0]); });
+            });
+
+        interpreter->registerNativeFunction("_native_cloud_setSilverLiningSpread",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                return modifyCloud(dispatcher, [&](render::cloud::CloudSettings& s)
+                { s.silverLiningSpread = extractFloat(args[0]); });
+            });
+
+        interpreter->registerNativeFunction("_native_cloud_setMultiScatterBoost",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                return modifyCloud(dispatcher, [&](render::cloud::CloudSettings& s)
+                { s.multiScatterBoost = extractFloat(args[0]); });
+            });
+
         // ── Performance ──
 
         interpreter->registerNativeFunction("_native_cloud_setTemporalBlend",

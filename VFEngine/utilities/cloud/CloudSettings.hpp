@@ -37,6 +37,13 @@ namespace render::cloud
         float phaseBlend = 0.5f;
         float ambientIntensity = 0.8f;
 
+        // Silver lining (bright rim when looking toward sun through thin cloud edges)
+        float silverLiningIntensity = 0.5f;  // [0, 2]
+        float silverLiningSpread = 5.0f;     // [1, 20] exponent for angular falloff
+
+        // Multi-scattering interior boost
+        float multiScatterBoost = 0.5f;      // [0, 2]
+
         // Performance
         float temporalBlendFactor = 0.8f;
         uint32_t maxMarchSteps = 96;

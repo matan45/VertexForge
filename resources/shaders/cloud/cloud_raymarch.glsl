@@ -28,7 +28,10 @@ layout(set = 0, binding = 5) uniform CloudParams {
     vec4 atmosphereParams;  // x=planetRadius, y=atmosphereRadius
     vec4 marchParams;       // x=maxSteps, y=lightSteps
     vec4 cloudColorTint;    // xyz=tint RGB
+    vec4 lightParams2;      // x=silverLiningIntensity, y=silverLiningSpread, z=multiScatterBoost, w=0
 } params;
+
+layout(set = 0, binding = 6) uniform sampler2D blueNoiseTex;
 
 #include "cloud_common.glsl"
 
@@ -134,6 +137,16 @@ float sampleCloudDensity(vec3 worldPos, float heightFrac, bool detailPass)
         // Erode edges (stronger at top of cloud)
         float erosionAmount = mix(0.2, 0.6, clamp(heightFrac, 0.0, 1.0)) * params.cloudShaping.z;
         density = max(density - detailFBM * erosionAmount, 0.0);
+
+        // Extra detail octave at close range for wispy edges
+        float cameraDist = length(worldPos - params.cameraPosition.xyz);
+        if (cameraDist < 5000.0)
+        {
+            vec3 fineUV = (samplePos + curlOffset * 0.5) * params.cloudShaping.y * 2.0;
+            float fineDetail = texture(detailNoiseTex, fineUV).a;
+            float closeBlend = 1.0 - smoothstep(2000.0, 5000.0, cameraDist);
+            density = max(density - fineDetail * erosionAmount * 0.3 * closeBlend, 0.0);
+        }
     }
 
     return density * params.cloudDensity.x;
@@ -288,6 +301,11 @@ void main()
     bool inCloud = false;
     int zeroCount = 0;
 
+    // Blue noise dithering to break banding artifacts
+    vec2 blueNoiseUV = (vec2(texel) + vec2(frameIndex % 8, frameIndex / 8 % 8) * 17.0) / 128.0;
+    float blueNoise = texture(blueNoiseTex, blueNoiseUV).r;
+    t += blueNoise * fineStep;
+
     for (int i = 0; i < maxSteps && t < marchEnd; ++i)
     {
         vec3 samplePos = rayOrigin + rayDir * t;
@@ -329,6 +347,11 @@ void main()
                 msEccentricity *= 0.5; // each bounce becomes more isotropic
             }
 
+            // Interior boost: brightens deeply embedded cloud samples
+            float depthInCloud = density * absorption * 500.0;
+            float interiorBoost = (1.0 - exp(-depthInCloud)) * params.lightParams2.z;
+            multiScatterLight += vec3(interiorBoost * 0.15);
+
             // Sample atmosphere transmittance for sun at this altitude
             float cosZenith = dot(normalize(samplePos - planetCenter), sunDir);
             vec3 sunTransmittance = vec3(1.0);
@@ -343,6 +366,14 @@ void main()
             // Sun illumination with multi-scattering
             vec3 sunColor = params.lightColor.xyz * 6.0;
             vec3 directSun = sunColor * sunTransmittance * multiScatterLight;
+
+            // Silver lining: bright rim when looking toward sun through thin cloud edges
+            if (params.lightParams2.x > 0.01)
+            {
+                float edgeFactor = exp(-lightDensity * absorption * 0.5);
+                float silverPhase = pow(max(cosTheta, 0.0), params.lightParams2.y);
+                directSun += sunColor * sunTransmittance * edgeFactor * silverPhase * params.lightParams2.x;
+            }
 
             // Ambient: sky light from all directions
             // Brighter at cloud tops, darker/bluer at bases
