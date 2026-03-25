@@ -176,6 +176,7 @@ namespace serialization
                 {"intensity", s.intensity},
                 {"ambientIntensity", s.ambientIntensity},
                 {"maxDistance", s.maxDistance},
+                {"giInjectionIntensity", s.giInjectionIntensity},
                 {"noiseEnabled", s.noiseEnabled},
                 {"noiseScale", s.noiseScale},
                 {"noiseIntensity", s.noiseIntensity},
@@ -358,6 +359,8 @@ namespace serialization
                 s.ambientIntensity = std::clamp(vf["ambientIntensity"].get<float>(), 0.0f, 2.0f);
             if (vf.contains("maxDistance") && vf["maxDistance"].is_number())
                 s.maxDistance = std::clamp(vf["maxDistance"].get<float>(), 10.0f, 5000.0f);
+            if (vf.contains("giInjectionIntensity") && vf["giInjectionIntensity"].is_number())
+                s.giInjectionIntensity = std::clamp(vf["giInjectionIntensity"].get<float>(), 0.0f, 5.0f);
             if (vf.contains("noiseEnabled") && vf["noiseEnabled"].is_boolean())
                 s.noiseEnabled = vf["noiseEnabled"].get<bool>();
             if (vf.contains("noiseScale") && vf["noiseScale"].is_number())

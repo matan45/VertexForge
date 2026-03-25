@@ -123,6 +123,9 @@ namespace postprocess
         float ambientIntensity = 0.15f;
         float maxDistance = 500.0f;
 
+        // GI injection
+        float giInjectionIntensity = 1.0f;
+
         // Noise/turbulence modulation
         bool noiseEnabled = false;
         float noiseScale = 0.01f;

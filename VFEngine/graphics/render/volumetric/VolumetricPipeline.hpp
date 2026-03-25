@@ -46,7 +46,8 @@ namespace render::volumetric
                   vk::DescriptorSetLayout lightCullingLayout,
                   vk::DescriptorSetLayout shadowDataLayout,
                   vk::DescriptorSetLayout shadowTextureLayout,
-                  vk::DescriptorSetLayout fogVolumeLayout);
+                  vk::DescriptorSetLayout fogVolumeLayout,
+                  vk::DescriptorSetLayout giSamplingLayout);
         void cleanup();
         void recreate(VolumetricQuality quality,
                       vk::DescriptorSetLayout clusterGridLayout,
@@ -54,7 +55,8 @@ namespace render::volumetric
                       vk::DescriptorSetLayout lightCullingLayout,
                       vk::DescriptorSetLayout shadowDataLayout,
                       vk::DescriptorSetLayout shadowTextureLayout,
-                      vk::DescriptorSetLayout fogVolumeLayout);
+                      vk::DescriptorSetLayout fogVolumeLayout,
+                      vk::DescriptorSetLayout giSamplingLayout);
 
         void update(const glm::mat4& viewProj, const glm::mat4& invViewProj,
                     const glm::vec3& cameraPos, float nearPlane, float farPlane,
@@ -66,7 +68,8 @@ namespace render::volumetric
                       vk::DescriptorSet lightCullingDescSet,
                       vk::DescriptorSet shadowDataDescSet,
                       vk::DescriptorSet shadowTextureDescSet,
-                      vk::DescriptorSet fogVolumeDescSet);
+                      vk::DescriptorSet fogVolumeDescSet,
+                      vk::DescriptorSet giSamplingDescSet);
 
         void setEnabled(bool value) { enabled = value; }
         [[nodiscard]] bool isEnabled() const { return enabled && initialized; }

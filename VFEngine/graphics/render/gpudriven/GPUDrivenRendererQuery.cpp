@@ -206,7 +206,10 @@ namespace render::gpudriven
             lightCullingPipeline->getDescriptorSetLayout(),
             shadowSystem ? shadowSystem->getShadowDataLayout() : vk::DescriptorSetLayout{},
             shadowSystem ? shadowSystem->getShadowTextureLayout() : vk::DescriptorSetLayout{},
-            fogVolumeBufferManager->getDescriptorSetLayout());
+            fogVolumeBufferManager->getDescriptorSetLayout(),
+            (giCascadeManager && giCascadeManager->getProbeStorage())
+                ? giCascadeManager->getProbeStorage()->getSamplingLayout()
+                : vk::DescriptorSetLayout{});
 
     }
 

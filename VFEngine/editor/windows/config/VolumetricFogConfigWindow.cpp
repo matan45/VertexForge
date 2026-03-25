@@ -222,6 +222,15 @@ namespace windows
             ImGui::SetTooltip("Amount of ambient light contribution to the fog.\nPrevents fog from being completely black in shadows.");
         }
 
+        if (ImGui::DragFloat("GI Injection", &settings.giInjectionIntensity, 0.01f, 0.0f, 5.0f, "%.2f"))
+        {
+            isDirty = true;
+        }
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip("GI probe light injection into fog.\nRequires GI system to be active.\n0 = flat ambient only.");
+        }
+
         if (ImGui::SliderFloat("Temporal Blend", &settings.temporalBlendFactor, 0.0f, 1.0f, "%.2f"))
         {
             isDirty = true;

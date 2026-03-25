@@ -183,18 +183,18 @@ namespace render::gi
             cascadeInfoLayout = vkDevice.createDescriptorSetLayout(layoutInfo);
         }
 
-        // Sampling layout for fragment shaders: binding 0 = probe read SSBO, binding 1 = cascade SSBO
+        // Sampling layout for fragment/compute shaders: binding 0 = probe read SSBO, binding 1 = cascade SSBO
         {
             std::array<vk::DescriptorSetLayoutBinding, 2> bindings{};
             bindings[0].binding = 0;
             bindings[0].descriptorType = vk::DescriptorType::eStorageBuffer;
             bindings[0].descriptorCount = 1;
-            bindings[0].stageFlags = vk::ShaderStageFlagBits::eFragment;
+            bindings[0].stageFlags = vk::ShaderStageFlagBits::eFragment | vk::ShaderStageFlagBits::eCompute;
 
             bindings[1].binding = 1;
             bindings[1].descriptorType = vk::DescriptorType::eStorageBuffer;
             bindings[1].descriptorCount = 1;
-            bindings[1].stageFlags = vk::ShaderStageFlagBits::eFragment;
+            bindings[1].stageFlags = vk::ShaderStageFlagBits::eFragment | vk::ShaderStageFlagBits::eCompute;
 
             vk::DescriptorSetLayoutCreateInfo layoutInfo{};
             layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());

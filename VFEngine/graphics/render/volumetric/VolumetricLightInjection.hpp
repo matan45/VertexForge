@@ -30,6 +30,7 @@ namespace render::volumetric
         vk::DescriptorSetLayout shadowDataLayout;        // Set 4
         vk::DescriptorSetLayout shadowTextureLayout;     // Set 5
         vk::DescriptorSetLayout fogVolumeLayout;          // Set 6
+        vk::DescriptorSetLayout giSamplingLayout;           // Set 7
 
         VolumetricGridDimensions dims{};
         bool initialized = false;
@@ -48,7 +49,8 @@ namespace render::volumetric
                   vk::DescriptorSetLayout lightCullingDescLayout,
                   vk::DescriptorSetLayout shadowDataDescLayout,
                   vk::DescriptorSetLayout shadowTextureDescLayout,
-                  vk::DescriptorSetLayout fogVolumeDescLayout);
+                  vk::DescriptorSetLayout fogVolumeDescLayout,
+                  vk::DescriptorSetLayout giSamplingDescLayout);
         void cleanup();
 
         void dispatch(vk::CommandBuffer cmd,
@@ -59,6 +61,7 @@ namespace render::volumetric
                       vk::DescriptorSet shadowDataDescSet,
                       vk::DescriptorSet shadowTextureDescSet,
                       vk::DescriptorSet fogVolumeDescSet,
+                      vk::DescriptorSet giSamplingDescSet,
                       uint32_t frameIndex);
 
         [[nodiscard]] bool isInitialized() const { return initialized; }

@@ -26,7 +26,8 @@ namespace render::volumetric
         vk::DescriptorSetLayout lightCullingLayout,
         vk::DescriptorSetLayout shadowDataLayout,
         vk::DescriptorSetLayout shadowTextureLayout,
-        vk::DescriptorSetLayout fogVolumeLayout)
+        vk::DescriptorSetLayout fogVolumeLayout,
+        vk::DescriptorSetLayout giSamplingLayout)
     {
         if (initialized)
         {
@@ -42,7 +43,7 @@ namespace render::volumetric
 
         lightInjection = std::make_unique<VolumetricLightInjection>(device);
         lightInjection->init(dims, gridDescLayout, clusterGridLayout, lightBufferLayout, lightCullingLayout,
-                             shadowDataLayout, shadowTextureLayout, fogVolumeLayout);
+                             shadowDataLayout, shadowTextureLayout, fogVolumeLayout, giSamplingLayout);
 
         temporalFilter = std::make_unique<VolumetricTemporalFilter>(device);
         temporalFilter->init(dims, gridDescLayout);
@@ -96,11 +97,12 @@ namespace render::volumetric
         vk::DescriptorSetLayout lightCullingLayout,
         vk::DescriptorSetLayout shadowDataLayout,
         vk::DescriptorSetLayout shadowTextureLayout,
-        vk::DescriptorSetLayout fogVolumeLayout)
+        vk::DescriptorSetLayout fogVolumeLayout,
+        vk::DescriptorSetLayout giSamplingLayout)
     {
         cleanup();
         init(quality, clusterGridLayout, lightBufferLayout, lightCullingLayout,
-             shadowDataLayout, shadowTextureLayout, fogVolumeLayout);
+             shadowDataLayout, shadowTextureLayout, fogVolumeLayout, giSamplingLayout);
     }
 
     void VolumetricPipeline::update(
@@ -137,7 +139,7 @@ namespace render::volumetric
             settings.ambientIntensity,
             settings.temporalBlendFactor,
             static_cast<float>(frameIndex),
-            0.0f);
+            settings.giInjectionIntensity);
         params.cameraPosition = glm::vec4(cameraPos, 0.0f);
 
         elapsedTime += 1.0f / 60.0f;
@@ -162,7 +164,8 @@ namespace render::volumetric
         vk::DescriptorSet lightCullingDescSet,
         vk::DescriptorSet shadowDataDescSet,
         vk::DescriptorSet shadowTextureDescSet,
-        vk::DescriptorSet fogVolumeDescSet)
+        vk::DescriptorSet fogVolumeDescSet,
+        vk::DescriptorSet giSamplingDescSet)
     {
         if (!initialized || !enabled)
             return;
@@ -186,11 +189,11 @@ namespace render::volumetric
                 0, nullptr);
         }
 
-        // Pass 1: Light Injection (with shadow sampling + fog volumes)
+        // Pass 1: Light Injection (with shadow sampling + fog volumes + GI)
         lightInjection->dispatch(cmd, gridDescSet, clusterGridDescSet,
                                  lightBufferDescSet, lightCullingDescSet,
                                  shadowDataDescSet, shadowTextureDescSet,
-                                 fogVolumeDescSet, frameIndex);
+                                 fogVolumeDescSet, giSamplingDescSet, frameIndex);
 
         // Barrier: injection write -> temporal read
         {

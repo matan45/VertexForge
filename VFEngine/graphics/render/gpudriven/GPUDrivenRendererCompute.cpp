@@ -219,7 +219,10 @@ namespace render::gpudriven
                                      lightCullingPipeline->getDescriptorSet(),
                                      shadowSystem ? shadowSystem->getShadowDataDescSet() : vk::DescriptorSet{},
                                      shadowSystem ? shadowSystem->getShadowTextureDescSet() : vk::DescriptorSet{},
-                                     fogVolumeBufferManager ? fogVolumeBufferManager->getDescriptorSet() : vk::DescriptorSet{});
+                                     fogVolumeBufferManager ? fogVolumeBufferManager->getDescriptorSet() : vk::DescriptorSet{},
+                                     (giCascadeManager && giCascadeManager->getProbeStorage())
+                                         ? giCascadeManager->getProbeStorage()->getSamplingDescSet()
+                                         : vk::DescriptorSet{});
     }
 
     void GPUDrivenRenderer::initLightStreaming(const lighting::LightStreamingConfig& config)
