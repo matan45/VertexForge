@@ -423,15 +423,17 @@ namespace render::shadow
         if (pgUpdate.pageShift.x == 0 && pgUpdate.pageShift.y == 0 && !isFirstFrame)
             return; // No page boundary crossed — all cached pages remain valid
 
-        // Teleport or first frame: full invalidation
+        // Any page-grid shift invalidates ALL pages in this level because the
+        // lookup VP matches the render VP — stale pages have depth from old VP
+        for (uint32_t p = 0; p < pps * pps; ++p)
+        {
+            uint32_t pageIdx = basePageIdx + p;
+            if (pageIdx < data.vsmPageDirty.size())
+                data.vsmPageDirty[pageIdx] = true;
+        }
+
         if (pgUpdate.fullInvalidation || isFirstFrame)
         {
-            for (uint32_t p = 0; p < pps * pps; ++p)
-            {
-                uint32_t pageIdx = basePageIdx + p;
-                if (pageIdx < data.vsmPageDirty.size())
-                    data.vsmPageDirty[pageIdx] = true;
-            }
             data.clipmapScrollOffset[level] = glm::ivec2(0);
             return;
         }
