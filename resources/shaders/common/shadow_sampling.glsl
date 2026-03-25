@@ -9,12 +9,9 @@
 //   Sampler declarations for:
 //     sampler2DShadow  physicalPoolShadow    (binding 0)
 //     sampler2D        physicalPoolDepth     (binding 1)
-//     samplerCubeShadow shadowCubes[]        (binding 2)
-//     samplerCube shadowCubesDepth[]         (binding 3)
 // ============================================================
 
 const int MAX_SHADOW_VIEWS = 272;
-const int MAX_POINT_SHADOW_CUBES = 32;
 
 // VSM Constants
 const uint PAGE_SIZE = 128u;
@@ -55,7 +52,7 @@ vec2 vsmLookupPhysicalUV(ShadowData sd, vec2 uv, out bool valid) {
         uv -= uvOffset;
     }
 
-    // Clamp UV to valid range (matches old atlas clamping behavior)
+    // Clamp UV to valid range
     uv = clamp(uv, vec2(0.0), vec2(0.999));
 
     ivec2 pageCoord = ivec2(uv * vec2(sd.pageTableInfo.xy));
@@ -120,33 +117,6 @@ vec2 blockerSearchVSM(ShadowData sd, vec2 uv, float receiverDepth, float searchR
 }
 
 // ============================================================
-// PCSS Blocker Search - Cubemap
-// ============================================================
-vec2 blockerSearchCube(int cubeMapIndex, vec3 sampleDir, float receiverDepth,
-                       float searchRadius, vec3 tangent, vec3 bitangent) {
-    float biasedReceiverDepth = receiverDepth - 0.002;
-    float blockerSum = 0.0;
-    int blockerCount = 0;
-
-    for (int i = 0; i < PCSS_SAMPLE_COUNT; ++i) {
-        vec3 offset = tangent * poissonDisk[i].x * searchRadius +
-                      bitangent * poissonDisk[i].y * searchRadius;
-        vec3 offsetDir = normalize(sampleDir + offset);
-
-        float depth = texture(shadowCubesDepth[nonuniformEXT(cubeMapIndex)], offsetDir).r;
-        if (depth < biasedReceiverDepth) {
-            blockerSum += depth;
-            blockerCount++;
-        }
-    }
-
-    if (blockerCount == 0)
-        return vec2(-1.0, 0.0);
-
-    return vec2(blockerSum / float(blockerCount), float(blockerCount));
-}
-
-// ============================================================
 // Penumbra Estimation
 // ============================================================
 float estimatePenumbra(float receiverDepth, float avgBlockerDepth, float lightSize) {
@@ -186,24 +156,6 @@ float pcssFilterVSM(ShadowData sd, vec2 uv, float receiverDepth, float penumbraW
     }
 
     return validSamples > 0 ? shadow / float(validSamples) : 1.0;
-}
-
-// ============================================================
-// PCSS Filter - Cubemap
-// ============================================================
-float pcssFilterCube(int cubeMapIndex, vec3 sampleDir, float perspectiveDepth,
-                     float penumbraWidth, vec3 tangent, vec3 bitangent) {
-    float filterRadius = max(penumbraWidth * 0.01, 0.001);
-    float shadow = 0.0;
-
-    for (int i = 0; i < PCSS_SAMPLE_COUNT; ++i) {
-        vec3 offset = tangent * poissonDisk[i].x * filterRadius +
-                      bitangent * poissonDisk[i].y * filterRadius;
-        vec3 offsetDir = normalize(sampleDir + offset);
-        shadow += texture(shadowCubes[nonuniformEXT(cubeMapIndex)], vec4(offsetDir, perspectiveDepth));
-    }
-
-    return shadow / float(PCSS_SAMPLE_COUNT);
 }
 
 // ============================================================
@@ -381,53 +333,30 @@ float sampleDirectionalShadowAuto(int baseShadowIndex, int shadowMode, vec3 worl
 }
 
 // ============================================================
-// Point Light Shadow (Cubemap PCSS - unchanged)
+// Point Light Shadow (VSM page-based, 6 faces)
 // ============================================================
-float samplePointShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal, vec3 lightPos, float lightRadius) {
-    if (shadowIndex < 0 || shadowIndex >= MAX_SHADOW_VIEWS) return 1.0;
+float samplePointShadow(int baseShadowIndex, vec3 worldPos, vec3 worldNormal, vec3 lightPos, float lightRadius) {
+    if (baseShadowIndex < 0 || baseShadowIndex + 5 >= MAX_SHADOW_VIEWS) return 1.0;
 
-    ShadowData sd = SHADOW_BUFFER[shadowIndex];
-
-    int cubeMapIndex = int(sd.pcssParams.w);
-    if (cubeMapIndex < 0 || cubeMapIndex >= MAX_POINT_SHADOW_CUBES) return 1.0;
-
-    float near = sd.rangeParams.x;
-    float far = sd.rangeParams.y;
+    // Determine which cube face to sample based on dominant axis
     vec3 lightToFrag = worldPos - lightPos;
-    float linearDepth = length(lightToFrag);
+    float dist = length(lightToFrag);
 
-    if (linearDepth >= far) return 1.0;
+    ShadowData sd0 = SHADOW_BUFFER[baseShadowIndex];
+    float far = sd0.rangeParams.y;
+    if (dist >= far) return 1.0;
 
-    vec3 biasedPos = worldPos + worldNormal * sd.biasParams.z;
-    lightToFrag = biasedPos - lightPos;
-    linearDepth = length(lightToFrag);
-    vec3 sampleDir = normalize(lightToFrag);
+    vec3 absDir = abs(lightToFrag);
+    int faceIndex;
+    if (absDir.x >= absDir.y && absDir.x >= absDir.z)
+        faceIndex = (lightToFrag.x > 0.0) ? 0 : 1;
+    else if (absDir.y >= absDir.x && absDir.y >= absDir.z)
+        faceIndex = (lightToFrag.y > 0.0) ? 2 : 3;
+    else
+        faceIndex = (lightToFrag.z > 0.0) ? 4 : 5;
 
-    float majorComponent = max(abs(sampleDir.x), max(abs(sampleDir.y), abs(sampleDir.z)));
-    float viewSpaceZ = linearDepth * majorComponent;
-    float perspectiveDepth = (far * (viewSpaceZ - near)) / (viewSpaceZ * (far - near));
-
-    bool filterEnabled = sd.pcssParams.z > 0.5;
-    if (!filterEnabled) {
-        return texture(shadowCubes[nonuniformEXT(cubeMapIndex)], vec4(sampleDir, perspectiveDepth));
-    }
-
-    // Build tangent frame
-    vec3 tangent = abs(sampleDir.x) < 0.9 ? vec3(1.0, 0.0, 0.0) : vec3(0.0, 1.0, 0.0);
-    vec3 bitangent = normalize(cross(sampleDir, tangent));
-    tangent = normalize(cross(bitangent, sampleDir));
-
-    // PCSS
-    float lightSize = sd.pcssParams.x;
-    float searchRadius = sd.pcssParams.y;
-    vec2 blockerResult = blockerSearchCube(cubeMapIndex, sampleDir, perspectiveDepth,
-                                           searchRadius, tangent, bitangent);
-
-    if (blockerResult.x < 0.0) return 1.0;
-    if (blockerResult.y >= float(PCSS_SAMPLE_COUNT)) return 0.0;
-
-    float penumbra = estimatePenumbra(perspectiveDepth, blockerResult.x, lightSize);
-    return pcssFilterCube(cubeMapIndex, sampleDir, perspectiveDepth, penumbra, tangent, bitangent);
+    int shadowIndex = baseShadowIndex + faceIndex;
+    return sampleVSMShadow(shadowIndex, worldPos, worldNormal);
 }
 
 #endif // SHADOW_SAMPLING_GLSL

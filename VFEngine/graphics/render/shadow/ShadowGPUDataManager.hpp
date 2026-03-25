@@ -16,7 +16,6 @@ namespace core
 namespace render::shadow
 {
     class VSMPhysicalTilePool;
-    class ShadowResourcePool;
 
     class ShadowGPUDataManager
     {
@@ -70,16 +69,12 @@ namespace render::shadow
             const std::vector<ShadowView>& directionalViews,
             const std::vector<ShadowView>& pointViews,
             const std::vector<ShadowView>& spotViews,
-            const std::unordered_map<uint32_t, LightShadowData>& lightShadowData,
-            const std::unordered_map<uint32_t, uint32_t>& entityToCubeIndex);
+            const std::unordered_map<uint32_t, LightShadowData>& lightShadowData);
 
         void uploadToGPU(vk::CommandBuffer cmd);
         void advanceStagingFrame() { currentStagingFrame = (currentStagingFrame + 1) % core::MAX_FRAMES_IN_FLIGHT; }
 
-        void updateShadowTextureDescriptor(
-            VSMPhysicalTilePool* tilePool,
-            ShadowResourcePool* resourcePool,
-            const std::unordered_map<uint32_t, LightShadowData>& lightShadowData);
+        void updateShadowTextureDescriptor(VSMPhysicalTilePool* tilePool);
 
         [[nodiscard]] vk::DescriptorSetLayout getShadowDataLayout() const { return shadowDataLayout; }
         [[nodiscard]] vk::DescriptorSet getShadowDataDescSet() const { return shadowDataDescSet; }

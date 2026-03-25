@@ -225,7 +225,6 @@ namespace controllers
             switch (info.type)
             {
                 case render::shadow::ShadowMapType::DirectionalCSM:
-                case render::shadow::ShadowMapType::Directional2D:
                     renderData.type = render::mesh::ShadowFrustumType::DirectionalCascade;
                     renderData.cascadeIndex = info.cascadeIndex;
                     renderData.inverseViewProjection = glm::inverse(info.viewProjectionMatrix);

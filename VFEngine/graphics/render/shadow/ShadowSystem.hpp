@@ -5,7 +5,6 @@
 #include "ClipmapShadowCalculator.hpp"
 #include "VSMPhysicalTilePool.hpp"
 #include "VSMPageTable.hpp"
-#include "ShadowResourcePool.hpp"
 #include "ShadowPassPipeline.hpp"
 #include "ShadowGPUDataManager.hpp"
 #include "ShadowPassRecorder.hpp"
@@ -43,7 +42,6 @@ namespace render
 
             std::unique_ptr<VSMPhysicalTilePool> tilePool;
             std::unique_ptr<VSMPageTable> pageTable;
-            std::unique_ptr<ShadowResourcePool> resourcePool;
             std::unique_ptr<ShadowPassPipeline> shadowPassPipeline;
             std::unique_ptr<TerrainShadowPipeline> terrainShadowPipeline;
             std::unique_ptr<ShadowGPUDataManager> gpuDataManager;
@@ -211,10 +209,39 @@ namespace render
             void readBackFeedback();
             [[nodiscard]] bool isFeedbackEnabled() const { return feedbackEnabled && initialized; }
 
+            struct PageDimensions
+            {
+                uint32_t x = 0;
+                uint32_t y = 0;
+                bool valid = false;
+            };
+
         private:
             void applyFeedbackAllocations();
             bool allocateVSMPages(LightShadowData& data);
             void freeVSMPages(LightShadowData& data);
+
+            // Per-type VSM page allocation helpers
+            PageDimensions allocateCSMPages(LightShadowData& data);
+            PageDimensions allocateClipmapPages(LightShadowData& data);
+            PageDimensions allocateSpotPages(LightShadowData& data, uint32_t maxPages);
+            PageDimensions allocatePointPages(LightShadowData& data, uint32_t maxPages);
+            bool allocatePhysicalTiles(LightShadowData& data, uint32_t pagesX, uint32_t pagesY);
+
+            // Debug info helpers
+            void addDirectionalDebugInfos(std::vector<ShadowDebugInfo>& infos) const;
+            void addSingleViewDebugInfo(std::vector<ShadowDebugInfo>& infos, ShadowMapType type) const;
+
+            // beginFrame helpers
+            struct PointLightRef { LightShadowData* data; glm::mat4 worldMatrix; float radius; };
+            struct SpotLightRef { LightShadowData* data; glm::mat4 worldMatrix; float outerAngle; float range; };
+            struct DirLightRef { LightShadowData* data; glm::mat4 worldMatrix; };
+
+            void classifyLightsForUpdate(
+                std::vector<PointLightRef>& pointLights,
+                std::vector<SpotLightRef>& spotLights,
+                std::vector<DirLightRef>& directionalLights);
+            void updateShadowCacheAfterRender();
 
             void updatePointCubeShadowMatrices(LightShadowData& data, uint32_t entityId);
             void updatePointCubeShadowMatricesFromData(LightShadowData& data,
@@ -231,14 +258,25 @@ namespace render
             void updateDirectionalClipmapMatricesFromData(LightShadowData& data,
                                                            const glm::mat4& worldMatrix,
                                                            const CameraContext& camera);
+            void updateClipmapLevelMatrices(LightShadowData& data, uint32_t level,
+                                             const glm::vec3& cameraWorldPos,
+                                             const glm::vec3& lightDirection,
+                                             float lightSpaceZ);
             void updateClipmapDirtyFlags(LightShadowData& data, uint32_t level,
                                           const ClipmapLevelData& levelData);
+            static void markExposedScrollPages(std::vector<bool>& pageDirty,
+                                               uint32_t basePageIdx, uint32_t pps,
+                                               const glm::ivec2& scroll,
+                                               const glm::ivec2& pageShift);
             void collectShadowViewsForGPU(const std::unordered_set<uint32_t>* visibleLightIds);
             void buildPageRenderList();
             void determineDynamicPages();
             void buildCSMPageRenderList(LightShadowData& data);
+            void remapClipmapPageTable(LightShadowData& data, uint32_t basePageIdx,
+                                       uint32_t pagesPerSide, const glm::ivec2& scroll);
             void buildClipmapPageRenderList(LightShadowData& data);
             void buildSingleViewPageRenderList(LightShadowData& data);
+            void buildPointPageRenderList(LightShadowData& data);
             void addPageToRenderLists(LightShadowData& data, uint32_t pageIdx,
                                       const glm::mat4& cropViewProjection,
                                       const ShadowView& view, bool isDirty);
@@ -250,6 +288,13 @@ namespace render
                                    bool isDirty, bool forceRender);
             void allocateDynamicTile(LightShadowData& data, uint32_t pageIdx);
             void freeDynamicTileIfExpired(LightShadowData& data, uint32_t pageIdx, uint32_t physTile);
+            void handleDirectionalModeSwitch(LightShadowData& data,
+                                              const types::ShadowSettings& shadowSettings,
+                                              types::DirectionalShadowMode newMode);
+            void updateDirectionalSettings(LightShadowData& data,
+                                            const types::ShadowSettings& shadowSettings,
+                                            bool modeChanged,
+                                            types::DirectionalShadowMode newMode);
             void allocateNonStaticLightPages(LightShadowData& data);
             void allocateStaticLightPages(LightShadowData& data, bool allowEviction);
         };

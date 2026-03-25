@@ -57,6 +57,21 @@ namespace render::shadow
         return splits;
     }
 
+    std::array<glm::vec3, 8> CascadeShadowCalculator::interpolateSubFrustum(
+        const SubFrustumParams& params)
+    {
+        std::array<glm::vec3, 8> subFrustumCorners;
+        for (int i = 0; i < 4; ++i)
+        {
+            glm::vec3 nearCorner = params.worldCorners[i];
+            glm::vec3 farCorner = params.worldCorners[i + 4];
+
+            subFrustumCorners[i] = glm::mix(nearCorner, farCorner, params.tNear);
+            subFrustumCorners[i + 4] = glm::mix(nearCorner, farCorner, params.tFar);
+        }
+        return subFrustumCorners;
+    }
+
     std::array<glm::vec3, 8> CascadeShadowCalculator::getFrustumCornersWorldSpace(
         const glm::mat4& cameraView,
         const glm::mat4& cameraProjection,
@@ -100,40 +115,11 @@ namespace render::shadow
         tNear = std::clamp(tNear, 0.0f, 1.0f);
         tFar = std::clamp(tFar, 0.0f, 1.0f);
 
-        std::array<glm::vec3, 8> subFrustumCorners;
-        for (int i = 0; i < 4; ++i)
-        {
-            glm::vec3 nearCorner = worldCorners[i];
-            glm::vec3 farCorner = worldCorners[i + 4];
-
-            subFrustumCorners[i] = glm::mix(nearCorner, farCorner, tNear);
-            subFrustumCorners[i + 4] = glm::mix(nearCorner, farCorner, tFar);
-        }
-
-        return subFrustumCorners;
+        return interpolateSubFrustum({worldCorners, tNear, tFar});
     }
 
-    CascadeData CascadeShadowCalculator::computeCascadeMatrix(
-        const std::array<glm::vec3, 8>& frustumCorners,
-        const glm::vec3& lightDirection,
-        uint32_t shadowMapResolution)
+    float CascadeShadowCalculator::quantizeRadius(float radius)
     {
-        CascadeData result{};
-
-        // Step 1: Compute frustum center
-        glm::vec3 frustumCenter{0.0f};
-        for (const auto& corner : frustumCorners)
-            frustumCenter += corner;
-        frustumCenter /= 8.0f;
-
-        // Step 2: Compute bounding sphere radius for rotation-invariant bounds
-        float radius = 0.0f;
-        for (const auto& corner : frustumCorners)
-        {
-            float dist = glm::length(corner - frustumCenter);
-            radius = std::max(radius, dist);
-        }
-
         // Quantize radius to LARGE steps for temporal stability
         // Using power-of-2 buckets ensures radius only changes when cascade size roughly doubles
         // This prevents "breathing" from small floating-point variations
@@ -143,71 +129,36 @@ namespace render::shadow
             // Round up to nearest 0.5 in log space (i.e., sqrt(2) multiplier buckets)
             // This gives ~41% size increments, which is coarse enough to be stable
             float quantizedLog = std::ceil(log2Radius * 2.0f) / 2.0f;
-            radius = std::pow(2.0f, quantizedLog);
+            return std::pow(2.0f, quantizedLog);
         }
-        else
-        {
-            radius = 1.0f;  // Fallback for degenerate cases
-        }
+        return 1.0f;  // Fallback for degenerate cases
+    }
 
-        auto axes = LightSpaceAxes::fromDirection(lightDirection);
-        const auto& lightDir = axes.lightDir;
-        const auto& lightRight = axes.lightRight;
-        const auto& lightUp = axes.lightUp;
-
-        // Step 4: Compute stable extent and texel size
-        // The ortho projection uses stableExtent (with margin), so texelSize MUST match
-        // what the projection actually maps — otherwise snapping and projection are misaligned.
-        float stableExtent = radius * 1.1f;
-        float stableTexelSize = (2.0f * stableExtent) / static_cast<float>(shadowMapResolution);
-        result.texelSize = stableTexelSize;
-
-        // Step 5: SNAP frustum center to WORLD-ANCHORED grid in light space
-        float lightSpaceX = glm::dot(frustumCenter, lightRight);
-        float lightSpaceY = glm::dot(frustumCenter, lightUp);
-        float lightSpaceZ = glm::dot(frustumCenter, lightDir);
-
-        // Snap to exact texel size. The radius is already quantized to sqrt(2) buckets,
-        // which keeps stableTexelSize stable. No further quantization on snap grid needed.
-        float snapGridSize = stableTexelSize;
-
-        // Snap X and Y to the stable grid
-        float snappedX = snapToTexel(lightSpaceX, snapGridSize);
-        float snappedY = snapToTexel(lightSpaceY, snapGridSize);
-
-        // Step 6: Reconstruct snapped position in world space
-        glm::vec3 snappedFrustumCenter = snappedX * lightRight +
-                                          snappedY * lightUp +
-                                          lightSpaceZ * lightDir;
-
-        // Step 7: Build view matrix with snapped center
-        glm::vec3 lightPos = snappedFrustumCenter - lightDir * radius;
-        result.viewMatrix = glm::lookAt(lightPos, snappedFrustumCenter, lightUp);
-
-        // Step 8: Compute Z bounds for depth range
+    ZBoundsResult CascadeShadowCalculator::computeZBounds(
+        const glm::mat4& viewMatrix,
+        const std::array<glm::vec3, 8>& frustumCorners,
+        float radius)
+    {
         float minZ = std::numeric_limits<float>::max();
         float maxZ = std::numeric_limits<float>::lowest();
         for (const auto& corner : frustumCorners)
         {
-            glm::vec3 lightSpaceCorner = glm::vec3(result.viewMatrix * glm::vec4(corner, 1.0f));
+            glm::vec3 lightSpaceCorner = glm::vec3(viewMatrix * glm::vec4(corner, 1.0f));
             minZ = std::min(minZ, lightSpaceCorner.z);
             maxZ = std::max(maxZ, lightSpaceCorner.z);
         }
 
-        // Step 9: Use SPHERE-BASED stable XY bounds (stableExtent computed in Step 4)
-
-        // Step 10: Stabilize Z range to prevent depth precision shifts during movement
-        // Quantize Z bounds to reduce frame-to-frame variation
+        // Stabilize Z range to prevent depth precision shifts during movement
         float zRange = maxZ - minZ;
         // Extend Z far behind the camera frustum to capture shadow casters that
-        // are between the light source and the visible scene. 3× the frustum depth
+        // are between the light source and the visible scene. 3x the frustum depth
         // and a minimum of 800 units prevents shadows from disappearing when the
         // camera views objects from the opposite side of the light direction.
         float zExtension = std::max(zRange * 3.0f, 800.0f);
 
-        // Quantize Z bounds to large steps (10 unit increments) for stability
-        // This prevents shadow acne/peter-panning changes as camera moves
-        float zQuantization = 10.0f;
+        // Scale Z quantization with cascade radius -- near cascades use finer steps
+        // to prevent visible shadow popping, far cascades use coarser steps
+        float zQuantization = std::max(1.0f, std::min(10.0f, radius * 0.05f));
         minZ = std::floor(minZ / zQuantization) * zQuantization;
         maxZ = std::ceil(maxZ / zQuantization) * zQuantization;
 
@@ -222,18 +173,73 @@ namespace render::shadow
 
         if (farClip <= nearClip) farClip = nearClip + zQuantization;
 
-        result.nearDistance = nearClip;
-        result.farDistance = farClip;
+        return {minZ, maxZ, nearClip, farClip};
+    }
 
-        // Step 11: Create orthographic projection with stable sphere-based bounds
+    FrustumSphere CascadeShadowCalculator::computeFrustumBoundingSphere(
+        const std::array<glm::vec3, 8>& frustumCorners)
+    {
+        FrustumSphere sphere;
+        for (const auto& corner : frustumCorners)
+            sphere.center += corner;
+        sphere.center /= 8.0f;
+
+        for (const auto& corner : frustumCorners)
+        {
+            float dist = glm::length(corner - sphere.center);
+            sphere.radius = std::max(sphere.radius, dist);
+        }
+        sphere.radius = quantizeRadius(sphere.radius);
+        return sphere;
+    }
+
+    glm::vec3 CascadeShadowCalculator::snapCenterToLightGrid(
+        const glm::vec3& frustumCenter,
+        const LightSpaceAxes& axes,
+        float texelSize)
+    {
+        float snappedX = snapToTexel(glm::dot(frustumCenter, axes.lightRight), texelSize);
+        float snappedY = snapToTexel(glm::dot(frustumCenter, axes.lightUp), texelSize);
+        float lightSpaceZ = glm::dot(frustumCenter, axes.lightDir);
+
+        return snappedX * axes.lightRight +
+               snappedY * axes.lightUp +
+               lightSpaceZ * axes.lightDir;
+    }
+
+    CascadeData CascadeShadowCalculator::computeCascadeMatrix(
+        const std::array<glm::vec3, 8>& frustumCorners,
+        const glm::vec3& lightDirection,
+        uint32_t shadowMapResolution)
+    {
+        CascadeData result{};
+
+        auto sphere = computeFrustumBoundingSphere(frustumCorners);
+        auto axes = LightSpaceAxes::fromDirection(lightDirection);
+
+        // Compute stable extent and texel size
+        float stableExtent = sphere.radius * 1.15f;
+        float stableTexelSize = (2.0f * stableExtent) / static_cast<float>(shadowMapResolution);
+        result.texelSize = stableTexelSize;
+
+        // Snap frustum center and build view matrix
+        glm::vec3 snappedCenter = snapCenterToLightGrid(sphere.center, axes, stableTexelSize);
+        glm::vec3 lightPos = snappedCenter - axes.lightDir * sphere.radius;
+        result.viewMatrix = glm::lookAt(lightPos, snappedCenter, axes.lightUp);
+
+        // Compute Z bounds for depth range
+        auto zBounds = computeZBounds(result.viewMatrix, frustumCorners, sphere.radius);
+        result.nearDistance = zBounds.nearClip;
+        result.farDistance = zBounds.farClip;
+
+        // Create orthographic projection with stable sphere-based bounds
         result.projMatrix = glm::orthoRH_ZO(
             -stableExtent, stableExtent,
             -stableExtent, stableExtent,
-            nearClip, farClip
+            zBounds.nearClip, zBounds.farClip
         );
 
         result.projMatrix[1][1] *= -1.0f;  // Vulkan Y-flip
-
         result.viewProjMatrix = result.projMatrix * result.viewMatrix;
 
         return result;

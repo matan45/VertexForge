@@ -5,7 +5,6 @@
 #include <cstdint>
 #include <cstddef>
 #include <cmath>
-#include <limits>
 #include <vector>
 
 namespace render::shadow
@@ -28,14 +27,27 @@ namespace render::shadow
         {
             LightSpaceAxes axes;
             axes.lightDir = glm::normalize(direction);
-            glm::vec3 worldUp = (std::abs(axes.lightDir.y) < 0.99f)
+
+            // Use dot product for robust pole detection (not just Y component)
+            glm::vec3 worldUp = (std::abs(glm::dot(axes.lightDir, glm::vec3(0.0f, 1.0f, 0.0f))) < 0.999f)
                 ? glm::vec3(0.0f, 1.0f, 0.0f)
-                : glm::vec3(1.0f, 0.0f, 0.0f);
-            axes.lightRight = glm::normalize(glm::cross(worldUp, axes.lightDir));
-            axes.lightUp = glm::cross(axes.lightDir, axes.lightRight);
+                : glm::vec3(0.0f, 0.0f, 1.0f);
+
+            // Consistent right-handed basis: right = dir x up, then recompute up
+            axes.lightRight = glm::normalize(glm::cross(axes.lightDir, worldUp));
+            axes.lightUp = glm::normalize(glm::cross(axes.lightRight, axes.lightDir));
             return axes;
         }
     };
+
+    inline bool matrixChanged(const glm::mat4& a, const glm::mat4& b, float epsilon = 1e-6f)
+    {
+        for (int i = 0; i < 4; ++i)
+            for (int j = 0; j < 4; ++j)
+                if (std::abs(a[i][j] - b[i][j]) > epsilon)
+                    return true;
+        return false;
+    }
 
     namespace ShadowConstants
     {
@@ -55,7 +67,6 @@ namespace render::shadow
     enum class ShadowMapType : uint8_t
     {
         None = 0,
-        Directional2D,
         DirectionalCSM,
         PointCube,
         Spot2D,
@@ -69,23 +80,6 @@ namespace render::shadow
         Medium,
         High,
         Ultra
-    };
-
-    struct ShadowResourceHandle
-    {
-        uint32_t resourceIndex = std::numeric_limits<uint32_t>::max();
-        uint32_t layerOrFace = 0;
-
-        [[nodiscard]] bool isValid() const
-        {
-            return resourceIndex != std::numeric_limits<uint32_t>::max();
-        }
-
-        void invalidate()
-        {
-            resourceIndex = std::numeric_limits<uint32_t>::max();
-            layerOrFace = 0;
-        }
     };
 
     struct ShadowSettings
@@ -153,7 +147,6 @@ namespace render::shadow
         ShadowMapType type = ShadowMapType::None;
 
         std::vector<ShadowView> views;
-        ShadowResourceHandle resourceHandle; // for point light cubemaps
 
         uint32_t lightEntityId = 0;
 
@@ -200,7 +193,6 @@ namespace render::shadow
             {
                 view.type = ShadowMapType::None;
             }
-            resourceHandle.invalidate();
             matricesDirty = true;
             shadowCached = false;
         }
@@ -231,14 +223,13 @@ namespace render::shadow
 
         [[nodiscard]] bool usesVSM() const
         {
-            return type == ShadowMapType::Spot2D || type == ShadowMapType::Directional2D
+            return type == ShadowMapType::Spot2D || type == ShadowMapType::PointCube
                 || type == ShadowMapType::DirectionalCSM || type == ShadowMapType::DirectionalClipmap;
         }
 
         [[nodiscard]] bool isDirectionalType() const
         {
             return type == ShadowMapType::DirectionalCSM
-                || type == ShadowMapType::Directional2D
                 || type == ShadowMapType::DirectionalClipmap;
         }
     };

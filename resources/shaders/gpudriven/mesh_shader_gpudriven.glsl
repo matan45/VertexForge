@@ -301,8 +301,6 @@ layout(std430, set = 9, binding = 1) readonly buffer PageTableBuffer {
 // Comparison samplers (shadow filtering)
 layout(set = 10, binding = 0) uniform sampler2DShadow physicalPoolShadow;
 layout(set = 10, binding = 1) uniform sampler2D physicalPoolDepth;
-layout(set = 10, binding = 2) uniform samplerCubeShadow shadowCubes[32];
-layout(set = 10, binding = 3) uniform samplerCube shadowCubesDepth[32];
 
 // PCSS sampling functions
 #define SHADOW_BUFFER shadowData

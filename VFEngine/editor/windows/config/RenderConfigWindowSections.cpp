@@ -204,10 +204,7 @@ namespace windows
                 (std::to_string(static_cast<int>(shadowStats.atlasUtilization * 100)) + "%%").c_str());
 
             float poolMB = (shadowStats.atlasWidth * shadowStats.atlasHeight * 4) / (1024.0f * 1024.0f);
-            uint32_t pointRes = shadowStats.pointResolution;
-            float cubeMB = shadowStats.pointLightCount * 6 * pointRes * pointRes * 4 / (1024.0f * 1024.0f);
-            float totalMB = poolMB + cubeMB;
-            ImGui::Text("Pool VRAM: %.1f MB (Pool: %.1f, Cubes: %.1f)", totalMB, poolMB, cubeMB);
+            ImGui::Text("Pool VRAM: %.1f MB", poolMB);
         }
         else
         {

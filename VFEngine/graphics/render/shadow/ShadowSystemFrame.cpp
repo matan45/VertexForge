@@ -164,206 +164,103 @@ namespace render::shadow
 
     void ShadowSystem::collectShadowViewsForGPU(const std::unordered_set<uint32_t>* visibleLightIds)
     {
-        std::unordered_map<uint32_t, int32_t> directionalIndices;
-        std::unordered_map<uint32_t, int32_t> pointIndices;
-        std::unordered_map<uint32_t, int32_t> spotIndices;
+        std::unordered_map<uint32_t, int32_t> dirIdx, ptIdx, spotIdx;
 
         for (auto& [entityId, data] : lightShadowData)
         {
             if (!data.settings.enabled || !data.settings.castShadows)
                 continue;
-
             if (visibleLightIds && !data.isDirectionalType() && !visibleLightIds->contains(entityId))
                 continue;
 
             float texelSize = 1.0f / static_cast<float>(data.settings.resolution);
-
-            auto applyViewDefaults = [&](ShadowView& viewCopy) {
-                viewCopy.entityId = entityId;
-                viewCopy.depthBias = data.settings.depthBias;
-                viewCopy.slopeBias = data.settings.slopeBias;
-                viewCopy.normalBias = data.settings.normalBias;
-                viewCopy.texelSize = texelSize;
-                viewCopy.lightSize = data.settings.lightSize;
-                viewCopy.filterEnabled = globalSoftShadows;
+            auto makeView = [&](const ShadowView& view) {
+                ShadowView v = view;
+                v.entityId = entityId;
+                v.depthBias = data.settings.depthBias;
+                v.slopeBias = data.settings.slopeBias;
+                v.normalBias = data.settings.normalBias;
+                v.texelSize = texelSize;
+                v.lightSize = data.settings.lightSize;
+                v.filterEnabled = globalSoftShadows;
+                return v;
+            };
+            auto addViews = [&](std::vector<ShadowView>& dest, std::unordered_map<uint32_t, int32_t>& idx) {
+                if (!idx.contains(entityId))
+                    idx[entityId] = static_cast<int32_t>(dest.size());
+                for (const auto& view : data.views)
+                    dest.push_back(makeView(view));
             };
 
             switch (data.type)
             {
-            case ShadowMapType::Directional2D:
             case ShadowMapType::DirectionalCSM:
-            case ShadowMapType::DirectionalClipmap:
-                for (const auto& view : data.views)
-                {
-                    ShadowView viewCopy = view;
-                    applyViewDefaults(viewCopy);
-                    if (!directionalIndices.contains(entityId))
-                        directionalIndices[entityId] = static_cast<int32_t>(directionalShadowViews.size());
-                    directionalShadowViews.push_back(viewCopy);
-                }
-                break;
-
-            case ShadowMapType::Spot2D:
-                for (const auto& view : data.views)
-                {
-                    ShadowView viewCopy = view;
-                    applyViewDefaults(viewCopy);
-                    if (!spotIndices.contains(entityId))
-                        spotIndices[entityId] = static_cast<int32_t>(spotShadowViews.size());
-                    spotShadowViews.push_back(viewCopy);
-                }
-                break;
-
+            case ShadowMapType::DirectionalClipmap: addViews(directionalShadowViews, dirIdx); break;
+            case ShadowMapType::Spot2D:             addViews(spotShadowViews, spotIdx); break;
             case ShadowMapType::PointCube:
-            {
-                if (!data.resourceHandle.isValid() || data.views.empty())
-                    continue;
-
-                ShadowView viewCopy = data.views[0];
-                applyViewDefaults(viewCopy);
-                pointIndices[entityId] = static_cast<int32_t>(pointShadowViews.size());
-                pointShadowViews.push_back(viewCopy);
-                break;
-            }
-
-            default:
-                break;
+                if (!data.views.empty()) addViews(pointShadowViews, ptIdx); break;
+            default: break;
             }
         }
 
-        const int32_t directionalOffset = 0;
-        const int32_t pointOffset = static_cast<int32_t>(directionalShadowViews.size());
-        const int32_t spotOffset = pointOffset + static_cast<int32_t>(pointShadowViews.size());
-
-        for (const auto& [entityId, localIdx] : directionalIndices)
-            entityToShadowIndex[entityId] = directionalOffset + localIdx;
-        for (const auto& [entityId, localIdx] : pointIndices)
-            entityToShadowIndex[entityId] = pointOffset + localIdx;
-        for (const auto& [entityId, localIdx] : spotIndices)
-            entityToShadowIndex[entityId] = spotOffset + localIdx;
+        int32_t ptOff = static_cast<int32_t>(directionalShadowViews.size());
+        int32_t spOff = ptOff + static_cast<int32_t>(pointShadowViews.size());
+        for (const auto& [id, i] : dirIdx)  entityToShadowIndex[id] = i;
+        for (const auto& [id, i] : ptIdx)   entityToShadowIndex[id] = ptOff + i;
+        for (const auto& [id, i] : spotIdx) entityToShadowIndex[id] = spOff + i;
     }
 
-    void ShadowSystem::beginFrame(const glm::mat4& cameraView,
-                                  const glm::mat4& cameraProjection,
-                                  float cameraNear,
-                                  float cameraFar,
-                                  const std::unordered_set<uint32_t>* visibleLightIds)
+    void ShadowSystem::classifyLightsForUpdate(
+        std::vector<PointLightRef>& pointLights,
+        std::vector<SpotLightRef>& spotLights,
+        std::vector<DirLightRef>& directionalLights)
     {
-        if (!shadowsEnabled)
-            return;
-
-        ++frameCounter;
-
-        glm::vec3 cameraPosition = -glm::vec3(cameraView[3]) * glm::mat3(cameraView);
-        glm::vec3 cameraForward = -glm::vec3(cameraView[0][2], cameraView[1][2], cameraView[2][2]);
-        cameraMovedThisFrame = glm::distance(cameraPosition, lastCameraPosition) > CAMERA_MOVE_EPSILON
-                            || glm::distance(cameraForward, lastCameraForward) > CAMERA_MOVE_EPSILON;
-        lastCameraPosition = cameraPosition;
-        lastCameraForward = cameraForward;
-
-        directionalShadowViews.clear();
-        pointShadowViews.clear();
-        spotShadowViews.clear();
-        entityToShadowIndex.clear();
-        pageRenderList.clear();
-
-        updateStaticFlags();
-        lastCacheStats = {};
-
         auto& registry = scene::EntityRegistry::getRegistry();
-
-        struct PointLightRef { LightShadowData* data; glm::mat4 worldMatrix; float radius; };
-        struct SpotLightRef { LightShadowData* data; glm::mat4 worldMatrix; float outerAngle; float range; };
-        struct DirLightRef { LightShadowData* data; glm::mat4 worldMatrix; };
-
-        std::vector<PointLightRef> pointLights;
-        std::vector<SpotLightRef> spotLights;
-        std::vector<DirLightRef> directionalLights;
-
         for (auto& [entityId, data] : lightShadowData)
         {
             if (!data.settings.enabled || !data.settings.castShadows)
                 continue;
-
             auto entity = static_cast<entt::entity>(entityId);
             if (!registry.valid(entity) || !registry.all_of<components::WorldTransformComponent>(entity))
                 continue;
-
             if (data.isStatic)
                 ++lastCacheStats.totalStaticLights;
-
             if (data.isStatic && data.shadowCached && !data.isDirectionalType())
             {
-                for (auto& view : data.views)
-                    view.cached = true;
+                for (auto& view : data.views) view.cached = true;
                 ++lastCacheStats.cachedShadowMaps;
                 ++lastCacheStats.skippedThisFrame;
                 continue;
             }
-
-            const auto& worldMatrix = registry.get<components::WorldTransformComponent>(entity).worldMatrix;
-
+            const auto& wm = registry.get<components::WorldTransformComponent>(entity).worldMatrix;
             if (data.type == ShadowMapType::PointCube)
             {
-                float radius = data.settings.farPlane;
-                if (registry.all_of<components::PointLightComponent>(entity))
-                    radius = registry.get<components::PointLightComponent>(entity).radius;
-                pointLights.push_back({&data, worldMatrix, radius});
+                float r = registry.all_of<components::PointLightComponent>(entity)
+                    ? registry.get<components::PointLightComponent>(entity).radius : data.settings.farPlane;
+                pointLights.push_back({&data, wm, r});
             }
             else if (data.type == ShadowMapType::Spot2D)
             {
-                float outerAngle = 45.0f, range = 20.0f;
+                float oa = 45.0f, rng = 20.0f;
                 if (registry.all_of<components::SpotLightComponent>(entity))
-                {
-                    const auto& spotLight = registry.get<components::SpotLightComponent>(entity);
-                    outerAngle = spotLight.outerAngle;
-                    range = spotLight.range;
-                }
-                spotLights.push_back({&data, worldMatrix, outerAngle, range});
+                { oa = registry.get<components::SpotLightComponent>(entity).outerAngle;
+                  rng = registry.get<components::SpotLightComponent>(entity).range; }
+                spotLights.push_back({&data, wm, oa, rng});
             }
             else if (data.isDirectionalType())
-            {
-                directionalLights.push_back({&data, worldMatrix});
-            }
-
-            for (auto& view : data.views)
-                view.cached = false;
+                directionalLights.push_back({&data, wm});
+            for (auto& view : data.views) view.cached = false;
             ++lastCacheStats.renderedThisFrame;
         }
+    }
 
-        auto f1 = threading::JobSystem::instance().submit(
-            [this, &pointLights]() {
-                for (auto& ref : pointLights)
-                    updatePointCubeShadowMatricesFromData(*ref.data, ref.worldMatrix, ref.radius);
-            }, threading::JobPriority::HIGH);
-        auto f2 = threading::JobSystem::instance().submit(
-            [this, &spotLights]() {
-                for (auto& ref : spotLights)
-                    updateSpotShadowMatricesFromData(*ref.data, ref.worldMatrix, ref.outerAngle, ref.range);
-            }, threading::JobPriority::HIGH);
-        CameraContext camera{cameraView, cameraProjection, cameraNear, cameraFar};
-        auto f3 = threading::JobSystem::instance().submit(
-            [this, &directionalLights, camera]() {
-                for (auto& ref : directionalLights)
-                {
-                    if (ref.data->type == ShadowMapType::DirectionalClipmap)
-                        updateDirectionalClipmapMatricesFromData(*ref.data, ref.worldMatrix, camera);
-                    else
-                        updateDirectionalCSMMatricesFromData(*ref.data, ref.worldMatrix, camera);
-                }
-            }, threading::JobPriority::HIGH);
-
-        f1.get();
-        f2.get();
-        f3.get();
-
+    void ShadowSystem::updateShadowCacheAfterRender()
+    {
         for (auto& [entityId, data] : lightShadowData)
         {
             if (!data.settings.enabled || !data.settings.castShadows)
                 continue;
 
-            // Track rendered frames for scene-load warmup (forceRender in addPageToRenderLists).
-            // Capped to avoid unbounded growth; only the first few frames matter.
             if (data.renderedFrameCount < 10)
                 ++data.renderedFrameCount;
 
@@ -376,7 +273,57 @@ namespace render::shadow
                 }
             }
         }
+    }
 
+    void ShadowSystem::beginFrame(const glm::mat4& cameraView,
+                                  const glm::mat4& cameraProjection,
+                                  float cameraNear, float cameraFar,
+                                  const std::unordered_set<uint32_t>* visibleLightIds)
+    {
+        if (!shadowsEnabled) return;
+        ++frameCounter;
+
+        glm::vec3 camPos = -glm::vec3(cameraView[3]) * glm::mat3(cameraView);
+        glm::vec3 camFwd = -glm::vec3(cameraView[0][2], cameraView[1][2], cameraView[2][2]);
+        cameraMovedThisFrame = glm::distance(camPos, lastCameraPosition) > CAMERA_MOVE_EPSILON
+                            || glm::distance(camFwd, lastCameraForward) > CAMERA_MOVE_EPSILON;
+        lastCameraPosition = camPos;
+        lastCameraForward = camFwd;
+
+        directionalShadowViews.clear();
+        pointShadowViews.clear();
+        spotShadowViews.clear();
+        entityToShadowIndex.clear();
+        pageRenderList.clear();
+        updateStaticFlags();
+        lastCacheStats = {};
+
+        std::vector<PointLightRef> ptLights;
+        std::vector<SpotLightRef> spLights;
+        std::vector<DirLightRef> dirLights;
+        classifyLightsForUpdate(ptLights, spLights, dirLights);
+
+        auto& jobs = threading::JobSystem::instance();
+        auto f1 = jobs.submit([this, &ptLights]() {
+            for (auto& r : ptLights)
+                updatePointCubeShadowMatricesFromData(*r.data, r.worldMatrix, r.radius);
+        }, threading::JobPriority::HIGH);
+        auto f2 = jobs.submit([this, &spLights]() {
+            for (auto& r : spLights)
+                updateSpotShadowMatricesFromData(*r.data, r.worldMatrix, r.outerAngle, r.range);
+        }, threading::JobPriority::HIGH);
+        CameraContext camera{cameraView, cameraProjection, cameraNear, cameraFar};
+        auto f3 = jobs.submit([this, &dirLights, camera]() {
+            for (auto& r : dirLights) {
+                if (r.data->type == ShadowMapType::DirectionalClipmap)
+                    updateDirectionalClipmapMatricesFromData(*r.data, r.worldMatrix, camera);
+                else
+                    updateDirectionalCSMMatricesFromData(*r.data, r.worldMatrix, camera);
+            }
+        }, threading::JobPriority::HIGH);
+        f1.get(); f2.get(); f3.get();
+
+        updateShadowCacheAfterRender();
         collectShadowViewsForGPU(visibleLightIds);
         applyFeedbackAllocations();
         determineDynamicPages();
@@ -399,55 +346,54 @@ namespace render::shadow
                                         data.settings.clipmapLevelCount);
 
         for (uint32_t i = 0; i < levelCount; ++i)
+            updateClipmapLevelMatrices(data, i, cameraWorldPos, lightDirection, lightSpaceZ);
+    }
+
+    void ShadowSystem::updateClipmapLevelMatrices(LightShadowData& data, uint32_t level,
+                                                    const glm::vec3& cameraWorldPos,
+                                                    const glm::vec3& lightDirection,
+                                                    float lightSpaceZ)
+    {
+        uint32_t pagesPerSide = (level < data.clipmapLevelPagesPerSide.size())
+            ? data.clipmapLevelPagesPerSide[level] : 1;
+        uint32_t levelResolution = pagesPerSide * vsm::PAGE_SIZE;
+
+        auto texelSnapped = ClipmapShadowCalculator::computeClipmapLevel(
+            level, data.settings.clipmapBaseExtent, cameraWorldPos, lightDirection, levelResolution);
+
+        updateClipmapDirtyFlags(data, level, texelSnapped);
+
+        glm::vec2 pageGridOrigin = (level < data.clipmapPageGridOrigin.size())
+            ? data.clipmapPageGridOrigin[level] : glm::vec2(0.0f);
+        auto pageGridLevel = ClipmapShadowCalculator::computeClipmapLevelStable(
+            level, data.settings.clipmapBaseExtent, pageGridOrigin, lightSpaceZ,
+            lightDirection, levelResolution);
+
+        if (level < data.clipmapRenderVP.size())
+            data.clipmapRenderVP[level] = pageGridLevel.viewProjMatrix;
+
+        if (level < data.clipmapUVOffset.size())
         {
-            uint32_t pagesPerSide = (i < data.clipmapLevelPagesPerSide.size())
-                ? data.clipmapLevelPagesPerSide[i] : 1;
-            uint32_t levelResolution = pagesPerSide * vsm::PAGE_SIZE;
-
-            // Texel-snapped level: follows camera closely, used for GPU lookup VP
-            auto texelSnapped = ClipmapShadowCalculator::computeClipmapLevel(
-                i, data.settings.clipmapBaseExtent, cameraWorldPos, lightDirection, levelResolution);
-
-            // Update toroidal dirty flags using page-grid shift detection
-            updateClipmapDirtyFlags(data, i, texelSnapped);
-
-            // Page-grid-snapped level: stable VP for rendering (only changes on page crossing)
-            glm::vec2 pageGridOrigin = (i < data.clipmapPageGridOrigin.size())
-                ? data.clipmapPageGridOrigin[i] : glm::vec2(0.0f);
-            auto pageGridLevel = ClipmapShadowCalculator::computeClipmapLevelStable(
-                i, data.settings.clipmapBaseExtent, pageGridOrigin, lightSpaceZ,
-                lightDirection, levelResolution);
-
-            // Store render VP for use in buildClipmapPageRenderList()
-            if (i < data.clipmapRenderVP.size())
-                data.clipmapRenderVP[i] = pageGridLevel.viewProjMatrix;
-
-            // Compute UV offset: difference between texel-snapped and page-grid centers
-            // in UV space [0,1]. GPU applies this to convert lookup UV to render UV.
-            if (i < data.clipmapUVOffset.size())
-            {
-                glm::vec2 delta = texelSnapped.snapPosition - pageGridOrigin;
-                float diameter = 2.0f * texelSnapped.worldExtent;
-                data.clipmapUVOffset[i] = (diameter > 0.0f)
-                    ? delta / diameter : glm::vec2(0.0f);
-            }
-
-            // Upload texel-snapped VP to GPU for shadow lookup (full camera coverage)
-            auto& view = data.views[i];
-            view.viewMatrix = texelSnapped.viewMatrix;
-            view.projectionMatrix = texelSnapped.projMatrix;
-            view.viewProjectionMatrix = texelSnapped.viewProjMatrix;
-            view.nearPlane = texelSnapped.nearDistance;
-            view.farPlane = texelSnapped.farDistance;
-            view.lightDirection = glm::vec4(lightDirection, 0.0f);
-            view.cascadeIndex = static_cast<uint16_t>(i);
-            view.texelSize = texelSnapped.texelSize;
-
-            float biasScale = 1.0f + static_cast<float>(i) * 0.3f;
-            view.depthBias = data.settings.depthBias * biasScale;
-            view.slopeBias = data.settings.slopeBias * biasScale;
-            view.normalBias = data.settings.normalBias * biasScale;
+            glm::vec2 delta = texelSnapped.snapPosition - pageGridOrigin;
+            float diameter = 2.0f * texelSnapped.worldExtent;
+            data.clipmapUVOffset[level] = (diameter > 0.0f)
+                ? delta / diameter : glm::vec2(0.0f);
         }
+
+        auto& view = data.views[level];
+        view.viewMatrix = texelSnapped.viewMatrix;
+        view.projectionMatrix = texelSnapped.projMatrix;
+        view.viewProjectionMatrix = texelSnapped.viewProjMatrix;
+        view.nearPlane = texelSnapped.nearDistance;
+        view.farPlane = texelSnapped.farDistance;
+        view.lightDirection = glm::vec4(lightDirection, 0.0f);
+        view.cascadeIndex = static_cast<uint16_t>(level);
+        view.texelSize = texelSnapped.texelSize;
+
+        float biasScale = 1.0f + static_cast<float>(level) * 0.3f;
+        view.depthBias = data.settings.depthBias * biasScale;
+        view.slopeBias = data.settings.slopeBias * biasScale;
+        view.normalBias = data.settings.normalBias * biasScale;
     }
 
     void ShadowSystem::updateClipmapDirtyFlags(LightShadowData& data, uint32_t level,
@@ -493,37 +439,44 @@ namespace render::shadow
             return;
         }
 
-        // Update scroll offset with positive modulo wrapping
         glm::ivec2& scroll = data.clipmapScrollOffset[level];
         int ipps = static_cast<int>(pps);
         scroll.x = ((scroll.x + pgUpdate.pageShift.x) % ipps + ipps) % ipps;
         scroll.y = ((scroll.y + pgUpdate.pageShift.y) % ipps + ipps) % ipps;
 
-        // Mark only newly exposed columns (X-axis scroll)
-        for (int col = 0; col < std::abs(pgUpdate.pageShift.x); ++col)
+        markExposedScrollPages(data.vsmPageDirty, basePageIdx, pps, scroll, pgUpdate.pageShift);
+    }
+
+    void ShadowSystem::markExposedScrollPages(std::vector<bool>& pageDirty,
+                                                uint32_t basePageIdx, uint32_t pps,
+                                                const glm::ivec2& scroll,
+                                                const glm::ivec2& pageShift)
+    {
+        int ipps = static_cast<int>(pps);
+
+        for (int col = 0; col < std::abs(pageShift.x); ++col)
         {
-            int vx = (pgUpdate.pageShift.x > 0)
+            int vx = (pageShift.x > 0)
                 ? ((scroll.x - 1 - col) % ipps + ipps) % ipps
                 : (scroll.x + col) % ipps;
             for (uint32_t vy = 0; vy < pps; ++vy)
             {
                 uint32_t pageIdx = basePageIdx + vy * pps + static_cast<uint32_t>(vx);
-                if (pageIdx < data.vsmPageDirty.size())
-                    data.vsmPageDirty[pageIdx] = true;
+                if (pageIdx < pageDirty.size())
+                    pageDirty[pageIdx] = true;
             }
         }
 
-        // Mark only newly exposed rows (Y-axis scroll)
-        for (int row = 0; row < std::abs(pgUpdate.pageShift.y); ++row)
+        for (int row = 0; row < std::abs(pageShift.y); ++row)
         {
-            int vy = (pgUpdate.pageShift.y > 0)
+            int vy = (pageShift.y > 0)
                 ? ((scroll.y - 1 - row) % ipps + ipps) % ipps
                 : (scroll.y + row) % ipps;
             for (uint32_t vx = 0; vx < pps; ++vx)
             {
                 uint32_t pageIdx = basePageIdx + static_cast<uint32_t>(vy) * pps + vx;
-                if (pageIdx < data.vsmPageDirty.size())
-                    data.vsmPageDirty[pageIdx] = true;
+                if (pageIdx < pageDirty.size())
+                    pageDirty[pageIdx] = true;
             }
         }
     }

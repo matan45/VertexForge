@@ -326,8 +326,6 @@ layout(std430, set = 9, binding = 1) readonly buffer PageTableBuffer {
 // Comparison samplers
 layout(set = 10, binding = 0) uniform sampler2DShadow physicalPoolShadow;
 layout(set = 10, binding = 1) uniform sampler2D physicalPoolDepth;
-layout(set = 10, binding = 2) uniform samplerCubeShadow shadowCubes[32];
-layout(set = 10, binding = 3) uniform samplerCube shadowCubesDepth[32];
 
 // Terrain needs higher normal bias than regular meshes to avoid self-shadow artifacts
 // Bias scales with shadow LOD to compensate for geometry mismatch between shadow and render LODs
