@@ -100,6 +100,7 @@
     <ClInclude Include="asset\AssetReferenceScanner.hpp" />
     <ClInclude Include="asset\DependencyScanner.hpp" />
     <ClInclude Include="atmosphere\AtmosphereSettings.hpp" />
+    <ClInclude Include="atmosphere\DayNightCycleController.hpp" />
     <ClInclude Include="behaviortree\BehaviorTreeAsset.hpp" />
     <ClInclude Include="behaviortree\BehaviorTreeRuntime.hpp" />
     <ClInclude Include="behaviortree\BehaviorTreeTypes.hpp" />
@@ -219,6 +220,7 @@
     <ClCompile Include="asset\AssetRef.cpp" />
     <ClCompile Include="asset\AssetReferenceScanner.cpp" />
     <ClCompile Include="asset\DependencyScanner.cpp" />
+    <ClCompile Include="atmosphere\DayNightCycleController.cpp" />
     <ClCompile Include="behaviortree\BehaviorTreeAsset.cpp" />
     <ClCompile Include="behaviortree\BehaviorTreeRuntime.cpp" />
     <ClCompile Include="behaviortree\BehaviorTreeTypes.cpp" />

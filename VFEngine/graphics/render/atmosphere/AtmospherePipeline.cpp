@@ -122,13 +122,20 @@ namespace render::atmosphere
     }
 
     void AtmospherePipeline::setCameraData(const glm::mat4& view, const glm::mat4& projection,
-                                            const glm::vec3& cameraPos, float nearPlane, float farPlane)
+                                            const glm::vec3& cameraPos, float nearPlane, float farPlane,
+                                            float time)
     {
         cachedView = view;
         cachedProjection = projection;
         cachedCameraPos = cameraPos;
         cachedNear = nearPlane;
         cachedFar = farPlane;
+        cachedTime = time;
+
+        float dt = time - lastFrameTime;
+        lastFrameTime = time;
+        if (dt > 0.0f && dt < 1.0f)
+            dayNightController.tick(dt, settings);
     }
 
     void AtmospherePipeline::createSampler()
@@ -189,6 +196,15 @@ namespace render::atmosphere
         gpu.viewProjection = vp;
         gpu.screenParams = glm::vec4(cachedNear, cachedFar, settings.aerialMaxDist, settings.aerialIntensity);
         gpu.screenSize = glm::uvec4(currentExtent.width, currentExtent.height, 0, 0);
+
+        // Moon
+        glm::vec3 moonDir = sunDirectionFromAngles(settings.moonAzimuth, settings.moonElevation);
+        gpu.moonDirection = glm::vec4(moonDir, settings.moonAngularRadius);
+        float moonPhase = 0.5f * (1.0f - glm::dot(sunDir, moonDir));
+        gpu.moonParams = glm::vec4(settings.moonBrightness, moonPhase, settings.nightSkyBrightness, 0.0f);
+
+        // Stars
+        gpu.starParams = glm::vec4(settings.starDensity, settings.starBrightness, settings.starTwinkleSpeed, cachedTime);
 
         std::memcpy(paramsBufferMapped, &gpu, sizeof(gpu));
     }

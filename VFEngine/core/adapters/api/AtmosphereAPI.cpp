@@ -141,5 +141,74 @@ namespace core::api
                 return modifyAtmosphere(dispatcher, [&](render::atmosphere::AtmosphereSettings& s)
                 { s.aerialIntensity = extractFloat(args[0]); });
             });
+
+        // ── Day-Night Cycle ──
+
+        interpreter->registerNativeFunction("_native_atmosphere_isDayNightEnabled",
+            [&dispatcher](const std::vector<value::Value>&) -> value::Value
+            {
+                auto s = dispatcher.query(events::atmosphere::GetAtmosphereSettingsQuery{});
+                return value::Value(s.dayNightEnabled);
+            });
+
+        interpreter->registerNativeFunction("_native_atmosphere_setDayNightEnabled",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                return modifyAtmosphere(dispatcher, [&](render::atmosphere::AtmosphereSettings& s)
+                { s.dayNightEnabled = extractBool(args[0]); });
+            });
+
+        interpreter->registerNativeFunction("_native_atmosphere_getTimeOfDay",
+            [&dispatcher](const std::vector<value::Value>&) -> value::Value
+            {
+                auto s = dispatcher.query(events::atmosphere::GetAtmosphereSettingsQuery{});
+                return value::Value(static_cast<double>(s.timeOfDay));
+            });
+
+        interpreter->registerNativeFunction("_native_atmosphere_setTimeOfDay",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                return modifyAtmosphere(dispatcher, [&](render::atmosphere::AtmosphereSettings& s)
+                { s.timeOfDay = extractFloat(args[0]); });
+            });
+
+        interpreter->registerNativeFunction("_native_atmosphere_setCycleSpeed",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                return modifyAtmosphere(dispatcher, [&](render::atmosphere::AtmosphereSettings& s)
+                { s.cycleSpeed = extractFloat(args[0]); });
+            });
+
+        // ── Moon ──
+
+        interpreter->registerNativeFunction("_native_atmosphere_setMoonBrightness",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                return modifyAtmosphere(dispatcher, [&](render::atmosphere::AtmosphereSettings& s)
+                { s.moonBrightness = extractFloat(args[0]); });
+            });
+
+        // ── Stars ──
+
+        interpreter->registerNativeFunction("_native_atmosphere_setStarDensity",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                return modifyAtmosphere(dispatcher, [&](render::atmosphere::AtmosphereSettings& s)
+                { s.starDensity = extractFloat(args[0]); });
+            });
+
+        interpreter->registerNativeFunction("_native_atmosphere_setStarBrightness",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                return modifyAtmosphere(dispatcher, [&](render::atmosphere::AtmosphereSettings& s)
+                { s.starBrightness = extractFloat(args[0]); });
+            });
+
+        interpreter->registerNativeFunction("_native_atmosphere_setNightSkyBrightness",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                return modifyAtmosphere(dispatcher, [&](render::atmosphere::AtmosphereSettings& s)
+                { s.nightSkyBrightness = extractFloat(args[0]); });
+            });
     }
 }

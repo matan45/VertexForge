@@ -14,3 +14,8 @@ mat4 invViewProjection;
 mat4 viewProjection;
 vec4 screenParams;        // x=nearPlane, y=farPlane, z=aerialMaxDist, w=aerialIntensity
 uvec4 screenSize;         // x=width, y=height
+
+// Moon / Stars / Night
+vec4 moonDirection;       // xyz=direction, w=angularRadius
+vec4 moonParams;          // x=brightness, y=phase, z=nightSkyBrightness, w=0
+vec4 starParams;          // x=density, y=brightness, z=twinkleSpeed, w=time

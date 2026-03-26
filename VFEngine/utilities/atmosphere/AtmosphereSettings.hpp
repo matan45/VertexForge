@@ -32,6 +32,24 @@ namespace render::atmosphere
         float sunAzimuth = 0.0f;                    // degrees
         float sunElevation = 45.0f;                 // degrees
 
+        // Moon
+        float moonAzimuth = 180.0f;                 // degrees
+        float moonElevation = -45.0f;               // degrees (below horizon by default)
+        float moonAngularRadius = 0.009f;           // radians (~0.52 deg)
+        float moonBrightness = 0.03f;               // relative to sunIrradiance
+
+        // Stars
+        float starDensity = 0.006f;                 // hash-cell probability threshold
+        float starBrightness = 1.5f;                // HDR multiplier
+        float starTwinkleSpeed = 1.0f;
+        float nightSkyBrightness = 0.002f;          // ambient floor at night
+
+        // Day-Night Cycle
+        bool dayNightEnabled = false;
+        float timeOfDay = 12.0f;                    // 0-24 hours
+        float cycleSpeed = 1.0f;                    // real-time minute per game-hour at 1.0
+        float moonPhaseOffset = 0.0f;               // 0-1, shifts moon orbit relative to sun
+
         // Ground
         glm::vec3 groundAlbedo{0.3f};
 

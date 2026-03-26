@@ -2,6 +2,7 @@
 #include "JsonConverters.hpp"
 #include "../components/Components.hpp"
 #include <algorithm>
+#include <cmath>
 
 namespace serialization
 {
@@ -28,7 +29,22 @@ namespace serialization
                 {"sunElevation", s.sunElevation},
                 {"groundAlbedo", {s.groundAlbedo.x, s.groundAlbedo.y, s.groundAlbedo.z}},
                 {"aerialMaxDist", s.aerialMaxDist},
-                {"aerialIntensity", s.aerialIntensity}
+                {"aerialIntensity", s.aerialIntensity},
+                // Moon
+                {"moonAzimuth", s.moonAzimuth},
+                {"moonElevation", s.moonElevation},
+                {"moonAngularRadius", s.moonAngularRadius},
+                {"moonBrightness", s.moonBrightness},
+                // Stars
+                {"starDensity", s.starDensity},
+                {"starBrightness", s.starBrightness},
+                {"starTwinkleSpeed", s.starTwinkleSpeed},
+                {"nightSkyBrightness", s.nightSkyBrightness},
+                // Day-Night Cycle
+                {"dayNightEnabled", s.dayNightEnabled},
+                {"timeOfDay", s.timeOfDay},
+                {"cycleSpeed", s.cycleSpeed},
+                {"moonPhaseOffset", s.moonPhaseOffset}
             };
         }
 
@@ -98,6 +114,36 @@ namespace serialization
                 s.aerialMaxDist = std::max(a["aerialMaxDist"].get<float>(), 1000.0f);
             if (a.contains("aerialIntensity") && a["aerialIntensity"].is_number())
                 s.aerialIntensity = std::clamp(a["aerialIntensity"].get<float>(), 0.0f, 5.0f);
+
+            // Moon
+            if (a.contains("moonAzimuth") && a["moonAzimuth"].is_number())
+                s.moonAzimuth = std::fmod(a["moonAzimuth"].get<float>(), 360.0f);
+            if (a.contains("moonElevation") && a["moonElevation"].is_number())
+                s.moonElevation = std::clamp(a["moonElevation"].get<float>(), -90.0f, 90.0f);
+            if (a.contains("moonAngularRadius") && a["moonAngularRadius"].is_number())
+                s.moonAngularRadius = std::clamp(a["moonAngularRadius"].get<float>(), 0.001f, 0.1f);
+            if (a.contains("moonBrightness") && a["moonBrightness"].is_number())
+                s.moonBrightness = std::clamp(a["moonBrightness"].get<float>(), 0.0f, 1.0f);
+
+            // Stars
+            if (a.contains("starDensity") && a["starDensity"].is_number())
+                s.starDensity = std::clamp(a["starDensity"].get<float>(), 0.0f, 0.05f);
+            if (a.contains("starBrightness") && a["starBrightness"].is_number())
+                s.starBrightness = std::clamp(a["starBrightness"].get<float>(), 0.0f, 10.0f);
+            if (a.contains("starTwinkleSpeed") && a["starTwinkleSpeed"].is_number())
+                s.starTwinkleSpeed = std::clamp(a["starTwinkleSpeed"].get<float>(), 0.0f, 5.0f);
+            if (a.contains("nightSkyBrightness") && a["nightSkyBrightness"].is_number())
+                s.nightSkyBrightness = std::clamp(a["nightSkyBrightness"].get<float>(), 0.0f, 0.05f);
+
+            // Day-Night Cycle
+            if (a.contains("dayNightEnabled") && a["dayNightEnabled"].is_boolean())
+                s.dayNightEnabled = a["dayNightEnabled"].get<bool>();
+            if (a.contains("timeOfDay") && a["timeOfDay"].is_number())
+                s.timeOfDay = std::clamp(a["timeOfDay"].get<float>(), 0.0f, 24.0f);
+            if (a.contains("cycleSpeed") && a["cycleSpeed"].is_number())
+                s.cycleSpeed = std::clamp(a["cycleSpeed"].get<float>(), 0.0f, 100.0f);
+            if (a.contains("moonPhaseOffset") && a["moonPhaseOffset"].is_number())
+                s.moonPhaseOffset = std::clamp(a["moonPhaseOffset"].get<float>(), 0.0f, 1.0f);
         }
 
         json serializeCloud(const render::cloud::CloudSettings& s)

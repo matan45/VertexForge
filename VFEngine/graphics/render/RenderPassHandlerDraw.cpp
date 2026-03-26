@@ -53,7 +53,8 @@ namespace render
         {
             atmospherePipeline->setCameraData(currentView, currentProjection,
                                                currentCameraPosition,
-                                               currentNearPlane, currentFarPlane);
+                                               currentNearPlane, currentFarPlane,
+                                               currentTime);
 
             if (gpuDrivenRendererInitialized)
             {
