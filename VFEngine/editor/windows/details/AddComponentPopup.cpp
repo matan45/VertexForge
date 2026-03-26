@@ -56,7 +56,7 @@ namespace windows::details
                            c.hasUIButton && c.hasUITextInput && c.hasUICheckbox && c.hasUIDropdown &&
                            c.hasUITabs && c.hasUISlider && c.hasUIProgressBar && c.hasUIAnimation && c.hasUIMask &&
                            c.hasUIDraggable && c.hasUIDropTarget &&
-                           c.hasNavmeshAgent && c.hasOffMeshLink && c.hasNavmeshObstacle && c.hasNavmeshModifierVolume && c.hasRenderTexture && c.hasController &&
+                           c.hasNavmeshAgent && c.hasOffMeshLink && c.hasNavmeshObstacle && c.hasNavmeshModifierVolume && c.hasNavInvoker && c.hasRenderTexture && c.hasController &&
                            c.hasIK && c.hasBehaviorTree && c.hasDecal && c.hasReverbZone &&
                            c.hasFogVolume;
             if (allAdded)
@@ -301,6 +301,18 @@ namespace windows::details
             }
             if (ImGui::IsItemHovered())
                 ImGui::SetTooltip("Volume that overrides navmesh area type (Road, Mud, Water, etc.)");
+        }
+
+        if (!c.hasNavInvoker)
+        {
+            if (ImGui::Selectable("  Nav Invoker"))
+            {
+                events::scene::AddNavInvokerComponentCommand cmd;
+                cmd.entity = handle;
+                dispatcher.execute(cmd);
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Streaming source that generates navmesh tiles around this entity");
         }
 
         if (!c.hasController)

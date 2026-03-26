@@ -280,6 +280,9 @@ namespace serialization
         static std::string modifierVolumeShapeToString(components::NavmeshModifierVolumeShape shape);
         static components::NavmeshModifierVolumeShape stringToModifierVolumeShape(const std::string& str);
 
+        static json serializeNavInvoker(const components::NavInvokerComponent& invoker);
+        static void deserializeNavInvoker(const json& j, components::NavInvokerComponent& invoker);
+
         static json serializeRenderTexture(const components::RenderTextureComponent& rtt);
         static void deserializeRenderTexture(const json& j, components::RenderTextureComponent& rtt);
 

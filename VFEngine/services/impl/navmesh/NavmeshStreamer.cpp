@@ -12,39 +12,77 @@ namespace services
     }
 
     float NavmeshStreamer::tileDistanceSq(const navigation::NavmeshTileCoord& coord,
-                                            const glm::vec3& cameraPos) const
+                                            const glm::vec3& pos) const
     {
         float tileWorldSize = bakeSettings.tileSize * bakeSettings.cellSize;
         float centerX = (coord.x + 0.5f) * tileWorldSize;
         float centerZ = (coord.z + 0.5f) * tileWorldSize;
 
-        float dx = cameraPos.x - centerX;
-        float dz = cameraPos.z - centerZ;
+        float dx = pos.x - centerX;
+        float dz = pos.z - centerZ;
         return dx * dx + dz * dz;
     }
 
+    float NavmeshStreamer::minDistanceToSources(const navigation::NavmeshTileCoord& coord,
+                                                   const std::vector<StreamingSource>& sources) const
+    {
+        float minDist = std::numeric_limits<float>::max();
+        for (const auto& src : sources)
+        {
+            float d = tileDistanceSq(coord, src.position);
+            if (d < minDist)
+                minDist = d;
+        }
+        return minDist;
+    }
+
+    bool NavmeshStreamer::isWithinAnySource(const navigation::NavmeshTileCoord& coord,
+                                              const std::vector<StreamingSource>& sources,
+                                              bool useUnloadRadius) const
+    {
+        for (const auto& src : sources)
+        {
+            float distSq = tileDistanceSq(coord, src.position);
+            float radiusSq = useUnloadRadius ? src.unloadRadiusSq : src.loadRadiusSq;
+            if (distSq <= radiusSq)
+                return true;
+        }
+        return false;
+    }
+
+    // Single-position backward compat wrapper
     void NavmeshStreamer::update(const glm::vec3& cameraPos,
                                   std::vector<navigation::NavmeshTileCoord>& outLoaded,
                                   std::vector<navigation::NavmeshTileCoord>& outUnloaded)
     {
-        if (!enabled || !tileCache || !navmeshProvider)
+        std::vector<navigation::NavmeshTileCoord> unused;
+        std::vector<StreamingSource> sources;
+        sources.push_back({cameraPos,
+                           config.loadRadius * config.loadRadius,
+                           config.unloadRadius * config.unloadRadius});
+        update(sources, outLoaded, outUnloaded, unused);
+    }
+
+    // Multi-source update with on-demand generation detection
+    void NavmeshStreamer::update(const std::vector<StreamingSource>& sources,
+                                  std::vector<navigation::NavmeshTileCoord>& outLoaded,
+                                  std::vector<navigation::NavmeshTileCoord>& outUnloaded,
+                                  std::vector<navigation::NavmeshTileCoord>& outNeedGeneration)
+    {
+        if (!enabled || !navmeshProvider || sources.empty())
             return;
 
-        float loadRadiusSq = config.loadRadius * config.loadRadius;
-        float unloadRadiusSq = config.unloadRadius * config.unloadRadius;
-
-        // Find tiles to unload
+        // === UNLOAD: tiles beyond ALL sources' unload radii ===
         unloadCandidates.clear();
         for (const auto& coord : loadedTiles)
         {
-            float distSq = tileDistanceSq(coord, cameraPos);
-            if (distSq > unloadRadiusSq)
+            if (!isWithinAnySource(coord, sources, true))
             {
-                unloadCandidates.push_back({coord, distSq});
+                float minDist = minDistanceToSources(coord, sources);
+                unloadCandidates.push_back({coord, minDist});
             }
         }
 
-        // Sort farthest first
         std::sort(unloadCandidates.begin(), unloadCandidates.end(),
             [](const Candidate& a, const Candidate& b) { return a.distSq > b.distSq; });
 
@@ -56,25 +94,28 @@ namespace services
 
             navmeshProvider->removeNavmeshTile(candidate.coord.x, candidate.coord.z);
             loadedTiles.erase(candidate.coord);
+            generatedTiles.erase(candidate.coord);
             outUnloaded.push_back(candidate.coord);
             unloaded++;
         }
 
-        // Find tiles to load
+        // === LOAD: cached tiles within ANY source's load radius ===
         loadCandidates.clear();
-        tileCache->forEachTile([&](const navigation::NavmeshTileCoord& coord)
+        if (tileCache)
         {
-            if (loadedTiles.count(coord))
-                return;
-
-            float distSq = tileDistanceSq(coord, cameraPos);
-            if (distSq <= loadRadiusSq)
+            tileCache->forEachTile([&](const navigation::NavmeshTileCoord& coord)
             {
-                loadCandidates.push_back({coord, distSq});
-            }
-        });
+                if (loadedTiles.count(coord))
+                    return;
 
-        // Sort nearest first
+                if (isWithinAnySource(coord, sources, false))
+                {
+                    float minDist = minDistanceToSources(coord, sources);
+                    loadCandidates.push_back({coord, minDist});
+                }
+            });
+        }
+
         std::sort(loadCandidates.begin(), loadCandidates.end(),
             [](const Candidate& a, const Candidate& b) { return a.distSq < b.distSq; });
 
@@ -85,7 +126,7 @@ namespace services
                 break;
 
             navigation::NavmeshTileData tileData;
-            if (tileCache->loadTile(candidate.coord, tileData))
+            if (tileCache && tileCache->loadTile(candidate.coord, tileData))
             {
                 if (navmeshProvider->addNavmeshTile(tileData))
                 {
@@ -95,6 +136,44 @@ namespace services
                 }
             }
         }
+
+        // === GENERATION: tiles within load radius but NOT in cache and NOT loaded ===
+        float tileWorldSize = bakeSettings.tileSize * bakeSettings.cellSize;
+        if (tileWorldSize <= 0.0f)
+            return;
+
+        std::unordered_set<navigation::NavmeshTileCoord, navigation::NavmeshTileCoordHash> needed;
+
+        for (const auto& src : sources)
+        {
+            float loadRadius = std::sqrt(src.loadRadiusSq);
+            int minTX = static_cast<int>(std::floor((src.position.x - loadRadius) / tileWorldSize));
+            int maxTX = static_cast<int>(std::floor((src.position.x + loadRadius) / tileWorldSize));
+            int minTZ = static_cast<int>(std::floor((src.position.z - loadRadius) / tileWorldSize));
+            int maxTZ = static_cast<int>(std::floor((src.position.z + loadRadius) / tileWorldSize));
+
+            for (int tx = minTX; tx <= maxTX; ++tx)
+            {
+                for (int tz = minTZ; tz <= maxTZ; ++tz)
+                {
+                    navigation::NavmeshTileCoord coord{tx, tz};
+                    float distSq = tileDistanceSq(coord, src.position);
+                    if (distSq > src.loadRadiusSq)
+                        continue;
+
+                    if (loadedTiles.count(coord))
+                        continue;
+
+                    if (tileCache && tileCache->hasTile(coord))
+                        continue;
+
+                    needed.insert(coord);
+                }
+            }
+        }
+
+        for (const auto& coord : needed)
+            outNeedGeneration.push_back(coord);
     }
 
     bool NavmeshStreamer::isTileLoaded(const navigation::NavmeshTileCoord& coord) const
@@ -105,5 +184,6 @@ namespace services
     void NavmeshStreamer::clear()
     {
         loadedTiles.clear();
+        generatedTiles.clear();
     }
 }

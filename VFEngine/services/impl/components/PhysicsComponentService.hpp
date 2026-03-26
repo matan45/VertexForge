@@ -63,6 +63,11 @@ namespace services {
         bool removeNavmeshModifierVolumeComponent(EntityHandle entity);
         bool hasNavmeshModifierVolumeComponent(EntityHandle entity) const;
 
+        // Nav Invoker Component Operations
+        bool addNavInvokerComponent(EntityHandle entity);
+        bool removeNavInvokerComponent(EntityHandle entity);
+        bool hasNavInvokerComponent(EntityHandle entity) const;
+
         // Controller Component Operations
         bool addControllerComponent(EntityHandle entity);
         bool removeControllerComponent(EntityHandle entity);

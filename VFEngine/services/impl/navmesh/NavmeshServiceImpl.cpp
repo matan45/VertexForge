@@ -467,12 +467,14 @@ namespace services
     {
         pollBakeCompletion();
         tileManager.pollTileBakeCompletions();
+        gatherInvokerSources();
         auto streamResult = tileManager.updateStreaming();
         if (!streamResult.unloaded.empty())
             agentManager.suspendAgentsOnUnloadedTiles(streamResult.unloaded);
         if (!streamResult.loaded.empty())
             agentManager.resumeAgentsOnLoadedTiles(streamResult.loaded);
         tileManager.processDirtyTiles();
+        tileManager.processOnDemandGeneration();
         agentManager.updatePositions(deltaTime);
         drawOffMeshLinkDebug();
         trackOffMeshLinkTransforms();
@@ -480,6 +482,57 @@ namespace services
         drawObstacleDebug();
         trackModifierVolumeTransforms();
         drawModifierVolumeDebug();
+        drawInvokerDebug();
+    }
+
+    void NavmeshServiceImpl::gatherInvokerSources()
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto view = registry.view<components::NavInvokerComponent, components::TransformComponent>();
+
+        std::vector<StreamingSource> sources;
+        for (auto entity : view)
+        {
+            const auto& invoker = view.get<components::NavInvokerComponent>(entity);
+            const auto& transform = view.get<components::TransformComponent>(entity);
+
+            float unloadRadius = invoker.generationRadius * invoker.unloadRadiusMultiplier;
+            sources.push_back({
+                transform.position,
+                invoker.generationRadius * invoker.generationRadius,
+                unloadRadius * unloadRadius
+            });
+        }
+
+        if (!sources.empty())
+        {
+            tileManager.ensureTiledNavmeshInitialized();
+        }
+
+        tileManager.setInvokerSources(std::move(sources));
+    }
+
+    void NavmeshServiceImpl::drawInvokerDebug()
+    {
+        auto& dispatcher = ::events::EventDispatcher::instance();
+        bool showNavmesh = dispatcher.query(events::render::GetShowNavmeshDebugQuery{});
+        if (!showNavmesh)
+            return;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto view = registry.view<components::NavInvokerComponent, components::TransformComponent>();
+
+        for (auto entity : view)
+        {
+            const auto& invoker = view.get<components::NavInvokerComponent>(entity);
+            const auto& transform = view.get<components::TransformComponent>(entity);
+
+            events::debugdraw::DrawSphereCommand sphereCmd;
+            sphereCmd.center = transform.position;
+            sphereCmd.radius = invoker.generationRadius;
+            sphereCmd.color = {0.2f, 0.6f, 1.0f, 0.4f}; // Blue for invoker range
+            dispatcher.execute(sphereCmd);
+        }
     }
 
 

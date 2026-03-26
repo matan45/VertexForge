@@ -214,6 +214,30 @@ namespace services
         return true;
     }
 
+    void NavmeshTileManager::setInvokerSources(std::vector<StreamingSource> sources)
+    {
+        invokerSources = std::move(sources);
+    }
+
+    void NavmeshTileManager::ensureTiledNavmeshInitialized()
+    {
+        if (tiledNavmeshInitialized || navmeshProvider->hasNavmesh())
+        {
+            tiledNavmeshInitialized = true;
+            return;
+        }
+
+        glm::vec3 boundsMin{-10000.0f, -1000.0f, -10000.0f};
+        glm::vec3 boundsMax{10000.0f, 1000.0f, 10000.0f};
+        if (navmeshProvider->initTiledNavmesh(bakeSettings, boundsMin, boundsMax))
+        {
+            tiledNavmeshInitialized = true;
+            streamer.setProvider(navmeshProvider);
+            streamer.setSettings(bakeSettings);
+            streamer.setEnabled(true);
+        }
+    }
+
     StreamingResult NavmeshTileManager::updateStreaming()
     {
         StreamingResult result;
@@ -221,7 +245,18 @@ namespace services
         if (!streamer.isEnabled())
             return result;
 
-        streamer.update(lastCameraPos, result.loaded, result.unloaded);
+        if (!invokerSources.empty())
+        {
+            std::vector<navigation::NavmeshTileCoord> needGeneration;
+            streamer.update(invokerSources, result.loaded, result.unloaded, needGeneration);
+
+            for (const auto& coord : needGeneration)
+                pendingGenerationTiles.insert(coord);
+        }
+        else
+        {
+            streamer.update(lastCameraPos, result.loaded, result.unloaded);
+        }
 
         auto& dispatcher = ::events::EventDispatcher::instance();
 
@@ -242,6 +277,48 @@ namespace services
         }
 
         return result;
+    }
+
+    void NavmeshTileManager::processOnDemandGeneration()
+    {
+        if (pendingGenerationTiles.empty())
+            return;
+
+        int submitted = 0;
+        auto it = pendingGenerationTiles.begin();
+        while (it != pendingGenerationTiles.end() && submitted < MAX_TILE_BAKES_PER_FRAME)
+        {
+            if (static_cast<int>(pendingTileBakes.size()) >= MAX_TILE_BAKES_PER_FRAME)
+                break;
+
+            navigation::NavmeshTileCoord coord = *it;
+            it = pendingGenerationTiles.erase(it);
+
+            auto bounds = navigation::computeTileBounds(coord, bakeSettings, -1000.0f, 1000.0f);
+
+            navigation::NavmeshInputGeometry geometry;
+            collectTileGeometry(bounds, bakeSettings, geometry);
+
+            if (geometry.isEmpty())
+                continue;
+
+            navigation::NavmeshOffMeshConnections offMeshLinks;
+            if (collectOffMeshLinks)
+                offMeshLinks = collectOffMeshLinks(bounds, bakeSettings);
+
+            std::vector<navigation::NavmeshAreaModifier> areaModifiers;
+            if (collectAreaModifiers)
+                areaModifiers = collectAreaModifiers(bounds);
+
+            auto future = threading::JobSystem::instance().submit(
+                [this, coord, geom = std::move(geometry), settings = bakeSettings, links = std::move(offMeshLinks), mods = std::move(areaModifiers)]()
+                {
+                    return navmeshProvider->buildSingleTile(coord.x, coord.z, geom, settings, links, mods);
+                }, threading::JobPriority::LOW);
+
+            pendingTileBakes.push_back({coord, std::move(future)});
+            submitted++;
+        }
     }
 
     void NavmeshTileManager::processDirtyTiles()
@@ -305,6 +382,10 @@ namespace services
                 {
                     navmeshProvider->addNavmeshTile(tileData);
 
+                    // Mark as loaded in streamer (for on-demand generated tiles)
+                    if (!streamer.isTileLoaded(it->coord))
+                        streamer.markTileGenerated(it->coord);
+
                     if (tileCache)
                     {
                         tileCache->saveTile(it->coord, tileData);
@@ -333,7 +414,10 @@ namespace services
                 pending.future.wait();
         }
         dirtyTiles.clear();
+        pendingGenerationTiles.clear();
         pendingTileBakes.clear();
+        invokerSources.clear();
+        tiledNavmeshInitialized = false;
         streamer.clear();
         tileCache.reset();
     }

@@ -186,6 +186,7 @@
     <ClInclude Include="windows\details\IKDrawer.hpp" />
     <ClInclude Include="windows\details\MaterialDrawer.hpp" />
     <ClInclude Include="windows\details\MeshDrawer.hpp" />
+    <ClInclude Include="windows\details\NavInvokerDrawer.hpp" />
     <ClInclude Include="windows\details\NavmeshAgentDrawer.hpp" />
     <ClInclude Include="windows\details\NavmeshModifierVolumeDrawer.hpp" />
     <ClInclude Include="windows\details\NavmeshObstacleDrawer.hpp" />
@@ -357,6 +358,7 @@
     <ClCompile Include="windows\details\IKDrawer.cpp" />
     <ClCompile Include="windows\details\MaterialDrawer.cpp" />
     <ClCompile Include="windows\details\MeshDrawer.cpp" />
+    <ClCompile Include="windows\details\NavInvokerDrawer.cpp" />
     <ClCompile Include="windows\details\NavmeshAgentDrawer.cpp" />
     <ClCompile Include="windows\details\NavmeshModifierVolumeDrawer.cpp" />
     <ClCompile Include="windows\details\NavmeshObstacleDrawer.cpp" />

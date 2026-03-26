@@ -520,6 +520,25 @@ namespace services
                 return hasNavmeshModifierVolumeComponent(query.entity);
             });
 
+        // Nav Invoker component handlers
+        dispatcher.registerCommandHandler<events::scene::AddNavInvokerComponentCommand>(
+            [this](const events::scene::AddNavInvokerComponentCommand& cmd)
+            {
+                return addNavInvokerComponent(cmd.entity);
+            });
+
+        dispatcher.registerCommandHandler<events::scene::RemoveNavInvokerComponentCommand>(
+            [this](const events::scene::RemoveNavInvokerComponentCommand& cmd)
+            {
+                return removeNavInvokerComponent(cmd.entity);
+            });
+
+        dispatcher.registerQueryHandler<events::scene::HasNavInvokerComponentQuery>(
+            [this](const events::scene::HasNavInvokerComponentQuery& query)
+            {
+                return hasNavInvokerComponent(query.entity);
+            });
+
         // Controller component handlers
         dispatcher.registerCommandHandler<events::scene::AddControllerComponentCommand>(
             [this](const events::scene::AddControllerComponentCommand& cmd)
@@ -664,6 +683,48 @@ namespace services
 
         scene::Entity sceneEntity(internal::fromHandle(entity));
         return sceneEntity.hasComponent<components::NavmeshModifierVolumeComponent>();
+    }
+
+    // ========== NAV INVOKER COMPONENT OPERATIONS ==========
+
+    bool PhysicsComponentService::addNavInvokerComponent(EntityHandle entity)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry))
+            return false;
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (!sceneEntity.hasComponent<components::NavInvokerComponent>())
+        {
+            sceneEntity.addComponent<components::NavInvokerComponent>();
+            return true;
+        }
+        return false;
+    }
+
+    bool PhysicsComponentService::removeNavInvokerComponent(EntityHandle entity)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry))
+            return false;
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (sceneEntity.hasComponent<components::NavInvokerComponent>())
+        {
+            sceneEntity.removeComponent<components::NavInvokerComponent>();
+            return true;
+        }
+        return false;
+    }
+
+    bool PhysicsComponentService::hasNavInvokerComponent(EntityHandle entity) const
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry))
+            return false;
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        return sceneEntity.hasComponent<components::NavInvokerComponent>();
     }
 
     // ========== CONTROLLER COMPONENT OPERATIONS ==========
