@@ -188,6 +188,7 @@
     <ClInclude Include="windows\details\MeshDrawer.hpp" />
     <ClInclude Include="windows\details\NavmeshAgentDrawer.hpp" />
     <ClInclude Include="windows\details\NavmeshRootDrawer.hpp" />
+    <ClInclude Include="windows\details\OffMeshLinkDrawer.hpp" />
     <ClInclude Include="windows\details\PhysicsAnimationDrawer.hpp" />
     <ClInclude Include="windows\details\PluginComponentDrawer.hpp" />
     <ClInclude Include="windows\details\PointLightDrawer.hpp" />
@@ -356,6 +357,7 @@
     <ClCompile Include="windows\details\MeshDrawer.cpp" />
     <ClCompile Include="windows\details\NavmeshAgentDrawer.cpp" />
     <ClCompile Include="windows\details\NavmeshRootDrawer.cpp" />
+    <ClCompile Include="windows\details\OffMeshLinkDrawer.cpp" />
     <ClCompile Include="windows\details\PhysicsAnimationDrawer.cpp" />
     <ClCompile Include="windows\details\PluginComponentDrawer.cpp" />
     <ClCompile Include="windows\details\PointLightDrawer.cpp" />

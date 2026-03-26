@@ -54,7 +54,7 @@ namespace core
         float halfExtents[3] = {CROWD_TARGET_HALF_EXTENTS[0], CROWD_TARGET_HALF_EXTENTS[1], CROWD_TARGET_HALF_EXTENTS[2]};
 
         dtQueryFilter filter;
-        filter.setIncludeFlags(0xFFFF);
+        configureQueryFilter(&filter);
 
         dtPolyRef ref = 0;
         float nearest[3];

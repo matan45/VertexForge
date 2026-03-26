@@ -16,7 +16,8 @@ namespace services
         virtual bool isInitialized() const = 0;
 
         virtual bool buildNavmesh(const navigation::NavmeshInputGeometry& geometry,
-                                   const types::NavmeshBakeSettings& settings) = 0;
+                                   const types::NavmeshBakeSettings& settings,
+                                   const navigation::OffMeshConnectionsMap& tileOffMeshLinks = {}) = 0;
         virtual types::NavmeshBakeProgress getBuildProgress() const = 0;
 
         // === Tiled Navmesh ===
@@ -24,7 +25,8 @@ namespace services
                                        const glm::vec3& boundsMin, const glm::vec3& boundsMax) = 0;
         virtual navigation::NavmeshTileData buildSingleTile(int tx, int tz,
                                                               const navigation::NavmeshInputGeometry& geometry,
-                                                              const types::NavmeshBakeSettings& settings) = 0;
+                                                              const types::NavmeshBakeSettings& settings,
+                                                              const navigation::NavmeshOffMeshConnections& offMeshLinks = {}) = 0;
         virtual bool addNavmeshTile(const navigation::NavmeshTileData& tileData) = 0;
         virtual bool removeNavmeshTile(int tx, int tz) = 0;
 

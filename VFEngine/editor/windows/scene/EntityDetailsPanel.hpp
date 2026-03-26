@@ -42,6 +42,7 @@
 #include "../details/UIDropTargetDrawer.hpp"
 #include "../details/SocketAttachmentDrawer.hpp"
 #include "../details/NavmeshAgentDrawer.hpp"
+#include "../details/OffMeshLinkDrawer.hpp"
 #include "../details/ControllerDrawer.hpp"
 #include "../details/RenderTextureDrawer.hpp"
 #include "../details/IKDrawer.hpp"
@@ -101,6 +102,7 @@ namespace windows
         details::UIDropTargetDrawer uiDropTargetDrawer;
         details::SocketAttachmentDrawer socketAttachmentDrawer;
         details::NavmeshAgentDrawer navmeshAgentDrawer;
+        details::OffMeshLinkDrawer offMeshLinkDrawer;
         details::ControllerDrawer controllerDrawer;
         details::RenderTextureDrawer renderTextureDrawer;
         details::IKDrawer ikDrawer;

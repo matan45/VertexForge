@@ -298,6 +298,11 @@ namespace serialization
             auto& comp = entity.addOrReplaceComponent<components::NavmeshComponent>();
             deserializeNavmesh(c["navmesh"], comp);
         }
+        if (c.contains("offMeshLink"))
+        {
+            auto& comp = entity.addOrReplaceComponent<components::OffMeshLinkComponent>();
+            deserializeOffMeshLink(c["offMeshLink"], comp);
+        }
         if (c.contains("renderTexture"))
         {
             auto& comp = entity.addOrReplaceComponent<components::RenderTextureComponent>();

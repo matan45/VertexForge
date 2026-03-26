@@ -9,6 +9,7 @@
 #include <cmath>
 #include <algorithm>
 
+#include "types/NavmeshTypes.hpp"
 #include "print/Log.hpp"
 namespace core
 {
@@ -175,6 +176,7 @@ namespace core
         {
             std::lock_guard lock(navMeshMutex);
             destroyNavMeshLocked();
+            storedSettings = header.settings;
 
             navMesh = dtAllocNavMesh();
             if (!navMesh)
@@ -251,6 +253,7 @@ namespace core
     {
         std::lock_guard lock(navMeshMutex);
         destroyNavMeshLocked();
+        storedSettings = settings;
 
         navMesh = dtAllocNavMesh();
         if (!navMesh)
@@ -357,8 +360,7 @@ namespace core
         float halfExtents[3] = {agentRadius * CROWD_MAX_AGENT_RADIUS_MULT, agentHeight, agentRadius * CROWD_MAX_AGENT_RADIUS_MULT};
 
         dtQueryFilter filter;
-        filter.setIncludeFlags(0xFFFF);
-        filter.setExcludeFlags(0);
+        configureQueryFilter(&filter);
 
         dtPolyRef startRef = 0, endRef = 0;
         float nearestStart[3] = {0.0f, 0.0f, 0.0f};
@@ -485,6 +487,18 @@ namespace core
         navQuery->findNearestPoly(pos, halfExtents, &filter, &ref, nearest);
 
         return ref != 0;
+    }
+
+    void NavmeshAdapter::configureQueryFilter(void* filterPtr) const
+    {
+        auto* filter = static_cast<dtQueryFilter*>(filterPtr);
+        filter->setIncludeFlags(0xFFFF);
+        filter->setExcludeFlags(0);
+        filter->setAreaCost(types::NAVMESH_AREA_GROUND, 1.0f);
+        filter->setAreaCost(types::NAVMESH_AREA_JUMP, storedSettings.jumpCost);
+        filter->setAreaCost(types::NAVMESH_AREA_CLIMB, storedSettings.climbCost);
+        filter->setAreaCost(types::NAVMESH_AREA_DROP, storedSettings.dropCost);
+        filter->setAreaCost(types::NAVMESH_AREA_CUSTOM, storedSettings.customLinkCost);
     }
 
 }

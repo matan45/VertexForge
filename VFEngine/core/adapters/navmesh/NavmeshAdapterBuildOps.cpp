@@ -146,6 +146,7 @@ namespace core
         int tileX = 0;
         int tileZ = 0;
         int tileLayer = 0;
+        const navigation::NavmeshOffMeshConnections* offMeshLinks = nullptr;
     };
 
     struct DetourBuildResult
@@ -189,6 +190,49 @@ namespace core
         params.tileY = input.tileZ;
         params.tileLayer = input.tileLayer;
 
+        // Off-mesh connections
+        std::vector<float> offMeshVerts;
+        std::vector<float> offMeshRad;
+        std::vector<unsigned char> offMeshDir;
+        std::vector<unsigned char> offMeshAreas;
+        std::vector<unsigned short> offMeshFlags;
+        std::vector<unsigned int> offMeshIDs;
+
+        if (input.offMeshLinks && !input.offMeshLinks->empty())
+        {
+            int count = static_cast<int>(input.offMeshLinks->connections.size());
+            offMeshVerts.resize(count * 6);
+            offMeshRad.resize(count);
+            offMeshDir.resize(count);
+            offMeshAreas.resize(count);
+            offMeshFlags.resize(count);
+            offMeshIDs.resize(count);
+
+            for (int i = 0; i < count; ++i)
+            {
+                const auto& conn = input.offMeshLinks->connections[i];
+                offMeshVerts[i * 6 + 0] = conn.start.x;
+                offMeshVerts[i * 6 + 1] = conn.start.y;
+                offMeshVerts[i * 6 + 2] = conn.start.z;
+                offMeshVerts[i * 6 + 3] = conn.end.x;
+                offMeshVerts[i * 6 + 4] = conn.end.y;
+                offMeshVerts[i * 6 + 5] = conn.end.z;
+                offMeshRad[i] = conn.radius;
+                offMeshDir[i] = conn.direction;
+                offMeshAreas[i] = conn.areaType;
+                offMeshFlags[i] = conn.flags;
+                offMeshIDs[i] = conn.userID;
+            }
+
+            params.offMeshConVerts = offMeshVerts.data();
+            params.offMeshConRad = offMeshRad.data();
+            params.offMeshConDir = offMeshDir.data();
+            params.offMeshConAreas = offMeshAreas.data();
+            params.offMeshConFlags = offMeshFlags.data();
+            params.offMeshConUserID = offMeshIDs.data();
+            params.offMeshConCount = count;
+        }
+
         DetourBuildResult result;
         if (!dtCreateNavMeshData(&params, &result.navData, &result.navDataSize))
         {
@@ -199,7 +243,8 @@ namespace core
 
     static navigation::NavmeshTileData buildTileData(int tx, int tz,
                                                        const navigation::NavmeshInputGeometry& geometry,
-                                                       const types::NavmeshBakeSettings& settings)
+                                                       const types::NavmeshBakeSettings& settings,
+                                                       const navigation::NavmeshOffMeshConnections* offMeshLinks = nullptr)
     {
         navigation::NavmeshTileData result;
         result.x = tx;
@@ -257,7 +302,7 @@ namespace core
             return result;
         }
 
-        auto detourResult = createDetourData({&cfg, &settings, pmesh, dmesh, tx, tz});
+        auto detourResult = createDetourData({&cfg, &settings, pmesh, dmesh, tx, tz, 0, offMeshLinks});
         rcFreePolyMesh(pmesh);
         rcFreePolyMeshDetail(dmesh);
 
@@ -274,13 +319,15 @@ namespace core
 
     navigation::NavmeshTileData NavmeshAdapter::buildSingleTile(int tx, int tz,
                                                                   const navigation::NavmeshInputGeometry& geometry,
-                                                                  const types::NavmeshBakeSettings& settings)
+                                                                  const types::NavmeshBakeSettings& settings,
+                                                                  const navigation::NavmeshOffMeshConnections& offMeshLinks)
     {
-        return buildTileData(tx, tz, geometry, settings);
+        return buildTileData(tx, tz, geometry, settings, offMeshLinks.empty() ? nullptr : &offMeshLinks);
     }
 
     bool NavmeshAdapter::buildNavmesh(const navigation::NavmeshInputGeometry& geometry,
-                                       const types::NavmeshBakeSettings& settings)
+                                       const types::NavmeshBakeSettings& settings,
+                                       const navigation::OffMeshConnectionsMap& tileOffMeshLinks)
     {
         updateProgress(types::NavmeshBakeStatus::Collecting, 0.0f, "Preparing geometry");
 
@@ -354,7 +401,13 @@ namespace core
 
                 if (!tileGeometry.isEmpty())
                 {
-                    auto tileData = buildTileData(tx, tz, tileGeometry, settings);
+                    const navigation::NavmeshOffMeshConnections* tileLinks = nullptr;
+                    navigation::NavmeshTileCoord tileCoord{tx, tz};
+                    auto linkIt = tileOffMeshLinks.find(tileCoord);
+                    if (linkIt != tileOffMeshLinks.end())
+                        tileLinks = &linkIt->second;
+
+                    auto tileData = buildTileData(tx, tz, tileGeometry, settings, tileLinks);
                     if (!tileData.data.empty())
                     {
                         addNavmeshTile(tileData);

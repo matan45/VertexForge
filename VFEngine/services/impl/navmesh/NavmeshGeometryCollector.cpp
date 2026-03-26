@@ -467,4 +467,92 @@ namespace services
             }
         }
     }
+
+    // === Off-Mesh Link Collection ===
+
+    static uint8_t linkTypeToAreaType(components::OffMeshLinkType type)
+    {
+        switch (type)
+        {
+            case components::OffMeshLinkType::Jump:  return types::NAVMESH_AREA_JUMP;
+            case components::OffMeshLinkType::Climb: return types::NAVMESH_AREA_CLIMB;
+            case components::OffMeshLinkType::Drop:  return types::NAVMESH_AREA_DROP;
+            case components::OffMeshLinkType::Custom: return types::NAVMESH_AREA_CUSTOM;
+            default: return types::NAVMESH_AREA_GROUND;
+        }
+    }
+
+    navigation::OffMeshConnectionsMap NavmeshServiceImpl::collectAllOffMeshLinks(
+        const types::NavmeshBakeSettings& settings)
+    {
+        navigation::OffMeshConnectionsMap result;
+        auto& registry = scene::EntityRegistry::getRegistry();
+
+        float tileWorldSize = settings.tileSize * settings.cellSize;
+
+        auto view = registry.view<components::OffMeshLinkComponent, components::TransformComponent>();
+        uint32_t nextUserID = 1;
+        for (auto entity : view)
+        {
+            const auto& link = view.get<components::OffMeshLinkComponent>(entity);
+            const auto& transform = view.get<components::TransformComponent>(entity);
+
+            glm::vec3 worldStart = transform.position + link.startOffset;
+            glm::vec3 worldEnd = transform.position + link.endOffset;
+
+            navigation::NavmeshTileCoord tileCoord;
+            tileCoord.x = static_cast<int32_t>(floorf(worldStart.x / tileWorldSize));
+            tileCoord.z = static_cast<int32_t>(floorf(worldStart.z / tileWorldSize));
+
+            navigation::NavmeshOffMeshConnection conn;
+            conn.start = worldStart;
+            conn.end = worldEnd;
+            conn.radius = link.radius;
+            conn.direction = static_cast<uint8_t>(link.direction);
+            conn.areaType = link.areaType > 0 ? link.areaType : linkTypeToAreaType(link.linkType);
+            conn.flags = link.polyFlags;
+            conn.userID = nextUserID++;
+
+            result[tileCoord].connections.push_back(conn);
+        }
+
+        return result;
+    }
+
+    navigation::NavmeshOffMeshConnections NavmeshServiceImpl::collectOffMeshLinksForTile(
+        const navigation::NavmeshTileBounds& bounds,
+        const types::NavmeshBakeSettings& settings)
+    {
+        navigation::NavmeshOffMeshConnections result;
+        auto& registry = scene::EntityRegistry::getRegistry();
+
+        auto view = registry.view<components::OffMeshLinkComponent, components::TransformComponent>();
+        uint32_t nextUserID = 1;
+        for (auto entity : view)
+        {
+            const auto& link = view.get<components::OffMeshLinkComponent>(entity);
+            const auto& transform = view.get<components::TransformComponent>(entity);
+
+            glm::vec3 worldStart = transform.position + link.startOffset;
+
+            if (worldStart.x < bounds.min.x || worldStart.x > bounds.max.x ||
+                worldStart.z < bounds.min.z || worldStart.z > bounds.max.z)
+                continue;
+
+            glm::vec3 worldEnd = transform.position + link.endOffset;
+
+            navigation::NavmeshOffMeshConnection conn;
+            conn.start = worldStart;
+            conn.end = worldEnd;
+            conn.radius = link.radius;
+            conn.direction = static_cast<uint8_t>(link.direction);
+            conn.areaType = link.areaType > 0 ? link.areaType : linkTypeToAreaType(link.linkType);
+            conn.flags = link.polyFlags;
+            conn.userID = nextUserID++;
+
+            result.connections.push_back(conn);
+        }
+
+        return result;
+    }
 }

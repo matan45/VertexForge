@@ -21,6 +21,7 @@ namespace core
         mutable std::mutex navMeshMutex;
         mutable std::mutex progressMutex;
         types::NavmeshBakeProgress currentProgress;
+        types::NavmeshBakeSettings storedSettings;
     public:
         explicit NavmeshAdapter();
         ~NavmeshAdapter() override;
@@ -34,7 +35,8 @@ namespace core
 
         // === Navmesh Building ===
         bool buildNavmesh(const navigation::NavmeshInputGeometry& geometry,
-                           const types::NavmeshBakeSettings& settings) override;
+                           const types::NavmeshBakeSettings& settings,
+                           const navigation::OffMeshConnectionsMap& tileOffMeshLinks = {}) override;
         types::NavmeshBakeProgress getBuildProgress() const override;
 
         // === Tiled Navmesh ===
@@ -42,7 +44,8 @@ namespace core
                                const glm::vec3& boundsMin, const glm::vec3& boundsMax) override;
         navigation::NavmeshTileData buildSingleTile(int tx, int tz,
                                                       const navigation::NavmeshInputGeometry& geometry,
-                                                      const types::NavmeshBakeSettings& settings) override;
+                                                      const types::NavmeshBakeSettings& settings,
+                                                      const navigation::NavmeshOffMeshConnections& offMeshLinks = {}) override;
         bool addNavmeshTile(const navigation::NavmeshTileData& tileData) override;
         bool removeNavmeshTile(int tx, int tz) override;
 
@@ -82,5 +85,6 @@ namespace core
         void initCrowd(float agentRadius);
         bool initializeNavmesh(unsigned char* navData, int navDataSize, float agentRadius);
         void updateProgress(types::NavmeshBakeStatus status, float progress, const char* stage);
+        void configureQueryFilter(void* filter) const;
     };
 }

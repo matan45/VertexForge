@@ -258,6 +258,14 @@ namespace serialization
         static json serializeNavmesh(const components::NavmeshComponent& navmesh);
         static void deserializeNavmesh(const json& j, components::NavmeshComponent& navmesh);
 
+        static json serializeOffMeshLink(const components::OffMeshLinkComponent& link);
+        static void deserializeOffMeshLink(const json& j, components::OffMeshLinkComponent& link);
+
+        static std::string offMeshLinkTypeToString(components::OffMeshLinkType type);
+        static components::OffMeshLinkType stringToOffMeshLinkType(const std::string& str);
+        static std::string offMeshLinkDirectionToString(components::OffMeshLinkDirection dir);
+        static components::OffMeshLinkDirection stringToOffMeshLinkDirection(const std::string& str);
+
         static json serializeRenderTexture(const components::RenderTextureComponent& rtt);
         static void deserializeRenderTexture(const json& j, components::RenderTextureComponent& rtt);
 

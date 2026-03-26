@@ -267,6 +267,18 @@ namespace windows::details
                 ImGui::SetTooltip("Navigation mesh agent for pathfinding and crowd movement");
         }
 
+        if (!c.hasOffMeshLink)
+        {
+            if (ImGui::Selectable("  Off-Mesh Link"))
+            {
+                events::scene::AddOffMeshLinkComponentCommand cmd;
+                cmd.entity = handle;
+                dispatcher.execute(cmd);
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Off-mesh connection for jumps, climbs, and drops between navmesh regions");
+        }
+
         if (!c.hasController)
         {
             if (ImGui::Selectable("  Controller"))

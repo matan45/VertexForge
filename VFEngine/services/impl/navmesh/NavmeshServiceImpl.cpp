@@ -35,6 +35,12 @@ namespace services
                        })
     {
         assert(navmeshProvider && "NavmeshProvider must not be null");
+        tileManager.setOffMeshLinkCollector(
+            [this](const navigation::NavmeshTileBounds& bounds,
+                   const types::NavmeshBakeSettings& settings)
+            {
+                return collectOffMeshLinksForTile(bounds, settings);
+            });
     }
 
     NavmeshServiceImpl::~NavmeshServiceImpl()
@@ -275,10 +281,12 @@ namespace services
         vfLogInfo("NavmeshService: Baking navmesh with {} vertices, {} triangles",
                   geometry.getVertexCount(), geometry.getTriangleCount());
 
+        auto offMeshLinks = collectAllOffMeshLinks(settings);
+
         bakeFuture = threading::JobSystem::instance().submit(
-            [this, geom = std::move(geometry), settings]()
+            [this, geom = std::move(geometry), settings, links = std::move(offMeshLinks)]()
             {
-                return navmeshProvider->buildNavmesh(geom, settings);
+                return navmeshProvider->buildNavmesh(geom, settings, links);
             }, threading::JobPriority::LOW);
     }
 

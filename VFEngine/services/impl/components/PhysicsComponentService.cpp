@@ -463,6 +463,25 @@ namespace services
                 return removeNavmeshAgentComponent(cmd.entity);
             });
 
+        // Off-Mesh Link component handlers
+        dispatcher.registerCommandHandler<events::scene::AddOffMeshLinkComponentCommand>(
+            [this](const events::scene::AddOffMeshLinkComponentCommand& cmd)
+            {
+                return addOffMeshLinkComponent(cmd.entity);
+            });
+
+        dispatcher.registerCommandHandler<events::scene::RemoveOffMeshLinkComponentCommand>(
+            [this](const events::scene::RemoveOffMeshLinkComponentCommand& cmd)
+            {
+                return removeOffMeshLinkComponent(cmd.entity);
+            });
+
+        dispatcher.registerQueryHandler<events::scene::HasOffMeshLinkComponentQuery>(
+            [this](const events::scene::HasOffMeshLinkComponentQuery& query)
+            {
+                return hasOffMeshLinkComponent(query.entity);
+            });
+
         // Controller component handlers
         dispatcher.registerCommandHandler<events::scene::AddControllerComponentCommand>(
             [this](const events::scene::AddControllerComponentCommand& cmd)
@@ -475,6 +494,54 @@ namespace services
             {
                 return removeControllerComponent(cmd.entity);
             });
+    }
+
+    // ========== OFF-MESH LINK COMPONENT OPERATIONS ==========
+
+    bool PhysicsComponentService::addOffMeshLinkComponent(EntityHandle entity)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry))
+        {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (!sceneEntity.hasComponent<components::OffMeshLinkComponent>())
+        {
+            sceneEntity.addComponent<components::OffMeshLinkComponent>();
+            return true;
+        }
+        return false;
+    }
+
+    bool PhysicsComponentService::removeOffMeshLinkComponent(EntityHandle entity)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry))
+        {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (sceneEntity.hasComponent<components::OffMeshLinkComponent>())
+        {
+            sceneEntity.removeComponent<components::OffMeshLinkComponent>();
+            return true;
+        }
+        return false;
+    }
+
+    bool PhysicsComponentService::hasOffMeshLinkComponent(EntityHandle entity) const
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry))
+        {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        return sceneEntity.hasComponent<components::OffMeshLinkComponent>();
     }
 
     // ========== CONTROLLER COMPONENT OPERATIONS ==========

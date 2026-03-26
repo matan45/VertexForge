@@ -201,6 +201,28 @@ namespace events::scene {
     };
 
     // ============================================
+    // Off-Mesh Link Component Events
+    // ============================================
+
+    struct AddOffMeshLinkComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "AddOffMeshLinkComponent"; }
+    };
+
+    struct RemoveOffMeshLinkComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "RemoveOffMeshLinkComponent"; }
+    };
+
+    struct HasOffMeshLinkComponentQuery : IQuery<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "HasOffMeshLinkComponent"; }
+    };
+
+    // ============================================
     // Controller Component Events
     // ============================================
 

@@ -92,6 +92,7 @@ namespace windows
 
         bool hasSocketAttachment = socketAttachmentDrawer.draw(handle);
         bool hasNavmeshAgent = navmeshAgentDrawer.draw(handle);
+        bool hasOffMeshLink = offMeshLinkDrawer.draw(handle);
         bool hasController = controllerDrawer.draw(handle);
         bool hasRenderTexture = renderTextureDrawer.draw(handle);
         bool hasIK = ikDrawer.draw(handle);
@@ -137,6 +138,7 @@ namespace windows
                                 hasUIScroll, hasUILayoutGroup, hasUIButton, hasUITextInput,
                                 hasUICheckbox, hasUIDropdown, hasUITabs, hasUISlider,
                                 hasUIProgressBar, hasSocketAttachment, hasNavmeshAgent,
+                                hasOffMeshLink,
                                 hasRenderTexture, hasController, hasIK, hasBehaviorTree,
                                 hasDecal, hasReverbZone, hasFogVolume, hasUIAnimation, hasUIMask,
                                 hasUIDraggable, hasUIDropTarget});

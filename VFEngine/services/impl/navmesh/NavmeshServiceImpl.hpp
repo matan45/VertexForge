@@ -71,5 +71,8 @@ namespace services
         void collectColliderGeometry(navigation::NavmeshInputGeometry& outGeometry);
         void collectColliderGeometryForBounds(const navigation::NavmeshTileBounds& bounds,
                                                navigation::NavmeshInputGeometry& outGeometry);
+        navigation::OffMeshConnectionsMap collectAllOffMeshLinks(const types::NavmeshBakeSettings& settings);
+        navigation::NavmeshOffMeshConnections collectOffMeshLinksForTile(const navigation::NavmeshTileBounds& bounds,
+                                                                         const types::NavmeshBakeSettings& settings);
     };
 }
