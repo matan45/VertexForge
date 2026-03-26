@@ -178,6 +178,90 @@ namespace windows
         }
     }
 
+    void AtmosphereConfigWindow::drawDayNightSection()
+    {
+        ImGui::Spacing();
+        ImGui::Text("Day-Night Cycle");
+        ImGui::Separator();
+
+        if (ImGui::Checkbox("Enable Day-Night Cycle", &settings.dayNightEnabled))
+            isDirty = true;
+
+        if (settings.dayNightEnabled)
+        {
+            if (ImGui::SliderFloat("Time of Day", &settings.timeOfDay, 0.0f, 24.0f, "%.1f h"))
+                isDirty = true;
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("0=Midnight, 6=Dawn, 12=Noon, 18=Dusk");
+
+            if (ImGui::DragFloat("Cycle Speed", &settings.cycleSpeed, 0.1f, 0.0f, 100.0f, "%.1f"))
+                isDirty = true;
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("1.0 = one game-hour per real-time minute. 0 = paused.");
+
+            if (ImGui::SliderFloat("Moon Phase Offset", &settings.moonPhaseOffset, 0.0f, 1.0f, "%.2f"))
+                isDirty = true;
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Shifts the moon orbit relative to sun. 0 = full moon at midnight.");
+        }
+    }
+
+    void AtmosphereConfigWindow::drawMoonSection()
+    {
+        ImGui::Spacing();
+        ImGui::Text("Moon");
+        ImGui::Separator();
+
+        if (settings.dayNightEnabled)
+        {
+            ImGui::TextDisabled("Moon position is auto-computed by Day-Night Cycle.");
+            ImGui::Text("Azimuth: %.1f deg  Elevation: %.1f deg", settings.moonAzimuth, settings.moonElevation);
+        }
+        else
+        {
+            if (ImGui::DragFloat("Moon Azimuth", &settings.moonAzimuth, 1.0f, 0.0f, 360.0f, "%.1f deg"))
+                isDirty = true;
+
+            if (ImGui::DragFloat("Moon Elevation", &settings.moonElevation, 0.5f, -90.0f, 90.0f, "%.1f deg"))
+                isDirty = true;
+        }
+
+        float moonAngDeg = glm::degrees(settings.moonAngularRadius);
+        if (ImGui::DragFloat("Moon Angular Radius", &moonAngDeg, 0.01f, 0.01f, 5.0f, "%.3f deg"))
+        {
+            settings.moonAngularRadius = glm::radians(moonAngDeg);
+            isDirty = true;
+        }
+
+        if (ImGui::SliderFloat("Moon Brightness", &settings.moonBrightness, 0.0f, 1.0f, "%.3f"))
+            isDirty = true;
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Moon brightness relative to sun irradiance.");
+    }
+
+    void AtmosphereConfigWindow::drawStarsSection()
+    {
+        ImGui::Spacing();
+        ImGui::Text("Stars");
+        ImGui::Separator();
+
+        if (ImGui::DragFloat("Star Density", &settings.starDensity, 0.0005f, 0.0f, 0.05f, "%.4f"))
+            isDirty = true;
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Probability of a star per grid cell. Higher = more stars.");
+
+        if (ImGui::DragFloat("Star Brightness", &settings.starBrightness, 0.05f, 0.0f, 10.0f, "%.2f"))
+            isDirty = true;
+
+        if (ImGui::DragFloat("Twinkle Speed", &settings.starTwinkleSpeed, 0.1f, 0.0f, 5.0f, "%.1f"))
+            isDirty = true;
+
+        if (ImGui::DragFloat("Night Sky Brightness", &settings.nightSkyBrightness, 0.0005f, 0.0f, 0.05f, "%.4f"))
+            isDirty = true;
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Ambient sky brightness floor at night.");
+    }
+
     void AtmosphereConfigWindow::drawAerialSection()
     {
         ImGui::Spacing();
@@ -213,6 +297,9 @@ namespace windows
                 drawMieSection();
                 drawOzoneSection();
                 drawSunSection();
+                drawDayNightSection();
+                drawMoonSection();
+                drawStarsSection();
                 drawAerialSection();
             }
 

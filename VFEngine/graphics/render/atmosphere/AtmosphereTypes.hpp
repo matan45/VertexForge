@@ -22,6 +22,11 @@ namespace render::atmosphere
         glm::mat4 viewProjection;
         glm::vec4 screenParams;        // x=nearPlane, y=farPlane, z=aerialMaxDist, w=aerialIntensity
         glm::uvec4 screenSize;         // x=width, y=height, z=0, w=0
+
+        // Moon / Stars / Night
+        glm::vec4 moonDirection;       // xyz=direction, w=angularRadius
+        glm::vec4 moonParams;          // x=brightness, y=phase(0-1), z=nightSkyBrightness, w=0
+        glm::vec4 starParams;          // x=density, y=brightness, z=twinkleSpeed, w=time
     };
 
     inline glm::vec3 sunDirectionFromAngles(float azimuthDeg, float elevationDeg)

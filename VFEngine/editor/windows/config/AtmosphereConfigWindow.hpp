@@ -20,6 +20,9 @@ namespace windows
         void drawMieSection();
         void drawOzoneSection();
         void drawSunSection();
+        void drawDayNightSection();
+        void drawMoonSection();
+        void drawStarsSection();
         void drawAerialSection();
 
     public:
