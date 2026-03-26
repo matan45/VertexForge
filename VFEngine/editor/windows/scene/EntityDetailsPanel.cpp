@@ -96,6 +96,8 @@ namespace windows
         bool hasNavmeshObstacle = navmeshObstacleDrawer.draw(handle);
         bool hasNavmeshModifierVolume = navmeshModifierVolumeDrawer.draw(handle);
         bool hasNavInvoker = navInvokerDrawer.draw(handle);
+        bool hasVolumetricNavVolume = volumetricVolumeDrawer.draw(handle);
+        bool hasVolumetricAgent = volumetricAgentDrawer.draw(handle);
         bool hasController = controllerDrawer.draw(handle);
         bool hasRenderTexture = renderTextureDrawer.draw(handle);
         bool hasIK = ikDrawer.draw(handle);
@@ -144,7 +146,8 @@ namespace windows
                                 hasOffMeshLink, hasNavmeshObstacle, hasNavmeshModifierVolume,
                                 hasRenderTexture, hasController, hasIK, hasBehaviorTree,
                                 hasDecal, hasReverbZone, hasFogVolume, hasUIAnimation, hasUIMask,
-                                hasUIDraggable, hasUIDropTarget, hasNavInvoker});
+                                hasUIDraggable, hasUIDropTarget, hasNavInvoker,
+                                hasVolumetricNavVolume, hasVolumetricAgent});
     }
 
     void EntityDetailsPanel::drawEntityName(services::EntityHandle handle, const std::string& currentName)

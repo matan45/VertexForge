@@ -150,6 +150,10 @@ namespace serialization
             out["behaviorTree"] = serializeBehaviorTree(entity.getComponent<components::BehaviorTreeComponent>());
         if (entity.hasComponent<components::DecalComponent>())
             out["decal"] = serializeDecal(entity.getComponent<components::DecalComponent>());
+        if (entity.hasComponent<components::VolumetricNavVolumeComponent>())
+            out["volumetricNavVolume"] = serializeVolumetricNavVolume(entity.getComponent<components::VolumetricNavVolumeComponent>());
+        if (entity.hasComponent<components::VolumetricAgentComponent>())
+            out["volumetricAgent"] = serializeVolumetricAgent(entity.getComponent<components::VolumetricAgentComponent>());
     }
 
     json SceneSerialization::serializeEntityComponents(scene::Entity& entity)

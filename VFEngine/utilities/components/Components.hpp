@@ -13,6 +13,7 @@
 #include "VegetationComponents.hpp"
 #include "MeshBrushComponents.hpp"
 #include "DecalComponents.hpp"
+#include "VolumetricComponents.hpp"
 #include "PluginComponents.hpp"
 
 namespace components
@@ -33,5 +34,6 @@ namespace components
                                                IKTargetComponent, WorldSectorComponent,
                                                GrassComponent, MeshBrushInstanceComponent,
                                                BehaviorTreeComponent, DecalComponent, ReverbZoneComponent,
-                                               FogVolumeComponent>;
+                                               FogVolumeComponent,
+                                               VolumetricNavVolumeComponent, VolumetricAgentComponent>;
 }

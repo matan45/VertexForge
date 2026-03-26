@@ -177,6 +177,7 @@
     <ClInclude Include="adapters\vegetation\GrassRenderAdapter.hpp" />
     <ClInclude Include="adapters\vfx\VFXPreviewAdapter.hpp" />
     <ClInclude Include="adapters\vfx\VFXRuntimeAdapter.hpp" />
+    <ClInclude Include="adapters\volumetric\VolumetricNavAdapter.hpp" />
     <ClInclude Include="bootstrap\editor\EditorBootstrap.hpp" />
     <ClInclude Include="bootstrap\runtime\RuntimeBootstrap.hpp" />
     <ClInclude Include="controllers\CoreInterface.hpp" />
@@ -277,6 +278,7 @@
     <ClCompile Include="adapters\vegetation\GrassRenderAdapter.cpp" />
     <ClCompile Include="adapters\vfx\VFXPreviewAdapter.cpp" />
     <ClCompile Include="adapters\vfx\VFXRuntimeAdapter.cpp" />
+    <ClCompile Include="adapters\volumetric\VolumetricNavAdapter.cpp" />
     <ClCompile Include="bootstrap\editor\EditorBootstrap.cpp" />
     <ClCompile Include="bootstrap\editor\EditorBootstrapCleanup.cpp" />
     <ClCompile Include="bootstrap\editor\EditorBootstrapFrame.cpp" />

@@ -298,6 +298,12 @@ namespace serialization
         static json serializeDecal(const components::DecalComponent& decal);
         static void deserializeDecal(const json& j, components::DecalComponent& decal);
 
+        static json serializeVolumetricNavVolume(const components::VolumetricNavVolumeComponent& volume);
+        static void deserializeVolumetricNavVolume(const json& j, components::VolumetricNavVolumeComponent& volume);
+
+        static json serializeVolumetricAgent(const components::VolumetricAgentComponent& agent);
+        static void deserializeVolumetricAgent(const json& j, components::VolumetricAgentComponent& agent);
+
         static json serializeUIAnimation(const components::UIAnimationComponent& anim);
         static void deserializeUIAnimation(const json& j, components::UIAnimationComponent& anim);
 

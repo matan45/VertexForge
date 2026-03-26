@@ -539,6 +539,44 @@ namespace services
                 return hasNavInvokerComponent(query.entity);
             });
 
+        // Volumetric Nav Volume component handlers
+        dispatcher.registerCommandHandler<events::scene::AddVolumetricNavVolumeComponentCommand>(
+            [this](const events::scene::AddVolumetricNavVolumeComponentCommand& cmd)
+            {
+                return addVolumetricNavVolumeComponent(cmd.entity);
+            });
+
+        dispatcher.registerCommandHandler<events::scene::RemoveVolumetricNavVolumeComponentCommand>(
+            [this](const events::scene::RemoveVolumetricNavVolumeComponentCommand& cmd)
+            {
+                return removeVolumetricNavVolumeComponent(cmd.entity);
+            });
+
+        dispatcher.registerQueryHandler<events::scene::HasVolumetricNavVolumeComponentQuery>(
+            [this](const events::scene::HasVolumetricNavVolumeComponentQuery& query)
+            {
+                return hasVolumetricNavVolumeComponent(query.entity);
+            });
+
+        // Volumetric Agent component handlers
+        dispatcher.registerCommandHandler<events::scene::AddVolumetricAgentComponentCommand>(
+            [this](const events::scene::AddVolumetricAgentComponentCommand& cmd)
+            {
+                return addVolumetricAgentComponent(cmd.entity);
+            });
+
+        dispatcher.registerCommandHandler<events::scene::RemoveVolumetricAgentComponentCommand>(
+            [this](const events::scene::RemoveVolumetricAgentComponentCommand& cmd)
+            {
+                return removeVolumetricAgentComponent(cmd.entity);
+            });
+
+        dispatcher.registerQueryHandler<events::scene::HasVolumetricAgentComponentQuery>(
+            [this](const events::scene::HasVolumetricAgentComponentQuery& query)
+            {
+                return hasVolumetricAgentComponent(query.entity);
+            });
+
         // Controller component handlers
         dispatcher.registerCommandHandler<events::scene::AddControllerComponentCommand>(
             [this](const events::scene::AddControllerComponentCommand& cmd)
@@ -725,6 +763,90 @@ namespace services
 
         scene::Entity sceneEntity(internal::fromHandle(entity));
         return sceneEntity.hasComponent<components::NavInvokerComponent>();
+    }
+
+    // ========== VOLUMETRIC NAV VOLUME COMPONENT OPERATIONS ==========
+
+    bool PhysicsComponentService::addVolumetricNavVolumeComponent(EntityHandle entity)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry))
+            return false;
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (!sceneEntity.hasComponent<components::VolumetricNavVolumeComponent>())
+        {
+            sceneEntity.addComponent<components::VolumetricNavVolumeComponent>();
+            return true;
+        }
+        return false;
+    }
+
+    bool PhysicsComponentService::removeVolumetricNavVolumeComponent(EntityHandle entity)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry))
+            return false;
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (sceneEntity.hasComponent<components::VolumetricNavVolumeComponent>())
+        {
+            sceneEntity.removeComponent<components::VolumetricNavVolumeComponent>();
+            return true;
+        }
+        return false;
+    }
+
+    bool PhysicsComponentService::hasVolumetricNavVolumeComponent(EntityHandle entity) const
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry))
+            return false;
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        return sceneEntity.hasComponent<components::VolumetricNavVolumeComponent>();
+    }
+
+    // ========== VOLUMETRIC AGENT COMPONENT OPERATIONS ==========
+
+    bool PhysicsComponentService::addVolumetricAgentComponent(EntityHandle entity)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry))
+            return false;
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (!sceneEntity.hasComponent<components::VolumetricAgentComponent>())
+        {
+            sceneEntity.addComponent<components::VolumetricAgentComponent>();
+            return true;
+        }
+        return false;
+    }
+
+    bool PhysicsComponentService::removeVolumetricAgentComponent(EntityHandle entity)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry))
+            return false;
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (sceneEntity.hasComponent<components::VolumetricAgentComponent>())
+        {
+            sceneEntity.removeComponent<components::VolumetricAgentComponent>();
+            return true;
+        }
+        return false;
+    }
+
+    bool PhysicsComponentService::hasVolumetricAgentComponent(EntityHandle entity) const
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry))
+            return false;
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        return sceneEntity.hasComponent<components::VolumetricAgentComponent>();
     }
 
     // ========== CONTROLLER COMPONENT OPERATIONS ==========

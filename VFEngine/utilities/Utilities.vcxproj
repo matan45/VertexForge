@@ -122,6 +122,8 @@
     <ClInclude Include="components\TerrainComponents.hpp" />
     <ClInclude Include="components\UIComponents.hpp" />
     <ClInclude Include="components\VegetationComponents.hpp" />
+    <ClInclude Include="components\VolumetricComponents.hpp" />
+    <ClInclude Include="components\VolumetricNavComponents.hpp" />
     <ClInclude Include="components\WaterComponents.hpp" />
     <ClInclude Include="config\Config.hpp" />
     <ClInclude Include="config\ProjectConfig.hpp" />
@@ -162,6 +164,10 @@
     <ClInclude Include="navigation\NavmeshData.hpp" />
     <ClInclude Include="navigation\NavmeshSerializer.hpp" />
     <ClInclude Include="navigation\NavmeshTileCache.hpp" />
+    <ClInclude Include="navigation\volumetric\SparseVoxelOctree.hpp" />
+    <ClInclude Include="navigation\volumetric\VolumetricPathfinder.hpp" />
+    <ClInclude Include="navigation\volumetric\VolumetricSerializer.hpp" />
+    <ClInclude Include="navigation\volumetric\VolumetricTypes.hpp" />
     <ClInclude Include="nfd\FileDialog.hpp" />
     <ClInclude Include="physics\PhysicsAnimationAsset.hpp" />
     <ClInclude Include="postprocess\PostProcessTypes.hpp" />
@@ -261,6 +267,9 @@
     <ClCompile Include="meshbrush\MeshBrushSpatialGrid.cpp" />
     <ClCompile Include="navigation\NavmeshSerializer.cpp" />
     <ClCompile Include="navigation\NavmeshTileCache.cpp" />
+    <ClCompile Include="navigation\volumetric\SparseVoxelOctree.cpp" />
+    <ClCompile Include="navigation\volumetric\VolumetricPathfinder.cpp" />
+    <ClCompile Include="navigation\volumetric\VolumetricSerializer.cpp" />
     <ClCompile Include="nfd\FileDialog.cpp" />
     <ClCompile Include="physics\PhysicsAnimationAsset.cpp" />
     <ClCompile Include="resource\AnimationResource.cpp" />

@@ -199,6 +199,7 @@
     <ClInclude Include="events\vfx\VFXPreviewEvents.hpp" />
     <ClInclude Include="events\vfx\VFXRuntimeEvents.hpp" />
     <ClInclude Include="events\vfx\VFXSnapshotEvents.hpp" />
+    <ClInclude Include="events\volumetric\VolumetricNavEvents.hpp" />
     <ClInclude Include="events\world\WorldSectorEvents.hpp" />
     <ClInclude Include="impl\ai\BehaviorTreePlayModeHandler.hpp" />
     <ClInclude Include="impl\ai\BehaviorTreeServiceImpl.hpp" />
@@ -280,6 +281,8 @@
     <ClInclude Include="impl\vegetation\VegetationBrushServiceImpl.hpp" />
     <ClInclude Include="impl\vfx\VFXPlayModeHandler.hpp" />
     <ClInclude Include="impl\vfx\VFXRuntimeServiceImpl.hpp" />
+    <ClInclude Include="impl\volumetric\VolumetricAgentManager.hpp" />
+    <ClInclude Include="impl\volumetric\VolumetricNavServiceImpl.hpp" />
     <ClInclude Include="impl\world\WorldSectorServiceImpl.hpp" />
     <ClInclude Include="interfaces\ai\IBehaviorTreeService.hpp" />
     <ClInclude Include="interfaces\ai\IEQSService.hpp" />
@@ -327,6 +330,7 @@
     <ClInclude Include="interfaces\vegetation\IGrassService.hpp" />
     <ClInclude Include="interfaces\vegetation\IVegetationBrushModeService.hpp" />
     <ClInclude Include="interfaces\vegetation\IVegetationBrushService.hpp" />
+    <ClInclude Include="interfaces\volumetric\IVolumetricNavService.hpp" />
     <ClInclude Include="interfaces\world\IWorldSectorService.hpp" />
     <ClInclude Include="providers\PreviewInstanceId.hpp" />
     <ClInclude Include="providers\ai\IBehaviorTreeProvider.hpp" />
@@ -361,6 +365,7 @@
     <ClInclude Include="providers\vegetation\IVegetationRenderProvider.hpp" />
     <ClInclude Include="providers\vfx\IVFXPreviewProvider.hpp" />
     <ClInclude Include="providers\vfx\IVFXRuntimeProvider.hpp" />
+    <ClInclude Include="providers\volumetric\IVolumetricNavProvider.hpp" />
     <ClInclude Include="serialization\InputMappingSerialization.hpp" />
   </ItemGroup>
   <ItemGroup>
@@ -475,6 +480,8 @@
     <ClCompile Include="impl\vegetation\VegetationBrushServiceImpl.cpp" />
     <ClCompile Include="impl\vfx\VFXPlayModeHandler.cpp" />
     <ClCompile Include="impl\vfx\VFXRuntimeServiceImpl.cpp" />
+    <ClCompile Include="impl\volumetric\VolumetricAgentManager.cpp" />
+    <ClCompile Include="impl\volumetric\VolumetricNavServiceImpl.cpp" />
     <ClCompile Include="impl\world\WorldSectorPersistenceOps.cpp" />
     <ClCompile Include="impl\world\WorldSectorServiceImpl.cpp" />
     <ClCompile Include="impl\world\WorldSectorStreamingOps.cpp" />

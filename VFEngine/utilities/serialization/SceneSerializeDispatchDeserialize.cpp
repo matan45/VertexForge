@@ -343,6 +343,16 @@ namespace serialization
             auto& comp = entity.addOrReplaceComponent<components::DecalComponent>();
             deserializeDecal(c["decal"], comp);
         }
+        if (c.contains("volumetricNavVolume"))
+        {
+            auto& comp = entity.addOrReplaceComponent<components::VolumetricNavVolumeComponent>();
+            deserializeVolumetricNavVolume(c["volumetricNavVolume"], comp);
+        }
+        if (c.contains("volumetricAgent"))
+        {
+            auto& comp = entity.addOrReplaceComponent<components::VolumetricAgentComponent>();
+            deserializeVolumetricAgent(c["volumetricAgent"], comp);
+        }
     }
 
     void SceneSerialization::deserializeEntityComponents(const json& componentsJson, scene::Entity& entity)

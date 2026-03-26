@@ -289,6 +289,50 @@ namespace events::scene {
     };
 
     // ============================================
+    // Volumetric Nav Volume Component Events
+    // ============================================
+
+    struct AddVolumetricNavVolumeComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "AddVolumetricNavVolumeComponent"; }
+    };
+
+    struct RemoveVolumetricNavVolumeComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "RemoveVolumetricNavVolumeComponent"; }
+    };
+
+    struct HasVolumetricNavVolumeComponentQuery : IQuery<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "HasVolumetricNavVolumeComponent"; }
+    };
+
+    // ============================================
+    // Volumetric Agent Component Events
+    // ============================================
+
+    struct AddVolumetricAgentComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "AddVolumetricAgentComponent"; }
+    };
+
+    struct RemoveVolumetricAgentComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "RemoveVolumetricAgentComponent"; }
+    };
+
+    struct HasVolumetricAgentComponentQuery : IQuery<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "HasVolumetricAgentComponent"; }
+    };
+
+    // ============================================
     // Controller Component Events
     // ============================================
 
