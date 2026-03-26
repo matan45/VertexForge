@@ -104,4 +104,59 @@ public class Atmosphere {
     public static function setAerialIntensity(float intensity): void {
         _native_atmosphere_setAerialIntensity(intensity);
     }
+
+    // ============================================
+    // Day-Night Cycle
+    // ============================================
+
+    // Whether the automatic day-night cycle is active
+    public static function isDayNightEnabled(): bool {
+        return _native_atmosphere_isDayNightEnabled();
+    }
+
+    public static function setDayNightEnabled(bool enabled): void {
+        _native_atmosphere_setDayNightEnabled(enabled);
+    }
+
+    // Current time of day in hours 0..24 (default: 12)
+    public static function getTimeOfDay(): float {
+        return _native_atmosphere_getTimeOfDay();
+    }
+
+    public static function setTimeOfDay(float hours): void {
+        _native_atmosphere_setTimeOfDay(hours);
+    }
+
+    // Cycle speed: 1.0 = one game-hour per real minute (default: 1.0)
+    public static function setCycleSpeed(float speed): void {
+        _native_atmosphere_setCycleSpeed(speed);
+    }
+
+    // ============================================
+    // Moon
+    // ============================================
+
+    // Moon brightness relative to sun 0..1 (default: 0.03)
+    public static function setMoonBrightness(float brightness): void {
+        _native_atmosphere_setMoonBrightness(brightness);
+    }
+
+    // ============================================
+    // Stars
+    // ============================================
+
+    // Star density / probability per grid cell 0..0.05 (default: 0.006)
+    public static function setStarDensity(float density): void {
+        _native_atmosphere_setStarDensity(density);
+    }
+
+    // Star HDR brightness multiplier 0..10 (default: 1.5)
+    public static function setStarBrightness(float brightness): void {
+        _native_atmosphere_setStarBrightness(brightness);
+    }
+
+    // Night sky ambient brightness floor 0..0.05 (default: 0.002)
+    public static function setNightSkyBrightness(float brightness): void {
+        _native_atmosphere_setNightSkyBrightness(brightness);
+    }
 }
