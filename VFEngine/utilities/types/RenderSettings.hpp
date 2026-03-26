@@ -112,7 +112,6 @@ namespace types
         float lodBias = 1.0f;
         float errorThreshold = 2.0f;
         float textureScale = 0.1f;
-        uint32_t shadowLOD = 0; // LOD level for terrain shadows (always highest detail)
     };
 
     struct VFXLODSettings
@@ -135,11 +134,6 @@ namespace types
         uint32_t maxStreamingInitPerFrame = 4;
     };
 
-    struct ShadowLODSettings
-    {
-        bool enabled = false; // Disabled by default with VSM (page-based allocation handles this)
-    };
-
     struct LightStreamingSettings
     {
         uint32_t maxPointLights = 1024;
@@ -154,7 +148,6 @@ namespace types
     struct RenderSettings
     {
         ShadowSettings shadows;
-        ShadowLODSettings shadowLOD;
         LightStreamingSettings lightStreaming;
         CullingSettings culling;
         DistanceCullingSettings distanceCulling;

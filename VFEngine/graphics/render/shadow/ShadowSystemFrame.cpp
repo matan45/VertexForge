@@ -48,6 +48,7 @@ namespace render::shadow
             view.farPlane = farPlane;
             view.lightPosition = glm::vec4(lightPosition, 1.0f);
             view.layer = face;
+            view.texelSize = 1.0f / static_cast<float>(data.settings.resolution);
             view.depthBias = data.settings.depthBias;
             view.slopeBias = data.settings.slopeBias;
             view.normalBias = data.settings.normalBias;
@@ -282,6 +283,7 @@ namespace render::shadow
         if (!shadowsEnabled) return;
         ++frameCounter;
         newPagesAllocatedThisFrame = 0;
+        buildEvictionHeap();
 
         glm::vec3 camPos = -glm::vec3(cameraView[3]) * glm::mat3(cameraView);
         glm::vec3 camFwd = -glm::vec3(cameraView[0][2], cameraView[1][2], cameraView[2][2]);

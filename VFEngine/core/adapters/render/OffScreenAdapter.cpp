@@ -415,12 +415,6 @@ namespace core {
         }
     }
 
-    void OffScreenAdapter::setTerrainShadowLOD(uint32_t lod) {
-        if (offScreen) {
-            offScreen->setTerrainShadowLOD(lod);
-        }
-    }
-
     void OffScreenAdapter::setTerrainSVTEnabled(bool enabled) {
         if (offScreen) {
             offScreen->setTerrainSVTEnabled(enabled);

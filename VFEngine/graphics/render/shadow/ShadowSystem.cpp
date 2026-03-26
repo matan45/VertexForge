@@ -6,6 +6,7 @@
 #include "components/Components.hpp"
 #include "print/Log.hpp"
 #include "threading/JobSystem.hpp"
+#include <algorithm>
 
 namespace render::shadow
 {
@@ -405,46 +406,56 @@ namespace render::shadow
         return true;
     }
 
-    uint32_t ShadowSystem::evictLowestPriorityPage(float requestingPriority)
+    void ShadowSystem::buildEvictionHeap()
     {
-        float lowestPriority = requestingPriority * 0.5f;
-        LightShadowData* victimData = nullptr;
-        uint32_t victimPageIdx = 0;
-        uint32_t oldestFrame = UINT32_MAX;
-
+        evictionHeap.clear();
         for (auto& [entityId, data] : lightShadowData)
         {
-            if (data.shadowPriority >= lowestPriority)
-                continue;
             if (data.vsmPhysicalTiles.empty())
                 continue;
-
             for (uint32_t i = 0; i < data.vsmPhysicalTiles.size(); ++i)
             {
                 if (data.vsmPhysicalTiles[i] == vsm::INVALID_TILE)
                     continue;
                 uint32_t lastUsed = (i < data.vsmPageLastUsedFrame.size())
                     ? data.vsmPageLastUsedFrame[i] : 0;
-                if (lastUsed < oldestFrame)
-                {
-                    oldestFrame = lastUsed;
-                    victimData = &data;
-                    victimPageIdx = i;
-                }
+                evictionHeap.push_back({data.shadowPriority, lastUsed, entityId, i});
             }
         }
+        std::make_heap(evictionHeap.begin(), evictionHeap.end(), std::greater<>{});
+    }
 
-        if (!victimData)
-            return vsm::INVALID_TILE;
+    uint32_t ShadowSystem::evictLowestPriorityPage(float requestingPriority)
+    {
+        float threshold = requestingPriority * 0.5f;
 
-        uint32_t tile = victimData->vsmPhysicalTiles[victimPageIdx];
-        victimData->vsmPhysicalTiles[victimPageIdx] = vsm::INVALID_TILE;
+        while (!evictionHeap.empty())
+        {
+            std::pop_heap(evictionHeap.begin(), evictionHeap.end(), std::greater<>{});
+            auto candidate = evictionHeap.back();
+            evictionHeap.pop_back();
 
-        uint32_t px = victimPageIdx % victimData->vsmPagesX;
-        uint32_t py = victimPageIdx / victimData->vsmPagesX;
-        pageTable->unmapPage(victimData->vsmPageTableOffset, px, py, victimData->vsmPagesX);
+            if (candidate.priority >= threshold)
+                return vsm::INVALID_TILE;
 
-        return tile;
+            auto it = lightShadowData.find(candidate.entityId);
+            if (it == lightShadowData.end())
+                continue;
+            auto& data = it->second;
+            if (candidate.pageIdx >= data.vsmPhysicalTiles.size())
+                continue;
+            if (data.vsmPhysicalTiles[candidate.pageIdx] == vsm::INVALID_TILE)
+                continue;
+
+            uint32_t tile = data.vsmPhysicalTiles[candidate.pageIdx];
+            data.vsmPhysicalTiles[candidate.pageIdx] = vsm::INVALID_TILE;
+
+            uint32_t px = candidate.pageIdx % data.vsmPagesX;
+            uint32_t py = candidate.pageIdx / data.vsmPagesX;
+            pageTable->unmapPage(data.vsmPageTableOffset, px, py, data.vsmPagesX);
+            return tile;
+        }
+        return vsm::INVALID_TILE;
     }
 
     bool ShadowSystem::allocateVSMPages(LightShadowData& data)

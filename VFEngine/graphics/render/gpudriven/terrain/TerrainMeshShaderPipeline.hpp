@@ -31,7 +31,7 @@ namespace render::gpudriven
         float brushWorldRadius;    // 0.0 = inactive
         float brushFalloff;        // Falloff type (0=constant, 1=linear, 2=smooth, 3=sharp)
         float brushShape;          // Shape (0=circle, 1=square)
-        float shadowLOD;           // Shadow LOD level (0-3) for receiver-side bias scaling
+        float _shadowLODRemoved;   // Reserved padding (was shadowLOD)
         uint32_t hiZMipLevels;     // Mip levels in the Hi-Z pyramid (0 = disabled)
         float _pad3;               // Align mat4 to 16-byte boundary (offset 64)
         glm::mat4 viewProjection; // CPU-precomputed view-projection (matches raycast invViewProjection)
@@ -118,7 +118,6 @@ namespace render::gpudriven
         float brushFalloff = 0.0f;
         float brushShape = 0.0f;
         float terrainMaxDrawDistSq = 0.0f;
-        uint32_t shadowLOD = 0;
         glm::mat4 viewProjection{1.0f};
 
     public:
@@ -191,8 +190,6 @@ namespace render::gpudriven
         void setMeshletOcclusionCullingEnabled(bool enabled) { meshletOcclusionCullingEnabled = enabled; }
         void setHiZMipLevels(uint32_t levels) { hiZMipLevels = levels; }
         void setTerrainMaxDrawDistSq(float distSq) { terrainMaxDrawDistSq = distSq; }
-        void setShadowLOD(uint32_t lod) { shadowLOD = lod; }
-
         void setBrushOverlay(const glm::vec2& worldPos, float worldRadius, float falloff, float shape)
         {
             brushWorldPos = worldPos;

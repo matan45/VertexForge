@@ -235,7 +235,21 @@ namespace render
             bool allocateVSMPages(LightShadowData& data);
             void freeVSMPages(LightShadowData& data);
 
-            // Shadow streaming: evict lowest-priority page to make room
+            // Shadow streaming: evict lowest-priority page to make room (O(1) via pre-built cache)
+            struct EvictionCandidate
+            {
+                float priority;
+                uint32_t lastUsedFrame;
+                uint32_t entityId;
+                uint32_t pageIdx;
+                bool operator>(const EvictionCandidate& o) const
+                {
+                    if (priority != o.priority) return priority > o.priority;
+                    return lastUsedFrame > o.lastUsedFrame;
+                }
+            };
+            std::vector<EvictionCandidate> evictionHeap;
+            void buildEvictionHeap();
             uint32_t evictLowestPriorityPage(float requestingPriority);
 
             // Per-type VSM page allocation helpers

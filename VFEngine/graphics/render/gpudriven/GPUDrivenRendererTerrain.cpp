@@ -353,7 +353,6 @@ namespace render::gpudriven
             terrainDistSq = d * d;
         }
         terrain.pipeline->setTerrainMaxDrawDistSq(terrainDistSq);
-        terrain.pipeline->setShadowLOD(terrain.shadowLOD);
         terrain.pipeline->setMeshletOcclusionCullingEnabled(culling.meshletOcclusionCullingEnabled);
         terrain.pipeline->setHiZMipLevels(prepassHiZMipLevels);
 

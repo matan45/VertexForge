@@ -281,14 +281,6 @@ namespace render
         }
     }
 
-    void RenderPassHandler::setTerrainShadowLOD(uint32_t lod)
-    {
-        if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
-        {
-            gpuDrivenRenderer->setTerrainShadowLOD(lod);
-        }
-    }
-
     void RenderPassHandler::setTerrainSVTEnabled(bool enabled)
     {
         if (gpuDrivenRendererInitialized && gpuDrivenRenderer)

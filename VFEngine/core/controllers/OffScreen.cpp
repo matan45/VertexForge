@@ -401,11 +401,6 @@ namespace controllers {
 		offScreenController->setTerrainTextureScale(scale);
 	}
 
-	void OffScreen::setTerrainShadowLOD(uint32_t lod)
-	{
-		offScreenController->setTerrainShadowLOD(lod);
-	}
-
 	void OffScreen::setTerrainSVTEnabled(bool enabled)
 	{
 		offScreenController->setTerrainSVTEnabled(enabled);
