@@ -16,7 +16,6 @@ namespace render::shadow
     {
         glm::mat4 lightViewProjection;
         uint32_t tileCount;
-        uint32_t shadowLOD;
         float depthBias;
         float slopeBias;
     };
@@ -56,7 +55,6 @@ namespace render::shadow
                       vk::DescriptorSet vertexDescSet,
                       const glm::mat4& lightViewProjection,
                       uint32_t tileCount,
-                      uint32_t shadowLOD,
                       float depthBias,
                       float slopeBias);
 

@@ -47,14 +47,15 @@ namespace render::shadow
         {
             if (!data.settings.enabled || !data.settings.castShadows)
                 continue;
-            if (data.type == ShadowMapType::PointCube || data.vsmPhysicalTiles.empty())
+            if (data.vsmPhysicalTiles.empty())
                 continue;
 
             uint32_t totalPages = data.vsmPagesX * data.vsmPagesY;
             if (data.vsmPageDirty.size() != totalPages)
                 data.vsmPageDirty.resize(totalPages, true);
 
-            if (!data.isStatic)
+            bool needsDynamicArrays = !data.isStatic || data.type == ShadowMapType::PointCube;
+            if (needsDynamicArrays)
             {
                 if (data.vsmDynamicTiles.size() != totalPages)
                     data.vsmDynamicTiles.resize(totalPages, vsm::INVALID_TILE);
@@ -68,6 +69,8 @@ namespace render::shadow
                 buildCSMPageRenderList(data);
             else if (data.type == ShadowMapType::DirectionalClipmap)
                 buildClipmapPageRenderList(data);
+            else if (data.type == ShadowMapType::PointCube)
+                buildPointPageRenderList(data);
             else
                 buildSingleViewPageRenderList(data);
         }
@@ -185,7 +188,7 @@ namespace render::shadow
         ++lastCacheStats.totalPages;
         bool forceRender = data.renderedFrameCount < 3;
 
-        if (data.isStatic)
+        if (data.isStatic && data.type != ShadowMapType::PointCube)
             addStaticLightPage(data, pageIdx, cropViewProjection, view, isDirty, forceRender);
         else
             addDualLayerPage(data, pageIdx, cropViewProjection, view, isDirty, forceRender);
@@ -215,6 +218,30 @@ namespace render::shadow
         }
     }
 
+    void ShadowSystem::remapClipmapPageTable(LightShadowData& data, uint32_t basePageIdx,
+                                               uint32_t pagesPerSide, const glm::ivec2& scroll)
+    {
+        uint32_t ptOffset = data.vsmPageTableOffset + basePageIdx;
+        for (uint32_t py = 0; py < pagesPerSide; ++py)
+        {
+            for (uint32_t px = 0; px < pagesPerSide; ++px)
+            {
+                uint32_t sx = (px + scroll.x) % pagesPerSide;
+                uint32_t sy = (py + scroll.y) % pagesPerSide;
+                uint32_t storageIdx = basePageIdx + sy * pagesPerSide + sx;
+
+                if (storageIdx < data.vsmPhysicalTiles.size())
+                {
+                    uint32_t physTile = data.vsmPhysicalTiles[storageIdx];
+                    if (physTile != vsm::INVALID_TILE)
+                        pageTable->mapPage(ptOffset, px, py, pagesPerSide, physTile);
+                    else
+                        pageTable->unmapPage(ptOffset, px, py, pagesPerSide);
+                }
+            }
+        }
+    }
+
     void ShadowSystem::buildClipmapPageRenderList(LightShadowData& data)
     {
         uint32_t levelCount = std::min(static_cast<uint32_t>(data.views.size()),
@@ -229,50 +256,25 @@ namespace render::shadow
             uint32_t pagesPerSide = data.clipmapLevelPagesPerSide[level];
             uint32_t basePageIdx = data.clipmapLevelPageOffsets[level];
 
-            // Get toroidal scroll offset for this level
             glm::ivec2 scroll(0);
             if (level < data.clipmapScrollOffset.size())
                 scroll = data.clipmapScrollOffset[level];
 
-            // Remap page table entries for this level (toroidal virtual-to-physical mapping)
-            uint32_t ptOffset = data.vsmPageTableOffset + basePageIdx;
-            for (uint32_t py = 0; py < pagesPerSide; ++py)
-            {
-                for (uint32_t px = 0; px < pagesPerSide; ++px)
-                {
-                    // Virtual page (px,py) in current VP maps to storage slot (sx,sy)
-                    uint32_t sx = (px + scroll.x) % pagesPerSide;
-                    uint32_t sy = (py + scroll.y) % pagesPerSide;
-                    uint32_t storageIdx = basePageIdx + sy * pagesPerSide + sx;
+            remapClipmapPageTable(data, basePageIdx, pagesPerSide, scroll);
 
-                    if (storageIdx < data.vsmPhysicalTiles.size())
-                    {
-                        uint32_t physTile = data.vsmPhysicalTiles[storageIdx];
-                        if (physTile != vsm::INVALID_TILE)
-                            pageTable->mapPage(ptOffset, px, py, pagesPerSide, physTile);
-                        else
-                            pageTable->unmapPage(ptOffset, px, py, pagesPerSide);
-                    }
-                }
-            }
-
-            // Use page-grid-snapped VP for rendering (stable, world-anchored depth)
             glm::mat4 renderVP = (level < data.clipmapRenderVP.size())
                 ? data.clipmapRenderVP[level] : view.viewProjectionMatrix;
 
-            // Build render list with toroidal page indexing
             for (uint32_t py = 0; py < pagesPerSide; ++py)
             {
                 for (uint32_t px = 0; px < pagesPerSide; ++px)
                 {
-                    // Toroidal wrap: virtual (px,py) → storage (sx,sy)
                     uint32_t sx = (px + scroll.x) % pagesPerSide;
                     uint32_t sy = (py + scroll.y) % pagesPerSide;
                     uint32_t storageIdx = basePageIdx + sy * pagesPerSide + sx;
                     if (storageIdx >= data.vsmPhysicalTiles.size())
                         continue;
 
-                    // Crop matrix uses virtual position (px,py) in the page-grid VP space
                     glm::mat4 cropMatrix = vsm::computePageCropMatrix(px, py, pagesPerSide, pagesPerSide);
                     addPageToRenderLists(data, storageIdx, cropMatrix * renderVP, view, false);
                 }
@@ -287,7 +289,7 @@ namespace render::shadow
 
         const auto& view = data.views[0];
         if (view.cached) return;
-        bool lightMoved = (view.viewProjectionMatrix != data.lastViewProjection);
+        bool lightMoved = matrixChanged(view.viewProjectionMatrix, data.lastViewProjection);
         if (lightMoved)
         {
             data.lastViewProjection = view.viewProjectionMatrix;
@@ -304,6 +306,108 @@ namespace render::shadow
                     continue;
                 glm::mat4 cropMatrix = vsm::computePageCropMatrix(px, py, data.vsmPagesX, data.vsmPagesY);
                 addPageToRenderLists(data, pageIdx, cropMatrix * view.viewProjectionMatrix, view, false);
+            }
+        }
+    }
+
+    void ShadowSystem::buildPointPageRenderList(LightShadowData& data)
+    {
+        if (data.views.size() != ShadowConstants::CUBE_FACE_COUNT)
+            return;
+
+        // Point lights have 6 faces laid out as pagesPerFace x (6 * pagesPerFace)
+        uint32_t pagesPerFace = data.vsmPagesX;
+        uint32_t faceHeight = pagesPerFace;
+
+        bool lightMoved = matrixChanged(data.views[0].viewProjectionMatrix, data.lastViewProjection);
+        if (lightMoved)
+        {
+            data.lastViewProjection = data.views[0].viewProjectionMatrix;
+            for (size_t i = 0; i < data.vsmPageDirty.size(); ++i)
+                data.vsmPageDirty[i] = true;
+        }
+
+        for (uint32_t face = 0; face < ShadowConstants::CUBE_FACE_COUNT; ++face)
+        {
+            const auto& view = data.views[face];
+
+            for (uint32_t fy = 0; fy < faceHeight; ++fy)
+            {
+                for (uint32_t fx = 0; fx < pagesPerFace; ++fx)
+                {
+                    uint32_t pageIdx = (face * faceHeight + fy) * pagesPerFace + fx;
+                    if (pageIdx >= data.vsmPhysicalTiles.size())
+                        continue;
+
+                    glm::mat4 cropMatrix = vsm::computePageCropMatrix(fx, fy, pagesPerFace, faceHeight);
+                    addPageToRenderLists(data, pageIdx, cropMatrix * view.viewProjectionMatrix, view, lightMoved);
+                }
+            }
+        }
+    }
+
+    void ShadowSystem::handleDirectionalModeSwitch(LightShadowData& data,
+                                                     const types::ShadowSettings& shadowSettings,
+                                                     types::DirectionalShadowMode newMode)
+    {
+        if (data.usesVSM())
+            freeVSMPages(data);
+
+        if (newMode == types::DirectionalShadowMode::Clipmap)
+        {
+            data.type = ShadowMapType::DirectionalClipmap;
+            data.settings.clipmapLevelCount = shadowSettings.clipmapLevelCount;
+            data.settings.clipmapBaseExtent = shadowSettings.clipmapBaseExtent;
+            data.views.resize(shadowSettings.clipmapLevelCount);
+            for (size_t i = 0; i < data.views.size(); ++i)
+            {
+                data.views[i].cascadeIndex = static_cast<uint16_t>(i);
+                data.views[i].type = ShadowMapType::DirectionalClipmap;
+            }
+        }
+        else
+        {
+            data.type = ShadowMapType::DirectionalCSM;
+            data.settings.cascadeCount = shadowSettings.cascadeCount;
+            data.views.resize(shadowSettings.cascadeCount);
+            for (size_t i = 0; i < data.views.size(); ++i)
+            {
+                data.views[i].cascadeIndex = static_cast<uint16_t>(i);
+                data.views[i].type = ShadowMapType::DirectionalCSM;
+            }
+        }
+
+        if (data.usesVSM())
+            allocateVSMPages(data);
+        data.matricesDirty = true;
+    }
+
+    void ShadowSystem::updateDirectionalSettings(LightShadowData& data,
+                                                   const types::ShadowSettings& shadowSettings,
+                                                   bool modeChanged, types::DirectionalShadowMode newMode)
+    {
+        if (data.isDirectionalType() && modeChanged)
+        {
+            handleDirectionalModeSwitch(data, shadowSettings, newMode);
+        }
+        else if (data.type == ShadowMapType::DirectionalCSM &&
+            data.settings.cascadeCount != shadowSettings.cascadeCount)
+        {
+            if (data.usesVSM())
+                freeVSMPages(data);
+            data.settings.cascadeCount = shadowSettings.cascadeCount;
+            data.views.resize(shadowSettings.cascadeCount);
+            if (data.usesVSM())
+                allocateVSMPages(data);
+        }
+        else if (data.type == ShadowMapType::DirectionalClipmap)
+        {
+            bool clipmapChanged = (data.settings.clipmapLevelCount != shadowSettings.clipmapLevelCount ||
+                                   data.settings.clipmapBaseExtent != shadowSettings.clipmapBaseExtent);
+            if (clipmapChanged)
+            {
+                handleDirectionalModeSwitch(data, shadowSettings,
+                    types::DirectionalShadowMode::Clipmap);
             }
         }
     }
@@ -338,73 +442,7 @@ namespace render::shadow
             data.settings.depthBias = shadowSettings.shadowBias;
             data.settings.slopeBias = shadowSettings.slopeBias;
             data.settings.normalBias = shadowSettings.normalBias;
-
-            // Handle directional shadow mode switching (CSM <-> Clipmap)
-            if (data.isDirectionalType() && modeChanged)
-            {
-                if (data.usesVSM())
-                    freeVSMPages(data);
-
-                if (newMode == types::DirectionalShadowMode::Clipmap)
-                {
-                    data.type = ShadowMapType::DirectionalClipmap;
-                    data.settings.clipmapLevelCount = shadowSettings.clipmapLevelCount;
-                    data.settings.clipmapBaseExtent = shadowSettings.clipmapBaseExtent;
-                    data.views.resize(shadowSettings.clipmapLevelCount);
-                    for (size_t i = 0; i < data.views.size(); ++i)
-                    {
-                        data.views[i].cascadeIndex = static_cast<uint16_t>(i);
-                        data.views[i].type = ShadowMapType::DirectionalClipmap;
-                    }
-                }
-                else
-                {
-                    data.type = ShadowMapType::DirectionalCSM;
-                    data.settings.cascadeCount = shadowSettings.cascadeCount;
-                    data.views.resize(shadowSettings.cascadeCount);
-                    for (size_t i = 0; i < data.views.size(); ++i)
-                    {
-                        data.views[i].cascadeIndex = static_cast<uint16_t>(i);
-                        data.views[i].type = ShadowMapType::DirectionalCSM;
-                    }
-                }
-
-                if (data.usesVSM())
-                    allocateVSMPages(data);
-                data.matricesDirty = true;
-            }
-            else if (data.type == ShadowMapType::DirectionalCSM &&
-                data.settings.cascadeCount != shadowSettings.cascadeCount)
-            {
-                if (data.usesVSM())
-                    freeVSMPages(data);
-                data.settings.cascadeCount = shadowSettings.cascadeCount;
-                data.views.resize(shadowSettings.cascadeCount);
-                if (data.usesVSM())
-                    allocateVSMPages(data);
-            }
-            else if (data.type == ShadowMapType::DirectionalClipmap)
-            {
-                // Update clipmap settings if changed
-                bool clipmapChanged = (data.settings.clipmapLevelCount != shadowSettings.clipmapLevelCount ||
-                                       data.settings.clipmapBaseExtent != shadowSettings.clipmapBaseExtent);
-                if (clipmapChanged)
-                {
-                    if (data.usesVSM())
-                        freeVSMPages(data);
-                    data.settings.clipmapLevelCount = shadowSettings.clipmapLevelCount;
-                    data.settings.clipmapBaseExtent = shadowSettings.clipmapBaseExtent;
-                    data.views.resize(shadowSettings.clipmapLevelCount);
-                    for (size_t i = 0; i < data.views.size(); ++i)
-                    {
-                        data.views[i].cascadeIndex = static_cast<uint16_t>(i);
-                        data.views[i].type = ShadowMapType::DirectionalClipmap;
-                    }
-                    if (data.usesVSM())
-                        allocateVSMPages(data);
-                    data.matricesDirty = true;
-                }
-            }
+            updateDirectionalSettings(data, shadowSettings, modeChanged, newMode);
             data.settingsDirty = true;
         }
 
@@ -562,23 +600,11 @@ namespace render::shadow
     {
         if (!initialized || !shadowsEnabled || !gpuDataManager) return;
 
-        std::unordered_map<uint32_t, uint32_t> entityToCubeIndex;
-        uint32_t cubeIdx = 0;
-        for (const auto& [entityId, data] : lightShadowData)
-        {
-            if (data.type != ShadowMapType::PointCube || !data.settings.enabled ||
-                !data.settings.castShadows || !data.resourceHandle.isValid())
-                continue;
-            ShadowCubeMap* cube = resourcePool ? resourcePool->getCube(data.resourceHandle) : nullptr;
-            if (cube && cube->isInitialized())
-                entityToCubeIndex[entityId] = cubeIdx++;
-        }
-
         gpuDataManager->buildGPUShadowData(directionalShadowViews, pointShadowViews, spotShadowViews,
-                                            lightShadowData, entityToCubeIndex);
+                                            lightShadowData);
         gpuDataManager->uploadToGPU(cmd);
         if (pageTable) pageTable->uploadToGPU(cmd);
-        gpuDataManager->updateShadowTextureDescriptor(tilePool.get(), resourcePool.get(), lightShadowData);
+        gpuDataManager->updateShadowTextureDescriptor(tilePool.get());
         needsUpdate = false;
     }
 
@@ -591,7 +617,7 @@ namespace render::shadow
 
         ShadowPassContext ctx{
             params, terrainParams,
-            tilePool.get(), resourcePool.get(),
+            tilePool.get(),
             shadowPassPipeline.get(), terrainShadowPipeline.get(),
             pageRenderList, staticPageRenderList, dynamicPageRenderList, tileCopyList,
             lightShadowData, shadowsEnabled, poolFirstUse

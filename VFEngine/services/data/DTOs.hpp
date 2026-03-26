@@ -342,6 +342,16 @@ namespace services
         bool showGizmo = false;
     };
 
+    struct ShadowOverrideData
+    {
+        float depthBias = -1.0f;
+        float slopeBias = -1.0f;
+        float normalBias = -1.0f;
+        uint32_t maxPages = 0;
+        bool softShadows = false;
+        bool hasSoftShadowOverride = false;
+    };
+
     struct UICanvasData
     {
         float referenceWidth = 1920.0f;

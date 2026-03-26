@@ -1,6 +1,5 @@
 #include "ShadowPassRecorder.hpp"
 #include "VSMPhysicalTilePool.hpp"
-#include "ShadowResourcePool.hpp"
 #include "ShadowPassPipeline.hpp"
 #include "TerrainShadowPipeline.hpp"
 #include "../gpudriven/GPUDrivenTypes.hpp"
@@ -30,19 +29,7 @@ namespace render::shadow
                            !ctx.staticPageRenderList.empty() ||
                            !ctx.dynamicPageRenderList.empty();
 
-        out.hasPointShadows = false;
-        for (const auto& [entityId, data] : ctx.lightShadowData)
-        {
-            if (data.type == ShadowMapType::PointCube &&
-                data.settings.enabled && data.settings.castShadows &&
-                data.resourceHandle.isValid())
-            {
-                out.hasPointShadows = true;
-                break;
-            }
-        }
-
-        if (!out.hasPageViews && !out.hasPointShadows)
+        if (!out.hasPageViews)
             return false;
 
         out.hasMeshBatches = ctx.params.batchCount > 0 &&
@@ -218,7 +205,7 @@ namespace render::shadow
             ctx.terrainShadowPipeline == nullptr || !ctx.terrainShadowPipeline->isInitialized())
             return;
 
-        constexpr float terrainBiasScale = 2.5f;
+        constexpr float terrainBiasScale = 3.5f;
         ctx.terrainShadowPipeline->dispatch(
             cmd,
             ctx.terrainParams->terrainDataDescSet,
@@ -226,9 +213,46 @@ namespace render::shadow
             ctx.terrainParams->terrainVertexDescSet,
             viewProj,
             ctx.terrainParams->tileCount,
-            ctx.terrainParams->shadowLOD,
             depthBias * terrainBiasScale,
             slopeBias * terrainBiasScale);
+    }
+
+    void ShadowPassRecorder::clearTileDepth(
+        vk::CommandBuffer cmd, const vk::Rect2D& scissor)
+    {
+        vk::ClearAttachment clearAttach{};
+        clearAttach.aspectMask = vk::ImageAspectFlagBits::eDepth;
+        clearAttach.clearValue.depthStencil = vk::ClearDepthStencilValue{1.0f, 0};
+
+        vk::ClearRect clearRect{};
+        clearRect.rect = scissor;
+        clearRect.baseArrayLayer = 0;
+        clearRect.layerCount = 1;
+
+        cmd.clearAttachments(1, &clearAttach, 1, &clearRect);
+    }
+
+    ShadowPushConstants ShadowPassRecorder::buildTilePushConstants(
+        const PageRenderEntry& page)
+    {
+        ShadowPushConstants pc{};
+        pc.lightViewProjection = page.cropViewProjection;
+        pc.baseDrawIndex = 0;
+        pc.depthBias = page.depthBias;
+        pc.slopeBias = page.slopeBias;
+        pc.normalBias = page.normalBias;
+
+        if (page.layer == ShadowLayer::Static)
+        {
+            pc.objectFilterMask = gpudriven::ObjectFlags::ShadowStatic;
+            pc.objectFilterValue = gpudriven::ObjectFlags::ShadowStatic;
+        }
+        else if (page.layer == ShadowLayer::Dynamic)
+        {
+            pc.objectFilterMask = gpudriven::ObjectFlags::ShadowStatic;
+            pc.objectFilterValue = 0;
+        }
+        return pc;
     }
 
     void ShadowPassRecorder::recordTileCommands(
@@ -242,42 +266,14 @@ namespace render::shadow
         cmd.setScissor(0, 1, &scissor);
 
         if (useLoadPass)
-        {
-            vk::ClearAttachment clearAttach{};
-            clearAttach.aspectMask = vk::ImageAspectFlagBits::eDepth;
-            clearAttach.clearValue.depthStencil = vk::ClearDepthStencilValue{1.0f, 0};
-
-            vk::ClearRect clearRect{};
-            clearRect.rect = scissor;
-            clearRect.baseArrayLayer = 0;
-            clearRect.layerCount = 1;
-
-            cmd.clearAttachments(1, &clearAttach, 1, &clearRect);
-        }
+            clearTileDepth(cmd, scissor);
 
         cmd.setDepthBias(page.depthBias, 0.0f, page.slopeBias);
 
         if (ctx.params.batchCount > 0 && ctx.params.commandsPerSection > 0 &&
             ctx.params.drawCommandBuffer && ctx.params.drawCountBuffer)
         {
-            ShadowPushConstants pc{};
-            pc.lightViewProjection = page.cropViewProjection;
-            pc.baseDrawIndex = 0;
-            pc.depthBias = page.depthBias;
-            pc.slopeBias = page.slopeBias;
-            pc.normalBias = page.normalBias;
-
-            if (page.layer == ShadowLayer::Static)
-            {
-                pc.objectFilterMask = gpudriven::ObjectFlags::ShadowStatic;
-                pc.objectFilterValue = gpudriven::ObjectFlags::ShadowStatic;
-            }
-            else if (page.layer == ShadowLayer::Dynamic)
-            {
-                pc.objectFilterMask = gpudriven::ObjectFlags::ShadowStatic;
-                pc.objectFilterValue = 0;
-            }
-
+            ShadowPushConstants pc = buildTilePushConstants(page);
             dispatchMeshBatches(cmd, ctx, pc);
         }
 
@@ -362,133 +358,5 @@ namespace render::shadow
         lastStats.threadsUsed = 0;
         lastStats.usedParallel = false;
 
-        renderPointLightCubeShadows(cmd, ctx);
-    }
-
-    void ShadowPassRecorder::renderCubeFace(
-        vk::CommandBuffer cmd, const ShadowPassContext& ctx,
-        const ShadowPassPrerequisites& prereq,
-        const CubeFaceRenderInfo& faceInfo)
-    {
-        const auto& view = faceInfo.view;
-        uint32_t cubeSize = faceInfo.cubeSize;
-
-        vk::ClearValue clearValue{};
-        clearValue.depthStencil = vk::ClearDepthStencilValue{1.0f, 0};
-
-        vk::RenderPassBeginInfo renderPassInfo{};
-        renderPassInfo.renderPass = ctx.shadowPassPipeline->getRenderPass();
-        renderPassInfo.framebuffer = faceInfo.framebuffer;
-        renderPassInfo.renderArea.offset = vk::Offset2D{0, 0};
-        renderPassInfo.renderArea.extent = vk::Extent2D{cubeSize, cubeSize};
-        renderPassInfo.clearValueCount = 1;
-        renderPassInfo.pClearValues = &clearValue;
-
-        cmd.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
-
-        vk::Viewport viewport{0.0f, 0.0f, static_cast<float>(cubeSize),
-                              static_cast<float>(cubeSize), 0.0f, 1.0f};
-        vk::Rect2D scissor{{0, 0}, {cubeSize, cubeSize}};
-        cmd.setViewport(0, 1, &viewport);
-        cmd.setScissor(0, 1, &scissor);
-        cmd.setDepthBias(view.depthBias, 0.0f, view.slopeBias);
-
-        if (prereq.hasMeshBatches)
-        {
-            bindShadowPipelineAndSets(cmd, ctx);
-
-            ShadowPushConstants pc{};
-            pc.lightViewProjection = view.viewProjectionMatrix;
-            pc.depthBias = view.depthBias;
-            pc.slopeBias = view.slopeBias;
-            pc.normalBias = view.normalBias;
-
-            dispatchMeshBatches(cmd, ctx, pc);
-        }
-
-        if (prereq.hasTerrainShadows)
-        {
-            ctx.terrainShadowPipeline->dispatch(
-                cmd,
-                ctx.terrainParams->terrainDataDescSet,
-                ctx.terrainParams->terrainMeshletDescSet,
-                ctx.terrainParams->terrainVertexDescSet,
-                view.viewProjectionMatrix,
-                ctx.terrainParams->tileCount,
-                ctx.terrainParams->shadowLOD,
-                view.depthBias, view.slopeBias);
-        }
-
-        cmd.endRenderPass();
-    }
-
-    std::vector<std::pair<uint32_t, LightShadowData*>>
-        ShadowPassRecorder::collectPointLights(const ShadowPassContext& ctx) const
-    {
-        std::vector<std::pair<uint32_t, LightShadowData*>> result;
-        for (auto& [entityId, data] : ctx.lightShadowData)
-        {
-            if (data.type != ShadowMapType::PointCube ||
-                !data.settings.enabled || !data.settings.castShadows ||
-                !data.resourceHandle.isValid())
-                continue;
-            if (data.isStatic && data.shadowCached)
-                continue;
-
-            ShadowCubeMap* cube = ctx.resourcePool->getCube(data.resourceHandle);
-            if (!cube || !cube->isInitialized())
-                continue;
-
-            result.emplace_back(entityId, &data);
-        }
-        return result;
-    }
-
-    void ShadowPassRecorder::renderPointLightCubeShadows(
-        vk::CommandBuffer cmd, const ShadowPassContext& ctx)
-    {
-        if (!ctx.resourcePool || !ctx.shadowPassPipeline)
-            return;
-
-        ShadowPassPrerequisites prereq;
-        prereq.hasTerrainShadows = ctx.terrainParams != nullptr &&
-                                   ctx.terrainParams->tileCount > 0 &&
-                                   ctx.terrainShadowPipeline != nullptr &&
-                                   ctx.terrainShadowPipeline->isInitialized();
-        prereq.hasMeshBatches = ctx.params.batchCount > 0 &&
-                                ctx.params.commandsPerSection > 0 &&
-                                ctx.params.drawCommandBuffer &&
-                                ctx.params.drawCountBuffer;
-
-        if (!prereq.hasMeshBatches && !prereq.hasTerrainShadows)
-            return;
-
-        auto pointLightsToRender = collectPointLights(ctx);
-        if (pointLightsToRender.empty())
-            return;
-
-        const auto& logicalDevice = device.getLogicalDevice();
-
-        for (auto& [entityId, data] : pointLightsToRender)
-        {
-            ShadowCubeMap* cube = ctx.resourcePool->getCube(data->resourceHandle);
-            uint32_t cubeSize = cube->getSize();
-
-            cube->transitionToDepthAttachment(cmd);
-
-            for (uint32_t face = 0; face < ShadowConstants::CUBE_FACE_COUNT; ++face)
-            {
-                if (face >= data->views.size())
-                    continue;
-
-                vk::Framebuffer fb = cube->getOrCreateFramebuffer(
-                    face, ctx.shadowPassPipeline->getRenderPass(), logicalDevice);
-
-                CubeFaceRenderInfo faceInfo{data->views[face], fb, cubeSize};
-                renderCubeFace(cmd, ctx, prereq, faceInfo);
-            }
-
-            cube->transitionToShaderRead(cmd);
-        }
     }
 }

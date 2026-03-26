@@ -17,7 +17,6 @@ namespace core
 namespace render::shadow
 {
     class VSMPhysicalTilePool;
-    class ShadowResourcePool;
     class ShadowPassPipeline;
     class TerrainShadowPipeline;
 
@@ -73,7 +72,6 @@ namespace render::shadow
         const ShadowPassParams& params;
         const TerrainShadowPassParams* terrainParams;
         VSMPhysicalTilePool* tilePool;
-        ShadowResourcePool* resourcePool;
         ShadowPassPipeline* shadowPassPipeline;
         TerrainShadowPipeline* terrainShadowPipeline;
         const std::vector<PageRenderEntry>& pageRenderList;
@@ -89,7 +87,6 @@ namespace render::shadow
     {
         bool hasTerrainShadows = false;
         bool hasPageViews = false;
-        bool hasPointShadows = false;
         bool hasMeshBatches = false;
     };
 
@@ -136,6 +133,12 @@ namespace render::shadow
                                 const ShadowPassContext& ctx,
                                 bool useLoadPass);
 
+        static void clearTileDepth(vk::CommandBuffer cmd,
+                                   const vk::Rect2D& scissor);
+
+        static ShadowPushConstants buildTilePushConstants(
+            const PageRenderEntry& page);
+
         void recordStaticPhase(vk::CommandBuffer cmd,
                                const ShadowPassContext& ctx,
                                const ShadowPassPrerequisites& prereq,
@@ -144,21 +147,6 @@ namespace render::shadow
         void recordDynamicPhase(vk::CommandBuffer cmd,
                                 const ShadowPassContext& ctx,
                                 const ShadowPassPrerequisites& prereq);
-
-        void renderPointLightCubeShadows(vk::CommandBuffer cmd,
-                                         const ShadowPassContext& ctx);
-
-        struct CubeFaceRenderInfo
-        {
-            const ShadowView& view;
-            vk::Framebuffer framebuffer;
-            uint32_t cubeSize;
-        };
-
-        void renderCubeFace(vk::CommandBuffer cmd,
-                            const ShadowPassContext& ctx,
-                            const ShadowPassPrerequisites& prereq,
-                            const CubeFaceRenderInfo& faceInfo);
 
         void dispatchMeshBatches(vk::CommandBuffer cmd,
                                  const ShadowPassContext& ctx,
@@ -170,9 +158,6 @@ namespace render::shadow
                                    float depthBias,
                                    float slopeBias);
 
-        std::vector<std::pair<uint32_t, LightShadowData*>>
-            collectPointLights(const ShadowPassContext& ctx) const;
-
         struct ParallelDispatchArgs
         {
             vk::CommandBuffer primaryCmd;
@@ -181,6 +166,20 @@ namespace render::shadow
             core::ThreadCommandPoolManager* threadPoolManager;
             uint32_t frameIndex;
         };
+
+        struct ParallelRenderPassInfo
+        {
+            vk::RenderPass renderPass;
+            vk::Framebuffer framebuffer;
+            bool useLoadPass;
+        };
+
+        void recordSecondaryTileCommands(
+            const ParallelDispatchArgs& args,
+            const std::vector<PageRenderEntry>& pages,
+            const ParallelRenderPassInfo& rpInfo,
+            std::vector<vk::CommandBuffer>& secondaryBuffers,
+            std::vector<bool>& threadUsed);
 
         void dispatchPagesParallel(
             const ParallelDispatchArgs& args,

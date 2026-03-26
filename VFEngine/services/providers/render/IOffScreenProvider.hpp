@@ -146,6 +146,15 @@ namespace services {
         TextureStreamDebugStats textureStream;
     };
 
+    struct PerLightShadowInfo
+    {
+        uint32_t entityId = 0;
+        uint32_t type = 0; // 0=dir, 1=spot, 2=point
+        uint32_t pagesAllocated = 0;
+        uint32_t pagesDirty = 0;
+        uint32_t pagesCached = 0;
+    };
+
     struct ShadowStats {
         uint32_t atlasWidth = 0;
         uint32_t atlasHeight = 0;
@@ -173,6 +182,9 @@ namespace services {
         uint32_t dynamicPagesRendered = 0;
         uint32_t tileCopiesThisFrame = 0;
         uint32_t dynamicTilesAllocated = 0;
+
+        // Per-light details
+        std::vector<PerLightShadowInfo> perLightInfo;
     };
 
     struct GPUPipelineStatus {
@@ -280,7 +292,6 @@ namespace services {
         virtual void setTerrainLODBias(float bias) = 0;
         virtual void setTerrainErrorThreshold(float threshold) = 0;
         virtual void setTerrainTextureScale(float scale) = 0;
-        virtual void setTerrainShadowLOD(uint32_t lod) = 0;
         virtual void setTerrainSVTEnabled(bool enabled) = 0;
 
         virtual void setUIViewportOffset(const glm::vec2& offset, const glm::vec2& panelSize) = 0;

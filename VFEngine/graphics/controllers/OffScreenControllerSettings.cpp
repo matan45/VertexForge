@@ -76,7 +76,6 @@ namespace controllers
         gpuDriven->setTerrainLODBias(settings.terrain.lodBias);
         gpuDriven->setTerrainErrorThreshold(settings.terrain.errorThreshold);
         gpuDriven->setTerrainTextureScale(settings.terrain.textureScale);
-        gpuDriven->setTerrainShadowLOD(settings.terrain.shadowLOD);
     }
 
     services::ShadowStats OffScreenController::getShadowStats() const
@@ -114,6 +113,19 @@ namespace controllers
         stats.dynamicPagesRendered = cacheStats.dynamicPagesRendered;
         stats.tileCopiesThisFrame = cacheStats.tileCopiesThisFrame;
         stats.dynamicTilesAllocated = cacheStats.dynamicTilesAllocated;
+
+        auto perLight = shadowSystem->getPerLightStats();
+        stats.perLightInfo.reserve(perLight.size());
+        for (const auto& pl : perLight)
+        {
+            services::PerLightShadowInfo info;
+            info.entityId = pl.entityId;
+            info.type = pl.type;
+            info.pagesAllocated = pl.pagesAllocated;
+            info.pagesDirty = pl.pagesDirty;
+            info.pagesCached = pl.pagesCached;
+            stats.perLightInfo.push_back(info);
+        }
 
         return stats;
     }
@@ -398,12 +410,6 @@ namespace controllers
     {
         auto* rh = offScreen->getRenderPassHandler();
         if (rh) rh->setTerrainTextureScale(scale);
-    }
-
-    void OffScreenController::setTerrainShadowLOD(uint32_t lod)
-    {
-        auto* rh = offScreen->getRenderPassHandler();
-        if (rh) rh->setTerrainShadowLOD(lod);
     }
 
     void OffScreenController::setTerrainSVTEnabled(bool enabled)

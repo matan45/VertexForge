@@ -36,6 +36,16 @@ namespace components
         bool showGizmo = false;
     };
 
+    struct ShadowOverrideComponent
+    {
+        float depthBias = -1.0f;
+        float slopeBias = -1.0f;
+        float normalBias = -1.0f;
+        uint32_t maxPages = 0;
+        bool softShadows = false;
+        bool hasSoftShadowOverride = false;
+    };
+
     enum class FogVolumeShape : uint8_t
     {
         Box = 0,

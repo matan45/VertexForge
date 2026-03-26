@@ -135,13 +135,6 @@ namespace services
                     offScreenProvider->setTerrainTextureScale(cmd.scale);
             });
 
-        dispatcher.registerCommandHandler<events::render::SetTerrainShadowLODCommand>(
-            [this](const events::render::SetTerrainShadowLODCommand& cmd)
-            {
-                if (offScreenProvider)
-                    offScreenProvider->setTerrainShadowLOD(cmd.lod);
-            });
-
         dispatcher.registerCommandHandler<events::render::SetTerrainSVTEnabledCommand>(
             [this](const events::render::SetTerrainSVTEnabledCommand& cmd)
             {

@@ -31,9 +31,6 @@ namespace windows
             settings.terrain.errorThreshold = 2.0f;
         if (!std::isfinite(settings.terrain.textureScale) || settings.terrain.textureScale < 0.001f || settings.terrain.textureScale > 10.0f)
             settings.terrain.textureScale = 0.1f;
-        if (settings.terrain.shadowLOD > 3)
-            settings.terrain.shadowLOD = 2;
-
         settingsLoaded = true;
         isDirty = false;
     }

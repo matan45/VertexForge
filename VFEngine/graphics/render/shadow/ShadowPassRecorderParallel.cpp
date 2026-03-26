@@ -1,6 +1,5 @@
 #include "ShadowPassRecorder.hpp"
 #include "VSMPhysicalTilePool.hpp"
-#include "ShadowResourcePool.hpp"
 #include "ShadowPassPipeline.hpp"
 #include "TerrainShadowPipeline.hpp"
 #include "../../core/Device.hpp"
@@ -10,21 +9,16 @@
 
 namespace render::shadow
 {
-    void ShadowPassRecorder::dispatchPagesParallel(
+    void ShadowPassRecorder::recordSecondaryTileCommands(
         const ParallelDispatchArgs& args,
         const std::vector<PageRenderEntry>& pages,
-        vk::RenderPass renderPass,
-        vk::Framebuffer framebuffer,
-        bool useLoadPass)
+        const ParallelRenderPassInfo& rpInfo,
+        std::vector<vk::CommandBuffer>& secondaryBuffers,
+        std::vector<bool>& threadUsed)
     {
-        uint32_t tileCount = static_cast<uint32_t>(pages.size());
-        uint32_t threadCount = args.threadPoolManager->getThreadCount();
-
-        std::vector<vk::CommandBuffer> secondaryBuffers(threadCount, nullptr);
-        std::vector<bool> threadUsed(threadCount, false);
-
         const auto& ctx = *args.ctx;
         const auto& prereq = *args.prereq;
+        uint32_t tileCount = static_cast<uint32_t>(pages.size());
 
         threading::JobSystem::instance().parallelFor(tileCount,
             [&](uint32_t begin, uint32_t end, uint32_t threadNum) {
@@ -32,9 +26,9 @@ namespace render::shadow
                     args.threadPoolManager->getSecondary(threadNum, args.frameIndex);
 
                 vk::CommandBufferInheritanceInfo inheritance{};
-                inheritance.renderPass = renderPass;
+                inheritance.renderPass = rpInfo.renderPass;
                 inheritance.subpass = 0;
-                inheritance.framebuffer = framebuffer;
+                inheritance.framebuffer = rpInfo.framebuffer;
 
                 vk::CommandBufferBeginInfo beginInfo{};
                 beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit |
@@ -46,12 +40,27 @@ namespace render::shadow
                     bindShadowPipelineAndSets(secondary, ctx);
 
                 for (uint32_t i = begin; i < end; ++i)
-                    recordTileCommands(secondary, pages[i], ctx, useLoadPass);
+                    recordTileCommands(secondary, pages[i], ctx, rpInfo.useLoadPass);
 
                 secondary.end();
                 secondaryBuffers[threadNum] = secondary;
                 threadUsed[threadNum] = true;
             }, 1);
+    }
+
+    void ShadowPassRecorder::dispatchPagesParallel(
+        const ParallelDispatchArgs& args,
+        const std::vector<PageRenderEntry>& pages,
+        vk::RenderPass renderPass,
+        vk::Framebuffer framebuffer,
+        bool useLoadPass)
+    {
+        uint32_t threadCount = args.threadPoolManager->getThreadCount();
+        std::vector<vk::CommandBuffer> secondaryBuffers(threadCount, nullptr);
+        std::vector<bool> threadUsed(threadCount, false);
+
+        ParallelRenderPassInfo rpInfo{renderPass, framebuffer, useLoadPass};
+        recordSecondaryTileCommands(args, pages, rpInfo, secondaryBuffers, threadUsed);
 
         std::vector<vk::CommandBuffer> validSecondaries;
         for (uint32_t t = 0; t < threadCount; t++)
@@ -180,7 +189,5 @@ namespace render::shadow
 
             transitionPoolToShaderRead(primaryCmd, ctx.tilePool);
         }
-
-        renderPointLightCubeShadows(primaryCmd, ctx);
     }
 }

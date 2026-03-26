@@ -44,6 +44,14 @@ namespace render::lighting
         float hysteresisMargin = 0.05f;
     };
 
+    struct ShadowStreamingConfig
+    {
+        uint32_t maxPagesPerSector = 256;
+        uint32_t maxNewPagesPerFrame = 32;
+        float nearSectorMultiplier = 2.0f;
+        float farSectorMultiplier = 0.5f;
+    };
+
     struct LightDefragResult
     {
         uint32_t entityId;
@@ -116,6 +124,11 @@ namespace render::lighting
         std::vector<LightDefragResult> defragStep(uint32_t maxMoves = 4);
         bool isDefragInProgress() const { return defragActive; }
 
+        // Shadow streaming
+        float getShadowPriority(uint32_t entityId) const;
+        void setShadowStreamingConfig(const ShadowStreamingConfig& cfg) { shadowStreamingConfig = cfg; }
+        const ShadowStreamingConfig& getShadowStreamingConfig() const { return shadowStreamingConfig; }
+
     private:
         // Defragmentation state
         bool defragActive = false;
@@ -127,6 +140,8 @@ namespace render::lighting
 
         static constexpr float DEFRAG_THRESHOLD = 30.0f;
         static constexpr uint32_t DEFRAG_COOLDOWN_FRAMES = 300;
+
+        ShadowStreamingConfig shadowStreamingConfig;
 
         float computePriority(const LightStreamEntry& entry) const;
         bool allocateSlot(LightStreamEntry& entry);

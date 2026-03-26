@@ -194,8 +194,7 @@ namespace serialization
                 {"enabled", s.enabled},
                 {"lodBias", s.lodBias},
                 {"errorThreshold", s.errorThreshold},
-                {"textureScale", s.textureScale},
-                {"shadowLOD", s.shadowLOD}
+                {"textureScale", s.textureScale}
             };
         }
 
@@ -215,8 +214,6 @@ namespace serialization
                 settings.errorThreshold = terrain["errorThreshold"].get<float>();
             if (terrain.contains("textureScale") && terrain["textureScale"].is_number())
                 settings.textureScale = terrain["textureScale"].get<float>();
-            if (terrain.contains("shadowLOD") && terrain["shadowLOD"].is_number_unsigned())
-                settings.shadowLOD = std::min(terrain["shadowLOD"].get<uint32_t>(), 3u);
             // svtEnabled moved to per-terrain TerrainComponent (backward compat: ignored here)
         }
         json serializeDistanceCullingSettings(const types::DistanceCullingSettings& s)
@@ -417,7 +414,6 @@ namespace serialization
         j["culling"] = serializeCullingSettings(settings.culling);
         j["distanceCulling"] = serializeDistanceCullingSettings(settings.distanceCulling);
         j["transparency"] = { {"wboitEnabled", settings.transparency.wboitEnabled} };
-        j["shadowLOD"] = { {"enabled", settings.shadowLOD.enabled} };
         j["terrain"] = serializeTerrainRenderSettings(settings.terrain);
         j["postProcess"] = serializePostProcessSettings(settings.postProcess);
         j["gi"] = serializeGISettings(settings.gi);
@@ -432,13 +428,6 @@ namespace serialization
     void SceneSerialization::deserializeRenderSettings(const json& j, types::RenderSettings& settings)
     {
         deserializeShadowSettings(j, settings.shadows);
-
-        if (j.contains("shadowLOD") && j["shadowLOD"].is_object())
-        {
-            const auto& sl = j["shadowLOD"];
-            if (sl.contains("enabled") && sl["enabled"].is_boolean())
-                settings.shadowLOD.enabled = sl["enabled"].get<bool>();
-        }
 
         deserializeCullingSettings(j, settings.culling);
         deserializeDistanceCullingSettings(j, settings.distanceCulling);

@@ -209,22 +209,28 @@ namespace windows
             currentViewMode = static_cast<int>(dispatcher.query(events::render::GetViewModeQuery{}));
 
             const char* viewModeLabels[] = {
-                "Color",
-                "Meshlet",
-                "LOD",
-                "Mipmap",
-                "Cluster",
-                "Depth",
-                "Shadow",
-                "Terrain Tile",
-                "Terrain UV",
-                "Weight Map"
+                "Color",          // 0
+                "Meshlet",        // 1
+                "LOD",            // 2
+                "Mipmap",         // 3
+                "Cluster",        // 4
+                "Depth",          // 5
+                "Shadow",         // 6
+                "Terrain Tile",   // 7
+                "Terrain UV",     // 8
+                "Weight Map",     // 9
+                "Shadow Level",   // 10 (dropdown) → 14 (shader)
+                "Shadow UV"       // 11 (dropdown) → 15 (shader)
             };
+            // Map dropdown index to shader viewMode value
+            static const int viewModeMap[] = {0,1,2,3,4,5,6,7,8,9,14,15};
+            static const int reverseMap[] = {0,1,2,3,4,5,6,7,8,9,0,0,0,0,10,11};
+            int displayIdx = (currentViewMode < 16) ? reverseMap[currentViewMode] : 0;
             ImGui::SetNextItemWidth(dropdownWidth);
-            if (ImGui::Combo("##ViewMode", &currentViewMode, viewModeLabels, 10))
+            if (ImGui::Combo("##ViewMode", &displayIdx, viewModeLabels, 12))
             {
                 events::render::SetViewModeCommand cmd;
-                cmd.mode = static_cast<uint32_t>(currentViewMode);
+                cmd.mode = static_cast<uint32_t>(viewModeMap[displayIdx]);
                 dispatcher.execute(cmd);
             }
 

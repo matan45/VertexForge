@@ -45,7 +45,7 @@ namespace render::shadow::vsm
         glm::mat4 viewProjection;       // full light VP
         glm::vec4 biasParams;           // depthBias, slopeBias, normalBias, texelSize
         glm::vec4 rangeParams;          // near, far, cascadeCount/unused, cascadeIndex/unused
-        glm::vec4 pcssParams;           // lightSize, searchRadius, filterEnabled, cubeMapIndex
+        glm::vec4 pcssParams;           // lightSize, searchRadius, filterEnabled, unused
         glm::ivec4 pageTableInfo;       // pagesX, pagesY, pageTableOffset, lightType (0=dir, 1=spot, 2=point)
     };
     static_assert(sizeof(GPUVSMLight) == 128, "GPUVSMLight must be 128 bytes");

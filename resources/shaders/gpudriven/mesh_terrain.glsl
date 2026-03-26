@@ -70,7 +70,7 @@ layout(push_constant) uniform PushConstants {
     float brushWorldRadius;
     float brushFalloff;
     float brushShape;
-    float shadowLOD;
+    float _shadowLODRemoved;
     uint hiZMipLevels;           // Mip levels in the Hi-Z pyramid (0 = disabled)
     float _pad3;                 // Align mat4 to 16-byte boundary
     mat4 viewProjection;         // CPU-precomputed view-projection (matches raycast invViewProjection)
@@ -281,7 +281,7 @@ layout(push_constant) uniform PushConstants {
     float brushWorldRadius;
     float brushFalloff;
     float brushShape;
-    float shadowLOD;
+    float _shadowLODRemoved;
     uint hiZMipLevels;           // Mip levels in the Hi-Z pyramid (0 = disabled)
     float _pad3;                 // Align mat4 to 16-byte boundary
     mat4 viewProjection;         // CPU-precomputed view-projection (matches raycast invViewProjection)
@@ -326,16 +326,9 @@ layout(std430, set = 9, binding = 1) readonly buffer PageTableBuffer {
 // Comparison samplers
 layout(set = 10, binding = 0) uniform sampler2DShadow physicalPoolShadow;
 layout(set = 10, binding = 1) uniform sampler2D physicalPoolDepth;
-layout(set = 10, binding = 2) uniform samplerCubeShadow shadowCubes[32];
-layout(set = 10, binding = 3) uniform samplerCube shadowCubesDepth[32];
 
 // Terrain needs higher normal bias than regular meshes to avoid self-shadow artifacts
-// Bias scales with shadow LOD to compensate for geometry mismatch between shadow and render LODs
-// pc.shadowLOD is uniform — GPU evaluates this once per wavefront, not per fragment
 float getTerrainNormalBiasScale() {
-    if (pc.shadowLOD < 0.5) return 3.0;
-    if (pc.shadowLOD < 1.5) return 8.0;
-    if (pc.shadowLOD < 2.5) return 12.0;
     return 3.0;
 }
 
@@ -647,37 +640,47 @@ void main() {
         color = c;
     }
 
-#ifdef SVT_ENABLED
-    // SVT debug visualizations
-    if (viewModeValue == 10u) {
-        // SVT mip level heatmap (blue = fine, red = coarse)
-        float t = svt_resolvedMip / float(SVT_PARAMS.svtInfo.w);
-        color = mix(vec3(0.0, 0.0, 1.0), vec3(1.0, 0.0, 0.0), t);
-        if (!svt_isResident) color = vec3(1.0, 0.0, 1.0); // Magenta = missing
-    }
+    // Clipmap/Cascade Level Visualization (terrain)
+    if (viewModeValue == 14u) {
+        color = vec3(0.2);
+        DirectionalLight light = directionalLights[0];
+        if (lightCounts.directionalCount > 0u && light.shadowIndex >= 0) {
+            int levelCount = int(SHADOW_BUFFER[light.shadowIndex].rangeParams.z);
+            float baseExtent = SHADOW_BUFFER[light.shadowIndex].rangeParams.x;
+            float worldDist = length(fragWorldPos - camera.cameraPos);
 
-    if (viewModeValue == 11u) {
-        // SVT residency map: green = resident, red = missing
-        color = svt_isResident ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
-    }
-
-    if (viewModeValue == 12u) {
-        // SVT tile boundary visualization
-        vec2 virtualUV = fragWorldPos.xz * SVT_PARAMS.svtScaleOffset.xy + SVT_PARAMS.svtScaleOffset.zw;
-        uint tps = svtTilesPerSide(uint(svt_resolvedMip), SVT_PARAMS.svtInfo.x, SVT_PARAMS.svtInfo.y);
-        vec2 tileUV = fract(virtualUV * float(tps));
-        float edge = min(min(tileUV.x, 1.0 - tileUV.x), min(tileUV.y, 1.0 - tileUV.y));
-        if (edge < 0.02) color = vec3(1.0, 1.0, 0.0);
-    }
-
-    if (viewModeValue == 13u) {
-        // Missing tile flash (magenta pulse)
-        if (!svt_isResident) {
-            float pulse = sin(camera.time * 6.0) * 0.5 + 0.5;
-            color = mix(color, vec3(1.0, 0.0, 1.0), pulse * 0.8);
+            if (light.shadowMode == 1) {
+                float lvl = max(log2(max(worldDist, baseExtent) / baseExtent), 0.0);
+                int levelIdx = clamp(int(lvl), 0, levelCount - 1);
+                float t = float(levelIdx) / max(float(levelCount - 1), 1.0);
+                color = mix(vec3(0.0, 0.2, 1.0), vec3(1.0, 0.2, 0.0), t);
+                if (fract(lvl) < 0.02 || fract(lvl) > 0.98) color = vec3(1.0);
+            } else {
+                vec3 cascadeColors[4] = vec3[](
+                    vec3(1.0, 0.2, 0.2), vec3(1.0, 0.7, 0.2),
+                    vec3(0.9, 0.9, 0.2), vec3(0.2, 1.0, 0.3));
+                // Use world distance for cascade visualization on terrain
+                int cascadeIdx = clamp(int(worldDist / 50.0), 0, min(levelCount, 4) - 1);
+                color = cascadeColors[cascadeIdx];
+            }
         }
     }
-#endif
+
+    // Shadow UV Visualization (terrain)
+    if (viewModeValue == 15u) {
+        color = vec3(0.0);
+        if (lightCounts.directionalCount > 0u) {
+            DirectionalLight light = directionalLights[0];
+            if (light.shadowIndex >= 0) {
+                ShadowData sd = SHADOW_BUFFER[light.shadowIndex];
+                vec4 lsPos = sd.viewProjection * vec4(fragWorldPos, 1.0);
+                vec2 uv = lsPos.xy * 0.5 + 0.5;
+                bool valid;
+                vec2 physUV = vsmLookupPhysicalUV(sd, uv, valid);
+                color = vec3(uv.x, uv.y, valid ? 0.5 : 0.0);
+            }
+        }
+    }
 
     // Tile selection highlight
     const uint FLAG_SELECTED = 1u << 13;

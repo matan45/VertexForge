@@ -5,7 +5,6 @@
 #include "ClipmapShadowCalculator.hpp"
 #include "VSMPhysicalTilePool.hpp"
 #include "VSMPageTable.hpp"
-#include "ShadowResourcePool.hpp"
 #include "ShadowPassPipeline.hpp"
 #include "ShadowGPUDataManager.hpp"
 #include "ShadowPassRecorder.hpp"
@@ -41,9 +40,12 @@ namespace render
 
             static constexpr float FRAME_BUDGET_WARNING_MS = 16.0f;
 
+            // Shadow streaming: per-frame tile allocation budget
+            static constexpr uint32_t MAX_NEW_PAGES_PER_FRAME = 32;
+            uint32_t newPagesAllocatedThisFrame = 0;
+
             std::unique_ptr<VSMPhysicalTilePool> tilePool;
             std::unique_ptr<VSMPageTable> pageTable;
-            std::unique_ptr<ShadowResourcePool> resourcePool;
             std::unique_ptr<ShadowPassPipeline> shadowPassPipeline;
             std::unique_ptr<TerrainShadowPipeline> terrainShadowPipeline;
             std::unique_ptr<ShadowGPUDataManager> gpuDataManager;
@@ -202,6 +204,16 @@ namespace render
             [[nodiscard]] std::vector<ShadowDebugInfo> getShadowDebugInfo() const;
             [[nodiscard]] ShadowRecordingStats getShadowRecordingStats() const;
 
+            struct PerLightStats
+            {
+                uint32_t entityId = 0;
+                uint32_t type = 0; // 0=dir, 1=spot, 2=point
+                uint32_t pagesAllocated = 0;
+                uint32_t pagesDirty = 0;
+                uint32_t pagesCached = 0;
+            };
+            [[nodiscard]] std::vector<PerLightStats> getPerLightStats() const;
+
             // GPU Feedback (Phase 2)
             void dispatchFeedback(vk::CommandBuffer cmd, vk::ImageView depthView,
                                   const glm::mat4& invViewProjection,
@@ -211,10 +223,56 @@ namespace render
             void readBackFeedback();
             [[nodiscard]] bool isFeedbackEnabled() const { return feedbackEnabled && initialized; }
 
+            struct PageDimensions
+            {
+                uint32_t x = 0;
+                uint32_t y = 0;
+                bool valid = false;
+            };
+
         private:
             void applyFeedbackAllocations();
             bool allocateVSMPages(LightShadowData& data);
             void freeVSMPages(LightShadowData& data);
+
+            // Shadow streaming: evict lowest-priority page to make room (O(1) via pre-built cache)
+            struct EvictionCandidate
+            {
+                float priority;
+                uint32_t lastUsedFrame;
+                uint32_t entityId;
+                uint32_t pageIdx;
+                bool operator>(const EvictionCandidate& o) const
+                {
+                    if (priority != o.priority) return priority > o.priority;
+                    return lastUsedFrame > o.lastUsedFrame;
+                }
+            };
+            std::vector<EvictionCandidate> evictionHeap;
+            void buildEvictionHeap();
+            uint32_t evictLowestPriorityPage(float requestingPriority);
+
+            // Per-type VSM page allocation helpers
+            PageDimensions allocateCSMPages(LightShadowData& data);
+            PageDimensions allocateClipmapPages(LightShadowData& data);
+            PageDimensions allocateSpotPages(LightShadowData& data, uint32_t maxPages);
+            PageDimensions allocatePointPages(LightShadowData& data, uint32_t maxPages);
+            bool allocatePhysicalTiles(LightShadowData& data, uint32_t pagesX, uint32_t pagesY);
+
+            // Debug info helpers
+            void addDirectionalDebugInfos(std::vector<ShadowDebugInfo>& infos) const;
+            void addSingleViewDebugInfo(std::vector<ShadowDebugInfo>& infos, ShadowMapType type) const;
+
+            // beginFrame helpers
+            struct PointLightRef { LightShadowData* data; glm::mat4 worldMatrix; float radius; };
+            struct SpotLightRef { LightShadowData* data; glm::mat4 worldMatrix; float outerAngle; float range; };
+            struct DirLightRef { LightShadowData* data; glm::mat4 worldMatrix; };
+
+            void classifyLightsForUpdate(
+                std::vector<PointLightRef>& pointLights,
+                std::vector<SpotLightRef>& spotLights,
+                std::vector<DirLightRef>& directionalLights);
+            void updateShadowCacheAfterRender();
 
             void updatePointCubeShadowMatrices(LightShadowData& data, uint32_t entityId);
             void updatePointCubeShadowMatricesFromData(LightShadowData& data,
@@ -231,14 +289,25 @@ namespace render
             void updateDirectionalClipmapMatricesFromData(LightShadowData& data,
                                                            const glm::mat4& worldMatrix,
                                                            const CameraContext& camera);
+            void updateClipmapLevelMatrices(LightShadowData& data, uint32_t level,
+                                             const glm::vec3& cameraWorldPos,
+                                             const glm::vec3& lightDirection,
+                                             float lightSpaceZ);
             void updateClipmapDirtyFlags(LightShadowData& data, uint32_t level,
                                           const ClipmapLevelData& levelData);
+            static void markExposedScrollPages(std::vector<bool>& pageDirty,
+                                               uint32_t basePageIdx, uint32_t pps,
+                                               const glm::ivec2& scroll,
+                                               const glm::ivec2& pageShift);
             void collectShadowViewsForGPU(const std::unordered_set<uint32_t>* visibleLightIds);
             void buildPageRenderList();
             void determineDynamicPages();
             void buildCSMPageRenderList(LightShadowData& data);
+            void remapClipmapPageTable(LightShadowData& data, uint32_t basePageIdx,
+                                       uint32_t pagesPerSide, const glm::ivec2& scroll);
             void buildClipmapPageRenderList(LightShadowData& data);
             void buildSingleViewPageRenderList(LightShadowData& data);
+            void buildPointPageRenderList(LightShadowData& data);
             void addPageToRenderLists(LightShadowData& data, uint32_t pageIdx,
                                       const glm::mat4& cropViewProjection,
                                       const ShadowView& view, bool isDirty);
@@ -250,6 +319,13 @@ namespace render
                                    bool isDirty, bool forceRender);
             void allocateDynamicTile(LightShadowData& data, uint32_t pageIdx);
             void freeDynamicTileIfExpired(LightShadowData& data, uint32_t pageIdx, uint32_t physTile);
+            void handleDirectionalModeSwitch(LightShadowData& data,
+                                              const types::ShadowSettings& shadowSettings,
+                                              types::DirectionalShadowMode newMode);
+            void updateDirectionalSettings(LightShadowData& data,
+                                            const types::ShadowSettings& shadowSettings,
+                                            bool modeChanged,
+                                            types::DirectionalShadowMode newMode);
             void allocateNonStaticLightPages(LightShadowData& data);
             void allocateStaticLightPages(LightShadowData& data, bool allowEviction);
         };

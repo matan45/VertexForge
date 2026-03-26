@@ -170,6 +170,16 @@ namespace events::render {
         std::string_view getName() const override { return "GetShowShadowDebug"; }
     };
 
+    struct SetShadowDebugModeCommand : ICommand<> {
+        types::ShadowDebugMode mode;
+
+        std::string_view getName() const override { return "SetShadowDebugMode"; }
+    };
+
+    struct GetShadowDebugModeQuery : IQuery<types::ShadowDebugMode> {
+        std::string_view getName() const override { return "GetShadowDebugMode"; }
+    };
+
     struct GetCullingStatsQuery : IQuery<services::CullingDebugStats> {
         std::string_view getName() const override { return "GetCullingStats"; }
     };
@@ -295,12 +305,6 @@ namespace events::render {
         float scale;
 
         std::string_view getName() const override { return "SetTerrainTextureScale"; }
-    };
-
-    struct SetTerrainShadowLODCommand : ICommand<> {
-        uint32_t lod;
-
-        std::string_view getName() const override { return "SetTerrainShadowLOD"; }
     };
 
     struct SetTerrainSVTEnabledCommand : ICommand<> {

@@ -149,7 +149,6 @@ namespace render::gpudriven
                 terrainShadowParams.terrainMeshletDescSet = terrainMeshletSet;
                 terrainShadowParams.terrainVertexDescSet = terrainVertexSet;
                 terrainShadowParams.tileCount = terrain.pipeline->getCurrentTileCount();
-                terrainShadowParams.shadowLOD = terrain.shadowLOD;
                 terrainShadowParamsPtr = &terrainShadowParams;
             }
         }

@@ -124,7 +124,6 @@ namespace render::gpudriven
             float lodBias = 1.0f;
             float errorThreshold = 2.0f;
             float textureScale = 0.1f;
-            uint32_t shadowLOD = 2;
             std::string currentMaterialPath;
             std::vector<TerrainLayerGPUData> layerData;
             bool layerDataDirty = false;
@@ -561,8 +560,6 @@ namespace render::gpudriven
         void setTerrainLODBias(float bias) { terrain.lodBias = bias; }
         void setTerrainErrorThreshold(float threshold) { terrain.errorThreshold = threshold; }
         void setTerrainTextureScale(float scale) { terrain.textureScale = scale; }
-        void setTerrainShadowLOD(uint32_t lod) { terrain.shadowLOD = std::min(lod, 3u); }
-
         void updateWater(const std::vector<::water::WaterTile*>& visibleTiles,
                          const ::water::WaterGlobalSettings& settings,
                          const ::water::WaterTileConfig& tileConfig);

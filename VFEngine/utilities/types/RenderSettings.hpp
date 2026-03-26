@@ -29,6 +29,14 @@ namespace types
         Clipmap
     };
 
+    enum class ShadowDebugMode : uint8_t
+    {
+        None = 0,
+        CascadeOverlay,
+        TilePoolHeatmap,
+        BiasVisualization
+    };
+
     struct ShadowSettings
     {
         bool enabled = true;
@@ -45,6 +53,8 @@ namespace types
 
         // PCSS
         bool softShadows = true;
+        float globalLightSize = 1.0f;
+        float searchRadiusMultiplier = 1.0f;
 
         // 0.0 = lighter shadows, 1.0 = darker shadows
         float shadowIntensity = 0.5f;
@@ -58,6 +68,9 @@ namespace types
         DirectionalShadowMode directionalMode = DirectionalShadowMode::CSM;
         uint8_t clipmapLevelCount = 16;
         float clipmapBaseExtent = 2.0f; // meters, level 0 half-extent
+
+        // Debug visualization
+        ShadowDebugMode debugMode = ShadowDebugMode::None;
     };
 
     struct CullingSettings
@@ -99,7 +112,6 @@ namespace types
         float lodBias = 1.0f;
         float errorThreshold = 2.0f;
         float textureScale = 0.1f;
-        uint32_t shadowLOD = 2; // LOD level for terrain shadows (0=highest, 3=lowest)
     };
 
     struct VFXLODSettings
@@ -122,11 +134,6 @@ namespace types
         uint32_t maxStreamingInitPerFrame = 4;
     };
 
-    struct ShadowLODSettings
-    {
-        bool enabled = false; // Disabled by default with VSM (page-based allocation handles this)
-    };
-
     struct LightStreamingSettings
     {
         uint32_t maxPointLights = 1024;
@@ -141,7 +148,6 @@ namespace types
     struct RenderSettings
     {
         ShadowSettings shadows;
-        ShadowLODSettings shadowLOD;
         LightStreamingSettings lightStreaming;
         CullingSettings culling;
         DistanceCullingSettings distanceCulling;

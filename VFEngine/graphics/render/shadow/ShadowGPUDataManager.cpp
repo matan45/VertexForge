@@ -1,6 +1,5 @@
 #include "ShadowGPUDataManager.hpp"
 #include "VSMPhysicalTilePool.hpp"
-#include "ShadowResourcePool.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/BufferUtilities.hpp"
 #include "../../core/PipelineUtilities.hpp"
@@ -211,11 +210,9 @@ namespace render::shadow
         const auto& logicalDevice = device.getLogicalDevice();
 
         // Set 10:
-        // Binding 0: Physical pool comparison sampler (replaces atlas)
-        // Binding 1: Physical pool depth sampler (replaces atlas depth)
-        // Binding 2: Cubemap comparison sampler[] (kept for point lights)
-        // Binding 3: Cubemap depth sampler[] (kept for point lights)
-        std::array<vk::DescriptorSetLayoutBinding, 4> bindings{};
+        // Binding 0: Physical pool comparison sampler
+        // Binding 1: Physical pool depth sampler (for PCSS blocker search)
+        std::array<vk::DescriptorSetLayoutBinding, 2> bindings{};
 
         bindings[0].binding = 0;
         bindings[0].descriptorType = vk::DescriptorType::eCombinedImageSampler;
@@ -227,25 +224,13 @@ namespace render::shadow
         bindings[1].descriptorCount = 1;
         bindings[1].stageFlags = vk::ShaderStageFlagBits::eFragment | vk::ShaderStageFlagBits::eCompute;
 
-        bindings[2].binding = 2;
-        bindings[2].descriptorType = vk::DescriptorType::eCombinedImageSampler;
-        bindings[2].descriptorCount = ShadowConstants::MAX_POINT_SHADOW_CASTERS;
-        bindings[2].stageFlags = vk::ShaderStageFlagBits::eFragment | vk::ShaderStageFlagBits::eCompute;
-
-        bindings[3].binding = 3;
-        bindings[3].descriptorType = vk::DescriptorType::eCombinedImageSampler;
-        bindings[3].descriptorCount = ShadowConstants::MAX_POINT_SHADOW_CASTERS;
-        bindings[3].stageFlags = vk::ShaderStageFlagBits::eFragment | vk::ShaderStageFlagBits::eCompute;
-
         vk::DescriptorSetLayoutCreateInfo layoutInfo{};
         layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
         layoutInfo.pBindings = bindings.data();
 
-        std::array<vk::DescriptorBindingFlags, 4> bindingFlags{};
+        std::array<vk::DescriptorBindingFlags, 2> bindingFlags{};
         bindingFlags[0] = vk::DescriptorBindingFlagBits::eUpdateAfterBind;
         bindingFlags[1] = vk::DescriptorBindingFlagBits::eUpdateAfterBind;
-        bindingFlags[2] = vk::DescriptorBindingFlagBits::ePartiallyBound | vk::DescriptorBindingFlagBits::eUpdateAfterBind;
-        bindingFlags[3] = vk::DescriptorBindingFlagBits::ePartiallyBound | vk::DescriptorBindingFlagBits::eUpdateAfterBind;
 
         vk::DescriptorSetLayoutBindingFlagsCreateInfo bindingFlagsInfo{};
         bindingFlagsInfo.bindingCount = static_cast<uint32_t>(bindingFlags.size());
@@ -257,7 +242,7 @@ namespace render::shadow
 
         vk::DescriptorPoolSize shadowTexPoolSize{};
         shadowTexPoolSize.type = vk::DescriptorType::eCombinedImageSampler;
-        shadowTexPoolSize.descriptorCount = 2 + 2 * ShadowConstants::MAX_POINT_SHADOW_CASTERS;
+        shadowTexPoolSize.descriptorCount = 2;
 
         shadowTexturePool = core::PipelineUtilities::createUpdateAfterBindPool(logicalDevice, 1, &shadowTexPoolSize, 1);
 
@@ -286,11 +271,9 @@ namespace render::shadow
     }
 
     void ShadowGPUDataManager::updateShadowTextureDescriptor(
-        VSMPhysicalTilePool* tilePool,
-        ShadowResourcePool* resourcePool,
-        const std::unordered_map<uint32_t, LightShadowData>& lightShadowData)
+        VSMPhysicalTilePool* tilePool)
     {
-        if (!tilePool || !resourcePool)
+        if (!tilePool)
             return;
 
         const auto& logicalDevice = device.getLogicalDevice();
@@ -326,92 +309,10 @@ namespace render::shadow
         poolDepthWrite.pImageInfo = &poolDepthInfo;
         writes.push_back(poolDepthWrite);
 
-        // Collect cube maps for point lights
-        std::vector<vk::DescriptorImageInfo> cubeInfos;
-        std::vector<vk::DescriptorImageInfo> cubeDepthInfos;
-        cubeInfos.reserve(ShadowConstants::MAX_POINT_SHADOW_CASTERS);
-        cubeDepthInfos.reserve(ShadowConstants::MAX_POINT_SHADOW_CASTERS);
-
-        uint32_t cubeIndex = 0;
-        for (const auto& [entityId, data] : lightShadowData)
-        {
-            if (data.type != ShadowMapType::PointCube ||
-                !data.settings.enabled || !data.settings.castShadows ||
-                !data.resourceHandle.isValid())
-                continue;
-
-            ShadowCubeMap* cube = resourcePool->getCube(data.resourceHandle);
-            if (!cube || !cube->isInitialized())
-                continue;
-
-            if (cubeIndex >= ShadowConstants::MAX_POINT_SHADOW_CASTERS)
-                break;
-
-            vk::DescriptorImageInfo cubeInfo{};
-            cubeInfo.sampler = resourcePool->getCubeComparisonSampler();
-            cubeInfo.imageView = cube->getCubeView();
-            cubeInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-            cubeInfos.push_back(cubeInfo);
-
-            vk::DescriptorImageInfo cubeDepthInfo{};
-            cubeDepthInfo.sampler = resourcePool->getCubeDepthSampler();
-            cubeDepthInfo.imageView = cube->getCubeView();
-            cubeDepthInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-            cubeDepthInfos.push_back(cubeDepthInfo);
-
-            ++cubeIndex;
-        }
-
-        if (cubeInfos.empty())
-        {
-            vk::ImageView placeholderCubeView = resourcePool->getPlaceholderCubeView();
-            if (placeholderCubeView)
-            {
-                vk::DescriptorImageInfo placeholderInfo{};
-                placeholderInfo.sampler = resourcePool->getCubeComparisonSampler();
-                placeholderInfo.imageView = placeholderCubeView;
-                placeholderInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-                cubeInfos.push_back(placeholderInfo);
-
-                vk::DescriptorImageInfo placeholderDepthInfo{};
-                placeholderDepthInfo.sampler = resourcePool->getCubeDepthSampler();
-                placeholderDepthInfo.imageView = placeholderCubeView;
-                placeholderDepthInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-                cubeDepthInfos.push_back(placeholderDepthInfo);
-            }
-        }
-
-        // Binding 2: Cube comparison samplers
-        if (!cubeInfos.empty())
-        {
-            vk::WriteDescriptorSet cubeWrite{};
-            cubeWrite.dstSet = shadowTextureDescSet;
-            cubeWrite.dstBinding = 2;
-            cubeWrite.dstArrayElement = 0;
-            cubeWrite.descriptorType = vk::DescriptorType::eCombinedImageSampler;
-            cubeWrite.descriptorCount = static_cast<uint32_t>(cubeInfos.size());
-            cubeWrite.pImageInfo = cubeInfos.data();
-            writes.push_back(cubeWrite);
-        }
-
-        // Binding 3: Cube depth samplers
-        if (!cubeDepthInfos.empty())
-        {
-            vk::WriteDescriptorSet cubeDepthWrite{};
-            cubeDepthWrite.dstSet = shadowTextureDescSet;
-            cubeDepthWrite.dstBinding = 3;
-            cubeDepthWrite.dstArrayElement = 0;
-            cubeDepthWrite.descriptorType = vk::DescriptorType::eCombinedImageSampler;
-            cubeDepthWrite.descriptorCount = static_cast<uint32_t>(cubeDepthInfos.size());
-            cubeDepthWrite.pImageInfo = cubeDepthInfos.data();
-            writes.push_back(cubeDepthWrite);
-        }
-
         if (!writes.empty())
         {
             logicalDevice.updateDescriptorSets(static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);
         }
-
     }
 
     namespace
@@ -457,19 +358,11 @@ namespace render::shadow
         }
 
         void packPCSSParams(vsm::GPUVSMLight& gpu, const ShadowView& view,
-                            ViewType viewType,
-                            const std::unordered_map<uint32_t, uint32_t>& entityToCubeIndex)
+                            ViewType viewType)
         {
-            float cubeMapIndex = -1.0f;
-            if (viewType == ViewType::Point)
-            {
-                auto it = entityToCubeIndex.find(view.entityId);
-                if (it != entityToCubeIndex.end())
-                    cubeMapIndex = static_cast<float>(it->second);
-            }
             float searchRadius = view.lightSize * view.texelSize * 20.0f;
             gpu.pcssParams = glm::vec4(view.lightSize, searchRadius,
-                                        view.filterEnabled ? 1.0f : 0.0f, cubeMapIndex);
+                                        view.filterEnabled ? 1.0f : 0.0f, 0.0f);
         }
 
         void packPageTableInfo(vsm::GPUVSMLight& gpu, const ShadowView& view,
@@ -497,6 +390,14 @@ namespace render::shadow
                 pagesY = ppc;
                 ptOffset = ld->vsmPageTableOffset + view.cascadeIndex * ppc * ppc;
             }
+            else if (ld->type == ShadowMapType::PointCube)
+            {
+                // Each face gets pagesPerFace x pagesPerFace pages
+                uint32_t pagesPerFace = ld->vsmPagesX;
+                pagesX = pagesPerFace;
+                pagesY = pagesPerFace;
+                ptOffset = ld->vsmPageTableOffset + view.cascadeIndex * pagesPerFace * pagesPerFace;
+            }
             else if (ld->type == ShadowMapType::DirectionalClipmap)
             {
                 uint32_t levelIdx = view.cascadeIndex;
@@ -518,8 +419,7 @@ namespace render::shadow
         const std::vector<ShadowView>& directionalViews,
         const std::vector<ShadowView>& pointViews,
         const std::vector<ShadowView>& spotViews,
-        const std::unordered_map<uint32_t, LightShadowData>& lightShadowData,
-        const std::unordered_map<uint32_t, uint32_t>& entityToCubeIndex)
+        const std::unordered_map<uint32_t, LightShadowData>& lightShadowData)
     {
         gpuShadowData.clear();
 
@@ -536,7 +436,7 @@ namespace render::shadow
                 gpu.biasParams = glm::vec4(view.depthBias, view.slopeBias, view.normalBias, view.texelSize);
 
                 packRangeParams(gpu, view, ld, viewType, isClipmap);
-                packPCSSParams(gpu, view, viewType, entityToCubeIndex);
+                packPCSSParams(gpu, view, viewType);
                 packPageTableInfo(gpu, view, ld, viewType, isClipmap);
 
                 gpuShadowData.push_back(gpu);

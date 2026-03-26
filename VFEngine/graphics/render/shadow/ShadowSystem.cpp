@@ -6,6 +6,7 @@
 #include "components/Components.hpp"
 #include "print/Log.hpp"
 #include "threading/JobSystem.hpp"
+#include <algorithm>
 
 namespace render::shadow
 {
@@ -33,9 +34,6 @@ namespace render::shadow
         pageTable = std::make_unique<VSMPageTable>(device);
         pageTable->init();
 
-        resourcePool = std::make_unique<ShadowResourcePool>(device);
-        resourcePool->init();
-
         gpuDataManager = std::make_unique<ShadowGPUDataManager>(device);
         gpuDataManager->init();
 
@@ -49,7 +47,7 @@ namespace render::shadow
         // Bind page table buffer to GPU data manager
         gpuDataManager->setPageTableBuffer(pageTable->getBuffer(), pageTable->getBufferSize());
 
-        gpuDataManager->updateShadowTextureDescriptor(tilePool.get(), resourcePool.get(), lightShadowData);
+        gpuDataManager->updateShadowTextureDescriptor(tilePool.get());
 
         // Initialize per-thread command pools for parallel shadow recording
         threadPoolManager = std::make_unique<core::ThreadCommandPoolManager>();
@@ -103,12 +101,6 @@ namespace render::shadow
         pointShadowViews.clear();
         spotShadowViews.clear();
         pageRenderList.clear();
-
-        if (resourcePool)
-        {
-            resourcePool->cleanup();
-            resourcePool.reset();
-        }
 
         if (pageTable)
         {
@@ -220,6 +212,14 @@ namespace render::shadow
             data.isStatic = registry.get<components::TransformComponent>(entity).isStatic;
         }
 
+        if (registry.valid(entity) && registry.all_of<components::ShadowOverrideComponent>(entity))
+        {
+            const auto& override = registry.get<components::ShadowOverrideComponent>(entity);
+            if (override.depthBias >= 0.0f) data.settings.depthBias = override.depthBias;
+            if (override.slopeBias >= 0.0f) data.settings.slopeBias = override.slopeBias;
+            if (override.normalBias >= 0.0f) data.settings.normalBias = override.normalBias;
+        }
+
         uint32_t viewCount = 1;
         switch (type)
         {
@@ -233,7 +233,6 @@ namespace render::shadow
             viewCount = settings.clipmapLevelCount;
             break;
         case ShadowMapType::Spot2D:
-        case ShadowMapType::Directional2D:
             viewCount = 1;
             break;
         default:
@@ -242,35 +241,20 @@ namespace render::shadow
 
         data.views.resize(viewCount);
 
-        // Allocate resources based on type
+        // VSM page-based allocation for all light types
+        if (!allocateVSMPages(data))
+        {
+            vfLogError("ShadowSystem: Failed to allocate VSM pages for light {}", entityId);
+            return false;
+        }
+
         if (type == ShadowMapType::PointCube)
         {
-            // Point lights still use cubemaps
-            if (!resourcePool || !resourcePool->isInitialized())
-                return false;
-
-            ShadowResourceHandle handle = resourcePool->allocateCube(settings.resolution);
-            if (!handle.isValid())
-            {
-                vfLogError("ShadowSystem: Failed to allocate point cube map {}x{}", settings.resolution, settings.resolution);
-                return false;
-            }
-
-            data.resourceHandle = handle;
             for (size_t i = 0; i < data.views.size(); ++i)
             {
                 auto& view = data.views[i];
                 view.type = ShadowMapType::PointCube;
                 view.layer = static_cast<uint32_t>(i);
-            }
-        }
-        else
-        {
-            // VSM page-based allocation for directional and spot lights
-            if (!allocateVSMPages(data))
-            {
-                vfLogError("ShadowSystem: Failed to allocate VSM pages for light {}", entityId);
-                return false;
             }
         }
 
@@ -290,118 +274,106 @@ namespace render::shadow
         }
 
         auto& data = it->second;
-
-        if (data.type == ShadowMapType::PointCube)
-        {
-            if (data.resourceHandle.isValid() && resourcePool)
-            {
-                resourcePool->free(data.resourceHandle);
-            }
-        }
-        else
-        {
-            freeVSMPages(data);
-        }
+        freeVSMPages(data);
 
         lightShadowData.erase(it);
         needsUpdate = true;
     }
 
-    bool ShadowSystem::allocateVSMPages(LightShadowData& data)
+    ShadowSystem::PageDimensions ShadowSystem::allocateCSMPages(LightShadowData& data)
     {
-        if (!tilePool || !pageTable)
-            return false;
+        static constexpr uint32_t MAX_DIR_PAGES = 4;
+        uint32_t pagesPerCascade = std::clamp(data.settings.resolution / vsm::PAGE_SIZE, 1u, MAX_DIR_PAGES);
+        data.settings.resolution = pagesPerCascade * vsm::PAGE_SIZE;
 
-        // Determine page grid size based on light type
-        // Limit pages per cascade to balance quality vs draw call count
-        // Each page = 1 physical tile (128x128). More pages = better quality but more draws.
-        // Page counts: balance quality vs draw call count
-        // Each page = 1 full indirect draw. Total draws = sum of all pages across all lights.
-        static constexpr uint32_t MAX_DIR_PAGES = 4;  // 4×4 = 512×512 per cascade, 64 draws for 4 cascades
-        static constexpr uint32_t MAX_SPOT_PAGES = 1;  // 1×1 = 128×128 per spot, 1 draw per spot
-
-        uint32_t pagesX, pagesY;
-        if (data.type == ShadowMapType::DirectionalCSM)
+        for (size_t i = 0; i < data.views.size(); ++i)
         {
-            uint32_t pagesPerCascade = std::clamp(data.settings.resolution / vsm::PAGE_SIZE, 1u, MAX_DIR_PAGES);
-
-            // Update resolution to match actual rendered size (fixes texel snapping)
-            data.settings.resolution = pagesPerCascade * vsm::PAGE_SIZE;
-
-            for (size_t i = 0; i < data.views.size(); ++i)
-            {
-                auto& view = data.views[i];
-                view.cascadeIndex = static_cast<uint16_t>(i);
-                view.type = data.type;
-            }
-
-            // pagesX = per-cascade width, pagesY = all cascades stacked vertically
-            pagesX = pagesPerCascade;
-            pagesY = pagesPerCascade * data.settings.cascadeCount;
-        }
-        else if (data.type == ShadowMapType::DirectionalClipmap)
-        {
-            // Tiered page density: near levels get more pages, far levels get fewer
-            // Level 0-3: 4x4=16 pages, Level 4-7: 2x2=4 pages, Level 8+: 1x1=1 page
-            uint32_t levelCount = data.settings.clipmapLevelCount;
-            data.clipmapLevelPagesPerSide.resize(levelCount);
-            data.clipmapLevelPageOffsets.resize(levelCount);
-            data.clipmapLastSnapPositions.resize(levelCount, glm::vec2(0.0f));
-            data.clipmapScrollOffset.resize(levelCount, glm::ivec2(0));
-            data.clipmapPageGridOrigin.resize(levelCount, glm::vec2(0.0f));
-            data.clipmapRenderVP.resize(levelCount, glm::mat4(1.0f));
-            data.clipmapUVOffset.resize(levelCount, glm::vec2(0.0f));
-            data.clipmapLevelInitialized.resize(levelCount, false);
-
-            uint32_t totalPages = 0;
-            for (uint32_t i = 0; i < levelCount; ++i)
-            {
-                uint32_t pps;
-                if (i < 4)       pps = MAX_DIR_PAGES;  // 4x4
-                else if (i < 8)  pps = 2;              // 2x2
-                else             pps = 1;              // 1x1
-
-                data.clipmapLevelPagesPerSide[i] = pps;
-                data.clipmapLevelPageOffsets[i] = totalPages;
-                totalPages += pps * pps;
-            }
-
-            for (size_t i = 0; i < data.views.size(); ++i)
-            {
-                auto& view = data.views[i];
-                view.cascadeIndex = static_cast<uint16_t>(i);
-                view.type = data.type;
-            }
-
-            // Allocate as a flat page table block (totalPages entries wide, 1 tall)
-            // We use pagesX=totalPages, pagesY=1 as a flat layout
-            pagesX = totalPages;
-            pagesY = 1;
-        }
-        else if (data.type == ShadowMapType::Spot2D || data.type == ShadowMapType::Directional2D)
-        {
-            uint32_t pages = std::clamp(data.settings.resolution / vsm::PAGE_SIZE, 1u, MAX_SPOT_PAGES);
-            data.settings.resolution = pages * vsm::PAGE_SIZE;
-            pagesX = pages;
-            pagesY = pages;
-
-            if (!data.views.empty())
-            {
-                data.views[0].cascadeIndex = 0;
-                data.views[0].type = data.type;
-            }
-        }
-        else
-        {
-            return false;
+            data.views[i].cascadeIndex = static_cast<uint16_t>(i);
+            data.views[i].type = data.type;
         }
 
-        // Allocate page table block
+        return {pagesPerCascade, pagesPerCascade * data.settings.cascadeCount, true};
+    }
+
+    ShadowSystem::PageDimensions ShadowSystem::allocateClipmapPages(LightShadowData& data)
+    {
+        // Near level resolution scales with quality
+        uint32_t nearPagesPerSide = 4;
+        switch (globalQuality)
+        {
+        case ShadowQuality::High:  nearPagesPerSide = 8;  break; // 1024
+        case ShadowQuality::Ultra: nearPagesPerSide = 16; break; // 2048
+        default: break;
+        }
+
+        uint32_t levelCount = data.settings.clipmapLevelCount;
+        data.clipmapLevelPagesPerSide.resize(levelCount);
+        data.clipmapLevelPageOffsets.resize(levelCount);
+        data.clipmapLastSnapPositions.resize(levelCount, glm::vec2(0.0f));
+        data.clipmapScrollOffset.resize(levelCount, glm::ivec2(0));
+        data.clipmapPageGridOrigin.resize(levelCount, glm::vec2(0.0f));
+        data.clipmapRenderVP.resize(levelCount, glm::mat4(1.0f));
+        data.clipmapUVOffset.resize(levelCount, glm::vec2(0.0f));
+        data.clipmapLevelInitialized.resize(levelCount, false);
+
+        uint32_t totalPages = 0;
+        for (uint32_t i = 0; i < levelCount; ++i)
+        {
+            uint32_t pps;
+            if (i < 4)       pps = nearPagesPerSide;
+            else if (i < 8)  pps = std::max(2u, nearPagesPerSide / 4);
+            else             pps = 1;
+
+            data.clipmapLevelPagesPerSide[i] = pps;
+            data.clipmapLevelPageOffsets[i] = totalPages;
+            totalPages += pps * pps;
+        }
+
+        for (size_t i = 0; i < data.views.size(); ++i)
+        {
+            data.views[i].cascadeIndex = static_cast<uint16_t>(i);
+            data.views[i].type = data.type;
+        }
+
+        return {totalPages, 1, true};
+    }
+
+    ShadowSystem::PageDimensions ShadowSystem::allocateSpotPages(LightShadowData& data, uint32_t maxPages)
+    {
+        uint32_t pages = std::clamp(data.settings.resolution / vsm::PAGE_SIZE, 1u, maxPages);
+        data.settings.resolution = pages * vsm::PAGE_SIZE;
+
+        if (!data.views.empty())
+        {
+            data.views[0].cascadeIndex = 0;
+            data.views[0].type = data.type;
+        }
+
+        return {pages, pages, true};
+    }
+
+    ShadowSystem::PageDimensions ShadowSystem::allocatePointPages(LightShadowData& data, uint32_t /*maxPages*/)
+    {
+        // Point lights use 1 page per face (6 total) to keep tile usage reasonable
+        // Each face covers 90 degrees — higher resolution can be added later
+        uint32_t pagesPerFace = 1;
+        data.settings.resolution = pagesPerFace * vsm::PAGE_SIZE;
+
+        for (size_t i = 0; i < data.views.size(); ++i)
+        {
+            data.views[i].cascadeIndex = static_cast<uint16_t>(i);
+            data.views[i].type = data.type;
+        }
+
+        return {pagesPerFace, pagesPerFace * ShadowConstants::CUBE_FACE_COUNT, true};
+    }
+
+    bool ShadowSystem::allocatePhysicalTiles(LightShadowData& data, uint32_t pagesX, uint32_t pagesY)
+    {
         uint32_t offset = pageTable->allocateBlock(pagesX, pagesY);
         if (offset == vsm::INVALID_TILE)
             return false;
 
-        // Allocate physical tiles for all pages (brute-force Phase 1)
         uint32_t totalPages = pagesX * pagesY;
         data.vsmPhysicalTiles.resize(totalPages);
 
@@ -410,7 +382,10 @@ namespace render::shadow
             uint32_t tile = tilePool->allocateTile();
             if (tile == vsm::INVALID_TILE)
             {
-                // Rollback
+                tile = evictLowestPriorityPage(data.shadowPriority);
+            }
+            if (tile == vsm::INVALID_TILE)
+            {
                 for (uint32_t j = 0; j < i; ++j)
                     tilePool->freeTile(data.vsmPhysicalTiles[j]);
                 pageTable->freeBlock(offset, pagesX, pagesY);
@@ -419,22 +394,98 @@ namespace render::shadow
                 return false;
             }
             data.vsmPhysicalTiles[i] = tile;
-
-            // Map in page table
-            uint32_t pageX = i % pagesX;
-            uint32_t pageY = i / pagesX;
-            pageTable->mapPage(offset, pageX, pageY, pagesX, tile);
+            pageTable->mapPage(offset, i % pagesX, i / pagesX, pagesX, tile);
         }
 
         data.vsmPagesX = pagesX;
         data.vsmPagesY = pagesY;
         data.vsmPageTableOffset = offset;
         data.vsmLightIndex = nextVSMLightIndex++;
-        // Initialize with a future frame so pages survive warmup/eviction
         data.vsmPageLastUsedFrame.resize(totalPages, frameCounter + EVICTION_THRESHOLD + 120);
-        data.vsmPageDirty.resize(totalPages, true); // all pages dirty initially
-
+        data.vsmPageDirty.resize(totalPages, true);
         return true;
+    }
+
+    void ShadowSystem::buildEvictionHeap()
+    {
+        evictionHeap.clear();
+        for (auto& [entityId, data] : lightShadowData)
+        {
+            if (data.vsmPhysicalTiles.empty())
+                continue;
+            for (uint32_t i = 0; i < data.vsmPhysicalTiles.size(); ++i)
+            {
+                if (data.vsmPhysicalTiles[i] == vsm::INVALID_TILE)
+                    continue;
+                uint32_t lastUsed = (i < data.vsmPageLastUsedFrame.size())
+                    ? data.vsmPageLastUsedFrame[i] : 0;
+                evictionHeap.push_back({data.shadowPriority, lastUsed, entityId, i});
+            }
+        }
+        std::make_heap(evictionHeap.begin(), evictionHeap.end(), std::greater<>{});
+    }
+
+    uint32_t ShadowSystem::evictLowestPriorityPage(float requestingPriority)
+    {
+        float threshold = requestingPriority * 0.5f;
+
+        while (!evictionHeap.empty())
+        {
+            std::pop_heap(evictionHeap.begin(), evictionHeap.end(), std::greater<>{});
+            auto candidate = evictionHeap.back();
+            evictionHeap.pop_back();
+
+            if (candidate.priority >= threshold)
+                return vsm::INVALID_TILE;
+
+            auto it = lightShadowData.find(candidate.entityId);
+            if (it == lightShadowData.end())
+                continue;
+            auto& data = it->second;
+            if (candidate.pageIdx >= data.vsmPhysicalTiles.size())
+                continue;
+            if (data.vsmPhysicalTiles[candidate.pageIdx] == vsm::INVALID_TILE)
+                continue;
+
+            uint32_t tile = data.vsmPhysicalTiles[candidate.pageIdx];
+            data.vsmPhysicalTiles[candidate.pageIdx] = vsm::INVALID_TILE;
+
+            uint32_t px = candidate.pageIdx % data.vsmPagesX;
+            uint32_t py = candidate.pageIdx / data.vsmPagesX;
+            pageTable->unmapPage(data.vsmPageTableOffset, px, py, data.vsmPagesX);
+            return tile;
+        }
+        return vsm::INVALID_TILE;
+    }
+
+    bool ShadowSystem::allocateVSMPages(LightShadowData& data)
+    {
+        if (!tilePool || !pageTable)
+            return false;
+
+        uint32_t maxSpotPages = 1;
+        switch (globalQuality)
+        {
+        case ShadowQuality::Medium: maxSpotPages = 2; break;
+        case ShadowQuality::High:
+        case ShadowQuality::Ultra:  maxSpotPages = 4; break;
+        default: break;
+        }
+
+        PageDimensions dims;
+        switch (data.type)
+        {
+        case ShadowMapType::DirectionalCSM:    dims = allocateCSMPages(data); break;
+        case ShadowMapType::DirectionalClipmap: dims = allocateClipmapPages(data); break;
+        case ShadowMapType::Spot2D:            dims = allocateSpotPages(data, maxSpotPages); break;
+        case ShadowMapType::PointCube:         dims = allocatePointPages(data, maxSpotPages); break;
+        default: return false;
+        }
+
+        if (!dims.valid)
+            return false;
+
+        return allocatePhysicalTiles(data, dims.x, dims.y);
     }
 
     void ShadowSystem::freeVSMPages(LightShadowData& data)
@@ -478,14 +529,11 @@ namespace render::shadow
         data.clipmapPageGridOrigin.clear();
         data.clipmapRenderVP.clear();
         data.clipmapUVOffset.clear();
+        data.clipmapLevelInitialized.clear();
     }
 
     void ShadowSystem::setDeletionQueue(core::DeferredDeletionQueue* queue)
     {
-        if (resourcePool)
-        {
-            resourcePool->setDeletionQueue(queue);
-        }
     }
 
     void ShadowSystem::invalidateStaticShadow(uint32_t entityId)
@@ -519,7 +567,10 @@ namespace render::shadow
             bool wasStatic = data.isStatic;
             if (registry.valid(entity) && registry.all_of<components::TransformComponent>(entity))
             {
-                data.isStatic = registry.get<components::TransformComponent>(entity).isStatic;
+                // Point lights always non-static in shadow system — their 6-face VSM
+                // layout doesn't work with the static page rendering path
+                bool entityStatic = registry.get<components::TransformComponent>(entity).isStatic;
+                data.isStatic = (data.type != ShadowMapType::PointCube) && entityStatic;
             }
             else
             {
@@ -536,6 +587,50 @@ namespace render::shadow
     ShadowSystem::ShadowCacheStats ShadowSystem::getShadowCacheStats() const
     {
         return lastCacheStats;
+    }
+
+    std::vector<ShadowSystem::PerLightStats> ShadowSystem::getPerLightStats() const
+    {
+        std::vector<PerLightStats> result;
+        result.reserve(lightShadowData.size());
+
+        for (const auto& [entityId, data] : lightShadowData)
+        {
+            PerLightStats info;
+            info.entityId = entityId;
+
+            switch (data.type)
+            {
+            case ShadowMapType::DirectionalCSM:
+            case ShadowMapType::DirectionalClipmap:
+                info.type = 0;
+                break;
+            case ShadowMapType::Spot2D:
+                info.type = 1;
+                break;
+            case ShadowMapType::PointCube:
+                info.type = 2;
+                break;
+            default:
+                info.type = 3;
+                break;
+            }
+
+            info.pagesAllocated = static_cast<uint32_t>(data.vsmPhysicalTiles.size());
+            uint32_t dirty = 0;
+            uint32_t cached = 0;
+            for (size_t i = 0; i < data.vsmPageDirty.size(); ++i)
+            {
+                if (data.vsmPageDirty[i])
+                    ++dirty;
+                else
+                    ++cached;
+            }
+            info.pagesDirty = dirty;
+            info.pagesCached = cached;
+            result.push_back(info);
+        }
+        return result;
     }
 
     int32_t ShadowSystem::getShadowViewIndex(uint32_t entityId) const
@@ -595,10 +690,58 @@ namespace render::shadow
         return tilePool ? tilePool->getUtilization() : 0.0f;
     }
 
+    void ShadowSystem::addDirectionalDebugInfos(std::vector<ShadowDebugInfo>& infos) const
+    {
+        for (const auto& [entityId, data] : lightShadowData)
+        {
+            if (!data.settings.enabled || !data.settings.castShadows || !data.isDirectionalType())
+                continue;
+
+            for (size_t i = 0; i < data.views.size(); ++i)
+            {
+                const auto& view = data.views[i];
+                ShadowDebugInfo info;
+                info.type = data.type;
+                info.cascadeIndex = static_cast<uint32_t>(i);
+                info.entityId = entityId;
+                info.viewProjectionMatrix = view.viewProjectionMatrix;
+                info.lightPosition = glm::vec3(view.lightPosition);
+                info.lightDirection = glm::vec3(view.lightDirection);
+                info.nearPlane = view.nearPlane;
+                info.farPlane = view.farPlane;
+                infos.push_back(info);
+            }
+        }
+    }
+
+    void ShadowSystem::addSingleViewDebugInfo(std::vector<ShadowDebugInfo>& infos, ShadowMapType type) const
+    {
+        for (const auto& [entityId, data] : lightShadowData)
+        {
+            if (!data.settings.enabled || !data.settings.castShadows || data.type != type)
+                continue;
+            if (data.views.empty())
+                continue;
+
+            const auto& view = data.views[0];
+            ShadowDebugInfo info;
+            info.type = data.type;
+            info.cascadeIndex = 0;
+            info.entityId = entityId;
+            info.viewProjectionMatrix = view.viewProjectionMatrix;
+            info.lightPosition = glm::vec3(view.lightPosition);
+            info.lightDirection = (type == ShadowMapType::PointCube)
+                ? glm::vec3(0.0f, -1.0f, 0.0f)
+                : glm::vec3(view.lightDirection);
+            info.nearPlane = view.nearPlane;
+            info.farPlane = view.farPlane;
+            infos.push_back(info);
+        }
+    }
+
     std::vector<ShadowDebugInfo> ShadowSystem::getShadowDebugInfo() const
     {
         std::vector<ShadowDebugInfo> debugInfos;
-
         if (!shadowsEnabled)
             return debugInfos;
 
@@ -608,78 +751,9 @@ namespace render::shadow
             spotShadowViews.size()
         );
 
-        for (const auto& [entityId, data] : lightShadowData)
-        {
-            if (!data.settings.enabled || !data.settings.castShadows)
-                continue;
-
-            if (data.isDirectionalType())
-            {
-                for (size_t i = 0; i < data.views.size(); ++i)
-                {
-                    const auto& view = data.views[i];
-                    ShadowDebugInfo info;
-                    info.type = data.type;
-                    info.cascadeIndex = static_cast<uint32_t>(i);
-                    info.entityId = entityId;
-                    info.viewProjectionMatrix = view.viewProjectionMatrix;
-                    info.lightPosition = glm::vec3(view.lightPosition);
-                    info.lightDirection = glm::vec3(view.lightDirection);
-                    info.nearPlane = view.nearPlane;
-                    info.farPlane = view.farPlane;
-                    debugInfos.push_back(info);
-                }
-            }
-        }
-
-        for (const auto& [entityId, data] : lightShadowData)
-        {
-            if (!data.settings.enabled || !data.settings.castShadows)
-                continue;
-
-            if (data.type == ShadowMapType::PointCube)
-            {
-                if (!data.views.empty())
-                {
-                    const auto& view = data.views[0];
-                    ShadowDebugInfo info;
-                    info.type = data.type;
-                    info.cascadeIndex = 0;
-                    info.entityId = entityId;
-                    info.viewProjectionMatrix = view.viewProjectionMatrix;
-                    info.lightPosition = glm::vec3(view.lightPosition);
-                    info.lightDirection = glm::vec3(0.0f, -1.0f, 0.0f);
-                    info.nearPlane = view.nearPlane;
-                    info.farPlane = view.farPlane;
-                    debugInfos.push_back(info);
-                }
-            }
-        }
-
-        for (const auto& [entityId, data] : lightShadowData)
-        {
-            if (!data.settings.enabled || !data.settings.castShadows)
-                continue;
-
-            if (data.type == ShadowMapType::Spot2D)
-            {
-                if (!data.views.empty())
-                {
-                    const auto& view = data.views[0];
-                    ShadowDebugInfo info;
-                    info.type = data.type;
-                    info.cascadeIndex = 0;
-                    info.entityId = entityId;
-                    info.viewProjectionMatrix = view.viewProjectionMatrix;
-                    info.lightPosition = glm::vec3(view.lightPosition);
-                    info.lightDirection = glm::vec3(view.lightDirection);
-                    info.nearPlane = view.nearPlane;
-                    info.farPlane = view.farPlane;
-                    debugInfos.push_back(info);
-                }
-            }
-        }
-
+        addDirectionalDebugInfos(debugInfos);
+        addSingleViewDebugInfo(debugInfos, ShadowMapType::PointCube);
+        addSingleViewDebugInfo(debugInfos, ShadowMapType::Spot2D);
         return debugInfos;
     }
 

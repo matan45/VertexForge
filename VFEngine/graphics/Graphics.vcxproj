@@ -254,11 +254,9 @@
     <ClInclude Include="render\shadow\CascadeShadowCalculator.hpp" />
     <ClInclude Include="render\shadow\ClipmapShadowCalculator.hpp" />
     <ClInclude Include="render\shadow\PointShadowCalculator.hpp" />
-    <ClInclude Include="render\shadow\ShadowCubeMap.hpp" />
     <ClInclude Include="render\shadow\ShadowGPUDataManager.hpp" />
     <ClInclude Include="render\shadow\ShadowPassPipeline.hpp" />
     <ClInclude Include="render\shadow\ShadowPassRecorder.hpp" />
-    <ClInclude Include="render\shadow\ShadowResourcePool.hpp" />
     <ClInclude Include="render\shadow\ShadowSystem.hpp" />
     <ClInclude Include="render\shadow\ShadowTypes.hpp" />
     <ClInclude Include="render\shadow\SpotShadowCalculator.hpp" />
@@ -502,12 +500,10 @@
     <ClCompile Include="render\shadow\CascadeShadowCalculator.cpp" />
     <ClCompile Include="render\shadow\ClipmapShadowCalculator.cpp" />
     <ClCompile Include="render\shadow\PointShadowCalculator.cpp" />
-    <ClCompile Include="render\shadow\ShadowCubeMap.cpp" />
     <ClCompile Include="render\shadow\ShadowGPUDataManager.cpp" />
     <ClCompile Include="render\shadow\ShadowPassPipeline.cpp" />
     <ClCompile Include="render\shadow\ShadowPassRecorder.cpp" />
     <ClCompile Include="render\shadow\ShadowPassRecorderParallel.cpp" />
-    <ClCompile Include="render\shadow\ShadowResourcePool.cpp" />
     <ClCompile Include="render\shadow\ShadowSystem.cpp" />
     <ClCompile Include="render\shadow\ShadowSystemFeedback.cpp" />
     <ClCompile Include="render\shadow\ShadowSystemFrame.cpp" />

@@ -338,6 +338,35 @@ namespace events::scene {
     };
 
     // ============================================
+    // Shadow Override Component Events
+    // ============================================
+
+    struct HasShadowOverrideQuery : IQuery<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "HasShadowOverride"; }
+    };
+
+    struct GetShadowOverrideDataQuery : IQuery<std::optional<services::ShadowOverrideData>> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "GetShadowOverrideData"; }
+    };
+
+    struct SetShadowOverrideDataCommand : ICommand<bool> {
+        services::EntityHandle entity;
+        services::ShadowOverrideData data;
+
+        std::string_view getName() const override { return "SetShadowOverrideData"; }
+    };
+
+    struct RemoveShadowOverrideCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "RemoveShadowOverride"; }
+    };
+
+    // ============================================
     // Settings Commands / Queries
     // ============================================
 

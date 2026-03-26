@@ -301,8 +301,6 @@ layout(std430, set = 9, binding = 1) readonly buffer PageTableBuffer {
 // Comparison samplers (shadow filtering)
 layout(set = 10, binding = 0) uniform sampler2DShadow physicalPoolShadow;
 layout(set = 10, binding = 1) uniform sampler2D physicalPoolDepth;
-layout(set = 10, binding = 2) uniform samplerCubeShadow shadowCubes[32];
-layout(set = 10, binding = 3) uniform samplerCube shadowCubesDepth[32];
 
 // PCSS sampling functions
 #define SHADOW_BUFFER shadowData
@@ -657,6 +655,61 @@ void main() {
 
         vec3 shadowColor = mix(vec3(0.1, 0.1, 0.3), vec3(1.0, 0.95, 0.9), totalShadow);
         color = shadowColor;
+    }
+
+    // Clipmap/Cascade Level Visualization
+    if (viewModeValue == 14u) {
+        color = vec3(0.2);
+        for (uint i = 0u; i < lightCounts.directionalCount; ++i) {
+            DirectionalLight light = directionalLights[i];
+            if (light.shadowIndex < 0) continue;
+
+            int levelCount = int(SHADOW_BUFFER[light.shadowIndex].rangeParams.z);
+            float baseExtent = SHADOW_BUFFER[light.shadowIndex].rangeParams.x;
+            float worldDist = length(fragWorldPos - camera.cameraPos);
+
+            if (light.shadowMode == 1) {
+                // Clipmap: level by world distance
+                float lvl = max(log2(max(worldDist, baseExtent) / baseExtent), 0.0);
+                int levelIdx = clamp(int(lvl), 0, levelCount - 1);
+                float t = float(levelIdx) / max(float(levelCount - 1), 1.0);
+                // Blue(near) → Cyan → Green → Yellow → Red(far)
+                color = mix(vec3(0.0, 0.2, 1.0), vec3(1.0, 0.2, 0.0), t);
+                // Show level boundaries as bright lines
+                float frac = fract(lvl);
+                if (frac < 0.02 || frac > 0.98) color = vec3(1.0);
+            } else {
+                // CSM: cascade by view depth
+                float linearZ = linearizeDepth(gl_FragCoord.z);
+                vec3 cascadeColors[4] = vec3[](
+                    vec3(1.0, 0.2, 0.2), vec3(1.0, 0.7, 0.2),
+                    vec3(0.9, 0.9, 0.2), vec3(0.2, 1.0, 0.3));
+                int cascadeIdx = 0;
+                for (int c = 0; c < min(levelCount, 4); ++c) {
+                    if (linearZ < SHADOW_BUFFER[light.shadowIndex + c].rangeParams.y) {
+                        cascadeIdx = c; break;
+                    }
+                    cascadeIdx = c;
+                }
+                color = cascadeColors[cascadeIdx];
+            }
+        }
+    }
+
+    // Shadow UV Visualization
+    if (viewModeValue == 15u) {
+        color = vec3(0.0);
+        for (uint i = 0u; i < lightCounts.directionalCount; ++i) {
+            DirectionalLight light = directionalLights[i];
+            if (light.shadowIndex < 0) continue;
+            ShadowData sd = SHADOW_BUFFER[light.shadowIndex];
+            vec4 lsPos = sd.viewProjection * vec4(fragWorldPos, 1.0);
+            vec2 uv = lsPos.xy * 0.5 + 0.5;
+            // Red = U, Green = V, Blue = valid page
+            bool valid;
+            vec2 physUV = vsmLookupPhysicalUV(sd, uv, valid);
+            color = vec3(uv.x, uv.y, valid ? 0.5 : 0.0);
+        }
     }
 
 #ifdef WBOIT_ENABLED

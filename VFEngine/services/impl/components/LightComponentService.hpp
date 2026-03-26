@@ -38,6 +38,11 @@ namespace services {
         std::optional<SpotLightData> getSpotLightData(EntityHandle entity) const;
         bool setSpotLightData(EntityHandle entity, const SpotLightData& lightData);
 
+        bool hasShadowOverride(EntityHandle entity) const;
+        std::optional<ShadowOverrideData> getShadowOverrideData(EntityHandle entity) const;
+        bool setShadowOverrideData(EntityHandle entity, const ShadowOverrideData& data);
+        bool removeShadowOverride(EntityHandle entity);
+
     private:
         template<typename ComponentT>
         bool addLightImpl(EntityHandle entity, uint8_t lightType, components::BillboardIconType iconType);
