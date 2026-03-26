@@ -91,17 +91,15 @@ namespace core
             }
         }
 
-        // Register RTT camera frustums for ALL enabled cameras so terrain/water
+        // Register RTT camera frustums for ALL enabled cameras so terrain
         // tiles are loaded even when the camera is between renders (FixedInterval).
         if (mainOffScreen)
         {
             mainOffScreen->clearAdditionalTerrainFrustums();
-            mainOffScreen->clearAdditionalWaterFrustums();
             for (auto& [id, ctrl] : enabled)
             {
                 glm::mat4 vp = ctrl->getProjectionMatrix() * ctrl->getViewMatrix();
                 mainOffScreen->addTerrainFrustum(vp, ctrl->getCameraPosition());
-                mainOffScreen->addWaterFrustum(vp, ctrl->getCameraPosition());
             }
         }
 

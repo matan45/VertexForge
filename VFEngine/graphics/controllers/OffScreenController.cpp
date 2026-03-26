@@ -18,7 +18,7 @@
 #include "../../services/events/EventDispatcher.hpp"
 #include "../../services/events/render/MaterialEvents.hpp"
 #include "../../services/events/terrain/TerrainEvents.hpp"
-#include "../../services/events/terrain/WaterEvents.hpp"
+#include "../../services/events/terrain/OceanEvents.hpp"
 #include "../../services/events/scene/EntityTransformEvents.hpp"
 
 namespace controllers
@@ -119,8 +119,8 @@ namespace controllers
             });
         tileRemovedSubscription = std::make_unique<events::SubscriptionToken>(tileRemovedToken);
 
-        auto waterToken = events::EventDispatcher::instance().subscribe<events::water::WaterDeletedNotification>(
-            [this](const events::water::WaterDeletedNotification&)
+        auto oceanToken = events::EventDispatcher::instance().subscribe<events::ocean::OceanDeletedNotification>(
+            [this](const events::ocean::OceanDeletedNotification&)
             {
                 auto* renderHandler = offScreen->getRenderPassHandler();
                 if (renderHandler)
@@ -128,7 +128,7 @@ namespace controllers
                     renderHandler->clearWaterData();
                 }
             });
-        waterDeletedSubscription = std::make_unique<events::SubscriptionToken>(waterToken);
+        waterDeletedSubscription = std::make_unique<events::SubscriptionToken>(oceanToken);
 
         auto entitySelectedToken = events::EventDispatcher::instance().subscribe<events::scene::EntitySelectedNotification>(
             [this](const events::scene::EntitySelectedNotification& notification)
@@ -139,7 +139,6 @@ namespace controllers
                 if (!notification.entity.has_value())
                 {
                     rh->clearSelectedTerrainTile();
-                    rh->clearSelectedWaterTile();
                     return;
                 }
 
@@ -155,28 +154,11 @@ namespace controllers
                     if (tileOpt.has_value())
                     {
                         rh->setSelectedTerrainTile(tileOpt->tileX, tileOpt->tileZ);
-                        rh->clearSelectedWaterTile();
-                        return;
-                    }
-                }
-
-                events::water::HasWaterTileComponentQuery waterTileQuery;
-                waterTileQuery.entity = *notification.entity;
-                if (disp.query(waterTileQuery))
-                {
-                    events::water::GetWaterTileDataQuery waterDataQuery;
-                    waterDataQuery.entity = *notification.entity;
-                    auto waterTileOpt = disp.query(waterDataQuery);
-                    if (waterTileOpt.has_value())
-                    {
-                        rh->setSelectedWaterTile(waterTileOpt->tileX, waterTileOpt->tileZ);
-                        rh->clearSelectedTerrainTile();
                         return;
                     }
                 }
 
                 rh->clearSelectedTerrainTile();
-                rh->clearSelectedWaterTile();
             });
         entitySelectedSubscription = std::make_unique<events::SubscriptionToken>(entitySelectedToken);
     }

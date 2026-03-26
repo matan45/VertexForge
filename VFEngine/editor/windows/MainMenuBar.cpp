@@ -9,7 +9,7 @@
 #include "config/RenderConfigWindow.hpp"
 #include "config/ProjectSettingsWindow.hpp"
 #include "terrain/TerrainCreationWindow.hpp"
-#include "water/WaterEditorWindow.hpp"
+#include "ocean/OceanEditorWindow.hpp"
 #include "config/PostProcessConfigWindow.hpp"
 #include "config/NavmeshWindow.hpp"
 #include "config/GIConfigWindow.hpp"
@@ -185,7 +185,7 @@ namespace windows
         if (!ImGui::BeginMenu("Add")) return;
         if (ImGui::MenuItem("IBL") && iblWindow) iblWindow->show();
         else if (ImGui::MenuItem("Terrain") && terrainCreationWindow) terrainCreationWindow->show();
-        else if (ImGui::MenuItem("Water") && waterEditorWindow) waterEditorWindow->show();
+        else if (ImGui::MenuItem("Ocean") && oceanEditorWindow) oceanEditorWindow->show();
         else if (ImGui::MenuItem("Post Process") && postProcessConfigWindow) postProcessConfigWindow->show();
         else if (ImGui::MenuItem("Navigation") && navmeshWindow) navmeshWindow->show();
         else if (ImGui::MenuItem("Volumetric Fog") && volumetricFogConfigWindow) volumetricFogConfigWindow->show();

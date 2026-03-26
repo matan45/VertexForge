@@ -10,7 +10,7 @@
 #include "impl/scripting/ScriptingServiceImpl.hpp"
 #include "impl/project/ProjectServiceImpl.hpp"
 #include "impl/scene/TerrainService.hpp"
-#include "impl/scene/WaterService.hpp"
+#include "impl/scene/OceanService.hpp"
 #include "impl/physics/PhysicsServiceImpl.hpp"
 #include "impl/physics/PhysicsAnimationServiceImpl.hpp"
 #include "impl/navmesh/NavmeshServiceImpl.hpp"
@@ -19,7 +19,7 @@
 #include "../audio/AudioSceneUpdater.hpp"
 #include "../audio/ReverbZoneManager.hpp"
 #include "../adapters/terrain/TerrainRenderAdapter.hpp"
-#include "../adapters/terrain/WaterRenderAdapter.hpp"
+#include "../adapters/terrain/OceanRenderAdapter.hpp"
 #include "impl/render/RenderTextureServiceImpl.hpp"
 #include "impl/render/RenderTexturePlayModeHandler.hpp"
 #include "impl/render/DebugDrawServiceImpl.hpp"
@@ -118,7 +118,7 @@ namespace handlers {
         physicsAnimationService.reset();
         physicsService.reset();
         navmeshService.reset();
-        waterService.reset();
+        oceanService.reset();
         terrainService.reset();
         projectService.reset();
         audioSceneUpdater.reset();
@@ -242,12 +242,12 @@ namespace handlers {
             terrainServiceImpl->setPhysicsProvider(physicsProvider);
         }
 
-        auto waterServiceImpl = std::make_shared<services::WaterService>(bootstrap->getSceneGraphSystem());
-        waterService = waterServiceImpl;
-        waterServiceImpl->setPhysicsProvider(bootstrap->getPhysicsProvider());
-        if (auto* waterAdapter = bootstrap->getWaterRenderAdapterInternal())
+        auto oceanServiceImpl = std::make_shared<services::OceanService>(bootstrap->getSceneGraphSystem());
+        oceanService = oceanServiceImpl;
+        oceanServiceImpl->setPhysicsProvider(bootstrap->getPhysicsProvider());
+        if (auto* oceanAdapter = bootstrap->getOceanRenderAdapterInternal())
         {
-            waterAdapter->setWaterService(waterServiceImpl.get());
+            oceanAdapter->setOceanService(oceanServiceImpl.get());
         }
 
         if (auto* physicsProvider = bootstrap->getPhysicsProvider())
@@ -255,7 +255,7 @@ namespace handlers {
             physicsService = std::make_shared<services::PhysicsServiceImpl>(physicsProvider);
             physicsAnimationService = std::make_shared<services::PhysicsAnimationServiceImpl>(physicsProvider);
             physicsPlayModeHandler = std::make_unique<services::PhysicsPlayModeHandler>(physicsProvider);
-            physicsPlayModeHandler->setWaterService(waterServiceImpl.get());
+            physicsPlayModeHandler->setOceanService(oceanServiceImpl.get());
             physicsPlayModeHandler->subscribeToEvents();
 
             // Wire script onFixedUpdate to run after each physics sub-step
@@ -319,7 +319,7 @@ namespace handlers {
         static_cast<services::AudioServiceImpl*>(audioService.get())->registerEventHandlers();
         static_cast<services::ScriptingServiceImpl*>(scriptingService.get())->registerEventHandlers();
         terrainService->registerEventHandlers();
-        waterService->registerEventHandlers();
+        oceanService->registerEventHandlers();
         if (physicsService)
         {
             physicsService->registerEventHandlers();

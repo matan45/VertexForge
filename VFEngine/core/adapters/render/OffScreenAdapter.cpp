@@ -459,9 +459,9 @@ namespace core {
         }
     }
 
-    void OffScreenAdapter::setWaterRenderProvider(services::IWaterRenderProvider* provider) {
+    void OffScreenAdapter::setOceanRenderProvider(services::IOceanRenderProvider* provider) {
         if (offScreen) {
-            offScreen->setWaterRenderProvider(provider);
+            offScreen->setOceanRenderProvider(provider);
         }
     }
 

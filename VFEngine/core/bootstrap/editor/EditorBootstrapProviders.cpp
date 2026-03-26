@@ -129,9 +129,9 @@ namespace core
         return debugDrawAdapter.get();
     }
 
-    WaterRenderAdapter* EditorBootstrap::getWaterRenderAdapterInternal()
+    OceanRenderAdapter* EditorBootstrap::getOceanRenderAdapterInternal()
     {
-        return waterRenderAdapter.get();
+        return oceanRenderAdapter.get();
     }
 
     services::IPostProcessProvider* EditorBootstrap::getPostProcessProvider()

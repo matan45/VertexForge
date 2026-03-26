@@ -90,11 +90,9 @@ namespace terrain
     class TerrainTile;
 }
 
-namespace water
+namespace services
 {
-    struct WaterTile;
-    struct WaterGlobalSettings;
-    struct WaterTileConfig;
+    struct OceanVisualSettings;
 }
 
 namespace vegetation
@@ -164,10 +162,6 @@ namespace render::gpudriven
             std::vector<render::water::WaterTileGPUData> tileData;
             render::water::WaterPushConstants cachedPushConstants{};
             bool renderingEnabled = true;
-            int32_t selectedCoordX = 0;
-            int32_t selectedCoordZ = 0;
-            bool hasSelectedTile = false;
-
             // Ocean FFT
             std::unique_ptr<render::water::OceanFFT> oceanFFT;
             bool oceanEnabled = false;
@@ -560,13 +554,12 @@ namespace render::gpudriven
         void setTerrainLODBias(float bias) { terrain.lodBias = bias; }
         void setTerrainErrorThreshold(float threshold) { terrain.errorThreshold = threshold; }
         void setTerrainTextureScale(float scale) { terrain.textureScale = scale; }
-        void updateWater(const std::vector<::water::WaterTile*>& visibleTiles,
-                         const ::water::WaterGlobalSettings& settings,
-                         const ::water::WaterTileConfig& tileConfig);
+        void updateWater(const services::OceanVisualSettings& visualSettings,
+                         float baseWaterHeight,
+                         const glm::vec3& cameraPosition,
+                         float oceanPatchSize);
         void renderWaterDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet);
         void clearWaterData();
-        void setSelectedWaterTile(int32_t coordX, int32_t coordZ);
-        void clearSelectedWaterTile();
 
         void setWaterRenderingEnabled(bool enabled) { water.renderingEnabled = enabled; }
         bool isWaterRenderingEnabled() const { return water.renderingEnabled; }

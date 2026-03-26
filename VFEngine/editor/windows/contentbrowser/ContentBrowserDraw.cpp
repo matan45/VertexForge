@@ -4,7 +4,6 @@
 #include "events/EventDispatcher.hpp"
 #include "events/project/ApplicationEvents.hpp"
 #include "events/terrain/TerrainEvents.hpp"
-#include "events/terrain/WaterEvents.hpp"
 #include "events/project/SceneEvents.hpp"
 #include "../../dragdrop/DragDropManager.hpp"
 #include "Import.hpp"

@@ -10,7 +10,7 @@
 #include "interfaces/scripting/IScriptingService.hpp"
 #include "interfaces/project/IProjectService.hpp"
 #include "interfaces/terrain/ITerrainService.hpp"
-#include "interfaces/terrain/IWaterService.hpp"
+#include "interfaces/terrain/IOceanService.hpp"
 #include "interfaces/physics/IPhysicsService.hpp"
 #include "interfaces/navmesh/INavmeshService.hpp"
 #include "interfaces/physics/IPhysicsAnimationService.hpp"
@@ -60,7 +60,7 @@ namespace handlers {
         std::shared_ptr<services::IScriptingService> scriptingService;
         std::shared_ptr<services::IProjectService> projectService;
         std::shared_ptr<services::ITerrainService> terrainService;
-        std::shared_ptr<services::IWaterService> waterService;
+        std::shared_ptr<services::IOceanService> oceanService;
         std::shared_ptr<services::IPhysicsService> physicsService;
         std::shared_ptr<services::IPhysicsAnimationService> physicsAnimationService;
         std::shared_ptr<services::INavmeshService> navmeshService;

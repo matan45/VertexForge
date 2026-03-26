@@ -22,7 +22,7 @@
 #include "../../adapters/render/RenderTextureAdapter.hpp"
 #include "../../adapters/render/RenderHookAdapter.hpp"
 #include "../../adapters/render/DebugDrawAdapter.hpp"
-#include "../../adapters/terrain/WaterRenderAdapter.hpp"
+#include "../../adapters/terrain/OceanRenderAdapter.hpp"
 #include "../../adapters/vegetation/GrassRenderAdapter.hpp"
 
 namespace core
@@ -75,7 +75,7 @@ namespace core
         renderTextureAdapter.reset();
         renderHookAdapter.reset();
         debugDrawAdapter.reset();
-        waterRenderAdapter.reset();
+        oceanRenderAdapter.reset();
         grassRenderAdapter.reset();
 
         if (coreInterface)

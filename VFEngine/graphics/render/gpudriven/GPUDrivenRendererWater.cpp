@@ -1,8 +1,7 @@
 #include "GPUDrivenRenderer.hpp"
-#include "water/WaterTile.hpp"
-#include "water/WaterTypes.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
+#include "data/OceanData.hpp"
 #include "print/Log.hpp"
 #include <cstring>
 #include <chrono>
@@ -40,33 +39,28 @@ namespace render::gpudriven
 
     }
 
-    void GPUDrivenRenderer::updateWater(const std::vector<::water::WaterTile*>& visibleTiles,
-                                          const ::water::WaterGlobalSettings& settings,
-                                          const ::water::WaterTileConfig& tileConfig)
+    void GPUDrivenRenderer::updateWater(const services::OceanVisualSettings& visualSettings,
+                                          float baseWaterHeight,
+                                          const glm::vec3& cameraPosition,
+                                          float oceanPatchSize)
     {
         auto updateStart = std::chrono::high_resolution_clock::now();
         if (!initialized || !water.renderingEnabled || !water.pipeline)
             return;
 
-        if (visibleTiles.empty())
-        {
-            water.tileData.clear();
-            return;
-        }
+        // Generate single large ocean plane centered on camera
+        float planeSize = oceanPatchSize * 10.0f;
+        float halfSize = planeSize * 0.5f;
 
-        water.tileData.resize(visibleTiles.size());
-        for (size_t i = 0; i < visibleTiles.size(); ++i)
-        {
-            const auto* tile = visibleTiles[i];
-            auto& gpuTile = water.tileData[i];
-            gpuTile.worldOriginAndSize = glm::vec4(tile->worldOrigin, tileConfig.worldTileSize);
-            uint32_t flags = render::water::WaterTileFlags::None;
-            if (water.hasSelectedTile && tile->coord.x == water.selectedCoordX && tile->coord.z == water.selectedCoordZ)
-                flags |= render::water::WaterTileFlags::Selected;
-            float flagsAsFloat;
-            std::memcpy(&flagsAsFloat, &flags, sizeof(float));
-            gpuTile.heightAndWave = glm::vec4(tile->waterHeight, tile->waveIntensity, flagsAsFloat, 0.0f);
-        }
+        water.tileData.resize(1);
+        auto& gpuData = water.tileData[0];
+        gpuData.worldOriginAndSize = glm::vec4(
+            cameraPosition.x - halfSize,
+            0.0f,
+            cameraPosition.z - halfSize,
+            planeSize
+        );
+        gpuData.heightAndWave = glm::vec4(baseWaterHeight, 1.0f, 0.0f, 0.0f);
 
         water.meshBuffer->updateTileData(water.tileData);
 
@@ -75,16 +69,10 @@ namespace render::gpudriven
             static_cast<uint32_t>(water.tileData.size())
         );
 
-        water.cachedPushConstants.shallowColor = settings.shallowColor;
-        water.cachedPushConstants.deepColor = settings.deepColor;
-        water.cachedPushConstants.waveSpeed = settings.waveSpeed;
-        water.cachedPushConstants.waveAmplitude = settings.waveAmplitude;
-        water.cachedPushConstants.waveFrequency = settings.waveFrequency;
-        water.cachedPushConstants.maxVisibleDepth = settings.maxVisibleDepth;
-        water.cachedPushConstants.fresnelPower = settings.fresnelPower;
-        water.cachedPushConstants.dudvTiling = settings.dudvTiling;
-        water.cachedPushConstants.dudvStrength = settings.dudvStrength;
-        water.cachedPushConstants.waveDirection = glm::radians(settings.waveDirectionDegrees);
+        water.cachedPushConstants.shallowColor = visualSettings.shallowColor;
+        water.cachedPushConstants.deepColor = visualSettings.deepColor;
+        water.cachedPushConstants.maxVisibleDepth = visualSettings.maxVisibleDepth;
+        water.cachedPushConstants.fresnelPower = visualSettings.fresnelPower;
 
         auto updateEnd = std::chrono::high_resolution_clock::now();
         water.updateUs = std::chrono::duration<float, std::micro>(updateEnd - updateStart).count();
@@ -100,14 +88,12 @@ namespace render::gpudriven
         if (water.oceanEnabled && water.oceanFFT && water.oceanFFT->isInitialized())
         {
             const auto& cfg = water.oceanFFT->getConfig();
-            water.cachedPushConstants.oceanEnabled = 1;
             water.cachedPushConstants.oceanChoppiness = cfg.choppiness;
             water.cachedPushConstants.oceanPatchSize = cfg.patchSize;
             water.cachedPushConstants.oceanFoamThreshold = cfg.foamThreshold;
         }
         else
         {
-            water.cachedPushConstants.oceanEnabled = 0;
             water.cachedPushConstants.oceanChoppiness = 0.0f;
             water.cachedPushConstants.oceanPatchSize = 1.0f;
             water.cachedPushConstants.oceanFoamThreshold = 0.0f;
@@ -132,18 +118,6 @@ namespace render::gpudriven
     void GPUDrivenRenderer::clearWaterData()
     {
         water.tileData.clear();
-    }
-
-    void GPUDrivenRenderer::setSelectedWaterTile(int32_t coordX, int32_t coordZ)
-    {
-        water.selectedCoordX = coordX;
-        water.selectedCoordZ = coordZ;
-        water.hasSelectedTile = true;
-    }
-
-    void GPUDrivenRenderer::clearSelectedWaterTile()
-    {
-        water.hasSelectedTile = false;
     }
 
     void GPUDrivenRenderer::initOceanFFT(const render::water::OceanFFTConfig& config)

@@ -18,7 +18,7 @@ namespace services
 {
     class IVFXRuntimeProvider;
     class ITerrainRenderProvider;
-    class IWaterRenderProvider;
+    class IOceanRenderProvider;
     class IGrassRenderProvider;
     class IVegetationRenderProvider;
 }
@@ -186,7 +186,7 @@ namespace render
 
         services::IVFXRuntimeProvider* vfxRuntimeProvider = nullptr;
         services::ITerrainRenderProvider* terrainRenderProvider = nullptr;
-        services::IWaterRenderProvider* waterRenderProvider = nullptr;
+        services::IOceanRenderProvider* oceanRenderProvider = nullptr;
         services::IGrassRenderProvider* grassRenderProvider = nullptr;
 
         mutable uint32_t lastOceanConfigVersion = 0;
@@ -209,10 +209,9 @@ namespace render
         std::vector<RegisteredRenderHook> renderHooks;
         uint64_t nextRenderHookId = 1;
 
-        // Additional frustums for RTT cameras — merged with main when loading terrain/water tiles.
+        // Additional frustums for RTT cameras — merged with main when loading terrain tiles.
         // Mutable because they are consumed (cleared) inside the const updateGPUDrivenSceneData().
         mutable std::vector<std::pair<math::Frustum, glm::vec3>> additionalTerrainFrustums;
-        mutable std::vector<std::pair<math::Frustum, glm::vec3>> additionalWaterFrustums;
 
     public:
         explicit RenderPassHandler(core::Device& device, core::SwapChain& swapChain,
@@ -324,8 +323,6 @@ namespace render
         void setVFXDrawDistance(float distance);
         void setBillboardDistanceCullingEnabled(bool enabled);
         void setBillboardDrawDistance(float distance);
-        void setWaterDistanceCullingEnabled(bool enabled);
-        void setWaterDrawDistance(float distance);
         void setTerrainDistanceCullingEnabled(bool enabled);
         void setTerrainDrawDistance(float distance);
 
@@ -341,13 +338,8 @@ namespace render
         void setGrassRenderProvider(services::IGrassRenderProvider* provider);
         void setVegetationRenderProvider(services::IVegetationRenderProvider* provider);
 
-        void setWaterRenderProvider(services::IWaterRenderProvider* provider);
+        void setOceanRenderProvider(services::IOceanRenderProvider* provider);
         void clearWaterData();
-        void setSelectedWaterTile(int32_t coordX, int32_t coordZ);
-        void clearSelectedWaterTile();
-
-        void addWaterFrustum(const math::Frustum& frustum, const glm::vec3& cameraPos);
-        void clearAdditionalWaterFrustums();
 
         void setViewMode(uint32_t mode);
         uint32_t getViewMode() const;

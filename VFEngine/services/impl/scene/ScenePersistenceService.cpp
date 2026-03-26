@@ -14,7 +14,7 @@
 #include "../../events/scene/StreamingZoneEvents.hpp"
 #include "../../events/render/RenderEvents.hpp"
 #include "../../events/terrain/TerrainEvents.hpp"
-#include "../../events/terrain/WaterEvents.hpp"
+#include "../../events/terrain/OceanEvents.hpp"
 #include "../../events/physics/PhysicsSettingsEvents.hpp"
 #include "../../events/audio/AudioSettingsEvents.hpp"
 #include "../../events/render/PostProcessEvents.hpp"
@@ -423,8 +423,8 @@ namespace services
             }
 
             {
-                events::water::RebuildWaterFromComponentsCommand rebuildWaterCmd;
-                dispatcher.execute(rebuildWaterCmd);
+                events::ocean::RebuildOceanFromComponentsCommand rebuildOceanCmd;
+                dispatcher.execute(rebuildOceanCmd);
             }
 
             events::physics::ApplyPhysicsSettingsCommand physicsCmd;

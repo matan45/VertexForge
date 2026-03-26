@@ -16,7 +16,7 @@ namespace windows
     class ProjectSettingsWindow;
     class TerrainCreationWindow;
     class PostProcessConfigWindow;
-    class WaterEditorWindow;
+    class OceanEditorWindow;
     class NavmeshWindow;
     class AssetLifecycleWindow;
     class WorldSectorWindow;
@@ -50,7 +50,7 @@ namespace windows
         RenderConfigWindow* renderConfigWindow = nullptr;
         ProjectSettingsWindow* projectSettingsWindow = nullptr;
         TerrainCreationWindow* terrainCreationWindow = nullptr;
-        WaterEditorWindow* waterEditorWindow = nullptr;
+        OceanEditorWindow* oceanEditorWindow = nullptr;
         PostProcessConfigWindow* postProcessConfigWindow = nullptr;
         NavmeshWindow* navmeshWindow = nullptr;
         AssetLifecycleWindow* assetLifecycleWindow = nullptr;
@@ -96,9 +96,9 @@ namespace windows
             terrainCreationWindow = window;
         }
 
-        void setWaterEditorWindow(WaterEditorWindow* window)
+        void setOceanEditorWindow(OceanEditorWindow* window)
         {
-            waterEditorWindow = window;
+            oceanEditorWindow = window;
         }
 
         void setPostProcessConfigWindow(PostProcessConfigWindow* window)

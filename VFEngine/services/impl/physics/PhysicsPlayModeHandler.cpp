@@ -1,6 +1,6 @@
 #include "print/Log.hpp"
 #include "PhysicsPlayModeHandler.hpp"
-#include "../scene/WaterService.hpp"
+#include "../scene/OceanService.hpp"
 #include "../../events/editor/EditorModeEvents.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "scene/EntityRegistry.hpp"
@@ -67,9 +67,9 @@ namespace services
         cleanupPhysicsAnimations();
         cleanupCharacterControllers();
 
-        if (waterService)
+        if (oceanService)
         {
-            waterService->clearBuoyancyTracking();
+            oceanService->clearBuoyancyTracking();
         }
 
         for (const auto& handle : activePhysicsBodies)
@@ -99,9 +99,9 @@ namespace services
             return;
         }
 
-        if (waterService)
+        if (oceanService)
         {
-            waterService->updateBuoyancy();
+            oceanService->updateBuoyancy();
         }
 
         physicsProvider->kickPhysicsStep(deltaTime);

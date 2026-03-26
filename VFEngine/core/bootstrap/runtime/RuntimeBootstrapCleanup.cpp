@@ -12,7 +12,7 @@
 #include "../../adapters/vfx/VFXRuntimeAdapter.hpp"
 #include "../../adapters/render/PostProcessAdapter.hpp"
 #include "../../adapters/terrain/TerrainRenderAdapter.hpp"
-#include "../../adapters/terrain/WaterRenderAdapter.hpp"
+#include "../../adapters/terrain/OceanRenderAdapter.hpp"
 #include "../../adapters/render/RenderTextureAdapter.hpp"
 #include "../../adapters/render/DebugDrawAdapter.hpp"
 
@@ -49,7 +49,7 @@ namespace core
         debugDrawAdapter.reset();
         postProcessAdapter.reset();
         terrainRenderAdapter.reset();
-        waterRenderAdapter.reset();
+        oceanRenderAdapter.reset();
         vfxRuntimeAdapter.reset();
         offScreenAdapter.reset();
         audioAdapter.reset();

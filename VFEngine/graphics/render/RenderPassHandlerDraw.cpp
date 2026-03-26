@@ -23,7 +23,7 @@
 #include "transparency/WBOITPipeline.hpp"
 #include "../../services/providers/vfx/IVFXRuntimeProvider.hpp"
 #include "../../services/providers/terrain/ITerrainRenderProvider.hpp"
-#include "../../services/providers/terrain/IWaterRenderProvider.hpp"
+#include "../../services/providers/terrain/IOceanRenderProvider.hpp"
 #include "../../services/providers/vegetation/IGrassRenderProvider.hpp"
 #include "threading/JobSystem.hpp"
 #include <chrono>
@@ -172,7 +172,7 @@ namespace render
             && terrainRenderProvider && terrainRenderProvider->hasActiveTerrain();
 
         bool hasWaterToRender = gpuDrivenRenderer && gpuDrivenRenderer->isWaterRenderingEnabled()
-            && waterRenderProvider && waterRenderProvider->hasActiveWater();
+            && oceanRenderProvider && oceanRenderProvider->hasActiveOcean();
 
         bool needsMeshPass = meshPipelineInitialized && (!currentMeshDrawList.empty() || hasCustomShaderMeshes
             || hasDebugItems || hasVFX || hasTerrainToRender || hasWaterToRender);

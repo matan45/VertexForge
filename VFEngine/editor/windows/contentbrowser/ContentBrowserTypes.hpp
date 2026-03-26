@@ -24,7 +24,7 @@ namespace windows
         Terrain,
         Navmesh,
         PhysAnim,
-        Water,
+        Ocean,
         BehaviorTree,
         Plugin,
         InputMapping,

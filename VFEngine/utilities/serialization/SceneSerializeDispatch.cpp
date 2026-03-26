@@ -74,10 +74,8 @@ namespace serialization
             out["terrainTile"] = serializeTerrainTile(entity.getComponent<components::TerrainTileComponent>());
         if (entity.hasComponent<components::GrassComponent>())
             out["grass"] = serializeGrass(entity.getComponent<components::GrassComponent>());
-        if (entity.hasComponent<components::WaterComponent>())
-            out["water"] = serializeWater(entity.getComponent<components::WaterComponent>());
-        if (entity.hasComponent<components::WaterTileComponent>())
-            out["waterTile"] = serializeWaterTile(entity.getComponent<components::WaterTileComponent>());
+        if (entity.hasComponent<components::OceanComponent>())
+            out["ocean"] = serializeOcean(entity.getComponent<components::OceanComponent>());
     }
 
     void SceneSerialization::serializeUIStructuralComponents(scene::Entity& entity, json& out)

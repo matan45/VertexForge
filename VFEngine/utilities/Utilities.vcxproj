@@ -115,6 +115,7 @@
     <ClInclude Include="components\MediaComponents.hpp" />
     <ClInclude Include="components\MeshBrushComponents.hpp" />
     <ClInclude Include="components\NavmeshComponents.hpp" />
+    <ClInclude Include="components\OceanComponents.hpp" />
     <ClInclude Include="components\PhysicsAnimationComponent.hpp" />
     <ClInclude Include="components\PhysicsComponents.hpp" />
     <ClInclude Include="components\PluginComponents.hpp" />
@@ -123,7 +124,6 @@
     <ClInclude Include="components\UIComponents.hpp" />
     <ClInclude Include="components\VegetationComponents.hpp" />
     <ClInclude Include="components\VolumetricComponents.hpp" />
-    <ClInclude Include="components\WaterComponents.hpp" />
     <ClInclude Include="config\Config.hpp" />
     <ClInclude Include="config\ProjectConfig.hpp" />
     <ClInclude Include="eqs\EQSQuery.hpp" />
@@ -225,12 +225,7 @@
     <ClInclude Include="vegetation\VegetationSpatialGrid.hpp" />
     <ClInclude Include="vegetation\VegetationTypes.hpp" />
     <ClInclude Include="vegetation\WindConfig.hpp" />
-    <ClInclude Include="water\WaterDefinitionMap.hpp" />
-    <ClInclude Include="water\WaterGrid.hpp" />
-    <ClInclude Include="water\WaterSerializer.hpp" />
-    <ClInclude Include="water\WaterTile.hpp" />
-    <ClInclude Include="water\WaterTypes.hpp" />
-    <ClInclude Include="water\WaterWorldStreamer.hpp" />
+    <ClInclude Include="water\OceanSerializer.hpp" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="asset\AssetDatabase.cpp" />
@@ -301,10 +296,7 @@
     <ClCompile Include="threading\TaskProfiler.cpp" />
     <ClCompile Include="time\Timer.cpp" />
     <ClCompile Include="vegetation\VegetationSerializer.cpp" />
-    <ClCompile Include="water\WaterGrid.cpp" />
-    <ClCompile Include="water\WaterSerializer.cpp" />
-    <ClCompile Include="water\WaterSerializerRead.cpp" />
-    <ClCompile Include="water\WaterWorldStreamer.cpp" />
+    <ClCompile Include="water\OceanSerializer.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\spdLog.vcxproj">

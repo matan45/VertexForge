@@ -171,15 +171,10 @@ namespace serialization
             auto& grassComp = entity.addOrReplaceComponent<components::GrassComponent>();
             deserializeGrass(c["grass"], grassComp);
         }
-        if (c.contains("water"))
+        if (c.contains("ocean"))
         {
-            auto& waterComp = entity.addOrReplaceComponent<components::WaterComponent>();
-            deserializeWater(c["water"], waterComp);
-        }
-        if (c.contains("waterTile"))
-        {
-            auto& waterTileComp = entity.addOrReplaceComponent<components::WaterTileComponent>();
-            deserializeWaterTile(c["waterTile"], waterTileComp);
+            auto& oceanComp = entity.addOrReplaceComponent<components::OceanComponent>();
+            deserializeOcean(c["ocean"], oceanComp);
         }
     }
 

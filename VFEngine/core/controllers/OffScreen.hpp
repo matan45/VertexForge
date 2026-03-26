@@ -30,7 +30,7 @@ namespace services
 {
     class IVFXRuntimeProvider;
     class ITerrainRenderProvider;
-    class IWaterRenderProvider;
+    class IOceanRenderProvider;
     class IGrassRenderProvider;
     class IVegetationRenderProvider;
 }
@@ -197,7 +197,7 @@ namespace controllers
 
         void setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider);
         void setTerrainRenderProvider(services::ITerrainRenderProvider* provider);
-        void setWaterRenderProvider(services::IWaterRenderProvider* provider);
+        void setOceanRenderProvider(services::IOceanRenderProvider* provider);
         void setGrassRenderProvider(services::IGrassRenderProvider* provider);
         void setVegetationRenderProvider(services::IVegetationRenderProvider* provider);
 
@@ -219,8 +219,5 @@ namespace controllers
 
         void addTerrainFrustum(const glm::mat4& viewProjection, const glm::vec3& cameraPos);
         void clearAdditionalTerrainFrustums();
-
-        void addWaterFrustum(const glm::mat4& viewProjection, const glm::vec3& cameraPos);
-        void clearAdditionalWaterFrustums();
     };
 }

@@ -210,7 +210,7 @@ namespace windows
         case PhysAnim:
             icon = AtlasIcon::PhysAnim;
             break;
-        case Water:
+        case Ocean:
             icon = AtlasIcon::Water;
             break;
         case BehaviorTree:

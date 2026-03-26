@@ -83,9 +83,9 @@ namespace core
         return terrainRenderAdapter.get();
     }
 
-    WaterRenderAdapter* RuntimeBootstrap::getWaterRenderAdapterInternal()
+    OceanRenderAdapter* RuntimeBootstrap::getOceanRenderAdapterInternal()
     {
-        return waterRenderAdapter.get();
+        return oceanRenderAdapter.get();
     }
 
     services::IBillboardRenderProvider* RuntimeBootstrap::getBillboardRenderProvider()

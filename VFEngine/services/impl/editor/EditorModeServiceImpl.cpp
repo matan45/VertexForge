@@ -4,7 +4,7 @@
 #include "../../events/project/SceneEvents.hpp"
 #include "../../events/render/RenderEvents.hpp"
 #include "../../events/terrain/TerrainEvents.hpp"
-#include "../../events/terrain/WaterEvents.hpp"
+#include "../../events/terrain/OceanEvents.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "serialization/SceneSerialization.hpp"
 #include "scene/SceneGraphSystem.hpp"
@@ -123,9 +123,9 @@ namespace services
         events::terrain::RemapTerrainEntitiesCommand remapTerrainCmd;
         dispatcher.execute(remapTerrainCmd);
 
-        // Re-map water registrations to restored entity IDs
-        events::water::RemapWaterEntitiesCommand remapWaterCmd;
-        dispatcher.execute(remapWaterCmd);
+        // Re-map ocean registrations to restored entity IDs
+        events::ocean::RemapOceanEntitiesCommand remapOceanCmd;
+        dispatcher.execute(remapOceanCmd);
 
         // Re-trigger mesh loading for all entities with MeshComponent
         auto meshView = registry.view<components::MeshComponent>();
