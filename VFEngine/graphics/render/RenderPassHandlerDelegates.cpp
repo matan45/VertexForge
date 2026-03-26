@@ -5,16 +5,22 @@
 #include "gpudriven/GPUDrivenRenderer.hpp"
 #include "gpudriven/terrain/TerrainRaycastPipeline.hpp"
 #include "decal/DecalPipeline.hpp"
+#include "atmosphere/AtmospherePipeline.hpp"
 
 namespace render
 {
     void RenderPassHandler::setGPUDrivenCameraData(const glm::vec3& cameraPos, float nearPlane, float farPlane,
                                                    float time)
     {
+        float deltaTime = time - currentTime;
         currentCameraPosition = cameraPos;
         currentNearPlane = nearPlane;
         currentFarPlane = farPlane;
         currentTime = time;
+
+        // Tick day-night cycle once per frame (before draw/async compute paths)
+        if (atmospherePipeline && atmospherePipeline->isEnabled())
+            atmospherePipeline->updateDayNightCycle(deltaTime);
     }
 
     void RenderPassHandler::updateSharedCameraUBO(const glm::mat4& view, const glm::mat4& projection,

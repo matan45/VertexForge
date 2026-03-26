@@ -131,15 +131,12 @@ namespace render::atmosphere
         cachedNear = nearPlane;
         cachedFar = farPlane;
         cachedTime = time;
+    }
 
-        float dt = time - lastFrameTime;
-        lastFrameTime = time;
-        if (dt > 0.0f && dt < 1.0f)
-            dayNightController.tick(dt, settings);
-
-        // Day-night cycle controls sun position; clear any directional light override
-        if (settings.dayNightEnabled)
-            hasSunOverride = false;
+    void AtmospherePipeline::updateDayNightCycle(float deltaTime)
+    {
+        if (deltaTime > 0.0f && deltaTime < 1.0f)
+            dayNightController.tick(deltaTime, settings);
     }
 
     void AtmospherePipeline::createSampler()
@@ -207,8 +204,8 @@ namespace render::atmosphere
         float moonPhase = 0.5f * (1.0f - glm::dot(sunDir, moonDir));
         gpu.moonParams = glm::vec4(settings.moonBrightness, moonPhase, settings.nightSkyBrightness, 0.0f);
 
-        // Stars
-        gpu.starParams = glm::vec4(settings.starDensity, settings.starBrightness, settings.starTwinkleSpeed, cachedTime);
+        // Stars (wrap time to avoid float precision loss after long sessions)
+        gpu.starParams = glm::vec4(settings.starDensity, settings.starBrightness, settings.starTwinkleSpeed, std::fmod(cachedTime, 10000.0f));
 
         std::memcpy(paramsBufferMapped, &gpu, sizeof(gpu));
     }

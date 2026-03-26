@@ -172,6 +172,13 @@ namespace core::api
                 { s.timeOfDay = extractFloat(args[0]); });
             });
 
+        interpreter->registerNativeFunction("_native_atmosphere_getCycleSpeed",
+            [&dispatcher](const std::vector<value::Value>&) -> value::Value
+            {
+                auto s = dispatcher.query(events::atmosphere::GetAtmosphereSettingsQuery{});
+                return value::Value(static_cast<double>(s.cycleSpeed));
+            });
+
         interpreter->registerNativeFunction("_native_atmosphere_setCycleSpeed",
             [&dispatcher](const std::vector<value::Value>& args) -> value::Value
             {
@@ -180,6 +187,13 @@ namespace core::api
             });
 
         // ── Moon ──
+
+        interpreter->registerNativeFunction("_native_atmosphere_getMoonBrightness",
+            [&dispatcher](const std::vector<value::Value>&) -> value::Value
+            {
+                auto s = dispatcher.query(events::atmosphere::GetAtmosphereSettingsQuery{});
+                return value::Value(static_cast<double>(s.moonBrightness));
+            });
 
         interpreter->registerNativeFunction("_native_atmosphere_setMoonBrightness",
             [&dispatcher](const std::vector<value::Value>& args) -> value::Value
@@ -190,6 +204,13 @@ namespace core::api
 
         // ── Stars ──
 
+        interpreter->registerNativeFunction("_native_atmosphere_getStarDensity",
+            [&dispatcher](const std::vector<value::Value>&) -> value::Value
+            {
+                auto s = dispatcher.query(events::atmosphere::GetAtmosphereSettingsQuery{});
+                return value::Value(static_cast<double>(s.starDensity));
+            });
+
         interpreter->registerNativeFunction("_native_atmosphere_setStarDensity",
             [&dispatcher](const std::vector<value::Value>& args) -> value::Value
             {
@@ -197,11 +218,25 @@ namespace core::api
                 { s.starDensity = extractFloat(args[0]); });
             });
 
+        interpreter->registerNativeFunction("_native_atmosphere_getStarBrightness",
+            [&dispatcher](const std::vector<value::Value>&) -> value::Value
+            {
+                auto s = dispatcher.query(events::atmosphere::GetAtmosphereSettingsQuery{});
+                return value::Value(static_cast<double>(s.starBrightness));
+            });
+
         interpreter->registerNativeFunction("_native_atmosphere_setStarBrightness",
             [&dispatcher](const std::vector<value::Value>& args) -> value::Value
             {
                 return modifyAtmosphere(dispatcher, [&](render::atmosphere::AtmosphereSettings& s)
                 { s.starBrightness = extractFloat(args[0]); });
+            });
+
+        interpreter->registerNativeFunction("_native_atmosphere_getNightSkyBrightness",
+            [&dispatcher](const std::vector<value::Value>&) -> value::Value
+            {
+                auto s = dispatcher.query(events::atmosphere::GetAtmosphereSettingsQuery{});
+                return value::Value(static_cast<double>(s.nightSkyBrightness));
             });
 
         interpreter->registerNativeFunction("_native_atmosphere_setNightSkyBrightness",

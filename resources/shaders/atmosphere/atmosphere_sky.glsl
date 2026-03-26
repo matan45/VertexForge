@@ -68,9 +68,10 @@ void main()
         float glowFalloff = exp(-glowAngle * glowAngle / (moonAngRad * moonAngRad * 3.0));
         float cosMoonZenith = dot(up, moonDir);
         vec3 transToMoon = sampleTransmittanceLUT(transmittanceLUT, pRadius, aRadius, altitude, cosMoonZenith);
+        // Skip glow if atmosphere is blocking the moon
         float moonTransLum = dot(transToMoon, vec3(0.333));
         if (moonTransLum < 0.0001)
-            transToMoon = vec3(1.0);
+            transToMoon = vec3(0.0);
 
         // Soft bluish-white glow from atmospheric scattering
         vec3 glowColor = vec3(0.7, 0.8, 1.0) * moonBrightness * 0.15;
@@ -132,12 +133,9 @@ void main()
         // Earthshine: faint illumination on the unlit side
         float earthshine = 0.03 * (1.0 - phaseMask);
 
-        // Moon transmittance through atmosphere
+        // Moon transmittance through atmosphere (fade out when occluded)
         float cosMoonZenith = dot(up, moonDir);
         vec3 transToMoon = sampleTransmittanceLUT(transmittanceLUT, pRadius, aRadius, altitude, cosMoonZenith);
-        float moonTransLum = dot(transToMoon, vec3(0.333));
-        if (moonTransLum < 0.0001)
-            transToMoon = vec3(1.0);
 
         // Warm tint to moonlight (slight yellow-white)
         vec3 moonColor = vec3(0.95, 0.93, 0.88);
@@ -149,7 +147,7 @@ void main()
 
     // Stars (visible when sun is below horizon)
     float sunElev = dot(up, sunDir);
-    float starVisibility = smoothstep(-0.05, -0.15, sunElev);
+    float starVisibility = 1.0 - smoothstep(-0.15, -0.05, sunElev);
 
     if (starVisibility > 0.0 && viewDir.y > 0.0)
     {
@@ -284,7 +282,7 @@ void main()
     }
 
     // Night sky ambient floor
-    float nightFactor = smoothstep(0.0, -0.15, sunElev);
+    float nightFactor = 1.0 - smoothstep(-0.15, 0.0, sunElev);
     skyColor += vec3(params.moonParams.z) * nightFactor;
 
     outColor = vec4(skyColor, 1.0);

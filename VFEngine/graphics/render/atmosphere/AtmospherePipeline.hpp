@@ -148,6 +148,9 @@ namespace render::atmosphere
                            const glm::vec3& cameraPos, float nearPlane, float farPlane,
                            float time = 0.0f);
 
+        // Advance day-night cycle; call once per frame from the main loop before rendering
+        void updateDayNightCycle(float deltaTime);
+
         // Override sun direction from directional light (takes priority over azimuth/elevation)
         // Ignored when day-night cycle is active (cycle controls sun position)
         void setSunDirection(const glm::vec3& dir)

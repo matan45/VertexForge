@@ -47,8 +47,8 @@ namespace render::atmosphere
         // Day-Night Cycle
         bool dayNightEnabled = false;
         float timeOfDay = 12.0f;                    // 0-24 hours
-        float cycleSpeed = 1.0f;                    // real-time minute per game-hour at 1.0
-        float moonPhaseOffset = 0.0f;               // 0-1, shifts moon orbit relative to sun
+        float cycleSpeed = 1.0f;                    // one game-hour per real-time minute at 1.0
+        float moonPhaseOffset = 0.0f;               // 0-1, shifts moon azimuth relative to sun (elevation stays opposite)
 
         // Ground
         glm::vec3 groundAlbedo{0.3f};
