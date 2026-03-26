@@ -27,7 +27,8 @@ namespace render::gpudriven
         cleanup();
     }
 
-    void GPUDrivenRenderer::init(vk::DescriptorSetLayout iblDescriptorSetLayout, vk::RenderPass renderPass)
+    void GPUDrivenRenderer::init(vk::DescriptorSetLayout iblDescriptorSetLayout, vk::RenderPass renderPass,
+                                  vk::ImageView sceneDepthView)
     {
         if (initialized)
         {
@@ -160,7 +161,7 @@ namespace render::gpudriven
             }
 
             initTerrainSubsystems(iblDescriptorSetLayout, renderPass);
-            initWaterSubsystems(iblDescriptorSetLayout, renderPass);
+            initWaterSubsystems(iblDescriptorSetLayout, renderPass, sceneDepthView);
             initVegetationSubsystems(iblDescriptorSetLayout, renderPass);
             initBillboardSubsystems(iblDescriptorSetLayout, renderPass);
         }
@@ -296,6 +297,7 @@ namespace render::gpudriven
         terrain.pipeline.reset();
         terrain.meshBuffer.reset();
         water.oceanFFT.reset();
+        water.refractionResources.reset();
         water.pipeline.reset();
         water.meshBuffer.reset();
         depthPrepassPipeline.reset();
@@ -443,6 +445,10 @@ namespace render::gpudriven
                 if (water.oceanFFT && water.oceanFFT->isInitialized())
                     oceanLayout = water.oceanFFT->getOceanTextureLayout();
 
+                vk::DescriptorSetLayout refractionLayout{};
+                if (water.refractionResources && water.refractionResources->isInitialized())
+                    refractionLayout = water.refractionResources->getDescriptorSetLayout();
+
                 water.pipeline->recreate({
                     cachedIBLLayout,
                     lightBufferManager->getDescriptorSetLayout(),
@@ -451,6 +457,7 @@ namespace render::gpudriven
                     shadowSystem->getShadowDataLayout(),
                     shadowSystem->getShadowTextureLayout(),
                     oceanLayout,
+                    refractionLayout,
                     cachedRenderPass
                 });
             }

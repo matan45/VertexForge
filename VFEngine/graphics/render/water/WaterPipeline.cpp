@@ -50,6 +50,15 @@ namespace render::water
             createOceanDummyTexture();
         }
 
+        if (config.refractionLayout)
+        {
+            refractionLayout = config.refractionLayout;
+        }
+        else
+        {
+            createRefractionDummy();
+        }
+
         createGraphicsPipeline(config);
 
         initialized = true;
@@ -76,6 +85,15 @@ namespace render::water
         else
         {
             oceanTextureLayout = oceanDummyLayout;
+        }
+
+        if (config.refractionLayout)
+        {
+            refractionLayout = config.refractionLayout;
+        }
+        else
+        {
+            refractionLayout = refractionDummyLayout;
         }
 
         if (graphicsPipeline)
@@ -177,6 +195,19 @@ namespace render::water
             oceanDummyLayout = nullptr;
         }
         oceanTextureLayout = nullptr;
+
+        // Refraction dummy resources
+        if (refractionDummyPool)
+        {
+            vkDevice.destroyDescriptorPool(refractionDummyPool);
+            refractionDummyPool = nullptr;
+        }
+        if (refractionDummyLayout)
+        {
+            vkDevice.destroyDescriptorSetLayout(refractionDummyLayout);
+            refractionDummyLayout = nullptr;
+        }
+        refractionLayout = nullptr;
 
         if (waterShader)
         {
@@ -525,6 +556,62 @@ namespace render::water
         vkDevice.updateDescriptorSets(writes, nullptr);
     }
 
+    void WaterPipeline::createRefractionDummy()
+    {
+        vk::Device vkDevice = device.getLogicalDevice();
+
+        // Create descriptor set layout (2 combined image samplers for fragment stage)
+        std::array<vk::DescriptorSetLayoutBinding, 2> bindings{};
+        bindings[0].binding = 0;
+        bindings[0].descriptorType = vk::DescriptorType::eCombinedImageSampler;
+        bindings[0].descriptorCount = 1;
+        bindings[0].stageFlags = vk::ShaderStageFlagBits::eFragment;
+
+        bindings[1].binding = 1;
+        bindings[1].descriptorType = vk::DescriptorType::eCombinedImageSampler;
+        bindings[1].descriptorCount = 1;
+        bindings[1].stageFlags = vk::ShaderStageFlagBits::eFragment;
+
+        vk::DescriptorSetLayoutCreateInfo layoutInfo{};
+        layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
+        layoutInfo.pBindings = bindings.data();
+        refractionDummyLayout = vkDevice.createDescriptorSetLayout(layoutInfo);
+        refractionLayout = refractionDummyLayout;
+
+        // Create descriptor pool + set
+        vk::DescriptorPoolSize poolSize{};
+        poolSize.type = vk::DescriptorType::eCombinedImageSampler;
+        poolSize.descriptorCount = 2;
+
+        vk::DescriptorPoolCreateInfo poolInfo{};
+        poolInfo.maxSets = 1;
+        poolInfo.poolSizeCount = 1;
+        poolInfo.pPoolSizes = &poolSize;
+        refractionDummyPool = vkDevice.createDescriptorPool(poolInfo);
+
+        vk::DescriptorSetAllocateInfo allocInfo{};
+        allocInfo.descriptorPool = refractionDummyPool;
+        allocInfo.descriptorSetCount = 1;
+        allocInfo.pSetLayouts = &refractionDummyLayout;
+        refractionDummyDescSet = vkDevice.allocateDescriptorSets(allocInfo)[0];
+
+        // Update with the ocean dummy texture (just needs a valid image to prevent validation errors)
+        std::array<vk::DescriptorImageInfo, 2> imageInfos{};
+        imageInfos[0] = {oceanDummySampler, oceanDummyView, vk::ImageLayout::eShaderReadOnlyOptimal};
+        imageInfos[1] = {oceanDummySampler, oceanDummyView, vk::ImageLayout::eShaderReadOnlyOptimal};
+
+        std::array<vk::WriteDescriptorSet, 2> refrWrites{};
+        for (int i = 0; i < 2; ++i)
+        {
+            refrWrites[i].dstSet = refractionDummyDescSet;
+            refrWrites[i].dstBinding = i;
+            refrWrites[i].descriptorCount = 1;
+            refrWrites[i].descriptorType = vk::DescriptorType::eCombinedImageSampler;
+            refrWrites[i].pImageInfo = &imageInfos[i];
+        }
+        vkDevice.updateDescriptorSets(refrWrites, nullptr);
+    }
+
     void WaterPipeline::createGraphicsPipeline(const WaterPipelineLayoutConfig& layoutConfig)
     {
         vk::VertexInputBindingDescription vertexBinding{};
@@ -561,7 +648,8 @@ namespace render::water
                 layoutConfig.cullingOutputLayout,
                 layoutConfig.shadowDataLayout,
                 layoutConfig.shadowTextureLayout,
-                oceanTextureLayout
+                oceanTextureLayout,
+                refractionLayout
             },
             .pushConstantSize = sizeof(WaterPushConstants),
             .pushConstantStages = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
@@ -615,12 +703,15 @@ namespace render::water
         cmd.bindVertexBuffers(0, 1, vertexBuffers, offsets);
         cmd.bindIndexBuffer(meshBuffer.getIndexBuffer(), 0, vk::IndexType::eUint32);
 
-        // Use real ocean desc set if provided, otherwise the dummy
+        // Use real desc sets if provided, otherwise dummies
         vk::DescriptorSet oceanDescSet = descriptors.oceanTextureDescSet
             ? descriptors.oceanTextureDescSet
             : oceanDummyDescSet;
+        vk::DescriptorSet refractionDescSet = descriptors.refractionDescSet
+            ? descriptors.refractionDescSet
+            : refractionDummyDescSet;
 
-        std::array<vk::DescriptorSet, 9> descriptorSets = {
+        std::array<vk::DescriptorSet, 10> descriptorSets = {
             descriptors.iblDescSet,
             waterTileDescriptorSet,
             dudvTextureDescriptorSet,
@@ -629,7 +720,8 @@ namespace render::water
             descriptors.cullingOutputDescSet,
             descriptors.shadowDataDescSet,
             descriptors.shadowTextureDescSet,
-            oceanDescSet
+            oceanDescSet,
+            refractionDescSet
         };
         cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout,
                                 0, descriptorSets, nullptr);

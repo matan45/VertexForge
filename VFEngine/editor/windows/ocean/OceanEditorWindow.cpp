@@ -36,6 +36,9 @@ namespace windows
             visualSettings.deepColor = dataOpt->deepColor;
             visualSettings.maxVisibleDepth = dataOpt->maxVisibleDepth;
             visualSettings.fresnelPower = dataOpt->fresnelPower;
+            visualSettings.refractionStrength = dataOpt->refractionStrength;
+            visualSettings.refractionChromatic = dataOpt->refractionChromatic;
+            visualSettings.refractionDepthScale = dataOpt->refractionDepthScale;
             visualSettingsDirty = false;
 
             physicsSettings.physicsEnabled = dataOpt->physicsEnabled;
@@ -164,6 +167,23 @@ namespace windows
             physicsSettingsDirty |= labeledDragFloat("Density (kg/m3)", "##Density", &physicsSettings.density, 1.0f, 1.0f, 10000.0f, "%.0f");
             physicsSettingsDirty |= labeledDragFloat("Drag", "##Drag", &physicsSettings.drag, 0.01f, 0.0f, 10.0f, "%.2f");
             physicsSettingsDirty |= labeledDragFloat("Buoyancy Strength", "##BuoyancyStrength", &physicsSettings.buoyancyStrength, 0.01f, 0.0f, 10.0f, "%.2f");
+            ImGui::Unindent();
+        }
+
+        if (ImGui::CollapsingHeader("Refraction", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            ImGui::Indent();
+            visualSettingsDirty |= labeledDragFloat("Strength", "##RefrStrength",
+                &visualSettings.refractionStrength, 0.01f, 0.0f, 2.0f, "%.2f");
+            ImGui::TextDisabled("0 = disabled, 0.5 = subtle, 1.0+ = strong");
+
+            visualSettingsDirty |= labeledDragFloat("Chromatic Aberration", "##RefrChromatic",
+                &visualSettings.refractionChromatic, 0.01f, 0.0f, 1.0f, "%.2f");
+            ImGui::TextDisabled("0 = off, higher = more color fringing");
+
+            visualSettingsDirty |= labeledDragFloat("Depth Scale", "##RefrDepthScale",
+                &visualSettings.refractionDepthScale, 0.01f, 0.0f, 1.0f, "%.2f");
+            ImGui::TextDisabled("How much depth increases distortion");
             ImGui::Unindent();
         }
 

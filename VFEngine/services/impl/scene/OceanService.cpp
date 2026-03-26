@@ -99,6 +99,9 @@ namespace services
                 comp.deepColor = cmd.settings.deepColor;
                 comp.maxVisibleDepth = cmd.settings.maxVisibleDepth;
                 comp.fresnelPower = cmd.settings.fresnelPower;
+                comp.refractionStrength = cmd.settings.refractionStrength;
+                comp.refractionChromatic = cmd.settings.refractionChromatic;
+                comp.refractionDepthScale = cmd.settings.refractionDepthScale;
             });
 
         dispatcher.registerCommandHandler<events::ocean::SetOceanPhysicsSettingsCommand>(
@@ -305,6 +308,9 @@ namespace services
         data.deepColor = comp.deepColor;
         data.maxVisibleDepth = comp.maxVisibleDepth;
         data.fresnelPower = comp.fresnelPower;
+        data.refractionStrength = comp.refractionStrength;
+        data.refractionChromatic = comp.refractionChromatic;
+        data.refractionDepthScale = comp.refractionDepthScale;
         data.oceanConfig.resolution = comp.oceanResolution;
         data.oceanConfig.patchSize = comp.oceanPatchSize;
         data.oceanConfig.windSpeed = comp.oceanWindSpeed;
@@ -376,6 +382,9 @@ namespace services
         settings.deepColor = comp.deepColor;
         settings.maxVisibleDepth = comp.maxVisibleDepth;
         settings.fresnelPower = comp.fresnelPower;
+        settings.refractionStrength = comp.refractionStrength;
+        settings.refractionChromatic = comp.refractionChromatic;
+        settings.refractionDepthScale = comp.refractionDepthScale;
 
         return settings;
     }
@@ -413,6 +422,9 @@ namespace services
         fileData.deepColor = comp.deepColor;
         fileData.maxVisibleDepth = comp.maxVisibleDepth;
         fileData.fresnelPower = comp.fresnelPower;
+        fileData.refractionStrength = comp.refractionStrength;
+        fileData.refractionChromatic = comp.refractionChromatic;
+        fileData.refractionDepthScale = comp.refractionDepthScale;
 
         fileData.density = comp.density;
         fileData.drag = comp.drag;
@@ -476,6 +488,9 @@ namespace services
             auto& comp = registry.get<components::OceanComponent>(ent);
             comp.maxVisibleDepth = fileData.maxVisibleDepth;
             comp.fresnelPower = fileData.fresnelPower;
+            comp.refractionStrength = fileData.refractionStrength;
+            comp.refractionChromatic = fileData.refractionChromatic;
+            comp.refractionDepthScale = fileData.refractionDepthScale;
             comp.density = fileData.density;
             comp.drag = fileData.drag;
             comp.buoyancyStrength = fileData.buoyancyStrength;

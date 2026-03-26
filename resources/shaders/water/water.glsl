@@ -33,9 +33,9 @@ layout(push_constant) uniform PushConstants {
     float oceanChoppiness;
     float oceanPatchSize;
     float oceanFoamThreshold;
-    float pad0;
-    float pad1;
-    float pad2;
+    float refractionStrength;
+    float refractionChromatic;
+    float refractionDepthScale;
 } pc;
 
 layout(set = 8, binding = 0) uniform sampler2D oceanDisplacementMap;
@@ -144,10 +144,13 @@ layout(push_constant) uniform PushConstants {
     float oceanChoppiness;
     float oceanPatchSize;
     float oceanFoamThreshold;
-    float pad0;
-    float pad1;
-    float pad2;
+    float refractionStrength;
+    float refractionChromatic;
+    float refractionDepthScale;
 } pc;
+
+layout(set = 9, binding = 0) uniform sampler2D refractionColorTex;
+layout(set = 9, binding = 1) uniform sampler2D sceneDepthTex;
 
 void main() {
     vec3 N = normalize(fragNormal);
@@ -249,7 +252,48 @@ void main() {
     float adjustedShadow = pow(minShadow, shadowContrast);
     float ambientShadowFactor = mix(1.0, adjustedShadow, lightCounts.shadowIntensity);
 
-    vec3 color = mix(waterColor, specular, fresnel) * ambientShadowFactor + directLighting;
+    // Refraction
+    vec3 refractionColor = waterColor;
+    if (pc.refractionStrength > 0.0) {
+        vec2 screenUV = gl_FragCoord.xy / vec2(textureSize(refractionColorTex, 0));
+
+        float sceneDepthRaw = texture(sceneDepthTex, screenUV).r;
+        float sceneDepthLinear = linearizeDepth(clusterParams, sceneDepthRaw);
+        float waterDepthLinear = linearizeDepth(clusterParams, gl_FragCoord.z);
+        float depthDifference = sceneDepthLinear - waterDepthLinear;
+
+        float depthFactor = clamp(depthDifference * pc.refractionDepthScale, 0.0, 1.0);
+
+        vec2 distortion = N.xz * pc.refractionStrength * depthFactor * 0.1;
+        vec2 refractedUV = clamp(screenUV + distortion, vec2(0.001), vec2(0.999));
+
+        // Edge artifact rejection
+        float distortedDepthRaw = texture(sceneDepthTex, refractedUV).r;
+        float distortedDepthLinear = linearizeDepth(clusterParams, distortedDepthRaw);
+        if (distortedDepthLinear < waterDepthLinear) {
+            refractedUV = screenUV;
+            depthFactor = 0.0;
+        }
+
+        // Sample refraction color with optional chromatic aberration
+        if (pc.refractionChromatic > 0.0) {
+            float spread = pc.refractionChromatic * depthFactor * 0.002;
+            vec2 chromaticDir = normalize(distortion + vec2(0.001));
+            float r = texture(refractionColorTex, refractedUV + chromaticDir * spread).r;
+            float g = texture(refractionColorTex, refractedUV).g;
+            float b = texture(refractionColorTex, refractedUV - chromaticDir * spread).b;
+            refractionColor = vec3(r, g, b);
+        } else {
+            refractionColor = texture(refractionColorTex, refractedUV).rgb;
+        }
+
+        // Tint by water depth
+        float depthTint = clamp(depthDifference / pc.maxVisibleDepth, 0.0, 1.0);
+        refractionColor = mix(refractionColor, waterColor, depthTint);
+    }
+
+    vec3 baseColor = (pc.refractionStrength > 0.0) ? refractionColor : waterColor;
+    vec3 color = mix(baseColor, specular, fresnel) * ambientShadowFactor + directLighting;
 
     // Ocean foam blending on large wave crests
     vec2 foamUV1 = fragWorldPos.xz / pc.oceanPatchSize;

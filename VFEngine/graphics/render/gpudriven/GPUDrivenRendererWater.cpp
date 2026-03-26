@@ -9,7 +9,8 @@
 namespace render::gpudriven
 {
     void GPUDrivenRenderer::initWaterSubsystems(vk::DescriptorSetLayout iblDescriptorSetLayout,
-                                                  vk::RenderPass renderPass)
+                                                  vk::RenderPass renderPass,
+                                                  vk::ImageView sceneDepthView)
     {
         water.meshBuffer = std::make_unique<render::water::WaterMeshBuffer>();
         water.meshBuffer->init(
@@ -20,10 +21,20 @@ namespace render::gpudriven
             render::water::WATER_DEFAULT_SUBDIVISIONS
         );
 
+        // Create refraction resources before pipeline so we have the descriptor set layout
+        water.refractionResources = std::make_unique<render::water::WaterRefractionResources>(device);
+        water.refractionResources->init(
+            swapChain.getSwapchainImageFormat(),
+            swapChain.getSwapchainExtent().width,
+            swapChain.getSwapchainExtent().height,
+            sceneDepthView);
+
         // Ocean texture layout (from OceanFFT if initialized, otherwise WaterPipeline creates dummy)
         vk::DescriptorSetLayout oceanLayout{};
         if (water.oceanFFT && water.oceanFFT->isInitialized())
             oceanLayout = water.oceanFFT->getOceanTextureLayout();
+
+        vk::DescriptorSetLayout refractionLayout = water.refractionResources->getDescriptorSetLayout();
 
         water.pipeline = std::make_unique<render::water::WaterPipeline>(device, swapChain);
         water.pipeline->init({
@@ -34,6 +45,7 @@ namespace render::gpudriven
             shadowSystem->getShadowDataLayout(),
             shadowSystem->getShadowTextureLayout(),
             oceanLayout,
+            refractionLayout,
             renderPass
         });
 
@@ -77,6 +89,9 @@ namespace render::gpudriven
         water.cachedPushConstants.deepColor = visualSettings.deepColor;
         water.cachedPushConstants.maxVisibleDepth = visualSettings.maxVisibleDepth;
         water.cachedPushConstants.fresnelPower = visualSettings.fresnelPower;
+        water.cachedPushConstants.refractionStrength = visualSettings.refractionStrength;
+        water.cachedPushConstants.refractionChromatic = visualSettings.refractionChromatic;
+        water.cachedPushConstants.refractionDepthScale = visualSettings.refractionDepthScale;
 
         auto updateEnd = std::chrono::high_resolution_clock::now();
         water.updateUs = std::chrono::duration<float, std::micro>(updateEnd - updateStart).count();
@@ -111,7 +126,9 @@ namespace render::gpudriven
             shadowSystem && shadowSystem->isInitialized() ? shadowSystem->getShadowDataDescSet() : vk::DescriptorSet{},
             shadowSystem && shadowSystem->isInitialized() ? shadowSystem->getShadowTextureDescSet() : vk::DescriptorSet{},
             (water.oceanEnabled && water.oceanFFT && water.oceanFFT->isInitialized())
-                ? water.oceanFFT->getOceanTextureDescSet() : vk::DescriptorSet{}
+                ? water.oceanFFT->getOceanTextureDescSet() : vk::DescriptorSet{},
+            (water.refractionResources && water.refractionResources->isInitialized())
+                ? water.refractionResources->getDescriptorSet() : vk::DescriptorSet{}
         };
         water.pipeline->render(cmd, waterDescriptors, *water.meshBuffer, water.cachedPushConstants);
 
@@ -135,6 +152,10 @@ namespace render::gpudriven
         // Recreate water pipeline so it uses the real ocean descriptor set layout
         if (water.pipeline)
         {
+            vk::DescriptorSetLayout refractionLayout{};
+            if (water.refractionResources && water.refractionResources->isInitialized())
+                refractionLayout = water.refractionResources->getDescriptorSetLayout();
+
             water.pipeline->recreate({
                 cachedIBLLayout,
                 lightBufferManager->getDescriptorSetLayout(),
@@ -143,6 +164,7 @@ namespace render::gpudriven
                 shadowSystem->getShadowDataLayout(),
                 shadowSystem->getShadowTextureLayout(),
                 water.oceanFFT->getOceanTextureLayout(),
+                refractionLayout,
                 cachedRenderPass
             });
         }
@@ -162,6 +184,10 @@ namespace render::gpudriven
         // Recreate water pipeline with dummy ocean layout
         if (water.pipeline)
         {
+            vk::DescriptorSetLayout refractionLayout{};
+            if (water.refractionResources && water.refractionResources->isInitialized())
+                refractionLayout = water.refractionResources->getDescriptorSetLayout();
+
             water.pipeline->recreate({
                 cachedIBLLayout,
                 lightBufferManager->getDescriptorSetLayout(),
@@ -170,6 +196,7 @@ namespace render::gpudriven
                 shadowSystem->getShadowDataLayout(),
                 shadowSystem->getShadowTextureLayout(),
                 vk::DescriptorSetLayout{},
+                refractionLayout,
                 cachedRenderPass
             });
         }
@@ -217,5 +244,24 @@ namespace render::gpudriven
             return 0.0f;
 
         return water.oceanFFT->sampleHeightAt(worldXZ);
+    }
+
+    void GPUDrivenRenderer::copySceneColorForRefraction(vk::CommandBuffer cmd, vk::Image colorImage,
+                                                         uint32_t width, uint32_t height)
+    {
+        if (water.refractionResources && water.refractionResources->isInitialized())
+            water.refractionResources->copySceneColor(cmd, colorImage, width, height);
+    }
+
+    void GPUDrivenRenderer::recreateRefractionResources(vk::ImageView sceneDepthView)
+    {
+        if (!water.refractionResources)
+            return;
+
+        water.refractionResources->recreate(
+            swapChain.getSwapchainImageFormat(),
+            swapChain.getSwapchainExtent().width,
+            swapChain.getSwapchainExtent().height,
+            sceneDepthView);
     }
 }

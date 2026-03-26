@@ -127,7 +127,8 @@ namespace render
     {
         if (gpuDrivenRendererInitialized || !meshPipelineInitialized) return;
 
-        gpuDrivenRenderer->init(meshPipeline->getIBLDescriptorSetLayout(), meshPipeline->getRenderPass());
+        gpuDrivenRenderer->init(meshPipeline->getIBLDescriptorSetLayout(), meshPipeline->getRenderPass(),
+                               offscreenResources.depthImage.depthImageView);
 
         auto& texCache = meshPipeline->getMaterialTextureCache();
         gpuDrivenRenderer->setMaterialTextureCache(&texCache);
@@ -164,7 +165,10 @@ namespace render
         {
             meshPipeline->recreate();
             if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
+            {
+                gpuDrivenRenderer->recreateRefractionResources(offscreenResources.depthImage.depthImageView);
                 gpuDrivenRenderer->updateRenderPass(meshPipeline->getRenderPass());
+            }
             if (vfxRuntimeProvider && vfxRuntimeProvider->isInitialized())
                 vfxRuntimeProvider->recreate(meshPipeline->getRenderPass());
         }

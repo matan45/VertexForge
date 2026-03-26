@@ -20,6 +20,9 @@ namespace ocean
                             data.deepColor.b, data.deepColor.a};
         vis["maxVisibleDepth"] = data.maxVisibleDepth;
         vis["fresnelPower"] = data.fresnelPower;
+        vis["refractionStrength"] = data.refractionStrength;
+        vis["refractionChromatic"] = data.refractionChromatic;
+        vis["refractionDepthScale"] = data.refractionDepthScale;
 
         // Physics
         auto& phys = j["physics"];
@@ -87,6 +90,9 @@ namespace ocean
             }
             outData.maxVisibleDepth = vis.value("maxVisibleDepth", 10.0f);
             outData.fresnelPower = vis.value("fresnelPower", 5.0f);
+            outData.refractionStrength = vis.value("refractionStrength", 0.5f);
+            outData.refractionChromatic = vis.value("refractionChromatic", 0.0f);
+            outData.refractionDepthScale = vis.value("refractionDepthScale", 0.2f);
         }
 
         // Physics

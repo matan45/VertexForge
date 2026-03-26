@@ -16,6 +16,7 @@
 #include "../water/WaterMeshBuffer.hpp"
 #include "../water/WaterGPUTypes.hpp"
 #include "../water/OceanFFT.hpp"
+#include "../water/WaterRefractionResources.hpp"
 #include "scene/MeshletBuffer.hpp"
 #include "scene/TextureStreamManager.hpp"
 #include "scene/BoneMatrixManager.hpp"
@@ -165,6 +166,8 @@ namespace render::gpudriven
             // Ocean FFT
             std::unique_ptr<render::water::OceanFFT> oceanFFT;
             bool oceanEnabled = false;
+            // Refraction
+            std::unique_ptr<render::water::WaterRefractionResources> refractionResources;
 
             // Timing (microseconds)
             float readbackUs = 0.0f;
@@ -366,7 +369,8 @@ namespace render::gpudriven
         GPUDrivenRenderer(const GPUDrivenRenderer&) = delete;
         GPUDrivenRenderer& operator=(const GPUDrivenRenderer&) = delete;
 
-        void init(vk::DescriptorSetLayout iblDescriptorSetLayout, vk::RenderPass renderPass);
+        void init(vk::DescriptorSetLayout iblDescriptorSetLayout, vk::RenderPass renderPass,
+                 vk::ImageView sceneDepthView = nullptr);
 
         void cleanup();
 
@@ -564,6 +568,10 @@ namespace render::gpudriven
         void setWaterRenderingEnabled(bool enabled) { water.renderingEnabled = enabled; }
         bool isWaterRenderingEnabled() const { return water.renderingEnabled; }
 
+        void copySceneColorForRefraction(vk::CommandBuffer cmd, vk::Image colorImage, uint32_t width, uint32_t height);
+        render::water::WaterRefractionResources* getRefractionResources() { return water.refractionResources.get(); }
+        void recreateRefractionResources(vk::ImageView sceneDepthView);
+
         void initOceanFFT(const render::water::OceanFFTConfig& config);
         void cleanupOceanFFT();
         void setOceanEnabled(bool enabled);
@@ -676,7 +684,8 @@ namespace render::gpudriven
         void initBillboardSubsystems(vk::DescriptorSetLayout iblDescriptorSetLayout, vk::RenderPass renderPass);
         void initTerrainSubsystems(vk::DescriptorSetLayout iblDescriptorSetLayout, vk::RenderPass renderPass);
         void createGrassBuffers(uint32_t maxInstances);
-        void initWaterSubsystems(vk::DescriptorSetLayout iblDescriptorSetLayout, vk::RenderPass renderPass);
+        void initWaterSubsystems(vk::DescriptorSetLayout iblDescriptorSetLayout, vk::RenderPass renderPass,
+                                 vk::ImageView sceneDepthView);
         void collectShadowVisibleLights(std::unordered_set<uint32_t>& outLights, bool& outHasFilter);
         void buildAndDispatchLightOcclusion(vk::CommandBuffer cmd);
         void recordShadowPasses(vk::CommandBuffer cmd, bool hasMeshObjects, bool hasTerrainTiles);

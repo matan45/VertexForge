@@ -23,9 +23,9 @@ namespace render::water
         float oceanChoppiness;          // 4
         float oceanPatchSize;           // 4
         float oceanFoamThreshold;       // 4
-        float pad0;                     // 4
-        float pad1;                     // 4
-        float pad2;                     // 4
+        float refractionStrength;       // 4  (0 = disabled, 0.5 = subtle, 1.0+ = strong)
+        float refractionChromatic;      // 4  (0 = off, chromatic aberration spread)
+        float refractionDepthScale;     // 4  (depth influence on distortion)
     };
     static_assert(sizeof(WaterPushConstants) == 64);
 

@@ -25,6 +25,7 @@ namespace render::water
         vk::DescriptorSetLayout shadowDataLayout;
         vk::DescriptorSetLayout shadowTextureLayout;
         vk::DescriptorSetLayout oceanTextureLayout; // Optional: from OceanFFT
+        vk::DescriptorSetLayout refractionLayout;  // Optional: from WaterRefractionResources
         vk::RenderPass renderPass;
     };
 
@@ -37,6 +38,7 @@ namespace render::water
         vk::DescriptorSet shadowDataDescSet;
         vk::DescriptorSet shadowTextureDescSet;
         vk::DescriptorSet oceanTextureDescSet; // Optional: from OceanFFT
+        vk::DescriptorSet refractionDescSet;  // Optional: from WaterRefractionResources
     };
 
     class WaterPipeline
@@ -69,6 +71,12 @@ namespace render::water
         vk::DescriptorSetLayout cachedCullingOutputLayout;
         vk::DescriptorSetLayout cachedShadowDataLayout;
         vk::DescriptorSetLayout cachedShadowTextureLayout;
+
+        // Refraction support
+        vk::DescriptorSetLayout refractionLayout;         // Currently active layout (dummy or external)
+        vk::DescriptorSetLayout refractionDummyLayout;
+        vk::DescriptorPool refractionDummyPool;
+        vk::DescriptorSet refractionDummyDescSet;
 
         // Ocean FFT texture support
         vk::DescriptorSetLayout oceanTextureLayout;       // Currently active layout (dummy or external)
@@ -103,6 +111,7 @@ namespace render::water
         void createDuDvTexture();
         void createDuDvDescriptor();
         void createOceanDummyTexture();
+        void createRefractionDummy();
         void createGraphicsPipeline(const WaterPipelineLayoutConfig& config);
     };
 }

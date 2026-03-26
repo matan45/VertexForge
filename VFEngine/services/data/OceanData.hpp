@@ -24,6 +24,9 @@ namespace services
         glm::vec4 deepColor{0.0f, 0.05f, 0.2f, 0.95f};
         float maxVisibleDepth = 10.0f;
         float fresnelPower = 5.0f;
+        float refractionStrength = 0.5f;
+        float refractionChromatic = 0.0f;
+        float refractionDepthScale = 0.2f;
     };
 
     struct OceanPhysicsSettings
@@ -55,6 +58,9 @@ namespace services
         glm::vec4 deepColor{0.0f, 0.05f, 0.2f, 0.95f};
         float maxVisibleDepth = 10.0f;
         float fresnelPower = 5.0f;
+        float refractionStrength = 0.5f;
+        float refractionChromatic = 0.0f;
+        float refractionDepthScale = 0.2f;
 
         OceanFFTConfigData oceanConfig;
     };

@@ -21,6 +21,9 @@ namespace serialization
                                        ocean.deepColor.z, ocean.deepColor.w});
         j["maxVisibleDepth"] = ocean.maxVisibleDepth;
         j["fresnelPower"] = ocean.fresnelPower;
+        j["refractionStrength"] = ocean.refractionStrength;
+        j["refractionChromatic"] = ocean.refractionChromatic;
+        j["refractionDepthScale"] = ocean.refractionDepthScale;
 
         // Ocean FFT
         j["oceanResolution"] = ocean.oceanResolution;
@@ -62,6 +65,12 @@ namespace serialization
             ocean.maxVisibleDepth = it->get<float>();
         if (auto it = j.find("fresnelPower"); it != j.end() && it->is_number())
             ocean.fresnelPower = it->get<float>();
+        if (auto it = j.find("refractionStrength"); it != j.end() && it->is_number())
+            ocean.refractionStrength = it->get<float>();
+        if (auto it = j.find("refractionChromatic"); it != j.end() && it->is_number())
+            ocean.refractionChromatic = it->get<float>();
+        if (auto it = j.find("refractionDepthScale"); it != j.end() && it->is_number())
+            ocean.refractionDepthScale = it->get<float>();
 
         // Ocean FFT
         if (auto it = j.find("oceanResolution"); it != j.end() && it->is_number_unsigned())
