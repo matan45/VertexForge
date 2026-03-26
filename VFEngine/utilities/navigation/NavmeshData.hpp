@@ -163,4 +163,26 @@ namespace navigation
     };
 
     using AreaModifiersMap = std::unordered_map<NavmeshTileCoord, std::vector<NavmeshAreaModifier>, NavmeshTileCoordHash>;
+
+    // Hierarchical pathfinding tile graph types
+    struct TileBoundaryPortal
+    {
+        glm::vec3 point{0.0f};
+        uint64_t polyRefA = 0;  // dtPolyRef on tile A side
+        uint64_t polyRefB = 0;  // dtPolyRef on tile B side
+    };
+
+    struct TileGraphEdge
+    {
+        NavmeshTileCoord neighbor;
+        float cost = 0.0f;
+        std::vector<TileBoundaryPortal> portals;
+    };
+
+    struct TileGraphNode
+    {
+        NavmeshTileCoord coord;
+        glm::vec3 center{0.0f};
+        std::vector<TileGraphEdge> edges;
+    };
 }

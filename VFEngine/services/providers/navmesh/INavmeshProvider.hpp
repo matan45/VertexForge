@@ -58,6 +58,10 @@ namespace services
         virtual void configureCrowdFilter(int filterIndex, const float* areaCosts, int numAreas) = 0;
         virtual void setCrowdAgentFilterType(int agentIndex, uint8_t filterType) = 0;
 
+        // Tile graph updates (hierarchical pathfinding)
+        virtual void onTileAdded(int tx, int tz) = 0;
+        virtual void onTileRemoved(int tx, int tz) = 0;
+
         virtual void getDebugMesh(std::vector<glm::vec3>& outVertices,
                                    std::vector<uint32_t>& outIndices) const = 0;
     };

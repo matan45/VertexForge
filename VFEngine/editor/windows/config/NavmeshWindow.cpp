@@ -230,6 +230,15 @@ namespace windows
             ImGui::DragFloat("##AutoDropMin", &settings.autoDropMinHeight, 0.1f, 0.1f, settings.autoDropMaxHeight, "Min Height: %.1f");
             ImGui::PopItemWidth();
         }
+
+        ImGui::Spacing();
+        ImGui::Text("Pathfinding");
+        ImGui::Separator();
+        ImGui::PushItemWidth(-1);
+        ImGui::DragFloat("##HierarchicalThreshold", &settings.hierarchicalPathThreshold, 1.0f, 0.0f, 10000.0f, "Hierarchical Threshold: %.0f");
+        ImGui::PopItemWidth();
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Paths longer than this distance use tile-level hierarchical A* for better performance");
     }
 
     void NavmeshWindow::drawActions()

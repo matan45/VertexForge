@@ -259,6 +259,25 @@ namespace services
                 tileManager.setLastCameraPos(notif.position);
             });
 
+        // Tile graph updates for hierarchical pathfinding
+        dispatcher.subscribe<events::navmesh::NavmeshTileLoadedNotification>(
+            [this](const events::navmesh::NavmeshTileLoadedNotification& notif)
+            {
+                navmeshProvider->onTileAdded(notif.tileX, notif.tileZ);
+            });
+
+        dispatcher.subscribe<events::navmesh::NavmeshTileUnloadedNotification>(
+            [this](const events::navmesh::NavmeshTileUnloadedNotification& notif)
+            {
+                navmeshProvider->onTileRemoved(notif.tileX, notif.tileZ);
+            });
+
+        dispatcher.subscribe<events::navmesh::NavmeshTileUpdatedNotification>(
+            [this](const events::navmesh::NavmeshTileUpdatedNotification& notif)
+            {
+                navmeshProvider->onTileAdded(notif.tileX, notif.tileZ);
+            });
+
         // Brush event subscriptions for incremental rebake
         tileManager.registerEvents();
     }

@@ -139,6 +139,7 @@
     <ClInclude Include="adapters\api\WaterAPI.hpp" />
     <ClInclude Include="adapters\audio\AudioAdapter.hpp" />
     <ClInclude Include="adapters\navmesh\NavmeshAdapter.hpp" />
+    <ClInclude Include="adapters\navmesh\TileGraph.hpp" />
     <ClInclude Include="adapters\physics\IKAdapter.hpp" />
     <ClInclude Include="adapters\physics\PhysicsAdapter.hpp" />
     <ClInclude Include="adapters\physics\PhysicsConversions.hpp" />
@@ -236,6 +237,7 @@
     <ClCompile Include="adapters\navmesh\NavmeshAdapter.cpp" />
     <ClCompile Include="adapters\navmesh\NavmeshAdapterBuildOps.cpp" />
     <ClCompile Include="adapters\navmesh\NavmeshAdapterCrowd.cpp" />
+    <ClCompile Include="adapters\navmesh\TileGraph.cpp" />
     <ClCompile Include="adapters\physics\IKAdapter.cpp" />
     <ClCompile Include="adapters\physics\PhysicsAdapter.cpp" />
     <ClCompile Include="adapters\physics\PhysicsAdapterAnimationOps.cpp" />

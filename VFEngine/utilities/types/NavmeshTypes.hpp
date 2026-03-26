@@ -82,6 +82,9 @@ namespace types
         float autoDropMaxHeight = 4.0f;
         float autoDropMinHeight = 0.5f;
 
+        // Hierarchical pathfinding
+        float hierarchicalPathThreshold = 96.0f;
+
         NavmeshBakeSettings()
         {
             for (int i = NAVMESH_NAMED_AREA_COUNT; i < 64; ++i)
