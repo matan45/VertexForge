@@ -73,10 +73,9 @@ namespace services
         void markTileGenerated(const navigation::NavmeshTileCoord& coord) { generatedTiles.insert(coord); loadedTileLods[coord] = 0; }
         void clear();
 
+    private:
         [[nodiscard]] uint8_t determineLod(float distSq) const;
         [[nodiscard]] bool isLodTransitionValid(const navigation::NavmeshTileCoord& coord, uint8_t targetLod) const;
-
-    private:
         [[nodiscard]] float tileDistanceSq(const navigation::NavmeshTileCoord& coord,
                                             const glm::vec3& pos) const;
         [[nodiscard]] float minDistanceToSources(const navigation::NavmeshTileCoord& coord,

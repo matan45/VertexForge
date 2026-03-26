@@ -593,25 +593,25 @@ namespace core
 
         if (startTile == endTile)
         {
-            // Same tile - use direct A* (should not normally reach here due to threshold)
+            // Same tile - use direct A*
             float startPos[3] = {start.x, start.y, start.z};
             float endPos[3] = {end.x, end.y, end.z};
-            float halfExtents[3] = {agentRadius * CROWD_MAX_AGENT_RADIUS_MULT, agentHeight, agentRadius * CROWD_MAX_AGENT_RADIUS_MULT};
+            float he[3] = {agentRadius * CROWD_MAX_AGENT_RADIUS_MULT, agentHeight, agentRadius * CROWD_MAX_AGENT_RADIUS_MULT};
 
             dtPolyRef startRef = 0, endRef = 0;
             float ns[3], ne[3];
-            navQuery->findNearestPoly(startPos, halfExtents, &filter, &startRef, ns);
-            navQuery->findNearestPoly(endPos, halfExtents, &filter, &endRef, ne);
+            navQuery->findNearestPoly(startPos, he, &filter, &startRef, ns);
+            navQuery->findNearestPoly(endPos, he, &filter, &endRef, ne);
             if (!startRef || !endRef) return result;
 
-            static std::vector<dtPolyRef> polys(MAX_POLYS);
+            std::vector<dtPolyRef> polys(MAX_POLYS);
             int nPolys = 0;
             navQuery->findPath(startRef, endRef, ns, ne, &filter, polys.data(), &nPolys, MAX_POLYS);
             if (nPolys <= 0) return result;
 
-            static std::vector<float> sp(MAX_POLYS * 3);
-            static std::vector<unsigned char> spf(MAX_POLYS);
-            static std::vector<dtPolyRef> spp(MAX_POLYS);
+            std::vector<float> sp(MAX_POLYS * 3);
+            std::vector<unsigned char> spf(MAX_POLYS);
+            std::vector<dtPolyRef> spp(MAX_POLYS);
             int nSP = 0;
             navQuery->findStraightPath(ns, ne, polys.data(), nPolys, sp.data(), spf.data(), spp.data(), &nSP, MAX_POLYS, 0);
 
@@ -626,46 +626,33 @@ namespace core
         if (tilePath.empty())
             return result;
 
+        // Compute tile boundary midpoints between consecutive tiles in the corridor
+        float tws = storedSettings.tileSize * storedSettings.cellSize;
+        auto tileBoundaryMidpoint = [tws](const navigation::NavmeshTileCoord& a,
+                                           const navigation::NavmeshTileCoord& b) -> glm::vec3
+        {
+            // Midpoint of the shared edge between adjacent tiles
+            float ax = (a.x + 0.5f) * tws, az = (a.z + 0.5f) * tws;
+            float bx = (b.x + 0.5f) * tws, bz = (b.z + 0.5f) * tws;
+            return glm::vec3((ax + bx) * 0.5f, 0.0f, (az + bz) * 0.5f);
+        };
+
         // Build waypoints by stitching local A* segments
         float halfExtents[3] = {agentRadius * CROWD_MAX_AGENT_RADIUS_MULT, agentHeight, agentRadius * CROWD_MAX_AGENT_RADIUS_MULT};
+
+        // Scratch buffers (stack-allocated, safe for concurrent use)
+        std::vector<dtPolyRef> polys(MAX_POLYS);
+        std::vector<float> straightPath(MAX_POLYS * 3);
+        std::vector<unsigned char> straightFlags(MAX_POLYS);
+        std::vector<dtPolyRef> straightPolys(MAX_POLYS);
 
         glm::vec3 segStart = start;
 
         for (size_t t = 0; t + 1 < tilePath.size(); ++t)
         {
-            // Find the best portal between tilePath[t] and tilePath[t+1]
-            glm::vec3 segEnd;
             bool lastSegment = (t + 2 >= tilePath.size());
+            glm::vec3 segEnd = lastSegment ? end : tileBoundaryMidpoint(tilePath[t], tilePath[t + 1]);
 
-            if (lastSegment)
-            {
-                segEnd = end;
-            }
-            else
-            {
-                // Find portal from tilePath[t] to tilePath[t+1]
-                auto nodeIt = tileGraph.hasTile(tilePath[t]) ? &tilePath[t] : nullptr;
-                if (!nodeIt) break;
-
-                // Pick the portal closest to the straight line start→end
-                glm::vec3 bestPortal = glm::vec3(0.0f);
-                float bestDist = std::numeric_limits<float>::max();
-                bool foundPortal = false;
-
-                // Search the node's edges for the next tile
-                // We need to access the tile graph nodes directly - use a helper
-                auto findBestPortal = [&](const navigation::NavmeshTileCoord& fromCoord,
-                                           const navigation::NavmeshTileCoord& toCoord) -> glm::vec3
-                {
-                    // Simple approach: use tile center of the target as intermediate
-                    float tws = storedSettings.tileSize * storedSettings.cellSize;
-                    return glm::vec3((toCoord.x + 0.5f) * tws, 0.0f, (toCoord.z + 0.5f) * tws);
-                };
-
-                segEnd = findBestPortal(tilePath[t], tilePath[t + 1]);
-            }
-
-            // Run local Detour A* for this segment
             float sp[3] = {segStart.x, segStart.y, segStart.z};
             float ep[3] = {segEnd.x, segEnd.y, segEnd.z};
 
@@ -680,21 +667,16 @@ namespace core
                 continue;
             }
 
-            static std::vector<dtPolyRef> polys(MAX_POLYS);
             int nPolys = 0;
             navQuery->findPath(sRef, eRef, ns, ne, &filter, polys.data(), &nPolys, MAX_POLYS);
 
             if (nPolys > 0)
             {
-                static std::vector<float> straightPath(MAX_POLYS * 3);
-                static std::vector<unsigned char> straightFlags(MAX_POLYS);
-                static std::vector<dtPolyRef> straightPolys(MAX_POLYS);
                 int nStraight = 0;
                 navQuery->findStraightPath(ns, ne, polys.data(), nPolys,
                     straightPath.data(), straightFlags.data(), straightPolys.data(),
                     &nStraight, MAX_POLYS, 0);
 
-                // Skip first waypoint if it duplicates the last one from previous segment
                 int startIdx = (!result.waypoints.empty() && nStraight > 0) ? 1 : 0;
                 for (int i = startIdx; i < nStraight; ++i)
                 {

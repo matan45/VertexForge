@@ -7,7 +7,6 @@
 
 class dtNavMesh;
 class dtNavMeshQuery;
-class dtNavMeshParams;
 class dtCrowd;
 class dtQueryFilter;
 

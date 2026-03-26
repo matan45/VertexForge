@@ -10,6 +10,22 @@ namespace core
         if (!navMesh || tileWorldSize <= 0.0f)
             return;
 
+        // Pass 1: Create all nodes (without edges) to avoid O(n^2) reverse-edge cleanup
+        for (int i = 0; i < navMesh->getMaxTiles(); ++i)
+        {
+            const dtMeshTile* tile = navMesh->getTile(i);
+            if (!tile || !tile->header || !tile->dataSize)
+                continue;
+
+            int tx = tile->header->x;
+            int tz = tile->header->y;
+            navigation::NavmeshTileCoord coord{tx, tz};
+            auto& node = nodes[coord];
+            node.coord = coord;
+            node.center = glm::vec3((tx + 0.5f) * tileWorldSize, 0.0f, (tz + 0.5f) * tileWorldSize);
+        }
+
+        // Pass 2: Build edges (all nodes exist, so reverse edges can be created immediately)
         for (int i = 0; i < navMesh->getMaxTiles(); ++i)
         {
             const dtMeshTile* tile = navMesh->getTile(i);

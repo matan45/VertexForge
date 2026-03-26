@@ -319,7 +319,7 @@ namespace services
 
     void NavmeshTileManager::processOnDemandGeneration()
     {
-        if (pendingGenerationTiles.empty())
+        if (pendingGenerationTiles.empty() || !collectTileGeometry)
             return;
 
         int submitted = 0;
@@ -354,7 +354,7 @@ namespace services
                     return navmeshProvider->buildSingleTile(coord.x, coord.z, geom, settings, links, mods);
                 }, threading::JobPriority::LOW);
 
-            pendingTileBakes.push_back({coord, std::move(future)});
+            pendingTileBakes.push_back({coord, saveOnDemandToCache, std::move(future)});
             submitted++;
         }
     }
@@ -401,7 +401,7 @@ namespace services
                     return navmeshProvider->buildSingleTile(coord.x, coord.z, geom, settings, links, mods);
                 }, threading::JobPriority::NORMAL);
 
-            pendingTileBakes.push_back({coord, std::move(future)});
+            pendingTileBakes.push_back({coord, true, std::move(future)});
             submitted++;
         }
     }
@@ -424,7 +424,7 @@ namespace services
                     if (!streamer.isTileLoaded(it->coord))
                         streamer.markTileGenerated(it->coord);
 
-                    if (tileCache)
+                    if (tileCache && it->saveToCache)
                     {
                         tileCache->saveTile(it->coord, tileData);
                     }

@@ -512,8 +512,10 @@ namespace services
         std::vector<StreamingSource> sources;
         for (auto entity : view)
         {
-            const auto& invoker = view.get<components::NavInvokerComponent>(entity);
+            auto& invoker = view.get<components::NavInvokerComponent>(entity);
             const auto& transform = view.get<components::TransformComponent>(entity);
+
+            invoker.isActive = navmeshProvider->hasNavmesh();
 
             float unloadRadius = invoker.generationRadius * invoker.unloadRadiusMultiplier;
             sources.push_back({
@@ -526,6 +528,18 @@ namespace services
         if (!sources.empty())
         {
             tileManager.ensureTiledNavmeshInitialized();
+
+            // Check if any invoker wants to save generated tiles to cache
+            bool anySave = false;
+            for (auto entity : view)
+            {
+                if (view.get<components::NavInvokerComponent>(entity).saveGeneratedToCache)
+                {
+                    anySave = true;
+                    break;
+                }
+            }
+            tileManager.setSaveOnDemandToCache(anySave);
         }
 
         tileManager.setInvokerSources(std::move(sources));

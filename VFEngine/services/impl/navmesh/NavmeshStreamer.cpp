@@ -56,10 +56,10 @@ namespace services
         if (lodConfig.lodCount <= 1)
             return 0;
 
-        // Check from finest to coarsest
+        // Use lodConfig.lodDistances as the authoritative source
         for (uint8_t i = 0; i < lodConfig.lodCount; ++i)
         {
-            float threshold = config.lodDistances[i];
+            float threshold = lodConfig.lodDistances[i];
             if (distSq <= threshold * threshold)
                 return i;
         }
@@ -90,7 +90,9 @@ namespace services
         return true;
     }
 
-    // Single-position backward compat wrapper
+    // Single-position backward compat wrapper (camera-based streaming).
+    // On-demand generation is intentionally not supported here - it requires
+    // NavInvokerComponent entities to drive tile generation via the multi-source path.
     void NavmeshStreamer::update(const glm::vec3& cameraPos,
                                   std::vector<navigation::NavmeshTileCoord>& outLoaded,
                                   std::vector<navigation::NavmeshTileCoord>& outUnloaded)
