@@ -47,7 +47,7 @@ namespace services
                 events::volumetric::VolumetricBakeCompleteNotification notif;
                 notif.success = result;
                 notif.message = result ? "Volumetric navigation bake complete" : "Volumetric navigation bake failed";
-                dispatcher.publish(notif);
+                ::events::EventDispatcher::instance().publish(notif);
             });
 
         dispatcher.registerCommandHandler<events::volumetric::ClearVolumetricNavCommand>(
