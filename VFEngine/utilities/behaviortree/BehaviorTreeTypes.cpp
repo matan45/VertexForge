@@ -105,7 +105,7 @@ namespace behaviortree
         return type == BTNodeType::Wait || type == BTNodeType::Log ||
                type == BTNodeType::MoveTo || type == BTNodeType::PlayAnimation ||
                type == BTNodeType::SetBlackboardValue || type == BTNodeType::CheckBlackboardValue ||
-               type == BTNodeType::ScriptTask;
+               type == BTNodeType::ScriptTask || type == BTNodeType::EnvironmentQuery;
     }
 
     bool isRootNode(BTNodeType type)
@@ -140,6 +140,7 @@ namespace behaviortree
         case BTNodeType::SetBlackboardValue: return "SetBlackboardValue";
         case BTNodeType::CheckBlackboardValue: return "CheckBlackboardValue";
         case BTNodeType::ScriptTask: return "ScriptTask";
+        case BTNodeType::EnvironmentQuery: return "EnvironmentQuery";
         default: return "Unknown";
         }
     }
@@ -163,6 +164,7 @@ namespace behaviortree
         if (str == "SetBlackboardValue") return BTNodeType::SetBlackboardValue;
         if (str == "CheckBlackboardValue") return BTNodeType::CheckBlackboardValue;
         if (str == "ScriptTask") return BTNodeType::ScriptTask;
+        if (str == "EnvironmentQuery") return BTNodeType::EnvironmentQuery;
         return BTNodeType::Sequence;
     }
 

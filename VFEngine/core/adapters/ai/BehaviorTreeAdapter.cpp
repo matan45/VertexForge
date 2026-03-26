@@ -4,6 +4,8 @@
 #include "../../../services/events/navmesh/NavmeshEvents.hpp"
 #include "../../../services/events/physics/ControllerEvents.hpp"
 #include "../../../services/events/animation/AnimatorEvents.hpp"
+#include "../../../services/events/ai/EQSEvents.hpp"
+#include "../../../services/events/scene/EntityTransformEvents.hpp"
 #include "print/Log.hpp"
 
 namespace core
@@ -66,6 +68,16 @@ namespace core
                 }
             }
         }
+        // Cancel any pending EQS query for this entity
+        auto eqsIt = pendingEQSQueries.find(entity.id);
+        if (eqsIt != pendingEQSQueries.end())
+        {
+            events::ai::CancelEQSQueryCommand cancelCmd;
+            cancelCmd.handle = eqsIt->second;
+            events::EventDispatcher::instance().execute(cancelCmd);
+            pendingEQSQueries.erase(eqsIt);
+        }
+
         runtimes.erase(it);
     }
 
@@ -261,5 +273,88 @@ namespace core
         case LogLevel::Error:   vfLogError("[BT] {}", message); break;
         }
         return BTNodeStatus::Success;
+    }
+
+    BTNodeStatus BehaviorTreeAdapter::executeEnvironmentQuery(
+        services::EntityHandle entity,
+        const std::string& queryName,
+        const std::string& resultKey,
+        Blackboard& blackboard,
+        bool isFirstTick)
+    {
+        if (queryName.empty())
+        {
+            vfLogWarning("BT EnvironmentQuery: empty query name for entity {}", entity.id);
+            return BTNodeStatus::Failure;
+        }
+
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        if (isFirstTick)
+        {
+            // Build EQS context from entity transform
+            eqs::EQSContext context;
+            context.querierEntity = entity;
+
+            events::scene::GetWorldTransformQuery transformQuery;
+            transformQuery.entity = entity;
+            auto transformOpt = dispatcher.query(transformQuery);
+            if (transformOpt.has_value())
+            {
+                context.querierPosition = transformOpt->position;
+                // Derive forward from rotation (Y-axis euler rotation)
+                float yaw = glm::radians(transformOpt->rotation.y);
+                context.querierForward = glm::vec3(std::sin(yaw), 0.0f, std::cos(yaw));
+            }
+
+            // Submit the EQS query
+            events::ai::SubmitEQSQueryCommand submitCmd;
+            submitCmd.queryName = queryName;
+            submitCmd.context = context;
+            auto handle = dispatcher.execute(submitCmd);
+
+            if (!handle.isValid())
+            {
+                vfLogWarning("BT EnvironmentQuery: failed to submit query '{}' for entity {}", queryName, entity.id);
+                return BTNodeStatus::Failure;
+            }
+
+            pendingEQSQueries[entity.id] = handle;
+            return BTNodeStatus::Running;
+        }
+
+        // Poll for results on subsequent ticks
+        auto it = pendingEQSQueries.find(entity.id);
+        if (it == pendingEQSQueries.end())
+        {
+            return BTNodeStatus::Failure;
+        }
+
+        events::ai::GetEQSQueryResultQuery resultQuery;
+        resultQuery.handle = it->second;
+        eqs::EQSResult result = dispatcher.query(resultQuery);
+
+        switch (result.status)
+        {
+        case eqs::EQSQueryStatus::Completed:
+        {
+            pendingEQSQueries.erase(it);
+            if (result.hasResults())
+            {
+                blackboard.set(resultKey, result.getBestPosition());
+                return BTNodeStatus::Success;
+            }
+            return BTNodeStatus::Failure;
+        }
+        case eqs::EQSQueryStatus::Failed:
+        {
+            pendingEQSQueries.erase(it);
+            return BTNodeStatus::Failure;
+        }
+        case eqs::EQSQueryStatus::Pending:
+        case eqs::EQSQueryStatus::Running:
+        default:
+            return BTNodeStatus::Running;
+        }
     }
 }

@@ -38,6 +38,13 @@ namespace behaviortree
                                                 float deltaTime) = 0;
 
         virtual BTNodeStatus executeLog(const std::string& message, LogLevel level) = 0;
+
+        virtual BTNodeStatus executeEnvironmentQuery(
+            services::EntityHandle entity,
+            const std::string& queryName,
+            const std::string& resultKey,
+            Blackboard& blackboard,
+            bool isFirstTick) = 0;
     };
 
     class BehaviorTreeRuntime

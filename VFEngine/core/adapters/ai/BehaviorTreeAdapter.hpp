@@ -2,6 +2,7 @@
 #include "../../../services/providers/ai/IBehaviorTreeProvider.hpp"
 #include "../../../utilities/behaviortree/BehaviorTreeRuntime.hpp"
 #include "../../../utilities/behaviortree/BehaviorTreeAsset.hpp"
+#include "../../../utilities/eqs/EQSTypes.hpp"
 #include <unordered_map>
 #include <memory>
 #include <optional>
@@ -58,6 +59,13 @@ namespace core
         behaviortree::BTNodeStatus executeLog(const std::string& message,
                                                behaviortree::LogLevel level) override;
 
+        behaviortree::BTNodeStatus executeEnvironmentQuery(
+            services::EntityHandle entity,
+            const std::string& queryName,
+            const std::string& resultKey,
+            behaviortree::Blackboard& blackboard,
+            bool isFirstTick) override;
+
     private:
         struct RuntimeInstance
         {
@@ -91,5 +99,6 @@ namespace core
         services::IScriptingProvider* scriptingProvider;
         std::unordered_map<uint64_t, RuntimeInstance> runtimes; // keyed by EntityHandle::id
         std::unordered_map<ScriptInstanceKey, uint64_t, ScriptInstanceKeyHash> scriptInstances;
+        std::unordered_map<uint64_t, eqs::EQSQueryHandle> pendingEQSQueries;
     };
 }

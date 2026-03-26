@@ -92,6 +92,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="adapters\ai\BehaviorTreeAdapter.hpp" />
+    <ClInclude Include="adapters\ai\EQSAdapter.hpp" />
     <ClInclude Include="adapters\animation\AnimationPreviewAdapter.hpp" />
     <ClInclude Include="adapters\animation\AnimatorAdapter.hpp" />
     <ClInclude Include="adapters\api\AnimatorAPI.hpp" />
@@ -188,6 +189,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="adapters\ai\BehaviorTreeAdapter.cpp" />
+    <ClCompile Include="adapters\ai\EQSAdapter.cpp" />
     <ClCompile Include="adapters\animation\AnimationPreviewAdapter.cpp" />
     <ClCompile Include="adapters\animation\AnimatorAdapter.cpp" />
     <ClCompile Include="adapters\api\AnimatorAPI.cpp" />
