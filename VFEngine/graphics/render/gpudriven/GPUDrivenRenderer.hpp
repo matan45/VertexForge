@@ -17,6 +17,7 @@
 #include "../water/WaterGPUTypes.hpp"
 #include "../water/OceanFFT.hpp"
 #include "../water/WaterRefractionResources.hpp"
+#include "../water/WaterCausticsResources.hpp"
 #include "scene/MeshletBuffer.hpp"
 #include "scene/TextureStreamManager.hpp"
 #include "scene/BoneMatrixManager.hpp"
@@ -168,6 +169,8 @@ namespace render::gpudriven
             bool oceanEnabled = false;
             // Refraction
             std::unique_ptr<render::water::WaterRefractionResources> refractionResources;
+            // Caustics
+            std::unique_ptr<render::water::WaterCausticsResources> causticsResources;
 
             // Timing (microseconds)
             float readbackUs = 0.0f;
@@ -570,6 +573,7 @@ namespace render::gpudriven
 
         void copySceneColorForRefraction(vk::CommandBuffer cmd, vk::Image colorImage, uint32_t width, uint32_t height);
         render::water::WaterRefractionResources* getRefractionResources() { return water.refractionResources.get(); }
+        render::water::WaterCausticsResources* getCausticsResources() { return water.causticsResources.get(); }
         void recreateRefractionResources(vk::ImageView sceneDepthView);
 
         void initOceanFFT(const render::water::OceanFFTConfig& config);

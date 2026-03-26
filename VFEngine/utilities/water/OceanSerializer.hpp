@@ -19,6 +19,8 @@ namespace ocean
         float refractionStrength = 0.5f;
         float refractionChromatic = 0.0f;
         float refractionDepthScale = 0.2f;
+        float causticStrength = 1.0f;
+        float causticDepthFalloff = 0.5f;
 
         // Physics
         float density = 1000.0f;

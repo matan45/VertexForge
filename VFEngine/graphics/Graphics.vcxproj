@@ -318,6 +318,7 @@
     <ClInclude Include="render\water\OceanFFTReadback.hpp" />
     <ClInclude Include="render\water\OceanFFTResources.hpp" />
     <ClInclude Include="render\water\OceanFFTTypes.hpp" />
+    <ClInclude Include="render\water\WaterCausticsResources.hpp" />
     <ClInclude Include="render\water\WaterGPUTypes.hpp" />
     <ClInclude Include="render\water\WaterMeshBuffer.hpp" />
     <ClInclude Include="render\water\WaterPipeline.hpp" />
@@ -560,6 +561,7 @@
     <ClCompile Include="render\water\OceanFFTPipelines.cpp" />
     <ClCompile Include="render\water\OceanFFTReadback.cpp" />
     <ClCompile Include="render\water\OceanFFTResources.cpp" />
+    <ClCompile Include="render\water\WaterCausticsResources.cpp" />
     <ClCompile Include="render\water\WaterMeshBuffer.cpp" />
     <ClCompile Include="render\water\WaterPipeline.cpp" />
     <ClCompile Include="render\water\WaterRefractionResources.cpp" />
@@ -582,6 +584,7 @@
     <None Include="..\..\resources\shaders\cloud\cloud_temporal.glsl" />
     <None Include="..\..\resources\shaders\cloud\cloud_weather_gen.glsl" />
     <None Include="..\..\resources\shaders\common\camera_types.glsl" />
+    <None Include="..\..\resources\shaders\common\caustic_sampling.glsl" />
     <None Include="..\..\resources\shaders\common\cluster_culling.glsl" />
     <None Include="..\..\resources\shaders\common\culling_functions.glsl" />
     <None Include="..\..\resources\shaders\common\gi_sampling.glsl" />

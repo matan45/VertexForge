@@ -24,6 +24,8 @@ namespace serialization
         j["refractionStrength"] = ocean.refractionStrength;
         j["refractionChromatic"] = ocean.refractionChromatic;
         j["refractionDepthScale"] = ocean.refractionDepthScale;
+        j["causticStrength"] = ocean.causticStrength;
+        j["causticDepthFalloff"] = ocean.causticDepthFalloff;
 
         // Ocean FFT
         j["oceanResolution"] = ocean.oceanResolution;
@@ -71,6 +73,10 @@ namespace serialization
             ocean.refractionChromatic = it->get<float>();
         if (auto it = j.find("refractionDepthScale"); it != j.end() && it->is_number())
             ocean.refractionDepthScale = it->get<float>();
+        if (auto it = j.find("causticStrength"); it != j.end() && it->is_number())
+            ocean.causticStrength = it->get<float>();
+        if (auto it = j.find("causticDepthFalloff"); it != j.end() && it->is_number())
+            ocean.causticDepthFalloff = it->get<float>();
 
         // Ocean FFT
         if (auto it = j.find("oceanResolution"); it != j.end() && it->is_number_unsigned())

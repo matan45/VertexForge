@@ -93,6 +93,17 @@ namespace render::gpudriven
         water.cachedPushConstants.refractionChromatic = visualSettings.refractionChromatic;
         water.cachedPushConstants.refractionDepthScale = visualSettings.refractionDepthScale;
 
+        // Update caustic params UBO
+        if (water.causticsResources && water.causticsResources->isInitialized())
+        {
+            render::water::CausticParams params;
+            params.waterHeight = baseWaterHeight;
+            params.causticStrength = visualSettings.causticStrength;
+            params.depthFalloff = visualSettings.causticDepthFalloff;
+            params.patchSize = oceanPatchSize;
+            water.causticsResources->updateParams(params);
+        }
+
         auto updateEnd = std::chrono::high_resolution_clock::now();
         water.updateUs = std::chrono::duration<float, std::micro>(updateEnd - updateStart).count();
     }
@@ -149,6 +160,10 @@ namespace render::gpudriven
         water.oceanFFT->init(config);
         water.oceanEnabled = true;
 
+        // Create caustics resources from the ocean FFT caustic texture
+        water.causticsResources = std::make_unique<render::water::WaterCausticsResources>(device);
+        water.causticsResources->init(water.oceanFFT->getCausticView());
+
         // Recreate water pipeline so it uses the real ocean descriptor set layout
         if (water.pipeline)
         {
@@ -169,16 +184,185 @@ namespace render::gpudriven
             });
         }
 
-        vfLogInfo("GPUDrivenRenderer: Ocean FFT initialized");
+        // Recreate mesh shader pipelines with caustic layout
+        vk::DescriptorSetLayout causticLayout = water.causticsResources->getDescriptorSetLayout();
+        vk::DescriptorSet causticDescSet = water.causticsResources->getDescriptorSet();
+
+        if (meshShaderPipeline && shadowSystem)
+        {
+            vk::DescriptorSetLayout giLayout{};
+            if (giCascadeManager)
+            {
+                auto* storage = giCascadeManager->getProbeStorage();
+                if (storage && storage->isInitialized())
+                    giLayout = storage->getSamplingLayout();
+            }
+
+            MeshPipelineInitInfo pipelineInfo{
+                .iblLayout = cachedIBLLayout,
+                .bindlessTextureLayout = bindlessTextures->getDescriptorSetLayout(),
+                .boneMatrixLayout = boneMatrixManager->getDescriptorSetLayout(),
+                .lightDataLayout = lightBufferManager->getDescriptorSetLayout(),
+                .clusterGridLayout = clusterGridManager->getDescriptorSetLayout(),
+                .cullingOutputLayout = lightCullingPipeline->getDescriptorSetLayout(),
+                .shadowDataLayout = shadowSystem->getShadowDataLayout(),
+                .shadowTextureLayout = shadowSystem->getShadowTextureLayout(),
+                .giProbeDataLayout = giLayout,
+                .causticLayout = causticLayout,
+                .renderPass = cachedRenderPass
+            };
+
+            meshShaderPipeline->recreate(pipelineInfo);
+            meshShaderPipeline->updateCausticDescriptor(causticDescSet);
+            if (giLayout && giCascadeManager)
+            {
+                auto* storage = giCascadeManager->getProbeStorage();
+                meshShaderPipeline->updateGIProbeDescriptor(storage->getSamplingDescSet());
+            }
+
+            if (transparentMeshShaderPipeline)
+            {
+                pipelineInfo.transparentMode = true;
+                transparentMeshShaderPipeline->recreate(pipelineInfo);
+                transparentMeshShaderPipeline->updateCausticDescriptor(causticDescSet);
+                if (giLayout && giCascadeManager)
+                {
+                    auto* storage = giCascadeManager->getProbeStorage();
+                    transparentMeshShaderPipeline->updateGIProbeDescriptor(storage->getSamplingDescSet());
+                }
+                pipelineInfo.transparentMode = false;
+            }
+
+            if (wboitMeshShaderPipeline && cachedWBOITRenderPass)
+            {
+                pipelineInfo.renderPass = cachedWBOITRenderPass;
+                pipelineInfo.wboitMode = true;
+                wboitMeshShaderPipeline->recreate(pipelineInfo);
+                wboitMeshShaderPipeline->updateCausticDescriptor(causticDescSet);
+                if (giLayout && giCascadeManager)
+                {
+                    auto* storage = giCascadeManager->getProbeStorage();
+                    wboitMeshShaderPipeline->updateGIProbeDescriptor(storage->getSamplingDescSet());
+                }
+            }
+        }
+
+        // Recreate terrain pipeline with caustic layout
+        if (terrain.pipeline)
+        {
+            terrain.pipeline->setCausticEnabled(true, causticLayout);
+            terrain.pipeline->recreate(cachedIBLLayout,
+                                       bindlessTextures->getDescriptorSetLayout(),
+                                       meshShaderPipeline->getMeshletDataLayout(),
+                                       meshShaderPipeline->getVertexDataLayout(),
+                                       lightBufferManager->getDescriptorSetLayout(),
+                                       clusterGridManager->getDescriptorSetLayout(),
+                                       lightCullingPipeline->getDescriptorSetLayout(),
+                                       shadowSystem->getShadowDataLayout(),
+                                       shadowSystem->getShadowTextureLayout(),
+                                       cachedRenderPass);
+            terrain.pipeline->updateCausticDescriptor(causticDescSet);
+        }
+
+        vfLogInfo("GPUDrivenRenderer: Ocean FFT initialized with caustics");
     }
 
     void GPUDrivenRenderer::cleanupOceanFFT()
     {
         water.oceanEnabled = false;
+
+        // Clear caustic descriptor references from pipelines before destroying resources
+        if (meshShaderPipeline) meshShaderPipeline->updateCausticDescriptor(vk::DescriptorSet{});
+        if (transparentMeshShaderPipeline) transparentMeshShaderPipeline->updateCausticDescriptor(vk::DescriptorSet{});
+        if (wboitMeshShaderPipeline) wboitMeshShaderPipeline->updateCausticDescriptor(vk::DescriptorSet{});
+        if (terrain.pipeline)
+        {
+            terrain.pipeline->updateCausticDescriptor(vk::DescriptorSet{});
+            terrain.pipeline->setCausticEnabled(false);
+        }
+
+        if (water.causticsResources)
+        {
+            water.causticsResources->cleanup();
+            water.causticsResources.reset();
+        }
+
         if (water.oceanFFT)
         {
             water.oceanFFT->cleanup();
             water.oceanFFT.reset();
+        }
+
+        // Recreate mesh shader pipelines without caustic layout
+        if (meshShaderPipeline && shadowSystem)
+        {
+            vk::DescriptorSetLayout giLayout{};
+            if (giCascadeManager)
+            {
+                auto* storage = giCascadeManager->getProbeStorage();
+                if (storage && storage->isInitialized())
+                    giLayout = storage->getSamplingLayout();
+            }
+
+            MeshPipelineInitInfo pipelineInfo{
+                .iblLayout = cachedIBLLayout,
+                .bindlessTextureLayout = bindlessTextures->getDescriptorSetLayout(),
+                .boneMatrixLayout = boneMatrixManager->getDescriptorSetLayout(),
+                .lightDataLayout = lightBufferManager->getDescriptorSetLayout(),
+                .clusterGridLayout = clusterGridManager->getDescriptorSetLayout(),
+                .cullingOutputLayout = lightCullingPipeline->getDescriptorSetLayout(),
+                .shadowDataLayout = shadowSystem->getShadowDataLayout(),
+                .shadowTextureLayout = shadowSystem->getShadowTextureLayout(),
+                .giProbeDataLayout = giLayout,
+                .causticLayout = nullptr,
+                .renderPass = cachedRenderPass
+            };
+
+            meshShaderPipeline->recreate(pipelineInfo);
+            if (giLayout && giCascadeManager)
+            {
+                auto* storage = giCascadeManager->getProbeStorage();
+                meshShaderPipeline->updateGIProbeDescriptor(storage->getSamplingDescSet());
+            }
+
+            if (transparentMeshShaderPipeline)
+            {
+                pipelineInfo.transparentMode = true;
+                transparentMeshShaderPipeline->recreate(pipelineInfo);
+                if (giLayout && giCascadeManager)
+                {
+                    auto* storage = giCascadeManager->getProbeStorage();
+                    transparentMeshShaderPipeline->updateGIProbeDescriptor(storage->getSamplingDescSet());
+                }
+                pipelineInfo.transparentMode = false;
+            }
+
+            if (wboitMeshShaderPipeline && cachedWBOITRenderPass)
+            {
+                pipelineInfo.renderPass = cachedWBOITRenderPass;
+                pipelineInfo.wboitMode = true;
+                wboitMeshShaderPipeline->recreate(pipelineInfo);
+                if (giLayout && giCascadeManager)
+                {
+                    auto* storage = giCascadeManager->getProbeStorage();
+                    wboitMeshShaderPipeline->updateGIProbeDescriptor(storage->getSamplingDescSet());
+                }
+            }
+        }
+
+        // Recreate terrain pipeline without caustic layout
+        if (terrain.pipeline)
+        {
+            terrain.pipeline->recreate(cachedIBLLayout,
+                                       bindlessTextures->getDescriptorSetLayout(),
+                                       meshShaderPipeline->getMeshletDataLayout(),
+                                       meshShaderPipeline->getVertexDataLayout(),
+                                       lightBufferManager->getDescriptorSetLayout(),
+                                       clusterGridManager->getDescriptorSetLayout(),
+                                       lightCullingPipeline->getDescriptorSetLayout(),
+                                       shadowSystem->getShadowDataLayout(),
+                                       shadowSystem->getShadowTextureLayout(),
+                                       cachedRenderPass);
         }
 
         // Recreate water pipeline with dummy ocean layout

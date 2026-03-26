@@ -327,6 +327,17 @@ layout(std430, set = 9, binding = 1) readonly buffer PageTableBuffer {
 layout(set = 10, binding = 0) uniform sampler2DShadow physicalPoolShadow;
 layout(set = 10, binding = 1) uniform sampler2D physicalPoolDepth;
 
+#ifdef CAUSTICS_ENABLED
+layout(set = CAUSTIC_SET, binding = 0) uniform sampler2D causticMap;
+layout(set = CAUSTIC_SET, binding = 1) uniform CausticParamsUBO {
+    float waterHeight;
+    float causticStrength;
+    float depthFalloff;
+    float patchSize;
+} causticParams;
+#include "../common/caustic_sampling.glsl"
+#endif
+
 // Terrain needs higher normal bias than regular meshes to avoid self-shadow artifacts
 float getTerrainNormalBiasScale() {
     return 3.0;
@@ -471,8 +482,14 @@ void main() {
         }
         minShadow = min(minShadow, shadow);
 
-        vec3 lightContrib = evaluateDirectionalLight(N, V, albedo, metallic, roughness, F0, light);
-        directLighting += lightContrib * shadow;
+        vec3 lightContrib = evaluateDirectionalLight(N, V, albedo, metallic, roughness, F0, light) * shadow;
+#ifdef CAUSTICS_ENABLED
+        float caustic = sampleCaustics(causticMap, causticParams.waterHeight, causticParams.causticStrength,
+                                       causticParams.depthFalloff, causticParams.patchSize,
+                                       fragWorldPos, light.direction);
+        lightContrib *= (1.0 + caustic);
+#endif
+        directLighting += lightContrib;
     }
 
     float shadowContrast = 1.0 + lightCounts.shadowIntensity * 2.0;

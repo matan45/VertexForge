@@ -23,6 +23,8 @@ namespace ocean
         vis["refractionStrength"] = data.refractionStrength;
         vis["refractionChromatic"] = data.refractionChromatic;
         vis["refractionDepthScale"] = data.refractionDepthScale;
+        vis["causticStrength"] = data.causticStrength;
+        vis["causticDepthFalloff"] = data.causticDepthFalloff;
 
         // Physics
         auto& phys = j["physics"];
@@ -93,6 +95,8 @@ namespace ocean
             outData.refractionStrength = vis.value("refractionStrength", 0.5f);
             outData.refractionChromatic = vis.value("refractionChromatic", 0.0f);
             outData.refractionDepthScale = vis.value("refractionDepthScale", 0.2f);
+            outData.causticStrength = vis.value("causticStrength", 1.0f);
+            outData.causticDepthFalloff = vis.value("causticDepthFalloff", 0.5f);
         }
 
         // Physics

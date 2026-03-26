@@ -39,6 +39,8 @@ namespace windows
             visualSettings.refractionStrength = dataOpt->refractionStrength;
             visualSettings.refractionChromatic = dataOpt->refractionChromatic;
             visualSettings.refractionDepthScale = dataOpt->refractionDepthScale;
+            visualSettings.causticStrength = dataOpt->causticStrength;
+            visualSettings.causticDepthFalloff = dataOpt->causticDepthFalloff;
             visualSettingsDirty = false;
 
             physicsSettings.physicsEnabled = dataOpt->physicsEnabled;
@@ -184,6 +186,19 @@ namespace windows
             visualSettingsDirty |= labeledDragFloat("Depth Scale", "##RefrDepthScale",
                 &visualSettings.refractionDepthScale, 0.01f, 0.0f, 1.0f, "%.2f");
             ImGui::TextDisabled("How much depth increases distortion");
+            ImGui::Unindent();
+        }
+
+        if (ImGui::CollapsingHeader("Caustics", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            ImGui::Indent();
+            visualSettingsDirty |= labeledDragFloat("Strength", "##CausticStrength",
+                &visualSettings.causticStrength, 0.01f, 0.0f, 3.0f, "%.2f");
+            ImGui::TextDisabled("0 = disabled, 1.0 = default, higher = brighter");
+
+            visualSettingsDirty |= labeledDragFloat("Depth Falloff", "##CausticDepthFalloff",
+                &visualSettings.causticDepthFalloff, 0.01f, 0.1f, 2.0f, "%.2f");
+            ImGui::TextDisabled("How quickly caustics fade with depth");
             ImGui::Unindent();
         }
 

@@ -460,6 +460,11 @@ namespace render::gpudriven
         {
             terrainShader->addMacroDefinition("SVT_ENABLED");
         }
+        if (causticEnabled && cachedCausticLayout)
+        {
+            terrainShader->addMacroDefinition("CAUSTICS_ENABLED");
+            terrainShader->addMacroDefinition("CAUSTIC_SET", "13");
+        }
         terrainShader->readShader("../../resources/shaders/gpudriven/task_terrain.glsl");
         terrainShader->readShader("../../resources/shaders/gpudriven/mesh_terrain.glsl");
 
@@ -505,12 +510,17 @@ namespace render::gpudriven
 
         vk::Device vkDevice = device.getLogicalDevice();
 
-        std::array<vk::DescriptorSetLayout, 13> setLayouts = {
+        std::vector<vk::DescriptorSetLayout> setLayouts = {
             iblLayout, weightMapLayout, bindlessTextureLayout, meshletDataLayout,
             vertexDataLayout, emptyLayout, lightDataLayout, clusterGridLayout,
             cullingOutputLayout, shadowDataLayout, shadowTextureLayout, terrainDataLayout,
             svtLayout  // Set 12: SVT page table + params + cache textures
         };
+
+        if (causticEnabled && cachedCausticLayout)
+        {
+            setLayouts.push_back(cachedCausticLayout); // Set 13
+        }
 
         vk::PushConstantRange pushConstantRange{};
         pushConstantRange.stageFlags = vk::ShaderStageFlagBits::eTaskEXT |

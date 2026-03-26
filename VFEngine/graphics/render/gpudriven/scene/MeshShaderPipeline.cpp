@@ -32,6 +32,7 @@ namespace render::gpudriven
         cachedShadowDataLayout = info.shadowDataLayout;
         cachedShadowTextureLayout = info.shadowTextureLayout;
         cachedGIProbeDataLayout = info.giProbeDataLayout;
+        cachedCausticLayout = info.causticLayout;
 
 
         createStatsBuffer();
@@ -114,6 +115,11 @@ namespace render::gpudriven
             vkDevice.destroyDescriptorSetLayout(vertexDataLayout);
             vertexDataLayout = nullptr;
         }
+        if (emptyPlaceholderLayout)
+        {
+            vkDevice.destroyDescriptorSetLayout(emptyPlaceholderLayout);
+            emptyPlaceholderLayout = nullptr;
+        }
     }
 
     void MeshShaderPipeline::recreate(const MeshPipelineInitInfo& info)
@@ -129,6 +135,7 @@ namespace render::gpudriven
         cachedShadowDataLayout = info.shadowDataLayout;
         cachedShadowTextureLayout = info.shadowTextureLayout;
         cachedGIProbeDataLayout = info.giProbeDataLayout;
+        cachedCausticLayout = info.causticLayout;
 
 
         if (graphicsPipeline)
@@ -297,6 +304,11 @@ namespace render::gpudriven
         giProbeDataDescriptorSet = giProbeDescSet;
     }
 
+    void MeshShaderPipeline::updateCausticDescriptor(vk::DescriptorSet causticDescSet)
+    {
+        causticDescriptorSet = causticDescSet;
+    }
+
     void MeshShaderPipeline::createPerDrawDataDescriptor()
     {
         vk::Device vkDevice = device.getLogicalDevice();
@@ -456,6 +468,11 @@ namespace render::gpudriven
         {
             meshShader->addMacroDefinition("GI_ENABLED");
         }
+        if (info.causticLayout)
+        {
+            meshShader->addMacroDefinition("CAUSTICS_ENABLED");
+            meshShader->addMacroDefinition("CAUSTIC_SET", "12");
+        }
         meshShader->readShader("../../resources/shaders/gpudriven/task_gpudriven.glsl");
         meshShader->readShader("../../resources/shaders/gpudriven/mesh_shader_gpudriven.glsl");
 
@@ -498,7 +515,25 @@ namespace render::gpudriven
 
         if (info.giProbeDataLayout)
         {
-            setLayouts.push_back(info.giProbeDataLayout);
+            setLayouts.push_back(info.giProbeDataLayout); // Set 11
+        }
+
+        if (info.causticLayout)
+        {
+            // If GI is not present, insert an empty placeholder at set 11
+            // so that caustics always occupy set 12
+            if (!info.giProbeDataLayout)
+            {
+                if (!emptyPlaceholderLayout)
+                {
+                    vk::DescriptorSetLayoutCreateInfo emptyLayoutInfo{};
+                    emptyLayoutInfo.bindingCount = 0;
+                    emptyLayoutInfo.pBindings = nullptr;
+                    emptyPlaceholderLayout = vkDevice.createDescriptorSetLayout(emptyLayoutInfo);
+                }
+                setLayouts.push_back(emptyPlaceholderLayout); // Set 11 placeholder
+            }
+            setLayouts.push_back(info.causticLayout); // Set 12
         }
 
         vk::PushConstantRange pushConstantRange{};

@@ -40,6 +40,7 @@ namespace core {
 		void readShader(std::string_view path);
 
 		void addMacroDefinition(const std::string& name);
+		void addMacroDefinition(const std::string& name, const std::string& value);
 
 		bool compileFromSource(std::string_view source, std::string_view shaderName = "generated");
 
@@ -54,6 +55,7 @@ namespace core {
 
 	private:
 		std::vector<std::string> macroDefinitions;
+		std::vector<std::pair<std::string, std::string>> macroDefinitionsWithValue;
 		std::vector<uint32_t> compileShaderToSPIRV(std::string_view source, vk::ShaderStageFlagBits stage, std::string_view shaderName);
 		void createShaderModule(const std::vector<uint32_t>& code, vk::ShaderStageFlagBits stage);
 		vk::ShaderStageFlagBits shaderTypeToVulkanStage(resource::ShaderType shaderType) const;

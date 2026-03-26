@@ -162,6 +162,10 @@ namespace render::gpudriven
 
                 if (meshShaderPipeline && shadowSystem)
                 {
+                    vk::DescriptorSetLayout causticLayout{};
+                    if (water.causticsResources && water.causticsResources->isInitialized())
+                        causticLayout = water.causticsResources->getDescriptorSetLayout();
+
                     MeshPipelineInitInfo pipelineInfo{
                         .iblLayout = cachedIBLLayout,
                         .bindlessTextureLayout = bindlessTextures->getDescriptorSetLayout(),
@@ -172,17 +176,22 @@ namespace render::gpudriven
                         .shadowDataLayout = shadowSystem->getShadowDataLayout(),
                         .shadowTextureLayout = shadowSystem->getShadowTextureLayout(),
                         .giProbeDataLayout = storage->getSamplingLayout(),
+                        .causticLayout = causticLayout,
                         .renderPass = cachedRenderPass
                     };
 
                     meshShaderPipeline->recreate(pipelineInfo);
                     meshShaderPipeline->updateGIProbeDescriptor(storage->getSamplingDescSet());
+                    if (causticLayout)
+                        meshShaderPipeline->updateCausticDescriptor(water.causticsResources->getDescriptorSet());
 
                     if (transparentMeshShaderPipeline)
                     {
                         pipelineInfo.transparentMode = true;
                         transparentMeshShaderPipeline->recreate(pipelineInfo);
                         transparentMeshShaderPipeline->updateGIProbeDescriptor(storage->getSamplingDescSet());
+                        if (causticLayout)
+                            transparentMeshShaderPipeline->updateCausticDescriptor(water.causticsResources->getDescriptorSet());
                         pipelineInfo.transparentMode = false;
                     }
 
@@ -192,6 +201,8 @@ namespace render::gpudriven
                         pipelineInfo.wboitMode = true;
                         wboitMeshShaderPipeline->recreate(pipelineInfo);
                         wboitMeshShaderPipeline->updateGIProbeDescriptor(storage->getSamplingDescSet());
+                        if (causticLayout)
+                            wboitMeshShaderPipeline->updateCausticDescriptor(water.causticsResources->getDescriptorSet());
                     }
                 }
             }
@@ -230,6 +241,10 @@ namespace render::gpudriven
 
             if (!giCascadeManager && meshShaderPipeline && shadowSystem && cachedRenderPass)
             {
+                vk::DescriptorSetLayout causticLayout{};
+                if (water.causticsResources && water.causticsResources->isInitialized())
+                    causticLayout = water.causticsResources->getDescriptorSetLayout();
+
                 MeshPipelineInitInfo pipelineInfo{
                     .iblLayout = cachedIBLLayout,
                     .bindlessTextureLayout = bindlessTextures->getDescriptorSetLayout(),
@@ -240,13 +255,18 @@ namespace render::gpudriven
                     .shadowDataLayout = shadowSystem->getShadowDataLayout(),
                     .shadowTextureLayout = shadowSystem->getShadowTextureLayout(),
                     .giProbeDataLayout = nullptr,
+                    .causticLayout = causticLayout,
                     .renderPass = cachedRenderPass
                 };
                 meshShaderPipeline->recreate(pipelineInfo);
+                if (causticLayout)
+                    meshShaderPipeline->updateCausticDescriptor(water.causticsResources->getDescriptorSet());
                 if (transparentMeshShaderPipeline)
                 {
                     pipelineInfo.transparentMode = true;
                     transparentMeshShaderPipeline->recreate(pipelineInfo);
+                    if (causticLayout)
+                        transparentMeshShaderPipeline->updateCausticDescriptor(water.causticsResources->getDescriptorSet());
                     pipelineInfo.transparentMode = false;
                 }
                 if (wboitMeshShaderPipeline && cachedWBOITRenderPass)
@@ -254,6 +274,8 @@ namespace render::gpudriven
                     pipelineInfo.renderPass = cachedWBOITRenderPass;
                     pipelineInfo.wboitMode = true;
                     wboitMeshShaderPipeline->recreate(pipelineInfo);
+                    if (causticLayout)
+                        wboitMeshShaderPipeline->updateCausticDescriptor(water.causticsResources->getDescriptorSet());
                 }
             }
         }

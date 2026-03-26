@@ -39,6 +39,8 @@ namespace render::water
         // Image handles
         [[nodiscard]] vk::Image getDisplacementImage() const { return displacementImage; }
         [[nodiscard]] vk::Image getNormalImage() const { return normalImage; }
+        [[nodiscard]] vk::Image getCausticImage() const { return causticImage; }
+        [[nodiscard]] vk::ImageView getCausticView() const { return causticView; }
 
     private:
         core::Device& device;
@@ -59,6 +61,10 @@ namespace render::water
         vk::Image normalImage;
         vk::DeviceMemory normalMemory;
         vk::ImageView normalView;
+
+        vk::Image causticImage;
+        vk::DeviceMemory causticMemory;
+        vk::ImageView causticView;
 
         vk::Sampler outputSampler;
 

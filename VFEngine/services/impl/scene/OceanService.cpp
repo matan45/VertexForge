@@ -102,6 +102,8 @@ namespace services
                 comp.refractionStrength = cmd.settings.refractionStrength;
                 comp.refractionChromatic = cmd.settings.refractionChromatic;
                 comp.refractionDepthScale = cmd.settings.refractionDepthScale;
+                comp.causticStrength = cmd.settings.causticStrength;
+                comp.causticDepthFalloff = cmd.settings.causticDepthFalloff;
             });
 
         dispatcher.registerCommandHandler<events::ocean::SetOceanPhysicsSettingsCommand>(
@@ -311,6 +313,8 @@ namespace services
         data.refractionStrength = comp.refractionStrength;
         data.refractionChromatic = comp.refractionChromatic;
         data.refractionDepthScale = comp.refractionDepthScale;
+        data.causticStrength = comp.causticStrength;
+        data.causticDepthFalloff = comp.causticDepthFalloff;
         data.oceanConfig.resolution = comp.oceanResolution;
         data.oceanConfig.patchSize = comp.oceanPatchSize;
         data.oceanConfig.windSpeed = comp.oceanWindSpeed;
@@ -385,6 +389,8 @@ namespace services
         settings.refractionStrength = comp.refractionStrength;
         settings.refractionChromatic = comp.refractionChromatic;
         settings.refractionDepthScale = comp.refractionDepthScale;
+        settings.causticStrength = comp.causticStrength;
+        settings.causticDepthFalloff = comp.causticDepthFalloff;
 
         return settings;
     }
@@ -425,6 +431,8 @@ namespace services
         fileData.refractionStrength = comp.refractionStrength;
         fileData.refractionChromatic = comp.refractionChromatic;
         fileData.refractionDepthScale = comp.refractionDepthScale;
+        fileData.causticStrength = comp.causticStrength;
+        fileData.causticDepthFalloff = comp.causticDepthFalloff;
 
         fileData.density = comp.density;
         fileData.drag = comp.drag;
@@ -491,6 +499,8 @@ namespace services
             comp.refractionStrength = fileData.refractionStrength;
             comp.refractionChromatic = fileData.refractionChromatic;
             comp.refractionDepthScale = fileData.refractionDepthScale;
+            comp.causticStrength = fileData.causticStrength;
+            comp.causticDepthFalloff = fileData.causticDepthFalloff;
             comp.density = fileData.density;
             comp.drag = fileData.drag;
             comp.buoyancyStrength = fileData.buoyancyStrength;

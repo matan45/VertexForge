@@ -94,7 +94,7 @@ namespace render::water
         // Transition output images back to General for compute writes
         if (!firstDispatch)
         {
-            std::array<vk::ImageMemoryBarrier, 2> barriers{};
+            std::array<vk::ImageMemoryBarrier, 3> barriers{};
 
             barriers[0].srcAccessMask = vk::AccessFlagBits::eShaderRead;
             barriers[0].dstAccessMask = vk::AccessFlagBits::eShaderWrite;
@@ -109,6 +109,13 @@ namespace render::water
             barriers[1].newLayout = vk::ImageLayout::eGeneral;
             barriers[1].image = resources->getNormalImage();
             barriers[1].subresourceRange = vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1);
+
+            barriers[2].srcAccessMask = vk::AccessFlagBits::eShaderRead;
+            barriers[2].dstAccessMask = vk::AccessFlagBits::eShaderWrite;
+            barriers[2].oldLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+            barriers[2].newLayout = vk::ImageLayout::eGeneral;
+            barriers[2].image = resources->getCausticImage();
+            barriers[2].subresourceRange = vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1);
 
             cmd.pipelineBarrier(
                 vk::PipelineStageFlagBits::eFragmentShader,
@@ -138,7 +145,7 @@ namespace render::water
 
     void OceanFFT::insertBarrier(vk::CommandBuffer cmd)
     {
-        std::array<vk::ImageMemoryBarrier, 2> barriers{};
+        std::array<vk::ImageMemoryBarrier, 3> barriers{};
 
         barriers[0].srcAccessMask = vk::AccessFlagBits::eShaderWrite;
         barriers[0].dstAccessMask = vk::AccessFlagBits::eShaderRead;
@@ -154,6 +161,13 @@ namespace render::water
         barriers[1].image = resources->getNormalImage();
         barriers[1].subresourceRange = vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1);
 
+        barriers[2].srcAccessMask = vk::AccessFlagBits::eShaderWrite;
+        barriers[2].dstAccessMask = vk::AccessFlagBits::eShaderRead;
+        barriers[2].oldLayout = vk::ImageLayout::eGeneral;
+        barriers[2].newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+        barriers[2].image = resources->getCausticImage();
+        barriers[2].subresourceRange = vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1);
+
         cmd.pipelineBarrier(
             vk::PipelineStageFlagBits::eComputeShader,
             vk::PipelineStageFlagBits::eVertexShader | vk::PipelineStageFlagBits::eFragmentShader,
@@ -168,6 +182,11 @@ namespace render::water
     vk::DescriptorSet OceanFFT::getOceanTextureDescSet() const
     {
         return resources ? resources->getOceanTextureDescSet() : vk::DescriptorSet{};
+    }
+
+    vk::ImageView OceanFFT::getCausticView() const
+    {
+        return resources ? resources->getCausticView() : vk::ImageView{};
     }
 
     void OceanFFT::readbackDisplacementData()

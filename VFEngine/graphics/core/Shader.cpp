@@ -115,6 +115,11 @@ namespace core {
 		macroDefinitions.push_back(name);
 	}
 
+	void Shader::addMacroDefinition(const std::string& name, const std::string& value)
+	{
+		macroDefinitionsWithValue.emplace_back(name, value);
+	}
+
 	void Shader::cleanUp()
 	{
 		shaderModules.clear();
@@ -147,6 +152,9 @@ namespace core {
 
 		for (const auto& name : macroDefinitions) {
 			options.AddMacroDefinition(name);
+		}
+		for (const auto& [name, value] : macroDefinitionsWithValue) {
+			options.AddMacroDefinition(name, value);
 		}
 
 		if (!currentShaderBasePath.empty()) {

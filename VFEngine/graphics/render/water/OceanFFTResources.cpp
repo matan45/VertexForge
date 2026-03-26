@@ -118,6 +118,22 @@ namespace render::water
                 vk::ImageAspectFlagBits::eColor, vk::ImageViewType::e2D);
             core::ImageUtilities::createImageView(viewReq, normalView);
         }
+
+        // Caustic: R16F (storage + sampled)
+        {
+            core::ImageInfoRequest req(vkDevice, device.getPhysicalDevice(),
+                N, N, 1, 1,
+                vk::Format::eR16Sfloat,
+                vk::ImageTiling::eOptimal,
+                vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eSampled,
+                vk::MemoryPropertyFlagBits::eDeviceLocal);
+            core::ImageUtilities::createImage(req, causticImage, causticMemory);
+
+            core::ImageViewInfoRequest viewReq(vkDevice, causticImage,
+                vk::Format::eR16Sfloat,
+                vk::ImageAspectFlagBits::eColor, vk::ImageViewType::e2D);
+            core::ImageUtilities::createImageView(viewReq, causticView);
+        }
     }
 
     void OceanFFTResources::createSampler()
@@ -187,10 +203,10 @@ namespace render::water
             fftDescLayout = vkDevice.createDescriptorSetLayout(info);
         }
 
-        // Merge: 3 readonly + 2 writeonly storage images
+        // Merge: 3 readonly + 3 writeonly storage images (displacement, normal, caustic)
         {
-            std::array<vk::DescriptorSetLayoutBinding, 5> bindings{};
-            for (uint32_t i = 0; i < 5; ++i)
+            std::array<vk::DescriptorSetLayoutBinding, 6> bindings{};
+            for (uint32_t i = 0; i < 6; ++i)
             {
                 bindings[i].binding = i;
                 bindings[i].descriptorType = vk::DescriptorType::eStorageImage;
@@ -228,7 +244,7 @@ namespace render::water
     {
         std::array<vk::DescriptorPoolSize, 2> poolSizes{};
         poolSizes[0].type = vk::DescriptorType::eStorageImage;
-        poolSizes[0].descriptorCount = 22;
+        poolSizes[0].descriptorCount = 23;
         poolSizes[1].type = vk::DescriptorType::eCombinedImageSampler;
         poolSizes[1].descriptorCount = 2;
 
@@ -314,11 +330,12 @@ namespace render::water
             addStorageImageWrite(fftDescSets[f * 2 + 1], 1, fields[f].views[0]);
         }
 
-        // Merge: bindings 0-2 = field results (ping-pong 0), 3 = displacement, 4 = normal
+        // Merge: bindings 0-2 = field results (ping-pong 0), 3 = displacement, 4 = normal, 5 = caustic
         for (int f = 0; f < 3; ++f)
             addStorageImageWrite(mergeDescSet, f, fields[f].views[0]);
         addStorageImageWrite(mergeDescSet, 3, displacementView);
         addStorageImageWrite(mergeDescSet, 4, normalView);
+        addStorageImageWrite(mergeDescSet, 5, causticView);
 
         // Ocean textures for graphics sampling
         addSampledImageWrite(oceanTextureDescSet, 0, displacementView);
@@ -350,6 +367,7 @@ namespace render::water
 
         transitionToGeneral(displacementImage);
         transitionToGeneral(normalImage);
+        transitionToGeneral(causticImage);
 
         core::Utilities::endSingleTimeCommands(device, cmd);
     }
@@ -375,5 +393,6 @@ namespace render::water
 
         destroyImage(displacementImage, displacementMemory, displacementView);
         destroyImage(normalImage, normalMemory, normalView);
+        destroyImage(causticImage, causticMemory, causticView);
     }
 }
