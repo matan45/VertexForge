@@ -4,6 +4,7 @@
 #include "../../data/EntityHandle.hpp"
 #include "../../data/OceanData.hpp"
 #include <optional>
+#include <string>
 
 namespace events::ocean
 {

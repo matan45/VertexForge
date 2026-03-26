@@ -116,7 +116,7 @@ namespace handlers
         renderService.reset();
         sceneService.reset();
         terrainService.reset();
-        waterService.reset();
+        oceanService.reset();
         projectService.reset();
         fileOperationsService.reset();
         undoRedoService.reset();

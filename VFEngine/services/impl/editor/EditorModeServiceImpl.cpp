@@ -123,9 +123,9 @@ namespace services
         events::terrain::RemapTerrainEntitiesCommand remapTerrainCmd;
         dispatcher.execute(remapTerrainCmd);
 
-        // Re-map ocean registrations to restored entity IDs
-        events::ocean::RemapOceanEntitiesCommand remapOceanCmd;
-        dispatcher.execute(remapOceanCmd);
+        // Rebuild ocean from restored components
+        events::ocean::RebuildOceanFromComponentsCommand rebuildOceanCmd;
+        dispatcher.execute(rebuildOceanCmd);
 
         // Re-trigger mesh loading for all entities with MeshComponent
         auto meshView = registry.view<components::MeshComponent>();
