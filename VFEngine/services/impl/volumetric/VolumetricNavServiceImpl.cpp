@@ -7,8 +7,9 @@
 
 namespace services
 {
-    VolumetricNavServiceImpl::VolumetricNavServiceImpl(IVolumetricNavProvider* provider)
-        : provider(provider), agentManager(provider)
+    VolumetricNavServiceImpl::VolumetricNavServiceImpl(IVolumetricNavProvider* provider,
+                                                        std::function<bool(glm::vec3, glm::vec3, float)> raycastFn)
+        : provider(provider), agentManager(provider), physicsRaycast(std::move(raycastFn))
     {
         assert(provider && "VolumetricNavProvider must not be null");
     }
@@ -30,8 +31,21 @@ namespace services
 
                 const auto& vol = registry.get<components::VolumetricNavVolumeComponent>(enttEntity);
 
-                auto isBlocked = [](glm::vec3 /*pos*/, float /*radius*/) -> bool
+                auto raycastFn = physicsRaycast;
+                auto isBlocked = [raycastFn](glm::vec3 pos, float radius) -> bool
                 {
+                    if (!raycastFn)
+                        return false;
+
+                    // 6-directional raycast probe to approximate sphere overlap
+                    static const glm::vec3 dirs[] = {
+                        {1,0,0}, {-1,0,0}, {0,1,0}, {0,-1,0}, {0,0,1}, {0,0,-1}
+                    };
+                    for (const auto& dir : dirs)
+                    {
+                        if (raycastFn(pos, dir, radius))
+                            return true;
+                    }
                     return false;
                 };
 

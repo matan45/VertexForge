@@ -41,4 +41,10 @@ namespace services
                 provider->cancelQuery(cmd.handle);
             });
     }
+
+    void EQSServiceImpl::update(float frameBudgetMs)
+    {
+        if (provider)
+            provider->update(frameBudgetMs);
+    }
 }

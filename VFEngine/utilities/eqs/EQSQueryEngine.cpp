@@ -11,11 +11,15 @@ namespace eqs
         for (auto& [id, pending] : queries)
         {
             if (pending.future.valid())
-            {
                 pending.future.wait();
-            }
         }
         queries.clear();
+        for (auto& f : cancelledFutures)
+        {
+            if (f.valid())
+                f.wait();
+        }
+        cancelledFutures.clear();
     }
 
     EQSQueryHandle EQSQueryEngine::submitQuery(const EQSQueryDef& queryDef,
@@ -56,7 +60,13 @@ namespace eqs
     void EQSQueryEngine::cancelQuery(const EQSQueryHandle& handle)
     {
         std::lock_guard<std::mutex> lock(mutex);
-        queries.erase(handle.id);
+        auto it = queries.find(handle.id);
+        if (it != queries.end())
+        {
+            if (it->second.future.valid())
+                cancelledFutures.push_back(std::move(it->second.future));
+            queries.erase(it);
+        }
     }
 
     void EQSQueryEngine::update()
@@ -70,6 +80,15 @@ namespace eqs
                 pending.result = pending.future.get();
             }
         }
+
+        // Clean up completed cancelled futures
+        cancelledFutures.erase(
+            std::remove_if(cancelledFutures.begin(), cancelledFutures.end(),
+                [](std::future<EQSResult>& f) {
+                    return !f.valid() ||
+                           f.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready;
+                }),
+            cancelledFutures.end());
     }
 
     EQSResult EQSQueryEngine::executeQuery(const EQSQueryDef& queryDef,

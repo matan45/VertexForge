@@ -14,5 +14,6 @@ namespace services
         ~EQSServiceImpl() override;
 
         void registerEventHandlers() override;
+        void update(float frameBudgetMs = 2.0f) override;
     };
 }

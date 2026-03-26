@@ -5,7 +5,6 @@
 #include "navigation/volumetric/VolumetricPathfinder.hpp"
 #include <memory>
 #include <mutex>
-#include <future>
 
 namespace core
 {
@@ -18,7 +17,6 @@ namespace core
         mutable std::mutex mutex;
         mutable std::mutex progressMutex;
         volumetric::VolumetricBakeProgress currentProgress;
-        std::future<bool> bakeFuture;
 
     public:
         VolumetricNavAdapter();

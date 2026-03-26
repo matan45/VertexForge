@@ -5,6 +5,7 @@
 #include "../../events/volumetric/VolumetricNavEvents.hpp"
 #include "VolumetricAgentManager.hpp"
 #include <memory>
+#include <functional>
 
 namespace services
 {
@@ -13,9 +14,11 @@ namespace services
     private:
         IVolumetricNavProvider* provider;
         VolumetricAgentManager agentManager;
+        std::function<bool(glm::vec3, glm::vec3, float)> physicsRaycast; // origin, dir, maxDist → hit?
 
     public:
-        explicit VolumetricNavServiceImpl(IVolumetricNavProvider* provider);
+        VolumetricNavServiceImpl(IVolumetricNavProvider* provider,
+                                  std::function<bool(glm::vec3, glm::vec3, float)> raycastFn = nullptr);
         ~VolumetricNavServiceImpl() override = default;
 
         void registerEventHandlers() override;

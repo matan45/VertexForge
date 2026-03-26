@@ -68,14 +68,19 @@ namespace core
                 }
             }
         }
-        // Cancel any pending EQS query for this entity
-        auto eqsIt = pendingEQSQueries.find(entity.id);
-        if (eqsIt != pendingEQSQueries.end())
+        // Cancel any pending EQS queries for this entity
+        std::string prefix = std::to_string(entity.id) + ":";
+        for (auto eqsIt = pendingEQSQueries.begin(); eqsIt != pendingEQSQueries.end(); )
         {
-            events::ai::CancelEQSQueryCommand cancelCmd;
-            cancelCmd.handle = eqsIt->second;
-            events::EventDispatcher::instance().execute(cancelCmd);
-            pendingEQSQueries.erase(eqsIt);
+            if (eqsIt->first.compare(0, prefix.size(), prefix) == 0)
+            {
+                events::ai::CancelEQSQueryCommand cancelCmd;
+                cancelCmd.handle = eqsIt->second;
+                events::EventDispatcher::instance().execute(cancelCmd);
+                eqsIt = pendingEQSQueries.erase(eqsIt);
+            }
+            else
+                ++eqsIt;
         }
 
         runtimes.erase(it);
@@ -294,7 +299,7 @@ namespace core
         {
             // Build EQS context from entity transform
             eqs::EQSContext context;
-            context.querierEntity = entity;
+            context.querierEntityId = entity.id;
 
             events::scene::GetWorldTransformQuery transformQuery;
             transformQuery.entity = entity;
@@ -319,12 +324,14 @@ namespace core
                 return BTNodeStatus::Failure;
             }
 
-            pendingEQSQueries[entity.id] = handle;
+            std::string eqsKey = std::to_string(entity.id) + ":" + queryName;
+            pendingEQSQueries[eqsKey] = handle;
             return BTNodeStatus::Running;
         }
 
         // Poll for results on subsequent ticks
-        auto it = pendingEQSQueries.find(entity.id);
+        std::string eqsKey = std::to_string(entity.id) + ":" + queryName;
+        auto it = pendingEQSQueries.find(eqsKey);
         if (it == pendingEQSQueries.end())
         {
             return BTNodeStatus::Failure;

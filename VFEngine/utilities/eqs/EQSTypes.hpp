@@ -6,7 +6,6 @@
 #include <cstdint>
 #include <memory>
 #include <functional>
-#include "../../services/data/EntityHandle.hpp"
 
 namespace eqs
 {
@@ -45,10 +44,10 @@ namespace eqs
 
     struct EQSContext
     {
-        services::EntityHandle querierEntity;
+        uint64_t querierEntityId = 0;
         glm::vec3 querierPosition{ 0.0f };
         glm::vec3 querierForward{ 0.0f, 0.0f, 1.0f };
-        services::EntityHandle targetEntity;
+        uint64_t targetEntityId = 0;
         glm::vec3 targetPosition{ 0.0f };
         bool hasTarget = false;
     };

@@ -99,6 +99,6 @@ namespace core
         services::IScriptingProvider* scriptingProvider;
         std::unordered_map<uint64_t, RuntimeInstance> runtimes; // keyed by EntityHandle::id
         std::unordered_map<ScriptInstanceKey, uint64_t, ScriptInstanceKeyHash> scriptInstances;
-        std::unordered_map<uint64_t, eqs::EQSQueryHandle> pendingEQSQueries;
+        std::unordered_map<std::string, eqs::EQSQueryHandle> pendingEQSQueries; // key: "{entityId}:{queryName}"
     };
 }

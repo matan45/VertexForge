@@ -10,13 +10,7 @@ namespace core
     {
     }
 
-    VolumetricNavAdapter::~VolumetricNavAdapter()
-    {
-        if (bakeFuture.valid())
-        {
-            bakeFuture.wait();
-        }
-    }
+    VolumetricNavAdapter::~VolumetricNavAdapter() = default;
 
     bool VolumetricNavAdapter::bakeVolume(glm::vec3 boundsMin, glm::vec3 boundsMax, float voxelSize,
                                            uint8_t connectivity, float agentClearance,

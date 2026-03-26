@@ -45,6 +45,7 @@ namespace eqs
 
         mutable std::mutex mutex;
         std::unordered_map<uint64_t, PendingQuery> queries;
+        std::vector<std::future<EQSResult>> cancelledFutures;
         std::atomic<uint64_t> nextId{ 1 };
     };
 }
