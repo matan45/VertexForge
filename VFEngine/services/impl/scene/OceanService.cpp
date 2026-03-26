@@ -409,17 +409,23 @@ namespace services
         fileData.waterHeight = comp.waterHeight;
         fileData.physicsEnabled = comp.physicsEnabled;
 
-        fileData.visual.shallowColor = comp.shallowColor;
-        fileData.visual.deepColor = comp.deepColor;
-        fileData.visual.maxVisibleDepth = comp.maxVisibleDepth;
-        fileData.visual.fresnelPower = comp.fresnelPower;
+        fileData.shallowColor = comp.shallowColor;
+        fileData.deepColor = comp.deepColor;
+        fileData.maxVisibleDepth = comp.maxVisibleDepth;
+        fileData.fresnelPower = comp.fresnelPower;
 
-        fileData.physics.density = comp.density;
-        fileData.physics.drag = comp.drag;
-        fileData.physics.buoyancyStrength = comp.buoyancyStrength;
-        fileData.physics.physicsEnabled = comp.physicsEnabled;
+        fileData.density = comp.density;
+        fileData.drag = comp.drag;
+        fileData.buoyancyStrength = comp.buoyancyStrength;
 
-        fileData.fftConfig = oceanConfig;
+        fileData.resolution = oceanConfig.resolution;
+        fileData.patchSize = oceanConfig.patchSize;
+        fileData.windSpeed = oceanConfig.windSpeed;
+        fileData.windDirection = oceanConfig.windDirection;
+        fileData.amplitude = oceanConfig.amplitude;
+        fileData.choppiness = oceanConfig.choppiness;
+        fileData.foamThreshold = oceanConfig.foamThreshold;
+        fileData.displacementScale = oceanConfig.displacementScale;
 
         if (!ocean::OceanSerializer::save(path, fileData))
             return false;
@@ -446,25 +452,33 @@ namespace services
         OceanCreationData config;
         config.waterHeight = fileData.waterHeight;
         config.physicsEnabled = fileData.physicsEnabled;
-        config.shallowColor = fileData.visual.shallowColor;
-        config.deepColor = fileData.visual.deepColor;
-        config.oceanConfig = fileData.fftConfig;
+        config.shallowColor = fileData.shallowColor;
+        config.deepColor = fileData.deepColor;
+        config.oceanConfig.resolution = fileData.resolution;
+        config.oceanConfig.patchSize = fileData.patchSize;
+        config.oceanConfig.windSpeed = fileData.windSpeed;
+        config.oceanConfig.windDirection = fileData.windDirection;
+        config.oceanConfig.amplitude = fileData.amplitude;
+        config.oceanConfig.choppiness = fileData.choppiness;
+        config.oceanConfig.foamThreshold = fileData.foamThreshold;
+        config.oceanConfig.displacementScale = fileData.displacementScale;
+        config.oceanConfig.enabled = true;
 
         EntityHandle handle = createOcean(config);
         if (!handle.isValid())
             return {};
 
-        // Apply visual and physics settings
+        // Apply remaining settings
         auto& registry = scene::EntityRegistry::getRegistry();
         entt::entity ent = internal::fromHandle(handle);
         if (registry.valid(ent) && registry.all_of<components::OceanComponent>(ent))
         {
             auto& comp = registry.get<components::OceanComponent>(ent);
-            comp.maxVisibleDepth = fileData.visual.maxVisibleDepth;
-            comp.fresnelPower = fileData.visual.fresnelPower;
-            comp.density = fileData.physics.density;
-            comp.drag = fileData.physics.drag;
-            comp.buoyancyStrength = fileData.physics.buoyancyStrength;
+            comp.maxVisibleDepth = fileData.maxVisibleDepth;
+            comp.fresnelPower = fileData.fresnelPower;
+            comp.density = fileData.density;
+            comp.drag = fileData.drag;
+            comp.buoyancyStrength = fileData.buoyancyStrength;
         }
 
         events::ocean::OceanLoadedNotification notification;

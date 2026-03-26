@@ -1,5 +1,4 @@
 #include "OceanSerializer.hpp"
-#include "print/Log.hpp"
 #include <nlohmann/json.hpp>
 #include <fstream>
 
@@ -15,39 +14,37 @@ namespace ocean
 
         // Visual
         auto& vis = j["visual"];
-        vis["shallowColor"] = {data.visual.shallowColor.r, data.visual.shallowColor.g,
-                               data.visual.shallowColor.b, data.visual.shallowColor.a};
-        vis["deepColor"] = {data.visual.deepColor.r, data.visual.deepColor.g,
-                            data.visual.deepColor.b, data.visual.deepColor.a};
-        vis["maxVisibleDepth"] = data.visual.maxVisibleDepth;
-        vis["fresnelPower"] = data.visual.fresnelPower;
+        vis["shallowColor"] = {data.shallowColor.r, data.shallowColor.g,
+                               data.shallowColor.b, data.shallowColor.a};
+        vis["deepColor"] = {data.deepColor.r, data.deepColor.g,
+                            data.deepColor.b, data.deepColor.a};
+        vis["maxVisibleDepth"] = data.maxVisibleDepth;
+        vis["fresnelPower"] = data.fresnelPower;
 
         // Physics
         auto& phys = j["physics"];
-        phys["density"] = data.physics.density;
-        phys["drag"] = data.physics.drag;
-        phys["buoyancyStrength"] = data.physics.buoyancyStrength;
+        phys["density"] = data.density;
+        phys["drag"] = data.drag;
+        phys["buoyancyStrength"] = data.buoyancyStrength;
 
         // Ocean FFT
         auto& fft = j["oceanFFT"];
-        fft["resolution"] = data.fftConfig.resolution;
-        fft["patchSize"] = data.fftConfig.patchSize;
-        fft["windSpeed"] = data.fftConfig.windSpeed;
-        fft["windDirection"] = data.fftConfig.windDirection;
-        fft["amplitude"] = data.fftConfig.amplitude;
-        fft["choppiness"] = data.fftConfig.choppiness;
-        fft["foamThreshold"] = data.fftConfig.foamThreshold;
-        fft["displacementScale"] = data.fftConfig.displacementScale;
+        fft["resolution"] = data.resolution;
+        fft["patchSize"] = data.patchSize;
+        fft["windSpeed"] = data.windSpeed;
+        fft["windDirection"] = data.windDirection;
+        fft["amplitude"] = data.amplitude;
+        fft["choppiness"] = data.choppiness;
+        fft["foamThreshold"] = data.foamThreshold;
+        fft["displacementScale"] = data.displacementScale;
 
         std::ofstream file(path);
         if (!file.is_open())
         {
-            vfLogError("OceanSerializer: Failed to open file for writing: {}", path);
             return false;
         }
 
         file << j.dump(4);
-        vfLogInfo("OceanSerializer: Saved ocean to {}", path);
         return true;
     }
 
@@ -56,7 +53,6 @@ namespace ocean
         std::ifstream file(path);
         if (!file.is_open())
         {
-            vfLogError("OceanSerializer: Failed to open file: {}", path);
             return false;
         }
 
@@ -67,7 +63,6 @@ namespace ocean
         }
         catch (const nlohmann::json::parse_error& e)
         {
-            vfLogError("OceanSerializer: JSON parse error in {}: {}", path, e.what());
             return false;
         }
 
@@ -81,44 +76,42 @@ namespace ocean
             if (vis.contains("shallowColor") && vis["shallowColor"].is_array())
             {
                 auto& c = vis["shallowColor"];
-                outData.visual.shallowColor = glm::vec4(c[0].get<float>(), c[1].get<float>(),
-                                                         c[2].get<float>(), c[3].get<float>());
+                outData.shallowColor = glm::vec4(c[0].get<float>(), c[1].get<float>(),
+                                                   c[2].get<float>(), c[3].get<float>());
             }
             if (vis.contains("deepColor") && vis["deepColor"].is_array())
             {
                 auto& c = vis["deepColor"];
-                outData.visual.deepColor = glm::vec4(c[0].get<float>(), c[1].get<float>(),
-                                                      c[2].get<float>(), c[3].get<float>());
+                outData.deepColor = glm::vec4(c[0].get<float>(), c[1].get<float>(),
+                                                c[2].get<float>(), c[3].get<float>());
             }
-            outData.visual.maxVisibleDepth = vis.value("maxVisibleDepth", 10.0f);
-            outData.visual.fresnelPower = vis.value("fresnelPower", 5.0f);
+            outData.maxVisibleDepth = vis.value("maxVisibleDepth", 10.0f);
+            outData.fresnelPower = vis.value("fresnelPower", 5.0f);
         }
 
         // Physics
         if (j.contains("physics"))
         {
             const auto& phys = j["physics"];
-            outData.physics.density = phys.value("density", 1000.0f);
-            outData.physics.drag = phys.value("drag", 0.5f);
-            outData.physics.buoyancyStrength = phys.value("buoyancyStrength", 2.0f);
+            outData.density = phys.value("density", 1000.0f);
+            outData.drag = phys.value("drag", 0.5f);
+            outData.buoyancyStrength = phys.value("buoyancyStrength", 2.0f);
         }
 
         // Ocean FFT
         if (j.contains("oceanFFT"))
         {
             const auto& fft = j["oceanFFT"];
-            outData.fftConfig.resolution = fft.value("resolution", 256u);
-            outData.fftConfig.patchSize = fft.value("patchSize", 100.0f);
-            outData.fftConfig.windSpeed = fft.value("windSpeed", 8.0f);
-            outData.fftConfig.windDirection = fft.value("windDirection", 45.0f);
-            outData.fftConfig.amplitude = fft.value("amplitude", 0.00003f);
-            outData.fftConfig.choppiness = fft.value("choppiness", 1.2f);
-            outData.fftConfig.foamThreshold = fft.value("foamThreshold", -0.1f);
-            outData.fftConfig.displacementScale = fft.value("displacementScale", 4.0f);
-            outData.fftConfig.enabled = true;
+            outData.resolution = fft.value("resolution", 256u);
+            outData.patchSize = fft.value("patchSize", 100.0f);
+            outData.windSpeed = fft.value("windSpeed", 8.0f);
+            outData.windDirection = fft.value("windDirection", 45.0f);
+            outData.amplitude = fft.value("amplitude", 0.00003f);
+            outData.choppiness = fft.value("choppiness", 1.2f);
+            outData.foamThreshold = fft.value("foamThreshold", -0.1f);
+            outData.displacementScale = fft.value("displacementScale", 4.0f);
         }
 
-        vfLogInfo("OceanSerializer: Loaded ocean from {}", path);
         return true;
     }
 }
