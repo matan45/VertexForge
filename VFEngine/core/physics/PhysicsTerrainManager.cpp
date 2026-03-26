@@ -295,8 +295,9 @@ namespace core::physics
         // Cancel any existing pending collider for this tile
         cancelPendingCollider(data.tileX, data.tileZ);
 
-        // Remove existing body if present (LOD transition)
-        removeTerrainTileBody(data.entityId, data.tileX, data.tileZ);
+        // NOTE: Do NOT remove the existing body here. The old collider stays active
+        // until pollColliderCompletions promotes the replacement, preventing a physics
+        // gap where objects could fall through during async shape creation.
 
         // Decimate based on physics LOD
         auto [decimatedSamples, decimatedCount] = decimateHeightField(
@@ -362,7 +363,8 @@ namespace core::physics
     {
         TileCoordKey key = makeTileKey(tileX, tileZ);
         pendingColliderKeys.erase(key);
-        // The future will be discarded when pollColliderCompletions sees the key is gone
+        // The background thread still runs to completion — only the result is discarded
+        // when pollColliderCompletions sees the key is no longer in pendingColliderKeys.
     }
 
     void PhysicsTerrainManager::pollColliderCompletions()
@@ -401,6 +403,10 @@ namespace core::physics
 
             if (shape != nullptr)
             {
+                // Remove the old body (if any) right before adding the replacement,
+                // so there is never a frame without a collider for this tile.
+                removeTerrainTileBody(it->entityId, it->tileX, it->tileZ);
+
                 JPH::BodyID bodyId = addTerrainTileBodyFromShape(
                     it->entityId, it->tileX, it->tileZ,
                     shape, it->friction, it->restitution, it->collisionLayer);
@@ -477,43 +483,39 @@ namespace core::physics
             if (currentPhysicsMemory <= budget)
                 break;
 
+            // removeTerrainTileBody already decrements currentPhysicsMemory via its tracking block
             removeTerrainTileBody(c.entityId, c.tileX, c.tileZ);
-            currentPhysicsMemory -= std::min(currentPhysicsMemory, c.memory);
-
-            auto infoIt = colliderStreamInfos.find(c.key);
-            if (infoIt != colliderStreamInfos.end())
-            {
-                infoIt->second.currentLOD = 255;
-                infoIt->second.memoryUsage = 0;
-            }
         }
     }
 
     void PhysicsTerrainManager::checkLODTransitions(const glm::vec3& cameraPosition)
     {
+        // Collect tiles needing LOD transition into a temp vector to avoid
+        // iterator invalidation — submitAsyncCollider modifies colliderStreamInfos.
+        struct LODTransition
+        {
+            OwnedTerrainColliderData data;
+            uint8_t targetLOD;
+        };
+        std::vector<LODTransition> transitions;
+
         for (auto& [key, info] : colliderStreamInfos)
         {
             if (info.currentLOD == 255)
                 continue; // not loaded
 
-            glm::vec3 tileCenter = info.cachedData.worldOrigin +
-                glm::vec3(info.cachedData.vertexSpacing * (info.cachedData.sampleCount - 1) * 0.5f,
-                           0.0f,
-                           info.cachedData.vertexSpacing * (info.cachedData.sampleCount - 1) * 0.5f);
-
-            float dist = glm::length(cameraPosition - tileCenter);
-            info.distanceToCamera = dist;
-            info.lastAccessFrame = currentFrame;
-
-            uint8_t targetLOD = selectPhysicsLOD(dist);
+            // Reuse distanceToCamera already computed by updateColliderStreaming
+            uint8_t targetLOD = selectPhysicsLOD(info.distanceToCamera);
             if (targetLOD != info.currentLOD && !info.cachedData.heightSamples.empty())
             {
-                // Re-submit at new LOD — submitAsyncCollider handles removal of old body
                 OwnedTerrainColliderData data = info.cachedData; // copy
                 data.physicsLOD = targetLOD;
-                submitAsyncCollider(std::move(data));
+                transitions.push_back({std::move(data), targetLOD});
             }
         }
+
+        for (auto& t : transitions)
+            submitAsyncCollider(std::move(t.data));
     }
 
     void PhysicsTerrainManager::updateColliderStreaming(const glm::vec3& cameraPosition)
@@ -521,7 +523,7 @@ namespace core::physics
         ++currentFrame;
         pollColliderCompletions();
 
-        // Update distances for all tracked tiles
+        // Update distances for all tracked tiles (single pass, reused by checkLODTransitions)
         for (auto& [key, info] : colliderStreamInfos)
         {
             if (info.cachedData.heightSamples.empty())

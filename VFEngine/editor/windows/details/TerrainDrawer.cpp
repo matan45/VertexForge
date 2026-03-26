@@ -393,7 +393,6 @@ namespace windows::details {
             ImGui::Text("Collider Streaming");
 
             events::physics::GetPhysicsColliderStreamConfigQuery streamQuery;
-            streamQuery.terrainEntity = handle;
             auto streamCfg = dispatcher.query(streamQuery);
 
             bool streamConfigChanged = false;

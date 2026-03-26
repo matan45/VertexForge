@@ -230,7 +230,6 @@ namespace events::physics {
     };
 
     struct GetPhysicsColliderStreamConfigQuery : ::events::IQuery<PhysicsColliderStreamConfigData> {
-        services::EntityHandle terrainEntity;
         std::string_view getName() const override { return "GetPhysicsColliderStreamConfig"; }
     };
 
