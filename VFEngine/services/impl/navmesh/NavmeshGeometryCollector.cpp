@@ -5,6 +5,7 @@
 #include "components/Components.hpp"
 #include "resource/ResourceManager.hpp"
 #include "resource/Types.hpp"
+#include <glm/gtc/constants.hpp>
 
 namespace services
 {
@@ -493,6 +494,8 @@ namespace services
         auto& registry = scene::EntityRegistry::getRegistry();
 
         float tileWorldSize = settings.tileSize * settings.cellSize;
+        if (tileWorldSize <= 0.0f)
+            return result;
 
         auto view = registry.view<components::OffMeshLinkComponent, components::TransformComponent>();
         uint32_t nextUserID = 1;
@@ -618,14 +621,28 @@ namespace services
             const glm::vec3& p1 = meshVerts[edge.v1];
             glm::vec3 edgeMid = (p0 + p1) * 0.5f;
 
-            // Compute edge normal (pointing outward from the mesh, in XZ plane)
+            // Try both perpendicular directions to find the outward one
             glm::vec3 edgeDir = glm::normalize(p1 - p0);
-            glm::vec3 outwardNormal = glm::vec3(-edgeDir.z, 0.0f, edgeDir.x);
+            glm::vec3 perp1 = glm::vec3(-edgeDir.z, 0.0f, edgeDir.x);
+            glm::vec3 perp2 = -perp1;
 
-            // Step outward slightly and check for ground below
+            // The outward direction is the one NOT on the navmesh
+            glm::vec3 test1 = edgeMid + perp1 * settings.agentRadius * 2.0f;
+            glm::vec3 test2 = edgeMid + perp2 * settings.agentRadius * 2.0f;
+            bool onMesh1 = navmeshProvider->isPointOnNavmesh(test1, 0.5f);
+            bool onMesh2 = navmeshProvider->isPointOnNavmesh(test2, 0.5f);
+
+            glm::vec3 outwardNormal;
+            if (!onMesh1 && onMesh2)
+                outwardNormal = perp1;
+            else if (onMesh1 && !onMesh2)
+                outwardNormal = perp2;
+            else
+                continue; // Ambiguous or both off-mesh, skip
+
+            // Step outward and check for ground below
             glm::vec3 testPoint = edgeMid + outwardNormal * settings.agentRadius * 2.0f;
 
-            // Find closest point on navmesh below the ledge
             glm::vec3 dropTest = testPoint - glm::vec3(0.0f, settings.autoDropMaxHeight, 0.0f);
             glm::vec3 closest = navmeshProvider->getClosestPoint(dropTest, settings.autoDropMaxHeight);
 
@@ -696,7 +713,7 @@ namespace services
             float y = (ring == 0) ? -halfH : halfH;
             for (int i = 0; i < SEGMENTS; ++i)
             {
-                float angle = (2.0f * 3.14159265f * i) / SEGMENTS;
+                float angle = (glm::two_pi<float>() * i) / SEGMENTS;
                 glm::vec3 local(radius * cosf(angle), y, radius * sinf(angle));
                 outGeometry.addVertex(glm::vec3(modelMatrix * glm::vec4(local, 1.0f)));
             }
@@ -767,8 +784,9 @@ namespace services
             const auto& transform = view.get<components::TransformComponent>(entity);
             glm::vec3 pos = transform.position + obstacle.offset;
 
-            if (pos.x < bounds.min.x - 50.0f || pos.x > bounds.max.x + 50.0f ||
-                pos.z < bounds.min.z - 50.0f || pos.z > bounds.max.z + 50.0f)
+            float maxExtent = glm::max(obstacle.size.x, glm::max(obstacle.size.y, obstacle.size.z)) * 0.5f;
+            if (pos.x < bounds.min.x - maxExtent || pos.x > bounds.max.x + maxExtent ||
+                pos.z < bounds.min.z - maxExtent || pos.z > bounds.max.z + maxExtent)
                 continue;
 
             glm::mat4 modelMatrix = glm::translate(transform.getMatrix(), obstacle.offset);
@@ -792,6 +810,8 @@ namespace services
         auto& registry = scene::EntityRegistry::getRegistry();
 
         float tileWorldSize = lastBakeSettings.tileSize * lastBakeSettings.cellSize;
+        if (tileWorldSize <= 0.0f)
+            return result;
 
         auto view = registry.view<components::NavmeshModifierVolumeComponent, components::TransformComponent>();
         for (auto entity : view)

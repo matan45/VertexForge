@@ -6,7 +6,9 @@
 
 class dtNavMesh;
 class dtNavMeshQuery;
+class dtNavMeshParams;
 class dtCrowd;
+class dtQueryFilter;
 
 namespace core
 {
@@ -91,6 +93,6 @@ namespace core
         void initCrowd(float agentRadius);
         bool initializeNavmesh(unsigned char* navData, int navDataSize, float agentRadius);
         void updateProgress(types::NavmeshBakeStatus status, float progress, const char* stage);
-        void configureQueryFilter(void* filter) const;
+        void configureQueryFilter(dtQueryFilter* filter) const;
     };
 }

@@ -499,9 +499,8 @@ namespace core
         return ref != 0;
     }
 
-    void NavmeshAdapter::configureQueryFilter(void* filterPtr) const
+    void NavmeshAdapter::configureQueryFilter(dtQueryFilter* filter) const
     {
-        auto* filter = static_cast<dtQueryFilter*>(filterPtr);
         filter->setIncludeFlags(0xFFFF);
         filter->setExcludeFlags(0);
         for (int i = 0; i < 64; ++i)

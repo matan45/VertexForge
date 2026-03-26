@@ -86,6 +86,8 @@ namespace navigation
 
     constexpr uint32_t NAVMESH_FILE_MAGIC = 0x564E4D53; // "VNMS"
     constexpr uint32_t NAVMESH_FILE_VERSION = 1;
+    // Version 3: added off-mesh link + obstacle fields to NavmeshBakeSettings
+    // Version 4: added areaCosts[64] to NavmeshBakeSettings
     constexpr uint32_t NAVMESH_TILE_FILE_VERSION = 4;
 
     struct NavmeshFileHeader

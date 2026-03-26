@@ -56,7 +56,7 @@ namespace windows::details
                            c.hasUIButton && c.hasUITextInput && c.hasUICheckbox && c.hasUIDropdown &&
                            c.hasUITabs && c.hasUISlider && c.hasUIProgressBar && c.hasUIAnimation && c.hasUIMask &&
                            c.hasUIDraggable && c.hasUIDropTarget &&
-                           c.hasNavmeshAgent && c.hasNavmeshModifierVolume && c.hasRenderTexture && c.hasController &&
+                           c.hasNavmeshAgent && c.hasOffMeshLink && c.hasNavmeshObstacle && c.hasNavmeshModifierVolume && c.hasRenderTexture && c.hasController &&
                            c.hasIK && c.hasBehaviorTree && c.hasDecal && c.hasReverbZone &&
                            c.hasFogVolume;
             if (allAdded)

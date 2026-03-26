@@ -580,10 +580,14 @@ namespace services
         auto& registry = scene::EntityRegistry::getRegistry();
         auto view = registry.view<components::OffMeshLinkComponent, components::TransformComponent>();
 
+        // Track live entity IDs
+        std::unordered_set<uint64_t> liveIds;
+
         for (auto entity : view)
         {
             const auto& transform = view.get<components::TransformComponent>(entity);
             uint64_t id = static_cast<uint64_t>(entity);
+            liveIds.insert(id);
 
             auto it = lastOffMeshLinkPositions.find(id);
             if (it == lastOffMeshLinkPositions.end())
@@ -592,7 +596,6 @@ namespace services
             }
             else if (it->second != transform.position)
             {
-                // Entity moved - mark old and new tiles dirty
                 const auto& link = view.get<components::OffMeshLinkComponent>(entity);
                 glm::vec3 oldStart = it->second + link.startOffset;
                 glm::vec3 newStart = transform.position + link.startOffset;
@@ -606,6 +609,15 @@ namespace services
 
                 it->second = transform.position;
             }
+        }
+
+        // Remove stale entries for destroyed entities
+        for (auto it = lastOffMeshLinkPositions.begin(); it != lastOffMeshLinkPositions.end(); )
+        {
+            if (liveIds.find(it->first) == liveIds.end())
+                it = lastOffMeshLinkPositions.erase(it);
+            else
+                ++it;
         }
     }
 
@@ -621,11 +633,14 @@ namespace services
 
         float tileWorldSize = lastBakeSettings.tileSize * lastBakeSettings.cellSize;
 
+        std::unordered_set<uint64_t> liveIds;
+
         for (auto entity : view)
         {
             auto& obstacle = view.get<components::NavmeshObstacleComponent>(entity);
             const auto& transform = view.get<components::TransformComponent>(entity);
             uint64_t id = static_cast<uint64_t>(entity);
+            liveIds.insert(id);
 
             glm::vec3 worldPos = transform.position + obstacle.offset;
 
@@ -657,7 +672,6 @@ namespace services
 
             if (obstacle.mode == components::NavmeshObstacleMode::Carve)
             {
-                // Mark all tiles covered by obstacle AABB as dirty (old + new positions)
                 glm::vec3 half = (obstacle.shape == components::NavmeshObstacleShape::Box)
                     ? obstacle.size * 0.5f
                     : glm::vec3(obstacle.size.x, obstacle.size.y * 0.5f, obstacle.size.x);
@@ -671,12 +685,11 @@ namespace services
                             tileManager.markTileDirty(tx, tz);
                 };
 
-                dirtyRange(obstacle.lastBakedPosition); // Old position
-                dirtyRange(worldPos);                     // New position
+                dirtyRange(obstacle.lastBakedPosition);
+                dirtyRange(worldPos);
             }
             else if (obstacle.mode == components::NavmeshObstacleMode::AvoidanceOnly)
             {
-                // Reposition phantom agent (remove + re-add)
                 if (obstacle.phantomAgentIndex >= 0)
                     navmeshProvider->removeCrowdAgent(obstacle.phantomAgentIndex);
 
@@ -689,6 +702,28 @@ namespace services
 
             obstacle.lastBakedPosition = worldPos;
             it->second = worldPos;
+        }
+
+        // Clean up stale entries and phantom agents for destroyed entities
+        for (auto it = lastObstaclePositions.begin(); it != lastObstaclePositions.end(); )
+        {
+            if (liveIds.find(it->first) == liveIds.end())
+            {
+                // Check if this was a phantom agent that needs cleanup
+                auto enttEntity = static_cast<entt::entity>(it->first);
+                if (registry.valid(enttEntity) && registry.all_of<components::NavmeshObstacleComponent>(enttEntity))
+                {
+                    auto& obs = registry.get<components::NavmeshObstacleComponent>(enttEntity);
+                    if (obs.phantomAgentIndex >= 0)
+                    {
+                        navmeshProvider->removeCrowdAgent(obs.phantomAgentIndex);
+                        obs.phantomAgentIndex = -1;
+                    }
+                }
+                it = lastObstaclePositions.erase(it);
+            }
+            else
+                ++it;
         }
     }
 
@@ -740,12 +775,12 @@ namespace services
             }
             else
             {
-                // Approximate cylinder with sphere for debug
-                events::debugdraw::DrawSphereCommand sphereCmd;
-                sphereCmd.center = worldPos;
-                sphereCmd.radius = obstacle.size.x;
-                sphereCmd.color = color;
-                dispatcher.execute(sphereCmd);
+                // Approximate cylinder with a box matching its bounding extents
+                events::debugdraw::DrawBoxCommand boxCmd;
+                boxCmd.center = worldPos;
+                boxCmd.halfExtents = glm::vec3(obstacle.size.x, obstacle.size.y * 0.5f, obstacle.size.x);
+                boxCmd.color = color;
+                dispatcher.execute(boxCmd);
             }
         }
     }
@@ -760,11 +795,14 @@ namespace services
         auto& registry = scene::EntityRegistry::getRegistry();
         auto view = registry.view<components::NavmeshModifierVolumeComponent, components::TransformComponent>();
 
+        std::unordered_set<uint64_t> liveIds;
+
         for (auto entity : view)
         {
             const auto& volume = view.get<components::NavmeshModifierVolumeComponent>(entity);
             const auto& transform = view.get<components::TransformComponent>(entity);
             uint64_t id = static_cast<uint64_t>(entity);
+            liveIds.insert(id);
 
             glm::vec3 worldPos = transform.position + volume.offset;
 
@@ -775,7 +813,6 @@ namespace services
             }
             else if (it->second != worldPos)
             {
-                // Mark all tiles covered by volume AABB as dirty (old + new positions)
                 glm::vec3 half = (volume.shape == components::NavmeshModifierVolumeShape::Box)
                     ? volume.size * 0.5f
                     : glm::vec3(volume.size.x, volume.size.y * 0.5f, volume.size.x);
@@ -789,11 +826,20 @@ namespace services
                             tileManager.markTileDirty(tx, tz);
                 };
 
-                dirtyRange(it->second); // Old position
-                dirtyRange(worldPos);    // New position
+                dirtyRange(it->second);
+                dirtyRange(worldPos);
 
                 it->second = worldPos;
             }
+        }
+
+        // Remove stale entries for destroyed entities
+        for (auto it = lastModifierVolumePositions.begin(); it != lastModifierVolumePositions.end(); )
+        {
+            if (liveIds.find(it->first) == liveIds.end())
+                it = lastModifierVolumePositions.erase(it);
+            else
+                ++it;
         }
     }
 
