@@ -267,6 +267,28 @@ namespace events::scene {
     };
 
     // ============================================
+    // Nav Invoker Component Events
+    // ============================================
+
+    struct AddNavInvokerComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "AddNavInvokerComponent"; }
+    };
+
+    struct RemoveNavInvokerComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "RemoveNavInvokerComponent"; }
+    };
+
+    struct HasNavInvokerComponentQuery : IQuery<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "HasNavInvokerComponent"; }
+    };
+
+    // ============================================
     // Controller Component Events
     // ============================================
 

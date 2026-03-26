@@ -119,4 +119,14 @@ namespace components
         glm::vec3 offset{0.0f};              // Local-space offset
         uint8_t areaType = 5;                // Default: Road
     };
+
+    struct NavInvokerComponent
+    {
+        float generationRadius = 256.0f;
+        float unloadRadiusMultiplier = 1.25f;
+        bool saveGeneratedToCache = true;
+
+        // Runtime (not serialized)
+        bool isActive = false;
+    };
 }

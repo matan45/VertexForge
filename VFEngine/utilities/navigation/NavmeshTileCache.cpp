@@ -15,6 +15,15 @@ namespace navigation
         return directory + "/tile_" + std::to_string(coord.x) + "_" + std::to_string(coord.z) + ".vfNavTile";
     }
 
+    std::string NavmeshTileCache::getTilePath(const NavmeshTileLodKey& key) const
+    {
+        if (key.lod == 0)
+            return directory + "/tile_" + std::to_string(key.x) + "_" + std::to_string(key.z) + ".vfNavTile";
+
+        return directory + "/tile_" + std::to_string(key.x) + "_" + std::to_string(key.z)
+               + "_lod" + std::to_string(key.lod) + ".vfNavTile";
+    }
+
     std::string NavmeshTileCache::getIndexPath() const
     {
         return directory + "/index.vfNavIndex";
@@ -44,6 +53,35 @@ namespace navigation
         return file.good();
     }
 
+    bool NavmeshTileCache::saveTile(const NavmeshTileLodKey& key, const NavmeshTileData& data)
+    {
+        std::filesystem::create_directories(directory);
+
+        std::string path = getTilePath(key);
+        std::ofstream file(path, std::ios::binary);
+        if (!file.is_open())
+        {
+            vfLogError("NavmeshTileCache: Failed to write LOD tile ({}, {}, lod{})", key.x, key.z, key.lod);
+            return false;
+        }
+
+        file.write(reinterpret_cast<const char*>(&data.x), sizeof(data.x));
+        file.write(reinterpret_cast<const char*>(&data.y), sizeof(data.y));
+        file.write(reinterpret_cast<const char*>(&data.lod), sizeof(data.lod));
+        file.write(reinterpret_cast<const char*>(&data.dataSize), sizeof(data.dataSize));
+        if (data.dataSize > 0)
+        {
+            file.write(reinterpret_cast<const char*>(data.data.data()), data.dataSize);
+        }
+
+        knownTileLods.insert(key);
+        // Also track in knownTiles for LOD 0 backward compat
+        if (key.lod == 0)
+            knownTiles.insert({key.x, key.z});
+
+        return file.good();
+    }
+
     bool NavmeshTileCache::loadTile(const NavmeshTileCoord& coord, NavmeshTileData& outData)
     {
         std::string path = getTilePath(coord);
@@ -65,12 +103,42 @@ namespace navigation
         return file.good();
     }
 
+    bool NavmeshTileCache::loadTile(const NavmeshTileLodKey& key, NavmeshTileData& outData)
+    {
+        std::string path = getTilePath(key);
+        std::ifstream file(path, std::ios::binary);
+        if (!file.is_open())
+        {
+            return false;
+        }
+
+        file.read(reinterpret_cast<char*>(&outData.x), sizeof(outData.x));
+        file.read(reinterpret_cast<char*>(&outData.y), sizeof(outData.y));
+        file.read(reinterpret_cast<char*>(&outData.lod), sizeof(outData.lod));
+        file.read(reinterpret_cast<char*>(&outData.dataSize), sizeof(outData.dataSize));
+        if (outData.dataSize > 0)
+        {
+            outData.data.resize(outData.dataSize);
+            file.read(reinterpret_cast<char*>(outData.data.data()), outData.dataSize);
+        }
+
+        return file.good();
+    }
+
     bool NavmeshTileCache::hasTile(const NavmeshTileCoord& coord) const
     {
         if (knownTiles.count(coord))
             return true;
 
         return std::filesystem::exists(getTilePath(coord));
+    }
+
+    bool NavmeshTileCache::hasTile(const NavmeshTileLodKey& key) const
+    {
+        if (knownTileLods.count(key))
+            return true;
+
+        return std::filesystem::exists(getTilePath(key));
     }
 
     bool NavmeshTileCache::removeTile(const NavmeshTileCoord& coord)

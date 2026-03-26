@@ -28,7 +28,8 @@ namespace services
                                                               const navigation::NavmeshInputGeometry& geometry,
                                                               const types::NavmeshBakeSettings& settings,
                                                               const navigation::NavmeshOffMeshConnections& offMeshLinks = {},
-                                                              const std::vector<navigation::NavmeshAreaModifier>& areaModifiers = {}) = 0;
+                                                              const std::vector<navigation::NavmeshAreaModifier>& areaModifiers = {},
+                                                              uint8_t lod = 0) = 0;
         virtual bool addNavmeshTile(const navigation::NavmeshTileData& tileData) = 0;
         virtual bool removeNavmeshTile(int tx, int tz) = 0;
 
@@ -57,6 +58,10 @@ namespace services
 
         virtual void configureCrowdFilter(int filterIndex, const float* areaCosts, int numAreas) = 0;
         virtual void setCrowdAgentFilterType(int agentIndex, uint8_t filterType) = 0;
+
+        // Tile graph updates (hierarchical pathfinding)
+        virtual void onTileAdded(int tx, int tz) = 0;
+        virtual void onTileRemoved(int tx, int tz) = 0;
 
         virtual void getDebugMesh(std::vector<glm::vec3>& outVertices,
                                    std::vector<uint32_t>& outIndices) const = 0;

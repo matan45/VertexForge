@@ -128,6 +128,8 @@ namespace windows
             drawFilterSection();
             ImGui::Spacing();
             drawAreaCosts();
+            ImGui::Spacing();
+            drawLodSettings();
 
             ImGui::Unindent();
         }
@@ -230,6 +232,44 @@ namespace windows
             ImGui::DragFloat("##AutoDropMin", &settings.autoDropMinHeight, 0.1f, 0.1f, settings.autoDropMaxHeight, "Min Height: %.1f");
             ImGui::PopItemWidth();
         }
+
+        ImGui::Spacing();
+        ImGui::Text("Pathfinding");
+        ImGui::Separator();
+        ImGui::PushItemWidth(-1);
+        ImGui::DragFloat("##HierarchicalThreshold", &settings.hierarchicalPathThreshold, 1.0f, 0.0f, 10000.0f, "Hierarchical Threshold: %.0f");
+        ImGui::PopItemWidth();
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Paths longer than this distance use tile-level hierarchical A* for better performance");
+    }
+
+    void NavmeshWindow::drawLodSettings()
+    {
+        ImGui::Text("LOD");
+        ImGui::Separator();
+
+        ImGui::PushItemWidth(-1);
+
+        int lodCount = static_cast<int>(settings.lodConfig.lodCount);
+        ImGui::Text("LOD Count");
+        if (ImGui::SliderInt("##LodCount", &lodCount, 1, 3))
+        {
+            settings.lodConfig.lodCount = static_cast<uint8_t>(lodCount);
+        }
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("1 = no LOD, 2-3 = multi-resolution navmesh tiles");
+
+        if (settings.lodConfig.lodCount > 1)
+        {
+            for (int i = 0; i < settings.lodConfig.lodCount; ++i)
+            {
+                char label[64];
+                snprintf(label, sizeof(label), "LOD %d Distance##LodDist%d", i, i);
+                ImGui::DragFloat(label, &settings.lodConfig.lodDistances[i], 1.0f, 0.0f, 4096.0f, "%.0f");
+            }
+        }
+
+        ImGui::PopItemWidth();
     }
 
     void NavmeshWindow::drawActions()

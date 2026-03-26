@@ -58,6 +58,7 @@ namespace core
 
     void NavmeshAdapter::destroyNavMeshLocked()
     {
+        tileGraph.clear();
         if (crowd)
         {
             dtFreeCrowd(crowd);
@@ -238,6 +239,11 @@ namespace core
             }
 
             initCrowd(header.settings.agentRadius);
+
+            // Build tile graph for hierarchical pathfinding
+            float tileWorldSize = header.settings.tileSize * header.settings.cellSize;
+            if (tileWorldSize > 0.0f)
+                tileGraph.rebuild(navMesh, tileWorldSize);
         }
 
         updateProgress(types::NavmeshBakeStatus::Complete, 1.0f, "Complete");
@@ -337,6 +343,12 @@ namespace core
             dtFree(data);
             return false;
         }
+
+        // Update tile graph for hierarchical pathfinding
+        float tileWorldSize = storedSettings.tileSize * storedSettings.cellSize;
+        if (tileWorldSize > 0.0f)
+            tileGraph.addOrUpdateTile(navMesh, tileData.x, tileData.y, tileWorldSize);
+
         return true;
     }
 
@@ -351,6 +363,8 @@ namespace core
             return false;
 
         dtStatus status = navMesh->removeTile(ref, nullptr, nullptr);
+        if (dtStatusSucceed(status))
+            tileGraph.removeTile(tx, tz);
         return dtStatusSucceed(status);
     }
 
@@ -365,12 +379,22 @@ namespace core
         if (!navMesh || !navQuery)
             return result;
 
-        float startPos[3] = {start.x, start.y, start.z};
-        float endPos[3] = {end.x, end.y, end.z};
-        float halfExtents[3] = {agentRadius * CROWD_MAX_AGENT_RADIUS_MULT, agentHeight, agentRadius * CROWD_MAX_AGENT_RADIUS_MULT};
+        // Check if hierarchical pathfinding should be used
+        float dx = end.x - start.x;
+        float dz = end.z - start.z;
+        float distXZ = std::sqrt(dx * dx + dz * dz);
 
         dtQueryFilter filter;
         configureQueryFilter(&filter);
+
+        if (distXZ > storedSettings.hierarchicalPathThreshold && tileGraph.nodeCount() > 1)
+        {
+            return findPathHierarchical(start, end, agentRadius, agentHeight, filter);
+        }
+
+        float startPos[3] = {start.x, start.y, start.z};
+        float endPos[3] = {end.x, end.y, end.z};
+        float halfExtents[3] = {agentRadius * CROWD_MAX_AGENT_RADIUS_MULT, agentHeight, agentRadius * CROWD_MAX_AGENT_RADIUS_MULT};
 
         dtPolyRef startRef = 0, endRef = 0;
         float nearestStart[3] = {0.0f, 0.0f, 0.0f};
@@ -528,6 +552,146 @@ namespace core
         dtCrowdAgentParams params = ag->params;
         params.queryFilterType = filterType;
         crowd->updateAgentParameters(agentIndex, &params);
+    }
+
+    // === Hierarchical Pathfinding ===
+
+    navigation::NavmeshTileCoord NavmeshAdapter::worldToTileCoord(const glm::vec3& pos) const
+    {
+        float tileWorldSize = storedSettings.tileSize * storedSettings.cellSize;
+        if (tileWorldSize <= 0.0f)
+            return {0, 0};
+        return {
+            static_cast<int32_t>(std::floor(pos.x / tileWorldSize)),
+            static_cast<int32_t>(std::floor(pos.z / tileWorldSize))
+        };
+    }
+
+    void NavmeshAdapter::onTileAdded(int tx, int tz)
+    {
+        std::lock_guard lock(navMeshMutex);
+        if (!navMesh) return;
+        float tileWorldSize = storedSettings.tileSize * storedSettings.cellSize;
+        tileGraph.addOrUpdateTile(navMesh, tx, tz, tileWorldSize);
+    }
+
+    void NavmeshAdapter::onTileRemoved(int tx, int tz)
+    {
+        std::lock_guard lock(navMeshMutex);
+        tileGraph.removeTile(tx, tz);
+    }
+
+    navigation::NavPath NavmeshAdapter::findPathHierarchical(
+        const glm::vec3& start, const glm::vec3& end,
+        float agentRadius, float agentHeight,
+        const dtQueryFilter& filter)
+    {
+        navigation::NavPath result;
+
+        auto startTile = worldToTileCoord(start);
+        auto endTile = worldToTileCoord(end);
+
+        if (startTile == endTile)
+        {
+            // Same tile - use direct A*
+            float startPos[3] = {start.x, start.y, start.z};
+            float endPos[3] = {end.x, end.y, end.z};
+            float he[3] = {agentRadius * CROWD_MAX_AGENT_RADIUS_MULT, agentHeight, agentRadius * CROWD_MAX_AGENT_RADIUS_MULT};
+
+            dtPolyRef startRef = 0, endRef = 0;
+            float ns[3], ne[3];
+            navQuery->findNearestPoly(startPos, he, &filter, &startRef, ns);
+            navQuery->findNearestPoly(endPos, he, &filter, &endRef, ne);
+            if (!startRef || !endRef) return result;
+
+            std::vector<dtPolyRef> polys(MAX_POLYS);
+            int nPolys = 0;
+            navQuery->findPath(startRef, endRef, ns, ne, &filter, polys.data(), &nPolys, MAX_POLYS);
+            if (nPolys <= 0) return result;
+
+            std::vector<float> sp(MAX_POLYS * 3);
+            std::vector<unsigned char> spf(MAX_POLYS);
+            std::vector<dtPolyRef> spp(MAX_POLYS);
+            int nSP = 0;
+            navQuery->findStraightPath(ns, ne, polys.data(), nPolys, sp.data(), spf.data(), spp.data(), &nSP, MAX_POLYS, 0);
+
+            result.isValid = nSP > 0;
+            for (int i = 0; i < nSP; ++i)
+                result.waypoints.emplace_back(sp[i*3], sp[i*3+1], sp[i*3+2]);
+            return result;
+        }
+
+        // Tile-level A*
+        auto tilePath = tileGraph.findTilePath(startTile, endTile);
+        if (tilePath.empty())
+            return result;
+
+        // Compute tile boundary midpoints between consecutive tiles in the corridor
+        float tws = storedSettings.tileSize * storedSettings.cellSize;
+        auto tileBoundaryMidpoint = [tws](const navigation::NavmeshTileCoord& a,
+                                           const navigation::NavmeshTileCoord& b) -> glm::vec3
+        {
+            // Midpoint of the shared edge between adjacent tiles
+            float ax = (a.x + 0.5f) * tws, az = (a.z + 0.5f) * tws;
+            float bx = (b.x + 0.5f) * tws, bz = (b.z + 0.5f) * tws;
+            return glm::vec3((ax + bx) * 0.5f, 0.0f, (az + bz) * 0.5f);
+        };
+
+        // Build waypoints by stitching local A* segments
+        float halfExtents[3] = {agentRadius * CROWD_MAX_AGENT_RADIUS_MULT, agentHeight, agentRadius * CROWD_MAX_AGENT_RADIUS_MULT};
+
+        // Scratch buffers (stack-allocated, safe for concurrent use)
+        std::vector<dtPolyRef> polys(MAX_POLYS);
+        std::vector<float> straightPath(MAX_POLYS * 3);
+        std::vector<unsigned char> straightFlags(MAX_POLYS);
+        std::vector<dtPolyRef> straightPolys(MAX_POLYS);
+
+        glm::vec3 segStart = start;
+
+        for (size_t t = 0; t + 1 < tilePath.size(); ++t)
+        {
+            bool lastSegment = (t + 2 >= tilePath.size());
+            glm::vec3 segEnd = lastSegment ? end : tileBoundaryMidpoint(tilePath[t], tilePath[t + 1]);
+
+            float sp[3] = {segStart.x, segStart.y, segStart.z};
+            float ep[3] = {segEnd.x, segEnd.y, segEnd.z};
+
+            dtPolyRef sRef = 0, eRef = 0;
+            float ns[3], ne[3];
+            navQuery->findNearestPoly(sp, halfExtents, &filter, &sRef, ns);
+            navQuery->findNearestPoly(ep, halfExtents, &filter, &eRef, ne);
+
+            if (!sRef || !eRef)
+            {
+                segStart = segEnd;
+                continue;
+            }
+
+            int nPolys = 0;
+            navQuery->findPath(sRef, eRef, ns, ne, &filter, polys.data(), &nPolys, MAX_POLYS);
+
+            if (nPolys > 0)
+            {
+                int nStraight = 0;
+                navQuery->findStraightPath(ns, ne, polys.data(), nPolys,
+                    straightPath.data(), straightFlags.data(), straightPolys.data(),
+                    &nStraight, MAX_POLYS, 0);
+
+                int startIdx = (!result.waypoints.empty() && nStraight > 0) ? 1 : 0;
+                for (int i = startIdx; i < nStraight; ++i)
+                {
+                    result.waypoints.emplace_back(
+                        straightPath[i * 3],
+                        straightPath[i * 3 + 1],
+                        straightPath[i * 3 + 2]);
+                }
+            }
+
+            segStart = segEnd;
+        }
+
+        result.isValid = !result.waypoints.empty();
+        return result;
     }
 
 }

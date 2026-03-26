@@ -44,8 +44,13 @@ namespace services
 
         void markTileDirty(int tileX, int tileZ);
         void processDirtyTiles();
+        void processOnDemandGeneration();
         void pollTileBakeCompletions();
         StreamingResult updateStreaming();
+
+        void setInvokerSources(std::vector<StreamingSource> sources);
+        void setSaveOnDemandToCache(bool save) { saveOnDemandToCache = save; }
+        void ensureTiledNavmeshInitialized();
 
         navigation::NavmeshTileCoord worldToTileCoord(const glm::vec3& worldPos) const;
 
@@ -73,11 +78,16 @@ namespace services
         std::unique_ptr<navigation::NavmeshTileCache> tileCache;
         glm::vec3 lastCameraPos{0.0f};
 
+        std::vector<StreamingSource> invokerSources;
         std::unordered_set<navigation::NavmeshTileCoord, navigation::NavmeshTileCoordHash> dirtyTiles;
+        std::unordered_set<navigation::NavmeshTileCoord, navigation::NavmeshTileCoordHash> pendingGenerationTiles;
+        bool tiledNavmeshInitialized = false;
+        bool saveOnDemandToCache = true;
 
         struct PendingTileBake
         {
             navigation::NavmeshTileCoord coord;
+            bool saveToCache = true;
             std::future<navigation::NavmeshTileData> future;
         };
         std::vector<PendingTileBake> pendingTileBakes;

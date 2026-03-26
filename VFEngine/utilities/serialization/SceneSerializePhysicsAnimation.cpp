@@ -433,6 +433,31 @@ namespace serialization
     }
 
     // ============================================
+    // Nav Invoker Component
+    // ============================================
+
+    json SceneSerialization::serializeNavInvoker(const components::NavInvokerComponent& invoker)
+    {
+        json j;
+        j["generationRadius"] = invoker.generationRadius;
+        j["unloadRadiusMultiplier"] = invoker.unloadRadiusMultiplier;
+        j["saveGeneratedToCache"] = invoker.saveGeneratedToCache;
+        return j;
+    }
+
+    void SceneSerialization::deserializeNavInvoker(const json& j, components::NavInvokerComponent& invoker)
+    {
+        if (auto it = j.find("generationRadius"); it != j.end() && it->is_number())
+            invoker.generationRadius = it->get<float>();
+        if (auto it = j.find("unloadRadiusMultiplier"); it != j.end() && it->is_number())
+            invoker.unloadRadiusMultiplier = it->get<float>();
+        if (auto it = j.find("saveGeneratedToCache"); it != j.end() && it->is_boolean())
+            invoker.saveGeneratedToCache = it->get<bool>();
+        // Reset runtime state
+        invoker.isActive = false;
+    }
+
+    // ============================================
     // Controller Component
     // ============================================
 

@@ -1,12 +1,12 @@
 #pragma once
 
 #include "../../services/providers/navmesh/INavmeshProvider.hpp"
+#include "TileGraph.hpp"
 #include <memory>
 #include <mutex>
 
 class dtNavMesh;
 class dtNavMeshQuery;
-class dtNavMeshParams;
 class dtCrowd;
 class dtQueryFilter;
 
@@ -24,6 +24,7 @@ namespace core
         mutable std::mutex progressMutex;
         types::NavmeshBakeProgress currentProgress;
         types::NavmeshBakeSettings storedSettings;
+        TileGraph tileGraph;
     public:
         explicit NavmeshAdapter();
         ~NavmeshAdapter() override;
@@ -49,7 +50,8 @@ namespace core
                                                       const navigation::NavmeshInputGeometry& geometry,
                                                       const types::NavmeshBakeSettings& settings,
                                                       const navigation::NavmeshOffMeshConnections& offMeshLinks = {},
-                                                      const std::vector<navigation::NavmeshAreaModifier>& areaModifiers = {}) override;
+                                                      const std::vector<navigation::NavmeshAreaModifier>& areaModifiers = {},
+                                                      uint8_t lod = 0) override;
         bool addNavmeshTile(const navigation::NavmeshTileData& tileData) override;
         bool removeNavmeshTile(int tx, int tz) override;
 
@@ -83,6 +85,10 @@ namespace core
         void configureCrowdFilter(int filterIndex, const float* areaCosts, int numAreas) override;
         void setCrowdAgentFilterType(int agentIndex, uint8_t filterType) override;
 
+        // === Tile Graph (Hierarchical Pathfinding) ===
+        void onTileAdded(int tx, int tz) override;
+        void onTileRemoved(int tx, int tz) override;
+
         // === Debug ===
         void getDebugMesh(std::vector<glm::vec3>& outVertices,
                            std::vector<uint32_t>& outIndices) const override;
@@ -94,5 +100,9 @@ namespace core
         bool initializeNavmesh(unsigned char* navData, int navDataSize, float agentRadius);
         void updateProgress(types::NavmeshBakeStatus status, float progress, const char* stage);
         void configureQueryFilter(dtQueryFilter* filter) const;
+        navigation::NavPath findPathHierarchical(const glm::vec3& start, const glm::vec3& end,
+                                                  float agentRadius, float agentHeight,
+                                                  const dtQueryFilter& filter);
+        navigation::NavmeshTileCoord worldToTileCoord(const glm::vec3& pos) const;
     };
 }
