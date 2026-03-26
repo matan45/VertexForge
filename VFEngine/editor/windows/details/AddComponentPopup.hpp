@@ -36,6 +36,7 @@ namespace windows::details {
         bool hasSocketAttachment = false;
         bool hasNavmeshAgent = false;
         bool hasOffMeshLink = false;
+        bool hasNavmeshObstacle = false;
         bool hasRenderTexture = false;
         bool hasController = false;
         bool hasIK = false;

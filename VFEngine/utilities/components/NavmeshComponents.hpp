@@ -74,4 +74,30 @@ namespace components
         // Runtime (not serialized)
         uint32_t userID = 0;
     };
+
+    enum class NavmeshObstacleMode : uint8_t
+    {
+        Carve = 0,
+        AvoidanceOnly = 1
+    };
+
+    enum class NavmeshObstacleShape : uint8_t
+    {
+        Box = 0,
+        Cylinder = 1
+    };
+
+    struct NavmeshObstacleComponent
+    {
+        NavmeshObstacleMode mode = NavmeshObstacleMode::Carve;
+        NavmeshObstacleShape shape = NavmeshObstacleShape::Box;
+        glm::vec3 size{1.0f, 2.0f, 1.0f};   // Box: full extents; Cylinder: x=radius, y=height
+        glm::vec3 offset{0.0f};              // Local-space offset
+        float movementThreshold = 0.5f;       // Min movement to trigger re-dirty
+
+        // Runtime (not serialized)
+        bool isRegistered = false;
+        glm::vec3 lastBakedPosition{0.0f};
+        int phantomAgentIndex = -1;           // For AvoidanceOnly mode
+    };
 }

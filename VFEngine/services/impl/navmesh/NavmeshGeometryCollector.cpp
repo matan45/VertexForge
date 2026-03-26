@@ -25,6 +25,8 @@ namespace services
         {
             collectColliderGeometry(outGeometry);
         }
+
+        collectObstacleGeometry(outGeometry);
     }
 
     void NavmeshServiceImpl::collectTerrainGeometry(navigation::NavmeshInputGeometry& outGeometry)
@@ -273,6 +275,8 @@ namespace services
         {
             collectColliderGeometryForBounds(expanded, outGeometry);
         }
+
+        collectObstacleGeometryForBounds(expanded, outGeometry);
     }
 
     void NavmeshServiceImpl::collectTerrainGeometryForBounds(const navigation::NavmeshTileBounds& bounds,
@@ -653,5 +657,130 @@ namespace services
 
         if (generated > 0)
             vfLogInfo("NavmeshService: Auto-generated {} drop links", generated);
+    }
+
+    // === Obstacle Geometry Collection ===
+
+    static void generateBoxGeometry(const glm::mat4& modelMatrix, const glm::vec3& halfSize,
+                                     navigation::NavmeshInputGeometry& outGeometry)
+    {
+        int base = outGeometry.getVertexCount();
+        glm::vec3 corners[8] = {
+            {-halfSize.x, -halfSize.y, -halfSize.z}, { halfSize.x, -halfSize.y, -halfSize.z},
+            { halfSize.x,  halfSize.y, -halfSize.z}, {-halfSize.x,  halfSize.y, -halfSize.z},
+            {-halfSize.x, -halfSize.y,  halfSize.z}, { halfSize.x, -halfSize.y,  halfSize.z},
+            { halfSize.x,  halfSize.y,  halfSize.z}, {-halfSize.x,  halfSize.y,  halfSize.z}
+        };
+        for (const auto& corner : corners)
+            outGeometry.addVertex(glm::vec3(modelMatrix * glm::vec4(corner, 1.0f)));
+
+        int boxIndices[] = {
+            0,1,2, 0,2,3, 5,4,7, 5,7,6,
+            4,0,3, 4,3,7, 1,5,6, 1,6,2,
+            3,2,6, 3,6,7, 4,5,1, 4,1,0
+        };
+        for (int i = 0; i < 36; i += 3)
+            outGeometry.addTriangle(base + boxIndices[i], base + boxIndices[i+1], base + boxIndices[i+2]);
+    }
+
+    static void generateCylinderGeometry(const glm::mat4& modelMatrix, float radius, float height,
+                                          navigation::NavmeshInputGeometry& outGeometry)
+    {
+        constexpr int SEGMENTS = 16;
+        float halfH = height * 0.5f;
+        int baseVertex = outGeometry.getVertexCount();
+
+        // Generate ring vertices (bottom then top)
+        for (int ring = 0; ring < 2; ++ring)
+        {
+            float y = (ring == 0) ? -halfH : halfH;
+            for (int i = 0; i < SEGMENTS; ++i)
+            {
+                float angle = (2.0f * 3.14159265f * i) / SEGMENTS;
+                glm::vec3 local(radius * cosf(angle), y, radius * sinf(angle));
+                outGeometry.addVertex(glm::vec3(modelMatrix * glm::vec4(local, 1.0f)));
+            }
+        }
+
+        // Center vertices for caps
+        int bottomCenter = outGeometry.getVertexCount();
+        outGeometry.addVertex(glm::vec3(modelMatrix * glm::vec4(0.0f, -halfH, 0.0f, 1.0f)));
+        int topCenter = outGeometry.getVertexCount();
+        outGeometry.addVertex(glm::vec3(modelMatrix * glm::vec4(0.0f, halfH, 0.0f, 1.0f)));
+
+        for (int i = 0; i < SEGMENTS; ++i)
+        {
+            int next = (i + 1) % SEGMENTS;
+
+            // Side quads (2 triangles each)
+            int b0 = baseVertex + i;
+            int b1 = baseVertex + next;
+            int t0 = baseVertex + SEGMENTS + i;
+            int t1 = baseVertex + SEGMENTS + next;
+            outGeometry.addTriangle(b0, b1, t1);
+            outGeometry.addTriangle(b0, t1, t0);
+
+            // Bottom cap
+            outGeometry.addTriangle(bottomCenter, baseVertex + next, baseVertex + i);
+            // Top cap
+            outGeometry.addTriangle(topCenter, baseVertex + SEGMENTS + i, baseVertex + SEGMENTS + next);
+        }
+    }
+
+    void NavmeshServiceImpl::collectObstacleGeometry(navigation::NavmeshInputGeometry& outGeometry)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto view = registry.view<components::NavmeshObstacleComponent, components::TransformComponent>();
+
+        for (auto entity : view)
+        {
+            const auto& obstacle = view.get<components::NavmeshObstacleComponent>(entity);
+            if (obstacle.mode != components::NavmeshObstacleMode::Carve)
+                continue;
+
+            const auto& transform = view.get<components::TransformComponent>(entity);
+            glm::mat4 modelMatrix = glm::translate(transform.getMatrix(), obstacle.offset);
+
+            if (obstacle.shape == components::NavmeshObstacleShape::Box)
+            {
+                generateBoxGeometry(modelMatrix, obstacle.size * 0.5f, outGeometry);
+            }
+            else
+            {
+                generateCylinderGeometry(modelMatrix, obstacle.size.x, obstacle.size.y, outGeometry);
+            }
+        }
+    }
+
+    void NavmeshServiceImpl::collectObstacleGeometryForBounds(const navigation::NavmeshTileBounds& bounds,
+                                                                navigation::NavmeshInputGeometry& outGeometry)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto view = registry.view<components::NavmeshObstacleComponent, components::TransformComponent>();
+
+        for (auto entity : view)
+        {
+            const auto& obstacle = view.get<components::NavmeshObstacleComponent>(entity);
+            if (obstacle.mode != components::NavmeshObstacleMode::Carve)
+                continue;
+
+            const auto& transform = view.get<components::TransformComponent>(entity);
+            glm::vec3 pos = transform.position + obstacle.offset;
+
+            if (pos.x < bounds.min.x - 50.0f || pos.x > bounds.max.x + 50.0f ||
+                pos.z < bounds.min.z - 50.0f || pos.z > bounds.max.z + 50.0f)
+                continue;
+
+            glm::mat4 modelMatrix = glm::translate(transform.getMatrix(), obstacle.offset);
+
+            if (obstacle.shape == components::NavmeshObstacleShape::Box)
+            {
+                generateBoxGeometry(modelMatrix, obstacle.size * 0.5f, outGeometry);
+            }
+            else
+            {
+                generateCylinderGeometry(modelMatrix, obstacle.size.x, obstacle.size.y, outGeometry);
+            }
+        }
     }
 }

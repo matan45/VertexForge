@@ -223,6 +223,28 @@ namespace events::scene {
     };
 
     // ============================================
+    // Navmesh Obstacle Component Events
+    // ============================================
+
+    struct AddNavmeshObstacleComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "AddNavmeshObstacleComponent"; }
+    };
+
+    struct RemoveNavmeshObstacleComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "RemoveNavmeshObstacleComponent"; }
+    };
+
+    struct HasNavmeshObstacleComponentQuery : IQuery<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "HasNavmeshObstacleComponent"; }
+    };
+
+    // ============================================
     // Controller Component Events
     // ============================================
 

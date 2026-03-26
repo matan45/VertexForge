@@ -279,6 +279,18 @@ namespace windows::details
                 ImGui::SetTooltip("Off-mesh connection for jumps, climbs, and drops between navmesh regions");
         }
 
+        if (!c.hasNavmeshObstacle)
+        {
+            if (ImGui::Selectable("  Navmesh Obstacle"))
+            {
+                events::scene::AddNavmeshObstacleComponentCommand cmd;
+                cmd.entity = handle;
+                dispatcher.execute(cmd);
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Dynamic obstacle that carves holes in navmesh or triggers agent avoidance");
+        }
+
         if (!c.hasController)
         {
             if (ImGui::Selectable("  Controller"))

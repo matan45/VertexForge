@@ -134,6 +134,8 @@ namespace serialization
             out["navmesh"] = serializeNavmesh(entity.getComponent<components::NavmeshComponent>());
         if (entity.hasComponent<components::OffMeshLinkComponent>())
             out["offMeshLink"] = serializeOffMeshLink(entity.getComponent<components::OffMeshLinkComponent>());
+        if (entity.hasComponent<components::NavmeshObstacleComponent>())
+            out["navmeshObstacle"] = serializeNavmeshObstacle(entity.getComponent<components::NavmeshObstacleComponent>());
         if (entity.hasComponent<components::RenderTextureComponent>())
             out["renderTexture"] = serializeRenderTexture(entity.getComponent<components::RenderTextureComponent>());
         if (entity.hasComponent<components::ControllerComponent>())

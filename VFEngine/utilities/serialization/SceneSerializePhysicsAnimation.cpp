@@ -293,6 +293,71 @@ namespace serialization
     }
 
     // ============================================
+    // Navmesh Obstacle Component
+    // ============================================
+
+    std::string SceneSerialization::obstacleModeToString(components::NavmeshObstacleMode mode)
+    {
+        switch (mode)
+        {
+            case components::NavmeshObstacleMode::Carve:         return "carve";
+            case components::NavmeshObstacleMode::AvoidanceOnly: return "avoidanceOnly";
+            default: return "carve";
+        }
+    }
+
+    components::NavmeshObstacleMode SceneSerialization::stringToObstacleMode(const std::string& str)
+    {
+        if (str == "avoidanceOnly") return components::NavmeshObstacleMode::AvoidanceOnly;
+        return components::NavmeshObstacleMode::Carve;
+    }
+
+    std::string SceneSerialization::obstacleShapeToString(components::NavmeshObstacleShape shape)
+    {
+        switch (shape)
+        {
+            case components::NavmeshObstacleShape::Box:      return "box";
+            case components::NavmeshObstacleShape::Cylinder:  return "cylinder";
+            default: return "box";
+        }
+    }
+
+    components::NavmeshObstacleShape SceneSerialization::stringToObstacleShape(const std::string& str)
+    {
+        if (str == "cylinder") return components::NavmeshObstacleShape::Cylinder;
+        return components::NavmeshObstacleShape::Box;
+    }
+
+    json SceneSerialization::serializeNavmeshObstacle(const components::NavmeshObstacleComponent& obstacle)
+    {
+        json j;
+        j["mode"] = obstacleModeToString(obstacle.mode);
+        j["shape"] = obstacleShapeToString(obstacle.shape);
+        j["size"] = {obstacle.size.x, obstacle.size.y, obstacle.size.z};
+        j["offset"] = {obstacle.offset.x, obstacle.offset.y, obstacle.offset.z};
+        j["movementThreshold"] = obstacle.movementThreshold;
+        return j;
+    }
+
+    void SceneSerialization::deserializeNavmeshObstacle(const json& j, components::NavmeshObstacleComponent& obstacle)
+    {
+        if (auto it = j.find("mode"); it != j.end() && it->is_string())
+            obstacle.mode = stringToObstacleMode(it->get<std::string>());
+        if (auto it = j.find("shape"); it != j.end() && it->is_string())
+            obstacle.shape = stringToObstacleShape(it->get<std::string>());
+        if (auto it = j.find("size"); it != j.end() && it->is_array() && it->size() >= 3)
+            obstacle.size = {(*it)[0].get<float>(), (*it)[1].get<float>(), (*it)[2].get<float>()};
+        if (auto it = j.find("offset"); it != j.end() && it->is_array() && it->size() >= 3)
+            obstacle.offset = {(*it)[0].get<float>(), (*it)[1].get<float>(), (*it)[2].get<float>()};
+        if (auto it = j.find("movementThreshold"); it != j.end() && it->is_number())
+            obstacle.movementThreshold = it->get<float>();
+        // Reset runtime state
+        obstacle.isRegistered = false;
+        obstacle.lastBakedPosition = glm::vec3{0.0f};
+        obstacle.phantomAgentIndex = -1;
+    }
+
+    // ============================================
     // Controller Component
     // ============================================
 

@@ -482,6 +482,25 @@ namespace services
                 return hasOffMeshLinkComponent(query.entity);
             });
 
+        // Navmesh Obstacle component handlers
+        dispatcher.registerCommandHandler<events::scene::AddNavmeshObstacleComponentCommand>(
+            [this](const events::scene::AddNavmeshObstacleComponentCommand& cmd)
+            {
+                return addNavmeshObstacleComponent(cmd.entity);
+            });
+
+        dispatcher.registerCommandHandler<events::scene::RemoveNavmeshObstacleComponentCommand>(
+            [this](const events::scene::RemoveNavmeshObstacleComponentCommand& cmd)
+            {
+                return removeNavmeshObstacleComponent(cmd.entity);
+            });
+
+        dispatcher.registerQueryHandler<events::scene::HasNavmeshObstacleComponentQuery>(
+            [this](const events::scene::HasNavmeshObstacleComponentQuery& query)
+            {
+                return hasNavmeshObstacleComponent(query.entity);
+            });
+
         // Controller component handlers
         dispatcher.registerCommandHandler<events::scene::AddControllerComponentCommand>(
             [this](const events::scene::AddControllerComponentCommand& cmd)
@@ -542,6 +561,48 @@ namespace services
 
         scene::Entity sceneEntity(internal::fromHandle(entity));
         return sceneEntity.hasComponent<components::OffMeshLinkComponent>();
+    }
+
+    // ========== NAVMESH OBSTACLE COMPONENT OPERATIONS ==========
+
+    bool PhysicsComponentService::addNavmeshObstacleComponent(EntityHandle entity)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry))
+            return false;
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (!sceneEntity.hasComponent<components::NavmeshObstacleComponent>())
+        {
+            sceneEntity.addComponent<components::NavmeshObstacleComponent>();
+            return true;
+        }
+        return false;
+    }
+
+    bool PhysicsComponentService::removeNavmeshObstacleComponent(EntityHandle entity)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry))
+            return false;
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (sceneEntity.hasComponent<components::NavmeshObstacleComponent>())
+        {
+            sceneEntity.removeComponent<components::NavmeshObstacleComponent>();
+            return true;
+        }
+        return false;
+    }
+
+    bool PhysicsComponentService::hasNavmeshObstacleComponent(EntityHandle entity) const
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry))
+            return false;
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        return sceneEntity.hasComponent<components::NavmeshObstacleComponent>();
     }
 
     // ========== CONTROLLER COMPONENT OPERATIONS ==========

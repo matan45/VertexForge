@@ -387,9 +387,11 @@ namespace services
 
     void NavmeshServiceImpl::clearNavmesh()
     {
+        cleanupPhantomAgents();
         navmeshProvider->clearNavmesh();
         agentManager.clear();
         tileManager.clear();
+        lastObstaclePositions.clear();
 
         auto& registry = scene::EntityRegistry::getRegistry();
         auto view = registry.view<components::NavmeshComponent>();
@@ -466,6 +468,8 @@ namespace services
         agentManager.updatePositions(deltaTime);
         drawOffMeshLinkDebug();
         trackOffMeshLinkTransforms();
+        trackObstacleTransforms();
+        drawObstacleDebug();
     }
 
 
@@ -591,6 +595,147 @@ namespace services
                     tileManager.markTileDirty(newCoord.x, newCoord.z);
 
                 it->second = transform.position;
+            }
+        }
+    }
+
+    // === Dynamic Obstacle Support ===
+
+    void NavmeshServiceImpl::trackObstacleTransforms()
+    {
+        if (!navmeshProvider->hasNavmesh())
+            return;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto view = registry.view<components::NavmeshObstacleComponent, components::TransformComponent>();
+
+        float tileWorldSize = lastBakeSettings.tileSize * lastBakeSettings.cellSize;
+
+        for (auto entity : view)
+        {
+            auto& obstacle = view.get<components::NavmeshObstacleComponent>(entity);
+            const auto& transform = view.get<components::TransformComponent>(entity);
+            uint64_t id = static_cast<uint64_t>(entity);
+
+            glm::vec3 worldPos = transform.position + obstacle.offset;
+
+            // Register avoidance-only phantom agents on first sight
+            if (obstacle.mode == components::NavmeshObstacleMode::AvoidanceOnly && !obstacle.isRegistered)
+            {
+                float obstacleRadius = (obstacle.shape == components::NavmeshObstacleShape::Box)
+                    ? glm::max(obstacle.size.x, obstacle.size.z) * 0.5f
+                    : obstacle.size.x;
+                int idx = navmeshProvider->addCrowdAgent(worldPos, obstacleRadius, obstacle.size.y, 0.0f, 0.0f);
+                obstacle.phantomAgentIndex = idx;
+                obstacle.isRegistered = true;
+                obstacle.lastBakedPosition = worldPos;
+                lastObstaclePositions[id] = worldPos;
+                continue;
+            }
+
+            auto it = lastObstaclePositions.find(id);
+            if (it == lastObstaclePositions.end())
+            {
+                lastObstaclePositions[id] = worldPos;
+                obstacle.lastBakedPosition = worldPos;
+                continue;
+            }
+
+            float dist = glm::distance(worldPos, obstacle.lastBakedPosition);
+            if (dist < obstacle.movementThreshold)
+                continue;
+
+            if (obstacle.mode == components::NavmeshObstacleMode::Carve)
+            {
+                // Mark all tiles covered by obstacle AABB as dirty (old + new positions)
+                glm::vec3 half = (obstacle.shape == components::NavmeshObstacleShape::Box)
+                    ? obstacle.size * 0.5f
+                    : glm::vec3(obstacle.size.x, obstacle.size.y * 0.5f, obstacle.size.x);
+
+                auto dirtyRange = [&](const glm::vec3& pos)
+                {
+                    auto coordMin = tileManager.worldToTileCoord(pos - half);
+                    auto coordMax = tileManager.worldToTileCoord(pos + half);
+                    for (int tx = coordMin.x; tx <= coordMax.x; ++tx)
+                        for (int tz = coordMin.z; tz <= coordMax.z; ++tz)
+                            tileManager.markTileDirty(tx, tz);
+                };
+
+                dirtyRange(obstacle.lastBakedPosition); // Old position
+                dirtyRange(worldPos);                     // New position
+            }
+            else if (obstacle.mode == components::NavmeshObstacleMode::AvoidanceOnly)
+            {
+                // Reposition phantom agent (remove + re-add)
+                if (obstacle.phantomAgentIndex >= 0)
+                    navmeshProvider->removeCrowdAgent(obstacle.phantomAgentIndex);
+
+                float obstacleRadius = (obstacle.shape == components::NavmeshObstacleShape::Box)
+                    ? glm::max(obstacle.size.x, obstacle.size.z) * 0.5f
+                    : obstacle.size.x;
+                int idx = navmeshProvider->addCrowdAgent(worldPos, obstacleRadius, obstacle.size.y, 0.0f, 0.0f);
+                obstacle.phantomAgentIndex = idx;
+            }
+
+            obstacle.lastBakedPosition = worldPos;
+            it->second = worldPos;
+        }
+    }
+
+    void NavmeshServiceImpl::cleanupPhantomAgents()
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto view = registry.view<components::NavmeshObstacleComponent>();
+
+        for (auto entity : view)
+        {
+            auto& obstacle = view.get<components::NavmeshObstacleComponent>(entity);
+            if (obstacle.phantomAgentIndex >= 0)
+            {
+                navmeshProvider->removeCrowdAgent(obstacle.phantomAgentIndex);
+                obstacle.phantomAgentIndex = -1;
+            }
+            obstacle.isRegistered = false;
+        }
+    }
+
+    void NavmeshServiceImpl::drawObstacleDebug()
+    {
+        auto& dispatcher = ::events::EventDispatcher::instance();
+        bool showNavmesh = dispatcher.query(events::render::GetShowNavmeshDebugQuery{});
+        if (!showNavmesh)
+            return;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto view = registry.view<components::NavmeshObstacleComponent, components::TransformComponent>();
+
+        for (auto entity : view)
+        {
+            const auto& obstacle = view.get<components::NavmeshObstacleComponent>(entity);
+            const auto& transform = view.get<components::TransformComponent>(entity);
+
+            glm::vec3 worldPos = transform.position + obstacle.offset;
+
+            glm::vec4 color = (obstacle.mode == components::NavmeshObstacleMode::Carve)
+                ? glm::vec4{1.0f, 0.2f, 0.2f, 0.8f}   // Red for carving
+                : glm::vec4{1.0f, 1.0f, 0.0f, 0.8f};  // Yellow for avoidance-only
+
+            if (obstacle.shape == components::NavmeshObstacleShape::Box)
+            {
+                events::debugdraw::DrawBoxCommand boxCmd;
+                boxCmd.center = worldPos;
+                boxCmd.halfExtents = obstacle.size * 0.5f;
+                boxCmd.color = color;
+                dispatcher.execute(boxCmd);
+            }
+            else
+            {
+                // Approximate cylinder with sphere for debug
+                events::debugdraw::DrawSphereCommand sphereCmd;
+                sphereCmd.center = worldPos;
+                sphereCmd.radius = obstacle.size.x;
+                sphereCmd.color = color;
+                dispatcher.execute(sphereCmd);
             }
         }
     }

@@ -43,6 +43,7 @@
 #include "../details/SocketAttachmentDrawer.hpp"
 #include "../details/NavmeshAgentDrawer.hpp"
 #include "../details/OffMeshLinkDrawer.hpp"
+#include "../details/NavmeshObstacleDrawer.hpp"
 #include "../details/ControllerDrawer.hpp"
 #include "../details/RenderTextureDrawer.hpp"
 #include "../details/IKDrawer.hpp"
@@ -103,6 +104,7 @@ namespace windows
         details::SocketAttachmentDrawer socketAttachmentDrawer;
         details::NavmeshAgentDrawer navmeshAgentDrawer;
         details::OffMeshLinkDrawer offMeshLinkDrawer;
+        details::NavmeshObstacleDrawer navmeshObstacleDrawer;
         details::ControllerDrawer controllerDrawer;
         details::RenderTextureDrawer renderTextureDrawer;
         details::IKDrawer ikDrawer;
