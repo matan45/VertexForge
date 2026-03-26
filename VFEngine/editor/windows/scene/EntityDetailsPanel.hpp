@@ -46,6 +46,8 @@
 #include "../details/NavmeshObstacleDrawer.hpp"
 #include "../details/NavmeshModifierVolumeDrawer.hpp"
 #include "../details/NavInvokerDrawer.hpp"
+#include "../details/VolumetricVolumeDrawer.hpp"
+#include "../details/VolumetricAgentDrawer.hpp"
 #include "../details/ControllerDrawer.hpp"
 #include "../details/RenderTextureDrawer.hpp"
 #include "../details/IKDrawer.hpp"
@@ -109,6 +111,8 @@ namespace windows
         details::NavmeshObstacleDrawer navmeshObstacleDrawer;
         details::NavmeshModifierVolumeDrawer navmeshModifierVolumeDrawer;
         details::NavInvokerDrawer navInvokerDrawer;
+        details::VolumetricVolumeDrawer volumetricVolumeDrawer;
+        details::VolumetricAgentDrawer volumetricAgentDrawer;
         details::ControllerDrawer controllerDrawer;
         details::RenderTextureDrawer renderTextureDrawer;
         details::IKDrawer ikDrawer;

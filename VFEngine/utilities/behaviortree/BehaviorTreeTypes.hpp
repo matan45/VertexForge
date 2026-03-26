@@ -31,7 +31,8 @@ namespace behaviortree
         PlayAnimation,
         SetBlackboardValue,
         CheckBlackboardValue,
-        ScriptTask
+        ScriptTask,
+        EnvironmentQuery
     };
 
     enum class BTNodeStatus : uint8_t

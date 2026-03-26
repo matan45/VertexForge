@@ -642,4 +642,63 @@ namespace serialization
     {
         navmesh.navmeshRef = readAssetRef(j, "navmeshRef", "navmeshPath");
     }
+
+    // ============================================
+    // Volumetric Nav Volume Component
+    // ============================================
+
+    json SceneSerialization::serializeVolumetricNavVolume(const components::VolumetricNavVolumeComponent& volume)
+    {
+        json j;
+        j["boundsMin"] = {volume.boundsMin.x, volume.boundsMin.y, volume.boundsMin.z};
+        j["boundsMax"] = {volume.boundsMax.x, volume.boundsMax.y, volume.boundsMax.z};
+        j["voxelSize"] = volume.voxelSize;
+        j["connectivity"] = volume.connectivity;
+        j["agentClearance"] = volume.agentClearance;
+        return j;
+    }
+
+    void SceneSerialization::deserializeVolumetricNavVolume(const json& j, components::VolumetricNavVolumeComponent& volume)
+    {
+        if (auto it = j.find("boundsMin"); it != j.end() && it->is_array() && it->size() >= 3)
+            volume.boundsMin = {(*it)[0].get<float>(), (*it)[1].get<float>(), (*it)[2].get<float>()};
+        if (auto it = j.find("boundsMax"); it != j.end() && it->is_array() && it->size() >= 3)
+            volume.boundsMax = {(*it)[0].get<float>(), (*it)[1].get<float>(), (*it)[2].get<float>()};
+        if (auto it = j.find("voxelSize"); it != j.end() && it->is_number())
+            volume.voxelSize = it->get<float>();
+        if (auto it = j.find("connectivity"); it != j.end() && it->is_number_unsigned())
+            volume.connectivity = it->get<uint8_t>();
+        if (auto it = j.find("agentClearance"); it != j.end() && it->is_number())
+            volume.agentClearance = it->get<float>();
+        // Reset runtime state
+        volume.isBaked = false;
+    }
+
+    // ============================================
+    // Volumetric Agent Component
+    // ============================================
+
+    json SceneSerialization::serializeVolumetricAgent(const components::VolumetricAgentComponent& agent)
+    {
+        json j;
+        j["radius"] = agent.radius;
+        j["maxSpeed"] = agent.maxSpeed;
+        j["maxAcceleration"] = agent.maxAcceleration;
+        j["stoppingDistance"] = agent.stoppingDistance;
+        return j;
+    }
+
+    void SceneSerialization::deserializeVolumetricAgent(const json& j, components::VolumetricAgentComponent& agent)
+    {
+        if (auto it = j.find("radius"); it != j.end() && it->is_number())
+            agent.radius = it->get<float>();
+        if (auto it = j.find("maxSpeed"); it != j.end() && it->is_number())
+            agent.maxSpeed = it->get<float>();
+        if (auto it = j.find("maxAcceleration"); it != j.end() && it->is_number())
+            agent.maxAcceleration = it->get<float>();
+        if (auto it = j.find("stoppingDistance"); it != j.end() && it->is_number())
+            agent.stoppingDistance = it->get<float>();
+        // Reset runtime state
+        agent.isActive = false;
+    }
 }

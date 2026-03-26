@@ -418,6 +418,14 @@ namespace behaviortree
             return executor->executeScriptTask(ownerEntity, node.scriptPath, node.scriptClassName, blackboard, dt);
         }
 
+        case BTNodeType::EnvironmentQuery:
+        {
+            if (!executor) return BTNodeStatus::Failure;
+            std::string queryName = getNodeProperty<std::string>(node, "queryName", std::string{});
+            std::string resultKey = getNodeProperty<std::string>(node, "resultKey", std::string("eqsResult"));
+            return executor->executeEnvironmentQuery(ownerEntity, queryName, resultKey, blackboard, state.isFirstTick);
+        }
+
         default:
             return BTNodeStatus::Failure;
         }

@@ -58,7 +58,8 @@ namespace windows::details
                            c.hasUIDraggable && c.hasUIDropTarget &&
                            c.hasNavmeshAgent && c.hasOffMeshLink && c.hasNavmeshObstacle && c.hasNavmeshModifierVolume && c.hasNavInvoker && c.hasRenderTexture && c.hasController &&
                            c.hasIK && c.hasBehaviorTree && c.hasDecal && c.hasReverbZone &&
-                           c.hasFogVolume;
+                           c.hasFogVolume &&
+                           c.hasVolumetricNavVolume && c.hasVolumetricAgent;
             if (allAdded)
             {
                 ImGui::Spacing();
@@ -313,6 +314,30 @@ namespace windows::details
             }
             if (ImGui::IsItemHovered())
                 ImGui::SetTooltip("Streaming source that generates navmesh tiles around this entity");
+        }
+
+        if (!c.hasVolumetricNavVolume)
+        {
+            if (ImGui::Selectable("  Volumetric Nav Volume"))
+            {
+                events::scene::AddVolumetricNavVolumeComponentCommand cmd;
+                cmd.entity = handle;
+                dispatcher.execute(cmd);
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("3D volumetric navigation volume for flying/swimming pathfinding");
+        }
+
+        if (!c.hasVolumetricAgent)
+        {
+            if (ImGui::Selectable("  Volumetric Agent"))
+            {
+                events::scene::AddVolumetricAgentComponentCommand cmd;
+                cmd.entity = handle;
+                dispatcher.execute(cmd);
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("3D volumetric navigation agent for flying/swimming movement");
         }
 
         if (!c.hasController)
