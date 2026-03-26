@@ -48,16 +48,20 @@ namespace render::gpudriven
         if (!initialized || !water.renderingEnabled || !water.pipeline)
             return;
 
-        // Generate single large ocean plane centered on camera
+        // Generate single large ocean plane centered on camera,
+        // snapped to patch-size grid so FFT textures don't shift with camera movement
         float planeSize = oceanPatchSize * 10.0f;
         float halfSize = planeSize * 0.5f;
+
+        float snappedX = std::floor(cameraPosition.x / oceanPatchSize) * oceanPatchSize;
+        float snappedZ = std::floor(cameraPosition.z / oceanPatchSize) * oceanPatchSize;
 
         water.tileData.resize(1);
         auto& gpuData = water.tileData[0];
         gpuData.worldOriginAndSize = glm::vec4(
-            cameraPosition.x - halfSize,
+            snappedX - halfSize,
             0.0f,
-            cameraPosition.z - halfSize,
+            snappedZ - halfSize,
             planeSize
         );
         gpuData.heightAndWave = glm::vec4(baseWaterHeight, 1.0f, 0.0f, 0.0f);
