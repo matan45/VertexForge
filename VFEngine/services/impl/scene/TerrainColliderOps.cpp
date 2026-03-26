@@ -161,11 +161,7 @@ namespace services
         auto cacheIt = fileCaches.find(terrainEntity.id);
         auto fileCache = (cacheIt != fileCaches.end()) ? cacheIt->second : nullptr;
 
-        std::vector<TerrainTileColliderInfo> tileInfos;
-        tileInfos.reserve(allTiles.size());
-
-        // Temp storage for hole-adjusted height arrays (must outlive addTerrainCollider call)
-        std::vector<std::vector<float>> holeAdjustedHeights;
+        uint32_t submittedCount = 0;
 
         for (auto* tile : allTiles)
         {
@@ -181,14 +177,16 @@ namespace services
             if (!tile->hasHeightData())
                 continue;
 
-            holeAdjustedHeights.emplace_back();
-            tileInfos.push_back(buildTileColliderInfo(*tile, terrainEntity, holeAdjustedHeights.back()));
+            std::vector<float> physicsHeights;
+            auto info = buildTileColliderInfo(*tile, terrainEntity, physicsHeights);
+
+            // Initial creation uses distance 0 (full LOD) since no camera position available
+            physicsProvider->submitAsyncTerrainTileCollider(terrainEntity, info, 0.0f);
+            ++submittedCount;
         }
 
-        if (tileInfos.empty())
+        if (submittedCount == 0)
             return false;
-
-        physicsProvider->addTerrainCollider(terrainEntity, tileInfos);
 
         appendCaveColliders(terrainEntity, allTiles);
 
@@ -205,7 +203,7 @@ namespace services
 
         generateDebugWireframes(terrainEntity, grid);
 
-        vfLogInfo("TerrainService: Added terrain collider with {} tiles", tileInfos.size());
+        vfLogInfo("TerrainService: Submitted {} terrain tile colliders async", submittedCount);
         return true;
     }
 

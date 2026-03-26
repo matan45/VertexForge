@@ -551,7 +551,37 @@ namespace core
                                                     int32_t tileX, int32_t tileZ)
     {
         if (!physicsWorld) return;
+        physicsWorld->getTerrainManager().cancelPendingCollider(tileX, tileZ);
         physicsWorld->removeTerrainTileBody(entity.id, tileX, tileZ);
+    }
+
+    void PhysicsAdapter::submitAsyncTerrainTileCollider(services::EntityHandle entity,
+                                                          const services::TerrainTileColliderInfo& tile,
+                                                          float distanceToCamera)
+    {
+        if (!physicsWorld) return;
+
+        physics::OwnedTerrainColliderData data;
+        data.entityId = entity.id;
+        data.tileX = tile.tileX;
+        data.tileZ = tile.tileZ;
+        data.heightSamples.assign(tile.heightSamples,
+                                   tile.heightSamples + static_cast<size_t>(tile.sampleCount) * tile.sampleCount);
+        data.sampleCount = tile.sampleCount;
+        data.worldOrigin = tile.worldOrigin;
+        data.vertexSpacing = tile.vertexSpacing;
+        data.friction = tile.friction;
+        data.restitution = tile.restitution;
+        data.collisionLayer = tile.collisionLayer;
+        data.physicsLOD = physicsWorld->getTerrainManager().selectPhysicsLOD(distanceToCamera);
+
+        physicsWorld->getTerrainManager().submitAsyncCollider(std::move(data));
+    }
+
+    void PhysicsAdapter::updatePhysicsColliderStreaming(const glm::vec3& cameraPosition)
+    {
+        if (!physicsWorld) return;
+        physicsWorld->getTerrainManager().updateColliderStreaming(cameraPosition);
     }
 
     void PhysicsAdapter::addCaveTileCollider(services::EntityHandle entity,

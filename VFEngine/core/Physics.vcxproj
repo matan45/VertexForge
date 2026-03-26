@@ -97,6 +97,7 @@
     <ClInclude Include="physics\PhysicsCharacterManager.hpp" />
     <ClInclude Include="physics\PhysicsContactListener.hpp" />
     <ClInclude Include="physics\PhysicsContext.hpp" />
+    <ClInclude Include="physics\PhysicsHeightFieldDecimator.hpp" />
     <ClInclude Include="physics\PhysicsLayers.hpp" />
     <ClInclude Include="physics\PhysicsMeshLoader.hpp" />
     <ClInclude Include="physics\PhysicsRagdollManager.hpp" />

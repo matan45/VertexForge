@@ -119,6 +119,9 @@ namespace core::physics
         uint64_t getEntityForBody(JPH::BodyID bodyId) const;
 
         // Terrain
+        PhysicsTerrainManager& getTerrainManager() { return terrainManager; }
+        const PhysicsTerrainManager& getTerrainManager() const { return terrainManager; }
+
         JPH::BodyID addTerrainTileBody(uint64_t entityId, int32_t tileX, int32_t tileZ,
                                         const TerrainHeightFieldCreateInfo& info);
         void removeTerrainTileBody(uint64_t entityId, int32_t tileX, int32_t tileZ);
