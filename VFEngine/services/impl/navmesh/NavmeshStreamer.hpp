@@ -4,7 +4,9 @@
 #include "navigation/NavmeshTileCache.hpp"
 #include "../../providers/navmesh/INavmeshProvider.hpp"
 #include "../../events/navmesh/NavmeshEvents.hpp"
+#include "types/NavmeshTypes.hpp"
 #include <glm/glm.hpp>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -28,12 +30,13 @@ namespace services
 
         ::events::navmesh::NavmeshStreamingConfig config;
         types::NavmeshBakeSettings bakeSettings;
+        types::NavmeshLodConfig lodConfig;
         bool enabled = false;
 
         navigation::NavmeshTileCache* tileCache = nullptr;
         INavmeshProvider* navmeshProvider = nullptr;
 
-        std::unordered_set<navigation::NavmeshTileCoord, navigation::NavmeshTileCoordHash> loadedTiles;
+        std::unordered_map<navigation::NavmeshTileCoord, uint8_t, navigation::NavmeshTileCoordHash> loadedTileLods;
         std::unordered_set<navigation::NavmeshTileCoord, navigation::NavmeshTileCoordHash> generatedTiles;
         std::vector<Candidate> loadCandidates;
         std::vector<Candidate> unloadCandidates;
@@ -49,6 +52,7 @@ namespace services
         void setTileCache(navigation::NavmeshTileCache* cache) { tileCache = cache; }
         void setProvider(INavmeshProvider* provider) { navmeshProvider = provider; }
         void setSettings(const types::NavmeshBakeSettings& s) { bakeSettings = s; }
+        void setLodConfig(const types::NavmeshLodConfig& cfg) { lodConfig = cfg; }
 
         // Single-position update (backward compat - uses global config radii)
         void update(const glm::vec3& cameraPos,
@@ -62,12 +66,15 @@ namespace services
                     std::vector<navigation::NavmeshTileCoord>& outNeedGeneration);
 
         [[nodiscard]] bool isTileLoaded(const navigation::NavmeshTileCoord& coord) const;
-        [[nodiscard]] const std::unordered_set<navigation::NavmeshTileCoord, navigation::NavmeshTileCoordHash>&
-            getLoadedTiles() const { return loadedTiles; }
+        [[nodiscard]] const std::unordered_map<navigation::NavmeshTileCoord, uint8_t, navigation::NavmeshTileCoordHash>&
+            getLoadedTileLods() const { return loadedTileLods; }
 
-        void markTileLoaded(const navigation::NavmeshTileCoord& coord) { loadedTiles.insert(coord); }
-        void markTileGenerated(const navigation::NavmeshTileCoord& coord) { generatedTiles.insert(coord); loadedTiles.insert(coord); }
+        void markTileLoaded(const navigation::NavmeshTileCoord& coord) { loadedTileLods[coord] = 0; }
+        void markTileGenerated(const navigation::NavmeshTileCoord& coord) { generatedTiles.insert(coord); loadedTileLods[coord] = 0; }
         void clear();
+
+        [[nodiscard]] uint8_t determineLod(float distSq) const;
+        [[nodiscard]] bool isLodTransitionValid(const navigation::NavmeshTileCoord& coord, uint8_t targetLod) const;
 
     private:
         [[nodiscard]] float tileDistanceSq(const navigation::NavmeshTileCoord& coord,

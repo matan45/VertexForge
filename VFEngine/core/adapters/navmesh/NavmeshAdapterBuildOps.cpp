@@ -351,15 +351,34 @@ namespace core
         return result;
     }
 
+    static types::NavmeshBakeSettings makeLodSettings(const types::NavmeshBakeSettings& base, uint8_t lod)
+    {
+        if (lod == 0)
+            return base;
+
+        types::NavmeshBakeSettings scaled = base;
+        float multiplier = base.lodConfig.cellSizeMultipliers[lod];
+        scaled.cellSize = base.cellSize * multiplier;
+        // Adjust tileSize inversely so world footprint remains the same
+        scaled.tileSize = static_cast<int>(base.tileSize / multiplier);
+        if (scaled.tileSize < 16)
+            scaled.tileSize = 16;
+        return scaled;
+    }
+
     navigation::NavmeshTileData NavmeshAdapter::buildSingleTile(int tx, int tz,
                                                                   const navigation::NavmeshInputGeometry& geometry,
                                                                   const types::NavmeshBakeSettings& settings,
                                                                   const navigation::NavmeshOffMeshConnections& offMeshLinks,
-                                                                  const std::vector<navigation::NavmeshAreaModifier>& areaModifiers)
+                                                                  const std::vector<navigation::NavmeshAreaModifier>& areaModifiers,
+                                                                  uint8_t lod)
     {
-        return buildTileData(tx, tz, geometry, settings,
+        const types::NavmeshBakeSettings effectiveSettings = (lod > 0) ? makeLodSettings(settings, lod) : settings;
+        auto result = buildTileData(tx, tz, geometry, effectiveSettings,
             offMeshLinks.empty() ? nullptr : &offMeshLinks,
             areaModifiers.empty() ? nullptr : &areaModifiers);
+        result.lod = lod;
+        return result;
     }
 
     bool NavmeshAdapter::buildNavmesh(const navigation::NavmeshInputGeometry& geometry,

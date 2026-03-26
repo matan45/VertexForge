@@ -153,9 +153,45 @@ namespace services
 
         tileCache->saveIndex(index);
 
+        // Build and save LOD 1/2 variants if multi-LOD is configured
+        if (bakeSettings.lodConfig.lodCount > 1 && collectTileGeometry)
+        {
+            for (const auto& coord : index.tileCoords)
+            {
+                auto bounds = navigation::computeTileBounds(coord, bakeSettings, -1000.0f, 1000.0f);
+
+                navigation::NavmeshInputGeometry geometry;
+                collectTileGeometry(bounds, bakeSettings, geometry);
+                if (geometry.isEmpty())
+                    continue;
+
+                navigation::NavmeshOffMeshConnections offMeshLinks;
+                if (collectOffMeshLinks)
+                    offMeshLinks = collectOffMeshLinks(bounds, bakeSettings);
+
+                std::vector<navigation::NavmeshAreaModifier> areaModifiers;
+                if (collectAreaModifiers)
+                    areaModifiers = collectAreaModifiers(bounds);
+
+                for (uint8_t lod = 1; lod < bakeSettings.lodConfig.lodCount; ++lod)
+                {
+                    auto lodTileData = navmeshProvider->buildSingleTile(
+                        coord.x, coord.z, geometry, bakeSettings, offMeshLinks, areaModifiers, lod);
+
+                    if (!lodTileData.data.empty())
+                    {
+                        navigation::NavmeshTileLodKey lodKey{coord.x, coord.z, lod};
+                        tileCache->saveTile(lodKey, lodTileData);
+                    }
+                }
+            }
+            vfLogInfo("NavmeshService: Built LOD variants for {} tiles", index.tileCoords.size());
+        }
+
         streamer.setTileCache(tileCache.get());
         streamer.setProvider(navmeshProvider);
         streamer.setSettings(bakeSettings);
+        streamer.setLodConfig(bakeSettings.lodConfig);
 
         vfLogInfo("NavmeshService: Saved {} tiles to {}", tiles.size(), directory);
         return true;
@@ -196,6 +232,7 @@ namespace services
         streamer.setTileCache(tileCache.get());
         streamer.setProvider(navmeshProvider);
         streamer.setSettings(index.settings);
+        streamer.setLodConfig(index.settings.lodConfig);
         streamer.setEnabled(true);
 
         for (const auto& coord : index.tileCoords)
@@ -234,6 +271,7 @@ namespace services
             tiledNavmeshInitialized = true;
             streamer.setProvider(navmeshProvider);
             streamer.setSettings(bakeSettings);
+            streamer.setLodConfig(bakeSettings.lodConfig);
             streamer.setEnabled(true);
         }
     }

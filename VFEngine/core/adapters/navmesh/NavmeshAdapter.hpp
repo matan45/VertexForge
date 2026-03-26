@@ -51,7 +51,8 @@ namespace core
                                                       const navigation::NavmeshInputGeometry& geometry,
                                                       const types::NavmeshBakeSettings& settings,
                                                       const navigation::NavmeshOffMeshConnections& offMeshLinks = {},
-                                                      const std::vector<navigation::NavmeshAreaModifier>& areaModifiers = {}) override;
+                                                      const std::vector<navigation::NavmeshAreaModifier>& areaModifiers = {},
+                                                      uint8_t lod = 0) override;
         bool addNavmeshTile(const navigation::NavmeshTileData& tileData) override;
         bool removeNavmeshTile(int tx, int tz) override;
 

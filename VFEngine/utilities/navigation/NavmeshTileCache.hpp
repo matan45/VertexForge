@@ -22,10 +22,16 @@ namespace navigation
     public:
         explicit NavmeshTileCache(const std::string& directory);
 
+        // Non-LOD methods (default to LOD 0)
         bool saveTile(const NavmeshTileCoord& coord, const NavmeshTileData& data);
         bool loadTile(const NavmeshTileCoord& coord, NavmeshTileData& outData);
         bool hasTile(const NavmeshTileCoord& coord) const;
         bool removeTile(const NavmeshTileCoord& coord);
+
+        // LOD-aware overloads
+        bool saveTile(const NavmeshTileLodKey& key, const NavmeshTileData& data);
+        bool loadTile(const NavmeshTileLodKey& key, NavmeshTileData& outData);
+        bool hasTile(const NavmeshTileLodKey& key) const;
 
         bool saveIndex(const NavmeshTileIndex& index);
         bool loadIndex(NavmeshTileIndex& outIndex);
@@ -37,8 +43,10 @@ namespace navigation
     private:
         std::string directory;
         std::unordered_set<NavmeshTileCoord, NavmeshTileCoordHash> knownTiles;
+        std::unordered_set<NavmeshTileLodKey, NavmeshTileLodKeyHash> knownTileLods;
 
         [[nodiscard]] std::string getTilePath(const NavmeshTileCoord& coord) const;
+        [[nodiscard]] std::string getTilePath(const NavmeshTileLodKey& key) const;
         [[nodiscard]] std::string getIndexPath() const;
     };
 }

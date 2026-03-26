@@ -28,7 +28,8 @@ namespace services
                                                               const navigation::NavmeshInputGeometry& geometry,
                                                               const types::NavmeshBakeSettings& settings,
                                                               const navigation::NavmeshOffMeshConnections& offMeshLinks = {},
-                                                              const std::vector<navigation::NavmeshAreaModifier>& areaModifiers = {}) = 0;
+                                                              const std::vector<navigation::NavmeshAreaModifier>& areaModifiers = {},
+                                                              uint8_t lod = 0) = 0;
         virtual bool addNavmeshTile(const navigation::NavmeshTileData& tileData) = 0;
         virtual bool removeNavmeshTile(int tx, int tz) = 0;
 

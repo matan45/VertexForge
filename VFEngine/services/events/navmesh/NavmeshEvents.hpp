@@ -185,6 +185,7 @@ namespace events::navmesh
         float unloadRadius = 640.0f;
         int maxLoadsPerFrame = 2;
         int maxUnloadsPerFrame = 2;
+        float lodDistances[3] = {256.0f, 512.0f, 1024.0f};
     };
 
     struct SetNavmeshStreamingConfigCommand : ICommand<>
@@ -248,5 +249,14 @@ namespace events::navmesh
         int tileX = 0;
         int tileZ = 0;
         std::string_view getName() const override { return "NavmeshTileUpdated"; }
+    };
+
+    struct NavmeshTileLodChangedNotification : INotification
+    {
+        int tileX = 0;
+        int tileZ = 0;
+        uint8_t oldLod = 0;
+        uint8_t newLod = 0;
+        std::string_view getName() const override { return "NavmeshTileLodChanged"; }
     };
 }

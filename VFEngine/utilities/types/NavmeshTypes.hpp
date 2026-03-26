@@ -29,6 +29,13 @@ namespace types
         return "User";
     }
 
+    struct NavmeshLodConfig
+    {
+        uint8_t lodCount = 1;  // 1=no LOD, up to 3
+        float cellSizeMultipliers[3] = {1.0f, 2.0f, 4.0f};
+        float lodDistances[3] = {256.0f, 512.0f, 1024.0f};
+    };
+
     struct NavmeshBakeSettings
     {
         // Rasterization
@@ -84,6 +91,9 @@ namespace types
 
         // Hierarchical pathfinding
         float hierarchicalPathThreshold = 96.0f;
+
+        // LOD
+        NavmeshLodConfig lodConfig;
 
         NavmeshBakeSettings()
         {

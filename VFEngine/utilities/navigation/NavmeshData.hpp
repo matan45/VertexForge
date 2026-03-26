@@ -88,7 +88,8 @@ namespace navigation
     constexpr uint32_t NAVMESH_FILE_VERSION = 1;
     // Version 3: added off-mesh link + obstacle fields to NavmeshBakeSettings
     // Version 4: added areaCosts[64] to NavmeshBakeSettings
-    constexpr uint32_t NAVMESH_TILE_FILE_VERSION = 4;
+    // Version 5: added LOD support (lod field in NavmeshTileData, NavmeshLodConfig in settings)
+    constexpr uint32_t NAVMESH_TILE_FILE_VERSION = 5;
 
     struct NavmeshFileHeader
     {
@@ -104,6 +105,7 @@ namespace navigation
     {
         int32_t x = 0;
         int32_t y = 0;
+        uint8_t lod = 0;
         uint32_t dataSize = 0;
         std::vector<uint8_t> data;
     };
@@ -184,5 +186,33 @@ namespace navigation
         NavmeshTileCoord coord;
         glm::vec3 center{0.0f};
         std::vector<TileGraphEdge> edges;
+    };
+
+    struct NavmeshTileLodKey
+    {
+        int32_t x = 0;
+        int32_t z = 0;
+        uint8_t lod = 0;
+
+        bool operator==(const NavmeshTileLodKey& other) const
+        {
+            return x == other.x && z == other.z && lod == other.lod;
+        }
+
+        bool operator!=(const NavmeshTileLodKey& other) const
+        {
+            return !(*this == other);
+        }
+    };
+
+    struct NavmeshTileLodKeyHash
+    {
+        size_t operator()(const NavmeshTileLodKey& k) const
+        {
+            size_t h1 = std::hash<int32_t>{}(k.x);
+            size_t h2 = std::hash<int32_t>{}(k.z);
+            size_t h3 = std::hash<uint8_t>{}(k.lod);
+            return h1 ^ (h2 * 2654435761u) ^ (h3 * 40503u);
+        }
     };
 }
