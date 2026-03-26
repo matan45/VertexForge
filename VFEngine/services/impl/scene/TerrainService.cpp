@@ -63,6 +63,8 @@ namespace services
         dispatcher.unregisterQueryHandler<events::terrain::GetTerrainHeightAtQuery>();
         dispatcher.unregisterQueryHandler<events::terrain::GetTerrainStreamingConfigQuery>();
         dispatcher.unregisterQueryHandler<events::terrain::IsTerrainStreamingEnabledQuery>();
+        dispatcher.unregisterCommandHandler<events::physics::SetPhysicsColliderStreamConfigCommand>();
+        dispatcher.unregisterQueryHandler<events::physics::GetPhysicsColliderStreamConfigQuery>();
         dispatcher.unregisterQueryHandler<events::physics::HasTerrainColliderQuery>();
 
         if (entityDeletedSubscription && entityDeletedSubscription->isValid())

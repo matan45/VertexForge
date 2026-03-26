@@ -467,6 +467,31 @@ namespace services
                 return hasTerrainCollider(query.terrainEntity);
             });
 
+        dispatcher.registerCommandHandler<events::physics::SetPhysicsColliderStreamConfigCommand>(
+            [this](const events::physics::SetPhysicsColliderStreamConfigCommand& cmd)
+            {
+                if (!physicsProvider) return;
+                physicsProvider->setPhysicsColliderStreamConfig(
+                    cmd.memoryBudgetMB, cmd.maxCreationsPerFrame,
+                    cmd.lodDistance0, cmd.lodDistance1, cmd.lodDistance2);
+            });
+
+        dispatcher.registerQueryHandler<events::physics::GetPhysicsColliderStreamConfigQuery>(
+            [this](const events::physics::GetPhysicsColliderStreamConfigQuery&)
+            {
+                events::physics::PhysicsColliderStreamConfigData data;
+                if (physicsProvider)
+                {
+                    auto cfg = physicsProvider->getPhysicsColliderStreamConfig();
+                    data.memoryBudgetMB = cfg.memoryBudgetMB;
+                    data.maxCreationsPerFrame = cfg.maxCreationsPerFrame;
+                    data.lodDistance0 = cfg.lodDistance0;
+                    data.lodDistance1 = cfg.lodDistance1;
+                    data.lodDistance2 = cfg.lodDistance2;
+                }
+                return data;
+            });
+
         dispatcher.registerCommandHandler<events::terrain::SetTerrainColliderPropertiesCommand>(
             [this](const events::terrain::SetTerrainColliderPropertiesCommand& cmd)
             {

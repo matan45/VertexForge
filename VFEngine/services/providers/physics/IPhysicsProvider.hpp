@@ -113,6 +113,24 @@ namespace services
         virtual void addTerrainTileCollider(EntityHandle entity, const TerrainTileColliderInfo& tile) = 0;
         virtual void removeTerrainTileCollider(EntityHandle entity, int32_t tileX, int32_t tileZ) = 0;
 
+        // Async collider streaming — build shape on background thread, add body on main thread
+        virtual void submitAsyncTerrainTileCollider(EntityHandle entity,
+                                                      const TerrainTileColliderInfo& tile,
+                                                      float distanceToCamera) = 0;
+        virtual void updatePhysicsColliderStreaming(const glm::vec3& cameraPosition) = 0;
+
+        struct PhysicsColliderStreamConfigDTO
+        {
+            float memoryBudgetMB = 64.0f;
+            int maxCreationsPerFrame = 4;
+            float lodDistance0 = 100.0f;
+            float lodDistance1 = 300.0f;
+            float lodDistance2 = 600.0f;
+        };
+        virtual void setPhysicsColliderStreamConfig(float memoryBudgetMB, int maxCreationsPerFrame,
+                                                      float lodDist0, float lodDist1, float lodDist2) = 0;
+        virtual PhysicsColliderStreamConfigDTO getPhysicsColliderStreamConfig() const = 0;
+
         virtual void addCaveTileCollider(EntityHandle entity, const CaveTileColliderInfo& cave) = 0;
         virtual void removeCaveTileCollider(EntityHandle entity, int32_t tileX, int32_t tileZ) = 0;
         virtual void rebuildCaveTileCollider(EntityHandle entity, const CaveTileColliderInfo& cave) = 0;

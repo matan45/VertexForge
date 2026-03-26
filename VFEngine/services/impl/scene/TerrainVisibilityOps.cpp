@@ -56,7 +56,7 @@ namespace services
 
             grid->regenerateDirtyTiles(cameraPosition);
 
-            // Create physics bodies for tiles that streamed in and now have height data
+            // Submit async physics colliders for tiles that streamed in and now have height data
             if (!pendingPhysicsTiles.empty() && physicsProvider)
             {
                 auto it = pendingPhysicsTiles.begin();
@@ -77,10 +77,21 @@ namespace services
 
                     std::vector<float> physicsHeights;
                     auto info = buildTileColliderInfo(*tile, EntityHandle{entityId}, physicsHeights);
-                    physicsProvider->addTerrainTileCollider(EntityHandle{entityId}, info);
+
+                    glm::vec3 tileCenter = tile->worldOrigin +
+                        glm::vec3(tile->config.getVertexSpacing() * (tile->config.getVertexCount() - 1) * 0.5f,
+                                   0.0f,
+                                   tile->config.getVertexSpacing() * (tile->config.getVertexCount() - 1) * 0.5f);
+                    float distance = glm::length(cameraPosition - tileCenter);
+
+                    physicsProvider->submitAsyncTerrainTileCollider(EntityHandle{entityId}, info, distance);
                     it = pendingPhysicsTiles.erase(it);
                 }
             }
+
+            // Pump async collider completions and LOD transitions
+            if (physicsProvider)
+                physicsProvider->updatePhysicsColliderStreaming(cameraPosition);
 
             auto visibleTiles = grid->getVisibleTiles(frustum);
 

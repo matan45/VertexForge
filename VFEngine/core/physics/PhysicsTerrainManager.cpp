@@ -1,4 +1,5 @@
 #include "PhysicsTerrainManager.hpp"
+#include "PhysicsHeightFieldDecimator.hpp"
 #include "PhysicsContext.hpp"
 #include "JoltConversions.hpp"
 #include <Jolt/Physics/Body/BodyCreationSettings.h>
@@ -7,6 +8,8 @@
 #include <Jolt/Physics/Collision/Shape/CapsuleShape.h>
 #include <Jolt/Physics/Collision/Shape/MeshShape.h>
 #include "print/Log.hpp"
+#include <algorithm>
+#include <chrono>
 
 namespace core::physics
 {
@@ -17,6 +20,18 @@ namespace core::physics
 
     void PhysicsTerrainManager::cleanUp()
     {
+        // Wait for all pending async shape builds to complete
+        for (auto& pending : pendingColliders)
+        {
+            if (pending.shapeFuture.valid())
+                pending.shapeFuture.wait();
+        }
+        pendingColliders.clear();
+        pendingColliderKeys.clear();
+        colliderStreamInfos.clear();
+        currentPhysicsMemory = 0;
+        pendingMemoryReserved = 0;
+
         if (!ctx || !ctx->physicsSystem) return;
 
         auto& bodyInterface = ctx->getBodyInterface();
@@ -81,10 +96,12 @@ namespace core::physics
     {
         if (!ctx || !ctx->physicsSystem) return;
 
+        TileCoordKey key = makeTileKey(tileX, tileZ);
+
         auto entityIt = terrainBodies.find(entityId);
         if (entityIt == terrainBodies.end()) return;
 
-        auto tileIt = entityIt->second.find(makeTileKey(tileX, tileZ));
+        auto tileIt = entityIt->second.find(key);
         if (tileIt == entityIt->second.end()) return;
 
         JPH::BodyID bodyId = tileIt->second;
@@ -92,6 +109,15 @@ namespace core::physics
 
         entityIt->second.erase(tileIt);
         if (entityIt->second.empty()) terrainBodies.erase(entityIt);
+
+        // Update memory tracking
+        auto infoIt = colliderStreamInfos.find(key);
+        if (infoIt != colliderStreamInfos.end())
+        {
+            currentPhysicsMemory -= std::min(currentPhysicsMemory, infoIt->second.memoryUsage);
+            infoIt->second.currentLOD = 255;
+            infoIt->second.memoryUsage = 0;
+        }
     }
 
     void PhysicsTerrainManager::removeAllTerrainBodies(uint64_t entityId)
@@ -106,6 +132,15 @@ namespace core::physics
             for (auto& [tileKey, bodyId] : entityIt->second)
             {
                 removeAndDestroyBody(bodyInterface, bodyId);
+
+                auto infoIt = colliderStreamInfos.find(tileKey);
+                if (infoIt != colliderStreamInfos.end())
+                {
+                    currentPhysicsMemory -= std::min(currentPhysicsMemory, infoIt->second.memoryUsage);
+                    colliderStreamInfos.erase(infoIt);
+                }
+
+                pendingColliderKeys.erase(tileKey);
             }
             terrainBodies.erase(entityIt);
         }
@@ -226,6 +261,293 @@ namespace core::physics
         }
         vegetationBodies.clear();
     }
+
+    // --- Async streaming pipeline ---
+
+    JPH::BodyID PhysicsTerrainManager::addTerrainTileBodyFromShape(
+        uint64_t entityId, int32_t tileX, int32_t tileZ,
+        JPH::Ref<JPH::Shape> shape, float friction, float restitution, uint8_t collisionLayer)
+    {
+        if (!ctx || !ctx->physicsSystem || shape == nullptr)
+            return JPH::BodyID();
+
+        JPH::BodyCreationSettings bodySettings(
+            shape, JPH::RVec3::sZero(), JPH::Quat::sIdentity(),
+            JPH::EMotionType::Static, static_cast<JPH::ObjectLayer>(collisionLayer));
+
+        bodySettings.mFriction = friction;
+        bodySettings.mRestitution = restitution;
+        bodySettings.mUserData = entityId;
+
+        auto& bodyInterface = ctx->getBodyInterface();
+        JPH::BodyID bodyId = bodyInterface.CreateAndAddBody(bodySettings, JPH::EActivation::DontActivate);
+
+        if (!bodyId.IsInvalid())
+            terrainBodies[entityId][makeTileKey(tileX, tileZ)] = bodyId;
+
+        return bodyId;
+    }
+
+    void PhysicsTerrainManager::submitAsyncCollider(OwnedTerrainColliderData data)
+    {
+        TileCoordKey key = makeTileKey(data.tileX, data.tileZ);
+
+        // Cancel any existing pending collider for this tile
+        cancelPendingCollider(data.tileX, data.tileZ);
+
+        // NOTE: Do NOT remove the existing body here. The old collider stays active
+        // until pollColliderCompletions promotes the replacement, preventing a physics
+        // gap where objects could fall through during async shape creation.
+
+        // Decimate based on physics LOD
+        auto [decimatedSamples, decimatedCount] = decimateHeightField(
+            data.heightSamples.data(), data.sampleCount, data.physicsLOD);
+
+        size_t estMemory = estimatePhysicsTileMemory(data.sampleCount, data.physicsLOD);
+
+        // Build shape offset and scale from world origin and vertex spacing
+        float totalSize = (decimatedCount - 1) * data.vertexSpacing *
+                          (data.physicsLOD == 0 ? 1.0f : static_cast<float>(1u << data.physicsLOD));
+        glm::vec3 offset = data.worldOrigin;
+        glm::vec3 scale{totalSize / static_cast<float>(decimatedCount - 1), 1.0f,
+                         totalSize / static_cast<float>(decimatedCount - 1)};
+
+        PendingPhysicsCollider pending;
+        pending.entityId = data.entityId;
+        pending.tileX = data.tileX;
+        pending.tileZ = data.tileZ;
+        pending.physicsLOD = data.physicsLOD;
+        pending.estimatedMemory = estMemory;
+        pending.worldOrigin = data.worldOrigin;
+        pending.vertexSpacing = data.vertexSpacing;
+        pending.decimatedSampleCount = decimatedCount;
+        pending.friction = data.friction;
+        pending.restitution = data.restitution;
+        pending.collisionLayer = data.collisionLayer;
+
+        // Launch async shape creation — HeightFieldShapeSettings::Create() is pure math, thread-safe
+        auto capturedOffset = offset;
+        auto capturedScale = scale;
+        pending.shapeFuture = std::async(std::launch::async,
+            [samples = std::move(decimatedSamples), count = decimatedCount,
+             capturedOffset, capturedScale]() -> JPH::Ref<JPH::Shape>
+            {
+                JPH::HeightFieldShapeSettings shapeSettings(
+                    samples.data(),
+                    JPH::Vec3(capturedOffset.x, capturedOffset.y, capturedOffset.z),
+                    JPH::Vec3(capturedScale.x, capturedScale.y, capturedScale.z),
+                    count);
+
+                auto result = shapeSettings.Create();
+                if (!result.IsValid())
+                    return nullptr;
+
+                return result.Get();
+            });
+
+        pendingMemoryReserved += estMemory;
+        pendingColliderKeys.insert(key);
+
+        // Cache full-res data for LOD transitions
+        auto& streamInfo = colliderStreamInfos[key];
+        streamInfo.entityId = data.entityId;
+        streamInfo.tileX = data.tileX;
+        streamInfo.tileZ = data.tileZ;
+        streamInfo.currentLOD = 255; // not yet loaded
+        streamInfo.cachedData = std::move(data);
+
+        pendingColliders.push_back(std::move(pending));
+    }
+
+    void PhysicsTerrainManager::cancelPendingCollider(int32_t tileX, int32_t tileZ)
+    {
+        TileCoordKey key = makeTileKey(tileX, tileZ);
+        pendingColliderKeys.erase(key);
+        // The background thread still runs to completion — only the result is discarded
+        // when pollColliderCompletions sees the key is no longer in pendingColliderKeys.
+    }
+
+    void PhysicsTerrainManager::pollColliderCompletions()
+    {
+        uint32_t created = 0;
+
+        auto it = pendingColliders.begin();
+        while (it != pendingColliders.end() && created < streamConfig.maxCreationsPerFrame)
+        {
+            if (!it->shapeFuture.valid())
+            {
+                pendingMemoryReserved -= std::min(pendingMemoryReserved, it->estimatedMemory);
+                it = pendingColliders.erase(it);
+                continue;
+            }
+
+            auto status = it->shapeFuture.wait_for(std::chrono::seconds(0));
+            if (status != std::future_status::ready)
+            {
+                ++it;
+                continue;
+            }
+
+            TileCoordKey key = makeTileKey(it->tileX, it->tileZ);
+            pendingMemoryReserved -= std::min(pendingMemoryReserved, it->estimatedMemory);
+
+            // Check if tile was cancelled (streamed out while shape was building)
+            if (pendingColliderKeys.find(key) == pendingColliderKeys.end())
+            {
+                it = pendingColliders.erase(it);
+                continue;
+            }
+
+            JPH::Ref<JPH::Shape> shape = it->shapeFuture.get();
+            pendingColliderKeys.erase(key);
+
+            if (shape != nullptr)
+            {
+                // Remove the old body (if any) right before adding the replacement,
+                // so there is never a frame without a collider for this tile.
+                removeTerrainTileBody(it->entityId, it->tileX, it->tileZ);
+
+                JPH::BodyID bodyId = addTerrainTileBodyFromShape(
+                    it->entityId, it->tileX, it->tileZ,
+                    shape, it->friction, it->restitution, it->collisionLayer);
+
+                if (!bodyId.IsInvalid())
+                {
+                    currentPhysicsMemory += it->estimatedMemory;
+
+                    auto infoIt = colliderStreamInfos.find(key);
+                    if (infoIt != colliderStreamInfos.end())
+                    {
+                        infoIt->second.currentLOD = it->physicsLOD;
+                        infoIt->second.memoryUsage = it->estimatedMemory;
+                        infoIt->second.lastAccessFrame = currentFrame;
+                    }
+
+                    ++created;
+                }
+            }
+            else
+            {
+                vfLogWarning("PhysicsTerrainManager: Async shape creation failed for tile ({}, {})",
+                              it->tileX, it->tileZ);
+            }
+
+            it = pendingColliders.erase(it);
+        }
+    }
+
+    uint8_t PhysicsTerrainManager::selectPhysicsLOD(float distance) const
+    {
+        if (distance < streamConfig.lodDistances[0])
+            return 0;
+        if (distance < streamConfig.lodDistances[1])
+            return 1;
+        return 2;
+    }
+
+    void PhysicsTerrainManager::processEvictions()
+    {
+        size_t budget = static_cast<size_t>(
+            static_cast<float>(streamConfig.memoryBudgetBytes) * streamConfig.evictionThreshold);
+
+        if (currentPhysicsMemory <= budget)
+            return;
+
+        // Build eviction candidates sorted by distance (farthest first)
+        struct EvictionCandidate
+        {
+            TileCoordKey key;
+            uint64_t entityId;
+            int32_t tileX, tileZ;
+            float distance;
+            size_t memory;
+        };
+
+        std::vector<EvictionCandidate> candidates;
+        candidates.reserve(colliderStreamInfos.size());
+
+        for (auto& [key, info] : colliderStreamInfos)
+        {
+            if (info.currentLOD == 255)
+                continue; // not yet loaded
+
+            candidates.push_back({key, info.entityId, info.tileX, info.tileZ,
+                                   info.distanceToCamera, info.memoryUsage});
+        }
+
+        std::sort(candidates.begin(), candidates.end(),
+                   [](const auto& a, const auto& b) { return a.distance > b.distance; });
+
+        for (auto& c : candidates)
+        {
+            if (currentPhysicsMemory <= budget)
+                break;
+
+            // removeTerrainTileBody already decrements currentPhysicsMemory via its tracking block
+            removeTerrainTileBody(c.entityId, c.tileX, c.tileZ);
+        }
+    }
+
+    void PhysicsTerrainManager::checkLODTransitions(const glm::vec3& cameraPosition)
+    {
+        // Collect tiles needing LOD transition into a temp vector to avoid
+        // iterator invalidation — submitAsyncCollider modifies colliderStreamInfos.
+        struct LODTransition
+        {
+            OwnedTerrainColliderData data;
+            uint8_t targetLOD;
+        };
+        std::vector<LODTransition> transitions;
+
+        for (auto& [key, info] : colliderStreamInfos)
+        {
+            if (info.currentLOD == 255)
+                continue; // not loaded
+
+            // Reuse distanceToCamera already computed by updateColliderStreaming
+            uint8_t targetLOD = selectPhysicsLOD(info.distanceToCamera);
+            if (targetLOD != info.currentLOD && !info.cachedData.heightSamples.empty())
+            {
+                OwnedTerrainColliderData data = info.cachedData; // copy
+                data.physicsLOD = targetLOD;
+                transitions.push_back({std::move(data), targetLOD});
+            }
+        }
+
+        for (auto& t : transitions)
+            submitAsyncCollider(std::move(t.data));
+    }
+
+    void PhysicsTerrainManager::updateColliderStreaming(const glm::vec3& cameraPosition)
+    {
+        ++currentFrame;
+        pollColliderCompletions();
+
+        // Update distances for all tracked tiles (single pass, reused by checkLODTransitions)
+        for (auto& [key, info] : colliderStreamInfos)
+        {
+            if (info.cachedData.heightSamples.empty())
+                continue;
+
+            glm::vec3 tileCenter = info.cachedData.worldOrigin +
+                glm::vec3(info.cachedData.vertexSpacing * (info.cachedData.sampleCount - 1) * 0.5f,
+                           0.0f,
+                           info.cachedData.vertexSpacing * (info.cachedData.sampleCount - 1) * 0.5f);
+
+            info.distanceToCamera = glm::length(cameraPosition - tileCenter);
+            info.lastAccessFrame = currentFrame;
+        }
+
+        checkLODTransitions(cameraPosition);
+        processEvictions();
+    }
+
+    void PhysicsTerrainManager::setStreamConfig(const PhysicsColliderStreamConfig& config)
+    {
+        streamConfig = config;
+    }
+
+    // --- Cave / Vegetation (unchanged) ---
 
     JPH::TriangleList PhysicsTerrainManager::buildJoltTriangleList(const services::CaveTileColliderInfo& cave)
     {

@@ -551,7 +551,63 @@ namespace core
                                                     int32_t tileX, int32_t tileZ)
     {
         if (!physicsWorld) return;
+        physicsWorld->getTerrainManager().cancelPendingCollider(tileX, tileZ);
         physicsWorld->removeTerrainTileBody(entity.id, tileX, tileZ);
+    }
+
+    void PhysicsAdapter::submitAsyncTerrainTileCollider(services::EntityHandle entity,
+                                                          const services::TerrainTileColliderInfo& tile,
+                                                          float distanceToCamera)
+    {
+        if (!physicsWorld) return;
+
+        physics::OwnedTerrainColliderData data;
+        data.entityId = entity.id;
+        data.tileX = tile.tileX;
+        data.tileZ = tile.tileZ;
+        data.heightSamples.assign(tile.heightSamples,
+                                   tile.heightSamples + static_cast<size_t>(tile.sampleCount) * tile.sampleCount);
+        data.sampleCount = tile.sampleCount;
+        data.worldOrigin = tile.worldOrigin;
+        data.vertexSpacing = tile.vertexSpacing;
+        data.friction = tile.friction;
+        data.restitution = tile.restitution;
+        data.collisionLayer = tile.collisionLayer;
+        data.physicsLOD = physicsWorld->getTerrainManager().selectPhysicsLOD(distanceToCamera);
+
+        physicsWorld->getTerrainManager().submitAsyncCollider(std::move(data));
+    }
+
+    void PhysicsAdapter::updatePhysicsColliderStreaming(const glm::vec3& cameraPosition)
+    {
+        if (!physicsWorld) return;
+        physicsWorld->getTerrainManager().updateColliderStreaming(cameraPosition);
+    }
+
+    void PhysicsAdapter::setPhysicsColliderStreamConfig(float memoryBudgetMB, int maxCreationsPerFrame,
+                                                          float lodDist0, float lodDist1, float lodDist2)
+    {
+        if (!physicsWorld) return;
+        physics::PhysicsColliderStreamConfig config;
+        config.memoryBudgetBytes = static_cast<size_t>(memoryBudgetMB * 1024.0f * 1024.0f);
+        config.maxCreationsPerFrame = static_cast<uint32_t>(maxCreationsPerFrame);
+        config.lodDistances[0] = lodDist0;
+        config.lodDistances[1] = lodDist1;
+        config.lodDistances[2] = lodDist2;
+        physicsWorld->getTerrainManager().setStreamConfig(config);
+    }
+
+    PhysicsAdapter::PhysicsColliderStreamConfigDTO PhysicsAdapter::getPhysicsColliderStreamConfig() const
+    {
+        PhysicsColliderStreamConfigDTO dto;
+        if (!physicsWorld) return dto;
+        const auto& cfg = physicsWorld->getTerrainManager().getStreamConfig();
+        dto.memoryBudgetMB = static_cast<float>(cfg.memoryBudgetBytes) / (1024.0f * 1024.0f);
+        dto.maxCreationsPerFrame = static_cast<int>(cfg.maxCreationsPerFrame);
+        dto.lodDistance0 = cfg.lodDistances[0];
+        dto.lodDistance1 = cfg.lodDistances[1];
+        dto.lodDistance2 = cfg.lodDistances[2];
+        return dto;
     }
 
     void PhysicsAdapter::addCaveTileCollider(services::EntityHandle entity,

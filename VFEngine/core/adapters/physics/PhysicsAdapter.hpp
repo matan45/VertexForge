@@ -92,6 +92,14 @@ namespace core
         void removeTerrainTileCollider(services::EntityHandle entity,
                                         int32_t tileX, int32_t tileZ) override;
 
+        void submitAsyncTerrainTileCollider(services::EntityHandle entity,
+                                             const services::TerrainTileColliderInfo& tile,
+                                             float distanceToCamera) override;
+        void updatePhysicsColliderStreaming(const glm::vec3& cameraPosition) override;
+        void setPhysicsColliderStreamConfig(float memoryBudgetMB, int maxCreationsPerFrame,
+                                              float lodDist0, float lodDist1, float lodDist2) override;
+        PhysicsColliderStreamConfigDTO getPhysicsColliderStreamConfig() const override;
+
         void addCaveTileCollider(services::EntityHandle entity,
                                   const services::CaveTileColliderInfo& cave) override;
         void removeCaveTileCollider(services::EntityHandle entity,

@@ -388,6 +388,71 @@ namespace windows::details {
                 propCmd.restitution = restitution;
                 dispatcher.execute(propCmd);
             }
+
+            ImGui::Spacing();
+            ImGui::Text("Collider Streaming");
+
+            events::physics::GetPhysicsColliderStreamConfigQuery streamQuery;
+            auto streamCfg = dispatcher.query(streamQuery);
+
+            bool streamConfigChanged = false;
+
+            float budgetMB = streamCfg.memoryBudgetMB;
+            if (ImGui::SliderFloat("Memory Budget (MB)", &budgetMB, 8.0f, 512.0f, "%.0f"))
+            {
+                streamCfg.memoryBudgetMB = budgetMB;
+                streamConfigChanged = true;
+            }
+
+            int maxCreations = streamCfg.maxCreationsPerFrame;
+            if (ImGui::SliderInt("Max Creations/Frame", &maxCreations, 1, 16))
+            {
+                streamCfg.maxCreationsPerFrame = maxCreations;
+                streamConfigChanged = true;
+            }
+
+            float lod0 = streamCfg.lodDistance0;
+            if (ImGui::SliderFloat("Full LOD Distance", &lod0, 16.0f, 512.0f, "%.0f"))
+            {
+                streamCfg.lodDistance0 = lod0;
+                streamConfigChanged = true;
+            }
+
+            float lod1 = streamCfg.lodDistance1;
+            if (ImGui::SliderFloat("Half LOD Distance", &lod1, 64.0f, 1024.0f, "%.0f"))
+            {
+                streamCfg.lodDistance1 = lod1;
+                streamConfigChanged = true;
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Beyond this distance tiles use half-resolution colliders");
+
+            float lod2 = streamCfg.lodDistance2;
+            if (ImGui::SliderFloat("Quarter LOD Distance", &lod2, 128.0f, 2048.0f, "%.0f"))
+            {
+                streamCfg.lodDistance2 = lod2;
+                streamConfigChanged = true;
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Beyond this distance tiles use quarter-resolution colliders");
+
+            // Enforce ordering: lod0 < lod1 < lod2
+            if (streamCfg.lodDistance1 <= streamCfg.lodDistance0)
+                streamCfg.lodDistance1 = streamCfg.lodDistance0 + 10.0f;
+            if (streamCfg.lodDistance2 <= streamCfg.lodDistance1)
+                streamCfg.lodDistance2 = streamCfg.lodDistance1 + 10.0f;
+
+            if (streamConfigChanged)
+            {
+                events::physics::SetPhysicsColliderStreamConfigCommand cmd;
+                cmd.terrainEntity = handle;
+                cmd.memoryBudgetMB = streamCfg.memoryBudgetMB;
+                cmd.maxCreationsPerFrame = streamCfg.maxCreationsPerFrame;
+                cmd.lodDistance0 = streamCfg.lodDistance0;
+                cmd.lodDistance1 = streamCfg.lodDistance1;
+                cmd.lodDistance2 = streamCfg.lodDistance2;
+                dispatcher.execute(cmd);
+            }
         }
     }
 

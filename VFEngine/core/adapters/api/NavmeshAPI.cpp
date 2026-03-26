@@ -5,6 +5,8 @@
 #include "NativeHelpers.hpp"
 #include "../../../services/events/EventDispatcher.hpp"
 #include "../../../services/events/navmesh/NavmeshEvents.hpp"
+#include "../../../services/events/volumetric/VolumetricNavEvents.hpp"
+#include "../../../services/events/ai/EQSEvents.hpp"
 
 namespace core::api
 {
@@ -198,6 +200,149 @@ namespace core::api
                 return makeVec3Array(dispatcher.query(query));
             });
 
+        registerVolumetricAPI(interpreter);
+        registerEQSAPI(interpreter);
+
         vfLogInfo("[NavmeshAPI] Registered Navmesh native functions");
+    }
+
+    void NavmeshAPI::registerVolumetricAPI(services::ScriptInterpreter* interpreter)
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        interpreter->registerNativeFunction("_native_volumetric_findPath3D",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                if (pathQueryCountThisFrame >= MAX_PATH_QUERIES_PER_FRAME)
+                {
+                    auto result = std::make_shared<value::NativeArray>(1, value::ValueType::FLOAT);
+                    result->set(0, value::Value(0.0f));
+                    return value::Value(result);
+                }
+                pathQueryCountThisFrame++;
+
+                if (args.size() < 6)
+                {
+                    auto result = std::make_shared<value::NativeArray>(1, value::ValueType::FLOAT);
+                    result->set(0, value::Value(0.0f));
+                    return value::Value(result);
+                }
+
+                events::volumetric::FindPath3DQuery query;
+                query.start = glm::vec3(extractFloat(args[0]), extractFloat(args[1]),
+                                         extractFloat(args[2]));
+                query.end = glm::vec3(extractFloat(args[3]), extractFloat(args[4]),
+                                       extractFloat(args[5]));
+
+                auto path = dispatcher.query(query);
+
+                if (!path.isValid || path.waypoints.empty())
+                {
+                    auto result = std::make_shared<value::NativeArray>(1, value::ValueType::FLOAT);
+                    result->set(0, value::Value(0.0f));
+                    return value::Value(result);
+                }
+
+                size_t count = path.waypoints.size();
+                auto result = std::make_shared<value::NativeArray>(
+                    1 + static_cast<int>(count * 3), value::ValueType::FLOAT);
+                result->set(0, value::Value(static_cast<float>(count)));
+                for (size_t i = 0; i < count; ++i)
+                {
+                    result->set(static_cast<int>(1 + i * 3), value::Value(path.waypoints[i].x));
+                    result->set(static_cast<int>(2 + i * 3), value::Value(path.waypoints[i].y));
+                    result->set(static_cast<int>(3 + i * 3), value::Value(path.waypoints[i].z));
+                }
+                return value::Value(result);
+            });
+
+        interpreter->registerNativeFunction("_native_volumetric_setDestination",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                if (args.size() < 4) return value::Value(std::monostate{});
+
+                events::volumetric::SetVolumetricAgentDestinationCommand cmd;
+                cmd.entity = intToEntity(extractInt64(args[0]));
+                cmd.target = glm::vec3(extractFloat(args[1]), extractFloat(args[2]),
+                                        extractFloat(args[3]));
+                dispatcher.execute(cmd);
+                return value::Value(std::monostate{});
+            });
+
+        interpreter->registerNativeFunction("_native_volumetric_stopAgent",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                if (args.empty()) return value::Value(std::monostate{});
+
+                events::volumetric::StopVolumetricAgentCommand cmd;
+                cmd.entity = intToEntity(extractInt64(args[0]));
+                dispatcher.execute(cmd);
+                return value::Value(std::monostate{});
+            });
+
+        interpreter->registerNativeFunction("_native_volumetric_isPointNavigable",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                if (args.size() < 3) return value::Value(false);
+
+                events::volumetric::IsPointNavigable3DQuery query;
+                query.point = glm::vec3(extractFloat(args[0]), extractFloat(args[1]),
+                                         extractFloat(args[2]));
+                return value::Value(dispatcher.query(query));
+            });
+    }
+
+    void NavmeshAPI::registerEQSAPI(services::ScriptInterpreter* interpreter)
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        interpreter->registerNativeFunction("_native_eqs_submitQuery",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                if (args.size() < 7) return value::Value(0.0);
+
+                events::ai::SubmitEQSQueryCommand cmd;
+                cmd.queryName = extractString(args[0]);
+                cmd.context.querierEntityId = static_cast<uint64_t>(extractInt64(args[1]));
+                cmd.context.querierPosition = glm::vec3(extractFloat(args[2]), extractFloat(args[3]),
+                                                          extractFloat(args[4]));
+                cmd.context.querierForward = glm::vec3(extractFloat(args[5]), 0.0f, extractFloat(args[6]));
+
+                auto handle = dispatcher.execute(cmd);
+                return value::Value(static_cast<double>(handle.id));
+            });
+
+        interpreter->registerNativeFunction("_native_eqs_getResult",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                if (args.empty()) return makeVec3Array(glm::vec3(0.0f));
+
+                events::ai::GetEQSQueryResultQuery query;
+                query.handle.id = static_cast<uint64_t>(extractInt64(args[0]));
+                auto result = dispatcher.query(query);
+
+                // Return: [status, bestX, bestY, bestZ, bestScore]
+                auto arr = std::make_shared<value::NativeArray>(5, value::ValueType::FLOAT);
+                arr->set(0, value::Value(static_cast<float>(static_cast<uint8_t>(result.status))));
+                if (result.hasResults())
+                {
+                    arr->set(1, value::Value(result.getBestPosition().x));
+                    arr->set(2, value::Value(result.getBestPosition().y));
+                    arr->set(3, value::Value(result.getBestPosition().z));
+                    arr->set(4, value::Value(result.getBestScore()));
+                }
+                return value::Value(arr);
+            });
+
+        interpreter->registerNativeFunction("_native_eqs_cancelQuery",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                if (args.empty()) return value::Value(std::monostate{});
+
+                events::ai::CancelEQSQueryCommand cmd;
+                cmd.handle.id = static_cast<uint64_t>(extractInt64(args[0]));
+                dispatcher.execute(cmd);
+                return value::Value(std::monostate{});
+            });
     }
 }
