@@ -3,6 +3,7 @@
 #include <vector>
 #include <cstdint>
 #include <functional>
+#include <unordered_map>
 #include "../types/NavmeshTypes.hpp"
 
 namespace navigation
@@ -85,7 +86,9 @@ namespace navigation
 
     constexpr uint32_t NAVMESH_FILE_MAGIC = 0x564E4D53; // "VNMS"
     constexpr uint32_t NAVMESH_FILE_VERSION = 1;
-    constexpr uint32_t NAVMESH_TILE_FILE_VERSION = 2;
+    // Version 3: added off-mesh link + obstacle fields to NavmeshBakeSettings
+    // Version 4: added areaCosts[64] to NavmeshBakeSettings
+    constexpr uint32_t NAVMESH_TILE_FILE_VERSION = 4;
 
     struct NavmeshFileHeader
     {
@@ -131,4 +134,33 @@ namespace navigation
         expanded.max = bounds.max + glm::vec3(borderExpand, 0.0f, borderExpand);
         return expanded;
     }
+
+    struct NavmeshOffMeshConnection
+    {
+        glm::vec3 start{0.0f};
+        glm::vec3 end{0.0f};
+        float radius = 0.25f;
+        uint8_t direction = 0;  // 0=one-way, 1=bidirectional
+        uint8_t areaType = 0;
+        uint16_t flags = 1;
+        uint32_t userID = 0;
+    };
+
+    struct NavmeshOffMeshConnections
+    {
+        std::vector<NavmeshOffMeshConnection> connections;
+        bool empty() const { return connections.empty(); }
+    };
+
+    using OffMeshConnectionsMap = std::unordered_map<NavmeshTileCoord, NavmeshOffMeshConnections, NavmeshTileCoordHash>;
+
+    struct NavmeshAreaModifier
+    {
+        uint8_t shape = 0;           // 0=Box, 1=Cylinder
+        glm::vec3 position{0.0f};    // World-space center
+        glm::vec3 halfSize{2.0f};    // Box: half-extents; Cylinder: x=radius, y=half-height
+        uint8_t areaType = 0;
+    };
+
+    using AreaModifiersMap = std::unordered_map<NavmeshTileCoord, std::vector<NavmeshAreaModifier>, NavmeshTileCoordHash>;
 }

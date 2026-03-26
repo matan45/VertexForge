@@ -48,6 +48,21 @@ namespace services {
         bool addNavmeshAgentComponent(EntityHandle entity);
         bool removeNavmeshAgentComponent(EntityHandle entity);
 
+        // Off-Mesh Link Component Operations
+        bool addOffMeshLinkComponent(EntityHandle entity);
+        bool removeOffMeshLinkComponent(EntityHandle entity);
+        bool hasOffMeshLinkComponent(EntityHandle entity) const;
+
+        // Navmesh Obstacle Component Operations
+        bool addNavmeshObstacleComponent(EntityHandle entity);
+        bool removeNavmeshObstacleComponent(EntityHandle entity);
+        bool hasNavmeshObstacleComponent(EntityHandle entity) const;
+
+        // Navmesh Modifier Volume Component Operations
+        bool addNavmeshModifierVolumeComponent(EntityHandle entity);
+        bool removeNavmeshModifierVolumeComponent(EntityHandle entity);
+        bool hasNavmeshModifierVolumeComponent(EntityHandle entity) const;
+
         // Controller Component Operations
         bool addControllerComponent(EntityHandle entity);
         bool removeControllerComponent(EntityHandle entity);

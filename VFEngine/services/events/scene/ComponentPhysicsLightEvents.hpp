@@ -201,6 +201,72 @@ namespace events::scene {
     };
 
     // ============================================
+    // Off-Mesh Link Component Events
+    // ============================================
+
+    struct AddOffMeshLinkComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "AddOffMeshLinkComponent"; }
+    };
+
+    struct RemoveOffMeshLinkComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "RemoveOffMeshLinkComponent"; }
+    };
+
+    struct HasOffMeshLinkComponentQuery : IQuery<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "HasOffMeshLinkComponent"; }
+    };
+
+    // ============================================
+    // Navmesh Obstacle Component Events
+    // ============================================
+
+    struct AddNavmeshObstacleComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "AddNavmeshObstacleComponent"; }
+    };
+
+    struct RemoveNavmeshObstacleComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "RemoveNavmeshObstacleComponent"; }
+    };
+
+    struct HasNavmeshObstacleComponentQuery : IQuery<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "HasNavmeshObstacleComponent"; }
+    };
+
+    // ============================================
+    // Navmesh Modifier Volume Component Events
+    // ============================================
+
+    struct AddNavmeshModifierVolumeComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "AddNavmeshModifierVolumeComponent"; }
+    };
+
+    struct RemoveNavmeshModifierVolumeComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "RemoveNavmeshModifierVolumeComponent"; }
+    };
+
+    struct HasNavmeshModifierVolumeComponentQuery : IQuery<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "HasNavmeshModifierVolumeComponent"; }
+    };
+
+    // ============================================
     // Controller Component Events
     // ============================================
 

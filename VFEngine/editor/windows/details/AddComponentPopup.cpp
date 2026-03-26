@@ -56,7 +56,7 @@ namespace windows::details
                            c.hasUIButton && c.hasUITextInput && c.hasUICheckbox && c.hasUIDropdown &&
                            c.hasUITabs && c.hasUISlider && c.hasUIProgressBar && c.hasUIAnimation && c.hasUIMask &&
                            c.hasUIDraggable && c.hasUIDropTarget &&
-                           c.hasNavmeshAgent && c.hasRenderTexture && c.hasController &&
+                           c.hasNavmeshAgent && c.hasOffMeshLink && c.hasNavmeshObstacle && c.hasNavmeshModifierVolume && c.hasRenderTexture && c.hasController &&
                            c.hasIK && c.hasBehaviorTree && c.hasDecal && c.hasReverbZone &&
                            c.hasFogVolume;
             if (allAdded)
@@ -265,6 +265,42 @@ namespace windows::details
             }
             if (ImGui::IsItemHovered())
                 ImGui::SetTooltip("Navigation mesh agent for pathfinding and crowd movement");
+        }
+
+        if (!c.hasOffMeshLink)
+        {
+            if (ImGui::Selectable("  Off-Mesh Link"))
+            {
+                events::scene::AddOffMeshLinkComponentCommand cmd;
+                cmd.entity = handle;
+                dispatcher.execute(cmd);
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Off-mesh connection for jumps, climbs, and drops between navmesh regions");
+        }
+
+        if (!c.hasNavmeshObstacle)
+        {
+            if (ImGui::Selectable("  Navmesh Obstacle"))
+            {
+                events::scene::AddNavmeshObstacleComponentCommand cmd;
+                cmd.entity = handle;
+                dispatcher.execute(cmd);
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Dynamic obstacle that carves holes in navmesh or triggers agent avoidance");
+        }
+
+        if (!c.hasNavmeshModifierVolume)
+        {
+            if (ImGui::Selectable("  Navmesh Modifier Volume"))
+            {
+                events::scene::AddNavmeshModifierVolumeComponentCommand cmd;
+                cmd.entity = handle;
+                dispatcher.execute(cmd);
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Volume that overrides navmesh area type (Road, Mud, Water, etc.)");
         }
 
         if (!c.hasController)

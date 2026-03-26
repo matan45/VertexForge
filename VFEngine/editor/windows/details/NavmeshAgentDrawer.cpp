@@ -4,6 +4,7 @@
 #include "scene/EntityRegistry.hpp"
 #include "../../../services/data/EntityConversion.hpp"
 #include "components/Components.hpp"
+#include "types/NavmeshTypes.hpp"
 #include <imgui.h>
 
 namespace windows::details
@@ -49,6 +50,21 @@ namespace windows::details
             }
             ImGui::DragFloat("##NavAgentSepWeight", &agent.separationWeight, 0.1f, 0.0f, 10.0f, "Separation: %.1f");
             ImGui::PopItemWidth();
+
+            ImGui::Spacing();
+            ImGui::Text("Cost Overrides");
+            ImGui::Checkbox("Use Custom Costs", &agent.useCustomCosts);
+            if (agent.useCustomCosts)
+            {
+                ImGui::PushItemWidth(-1);
+                for (int i = 0; i < types::NAVMESH_NAMED_AREA_COUNT; ++i)
+                {
+                    char label[64];
+                    snprintf(label, sizeof(label), "%s##NavAgentCost%d", types::getNavmeshAreaName(static_cast<uint8_t>(i)), i);
+                    ImGui::DragFloat(label, &agent.customAreaCosts[i], 0.1f, 0.0f, 100.0f, "%.1f");
+                }
+                ImGui::PopItemWidth();
+            }
 
             if (agent.isActive)
             {

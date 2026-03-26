@@ -29,6 +29,7 @@ namespace windows
         void drawRegionSection();
         void drawPolygonSection();
         void drawFilterSection();
+        void drawAreaCosts();
         void drawActions();
         void drawTileStatus();
         void drawStreamingConfig();

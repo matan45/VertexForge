@@ -6,7 +6,9 @@
 
 class dtNavMesh;
 class dtNavMeshQuery;
+class dtNavMeshParams;
 class dtCrowd;
+class dtQueryFilter;
 
 namespace core
 {
@@ -21,6 +23,7 @@ namespace core
         mutable std::mutex navMeshMutex;
         mutable std::mutex progressMutex;
         types::NavmeshBakeProgress currentProgress;
+        types::NavmeshBakeSettings storedSettings;
     public:
         explicit NavmeshAdapter();
         ~NavmeshAdapter() override;
@@ -34,7 +37,9 @@ namespace core
 
         // === Navmesh Building ===
         bool buildNavmesh(const navigation::NavmeshInputGeometry& geometry,
-                           const types::NavmeshBakeSettings& settings) override;
+                           const types::NavmeshBakeSettings& settings,
+                           const navigation::OffMeshConnectionsMap& tileOffMeshLinks = {},
+                           const navigation::AreaModifiersMap& tileAreaModifiers = {}) override;
         types::NavmeshBakeProgress getBuildProgress() const override;
 
         // === Tiled Navmesh ===
@@ -42,7 +47,9 @@ namespace core
                                const glm::vec3& boundsMin, const glm::vec3& boundsMax) override;
         navigation::NavmeshTileData buildSingleTile(int tx, int tz,
                                                       const navigation::NavmeshInputGeometry& geometry,
-                                                      const types::NavmeshBakeSettings& settings) override;
+                                                      const types::NavmeshBakeSettings& settings,
+                                                      const navigation::NavmeshOffMeshConnections& offMeshLinks = {},
+                                                      const std::vector<navigation::NavmeshAreaModifier>& areaModifiers = {}) override;
         bool addNavmeshTile(const navigation::NavmeshTileData& tileData) override;
         bool removeNavmeshTile(int tx, int tz) override;
 
@@ -72,6 +79,10 @@ namespace core
         float getCrowdAgentMaxSpeed(int agentIndex) const override;
         void updateCrowd(float deltaTime) override;
 
+        // === Crowd Filters ===
+        void configureCrowdFilter(int filterIndex, const float* areaCosts, int numAreas) override;
+        void setCrowdAgentFilterType(int agentIndex, uint8_t filterType) override;
+
         // === Debug ===
         void getDebugMesh(std::vector<glm::vec3>& outVertices,
                            std::vector<uint32_t>& outIndices) const override;
@@ -82,5 +93,6 @@ namespace core
         void initCrowd(float agentRadius);
         bool initializeNavmesh(unsigned char* navData, int navDataSize, float agentRadius);
         void updateProgress(types::NavmeshBakeStatus status, float progress, const char* stage);
+        void configureQueryFilter(dtQueryFilter* filter) const;
     };
 }

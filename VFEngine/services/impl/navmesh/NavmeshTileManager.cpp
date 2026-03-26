@@ -87,7 +87,15 @@ namespace services
             return true;
         }
 
-        auto tileData = navmeshProvider->buildSingleTile(tileX, tileZ, geometry, bakeSettings);
+        navigation::NavmeshOffMeshConnections offMeshLinks;
+        if (collectOffMeshLinks)
+            offMeshLinks = collectOffMeshLinks(bounds, bakeSettings);
+
+        std::vector<navigation::NavmeshAreaModifier> areaModifiers;
+        if (collectAreaModifiers)
+            areaModifiers = collectAreaModifiers(bounds);
+
+        auto tileData = navmeshProvider->buildSingleTile(tileX, tileZ, geometry, bakeSettings, offMeshLinks, areaModifiers);
         if (tileData.data.empty())
             return false;
 
@@ -264,10 +272,18 @@ namespace services
                 continue;
             }
 
+            navigation::NavmeshOffMeshConnections offMeshLinks;
+            if (collectOffMeshLinks)
+                offMeshLinks = collectOffMeshLinks(bounds, bakeSettings);
+
+            std::vector<navigation::NavmeshAreaModifier> areaModifiers;
+            if (collectAreaModifiers)
+                areaModifiers = collectAreaModifiers(bounds);
+
             auto future = threading::JobSystem::instance().submit(
-                [this, coord, geom = std::move(geometry), settings = bakeSettings]()
+                [this, coord, geom = std::move(geometry), settings = bakeSettings, links = std::move(offMeshLinks), mods = std::move(areaModifiers)]()
                 {
-                    return navmeshProvider->buildSingleTile(coord.x, coord.z, geom, settings);
+                    return navmeshProvider->buildSingleTile(coord.x, coord.z, geom, settings, links, mods);
                 }, threading::JobPriority::NORMAL);
 
             pendingTileBakes.push_back({coord, std::move(future)});

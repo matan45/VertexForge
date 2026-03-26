@@ -463,6 +463,63 @@ namespace services
                 return removeNavmeshAgentComponent(cmd.entity);
             });
 
+        // Off-Mesh Link component handlers
+        dispatcher.registerCommandHandler<events::scene::AddOffMeshLinkComponentCommand>(
+            [this](const events::scene::AddOffMeshLinkComponentCommand& cmd)
+            {
+                return addOffMeshLinkComponent(cmd.entity);
+            });
+
+        dispatcher.registerCommandHandler<events::scene::RemoveOffMeshLinkComponentCommand>(
+            [this](const events::scene::RemoveOffMeshLinkComponentCommand& cmd)
+            {
+                return removeOffMeshLinkComponent(cmd.entity);
+            });
+
+        dispatcher.registerQueryHandler<events::scene::HasOffMeshLinkComponentQuery>(
+            [this](const events::scene::HasOffMeshLinkComponentQuery& query)
+            {
+                return hasOffMeshLinkComponent(query.entity);
+            });
+
+        // Navmesh Obstacle component handlers
+        dispatcher.registerCommandHandler<events::scene::AddNavmeshObstacleComponentCommand>(
+            [this](const events::scene::AddNavmeshObstacleComponentCommand& cmd)
+            {
+                return addNavmeshObstacleComponent(cmd.entity);
+            });
+
+        dispatcher.registerCommandHandler<events::scene::RemoveNavmeshObstacleComponentCommand>(
+            [this](const events::scene::RemoveNavmeshObstacleComponentCommand& cmd)
+            {
+                return removeNavmeshObstacleComponent(cmd.entity);
+            });
+
+        dispatcher.registerQueryHandler<events::scene::HasNavmeshObstacleComponentQuery>(
+            [this](const events::scene::HasNavmeshObstacleComponentQuery& query)
+            {
+                return hasNavmeshObstacleComponent(query.entity);
+            });
+
+        // Navmesh Modifier Volume component handlers
+        dispatcher.registerCommandHandler<events::scene::AddNavmeshModifierVolumeComponentCommand>(
+            [this](const events::scene::AddNavmeshModifierVolumeComponentCommand& cmd)
+            {
+                return addNavmeshModifierVolumeComponent(cmd.entity);
+            });
+
+        dispatcher.registerCommandHandler<events::scene::RemoveNavmeshModifierVolumeComponentCommand>(
+            [this](const events::scene::RemoveNavmeshModifierVolumeComponentCommand& cmd)
+            {
+                return removeNavmeshModifierVolumeComponent(cmd.entity);
+            });
+
+        dispatcher.registerQueryHandler<events::scene::HasNavmeshModifierVolumeComponentQuery>(
+            [this](const events::scene::HasNavmeshModifierVolumeComponentQuery& query)
+            {
+                return hasNavmeshModifierVolumeComponent(query.entity);
+            });
+
         // Controller component handlers
         dispatcher.registerCommandHandler<events::scene::AddControllerComponentCommand>(
             [this](const events::scene::AddControllerComponentCommand& cmd)
@@ -475,6 +532,138 @@ namespace services
             {
                 return removeControllerComponent(cmd.entity);
             });
+    }
+
+    // ========== OFF-MESH LINK COMPONENT OPERATIONS ==========
+
+    bool PhysicsComponentService::addOffMeshLinkComponent(EntityHandle entity)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry))
+        {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (!sceneEntity.hasComponent<components::OffMeshLinkComponent>())
+        {
+            sceneEntity.addComponent<components::OffMeshLinkComponent>();
+            return true;
+        }
+        return false;
+    }
+
+    bool PhysicsComponentService::removeOffMeshLinkComponent(EntityHandle entity)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry))
+        {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (sceneEntity.hasComponent<components::OffMeshLinkComponent>())
+        {
+            sceneEntity.removeComponent<components::OffMeshLinkComponent>();
+            return true;
+        }
+        return false;
+    }
+
+    bool PhysicsComponentService::hasOffMeshLinkComponent(EntityHandle entity) const
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry))
+        {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        return sceneEntity.hasComponent<components::OffMeshLinkComponent>();
+    }
+
+    // ========== NAVMESH OBSTACLE COMPONENT OPERATIONS ==========
+
+    bool PhysicsComponentService::addNavmeshObstacleComponent(EntityHandle entity)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry))
+            return false;
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (!sceneEntity.hasComponent<components::NavmeshObstacleComponent>())
+        {
+            sceneEntity.addComponent<components::NavmeshObstacleComponent>();
+            return true;
+        }
+        return false;
+    }
+
+    bool PhysicsComponentService::removeNavmeshObstacleComponent(EntityHandle entity)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry))
+            return false;
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (sceneEntity.hasComponent<components::NavmeshObstacleComponent>())
+        {
+            sceneEntity.removeComponent<components::NavmeshObstacleComponent>();
+            return true;
+        }
+        return false;
+    }
+
+    bool PhysicsComponentService::hasNavmeshObstacleComponent(EntityHandle entity) const
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry))
+            return false;
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        return sceneEntity.hasComponent<components::NavmeshObstacleComponent>();
+    }
+
+    // ========== NAVMESH MODIFIER VOLUME COMPONENT OPERATIONS ==========
+
+    bool PhysicsComponentService::addNavmeshModifierVolumeComponent(EntityHandle entity)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry))
+            return false;
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (!sceneEntity.hasComponent<components::NavmeshModifierVolumeComponent>())
+        {
+            sceneEntity.addComponent<components::NavmeshModifierVolumeComponent>();
+            return true;
+        }
+        return false;
+    }
+
+    bool PhysicsComponentService::removeNavmeshModifierVolumeComponent(EntityHandle entity)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry))
+            return false;
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (sceneEntity.hasComponent<components::NavmeshModifierVolumeComponent>())
+        {
+            sceneEntity.removeComponent<components::NavmeshModifierVolumeComponent>();
+            return true;
+        }
+        return false;
+    }
+
+    bool PhysicsComponentService::hasNavmeshModifierVolumeComponent(EntityHandle entity) const
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry))
+            return false;
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        return sceneEntity.hasComponent<components::NavmeshModifierVolumeComponent>();
     }
 
     // ========== CONTROLLER COMPONENT OPERATIONS ==========

@@ -26,9 +26,17 @@ namespace services
         using CollectGeometryFunc = std::function<void(const navigation::NavmeshTileBounds&,
                                                         const types::NavmeshBakeSettings&,
                                                         navigation::NavmeshInputGeometry&)>;
+        using CollectOffMeshFunc = std::function<navigation::NavmeshOffMeshConnections(
+                                                        const navigation::NavmeshTileBounds&,
+                                                        const types::NavmeshBakeSettings&)>;
+        using CollectAreaModifiersFunc = std::function<std::vector<navigation::NavmeshAreaModifier>(
+                                                        const navigation::NavmeshTileBounds&)>;
 
         NavmeshTileManager(INavmeshProvider* provider, const types::NavmeshBakeSettings& settings,
                           CollectGeometryFunc collectTileGeometry);
+
+        void setOffMeshLinkCollector(CollectOffMeshFunc func) { collectOffMeshLinks = std::move(func); }
+        void setAreaModifierCollector(CollectAreaModifiersFunc func) { collectAreaModifiers = std::move(func); }
 
         bool bakeSingleTile(int tileX, int tileZ);
         bool saveNavmeshTiled(const std::string& directory);
@@ -58,6 +66,8 @@ namespace services
         INavmeshProvider* navmeshProvider;
         const types::NavmeshBakeSettings& bakeSettings;
         CollectGeometryFunc collectTileGeometry;
+        CollectOffMeshFunc collectOffMeshLinks;
+        CollectAreaModifiersFunc collectAreaModifiers;
 
         NavmeshStreamer streamer;
         std::unique_ptr<navigation::NavmeshTileCache> tileCache;

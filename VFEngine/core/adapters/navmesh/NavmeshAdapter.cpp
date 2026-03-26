@@ -9,6 +9,7 @@
 #include <cmath>
 #include <algorithm>
 
+#include "types/NavmeshTypes.hpp"
 #include "print/Log.hpp"
 namespace core
 {
@@ -87,6 +88,16 @@ namespace core
         if (crowd)
         {
             crowd->init(MAX_CROWD_AGENTS, agentRadius * CROWD_MAX_AGENT_RADIUS_MULT, navMesh);
+
+            // Configure default filter (slot 0) with global area costs
+            dtQueryFilter* defaultFilter = crowd->getEditableFilter(0);
+            if (defaultFilter)
+            {
+                defaultFilter->setIncludeFlags(0xFFFF);
+                defaultFilter->setExcludeFlags(0);
+                for (int i = 0; i < 64; ++i)
+                    defaultFilter->setAreaCost(i, storedSettings.areaCosts[i]);
+            }
         }
     }
 
@@ -175,6 +186,7 @@ namespace core
         {
             std::lock_guard lock(navMeshMutex);
             destroyNavMeshLocked();
+            storedSettings = header.settings;
 
             navMesh = dtAllocNavMesh();
             if (!navMesh)
@@ -251,6 +263,7 @@ namespace core
     {
         std::lock_guard lock(navMeshMutex);
         destroyNavMeshLocked();
+        storedSettings = settings;
 
         navMesh = dtAllocNavMesh();
         if (!navMesh)
@@ -357,8 +370,7 @@ namespace core
         float halfExtents[3] = {agentRadius * CROWD_MAX_AGENT_RADIUS_MULT, agentHeight, agentRadius * CROWD_MAX_AGENT_RADIUS_MULT};
 
         dtQueryFilter filter;
-        filter.setIncludeFlags(0xFFFF);
-        filter.setExcludeFlags(0);
+        configureQueryFilter(&filter);
 
         dtPolyRef startRef = 0, endRef = 0;
         float nearestStart[3] = {0.0f, 0.0f, 0.0f};
@@ -485,6 +497,37 @@ namespace core
         navQuery->findNearestPoly(pos, halfExtents, &filter, &ref, nearest);
 
         return ref != 0;
+    }
+
+    void NavmeshAdapter::configureQueryFilter(dtQueryFilter* filter) const
+    {
+        filter->setIncludeFlags(0xFFFF);
+        filter->setExcludeFlags(0);
+        for (int i = 0; i < 64; ++i)
+            filter->setAreaCost(i, storedSettings.areaCosts[i]);
+    }
+
+    void NavmeshAdapter::configureCrowdFilter(int filterIndex, const float* areaCosts, int numAreas)
+    {
+        std::lock_guard lock(navMeshMutex);
+        if (!crowd) return;
+        dtQueryFilter* filter = crowd->getEditableFilter(filterIndex);
+        if (!filter) return;
+        filter->setIncludeFlags(0xFFFF);
+        filter->setExcludeFlags(0);
+        for (int i = 0; i < numAreas && i < 64; ++i)
+            filter->setAreaCost(i, areaCosts[i]);
+    }
+
+    void NavmeshAdapter::setCrowdAgentFilterType(int agentIndex, uint8_t filterType)
+    {
+        std::lock_guard lock(navMeshMutex);
+        if (!crowd) return;
+        const dtCrowdAgent* ag = crowd->getAgent(agentIndex);
+        if (!ag || !ag->active) return;
+        dtCrowdAgentParams params = ag->params;
+        params.queryFilterType = filterType;
+        crowd->updateAgentParameters(agentIndex, &params);
     }
 
 }

@@ -29,7 +29,7 @@ namespace components
                                                UITextInputComponent, UIDropdownComponent,
                                                UITabsComponent, UISliderComponent,
                                                SocketAttachmentComponent, SocketOverrideComponent,
-                                               NavmeshAgentComponent, NavmeshComponent, ControllerComponent,
+                                               NavmeshAgentComponent, NavmeshComponent, OffMeshLinkComponent, NavmeshObstacleComponent, NavmeshModifierVolumeComponent, ControllerComponent,
                                                IKTargetComponent, WorldSectorComponent,
                                                GrassComponent, MeshBrushInstanceComponent,
                                                BehaviorTreeComponent, DecalComponent, ReverbZoneComponent,

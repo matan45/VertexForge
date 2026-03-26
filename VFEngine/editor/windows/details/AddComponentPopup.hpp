@@ -35,6 +35,9 @@ namespace windows::details {
         bool hasUIProgressBar = false;
         bool hasSocketAttachment = false;
         bool hasNavmeshAgent = false;
+        bool hasOffMeshLink = false;
+        bool hasNavmeshObstacle = false;
+        bool hasNavmeshModifierVolume = false;
         bool hasRenderTexture = false;
         bool hasController = false;
         bool hasIK = false;

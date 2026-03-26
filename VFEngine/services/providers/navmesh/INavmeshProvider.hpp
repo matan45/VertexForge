@@ -16,7 +16,9 @@ namespace services
         virtual bool isInitialized() const = 0;
 
         virtual bool buildNavmesh(const navigation::NavmeshInputGeometry& geometry,
-                                   const types::NavmeshBakeSettings& settings) = 0;
+                                   const types::NavmeshBakeSettings& settings,
+                                   const navigation::OffMeshConnectionsMap& tileOffMeshLinks = {},
+                                   const navigation::AreaModifiersMap& tileAreaModifiers = {}) = 0;
         virtual types::NavmeshBakeProgress getBuildProgress() const = 0;
 
         // === Tiled Navmesh ===
@@ -24,7 +26,9 @@ namespace services
                                        const glm::vec3& boundsMin, const glm::vec3& boundsMax) = 0;
         virtual navigation::NavmeshTileData buildSingleTile(int tx, int tz,
                                                               const navigation::NavmeshInputGeometry& geometry,
-                                                              const types::NavmeshBakeSettings& settings) = 0;
+                                                              const types::NavmeshBakeSettings& settings,
+                                                              const navigation::NavmeshOffMeshConnections& offMeshLinks = {},
+                                                              const std::vector<navigation::NavmeshAreaModifier>& areaModifiers = {}) = 0;
         virtual bool addNavmeshTile(const navigation::NavmeshTileData& tileData) = 0;
         virtual bool removeNavmeshTile(int tx, int tz) = 0;
 
@@ -50,6 +54,9 @@ namespace services
         virtual glm::vec3 getCrowdAgentVelocity(int agentIndex) const = 0;
         virtual float getCrowdAgentMaxSpeed(int agentIndex) const = 0;
         virtual void updateCrowd(float deltaTime) = 0;
+
+        virtual void configureCrowdFilter(int filterIndex, const float* areaCosts, int numAreas) = 0;
+        virtual void setCrowdAgentFilterType(int agentIndex, uint8_t filterType) = 0;
 
         virtual void getDebugMesh(std::vector<glm::vec3>& outVertices,
                                    std::vector<uint32_t>& outIndices) const = 0;
