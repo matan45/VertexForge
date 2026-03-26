@@ -64,7 +64,7 @@ namespace ocean
         {
             file >> j;
         }
-        catch (const nlohmann::json::parse_error& e)
+        catch (const nlohmann::json::parse_error&)
         {
             return false;
         }
