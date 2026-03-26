@@ -210,4 +210,28 @@ namespace events::physics {
         std::string_view getName() const override { return "HasTerrainCollider"; }
     };
 
+    struct PhysicsColliderStreamConfigData
+    {
+        float memoryBudgetMB = 64.0f;
+        int maxCreationsPerFrame = 4;
+        float lodDistance0 = 100.0f; // full res
+        float lodDistance1 = 300.0f; // half res
+        float lodDistance2 = 600.0f; // quarter res
+    };
+
+    struct SetPhysicsColliderStreamConfigCommand : ::events::ICommand<> {
+        services::EntityHandle terrainEntity;
+        float memoryBudgetMB = 64.0f;
+        int maxCreationsPerFrame = 4;
+        float lodDistance0 = 100.0f;
+        float lodDistance1 = 300.0f;
+        float lodDistance2 = 600.0f;
+        std::string_view getName() const override { return "SetPhysicsColliderStreamConfig"; }
+    };
+
+    struct GetPhysicsColliderStreamConfigQuery : ::events::IQuery<PhysicsColliderStreamConfigData> {
+        services::EntityHandle terrainEntity;
+        std::string_view getName() const override { return "GetPhysicsColliderStreamConfig"; }
+    };
+
 }

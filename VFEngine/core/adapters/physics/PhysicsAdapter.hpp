@@ -96,6 +96,9 @@ namespace core
                                              const services::TerrainTileColliderInfo& tile,
                                              float distanceToCamera) override;
         void updatePhysicsColliderStreaming(const glm::vec3& cameraPosition) override;
+        void setPhysicsColliderStreamConfig(float memoryBudgetMB, int maxCreationsPerFrame,
+                                              float lodDist0, float lodDist1, float lodDist2) override;
+        PhysicsColliderStreamConfigDTO getPhysicsColliderStreamConfig() const override;
 
         void addCaveTileCollider(services::EntityHandle entity,
                                   const services::CaveTileColliderInfo& cave) override;

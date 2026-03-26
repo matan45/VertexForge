@@ -584,6 +584,32 @@ namespace core
         physicsWorld->getTerrainManager().updateColliderStreaming(cameraPosition);
     }
 
+    void PhysicsAdapter::setPhysicsColliderStreamConfig(float memoryBudgetMB, int maxCreationsPerFrame,
+                                                          float lodDist0, float lodDist1, float lodDist2)
+    {
+        if (!physicsWorld) return;
+        physics::PhysicsColliderStreamConfig config;
+        config.memoryBudgetBytes = static_cast<size_t>(memoryBudgetMB * 1024.0f * 1024.0f);
+        config.maxCreationsPerFrame = static_cast<uint32_t>(maxCreationsPerFrame);
+        config.lodDistances[0] = lodDist0;
+        config.lodDistances[1] = lodDist1;
+        config.lodDistances[2] = lodDist2;
+        physicsWorld->getTerrainManager().setStreamConfig(config);
+    }
+
+    PhysicsAdapter::PhysicsColliderStreamConfigDTO PhysicsAdapter::getPhysicsColliderStreamConfig() const
+    {
+        PhysicsColliderStreamConfigDTO dto;
+        if (!physicsWorld) return dto;
+        const auto& cfg = physicsWorld->getTerrainManager().getStreamConfig();
+        dto.memoryBudgetMB = static_cast<float>(cfg.memoryBudgetBytes) / (1024.0f * 1024.0f);
+        dto.maxCreationsPerFrame = static_cast<int>(cfg.maxCreationsPerFrame);
+        dto.lodDistance0 = cfg.lodDistances[0];
+        dto.lodDistance1 = cfg.lodDistances[1];
+        dto.lodDistance2 = cfg.lodDistances[2];
+        return dto;
+    }
+
     void PhysicsAdapter::addCaveTileCollider(services::EntityHandle entity,
                                               const services::CaveTileColliderInfo& cave)
     {

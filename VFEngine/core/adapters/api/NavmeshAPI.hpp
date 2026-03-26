@@ -17,5 +17,9 @@ namespace core::api
     public:
         static void registerAPI(services::ScriptInterpreter* interpreter);
         static void beginFrame();
+
+    private:
+        static void registerVolumetricAPI(services::ScriptInterpreter* interpreter);
+        static void registerEQSAPI(services::ScriptInterpreter* interpreter);
     };
 }
