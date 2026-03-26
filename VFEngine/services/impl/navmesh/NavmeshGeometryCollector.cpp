@@ -783,4 +783,85 @@ namespace services
             }
         }
     }
+
+    // === Area Modifier Volume Collection ===
+
+    navigation::AreaModifiersMap NavmeshServiceImpl::collectAllAreaModifiers()
+    {
+        navigation::AreaModifiersMap result;
+        auto& registry = scene::EntityRegistry::getRegistry();
+
+        float tileWorldSize = lastBakeSettings.tileSize * lastBakeSettings.cellSize;
+
+        auto view = registry.view<components::NavmeshModifierVolumeComponent, components::TransformComponent>();
+        for (auto entity : view)
+        {
+            const auto& volume = view.get<components::NavmeshModifierVolumeComponent>(entity);
+            const auto& transform = view.get<components::TransformComponent>(entity);
+
+            glm::vec3 worldPos = transform.position + volume.offset;
+            glm::vec3 half = (volume.shape == components::NavmeshModifierVolumeShape::Box)
+                ? volume.size * 0.5f
+                : glm::vec3(volume.size.x, volume.size.y * 0.5f, volume.size.x);
+
+            navigation::NavmeshAreaModifier mod;
+            mod.shape = static_cast<uint8_t>(volume.shape);
+            mod.position = worldPos;
+            mod.halfSize = half;
+            mod.areaType = volume.areaType;
+
+            // Assign to all tiles the volume overlaps
+            auto coordMin = navigation::NavmeshTileCoord{
+                static_cast<int32_t>(floorf((worldPos.x - half.x) / tileWorldSize)),
+                static_cast<int32_t>(floorf((worldPos.z - half.z) / tileWorldSize))
+            };
+            auto coordMax = navigation::NavmeshTileCoord{
+                static_cast<int32_t>(floorf((worldPos.x + half.x) / tileWorldSize)),
+                static_cast<int32_t>(floorf((worldPos.z + half.z) / tileWorldSize))
+            };
+
+            for (int tx = coordMin.x; tx <= coordMax.x; ++tx)
+                for (int tz = coordMin.z; tz <= coordMax.z; ++tz)
+                    result[{tx, tz}].push_back(mod);
+        }
+
+        return result;
+    }
+
+    std::vector<navigation::NavmeshAreaModifier> NavmeshServiceImpl::collectAreaModifiersForTile(
+        const navigation::NavmeshTileBounds& bounds)
+    {
+        std::vector<navigation::NavmeshAreaModifier> result;
+        auto& registry = scene::EntityRegistry::getRegistry();
+
+        auto view = registry.view<components::NavmeshModifierVolumeComponent, components::TransformComponent>();
+        for (auto entity : view)
+        {
+            const auto& volume = view.get<components::NavmeshModifierVolumeComponent>(entity);
+            const auto& transform = view.get<components::TransformComponent>(entity);
+
+            glm::vec3 worldPos = transform.position + volume.offset;
+            glm::vec3 half = (volume.shape == components::NavmeshModifierVolumeShape::Box)
+                ? volume.size * 0.5f
+                : glm::vec3(volume.size.x, volume.size.y * 0.5f, volume.size.x);
+
+            // Check if modifier overlaps tile bounds
+            glm::vec3 modMin = worldPos - half;
+            glm::vec3 modMax = worldPos + half;
+
+            if (modMax.x < bounds.min.x || modMin.x > bounds.max.x ||
+                modMax.z < bounds.min.z || modMin.z > bounds.max.z)
+                continue;
+
+            navigation::NavmeshAreaModifier mod;
+            mod.shape = static_cast<uint8_t>(volume.shape);
+            mod.position = worldPos;
+            mod.halfSize = half;
+            mod.areaType = volume.areaType;
+
+            result.push_back(mod);
+        }
+
+        return result;
+    }
 }

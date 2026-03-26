@@ -28,10 +28,15 @@ namespace components
         uint8_t avoidanceQuality = 3;       // 0-3, higher = better but slower
         float separationWeight = 2.0f;
 
+        // Per-agent area cost overrides (optional)
+        bool useCustomCosts = false;
+        float customAreaCosts[64] = {};     // 0 = use global default; >0 = override
+
         // Runtime state (not serialized)
         bool isActive = false;
         bool isSuspended = false;
         int crowdAgentIndex = -1;
+        uint8_t queryFilterIndex = 0;
 
         // Stored state for suspend/resume
         glm::vec3 suspendedPosition{0.0f};
@@ -99,5 +104,19 @@ namespace components
         bool isRegistered = false;
         glm::vec3 lastBakedPosition{0.0f};
         int phantomAgentIndex = -1;           // For AvoidanceOnly mode
+    };
+
+    enum class NavmeshModifierVolumeShape : uint8_t
+    {
+        Box = 0,
+        Cylinder = 1
+    };
+
+    struct NavmeshModifierVolumeComponent
+    {
+        NavmeshModifierVolumeShape shape = NavmeshModifierVolumeShape::Box;
+        glm::vec3 size{4.0f, 4.0f, 4.0f};   // Box: full extents; Cylinder: x=radius, y=height
+        glm::vec3 offset{0.0f};              // Local-space offset
+        uint8_t areaType = 5;                // Default: Road
     };
 }

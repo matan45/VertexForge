@@ -56,7 +56,7 @@ namespace windows::details
                            c.hasUIButton && c.hasUITextInput && c.hasUICheckbox && c.hasUIDropdown &&
                            c.hasUITabs && c.hasUISlider && c.hasUIProgressBar && c.hasUIAnimation && c.hasUIMask &&
                            c.hasUIDraggable && c.hasUIDropTarget &&
-                           c.hasNavmeshAgent && c.hasRenderTexture && c.hasController &&
+                           c.hasNavmeshAgent && c.hasNavmeshModifierVolume && c.hasRenderTexture && c.hasController &&
                            c.hasIK && c.hasBehaviorTree && c.hasDecal && c.hasReverbZone &&
                            c.hasFogVolume;
             if (allAdded)
@@ -289,6 +289,18 @@ namespace windows::details
             }
             if (ImGui::IsItemHovered())
                 ImGui::SetTooltip("Dynamic obstacle that carves holes in navmesh or triggers agent avoidance");
+        }
+
+        if (!c.hasNavmeshModifierVolume)
+        {
+            if (ImGui::Selectable("  Navmesh Modifier Volume"))
+            {
+                events::scene::AddNavmeshModifierVolumeComponentCommand cmd;
+                cmd.entity = handle;
+                dispatcher.execute(cmd);
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Volume that overrides navmesh area type (Road, Mud, Water, etc.)");
         }
 
         if (!c.hasController)

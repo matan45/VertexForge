@@ -187,6 +187,7 @@
     <ClInclude Include="windows\details\MaterialDrawer.hpp" />
     <ClInclude Include="windows\details\MeshDrawer.hpp" />
     <ClInclude Include="windows\details\NavmeshAgentDrawer.hpp" />
+    <ClInclude Include="windows\details\NavmeshModifierVolumeDrawer.hpp" />
     <ClInclude Include="windows\details\NavmeshObstacleDrawer.hpp" />
     <ClInclude Include="windows\details\NavmeshRootDrawer.hpp" />
     <ClInclude Include="windows\details\OffMeshLinkDrawer.hpp" />
@@ -357,6 +358,7 @@
     <ClCompile Include="windows\details\MaterialDrawer.cpp" />
     <ClCompile Include="windows\details\MeshDrawer.cpp" />
     <ClCompile Include="windows\details\NavmeshAgentDrawer.cpp" />
+    <ClCompile Include="windows\details\NavmeshModifierVolumeDrawer.cpp" />
     <ClCompile Include="windows\details\NavmeshObstacleDrawer.cpp" />
     <ClCompile Include="windows\details\NavmeshRootDrawer.cpp" />
     <ClCompile Include="windows\details\OffMeshLinkDrawer.cpp" />

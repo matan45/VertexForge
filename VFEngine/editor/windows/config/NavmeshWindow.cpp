@@ -2,6 +2,7 @@
 #include "../../services/events/EventDispatcher.hpp"
 #include "../../services/events/navmesh/NavmeshEvents.hpp"
 #include "../../services/events/render/RenderEvents.hpp"
+#include "types/NavmeshTypes.hpp"
 #include <imgui.h>
 
 namespace windows
@@ -126,7 +127,7 @@ namespace windows
             ImGui::Spacing();
             drawFilterSection();
             ImGui::Spacing();
-            drawOffMeshLinkCosts();
+            drawAreaCosts();
 
             ImGui::Unindent();
         }
@@ -205,16 +206,19 @@ namespace windows
         ImGui::Checkbox("Include Colliders", &settings.includeColliders);
     }
 
-    void NavmeshWindow::drawOffMeshLinkCosts()
+    void NavmeshWindow::drawAreaCosts()
     {
-        ImGui::Text("Off-Mesh Link Costs");
+        ImGui::Text("Area Costs");
         ImGui::Separator();
 
         ImGui::PushItemWidth(-1);
-        ImGui::DragFloat("##JumpCost", &settings.jumpCost, 0.1f, 0.1f, 100.0f, "Jump: %.1f");
-        ImGui::DragFloat("##ClimbCost", &settings.climbCost, 0.1f, 0.1f, 100.0f, "Climb: %.1f");
-        ImGui::DragFloat("##DropCost", &settings.dropCost, 0.1f, 0.1f, 100.0f, "Drop: %.1f");
-        ImGui::DragFloat("##CustomLinkCost", &settings.customLinkCost, 0.1f, 0.1f, 100.0f, "Custom: %.1f");
+        // Show user-facing area costs (Road through Hazard, indices 5-9)
+        for (int i = types::NAVMESH_AREA_ROAD; i <= types::NAVMESH_AREA_HAZARD; ++i)
+        {
+            char label[64];
+            snprintf(label, sizeof(label), "%s##AreaCost%d", types::getNavmeshAreaName(static_cast<uint8_t>(i)), i);
+            ImGui::DragFloat(label, &settings.areaCosts[i], 0.1f, 0.1f, 100.0f, "%.1f");
+        }
         ImGui::PopItemWidth();
 
         ImGui::Spacing();

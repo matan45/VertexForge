@@ -36,7 +36,8 @@ namespace core
         // === Navmesh Building ===
         bool buildNavmesh(const navigation::NavmeshInputGeometry& geometry,
                            const types::NavmeshBakeSettings& settings,
-                           const navigation::OffMeshConnectionsMap& tileOffMeshLinks = {}) override;
+                           const navigation::OffMeshConnectionsMap& tileOffMeshLinks = {},
+                           const navigation::AreaModifiersMap& tileAreaModifiers = {}) override;
         types::NavmeshBakeProgress getBuildProgress() const override;
 
         // === Tiled Navmesh ===
@@ -45,7 +46,8 @@ namespace core
         navigation::NavmeshTileData buildSingleTile(int tx, int tz,
                                                       const navigation::NavmeshInputGeometry& geometry,
                                                       const types::NavmeshBakeSettings& settings,
-                                                      const navigation::NavmeshOffMeshConnections& offMeshLinks = {}) override;
+                                                      const navigation::NavmeshOffMeshConnections& offMeshLinks = {},
+                                                      const std::vector<navigation::NavmeshAreaModifier>& areaModifiers = {}) override;
         bool addNavmeshTile(const navigation::NavmeshTileData& tileData) override;
         bool removeNavmeshTile(int tx, int tz) override;
 
@@ -74,6 +76,10 @@ namespace core
         glm::vec3 getCrowdAgentVelocity(int agentIndex) const override;
         float getCrowdAgentMaxSpeed(int agentIndex) const override;
         void updateCrowd(float deltaTime) override;
+
+        // === Crowd Filters ===
+        void configureCrowdFilter(int filterIndex, const float* areaCosts, int numAreas) override;
+        void setCrowdAgentFilterType(int agentIndex, uint8_t filterType) override;
 
         // === Debug ===
         void getDebugMesh(std::vector<glm::vec3>& outVertices,

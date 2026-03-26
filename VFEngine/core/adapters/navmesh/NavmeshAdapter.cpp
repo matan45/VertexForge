@@ -88,6 +88,16 @@ namespace core
         if (crowd)
         {
             crowd->init(MAX_CROWD_AGENTS, agentRadius * CROWD_MAX_AGENT_RADIUS_MULT, navMesh);
+
+            // Configure default filter (slot 0) with global area costs
+            dtQueryFilter* defaultFilter = crowd->getEditableFilter(0);
+            if (defaultFilter)
+            {
+                defaultFilter->setIncludeFlags(0xFFFF);
+                defaultFilter->setExcludeFlags(0);
+                for (int i = 0; i < 64; ++i)
+                    defaultFilter->setAreaCost(i, storedSettings.areaCosts[i]);
+            }
         }
     }
 
@@ -494,11 +504,31 @@ namespace core
         auto* filter = static_cast<dtQueryFilter*>(filterPtr);
         filter->setIncludeFlags(0xFFFF);
         filter->setExcludeFlags(0);
-        filter->setAreaCost(types::NAVMESH_AREA_GROUND, 1.0f);
-        filter->setAreaCost(types::NAVMESH_AREA_JUMP, storedSettings.jumpCost);
-        filter->setAreaCost(types::NAVMESH_AREA_CLIMB, storedSettings.climbCost);
-        filter->setAreaCost(types::NAVMESH_AREA_DROP, storedSettings.dropCost);
-        filter->setAreaCost(types::NAVMESH_AREA_CUSTOM, storedSettings.customLinkCost);
+        for (int i = 0; i < 64; ++i)
+            filter->setAreaCost(i, storedSettings.areaCosts[i]);
+    }
+
+    void NavmeshAdapter::configureCrowdFilter(int filterIndex, const float* areaCosts, int numAreas)
+    {
+        std::lock_guard lock(navMeshMutex);
+        if (!crowd) return;
+        dtQueryFilter* filter = crowd->getEditableFilter(filterIndex);
+        if (!filter) return;
+        filter->setIncludeFlags(0xFFFF);
+        filter->setExcludeFlags(0);
+        for (int i = 0; i < numAreas && i < 64; ++i)
+            filter->setAreaCost(i, areaCosts[i]);
+    }
+
+    void NavmeshAdapter::setCrowdAgentFilterType(int agentIndex, uint8_t filterType)
+    {
+        std::lock_guard lock(navMeshMutex);
+        if (!crowd) return;
+        const dtCrowdAgent* ag = crowd->getAgent(agentIndex);
+        if (!ag || !ag->active) return;
+        dtCrowdAgentParams params = ag->params;
+        params.queryFilterType = filterType;
+        crowd->updateAgentParameters(agentIndex, &params);
     }
 
 }

@@ -274,6 +274,12 @@ namespace serialization
         static std::string obstacleShapeToString(components::NavmeshObstacleShape shape);
         static components::NavmeshObstacleShape stringToObstacleShape(const std::string& str);
 
+        static json serializeNavmeshModifierVolume(const components::NavmeshModifierVolumeComponent& volume);
+        static void deserializeNavmeshModifierVolume(const json& j, components::NavmeshModifierVolumeComponent& volume);
+
+        static std::string modifierVolumeShapeToString(components::NavmeshModifierVolumeShape shape);
+        static components::NavmeshModifierVolumeShape stringToModifierVolumeShape(const std::string& str);
+
         static json serializeRenderTexture(const components::RenderTextureComponent& rtt);
         static void deserializeRenderTexture(const json& j, components::RenderTextureComponent& rtt);
 

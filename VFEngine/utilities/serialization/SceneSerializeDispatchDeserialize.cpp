@@ -308,6 +308,11 @@ namespace serialization
             auto& comp = entity.addOrReplaceComponent<components::NavmeshObstacleComponent>();
             deserializeNavmeshObstacle(c["navmeshObstacle"], comp);
         }
+        if (c.contains("navmeshModifierVolume"))
+        {
+            auto& comp = entity.addOrReplaceComponent<components::NavmeshModifierVolumeComponent>();
+            deserializeNavmeshModifierVolume(c["navmeshModifierVolume"], comp);
+        }
         if (c.contains("renderTexture"))
         {
             auto& comp = entity.addOrReplaceComponent<components::RenderTextureComponent>();

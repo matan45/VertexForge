@@ -88,8 +88,15 @@ namespace services
         void drawObstacleDebug();
         void cleanupPhantomAgents();
 
+        // Area modifier volume support
+        navigation::AreaModifiersMap collectAllAreaModifiers();
+        std::vector<navigation::NavmeshAreaModifier> collectAreaModifiersForTile(const navigation::NavmeshTileBounds& bounds);
+        void trackModifierVolumeTransforms();
+        void drawModifierVolumeDebug();
+
         // Track entity positions for dirty tile marking
         std::unordered_map<uint64_t, glm::vec3> lastOffMeshLinkPositions;
         std::unordered_map<uint64_t, glm::vec3> lastObstaclePositions;
+        std::unordered_map<uint64_t, glm::vec3> lastModifierVolumePositions;
     };
 }

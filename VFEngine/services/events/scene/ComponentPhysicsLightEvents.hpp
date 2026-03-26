@@ -245,6 +245,28 @@ namespace events::scene {
     };
 
     // ============================================
+    // Navmesh Modifier Volume Component Events
+    // ============================================
+
+    struct AddNavmeshModifierVolumeComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "AddNavmeshModifierVolumeComponent"; }
+    };
+
+    struct RemoveNavmeshModifierVolumeComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "RemoveNavmeshModifierVolumeComponent"; }
+    };
+
+    struct HasNavmeshModifierVolumeComponentQuery : IQuery<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "HasNavmeshModifierVolumeComponent"; }
+    };
+
+    // ============================================
     // Controller Component Events
     // ============================================
 

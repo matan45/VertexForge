@@ -86,7 +86,7 @@ namespace navigation
 
     constexpr uint32_t NAVMESH_FILE_MAGIC = 0x564E4D53; // "VNMS"
     constexpr uint32_t NAVMESH_FILE_VERSION = 1;
-    constexpr uint32_t NAVMESH_TILE_FILE_VERSION = 3;
+    constexpr uint32_t NAVMESH_TILE_FILE_VERSION = 4;
 
     struct NavmeshFileHeader
     {
@@ -151,4 +151,14 @@ namespace navigation
     };
 
     using OffMeshConnectionsMap = std::unordered_map<NavmeshTileCoord, NavmeshOffMeshConnections, NavmeshTileCoordHash>;
+
+    struct NavmeshAreaModifier
+    {
+        uint8_t shape = 0;           // 0=Box, 1=Cylinder
+        glm::vec3 position{0.0f};    // World-space center
+        glm::vec3 halfSize{2.0f};    // Box: half-extents; Cylinder: x=radius, y=half-height
+        uint8_t areaType = 0;
+    };
+
+    using AreaModifiersMap = std::unordered_map<NavmeshTileCoord, std::vector<NavmeshAreaModifier>, NavmeshTileCoordHash>;
 }

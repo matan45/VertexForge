@@ -44,6 +44,7 @@
 #include "../details/NavmeshAgentDrawer.hpp"
 #include "../details/OffMeshLinkDrawer.hpp"
 #include "../details/NavmeshObstacleDrawer.hpp"
+#include "../details/NavmeshModifierVolumeDrawer.hpp"
 #include "../details/ControllerDrawer.hpp"
 #include "../details/RenderTextureDrawer.hpp"
 #include "../details/IKDrawer.hpp"
@@ -105,6 +106,7 @@ namespace windows
         details::NavmeshAgentDrawer navmeshAgentDrawer;
         details::OffMeshLinkDrawer offMeshLinkDrawer;
         details::NavmeshObstacleDrawer navmeshObstacleDrawer;
+        details::NavmeshModifierVolumeDrawer navmeshModifierVolumeDrawer;
         details::ControllerDrawer controllerDrawer;
         details::RenderTextureDrawer renderTextureDrawer;
         details::IKDrawer ikDrawer;

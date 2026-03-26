@@ -64,7 +64,8 @@ namespace core
     }
 
     static rcCompactHeightfield* buildCompactField(rcContext& ctx, const rcConfig& cfg,
-                                                    rcHeightfield& solid)
+                                                    rcHeightfield& solid,
+                                                    const std::vector<navigation::NavmeshAreaModifier>& areaModifiers = {})
     {
         rcCompactHeightfield* chf = rcAllocCompactHeightfield();
         if (!chf || !rcBuildCompactHeightfield(&ctx, cfg.walkableHeight, cfg.walkableClimb, solid, *chf))
@@ -79,6 +80,31 @@ namespace core
             vfLogError("NavmeshAdapter: Failed to erode walkable area");
             rcFreeCompactHeightfield(chf);
             return nullptr;
+        }
+
+        // Apply area modifier volumes
+        for (const auto& modifier : areaModifiers)
+        {
+            if (modifier.shape == 0) // Box
+            {
+                float bmin[3] = {
+                    modifier.position.x - modifier.halfSize.x,
+                    modifier.position.y - modifier.halfSize.y,
+                    modifier.position.z - modifier.halfSize.z
+                };
+                float bmax[3] = {
+                    modifier.position.x + modifier.halfSize.x,
+                    modifier.position.y + modifier.halfSize.y,
+                    modifier.position.z + modifier.halfSize.z
+                };
+                rcMarkBoxArea(&ctx, bmin, bmax, modifier.areaType, *chf);
+            }
+            else // Cylinder
+            {
+                float pos[3] = {modifier.position.x, modifier.position.y, modifier.position.z};
+                rcMarkCylinderArea(&ctx, pos, modifier.halfSize.x, modifier.halfSize.y * 2.0f,
+                                    modifier.areaType, *chf);
+            }
         }
 
         if (!rcBuildDistanceField(&ctx, *chf))
@@ -162,7 +188,12 @@ namespace core
         auto& dmesh = *input.dmesh;
 
         for (int i = 0; i < pmesh.npolys; ++i)
+        {
+            // Remap RC_WALKABLE_AREA (63) to NAVMESH_AREA_GROUND (0)
+            if (pmesh.areas[i] == RC_WALKABLE_AREA)
+                pmesh.areas[i] = 0;
             pmesh.flags[i] = 1;
+        }
 
         dtNavMeshCreateParams params;
         memset(&params, 0, sizeof(params));
@@ -244,7 +275,8 @@ namespace core
     static navigation::NavmeshTileData buildTileData(int tx, int tz,
                                                        const navigation::NavmeshInputGeometry& geometry,
                                                        const types::NavmeshBakeSettings& settings,
-                                                       const navigation::NavmeshOffMeshConnections* offMeshLinks = nullptr)
+                                                       const navigation::NavmeshOffMeshConnections* offMeshLinks = nullptr,
+                                                       const std::vector<navigation::NavmeshAreaModifier>* areaModifiers = nullptr)
     {
         navigation::NavmeshTileData result;
         result.x = tx;
@@ -281,7 +313,9 @@ namespace core
         if (!solid)
             return result;
 
-        rcCompactHeightfield* chf = buildCompactField(ctx, cfg, *solid);
+        static const std::vector<navigation::NavmeshAreaModifier> emptyModifiers;
+        rcCompactHeightfield* chf = buildCompactField(ctx, cfg, *solid,
+            areaModifiers ? *areaModifiers : emptyModifiers);
         rcFreeHeightField(solid);
         if (!chf)
             return result;
@@ -320,14 +354,18 @@ namespace core
     navigation::NavmeshTileData NavmeshAdapter::buildSingleTile(int tx, int tz,
                                                                   const navigation::NavmeshInputGeometry& geometry,
                                                                   const types::NavmeshBakeSettings& settings,
-                                                                  const navigation::NavmeshOffMeshConnections& offMeshLinks)
+                                                                  const navigation::NavmeshOffMeshConnections& offMeshLinks,
+                                                                  const std::vector<navigation::NavmeshAreaModifier>& areaModifiers)
     {
-        return buildTileData(tx, tz, geometry, settings, offMeshLinks.empty() ? nullptr : &offMeshLinks);
+        return buildTileData(tx, tz, geometry, settings,
+            offMeshLinks.empty() ? nullptr : &offMeshLinks,
+            areaModifiers.empty() ? nullptr : &areaModifiers);
     }
 
     bool NavmeshAdapter::buildNavmesh(const navigation::NavmeshInputGeometry& geometry,
                                        const types::NavmeshBakeSettings& settings,
-                                       const navigation::OffMeshConnectionsMap& tileOffMeshLinks)
+                                       const navigation::OffMeshConnectionsMap& tileOffMeshLinks,
+                                       const navigation::AreaModifiersMap& tileAreaModifiers)
     {
         updateProgress(types::NavmeshBakeStatus::Collecting, 0.0f, "Preparing geometry");
 
@@ -407,7 +445,12 @@ namespace core
                     if (linkIt != tileOffMeshLinks.end())
                         tileLinks = &linkIt->second;
 
-                    auto tileData = buildTileData(tx, tz, tileGeometry, settings, tileLinks);
+                    const std::vector<navigation::NavmeshAreaModifier>* tileModifiers = nullptr;
+                    auto modIt = tileAreaModifiers.find(tileCoord);
+                    if (modIt != tileAreaModifiers.end())
+                        tileModifiers = &modIt->second;
+
+                    auto tileData = buildTileData(tx, tz, tileGeometry, settings, tileLinks, tileModifiers);
                     if (!tileData.data.empty())
                     {
                         addNavmeshTile(tileData);

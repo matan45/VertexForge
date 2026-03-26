@@ -189,6 +189,22 @@ namespace serialization
         j["stoppingDistance"] = agent.stoppingDistance;
         j["avoidanceQuality"] = agent.avoidanceQuality;
         j["separationWeight"] = agent.separationWeight;
+        j["useCustomCosts"] = agent.useCustomCosts;
+
+        if (agent.useCustomCosts)
+        {
+            // Sparse format: only serialize non-zero overrides
+            json costsObj = json::object();
+            for (int i = 0; i < 64; ++i)
+            {
+                if (agent.customAreaCosts[i] > 0.0f)
+                {
+                    costsObj[std::to_string(i)] = agent.customAreaCosts[i];
+                }
+            }
+            j["customAreaCosts"] = costsObj;
+        }
+
         return j;
     }
 
@@ -208,6 +224,23 @@ namespace serialization
             agent.avoidanceQuality = std::min(it->get<uint8_t>(), static_cast<uint8_t>(3));
         if (auto it = j.find("separationWeight"); it != j.end() && it->is_number())
             agent.separationWeight = it->get<float>();
+        if (auto it = j.find("useCustomCosts"); it != j.end() && it->is_boolean())
+            agent.useCustomCosts = it->get<bool>();
+
+        // Initialize all custom costs to 0 (use global default)
+        for (int i = 0; i < 64; ++i)
+            agent.customAreaCosts[i] = 0.0f;
+
+        if (j.contains("customAreaCosts") && j["customAreaCosts"].is_object())
+        {
+            for (auto& [key, value] : j["customAreaCosts"].items())
+            {
+                int idx = std::stoi(key);
+                if (idx >= 0 && idx < 64 && value.is_number())
+                    agent.customAreaCosts[idx] = value.get<float>();
+            }
+        }
+
         // Reset runtime state
         agent.isActive = false;
         agent.crowdAgentIndex = -1;
@@ -355,6 +388,48 @@ namespace serialization
         obstacle.isRegistered = false;
         obstacle.lastBakedPosition = glm::vec3{0.0f};
         obstacle.phantomAgentIndex = -1;
+    }
+
+    // ============================================
+    // Navmesh Modifier Volume Component
+    // ============================================
+
+    std::string SceneSerialization::modifierVolumeShapeToString(components::NavmeshModifierVolumeShape shape)
+    {
+        switch (shape)
+        {
+            case components::NavmeshModifierVolumeShape::Box:      return "box";
+            case components::NavmeshModifierVolumeShape::Cylinder:  return "cylinder";
+            default: return "box";
+        }
+    }
+
+    components::NavmeshModifierVolumeShape SceneSerialization::stringToModifierVolumeShape(const std::string& str)
+    {
+        if (str == "cylinder") return components::NavmeshModifierVolumeShape::Cylinder;
+        return components::NavmeshModifierVolumeShape::Box;
+    }
+
+    json SceneSerialization::serializeNavmeshModifierVolume(const components::NavmeshModifierVolumeComponent& volume)
+    {
+        json j;
+        j["shape"] = modifierVolumeShapeToString(volume.shape);
+        j["size"] = {volume.size.x, volume.size.y, volume.size.z};
+        j["offset"] = {volume.offset.x, volume.offset.y, volume.offset.z};
+        j["areaType"] = volume.areaType;
+        return j;
+    }
+
+    void SceneSerialization::deserializeNavmeshModifierVolume(const json& j, components::NavmeshModifierVolumeComponent& volume)
+    {
+        if (auto it = j.find("shape"); it != j.end() && it->is_string())
+            volume.shape = stringToModifierVolumeShape(it->get<std::string>());
+        if (auto it = j.find("size"); it != j.end() && it->is_array() && it->size() >= 3)
+            volume.size = {(*it)[0].get<float>(), (*it)[1].get<float>(), (*it)[2].get<float>()};
+        if (auto it = j.find("offset"); it != j.end() && it->is_array() && it->size() >= 3)
+            volume.offset = {(*it)[0].get<float>(), (*it)[1].get<float>(), (*it)[2].get<float>()};
+        if (auto it = j.find("areaType"); it != j.end() && it->is_number_unsigned())
+            volume.areaType = it->get<uint8_t>();
     }
 
     // ============================================
