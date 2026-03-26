@@ -99,27 +99,31 @@ void main()
         float terminator = smoothstep(-0.2, 0.2, localU * (moonPhase * 2.0 - 1.0) + (moonPhase - 0.5));
         float phaseMask = mix(terminator, 1.0, smoothstep(0.9, 1.0, moonPhase));
 
-        // Procedural surface detail (maria / craters)
+        // Procedural moon surface using single smooth FBM (subtle variation only)
         vec2 moonUV = vec2(localU, localV);
-        // Large-scale maria (dark basaltic plains)
-        float maria1 = fract(sin(dot(floor(moonUV * 3.0 + 0.5), vec2(127.1, 311.7))) * 43758.5453);
-        float maria2 = fract(sin(dot(floor(moonUV * 5.0 + 0.5), vec2(269.5, 183.3))) * 43758.5453);
-        float maria3 = fract(sin(dot(floor(moonUV * 8.0 + 0.5), vec2(419.2, 371.9))) * 43758.5453);
-        float mariaPattern = smoothstep(0.3, 0.7, maria1 * 0.5 + maria2 * 0.3 + maria3 * 0.2);
-        // Blend between bright highlands (1.0) and darker maria (0.6)
-        float surfaceAlbedo = mix(0.55, 1.0, mariaPattern);
-
-        // Small crater detail
-        vec2 craterUV = moonUV * 12.0;
-        vec2 craterCell = floor(craterUV);
-        vec2 craterFrac = fract(craterUV);
-        float ch = fract(sin(dot(craterCell, vec2(73.1, 157.3))) * 43758.5453);
-        float ch2 = fract(sin(dot(craterCell, vec2(213.7, 91.1))) * 43758.5453);
-        vec2 craterPos = vec2(ch, ch2) * 0.6 + 0.2;
-        float craterDist = length(craterFrac - craterPos);
-        float craterRim = smoothstep(0.12, 0.15, craterDist) - smoothstep(0.15, 0.18, craterDist);
-        float craterFloor = 1.0 - 0.15 * (1.0 - smoothstep(0.0, 0.12, craterDist));
-        surfaceAlbedo *= craterFloor + craterRim * 0.1;
+        float surfaceNoise = 0.0;
+        {
+            float amp = 0.5;
+            float freq = 2.0;
+            vec2 seedOffset = vec2(0.0);
+            for (int i = 0; i < 5; i++)
+            {
+                vec2 p = moonUV * freq + seedOffset;
+                vec2 ip = floor(p);
+                vec2 fp = fract(p);
+                vec2 u = fp * fp * fp * (fp * (fp * 6.0 - 15.0) + 10.0); // quintic smoothing
+                float a = fract(sin(dot(ip,                  vec2(127.1, 311.7))) * 43758.5453);
+                float b = fract(sin(dot(ip + vec2(1.0, 0.0), vec2(127.1, 311.7))) * 43758.5453);
+                float c = fract(sin(dot(ip + vec2(0.0, 1.0), vec2(127.1, 311.7))) * 43758.5453);
+                float d = fract(sin(dot(ip + vec2(1.0, 1.0), vec2(127.1, 311.7))) * 43758.5453);
+                surfaceNoise += amp * mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+                freq *= 2.0;
+                amp *= 0.5;
+                seedOffset += vec2(17.3, 31.7);
+            }
+        }
+        // Gentle surface variation: mostly bright with subtle darker patches
+        float surfaceAlbedo = mix(0.82, 1.0, smoothstep(0.35, 0.65, surfaceNoise));
 
         // Limb darkening (edges of moon disk are darker)
         float r2 = localU * localU + localV * localV;
@@ -272,26 +276,6 @@ void main()
 
                 totalStarLight += starColor * starBright * magnitude * starMask * twinkle;
             }
-        }
-
-        // --- Milky Way band (diffuse glow along galactic plane) ---
-        {
-            // Approximate galactic plane tilted ~60 degrees from celestial pole
-            vec3 galacticNorth = normalize(vec3(0.3, 0.85, -0.43));
-            float galacticLat = abs(dot(starViewDir, galacticNorth));
-            float milkyWayMask = exp(-galacticLat * galacticLat / 0.04);
-
-            // Add noise for structure (dust lanes, bright patches)
-            float mwPhi = atan(starViewDir.z, starViewDir.x) * 3.0;
-            float mwTheta = acos(clamp(starViewDir.y, -1.0, 1.0)) * 4.0;
-            float mwNoise1 = fract(sin(dot(floor(vec2(mwPhi, mwTheta) * 5.0), vec2(127.1, 311.7))) * 43758.5453);
-            float mwNoise2 = fract(sin(dot(floor(vec2(mwPhi, mwTheta) * 10.0), vec2(269.5, 183.3))) * 43758.5453);
-            float mwDetail = mwNoise1 * 0.6 + mwNoise2 * 0.4;
-            // Dark dust lanes
-            float dustLane = smoothstep(0.25, 0.55, mwDetail);
-
-            vec3 milkyWayColor = vec3(0.65, 0.7, 0.85) * starBright * 0.015;
-            totalStarLight += milkyWayColor * milkyWayMask * dustLane;
         }
 
         // Fade stars near horizon (atmospheric extinction)
