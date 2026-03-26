@@ -149,7 +149,17 @@ namespace render::atmosphere
                            float time = 0.0f);
 
         // Override sun direction from directional light (takes priority over azimuth/elevation)
-        void setSunDirection(const glm::vec3& dir) { sunDirectionOverride = dir; hasSunOverride = true; }
+        // Ignored when day-night cycle is active (cycle controls sun position)
+        void setSunDirection(const glm::vec3& dir)
+        {
+            if (!settings.dayNightEnabled)
+            {
+                sunDirectionOverride = dir;
+                hasSunOverride = true;
+            }
+        }
+
+        [[nodiscard]] bool isDayNightEnabled() const { return settings.dayNightEnabled; }
 
         // Dispatch all compute LUTs
         void dispatchCompute(const vk::CommandBuffer& cmd);

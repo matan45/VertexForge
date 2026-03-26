@@ -136,6 +136,10 @@ namespace render::atmosphere
         lastFrameTime = time;
         if (dt > 0.0f && dt < 1.0f)
             dayNightController.tick(dt, settings);
+
+        // Day-night cycle controls sun position; clear any directional light override
+        if (settings.dayNightEnabled)
+            hasSunOverride = false;
     }
 
     void AtmospherePipeline::createSampler()
