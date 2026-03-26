@@ -321,6 +321,7 @@
     <ClInclude Include="render\water\WaterGPUTypes.hpp" />
     <ClInclude Include="render\water\WaterMeshBuffer.hpp" />
     <ClInclude Include="render\water\WaterPipeline.hpp" />
+    <ClInclude Include="render\water\WaterRefractionResources.hpp" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="controllers\AnimatorSystemController.cpp" />
@@ -561,6 +562,7 @@
     <ClCompile Include="render\water\OceanFFTResources.cpp" />
     <ClCompile Include="render\water\WaterMeshBuffer.cpp" />
     <ClCompile Include="render\water\WaterPipeline.cpp" />
+    <ClCompile Include="render\water\WaterRefractionResources.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="..\..\resources\shaders\animation\bone_evaluate.glsl" />

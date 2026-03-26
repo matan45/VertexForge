@@ -201,7 +201,7 @@ namespace render::water
         vk::ImageCopy copyRegion{};
         copyRegion.srcSubresource = {vk::ImageAspectFlagBits::eColor, 0, 0, 1};
         copyRegion.dstSubresource = {vk::ImageAspectFlagBits::eColor, 0, 0, 1};
-        copyRegion.extent = {width, height, 1};
+        copyRegion.extent = vk::Extent3D {width, height, 1};
         cmd.copyImage(srcColorImage, vk::ImageLayout::eTransferSrcOptimal,
                       refractionImage, vk::ImageLayout::eTransferDstOptimal,
                       copyRegion);
