@@ -85,22 +85,15 @@ namespace windows::details
             {
                 events::volumetric::GetVolumetricBakeProgressQuery progressQuery;
                 auto progress = events::EventDispatcher::instance().query(progressQuery);
-                if (progress.has_value())
+                if (progress.status == volumetric::VolumetricBakeStatus::Voxelizing ||
+                    progress.status == volumetric::VolumetricBakeStatus::BuildingOctree)
                 {
-                    switch (progress->status)
-                    {
-                    case volumetric::VolumetricBakeStatus::Voxelizing:
-                    case volumetric::VolumetricBakeStatus::BuildingOctree:
-                        ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "%s (%.0f%%)",
-                                           progress->currentStage.c_str(), progress->progress * 100.0f);
-                        break;
-                    case volumetric::VolumetricBakeStatus::Failed:
-                        ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Bake Failed");
-                        break;
-                    default:
-                        ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "Not Baked");
-                        break;
-                    }
+                    ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "%s (%.0f%%)",
+                                       progress.currentStage.c_str(), progress.progress * 100.0f);
+                }
+                else if (progress.status == volumetric::VolumetricBakeStatus::Failed)
+                {
+                    ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Bake Failed");
                 }
                 else
                 {
