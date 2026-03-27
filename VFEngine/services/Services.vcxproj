@@ -446,6 +446,7 @@
     <ClCompile Include="impl\scene\EntityStateService.cpp" />
     <ClCompile Include="impl\scene\HierarchyService.cpp" />
     <ClCompile Include="impl\scene\OceanService.cpp" />
+    <ClCompile Include="impl\scene\OceanStreamingOps.cpp" />
     <ClCompile Include="impl\scene\ScenePersistenceService.cpp" />
     <ClCompile Include="impl\scene\StreamingZoneManager.cpp" />
     <ClCompile Include="impl\scene\TerrainBrushOps.cpp" />

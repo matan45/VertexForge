@@ -33,5 +33,9 @@ namespace core
         uint32_t getOceanFFTConfigVersion() const override;
         float getOceanHeightAt(const glm::vec2& worldXZ) const override;
         float getPhysicsGravity() const override;
+
+        bool isWorldModeActive() const override;
+        const water::WaterTileGrid* getWaterTileGrid() const override;
+        void processWaterTileStreaming() override;
     };
 }

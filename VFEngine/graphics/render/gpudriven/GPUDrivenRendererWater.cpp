@@ -3,6 +3,7 @@
 #include "../../core/SwapChain.hpp"
 #include "../water/OceanFFTResources.hpp"
 #include "../../../services/data/OceanData.hpp"
+#include "../../../utilities/water/WaterTileGrid.hpp"
 #include "print/Log.hpp"
 #include <cstring>
 #include <chrono>
@@ -54,55 +55,73 @@ namespace render::gpudriven
     void GPUDrivenRenderer::updateWater(const services::OceanVisualSettings& visualSettings,
                                           float baseWaterHeight,
                                           const glm::vec3& cameraPosition,
-                                          float oceanPatchSize)
+                                          float oceanPatchSize,
+                                          bool worldMode,
+                                          const ::water::WaterTileGrid* tileGrid)
     {
         auto updateStart = std::chrono::high_resolution_clock::now();
         if (!initialized || !water.renderingEnabled || !water.pipeline)
             return;
 
-        // Generate grid of tiles centered on camera with distance-based LOD
-        constexpr int GRID_HALF = 4;  // 9x9 grid = 81 tiles max
         float tileSize = oceanPatchSize * 2.0f;
 
-        // Snap camera to tile grid
-        float snappedX = std::floor(cameraPosition.x / tileSize) * tileSize;
-        float snappedZ = std::floor(cameraPosition.z / tileSize) * tileSize;
-
-        // Sort tiles by LOD for batched draw calls
-        // LOD thresholds based on distance from camera (in tiles)
-        // Ring 0 (center): LOD 0, Ring 1: LOD 1, Ring 2: LOD 2, Ring 3+: LOD 3
-        std::array<std::vector<render::water::WaterTileGPUData>, render::water::WATER_LOD_COUNT> lodBuckets;
-        for (auto& bucket : lodBuckets) bucket.reserve(32);
-
-        for (int tz = -GRID_HALF; tz <= GRID_HALF; ++tz)
+        if (worldMode && tileGrid && tileGrid->tileCount() > 0)
         {
-            for (int tx = -GRID_HALF; tx <= GRID_HALF; ++tx)
-            {
-                float tileOriginX = snappedX + tx * tileSize;
-                float tileOriginZ = snappedZ + tz * tileSize;
+            // World mode: sector-driven tiles from WaterTileGrid
+            // WaterTileGrid uses ::water::WaterTileGPUData which has identical layout
+            // to render::water::WaterTileGPUData — reinterpret via memcpy
+            std::vector<::water::WaterTileGPUData> gridTiles;
+            uint32_t gridLodCounts[::water::WATER_TILE_LOD_COUNT] = {};
+            tileGrid->buildGPUTileData(cameraPosition, tileSize, baseWaterHeight,
+                                        gridTiles, gridLodCounts);
 
-                // Distance in tile units from center
-                int ring = std::max(std::abs(tx), std::abs(tz));
-
-                uint32_t lod;
-                if (ring <= 1) lod = 0;
-                else if (ring <= 2) lod = 1;
-                else if (ring <= 3) lod = 2;
-                else lod = 3;
-
-                render::water::WaterTileGPUData tile;
-                tile.worldOriginAndSize = glm::vec4(tileOriginX, 0.0f, tileOriginZ, tileSize);
-                tile.heightAndWave = glm::vec4(baseWaterHeight, 1.0f, static_cast<float>(lod), 0.0f);
-                lodBuckets[lod].push_back(tile);
-            }
+            water.tileData.clear();
+            water.tileData.resize(gridTiles.size());
+            static_assert(sizeof(::water::WaterTileGPUData) == sizeof(render::water::WaterTileGPUData));
+            std::memcpy(water.tileData.data(), gridTiles.data(),
+                        gridTiles.size() * sizeof(render::water::WaterTileGPUData));
+            for (uint32_t lod = 0; lod < render::water::WATER_LOD_COUNT; ++lod)
+                water.lodTileCounts[lod] = gridLodCounts[lod];
         }
-
-        // Flatten into SSBO sorted by LOD
-        water.tileData.clear();
-        for (uint32_t lod = 0; lod < render::water::WATER_LOD_COUNT; ++lod)
+        else
         {
-            water.lodTileCounts[lod] = static_cast<uint32_t>(lodBuckets[lod].size());
-            water.tileData.insert(water.tileData.end(), lodBuckets[lod].begin(), lodBuckets[lod].end());
+            // Editor mode: generate 9x9 grid centered on camera
+            constexpr int GRID_HALF = 4;
+
+            float snappedX = std::floor(cameraPosition.x / tileSize) * tileSize;
+            float snappedZ = std::floor(cameraPosition.z / tileSize) * tileSize;
+
+            std::array<std::vector<render::water::WaterTileGPUData>, render::water::WATER_LOD_COUNT> lodBuckets;
+            for (auto& bucket : lodBuckets) bucket.reserve(32);
+
+            for (int tz = -GRID_HALF; tz <= GRID_HALF; ++tz)
+            {
+                for (int tx = -GRID_HALF; tx <= GRID_HALF; ++tx)
+                {
+                    float tileOriginX = snappedX + tx * tileSize;
+                    float tileOriginZ = snappedZ + tz * tileSize;
+
+                    int ring = std::max(std::abs(tx), std::abs(tz));
+
+                    uint32_t lod;
+                    if (ring <= 1) lod = 0;
+                    else if (ring <= 2) lod = 1;
+                    else if (ring <= 3) lod = 2;
+                    else lod = 3;
+
+                    render::water::WaterTileGPUData tile;
+                    tile.worldOriginAndSize = glm::vec4(tileOriginX, 0.0f, tileOriginZ, tileSize);
+                    tile.heightAndWave = glm::vec4(baseWaterHeight, 1.0f, static_cast<float>(lod), 0.0f);
+                    lodBuckets[lod].push_back(tile);
+                }
+            }
+
+            water.tileData.clear();
+            for (uint32_t lod = 0; lod < render::water::WATER_LOD_COUNT; ++lod)
+            {
+                water.lodTileCounts[lod] = static_cast<uint32_t>(lodBuckets[lod].size());
+                water.tileData.insert(water.tileData.end(), lodBuckets[lod].begin(), lodBuckets[lod].end());
+            }
         }
 
         water.meshBuffer->updateTileData(water.tileData);

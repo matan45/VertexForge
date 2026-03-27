@@ -5,6 +5,8 @@
 #include "../../data/OceanData.hpp"
 #include "../../events/terrain/OceanEvents.hpp"
 #include "../../events/EventDispatcher.hpp"
+#include "../../../utilities/world/WorldTypes.hpp"
+#include "../../../utilities/terrain/TerrainTypes.hpp"
 #include <glm/glm.hpp>
 #include <functional>
 #include <memory>
@@ -14,6 +16,11 @@
 namespace scene
 {
     class SceneGraphSystem;
+}
+
+namespace water
+{
+    class WaterTileGrid;
 }
 
 namespace services
@@ -37,6 +44,21 @@ namespace services
 
         std::unique_ptr<::events::SubscriptionToken> entityDeletedSubscription;
         std::unique_ptr<::events::SubscriptionToken> sceneClearedSubscription;
+
+        // Sector-driven water tile streaming (world mode)
+        bool worldModeActive = false;
+        world::SectorConfig cachedSectorConfig;
+        std::unique_ptr<water::WaterTileGrid> waterTileGrid;
+        std::unique_ptr<::events::SubscriptionToken> sectorActivatedSub;
+        std::unique_ptr<::events::SubscriptionToken> sectorDeactivatedSub;
+        std::unique_ptr<::events::SubscriptionToken> worldLoadedSub;
+
+        struct PendingWaterTileAction
+        {
+            terrain::TileCoord coord;
+            bool isLoad;
+        };
+        std::vector<PendingWaterTileAction> pendingSectorTileActions;
 
     public:
         explicit OceanService(std::shared_ptr<scene::SceneGraphSystem> sceneGraph);
@@ -73,6 +95,11 @@ namespace services
 
         void rebuildOceanFromComponents();
 
+        // Water tile streaming
+        bool isWorldModeActive() const { return worldModeActive; }
+        const water::WaterTileGrid* getWaterTileGrid() const;
+        void processPendingSectorTileActions();
+
     private:
         void registerOceanCoreHandlers(::events::EventDispatcher& dispatcher);
         void registerOceanQueryHandlers(::events::EventDispatcher& dispatcher);
@@ -80,5 +107,10 @@ namespace services
 
         void onEntityDeleted(EntityHandle entity);
         void onSceneCleared();
+
+        // Sector-driven water tile streaming
+        void onSectorActivated(const world::SectorCoord& coord, const world::SectorConfig& config);
+        void onSectorDeactivated(const world::SectorCoord& coord, const world::SectorConfig& config);
+        void activateWaterTilesForLoadedSectors();
     };
 }

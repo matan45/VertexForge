@@ -9,7 +9,9 @@
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/terrain/OceanEvents.hpp"
 #include "../../events/project/SceneEvents.hpp"
+#include "../../events/world/WorldSectorEvents.hpp"
 #include "../../providers/physics/IPhysicsProvider.hpp"
+#include "../../../utilities/water/WaterTileGrid.hpp"
 
 namespace services
 {
@@ -36,6 +38,24 @@ namespace services
             dispatcher.unsubscribe(*sceneClearedSubscription);
             sceneClearedSubscription.reset();
         }
+
+        if (sectorActivatedSub && sectorActivatedSub->isValid())
+        {
+            dispatcher.unsubscribe(*sectorActivatedSub);
+            sectorActivatedSub.reset();
+        }
+        if (sectorDeactivatedSub && sectorDeactivatedSub->isValid())
+        {
+            dispatcher.unsubscribe(*sectorDeactivatedSub);
+            sectorDeactivatedSub.reset();
+        }
+        if (worldLoadedSub && worldLoadedSub->isValid())
+        {
+            dispatcher.unsubscribe(*worldLoadedSub);
+            worldLoadedSub.reset();
+        }
+
+        waterTileGrid.reset();
 
         dispatcher.unregisterCommandHandler<events::ocean::CreateOceanCommand>();
         dispatcher.unregisterCommandHandler<events::ocean::DeleteOceanCommand>();
@@ -76,6 +96,28 @@ namespace services
                 onSceneCleared();
             });
         sceneClearedSubscription = std::make_unique<events::SubscriptionToken>(sceneToken);
+
+        // Sector-driven water tile streaming subscriptions
+        auto activatedToken = dispatcher.subscribe<events::world::SectorActivatedNotification>(
+            [this](const events::world::SectorActivatedNotification& notif)
+            {
+                onSectorActivated(notif.coord, notif.sectorConfig);
+            });
+        sectorActivatedSub = std::make_unique<events::SubscriptionToken>(activatedToken);
+
+        auto deactivatedToken = dispatcher.subscribe<events::world::SectorDeactivatedNotification>(
+            [this](const events::world::SectorDeactivatedNotification& notif)
+            {
+                onSectorDeactivated(notif.coord, notif.sectorConfig);
+            });
+        sectorDeactivatedSub = std::make_unique<events::SubscriptionToken>(deactivatedToken);
+
+        auto worldLoadedToken = dispatcher.subscribe<events::world::WorldLoadedNotification>(
+            [this](const events::world::WorldLoadedNotification&)
+            {
+                activateWaterTilesForLoadedSectors();
+            });
+        worldLoadedSub = std::make_unique<events::SubscriptionToken>(worldLoadedToken);
     }
 
     void OceanService::registerOceanCoreHandlers(::events::EventDispatcher& dispatcher)

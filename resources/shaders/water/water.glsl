@@ -69,19 +69,25 @@ void main() {
 
     fragBaseHeight = waterHeight;
 
+    // Per-tile simulation LOD: skip expensive bands at coarse LODs
+    uint lodLevel = uint(heightWave.z);
+    uint tileBandMask = pc.bandEnableMask;
+    if (lodLevel >= 2u) tileBandMask &= ~4u;  // skip ripples at LOD2+
+    if (lodLevel >= 3u) tileBandMask &= ~2u;  // skip agitation at LOD3
+
     // Multi-band FFT displacement: each band at its own patch size
     vec4 totalDisp = vec4(0.0);
     vec3 totalNorm = vec3(0.0, 1.0, 0.0);
 
     // Band 0: Swell (large-scale distant wind waves)
-    if ((pc.bandEnableMask & 1u) != 0u) {
+    if ((tileBandMask & 1u) != 0u) {
         vec2 uv0 = worldPos.xz / pc.oceanPatchSize0;
         totalDisp += texture(oceanDisp0, uv0);
         totalNorm = texture(oceanNorm0, uv0).xyz;
     }
 
     // Band 1: Agitation (mid-frequency wind chaos)
-    if ((pc.bandEnableMask & 2u) != 0u) {
+    if ((tileBandMask & 2u) != 0u) {
         vec2 uv1 = worldPos.xz / pc.oceanPatchSize1;
         totalDisp += texture(oceanDisp1, uv1);
         vec3 n1 = texture(oceanNorm1, uv1).xyz;
@@ -89,7 +95,7 @@ void main() {
     }
 
     // Band 2: Ripples (fine surface detail)
-    if ((pc.bandEnableMask & 4u) != 0u) {
+    if ((tileBandMask & 4u) != 0u) {
         vec2 uv2 = worldPos.xz / pc.oceanPatchSize2;
         totalDisp += texture(oceanDisp2, uv2);
         vec3 n2 = texture(oceanNorm2, uv2).xyz;
