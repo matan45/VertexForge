@@ -6,9 +6,7 @@
 namespace core
 {
     class Device;
-    class SwapChain;
     class Shader;
-    struct OffscreenResources;
 }
 
 namespace render::postprocess
@@ -19,8 +17,6 @@ namespace render::postprocess
     {
     private:
         core::Device& device;
-        core::SwapChain& swapChain;
-        core::OffscreenResources& offscreenResources;
         PostProcessPipeline& pipeline;
 
         std::shared_ptr<core::Shader> shader;
@@ -31,9 +27,7 @@ namespace render::postprocess
         ::postprocess::UnderwaterSettings currentSettings;
 
     public:
-        UnderwaterEffect(core::Device& device, core::SwapChain& swapChain,
-                         core::OffscreenResources& offscreenResources,
-                         PostProcessPipeline& pipeline);
+        UnderwaterEffect(core::Device& device, PostProcessPipeline& pipeline);
 
         void init(vk::RenderPass renderPass, vk::Extent2D extent) override;
         void cleanup() override;

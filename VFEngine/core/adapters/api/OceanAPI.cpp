@@ -43,8 +43,6 @@ namespace core::api
                 });
 
             // ocean.isCameraUnderwater() -> bool
-            // Uses IsPositionInOcean with y=0 as a proxy; actual camera position
-            // should be provided by the caller via isInOcean if needed.
             interpreter->registerNativeFunction("_native_ocean_isCameraUnderwater",
                 [&dispatcher](const std::vector<value::Value>& args) -> value::Value
                 {

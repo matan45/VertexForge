@@ -777,10 +777,7 @@ namespace render::water
         for (uint32_t lod = 0; lod < WATER_LOD_COUNT; ++lod)
         {
             if (lodTileCounts[lod] == 0)
-            {
-                firstInstance += lodTileCounts[lod];
                 continue;
-            }
 
             const auto& lodMesh = meshBuffer.getLODMesh(lod);
             cmd.drawIndexed(

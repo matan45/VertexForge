@@ -1,7 +1,6 @@
 #include "UnderwaterEffect.hpp"
 #include "../PostProcessPipeline.hpp"
 #include "../../../core/Device.hpp"
-#include "../../../core/SwapChain.hpp"
 #include "../../../core/Shader.hpp"
 #include "../../../core/PipelineUtilities.hpp"
 
@@ -27,10 +26,8 @@ namespace render::postprocess
         float farPlane;
     };
 
-    UnderwaterEffect::UnderwaterEffect(core::Device& device, core::SwapChain& swapChain,
-                                       core::OffscreenResources& offscreenResources,
-                                       PostProcessPipeline& pipeline)
-        : device{device}, swapChain{swapChain}, offscreenResources{offscreenResources}, pipeline{pipeline}
+    UnderwaterEffect::UnderwaterEffect(core::Device& device, PostProcessPipeline& pipeline)
+        : device{device}, pipeline{pipeline}
     {
         enabled = false;
     }

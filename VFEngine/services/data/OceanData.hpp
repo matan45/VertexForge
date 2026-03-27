@@ -5,6 +5,7 @@
 
 namespace services
 {
+    // Must stay in sync with components::MAX_OCEAN_BANDS in OceanComponents.hpp
     static constexpr uint32_t MAX_OCEAN_BANDS = 3;
 
     struct OceanBandConfigData
@@ -29,11 +30,6 @@ namespace services
         };
         float gravity = 9.81f;
         bool enabled = false;
-
-        // Legacy accessors for backward compatibility
-        uint32_t getResolution() const { return bands[0].resolution; }
-        float getPatchSize() const { return bands[0].patchSize; }
-        float getWindSpeed() const { return bands[0].windSpeed; }
     };
 
     struct OceanVisualSettings

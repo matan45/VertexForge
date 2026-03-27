@@ -18,8 +18,7 @@ namespace render::gpudriven
             device.getLogicalDevice(),
             device.getPhysicalDevice(),
             device.getGraphicsQueue(),
-            device.getStagingCommandPool(),
-            render::water::WATER_DEFAULT_SUBDIVISIONS
+            device.getStagingCommandPool()
         );
 
         // Create refraction resources before pipeline so we have the descriptor set layout
@@ -73,6 +72,7 @@ namespace render::gpudriven
         // LOD thresholds based on distance from camera (in tiles)
         // Ring 0 (center): LOD 0, Ring 1: LOD 1, Ring 2: LOD 2, Ring 3+: LOD 3
         std::array<std::vector<render::water::WaterTileGPUData>, render::water::WATER_LOD_COUNT> lodBuckets;
+        for (auto& bucket : lodBuckets) bucket.reserve(32);
 
         for (int tz = -GRID_HALF; tz <= GRID_HALF; ++tz)
         {
@@ -652,22 +652,33 @@ namespace render::gpudriven
 
     void GPUDrivenRenderer::readbackOceanDisplacement()
     {
-        if (!water.oceanEnabled || !water.oceanBands[0] || !water.oceanBands[0]->isInitialized())
+        if (!water.oceanEnabled)
             return;
 
-        // Only readback band 0 (swell) for physics
+        // Find first active band for physics readback (typically band 0 / swell)
+        render::water::OceanFFT* physicsBand = nullptr;
+        for (auto& band : water.oceanBands)
+            if (band && band->isInitialized()) { physicsBand = band.get(); break; }
+        if (!physicsBand)
+            return;
+
         auto readbackStart = std::chrono::high_resolution_clock::now();
-        water.oceanBands[0]->readbackDisplacementData();
+        physicsBand->readbackDisplacementData();
         auto readbackEnd = std::chrono::high_resolution_clock::now();
         water.readbackUs = std::chrono::duration<float, std::micro>(readbackEnd - readbackStart).count();
     }
 
     float GPUDrivenRenderer::getOceanHeightAt(const glm::vec2& worldXZ) const
     {
-        if (!water.oceanEnabled || !water.oceanBands[0] || !water.oceanBands[0]->isInitialized())
+        if (!water.oceanEnabled)
             return 0.0f;
 
-        return water.oceanBands[0]->sampleHeightAt(worldXZ);
+        // Find first active band for physics height sampling (typically band 0 / swell)
+        for (auto& band : water.oceanBands)
+            if (band && band->isInitialized())
+                return band->sampleHeightAt(worldXZ);
+
+        return 0.0f;
     }
 
     void GPUDrivenRenderer::copySceneColorForRefraction(vk::CommandBuffer cmd, vk::Image colorImage,

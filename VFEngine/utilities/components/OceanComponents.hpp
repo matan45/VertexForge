@@ -5,6 +5,7 @@
 
 namespace components
 {
+    // Must stay in sync with services::MAX_OCEAN_BANDS in OceanData.hpp
     static constexpr uint32_t MAX_OCEAN_BANDS = 3;
 
     struct OceanBandData

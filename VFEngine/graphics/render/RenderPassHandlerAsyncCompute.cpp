@@ -108,7 +108,7 @@ namespace render
                 std::array<render::water::OceanFFTConfig, 3> configs;
                 std::array<bool, 3> enabled;
 
-                for (uint32_t i = 0; i < 3; ++i)
+                for (uint32_t i = 0; i < services::MAX_OCEAN_BANDS; ++i)
                 {
                     const auto& band = cfgData.bands[i];
                     configs[i].resolution = band.resolution;

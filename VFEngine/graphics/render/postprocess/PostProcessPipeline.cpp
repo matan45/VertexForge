@@ -449,7 +449,7 @@ namespace render::postprocess
             [this]() { return std::make_unique<ColorGradingEffect>(device); });
 
         syncEffect(::postprocess::EffectType::Underwater, settings.underwater.enabled,
-            [this]() { return std::make_unique<UnderwaterEffect>(device, swapChain, offscreenResources, *this); });
+            [this]() { return std::make_unique<UnderwaterEffect>(device, *this); });
 
         updateSettings(settings);
     }

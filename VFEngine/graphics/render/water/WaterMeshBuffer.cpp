@@ -12,7 +12,7 @@ namespace render::water
     };
 
     void WaterMeshBuffer::init(vk::Device device, vk::PhysicalDevice physicalDevice,
-                               vk::Queue queue, vk::CommandPool cmdPool, uint32_t /*subdivisions*/)
+                               vk::Queue queue, vk::CommandPool cmdPool)
     {
         this->device = device;
         this->physicalDevice = physicalDevice;
