@@ -4,6 +4,11 @@
 #include <glm/glm.hpp>
 #include <cstdint>
 
+namespace water
+{
+    class WaterTileGrid;
+}
+
 namespace services
 {
     struct OceanFFTConfigData;
@@ -25,5 +30,9 @@ namespace services
         virtual float getOceanHeightAt(const glm::vec2& worldXZ) const = 0;
         virtual void setOceanHeightSampler(std::function<float(const glm::vec2&)> sampler) = 0;
         virtual float getPhysicsGravity() const = 0;
+
+        virtual bool isWorldModeActive() const = 0;
+        virtual const water::WaterTileGrid* getWaterTileGrid() const = 0;
+        virtual void processWaterTileStreaming() = 0;
     };
 }

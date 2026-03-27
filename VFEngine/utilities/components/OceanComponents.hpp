@@ -39,6 +39,12 @@ namespace components
         float refractionDepthScale = 0.2f;
         float causticStrength = 1.0f;
         float causticDepthFalloff = 0.5f;
+        float shoreFoamRange = 3.0f;
+        float shoreFoamIntensity = 0.8f;
+        float shoreBreakingStrength = 0.8f;
+        float shoreWetRange = 5.0f;
+        float shoreWetDarkening = 0.3f;
+        float shoreWetRoughness = 0.15f;
 
         // Ocean FFT bands
         OceanBandData oceanBands[MAX_OCEAN_BANDS] = {

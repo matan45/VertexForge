@@ -69,4 +69,21 @@ namespace core
         }
         return 9.81f;
     }
+
+    bool OceanRenderAdapter::isWorldModeActive() const
+    {
+        return oceanService && oceanService->isWorldModeActive();
+    }
+
+    const water::WaterTileGrid* OceanRenderAdapter::getWaterTileGrid() const
+    {
+        if (!oceanService) return nullptr;
+        return oceanService->getWaterTileGrid();
+    }
+
+    void OceanRenderAdapter::processWaterTileStreaming()
+    {
+        if (oceanService)
+            oceanService->processPendingSectorTileActions();
+    }
 }

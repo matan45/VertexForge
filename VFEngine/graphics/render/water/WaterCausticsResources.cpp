@@ -18,6 +18,9 @@ namespace render::water
 
     void WaterCausticsResources::init(vk::ImageView causticView)
     {
+        if (!causticView)
+            return;
+
         vk::Device vkDevice = device.getLogicalDevice();
 
         // Create sampler with repeat addressing for tiling caustics

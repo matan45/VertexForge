@@ -9,7 +9,9 @@
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/terrain/OceanEvents.hpp"
 #include "../../events/project/SceneEvents.hpp"
+#include "../../events/world/WorldSectorEvents.hpp"
 #include "../../providers/physics/IPhysicsProvider.hpp"
+#include "../../../utilities/water/WaterTileGrid.hpp"
 
 namespace services
 {
@@ -36,6 +38,24 @@ namespace services
             dispatcher.unsubscribe(*sceneClearedSubscription);
             sceneClearedSubscription.reset();
         }
+
+        if (sectorActivatedSub && sectorActivatedSub->isValid())
+        {
+            dispatcher.unsubscribe(*sectorActivatedSub);
+            sectorActivatedSub.reset();
+        }
+        if (sectorDeactivatedSub && sectorDeactivatedSub->isValid())
+        {
+            dispatcher.unsubscribe(*sectorDeactivatedSub);
+            sectorDeactivatedSub.reset();
+        }
+        if (worldLoadedSub && worldLoadedSub->isValid())
+        {
+            dispatcher.unsubscribe(*worldLoadedSub);
+            worldLoadedSub.reset();
+        }
+
+        waterTileGrid.reset();
 
         dispatcher.unregisterCommandHandler<events::ocean::CreateOceanCommand>();
         dispatcher.unregisterCommandHandler<events::ocean::DeleteOceanCommand>();
@@ -76,6 +96,28 @@ namespace services
                 onSceneCleared();
             });
         sceneClearedSubscription = std::make_unique<events::SubscriptionToken>(sceneToken);
+
+        // Sector-driven water tile streaming subscriptions
+        auto activatedToken = dispatcher.subscribe<events::world::SectorActivatedNotification>(
+            [this](const events::world::SectorActivatedNotification& notif)
+            {
+                onSectorActivated(notif.coord, notif.sectorConfig);
+            });
+        sectorActivatedSub = std::make_unique<events::SubscriptionToken>(activatedToken);
+
+        auto deactivatedToken = dispatcher.subscribe<events::world::SectorDeactivatedNotification>(
+            [this](const events::world::SectorDeactivatedNotification& notif)
+            {
+                onSectorDeactivated(notif.coord, notif.sectorConfig);
+            });
+        sectorDeactivatedSub = std::make_unique<events::SubscriptionToken>(deactivatedToken);
+
+        auto worldLoadedToken = dispatcher.subscribe<events::world::WorldLoadedNotification>(
+            [this](const events::world::WorldLoadedNotification&)
+            {
+                activateWaterTilesForLoadedSectors();
+            });
+        worldLoadedSub = std::make_unique<events::SubscriptionToken>(worldLoadedToken);
     }
 
     void OceanService::registerOceanCoreHandlers(::events::EventDispatcher& dispatcher)
@@ -113,6 +155,12 @@ namespace services
                 comp.refractionDepthScale = cmd.settings.refractionDepthScale;
                 comp.causticStrength = cmd.settings.causticStrength;
                 comp.causticDepthFalloff = cmd.settings.causticDepthFalloff;
+                comp.shoreFoamRange = cmd.settings.shoreFoamRange;
+                comp.shoreFoamIntensity = cmd.settings.shoreFoamIntensity;
+                comp.shoreBreakingStrength = cmd.settings.shoreBreakingStrength;
+                comp.shoreWetRange = cmd.settings.shoreWetRange;
+                comp.shoreWetDarkening = cmd.settings.shoreWetDarkening;
+                comp.shoreWetRoughness = cmd.settings.shoreWetRoughness;
             });
 
         dispatcher.registerCommandHandler<events::ocean::SetOceanPhysicsSettingsCommand>(
@@ -334,6 +382,12 @@ namespace services
         data.refractionDepthScale = comp.refractionDepthScale;
         data.causticStrength = comp.causticStrength;
         data.causticDepthFalloff = comp.causticDepthFalloff;
+        data.shoreFoamRange = comp.shoreFoamRange;
+        data.shoreFoamIntensity = comp.shoreFoamIntensity;
+        data.shoreBreakingStrength = comp.shoreBreakingStrength;
+        data.shoreWetRange = comp.shoreWetRange;
+        data.shoreWetDarkening = comp.shoreWetDarkening;
+        data.shoreWetRoughness = comp.shoreWetRoughness;
         for (uint32_t i = 0; i < services::MAX_OCEAN_BANDS; ++i)
         {
             data.oceanConfig.bands[i].resolution = comp.oceanBands[i].resolution;
@@ -415,6 +469,12 @@ namespace services
         settings.refractionDepthScale = comp.refractionDepthScale;
         settings.causticStrength = comp.causticStrength;
         settings.causticDepthFalloff = comp.causticDepthFalloff;
+        settings.shoreFoamRange = comp.shoreFoamRange;
+        settings.shoreFoamIntensity = comp.shoreFoamIntensity;
+        settings.shoreBreakingStrength = comp.shoreBreakingStrength;
+        settings.shoreWetRange = comp.shoreWetRange;
+        settings.shoreWetDarkening = comp.shoreWetDarkening;
+        settings.shoreWetRoughness = comp.shoreWetRoughness;
 
         return settings;
     }
@@ -457,6 +517,12 @@ namespace services
         fileData.refractionDepthScale = comp.refractionDepthScale;
         fileData.causticStrength = comp.causticStrength;
         fileData.causticDepthFalloff = comp.causticDepthFalloff;
+        fileData.shoreFoamRange = comp.shoreFoamRange;
+        fileData.shoreFoamIntensity = comp.shoreFoamIntensity;
+        fileData.shoreBreakingStrength = comp.shoreBreakingStrength;
+        fileData.shoreWetRange = comp.shoreWetRange;
+        fileData.shoreWetDarkening = comp.shoreWetDarkening;
+        fileData.shoreWetRoughness = comp.shoreWetRoughness;
 
         fileData.density = comp.density;
         fileData.drag = comp.drag;
@@ -535,6 +601,12 @@ namespace services
             comp.refractionDepthScale = fileData.refractionDepthScale;
             comp.causticStrength = fileData.causticStrength;
             comp.causticDepthFalloff = fileData.causticDepthFalloff;
+            comp.shoreFoamRange = fileData.shoreFoamRange;
+            comp.shoreFoamIntensity = fileData.shoreFoamIntensity;
+            comp.shoreBreakingStrength = fileData.shoreBreakingStrength;
+            comp.shoreWetRange = fileData.shoreWetRange;
+            comp.shoreWetDarkening = fileData.shoreWetDarkening;
+            comp.shoreWetRoughness = fileData.shoreWetRoughness;
             comp.density = fileData.density;
             comp.drag = fileData.drag;
             comp.buoyancyStrength = fileData.buoyancyStrength;

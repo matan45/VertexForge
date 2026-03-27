@@ -215,7 +215,12 @@ namespace render::gpudriven
             cachedCausticLayout = layout;
         }
         bool isCausticEnabled() const { return causticEnabled; }
-        void updateCausticDescriptor(vk::DescriptorSet causticDescSet) { causticDescriptorSet = causticDescSet; }
+        void updateCausticDescriptor(vk::DescriptorSet causticDescSet)
+        {
+            causticDescriptorSet = causticDescSet;
+            if (!causticDescSet)
+                causticEnabled = false;
+        }
         vk::DescriptorSet getCausticDescriptorSet() const { return causticDescriptorSet; }
 
         // SVT integration

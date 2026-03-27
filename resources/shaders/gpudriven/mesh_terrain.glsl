@@ -334,6 +334,10 @@ layout(set = CAUSTIC_SET, binding = 1) uniform CausticParamsUBO {
     float causticStrength;
     float depthFalloff;
     float patchSize;
+    float shoreWetRange;
+    float shoreWetDarkening;
+    float shoreWetRoughness;
+    float pad1;
 } causticParams;
 #include "../common/caustic_sampling.glsl"
 #endif
@@ -408,6 +412,23 @@ void main() {
     float metallic = mat_metallic;
     float roughness = mat_roughness;
     float ao = mat_ao;
+
+#ifdef CAUSTICS_ENABLED
+    // Shoreline wetness: darken and roughen terrain near and above waterline
+    if (causticParams.shoreWetRange > 0.0) {
+        float waveFreq = 6.2831853 / causticParams.patchSize;
+        float waveApprox = sin(fragWorldPos.x * waveFreq + fragWorldPos.z * waveFreq * 1.5 + camera.time) * 0.5;
+        float heightAboveWater = fragWorldPos.y - causticParams.waterHeight + waveApprox;
+        // Only apply above water (fade in from waterline up to shoreWetRange)
+        float wetness = 1.0 - smoothstep(0.0, causticParams.shoreWetRange, heightAboveWater);
+        // Fade out below waterline (terrain underwater doesn't need wet effect)
+        wetness *= smoothstep(-1.0, 0.0, heightAboveWater);
+        wetness *= wetness;
+        albedo *= mix(1.0, causticParams.shoreWetDarkening, wetness);
+        roughness = mix(roughness, max(roughness, causticParams.shoreWetRoughness), wetness);
+        ao = mix(ao, 1.0, wetness * 0.3);
+    }
+#endif
 
     vec3 R = reflect(-V, N);
     vec3 F0 = mix(vec3(0.04), albedo, metallic);

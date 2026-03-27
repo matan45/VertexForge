@@ -314,6 +314,10 @@ layout(set = CAUSTIC_SET, binding = 1) uniform CausticParamsUBO {
     float causticStrength;
     float depthFalloff;
     float patchSize;
+    float shoreWetRange;
+    float shoreWetDarkening;
+    float shoreWetRoughness;
+    float pad1;
 } causticParams;
 #include "../common/caustic_sampling.glsl"
 #endif

@@ -26,6 +26,12 @@ namespace serialization
         j["refractionDepthScale"] = ocean.refractionDepthScale;
         j["causticStrength"] = ocean.causticStrength;
         j["causticDepthFalloff"] = ocean.causticDepthFalloff;
+        j["shoreFoamRange"] = ocean.shoreFoamRange;
+        j["shoreFoamIntensity"] = ocean.shoreFoamIntensity;
+        j["shoreBreakingStrength"] = ocean.shoreBreakingStrength;
+        j["shoreWetRange"] = ocean.shoreWetRange;
+        j["shoreWetDarkening"] = ocean.shoreWetDarkening;
+        j["shoreWetRoughness"] = ocean.shoreWetRoughness;
 
         // Ocean FFT bands
         auto bandsArray = nlohmann::json::array();
@@ -87,6 +93,18 @@ namespace serialization
             ocean.causticStrength = it->get<float>();
         if (auto it = j.find("causticDepthFalloff"); it != j.end() && it->is_number())
             ocean.causticDepthFalloff = it->get<float>();
+        if (auto it = j.find("shoreFoamRange"); it != j.end() && it->is_number())
+            ocean.shoreFoamRange = it->get<float>();
+        if (auto it = j.find("shoreFoamIntensity"); it != j.end() && it->is_number())
+            ocean.shoreFoamIntensity = it->get<float>();
+        if (auto it = j.find("shoreBreakingStrength"); it != j.end() && it->is_number())
+            ocean.shoreBreakingStrength = it->get<float>();
+        if (auto it = j.find("shoreWetRange"); it != j.end() && it->is_number())
+            ocean.shoreWetRange = it->get<float>();
+        if (auto it = j.find("shoreWetDarkening"); it != j.end() && it->is_number())
+            ocean.shoreWetDarkening = it->get<float>();
+        if (auto it = j.find("shoreWetRoughness"); it != j.end() && it->is_number())
+            ocean.shoreWetRoughness = it->get<float>();
 
         // Ocean FFT bands
         if (j.contains("oceanBands") && j["oceanBands"].is_array())

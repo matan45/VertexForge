@@ -51,6 +51,8 @@ namespace render::water
         if (!initialized)
             return;
 
+        device.getLogicalDevice().waitIdle();
+
         pipelines->cleanup();
         pipelines.reset();
 

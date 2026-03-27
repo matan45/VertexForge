@@ -216,4 +216,34 @@ namespace terrain
         caveDirty = true;
         caveGPUDirty = true;
     }
+
+    void TerrainTile::maskBelowWaterLevel(float waterHeight, float margin)
+    {
+        if (!hasHeightData())
+            return;
+
+        if (!hasHoleMask())
+            initializeHoleMask();
+
+        uint32_t vertexCount = config.getVertexCount();
+        uint32_t quadCount = vertexCount - 1;
+        float threshold = waterHeight - margin;
+
+        for (uint32_t z = 0; z < quadCount; ++z)
+        {
+            for (uint32_t x = 0; x < quadCount; ++x)
+            {
+                float h00 = heightData[static_cast<size_t>(z) * vertexCount + x];
+                float h10 = heightData[static_cast<size_t>(z) * vertexCount + x + 1];
+                float h01 = heightData[static_cast<size_t>((z + 1)) * vertexCount + x];
+                float h11 = heightData[static_cast<size_t>((z + 1)) * vertexCount + x + 1];
+
+                if (h00 < threshold && h10 < threshold && h01 < threshold && h11 < threshold)
+                    setHole(x, z, true);
+            }
+        }
+
+        topologyDirty = true;
+        setAllLODsDirty();
+    }
 }

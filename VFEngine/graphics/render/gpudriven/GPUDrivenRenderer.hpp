@@ -98,6 +98,11 @@ namespace services
     struct OceanVisualSettings;
 }
 
+namespace water
+{
+    class WaterTileGrid;
+}
+
 namespace vegetation
 {
     struct WindConfig;
@@ -574,7 +579,9 @@ namespace render::gpudriven
         void updateWater(const services::OceanVisualSettings& visualSettings,
                          float baseWaterHeight,
                          const glm::vec3& cameraPosition,
-                         float oceanPatchSize);
+                         float oceanPatchSize,
+                         bool worldMode = false,
+                         const ::water::WaterTileGrid* tileGrid = nullptr);
         void renderWaterDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet);
         void clearWaterData();
 

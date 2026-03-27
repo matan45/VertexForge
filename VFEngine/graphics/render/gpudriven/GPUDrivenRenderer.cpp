@@ -263,8 +263,8 @@ namespace render::gpudriven
         if (lightStreamManager) lightStreamManager->cleanup();
         if (volumetricPipeline) volumetricPipeline->cleanup();
         if (fogVolumeBufferManager) fogVolumeBufferManager->cleanup();
-        if (water.causticsResources) water.causticsResources->cleanup();
         for (auto& band : water.oceanBands) { if (band) band->cleanup(); }
+        if (water.causticsResources) water.causticsResources->cleanup();
         if (water.pipeline) water.pipeline->cleanup();
         if (water.meshBuffer) water.meshBuffer->cleanup();
         if (billboard.meshShaderPipeline) billboard.meshShaderPipeline->cleanup();

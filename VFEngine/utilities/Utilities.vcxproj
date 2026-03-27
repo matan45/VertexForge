@@ -226,6 +226,7 @@
     <ClInclude Include="vegetation\VegetationTypes.hpp" />
     <ClInclude Include="vegetation\WindConfig.hpp" />
     <ClInclude Include="water\OceanSerializer.hpp" />
+    <ClInclude Include="water\WaterTileGrid.hpp" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="asset\AssetDatabase.cpp" />
@@ -297,6 +298,7 @@
     <ClCompile Include="time\Timer.cpp" />
     <ClCompile Include="vegetation\VegetationSerializer.cpp" />
     <ClCompile Include="water\OceanSerializer.cpp" />
+    <ClCompile Include="water\WaterTileGrid.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\spdLog.vcxproj">

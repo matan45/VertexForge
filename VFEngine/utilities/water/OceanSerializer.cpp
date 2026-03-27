@@ -25,6 +25,12 @@ namespace ocean
         vis["refractionDepthScale"] = data.refractionDepthScale;
         vis["causticStrength"] = data.causticStrength;
         vis["causticDepthFalloff"] = data.causticDepthFalloff;
+        vis["shoreFoamRange"] = data.shoreFoamRange;
+        vis["shoreFoamIntensity"] = data.shoreFoamIntensity;
+        vis["shoreBreakingStrength"] = data.shoreBreakingStrength;
+        vis["shoreWetRange"] = data.shoreWetRange;
+        vis["shoreWetDarkening"] = data.shoreWetDarkening;
+        vis["shoreWetRoughness"] = data.shoreWetRoughness;
 
         // Physics
         auto& phys = j["physics"];
@@ -106,6 +112,12 @@ namespace ocean
             outData.refractionDepthScale = vis.value("refractionDepthScale", 0.2f);
             outData.causticStrength = vis.value("causticStrength", 1.0f);
             outData.causticDepthFalloff = vis.value("causticDepthFalloff", 0.5f);
+            outData.shoreFoamRange = vis.value("shoreFoamRange", 3.0f);
+            outData.shoreFoamIntensity = vis.value("shoreFoamIntensity", 0.8f);
+            outData.shoreBreakingStrength = vis.value("shoreBreakingStrength", 0.8f);
+            outData.shoreWetRange = vis.value("shoreWetRange", 5.0f);
+            outData.shoreWetDarkening = vis.value("shoreWetDarkening", 0.3f);
+            outData.shoreWetRoughness = vis.value("shoreWetRoughness", 0.15f);
         }
 
         // Physics

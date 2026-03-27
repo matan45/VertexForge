@@ -89,11 +89,16 @@ namespace render
 
         if (oceanRenderProvider && oceanRenderProvider->hasActiveOcean() && gpuDrivenRenderer)
         {
+            oceanRenderProvider->processWaterTileStreaming();
+
             auto visualSettings = oceanRenderProvider->getOceanVisualSettings();
             float baseHeight = oceanRenderProvider->getBaseWaterHeight();
             auto cfgData = oceanRenderProvider->getOceanFFTConfig();
+            const auto* tileGrid = oceanRenderProvider->getWaterTileGrid();
+            bool worldMode = oceanRenderProvider->isWorldModeActive();
             gpuDrivenRenderer->updateWater(visualSettings, baseHeight,
-                                            currentCameraPosition, cfgData.bands[0].patchSize);
+                                            currentCameraPosition, cfgData.bands[0].patchSize,
+                                            worldMode, tileGrid);
         }
 
         if (oceanRenderProvider && gpuDrivenRenderer)
