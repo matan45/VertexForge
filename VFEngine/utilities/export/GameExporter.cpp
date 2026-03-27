@@ -9,6 +9,7 @@
 #include "../material/MaterialAsset.hpp"
 #include "../archive/VFPakWriter.hpp"
 #include "../archive/VFPakReader.hpp"
+#include "../serialization/BinarySceneSerialization.hpp"
 #include <fstream>
 #include <memory>
 #include <cstdlib>
@@ -463,6 +464,27 @@ namespace gameExport
 			fs::path relativePath = fs::relative(entry.path(), config.workingDirectory, ec);
 			std::string archivePath = "Assets/" + relativePath.generic_string();
 
+			// Convert JSON scenes to binary MessagePack for faster loading
+			if (ext == ".vfscene")
+			{
+				fs::path tempBinary = config.outputDirectory / "_temp_scenes" / relativePath;
+				fs::create_directories(tempBinary.parent_path(), ec);
+
+				if (serialization::BinarySceneSerialization::convertJsonToBinary(
+						entry.path().string(), tempBinary.string()))
+				{
+					writer.addFile(archivePath, tempBinary, archive::CompressionType::LZ4);
+				}
+				else
+				{
+					// Fallback: pack JSON as-is
+					writer.addFile(archivePath, entry.path(), archive::CompressionType::LZ4);
+					result.warnings.push_back("Failed to convert scene to binary: " + relativePath.string());
+				}
+				assetCount++;
+				continue;
+			}
+
 			writer.addFile(archivePath, entry.path(), shouldCompress(ext));
 			assetCount++;
 		}
@@ -485,6 +507,13 @@ namespace gameExport
 
 			// Clean up temp directory
 			fs::remove_all(tempShaders, ec);
+		}
+
+		// Clean up temp scenes directory
+		fs::path tempScenes = config.outputDirectory / "_temp_scenes";
+		if (fs::exists(tempScenes))
+		{
+			fs::remove_all(tempScenes, ec);
 		}
 
 		if (!writer.finalize())

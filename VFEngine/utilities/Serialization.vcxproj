@@ -92,6 +92,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="serialization\AssetRefSerializationHelper.hpp" />
+    <ClInclude Include="serialization\BinarySceneSerialization.hpp" />
     <ClInclude Include="serialization\JsonConverters.hpp" />
     <ClInclude Include="serialization\PrefabSerialization.hpp" />
     <ClInclude Include="serialization\ProjectSerialization.hpp" />
@@ -100,6 +101,7 @@
     <ClInclude Include="world\WorldSectorSerialization.hpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="serialization\BinarySceneSerialization.cpp" />
     <ClCompile Include="serialization\PrefabSerialization.cpp" />
     <ClCompile Include="serialization\PrefabSerializationIO.cpp" />
     <ClCompile Include="serialization\ProjectSerialization.cpp" />
