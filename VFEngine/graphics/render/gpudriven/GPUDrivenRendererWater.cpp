@@ -1,6 +1,7 @@
 #include "GPUDrivenRenderer.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
+#include "../water/OceanFFTResources.hpp"
 #include "../../../services/data/OceanData.hpp"
 #include "print/Log.hpp"
 #include <cstring>
@@ -17,8 +18,7 @@ namespace render::gpudriven
             device.getLogicalDevice(),
             device.getPhysicalDevice(),
             device.getGraphicsQueue(),
-            device.getStagingCommandPool(),
-            render::water::WATER_DEFAULT_SUBDIVISIONS
+            device.getStagingCommandPool()
         );
 
         // Create refraction resources before pipeline so we have the descriptor set layout
@@ -29,10 +29,10 @@ namespace render::gpudriven
             swapChain.getSwapchainExtent().height,
             sceneDepthView);
 
-        // Ocean texture layout (from OceanFFT if initialized, otherwise WaterPipeline creates dummy)
+        // Ocean texture layout (from multi-band descriptor if initialized, otherwise WaterPipeline creates dummy)
         vk::DescriptorSetLayout oceanLayout{};
-        if (water.oceanFFT && water.oceanFFT->isInitialized())
-            oceanLayout = water.oceanFFT->getOceanTextureLayout();
+        if (water.multiBandOceanLayout)
+            oceanLayout = water.multiBandOceanLayout;
 
         vk::DescriptorSetLayout refractionLayout = water.refractionResources->getDescriptorSetLayout();
 
@@ -60,23 +60,50 @@ namespace render::gpudriven
         if (!initialized || !water.renderingEnabled || !water.pipeline)
             return;
 
-        // Generate single large ocean plane centered on camera,
-        // snapped to patch-size grid so FFT textures don't shift with camera movement
-        float planeSize = oceanPatchSize * 10.0f;
-        float halfSize = planeSize * 0.5f;
+        // Generate grid of tiles centered on camera with distance-based LOD
+        constexpr int GRID_HALF = 4;  // 9x9 grid = 81 tiles max
+        float tileSize = oceanPatchSize * 2.0f;
 
-        float snappedX = std::floor(cameraPosition.x / oceanPatchSize) * oceanPatchSize;
-        float snappedZ = std::floor(cameraPosition.z / oceanPatchSize) * oceanPatchSize;
+        // Snap camera to tile grid
+        float snappedX = std::floor(cameraPosition.x / tileSize) * tileSize;
+        float snappedZ = std::floor(cameraPosition.z / tileSize) * tileSize;
 
-        water.tileData.resize(1);
-        auto& gpuData = water.tileData[0];
-        gpuData.worldOriginAndSize = glm::vec4(
-            snappedX - halfSize,
-            0.0f,
-            snappedZ - halfSize,
-            planeSize
-        );
-        gpuData.heightAndWave = glm::vec4(baseWaterHeight, 1.0f, 0.0f, 0.0f);
+        // Sort tiles by LOD for batched draw calls
+        // LOD thresholds based on distance from camera (in tiles)
+        // Ring 0 (center): LOD 0, Ring 1: LOD 1, Ring 2: LOD 2, Ring 3+: LOD 3
+        std::array<std::vector<render::water::WaterTileGPUData>, render::water::WATER_LOD_COUNT> lodBuckets;
+        for (auto& bucket : lodBuckets) bucket.reserve(32);
+
+        for (int tz = -GRID_HALF; tz <= GRID_HALF; ++tz)
+        {
+            for (int tx = -GRID_HALF; tx <= GRID_HALF; ++tx)
+            {
+                float tileOriginX = snappedX + tx * tileSize;
+                float tileOriginZ = snappedZ + tz * tileSize;
+
+                // Distance in tile units from center
+                int ring = std::max(std::abs(tx), std::abs(tz));
+
+                uint32_t lod;
+                if (ring <= 1) lod = 0;
+                else if (ring <= 2) lod = 1;
+                else if (ring <= 3) lod = 2;
+                else lod = 3;
+
+                render::water::WaterTileGPUData tile;
+                tile.worldOriginAndSize = glm::vec4(tileOriginX, 0.0f, tileOriginZ, tileSize);
+                tile.heightAndWave = glm::vec4(baseWaterHeight, 1.0f, static_cast<float>(lod), 0.0f);
+                lodBuckets[lod].push_back(tile);
+            }
+        }
+
+        // Flatten into SSBO sorted by LOD
+        water.tileData.clear();
+        for (uint32_t lod = 0; lod < render::water::WATER_LOD_COUNT; ++lod)
+        {
+            water.lodTileCounts[lod] = static_cast<uint32_t>(lodBuckets[lod].size());
+            water.tileData.insert(water.tileData.end(), lodBuckets[lod].begin(), lodBuckets[lod].end());
+        }
 
         water.meshBuffer->updateTileData(water.tileData);
 
@@ -114,20 +141,33 @@ namespace render::gpudriven
         if (!initialized || !water.renderingEnabled || !water.pipeline || water.tileData.empty())
             return;
 
-        // Set ocean push constant fields
-        if (water.oceanEnabled && water.oceanFFT && water.oceanFFT->isInitialized())
+        // Set per-band ocean push constant fields
+        uint32_t bandMask = 0;
+        for (uint32_t i = 0; i < 3; ++i)
         {
-            const auto& cfg = water.oceanFFT->getConfig();
-            water.cachedPushConstants.oceanChoppiness = cfg.choppiness;
-            water.cachedPushConstants.oceanPatchSize = cfg.patchSize;
-            water.cachedPushConstants.oceanFoamThreshold = cfg.foamThreshold;
+            if (water.oceanBands[i] && water.oceanBands[i]->isInitialized())
+                bandMask |= (1u << i);
+        }
+        water.cachedPushConstants.bandEnableMask = bandMask;
+
+        if (water.oceanEnabled && water.oceanBands[0] && water.oceanBands[0]->isInitialized())
+        {
+            const auto& cfg0 = water.oceanBands[0]->getConfig();
+            water.cachedPushConstants.oceanChoppiness = cfg0.choppiness;
+            water.cachedPushConstants.oceanPatchSize0 = cfg0.patchSize;
+            water.cachedPushConstants.oceanFoamThreshold = cfg0.foamThreshold;
         }
         else
         {
             water.cachedPushConstants.oceanChoppiness = 0.0f;
-            water.cachedPushConstants.oceanPatchSize = 1.0f;
+            water.cachedPushConstants.oceanPatchSize0 = 1.0f;
             water.cachedPushConstants.oceanFoamThreshold = 0.0f;
         }
+
+        water.cachedPushConstants.oceanPatchSize1 = (water.oceanBands[1] && water.oceanBands[1]->isInitialized())
+            ? water.oceanBands[1]->getConfig().patchSize : 1.0f;
+        water.cachedPushConstants.oceanPatchSize2 = (water.oceanBands[2] && water.oceanBands[2]->isInitialized())
+            ? water.oceanBands[2]->getConfig().patchSize : 1.0f;
 
         render::water::WaterRenderDescriptors waterDescriptors{
             iblDescriptorSet,
@@ -136,12 +176,13 @@ namespace render::gpudriven
             lightCullingPipeline->getDescriptorSet(),
             shadowSystem && shadowSystem->isInitialized() ? shadowSystem->getShadowDataDescSet() : vk::DescriptorSet{},
             shadowSystem && shadowSystem->isInitialized() ? shadowSystem->getShadowTextureDescSet() : vk::DescriptorSet{},
-            (water.oceanEnabled && water.oceanFFT && water.oceanFFT->isInitialized())
-                ? water.oceanFFT->getOceanTextureDescSet() : vk::DescriptorSet{},
+            (water.oceanEnabled && water.multiBandDescriptorValid && water.multiBandOceanDescSet)
+                ? water.multiBandOceanDescSet : vk::DescriptorSet{},
             (water.refractionResources && water.refractionResources->isInitialized())
                 ? water.refractionResources->getDescriptorSet() : vk::DescriptorSet{}
         };
-        water.pipeline->render(cmd, waterDescriptors, *water.meshBuffer, water.cachedPushConstants);
+        water.pipeline->renderMultiLOD(cmd, waterDescriptors, *water.meshBuffer,
+                                       water.cachedPushConstants, water.lodTileCounts);
 
         auto renderEnd = std::chrono::high_resolution_clock::now();
         water.renderUs = std::chrono::duration<float, std::micro>(renderEnd - renderStart).count();
@@ -152,19 +193,43 @@ namespace render::gpudriven
         water.tileData.clear();
     }
 
-    void GPUDrivenRenderer::initOceanFFT(const render::water::OceanFFTConfig& config)
+    void GPUDrivenRenderer::initOceanFFT(const std::array<render::water::OceanFFTConfig, 3>& bandConfigs,
+                                          const std::array<bool, 3>& bandEnabled)
     {
-        if (!water.oceanFFT)
-            water.oceanFFT = std::make_unique<render::water::OceanFFT>(device);
+        device.getLogicalDevice().waitIdle();
 
-        water.oceanFFT->init(config);
-        water.oceanEnabled = true;
+        water.activeBandCount = 0;
+        for (uint32_t i = 0; i < 3; ++i)
+        {
+            if (bandEnabled[i])
+            {
+                if (!water.oceanBands[i])
+                    water.oceanBands[i] = std::make_unique<render::water::OceanFFT>(device);
+                water.oceanBands[i]->init(bandConfigs[i]);
+                water.activeBandCount++;
+            }
+            else
+            {
+                if (water.oceanBands[i])
+                {
+                    water.oceanBands[i]->cleanup();
+                    water.oceanBands[i].reset();
+                }
+            }
+        }
+        water.oceanEnabled = water.activeBandCount > 0;
 
-        // Create caustics resources from the ocean FFT caustic texture
-        water.causticsResources = std::make_unique<render::water::WaterCausticsResources>(device);
-        water.causticsResources->init(water.oceanFFT->getCausticView());
+        // Create composite 6-binding descriptor set
+        createMultiBandOceanDescriptor();
 
-        // Recreate water pipeline so it uses the real ocean descriptor set layout
+        // Create caustics from band 0 (swell)
+        if (water.oceanBands[0] && water.oceanBands[0]->isInitialized())
+        {
+            water.causticsResources = std::make_unique<render::water::WaterCausticsResources>(device);
+            water.causticsResources->init(water.oceanBands[0]->getCausticView());
+        }
+
+        // Recreate water pipeline with multi-band ocean texture layout
         if (water.pipeline)
         {
             vk::DescriptorSetLayout refractionLayout{};
@@ -178,93 +243,205 @@ namespace render::gpudriven
                 lightCullingPipeline->getDescriptorSetLayout(),
                 shadowSystem->getShadowDataLayout(),
                 shadowSystem->getShadowTextureLayout(),
-                water.oceanFFT->getOceanTextureLayout(),
+                water.multiBandOceanLayout,
                 refractionLayout,
                 cachedRenderPass
             });
         }
 
         // Recreate mesh shader pipelines with caustic layout
-        vk::DescriptorSetLayout causticLayout = water.causticsResources->getDescriptorSetLayout();
-        vk::DescriptorSet causticDescSet = water.causticsResources->getDescriptorSet();
-
-        if (meshShaderPipeline && shadowSystem)
+        if (water.causticsResources && water.causticsResources->isInitialized())
         {
-            vk::DescriptorSetLayout giLayout{};
-            if (giCascadeManager)
-            {
-                auto* storage = giCascadeManager->getProbeStorage();
-                if (storage && storage->isInitialized())
-                    giLayout = storage->getSamplingLayout();
-            }
+            vk::DescriptorSetLayout causticLayout = water.causticsResources->getDescriptorSetLayout();
+            vk::DescriptorSet causticDescSet = water.causticsResources->getDescriptorSet();
 
-            MeshPipelineInitInfo pipelineInfo{
-                .iblLayout = cachedIBLLayout,
-                .bindlessTextureLayout = bindlessTextures->getDescriptorSetLayout(),
-                .boneMatrixLayout = boneMatrixManager->getDescriptorSetLayout(),
-                .lightDataLayout = lightBufferManager->getDescriptorSetLayout(),
-                .clusterGridLayout = clusterGridManager->getDescriptorSetLayout(),
-                .cullingOutputLayout = lightCullingPipeline->getDescriptorSetLayout(),
-                .shadowDataLayout = shadowSystem->getShadowDataLayout(),
-                .shadowTextureLayout = shadowSystem->getShadowTextureLayout(),
-                .giProbeDataLayout = giLayout,
-                .causticLayout = causticLayout,
-                .renderPass = cachedRenderPass
-            };
-
-            meshShaderPipeline->recreate(pipelineInfo);
-            meshShaderPipeline->updateCausticDescriptor(causticDescSet);
-            if (giLayout && giCascadeManager)
+            if (meshShaderPipeline && shadowSystem)
             {
-                auto* storage = giCascadeManager->getProbeStorage();
-                meshShaderPipeline->updateGIProbeDescriptor(storage->getSamplingDescSet());
-            }
+                vk::DescriptorSetLayout giLayout{};
+                if (giCascadeManager)
+                {
+                    auto* storage = giCascadeManager->getProbeStorage();
+                    if (storage && storage->isInitialized())
+                        giLayout = storage->getSamplingLayout();
+                }
 
-            if (transparentMeshShaderPipeline)
-            {
-                pipelineInfo.transparentMode = true;
-                transparentMeshShaderPipeline->recreate(pipelineInfo);
-                transparentMeshShaderPipeline->updateCausticDescriptor(causticDescSet);
+                MeshPipelineInitInfo pipelineInfo{
+                    .iblLayout = cachedIBLLayout,
+                    .bindlessTextureLayout = bindlessTextures->getDescriptorSetLayout(),
+                    .boneMatrixLayout = boneMatrixManager->getDescriptorSetLayout(),
+                    .lightDataLayout = lightBufferManager->getDescriptorSetLayout(),
+                    .clusterGridLayout = clusterGridManager->getDescriptorSetLayout(),
+                    .cullingOutputLayout = lightCullingPipeline->getDescriptorSetLayout(),
+                    .shadowDataLayout = shadowSystem->getShadowDataLayout(),
+                    .shadowTextureLayout = shadowSystem->getShadowTextureLayout(),
+                    .giProbeDataLayout = giLayout,
+                    .causticLayout = causticLayout,
+                    .renderPass = cachedRenderPass
+                };
+
+                meshShaderPipeline->recreate(pipelineInfo);
+                meshShaderPipeline->updateCausticDescriptor(causticDescSet);
                 if (giLayout && giCascadeManager)
                 {
                     auto* storage = giCascadeManager->getProbeStorage();
-                    transparentMeshShaderPipeline->updateGIProbeDescriptor(storage->getSamplingDescSet());
+                    meshShaderPipeline->updateGIProbeDescriptor(storage->getSamplingDescSet());
                 }
-                pipelineInfo.transparentMode = false;
-            }
 
-            if (wboitMeshShaderPipeline && cachedWBOITRenderPass)
-            {
-                pipelineInfo.renderPass = cachedWBOITRenderPass;
-                pipelineInfo.wboitMode = true;
-                wboitMeshShaderPipeline->recreate(pipelineInfo);
-                wboitMeshShaderPipeline->updateCausticDescriptor(causticDescSet);
-                if (giLayout && giCascadeManager)
+                if (transparentMeshShaderPipeline)
                 {
-                    auto* storage = giCascadeManager->getProbeStorage();
-                    wboitMeshShaderPipeline->updateGIProbeDescriptor(storage->getSamplingDescSet());
+                    pipelineInfo.transparentMode = true;
+                    transparentMeshShaderPipeline->recreate(pipelineInfo);
+                    transparentMeshShaderPipeline->updateCausticDescriptor(causticDescSet);
+                    if (giLayout && giCascadeManager)
+                    {
+                        auto* storage = giCascadeManager->getProbeStorage();
+                        transparentMeshShaderPipeline->updateGIProbeDescriptor(storage->getSamplingDescSet());
+                    }
+                    pipelineInfo.transparentMode = false;
                 }
+
+                if (wboitMeshShaderPipeline && cachedWBOITRenderPass)
+                {
+                    pipelineInfo.renderPass = cachedWBOITRenderPass;
+                    pipelineInfo.wboitMode = true;
+                    wboitMeshShaderPipeline->recreate(pipelineInfo);
+                    wboitMeshShaderPipeline->updateCausticDescriptor(causticDescSet);
+                    if (giLayout && giCascadeManager)
+                    {
+                        auto* storage = giCascadeManager->getProbeStorage();
+                        wboitMeshShaderPipeline->updateGIProbeDescriptor(storage->getSamplingDescSet());
+                    }
+                }
+            }
+
+            // Recreate terrain pipeline with caustic layout
+            if (terrain.pipeline)
+            {
+                terrain.pipeline->setCausticEnabled(true, causticLayout);
+                terrain.pipeline->recreate(cachedIBLLayout,
+                                           bindlessTextures->getDescriptorSetLayout(),
+                                           meshShaderPipeline->getMeshletDataLayout(),
+                                           meshShaderPipeline->getVertexDataLayout(),
+                                           lightBufferManager->getDescriptorSetLayout(),
+                                           clusterGridManager->getDescriptorSetLayout(),
+                                           lightCullingPipeline->getDescriptorSetLayout(),
+                                           shadowSystem->getShadowDataLayout(),
+                                           shadowSystem->getShadowTextureLayout(),
+                                           cachedRenderPass);
+                terrain.pipeline->updateCausticDescriptor(causticDescSet);
             }
         }
 
-        // Recreate terrain pipeline with caustic layout
-        if (terrain.pipeline)
+        vfLogInfo("GPUDrivenRenderer: Ocean FFT initialized with {} active bands", water.activeBandCount);
+    }
+
+    void GPUDrivenRenderer::createMultiBandOceanDescriptor()
+    {
+        vk::Device vkDevice = device.getLogicalDevice();
+
+        // Cleanup old
+        if (water.multiBandOceanPool)
         {
-            terrain.pipeline->setCausticEnabled(true, causticLayout);
-            terrain.pipeline->recreate(cachedIBLLayout,
-                                       bindlessTextures->getDescriptorSetLayout(),
-                                       meshShaderPipeline->getMeshletDataLayout(),
-                                       meshShaderPipeline->getVertexDataLayout(),
-                                       lightBufferManager->getDescriptorSetLayout(),
-                                       clusterGridManager->getDescriptorSetLayout(),
-                                       lightCullingPipeline->getDescriptorSetLayout(),
-                                       shadowSystem->getShadowDataLayout(),
-                                       shadowSystem->getShadowTextureLayout(),
-                                       cachedRenderPass);
-            terrain.pipeline->updateCausticDescriptor(causticDescSet);
+            vkDevice.destroyDescriptorPool(water.multiBandOceanPool);
+            water.multiBandOceanPool = nullptr;
+        }
+        if (water.multiBandOceanLayout)
+        {
+            vkDevice.destroyDescriptorSetLayout(water.multiBandOceanLayout);
+            water.multiBandOceanLayout = nullptr;
+        }
+        water.multiBandOceanDescSet = nullptr;
+        water.multiBandDescriptorValid = false;
+
+        // Create layout: 6 combined image samplers (vertex + fragment)
+        std::array<vk::DescriptorSetLayoutBinding, 6> bindings{};
+        for (uint32_t i = 0; i < 6; ++i)
+        {
+            bindings[i].binding = i;
+            bindings[i].descriptorType = vk::DescriptorType::eCombinedImageSampler;
+            bindings[i].descriptorCount = 1;
+            bindings[i].stageFlags = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment;
         }
 
-        vfLogInfo("GPUDrivenRenderer: Ocean FFT initialized with caustics");
+        vk::DescriptorSetLayoutCreateInfo layoutInfo{};
+        layoutInfo.bindingCount = 6;
+        layoutInfo.pBindings = bindings.data();
+        water.multiBandOceanLayout = vkDevice.createDescriptorSetLayout(layoutInfo);
+
+        // Create pool
+        vk::DescriptorPoolSize poolSize{vk::DescriptorType::eCombinedImageSampler, 6};
+        vk::DescriptorPoolCreateInfo poolInfo{};
+        poolInfo.maxSets = 1;
+        poolInfo.poolSizeCount = 1;
+        poolInfo.pPoolSizes = &poolSize;
+        water.multiBandOceanPool = vkDevice.createDescriptorPool(poolInfo);
+
+        // Allocate set
+        vk::DescriptorSetAllocateInfo allocInfo{};
+        allocInfo.descriptorPool = water.multiBandOceanPool;
+        allocInfo.descriptorSetCount = 1;
+        allocInfo.pSetLayouts = &water.multiBandOceanLayout;
+        water.multiBandOceanDescSet = vkDevice.allocateDescriptorSets(allocInfo)[0];
+
+        // Update with band textures
+        updateMultiBandOceanDescriptor();
+    }
+
+    void GPUDrivenRenderer::updateMultiBandOceanDescriptor()
+    {
+        if (!water.multiBandOceanDescSet)
+            return;
+
+        // Find a valid band to use as fallback for disabled bands
+        render::water::OceanFFTResources* fallbackResources = nullptr;
+        for (uint32_t i = 0; i < 3; ++i)
+        {
+            if (water.oceanBands[i] && water.oceanBands[i]->isInitialized())
+            {
+                fallbackResources = water.oceanBands[i]->getResources();
+                break;
+            }
+        }
+
+        if (!fallbackResources ||
+            !fallbackResources->getDisplacementView() ||
+            !fallbackResources->getNormalView() ||
+            !fallbackResources->getOutputSampler())
+            return;
+
+        std::array<vk::DescriptorImageInfo, 6> imageInfos{};
+
+        for (uint32_t i = 0; i < 3; ++i)
+        {
+            render::water::OceanFFTResources* resources = fallbackResources;
+            if (water.oceanBands[i] && water.oceanBands[i]->isInitialized())
+                resources = water.oceanBands[i]->getResources();
+
+            vk::Sampler sampler = resources->getOutputSampler();
+            vk::ImageView dispView = resources->getDisplacementView();
+            vk::ImageView normView = resources->getNormalView();
+
+            // Safety: if views are null, use fallback
+            if (!dispView) dispView = fallbackResources->getDisplacementView();
+            if (!normView) normView = fallbackResources->getNormalView();
+            if (!sampler) sampler = fallbackResources->getOutputSampler();
+
+            imageInfos[i * 2 + 0] = {sampler, dispView, vk::ImageLayout::eShaderReadOnlyOptimal};
+            imageInfos[i * 2 + 1] = {sampler, normView, vk::ImageLayout::eShaderReadOnlyOptimal};
+        }
+
+        // Write all 6 descriptors
+        std::array<vk::WriteDescriptorSet, 6> writes{};
+        for (uint32_t i = 0; i < 6; ++i)
+        {
+            writes[i].dstSet = water.multiBandOceanDescSet;
+            writes[i].dstBinding = i;
+            writes[i].descriptorCount = 1;
+            writes[i].descriptorType = vk::DescriptorType::eCombinedImageSampler;
+            writes[i].pImageInfo = &imageInfos[i];
+        }
+        device.getLogicalDevice().updateDescriptorSets(writes, nullptr);
+        water.multiBandDescriptorValid = true;
     }
 
     void GPUDrivenRenderer::cleanupOceanFFT()
@@ -287,11 +464,33 @@ namespace render::gpudriven
             water.causticsResources.reset();
         }
 
-        if (water.oceanFFT)
+        device.getLogicalDevice().waitIdle();
+
+        // Cleanup all bands
+        for (auto& band : water.oceanBands)
         {
-            water.oceanFFT->cleanup();
-            water.oceanFFT.reset();
+            if (band)
+            {
+                band->cleanup();
+                band.reset();
+            }
         }
+        water.activeBandCount = 0;
+
+        // Cleanup composite descriptor
+        vk::Device vkDevice = device.getLogicalDevice();
+        if (water.multiBandOceanPool)
+        {
+            vkDevice.destroyDescriptorPool(water.multiBandOceanPool);
+            water.multiBandOceanPool = nullptr;
+        }
+        if (water.multiBandOceanLayout)
+        {
+            vkDevice.destroyDescriptorSetLayout(water.multiBandOceanLayout);
+            water.multiBandOceanLayout = nullptr;
+        }
+        water.multiBandOceanDescSet = nullptr;
+        water.multiBandDescriptorValid = false;
 
         // Recreate mesh shader pipelines without caustic layout
         if (meshShaderPipeline && shadowSystem)
@@ -388,46 +587,98 @@ namespace render::gpudriven
 
     void GPUDrivenRenderer::setOceanEnabled(bool enabled)
     {
-        water.oceanEnabled = enabled && water.oceanFFT && water.oceanFFT->isInitialized();
+        water.oceanEnabled = enabled;
+        if (enabled)
+        {
+            water.activeBandCount = 0;
+            for (auto& band : water.oceanBands)
+                if (band && band->isInitialized()) water.activeBandCount++;
+            water.oceanEnabled = water.activeBandCount > 0;
+        }
     }
 
-    void GPUDrivenRenderer::updateOceanConfig(const render::water::OceanFFTConfig& config)
+    void GPUDrivenRenderer::updateOceanConfig(const std::array<render::water::OceanFFTConfig, 3>& bandConfigs,
+                                               const std::array<bool, 3>& bandEnabled)
     {
-        if (water.oceanFFT && water.oceanFFT->isInitialized())
-            water.oceanFFT->updateConfig(config);
+        bool needsRecreate = false;
+        bool needsDescriptorRefresh = false;
+
+        for (uint32_t i = 0; i < 3; ++i)
+        {
+            bool wasActive = water.oceanBands[i] && water.oceanBands[i]->isInitialized();
+
+            if (bandEnabled[i] != wasActive)
+            {
+                needsRecreate = true;
+            }
+            else if (bandEnabled[i] && wasActive)
+            {
+                // Check if resolution changed (requires full band rebuild)
+                bool resolutionChanged = bandConfigs[i].resolution != water.oceanBands[i]->getConfig().resolution;
+                water.oceanBands[i]->updateConfig(bandConfigs[i]);
+                if (resolutionChanged)
+                    needsDescriptorRefresh = true;
+            }
+        }
+
+        if (needsRecreate)
+        {
+            initOceanFFT(bandConfigs, bandEnabled);
+        }
+        else if (needsDescriptorRefresh)
+        {
+            // Resolution change rebuilt the band's resources — refresh composite descriptor
+            updateMultiBandOceanDescriptor();
+        }
     }
 
     void GPUDrivenRenderer::dispatchOceanFFT(vk::CommandBuffer cmd, float time)
     {
-        if (!water.oceanEnabled || !water.oceanFFT || !water.oceanFFT->isInitialized())
-        {
+        if (!water.oceanEnabled)
             return;
-        }
 
         auto dispatchStart = std::chrono::high_resolution_clock::now();
-        water.oceanFFT->dispatch(cmd, time);
-        water.oceanFFT->insertBarrier(cmd);
+        for (uint32_t i = 0; i < 3; ++i)
+        {
+            if (water.oceanBands[i] && water.oceanBands[i]->isInitialized())
+            {
+                water.oceanBands[i]->dispatch(cmd, time);
+                water.oceanBands[i]->insertBarrier(cmd);
+            }
+        }
         auto dispatchEnd = std::chrono::high_resolution_clock::now();
         water.dispatchUs = std::chrono::duration<float, std::micro>(dispatchEnd - dispatchStart).count();
     }
 
     void GPUDrivenRenderer::readbackOceanDisplacement()
     {
-        if (!water.oceanEnabled || !water.oceanFFT || !water.oceanFFT->isInitialized())
+        if (!water.oceanEnabled)
+            return;
+
+        // Find first active band for physics readback (typically band 0 / swell)
+        render::water::OceanFFT* physicsBand = nullptr;
+        for (auto& band : water.oceanBands)
+            if (band && band->isInitialized()) { physicsBand = band.get(); break; }
+        if (!physicsBand)
             return;
 
         auto readbackStart = std::chrono::high_resolution_clock::now();
-        water.oceanFFT->readbackDisplacementData();
+        physicsBand->readbackDisplacementData();
         auto readbackEnd = std::chrono::high_resolution_clock::now();
         water.readbackUs = std::chrono::duration<float, std::micro>(readbackEnd - readbackStart).count();
     }
 
     float GPUDrivenRenderer::getOceanHeightAt(const glm::vec2& worldXZ) const
     {
-        if (!water.oceanEnabled || !water.oceanFFT || !water.oceanFFT->isInitialized())
+        if (!water.oceanEnabled)
             return 0.0f;
 
-        return water.oceanFFT->sampleHeightAt(worldXZ);
+        // Find first active band for physics height sampling (typically band 0 / swell)
+        for (auto& band : water.oceanBands)
+            if (band && band->isInitialized())
+                return band->sampleHeightAt(worldXZ);
+
+        return 0.0f;
     }
 
     void GPUDrivenRenderer::copySceneColorForRefraction(vk::CommandBuffer cmd, vk::Image colorImage,

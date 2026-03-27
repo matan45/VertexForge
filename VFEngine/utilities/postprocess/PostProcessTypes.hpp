@@ -16,7 +16,8 @@ namespace postprocess
         SSAO,
         EdgeDetection,
         AutoExposure,
-        ColorGrading
+        ColorGrading,
+        Underwater
     };
 
     enum class VolumetricQuality : uint8_t
@@ -180,6 +181,23 @@ namespace postprocess
         float colorTint = 0.0f;
     };
 
+    struct UnderwaterSettings
+    {
+        bool enabled = false;
+        float fogDensity = 0.15f;
+        float fogColor[3] = {0.0f, 0.15f, 0.3f};
+        float absorptionR = 0.45f;
+        float absorptionG = 0.08f;
+        float absorptionB = 0.02f;
+        float causticStrength = 0.5f;
+        float causticScale = 50.0f;
+        float causticSpeed = 0.3f;
+        float meniscusWidth = 0.02f;
+        float meniscusDistortion = 0.03f;
+        float chromaticStrength = 0.003f;
+        float maxFogDistance = 100.0f;
+    };
+
     struct PostProcessSettings
     {
         bool enabled = false;
@@ -196,6 +214,7 @@ namespace postprocess
         EdgeDetectionSettings edgeDetection;
         AutoExposureSettings autoExposure;
         ColorGradingSettings colorGrading;
+        UnderwaterSettings underwater;
 
         static PostProcessSettings createDefault()
         {

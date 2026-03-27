@@ -103,6 +103,11 @@ namespace render::water
         void render(vk::CommandBuffer cmd, const WaterRenderDescriptors& descriptors,
                     WaterMeshBuffer& meshBuffer, const WaterPushConstants& pushConstants);
 
+        // Per-LOD rendering: lodTileCounts[i] = number of tiles at LOD i, tiles sorted by LOD in SSBO
+        void renderMultiLOD(vk::CommandBuffer cmd, const WaterRenderDescriptors& descriptors,
+                            WaterMeshBuffer& meshBuffer, const WaterPushConstants& pushConstants,
+                            const uint32_t lodTileCounts[WATER_LOD_COUNT]);
+
         [[nodiscard]] bool isInitialized() const { return initialized; }
 
     private:

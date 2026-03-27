@@ -20,7 +20,22 @@ namespace services
 
     OceanService::~OceanService()
     {
+        physicsProvider = nullptr;
+        sceneGraph.reset();
+
         auto& dispatcher = events::EventDispatcher::instance();
+
+        // Unsubscribe notifications first to prevent callbacks during teardown
+        if (entityDeletedSubscription && entityDeletedSubscription->isValid())
+        {
+            dispatcher.unsubscribe(*entityDeletedSubscription);
+            entityDeletedSubscription.reset();
+        }
+        if (sceneClearedSubscription && sceneClearedSubscription->isValid())
+        {
+            dispatcher.unsubscribe(*sceneClearedSubscription);
+            sceneClearedSubscription.reset();
+        }
 
         dispatcher.unregisterCommandHandler<events::ocean::CreateOceanCommand>();
         dispatcher.unregisterCommandHandler<events::ocean::DeleteOceanCommand>();
@@ -38,12 +53,6 @@ namespace services
         dispatcher.unregisterQueryHandler<events::ocean::IsOceanFFTEnabledQuery>();
         dispatcher.unregisterQueryHandler<events::ocean::GetOceanHeightAtQuery>();
         dispatcher.unregisterQueryHandler<events::ocean::IsPositionInOceanQuery>();
-
-        if (entityDeletedSubscription && entityDeletedSubscription->isValid())
-            dispatcher.unsubscribe(*entityDeletedSubscription);
-
-        if (sceneClearedSubscription && sceneClearedSubscription->isValid())
-            dispatcher.unsubscribe(*sceneClearedSubscription);
     }
 
     void OceanService::registerEventHandlers()
@@ -192,14 +201,19 @@ namespace services
                     if (registry.valid(ent) && registry.all_of<components::OceanComponent>(ent))
                     {
                         auto& comp = registry.get<components::OceanComponent>(ent);
-                        comp.oceanResolution = cmd.config.resolution;
-                        comp.oceanPatchSize = cmd.config.patchSize;
-                        comp.oceanWindSpeed = cmd.config.windSpeed;
-                        comp.oceanWindDirection = cmd.config.windDirection;
-                        comp.oceanAmplitude = cmd.config.amplitude;
-                        comp.oceanChoppiness = cmd.config.choppiness;
-                        comp.oceanFoamThreshold = cmd.config.foamThreshold;
-                        comp.oceanDisplacementScale = cmd.config.displacementScale;
+                        for (uint32_t i = 0; i < services::MAX_OCEAN_BANDS; ++i)
+                        {
+                            comp.oceanBands[i].resolution = cmd.config.bands[i].resolution;
+                            comp.oceanBands[i].patchSize = cmd.config.bands[i].patchSize;
+                            comp.oceanBands[i].windSpeed = cmd.config.bands[i].windSpeed;
+                            comp.oceanBands[i].windDirection = cmd.config.bands[i].windDirection;
+                            comp.oceanBands[i].amplitude = cmd.config.bands[i].amplitude;
+                            comp.oceanBands[i].choppiness = cmd.config.bands[i].choppiness;
+                            comp.oceanBands[i].foamThreshold = cmd.config.bands[i].foamThreshold;
+                            comp.oceanBands[i].displacementScale = cmd.config.bands[i].displacementScale;
+                            comp.oceanBands[i].enabled = cmd.config.bands[i].enabled;
+                        }
+                        comp.oceanGravity = cmd.config.gravity;
                     }
                 }
 
@@ -234,14 +248,19 @@ namespace services
         comp.isActive = true;
 
         // Apply ocean FFT config
-        comp.oceanResolution = config.oceanConfig.resolution;
-        comp.oceanPatchSize = config.oceanConfig.patchSize;
-        comp.oceanWindSpeed = config.oceanConfig.windSpeed;
-        comp.oceanWindDirection = config.oceanConfig.windDirection;
-        comp.oceanAmplitude = config.oceanConfig.amplitude;
-        comp.oceanChoppiness = config.oceanConfig.choppiness;
-        comp.oceanFoamThreshold = config.oceanConfig.foamThreshold;
-        comp.oceanDisplacementScale = config.oceanConfig.displacementScale;
+        for (uint32_t i = 0; i < services::MAX_OCEAN_BANDS; ++i)
+        {
+            comp.oceanBands[i].resolution = config.oceanConfig.bands[i].resolution;
+            comp.oceanBands[i].patchSize = config.oceanConfig.bands[i].patchSize;
+            comp.oceanBands[i].windSpeed = config.oceanConfig.bands[i].windSpeed;
+            comp.oceanBands[i].windDirection = config.oceanConfig.bands[i].windDirection;
+            comp.oceanBands[i].amplitude = config.oceanConfig.bands[i].amplitude;
+            comp.oceanBands[i].choppiness = config.oceanConfig.bands[i].choppiness;
+            comp.oceanBands[i].foamThreshold = config.oceanConfig.bands[i].foamThreshold;
+            comp.oceanBands[i].displacementScale = config.oceanConfig.bands[i].displacementScale;
+            comp.oceanBands[i].enabled = config.oceanConfig.bands[i].enabled;
+        }
+        comp.oceanGravity = config.oceanConfig.gravity;
 
         oceanEntity = internal::toHandle(parentEntity.getHandle());
 
@@ -315,14 +334,19 @@ namespace services
         data.refractionDepthScale = comp.refractionDepthScale;
         data.causticStrength = comp.causticStrength;
         data.causticDepthFalloff = comp.causticDepthFalloff;
-        data.oceanConfig.resolution = comp.oceanResolution;
-        data.oceanConfig.patchSize = comp.oceanPatchSize;
-        data.oceanConfig.windSpeed = comp.oceanWindSpeed;
-        data.oceanConfig.windDirection = comp.oceanWindDirection;
-        data.oceanConfig.amplitude = comp.oceanAmplitude;
-        data.oceanConfig.choppiness = comp.oceanChoppiness;
-        data.oceanConfig.foamThreshold = comp.oceanFoamThreshold;
-        data.oceanConfig.displacementScale = comp.oceanDisplacementScale;
+        for (uint32_t i = 0; i < services::MAX_OCEAN_BANDS; ++i)
+        {
+            data.oceanConfig.bands[i].resolution = comp.oceanBands[i].resolution;
+            data.oceanConfig.bands[i].patchSize = comp.oceanBands[i].patchSize;
+            data.oceanConfig.bands[i].windSpeed = comp.oceanBands[i].windSpeed;
+            data.oceanConfig.bands[i].windDirection = comp.oceanBands[i].windDirection;
+            data.oceanConfig.bands[i].amplitude = comp.oceanBands[i].amplitude;
+            data.oceanConfig.bands[i].choppiness = comp.oceanBands[i].choppiness;
+            data.oceanConfig.bands[i].foamThreshold = comp.oceanBands[i].foamThreshold;
+            data.oceanConfig.bands[i].displacementScale = comp.oceanBands[i].displacementScale;
+            data.oceanConfig.bands[i].enabled = comp.oceanBands[i].enabled;
+        }
+        data.oceanConfig.gravity = comp.oceanGravity;
         data.oceanConfig.enabled = comp.isActive;
 
         return data;
@@ -438,14 +462,19 @@ namespace services
         fileData.drag = comp.drag;
         fileData.buoyancyStrength = comp.buoyancyStrength;
 
-        fileData.resolution = oceanConfig.resolution;
-        fileData.patchSize = oceanConfig.patchSize;
-        fileData.windSpeed = oceanConfig.windSpeed;
-        fileData.windDirection = oceanConfig.windDirection;
-        fileData.amplitude = oceanConfig.amplitude;
-        fileData.choppiness = oceanConfig.choppiness;
-        fileData.foamThreshold = oceanConfig.foamThreshold;
-        fileData.displacementScale = oceanConfig.displacementScale;
+        for (uint32_t i = 0; i < ocean::OceanFileData::MAX_BANDS; ++i)
+        {
+            fileData.bands[i].resolution = comp.oceanBands[i].resolution;
+            fileData.bands[i].patchSize = comp.oceanBands[i].patchSize;
+            fileData.bands[i].windSpeed = comp.oceanBands[i].windSpeed;
+            fileData.bands[i].windDirection = comp.oceanBands[i].windDirection;
+            fileData.bands[i].amplitude = comp.oceanBands[i].amplitude;
+            fileData.bands[i].choppiness = comp.oceanBands[i].choppiness;
+            fileData.bands[i].foamThreshold = comp.oceanBands[i].foamThreshold;
+            fileData.bands[i].displacementScale = comp.oceanBands[i].displacementScale;
+            fileData.bands[i].enabled = comp.oceanBands[i].enabled;
+        }
+        fileData.gravity = comp.oceanGravity;
 
         if (!ocean::OceanSerializer::save(path, fileData))
             return false;
@@ -474,14 +503,19 @@ namespace services
         config.physicsEnabled = fileData.physicsEnabled;
         config.shallowColor = fileData.shallowColor;
         config.deepColor = fileData.deepColor;
-        config.oceanConfig.resolution = fileData.resolution;
-        config.oceanConfig.patchSize = fileData.patchSize;
-        config.oceanConfig.windSpeed = fileData.windSpeed;
-        config.oceanConfig.windDirection = fileData.windDirection;
-        config.oceanConfig.amplitude = fileData.amplitude;
-        config.oceanConfig.choppiness = fileData.choppiness;
-        config.oceanConfig.foamThreshold = fileData.foamThreshold;
-        config.oceanConfig.displacementScale = fileData.displacementScale;
+        for (uint32_t i = 0; i < ocean::OceanFileData::MAX_BANDS; ++i)
+        {
+            config.oceanConfig.bands[i].resolution = fileData.bands[i].resolution;
+            config.oceanConfig.bands[i].patchSize = fileData.bands[i].patchSize;
+            config.oceanConfig.bands[i].windSpeed = fileData.bands[i].windSpeed;
+            config.oceanConfig.bands[i].windDirection = fileData.bands[i].windDirection;
+            config.oceanConfig.bands[i].amplitude = fileData.bands[i].amplitude;
+            config.oceanConfig.bands[i].choppiness = fileData.bands[i].choppiness;
+            config.oceanConfig.bands[i].foamThreshold = fileData.bands[i].foamThreshold;
+            config.oceanConfig.bands[i].displacementScale = fileData.bands[i].displacementScale;
+            config.oceanConfig.bands[i].enabled = fileData.bands[i].enabled;
+        }
+        config.oceanConfig.gravity = fileData.gravity;
         config.oceanConfig.enabled = true;
 
         EntityHandle handle = createOcean(config);
@@ -614,14 +648,19 @@ namespace services
             oceanEntity = internal::toHandle(entity);
 
             const auto& comp = registry.get<components::OceanComponent>(entity);
-            oceanConfig.resolution = comp.oceanResolution;
-            oceanConfig.patchSize = comp.oceanPatchSize;
-            oceanConfig.windSpeed = comp.oceanWindSpeed;
-            oceanConfig.windDirection = comp.oceanWindDirection;
-            oceanConfig.amplitude = comp.oceanAmplitude;
-            oceanConfig.choppiness = comp.oceanChoppiness;
-            oceanConfig.foamThreshold = comp.oceanFoamThreshold;
-            oceanConfig.displacementScale = comp.oceanDisplacementScale;
+            for (uint32_t i = 0; i < services::MAX_OCEAN_BANDS; ++i)
+            {
+                oceanConfig.bands[i].resolution = comp.oceanBands[i].resolution;
+                oceanConfig.bands[i].patchSize = comp.oceanBands[i].patchSize;
+                oceanConfig.bands[i].windSpeed = comp.oceanBands[i].windSpeed;
+                oceanConfig.bands[i].windDirection = comp.oceanBands[i].windDirection;
+                oceanConfig.bands[i].amplitude = comp.oceanBands[i].amplitude;
+                oceanConfig.bands[i].choppiness = comp.oceanBands[i].choppiness;
+                oceanConfig.bands[i].foamThreshold = comp.oceanBands[i].foamThreshold;
+                oceanConfig.bands[i].displacementScale = comp.oceanBands[i].displacementScale;
+                oceanConfig.bands[i].enabled = comp.oceanBands[i].enabled;
+            }
+            oceanConfig.gravity = comp.oceanGravity;
             oceanConfig.enabled = comp.isActive;
             oceanConfigVersion++;
 

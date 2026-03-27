@@ -504,17 +504,15 @@ namespace render::water
         samplerInfo.addressModeW = vk::SamplerAddressMode::eRepeat;
         oceanDummySampler = vkDevice.createSampler(samplerInfo);
 
-        // Create descriptor set layout (2 combined image samplers for vertex + fragment)
-        std::array<vk::DescriptorSetLayoutBinding, 2> bindings{};
-        bindings[0].binding = 0;
-        bindings[0].descriptorType = vk::DescriptorType::eCombinedImageSampler;
-        bindings[0].descriptorCount = 1;
-        bindings[0].stageFlags = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment;
-
-        bindings[1].binding = 1;
-        bindings[1].descriptorType = vk::DescriptorType::eCombinedImageSampler;
-        bindings[1].descriptorCount = 1;
-        bindings[1].stageFlags = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment;
+        // Create descriptor set layout (6 combined image samplers for multi-band ocean: 3 bands x 2 textures)
+        std::array<vk::DescriptorSetLayoutBinding, 6> bindings{};
+        for (uint32_t i = 0; i < 6; ++i)
+        {
+            bindings[i].binding = i;
+            bindings[i].descriptorType = vk::DescriptorType::eCombinedImageSampler;
+            bindings[i].descriptorCount = 1;
+            bindings[i].stageFlags = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment;
+        }
 
         vk::DescriptorSetLayoutCreateInfo layoutInfo{};
         layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
@@ -525,7 +523,7 @@ namespace render::water
         // Create descriptor pool + set
         vk::DescriptorPoolSize poolSize{};
         poolSize.type = vk::DescriptorType::eCombinedImageSampler;
-        poolSize.descriptorCount = 2;
+        poolSize.descriptorCount = 6;
 
         vk::DescriptorPoolCreateInfo poolInfo{};
         poolInfo.maxSets = 1;
@@ -539,13 +537,13 @@ namespace render::water
         allocInfo.pSetLayouts = &oceanDummyLayout;
         oceanDummyDescSet = vkDevice.allocateDescriptorSets(allocInfo)[0];
 
-        // Update with dummy texture
-        std::array<vk::DescriptorImageInfo, 2> imageInfos{};
-        imageInfos[0] = {oceanDummySampler, oceanDummyView, vk::ImageLayout::eShaderReadOnlyOptimal};
-        imageInfos[1] = {oceanDummySampler, oceanDummyView, vk::ImageLayout::eShaderReadOnlyOptimal};
+        // Update all 6 bindings with dummy texture
+        std::array<vk::DescriptorImageInfo, 6> imageInfos{};
+        for (uint32_t i = 0; i < 6; ++i)
+            imageInfos[i] = {oceanDummySampler, oceanDummyView, vk::ImageLayout::eShaderReadOnlyOptimal};
 
-        std::array<vk::WriteDescriptorSet, 2> writes{};
-        for (int i = 0; i < 2; ++i)
+        std::array<vk::WriteDescriptorSet, 6> writes{};
+        for (uint32_t i = 0; i < 6; ++i)
         {
             writes[i].dstSet = oceanDummyDescSet;
             writes[i].dstBinding = i;
@@ -731,5 +729,66 @@ namespace render::water
                            0, sizeof(WaterPushConstants), &pushConstants);
 
         cmd.drawIndexed(meshBuffer.getIndexCount(), meshBuffer.getTileCount(), 0, 0, 0);
+    }
+
+    void WaterPipeline::renderMultiLOD(vk::CommandBuffer cmd, const WaterRenderDescriptors& descriptors,
+                                        WaterMeshBuffer& meshBuffer, const WaterPushConstants& pushConstants,
+                                        const uint32_t lodTileCounts[WATER_LOD_COUNT])
+    {
+        if (!initialized || meshBuffer.getTileCount() == 0)
+            return;
+
+        cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
+
+        vk::Buffer vertexBuffers[] = {meshBuffer.getVertexBuffer()};
+        vk::DeviceSize offsets[] = {0};
+        cmd.bindVertexBuffers(0, 1, vertexBuffers, offsets);
+        cmd.bindIndexBuffer(meshBuffer.getIndexBuffer(), 0, vk::IndexType::eUint32);
+
+        vk::DescriptorSet oceanDescSet = descriptors.oceanTextureDescSet
+            ? descriptors.oceanTextureDescSet
+            : oceanDummyDescSet;
+        vk::DescriptorSet refractionDescSet = descriptors.refractionDescSet
+            ? descriptors.refractionDescSet
+            : refractionDummyDescSet;
+
+        std::array<vk::DescriptorSet, 10> descSets = {
+            descriptors.iblDescSet,
+            waterTileDescriptorSet,
+            dudvTextureDescriptorSet,
+            descriptors.lightDataDescSet,
+            descriptors.clusterGridDescSet,
+            descriptors.cullingOutputDescSet,
+            descriptors.shadowDataDescSet,
+            descriptors.shadowTextureDescSet,
+            oceanDescSet,
+            refractionDescSet
+        };
+        cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout,
+                                0, descSets, nullptr);
+
+        cmd.pushConstants(pipelineLayout,
+                           vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
+                           0, sizeof(WaterPushConstants), &pushConstants);
+
+        // Issue one draw call per LOD level
+        // Tiles are sorted by LOD in the SSBO: [LOD0 tiles...][LOD1 tiles...][LOD2 tiles...]...
+        uint32_t firstInstance = 0;
+        for (uint32_t lod = 0; lod < WATER_LOD_COUNT; ++lod)
+        {
+            if (lodTileCounts[lod] == 0)
+                continue;
+
+            const auto& lodMesh = meshBuffer.getLODMesh(lod);
+            cmd.drawIndexed(
+                lodMesh.indexCount,
+                lodTileCounts[lod],
+                lodMesh.indexOffset,
+                static_cast<int32_t>(lodMesh.vertexOffset),
+                firstInstance
+            );
+
+            firstInstance += lodTileCounts[lod];
+        }
     }
 }

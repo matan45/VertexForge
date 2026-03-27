@@ -446,6 +446,7 @@ namespace windows
             drawSSAOSection();
             drawEdgeDetectionSection();
             drawColorGradingSection();
+            drawUnderwaterSection();
 
             ImGui::Spacing();
             ImGui::Separator();

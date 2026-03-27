@@ -42,6 +42,27 @@ namespace core::api
                     return value::Value(dispatcher.query(query));
                 });
 
+            // ocean.isCameraUnderwater() -> bool
+            interpreter->registerNativeFunction("_native_ocean_isCameraUnderwater",
+                [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+                {
+                    auto& registry = scene::EntityRegistry::getRegistry();
+                    auto view = registry.view<components::OceanComponent>();
+                    for (auto entity : view)
+                    {
+                        const auto& ocean = view.get<components::OceanComponent>(entity);
+                        // Check if the camera position (from CameraComponent) is below water
+                        auto camView = registry.view<components::CameraComponent, components::TransformComponent>();
+                        for (auto camEntity : camView)
+                        {
+                            const auto& transform = camView.get<components::TransformComponent>(camEntity);
+                            if (transform.position.y < ocean.waterHeight)
+                                return value::Value(true);
+                        }
+                    }
+                    return value::Value(false);
+                });
+
             // ocean.hasOcean(entityId) -> bool
             interpreter->registerNativeFunction("_native_ocean_hasOcean",
                 [&dispatcher](const std::vector<value::Value>& args) -> value::Value

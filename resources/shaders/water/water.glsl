@@ -31,15 +31,24 @@ layout(push_constant) uniform PushConstants {
     float maxVisibleDepth;
     float fresnelPower;
     float oceanChoppiness;
-    float oceanPatchSize;
+    float oceanPatchSize0;       // Swell band patch size
     float oceanFoamThreshold;
     float refractionStrength;
     float refractionChromatic;
     float refractionDepthScale;
+    float oceanPatchSize1;       // Agitation band patch size
+    float oceanPatchSize2;       // Ripples band patch size
+    uint  bandEnableMask;        // bit 0=swell, bit 1=agitation, bit 2=ripples
+    float pad;
 } pc;
 
-layout(set = 8, binding = 0) uniform sampler2D oceanDisplacementMap;
-layout(set = 8, binding = 1) uniform sampler2D oceanNormalMap;
+// Multi-band ocean textures (set 8)
+layout(set = 8, binding = 0) uniform sampler2D oceanDisp0;   // Swell displacement
+layout(set = 8, binding = 1) uniform sampler2D oceanNorm0;   // Swell normals
+layout(set = 8, binding = 2) uniform sampler2D oceanDisp1;   // Agitation displacement
+layout(set = 8, binding = 3) uniform sampler2D oceanNorm1;   // Agitation normals
+layout(set = 8, binding = 4) uniform sampler2D oceanDisp2;   // Ripples displacement
+layout(set = 8, binding = 5) uniform sampler2D oceanNorm2;   // Ripples normals
 
 void main() {
     uint tileIndex = gl_InstanceIndex;
@@ -58,24 +67,39 @@ void main() {
 
     fragBaseHeight = waterHeight;
 
-    // Ocean FFT displacement: two octaves at different scales to break up visible tiling
-    vec2 oceanUV1 = worldPos.xz / pc.oceanPatchSize;
-    vec2 oceanUV2 = worldPos.xz / (pc.oceanPatchSize * 2.731) + vec2(0.37, 0.71);
+    // Multi-band FFT displacement: each band at its own patch size
+    vec4 totalDisp = vec4(0.0);
+    vec3 totalNorm = vec3(0.0, 1.0, 0.0);
 
-    vec4 disp1 = texture(oceanDisplacementMap, oceanUV1);
-    vec4 disp2 = texture(oceanDisplacementMap, oceanUV2);
-    vec4 disp = disp1 + disp2 * 0.3; // second octave at 30% strength
+    // Band 0: Swell (large-scale distant wind waves)
+    if ((pc.bandEnableMask & 1u) != 0u) {
+        vec2 uv0 = worldPos.xz / pc.oceanPatchSize0;
+        totalDisp += texture(oceanDisp0, uv0);
+        totalNorm = texture(oceanNorm0, uv0).xyz;
+    }
 
-    worldPos.x += disp.x;
-    worldPos.y += disp.y;
-    worldPos.z += disp.z;
+    // Band 1: Agitation (mid-frequency wind chaos)
+    if ((pc.bandEnableMask & 2u) != 0u) {
+        vec2 uv1 = worldPos.xz / pc.oceanPatchSize1;
+        totalDisp += texture(oceanDisp1, uv1);
+        vec3 n1 = texture(oceanNorm1, uv1).xyz;
+        totalNorm = normalize(totalNorm + (n1 - vec3(0.0, 1.0, 0.0)));
+    }
 
-    fragOceanDispY = disp.y;
+    // Band 2: Ripples (fine surface detail)
+    if ((pc.bandEnableMask & 4u) != 0u) {
+        vec2 uv2 = worldPos.xz / pc.oceanPatchSize2;
+        totalDisp += texture(oceanDisp2, uv2);
+        vec3 n2 = texture(oceanNorm2, uv2).xyz;
+        totalNorm = normalize(totalNorm + (n2 - vec3(0.0, 1.0, 0.0)));
+    }
 
-    vec3 norm1 = texture(oceanNormalMap, oceanUV1).xyz;
-    vec3 norm2 = texture(oceanNormalMap, oceanUV2).xyz;
-    vec3 blendedNorm = normalize(norm1 + (norm2 - vec3(0.0, 1.0, 0.0)) * 0.3);
-    fragNormal = normalize(blendedNorm);
+    worldPos.x += totalDisp.x;
+    worldPos.y += totalDisp.y;
+    worldPos.z += totalDisp.z;
+
+    fragOceanDispY = totalDisp.y;
+    fragNormal = normalize(totalNorm);
 
     fragWorldPos = worldPos;
     fragTexCoord = inTexCoord;
@@ -133,8 +157,13 @@ layout(set = 7, binding = 1) uniform sampler2D physicalPoolDepth;
 #define PAGE_TABLE pageTableData
 #include "../common/shadow_sampling.glsl"
 
-layout(set = 8, binding = 0) uniform sampler2D frag_oceanDisplacementMap;
-layout(set = 8, binding = 1) uniform sampler2D frag_oceanNormalMap;
+// Multi-band ocean textures (set 8)
+layout(set = 8, binding = 0) uniform sampler2D frag_oceanDisp0;
+layout(set = 8, binding = 1) uniform sampler2D frag_oceanNorm0;
+layout(set = 8, binding = 2) uniform sampler2D frag_oceanDisp1;
+layout(set = 8, binding = 3) uniform sampler2D frag_oceanNorm1;
+layout(set = 8, binding = 4) uniform sampler2D frag_oceanDisp2;
+layout(set = 8, binding = 5) uniform sampler2D frag_oceanNorm2;
 
 layout(push_constant) uniform PushConstants {
     vec4 shallowColor;
@@ -142,11 +171,15 @@ layout(push_constant) uniform PushConstants {
     float maxVisibleDepth;
     float fresnelPower;
     float oceanChoppiness;
-    float oceanPatchSize;
+    float oceanPatchSize0;
     float oceanFoamThreshold;
     float refractionStrength;
     float refractionChromatic;
     float refractionDepthScale;
+    float oceanPatchSize1;
+    float oceanPatchSize2;
+    uint  bandEnableMask;
+    float pad;
 } pc;
 
 layout(set = 9, binding = 0) uniform sampler2D refractionColorTex;
@@ -173,16 +206,13 @@ void main() {
     vec3 waterColor = mix(pc.deepColor.rgb, pc.shallowColor.rgb, heightFactor);
 
     // Subsurface scattering approximation
-    // Light passes through thin wave peaks -- bright teal glow when backlit
-    vec3 sssColor = vec3(0.0, 0.7, 0.6); // turquoise SSS tint
-    // Use directional light if available, otherwise default sun from above
+    vec3 sssColor = vec3(0.0, 0.7, 0.6);
     vec3 L = normalize(vec3(0.5, 0.7, 0.3));
     vec3 lightColor = vec3(1.0);
     if (lightCounts.directionalCount > 0u) {
         L = normalize(-directionalLights[0].direction);
         lightColor = directionalLights[0].color;
     }
-    // SSS strongest when looking toward the light through a wave peak
     float LdotV = max(dot(L, -V), 0.0);
     float waveHeight = clamp(heightRange, 0.0, 1.0);
     float NdotL = dot(N, L);
@@ -191,7 +221,6 @@ void main() {
     sss = clamp(sss, 0.0, 1.0);
     waterColor = mix(waterColor, sssColor * lightColor, sss);
 
-    // Fresnel blend -- balanced for ocean (less reflection at steep angles)
     fresnel = clamp(fresnel, 0.02, 0.6);
 
     float metallic = 0.0;
@@ -257,14 +286,12 @@ void main() {
     if (pc.refractionStrength > 0.0) {
         vec2 screenUV = gl_FragCoord.xy / vec2(textureSize(refractionColorTex, 0));
 
-        // Use view angle as depth proxy (steeper = more distortion)
         float viewAngleFactor = 1.0 - abs(dot(V, vec3(0.0, 1.0, 0.0)));
         float depthFactor = smoothstep(0.0, 1.0, viewAngleFactor * pc.refractionDepthScale);
 
         vec2 distortion = N.xz * pc.refractionStrength * depthFactor * 0.1;
         vec2 refractedUV = clamp(screenUV + distortion, vec2(0.001), vec2(0.999));
 
-        // Sample refraction color with optional chromatic aberration
         if (pc.refractionChromatic > 0.0) {
             float spread = pc.refractionChromatic * depthFactor * 0.002;
             vec2 chromaticDir = normalize(distortion + vec2(0.001));
@@ -276,7 +303,6 @@ void main() {
             refractionColor = texture(refractionColorTex, refractedUV).rgb;
         }
 
-        // Tint toward water color based on view angle (looking down = more tint)
         float depthTint = smoothstep(0.0, 1.0, viewAngleFactor);
         refractionColor = mix(refractionColor, waterColor, depthTint * 0.5);
     }
@@ -284,14 +310,22 @@ void main() {
     vec3 baseColor = (pc.refractionStrength > 0.0) ? refractionColor : waterColor;
     vec3 color = mix(baseColor, specular, fresnel) * ambientShadowFactor + directLighting;
 
-    // Ocean foam blending on large wave crests
-    vec2 foamUV1 = fragWorldPos.xz / pc.oceanPatchSize;
-    vec2 foamUV2 = fragWorldPos.xz / (pc.oceanPatchSize * 2.731) + vec2(0.37, 0.71);
-    float foam = texture(frag_oceanDisplacementMap, foamUV1).w + texture(frag_oceanDisplacementMap, foamUV2).w * 0.3;
+    // Ocean foam blending — sum foam from all active bands
+    float foam = 0.0;
+    if ((pc.bandEnableMask & 1u) != 0u) {
+        vec2 foamUV0 = fragWorldPos.xz / pc.oceanPatchSize0;
+        foam += texture(frag_oceanDisp0, foamUV0).w;
+    }
+    if ((pc.bandEnableMask & 2u) != 0u) {
+        vec2 foamUV1 = fragWorldPos.xz / pc.oceanPatchSize1;
+        foam += texture(frag_oceanDisp1, foamUV1).w * 0.5;
+    }
+    if ((pc.bandEnableMask & 4u) != 0u) {
+        vec2 foamUV2 = fragWorldPos.xz / pc.oceanPatchSize2;
+        foam += texture(frag_oceanDisp2, foamUV2).w * 0.3;
+    }
     vec3 foamColor = vec3(0.95, 0.97, 1.0);
     color = mix(color, foamColor, foam * 0.6);
-
-    // Tonemapping and gamma handled by post-process pipeline
 
     float alpha = mix(pc.shallowColor.a, 1.0, fresnel);
 

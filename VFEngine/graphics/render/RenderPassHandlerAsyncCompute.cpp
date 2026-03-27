@@ -93,7 +93,7 @@ namespace render
             float baseHeight = oceanRenderProvider->getBaseWaterHeight();
             auto cfgData = oceanRenderProvider->getOceanFFTConfig();
             gpuDrivenRenderer->updateWater(visualSettings, baseHeight,
-                                            currentCameraPosition, cfgData.patchSize);
+                                            currentCameraPosition, cfgData.bands[0].patchSize);
         }
 
         if (oceanRenderProvider && gpuDrivenRenderer)
@@ -101,24 +101,34 @@ namespace render
             bool wantOcean = oceanRenderProvider->isOceanFFTEnabled();
             uint32_t version = oceanRenderProvider->getOceanFFTConfigVersion();
 
-            auto buildOceanConfig = [this]() {
+            auto buildOceanConfigs = [this]() -> std::pair<std::array<render::water::OceanFFTConfig, 3>, std::array<bool, 3>> {
                 auto cfgData = oceanRenderProvider->getOceanFFTConfig();
-                render::water::OceanFFTConfig cfg;
-                cfg.resolution = cfgData.resolution;
-                cfg.patchSize = cfgData.patchSize;
-                cfg.windSpeed = cfgData.windSpeed;
-                cfg.windDirection = cfgData.windDirection;
-                cfg.amplitude = cfgData.amplitude;
-                cfg.choppiness = cfgData.choppiness;
-                cfg.gravity = oceanRenderProvider->getPhysicsGravity();
-                cfg.foamThreshold = cfgData.foamThreshold;
-                cfg.displacementScale = cfgData.displacementScale;
-                return cfg;
+                float gravity = cfgData.gravity > 0.0f ? cfgData.gravity : oceanRenderProvider->getPhysicsGravity();
+
+                std::array<render::water::OceanFFTConfig, 3> configs;
+                std::array<bool, 3> enabled;
+
+                for (uint32_t i = 0; i < services::MAX_OCEAN_BANDS; ++i)
+                {
+                    const auto& band = cfgData.bands[i];
+                    configs[i].resolution = band.resolution;
+                    configs[i].patchSize = band.patchSize;
+                    configs[i].windSpeed = band.windSpeed;
+                    configs[i].windDirection = band.windDirection;
+                    configs[i].amplitude = band.amplitude;
+                    configs[i].choppiness = band.choppiness;
+                    configs[i].gravity = gravity;
+                    configs[i].foamThreshold = band.foamThreshold;
+                    configs[i].displacementScale = band.displacementScale;
+                    enabled[i] = band.enabled;
+                }
+                return {configs, enabled};
             };
 
             if (wantOcean && !oceanFFTInitialized)
             {
-                gpuDrivenRenderer->initOceanFFT(buildOceanConfig());
+                auto [configs, enabled] = buildOceanConfigs();
+                gpuDrivenRenderer->initOceanFFT(configs, enabled);
                 oceanFFTInitialized = true;
                 lastOceanConfigVersion = version;
 
@@ -134,7 +144,8 @@ namespace render
             }
             else if (wantOcean && oceanFFTInitialized && version != lastOceanConfigVersion)
             {
-                gpuDrivenRenderer->updateOceanConfig(buildOceanConfig());
+                auto [configs, enabled] = buildOceanConfigs();
+                gpuDrivenRenderer->updateOceanConfig(configs, enabled);
                 lastOceanConfigVersion = version;
             }
         }
@@ -274,6 +285,14 @@ namespace render
         camInfo.jitterOffset = currentJitterOffset;
         camInfo.frameIndex = taaFrameIndex;
         camInfo.time = currentTime;
+        if (oceanRenderProvider && oceanRenderProvider->hasActiveOcean())
+        {
+            float waterH = oceanRenderProvider->getBaseWaterHeight();
+            float diff = waterH - currentCameraPosition.y;
+            camInfo.submersionFactor = glm::clamp((diff + 0.5f) / 1.0f, 0.0f, 1.0f);
+            camInfo.isUnderwater = camInfo.submersionFactor > 0.01f;
+            camInfo.waterHeight = waterH;
+        }
         postProcessPipeline->setCameraData(camInfo);
 
         if (gpuDrivenRendererInitialized)

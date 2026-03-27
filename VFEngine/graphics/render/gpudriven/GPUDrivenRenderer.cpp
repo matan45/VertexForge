@@ -264,7 +264,7 @@ namespace render::gpudriven
         if (volumetricPipeline) volumetricPipeline->cleanup();
         if (fogVolumeBufferManager) fogVolumeBufferManager->cleanup();
         if (water.causticsResources) water.causticsResources->cleanup();
-        if (water.oceanFFT) water.oceanFFT->cleanup();
+        for (auto& band : water.oceanBands) { if (band) band->cleanup(); }
         if (water.pipeline) water.pipeline->cleanup();
         if (water.meshBuffer) water.meshBuffer->cleanup();
         if (billboard.meshShaderPipeline) billboard.meshShaderPipeline->cleanup();
@@ -304,7 +304,11 @@ namespace render::gpudriven
         terrain.adapter.reset();
         terrain.pipeline.reset();
         terrain.meshBuffer.reset();
-        water.oceanFFT.reset();
+        for (auto& band : water.oceanBands) band.reset();
+        // Cleanup composite descriptor resources
+        if (water.multiBandOceanPool) { vkDevice.destroyDescriptorPool(water.multiBandOceanPool); water.multiBandOceanPool = nullptr; }
+        if (water.multiBandOceanLayout) { vkDevice.destroyDescriptorSetLayout(water.multiBandOceanLayout); water.multiBandOceanLayout = nullptr; }
+        water.multiBandOceanDescSet = nullptr;
         water.refractionResources.reset();
         water.pipeline.reset();
         water.meshBuffer.reset();
@@ -461,8 +465,8 @@ namespace render::gpudriven
             if (water.pipeline)
             {
                 vk::DescriptorSetLayout oceanLayout{};
-                if (water.oceanFFT && water.oceanFFT->isInitialized())
-                    oceanLayout = water.oceanFFT->getOceanTextureLayout();
+                if (water.multiBandOceanLayout)
+                    oceanLayout = water.multiBandOceanLayout;
 
                 vk::DescriptorSetLayout refractionLayout{};
                 if (water.refractionResources && water.refractionResources->isInitialized())

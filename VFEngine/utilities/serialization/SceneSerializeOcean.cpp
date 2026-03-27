@@ -27,15 +27,25 @@ namespace serialization
         j["causticStrength"] = ocean.causticStrength;
         j["causticDepthFalloff"] = ocean.causticDepthFalloff;
 
-        // Ocean FFT
-        j["oceanResolution"] = ocean.oceanResolution;
-        j["oceanPatchSize"] = ocean.oceanPatchSize;
-        j["oceanWindSpeed"] = ocean.oceanWindSpeed;
-        j["oceanWindDirection"] = ocean.oceanWindDirection;
-        j["oceanAmplitude"] = ocean.oceanAmplitude;
-        j["oceanChoppiness"] = ocean.oceanChoppiness;
-        j["oceanFoamThreshold"] = ocean.oceanFoamThreshold;
-        j["oceanDisplacementScale"] = ocean.oceanDisplacementScale;
+        // Ocean FFT bands
+        auto bandsArray = nlohmann::json::array();
+        for (uint32_t i = 0; i < components::MAX_OCEAN_BANDS; ++i)
+        {
+            const auto& band = ocean.oceanBands[i];
+            nlohmann::json bandJson;
+            bandJson["resolution"] = band.resolution;
+            bandJson["patchSize"] = band.patchSize;
+            bandJson["windSpeed"] = band.windSpeed;
+            bandJson["windDirection"] = band.windDirection;
+            bandJson["amplitude"] = band.amplitude;
+            bandJson["choppiness"] = band.choppiness;
+            bandJson["foamThreshold"] = band.foamThreshold;
+            bandJson["displacementScale"] = band.displacementScale;
+            bandJson["enabled"] = band.enabled;
+            bandsArray.push_back(bandJson);
+        }
+        j["oceanBands"] = bandsArray;
+        j["oceanGravity"] = ocean.oceanGravity;
 
         // Runtime
         j["waterHeight"] = ocean.waterHeight;
@@ -78,23 +88,46 @@ namespace serialization
         if (auto it = j.find("causticDepthFalloff"); it != j.end() && it->is_number())
             ocean.causticDepthFalloff = it->get<float>();
 
-        // Ocean FFT
-        if (auto it = j.find("oceanResolution"); it != j.end() && it->is_number_unsigned())
-            ocean.oceanResolution = it->get<uint32_t>();
-        if (auto it = j.find("oceanPatchSize"); it != j.end() && it->is_number())
-            ocean.oceanPatchSize = it->get<float>();
-        if (auto it = j.find("oceanWindSpeed"); it != j.end() && it->is_number())
-            ocean.oceanWindSpeed = it->get<float>();
-        if (auto it = j.find("oceanWindDirection"); it != j.end() && it->is_number())
-            ocean.oceanWindDirection = it->get<float>();
-        if (auto it = j.find("oceanAmplitude"); it != j.end() && it->is_number())
-            ocean.oceanAmplitude = it->get<float>();
-        if (auto it = j.find("oceanChoppiness"); it != j.end() && it->is_number())
-            ocean.oceanChoppiness = it->get<float>();
-        if (auto it = j.find("oceanFoamThreshold"); it != j.end() && it->is_number())
-            ocean.oceanFoamThreshold = it->get<float>();
-        if (auto it = j.find("oceanDisplacementScale"); it != j.end() && it->is_number())
-            ocean.oceanDisplacementScale = it->get<float>();
+        // Ocean FFT bands
+        if (j.contains("oceanBands") && j["oceanBands"].is_array())
+        {
+            const auto& bandsArr = j["oceanBands"];
+            for (uint32_t i = 0; i < std::min(static_cast<uint32_t>(bandsArr.size()), components::MAX_OCEAN_BANDS); ++i)
+            {
+                const auto& b = bandsArr[i];
+                ocean.oceanBands[i].resolution = b.value("resolution", 256u);
+                ocean.oceanBands[i].patchSize = b.value("patchSize", 100.0f);
+                ocean.oceanBands[i].windSpeed = b.value("windSpeed", 8.0f);
+                ocean.oceanBands[i].windDirection = b.value("windDirection", 45.0f);
+                ocean.oceanBands[i].amplitude = b.value("amplitude", 0.00003f);
+                ocean.oceanBands[i].choppiness = b.value("choppiness", 1.2f);
+                ocean.oceanBands[i].foamThreshold = b.value("foamThreshold", -0.1f);
+                ocean.oceanBands[i].displacementScale = b.value("displacementScale", 4.0f);
+                ocean.oceanBands[i].enabled = b.value("enabled", true);
+            }
+        }
+        else
+        {
+            // Backward compat: old flat fields -> band[0]
+            if (auto it = j.find("oceanResolution"); it != j.end() && it->is_number_unsigned())
+                ocean.oceanBands[0].resolution = it->get<uint32_t>();
+            if (auto it = j.find("oceanPatchSize"); it != j.end() && it->is_number())
+                ocean.oceanBands[0].patchSize = it->get<float>();
+            if (auto it = j.find("oceanWindSpeed"); it != j.end() && it->is_number())
+                ocean.oceanBands[0].windSpeed = it->get<float>();
+            if (auto it = j.find("oceanWindDirection"); it != j.end() && it->is_number())
+                ocean.oceanBands[0].windDirection = it->get<float>();
+            if (auto it = j.find("oceanAmplitude"); it != j.end() && it->is_number())
+                ocean.oceanBands[0].amplitude = it->get<float>();
+            if (auto it = j.find("oceanChoppiness"); it != j.end() && it->is_number())
+                ocean.oceanBands[0].choppiness = it->get<float>();
+            if (auto it = j.find("oceanFoamThreshold"); it != j.end() && it->is_number())
+                ocean.oceanBands[0].foamThreshold = it->get<float>();
+            if (auto it = j.find("oceanDisplacementScale"); it != j.end() && it->is_number())
+                ocean.oceanBands[0].displacementScale = it->get<float>();
+        }
+        if (auto it = j.find("oceanGravity"); it != j.end() && it->is_number())
+            ocean.oceanGravity = it->get<float>();
 
         // Runtime
         if (auto it = j.find("waterHeight"); it != j.end() && it->is_number())

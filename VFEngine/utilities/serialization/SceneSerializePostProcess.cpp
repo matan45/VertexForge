@@ -185,6 +185,25 @@ namespace serialization
             };
         }
 
+        json serializeUnderwater(const postprocess::UnderwaterSettings& s)
+        {
+            return {
+                {"enabled", s.enabled},
+                {"fogDensity", s.fogDensity},
+                {"fogColor", {s.fogColor[0], s.fogColor[1], s.fogColor[2]}},
+                {"absorptionR", s.absorptionR},
+                {"absorptionG", s.absorptionG},
+                {"absorptionB", s.absorptionB},
+                {"causticStrength", s.causticStrength},
+                {"causticScale", s.causticScale},
+                {"causticSpeed", s.causticSpeed},
+                {"meniscusWidth", s.meniscusWidth},
+                {"meniscusDistortion", s.meniscusDistortion},
+                {"chromaticStrength", s.chromaticStrength},
+                {"maxFogDistance", s.maxFogDistance}
+            };
+        }
+
         json serializeColorGrading(const postprocess::ColorGradingSettings& s)
         {
             return {
@@ -436,6 +455,43 @@ namespace serialization
                 s.highPercentile = std::clamp(ae["highPercentile"].get<float>(), 0.5f, 1.0f);
         }
 
+        void deserializeUnderwater(const json& j, postprocess::UnderwaterSettings& s)
+        {
+            if (!j.contains("underwater") || !j["underwater"].is_object())
+                return;
+            const auto& uw = j["underwater"];
+            if (uw.contains("enabled") && uw["enabled"].is_boolean())
+                s.enabled = uw["enabled"].get<bool>();
+            if (uw.contains("fogDensity") && uw["fogDensity"].is_number())
+                s.fogDensity = std::clamp(uw["fogDensity"].get<float>(), 0.0f, 1.0f);
+            if (uw.contains("fogColor") && uw["fogColor"].is_array() && uw["fogColor"].size() == 3)
+            {
+                s.fogColor[0] = std::clamp(uw["fogColor"][0].get<float>(), 0.0f, 1.0f);
+                s.fogColor[1] = std::clamp(uw["fogColor"][1].get<float>(), 0.0f, 1.0f);
+                s.fogColor[2] = std::clamp(uw["fogColor"][2].get<float>(), 0.0f, 1.0f);
+            }
+            if (uw.contains("absorptionR") && uw["absorptionR"].is_number())
+                s.absorptionR = std::clamp(uw["absorptionR"].get<float>(), 0.0f, 1.0f);
+            if (uw.contains("absorptionG") && uw["absorptionG"].is_number())
+                s.absorptionG = std::clamp(uw["absorptionG"].get<float>(), 0.0f, 1.0f);
+            if (uw.contains("absorptionB") && uw["absorptionB"].is_number())
+                s.absorptionB = std::clamp(uw["absorptionB"].get<float>(), 0.0f, 1.0f);
+            if (uw.contains("causticStrength") && uw["causticStrength"].is_number())
+                s.causticStrength = std::clamp(uw["causticStrength"].get<float>(), 0.0f, 2.0f);
+            if (uw.contains("causticScale") && uw["causticScale"].is_number())
+                s.causticScale = std::clamp(uw["causticScale"].get<float>(), 10.0f, 200.0f);
+            if (uw.contains("causticSpeed") && uw["causticSpeed"].is_number())
+                s.causticSpeed = std::clamp(uw["causticSpeed"].get<float>(), 0.0f, 2.0f);
+            if (uw.contains("meniscusWidth") && uw["meniscusWidth"].is_number())
+                s.meniscusWidth = std::clamp(uw["meniscusWidth"].get<float>(), 0.0f, 0.1f);
+            if (uw.contains("meniscusDistortion") && uw["meniscusDistortion"].is_number())
+                s.meniscusDistortion = std::clamp(uw["meniscusDistortion"].get<float>(), 0.0f, 0.1f);
+            if (uw.contains("chromaticStrength") && uw["chromaticStrength"].is_number())
+                s.chromaticStrength = std::clamp(uw["chromaticStrength"].get<float>(), 0.0f, 0.01f);
+            if (uw.contains("maxFogDistance") && uw["maxFogDistance"].is_number())
+                s.maxFogDistance = std::clamp(uw["maxFogDistance"].get<float>(), 10.0f, 500.0f);
+        }
+
         void deserializeColorGrading(const json& j, postprocess::ColorGradingSettings& s)
         {
             if (!j.contains("colorGrading") || !j["colorGrading"].is_object())
@@ -495,6 +551,7 @@ namespace serialization
         j["edgeDetection"] = serializeEdgeDetection(settings.edgeDetection);
         j["autoExposure"] = serializeAutoExposure(settings.autoExposure);
         j["colorGrading"] = serializeColorGrading(settings.colorGrading);
+        j["underwater"] = serializeUnderwater(settings.underwater);
         return j;
     }
 
@@ -514,5 +571,6 @@ namespace serialization
         deserializeEdgeDetection(j, settings.edgeDetection);
         deserializeAutoExposure(j, settings.autoExposure);
         deserializeColorGrading(j, settings.colorGrading);
+        deserializeUnderwater(j, settings.underwater);
     }
 }

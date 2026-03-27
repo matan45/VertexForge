@@ -167,6 +167,134 @@ namespace windows
         }
     }
 
+    void PostProcessConfigWindow::drawUnderwaterSection()
+    {
+        if (ImGui::CollapsingHeader("Underwater", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            ImGui::Indent(10.0f);
+
+            if (ImGui::Checkbox("Enable Underwater", &settings.underwater.enabled))
+            {
+                isDirty = true;
+            }
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("Underwater post-processing effect.\nAutomatically activates when camera goes below ocean surface.");
+            }
+
+            if (settings.underwater.enabled)
+            {
+                ImGui::Spacing();
+
+                if (ImGui::SliderFloat("Fog Density##uw", &settings.underwater.fogDensity, 0.0f, 1.0f, "%.3f"))
+                {
+                    isDirty = true;
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Density of underwater fog.\nHigher = murkier water.");
+                }
+
+                if (ImGui::ColorEdit3("Fog Color##uw", settings.underwater.fogColor))
+                {
+                    isDirty = true;
+                }
+
+                if (ImGui::SliderFloat("Absorption R##uw", &settings.underwater.absorptionR, 0.0f, 1.0f, "%.3f"))
+                {
+                    isDirty = true;
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Red light absorption rate.\nHigher = red light fades faster with depth.");
+                }
+
+                if (ImGui::SliderFloat("Absorption G##uw", &settings.underwater.absorptionG, 0.0f, 1.0f, "%.3f"))
+                {
+                    isDirty = true;
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Green light absorption rate.");
+                }
+
+                if (ImGui::SliderFloat("Absorption B##uw", &settings.underwater.absorptionB, 0.0f, 1.0f, "%.3f"))
+                {
+                    isDirty = true;
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Blue light absorption rate.\nTypically lowest for ocean water.");
+                }
+
+                if (ImGui::SliderFloat("Caustic Strength##uw", &settings.underwater.causticStrength, 0.0f, 2.0f, "%.2f"))
+                {
+                    isDirty = true;
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Intensity of light caustic patterns.");
+                }
+
+                if (ImGui::SliderFloat("Caustic Scale##uw", &settings.underwater.causticScale, 10.0f, 200.0f, "%.1f"))
+                {
+                    isDirty = true;
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Scale of caustic pattern.\nHigher = finer detail.");
+                }
+
+                if (ImGui::SliderFloat("Caustic Speed##uw", &settings.underwater.causticSpeed, 0.0f, 2.0f, "%.2f"))
+                {
+                    isDirty = true;
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Animation speed of caustic patterns.");
+                }
+
+                if (ImGui::SliderFloat("Meniscus Width##uw", &settings.underwater.meniscusWidth, 0.0f, 0.1f, "%.3f"))
+                {
+                    isDirty = true;
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Width of the meniscus distortion at the waterline.");
+                }
+
+                if (ImGui::SliderFloat("Meniscus Distortion##uw", &settings.underwater.meniscusDistortion, 0.0f, 0.1f, "%.3f"))
+                {
+                    isDirty = true;
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Strength of visual distortion at the waterline.");
+                }
+
+                if (ImGui::SliderFloat("Chromatic Strength##uw", &settings.underwater.chromaticStrength, 0.0f, 0.01f, "%.4f"))
+                {
+                    isDirty = true;
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Underwater chromatic aberration amount.");
+                }
+
+                if (ImGui::DragFloat("Max Fog Distance##uw", &settings.underwater.maxFogDistance, 1.0f, 10.0f, 500.0f, "%.0f"))
+                {
+                    isDirty = true;
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Maximum distance for fog calculation.\nBeyond this, fog is at full density.");
+                }
+            }
+
+            ImGui::Unindent(10.0f);
+        }
+    }
+
     void PostProcessConfigWindow::drawEdgeDetectionSection()
     {
         if (ImGui::CollapsingHeader("Edge Detection", ImGuiTreeNodeFlags_DefaultOpen))

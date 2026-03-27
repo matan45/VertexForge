@@ -56,6 +56,7 @@
 #include <vulkan/vulkan.hpp>
 #include <glm/glm.hpp>
 #include <memory>
+#include <array>
 #include <vector>
 #include <unordered_map>
 #include <unordered_set>
@@ -162,11 +163,20 @@ namespace render::gpudriven
             std::unique_ptr<render::water::WaterPipeline> pipeline;
             std::unique_ptr<render::water::WaterMeshBuffer> meshBuffer;
             std::vector<render::water::WaterTileGPUData> tileData;
+            uint32_t lodTileCounts[render::water::WATER_LOD_COUNT] = {};
             render::water::WaterPushConstants cachedPushConstants{};
             bool renderingEnabled = true;
-            // Ocean FFT
-            std::unique_ptr<render::water::OceanFFT> oceanFFT;
+            // Ocean FFT (multi-band)
+            static constexpr uint32_t MAX_OCEAN_BANDS = 3;
+            std::array<std::unique_ptr<render::water::OceanFFT>, MAX_OCEAN_BANDS> oceanBands;
+            uint32_t activeBandCount = 0;
             bool oceanEnabled = false;
+
+            // Composite descriptor set for multi-band ocean textures (6 bindings)
+            vk::DescriptorSetLayout multiBandOceanLayout;
+            vk::DescriptorPool multiBandOceanPool;
+            vk::DescriptorSet multiBandOceanDescSet;
+            bool multiBandDescriptorValid = false;
             // Refraction
             std::unique_ptr<render::water::WaterRefractionResources> refractionResources;
             // Caustics
@@ -576,11 +586,13 @@ namespace render::gpudriven
         render::water::WaterCausticsResources* getCausticsResources() { return water.causticsResources.get(); }
         void recreateRefractionResources(vk::ImageView sceneDepthView);
 
-        void initOceanFFT(const render::water::OceanFFTConfig& config);
+        void initOceanFFT(const std::array<render::water::OceanFFTConfig, 3>& bandConfigs,
+                          const std::array<bool, 3>& bandEnabled);
         void cleanupOceanFFT();
         void setOceanEnabled(bool enabled);
         bool isOceanEnabled() const { return water.oceanEnabled; }
-        void updateOceanConfig(const render::water::OceanFFTConfig& config);
+        void updateOceanConfig(const std::array<render::water::OceanFFTConfig, 3>& bandConfigs,
+                               const std::array<bool, 3>& bandEnabled);
         void dispatchOceanFFT(vk::CommandBuffer cmd, float time);
         void readbackOceanDisplacement();
         float getOceanHeightAt(const glm::vec2& worldXZ) const;
@@ -690,6 +702,8 @@ namespace render::gpudriven
         void createGrassBuffers(uint32_t maxInstances);
         void initWaterSubsystems(vk::DescriptorSetLayout iblDescriptorSetLayout, vk::RenderPass renderPass,
                                  vk::ImageView sceneDepthView);
+        void createMultiBandOceanDescriptor();
+        void updateMultiBandOceanDescriptor();
         void collectShadowVisibleLights(std::unordered_set<uint32_t>& outLights, bool& outHasFilter);
         void buildAndDispatchLightOcclusion(vk::CommandBuffer cmd);
         void recordShadowPasses(vk::CommandBuffer cmd, bool hasMeshObjects, bool hasTerrainTiles);

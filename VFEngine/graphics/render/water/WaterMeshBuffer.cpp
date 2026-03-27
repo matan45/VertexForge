@@ -4,16 +4,22 @@
 
 namespace render::water
 {
+    static constexpr uint32_t LOD_SUBDIVISIONS[WATER_LOD_COUNT] = {
+        WATER_LOD0_SUBDIVISIONS,
+        WATER_LOD1_SUBDIVISIONS,
+        WATER_LOD2_SUBDIVISIONS,
+        WATER_LOD3_SUBDIVISIONS
+    };
+
     void WaterMeshBuffer::init(vk::Device device, vk::PhysicalDevice physicalDevice,
-                               vk::Queue queue, vk::CommandPool cmdPool, uint32_t subdivisions)
+                               vk::Queue queue, vk::CommandPool cmdPool)
     {
         this->device = device;
         this->physicalDevice = physicalDevice;
         this->graphicsQueue = queue;
         this->commandPool = cmdPool;
-        this->subdivisions = subdivisions;
 
-        createQuadMesh();
+        createMultiLODMesh();
         createTileSSBO();
 
         initialized = true;
@@ -37,15 +43,13 @@ namespace render::water
         initialized = false;
     }
 
-    void WaterMeshBuffer::createQuadMesh()
+    void WaterMeshBuffer::generateQuadMesh(uint32_t N,
+                                            std::vector<WaterVertex>& outVertices,
+                                            std::vector<uint32_t>& outIndices)
     {
-        uint32_t N = subdivisions;
         uint32_t vertsPerSide = N + 1;
 
-        // Generate vertices for subdivided unit quad (0,0) -> (1,0,1)
-        std::vector<WaterVertex> vertices;
-        vertices.reserve(vertsPerSide * vertsPerSide);
-
+        outVertices.reserve(vertsPerSide * vertsPerSide);
         for (uint32_t z = 0; z < vertsPerSide; ++z)
         {
             for (uint32_t x = 0; x < vertsPerSide; ++x)
@@ -56,14 +60,11 @@ namespace render::water
                 WaterVertex vertex;
                 vertex.position = glm::vec3(u, 0.0f, v);
                 vertex.texCoord = glm::vec2(u, v);
-                vertices.push_back(vertex);
+                outVertices.push_back(vertex);
             }
         }
 
-        // Generate indices (two triangles per cell)
-        std::vector<uint32_t> indices;
-        indices.reserve(N * N * 6);
-
+        outIndices.reserve(N * N * 6);
         for (uint32_t z = 0; z < N; ++z)
         {
             for (uint32_t x = 0; x < N; ++x)
@@ -73,22 +74,42 @@ namespace render::water
                 uint32_t bottomLeft = (z + 1) * vertsPerSide + x;
                 uint32_t bottomRight = bottomLeft + 1;
 
-                // Triangle 1
-                indices.push_back(topLeft);
-                indices.push_back(bottomLeft);
-                indices.push_back(topRight);
+                outIndices.push_back(topLeft);
+                outIndices.push_back(bottomLeft);
+                outIndices.push_back(topRight);
 
-                // Triangle 2
-                indices.push_back(topRight);
-                indices.push_back(bottomLeft);
-                indices.push_back(bottomRight);
+                outIndices.push_back(topRight);
+                outIndices.push_back(bottomLeft);
+                outIndices.push_back(bottomRight);
             }
         }
+    }
 
-        vertexCount = static_cast<uint32_t>(vertices.size());
-        indexCount = static_cast<uint32_t>(indices.size());
+    void WaterMeshBuffer::createMultiLODMesh()
+    {
+        // Generate all LOD meshes and concatenate into shared buffers
+        std::vector<WaterVertex> allVertices;
+        std::vector<uint32_t> allIndices;
 
-        vk::DeviceSize vertexSize = vertices.size() * sizeof(WaterVertex);
+        for (uint32_t lod = 0; lod < WATER_LOD_COUNT; ++lod)
+        {
+            std::vector<WaterVertex> lodVertices;
+            std::vector<uint32_t> lodIndices;
+            generateQuadMesh(LOD_SUBDIVISIONS[lod], lodVertices, lodIndices);
+
+            auto& info = lodMeshes[lod];
+            info.vertexOffset = static_cast<uint32_t>(allVertices.size());
+            info.indexOffset = static_cast<uint32_t>(allIndices.size());
+            info.vertexCount = static_cast<uint32_t>(lodVertices.size());
+            info.indexCount = static_cast<uint32_t>(lodIndices.size());
+            info.subdivisions = LOD_SUBDIVISIONS[lod];
+
+            allVertices.insert(allVertices.end(), lodVertices.begin(), lodVertices.end());
+            allIndices.insert(allIndices.end(), lodIndices.begin(), lodIndices.end());
+        }
+
+        // Upload combined vertex buffer
+        vk::DeviceSize vertexSize = allVertices.size() * sizeof(WaterVertex);
         core::BufferInfoRequest vertexInfo(
             device, physicalDevice, vertexSize,
             vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst,
@@ -96,9 +117,10 @@ namespace render::water
         );
         core::BufferUtilities::createBuffer(vertexInfo, vertexBuffer, vertexMemory);
         core::BufferUtilities::copyToBuffer(device, physicalDevice, graphicsQueue, commandPool,
-                                            vertexBuffer, vertices.data(), vertexSize);
+                                            vertexBuffer, allVertices.data(), vertexSize);
 
-        vk::DeviceSize indexSize = indices.size() * sizeof(uint32_t);
+        // Upload combined index buffer
+        vk::DeviceSize indexSize = allIndices.size() * sizeof(uint32_t);
         core::BufferInfoRequest indexInfo(
             device, physicalDevice, indexSize,
             vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eTransferDst,
@@ -106,7 +128,7 @@ namespace render::water
         );
         core::BufferUtilities::createBuffer(indexInfo, indexBuffer, indexMemory);
         core::BufferUtilities::copyToBuffer(device, physicalDevice, graphicsQueue, commandPool,
-                                            indexBuffer, indices.data(), indexSize);
+                                            indexBuffer, allIndices.data(), indexSize);
     }
 
     void WaterMeshBuffer::createTileSSBO()
@@ -120,7 +142,6 @@ namespace render::water
         );
         core::BufferUtilities::createBuffer(ssboInfo, tileSSBO, tileSSBOMemory);
 
-        // Persistent map
         mappedTileData = device.mapMemory(tileSSBOMemory, 0, ssboSize);
     }
 
