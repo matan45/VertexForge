@@ -1,6 +1,7 @@
 #include "../print/Log.hpp"
 #include "../uuid/UUID.hpp"
 #include "VFXAsset.hpp"
+#include "../resource/VFSHelpers.hpp"
 #include <nlohmann/json.hpp>
 #include <fstream>
 #include <filesystem>
@@ -64,22 +65,20 @@ namespace vfx
                 return std::nullopt;
             }
 
-            std::ifstream file(filePath);
-            if (!file.is_open())
-            {
-                vfLogError("Failed to open VFX file: {}", path);
-                return std::nullopt;
-            }
-
             json j;
             try
             {
-                file >> j;
+                j = resource::readJsonFile(filePath.string());
             }
             catch (const json::parse_error& e)
             {
                 vfLogError("VFX file '{}' contains invalid JSON at byte {}: {}",
                            path, e.byte, e.what());
+                return std::nullopt;
+            }
+            if (j.is_null())
+            {
+                vfLogError("Failed to open VFX file: {}", path);
                 return std::nullopt;
             }
 

@@ -8,8 +8,22 @@ namespace resource
 		if (initialized) return;
 		initialized = true;
 
-		// If "resources/shaders/" exists next to the executable, we're in an exported build
+		// Detect exported build: either loose shaders directory or .vfpak archive
 		exportedBuild = std::filesystem::exists("resources/shaders");
+
+		if (!exportedBuild)
+		{
+			// Check for .vfpak archive (shaders are packed inside)
+			std::error_code ec;
+			for (const auto& entry : std::filesystem::directory_iterator(".", ec))
+			{
+				if (entry.is_regular_file() && entry.path().extension() == ".vfpak")
+				{
+					exportedBuild = true;
+					break;
+				}
+			}
+		}
 
 		if (exportedBuild)
 		{

@@ -1,6 +1,7 @@
 #include "AssetDatabase.hpp"
 #include "AssetMetadataSerializer.hpp"
 #include "../print/Log.hpp"
+#include "../resource/VFSHelpers.hpp"
 #include <nlohmann/json.hpp>
 #include <algorithm>
 #include <filesystem>
@@ -343,13 +344,11 @@ namespace asset
                 return false;
             }
 
-            std::ifstream file(indexPath);
-            if (!file.is_open())
+            json j = resource::readJsonFile(indexPath.string());
+            if (j.is_null())
             {
                 return false;
             }
-
-            json j = json::parse(file);
 
             std::unique_lock lock(dbMutex);
 

@@ -2,6 +2,7 @@
 #include <nlohmann/json.hpp>
 #include <fstream>
 #include "print/Log.hpp"
+#include "resource/VFSHelpers.hpp"
 
 namespace serialization
 {
@@ -103,13 +104,11 @@ namespace serialization
     bool InputMappingSerialization::load(const std::string& filePath, InputMappingData& outData)
     {
         try {
-            std::ifstream file(filePath);
-            if (!file.is_open()) {
+            json root = resource::readJsonFile(filePath);
+            if (root.is_null()) {
                 vfLogWarning("[InputMappingSerialization] File not found: {}", filePath);
                 return false;
             }
-
-            json root = json::parse(file);
 
             if (!root.contains("actionBindings") || !root["actionBindings"].is_object()) {
                 vfLogError("[InputMappingSerialization] Invalid file format");

@@ -9,9 +9,9 @@
 #include "../material/MaterialInstanceAsset.hpp"
 #include "../animator/AnimatorAsset.hpp"
 #include "../terrain/TerrainMaterialAsset.hpp"
+#include "VFSHelpers.hpp"
 #include <algorithm>
 #include <cctype>
-#include <fstream>
 
 namespace resource
 {
@@ -105,20 +105,14 @@ namespace resource
 
     static FileType readBinaryHeader(const fs::path& filePath)
     {
-        std::ifstream file(filePath, std::ios::binary);
-        if (!file.is_open())
+        auto data = resource::readFileBytes(filePath.string());
+        if (data.empty())
         {
-            vfLogError("Failed to open file: {}", filePath.string());
+            vfLogError("Failed to read file: {}", filePath.string());
             return FileType::UNKNOWN;
         }
 
-        uint8_t typeByte = 0;
-        file.read(reinterpret_cast<char*>(&typeByte), sizeof(typeByte));
-        if (!file || file.gcount() != sizeof(typeByte))
-        {
-            vfLogError("Failed to read header from file: {}", filePath.string());
-            return FileType::UNKNOWN;
-        }
+        uint8_t typeByte = data[0];
 
         if (!isValidFileType(typeByte))
         {

@@ -1,5 +1,6 @@
 #include "AssetMetadataSerializer.hpp"
 #include "../print/Log.hpp"
+#include "../resource/VFSHelpers.hpp"
 #include <nlohmann/json.hpp>
 #include <fstream>
 
@@ -39,13 +40,11 @@ namespace asset
     {
         try
         {
-            std::ifstream file(metaPath);
-            if (!file.is_open())
+            json j = resource::readJsonFile(metaPath.string());
+            if (j.is_null())
             {
                 return std::nullopt;
             }
-
-            json j = json::parse(file);
 
             AssetMetadata metadata;
             metadata.guid = AssetGUID::fromString(j.value("guid", ""));

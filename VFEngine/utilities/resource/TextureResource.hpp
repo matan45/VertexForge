@@ -1,5 +1,6 @@
 #pragma once
 #include <string>
+#include <istream>
 #include "Types.hpp"
 
 namespace resource
@@ -17,13 +18,13 @@ namespace resource
     class HDRReader
     {
     public:
-        static void readHDR(std::ifstream& file, int width, int height, int channels, std::vector<float>& pixels);
+        static void readHDR(std::istream& file, int width, int height, int channels, std::vector<float>& pixels);
     };
-    
+
     class TGAReader
     {
     public:
-        static void readTGA(std::ifstream& file, int width, int height,
+        static void readTGA(std::istream& file, int width, int height,
                             std::vector<unsigned char>& pixelData);
     };
 }

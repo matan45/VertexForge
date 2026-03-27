@@ -16,6 +16,7 @@ namespace resource
         : file(std::move(other.file))
           , header(std::move(other.header))
           , filePath(std::move(other.filePath))
+          , baseOffset(other.baseOffset)
     {
     }
 
@@ -27,6 +28,7 @@ namespace resource
             file = std::move(other.file);
             header = std::move(other.header);
             filePath = std::move(other.filePath);
+            baseOffset = other.baseOffset;
         }
         return *this;
     }
@@ -36,7 +38,25 @@ namespace resource
         close();
 
         filePath = std::string(path);
-        file.open(filePath, std::ios::binary);
+
+        if (resource::VirtualFileSystem::instance().isArchiveMode())
+        {
+            auto region = resource::VirtualFileSystem::instance().openStream(filePath);
+            if (region)
+            {
+                baseOffset = region->baseOffset;
+                file = std::move(region->stream);
+            }
+            else
+            {
+                vfLogError("MeshStreamHandle: Failed to open mesh file from archive: {}", path);
+                return false;
+            }
+        }
+        else
+        {
+            file.open(filePath, std::ios::binary);
+        }
 
         if (!file)
         {
@@ -62,6 +82,7 @@ namespace resource
         }
         header = MeshStreamHeader{};
         filePath.clear();
+        baseOffset = 0;
     }
 
     std::streampos MeshStreamHandle::getSocketDataOffset()
@@ -105,7 +126,7 @@ namespace resource
 
         const auto& lodInfo = header.submeshes[submeshIdx].lods[lodLevel];
 
-        file.seekg(lodInfo.fileOffset);
+        file.seekg(baseOffset + lodInfo.fileOffset);
         if (file.fail())
         {
             vfLogError("MeshStreamHandle: Failed to seek to LOD {} of submesh {}",
@@ -270,14 +291,35 @@ namespace resource
                                              std::vector<Vertex>& outVertices,
                                              std::vector<uint32_t>& outIndices)
     {
-        std::ifstream file(std::string(path), std::ios::binary);
+        std::ifstream file;
+        std::streampos readBaseOffset = 0;
+
+        if (resource::VirtualFileSystem::instance().isArchiveMode())
+        {
+            auto region = resource::VirtualFileSystem::instance().openStream(std::string(path));
+            if (region)
+            {
+                readBaseOffset = region->baseOffset;
+                file = std::move(region->stream);
+            }
+            else
+            {
+                vfLogError("MeshStreamResource: Failed to open file from archive for LOD read: {}", path);
+                return false;
+            }
+        }
+        else
+        {
+            file.open(std::string(path), std::ios::binary);
+        }
+
         if (!file)
         {
             vfLogError("MeshStreamResource: Failed to open file for LOD read: {}", path);
             return false;
         }
 
-        file.seekg(lodInfo.fileOffset);
+        file.seekg(readBaseOffset + lodInfo.fileOffset);
         if (file.fail())
         {
             vfLogError("MeshStreamResource: Failed to seek to LOD offset in {}", path);

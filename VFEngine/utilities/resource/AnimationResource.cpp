@@ -1,8 +1,9 @@
 #include "../print/Log.hpp"
 #include "AnimationResource.hpp"
 #include "EndianUtils.hpp"
+#include "VFSHelpers.hpp"
 
-#include <fstream>
+#include <sstream>
 
 namespace resource
 {
@@ -10,12 +11,15 @@ namespace resource
     {
         AnimationData data;
 
-        std::ifstream file(path.data(), std::ios::binary);
-        if (!file)
+        auto fileData = resource::readFileBytes(std::string(path));
+        if (fileData.empty())
         {
-            vfLogError("Failed to open animation file: {}", path);
+            vfLogError("Failed to read animation file: {}", path);
             return data;
         }
+
+        std::string dataStr(fileData.begin(), fileData.end());
+        std::istringstream file(dataStr, std::ios::binary);
 
         uint8_t fileType = endian::readLE<uint8_t>(file);
         if (static_cast<FileType>(fileType) != FileType::ANIMATION)
@@ -109,12 +113,15 @@ namespace resource
 
     std::streampos AnimationResource::getEventDataOffset(std::string_view path)
     {
-        std::ifstream file(path.data(), std::ios::binary);
-        if (!file)
+        auto fileData = resource::readFileBytes(std::string(path));
+        if (fileData.empty())
         {
-            vfLogError("AnimationResource: Failed to open for offset query: {}", path);
+            vfLogError("AnimationResource: Failed to read for offset query: {}", path);
             return 0;
         }
+
+        std::string dataStr(fileData.begin(), fileData.end());
+        std::istringstream file(dataStr, std::ios::binary);
 
         uint8_t fileType = endian::readLE<uint8_t>(file);
         if (static_cast<FileType>(fileType) != FileType::ANIMATION)
@@ -157,7 +164,7 @@ namespace resource
         return file.tellg();
     }
 
-    std::string AnimationResource::readString(std::ifstream& file)
+    std::string AnimationResource::readString(std::istream& file)
     {
         uint32_t length = endian::readLE<uint32_t>(file);
         if (length == 0)
@@ -175,7 +182,7 @@ namespace resource
         return str;
     }
 
-    void AnimationResource::skipString(std::ifstream& file)
+    void AnimationResource::skipString(std::istream& file)
     {
         uint32_t length = endian::readLE<uint32_t>(file);
         if (length > 0 && length <= 10000)

@@ -6,6 +6,7 @@
 #include <memory>
 #include <mutex>
 #include "Types.hpp"
+#include "VirtualFileSystem.hpp"
 
 namespace resource
 {
@@ -33,6 +34,8 @@ namespace resource
     private:
         TextureStreamHeader header;
         std::string filePath;
+        std::string archiveFilePath;         // Archive file path for re-opening in archive mode
+        std::streampos baseOffset = 0;       // Offset for archive-backed VFS access
         mutable std::mutex fileMutex;
 
     public:

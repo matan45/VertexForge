@@ -19,6 +19,9 @@ mono_crash.*
 # Pipeline cache
 cache/
 
+# Exported game archives
+*.vfpak
+
 # Build results
 [Dd]ebug/
 [Dd]ebugPublic/

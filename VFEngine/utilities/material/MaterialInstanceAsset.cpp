@@ -2,6 +2,7 @@
 #include "../print/Log.hpp"
 #include "../uuid/UUID.hpp"
 #include "../asset/AssetRef.hpp"
+#include "../resource/VFSHelpers.hpp"
 #include <nlohmann/json.hpp>
 #include <fstream>
 #include <filesystem>
@@ -145,22 +146,20 @@ namespace material
             return std::nullopt;
         }
 
-        std::ifstream file(filePath);
-        if (!file.is_open())
-        {
-            vfLogError("Failed to open material instance file: {}", path);
-            return std::nullopt;
-        }
-
         // Parse JSON
         json j;
         try
         {
-            file >> j;
+            j = resource::readJsonFile(filePath.string());
         }
         catch (const json::parse_error& e)
         {
             vfLogError("Material instance file '{}' contains invalid JSON: {}", path, e.what());
+            return std::nullopt;
+        }
+        if (j.is_null())
+        {
+            vfLogError("Failed to open material instance file: {}", path);
             return std::nullopt;
         }
 

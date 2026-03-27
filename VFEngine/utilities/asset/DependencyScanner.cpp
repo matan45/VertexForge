@@ -1,6 +1,7 @@
 #include "DependencyScanner.hpp"
 #include "AssetDatabase.hpp"
 #include "../print/Log.hpp"
+#include "../resource/VFSHelpers.hpp"
 #include <nlohmann/json.hpp>
 #include <algorithm>
 #include <filesystem>
@@ -67,10 +68,8 @@ namespace asset
 
         try
         {
-            std::ifstream file(filePath);
-            if (!file.is_open()) return paths;
-
-            json j = json::parse(file);
+            json j = resource::readJsonFile(filePath);
+            if (j.is_null()) return paths;
 
             std::vector<std::string> allStrings;
             collectJsonStrings(j, allStrings);

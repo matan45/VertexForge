@@ -7,6 +7,8 @@
 #include "../resource/ShaderResource.hpp"
 #include "../resource/ShaderBinaryFormat.hpp"
 #include "../material/MaterialAsset.hpp"
+#include "../archive/VFPakWriter.hpp"
+#include "../archive/VFPakReader.hpp"
 #include <fstream>
 #include <memory>
 #include <cstdlib>
@@ -46,8 +48,8 @@ namespace gameExport
 		report(0.35f, "Compiling material shaders...");
 		if (!compileMaterialShaders(config, result)) return result;
 
-		report(0.40f, "Copying assets...");
-		if (!copyAssets(config, result)) return result;
+		report(0.40f, "Packing assets into archive...");
+		if (!packAssets(config, result)) return result;
 
 		report(0.80f, "Copying plugins...");
 		if (!copyPlugins(config, result)) return result;
@@ -118,19 +120,15 @@ namespace gameExport
 	{
 		std::error_code ec;
 
-		fs::create_directories(config.outputDirectory / "Assets", ec);
+		fs::create_directories(config.outputDirectory, ec);
 		if (ec)
 		{
-			result.errorMessage = "Failed to create Assets directory: " + ec.message();
+			result.errorMessage = "Failed to create output directory: " + ec.message();
 			return false;
 		}
 
-		fs::create_directories(config.outputDirectory / "resources" / "shaders", ec);
-		if (ec)
-		{
-			result.errorMessage = "Failed to create resources/shaders directory: " + ec.message();
-			return false;
-		}
+		// Temp directory for intermediate shader compilation before packing into archive
+		fs::create_directories(config.outputDirectory / "_temp_shaders", ec);
 
 		return true;
 	}
@@ -190,7 +188,7 @@ namespace gameExport
 	bool GameExporter::compileShaders(const ExportConfig& config, ExportResult& result)
 	{
 		fs::path shaderSrc = findShaderDirectory();
-		fs::path shaderDst = config.outputDirectory / "resources" / "shaders";
+		fs::path shaderDst = config.outputDirectory / "_temp_shaders" / "resources" / "shaders";
 
 		// Build permutation lookup: glslPath -> list of permutations
 		auto permutations = shaderCompiler::getShaderPermutations();
@@ -297,7 +295,7 @@ namespace gameExport
 		fs::path iblSrc = findIBLDirectory();
 		if (fs::exists(iblSrc))
 		{
-			fs::path iblDst = config.outputDirectory / "resources" / "ibl";
+			fs::path iblDst = config.outputDirectory / "_temp_shaders" / "resources" / "ibl";
 			fs::create_directories(iblDst, ec);
 			copyDirectoryRecursive(iblSrc, iblDst, result);
 		}
@@ -307,7 +305,7 @@ namespace gameExport
 
 	bool GameExporter::compileMaterialShaders(const ExportConfig& config, ExportResult& result)
 	{
-		fs::path compiledDir = config.outputDirectory / "Assets" / "materials" / "compiled";
+		fs::path compiledDir = config.outputDirectory / "_temp_shaders" / "Assets" / "materials" / "compiled";
 		std::error_code ec;
 		fs::create_directories(compiledDir, ec);
 
@@ -403,10 +401,99 @@ namespace gameExport
 		return true;
 	}
 
-	bool GameExporter::copyAssets(const ExportConfig& config, ExportResult& result)
+	bool GameExporter::packAssets(const ExportConfig& config, ExportResult& result)
 	{
-		fs::path assetsDst = config.outputDirectory / "Assets";
-		copyDirectoryFilteredRecursive(config.workingDirectory, assetsDst, result, config.outputDirectory);
+		fs::path pakPath = config.outputDirectory / (config.gameName + ".vfpak");
+		archive::VFPakWriter writer;
+
+		if (!writer.create(pakPath))
+		{
+			result.errorMessage = "Failed to create archive file: " + pakPath.string();
+			return false;
+		}
+
+		// Extensions that should NOT be LZ4-compressed (already compressed or need streaming)
+		static const std::unordered_set<std::string> noCompressExts = {
+			".vfimage", ".vfhdr", ".vfmesh", ".vfaudio",
+			".vfterrain", ".vfsvt"
+		};
+
+		auto shouldCompress = [&](const std::string& ext) -> archive::CompressionType
+		{
+			std::string lower = ext;
+			for (char& c : lower) c = static_cast<char>(std::tolower(c));
+			if (noCompressExts.count(lower))
+				return archive::CompressionType::None;
+			return archive::CompressionType::LZ4;
+		};
+
+		// 1. Pack game assets from working directory
+		std::error_code ec;
+		fs::path excludeAbsolute;
+		if (!config.outputDirectory.empty())
+		{
+			excludeAbsolute = fs::weakly_canonical(config.outputDirectory, ec);
+		}
+
+		uint32_t assetCount = 0;
+		for (auto it = fs::recursive_directory_iterator(config.workingDirectory, ec);
+		     it != fs::recursive_directory_iterator(); ++it)
+		{
+			const auto& entry = *it;
+
+			// Skip export output directory
+			if (entry.is_directory() && !excludeAbsolute.empty())
+			{
+				std::error_code cmpEc;
+				fs::path entryAbs = fs::weakly_canonical(entry.path(), cmpEc);
+				if (!cmpEc && entryAbs == excludeAbsolute)
+				{
+					it.disable_recursion_pending();
+					continue;
+				}
+			}
+
+			if (!entry.is_regular_file()) continue;
+
+			auto ext = entry.path().extension().string();
+
+			// Skip source scripts and project files
+			if (ext == ".mt" || ext == ".vfproj") continue;
+
+			fs::path relativePath = fs::relative(entry.path(), config.workingDirectory, ec);
+			std::string archivePath = "Assets/" + relativePath.generic_string();
+
+			writer.addFile(archivePath, entry.path(), shouldCompress(ext));
+			assetCount++;
+		}
+
+		// 2. Pack compiled shaders from temp directory
+		fs::path tempShaders = config.outputDirectory / "_temp_shaders";
+		if (fs::exists(tempShaders))
+		{
+			for (auto it = fs::recursive_directory_iterator(tempShaders, ec);
+			     it != fs::recursive_directory_iterator(); ++it)
+			{
+				if (!it->is_regular_file()) continue;
+
+				fs::path relativePath = fs::relative(it->path(), tempShaders, ec);
+				std::string archivePath = relativePath.generic_string();
+
+				// .vfshader files benefit from LZ4 compression (SPIR-V is not pre-compressed)
+				writer.addFile(archivePath, it->path(), archive::CompressionType::LZ4);
+			}
+
+			// Clean up temp directory
+			fs::remove_all(tempShaders, ec);
+		}
+
+		if (!writer.finalize())
+		{
+			result.errorMessage = "Failed to finalize archive";
+			return false;
+		}
+
+		vfLogInfo("Packed {} game assets into archive", assetCount);
 		return true;
 	}
 
@@ -486,8 +573,7 @@ namespace gameExport
 	{
 		fs::path exePath = config.outputDirectory / (config.gameName + ".exe");
 		fs::path projPath = config.outputDirectory / (config.gameName + ".vfproj");
-		fs::path assetsDir = config.outputDirectory / "Assets";
-		fs::path shadersDir = config.outputDirectory / "resources" / "shaders";
+		fs::path pakPath = config.outputDirectory / (config.gameName + ".vfpak");
 
 		if (!fs::exists(exePath))
 		{
@@ -501,37 +587,32 @@ namespace gameExport
 			return false;
 		}
 
-		if (!fs::exists(assetsDir) || fs::is_empty(assetsDir))
+		if (!fs::exists(pakPath))
 		{
-			result.warnings.push_back("Assets directory is empty");
-		}
-
-		if (!fs::exists(shadersDir) || fs::is_empty(shadersDir))
-		{
-			result.errorMessage = "Validation failed: shaders directory is empty";
+			result.errorMessage = "Validation failed: archive (.vfpak) not found in output";
 			return false;
 		}
 
-		// Verify at least one .vfshader file exists (pre-compiled SPIR-V)
-		bool hasCompiledShaders = false;
-		for (const auto& entry : fs::recursive_directory_iterator(shadersDir))
+		// Verify archive is not empty
+		auto pakSize = fs::file_size(pakPath);
+		if (pakSize <= archive::VFPAK_HEADER_SIZE)
 		{
-			if (entry.is_regular_file() && entry.path().extension() == ".vfshader")
-			{
-				hasCompiledShaders = true;
-				break;
-			}
-		}
-		if (!hasCompiledShaders)
-		{
-			result.errorMessage = "Validation failed: no compiled shader files (.vfshader) found";
+			result.errorMessage = "Validation failed: archive is empty or corrupt";
 			return false;
 		}
 
-		fs::path scenePath = assetsDir / config.startupScene;
-		if (!fs::exists(scenePath))
+		// Verify archive can be opened and contains the startup scene
+		archive::VFPakReader reader;
+		if (!reader.open(pakPath))
 		{
-			result.errorMessage = "Validation failed: startup scene not found in exported assets: " + config.startupScene;
+			result.errorMessage = "Validation failed: failed to read archive";
+			return false;
+		}
+
+		std::string scenePath = "Assets/" + config.startupScene;
+		if (!reader.contains(scenePath))
+		{
+			result.errorMessage = "Validation failed: startup scene not found in archive: " + config.startupScene;
 			return false;
 		}
 

@@ -346,14 +346,18 @@ project "Utilities"
 	  "dependencies/meshoptimizer/src",  -- meshoptimizer for terrain meshlet generation
 	  "dependencies/enkiTS/src",         -- enkiTS task scheduler
 	  "dependencies/stb",               -- stb_vorbis for runtime Vorbis decoding
-      vulkanLibPath.."/Include"          -- Vulkan SDK for shader binary format types
+      vulkanLibPath.."/Include",         -- Vulkan SDK for shader binary format types
+      "dependencies/lz4/lib"             -- LZ4 compression for .vfpak archives
    }
 
-   links { "spdLog", "meshoptimizer", "enkiTS" }
+   links { "spdLog", "meshoptimizer", "enkiTS", "lz4" }
 
-   -- Export pipeline (GameExporter, ShaderCompiler) requires shaderc,
-   -- compiled only as part of Editor
-   removefiles { "VFEngine/utilities/export/**" }
+   -- Export pipeline compiled in GameExport subsystem
+   -- VFPakWriter is export-only; VFPakReader/Format stay in Utilities for runtime use
+   removefiles {
+      "VFEngine/utilities/export/**",
+      "VFEngine/utilities/archive/VFPakWriter.*"
+   }
 
    defines { "MESHOPTIMIZER_API=__declspec(dllimport)" }
 
@@ -836,7 +840,9 @@ project "GameExport"
 
    files {
       "VFEngine/utilities/export/**.hpp",
-      "VFEngine/utilities/export/**.cpp"
+      "VFEngine/utilities/export/**.cpp",
+      "VFEngine/utilities/archive/VFPakWriter.hpp",
+      "VFEngine/utilities/archive/VFPakWriter.cpp"
    }
 
    includedirs {
@@ -844,6 +850,7 @@ project "GameExport"
       "dependencies/glm",
       "dependencies/entt/single_include",
       "dependencies/json/single_include",
+      "dependencies/lz4/lib",
       "VFEngine/utilities",
       vulkanLibPath.."/Include"
    }
@@ -854,7 +861,7 @@ project "GameExport"
 
    defines { "_CRT_SECURE_NO_WARNINGS" }
 
-   links { "Utilities", "shaderc_shared.lib" }
+   links { "Utilities", "lz4", "shaderc_shared.lib" }
 
    filter "configurations:Debug"
       defines { "DEBUG" }
@@ -867,6 +874,29 @@ project "GameExport"
 
 -- Group for Libraries
 group "libs"
+
+-- Project: LZ4 (fast compression for .vfpak archives)
+project "lz4"
+   kind "StaticLib"
+   language "C"
+   targetdir "bin/%{prj.name}/%{cfg.buildcfg}/%{cfg.platform}"
+
+   files {
+      "dependencies/lz4/lib/lz4.h",
+      "dependencies/lz4/lib/lz4.c",
+      "dependencies/lz4/lib/lz4hc.h",
+      "dependencies/lz4/lib/lz4hc.c"
+   }
+
+   includedirs { "dependencies/lz4/lib" }
+
+   filter "configurations:Debug"
+      defines { "DEBUG" }
+      symbols "On"
+
+   filter "configurations:Release"
+      defines { "NDEBUG" }
+      optimize "On"
 
 -- Project: GLFW
 project "GLFW"

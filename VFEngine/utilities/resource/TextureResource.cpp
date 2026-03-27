@@ -1,8 +1,9 @@
 #include "../print/Log.hpp"
 #include "TextureResource.hpp"
 #include "EndianUtils.hpp"
+#include "VFSHelpers.hpp"
 
-#include <fstream>
+#include <sstream>
 #include <bit>  // For std::bit_cast
 
 namespace resource
@@ -18,13 +19,16 @@ namespace resource
             return {};
         }
 
-        // Open the file in binary mode
-        std::ifstream inFile(path.data(), std::ios::binary);
-        if (!inFile)
+        // Read entire file via VFS
+        auto data = resource::readFileBytes(std::string(path));
+        if (data.empty())
         {
-            vfLogError("Failed to open texture file for reading: {}", path);
+            vfLogError("Failed to read texture file: {}", path);
             return {};
         }
+
+        std::string dataStr(data.begin(), data.end());
+        std::istringstream inFile(dataStr, std::ios::binary);
 
         // Read header file type (single byte, endian-safe)
         uint8_t headerFileType = endian::readLE<uint8_t>(inFile);
@@ -113,8 +117,6 @@ namespace resource
             textureData.mipData.push_back(std::move(mipLevel));
         }
 
-        inFile.close();
-
         return textureData;
     }
 
@@ -122,12 +124,15 @@ namespace resource
     {
         resource::HDRData hdrData;
 
-        std::ifstream inFile(path.data(), std::ios::binary);
-        if (!inFile)
+        auto data = resource::readFileBytes(std::string(path));
+        if (data.empty())
         {
-            vfLogError("Failed to open file for reading: ", path);
+            vfLogError("Failed to read HDR file: {}", path);
             return {};
         }
+
+        std::string dataStr(data.begin(), data.end());
+        std::istringstream inFile(dataStr, std::ios::binary);
 
         uint8_t headerFileType = endian::readLE<uint8_t>(inFile);
         hdrData.headerFileType = static_cast<resource::FileType>(headerFileType);
@@ -168,12 +173,10 @@ namespace resource
             hdrData.mipData.push_back(std::move(mipLevel));
         }
 
-        inFile.close();
-
         return hdrData;
     }
 
-    void HDRReader::readHDR(std::ifstream& file, int width, int height, int channels, std::vector<float>& pixels)
+    void HDRReader::readHDR(std::istream& file, int width, int height, int channels, std::vector<float>& pixels)
     {
         size_t pixelCount = static_cast<size_t>(width) * height * channels;
         pixels.resize(pixelCount);
@@ -184,7 +187,7 @@ namespace resource
         }
     }
 
-    void TGAReader::readTGA(std::ifstream& file, int width, int height,
+    void TGAReader::readTGA(std::istream& file, int width, int height,
                             std::vector<unsigned char>& pixelData)
     {
         size_t pixelDataSize = width * height * 4;

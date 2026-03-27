@@ -33,6 +33,7 @@
 #include "events/project/ProjectEvents.hpp"
 #include "events/project/SceneEvents.hpp"
 #include "resource/PathResolver.hpp"
+#include "resource/VirtualFileSystem.hpp"
 #include <filesystem>
 #include "time/Timer.hpp"
 #include "core/PluginManager.hpp"
@@ -51,6 +52,7 @@ namespace handlers {
 
     void RuntimeHandler::init() {
         resource::PathResolver::initialize();
+        resource::VirtualFileSystem::instance().initialize();
         bootstrap->init();
 
         // Runtime is always in play mode — hide editor-only overlays (grid, gizmos, etc.)

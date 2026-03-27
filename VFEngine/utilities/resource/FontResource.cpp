@@ -2,8 +2,9 @@
 #include "../print/Log.hpp"
 #include "../config/Config.hpp"
 #include "EndianUtils.hpp"
+#include "VFSHelpers.hpp"
 
-#include <fstream>
+#include <sstream>
 #include <limits>
 
 namespace resource
@@ -18,24 +19,23 @@ namespace resource
             return {};
         }
 
-        std::ifstream inFile(path.data(), std::ios::binary);
-        if (!inFile)
+        auto data = resource::readFileBytes(std::string(path));
+        if (data.empty())
         {
-            vfLogError("Failed to open font file for reading: {}", path);
+            vfLogError("Failed to read font file: {}", path);
             return {};
         }
 
-        inFile.seekg(0, std::ios::end);
-        auto fileSize = inFile.tellg();
-        inFile.seekg(0, std::ios::beg);
-
-        constexpr std::streamoff maxFontFileSize = 50 * 1024 * 1024; // 50 MB
-        if (fileSize > maxFontFileSize)
+        constexpr size_t maxFontFileSize = 50 * 1024 * 1024; // 50 MB
+        if (data.size() > maxFontFileSize)
         {
             vfLogError("Font file too large ({} bytes, max {} bytes): {}",
-                       static_cast<size_t>(fileSize), static_cast<size_t>(maxFontFileSize), path);
+                       data.size(), maxFontFileSize, path);
             return {};
         }
+
+        std::string dataStr(data.begin(), data.end());
+        std::istringstream inFile(dataStr, std::ios::binary);
 
         using namespace endian;
 
@@ -207,8 +207,6 @@ namespace resource
             vfLogError("Error reading font file: {}", path);
             return {};
         }
-
-        inFile.close();
 
         vfLogInfo("Loaded font: {} ({} glyphs, {}x{} atlas)",
                   fontData.metadata.fontName, fontData.glyphs.size(),

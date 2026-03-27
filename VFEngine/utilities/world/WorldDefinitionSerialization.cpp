@@ -1,5 +1,6 @@
 #include "WorldDefinitionSerialization.hpp"
 #include "../print/Log.hpp"
+#include "../resource/VFSHelpers.hpp"
 #include <nlohmann/json.hpp>
 #include <fstream>
 
@@ -69,15 +70,12 @@ namespace world
     {
         try
         {
-            std::ifstream file{filePath};
-            if (!file.is_open())
+            json worldJson = resource::readJsonFile(filePath);
+            if (worldJson.is_null())
             {
                 vfLogError("Failed to open world file for reading: {}", filePath);
                 return false;
             }
-
-            json worldJson = json::parse(file);
-            file.close();
 
             outDefinition.name = worldJson.value("name", "Untitled World");
             outDefinition.terrainPath = worldJson.value("terrainPath", "");

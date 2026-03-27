@@ -4,8 +4,10 @@
 #include <vector>
 #include <filesystem>
 #include <fstream>
+#include <sstream>
 #include <string>
 #include "print/Log.hpp"
+#include "resource/VFSHelpers.hpp"
 
 namespace resource
 {
@@ -55,12 +57,15 @@ namespace resource
 		{
 			std::vector<StageSPIRV> stages;
 
-			std::ifstream file(path, std::ios::binary);
-			if (!file.is_open())
+			auto data = resource::readFileBytes(path.string());
+			if (data.empty())
 			{
-				vfLogError("ShaderBinaryFormat: Failed to open file: {}", path.string());
+				vfLogError("ShaderBinaryFormat: Failed to read file: {}", path.string());
 				return stages;
 			}
+
+			std::string dataStr(data.begin(), data.end());
+			std::istringstream file(dataStr, std::ios::binary);
 
 			uint32_t magic = 0;
 			uint32_t version = 0;

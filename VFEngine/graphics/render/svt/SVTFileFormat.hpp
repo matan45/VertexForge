@@ -6,6 +6,7 @@
 #include <fstream>
 #include <cstdint>
 #include <cstring>
+#include "resource/VirtualFileSystem.hpp"
 
 namespace render::svt
 {
@@ -37,6 +38,7 @@ namespace render::svt
         SVTFileHeader header{};
         std::vector<SVTTileDirectoryEntry> directory;
         uint32_t totalTiles = 0;
+        uint64_t baseOffset = 0;
         bool valid = false;
 
         uint32_t getTileIndex(const VirtualTileCoord& coord) const
@@ -52,7 +54,23 @@ namespace render::svt
     public:
         bool open(const std::string& path)
         {
-            file.open(path, std::ios::binary);
+            if (resource::VirtualFileSystem::instance().isArchiveMode())
+            {
+                auto region = resource::VirtualFileSystem::instance().openStream(path);
+                if (region)
+                {
+                    baseOffset = static_cast<uint64_t>(region->baseOffset);
+                    file = std::move(region->stream);
+                }
+                else
+                {
+                    return false;
+                }
+            }
+            else
+            {
+                file.open(path, std::ios::binary);
+            }
             if (!file.is_open()) return false;
 
             file.read(reinterpret_cast<char*>(&header), sizeof(header));
@@ -88,7 +106,7 @@ namespace render::svt
             if (entry.fileOffset == 0 || entry.compressedSize == 0) return false;
 
             outData.resize(entry.compressedSize);
-            file.seekg(static_cast<std::streamoff>(entry.fileOffset));
+            file.seekg(static_cast<std::streamoff>(baseOffset + entry.fileOffset));
             file.read(reinterpret_cast<char*>(outData.data()), entry.compressedSize);
 
             return file.good();

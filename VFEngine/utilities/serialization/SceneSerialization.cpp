@@ -4,6 +4,7 @@
 #include "../scene/SceneGraphSystem.hpp"
 #include "../components/Components.hpp"
 #include "../threading/JobSystem.hpp"
+#include "../resource/VFSHelpers.hpp"
 #include <fstream>
 #include <algorithm>
 
@@ -148,15 +149,12 @@ namespace serialization
         try
         {
             std::string filePath{filename};
-            std::ifstream file{filePath};
-            if (!file.is_open())
+            sceneJson = resource::readJsonFile(filePath);
+            if (sceneJson.is_null())
             {
                 vfLogError("Failed to open file for reading: {}", filename);
                 return false;
             }
-
-            sceneJson = json::parse(file);
-            file.close();
 
             if (!sceneJson.is_object())
             {
@@ -214,15 +212,12 @@ namespace serialization
         try
         {
             std::string filePath{filename};
-            std::ifstream file{filePath};
-            if (!file.is_open())
+            sceneJson = resource::readJsonFile(filePath);
+            if (sceneJson.is_null())
             {
                 vfLogError("Failed to open file for additive loading: {}", filename);
                 return false;
             }
-
-            sceneJson = json::parse(file);
-            file.close();
 
             if (!sceneJson.is_object())
             {

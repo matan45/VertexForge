@@ -86,7 +86,7 @@ namespace resource
 
                 if (lodIdx < lodLevelCount)
                 {
-                    lodInfo.fileOffset = file.tellg();
+                    lodInfo.fileOffset = file.tellg() - baseOffset;
 
                     lodInfo.vertexCount = endian::readLE<uint32_t>(file);
                     if (lodInfo.vertexCount > maxVertexCount)
@@ -172,7 +172,7 @@ namespace resource
     {
         auto& submeshInfo = header.submeshes[meshIdx];
 
-        submeshInfo.meshletDataOffset = file.tellg();
+        submeshInfo.meshletDataOffset = file.tellg() - baseOffset;
         submeshInfo.hasMeshletData = true;
 
         uint32_t totalMeshlets = 0;
@@ -221,7 +221,7 @@ namespace resource
     {
         auto& submeshInfo = header.submeshes[meshIdx];
 
-        submeshInfo.convexDataOffset = file.tellg();
+        submeshInfo.convexDataOffset = file.tellg() - baseOffset;
 
         uint8_t hasDecomp = endian::readLE<uint8_t>(file);
         submeshInfo.hasConvexData = (hasDecomp != 0);
@@ -274,7 +274,7 @@ namespace resource
 
     bool MeshStreamHandle::parseSkeletonHeader()
     {
-        header.skeletonDataOffset = file.tellg();
+        header.skeletonDataOffset = file.tellg() - baseOffset;
 
         uint8_t hasSkinning = endian::readLE<uint8_t>(file);
         hasSkeleton = (hasSkinning != 0);
@@ -326,7 +326,7 @@ namespace resource
         }
 
         // Try to read socket data (appended after skeleton)
-        socketDataOffset = file.tellg();
+        socketDataOffset = file.tellg() - baseOffset;
         std::streampos beforeSockets = socketDataOffset;
         uint32_t socketCount = endian::readLE<uint32_t>(file);
         if (!file.fail() && socketCount < 256)
@@ -355,12 +355,12 @@ namespace resource
         {
             // No socket data or EOF — backward compatible
             file.clear();
-            file.seekg(beforeSockets);
+            file.seekg(baseOffset + beforeSockets);
             hasSockets = false;
         }
 
         // Try to read IK chain data (appended after sockets)
-        ikChainDataOffset = file.tellg();
+        ikChainDataOffset = file.tellg() - baseOffset;
         std::streampos beforeIKChains = ikChainDataOffset;
         uint32_t ikChainCount = endian::readLE<uint32_t>(file);
         if (!file.fail() && ikChainCount < 256)
@@ -405,7 +405,7 @@ namespace resource
         else
         {
             file.clear();
-            file.seekg(beforeIKChains);
+            file.seekg(baseOffset + beforeIKChains);
             hasIKChains = false;
         }
 

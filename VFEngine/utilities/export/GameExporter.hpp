@@ -15,7 +15,7 @@ namespace gameExport
 		bool copyRuntimeDependencies(const ExportConfig& config, ExportResult& result);
 		bool compileShaders(const ExportConfig& config, ExportResult& result);
 		bool compileMaterialShaders(const ExportConfig& config, ExportResult& result);
-		bool copyAssets(const ExportConfig& config, ExportResult& result);
+		bool packAssets(const ExportConfig& config, ExportResult& result);
 		bool copyPlugins(const ExportConfig& config, ExportResult& result);
 		bool generateProjectConfig(const ExportConfig& config, ExportResult& result);
 		bool embedExeIcon(const ExportConfig& config, ExportResult& result);
