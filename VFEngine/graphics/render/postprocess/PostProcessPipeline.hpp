@@ -10,6 +10,7 @@ namespace core
 {
     class Device;
     class SwapChain;
+    class DeferredDeletionQueue;
     struct OffscreenResources;
 }
 
@@ -73,6 +74,7 @@ namespace render::postprocess
 
         std::vector<std::unique_ptr<PostProcessEffect>> effects;
         std::optional<float> autoExposureOverride;
+        core::DeferredDeletionQueue* deletionQueue = nullptr;
 
     public:
         explicit PostProcessPipeline(core::Device& device, core::SwapChain& swapChain,
@@ -89,6 +91,7 @@ namespace render::postprocess
         void updateSettings(const ::postprocess::PostProcessSettings& settings);
         void applySettings(const ::postprocess::PostProcessSettings& settings);
 
+        void setDeletionQueue(core::DeferredDeletionQueue* queue);
         void setSunData(const glm::vec2& screenPos, bool hasSun);
         const SunInfo& getSunData() const { return sunInfo; }
 
