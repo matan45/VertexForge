@@ -5,6 +5,21 @@
 
 namespace components
 {
+    static constexpr uint32_t MAX_OCEAN_BANDS = 3;
+
+    struct OceanBandData
+    {
+        uint32_t resolution = 256;
+        float patchSize = 100.0f;
+        float windSpeed = 8.0f;
+        float windDirection = 45.0f;
+        float amplitude = 0.00003f;
+        float choppiness = 1.2f;
+        float foamThreshold = -0.1f;
+        float displacementScale = 4.0f;
+        bool enabled = true;
+    };
+
     struct OceanComponent
     {
         // Physics
@@ -24,15 +39,13 @@ namespace components
         float causticStrength = 1.0f;
         float causticDepthFalloff = 0.5f;
 
-        // Ocean FFT
-        uint32_t oceanResolution = 256;
-        float oceanPatchSize = 100.0f;
-        float oceanWindSpeed = 8.0f;
-        float oceanWindDirection = 45.0f;
-        float oceanAmplitude = 0.00003f;
-        float oceanChoppiness = 1.2f;
-        float oceanFoamThreshold = -0.1f;
-        float oceanDisplacementScale = 4.0f;
+        // Ocean FFT bands
+        OceanBandData oceanBands[MAX_OCEAN_BANDS] = {
+            {256, 500.0f, 12.0f, 45.0f, 0.00005f, 1.5f, -0.1f, 4.0f, true},   // Swell
+            {128, 100.0f,  8.0f, 60.0f, 0.00003f, 1.2f, -0.1f, 4.0f, true},   // Agitation
+            {128,  20.0f,  4.0f, 30.0f, 0.00001f, 0.8f, -0.1f, 4.0f, true},   // Ripples
+        };
+        float oceanGravity = 9.81f;
 
         // Runtime
         float waterHeight = 0.0f;

@@ -234,39 +234,77 @@ namespace windows
 
         ImGui::Indent();
 
-        ImGui::Text("Resolution");
-        ImGui::PushItemWidth(-1);
-        static const uint32_t resolutions[] = {64, 128, 256, 512};
-        int resIndex = 2;
-        for (int i = 0; i < 4; ++i)
-        {
-            if (resolutions[i] == oceanConfig.resolution)
-            {
-                resIndex = i;
-                break;
-            }
-        }
-        if (ImGui::Combo("##OceanResolution", &resIndex, "64\0" "128\0" "256\0" "512\0"))
-        {
-            oceanConfig.resolution = resolutions[resIndex];
-            oceanConfigDirty = true;
-        }
-        ImGui::PopItemWidth();
+        static const char* bandNames[] = {"Swell", "Agitation", "Ripples"};
 
-        oceanConfigDirty |= labeledDragFloat("Patch Size (world units)", "##OceanPatchSize", &oceanConfig.patchSize, 1.0f, 10.0f, 2000.0f, "%.0f");
-        oceanConfigDirty |= labeledDragFloat("Amplitude", "##OceanAmplitude", &oceanConfig.amplitude, 0.000001f, 0.00001f, 0.001f, "%.6f");
-        ImGui::Spacing();
-        oceanConfigDirty |= labeledDragFloat("Wind Speed (m/s)", "##OceanWindSpeed", &oceanConfig.windSpeed, 0.01f, 0.1f, 100.0f, "%.2f");
-        ImGui::Text("Wind Direction");
-        ImGui::PushItemWidth(-1);
-        oceanConfigDirty |= ImGui::SliderFloat("##OceanWindDir", &oceanConfig.windDirection, 0.0f, 360.0f, "%.0f deg");
-        ImGui::PopItemWidth();
-        ImGui::Spacing();
-        oceanConfigDirty |= labeledDragFloat("Choppiness", "##OceanChoppiness", &oceanConfig.choppiness, 0.01f, 0.0f, 5.0f, "%.2f");
-        oceanConfigDirty |= labeledDragFloat("Foam Threshold", "##OceanFoamThreshold", &oceanConfig.foamThreshold, 0.01f, -1.0f, 2.0f, "%.2f");
-        ImGui::TextDisabled("Lower = more foam");
-        oceanConfigDirty |= labeledDragFloat("Wave Height Scale", "##OceanDisplacementScale", &oceanConfig.displacementScale, 0.1f, 0.1f, 50.0f, "%.1f");
-        ImGui::TextDisabled("Multiplier for wave height (1.0 = default)");
+        if (ImGui::BeginTabBar("OceanBands"))
+        {
+            for (int i = 0; i < 3; ++i)
+            {
+                if (ImGui::BeginTabItem(bandNames[i]))
+                {
+                    auto& band = oceanConfig.bands[i];
+
+                    oceanConfigDirty |= ImGui::Checkbox("Enabled", &band.enabled);
+
+                    if (band.enabled)
+                    {
+                        ImGui::Text("Resolution");
+                        ImGui::PushItemWidth(-1);
+                        static const uint32_t resolutions[] = {64, 128, 256, 512};
+                        int resIndex = 2;
+                        for (int r = 0; r < 4; ++r)
+                        {
+                            if (resolutions[r] == band.resolution)
+                            {
+                                resIndex = r;
+                                break;
+                            }
+                        }
+                        char resId[32];
+                        snprintf(resId, sizeof(resId), "##Res%d", i);
+                        if (ImGui::Combo(resId, &resIndex, "64\0" "128\0" "256\0" "512\0"))
+                        {
+                            band.resolution = resolutions[resIndex];
+                            oceanConfigDirty = true;
+                        }
+                        ImGui::PopItemWidth();
+
+                        char id[32];
+                        snprintf(id, sizeof(id), "##PatchSize%d", i);
+                        oceanConfigDirty |= labeledDragFloat("Patch Size", id, &band.patchSize, 1.0f, 10.0f, 2000.0f, "%.0f");
+
+                        snprintf(id, sizeof(id), "##Amplitude%d", i);
+                        oceanConfigDirty |= labeledDragFloat("Amplitude", id, &band.amplitude, 0.000001f, 0.00001f, 0.001f, "%.6f");
+
+                        ImGui::Spacing();
+
+                        snprintf(id, sizeof(id), "##WindSpeed%d", i);
+                        oceanConfigDirty |= labeledDragFloat("Wind Speed (m/s)", id, &band.windSpeed, 0.01f, 0.1f, 100.0f, "%.2f");
+
+                        snprintf(id, sizeof(id), "##WindDir%d", i);
+                        ImGui::Text("Wind Direction");
+                        ImGui::PushItemWidth(-1);
+                        oceanConfigDirty |= ImGui::SliderFloat(id, &band.windDirection, 0.0f, 360.0f, "%.0f deg");
+                        ImGui::PopItemWidth();
+
+                        ImGui::Spacing();
+
+                        snprintf(id, sizeof(id), "##Choppiness%d", i);
+                        oceanConfigDirty |= labeledDragFloat("Choppiness", id, &band.choppiness, 0.01f, 0.0f, 5.0f, "%.2f");
+
+                        snprintf(id, sizeof(id), "##FoamThreshold%d", i);
+                        oceanConfigDirty |= labeledDragFloat("Foam Threshold", id, &band.foamThreshold, 0.01f, -1.0f, 2.0f, "%.2f");
+
+                        snprintf(id, sizeof(id), "##DisplacementScale%d", i);
+                        oceanConfigDirty |= labeledDragFloat("Wave Height Scale", id, &band.displacementScale, 0.1f, 0.1f, 50.0f, "%.1f");
+                    }
+
+                    ImGui::EndTabItem();
+                }
+            }
+            ImGui::EndTabBar();
+        }
+
         ImGui::Spacing();
         if (ImGui::Button("Apply Ocean", ImVec2(100, 0)))
             applyOceanConfig();

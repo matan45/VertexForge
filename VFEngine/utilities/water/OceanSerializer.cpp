@@ -32,16 +32,25 @@ namespace ocean
         phys["drag"] = data.drag;
         phys["buoyancyStrength"] = data.buoyancyStrength;
 
-        // Ocean FFT
+        // Ocean FFT bands
         auto& fft = j["oceanFFT"];
-        fft["resolution"] = data.resolution;
-        fft["patchSize"] = data.patchSize;
-        fft["windSpeed"] = data.windSpeed;
-        fft["windDirection"] = data.windDirection;
-        fft["amplitude"] = data.amplitude;
-        fft["choppiness"] = data.choppiness;
-        fft["foamThreshold"] = data.foamThreshold;
-        fft["displacementScale"] = data.displacementScale;
+        fft["gravity"] = data.gravity;
+        auto bandsArr = nlohmann::json::array();
+        for (uint32_t i = 0; i < OceanFileData::MAX_BANDS; ++i)
+        {
+            nlohmann::json b;
+            b["resolution"] = data.bands[i].resolution;
+            b["patchSize"] = data.bands[i].patchSize;
+            b["windSpeed"] = data.bands[i].windSpeed;
+            b["windDirection"] = data.bands[i].windDirection;
+            b["amplitude"] = data.bands[i].amplitude;
+            b["choppiness"] = data.bands[i].choppiness;
+            b["foamThreshold"] = data.bands[i].foamThreshold;
+            b["displacementScale"] = data.bands[i].displacementScale;
+            b["enabled"] = data.bands[i].enabled;
+            bandsArr.push_back(b);
+        }
+        fft["bands"] = bandsArr;
 
         std::ofstream file(path);
         if (!file.is_open())
@@ -108,18 +117,41 @@ namespace ocean
             outData.buoyancyStrength = phys.value("buoyancyStrength", 2.0f);
         }
 
-        // Ocean FFT
+        // Ocean FFT bands
         if (j.contains("oceanFFT"))
         {
             const auto& fft = j["oceanFFT"];
-            outData.resolution = fft.value("resolution", 256u);
-            outData.patchSize = fft.value("patchSize", 100.0f);
-            outData.windSpeed = fft.value("windSpeed", 8.0f);
-            outData.windDirection = fft.value("windDirection", 45.0f);
-            outData.amplitude = fft.value("amplitude", 0.00003f);
-            outData.choppiness = fft.value("choppiness", 1.2f);
-            outData.foamThreshold = fft.value("foamThreshold", -0.1f);
-            outData.displacementScale = fft.value("displacementScale", 4.0f);
+            outData.gravity = fft.value("gravity", 9.81f);
+
+            if (fft.contains("bands") && fft["bands"].is_array())
+            {
+                const auto& bandsArr = fft["bands"];
+                for (uint32_t i = 0; i < std::min(static_cast<uint32_t>(bandsArr.size()), OceanFileData::MAX_BANDS); ++i)
+                {
+                    const auto& b = bandsArr[i];
+                    outData.bands[i].resolution = b.value("resolution", 256u);
+                    outData.bands[i].patchSize = b.value("patchSize", 100.0f);
+                    outData.bands[i].windSpeed = b.value("windSpeed", 8.0f);
+                    outData.bands[i].windDirection = b.value("windDirection", 45.0f);
+                    outData.bands[i].amplitude = b.value("amplitude", 0.00003f);
+                    outData.bands[i].choppiness = b.value("choppiness", 1.2f);
+                    outData.bands[i].foamThreshold = b.value("foamThreshold", -0.1f);
+                    outData.bands[i].displacementScale = b.value("displacementScale", 4.0f);
+                    outData.bands[i].enabled = b.value("enabled", true);
+                }
+            }
+            else
+            {
+                // Backward compat: old flat fields -> band[0]
+                outData.bands[0].resolution = fft.value("resolution", 256u);
+                outData.bands[0].patchSize = fft.value("patchSize", 100.0f);
+                outData.bands[0].windSpeed = fft.value("windSpeed", 8.0f);
+                outData.bands[0].windDirection = fft.value("windDirection", 45.0f);
+                outData.bands[0].amplitude = fft.value("amplitude", 0.00003f);
+                outData.bands[0].choppiness = fft.value("choppiness", 1.2f);
+                outData.bands[0].foamThreshold = fft.value("foamThreshold", -0.1f);
+                outData.bands[0].displacementScale = fft.value("displacementScale", 4.0f);
+            }
         }
 
         return true;

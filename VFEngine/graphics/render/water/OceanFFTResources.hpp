@@ -41,6 +41,9 @@ namespace render::water
         [[nodiscard]] vk::Image getNormalImage() const { return normalImage; }
         [[nodiscard]] vk::Image getCausticImage() const { return causticImage; }
         [[nodiscard]] vk::ImageView getCausticView() const { return causticView; }
+        [[nodiscard]] vk::ImageView getDisplacementView() const { return displacementView; }
+        [[nodiscard]] vk::ImageView getNormalView() const { return normalView; }
+        [[nodiscard]] vk::Sampler getOutputSampler() const { return outputSampler; }
 
     private:
         core::Device& device;

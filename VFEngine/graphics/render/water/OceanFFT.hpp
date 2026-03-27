@@ -41,6 +41,7 @@ namespace render::water
         [[nodiscard]] vk::ImageView getCausticView() const;
         [[nodiscard]] bool isInitialized() const { return initialized; }
         [[nodiscard]] const OceanFFTConfig& getConfig() const { return config; }
+        [[nodiscard]] OceanFFTResources* getResources() const { return resources.get(); }
 
         // CPU-side displacement readback for physics
         void readbackDisplacementData();

@@ -504,17 +504,15 @@ namespace render::water
         samplerInfo.addressModeW = vk::SamplerAddressMode::eRepeat;
         oceanDummySampler = vkDevice.createSampler(samplerInfo);
 
-        // Create descriptor set layout (2 combined image samplers for vertex + fragment)
-        std::array<vk::DescriptorSetLayoutBinding, 2> bindings{};
-        bindings[0].binding = 0;
-        bindings[0].descriptorType = vk::DescriptorType::eCombinedImageSampler;
-        bindings[0].descriptorCount = 1;
-        bindings[0].stageFlags = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment;
-
-        bindings[1].binding = 1;
-        bindings[1].descriptorType = vk::DescriptorType::eCombinedImageSampler;
-        bindings[1].descriptorCount = 1;
-        bindings[1].stageFlags = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment;
+        // Create descriptor set layout (6 combined image samplers for multi-band ocean: 3 bands x 2 textures)
+        std::array<vk::DescriptorSetLayoutBinding, 6> bindings{};
+        for (uint32_t i = 0; i < 6; ++i)
+        {
+            bindings[i].binding = i;
+            bindings[i].descriptorType = vk::DescriptorType::eCombinedImageSampler;
+            bindings[i].descriptorCount = 1;
+            bindings[i].stageFlags = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment;
+        }
 
         vk::DescriptorSetLayoutCreateInfo layoutInfo{};
         layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
@@ -525,7 +523,7 @@ namespace render::water
         // Create descriptor pool + set
         vk::DescriptorPoolSize poolSize{};
         poolSize.type = vk::DescriptorType::eCombinedImageSampler;
-        poolSize.descriptorCount = 2;
+        poolSize.descriptorCount = 6;
 
         vk::DescriptorPoolCreateInfo poolInfo{};
         poolInfo.maxSets = 1;
@@ -539,13 +537,13 @@ namespace render::water
         allocInfo.pSetLayouts = &oceanDummyLayout;
         oceanDummyDescSet = vkDevice.allocateDescriptorSets(allocInfo)[0];
 
-        // Update with dummy texture
-        std::array<vk::DescriptorImageInfo, 2> imageInfos{};
-        imageInfos[0] = {oceanDummySampler, oceanDummyView, vk::ImageLayout::eShaderReadOnlyOptimal};
-        imageInfos[1] = {oceanDummySampler, oceanDummyView, vk::ImageLayout::eShaderReadOnlyOptimal};
+        // Update all 6 bindings with dummy texture
+        std::array<vk::DescriptorImageInfo, 6> imageInfos{};
+        for (uint32_t i = 0; i < 6; ++i)
+            imageInfos[i] = {oceanDummySampler, oceanDummyView, vk::ImageLayout::eShaderReadOnlyOptimal};
 
-        std::array<vk::WriteDescriptorSet, 2> writes{};
-        for (int i = 0; i < 2; ++i)
+        std::array<vk::WriteDescriptorSet, 6> writes{};
+        for (uint32_t i = 0; i < 6; ++i)
         {
             writes[i].dstSet = oceanDummyDescSet;
             writes[i].dstBinding = i;

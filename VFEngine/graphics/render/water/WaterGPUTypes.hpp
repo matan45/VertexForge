@@ -21,13 +21,17 @@ namespace render::water
         float maxVisibleDepth;          // 4
         float fresnelPower;             // 4
         float oceanChoppiness;          // 4
-        float oceanPatchSize;           // 4
+        float oceanPatchSize0;          // 4  (swell band patch size)
         float oceanFoamThreshold;       // 4
-        float refractionStrength;       // 4  (0 = disabled, 0.5 = subtle, 1.0+ = strong)
-        float refractionChromatic;      // 4  (0 = off, chromatic aberration spread)
-        float refractionDepthScale;     // 4  (depth influence on distortion)
+        float refractionStrength;       // 4
+        float refractionChromatic;      // 4
+        float refractionDepthScale;     // 4
+        float oceanPatchSize1;          // 4  (agitation band patch size)
+        float oceanPatchSize2;          // 4  (ripples band patch size)
+        uint32_t bandEnableMask;        // 4  (bit 0=swell, bit 1=agitation, bit 2=ripples)
+        float pad;                      // 4
     };
-    static_assert(sizeof(WaterPushConstants) == 64);
+    static_assert(sizeof(WaterPushConstants) == 80);
 
     // Vertex format for the subdivided unit quad
     struct WaterVertex
