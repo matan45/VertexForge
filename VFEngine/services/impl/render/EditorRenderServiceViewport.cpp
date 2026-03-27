@@ -89,6 +89,19 @@ namespace services
                 return offScreenProvider ? offScreenProvider->getShowPhysicsDebug() : false;
             });
 
+        dispatcher.registerCommandHandler<events::render::SetShowWireframeCommand>(
+            [this](const events::render::SetShowWireframeCommand& cmd)
+            {
+                if (offScreenProvider)
+                    offScreenProvider->setShowWireframe(cmd.show);
+            });
+
+        dispatcher.registerQueryHandler<events::render::GetShowWireframeQuery>(
+            [this](const events::render::GetShowWireframeQuery&)
+            {
+                return offScreenProvider ? offScreenProvider->getShowWireframe() : false;
+            });
+
         dispatcher.registerCommandHandler<events::render::SetShowNavmeshDebugCommand>(
             [this](const events::render::SetShowNavmeshDebugCommand& cmd)
             {

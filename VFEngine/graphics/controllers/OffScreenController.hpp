@@ -94,6 +94,7 @@ namespace controllers
         bool showPhysicsDebug = false;
         bool showClusterDebug = false;
         bool showShadowDebug = false;
+        bool showWireframe = false;
         bool playModeActive = false;
         bool prevLeftMouseDown = false;
         glm::vec2 uiViewportOffset{0.0f, 0.0f};
@@ -202,6 +203,9 @@ namespace controllers
         void setShowShadowDebug(bool show) { showShadowDebug = show; }
         bool getShowShadowDebug() const { return showShadowDebug; }
         void prepareFrameShadowDebug();
+
+        void setShowWireframe(bool show);
+        bool getShowWireframe() const { return showWireframe; }
 
         void setShowNavmeshDebug(bool show);
         bool getShowNavmeshDebug() const;

@@ -423,6 +423,14 @@ namespace render
         }
     }
 
+    void RenderPassHandler::setWireframeMode(bool enabled)
+    {
+        if (gpuDrivenRenderer && gpuDrivenRendererInitialized)
+        {
+            gpuDrivenRenderer->setWireframeMode(enabled);
+        }
+    }
+
     void RenderPassHandler::setShowNavmeshDebug(bool show)
     {
         if (debugRenderer)

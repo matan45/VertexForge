@@ -15,6 +15,8 @@
 #include "../../core/SwapChain.hpp"
 #include "../../core/OffScreen.hpp"
 #include "../../core/ImageUtilities.hpp"
+#include "../../core/DeferredDeletionQueue.hpp"
+#include "../../core/RenderManager.hpp"
 #include <algorithm>
 
 namespace render::postprocess
@@ -369,14 +371,28 @@ namespace render::postprocess
         }
     }
 
+    void PostProcessPipeline::setDeletionQueue(core::DeferredDeletionQueue* queue) { deletionQueue = queue; }
+
     void PostProcessPipeline::removeEffect(::postprocess::EffectType type)
     {
+        auto* dq = deletionQueue ? deletionQueue : core::RenderManager::getGlobalDeletionQueue();
+
         for (auto it = effects.begin(); it != effects.end();)
         {
             if ((*it)->getType() == type)
             {
-                if ((*it)->isInitialized())
+                if ((*it)->isInitialized() && dq)
+                {
+                    auto shared = std::shared_ptr<PostProcessEffect>(std::move(*it));
+                    // vk::Device arg intentionally unused — effect holds its own device reference
+                    dq->queueCustom([shared](vk::Device) {
+                        shared->cleanup();
+                    });
+                }
+                else if ((*it)->isInitialized())
+                {
                     (*it)->cleanup();
+                }
                 it = effects.erase(it);
             }
             else

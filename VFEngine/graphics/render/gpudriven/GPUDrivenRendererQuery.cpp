@@ -118,6 +118,102 @@ namespace render::gpudriven
         lightCulling.useBVH = false;
     }
 
+    void GPUDrivenRenderer::setWireframeMode(bool enabled)
+    {
+        if (wireframeMode == enabled) return;
+        wireframeMode = enabled;
+
+        device.getLogicalDevice().waitIdle();
+
+        vk::DescriptorSetLayout giLayout{};
+        if (giCascadeManager && giCascadeManager->getProbeStorage())
+            giLayout = giCascadeManager->getProbeStorage()->getSamplingLayout();
+
+        vk::DescriptorSetLayout causticLayout{};
+        if (water.causticsResources && water.causticsResources->isInitialized())
+            causticLayout = water.causticsResources->getDescriptorSetLayout();
+
+        // Recreate scene mesh pipelines
+        if (meshShaderPipeline)
+        {
+            meshShaderPipeline->setWireframeMode(enabled);
+
+            MeshPipelineInitInfo pipelineInfo{
+                .iblLayout = cachedIBLLayout,
+                .bindlessTextureLayout = bindlessTextures->getDescriptorSetLayout(),
+                .boneMatrixLayout = boneMatrixManager->getDescriptorSetLayout(),
+                .lightDataLayout = lightBufferManager->getDescriptorSetLayout(),
+                .clusterGridLayout = clusterGridManager->getDescriptorSetLayout(),
+                .cullingOutputLayout = lightCullingPipeline->getDescriptorSetLayout(),
+                .shadowDataLayout = shadowSystem->getShadowDataLayout(),
+                .shadowTextureLayout = shadowSystem->getShadowTextureLayout(),
+                .giProbeDataLayout = giLayout,
+                .causticLayout = causticLayout,
+                .renderPass = cachedRenderPass
+            };
+
+            meshShaderPipeline->recreate(pipelineInfo);
+
+            if (transparentMeshShaderPipeline)
+            {
+                transparentMeshShaderPipeline->setWireframeMode(enabled);
+                pipelineInfo.transparentMode = true;
+                transparentMeshShaderPipeline->recreate(pipelineInfo);
+            }
+
+            if (wboitMeshShaderPipeline && cachedWBOITRenderPass)
+            {
+                wboitMeshShaderPipeline->setWireframeMode(enabled);
+                pipelineInfo.transparentMode = false;
+                pipelineInfo.renderPass = cachedWBOITRenderPass;
+                pipelineInfo.wboitMode = true;
+                wboitMeshShaderPipeline->recreate(pipelineInfo);
+            }
+        }
+
+        // Recreate terrain pipeline
+        if (terrain.pipeline)
+        {
+            terrain.pipeline->setWireframeMode(enabled);
+            terrain.pipeline->recreate(cachedIBLLayout,
+                                       bindlessTextures->getDescriptorSetLayout(),
+                                       meshShaderPipeline->getMeshletDataLayout(),
+                                       meshShaderPipeline->getVertexDataLayout(),
+                                       lightBufferManager->getDescriptorSetLayout(),
+                                       clusterGridManager->getDescriptorSetLayout(),
+                                       lightCullingPipeline->getDescriptorSetLayout(),
+                                       shadowSystem->getShadowDataLayout(),
+                                       shadowSystem->getShadowTextureLayout(),
+                                       cachedRenderPass);
+        }
+
+        // Recreate water pipeline
+        if (water.pipeline)
+        {
+            water.pipeline->setWireframeMode(enabled);
+
+            vk::DescriptorSetLayout oceanLayout{};
+            if (water.multiBandOceanLayout)
+                oceanLayout = water.multiBandOceanLayout;
+
+            vk::DescriptorSetLayout refractionLayout{};
+            if (water.refractionResources && water.refractionResources->isInitialized())
+                refractionLayout = water.refractionResources->getDescriptorSetLayout();
+
+            water.pipeline->recreate({
+                cachedIBLLayout,
+                lightBufferManager->getDescriptorSetLayout(),
+                clusterGridManager->getDescriptorSetLayout(),
+                lightCullingPipeline->getDescriptorSetLayout(),
+                shadowSystem->getShadowDataLayout(),
+                shadowSystem->getShadowTextureLayout(),
+                oceanLayout,
+                refractionLayout,
+                cachedRenderPass
+            });
+        }
+    }
+
     void GPUDrivenRenderer::setDeletionQueue(core::DeferredDeletionQueue* queue)
     {
         if (shadowSystem)

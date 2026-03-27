@@ -260,6 +260,16 @@ namespace controllers {
 		offScreenController->prepareFrameShadowDebug();
 	}
 
+	void OffScreen::setShowWireframe(bool show)
+	{
+		offScreenController->setShowWireframe(show);
+	}
+
+	bool OffScreen::getShowWireframe() const
+	{
+		return offScreenController->getShowWireframe();
+	}
+
 	void OffScreen::setShowNavmeshDebug(bool show)
 	{
 		offScreenController->setShowNavmeshDebug(show);

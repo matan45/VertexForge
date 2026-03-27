@@ -117,6 +117,7 @@ namespace render::gpudriven
         vk::DescriptorSet terrainVertexDescriptorSet;
 
         bool initialized = false;
+        bool wireframeMode = false;
 
         glm::vec2 brushWorldPos{0.0f};
         float brushWorldRadius = 0.0f;
@@ -154,6 +155,8 @@ namespace render::gpudriven
                       vk::DescriptorSetLayout shadowDataLayout,
                       vk::DescriptorSetLayout shadowTextureLayout,
                       vk::RenderPass renderPass);
+
+        void setWireframeMode(bool enabled) { wireframeMode = enabled; }
 
         void updateTileData(const std::vector<TerrainTileGPUData>& tiles);
 

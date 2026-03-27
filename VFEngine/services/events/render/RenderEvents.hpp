@@ -180,6 +180,16 @@ namespace events::render {
         std::string_view getName() const override { return "GetShadowDebugMode"; }
     };
 
+    struct SetShowWireframeCommand : ICommand<> {
+        bool show = false;
+
+        std::string_view getName() const override { return "SetShowWireframe"; }
+    };
+
+    struct GetShowWireframeQuery : IQuery<bool> {
+        std::string_view getName() const override { return "GetShowWireframe"; }
+    };
+
     struct GetCullingStatsQuery : IQuery<services::CullingDebugStats> {
         std::string_view getName() const override { return "GetCullingStats"; }
     };

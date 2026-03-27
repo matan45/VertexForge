@@ -379,6 +379,7 @@ namespace render::gpudriven
         MaterialState materials;
         CullingConfig culling;
         CachedCamera cachedCamera;
+        bool wireframeMode = false;
 
     public:
         explicit GPUDrivenRenderer(core::Device& device, core::SwapChain& swapChain);
@@ -507,6 +508,8 @@ namespace render::gpudriven
         shadow::ShadowSystem* getShadowSystem() const { return shadowSystem.get(); }
 
         void setDeletionQueue(core::DeferredDeletionQueue* queue);
+
+        void setWireframeMode(bool enabled);
 
         // Light streaming
         lighting::LightStreamManager* getLightStreamManager() const { return lightStreamManager.get(); }

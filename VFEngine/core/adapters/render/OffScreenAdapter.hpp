@@ -92,6 +92,9 @@ namespace core
         bool getShowShadowDebug() const override;
         void prepareFrameShadowDebug() override;
 
+        void setShowWireframe(bool show) override;
+        bool getShowWireframe() const override;
+
         void setShowNavmeshDebug(bool show) override;
         bool getShowNavmeshDebug() const override;
         void updateNavmeshDebugMesh(const std::vector<glm::vec3>& vertices, const std::vector<uint32_t>& indices) override;

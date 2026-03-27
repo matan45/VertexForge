@@ -265,6 +265,14 @@ namespace windows
                 dispatcher.execute(cmd);
             }
 
+            bool showWireframe = dispatcher.query(events::render::GetShowWireframeQuery{});
+            if (ImGui::MenuItem("Show Wireframe", nullptr, showWireframe))
+            {
+                events::render::SetShowWireframeCommand cmd;
+                cmd.show = !showWireframe;
+                dispatcher.execute(cmd);
+            }
+
             bool showNavmeshDebug = dispatcher.query(events::render::GetShowNavmeshDebugQuery{});
             if (ImGui::MenuItem("Show Navmesh", nullptr, showNavmeshDebug))
             {

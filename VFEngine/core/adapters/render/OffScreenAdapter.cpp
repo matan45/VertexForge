@@ -272,6 +272,16 @@ namespace core {
         }
     }
 
+    void OffScreenAdapter::setShowWireframe(bool show) {
+        if (offScreen) {
+            offScreen->setShowWireframe(show);
+        }
+    }
+
+    bool OffScreenAdapter::getShowWireframe() const {
+        return offScreen ? offScreen->getShowWireframe() : false;
+    }
+
     void OffScreenAdapter::setShowNavmeshDebug(bool show) {
         if (offScreen) {
             offScreen->setShowNavmeshDebug(show);

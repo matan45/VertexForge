@@ -246,6 +246,12 @@ namespace core
         deviceFeatures.independentBlend = VK_TRUE;
         deviceFeatures.textureCompressionBC = VK_TRUE;
 
+        vk::PhysicalDeviceFeatures supportedFeatures = physicalDevice.getFeatures();
+        if (supportedFeatures.fillModeNonSolid)
+        {
+            deviceFeatures.fillModeNonSolid = VK_TRUE;
+        }
+
         // required for gl_BaseInstance in shaders
         vk::PhysicalDeviceVulkan11Features vulkan11Features{};
         vulkan11Features.shaderDrawParameters = VK_TRUE;

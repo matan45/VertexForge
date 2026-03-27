@@ -560,6 +560,7 @@ namespace render::gpudriven
             .shaderStages = stages,
             .existingPipelineLayout = pipelineLayout,
             .cullMode = isTransparent ? vk::CullModeFlagBits::eNone : vk::CullModeFlagBits::eBack,
+            .polygonMode = isWireframeMode ? vk::PolygonMode::eLine : vk::PolygonMode::eFill,
             .depthTestEnable = true,
             .depthWriteEnable = !isTransparent,
             .depthCompareOp = isWBOITMode ? vk::CompareOp::eLessOrEqual : vk::CompareOp::eLess,
