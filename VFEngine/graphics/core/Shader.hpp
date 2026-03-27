@@ -60,6 +60,11 @@ namespace core {
 		void createShaderModule(const std::vector<uint32_t>& code, vk::ShaderStageFlagBits stage);
 		vk::ShaderStageFlagBits shaderTypeToVulkanStage(resource::ShaderType shaderType) const;
 
+		// Pre-compiled SPIR-V loading (exported builds)
+		void loadPrecompiledSPIRV(const std::filesystem::path& vfshaderPath);
+		std::filesystem::path resolvePrecompiledPath(const std::string& glslPath) const;
+		std::string computePermutationKey() const;
+
 		struct ShaderSource {
 			resource::ShaderType type;
 			std::string source;

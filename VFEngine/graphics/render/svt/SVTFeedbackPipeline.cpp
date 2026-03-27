@@ -2,6 +2,7 @@
 #include "../../core/Device.hpp"
 #include "../../core/BufferUtilities.hpp"
 #include "../../core/Shader.hpp"
+#include "../../core/PipelineUtilities.hpp"
 #include "print/Log.hpp"
 #include <cstring>
 
@@ -230,8 +231,7 @@ namespace render::svt
         pipelineInfo.stage = stages[0];
         pipelineInfo.layout = pipelineLayout;
 
-        auto result = device.getLogicalDevice().createComputePipeline(nullptr, pipelineInfo);
-        pipeline = result.value;
+        pipeline = core::PipelineUtilities::createComputePipeline(device.getLogicalDevice(), pipelineInfo);
     }
 
     void SVTFeedbackPipeline::createFeedbackBuffers()

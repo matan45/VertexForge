@@ -3,6 +3,7 @@
 #include <vector>
 #include <array>
 #include <mutex>
+#include <filesystem>
 
 #include "Utilities.hpp"
 
@@ -78,6 +79,10 @@ namespace core
         // Shared staging command pool for one-time transfer operations
         vk::UniqueCommandPool stagingCommandPool;
 
+        // Pipeline cache for faster pipeline creation on subsequent launches
+        vk::UniquePipelineCache pipelineCache;
+        std::filesystem::path pipelineCachePath;
+
         mutable std::mutex graphicsQueueMutex;
         mutable std::mutex transferQueueMutex;
 
@@ -97,6 +102,8 @@ namespace core
         void pickPhysicalDevice();
         void createLogicalDevice();
         void createStagingCommandPool();
+        void createPipelineCache();
+        void loadPipelineCacheFromDisk();
         void queryMeshShaderCapabilities();
         void queryRayQueryCapabilities();
         bool checkValidationLayerSupport() const;
@@ -155,6 +162,9 @@ namespace core
         }
 
         const vk::CommandPool& getStagingCommandPool() const { return stagingCommandPool.get(); }
+
+        vk::PipelineCache getPipelineCache() const { return pipelineCache.get(); }
+        void savePipelineCacheToDisk() const;
 
         DeviceMemoryInfo getDeviceMemoryInfo() const;
 

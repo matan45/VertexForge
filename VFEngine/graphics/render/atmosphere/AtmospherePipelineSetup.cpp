@@ -5,6 +5,7 @@
 #include "../../core/OffScreen.hpp"
 #include "../../core/ImageUtilities.hpp"
 #include "../../core/MemoryUtilities.hpp"
+#include "../../core/PipelineUtilities.hpp"
 
 namespace render::atmosphere
 {
@@ -123,7 +124,7 @@ namespace render::atmosphere
             vk::ComputePipelineCreateInfo cpInfo{};
             cpInfo.stage = stages[0];
             cpInfo.layout = kit.pipelineLayout;
-            kit.pipeline = dev.createComputePipeline(nullptr, cpInfo).value;
+            kit.pipeline = core::PipelineUtilities::createComputePipeline(dev, cpInfo);
 
             return kit;
         }

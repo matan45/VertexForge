@@ -37,7 +37,7 @@ namespace imguiPass {
 		initInfo.Device = device.getLogicalDevice();
 		initInfo.QueueFamily = device.getQueueFamilyIndices().graphicsAndComputeFamily.value();
 		initInfo.Queue = device.getGraphicsQueue();
-		initInfo.PipelineCache = VK_NULL_HANDLE;
+		initInfo.PipelineCache = device.getPipelineCache();
 		initInfo.DescriptorPool = imGuiDescriptorPool;
 		initInfo.MinImageCount = swapChain.getImageCount();
 		initInfo.ImageCount = swapChain.getImageCount();

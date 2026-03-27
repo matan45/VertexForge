@@ -1,6 +1,7 @@
 #include "VolumetricTemporalFilter.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/Shader.hpp"
+#include "../../core/PipelineUtilities.hpp"
 #include "print/Log.hpp"
 
 namespace render::volumetric
@@ -89,14 +90,12 @@ namespace render::volumetric
         pipelineInfo.stage = stages[0];
         pipelineInfo.layout = pipelineLayout;
 
-        auto result = device.getLogicalDevice().createComputePipeline(nullptr, pipelineInfo);
-        if (result.result != vk::Result::eSuccess)
+        computePipeline = core::PipelineUtilities::createComputePipeline(device.getLogicalDevice(), pipelineInfo);
+        if (!computePipeline)
         {
             vfLogError("VolumetricTemporalFilter: Failed to create compute pipeline");
             return;
         }
-
-        computePipeline = result.value;
     }
 
     void VolumetricTemporalFilter::dispatch(

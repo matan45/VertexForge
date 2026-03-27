@@ -2,6 +2,7 @@
 #include "OceanFFTResources.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/Shader.hpp"
+#include "../../core/PipelineUtilities.hpp"
 #include "print/Log.hpp"
 
 #include <cmath>
@@ -61,14 +62,12 @@ namespace render::water
             pipelineInfo.stage = stages[0];
             pipelineInfo.layout = outPipelineLayout;
 
-            auto result = vkDevice.createComputePipeline(nullptr, pipelineInfo);
-            if (result.result != vk::Result::eSuccess)
+            outPipeline = core::PipelineUtilities::createComputePipeline(vkDevice, pipelineInfo);
+            if (!outPipeline)
             {
                 vfLogError("OceanFFT: Failed to create compute pipeline for {}", shaderPath);
                 return {};
             }
-
-            outPipeline = result.value;
             return shader;
         };
 

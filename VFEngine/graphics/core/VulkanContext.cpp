@@ -1,4 +1,5 @@
 #include "VulkanContext.hpp"
+#include "PipelineUtilities.hpp"
 #include "../window/Window.hpp"
 
 namespace core {
@@ -7,6 +8,7 @@ namespace core {
 		device = std::make_unique<core::Device>(windowGlfw);
 		swapChain = std::make_unique<core::SwapChain>(*device.get());
 		device->init();
+		PipelineUtilities::setGlobalPipelineCache(device->getPipelineCache());
 		swapChain->init(windowGlfw->getWidth(), windowGlfw->getHeight());
 		window = windowGlfw;
 	}

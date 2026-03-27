@@ -3,6 +3,7 @@
 #include "../../core/Shader.hpp"
 #include "../../core/ImageUtilities.hpp"
 #include "../../core/MemoryUtilities.hpp"
+#include "../../core/PipelineUtilities.hpp"
 #include "print/Log.hpp"
 #include <array>
 
@@ -191,7 +192,7 @@ namespace render::volumetric
         vk::ComputePipelineCreateInfo cpInfo{};
         cpInfo.stage = stages[0];
         cpInfo.layout = genPipelineLayout;
-        genPipeline = dev.createComputePipeline(nullptr, cpInfo).value;
+        genPipeline = core::PipelineUtilities::createComputePipeline(dev, cpInfo);
 
         // Write descriptor
         vk::DescriptorImageInfo imgInfo{nullptr, noiseView, vk::ImageLayout::eGeneral};

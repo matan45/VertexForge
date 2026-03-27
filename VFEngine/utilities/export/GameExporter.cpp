@@ -1,10 +1,17 @@
 #include "../print/Log.hpp"
 #include "GameExporter.hpp"
 #include "ExeIconEmbedder.hpp"
+#include "ShaderCompiler.hpp"
+#include "ShaderPermutationManifest.hpp"
 #include "../serialization/ProjectSerialization.hpp"
+#include "../resource/ShaderResource.hpp"
+#include "../resource/ShaderBinaryFormat.hpp"
+#include "../material/MaterialAsset.hpp"
 #include <fstream>
 #include <memory>
 #include <cstdlib>
+#include <unordered_map>
+#include <unordered_set>
 
 namespace gameExport
 {
@@ -33,8 +40,11 @@ namespace gameExport
 		report(0.15f, "Copying runtime dependencies...");
 		if (!copyRuntimeDependencies(config, result)) return result;
 
-		report(0.25f, "Copying shaders...");
-		if (!copyShaders(config, result)) return result;
+		report(0.25f, "Compiling shaders...");
+		if (!compileShaders(config, result)) return result;
+
+		report(0.35f, "Compiling material shaders...");
+		if (!compileMaterialShaders(config, result)) return result;
 
 		report(0.40f, "Copying assets...");
 		if (!copyAssets(config, result)) return result;
@@ -171,57 +181,223 @@ namespace gameExport
 			}
 		}
 
-		{
-			char* vulkanSdkBuf = nullptr;
-			size_t vulkanSdkLen = 0;
-			_dupenv_s(&vulkanSdkBuf, &vulkanSdkLen, "VULKAN_SDK");
-			std::unique_ptr<char, decltype(&free)> vulkanSdkGuard(vulkanSdkBuf, &free);
-
-			if (vulkanSdkBuf)
-			{
-				fs::path shadercDll = fs::path(vulkanSdkBuf) / "Bin" / "shaderc_shared.dll";
-				if (fs::exists(shadercDll))
-				{
-					std::error_code ec;
-					fs::copy_file(shadercDll, config.outputDirectory / "shaderc_shared.dll",
-								  fs::copy_options::overwrite_existing, ec);
-					if (ec)
-					{
-						result.errorMessage = "Failed to copy shaderc_shared.dll: " + ec.message();
-						return false;
-					}
-				}
-				else
-				{
-					result.errorMessage = "shaderc_shared.dll not found at: " + shadercDll.string();
-					return false;
-				}
-			}
-			else
-			{
-				result.errorMessage = "VULKAN_SDK environment variable not set. Cannot locate shaderc_shared.dll";
-				return false;
-			}
-		}
+		// shaderc_shared.dll is no longer needed in exported builds:
+		// shaders are pre-compiled to SPIR-V at export time
 
 		return true;
 	}
 
-	bool GameExporter::copyShaders(const ExportConfig& config, ExportResult& result)
+	bool GameExporter::compileShaders(const ExportConfig& config, ExportResult& result)
 	{
 		fs::path shaderSrc = findShaderDirectory();
 		fs::path shaderDst = config.outputDirectory / "resources" / "shaders";
 
-		copyDirectoryRecursive(shaderSrc, shaderDst, result);
+		// Build permutation lookup: glslPath -> list of permutations
+		auto permutations = shaderCompiler::getShaderPermutations();
+		std::unordered_map<std::string, std::vector<const shaderCompiler::ShaderPermutation*>> permutationMap;
+		for (const auto& perm : permutations)
+		{
+			permutationMap[perm.glslPath].push_back(&perm);
+		}
+
+		// Walk all .glsl files and compile to .vfshader
+		std::error_code ec;
+		int compiledCount = 0;
+		for (auto it = fs::recursive_directory_iterator(shaderSrc, ec); it != fs::recursive_directory_iterator(); ++it)
+		{
+			if (!it->is_regular_file() || it->path().extension() != ".glsl")
+			{
+				continue;
+			}
+
+			fs::path relativePath = fs::relative(it->path(), shaderSrc, ec);
+			std::string relativeStr = relativePath.generic_string();
+
+			// Parse the GLSL file to get shader stages
+			auto shaderModels = resource::ShaderResource::readShaderFile(it->path().string());
+			if (shaderModels.empty())
+			{
+				result.warnings.push_back("Failed to parse shader: " + relativeStr);
+				continue;
+			}
+
+			// Compile base variant (no macros)
+			{
+				shaderCompiler::CompileOptions opts;
+				opts.includeBasePath = it->path().parent_path();
+
+				std::vector<resource::StageSPIRV> stages;
+				bool success = true;
+				for (const auto& model : shaderModels)
+				{
+					auto stage = shaderCompiler::shaderTypeToVulkanStage(static_cast<uint8_t>(model.type));
+					auto spirv = shaderCompiler::compile(model.source, stage, relativeStr, opts);
+					if (spirv.empty())
+					{
+						result.warnings.push_back("Failed to compile base variant: " + relativeStr);
+						success = false;
+						break;
+					}
+					stages.push_back({static_cast<uint32_t>(stage), std::move(spirv)});
+				}
+
+				if (success)
+				{
+					fs::path outPath = shaderDst / relativePath;
+					outPath.replace_extension(".vfshader");
+					fs::create_directories(outPath.parent_path(), ec);
+					resource::ShaderBinaryFormat::write(outPath, stages);
+					compiledCount++;
+				}
+			}
+
+			// Compile permutation variants
+			auto permIt = permutationMap.find(relativeStr);
+			if (permIt != permutationMap.end())
+			{
+				for (const auto* perm : permIt->second)
+				{
+					shaderCompiler::CompileOptions opts;
+					opts.macroNames = perm->macroNames;
+					opts.macroValues = perm->macroValues;
+					opts.includeBasePath = it->path().parent_path();
+
+					std::string permKey = shaderCompiler::computePermutationKey(opts);
+
+					std::vector<resource::StageSPIRV> stages;
+					bool success = true;
+					for (const auto& model : shaderModels)
+					{
+						auto stage = shaderCompiler::shaderTypeToVulkanStage(static_cast<uint8_t>(model.type));
+						auto spirv = shaderCompiler::compile(model.source, stage, relativeStr, opts);
+						if (spirv.empty())
+						{
+							result.warnings.push_back("Failed to compile permutation " + permKey + " of " + relativeStr);
+							success = false;
+							break;
+						}
+						stages.push_back({static_cast<uint32_t>(stage), std::move(spirv)});
+					}
+
+					if (success)
+					{
+						fs::path outPath = shaderDst / relativePath;
+						std::string stem = outPath.stem().string();
+						outPath.replace_filename(stem + "_" + permKey + ".vfshader");
+						resource::ShaderBinaryFormat::write(outPath, stages);
+						compiledCount++;
+					}
+				}
+			}
+		}
+
+		vfLogInfo("Compiled {} shader variants", compiledCount);
 
 		// Copy IBL resources (pre-baked BRDF LUT)
 		fs::path iblSrc = findIBLDirectory();
 		if (fs::exists(iblSrc))
 		{
 			fs::path iblDst = config.outputDirectory / "resources" / "ibl";
-			std::error_code ec;
 			fs::create_directories(iblDst, ec);
 			copyDirectoryRecursive(iblSrc, iblDst, result);
+		}
+
+		return true;
+	}
+
+	bool GameExporter::compileMaterialShaders(const ExportConfig& config, ExportResult& result)
+	{
+		fs::path compiledDir = config.outputDirectory / "Assets" / "materials" / "compiled";
+		std::error_code ec;
+		fs::create_directories(compiledDir, ec);
+
+		std::unordered_set<std::string> compiledHashes;
+		int compiledCount = 0;
+
+		// Scan all .vfmaterial files in the working directory
+		for (auto it = fs::recursive_directory_iterator(config.workingDirectory, ec);
+		     it != fs::recursive_directory_iterator(); ++it)
+		{
+			if (!it->is_regular_file() || it->path().extension() != ".vfmaterial")
+			{
+				continue;
+			}
+
+			// Load the material to get cached shader source
+			auto materialOpt = material::MaterialAsset::load(it->path().string());
+			if (!materialOpt)
+			{
+				continue;
+			}
+			const auto& materialData = *materialOpt;
+
+			if (materialData.cachedVertexShader.empty() || materialData.cachedFragmentShader.empty())
+			{
+				continue;
+			}
+
+			// Compute hash key matching MaterialShaderCache::hashShaderSource
+			std::hash<std::string> hasher;
+			std::string vsHash = std::to_string(hasher(materialData.cachedVertexShader));
+			std::string fsHash = std::to_string(hasher(materialData.cachedFragmentShader));
+			std::string combinedHash = vsHash + "_" + fsHash;
+
+			// Skip if already compiled (dedup by hash)
+			if (compiledHashes.count(combinedHash))
+			{
+				continue;
+			}
+			compiledHashes.insert(combinedHash);
+
+			// Compile vertex and fragment shaders
+			shaderCompiler::CompileOptions opts;
+			std::vector<resource::StageSPIRV> stages;
+
+			// Strip #type directive if present
+			std::string vsSource = materialData.cachedVertexShader;
+			if (auto pos = vsSource.find("#type"); pos != std::string::npos)
+			{
+				auto lineEnd = vsSource.find('\n', pos);
+				if (lineEnd != std::string::npos)
+					vsSource = vsSource.substr(lineEnd + 1);
+			}
+
+			std::string fsSource = materialData.cachedFragmentShader;
+			if (auto pos = fsSource.find("#type"); pos != std::string::npos)
+			{
+				auto lineEnd = fsSource.find('\n', pos);
+				if (lineEnd != std::string::npos)
+					fsSource = fsSource.substr(lineEnd + 1);
+			}
+
+			auto vsSPIRV = shaderCompiler::compile(vsSource,
+				vk::ShaderStageFlagBits::eVertex, materialData.name, opts);
+			if (vsSPIRV.empty())
+			{
+				result.warnings.push_back("Failed to compile vertex shader for material: " +
+					it->path().filename().string());
+				continue;
+			}
+			stages.push_back({static_cast<uint32_t>(vk::ShaderStageFlagBits::eVertex), std::move(vsSPIRV)});
+
+			auto fsSPIRV = shaderCompiler::compile(fsSource,
+				vk::ShaderStageFlagBits::eFragment, materialData.name, opts);
+			if (fsSPIRV.empty())
+			{
+				result.warnings.push_back("Failed to compile fragment shader for material: " +
+					it->path().filename().string());
+				continue;
+			}
+			stages.push_back({static_cast<uint32_t>(vk::ShaderStageFlagBits::eFragment), std::move(fsSPIRV)});
+
+			fs::path outPath = compiledDir / (combinedHash + ".vfshader");
+			resource::ShaderBinaryFormat::write(outPath, stages);
+			compiledCount++;
+		}
+
+		if (compiledCount > 0)
+		{
+			vfLogInfo("Compiled {} material shader variants", compiledCount);
 		}
 
 		return true;
@@ -333,6 +509,22 @@ namespace gameExport
 		if (!fs::exists(shadersDir) || fs::is_empty(shadersDir))
 		{
 			result.errorMessage = "Validation failed: shaders directory is empty";
+			return false;
+		}
+
+		// Verify at least one .vfshader file exists (pre-compiled SPIR-V)
+		bool hasCompiledShaders = false;
+		for (const auto& entry : fs::recursive_directory_iterator(shadersDir))
+		{
+			if (entry.is_regular_file() && entry.path().extension() == ".vfshader")
+			{
+				hasCompiledShaders = true;
+				break;
+			}
+		}
+		if (!hasCompiledShaders)
+		{
+			result.errorMessage = "Validation failed: no compiled shader files (.vfshader) found";
 			return false;
 		}
 

@@ -54,13 +54,12 @@ namespace animation
         vk::ComputePipelineCreateInfo pipelineInfo{};
         pipelineInfo.stage = stages[0];
         pipelineInfo.layout = pipelineLayout;
-        auto result = vkDevice.createComputePipeline(nullptr, pipelineInfo);
-        if (result.result != vk::Result::eSuccess)
+        computePipeline = core::PipelineUtilities::createComputePipeline(vkDevice, pipelineInfo);
+        if (!computePipeline)
         {
             vfLogError("AnimationComputePipeline: Failed to create compute pipeline");
             return;
         }
-        computePipeline = result.value;
 
         vk::DescriptorPoolSize poolSize{};
         poolSize.type = vk::DescriptorType::eStorageBuffer;

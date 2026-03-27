@@ -13,7 +13,8 @@ namespace gameExport
 		bool createOutputStructure(const ExportConfig& config, ExportResult& result);
 		bool copyRuntimeExecutable(const ExportConfig& config, ExportResult& result);
 		bool copyRuntimeDependencies(const ExportConfig& config, ExportResult& result);
-		bool copyShaders(const ExportConfig& config, ExportResult& result);
+		bool compileShaders(const ExportConfig& config, ExportResult& result);
+		bool compileMaterialShaders(const ExportConfig& config, ExportResult& result);
 		bool copyAssets(const ExportConfig& config, ExportResult& result);
 		bool copyPlugins(const ExportConfig& config, ExportResult& result);
 		bool generateProjectConfig(const ExportConfig& config, ExportResult& result);

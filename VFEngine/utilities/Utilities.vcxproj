@@ -57,7 +57,7 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <PreprocessorDefinitions>VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1;GLM_FORCE_DEPTH_ZERO_TO_ONE;MESHOPTIMIZER_API=__declspec(dllimport);DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\..\dependencies\spdlog\include;..\..\dependencies\glm;..\..\dependencies\entt\single_include;..\..\dependencies\json\single_include;..\..\dependencies\meshoptimizer\src;..\..\dependencies\enkiTS\src;..\..\dependencies\stb;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\..\dependencies\spdlog\include;..\..\dependencies\glm;..\..\dependencies\entt\single_include;..\..\dependencies\json\single_include;..\..\dependencies\meshoptimizer\src;..\..\dependencies\enkiTS\src;..\..\dependencies\stb;C:\VulkanSDK\1.4.335.0\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DebugInformationFormat>EditAndContinue</DebugInformationFormat>
       <Optimization>Disabled</Optimization>
       <AdditionalOptions>/utf-8 /MP /bigobj %(AdditionalOptions)</AdditionalOptions>
@@ -74,7 +74,7 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <PreprocessorDefinitions>VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1;GLM_FORCE_DEPTH_ZERO_TO_ONE;MESHOPTIMIZER_API=__declspec(dllimport);NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\..\dependencies\spdlog\include;..\..\dependencies\glm;..\..\dependencies\entt\single_include;..\..\dependencies\json\single_include;..\..\dependencies\meshoptimizer\src;..\..\dependencies\enkiTS\src;..\..\dependencies\stb;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\..\dependencies\spdlog\include;..\..\dependencies\glm;..\..\dependencies\entt\single_include;..\..\dependencies\json\single_include;..\..\dependencies\meshoptimizer\src;..\..\dependencies\enkiTS\src;..\..\dependencies\stb;C:\VulkanSDK\1.4.335.0\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <Optimization>Full</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
@@ -140,9 +140,6 @@
     <ClInclude Include="eqs\tests\OnNavMeshTest.hpp" />
     <ClInclude Include="eqs\tests\PathfindingCostTest.hpp" />
     <ClInclude Include="eqs\tests\TraceTest.hpp" />
-    <ClInclude Include="export\ExeIconEmbedder.hpp" />
-    <ClInclude Include="export\ExportConfig.hpp" />
-    <ClInclude Include="export\GameExporter.hpp" />
     <ClInclude Include="geometry\SphereGenerator.hpp" />
     <ClInclude Include="input\KeyCodes.hpp" />
     <ClInclude Include="material\MaterialAsset.hpp" />
@@ -187,6 +184,7 @@
     <ClInclude Include="resource\MeshletTypes.hpp" />
     <ClInclude Include="resource\PathResolver.hpp" />
     <ClInclude Include="resource\ResourceManager.hpp" />
+    <ClInclude Include="resource\ShaderBinaryFormat.hpp" />
     <ClInclude Include="resource\ShaderResource.hpp" />
     <ClInclude Include="resource\TextureResource.hpp" />
     <ClInclude Include="resource\TextureStreamHandle.hpp" />
@@ -250,8 +248,6 @@
     <ClCompile Include="eqs\tests\OnNavMeshTest.cpp" />
     <ClCompile Include="eqs\tests\PathfindingCostTest.cpp" />
     <ClCompile Include="eqs\tests\TraceTest.cpp" />
-    <ClCompile Include="export\ExeIconEmbedder.cpp" />
-    <ClCompile Include="export\GameExporter.cpp" />
     <ClCompile Include="geometry\SphereGenerator.cpp" />
     <ClCompile Include="material\MaterialAsset.cpp" />
     <ClCompile Include="material\MaterialAsset_Load.cpp" />

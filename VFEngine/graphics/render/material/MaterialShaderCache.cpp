@@ -4,6 +4,7 @@
 #include "../../core/Shader.hpp"
 #include "../../core/PipelineUtilities.hpp"
 #include "material/MaterialTypes.hpp"
+#include "resource/PathResolver.hpp"
 #include "print/Log.hpp"
 #include <functional>
 
@@ -75,25 +76,42 @@ namespace render::mesh
         MaterialPipelineData& outData)
     {
         outData.shader = std::make_shared<core::Shader>(device);
-        
-        bool success = outData.shader->compileFromSources(
-            materialData.cachedVertexShader,
-            materialData.cachedFragmentShader,
-            materialData.name
-        );
 
-        if (!success || outData.shader->getShaderStages().empty())
-        {
-            lastCompilationError = outData.shader->getLastCompilationError();
-            vfLogError("Failed to compile material shader: {}", materialPath);
-            return false;
-        }
-        
-        lastCompilationError.clear();
-        
         outData.vertexShaderHash = hashShaderSource(materialData.cachedVertexShader);
         outData.fragmentShaderHash = hashShaderSource(materialData.cachedFragmentShader);
-        
+
+        if (resource::PathResolver::isExportedMode())
+        {
+            // In exported builds, load pre-compiled SPIR-V by source hash.
+            // Pass a .glsl path that resolvePrecompiledPath will convert to .vfshader
+            std::string combinedHash = outData.vertexShaderHash + "_" + outData.fragmentShaderHash;
+            std::string fakePath = "Assets/materials/compiled/" + combinedHash + ".glsl";
+            outData.shader->readShader(fakePath);
+
+            if (outData.shader->getShaderStages().empty())
+            {
+                vfLogError("Failed to load pre-compiled material shader: {}", materialPath);
+                return false;
+            }
+        }
+        else
+        {
+            bool success = outData.shader->compileFromSources(
+                materialData.cachedVertexShader,
+                materialData.cachedFragmentShader,
+                materialData.name
+            );
+
+            if (!success || outData.shader->getShaderStages().empty())
+            {
+                lastCompilationError = outData.shader->getLastCompilationError();
+                vfLogError("Failed to compile material shader: {}", materialPath);
+                return false;
+            }
+        }
+
+        lastCompilationError.clear();
+
         if (!createPipelines(outData))
         {
             vfLogError("Failed to create pipeline for material: {}", materialPath);

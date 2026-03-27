@@ -37,7 +37,10 @@ project "Editor"
    location "VFEngine/editor"
    targetdir "bin/%{prj.name}/%{cfg.buildcfg}/%{cfg.platform}"
 
-   files { "VFEngine/editor/**.hpp", "VFEngine/editor/**.cpp", "VFEngine/editor/app.rc", "resources/editor/**.vfImage" }
+   files {
+      "VFEngine/editor/**.hpp", "VFEngine/editor/**.cpp", "VFEngine/editor/app.rc", "resources/editor/**.vfImage",
+      "VFEngine/utilities/export/**.hpp", "VFEngine/utilities/export/**.cpp"
+   }
 
    includedirs {
 	  "dependencies/imgui",
@@ -56,7 +59,12 @@ project "Editor"
 	  "VFEngine/services",                -- Services layer interfaces
 	  "VFEngine/plugin",                  -- Plugin system
 	  "VFEngine/utilities/procedural",    -- Procedural heightmap generation
-	  "VFEngine/utilities/imageprocessing" -- Image background removal
+	  "VFEngine/utilities/imageprocessing", -- Image background removal
+      vulkanLibPath.."/Include"             -- Vulkan SDK for ShaderCompiler
+   }
+
+   libdirs {
+      vulkanLibPath.."/Lib"
    }
 
    links {
@@ -66,7 +74,8 @@ project "Editor"
 	  "Plugin",                         -- Plugin system
 	  "imgui",                          -- For imgui-node-editor in ShaderGraphEditor
 	  "ProceduralGen",                  -- Procedural heightmap generation
-	  "ImageProcessing"                 -- Image background removal
+	  "ImageProcessing",                -- Image background removal
+	  "shaderc_shared.lib"              -- Shader compiler for export
    }
 
    defines { "_CRT_SECURE_NO_WARNINGS" }
@@ -293,6 +302,11 @@ project "Runtime"
 
    links { "Services", "Core", "Plugin" }  -- Core linked for RuntimeBootstrap, not direct access
 
+   -- Delay-load shaderc: exported builds ship pre-compiled SPIR-V,
+   -- so shaderc_shared.dll is not needed and never loaded at runtime
+   linkoptions { "/DELAYLOAD:shaderc_shared.dll" }
+   links { "delayimp" }
+
    filter "configurations:Debug"
       defines { "DEBUG" }
       symbols "On"
@@ -339,10 +353,15 @@ project "Utilities"
 	  "dependencies/json/single_include",
 	  "dependencies/meshoptimizer/src",  -- meshoptimizer for terrain meshlet generation
 	  "dependencies/enkiTS/src",         -- enkiTS task scheduler
-	  "dependencies/stb"                 -- stb_vorbis for runtime Vorbis decoding
+	  "dependencies/stb",               -- stb_vorbis for runtime Vorbis decoding
+      vulkanLibPath.."/Include"          -- Vulkan SDK for shader binary format types
    }
 
    links { "spdLog", "meshoptimizer", "enkiTS" }
+
+   -- Export pipeline (GameExporter, ShaderCompiler) requires shaderc,
+   -- compiled only as part of Editor
+   removefiles { "VFEngine/utilities/export/**" }
 
    defines { "MESHOPTIMIZER_API=__declspec(dllimport)" }
 
