@@ -111,7 +111,7 @@ namespace render::water
 
     void WaterMeshBuffer::createTileSSBO()
     {
-        vk::DeviceSize ssboSize = MAX_WATER_TILES * sizeof(WaterTileGPUData);
+        vk::DeviceSize ssboSize = MAX_OCEAN_GPU_INSTANCES * sizeof(WaterTileGPUData);
 
         core::BufferInfoRequest ssboInfo(
             device, physicalDevice, ssboSize,
@@ -133,7 +133,7 @@ namespace render::water
         }
 
         uint32_t count = static_cast<uint32_t>(std::min(tiles.size(),
-                                                        static_cast<size_t>(MAX_WATER_TILES)));
+                                                        static_cast<size_t>(MAX_OCEAN_GPU_INSTANCES)));
         std::memcpy(mappedTileData, tiles.data(), count * sizeof(WaterTileGPUData));
         currentTileCount = count;
     }

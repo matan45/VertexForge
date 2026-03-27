@@ -573,6 +573,15 @@ namespace services
             float submergedDepth = glm::clamp(waterHeight - objectBottom, 0.0f, objectHeight);
             float submersionRatio = submergedDepth / objectHeight;
 
+            // Track enter/exit for submersion notifications
+            bool wasInWater = entitiesInWater.contains(handle);
+            bool isInWater = submersionRatio > 0.0f;
+
+            if (isInWater && !wasInWater)
+                entitiesInWater.insert(handle);
+            else if (!isInWater && wasInWater)
+                entitiesInWater.erase(handle);
+
             if (submersionRatio <= 0.0f)
                 continue;
 

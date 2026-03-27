@@ -138,9 +138,11 @@ namespace render::water
         imageInfos[0].imageView = refractionView;
         imageInfos[0].imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
 
+        // Binding 1: use the same refraction color texture as a dummy
+        // (depth sampling removed - water shader uses gl_FragCoord.z directly)
         imageInfos[1].sampler = refractionSampler;
-        imageInfos[1].imageView = sceneDepthView;
-        imageInfos[1].imageLayout = vk::ImageLayout::eDepthStencilReadOnlyOptimal;
+        imageInfos[1].imageView = refractionView;
+        imageInfos[1].imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
 
         std::array<vk::WriteDescriptorSet, 2> writes{};
         writes[0].dstSet = descriptorSet;
@@ -185,9 +187,9 @@ namespace render::water
                             vk::PipelineStageFlagBits::eTransfer,
                             {}, {}, {}, toTransferDst);
 
-        // 2. Transition source: ColorAttachment -> TransferSrc
+        // 2. Transition source: ShaderReadOnly (after render pass end) -> TransferSrc
         vk::ImageMemoryBarrier srcToTransfer{};
-        srcToTransfer.oldLayout = vk::ImageLayout::eColorAttachmentOptimal;
+        srcToTransfer.oldLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
         srcToTransfer.newLayout = vk::ImageLayout::eTransferSrcOptimal;
         srcToTransfer.image = srcColorImage;
         srcToTransfer.subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};

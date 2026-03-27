@@ -121,7 +121,7 @@ namespace render::mesh
         colorAttachmentRef.attachment = 0;
         colorAttachmentRef.layout = vk::ImageLayout::eColorAttachmentOptimal;
 
-        // Depth: load existing depth, keep as read-write attachment
+        // Depth: load existing, read-write for depth testing
         vk::AttachmentDescription depthAttachment{};
         depthAttachment.format = swapChain.getSwapchainDepthStencilFormat();
         depthAttachment.samples = vk::SampleCountFlagBits::e1;

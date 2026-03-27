@@ -166,6 +166,7 @@ namespace windows
         if (ImGui::CollapsingHeader("Physics Settings", ImGuiTreeNodeFlags_DefaultOpen))
         {
             ImGui::Indent();
+            physicsSettingsDirty |= ImGui::Checkbox("Enabled", &physicsSettings.physicsEnabled);
             physicsSettingsDirty |= labeledDragFloat("Density (kg/m3)", "##Density", &physicsSettings.density, 1.0f, 1.0f, 10000.0f, "%.0f");
             physicsSettingsDirty |= labeledDragFloat("Drag", "##Drag", &physicsSettings.drag, 0.01f, 0.0f, 10.0f, "%.2f");
             physicsSettingsDirty |= labeledDragFloat("Buoyancy Strength", "##BuoyancyStrength", &physicsSettings.buoyancyStrength, 0.01f, 0.0f, 10.0f, "%.2f");

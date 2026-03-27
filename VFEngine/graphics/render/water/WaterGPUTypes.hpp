@@ -37,6 +37,6 @@ namespace render::water
     };
     static_assert(sizeof(WaterVertex) == 20);
 
-    constexpr uint32_t MAX_WATER_TILES = 4;
+    constexpr uint32_t MAX_OCEAN_GPU_INSTANCES = 4;
     constexpr uint32_t WATER_DEFAULT_SUBDIVISIONS = 64;
 }

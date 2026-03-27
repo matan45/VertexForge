@@ -41,9 +41,9 @@ public class Ocean {
     // Property Getters
     // ============================================
 
-    // Get water height for ocean entity
-    public static function getWaterHeight(int entityId): float {
-        return _native_ocean_getWaterHeight(entityId);
+    // Get base water height for ocean entity
+    public static function getBaseHeight(int entityId): float {
+        return _native_ocean_getBaseHeight(entityId);
     }
 
     // Get ocean density in kg/m3

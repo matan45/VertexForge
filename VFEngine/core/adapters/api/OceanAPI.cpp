@@ -58,8 +58,8 @@ namespace core::api
 
         void registerPropertyFunctions(services::ScriptInterpreter* interpreter)
         {
-            // ocean.getWaterHeight(entityId) -> float
-            interpreter->registerNativeFunction("_native_ocean_getWaterHeight",
+            // ocean.getBaseHeight(entityId) -> float
+            interpreter->registerNativeFunction("_native_ocean_getBaseHeight",
                 [](const std::vector<value::Value>& args) -> value::Value
                 {
                     if (args.empty()) return value::Value(0.0f);
