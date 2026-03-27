@@ -55,6 +55,7 @@ namespace services
         virtual glm::vec3 getCrowdAgentVelocity(int agentIndex) const = 0;
         virtual float getCrowdAgentMaxSpeed(int agentIndex) const = 0;
         virtual void updateCrowd(float deltaTime) = 0;
+        virtual bool overrideCrowdAgentVelocity(int agentIndex, const glm::vec3& velocity) = 0;
 
         virtual void configureCrowdFilter(int filterIndex, const float* areaCosts, int numAreas) = 0;
         virtual void setCrowdAgentFilterType(int agentIndex, uint8_t filterType) = 0;

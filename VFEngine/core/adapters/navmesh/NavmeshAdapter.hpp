@@ -80,6 +80,7 @@ namespace core
         glm::vec3 getCrowdAgentVelocity(int agentIndex) const override;
         float getCrowdAgentMaxSpeed(int agentIndex) const override;
         void updateCrowd(float deltaTime) override;
+        bool overrideCrowdAgentVelocity(int agentIndex, const glm::vec3& velocity) override;
 
         // === Crowd Filters ===
         void configureCrowdFilter(int filterIndex, const float* areaCosts, int numAreas) override;

@@ -48,7 +48,11 @@ namespace services
             glm::vec3 position;
             glm::vec3 target;
             bool hasTarget;
+            glm::vec3 velocity;
         };
         std::vector<SuspendedAgent> suspendedAgents;
+
+        std::unordered_map<uint64_t, int> velocityTransitionFrames;
+        static constexpr int VELOCITY_TRANSITION_FRAMES = 3;
     };
 }
