@@ -55,6 +55,7 @@ namespace render::mesh
         loadShaders();
         createRenderPass();
         createVFXRenderPass();
+        createWaterContinueRenderPass();
         createDescriptorSetLayout();
         createTextureDescriptorSetLayout();
         createDescriptorPool();
@@ -74,6 +75,7 @@ namespace render::mesh
         loadShaders();
         createRenderPass();
         createVFXRenderPass();
+        createWaterContinueRenderPass();
         createDescriptorSetLayout();
         createTextureDescriptorSetLayout();
         createDescriptorPool();
@@ -110,10 +112,13 @@ namespace render::mesh
         device.getLogicalDevice().destroyRenderPass(renderPass);
         if (vfxRenderPass)
             device.getLogicalDevice().destroyRenderPass(vfxRenderPass);
+        if (waterContinueRenderPass)
+            device.getLogicalDevice().destroyRenderPass(waterContinueRenderPass);
         device.getLogicalDevice().destroyPipeline(graphicsPipeline);
 
         createRenderPass();
         createVFXRenderPass();
+        createWaterContinueRenderPass();
         createGraphicsPipeline();
         createFramebuffers();
     }
@@ -161,6 +166,8 @@ namespace render::mesh
             device.getLogicalDevice().destroyRenderPass(renderPass);
         if (vfxRenderPass)
             device.getLogicalDevice().destroyRenderPass(vfxRenderPass);
+        if (waterContinueRenderPass)
+            device.getLogicalDevice().destroyRenderPass(waterContinueRenderPass);
         if (graphicsPipeline)
             device.getLogicalDevice().destroyPipeline(graphicsPipeline);
         if (pipelineLayout)

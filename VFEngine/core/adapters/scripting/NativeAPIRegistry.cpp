@@ -11,7 +11,7 @@
 #include "../api/PostProcessAPI.hpp"
 #include "../api/UIAPI.hpp"
 #include "../api/UIAnimationAPI.hpp"
-#include "../api/WaterAPI.hpp"
+#include "../api/OceanAPI.hpp"
 #include "../api/SocketAPI.hpp"
 #include "../api/NavmeshAPI.hpp"
 #include "../api/RenderTextureAPI.hpp"
@@ -77,7 +77,7 @@ namespace core
         api::PostProcessAPI::registerAPI(interpreter);
         api::UIAPI::registerAPI(interpreter);
         api::UIAnimationAPI::registerAPI(interpreter);
-        api::WaterAPI::registerAPI(interpreter);
+        api::OceanAPI::registerAPI(interpreter);
         api::SocketAPI::registerAPI(interpreter);
         api::NavmeshAPI::registerAPI(interpreter);
         api::RenderTextureAPI::registerAPI(interpreter);

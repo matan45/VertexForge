@@ -32,6 +32,17 @@ namespace render::gpudriven
         return sets;
     }
 
+    static void bindCausticDescriptorSet(vk::CommandBuffer cmd, vk::PipelineLayout layout,
+                                          MeshShaderPipeline& pipeline)
+    {
+        vk::DescriptorSet causticSet = pipeline.getCausticDescriptorSet();
+        if (causticSet)
+        {
+            // Caustics always at set 12 (after GI at set 11)
+            cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, layout, 12, 1, &causticSet, 0, nullptr);
+        }
+    }
+
     void GPUDrivenRenderer::renderDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet,
                                        uint32_t screenWidth, uint32_t screenHeight)
     {
@@ -59,6 +70,7 @@ namespace render::gpudriven
             descriptorSets.data(),
             0, nullptr);
 
+        bindCausticDescriptorSet(cmd, layout, *meshShaderPipeline);
 
         float dispatchWidth, dispatchHeight;
         if (screenWidth > 0 && screenHeight > 0)
@@ -142,6 +154,7 @@ namespace render::gpudriven
             descriptorSets.data(),
             0, nullptr);
 
+        bindCausticDescriptorSet(cmd, layout, *transparentMeshShaderPipeline);
 
         float dispatchWidth, dispatchHeight;
         if (screenWidth > 0 && screenHeight > 0)
@@ -220,6 +233,7 @@ namespace render::gpudriven
             descriptorSets.data(),
             0, nullptr);
 
+        bindCausticDescriptorSet(cmd, layout, *wboitMeshShaderPipeline);
 
         float dispatchWidth, dispatchHeight;
         if (screenWidth > 0 && screenHeight > 0)
@@ -298,6 +312,7 @@ namespace render::gpudriven
             descriptorSets.data(),
             0, nullptr);
 
+        bindCausticDescriptorSet(cmd, layout, *transparentMeshShaderPipeline);
 
         float dispatchWidth, dispatchHeight;
         if (screenWidth > 0 && screenHeight > 0)

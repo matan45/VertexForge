@@ -1,8 +1,7 @@
 #include "GPUDrivenRenderer.hpp"
-#include "water/WaterTile.hpp"
-#include "water/WaterTypes.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
+#include "../../../services/data/OceanData.hpp"
 #include "print/Log.hpp"
 #include <cstring>
 #include <chrono>
@@ -10,7 +9,8 @@
 namespace render::gpudriven
 {
     void GPUDrivenRenderer::initWaterSubsystems(vk::DescriptorSetLayout iblDescriptorSetLayout,
-                                                  vk::RenderPass renderPass)
+                                                  vk::RenderPass renderPass,
+                                                  vk::ImageView sceneDepthView)
     {
         water.meshBuffer = std::make_unique<render::water::WaterMeshBuffer>();
         water.meshBuffer->init(
@@ -21,10 +21,20 @@ namespace render::gpudriven
             render::water::WATER_DEFAULT_SUBDIVISIONS
         );
 
+        // Create refraction resources before pipeline so we have the descriptor set layout
+        water.refractionResources = std::make_unique<render::water::WaterRefractionResources>(device);
+        water.refractionResources->init(
+            swapChain.getSwapchainImageFormat(),
+            swapChain.getSwapchainExtent().width,
+            swapChain.getSwapchainExtent().height,
+            sceneDepthView);
+
         // Ocean texture layout (from OceanFFT if initialized, otherwise WaterPipeline creates dummy)
         vk::DescriptorSetLayout oceanLayout{};
         if (water.oceanFFT && water.oceanFFT->isInitialized())
             oceanLayout = water.oceanFFT->getOceanTextureLayout();
+
+        vk::DescriptorSetLayout refractionLayout = water.refractionResources->getDescriptorSetLayout();
 
         water.pipeline = std::make_unique<render::water::WaterPipeline>(device, swapChain);
         water.pipeline->init({
@@ -35,38 +45,38 @@ namespace render::gpudriven
             shadowSystem->getShadowDataLayout(),
             shadowSystem->getShadowTextureLayout(),
             oceanLayout,
+            refractionLayout,
             renderPass
         });
 
     }
 
-    void GPUDrivenRenderer::updateWater(const std::vector<::water::WaterTile*>& visibleTiles,
-                                          const ::water::WaterGlobalSettings& settings,
-                                          const ::water::WaterTileConfig& tileConfig)
+    void GPUDrivenRenderer::updateWater(const services::OceanVisualSettings& visualSettings,
+                                          float baseWaterHeight,
+                                          const glm::vec3& cameraPosition,
+                                          float oceanPatchSize)
     {
         auto updateStart = std::chrono::high_resolution_clock::now();
         if (!initialized || !water.renderingEnabled || !water.pipeline)
             return;
 
-        if (visibleTiles.empty())
-        {
-            water.tileData.clear();
-            return;
-        }
+        // Generate single large ocean plane centered on camera,
+        // snapped to patch-size grid so FFT textures don't shift with camera movement
+        float planeSize = oceanPatchSize * 10.0f;
+        float halfSize = planeSize * 0.5f;
 
-        water.tileData.resize(visibleTiles.size());
-        for (size_t i = 0; i < visibleTiles.size(); ++i)
-        {
-            const auto* tile = visibleTiles[i];
-            auto& gpuTile = water.tileData[i];
-            gpuTile.worldOriginAndSize = glm::vec4(tile->worldOrigin, tileConfig.worldTileSize);
-            uint32_t flags = render::water::WaterTileFlags::None;
-            if (water.hasSelectedTile && tile->coord.x == water.selectedCoordX && tile->coord.z == water.selectedCoordZ)
-                flags |= render::water::WaterTileFlags::Selected;
-            float flagsAsFloat;
-            std::memcpy(&flagsAsFloat, &flags, sizeof(float));
-            gpuTile.heightAndWave = glm::vec4(tile->waterHeight, tile->waveIntensity, flagsAsFloat, 0.0f);
-        }
+        float snappedX = std::floor(cameraPosition.x / oceanPatchSize) * oceanPatchSize;
+        float snappedZ = std::floor(cameraPosition.z / oceanPatchSize) * oceanPatchSize;
+
+        water.tileData.resize(1);
+        auto& gpuData = water.tileData[0];
+        gpuData.worldOriginAndSize = glm::vec4(
+            snappedX - halfSize,
+            0.0f,
+            snappedZ - halfSize,
+            planeSize
+        );
+        gpuData.heightAndWave = glm::vec4(baseWaterHeight, 1.0f, 0.0f, 0.0f);
 
         water.meshBuffer->updateTileData(water.tileData);
 
@@ -75,16 +85,24 @@ namespace render::gpudriven
             static_cast<uint32_t>(water.tileData.size())
         );
 
-        water.cachedPushConstants.shallowColor = settings.shallowColor;
-        water.cachedPushConstants.deepColor = settings.deepColor;
-        water.cachedPushConstants.waveSpeed = settings.waveSpeed;
-        water.cachedPushConstants.waveAmplitude = settings.waveAmplitude;
-        water.cachedPushConstants.waveFrequency = settings.waveFrequency;
-        water.cachedPushConstants.maxVisibleDepth = settings.maxVisibleDepth;
-        water.cachedPushConstants.fresnelPower = settings.fresnelPower;
-        water.cachedPushConstants.dudvTiling = settings.dudvTiling;
-        water.cachedPushConstants.dudvStrength = settings.dudvStrength;
-        water.cachedPushConstants.waveDirection = glm::radians(settings.waveDirectionDegrees);
+        water.cachedPushConstants.shallowColor = visualSettings.shallowColor;
+        water.cachedPushConstants.deepColor = visualSettings.deepColor;
+        water.cachedPushConstants.maxVisibleDepth = visualSettings.maxVisibleDepth;
+        water.cachedPushConstants.fresnelPower = visualSettings.fresnelPower;
+        water.cachedPushConstants.refractionStrength = visualSettings.refractionStrength;
+        water.cachedPushConstants.refractionChromatic = visualSettings.refractionChromatic;
+        water.cachedPushConstants.refractionDepthScale = visualSettings.refractionDepthScale;
+
+        // Update caustic params UBO
+        if (water.causticsResources && water.causticsResources->isInitialized())
+        {
+            render::water::CausticParams params;
+            params.waterHeight = baseWaterHeight;
+            params.causticStrength = visualSettings.causticStrength;
+            params.depthFalloff = visualSettings.causticDepthFalloff;
+            params.patchSize = oceanPatchSize;
+            water.causticsResources->updateParams(params);
+        }
 
         auto updateEnd = std::chrono::high_resolution_clock::now();
         water.updateUs = std::chrono::duration<float, std::micro>(updateEnd - updateStart).count();
@@ -100,14 +118,12 @@ namespace render::gpudriven
         if (water.oceanEnabled && water.oceanFFT && water.oceanFFT->isInitialized())
         {
             const auto& cfg = water.oceanFFT->getConfig();
-            water.cachedPushConstants.oceanEnabled = 1;
             water.cachedPushConstants.oceanChoppiness = cfg.choppiness;
             water.cachedPushConstants.oceanPatchSize = cfg.patchSize;
             water.cachedPushConstants.oceanFoamThreshold = cfg.foamThreshold;
         }
         else
         {
-            water.cachedPushConstants.oceanEnabled = 0;
             water.cachedPushConstants.oceanChoppiness = 0.0f;
             water.cachedPushConstants.oceanPatchSize = 1.0f;
             water.cachedPushConstants.oceanFoamThreshold = 0.0f;
@@ -121,7 +137,9 @@ namespace render::gpudriven
             shadowSystem && shadowSystem->isInitialized() ? shadowSystem->getShadowDataDescSet() : vk::DescriptorSet{},
             shadowSystem && shadowSystem->isInitialized() ? shadowSystem->getShadowTextureDescSet() : vk::DescriptorSet{},
             (water.oceanEnabled && water.oceanFFT && water.oceanFFT->isInitialized())
-                ? water.oceanFFT->getOceanTextureDescSet() : vk::DescriptorSet{}
+                ? water.oceanFFT->getOceanTextureDescSet() : vk::DescriptorSet{},
+            (water.refractionResources && water.refractionResources->isInitialized())
+                ? water.refractionResources->getDescriptorSet() : vk::DescriptorSet{}
         };
         water.pipeline->render(cmd, waterDescriptors, *water.meshBuffer, water.cachedPushConstants);
 
@@ -134,18 +152,6 @@ namespace render::gpudriven
         water.tileData.clear();
     }
 
-    void GPUDrivenRenderer::setSelectedWaterTile(int32_t coordX, int32_t coordZ)
-    {
-        water.selectedCoordX = coordX;
-        water.selectedCoordZ = coordZ;
-        water.hasSelectedTile = true;
-    }
-
-    void GPUDrivenRenderer::clearSelectedWaterTile()
-    {
-        water.hasSelectedTile = false;
-    }
-
     void GPUDrivenRenderer::initOceanFFT(const render::water::OceanFFTConfig& config)
     {
         if (!water.oceanFFT)
@@ -154,9 +160,17 @@ namespace render::gpudriven
         water.oceanFFT->init(config);
         water.oceanEnabled = true;
 
+        // Create caustics resources from the ocean FFT caustic texture
+        water.causticsResources = std::make_unique<render::water::WaterCausticsResources>(device);
+        water.causticsResources->init(water.oceanFFT->getCausticView());
+
         // Recreate water pipeline so it uses the real ocean descriptor set layout
         if (water.pipeline)
         {
+            vk::DescriptorSetLayout refractionLayout{};
+            if (water.refractionResources && water.refractionResources->isInitialized())
+                refractionLayout = water.refractionResources->getDescriptorSetLayout();
+
             water.pipeline->recreate({
                 cachedIBLLayout,
                 lightBufferManager->getDescriptorSetLayout(),
@@ -165,25 +179,199 @@ namespace render::gpudriven
                 shadowSystem->getShadowDataLayout(),
                 shadowSystem->getShadowTextureLayout(),
                 water.oceanFFT->getOceanTextureLayout(),
+                refractionLayout,
                 cachedRenderPass
             });
         }
 
-        vfLogInfo("GPUDrivenRenderer: Ocean FFT initialized");
+        // Recreate mesh shader pipelines with caustic layout
+        vk::DescriptorSetLayout causticLayout = water.causticsResources->getDescriptorSetLayout();
+        vk::DescriptorSet causticDescSet = water.causticsResources->getDescriptorSet();
+
+        if (meshShaderPipeline && shadowSystem)
+        {
+            vk::DescriptorSetLayout giLayout{};
+            if (giCascadeManager)
+            {
+                auto* storage = giCascadeManager->getProbeStorage();
+                if (storage && storage->isInitialized())
+                    giLayout = storage->getSamplingLayout();
+            }
+
+            MeshPipelineInitInfo pipelineInfo{
+                .iblLayout = cachedIBLLayout,
+                .bindlessTextureLayout = bindlessTextures->getDescriptorSetLayout(),
+                .boneMatrixLayout = boneMatrixManager->getDescriptorSetLayout(),
+                .lightDataLayout = lightBufferManager->getDescriptorSetLayout(),
+                .clusterGridLayout = clusterGridManager->getDescriptorSetLayout(),
+                .cullingOutputLayout = lightCullingPipeline->getDescriptorSetLayout(),
+                .shadowDataLayout = shadowSystem->getShadowDataLayout(),
+                .shadowTextureLayout = shadowSystem->getShadowTextureLayout(),
+                .giProbeDataLayout = giLayout,
+                .causticLayout = causticLayout,
+                .renderPass = cachedRenderPass
+            };
+
+            meshShaderPipeline->recreate(pipelineInfo);
+            meshShaderPipeline->updateCausticDescriptor(causticDescSet);
+            if (giLayout && giCascadeManager)
+            {
+                auto* storage = giCascadeManager->getProbeStorage();
+                meshShaderPipeline->updateGIProbeDescriptor(storage->getSamplingDescSet());
+            }
+
+            if (transparentMeshShaderPipeline)
+            {
+                pipelineInfo.transparentMode = true;
+                transparentMeshShaderPipeline->recreate(pipelineInfo);
+                transparentMeshShaderPipeline->updateCausticDescriptor(causticDescSet);
+                if (giLayout && giCascadeManager)
+                {
+                    auto* storage = giCascadeManager->getProbeStorage();
+                    transparentMeshShaderPipeline->updateGIProbeDescriptor(storage->getSamplingDescSet());
+                }
+                pipelineInfo.transparentMode = false;
+            }
+
+            if (wboitMeshShaderPipeline && cachedWBOITRenderPass)
+            {
+                pipelineInfo.renderPass = cachedWBOITRenderPass;
+                pipelineInfo.wboitMode = true;
+                wboitMeshShaderPipeline->recreate(pipelineInfo);
+                wboitMeshShaderPipeline->updateCausticDescriptor(causticDescSet);
+                if (giLayout && giCascadeManager)
+                {
+                    auto* storage = giCascadeManager->getProbeStorage();
+                    wboitMeshShaderPipeline->updateGIProbeDescriptor(storage->getSamplingDescSet());
+                }
+            }
+        }
+
+        // Recreate terrain pipeline with caustic layout
+        if (terrain.pipeline)
+        {
+            terrain.pipeline->setCausticEnabled(true, causticLayout);
+            terrain.pipeline->recreate(cachedIBLLayout,
+                                       bindlessTextures->getDescriptorSetLayout(),
+                                       meshShaderPipeline->getMeshletDataLayout(),
+                                       meshShaderPipeline->getVertexDataLayout(),
+                                       lightBufferManager->getDescriptorSetLayout(),
+                                       clusterGridManager->getDescriptorSetLayout(),
+                                       lightCullingPipeline->getDescriptorSetLayout(),
+                                       shadowSystem->getShadowDataLayout(),
+                                       shadowSystem->getShadowTextureLayout(),
+                                       cachedRenderPass);
+            terrain.pipeline->updateCausticDescriptor(causticDescSet);
+        }
+
+        vfLogInfo("GPUDrivenRenderer: Ocean FFT initialized with caustics");
     }
 
     void GPUDrivenRenderer::cleanupOceanFFT()
     {
         water.oceanEnabled = false;
+
+        // Clear caustic descriptor references from pipelines before destroying resources
+        if (meshShaderPipeline) meshShaderPipeline->updateCausticDescriptor(vk::DescriptorSet{});
+        if (transparentMeshShaderPipeline) transparentMeshShaderPipeline->updateCausticDescriptor(vk::DescriptorSet{});
+        if (wboitMeshShaderPipeline) wboitMeshShaderPipeline->updateCausticDescriptor(vk::DescriptorSet{});
+        if (terrain.pipeline)
+        {
+            terrain.pipeline->updateCausticDescriptor(vk::DescriptorSet{});
+            terrain.pipeline->setCausticEnabled(false);
+        }
+
+        if (water.causticsResources)
+        {
+            water.causticsResources->cleanup();
+            water.causticsResources.reset();
+        }
+
         if (water.oceanFFT)
         {
             water.oceanFFT->cleanup();
             water.oceanFFT.reset();
         }
 
+        // Recreate mesh shader pipelines without caustic layout
+        if (meshShaderPipeline && shadowSystem)
+        {
+            vk::DescriptorSetLayout giLayout{};
+            if (giCascadeManager)
+            {
+                auto* storage = giCascadeManager->getProbeStorage();
+                if (storage && storage->isInitialized())
+                    giLayout = storage->getSamplingLayout();
+            }
+
+            MeshPipelineInitInfo pipelineInfo{
+                .iblLayout = cachedIBLLayout,
+                .bindlessTextureLayout = bindlessTextures->getDescriptorSetLayout(),
+                .boneMatrixLayout = boneMatrixManager->getDescriptorSetLayout(),
+                .lightDataLayout = lightBufferManager->getDescriptorSetLayout(),
+                .clusterGridLayout = clusterGridManager->getDescriptorSetLayout(),
+                .cullingOutputLayout = lightCullingPipeline->getDescriptorSetLayout(),
+                .shadowDataLayout = shadowSystem->getShadowDataLayout(),
+                .shadowTextureLayout = shadowSystem->getShadowTextureLayout(),
+                .giProbeDataLayout = giLayout,
+                .causticLayout = nullptr,
+                .renderPass = cachedRenderPass
+            };
+
+            meshShaderPipeline->recreate(pipelineInfo);
+            if (giLayout && giCascadeManager)
+            {
+                auto* storage = giCascadeManager->getProbeStorage();
+                meshShaderPipeline->updateGIProbeDescriptor(storage->getSamplingDescSet());
+            }
+
+            if (transparentMeshShaderPipeline)
+            {
+                pipelineInfo.transparentMode = true;
+                transparentMeshShaderPipeline->recreate(pipelineInfo);
+                if (giLayout && giCascadeManager)
+                {
+                    auto* storage = giCascadeManager->getProbeStorage();
+                    transparentMeshShaderPipeline->updateGIProbeDescriptor(storage->getSamplingDescSet());
+                }
+                pipelineInfo.transparentMode = false;
+            }
+
+            if (wboitMeshShaderPipeline && cachedWBOITRenderPass)
+            {
+                pipelineInfo.renderPass = cachedWBOITRenderPass;
+                pipelineInfo.wboitMode = true;
+                wboitMeshShaderPipeline->recreate(pipelineInfo);
+                if (giLayout && giCascadeManager)
+                {
+                    auto* storage = giCascadeManager->getProbeStorage();
+                    wboitMeshShaderPipeline->updateGIProbeDescriptor(storage->getSamplingDescSet());
+                }
+            }
+        }
+
+        // Recreate terrain pipeline without caustic layout
+        if (terrain.pipeline)
+        {
+            terrain.pipeline->recreate(cachedIBLLayout,
+                                       bindlessTextures->getDescriptorSetLayout(),
+                                       meshShaderPipeline->getMeshletDataLayout(),
+                                       meshShaderPipeline->getVertexDataLayout(),
+                                       lightBufferManager->getDescriptorSetLayout(),
+                                       clusterGridManager->getDescriptorSetLayout(),
+                                       lightCullingPipeline->getDescriptorSetLayout(),
+                                       shadowSystem->getShadowDataLayout(),
+                                       shadowSystem->getShadowTextureLayout(),
+                                       cachedRenderPass);
+        }
+
         // Recreate water pipeline with dummy ocean layout
         if (water.pipeline)
         {
+            vk::DescriptorSetLayout refractionLayout{};
+            if (water.refractionResources && water.refractionResources->isInitialized())
+                refractionLayout = water.refractionResources->getDescriptorSetLayout();
+
             water.pipeline->recreate({
                 cachedIBLLayout,
                 lightBufferManager->getDescriptorSetLayout(),
@@ -192,6 +380,7 @@ namespace render::gpudriven
                 shadowSystem->getShadowDataLayout(),
                 shadowSystem->getShadowTextureLayout(),
                 vk::DescriptorSetLayout{},
+                refractionLayout,
                 cachedRenderPass
             });
         }
@@ -239,5 +428,24 @@ namespace render::gpudriven
             return 0.0f;
 
         return water.oceanFFT->sampleHeightAt(worldXZ);
+    }
+
+    void GPUDrivenRenderer::copySceneColorForRefraction(vk::CommandBuffer cmd, vk::Image colorImage,
+                                                         uint32_t width, uint32_t height)
+    {
+        if (water.refractionResources && water.refractionResources->isInitialized())
+            water.refractionResources->copySceneColor(cmd, colorImage, width, height);
+    }
+
+    void GPUDrivenRenderer::recreateRefractionResources(vk::ImageView sceneDepthView)
+    {
+        if (!water.refractionResources)
+            return;
+
+        water.refractionResources->recreate(
+            swapChain.getSwapchainImageFormat(),
+            swapChain.getSwapchainExtent().width,
+            swapChain.getSwapchainExtent().height,
+            sceneDepthView);
     }
 }

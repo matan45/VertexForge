@@ -112,6 +112,7 @@
     <ClCompile Include="serialization\SceneSerializeGrass.cpp" />
     <ClCompile Include="serialization\SceneSerializeIK.cpp" />
     <ClCompile Include="serialization\SceneSerializeLights.cpp" />
+    <ClCompile Include="serialization\SceneSerializeOcean.cpp" />
     <ClCompile Include="serialization\SceneSerializePhysics.cpp" />
     <ClCompile Include="serialization\SceneSerializePhysicsAnimation.cpp" />
     <ClCompile Include="serialization\SceneSerializePostProcess.cpp" />
@@ -123,7 +124,6 @@
     <ClCompile Include="serialization\SceneSerializeUI.cpp" />
     <ClCompile Include="serialization\SceneSerializeUILayout.cpp" />
     <ClCompile Include="serialization\SceneSerializeUIWidgets.cpp" />
-    <ClCompile Include="serialization\SceneSerializeWater.cpp" />
     <ClCompile Include="world\WorldDefinitionSerialization.cpp" />
     <ClCompile Include="world\WorldSectorSerialization.cpp" />
   </ItemGroup>

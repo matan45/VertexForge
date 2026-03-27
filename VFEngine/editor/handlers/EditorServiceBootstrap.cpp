@@ -19,7 +19,7 @@
 #include "impl/vfx/VFXRuntimeServiceImpl.hpp"
 #include "impl/project/ProjectServiceImpl.hpp"
 #include "impl/scene/TerrainService.hpp"
-#include "impl/scene/WaterService.hpp"
+#include "impl/scene/OceanService.hpp"
 #include "impl/editor/SculptModeServiceImpl.hpp"
 #include "impl/terrain/BrushServiceImpl.hpp"
 #include "impl/terrain/PaintModeServiceImpl.hpp"
@@ -50,7 +50,7 @@
 #include "impl/meshbrush/MeshBrushModeServiceImpl.hpp"
 #include "impl/meshbrush/MeshBrushServiceImpl.hpp"
 #include "../adapters/terrain/TerrainRenderAdapter.hpp"
-#include "../adapters/terrain/WaterRenderAdapter.hpp"
+#include "../adapters/terrain/OceanRenderAdapter.hpp"
 #include "../audio/AudioSceneUpdater.hpp"
 #include "../audio/ReverbZoneManager.hpp"
 #include "events/EventDispatcher.hpp"
@@ -71,7 +71,7 @@ namespace handlers
         createPhysicsServices();
         createVFXServices();
         createTerrainServices();
-        createWaterServices();
+        createOceanServices();
         createVegetationServices();
         createMeshBrushServices();
         createAIServices();
@@ -200,17 +200,17 @@ namespace handlers
             bootstrap->getTerrainRaycastProvider());
     }
 
-    void EditorHandler::createWaterServices()
+    void EditorHandler::createOceanServices()
     {
-        auto waterServiceImpl = std::make_shared<services::WaterService>(bootstrap->getSceneGraphSystem());
-        waterService = waterServiceImpl;
-        waterServiceImpl->setPhysicsProvider(bootstrap->getPhysicsProvider());
+        auto oceanServiceImpl = std::make_shared<services::OceanService>(bootstrap->getSceneGraphSystem());
+        oceanService = oceanServiceImpl;
+        oceanServiceImpl->setPhysicsProvider(bootstrap->getPhysicsProvider());
 
-        if (auto* waterAdapter = bootstrap->getWaterRenderAdapterInternal())
-            waterAdapter->setWaterService(waterServiceImpl.get());
+        if (auto* oceanAdapter = bootstrap->getOceanRenderAdapterInternal())
+            oceanAdapter->setOceanService(oceanServiceImpl.get());
 
         if (physicsPlayModeHandler)
-            physicsPlayModeHandler->setWaterService(waterServiceImpl.get());
+            physicsPlayModeHandler->setOceanService(oceanServiceImpl.get());
     }
 
     void EditorHandler::createVegetationServices()
@@ -284,7 +284,7 @@ namespace handlers
         projectService->registerEventHandlers();
         assetDatabaseService->registerEventHandlers();
         terrainService->registerEventHandlers();
-        waterService->registerEventHandlers();
+        oceanService->registerEventHandlers();
         sculptModeService->registerEventHandlers();
         brushService->registerEventHandlers();
         paintModeService->registerEventHandlers();

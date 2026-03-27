@@ -24,12 +24,10 @@
 #include "shadow/ShadowSystem.hpp"
 #include "../../services/providers/vfx/IVFXRuntimeProvider.hpp"
 #include "../../services/providers/terrain/ITerrainRenderProvider.hpp"
-#include "../../services/providers/terrain/IWaterRenderProvider.hpp"
+#include "../../services/providers/terrain/IOceanRenderProvider.hpp"
+#include "../../services/data/OceanData.hpp"
 #include "../../services/providers/vegetation/IGrassRenderProvider.hpp"
 #include "../../services/data/RenderHookContext.hpp"
-#include "../../services/data/WaterData.hpp"
-#include "water/WaterTypes.hpp"
-#include "water/WaterTile.hpp"
 #include "water/OceanFFT.hpp"
 #include "vegetation/WindConfig.hpp"
 #include <unordered_set>
@@ -89,32 +87,22 @@ namespace render
             }
         }
 
-        if (waterRenderProvider && waterRenderProvider->hasActiveWater() && currentFrustum)
+        if (oceanRenderProvider && oceanRenderProvider->hasActiveOcean() && gpuDrivenRenderer)
         {
-            auto visibleTiles = waterRenderProvider->getVisibleWaterTiles(*currentFrustum, currentCameraPosition);
-
-            std::unordered_set<::water::WaterTile*> waterSeen(visibleTiles.begin(), visibleTiles.end());
-            for (const auto& [rttFrustum, rttCameraPos] : additionalWaterFrustums)
-            {
-                for (auto* tile : waterRenderProvider->queryVisibleWaterTiles(rttFrustum, rttCameraPos))
-                {
-                    if (waterSeen.insert(tile).second)
-                        visibleTiles.push_back(tile);
-                }
-            }
-
-            gpuDrivenRenderer->updateWater(visibleTiles,
-                                            waterRenderProvider->getWaterGlobalSettings(),
-                                            waterRenderProvider->getWaterTileConfig());
+            auto visualSettings = oceanRenderProvider->getOceanVisualSettings();
+            float baseHeight = oceanRenderProvider->getBaseWaterHeight();
+            auto cfgData = oceanRenderProvider->getOceanFFTConfig();
+            gpuDrivenRenderer->updateWater(visualSettings, baseHeight,
+                                            currentCameraPosition, cfgData.patchSize);
         }
 
-        if (waterRenderProvider && gpuDrivenRenderer)
+        if (oceanRenderProvider && gpuDrivenRenderer)
         {
-            bool wantOcean = waterRenderProvider->isOceanFFTEnabled();
-            uint32_t version = waterRenderProvider->getOceanFFTConfigVersion();
+            bool wantOcean = oceanRenderProvider->isOceanFFTEnabled();
+            uint32_t version = oceanRenderProvider->getOceanFFTConfigVersion();
 
             auto buildOceanConfig = [this]() {
-                auto cfgData = waterRenderProvider->getOceanFFTConfig();
+                auto cfgData = oceanRenderProvider->getOceanFFTConfig();
                 render::water::OceanFFTConfig cfg;
                 cfg.resolution = cfgData.resolution;
                 cfg.patchSize = cfgData.patchSize;
@@ -122,7 +110,7 @@ namespace render
                 cfg.windDirection = cfgData.windDirection;
                 cfg.amplitude = cfgData.amplitude;
                 cfg.choppiness = cfgData.choppiness;
-                cfg.gravity = waterRenderProvider->getPhysicsGravity();
+                cfg.gravity = oceanRenderProvider->getPhysicsGravity();
                 cfg.foamThreshold = cfgData.foamThreshold;
                 cfg.displacementScale = cfgData.displacementScale;
                 return cfg;
@@ -135,14 +123,14 @@ namespace render
                 lastOceanConfigVersion = version;
 
                 auto* renderer = gpuDrivenRenderer.get();
-                waterRenderProvider->setOceanHeightSampler(
+                oceanRenderProvider->setOceanHeightSampler(
                     [renderer](const glm::vec2& pos) { return renderer->getOceanHeightAt(pos); });
             }
             else if (!wantOcean && oceanFFTInitialized)
             {
                 gpuDrivenRenderer->cleanupOceanFFT();
                 oceanFFTInitialized = false;
-                waterRenderProvider->setOceanHeightSampler(nullptr);
+                oceanRenderProvider->setOceanHeightSampler(nullptr);
             }
             else if (wantOcean && oceanFFTInitialized && version != lastOceanConfigVersion)
             {
@@ -152,7 +140,6 @@ namespace render
         }
 
         additionalTerrainFrustums.clear();
-        additionalWaterFrustums.clear();
     }
 
     void RenderPassHandler::executeOcclusionPasses(const vk::CommandBuffer& commandBuffer) const

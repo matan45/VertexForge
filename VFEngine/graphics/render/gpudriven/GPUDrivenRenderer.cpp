@@ -27,7 +27,8 @@ namespace render::gpudriven
         cleanup();
     }
 
-    void GPUDrivenRenderer::init(vk::DescriptorSetLayout iblDescriptorSetLayout, vk::RenderPass renderPass)
+    void GPUDrivenRenderer::init(vk::DescriptorSetLayout iblDescriptorSetLayout, vk::RenderPass renderPass,
+                                  vk::ImageView sceneDepthView)
     {
         if (initialized)
         {
@@ -160,7 +161,7 @@ namespace render::gpudriven
             }
 
             initTerrainSubsystems(iblDescriptorSetLayout, renderPass);
-            initWaterSubsystems(iblDescriptorSetLayout, renderPass);
+            initWaterSubsystems(iblDescriptorSetLayout, renderPass, sceneDepthView);
             initVegetationSubsystems(iblDescriptorSetLayout, renderPass);
             initBillboardSubsystems(iblDescriptorSetLayout, renderPass);
         }
@@ -208,6 +209,10 @@ namespace render::gpudriven
                 giLayout = storage->getSamplingLayout();
         }
 
+        vk::DescriptorSetLayout wboitCausticLayout{};
+        if (water.causticsResources && water.causticsResources->isInitialized())
+            wboitCausticLayout = water.causticsResources->getDescriptorSetLayout();
+
         wboitMeshShaderPipeline = std::make_unique<MeshShaderPipeline>(device, swapChain);
         wboitMeshShaderPipeline->init({
             .iblLayout = cachedIBLLayout,
@@ -219,6 +224,7 @@ namespace render::gpudriven
             .shadowDataLayout = shadowSystem->getShadowDataLayout(),
             .shadowTextureLayout = shadowSystem->getShadowTextureLayout(),
             .giProbeDataLayout = giLayout,
+            .causticLayout = wboitCausticLayout,
             .renderPass = wboitRenderPass,
             .wboitMode = true
         });
@@ -228,6 +234,8 @@ namespace render::gpudriven
             auto* storage = giCascadeManager->getProbeStorage();
             wboitMeshShaderPipeline->updateGIProbeDescriptor(storage->getSamplingDescSet());
         }
+        if (wboitCausticLayout)
+            wboitMeshShaderPipeline->updateCausticDescriptor(water.causticsResources->getDescriptorSet());
     }
 
     void GPUDrivenRenderer::cleanup()
@@ -255,6 +263,7 @@ namespace render::gpudriven
         if (lightStreamManager) lightStreamManager->cleanup();
         if (volumetricPipeline) volumetricPipeline->cleanup();
         if (fogVolumeBufferManager) fogVolumeBufferManager->cleanup();
+        if (water.causticsResources) water.causticsResources->cleanup();
         if (water.oceanFFT) water.oceanFFT->cleanup();
         if (water.pipeline) water.pipeline->cleanup();
         if (water.meshBuffer) water.meshBuffer->cleanup();
@@ -296,6 +305,7 @@ namespace render::gpudriven
         terrain.pipeline.reset();
         terrain.meshBuffer.reset();
         water.oceanFFT.reset();
+        water.refractionResources.reset();
         water.pipeline.reset();
         water.meshBuffer.reset();
         depthPrepassPipeline.reset();
@@ -379,6 +389,10 @@ namespace render::gpudriven
                     giLayout = storage->getSamplingLayout();
             }
 
+            vk::DescriptorSetLayout causticLayout{};
+            if (water.causticsResources && water.causticsResources->isInitialized())
+                causticLayout = water.causticsResources->getDescriptorSetLayout();
+
             MeshPipelineInitInfo pipelineInfo{
                 .iblLayout = cachedIBLLayout,
                 .bindlessTextureLayout = bindlessTextures->getDescriptorSetLayout(),
@@ -389,6 +403,7 @@ namespace render::gpudriven
                 .shadowDataLayout = shadowSystem->getShadowDataLayout(),
                 .shadowTextureLayout = shadowSystem->getShadowTextureLayout(),
                 .giProbeDataLayout = giLayout,
+                .causticLayout = causticLayout,
                 .renderPass = cachedRenderPass
             };
 
@@ -398,6 +413,8 @@ namespace render::gpudriven
                 auto* storage = giCascadeManager->getProbeStorage();
                 meshShaderPipeline->updateGIProbeDescriptor(storage->getSamplingDescSet());
             }
+            if (causticLayout)
+                meshShaderPipeline->updateCausticDescriptor(water.causticsResources->getDescriptorSet());
 
             if (transparentMeshShaderPipeline)
             {
@@ -409,6 +426,8 @@ namespace render::gpudriven
                     auto* storage = giCascadeManager->getProbeStorage();
                     transparentMeshShaderPipeline->updateGIProbeDescriptor(storage->getSamplingDescSet());
                 }
+                if (causticLayout)
+                    transparentMeshShaderPipeline->updateCausticDescriptor(water.causticsResources->getDescriptorSet());
             }
 
             if (wboitMeshShaderPipeline && cachedWBOITRenderPass)
@@ -421,6 +440,8 @@ namespace render::gpudriven
                     auto* storage = giCascadeManager->getProbeStorage();
                     wboitMeshShaderPipeline->updateGIProbeDescriptor(storage->getSamplingDescSet());
                 }
+                if (causticLayout)
+                    wboitMeshShaderPipeline->updateCausticDescriptor(water.causticsResources->getDescriptorSet());
             }
 
             if (terrain.pipeline)
@@ -443,6 +464,10 @@ namespace render::gpudriven
                 if (water.oceanFFT && water.oceanFFT->isInitialized())
                     oceanLayout = water.oceanFFT->getOceanTextureLayout();
 
+                vk::DescriptorSetLayout refractionLayout{};
+                if (water.refractionResources && water.refractionResources->isInitialized())
+                    refractionLayout = water.refractionResources->getDescriptorSetLayout();
+
                 water.pipeline->recreate({
                     cachedIBLLayout,
                     lightBufferManager->getDescriptorSetLayout(),
@@ -451,6 +476,7 @@ namespace render::gpudriven
                     shadowSystem->getShadowDataLayout(),
                     shadowSystem->getShadowTextureLayout(),
                     oceanLayout,
+                    refractionLayout,
                     cachedRenderPass
                 });
             }

@@ -201,11 +201,8 @@ namespace serialization
         static json serializeGrass(const components::GrassComponent& grass);
         static void deserializeGrass(const json& j, components::GrassComponent& grass);
 
-        static json serializeWater(const components::WaterComponent& water);
-        static void deserializeWater(const json& j, components::WaterComponent& water);
-
-        static json serializeWaterTile(const components::WaterTileComponent& tile);
-        static void deserializeWaterTile(const json& j, components::WaterTileComponent& tile);
+        static json serializeOcean(const components::OceanComponent& ocean);
+        static void deserializeOcean(const json& j, components::OceanComponent& ocean);
 
         static json serializeUICanvas(const components::UICanvasComponent& canvas);
         static void deserializeUICanvas(const json& j, components::UICanvasComponent& canvas);

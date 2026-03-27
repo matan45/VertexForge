@@ -5,40 +5,29 @@
 
 namespace render::water
 {
-    // Per-tile instance data uploaded to SSBO each frame
-    namespace WaterTileFlags
-    {
-        constexpr uint32_t None     = 0;
-        constexpr uint32_t Selected = 1 << 0;
-    }
-
+    // Per-instance data uploaded to SSBO each frame (single ocean plane)
     struct alignas(16) WaterTileGPUData
     {
-        glm::vec4 worldOriginAndSize;   // xyz = tile world origin, w = worldTileSize
-        glm::vec4 heightAndWave;        // x = waterHeight, y = waveIntensity, z = flags (as float-bits), w = 0
+        glm::vec4 worldOriginAndSize;   // xyz = plane world origin, w = planeSize
+        glm::vec4 heightAndWave;        // x = waterHeight, y = 1.0 (wave intensity), z = 0, w = 0
     };
     static_assert(sizeof(WaterTileGPUData) == 32);
 
-    // Push constants for water rendering (must fit 128-byte limit)
+    // Push constants for ocean rendering (must fit 128-byte limit)
     struct WaterPushConstants
     {
         glm::vec4 shallowColor;         // 16 bytes
         glm::vec4 deepColor;            // 16 bytes
-        float waveSpeed;                // 4
-        float waveAmplitude;            // 4
-        float waveFrequency;            // 4
         float maxVisibleDepth;          // 4
         float fresnelPower;             // 4
-        float dudvTiling;               // 4
-        float dudvStrength;             // 4
-        float waveDirection;            // 4 (angle in radians)
-        // Ocean FFT fields (64 bytes offset)
-        uint32_t oceanEnabled;          // 4 (0 or 1)
         float oceanChoppiness;          // 4
         float oceanPatchSize;           // 4
         float oceanFoamThreshold;       // 4
+        float refractionStrength;       // 4  (0 = disabled, 0.5 = subtle, 1.0+ = strong)
+        float refractionChromatic;      // 4  (0 = off, chromatic aberration spread)
+        float refractionDepthScale;     // 4  (depth influence on distortion)
     };
-    static_assert(sizeof(WaterPushConstants) == 80);
+    static_assert(sizeof(WaterPushConstants) == 64);
 
     // Vertex format for the subdivided unit quad
     struct WaterVertex
@@ -48,6 +37,6 @@ namespace render::water
     };
     static_assert(sizeof(WaterVertex) == 20);
 
-    constexpr uint32_t MAX_WATER_TILES = 256;
-    constexpr uint32_t WATER_DEFAULT_SUBDIVISIONS = 32;
+    constexpr uint32_t MAX_OCEAN_GPU_INSTANCES = 4;
+    constexpr uint32_t WATER_DEFAULT_SUBDIVISIONS = 64;
 }

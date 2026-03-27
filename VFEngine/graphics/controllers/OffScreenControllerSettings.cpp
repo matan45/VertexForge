@@ -65,8 +65,6 @@ namespace controllers
         renderHandler->setVFXDrawDistance(settings.distanceCulling.vfxDistance);
         renderHandler->setBillboardDistanceCullingEnabled(settings.distanceCulling.enabled);
         renderHandler->setBillboardDrawDistance(settings.distanceCulling.billboardDistance);
-        renderHandler->setWaterDistanceCullingEnabled(settings.distanceCulling.enabled);
-        renderHandler->setWaterDrawDistance(settings.distanceCulling.waterDistance);
         renderHandler->setTerrainDistanceCullingEnabled(settings.distanceCulling.enabled);
         renderHandler->setTerrainDrawDistance(settings.distanceCulling.terrainDistance);
 
@@ -316,7 +314,6 @@ namespace controllers
 
         renderHandler->setVFXDistanceCullingEnabled(enabled);
         renderHandler->setBillboardDistanceCullingEnabled(enabled);
-        renderHandler->setWaterDistanceCullingEnabled(enabled);
         renderHandler->setTerrainDistanceCullingEnabled(enabled);
     }
 
@@ -334,8 +331,6 @@ namespace controllers
             renderHandler->setVFXDrawDistance(distance);
         else if (category == render::gpudriven::ObjectCategory::Billboard)
             renderHandler->setBillboardDrawDistance(distance);
-        else if (category == render::gpudriven::ObjectCategory::Water)
-            renderHandler->setWaterDrawDistance(distance);
     }
 
     void OffScreenController::setShadowDistanceMultiplier(float multiplier)
@@ -430,10 +425,10 @@ namespace controllers
         if (rh) rh->setTerrainRenderProvider(provider);
     }
 
-    void OffScreenController::setWaterRenderProvider(services::IWaterRenderProvider* provider)
+    void OffScreenController::setOceanRenderProvider(services::IOceanRenderProvider* provider)
     {
         auto* rh = offScreen->getRenderPassHandler();
-        if (rh) rh->setWaterRenderProvider(provider);
+        if (rh) rh->setOceanRenderProvider(provider);
     }
 
     void OffScreenController::setGrassRenderProvider(services::IGrassRenderProvider* provider)
@@ -487,21 +482,4 @@ namespace controllers
             handler->clearAdditionalTerrainFrustums();
     }
 
-    void OffScreenController::addWaterFrustum(const glm::mat4& viewProjection, const glm::vec3& cameraPos)
-    {
-        auto* handler = offScreen ? offScreen->getRenderPassHandler() : nullptr;
-        if (handler)
-        {
-            math::Frustum frustum;
-            frustum.extractFromMatrix(viewProjection);
-            handler->addWaterFrustum(frustum, cameraPos);
-        }
-    }
-
-    void OffScreenController::clearAdditionalWaterFrustums()
-    {
-        auto* handler = offScreen ? offScreen->getRenderPassHandler() : nullptr;
-        if (handler)
-            handler->clearAdditionalWaterFrustums();
-    }
 }

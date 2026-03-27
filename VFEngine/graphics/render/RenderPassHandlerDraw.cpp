@@ -23,7 +23,7 @@
 #include "transparency/WBOITPipeline.hpp"
 #include "../../services/providers/vfx/IVFXRuntimeProvider.hpp"
 #include "../../services/providers/terrain/ITerrainRenderProvider.hpp"
-#include "../../services/providers/terrain/IWaterRenderProvider.hpp"
+#include "../../services/providers/terrain/IOceanRenderProvider.hpp"
 #include "../../services/providers/vegetation/IGrassRenderProvider.hpp"
 #include "threading/JobSystem.hpp"
 #include <chrono>
@@ -172,7 +172,7 @@ namespace render
             && terrainRenderProvider && terrainRenderProvider->hasActiveTerrain();
 
         bool hasWaterToRender = gpuDrivenRenderer && gpuDrivenRenderer->isWaterRenderingEnabled()
-            && waterRenderProvider && waterRenderProvider->hasActiveWater();
+            && oceanRenderProvider && oceanRenderProvider->hasActiveOcean();
 
         bool needsMeshPass = meshPipelineInitialized && (!currentMeshDrawList.empty() || hasCustomShaderMeshes
             || hasDebugItems || hasVFX || hasTerrainToRender || hasWaterToRender);
@@ -347,14 +347,15 @@ namespace render
             }, threading::JobPriority::HIGH);
         }
 
+        // When water is present: billboards/overlays drawn inline after render pass break
+        // When no water: original secondary command buffer approach
         std::future<void> waterFuture;
-        if (hasWater || hasBillboards)
+        if (!hasWater && hasBillboards)
         {
             waterFuture = threading::JobSystem::instance().submit([&]() {
                 waterCmd = sceneThreadPoolManager->getSecondary(3, imageIndex);
                 setupSecondary(waterCmd);
-                if (hasWater) gpuDrivenRenderer->renderWaterDraw(waterCmd, iblDescriptorSet);
-                if (hasBillboards) gpuDrivenRenderer->renderBillboardDraw(waterCmd, iblDescriptorSet);
+                gpuDrivenRenderer->renderBillboardDraw(waterCmd, iblDescriptorSet);
                 waterCmd.end();
             }, threading::JobPriority::HIGH);
         }
@@ -364,17 +365,20 @@ namespace render
         if (grassFuture.valid()) grassFuture.get();
         if (waterFuture.valid()) waterFuture.get();
 
-        overlayCmd = sceneThreadPoolManager->getSecondary(4, imageIndex);
-        setupSecondary(overlayCmd);
-        if (hasCustomShaderMeshes)
-            meshPipeline->renderMeshList(overlayCmd, imageIndex, customShaderMeshDrawList, currentFrustum);
-        gpuDrivenRenderer->renderGIDebug(overlayCmd, currentProjection * currentView);
-        if (debugRendererPtr)
+        if (!hasWater)
         {
-            debugRendererPtr->render(overlayCmd, combinedMeshDrawList, currentView, currentProjection,
-                [this](const std::string& meshId) { return meshPipeline->getMesh(meshId); });
+            overlayCmd = sceneThreadPoolManager->getSecondary(4, imageIndex);
+            setupSecondary(overlayCmd);
+            if (hasCustomShaderMeshes)
+                meshPipeline->renderMeshList(overlayCmd, imageIndex, customShaderMeshDrawList, currentFrustum);
+            gpuDrivenRenderer->renderGIDebug(overlayCmd, currentProjection * currentView);
+            if (debugRendererPtr)
+            {
+                debugRendererPtr->render(overlayCmd, combinedMeshDrawList, currentView, currentProjection,
+                    [this](const std::string& meshId) { return meshPipeline->getMesh(meshId); });
+            }
+            overlayCmd.end();
         }
-        overlayCmd.end();
 
         meshPipeline->beginRenderPassForSecondary(commandBuffer, imageIndex);
 
@@ -383,13 +387,52 @@ namespace render
         secondaries.push_back(meshCmd);
         if (terrainCmd) secondaries.push_back(terrainCmd);
         if (grassCmd) secondaries.push_back(grassCmd);
-        if (waterCmd) secondaries.push_back(waterCmd);
-        secondaries.push_back(overlayCmd);
+        if (!hasWater && waterCmd) secondaries.push_back(waterCmd);
+        if (!hasWater && overlayCmd) secondaries.push_back(overlayCmd);
 
         commandBuffer.executeCommands(
             static_cast<uint32_t>(secondaries.size()),
             secondaries.data()
         );
+
+        if (hasWater)
+        {
+            // Break render pass for refraction copy
+            meshPipeline->endRenderPass(commandBuffer);
+
+            auto extent = swapChain.getSwapchainExtent();
+            gpuDrivenRenderer->copySceneColorForRefraction(
+                commandBuffer,
+                offscreenResources.colorImages[imageIndex].colorImage,
+                extent.width, extent.height);
+
+            // Water continue pass (inline)
+            meshPipeline->beginWaterContinuePass(commandBuffer, imageIndex);
+
+            vk::Viewport viewport{0.0f, 0.0f,
+                                   static_cast<float>(extent.width),
+                                   static_cast<float>(extent.height),
+                                   0.0f, 1.0f};
+            commandBuffer.setViewport(0, viewport);
+            vk::Rect2D scissor{{0, 0}, extent};
+            commandBuffer.setScissor(0, scissor);
+
+            gpuDrivenRenderer->renderWaterDraw(commandBuffer, iblDescriptorSet);
+
+            if (hasBillboards)
+                gpuDrivenRenderer->renderBillboardDraw(commandBuffer, iblDescriptorSet);
+
+            if (hasCustomShaderMeshes)
+                meshPipeline->renderMeshList(commandBuffer, imageIndex, customShaderMeshDrawList, currentFrustum);
+
+            gpuDrivenRenderer->renderGIDebug(commandBuffer, currentProjection * currentView);
+
+            if (debugRendererPtr)
+            {
+                debugRendererPtr->render(commandBuffer, combinedMeshDrawList, currentView, currentProjection,
+                    [this](const std::string& meshId) { return meshPipeline->getMesh(meshId); });
+            }
+        }
 
         auto sceneRecordEnd = std::chrono::high_resolution_clock::now();
         lastSceneRecordingUs = std::chrono::duration<float, std::micro>(sceneRecordEnd - sceneRecordStart).count();
@@ -426,8 +469,34 @@ namespace render
         if (gpuDrivenRenderer->isGrassRenderingEnabled())
             gpuDrivenRenderer->renderGrassDraw(commandBuffer);
 
-        if (gpuDrivenRenderer->isWaterRenderingEnabled())
+        bool hasWater = gpuDrivenRenderer->isWaterRenderingEnabled()
+            && oceanRenderProvider && oceanRenderProvider->hasActiveOcean();
+
+        if (hasWater)
+        {
+            // End main render pass to copy scene color for refraction
+            meshPipeline->endRenderPass(commandBuffer);
+
+            // Copy scene color to refraction texture
+            gpuDrivenRenderer->copySceneColorForRefraction(
+                commandBuffer,
+                offscreenResources.colorImages[imageIndex].colorImage,
+                extent.width, extent.height);
+
+            // Restart render pass with load ops (preserves color + depth)
+            meshPipeline->beginWaterContinuePass(commandBuffer, imageIndex);
+
+            auto waterExtent = swapChain.getSwapchainExtent();
+            vk::Viewport waterViewport{0.0f, 0.0f,
+                                        static_cast<float>(waterExtent.width),
+                                        static_cast<float>(waterExtent.height),
+                                        0.0f, 1.0f};
+            commandBuffer.setViewport(0, waterViewport);
+            vk::Rect2D waterScissor{{0, 0}, waterExtent};
+            commandBuffer.setScissor(0, waterScissor);
+
             gpuDrivenRenderer->renderWaterDraw(commandBuffer, iblDescriptorSet);
+        }
 
         if (gpuDrivenRenderer->isBillboardRenderingEnabled())
             gpuDrivenRenderer->renderBillboardDraw(commandBuffer, iblDescriptorSet);

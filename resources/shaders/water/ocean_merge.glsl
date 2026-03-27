@@ -8,6 +8,7 @@ layout(rg32f,   set = 0, binding = 1) readonly  uniform image2D chopXField;
 layout(rg32f,   set = 0, binding = 2) readonly  uniform image2D chopZField;
 layout(rgba16f, set = 0, binding = 3) writeonly  uniform image2D displacementMap;
 layout(rgba16f, set = 0, binding = 4) writeonly  uniform image2D normalMap;
+layout(r16f,    set = 0, binding = 5) writeonly  uniform image2D causticMap;
 
 layout(push_constant) uniform PushConstants {
     uint N;
@@ -62,6 +63,11 @@ void main() {
     float Jxz = dxdz * derivScale;
     float Jzx = dzdx * derivScale;
     float jacobian = Jxx * Jzz - Jxz * Jzx;
+
+    // Caustic intensity from inverse Jacobian (wave convergence = bright caustics)
+    float causticRaw = 1.0 / max(jacobian, 0.01);
+    float causticIntensity = clamp(pow(causticRaw, 2.0), 0.0, 8.0);
+    imageStore(causticMap, ivec2(x, y), vec4(causticIntensity, 0.0, 0.0, 0.0));
 
     // Foam only on strong wave crests that are actually folding
     float displacementMag = length(vec3(dx, dy, dz));

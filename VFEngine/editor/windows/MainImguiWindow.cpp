@@ -19,7 +19,7 @@ namespace windows
         menuBar.setProjectSettingsWindow(&projectSettingsWindow);
         menuBar.setTerrainCreationWindow(&terrainCreationWindow);
         menuBar.setPostProcessConfigWindow(&postProcessConfigWindow);
-        menuBar.setWaterEditorWindow(&waterEditorWindow);
+        menuBar.setOceanEditorWindow(&oceanEditorWindow);
         menuBar.setNavmeshWindow(&navmeshWindow);
         menuBar.setAssetLifecycleWindow(&assetLifecycleWindow);
         menuBar.setWorldSectorWindow(&worldSectorWindow);
@@ -117,7 +117,7 @@ namespace windows
             postProcessConfigWindow.draw();
             projectSettingsWindow.draw();
             terrainCreationWindow.draw();
-            waterEditorWindow.draw();
+            oceanEditorWindow.draw();
             navmeshWindow.draw();
             assetLifecycleWindow.draw();
             worldSectorWindow.draw();

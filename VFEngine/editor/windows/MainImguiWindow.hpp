@@ -11,7 +11,7 @@
 #include "config/PostProcessConfigWindow.hpp"
 #include "config/ProjectSettingsWindow.hpp"
 #include "terrain/TerrainCreationWindow.hpp"
-#include "water/WaterEditorWindow.hpp"
+#include "ocean/OceanEditorWindow.hpp"
 #include "config/NavmeshWindow.hpp"
 #include "asset/AssetLifecycleWindow.hpp"
 #include "world/WorldSectorWindow.hpp"
@@ -60,7 +60,7 @@ namespace windows
         PostProcessConfigWindow postProcessConfigWindow;
         ProjectSettingsWindow projectSettingsWindow;
         TerrainCreationWindow terrainCreationWindow;
-        WaterEditorWindow waterEditorWindow;
+        OceanEditorWindow oceanEditorWindow;
         NavmeshWindow navmeshWindow;
         AssetLifecycleWindow assetLifecycleWindow;
         WorldSectorWindow worldSectorWindow;

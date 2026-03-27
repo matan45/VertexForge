@@ -60,6 +60,7 @@ namespace render::mesh
 
         vk::RenderPass renderPass;
         vk::RenderPass vfxRenderPass;
+        vk::RenderPass waterContinueRenderPass;
         vk::Pipeline graphicsPipeline;
         vk::PipelineLayout pipelineLayout;
 
@@ -122,6 +123,7 @@ namespace render::mesh
         // Begin render pass with secondary command buffer support for parallel recording
         void beginRenderPassForSecondary(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
         void beginVFXRenderPass(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
+        void beginWaterContinuePass(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
         void endRenderPass(const vk::CommandBuffer& commandBuffer) const;
 
         vk::Framebuffer getFramebuffer(uint32_t imageIndex) const { return framebuffers[imageIndex]; }
@@ -178,6 +180,7 @@ namespace render::mesh
         void loadShaders();
         void createRenderPass();
         void createVFXRenderPass();
+        void createWaterContinueRenderPass();
         void createDescriptorSetLayout();
         void createDescriptorPool();
         void createDescriptorSet(const ibl::ImageData& irradianceMap,

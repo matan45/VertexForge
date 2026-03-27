@@ -307,6 +307,17 @@ layout(set = 10, binding = 1) uniform sampler2D physicalPoolDepth;
 #define PAGE_TABLE pageTable
 #include "../common/shadow_sampling.glsl"
 
+#ifdef CAUSTICS_ENABLED
+layout(set = CAUSTIC_SET, binding = 0) uniform sampler2D causticMap;
+layout(set = CAUSTIC_SET, binding = 1) uniform CausticParamsUBO {
+    float waterHeight;
+    float causticStrength;
+    float depthFalloff;
+    float patchSize;
+} causticParams;
+#include "../common/caustic_sampling.glsl"
+#endif
+
 const uint LIGHT_INDEX_MASK = 0x7FFFFFFFu;
 
 float linearizeDepth(float windowZ) {
@@ -502,7 +513,14 @@ void main() {
         DirectionalLight light = directionalLights[i];
         float shadow = sampleDirectionalShadowAuto(light.shadowIndex, light.shadowMode, fragWorldPos, N, linearZ, camera.cameraPos);
         minShadow = min(minShadow, shadow);
-        directLighting += evaluateDirectionalLight(N, V, albedo, metallic, roughness, F0, light) * shadow;
+        vec3 lightContrib = evaluateDirectionalLight(N, V, albedo, metallic, roughness, F0, light) * shadow;
+#ifdef CAUSTICS_ENABLED
+        float caustic = sampleCaustics(causticMap, causticParams.waterHeight, causticParams.causticStrength,
+                                       causticParams.depthFalloff, causticParams.patchSize,
+                                       fragWorldPos, light.direction);
+        lightContrib *= (1.0 + caustic);
+#endif
+        directLighting += lightContrib;
     }
 
     float shadowContrast = 1.0 + lightCounts.shadowIntensity * 2.0;

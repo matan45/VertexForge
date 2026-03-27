@@ -5,7 +5,7 @@
 #include "PhysicsAnimationComponent.hpp"
 #include "LightTextComponents.hpp"
 #include "TerrainComponents.hpp"
-#include "WaterComponents.hpp"
+#include "OceanComponents.hpp"
 #include "UIComponents.hpp"
 #include "NavmeshComponents.hpp"
 #include "ControllerComponents.hpp"
@@ -24,7 +24,7 @@ namespace components
                                                PhysicsAnimationComponent,
                                                VFXComponent, DirectionalLightComponent, PointLightComponent,
                                                SpotLightComponent, TerrainComponent, TerrainTileComponent,
-                                               WaterComponent, WaterTileComponent, TextComponent,
+                                               OceanComponent, TextComponent,
                                                UICanvasComponent, UIRectComponent, UIImageComponent, UIScrollComponent,
                                                UILayoutGroupComponent, UILabelComponent, UIButtonComponent,
                                                UITextInputComponent, UIDropdownComponent,

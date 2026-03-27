@@ -25,7 +25,7 @@
 #include "material/MaterialTextureCache.hpp"
 #include "../../services/providers/terrain/ITerrainRenderProvider.hpp"
 #include "gpudriven/terrain/TerrainStreamManager.hpp"
-#include "../../services/providers/terrain/IWaterRenderProvider.hpp"
+#include "../../services/providers/terrain/IOceanRenderProvider.hpp"
 #include "../../services/providers/vegetation/IGrassRenderProvider.hpp"
 #include "../../services/providers/vegetation/IVegetationRenderProvider.hpp"
 #include "../../services/providers/vfx/IVFXRuntimeProvider.hpp"
@@ -48,8 +48,6 @@ namespace render
     void RenderPassHandler::setVFXDrawDistance(float distance) { if (vfxRuntimeProvider) vfxRuntimeProvider->setMaxDrawDistance(distance); }
     void RenderPassHandler::setBillboardDistanceCullingEnabled(bool enabled) { if (billboardPipelineInitialized && billboardPipeline) billboardPipeline->setDistanceCullingEnabled(enabled); }
     void RenderPassHandler::setBillboardDrawDistance(float distance) { if (billboardPipelineInitialized && billboardPipeline) billboardPipeline->setMaxDrawDistance(distance); }
-    void RenderPassHandler::setWaterDistanceCullingEnabled(bool enabled) { if (waterRenderProvider) waterRenderProvider->setDistanceCullingEnabled(enabled); }
-    void RenderPassHandler::setWaterDrawDistance(float distance) { if (waterRenderProvider) waterRenderProvider->setMaxDrawDistance(distance); }
     void RenderPassHandler::setTerrainDistanceCullingEnabled(bool enabled) { if (terrainRenderProvider) terrainRenderProvider->setDistanceCullingEnabled(enabled); }
     void RenderPassHandler::setTerrainDrawDistance(float distance) { if (terrainRenderProvider) terrainRenderProvider->setMaxDrawDistance(distance); }
 
@@ -112,7 +110,7 @@ namespace render
         }
     }
 
-    void RenderPassHandler::setWaterRenderProvider(services::IWaterRenderProvider* provider) { waterRenderProvider = provider; }
+    void RenderPassHandler::setOceanRenderProvider(services::IOceanRenderProvider* provider) { oceanRenderProvider = provider; }
 
     void RenderPassHandler::clearTerrainData() { if (gpuDrivenRenderer) gpuDrivenRenderer->clearTerrainData(); }
     void RenderPassHandler::evictTerrainTile(int32_t coordX, int32_t coordZ) { if (gpuDrivenRenderer) gpuDrivenRenderer->evictTerrainTile(coordX, coordZ); }
@@ -121,10 +119,6 @@ namespace render
     void RenderPassHandler::addTerrainFrustum(const math::Frustum& frustum, const glm::vec3& cameraPos) { additionalTerrainFrustums.emplace_back(frustum, cameraPos); }
     void RenderPassHandler::clearAdditionalTerrainFrustums() { additionalTerrainFrustums.clear(); }
     void RenderPassHandler::clearWaterData() { if (gpuDrivenRenderer) gpuDrivenRenderer->clearWaterData(); }
-    void RenderPassHandler::setSelectedWaterTile(int32_t coordX, int32_t coordZ) { if (gpuDrivenRenderer) gpuDrivenRenderer->setSelectedWaterTile(coordX, coordZ); }
-    void RenderPassHandler::clearSelectedWaterTile() { if (gpuDrivenRenderer) gpuDrivenRenderer->clearSelectedWaterTile(); }
-    void RenderPassHandler::addWaterFrustum(const math::Frustum& frustum, const glm::vec3& cameraPos) { additionalWaterFrustums.emplace_back(frustum, cameraPos); }
-    void RenderPassHandler::clearAdditionalWaterFrustums() { additionalWaterFrustums.clear(); }
 
     void RenderPassHandler::reinitMeshPipelineWithDefaults()
     {

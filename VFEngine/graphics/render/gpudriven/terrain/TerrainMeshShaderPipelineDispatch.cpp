@@ -207,13 +207,18 @@ namespace render::gpudriven
 
         cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
 
-        std::array<vk::DescriptorSet, 13> currentSets = {
+        std::vector<vk::DescriptorSet> currentSets = {
             iblDescriptorSet, weightMapDescriptorSet, bindlessDescriptorSet,
             terrainMeshletDescriptorSet, terrainVertexDescriptorSet, emptyDescriptorSet5,
             lightDataDescriptorSet, clusterGridDescriptorSet, cullingOutputDescriptorSet,
             shadowDataDescriptorSet, shadowTextureDescriptorSet, terrainDataDescriptorSet,
             svtEnabled ? svtDescriptorSet : vk::DescriptorSet{nullptr}  // Set 12: SVT (optional)
         };
+
+        if (causticEnabled && causticDescriptorSet)
+        {
+            currentSets.push_back(causticDescriptorSet); // Set 13
+        }
 
         bindDescriptorSetsInBatches(cmd, currentSets.data(), static_cast<uint32_t>(currentSets.size()));
 

@@ -38,6 +38,7 @@ namespace render::water
 
         [[nodiscard]] vk::DescriptorSetLayout getOceanTextureLayout() const;
         [[nodiscard]] vk::DescriptorSet getOceanTextureDescSet() const;
+        [[nodiscard]] vk::ImageView getCausticView() const;
         [[nodiscard]] bool isInitialized() const { return initialized; }
         [[nodiscard]] const OceanFFTConfig& getConfig() const { return config; }
 

@@ -18,7 +18,7 @@
 #include "interfaces/navmesh/INavmeshService.hpp"
 #include "interfaces/project/IProjectService.hpp"
 #include "interfaces/terrain/ITerrainService.hpp"
-#include "interfaces/terrain/IWaterService.hpp"
+#include "interfaces/terrain/IOceanService.hpp"
 #include "interfaces/editor/ISculptModeService.hpp"
 #include "interfaces/terrain/IBrushService.hpp"
 #include "interfaces/terrain/IPaintModeService.hpp"
@@ -105,7 +105,7 @@ namespace handlers {
 		std::shared_ptr<services::IPhysicsService> physicsService;
 		std::shared_ptr<services::IProjectService> projectService;
 		std::shared_ptr<services::ITerrainService> terrainService;
-		std::shared_ptr<services::IWaterService> waterService;
+		std::shared_ptr<services::IOceanService> oceanService;
 		std::shared_ptr<services::ISculptModeService> sculptModeService;
 		std::shared_ptr<services::IBrushService> brushService;
 		std::shared_ptr<services::IPaintModeService> paintModeService;
@@ -171,7 +171,7 @@ namespace handlers {
 		void createPhysicsServices();
 		void createVFXServices();
 		void createTerrainServices();
-		void createWaterServices();
+		void createOceanServices();
 		void createVegetationServices();
 		void createMeshBrushServices();
 		void createAIServices();

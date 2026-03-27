@@ -191,6 +191,7 @@
     <ClInclude Include="windows\details\NavmeshModifierVolumeDrawer.hpp" />
     <ClInclude Include="windows\details\NavmeshObstacleDrawer.hpp" />
     <ClInclude Include="windows\details\NavmeshRootDrawer.hpp" />
+    <ClInclude Include="windows\details\OceanDrawer.hpp" />
     <ClInclude Include="windows\details\OffMeshLinkDrawer.hpp" />
     <ClInclude Include="windows\details\PhysicsAnimationDrawer.hpp" />
     <ClInclude Include="windows\details\PluginComponentDrawer.hpp" />
@@ -226,8 +227,6 @@
     <ClInclude Include="windows\details\VFXDrawer.hpp" />
     <ClInclude Include="windows\details\VolumetricAgentDrawer.hpp" />
     <ClInclude Include="windows\details\VolumetricVolumeDrawer.hpp" />
-    <ClInclude Include="windows\details\WaterDrawer.hpp" />
-    <ClInclude Include="windows\details\WaterTileDrawer.hpp" />
     <ClInclude Include="windows\details\WorldSectorDrawer.hpp" />
     <ClInclude Include="windows\imageprocessing\BackgroundRemovalWindow.hpp" />
     <ClInclude Include="windows\import\ExportProgressWindow.hpp" />
@@ -243,6 +242,7 @@
     <ClInclude Include="windows\material\MaterialPropertyPanel.hpp" />
     <ClInclude Include="windows\material\OrmPackingDialog.hpp" />
     <ClInclude Include="windows\meshbrush\MeshBrushToolPanel.hpp" />
+    <ClInclude Include="windows\ocean\OceanEditorWindow.hpp" />
     <ClInclude Include="windows\plugin\PluginManagerWindow.hpp" />
     <ClInclude Include="windows\preview\AudioPreviewWindow.hpp" />
     <ClInclude Include="windows\preview\FontPreviewWindow.hpp" />
@@ -269,7 +269,6 @@
     <ClInclude Include="windows\viewport\ViewPortGizmo.hpp" />
     <ClInclude Include="windows\viewport\ViewPortOverlay.hpp" />
     <ClInclude Include="windows\viewport\ViewPortPicker.hpp" />
-    <ClInclude Include="windows\water\WaterEditorWindow.hpp" />
     <ClInclude Include="windows\world\WorldSectorWindow.hpp" />
   </ItemGroup>
   <ItemGroup>
@@ -365,6 +364,7 @@
     <ClCompile Include="windows\details\NavmeshModifierVolumeDrawer.cpp" />
     <ClCompile Include="windows\details\NavmeshObstacleDrawer.cpp" />
     <ClCompile Include="windows\details\NavmeshRootDrawer.cpp" />
+    <ClCompile Include="windows\details\OceanDrawer.cpp" />
     <ClCompile Include="windows\details\OffMeshLinkDrawer.cpp" />
     <ClCompile Include="windows\details\PhysicsAnimationDrawer.cpp" />
     <ClCompile Include="windows\details\PluginComponentDrawer.cpp" />
@@ -400,8 +400,6 @@
     <ClCompile Include="windows\details\VFXDrawer.cpp" />
     <ClCompile Include="windows\details\VolumetricAgentDrawer.cpp" />
     <ClCompile Include="windows\details\VolumetricVolumeDrawer.cpp" />
-    <ClCompile Include="windows\details\WaterDrawer.cpp" />
-    <ClCompile Include="windows\details\WaterTileDrawer.cpp" />
     <ClCompile Include="windows\details\WorldSectorDrawer.cpp" />
     <ClCompile Include="windows\imageprocessing\BackgroundRemovalWindow.cpp" />
     <ClCompile Include="windows\import\ExportProgressWindow.cpp" />
@@ -417,6 +415,7 @@
     <ClCompile Include="windows\material\MaterialPropertyPanel.cpp" />
     <ClCompile Include="windows\material\OrmPackingDialog.cpp" />
     <ClCompile Include="windows\meshbrush\MeshBrushToolPanel.cpp" />
+    <ClCompile Include="windows\ocean\OceanEditorWindow.cpp" />
     <ClCompile Include="windows\plugin\PluginManagerWindow.cpp" />
     <ClCompile Include="windows\preview\AudioPreviewWindow.cpp" />
     <ClCompile Include="windows\preview\FontPreviewWindow.cpp" />
@@ -444,7 +443,6 @@
     <ClCompile Include="windows\viewport\ViewPortGizmo.cpp" />
     <ClCompile Include="windows\viewport\ViewPortOverlay.cpp" />
     <ClCompile Include="windows\viewport\ViewPortPicker.cpp" />
-    <ClCompile Include="windows\water\WaterEditorWindow.cpp" />
     <ClCompile Include="windows\world\WorldSectorWindow.cpp" />
   </ItemGroup>
   <ItemGroup>

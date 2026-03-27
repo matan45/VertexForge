@@ -517,6 +517,20 @@ namespace render::mesh
         commandBuffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
     }
 
+    void StaticMeshPipeline::beginWaterContinuePass(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const
+    {
+        vk::RenderPassBeginInfo renderPassInfo{};
+        renderPassInfo.renderPass = waterContinueRenderPass;
+        renderPassInfo.framebuffer = framebuffers[imageIndex];
+        renderPassInfo.renderArea.offset = vk::Offset2D{0, 0};
+        renderPassInfo.renderArea.extent = swapChain.getSwapchainExtent();
+
+        renderPassInfo.clearValueCount = 0;
+        renderPassInfo.pClearValues = nullptr;
+
+        commandBuffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
+    }
+
     void StaticMeshPipeline::endRenderPass(const vk::CommandBuffer& commandBuffer) const
     {
         commandBuffer.endRenderPass();

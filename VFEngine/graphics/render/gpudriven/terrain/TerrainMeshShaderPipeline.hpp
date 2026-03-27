@@ -87,6 +87,11 @@ namespace render::gpudriven
         vk::DescriptorSet svtDescriptorSet;
         bool svtEnabled = false;
 
+        // Caustic descriptor set (Set 13) - owned by WaterCausticsResources
+        vk::DescriptorSetLayout cachedCausticLayout;
+        vk::DescriptorSet causticDescriptorSet;
+        bool causticEnabled = false;
+
         // Weight map + layer info descriptor (Set 1)
         vk::DescriptorSetLayout weightMapLayout;
         vk::DescriptorPool weightMapPool;
@@ -202,6 +207,16 @@ namespace render::gpudriven
         {
             viewProjection = viewProj;
         }
+
+        // Caustic integration (Set 13)
+        void setCausticEnabled(bool enabled, vk::DescriptorSetLayout layout = nullptr)
+        {
+            causticEnabled = enabled;
+            cachedCausticLayout = layout;
+        }
+        bool isCausticEnabled() const { return causticEnabled; }
+        void updateCausticDescriptor(vk::DescriptorSet causticDescSet) { causticDescriptorSet = causticDescSet; }
+        vk::DescriptorSet getCausticDescriptorSet() const { return causticDescriptorSet; }
 
         // SVT integration
         void setSVTEnabled(bool enabled) { svtEnabled = enabled; }

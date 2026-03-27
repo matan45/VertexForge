@@ -33,9 +33,9 @@ namespace controllers {
 		offScreenController->setTerrainRenderProvider(provider);
 	}
 
-	void OffScreen::setWaterRenderProvider(services::IWaterRenderProvider* provider)
+	void OffScreen::setOceanRenderProvider(services::IOceanRenderProvider* provider)
 	{
-		offScreenController->setWaterRenderProvider(provider);
+		offScreenController->setOceanRenderProvider(provider);
 	}
 
 	void OffScreen::setGrassRenderProvider(services::IGrassRenderProvider* provider)
@@ -104,18 +104,6 @@ namespace controllers {
 	{
 		if (offScreenController)
 			offScreenController->clearAdditionalTerrainFrustums();
-	}
-
-	void OffScreen::addWaterFrustum(const glm::mat4& viewProjection, const glm::vec3& cameraPos)
-	{
-		if (offScreenController)
-			offScreenController->addWaterFrustum(viewProjection, cameraPos);
-	}
-
-	void OffScreen::clearAdditionalWaterFrustums()
-	{
-		if (offScreenController)
-			offScreenController->clearAdditionalWaterFrustums();
 	}
 
 	void OffScreen::applyAtmosphereSettings(const render::atmosphere::AtmosphereSettings& settings)

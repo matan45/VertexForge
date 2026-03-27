@@ -13,7 +13,7 @@
 #include "../../adapters/vfx/VFXRuntimeAdapter.hpp"
 #include "../../adapters/render/PostProcessAdapter.hpp"
 #include "../../adapters/terrain/TerrainRenderAdapter.hpp"
-#include "../../adapters/terrain/WaterRenderAdapter.hpp"
+#include "../../adapters/terrain/OceanRenderAdapter.hpp"
 #include "../../adapters/render/RenderTextureAdapter.hpp"
 #include "../../adapters/render/DebugDrawAdapter.hpp"
 #include "../../adapters/render/BillboardRenderAdapter.hpp"
@@ -46,7 +46,7 @@ namespace core
         vfxRuntimeAdapter = std::make_unique<VFXRuntimeAdapter>();
         postProcessAdapter = std::make_unique<PostProcessAdapter>(offScreen.get());
         terrainRenderAdapter = std::make_unique<TerrainRenderAdapter>();
-        waterRenderAdapter = std::make_unique<WaterRenderAdapter>();
+        oceanRenderAdapter = std::make_unique<OceanRenderAdapter>();
         renderTextureAdapter = std::make_unique<RenderTextureAdapter>(offScreen.get());
         debugDrawAdapter = std::make_unique<DebugDrawAdapter>();
         billboardRenderAdapter = std::make_unique<adapters::BillboardRenderAdapter>();
@@ -74,8 +74,8 @@ namespace core
         // Wire terrain render provider to offscreen renderer
         offScreenAdapter->setTerrainRenderProvider(terrainRenderAdapter.get());
 
-        // Wire water render provider to offscreen renderer
-        offScreenAdapter->setWaterRenderProvider(waterRenderAdapter.get());
+        // Wire ocean render provider to offscreen renderer
+        offScreenAdapter->setOceanRenderProvider(oceanRenderAdapter.get());
 
         // Set up resize callback to recreate offscreen resources (Hi-Z, etc.)
         coreInterface->setResizeCallback([this]()

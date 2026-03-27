@@ -104,6 +104,55 @@ namespace render::mesh
         vfxRenderPass = device.getLogicalDevice().createRenderPass(renderPassInfo);
     }
 
+    void StaticMeshPipeline::createWaterContinueRenderPass()
+    {
+        // Color: load existing content, keep as color attachment
+        vk::AttachmentDescription colorAttachment{};
+        colorAttachment.format = swapChain.getSwapchainImageFormat();
+        colorAttachment.samples = vk::SampleCountFlagBits::e1;
+        colorAttachment.loadOp = vk::AttachmentLoadOp::eLoad;
+        colorAttachment.storeOp = vk::AttachmentStoreOp::eStore;
+        colorAttachment.stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
+        colorAttachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
+        colorAttachment.initialLayout = vk::ImageLayout::eColorAttachmentOptimal;
+        colorAttachment.finalLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+
+        vk::AttachmentReference colorAttachmentRef{};
+        colorAttachmentRef.attachment = 0;
+        colorAttachmentRef.layout = vk::ImageLayout::eColorAttachmentOptimal;
+
+        // Depth: load existing, read-write for depth testing
+        vk::AttachmentDescription depthAttachment{};
+        depthAttachment.format = swapChain.getSwapchainDepthStencilFormat();
+        depthAttachment.samples = vk::SampleCountFlagBits::e1;
+        depthAttachment.loadOp = vk::AttachmentLoadOp::eLoad;
+        depthAttachment.storeOp = vk::AttachmentStoreOp::eStore;
+        depthAttachment.stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
+        depthAttachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
+        depthAttachment.initialLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
+        depthAttachment.finalLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
+
+        vk::AttachmentReference depthAttachmentRef{};
+        depthAttachmentRef.attachment = 1;
+        depthAttachmentRef.layout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
+
+        vk::SubpassDescription subpass{};
+        subpass.pipelineBindPoint = vk::PipelineBindPoint::eGraphics;
+        subpass.colorAttachmentCount = 1;
+        subpass.pColorAttachments = &colorAttachmentRef;
+        subpass.pDepthStencilAttachment = &depthAttachmentRef;
+
+        std::array<vk::AttachmentDescription, 2> attachments = {colorAttachment, depthAttachment};
+
+        vk::RenderPassCreateInfo renderPassInfo{};
+        renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
+        renderPassInfo.pAttachments = attachments.data();
+        renderPassInfo.subpassCount = 1;
+        renderPassInfo.pSubpasses = &subpass;
+
+        waterContinueRenderPass = device.getLogicalDevice().createRenderPass(renderPassInfo);
+    }
+
     void StaticMeshPipeline::createDescriptorSetLayout()
     {
         std::vector<vk::DescriptorSetLayoutBinding> bindings(4);

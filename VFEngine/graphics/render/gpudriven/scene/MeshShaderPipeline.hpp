@@ -26,6 +26,7 @@ namespace render::gpudriven
         vk::DescriptorSetLayout shadowDataLayout;
         vk::DescriptorSetLayout shadowTextureLayout;
         vk::DescriptorSetLayout giProbeDataLayout;
+        vk::DescriptorSetLayout causticLayout;
         vk::RenderPass renderPass;
         bool transparentMode = false;
         bool wboitMode = false;
@@ -87,6 +88,7 @@ namespace render::gpudriven
         vk::DescriptorSet shadowDataDescriptorSet;
         vk::DescriptorSet shadowTextureDescriptorSet;
         vk::DescriptorSet giProbeDataDescriptorSet;
+        vk::DescriptorSet causticDescriptorSet;
 
         vk::DescriptorSetLayout cachedLightDataLayout;
         vk::DescriptorSetLayout cachedClusterGridLayout;
@@ -95,6 +97,9 @@ namespace render::gpudriven
         vk::DescriptorSetLayout cachedShadowDataLayout;
         vk::DescriptorSetLayout cachedShadowTextureLayout;
         vk::DescriptorSetLayout cachedGIProbeDataLayout;
+        vk::DescriptorSetLayout cachedCausticLayout;
+
+        vk::DescriptorSetLayout emptyPlaceholderLayout;
 
         bool isTransparentMode = false;
         bool isWBOITMode = false;
@@ -124,6 +129,7 @@ namespace render::gpudriven
                                      vk::DescriptorSet shadowTextureDescSet);
 
         void updateGIProbeDescriptor(vk::DescriptorSet giProbeDescSet);
+        void updateCausticDescriptor(vk::DescriptorSet causticDescSet);
 
         vk::Pipeline getPipeline() const { return graphicsPipeline; }
         vk::PipelineLayout getPipelineLayout() const { return pipelineLayout; }
@@ -136,6 +142,7 @@ namespace render::gpudriven
         vk::DescriptorSet getShadowDataDescriptorSet() const { return shadowDataDescriptorSet; }
         vk::DescriptorSet getShadowTextureDescriptorSet() const { return shadowTextureDescriptorSet; }
         vk::DescriptorSet getGIProbeDataDescriptorSet() const { return giProbeDataDescriptorSet; }
+        vk::DescriptorSet getCausticDescriptorSet() const { return causticDescriptorSet; }
 
         vk::DescriptorSetLayout getPerDrawDataLayout() const { return perDrawDataLayout; }
         vk::DescriptorSetLayout getMeshletDataLayout() const { return meshletDataLayout; }

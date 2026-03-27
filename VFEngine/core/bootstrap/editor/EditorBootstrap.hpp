@@ -22,7 +22,7 @@ namespace services
     class ITerrainRaycastProvider;
     class ITerrainBrushComputeProvider;
     class IPostProcessProvider;
-    class IWaterRenderProvider;
+    class IOceanRenderProvider;
     class IRenderTextureProvider;
     class IRenderHookProvider;
     class IDebugDrawProvider;
@@ -71,7 +71,7 @@ namespace core
     class TerrainRaycastAdapter;
     class TerrainBrushComputeAdapter;
     class PostProcessAdapter;
-    class WaterRenderAdapter;
+    class OceanRenderAdapter;
     class RenderTextureAdapter;
     class RenderHookAdapter;
     class DebugDrawAdapter;
@@ -111,7 +111,7 @@ namespace core
         std::unique_ptr<TerrainRaycastAdapter> terrainRaycastAdapter;
         std::unique_ptr<TerrainBrushComputeAdapter> terrainBrushComputeAdapter;
         std::unique_ptr<PostProcessAdapter> postProcessAdapter;
-        std::unique_ptr<WaterRenderAdapter> waterRenderAdapter;
+        std::unique_ptr<OceanRenderAdapter> oceanRenderAdapter;
         std::unique_ptr<RenderTextureAdapter> renderTextureAdapter;
         std::unique_ptr<RenderHookAdapter> renderHookAdapter;
         std::unique_ptr<DebugDrawAdapter> debugDrawAdapter;
@@ -181,8 +181,8 @@ namespace core
 
         services::IDebugDrawProvider* getDebugDrawProvider();
 
-        // For late binding - allows EditorHandler to connect WaterService
-        WaterRenderAdapter* getWaterRenderAdapterInternal();
+        // For late binding - allows EditorHandler to connect OceanService
+        OceanRenderAdapter* getOceanRenderAdapterInternal();
 
         services::IGrassRenderProvider* getGrassRenderProvider();
 

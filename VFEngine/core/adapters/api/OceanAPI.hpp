@@ -7,7 +7,7 @@ namespace services
 
 namespace core::api
 {
-    class WaterAPI
+    class OceanAPI
     {
     public:
         static void registerAPI(services::ScriptInterpreter* interpreter);

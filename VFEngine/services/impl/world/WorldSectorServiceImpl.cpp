@@ -28,8 +28,7 @@ namespace
     {
         return entity.hasComponent<components::TerrainComponent>()
             || entity.hasComponent<components::TerrainTileComponent>()
-            || entity.hasComponent<components::WaterComponent>()
-            || entity.hasComponent<components::WaterTileComponent>()
+            || entity.hasComponent<components::OceanComponent>()
             || entity.hasComponent<components::IBLComponent>()
             || entity.hasComponent<components::CameraComponent>();
     }

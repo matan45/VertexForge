@@ -20,7 +20,7 @@
 #include "../../adapters/terrain/TerrainRaycastAdapter.hpp"
 #include "../../adapters/terrain/TerrainBrushComputeAdapter.hpp"
 #include "../../adapters/render/PostProcessAdapter.hpp"
-#include "../../adapters/terrain/WaterRenderAdapter.hpp"
+#include "../../adapters/terrain/OceanRenderAdapter.hpp"
 #include "../../adapters/render/RenderTextureAdapter.hpp"
 #include "../../adapters/render/RenderHookAdapter.hpp"
 #include "../../adapters/render/DebugDrawAdapter.hpp"
@@ -66,7 +66,7 @@ namespace core
         terrainRaycastAdapter = std::make_unique<TerrainRaycastAdapter>(*offScreen);
         terrainBrushComputeAdapter = std::make_unique<TerrainBrushComputeAdapter>(*offScreen);
         postProcessAdapter = std::make_unique<PostProcessAdapter>(offScreen.get());
-        waterRenderAdapter = std::make_unique<WaterRenderAdapter>();
+        oceanRenderAdapter = std::make_unique<OceanRenderAdapter>();
         renderTextureAdapter = std::make_unique<RenderTextureAdapter>(offScreen.get());
         renderHookAdapter = std::make_unique<RenderHookAdapter>(offScreen.get());
         debugDrawAdapter = std::make_unique<DebugDrawAdapter>();
@@ -98,9 +98,9 @@ namespace core
         // TerrainService will be connected later via setTerrainService() in EditorHandler
         offScreenAdapter->setTerrainRenderProvider(terrainRenderAdapter.get());
 
-        // Wire water render provider to offscreen renderer
-        // WaterService will be connected later via setWaterService() in EditorHandler
-        offScreenAdapter->setWaterRenderProvider(waterRenderAdapter.get());
+        // Wire ocean render provider to offscreen renderer
+        // OceanService will be connected later via setOceanService() in EditorHandler
+        offScreenAdapter->setOceanRenderProvider(oceanRenderAdapter.get());
 
         // Wire vegetation render providers to offscreen renderer
         offScreenAdapter->setGrassRenderProvider(grassRenderAdapter.get());
