@@ -285,6 +285,14 @@ namespace render
         camInfo.jitterOffset = currentJitterOffset;
         camInfo.frameIndex = taaFrameIndex;
         camInfo.time = currentTime;
+        if (oceanRenderProvider && oceanRenderProvider->hasActiveOcean())
+        {
+            float waterH = oceanRenderProvider->getBaseWaterHeight();
+            float diff = waterH - currentCameraPosition.y;
+            camInfo.submersionFactor = glm::clamp((diff + 0.5f) / 1.0f, 0.0f, 1.0f);
+            camInfo.isUnderwater = camInfo.submersionFactor > 0.01f;
+            camInfo.waterHeight = waterH;
+        }
         postProcessPipeline->setCameraData(camInfo);
 
         if (gpuDrivenRendererInitialized)

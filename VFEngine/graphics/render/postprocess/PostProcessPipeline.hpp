@@ -34,6 +34,9 @@ namespace render::postprocess
         glm::vec2 jitterOffset{0.0f};
         uint32_t frameIndex = 0;
         float time = 0.0f;
+        bool isUnderwater = false;
+        float submersionFactor = 0.0f;
+        float waterHeight = 0.0f;
     };
 
     struct PingPongTarget

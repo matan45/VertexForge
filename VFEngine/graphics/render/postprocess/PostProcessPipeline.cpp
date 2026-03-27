@@ -10,6 +10,7 @@
 #include "effects/EdgeDetectionEffect.hpp"
 #include "effects/AutoExposureEffect.hpp"
 #include "effects/ColorGradingEffect.hpp"
+#include "effects/UnderwaterEffect.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
 #include "../../core/OffScreen.hpp"
@@ -49,6 +50,9 @@ namespace render::postprocess
         cameraInfo.jitterOffset = incoming.jitterOffset;
         cameraInfo.frameIndex = incoming.frameIndex;
         cameraInfo.time = incoming.time;
+        cameraInfo.isUnderwater = incoming.isUnderwater;
+        cameraInfo.submersionFactor = incoming.submersionFactor;
+        cameraInfo.waterHeight = incoming.waterHeight;
     }
 
     bool PostProcessPipeline::hasEnabledEffects() const
@@ -443,6 +447,9 @@ namespace render::postprocess
 
         syncEffect(::postprocess::EffectType::ColorGrading, settings.colorGrading.enabled,
             [this]() { return std::make_unique<ColorGradingEffect>(device); });
+
+        syncEffect(::postprocess::EffectType::Underwater, settings.underwater.enabled,
+            [this]() { return std::make_unique<UnderwaterEffect>(device, swapChain, offscreenResources, *this); });
 
         updateSettings(settings);
     }

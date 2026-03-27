@@ -28,6 +28,11 @@ public class Ocean {
         return _native_ocean_getOceanHeightAt(x, z);
     }
 
+    // Check if the camera is currently underwater
+    public static function isCameraUnderwater(): bool {
+        return _native_ocean_isCameraUnderwater();
+    }
+
     // ============================================
     // Component Queries
     // ============================================
