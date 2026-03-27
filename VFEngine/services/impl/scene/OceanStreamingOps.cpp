@@ -15,6 +15,7 @@ namespace services
             return;
 
         int32_t tps = config.tilesPerSector;
+        std::lock_guard<std::mutex> lock(pendingActionsMutex);
 
         for (int32_t tx = coord.x * tps; tx < (coord.x + 1) * tps; ++tx)
         {
@@ -35,6 +36,7 @@ namespace services
             return;
 
         int32_t tps = config.tilesPerSector;
+        std::lock_guard<std::mutex> lock(pendingActionsMutex);
 
         for (int32_t tx = coord.x * tps; tx < (coord.x + 1) * tps; ++tx)
         {
@@ -51,16 +53,25 @@ namespace services
 
     void OceanService::processPendingSectorTileActions()
     {
-        if (pendingSectorTileActions.empty() || !waterTileGrid)
+        if (!waterTileGrid)
             return;
+
+        // Swap pending actions under lock to minimize lock duration
+        std::vector<PendingWaterTileAction> actions;
+        {
+            std::lock_guard<std::mutex> lock(pendingActionsMutex);
+            if (pendingSectorTileActions.empty())
+                return;
+            actions.swap(pendingSectorTileActions);
+        }
 
         int loadsRemaining = 16;
         int unloadsRemaining = 16;
 
         float waterHeight = getBaseWaterHeight();
 
-        auto it = pendingSectorTileActions.begin();
-        while (it != pendingSectorTileActions.end())
+        auto it = actions.begin();
+        while (it != actions.end())
         {
             if (it->isLoad && loadsRemaining <= 0)
             {
@@ -84,7 +95,15 @@ namespace services
                 --unloadsRemaining;
             }
 
-            it = pendingSectorTileActions.erase(it);
+            it = actions.erase(it);
+        }
+
+        // Put unprocessed actions back
+        if (!actions.empty())
+        {
+            std::lock_guard<std::mutex> lock(pendingActionsMutex);
+            pendingSectorTileActions.insert(pendingSectorTileActions.begin(),
+                                            actions.begin(), actions.end());
         }
     }
 
@@ -113,7 +132,7 @@ namespace services
             onSectorActivated(coord, cachedSectorConfig);
         }
 
-        // Process all pending immediately for initial load
-        processPendingSectorTileActions();
+        // Initial load uses the same per-frame throttle — no special bypass
+        // Tiles will stream in over multiple frames via processPendingSectorTileActions()
     }
 }

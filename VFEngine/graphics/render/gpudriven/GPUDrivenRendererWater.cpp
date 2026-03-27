@@ -68,18 +68,10 @@ namespace render::gpudriven
         if (worldMode && tileGrid && tileGrid->tileCount() > 0)
         {
             // World mode: sector-driven tiles from WaterTileGrid
-            // WaterTileGrid uses ::water::WaterTileGPUData which has identical layout
-            // to render::water::WaterTileGPUData — reinterpret via memcpy
-            std::vector<::water::WaterTileGPUData> gridTiles;
-            uint32_t gridLodCounts[::water::WATER_TILE_LOD_COUNT] = {};
-            tileGrid->buildGPUTileData(cameraPosition, tileSize, baseWaterHeight,
-                                        gridTiles, gridLodCounts);
-
             water.tileData.clear();
-            water.tileData.resize(gridTiles.size());
-            static_assert(sizeof(::water::WaterTileGPUData) == sizeof(render::water::WaterTileGPUData));
-            std::memcpy(water.tileData.data(), gridTiles.data(),
-                        gridTiles.size() * sizeof(render::water::WaterTileGPUData));
+            uint32_t gridLodCounts[render::water::WATER_LOD_COUNT] = {};
+            tileGrid->buildGPUTileData(cameraPosition, tileSize, baseWaterHeight,
+                                        water.tileData, gridLodCounts);
             for (uint32_t lod = 0; lod < render::water::WATER_LOD_COUNT; ++lod)
                 water.lodTileCounts[lod] = gridLodCounts[lod];
         }
@@ -153,7 +145,6 @@ namespace render::gpudriven
             params.shoreWetRange = visualSettings.shoreWetRange;
             params.shoreWetDarkening = visualSettings.shoreWetDarkening;
             params.shoreWetRoughness = visualSettings.shoreWetRoughness;
-            params.shoreWetEnabled = 1.0f;
             water.causticsResources->updateParams(params);
         }
 

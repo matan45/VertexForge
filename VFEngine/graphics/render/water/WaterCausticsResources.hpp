@@ -18,7 +18,7 @@ namespace render::water
         float shoreWetRange = 5.0f;
         float shoreWetDarkening = 0.3f;
         float shoreWetRoughness = 0.15f;
-        float shoreWetEnabled = 1.0f;
+        float pad1 = 0.0f;
     };
 
     class WaterCausticsResources

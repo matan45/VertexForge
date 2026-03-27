@@ -317,7 +317,7 @@ layout(set = CAUSTIC_SET, binding = 1) uniform CausticParamsUBO {
     float shoreWetRange;
     float shoreWetDarkening;
     float shoreWetRoughness;
-    float shoreWetEnabled;
+    float pad1;
 } causticParams;
 #include "../common/caustic_sampling.glsl"
 #endif

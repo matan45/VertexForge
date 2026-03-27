@@ -35,11 +35,12 @@ namespace water
         return tiles.contains(coord);
     }
 
-    uint32_t WaterTileGrid::selectLOD(float distance)
+    uint32_t WaterTileGrid::selectLOD(float distance, float tileWorldSize)
     {
-        if (distance < 200.0f) return 0;
-        if (distance < 500.0f) return 1;
-        if (distance < 1000.0f) return 2;
+        // LOD thresholds as multiples of tile size
+        if (distance < tileWorldSize * 2.0f) return 0;
+        if (distance < tileWorldSize * 5.0f) return 1;
+        if (distance < tileWorldSize * 10.0f) return 2;
         return 3;
     }
 
@@ -78,7 +79,7 @@ namespace water
             float dz = tileCenterZ - cameraPos.z;
             float dist = std::sqrt(dx * dx + dz * dz);
 
-            sortedTiles.push_back({coord, dist, selectLOD(dist)});
+            sortedTiles.push_back({coord, dist, selectLOD(dist, tileWorldSize)});
         }
 
         // Clamp LOD to neighbor LOD + 1 to prevent T-junction cracks

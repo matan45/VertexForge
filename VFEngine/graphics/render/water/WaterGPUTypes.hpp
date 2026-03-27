@@ -1,23 +1,19 @@
 #pragma once
 
+#include "../../../utilities/water/WaterTileGrid.hpp"
 #include <glm/glm.hpp>
 #include <cstdint>
 
 namespace render::water
 {
-    constexpr uint32_t WATER_LOD_COUNT = 4;
+    constexpr uint32_t WATER_LOD_COUNT = ::water::WATER_TILE_LOD_COUNT;
     constexpr uint32_t WATER_LOD0_SUBDIVISIONS = 64;
     constexpr uint32_t WATER_LOD1_SUBDIVISIONS = 32;
     constexpr uint32_t WATER_LOD2_SUBDIVISIONS = 16;
     constexpr uint32_t WATER_LOD3_SUBDIVISIONS = 8;
 
-    // Per-tile instance data uploaded to SSBO each frame
-    struct alignas(16) WaterTileGPUData
-    {
-        glm::vec4 worldOriginAndSize;   // xyz = tile world origin, w = tileSize
-        glm::vec4 heightAndWave;        // x = waterHeight, y = 1.0, z = lodLevel (as float), w = 0
-    };
-    static_assert(sizeof(WaterTileGPUData) == 32);
+    // Per-tile instance data — canonical definition in ::water::WaterTileGPUData
+    using WaterTileGPUData = ::water::WaterTileGPUData;
 
     // Push constants for ocean rendering (must fit 128-byte limit)
     struct WaterPushConstants
@@ -49,7 +45,7 @@ namespace render::water
     };
     static_assert(sizeof(WaterVertex) == 20);
 
-    constexpr uint32_t MAX_OCEAN_GPU_INSTANCES = 128;
+    constexpr uint32_t MAX_OCEAN_GPU_INSTANCES = ::water::MAX_WATER_GPU_INSTANCES;
     constexpr uint32_t WATER_DEFAULT_SUBDIVISIONS = 64;
 
     // Per-LOD mesh info (returned by WaterMeshBuffer)

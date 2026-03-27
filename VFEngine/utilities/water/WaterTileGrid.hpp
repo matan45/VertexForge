@@ -21,7 +21,6 @@ namespace water
     {
         terrain::TileCoord coord;
         float waterHeight = 0.0f;
-        uint64_t lastAccessFrame = 0;
     };
 
     class WaterTileGrid
@@ -44,6 +43,6 @@ namespace water
     private:
         std::unordered_map<terrain::TileCoord, WaterTileInfo, terrain::TileCoordHash> tiles;
 
-        [[nodiscard]] static uint32_t selectLOD(float distance);
+        [[nodiscard]] static uint32_t selectLOD(float distance, float tileWorldSize);
     };
 }

@@ -337,7 +337,7 @@ layout(set = CAUSTIC_SET, binding = 1) uniform CausticParamsUBO {
     float shoreWetRange;
     float shoreWetDarkening;
     float shoreWetRoughness;
-    float shoreWetEnabled;
+    float pad1;
 } causticParams;
 #include "../common/caustic_sampling.glsl"
 #endif
@@ -415,8 +415,9 @@ void main() {
 
 #ifdef CAUSTICS_ENABLED
     // Shoreline wetness: darken and roughen terrain near and above waterline
-    if (causticParams.shoreWetEnabled > 0.5) {
-        float waveApprox = sin(fragWorldPos.x * 0.1 + fragWorldPos.z * 0.15 + camera.time) * 0.5;
+    if (causticParams.shoreWetRange > 0.0) {
+        float waveFreq = 6.2831853 / causticParams.patchSize;
+        float waveApprox = sin(fragWorldPos.x * waveFreq + fragWorldPos.z * waveFreq * 1.5 + camera.time) * 0.5;
         float heightAboveWater = fragWorldPos.y - causticParams.waterHeight + waveApprox;
         // Only apply above water (fade in from waterline up to shoreWetRange)
         float wetness = 1.0 - smoothstep(0.0, causticParams.shoreWetRange, heightAboveWater);

@@ -10,6 +10,7 @@
 #include <glm/glm.hpp>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <unordered_set>
 
@@ -58,6 +59,7 @@ namespace services
             terrain::TileCoord coord;
             bool isLoad;
         };
+        std::mutex pendingActionsMutex;
         std::vector<PendingWaterTileAction> pendingSectorTileActions;
 
     public:
