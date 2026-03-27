@@ -39,7 +39,9 @@ layout(push_constant) uniform PushConstants {
     float oceanPatchSize1;       // Agitation band patch size
     float oceanPatchSize2;       // Ripples band patch size
     uint  bandEnableMask;        // bit 0=swell, bit 1=agitation, bit 2=ripples
-    float pad;
+    float shoreFoamRange;
+    float shoreFoamIntensity;
+    float shoreBreakingStrength;
 } pc;
 
 // Multi-band ocean textures (set 8)
@@ -179,7 +181,9 @@ layout(push_constant) uniform PushConstants {
     float oceanPatchSize1;
     float oceanPatchSize2;
     uint  bandEnableMask;
-    float pad;
+    float shoreFoamRange;
+    float shoreFoamIntensity;
+    float shoreBreakingStrength;
 } pc;
 
 layout(set = 9, binding = 0) uniform sampler2D refractionColorTex;
@@ -324,6 +328,52 @@ void main() {
         vec2 foamUV2 = fragWorldPos.xz / pc.oceanPatchSize2;
         foam += texture(frag_oceanDisp2, foamUV2).w * 0.3;
     }
+
+    // Shore foam — depth-based foam where water meets terrain
+    if (pc.shoreFoamRange > 0.0) {
+        vec2 screenUV = gl_FragCoord.xy / vec2(textureSize(sceneDepthTex, 0));
+        float terrainDepthRaw = texture(sceneDepthTex, screenUV).r;
+
+        // Reconstruct terrain world position from depth buffer
+        float near = clusterParams.depthParams.x;
+        float far  = clusterParams.depthParams.y;
+        float terrainLinearZ = near * far / max(far - terrainDepthRaw * (far - near), 0.0001);
+        float waterLinearZ   = near * far / max(far - gl_FragCoord.z * (far - near), 0.0001);
+
+        // Use view-space depth difference scaled by view angle to approximate
+        // the vertical water depth (how deep the terrain is below the water surface)
+        float viewDepthDiff = terrainLinearZ - waterLinearZ;
+
+        // Convert to approximate world-space vertical depth using view direction
+        float cosViewAngle = max(abs(dot(normalize(camera.cameraPos - fragWorldPos), vec3(0.0, 1.0, 0.0))), 0.1);
+        float shoreDepth = max(viewDepthDiff * cosViewAngle, 0.0);
+
+        // Skip shore effects for deep water or when terrain is far behind
+        if (shoreDepth < pc.shoreFoamRange * 2.0) {
+            // Wave-responsive modulation: foam line moves with wave displacement
+            float waveModulation = fragOceanDispY * 0.5;
+            float effectiveShoreRange = max(pc.shoreFoamRange + waveModulation, 0.5);
+
+            // Base shore foam gradient
+            float shoreFoam = (1.0 - smoothstep(0.0, effectiveShoreRange, shoreDepth)) * pc.shoreFoamIntensity;
+
+            // Animated foam lines rolling toward shore
+            float foamLine = smoothstep(0.4, 0.5, sin(shoreDepth * 6.0 - camera.u_Time * 1.5) * 0.5 + 0.5);
+            shoreFoam = max(shoreFoam, foamLine * (1.0 - smoothstep(0.0, effectiveShoreRange * 0.7, shoreDepth)) * pc.shoreFoamIntensity);
+
+            foam += shoreFoam;
+
+            // Shore wave breaking: boost foam where waves are steep near shore
+            if (pc.shoreBreakingStrength > 0.0) {
+                float shoreProximity = 1.0 - smoothstep(0.0, effectiveShoreRange * 1.5, shoreDepth);
+                float waveSteepness = 1.0 - dot(N, vec3(0.0, 1.0, 0.0));
+                float breaking = shoreProximity * waveSteepness * 2.0 * pc.shoreBreakingStrength;
+                foam += clamp(breaking, 0.0, 1.0);
+            }
+        }
+    }
+
+    foam = clamp(foam, 0.0, 1.0);
     vec3 foamColor = vec3(0.95, 0.97, 1.0);
     color = mix(color, foamColor, foam * 0.6);
 

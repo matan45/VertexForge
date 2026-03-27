@@ -119,6 +119,9 @@ namespace render::gpudriven
         water.cachedPushConstants.refractionStrength = visualSettings.refractionStrength;
         water.cachedPushConstants.refractionChromatic = visualSettings.refractionChromatic;
         water.cachedPushConstants.refractionDepthScale = visualSettings.refractionDepthScale;
+        water.cachedPushConstants.shoreFoamRange = visualSettings.shoreFoamRange;
+        water.cachedPushConstants.shoreFoamIntensity = visualSettings.shoreFoamIntensity;
+        water.cachedPushConstants.shoreBreakingStrength = visualSettings.shoreBreakingStrength;
 
         // Update caustic params UBO
         if (water.causticsResources && water.causticsResources->isInitialized())
@@ -128,6 +131,10 @@ namespace render::gpudriven
             params.causticStrength = visualSettings.causticStrength;
             params.depthFalloff = visualSettings.causticDepthFalloff;
             params.patchSize = oceanPatchSize;
+            params.shoreWetRange = visualSettings.shoreWetRange;
+            params.shoreWetDarkening = visualSettings.shoreWetDarkening;
+            params.shoreWetRoughness = visualSettings.shoreWetRoughness;
+            params.shoreWetEnabled = 1.0f;
             water.causticsResources->updateParams(params);
         }
 
@@ -222,8 +229,9 @@ namespace render::gpudriven
         // Create composite 6-binding descriptor set
         createMultiBandOceanDescriptor();
 
-        // Create caustics from band 0 (swell)
-        if (water.oceanBands[0] && water.oceanBands[0]->isInitialized())
+        // Create caustics from band 0 (swell) - only if caustic view is available
+        if (water.oceanBands[0] && water.oceanBands[0]->isInitialized()
+            && water.oceanBands[0]->getCausticView())
         {
             water.causticsResources = std::make_unique<render::water::WaterCausticsResources>(device);
             water.causticsResources->init(water.oceanBands[0]->getCausticView());

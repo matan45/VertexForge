@@ -35,9 +35,11 @@ namespace render::water
         float oceanPatchSize1;          // 4  (agitation band patch size)
         float oceanPatchSize2;          // 4  (ripples band patch size)
         uint32_t bandEnableMask;        // 4  (bit 0=swell, bit 1=agitation, bit 2=ripples)
-        float pad;                      // 4
+        float shoreFoamRange;           // 4  (world units: how far from shore foam extends)
+        float shoreFoamIntensity;       // 4
+        float shoreBreakingStrength;    // 4
     };
-    static_assert(sizeof(WaterPushConstants) == 80);
+    static_assert(sizeof(WaterPushConstants) == 88);
 
     // Vertex format for the subdivided unit quad
     struct WaterVertex

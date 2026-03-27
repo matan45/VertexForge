@@ -41,6 +41,12 @@ namespace windows
             visualSettings.refractionDepthScale = dataOpt->refractionDepthScale;
             visualSettings.causticStrength = dataOpt->causticStrength;
             visualSettings.causticDepthFalloff = dataOpt->causticDepthFalloff;
+            visualSettings.shoreFoamRange = dataOpt->shoreFoamRange;
+            visualSettings.shoreFoamIntensity = dataOpt->shoreFoamIntensity;
+            visualSettings.shoreBreakingStrength = dataOpt->shoreBreakingStrength;
+            visualSettings.shoreWetRange = dataOpt->shoreWetRange;
+            visualSettings.shoreWetDarkening = dataOpt->shoreWetDarkening;
+            visualSettings.shoreWetRoughness = dataOpt->shoreWetRoughness;
             visualSettingsDirty = false;
 
             physicsSettings.physicsEnabled = dataOpt->physicsEnabled;
@@ -200,6 +206,37 @@ namespace windows
             visualSettingsDirty |= labeledDragFloat("Depth Falloff", "##CausticDepthFalloff",
                 &visualSettings.causticDepthFalloff, 0.01f, 0.1f, 2.0f, "%.2f");
             ImGui::TextDisabled("How quickly caustics fade with depth");
+            ImGui::Unindent();
+        }
+
+        if (ImGui::CollapsingHeader("Shoreline", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            ImGui::Indent();
+            ImGui::Text("Shore Foam");
+            visualSettingsDirty |= labeledDragFloat("Foam Range", "##ShoreFoamRange",
+                &visualSettings.shoreFoamRange, 0.1f, 0.0f, 20.0f, "%.1f");
+            ImGui::TextDisabled("Width of foam band at shore (world units)");
+
+            visualSettingsDirty |= labeledDragFloat("Foam Intensity", "##ShoreFoamIntensity",
+                &visualSettings.shoreFoamIntensity, 0.01f, 0.0f, 1.0f, "%.2f");
+
+            visualSettingsDirty |= labeledDragFloat("Breaking Strength", "##ShoreBreakingStrength",
+                &visualSettings.shoreBreakingStrength, 0.01f, 0.0f, 2.0f, "%.2f");
+            ImGui::TextDisabled("Extra foam on steep waves near shore");
+
+            ImGui::Spacing();
+            ImGui::Text("Wet Sand");
+            visualSettingsDirty |= labeledDragFloat("Wet Range", "##ShoreWetRange",
+                &visualSettings.shoreWetRange, 0.1f, 0.0f, 20.0f, "%.1f");
+            ImGui::TextDisabled("How far above waterline terrain gets wet");
+
+            visualSettingsDirty |= labeledDragFloat("Darkening", "##ShoreWetDarkening",
+                &visualSettings.shoreWetDarkening, 0.01f, 0.0f, 1.0f, "%.2f");
+            ImGui::TextDisabled("0 = black, 1 = no darkening");
+
+            visualSettingsDirty |= labeledDragFloat("Roughness", "##ShoreWetRoughness",
+                &visualSettings.shoreWetRoughness, 0.01f, 0.0f, 1.0f, "%.2f");
+            ImGui::TextDisabled("Surface roughness at waterline");
             ImGui::Unindent();
         }
 

@@ -128,6 +128,8 @@ namespace terrain
         [[nodiscard]] bool hasCaveData() const { return caveData && caveData->isInitialized(); }
         [[nodiscard]] bool hasCaveGeometry() const { return caveData && caveData->hasCaveGeometry(); }
 
+        void maskBelowWaterLevel(float waterHeight, float margin = 0.0f);
+
     private:
         void initializeFlat(float height = 0.0f);
 

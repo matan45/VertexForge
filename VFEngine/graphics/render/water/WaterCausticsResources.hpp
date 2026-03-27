@@ -15,6 +15,10 @@ namespace render::water
         float causticStrength = 1.0f;
         float depthFalloff = 0.5f;
         float patchSize = 100.0f;
+        float shoreWetRange = 5.0f;
+        float shoreWetDarkening = 0.3f;
+        float shoreWetRoughness = 0.15f;
+        float shoreWetEnabled = 1.0f;
     };
 
     class WaterCausticsResources
