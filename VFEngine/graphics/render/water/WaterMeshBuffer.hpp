@@ -3,6 +3,7 @@
 #include "WaterGPUTypes.hpp"
 #include <vulkan/vulkan.hpp>
 #include <vector>
+#include <array>
 
 namespace render::water
 {
@@ -14,13 +15,14 @@ namespace render::water
         vk::Queue graphicsQueue;
         vk::CommandPool commandPool;
 
-        // Shared unit quad mesh (device-local, static)
+        // Shared vertex/index buffers containing all LOD meshes
         vk::Buffer vertexBuffer;
         vk::DeviceMemory vertexMemory;
         vk::Buffer indexBuffer;
         vk::DeviceMemory indexMemory;
-        uint32_t indexCount = 0;
-        uint32_t vertexCount = 0;
+
+        // Per-LOD mesh info (offsets into shared buffers)
+        std::array<WaterLODMeshInfo, WATER_LOD_COUNT> lodMeshes;
 
         // Per-tile instance SSBO (host-visible, persistent mapped)
         vk::Buffer tileSSBO;
@@ -28,7 +30,6 @@ namespace render::water
         void* mappedTileData = nullptr;
         uint32_t currentTileCount = 0;
 
-        uint32_t subdivisions = WATER_DEFAULT_SUBDIVISIONS;
         bool initialized = false;
 
     public:
@@ -41,12 +42,18 @@ namespace render::water
         [[nodiscard]] vk::Buffer getVertexBuffer() const { return vertexBuffer; }
         [[nodiscard]] vk::Buffer getIndexBuffer() const { return indexBuffer; }
         [[nodiscard]] vk::Buffer getTileSSBO() const { return tileSSBO; }
-        [[nodiscard]] uint32_t getIndexCount() const { return indexCount; }
         [[nodiscard]] uint32_t getTileCount() const { return currentTileCount; }
         [[nodiscard]] bool isInitialized() const { return initialized; }
 
+        [[nodiscard]] const WaterLODMeshInfo& getLODMesh(uint32_t lod) const { return lodMeshes[lod]; }
+        [[nodiscard]] uint32_t getIndexCount() const { return lodMeshes[0].indexCount; } // LOD0 for backward compat
+
     private:
-        void createQuadMesh();
+        void createMultiLODMesh();
         void createTileSSBO();
+
+        static void generateQuadMesh(uint32_t subdivisions,
+                                      std::vector<WaterVertex>& outVertices,
+                                      std::vector<uint32_t>& outIndices);
     };
 }

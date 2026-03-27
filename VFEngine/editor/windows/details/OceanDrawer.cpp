@@ -45,11 +45,15 @@ namespace windows::details
             ImGui::Text("Physics: %s", data.physicsEnabled ? "Enabled" : "Disabled");
 
             ImGui::Separator();
-            ImGui::Text("Ocean FFT");
-            ImGui::Text("  Resolution: %u", data.oceanConfig.resolution);
-            ImGui::Text("  Patch Size: %.0f", data.oceanConfig.patchSize);
-            ImGui::Text("  Wind Speed: %.2f m/s", data.oceanConfig.windSpeed);
-            ImGui::Text("  Choppiness: %.2f", data.oceanConfig.choppiness);
+            ImGui::Text("Ocean FFT Bands");
+            static const char* bandNames[] = {"Swell", "Agitation", "Ripples"};
+            for (uint32_t i = 0; i < 3; ++i)
+            {
+                const auto& band = data.oceanConfig.bands[i];
+                if (!band.enabled) continue;
+                ImGui::Text("  %s: %ux%u, patch=%.0f, wind=%.1f",
+                    bandNames[i], band.resolution, band.resolution, band.patchSize, band.windSpeed);
+            }
 
             ImGui::Unindent(10.0f);
         }

@@ -163,6 +163,7 @@ namespace render::gpudriven
             std::unique_ptr<render::water::WaterPipeline> pipeline;
             std::unique_ptr<render::water::WaterMeshBuffer> meshBuffer;
             std::vector<render::water::WaterTileGPUData> tileData;
+            uint32_t lodTileCounts[render::water::WATER_LOD_COUNT] = {};
             render::water::WaterPushConstants cachedPushConstants{};
             bool renderingEnabled = true;
             // Ocean FFT (multi-band)

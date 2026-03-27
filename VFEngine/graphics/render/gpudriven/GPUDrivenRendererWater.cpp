@@ -61,23 +61,49 @@ namespace render::gpudriven
         if (!initialized || !water.renderingEnabled || !water.pipeline)
             return;
 
-        // Generate single large ocean plane centered on camera,
-        // snapped to patch-size grid so FFT textures don't shift with camera movement
-        float planeSize = oceanPatchSize * 10.0f;
-        float halfSize = planeSize * 0.5f;
+        // Generate grid of tiles centered on camera with distance-based LOD
+        constexpr int GRID_HALF = 4;  // 9x9 grid = 81 tiles max
+        float tileSize = oceanPatchSize * 2.0f;
 
-        float snappedX = std::floor(cameraPosition.x / oceanPatchSize) * oceanPatchSize;
-        float snappedZ = std::floor(cameraPosition.z / oceanPatchSize) * oceanPatchSize;
+        // Snap camera to tile grid
+        float snappedX = std::floor(cameraPosition.x / tileSize) * tileSize;
+        float snappedZ = std::floor(cameraPosition.z / tileSize) * tileSize;
 
-        water.tileData.resize(1);
-        auto& gpuData = water.tileData[0];
-        gpuData.worldOriginAndSize = glm::vec4(
-            snappedX - halfSize,
-            0.0f,
-            snappedZ - halfSize,
-            planeSize
-        );
-        gpuData.heightAndWave = glm::vec4(baseWaterHeight, 1.0f, 0.0f, 0.0f);
+        // Sort tiles by LOD for batched draw calls
+        // LOD thresholds based on distance from camera (in tiles)
+        // Ring 0 (center): LOD 0, Ring 1: LOD 1, Ring 2: LOD 2, Ring 3+: LOD 3
+        std::array<std::vector<render::water::WaterTileGPUData>, render::water::WATER_LOD_COUNT> lodBuckets;
+
+        for (int tz = -GRID_HALF; tz <= GRID_HALF; ++tz)
+        {
+            for (int tx = -GRID_HALF; tx <= GRID_HALF; ++tx)
+            {
+                float tileOriginX = snappedX + tx * tileSize;
+                float tileOriginZ = snappedZ + tz * tileSize;
+
+                // Distance in tile units from center
+                int ring = std::max(std::abs(tx), std::abs(tz));
+
+                uint32_t lod;
+                if (ring <= 1) lod = 0;
+                else if (ring <= 2) lod = 1;
+                else if (ring <= 3) lod = 2;
+                else lod = 3;
+
+                render::water::WaterTileGPUData tile;
+                tile.worldOriginAndSize = glm::vec4(tileOriginX, 0.0f, tileOriginZ, tileSize);
+                tile.heightAndWave = glm::vec4(baseWaterHeight, 1.0f, static_cast<float>(lod), 0.0f);
+                lodBuckets[lod].push_back(tile);
+            }
+        }
+
+        // Flatten into SSBO sorted by LOD
+        water.tileData.clear();
+        for (uint32_t lod = 0; lod < render::water::WATER_LOD_COUNT; ++lod)
+        {
+            water.lodTileCounts[lod] = static_cast<uint32_t>(lodBuckets[lod].size());
+            water.tileData.insert(water.tileData.end(), lodBuckets[lod].begin(), lodBuckets[lod].end());
+        }
 
         water.meshBuffer->updateTileData(water.tileData);
 
@@ -155,7 +181,8 @@ namespace render::gpudriven
             (water.refractionResources && water.refractionResources->isInitialized())
                 ? water.refractionResources->getDescriptorSet() : vk::DescriptorSet{}
         };
-        water.pipeline->render(cmd, waterDescriptors, *water.meshBuffer, water.cachedPushConstants);
+        water.pipeline->renderMultiLOD(cmd, waterDescriptors, *water.meshBuffer,
+                                       water.cachedPushConstants, water.lodTileCounts);
 
         auto renderEnd = std::chrono::high_resolution_clock::now();
         water.renderUs = std::chrono::duration<float, std::micro>(renderEnd - renderStart).count();

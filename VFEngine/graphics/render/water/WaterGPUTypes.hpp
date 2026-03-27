@@ -5,11 +5,17 @@
 
 namespace render::water
 {
-    // Per-instance data uploaded to SSBO each frame (single ocean plane)
+    constexpr uint32_t WATER_LOD_COUNT = 4;
+    constexpr uint32_t WATER_LOD0_SUBDIVISIONS = 64;
+    constexpr uint32_t WATER_LOD1_SUBDIVISIONS = 32;
+    constexpr uint32_t WATER_LOD2_SUBDIVISIONS = 16;
+    constexpr uint32_t WATER_LOD3_SUBDIVISIONS = 8;
+
+    // Per-tile instance data uploaded to SSBO each frame
     struct alignas(16) WaterTileGPUData
     {
-        glm::vec4 worldOriginAndSize;   // xyz = plane world origin, w = planeSize
-        glm::vec4 heightAndWave;        // x = waterHeight, y = 1.0 (wave intensity), z = 0, w = 0
+        glm::vec4 worldOriginAndSize;   // xyz = tile world origin, w = tileSize
+        glm::vec4 heightAndWave;        // x = waterHeight, y = 1.0, z = lodLevel (as float), w = 0
     };
     static_assert(sizeof(WaterTileGPUData) == 32);
 
@@ -41,6 +47,16 @@ namespace render::water
     };
     static_assert(sizeof(WaterVertex) == 20);
 
-    constexpr uint32_t MAX_OCEAN_GPU_INSTANCES = 4;
+    constexpr uint32_t MAX_OCEAN_GPU_INSTANCES = 128;
     constexpr uint32_t WATER_DEFAULT_SUBDIVISIONS = 64;
+
+    // Per-LOD mesh info (returned by WaterMeshBuffer)
+    struct WaterLODMeshInfo
+    {
+        uint32_t vertexOffset = 0;
+        uint32_t indexOffset = 0;
+        uint32_t indexCount = 0;
+        uint32_t vertexCount = 0;
+        uint32_t subdivisions = 0;
+    };
 }

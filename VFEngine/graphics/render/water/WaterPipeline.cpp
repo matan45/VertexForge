@@ -730,4 +730,68 @@ namespace render::water
 
         cmd.drawIndexed(meshBuffer.getIndexCount(), meshBuffer.getTileCount(), 0, 0, 0);
     }
+
+    void WaterPipeline::renderMultiLOD(vk::CommandBuffer cmd, const WaterRenderDescriptors& descriptors,
+                                        WaterMeshBuffer& meshBuffer, const WaterPushConstants& pushConstants,
+                                        const uint32_t lodTileCounts[WATER_LOD_COUNT])
+    {
+        if (!initialized || meshBuffer.getTileCount() == 0)
+            return;
+
+        cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
+
+        vk::Buffer vertexBuffers[] = {meshBuffer.getVertexBuffer()};
+        vk::DeviceSize offsets[] = {0};
+        cmd.bindVertexBuffers(0, 1, vertexBuffers, offsets);
+        cmd.bindIndexBuffer(meshBuffer.getIndexBuffer(), 0, vk::IndexType::eUint32);
+
+        vk::DescriptorSet oceanDescSet = descriptors.oceanTextureDescSet
+            ? descriptors.oceanTextureDescSet
+            : oceanDummyDescSet;
+        vk::DescriptorSet refractionDescSet = descriptors.refractionDescSet
+            ? descriptors.refractionDescSet
+            : refractionDummyDescSet;
+
+        std::array<vk::DescriptorSet, 10> descSets = {
+            descriptors.iblDescSet,
+            waterTileDescriptorSet,
+            dudvTextureDescriptorSet,
+            descriptors.lightDataDescSet,
+            descriptors.clusterGridDescSet,
+            descriptors.cullingOutputDescSet,
+            descriptors.shadowDataDescSet,
+            descriptors.shadowTextureDescSet,
+            oceanDescSet,
+            refractionDescSet
+        };
+        cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout,
+                                0, descSets, nullptr);
+
+        cmd.pushConstants(pipelineLayout,
+                           vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
+                           0, sizeof(WaterPushConstants), &pushConstants);
+
+        // Issue one draw call per LOD level
+        // Tiles are sorted by LOD in the SSBO: [LOD0 tiles...][LOD1 tiles...][LOD2 tiles...]...
+        uint32_t firstInstance = 0;
+        for (uint32_t lod = 0; lod < WATER_LOD_COUNT; ++lod)
+        {
+            if (lodTileCounts[lod] == 0)
+            {
+                firstInstance += lodTileCounts[lod];
+                continue;
+            }
+
+            const auto& lodMesh = meshBuffer.getLODMesh(lod);
+            cmd.drawIndexed(
+                lodMesh.indexCount,
+                lodTileCounts[lod],
+                lodMesh.indexOffset,
+                static_cast<int32_t>(lodMesh.vertexOffset),
+                firstInstance
+            );
+
+            firstInstance += lodTileCounts[lod];
+        }
+    }
 }
