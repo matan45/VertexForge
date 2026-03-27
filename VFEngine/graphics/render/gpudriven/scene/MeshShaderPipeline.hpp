@@ -103,12 +103,15 @@ namespace render::gpudriven
 
         bool isTransparentMode = false;
         bool isWBOITMode = false;
+        bool isWireframeMode = false;
     public:
         explicit MeshShaderPipeline(core::Device& device, core::SwapChain& swapChain);
         ~MeshShaderPipeline();
 
         MeshShaderPipeline(const MeshShaderPipeline&) = delete;
         MeshShaderPipeline& operator=(const MeshShaderPipeline&) = delete;
+
+        void setWireframeMode(bool enabled) { isWireframeMode = enabled; }
 
         void init(const MeshPipelineInitInfo& info);
         void cleanup();

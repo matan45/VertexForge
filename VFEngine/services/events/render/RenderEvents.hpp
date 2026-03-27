@@ -181,7 +181,7 @@ namespace events::render {
     };
 
     struct SetShowWireframeCommand : ICommand<> {
-        bool show;
+        bool show = false;
 
         std::string_view getName() const override { return "SetShowWireframe"; }
     };

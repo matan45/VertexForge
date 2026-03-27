@@ -125,6 +125,53 @@ namespace render::gpudriven
 
         device.getLogicalDevice().waitIdle();
 
+        vk::DescriptorSetLayout giLayout{};
+        if (giCascadeManager && giCascadeManager->getProbeStorage())
+            giLayout = giCascadeManager->getProbeStorage()->getSamplingLayout();
+
+        vk::DescriptorSetLayout causticLayout{};
+        if (water.causticsResources && water.causticsResources->isInitialized())
+            causticLayout = water.causticsResources->getDescriptorSetLayout();
+
+        // Recreate scene mesh pipelines
+        if (meshShaderPipeline)
+        {
+            meshShaderPipeline->setWireframeMode(enabled);
+
+            MeshPipelineInitInfo pipelineInfo{
+                .iblLayout = cachedIBLLayout,
+                .bindlessTextureLayout = bindlessTextures->getDescriptorSetLayout(),
+                .boneMatrixLayout = boneMatrixManager->getDescriptorSetLayout(),
+                .lightDataLayout = lightBufferManager->getDescriptorSetLayout(),
+                .clusterGridLayout = clusterGridManager->getDescriptorSetLayout(),
+                .cullingOutputLayout = lightCullingPipeline->getDescriptorSetLayout(),
+                .shadowDataLayout = shadowSystem->getShadowDataLayout(),
+                .shadowTextureLayout = shadowSystem->getShadowTextureLayout(),
+                .giProbeDataLayout = giLayout,
+                .causticLayout = causticLayout,
+                .renderPass = cachedRenderPass
+            };
+
+            meshShaderPipeline->recreate(pipelineInfo);
+
+            if (transparentMeshShaderPipeline)
+            {
+                transparentMeshShaderPipeline->setWireframeMode(enabled);
+                pipelineInfo.transparentMode = true;
+                transparentMeshShaderPipeline->recreate(pipelineInfo);
+            }
+
+            if (wboitMeshShaderPipeline && cachedWBOITRenderPass)
+            {
+                wboitMeshShaderPipeline->setWireframeMode(enabled);
+                pipelineInfo.transparentMode = false;
+                pipelineInfo.renderPass = cachedWBOITRenderPass;
+                pipelineInfo.wboitMode = true;
+                wboitMeshShaderPipeline->recreate(pipelineInfo);
+            }
+        }
+
+        // Recreate terrain pipeline
         if (terrain.pipeline)
         {
             terrain.pipeline->setWireframeMode(enabled);
@@ -140,6 +187,7 @@ namespace render::gpudriven
                                        cachedRenderPass);
         }
 
+        // Recreate water pipeline
         if (water.pipeline)
         {
             water.pipeline->setWireframeMode(enabled);

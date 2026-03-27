@@ -384,6 +384,7 @@ namespace render::postprocess
                 if ((*it)->isInitialized() && dq)
                 {
                     auto shared = std::shared_ptr<PostProcessEffect>(std::move(*it));
+                    // vk::Device arg intentionally unused — effect holds its own device reference
                     dq->queueCustom([shared](vk::Device) {
                         shared->cleanup();
                     });
