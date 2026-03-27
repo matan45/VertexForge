@@ -37,10 +37,7 @@ project "Editor"
    location "VFEngine/editor"
    targetdir "bin/%{prj.name}/%{cfg.buildcfg}/%{cfg.platform}"
 
-   files {
-      "VFEngine/editor/**.hpp", "VFEngine/editor/**.cpp", "VFEngine/editor/app.rc", "resources/editor/**.vfImage",
-      "VFEngine/utilities/export/**.hpp", "VFEngine/utilities/export/**.cpp"
-   }
+   files { "VFEngine/editor/**.hpp", "VFEngine/editor/**.cpp", "VFEngine/editor/app.rc", "resources/editor/**.vfImage" }
 
    includedirs {
 	  "dependencies/imgui",
@@ -59,12 +56,7 @@ project "Editor"
 	  "VFEngine/services",                -- Services layer interfaces
 	  "VFEngine/plugin",                  -- Plugin system
 	  "VFEngine/utilities/procedural",    -- Procedural heightmap generation
-	  "VFEngine/utilities/imageprocessing", -- Image background removal
-      vulkanLibPath.."/Include"             -- Vulkan SDK for ShaderCompiler
-   }
-
-   libdirs {
-      vulkanLibPath.."/Lib"
+	  "VFEngine/utilities/imageprocessing" -- Image background removal
    }
 
    links {
@@ -75,7 +67,7 @@ project "Editor"
 	  "imgui",                          -- For imgui-node-editor in ShaderGraphEditor
 	  "ProceduralGen",                  -- Procedural heightmap generation
 	  "ImageProcessing",                -- Image background removal
-	  "shaderc_shared.lib"              -- Shader compiler for export
+	  "GameExport"                      -- Game export pipeline with shader pre-compilation
    }
 
    defines { "_CRT_SECURE_NO_WARNINGS" }
@@ -832,6 +824,45 @@ project "VFX"
       defines { "NDEBUG" }
       optimize "On"
       links { "shaderc_shared.lib" }
+
+
+-- GameExport subsystem (extracted from Utilities - shader pre-compilation and game export pipeline)
+project "GameExport"
+   kind "StaticLib"
+   language "C++"
+   cppdialect "C++20"
+   location "VFEngine/utilities"
+   targetdir "bin/%{prj.name}/%{cfg.buildcfg}/%{cfg.platform}"
+
+   files {
+      "VFEngine/utilities/export/**.hpp",
+      "VFEngine/utilities/export/**.cpp"
+   }
+
+   includedirs {
+      "dependencies/spdlog/include",
+      "dependencies/glm",
+      "dependencies/entt/single_include",
+      "dependencies/json/single_include",
+      "VFEngine/utilities",
+      vulkanLibPath.."/Include"
+   }
+
+   libdirs {
+      vulkanLibPath.."/Lib"
+   }
+
+   defines { "_CRT_SECURE_NO_WARNINGS" }
+
+   links { "Utilities", "shaderc_shared.lib" }
+
+   filter "configurations:Debug"
+      defines { "DEBUG" }
+      symbols "On"
+
+   filter "configurations:Release"
+      defines { "NDEBUG" }
+      optimize "On"
 
 
 -- Group for Libraries

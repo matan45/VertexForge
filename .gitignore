@@ -16,6 +16,9 @@
 # Mono auto generated files
 mono_crash.*
 
+# Pipeline cache
+cache/
+
 # Build results
 [Dd]ebug/
 [Dd]ebugPublic/

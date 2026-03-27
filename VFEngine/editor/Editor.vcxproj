@@ -59,7 +59,7 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <PreprocessorDefinitions>VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1;GLM_FORCE_DEPTH_ZERO_TO_ONE;_CRT_SECURE_NO_WARNINGS;DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\..\dependencies\imgui;..\..\dependencies\ImGuizmo;..\..\dependencies\imgui-node-editor;..\..\dependencies\spdlog\include;..\..\dependencies\glm;..\..\dependencies\entt\single_include;..\..\dependencies\json\single_include;..\utilities;..\core\bootstrap;..\core\controllers;..\..\dependencies\IconFontCppHeaders;..\import\controllers;..\import\types;..\services;..\plugin;..\utilities\procedural;..\utilities\imageprocessing;C:\VulkanSDK\1.4.335.0\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\..\dependencies\imgui;..\..\dependencies\ImGuizmo;..\..\dependencies\imgui-node-editor;..\..\dependencies\spdlog\include;..\..\dependencies\glm;..\..\dependencies\entt\single_include;..\..\dependencies\json\single_include;..\utilities;..\core\bootstrap;..\core\controllers;..\..\dependencies\IconFontCppHeaders;..\import\controllers;..\import\types;..\services;..\plugin;..\utilities\procedural;..\utilities\imageprocessing;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DebugInformationFormat>EditAndContinue</DebugInformationFormat>
       <Optimization>Disabled</Optimization>
       <AdditionalOptions>/utf-8 /MP %(AdditionalOptions)</AdditionalOptions>
@@ -68,13 +68,12 @@
     </ClCompile>
     <ResourceCompile>
       <PreprocessorDefinitions>VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1;GLM_FORCE_DEPTH_ZERO_TO_ONE;_CRT_SECURE_NO_WARNINGS;DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\..\dependencies\imgui;..\..\dependencies\ImGuizmo;..\..\dependencies\imgui-node-editor;..\..\dependencies\spdlog\include;..\..\dependencies\glm;..\..\dependencies\entt\single_include;..\..\dependencies\json\single_include;..\utilities;..\core\bootstrap;..\core\controllers;..\..\dependencies\IconFontCppHeaders;..\import\controllers;..\import\types;..\services;..\plugin;..\utilities\procedural;..\utilities\imageprocessing;C:\VulkanSDK\1.4.335.0\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\..\dependencies\imgui;..\..\dependencies\ImGuizmo;..\..\dependencies\imgui-node-editor;..\..\dependencies\spdlog\include;..\..\dependencies\glm;..\..\dependencies\entt\single_include;..\..\dependencies\json\single_include;..\utilities;..\core\bootstrap;..\core\controllers;..\..\dependencies\IconFontCppHeaders;..\import\controllers;..\import\types;..\services;..\plugin;..\utilities\procedural;..\utilities\imageprocessing;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ResourceCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>shaderc_shared.lib;gdiplus.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>C:\VulkanSDK\1.4.335.0\Lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>gdiplus.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PostBuildEvent>
       <Command>IF EXIST ..\..\dependencies\openal-soft\build\Debug\OpenAL32.dll\ (xcopy /Q /E /Y /I ..\..\dependencies\openal-soft\build\Debug\OpenAL32.dll ..\..\bin\Editor\Debug\x64 &gt; nul) ELSE (xcopy /Q /Y /I ..\..\dependencies\openal-soft\build\Debug\OpenAL32.dll ..\..\bin\Editor\Debug\x64 &gt; nul)</Command>
@@ -85,7 +84,7 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <PreprocessorDefinitions>VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1;GLM_FORCE_DEPTH_ZERO_TO_ONE;_CRT_SECURE_NO_WARNINGS;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\..\dependencies\imgui;..\..\dependencies\ImGuizmo;..\..\dependencies\imgui-node-editor;..\..\dependencies\spdlog\include;..\..\dependencies\glm;..\..\dependencies\entt\single_include;..\..\dependencies\json\single_include;..\utilities;..\core\bootstrap;..\core\controllers;..\..\dependencies\IconFontCppHeaders;..\import\controllers;..\import\types;..\services;..\plugin;..\utilities\procedural;..\utilities\imageprocessing;C:\VulkanSDK\1.4.335.0\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\..\dependencies\imgui;..\..\dependencies\ImGuizmo;..\..\dependencies\imgui-node-editor;..\..\dependencies\spdlog\include;..\..\dependencies\glm;..\..\dependencies\entt\single_include;..\..\dependencies\json\single_include;..\utilities;..\core\bootstrap;..\core\controllers;..\..\dependencies\IconFontCppHeaders;..\import\controllers;..\import\types;..\services;..\plugin;..\utilities\procedural;..\utilities\imageprocessing;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <Optimization>Full</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
@@ -97,14 +96,13 @@
     </ClCompile>
     <ResourceCompile>
       <PreprocessorDefinitions>VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1;GLM_FORCE_DEPTH_ZERO_TO_ONE;_CRT_SECURE_NO_WARNINGS;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\..\dependencies\imgui;..\..\dependencies\ImGuizmo;..\..\dependencies\imgui-node-editor;..\..\dependencies\spdlog\include;..\..\dependencies\glm;..\..\dependencies\entt\single_include;..\..\dependencies\json\single_include;..\utilities;..\core\bootstrap;..\core\controllers;..\..\dependencies\IconFontCppHeaders;..\import\controllers;..\import\types;..\services;..\plugin;..\utilities\procedural;..\utilities\imageprocessing;C:\VulkanSDK\1.4.335.0\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\..\dependencies\imgui;..\..\dependencies\ImGuizmo;..\..\dependencies\imgui-node-editor;..\..\dependencies\spdlog\include;..\..\dependencies\glm;..\..\dependencies\entt\single_include;..\..\dependencies\json\single_include;..\utilities;..\core\bootstrap;..\core\controllers;..\..\dependencies\IconFontCppHeaders;..\import\controllers;..\import\types;..\services;..\plugin;..\utilities\procedural;..\utilities\imageprocessing;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ResourceCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalDependencies>shaderc_shared.lib;gdiplus.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>C:\VulkanSDK\1.4.335.0\Lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>gdiplus.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <EntryPointSymbol>mainCRTStartup</EntryPointSymbol>
     </Link>
     <PostBuildEvent>
@@ -112,11 +110,6 @@
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="..\utilities\export\ExeIconEmbedder.hpp" />
-    <ClInclude Include="..\utilities\export\ExportConfig.hpp" />
-    <ClInclude Include="..\utilities\export\GameExporter.hpp" />
-    <ClInclude Include="..\utilities\export\ShaderCompiler.hpp" />
-    <ClInclude Include="..\utilities\export\ShaderPermutationManifest.hpp" />
     <ClInclude Include="camera\EditorCamera.hpp" />
     <ClInclude Include="camera\OrbitCamera.hpp" />
     <ClInclude Include="clipboard\ClipboardManager.hpp" />
@@ -279,9 +272,6 @@
     <ClInclude Include="windows\world\WorldSectorWindow.hpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\utilities\export\ExeIconEmbedder.cpp" />
-    <ClCompile Include="..\utilities\export\GameExporter.cpp" />
-    <ClCompile Include="..\utilities\export\ShaderCompiler.cpp" />
     <ClCompile Include="camera\EditorCamera.cpp" />
     <ClCompile Include="camera\OrbitCamera.cpp" />
     <ClCompile Include="clipboard\ClipboardManager.cpp" />
@@ -487,6 +477,9 @@
     </ProjectReference>
     <ProjectReference Include="..\utilities\ImageProcessing.vcxproj">
       <Project>{C5156011-31A1-CDD5-3AB2-50CAA6BC29D6}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\utilities\GameExport.vcxproj">
+      <Project>{614E3318-4D06-7565-B60D-4EC1A2E40F56}</Project>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
