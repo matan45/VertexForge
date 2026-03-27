@@ -262,6 +262,9 @@ namespace services {
         virtual bool getShowShadowDebug() const = 0;
         virtual void prepareFrameShadowDebug() = 0;
 
+        virtual void setShowWireframe(bool show) = 0;
+        virtual bool getShowWireframe() const = 0;
+
         virtual void setShowNavmeshDebug(bool show) = 0;
         virtual bool getShowNavmeshDebug() const = 0;
         virtual void updateNavmeshDebugMesh(const std::vector<glm::vec3>& vertices, const std::vector<uint32_t>& indices) = 0;

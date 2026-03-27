@@ -88,11 +88,14 @@ namespace render::water
         vk::ImageView oceanDummyView;
         vk::Sampler oceanDummySampler;
         bool initialized = false;
+        bool wireframeMode = false;
         uint32_t lastDescriptorTileCount = 0;
 
     public:
         explicit WaterPipeline(core::Device& device, core::SwapChain& swapChain);
         ~WaterPipeline();
+
+        void setWireframeMode(bool enabled) { wireframeMode = enabled; }
 
         void init(const WaterPipelineLayoutConfig& config);
         void recreate(const WaterPipelineLayoutConfig& config);

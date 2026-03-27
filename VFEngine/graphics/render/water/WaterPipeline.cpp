@@ -652,6 +652,7 @@ namespace render::water
             .pushConstantSize = sizeof(WaterPushConstants),
             .pushConstantStages = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
             .cullMode = vk::CullModeFlagBits::eNone,
+            .polygonMode = wireframeMode ? vk::PolygonMode::eLine : vk::PolygonMode::eFill,
             .depthTestEnable = true,
             .depthWriteEnable = false,
             .blendEnable = true

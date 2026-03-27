@@ -42,6 +42,16 @@ namespace controllers
         }
     }
 
+    void OffScreenController::setShowWireframe(bool show)
+    {
+        showWireframe = show;
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (renderHandler)
+        {
+            renderHandler->setWireframeMode(show);
+        }
+    }
+
     void OffScreenController::setShowNavmeshDebug(bool show)
     {
         auto* renderHandler = offScreen->getRenderPassHandler();

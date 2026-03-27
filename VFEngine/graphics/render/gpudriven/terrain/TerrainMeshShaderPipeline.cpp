@@ -544,6 +544,7 @@ namespace render::gpudriven
             .shaderStages = terrainShader->getShaderStages(),
             .existingPipelineLayout = pipelineLayout,
             .cullMode = vk::CullModeFlagBits::eBack,
+            .polygonMode = wireframeMode ? vk::PolygonMode::eLine : vk::PolygonMode::eFill,
             .depthTestEnable = true,
             .depthWriteEnable = true
         };

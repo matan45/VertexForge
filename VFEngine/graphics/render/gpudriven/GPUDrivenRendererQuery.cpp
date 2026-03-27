@@ -118,6 +118,54 @@ namespace render::gpudriven
         lightCulling.useBVH = false;
     }
 
+    void GPUDrivenRenderer::setWireframeMode(bool enabled)
+    {
+        if (wireframeMode == enabled) return;
+        wireframeMode = enabled;
+
+        device.getLogicalDevice().waitIdle();
+
+        if (terrain.pipeline)
+        {
+            terrain.pipeline->setWireframeMode(enabled);
+            terrain.pipeline->recreate(cachedIBLLayout,
+                                       bindlessTextures->getDescriptorSetLayout(),
+                                       meshShaderPipeline->getMeshletDataLayout(),
+                                       meshShaderPipeline->getVertexDataLayout(),
+                                       lightBufferManager->getDescriptorSetLayout(),
+                                       clusterGridManager->getDescriptorSetLayout(),
+                                       lightCullingPipeline->getDescriptorSetLayout(),
+                                       shadowSystem->getShadowDataLayout(),
+                                       shadowSystem->getShadowTextureLayout(),
+                                       cachedRenderPass);
+        }
+
+        if (water.pipeline)
+        {
+            water.pipeline->setWireframeMode(enabled);
+
+            vk::DescriptorSetLayout oceanLayout{};
+            if (water.multiBandOceanLayout)
+                oceanLayout = water.multiBandOceanLayout;
+
+            vk::DescriptorSetLayout refractionLayout{};
+            if (water.refractionResources && water.refractionResources->isInitialized())
+                refractionLayout = water.refractionResources->getDescriptorSetLayout();
+
+            water.pipeline->recreate({
+                cachedIBLLayout,
+                lightBufferManager->getDescriptorSetLayout(),
+                clusterGridManager->getDescriptorSetLayout(),
+                lightCullingPipeline->getDescriptorSetLayout(),
+                shadowSystem->getShadowDataLayout(),
+                shadowSystem->getShadowTextureLayout(),
+                oceanLayout,
+                refractionLayout,
+                cachedRenderPass
+            });
+        }
+    }
+
     void GPUDrivenRenderer::setDeletionQueue(core::DeferredDeletionQueue* queue)
     {
         if (shadowSystem)

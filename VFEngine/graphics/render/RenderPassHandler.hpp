@@ -269,6 +269,8 @@ namespace render
         void setClusterDebugData(mesh::ClusterDebugRenderData&& data);
         void setUICanvasOutlineDrawList(std::vector<mesh::UICanvasOutlineRenderData>&& outlines);
         void setUICanvasImageDrawList(std::vector<mesh::UICanvasImageRenderData>&& images);
+        void setWireframeMode(bool enabled);
+
         void setShowNavmeshDebug(bool show);
         bool getShowNavmeshDebug() const;
         void updateNavmeshDebugMesh(const std::vector<glm::vec3>& vertices, const std::vector<uint32_t>& indices);
