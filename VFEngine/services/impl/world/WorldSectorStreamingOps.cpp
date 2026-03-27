@@ -201,6 +201,22 @@ namespace services
         if (pendingAsyncLoads.size() >= kMaxConcurrentSectorLoads)
             return;
 
+        // Pre-notify subsystems (e.g. navmesh) so they can begin loading tiles
+        // before the sector transitions to Loading and entities begin spawning
+        {
+            float sectorSize = sectorManager.getConfig().sectorWorldSize;
+            ::events::world::SectorAboutToLoadNotification preNotif;
+            preNotif.coord = coord;
+            preNotif.sectorConfig = sectorManager.getConfig();
+            preNotif.boundsMin = glm::vec3(
+                static_cast<float>(coord.x) * sectorSize, -1000.0f,
+                static_cast<float>(coord.z) * sectorSize);
+            preNotif.boundsMax = glm::vec3(
+                static_cast<float>(coord.x + 1) * sectorSize, 1000.0f,
+                static_cast<float>(coord.z + 1) * sectorSize);
+            ::events::EventDispatcher::instance().publish(preNotif);
+        }
+
         sector->state = world::SectorState::Loading;
 
         // Notify subsystems (e.g. terrain) that this sector is now active
@@ -360,6 +376,7 @@ namespace services
 
         ::events::world::SectorUnloadedNotification notif;
         notif.coord = coord;
+        notif.sectorConfig = sectorManager.getConfig();
         ::events::EventDispatcher::instance().publish(notif);
     }
 

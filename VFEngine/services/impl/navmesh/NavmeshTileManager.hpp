@@ -3,10 +3,13 @@
 #include "NavmeshStreamer.hpp"
 #include "../../providers/navmesh/INavmeshProvider.hpp"
 #include "../../events/navmesh/NavmeshEvents.hpp"
+#include "../../events/world/WorldSectorEvents.hpp"
 #include "../../events/EventTypes.hpp"
 #include "navigation/NavmeshTileCache.hpp"
+#include "world/WorldTypes.hpp"
 #include <glm/glm.hpp>
 #include <unordered_set>
+#include <unordered_map>
 #include <vector>
 #include <future>
 #include <memory>
@@ -63,7 +66,15 @@ namespace services
 
         void setLastCameraPos(const glm::vec3& pos) { lastCameraPos = pos; }
 
-        // Event registration for brush subscriptions
+        // Sector-navmesh coordination
+        void prioritizeTilesForBounds(const world::SectorCoord& sectorCoord,
+                                       const glm::vec3& boundsMin, const glm::vec3& boundsMax);
+        void releaseTilesForSector(const world::SectorCoord& sectorCoord,
+                                    const glm::vec3& boundsMin, const glm::vec3& boundsMax);
+        std::vector<navigation::NavmeshTileCoord> computeTilesForBounds(
+            const glm::vec3& boundsMin, const glm::vec3& boundsMax) const;
+
+        // Event registration for brush and sector subscriptions
         void registerEvents();
         void unregisterEvents();
 
@@ -95,5 +106,21 @@ namespace services
 
         ::events::SubscriptionToken brushAppliedToken;
         ::events::SubscriptionToken holeBrushAppliedToken;
+
+        // Sector-navmesh coordination
+        struct SectorTileRequest
+        {
+            world::SectorCoord sectorCoord;
+            std::vector<navigation::NavmeshTileCoord> tileCoords;
+        };
+
+        std::vector<SectorTileRequest> pendingSectorTileRequests;
+        std::unordered_map<navigation::NavmeshTileCoord, int, navigation::NavmeshTileCoordHash> sectorRefCounts;
+
+        ::events::SubscriptionToken sectorAboutToLoadToken;
+        ::events::SubscriptionToken sectorUnloadedToken;
+
+        void processSectorTileRequests();
+        static constexpr int MAX_SECTOR_TILE_LOADS_PER_FRAME = 4;
     };
 }

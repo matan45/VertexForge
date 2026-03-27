@@ -170,6 +170,16 @@ namespace events::world
         std::string_view getName() const override { return "WorldLoaded"; }
     };
 
+    struct SectorAboutToLoadNotification : INotification
+    {
+        ::world::SectorCoord coord;
+        glm::vec3 boundsMin{0.0f};
+        glm::vec3 boundsMax{0.0f};
+        ::world::SectorConfig sectorConfig;
+
+        std::string_view getName() const override { return "SectorAboutToLoad"; }
+    };
+
     struct SectorActivatedNotification : INotification
     {
         ::world::SectorCoord coord;
@@ -197,6 +207,7 @@ namespace events::world
     struct SectorUnloadedNotification : INotification
     {
         ::world::SectorCoord coord;
+        ::world::SectorConfig sectorConfig;
 
         std::string_view getName() const override { return "SectorUnloaded"; }
     };

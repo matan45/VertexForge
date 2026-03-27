@@ -70,6 +70,11 @@ namespace services
             getLoadedTileLods() const { return loadedTileLods; }
 
         void markTileLoaded(const navigation::NavmeshTileCoord& coord) { loadedTileLods[coord] = 0; }
+        void markTileUnloaded(const navigation::NavmeshTileCoord& coord)
+        {
+            loadedTileLods.erase(coord);
+            generatedTiles.erase(coord);
+        }
         void markTileGenerated(const navigation::NavmeshTileCoord& coord) { generatedTiles.insert(coord); loadedTileLods[coord] = 0; }
         void clear();
 

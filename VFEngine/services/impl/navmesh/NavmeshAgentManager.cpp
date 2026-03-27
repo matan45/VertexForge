@@ -78,6 +78,7 @@ namespace services
             }
 
             entityToAgentIndex.erase(it);
+            velocityTransitionFrames.erase(entity.id);
         }
     }
 
@@ -100,6 +101,7 @@ namespace services
             navmeshProvider->stopCrowdAgent(it->second);
             entityToTarget.erase(entity.id);
             entityStuckTimer.erase(entity.id);
+            velocityTransitionFrames.erase(entity.id);
         }
     }
 
@@ -142,6 +144,30 @@ namespace services
         }
 
         navmeshProvider->updateCrowd(deltaTime);
+
+        // Process velocity transitions for recently-resumed agents
+        if (!velocityTransitionFrames.empty())
+        {
+            auto transIt = velocityTransitionFrames.begin();
+            while (transIt != velocityTransitionFrames.end())
+            {
+                transIt->second--;
+                if (transIt->second <= 0)
+                {
+                    auto agentIt = entityToAgentIndex.find(transIt->first);
+                    auto targetIt = entityToTarget.find(transIt->first);
+                    if (agentIt != entityToAgentIndex.end() && targetIt != entityToTarget.end())
+                    {
+                        navmeshProvider->setCrowdAgentTarget(agentIt->second, targetIt->second);
+                    }
+                    transIt = velocityTransitionFrames.erase(transIt);
+                }
+                else
+                {
+                    ++transIt;
+                }
+            }
+        }
 
         auto& registry = scene::EntityRegistry::getRegistry();
         for (const auto& [entityId, agentIdx] : entityToAgentIndex)
@@ -232,8 +258,19 @@ namespace services
                 SuspendedAgent suspended;
                 suspended.entityId = entityId;
                 suspended.position = agentPos;
-                suspended.target = glm::vec3(0.0f);
-                suspended.hasTarget = false;
+                suspended.velocity = navmeshProvider->getCrowdAgentVelocity(agentIdx);
+
+                auto targetIt = entityToTarget.find(entityId);
+                if (targetIt != entityToTarget.end())
+                {
+                    suspended.target = targetIt->second;
+                    suspended.hasTarget = true;
+                }
+                else
+                {
+                    suspended.target = glm::vec3(0.0f);
+                    suspended.hasTarget = false;
+                }
 
                 auto enttEntity = internal::fromHandle(EntityHandle{entityId});
                 if (registry.valid(enttEntity) && registry.all_of<components::NavmeshAgentComponent>(enttEntity))
@@ -241,6 +278,8 @@ namespace services
                     auto& agent = registry.get<components::NavmeshAgentComponent>(enttEntity);
                     agent.isSuspended = true;
                     agent.suspendedPosition = agentPos;
+                    agent.suspendedTarget = suspended.target;
+                    agent.hasSuspendedTarget = suspended.hasTarget;
                 }
 
                 navmeshProvider->removeCrowdAgent(agentIdx);
@@ -252,6 +291,9 @@ namespace services
         for (uint64_t id : toRemove)
         {
             entityToAgentIndex.erase(id);
+            entityToTarget.erase(id);
+            entityStuckTimer.erase(id);
+            velocityTransitionFrames.erase(id);
         }
     }
 
@@ -287,6 +329,15 @@ namespace services
                         if (it->hasTarget)
                         {
                             navmeshProvider->setCrowdAgentTarget(agentIdx, it->target);
+                            entityToTarget[it->entityId] = it->target;
+                        }
+
+                        // If agent had meaningful velocity, use velocity override for smooth transition
+                        float speed = glm::length(it->velocity);
+                        if (speed > 0.01f)
+                        {
+                            navmeshProvider->overrideCrowdAgentVelocity(agentIdx, it->velocity);
+                            velocityTransitionFrames[it->entityId] = VELOCITY_TRANSITION_FRAMES;
                         }
                     }
                 }
@@ -306,5 +357,6 @@ namespace services
         entityToTarget.clear();
         entityStuckTimer.clear();
         suspendedAgents.clear();
+        velocityTransitionFrames.clear();
     }
 }

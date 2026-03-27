@@ -45,6 +45,31 @@ namespace services
                 markTileDirty(coord.x, coord.z - 1);
                 markTileDirty(coord.x, coord.z + 1);
             });
+
+        // Sector-driven navmesh pre-loading
+        sectorAboutToLoadToken = dispatcher.subscribe<::events::world::SectorAboutToLoadNotification>(
+            [this](const ::events::world::SectorAboutToLoadNotification& notif)
+            {
+                if (!streamer.isEnabled())
+                    return;
+                prioritizeTilesForBounds(notif.coord, notif.boundsMin, notif.boundsMax);
+            });
+
+        // Coordinated unload
+        sectorUnloadedToken = dispatcher.subscribe<::events::world::SectorUnloadedNotification>(
+            [this](const ::events::world::SectorUnloadedNotification& notif)
+            {
+                if (!streamer.isEnabled())
+                    return;
+                float sectorSize = notif.sectorConfig.sectorWorldSize;
+                glm::vec3 boundsMin(
+                    static_cast<float>(notif.coord.x) * sectorSize, -1000.0f,
+                    static_cast<float>(notif.coord.z) * sectorSize);
+                glm::vec3 boundsMax(
+                    static_cast<float>(notif.coord.x + 1) * sectorSize, 1000.0f,
+                    static_cast<float>(notif.coord.z + 1) * sectorSize);
+                releaseTilesForSector(notif.coord, boundsMin, boundsMax);
+            });
     }
 
     void NavmeshTileManager::unregisterEvents()
@@ -54,6 +79,10 @@ namespace services
             dispatcher.unsubscribe(brushAppliedToken);
         if (holeBrushAppliedToken.isValid())
             dispatcher.unsubscribe(holeBrushAppliedToken);
+        if (sectorAboutToLoadToken.isValid())
+            dispatcher.unsubscribe(sectorAboutToLoadToken);
+        if (sectorUnloadedToken.isValid())
+            dispatcher.unsubscribe(sectorUnloadedToken);
     }
 
     navigation::NavmeshTileCoord NavmeshTileManager::worldToTileCoord(const glm::vec3& worldPos) const
@@ -283,6 +312,9 @@ namespace services
         if (!streamer.isEnabled())
             return result;
 
+        // Process sector-driven tile requests with priority before normal streaming
+        processSectorTileRequests();
+
         if (!invokerSources.empty())
         {
             std::vector<navigation::NavmeshTileCoord> needGeneration;
@@ -454,9 +486,157 @@ namespace services
         dirtyTiles.clear();
         pendingGenerationTiles.clear();
         pendingTileBakes.clear();
+        pendingSectorTileRequests.clear();
+        sectorRefCounts.clear();
         invokerSources.clear();
         tiledNavmeshInitialized = false;
         streamer.clear();
         tileCache.reset();
+    }
+
+    std::vector<navigation::NavmeshTileCoord> NavmeshTileManager::computeTilesForBounds(
+        const glm::vec3& boundsMin, const glm::vec3& boundsMax) const
+    {
+        float tileWorldSize = bakeSettings.tileSize * bakeSettings.cellSize;
+        int minTileX = static_cast<int>(std::floor(boundsMin.x / tileWorldSize));
+        int maxTileX = static_cast<int>(std::floor((boundsMax.x - 0.001f) / tileWorldSize));
+        int minTileZ = static_cast<int>(std::floor(boundsMin.z / tileWorldSize));
+        int maxTileZ = static_cast<int>(std::floor((boundsMax.z - 0.001f) / tileWorldSize));
+
+        std::vector<navigation::NavmeshTileCoord> result;
+        result.reserve((maxTileX - minTileX + 1) * (maxTileZ - minTileZ + 1));
+        for (int x = minTileX; x <= maxTileX; ++x)
+            for (int z = minTileZ; z <= maxTileZ; ++z)
+                result.push_back({x, z});
+        return result;
+    }
+
+    void NavmeshTileManager::prioritizeTilesForBounds(const world::SectorCoord& sectorCoord,
+                                                       const glm::vec3& boundsMin,
+                                                       const glm::vec3& boundsMax)
+    {
+        auto tiles = computeTilesForBounds(boundsMin, boundsMax);
+
+        SectorTileRequest request;
+        request.sectorCoord = sectorCoord;
+
+        for (const auto& coord : tiles)
+        {
+            sectorRefCounts[coord]++;
+
+            if (!streamer.isTileLoaded(coord))
+                request.tileCoords.push_back(coord);
+        }
+
+        if (!request.tileCoords.empty())
+            pendingSectorTileRequests.push_back(std::move(request));
+    }
+
+    void NavmeshTileManager::processSectorTileRequests()
+    {
+        if (pendingSectorTileRequests.empty() || !tileCache)
+            return;
+
+        int loaded = 0;
+        auto& dispatcher = ::events::EventDispatcher::instance();
+
+        auto it = pendingSectorTileRequests.begin();
+        while (it != pendingSectorTileRequests.end() && loaded < MAX_SECTOR_TILE_LOADS_PER_FRAME)
+        {
+            auto& request = *it;
+            auto tileIt = request.tileCoords.begin();
+
+            while (tileIt != request.tileCoords.end() && loaded < MAX_SECTOR_TILE_LOADS_PER_FRAME)
+            {
+                const auto& coord = *tileIt;
+
+                if (streamer.isTileLoaded(coord))
+                {
+                    tileIt = request.tileCoords.erase(tileIt);
+                    continue;
+                }
+
+                navigation::NavmeshTileData tileData;
+                if (tileCache->loadTile(coord, tileData))
+                {
+                    if (navmeshProvider->addNavmeshTile(tileData))
+                    {
+                        streamer.markTileLoaded(coord);
+                        loaded++;
+
+                        events::navmesh::NavmeshTileLoadedNotification notif;
+                        notif.tileX = coord.x;
+                        notif.tileZ = coord.z;
+                        dispatcher.publish(notif);
+                    }
+                    tileIt = request.tileCoords.erase(tileIt);
+                }
+                else
+                {
+                    // Not in cache — queue for on-demand generation
+                    pendingGenerationTiles.insert(coord);
+                    tileIt = request.tileCoords.erase(tileIt);
+                }
+            }
+
+            if (request.tileCoords.empty())
+                it = pendingSectorTileRequests.erase(it);
+            else
+                ++it;
+        }
+    }
+
+    void NavmeshTileManager::releaseTilesForSector(const world::SectorCoord& sectorCoord,
+                                                     const glm::vec3& boundsMin,
+                                                     const glm::vec3& boundsMax)
+    {
+        auto tiles = computeTilesForBounds(boundsMin, boundsMax);
+        float tileWorldSize = bakeSettings.tileSize * bakeSettings.cellSize;
+
+        auto& dispatcher = ::events::EventDispatcher::instance();
+
+        for (const auto& coord : tiles)
+        {
+            auto refIt = sectorRefCounts.find(coord);
+            if (refIt == sectorRefCounts.end())
+                continue;
+
+            refIt->second--;
+            if (refIt->second <= 0)
+            {
+                sectorRefCounts.erase(refIt);
+
+                // No sector needs this tile anymore — unload if also outside invoker ranges
+                if (streamer.isTileLoaded(coord))
+                {
+                    bool withinInvoker = false;
+                    float cx = (coord.x + 0.5f) * tileWorldSize;
+                    float cz = (coord.z + 0.5f) * tileWorldSize;
+
+                    for (const auto& src : invokerSources)
+                    {
+                        float dx = src.position.x - cx;
+                        float dz = src.position.z - cz;
+                        float distSq = dx * dx + dz * dz;
+                        if (distSq <= src.unloadRadiusSq)
+                        {
+                            withinInvoker = true;
+                            break;
+                        }
+                    }
+
+                    if (!withinInvoker)
+                    {
+                        navmeshProvider->removeNavmeshTile(coord.x, coord.z);
+                        streamer.markTileUnloaded(coord);
+
+                        events::navmesh::NavmeshTileUnloadedNotification notif;
+                        notif.tileX = coord.x;
+                        notif.tileZ = coord.z;
+                        dispatcher.publish(notif);
+                    }
+                }
+            }
+        }
     }
 }

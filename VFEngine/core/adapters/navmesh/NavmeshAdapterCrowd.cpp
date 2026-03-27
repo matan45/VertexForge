@@ -131,6 +131,16 @@ namespace core
             crowd->update(deltaTime, nullptr);
     }
 
+    bool NavmeshAdapter::overrideCrowdAgentVelocity(int agentIndex, const glm::vec3& velocity)
+    {
+        std::lock_guard lock(navMeshMutex);
+        if (!crowd)
+            return false;
+
+        float vel[3] = {velocity.x, velocity.y, velocity.z};
+        return crowd->requestMoveVelocity(agentIndex, vel);
+    }
+
     void NavmeshAdapter::getDebugMesh(std::vector<glm::vec3>& outVertices,
                                        std::vector<uint32_t>& outIndices) const
     {
