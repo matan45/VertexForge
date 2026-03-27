@@ -402,7 +402,7 @@ namespace render
         void applyCloudSettings(const cloud::CloudSettings& settings);
         cloud::CloudPipeline* getCloudPipeline() const { return cloudPipeline.get(); }
 
-        void cleanUp() const;
+        void cleanUp();
 
         void draw(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
         

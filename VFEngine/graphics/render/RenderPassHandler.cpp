@@ -49,11 +49,6 @@ namespace render
     {
         if (materialChangeCallbackId)
             material::MaterialManager::instance().unregisterChangeCallback(materialChangeCallbackId);
-        if (oceanFFTInitialized && gpuDrivenRenderer)
-        {
-            gpuDrivenRenderer->cleanupOceanFFT();
-            oceanFFTInitialized = false;
-        }
     }
 
     void RenderPassHandler::init()
@@ -203,8 +198,13 @@ namespace render
         if (meshPipelineInitialized) meshPipeline->cleanUpShader();
     }
 
-    void RenderPassHandler::cleanUp() const
+    void RenderPassHandler::cleanUp()
     {
+        if (oceanFFTInitialized && gpuDrivenRenderer)
+        {
+            gpuDrivenRenderer->cleanupOceanFFT();
+            oceanFFTInitialized = false;
+        }
         if (terrainRaycastPipeline) terrainRaycastPipeline->cleanup();
         if (wboitPipeline) wboitPipeline->cleanup();
         if (decalPipeline) decalPipeline->cleanup();
