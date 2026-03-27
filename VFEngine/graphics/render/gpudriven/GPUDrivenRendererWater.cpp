@@ -176,7 +176,7 @@ namespace render::gpudriven
             lightCullingPipeline->getDescriptorSet(),
             shadowSystem && shadowSystem->isInitialized() ? shadowSystem->getShadowDataDescSet() : vk::DescriptorSet{},
             shadowSystem && shadowSystem->isInitialized() ? shadowSystem->getShadowTextureDescSet() : vk::DescriptorSet{},
-            (water.oceanEnabled && water.multiBandOceanDescSet)
+            (water.oceanEnabled && water.multiBandDescriptorValid && water.multiBandOceanDescSet)
                 ? water.multiBandOceanDescSet : vk::DescriptorSet{},
             (water.refractionResources && water.refractionResources->isInitialized())
                 ? water.refractionResources->getDescriptorSet() : vk::DescriptorSet{}
@@ -351,6 +351,7 @@ namespace render::gpudriven
             water.multiBandOceanLayout = nullptr;
         }
         water.multiBandOceanDescSet = nullptr;
+        water.multiBandDescriptorValid = false;
 
         // Create layout: 6 combined image samplers (vertex + fragment)
         std::array<vk::DescriptorSetLayoutBinding, 6> bindings{};
@@ -402,7 +403,10 @@ namespace render::gpudriven
             }
         }
 
-        if (!fallbackResources)
+        if (!fallbackResources ||
+            !fallbackResources->getDisplacementView() ||
+            !fallbackResources->getNormalView() ||
+            !fallbackResources->getOutputSampler())
             return;
 
         std::array<vk::DescriptorImageInfo, 6> imageInfos{};
@@ -414,8 +418,16 @@ namespace render::gpudriven
                 resources = water.oceanBands[i]->getResources();
 
             vk::Sampler sampler = resources->getOutputSampler();
-            imageInfos[i * 2 + 0] = {sampler, resources->getDisplacementView(), vk::ImageLayout::eShaderReadOnlyOptimal};
-            imageInfos[i * 2 + 1] = {sampler, resources->getNormalView(), vk::ImageLayout::eShaderReadOnlyOptimal};
+            vk::ImageView dispView = resources->getDisplacementView();
+            vk::ImageView normView = resources->getNormalView();
+
+            // Safety: if views are null, use fallback
+            if (!dispView) dispView = fallbackResources->getDisplacementView();
+            if (!normView) normView = fallbackResources->getNormalView();
+            if (!sampler) sampler = fallbackResources->getOutputSampler();
+
+            imageInfos[i * 2 + 0] = {sampler, dispView, vk::ImageLayout::eShaderReadOnlyOptimal};
+            imageInfos[i * 2 + 1] = {sampler, normView, vk::ImageLayout::eShaderReadOnlyOptimal};
         }
 
         // Write all 6 descriptors
@@ -429,6 +441,7 @@ namespace render::gpudriven
             writes[i].pImageInfo = &imageInfos[i];
         }
         device.getLogicalDevice().updateDescriptorSets(writes, nullptr);
+        water.multiBandDescriptorValid = true;
     }
 
     void GPUDrivenRenderer::cleanupOceanFFT()
@@ -477,6 +490,7 @@ namespace render::gpudriven
             water.multiBandOceanLayout = nullptr;
         }
         water.multiBandOceanDescSet = nullptr;
+        water.multiBandDescriptorValid = false;
 
         // Recreate mesh shader pipelines without caustic layout
         if (meshShaderPipeline && shadowSystem)

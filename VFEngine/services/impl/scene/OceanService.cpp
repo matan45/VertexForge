@@ -20,7 +20,22 @@ namespace services
 
     OceanService::~OceanService()
     {
+        physicsProvider = nullptr;
+        sceneGraph.reset();
+
         auto& dispatcher = events::EventDispatcher::instance();
+
+        // Unsubscribe notifications first to prevent callbacks during teardown
+        if (entityDeletedSubscription && entityDeletedSubscription->isValid())
+        {
+            dispatcher.unsubscribe(*entityDeletedSubscription);
+            entityDeletedSubscription.reset();
+        }
+        if (sceneClearedSubscription && sceneClearedSubscription->isValid())
+        {
+            dispatcher.unsubscribe(*sceneClearedSubscription);
+            sceneClearedSubscription.reset();
+        }
 
         dispatcher.unregisterCommandHandler<events::ocean::CreateOceanCommand>();
         dispatcher.unregisterCommandHandler<events::ocean::DeleteOceanCommand>();
@@ -38,12 +53,6 @@ namespace services
         dispatcher.unregisterQueryHandler<events::ocean::IsOceanFFTEnabledQuery>();
         dispatcher.unregisterQueryHandler<events::ocean::GetOceanHeightAtQuery>();
         dispatcher.unregisterQueryHandler<events::ocean::IsPositionInOceanQuery>();
-
-        if (entityDeletedSubscription && entityDeletedSubscription->isValid())
-            dispatcher.unsubscribe(*entityDeletedSubscription);
-
-        if (sceneClearedSubscription && sceneClearedSubscription->isValid())
-            dispatcher.unsubscribe(*sceneClearedSubscription);
     }
 
     void OceanService::registerEventHandlers()

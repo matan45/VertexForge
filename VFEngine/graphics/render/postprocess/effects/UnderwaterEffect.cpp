@@ -97,16 +97,15 @@ namespace render::postprocess
                                    vk::DescriptorSet inputDescriptorSet)
     {
         auto camData = pipeline.getCameraData();
-        if (camData.submersionFactor <= 0.01f)
-            return;
 
         commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
         commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout,
                                           0, inputDescriptorSet, nullptr);
 
+        // Always draw — the shader handles early-out via submersionFactor=0 (passthrough)
         UnderwaterPushConstants pc{};
         pc.waterHeight = camData.waterHeight;
-        pc.cameraDepth = camData.waterHeight - camData.cameraPosition.y;
+        pc.cameraDepth = std::max(0.0f, camData.waterHeight - camData.cameraPosition.y);
         pc.submersionFactor = camData.submersionFactor;
         pc.time = camData.time;
         pc.fogDensity = currentSettings.fogDensity;

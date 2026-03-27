@@ -176,6 +176,7 @@ namespace render::gpudriven
             vk::DescriptorSetLayout multiBandOceanLayout;
             vk::DescriptorPool multiBandOceanPool;
             vk::DescriptorSet multiBandOceanDescSet;
+            bool multiBandDescriptorValid = false;
             // Refraction
             std::unique_ptr<render::water::WaterRefractionResources> refractionResources;
             // Caustics

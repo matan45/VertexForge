@@ -116,7 +116,6 @@ namespace handlers
         renderService.reset();
         sceneService.reset();
         terrainService.reset();
-        oceanService.reset();
         projectService.reset();
         fileOperationsService.reset();
         undoRedoService.reset();
@@ -124,6 +123,7 @@ namespace handlers
         physicsAnimationService.reset();
         navmeshService.reset();
         physicsPlayModeHandler.reset();
+        oceanService.reset();
         vfxPlayModeHandler.reset();
         renderTexturePlayModeHandler.reset();
         vfxRuntimeService.reset();
