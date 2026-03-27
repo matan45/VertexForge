@@ -601,19 +601,35 @@ namespace render::gpudriven
                                                const std::array<bool, 3>& bandEnabled)
     {
         bool needsRecreate = false;
+        bool needsDescriptorRefresh = false;
+
         for (uint32_t i = 0; i < 3; ++i)
         {
-            if (bandEnabled[i] && water.oceanBands[i] && water.oceanBands[i]->isInitialized())
-                water.oceanBands[i]->updateConfig(bandConfigs[i]);
-
-            // Check if a band was toggled
             bool wasActive = water.oceanBands[i] && water.oceanBands[i]->isInitialized();
+
             if (bandEnabled[i] != wasActive)
+            {
                 needsRecreate = true;
+            }
+            else if (bandEnabled[i] && wasActive)
+            {
+                // Check if resolution changed (requires full band rebuild)
+                bool resolutionChanged = bandConfigs[i].resolution != water.oceanBands[i]->getConfig().resolution;
+                water.oceanBands[i]->updateConfig(bandConfigs[i]);
+                if (resolutionChanged)
+                    needsDescriptorRefresh = true;
+            }
         }
 
         if (needsRecreate)
+        {
             initOceanFFT(bandConfigs, bandEnabled);
+        }
+        else if (needsDescriptorRefresh)
+        {
+            // Resolution change rebuilt the band's resources — refresh composite descriptor
+            updateMultiBandOceanDescriptor();
+        }
     }
 
     void GPUDrivenRenderer::dispatchOceanFFT(vk::CommandBuffer cmd, float time)
