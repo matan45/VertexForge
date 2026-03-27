@@ -1,6 +1,7 @@
 #pragma once
 #include <string>
 #include <cstdint>
+#include <cmath>
 
 namespace types
 {
@@ -95,12 +96,29 @@ namespace types
         // LOD
         NavmeshLodConfig lodConfig;
 
+        // Sector-navmesh grid alignment
+        bool alignToSectorGrid = false;
+        float sectorWorldSize = 128.0f;
+
         NavmeshBakeSettings()
         {
             for (int i = NAVMESH_NAMED_AREA_COUNT; i < 64; ++i)
                 areaCosts[i] = 1.0f;
         }
     };
+
+    inline int navmeshTilesPerSectorEdge(const NavmeshBakeSettings& settings)
+    {
+        float tileWorldSize = settings.tileSize * settings.cellSize;
+        return static_cast<int>(std::round(settings.sectorWorldSize / tileWorldSize));
+    }
+
+    inline bool isNavmeshAlignedToSector(const NavmeshBakeSettings& settings)
+    {
+        float tileWorldSize = settings.tileSize * settings.cellSize;
+        float ratio = settings.sectorWorldSize / tileWorldSize;
+        return std::abs(ratio - std::round(ratio)) < 0.001f;
+    }
 
     enum class NavmeshBakeStatus : uint8_t
     {
