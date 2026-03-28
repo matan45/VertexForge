@@ -1,6 +1,7 @@
 #include "StagingRingBuffer.hpp"
 #include "BufferUtilities.hpp"
 #include "Device.hpp"
+#include "memory/GpuAllocationStats.hpp"
 #include "print/Log.hpp"
 
 namespace core
@@ -8,7 +9,7 @@ namespace core
 	StagingRingBuffer::StagingRingBuffer(Device& device, vk::DeviceSize ringSize)
 		: ownerDevice(device)
 		, device(device.getLogicalDevice())
-		, ringSize(ringSize)
+		, ringSize(ringSize > 0 ? ringSize : memory::MemoryPoolConfig::instance().stagingRingBufferSize())
 	{
 		// Create a single large host-visible staging buffer
 		BufferInfoRequest bufferInfo(

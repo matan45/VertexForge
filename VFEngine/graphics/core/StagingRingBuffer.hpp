@@ -25,9 +25,7 @@ namespace core
 	class StagingRingBuffer
 	{
 	public:
-		static constexpr vk::DeviceSize DEFAULT_RING_SIZE = 64ull * 1024 * 1024; // 64 MB
-
-		StagingRingBuffer(Device& device, vk::DeviceSize ringSize = DEFAULT_RING_SIZE);
+		StagingRingBuffer(Device& device, vk::DeviceSize ringSize = 0);
 		~StagingRingBuffer();
 
 		StagingRingBuffer(const StagingRingBuffer&) = delete;

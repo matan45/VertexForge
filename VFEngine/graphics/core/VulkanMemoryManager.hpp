@@ -59,10 +59,6 @@ namespace core
 	class VulkanMemoryManager
 	{
 	public:
-		// Default block sizes
-		static constexpr vk::DeviceSize DEFAULT_DEVICE_LOCAL_BLOCK_SIZE = 256ull * 1024 * 1024; // 256 MB
-		static constexpr vk::DeviceSize DEFAULT_HOST_VISIBLE_BLOCK_SIZE = 64ull * 1024 * 1024;  // 64 MB
-
 		explicit VulkanMemoryManager(Device& device);
 		~VulkanMemoryManager();
 

@@ -1,6 +1,7 @@
 #include "VulkanMemoryManager.hpp"
 #include "Device.hpp"
 #include "MemoryUtilities.hpp"
+#include "memory/GpuAllocationStats.hpp"
 #include "print/Log.hpp"
 
 namespace core
@@ -204,10 +205,11 @@ namespace core
 
 	vk::DeviceSize VulkanMemoryManager::getBlockSizeForType(uint32_t memoryTypeIndex) const
 	{
+		auto& config = memory::MemoryPoolConfig::instance();
 		if (isHostVisible(memoryTypeIndex)) {
-			return DEFAULT_HOST_VISIBLE_BLOCK_SIZE;
+			return config.hostVisibleBlockSize();
 		}
-		return DEFAULT_DEVICE_LOCAL_BLOCK_SIZE;
+		return config.deviceLocalBlockSize();
 	}
 
 	VulkanAllocation VulkanMemoryManager::allocateDedicated(vk::DeviceSize size, uint32_t memoryTypeIndex,
