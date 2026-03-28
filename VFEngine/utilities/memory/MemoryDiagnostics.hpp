@@ -1,7 +1,5 @@
 #pragma once
 
-#include <mutex>
-
 namespace memory {
 
 	class MemoryDiagnostics {
@@ -12,7 +10,6 @@ namespace memory {
 
 	private:
 		MemoryDiagnostics() = default;
-		mutable std::mutex diagMutex;
 	};
 
 }

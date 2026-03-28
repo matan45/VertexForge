@@ -54,6 +54,7 @@ namespace core
 
 		vk::DeviceSize writeOffset = 0;
 		vk::DeviceSize readOffset = 0;
+		vk::DeviceSize copyAlignment = 1;
 
 		mutable std::mutex ringMutex;
 

@@ -9,7 +9,9 @@ namespace memory {
 
 	class FreeListHeapAllocator : public IAllocator {
 	public:
-		FreeListHeapAllocator(uint64_t capacity, const std::string& name = "FreeListHeapAllocator");
+		// When backingBuffer is false, no CPU memory is allocated (offset-only tracking for GPU blocks)
+		FreeListHeapAllocator(uint64_t capacity, const std::string& name = "FreeListHeapAllocator",
+			bool backingBuffer = false);
 		~FreeListHeapAllocator() override;
 
 		FreeListHeapAllocator(const FreeListHeapAllocator&) = delete;

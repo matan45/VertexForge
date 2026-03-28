@@ -28,6 +28,10 @@ namespace core
 		// Persistently map
 		baseMappedPtr = bufferAllocation.mappedPtr;
 
+		// Query optimal copy alignment
+		auto props = device.getPhysicalDevice().getProperties();
+		copyAlignment = std::max(static_cast<vk::DeviceSize>(1), props.limits.optimalBufferCopyOffsetAlignment);
+
 		vfLogInfo("StagingRingBuffer: Created {}MB ring buffer", this->ringSize / (1024 * 1024));
 	}
 
@@ -43,17 +47,21 @@ namespace core
 	{
 		std::lock_guard lock(ringMutex);
 
+		// Align writeOffset to optimalBufferCopyOffsetAlignment
+		vk::DeviceSize alignedWrite = (writeOffset + copyAlignment - 1) & ~(copyAlignment - 1);
+
 		// Check if we have enough contiguous space
 		vk::DeviceSize available = availableSpace();
 
 		// Try linear allocation (no wrap)
-		if (writeOffset + size <= ringSize && size <= available) {
+		vk::DeviceSize alignedSize = (alignedWrite - writeOffset) + size;
+		if (alignedWrite + size <= ringSize && alignedSize <= available) {
 			StagingRegion region;
-			region.offset = writeOffset;
-			region.mappedPtr = static_cast<uint8_t*>(baseMappedPtr) + writeOffset;
+			region.offset = alignedWrite;
+			region.mappedPtr = static_cast<uint8_t*>(baseMappedPtr) + alignedWrite;
 			region.size = size;
 			region.isOverflow = false;
-			writeOffset += size;
+			writeOffset = alignedWrite + size;
 			return region;
 		}
 

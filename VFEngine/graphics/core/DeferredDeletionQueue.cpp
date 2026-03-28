@@ -1,6 +1,7 @@
 #include "DeferredDeletionQueue.hpp"
 #include "VulkanMemoryManager.hpp"
 #include "Device.hpp"
+#include "memory/GpuAllocationStats.hpp"
 #include <spdlog/spdlog.h>
 
 namespace core
@@ -169,7 +170,11 @@ namespace core
                 if (deletion.buffer)
                     logicalDevice.destroyBuffer(deletion.buffer);
                 if (deletion.allocation.isValid() && deletion.memManager)
+                {
+                    memory::GpuAllocationStats::managedAllocationCount.fetch_sub(1, std::memory_order_relaxed);
+                    memory::GpuAllocationStats::managedAllocatedBytes.fetch_sub(deletion.allocation.size, std::memory_order_relaxed);
                     deletion.memManager->free(deletion.allocation);
+                }
             }
             else if constexpr (std::is_same_v<T, ImageDeletion>)
             {
@@ -181,7 +186,11 @@ namespace core
                 if (deletion.image)
                     logicalDevice.destroyImage(deletion.image);
                 if (deletion.allocation.isValid() && deletion.memManager)
+                {
+                    memory::GpuAllocationStats::managedAllocationCount.fetch_sub(1, std::memory_order_relaxed);
+                    memory::GpuAllocationStats::managedAllocatedBytes.fetch_sub(deletion.allocation.size, std::memory_order_relaxed);
                     deletion.memManager->free(deletion.allocation);
+                }
             }
             else if constexpr (std::is_same_v<T, ImageViewDeletion>)
             {

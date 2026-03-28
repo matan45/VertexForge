@@ -38,7 +38,7 @@ namespace core
 		VulkanMemoryBlock(const VulkanMemoryBlock&) = delete;
 		VulkanMemoryBlock& operator=(const VulkanMemoryBlock&) = delete;
 
-		VulkanAllocation allocate(vk::DeviceSize size, vk::DeviceSize alignment,
+		[[nodiscard]] VulkanAllocation allocate(vk::DeviceSize size, vk::DeviceSize alignment,
 			GpuResourceType resourceType, vk::DeviceSize bufferImageGranularity);
 		void free(vk::DeviceSize offset, vk::DeviceSize size);
 
@@ -71,7 +71,7 @@ namespace core
 		VulkanMemoryManager(const VulkanMemoryManager&) = delete;
 		VulkanMemoryManager& operator=(const VulkanMemoryManager&) = delete;
 
-		VulkanAllocation allocate(const vk::MemoryRequirements& memRequirements,
+		[[nodiscard]] VulkanAllocation allocate(const vk::MemoryRequirements& memRequirements,
 			vk::MemoryPropertyFlags properties,
 			bool needsDeviceAddress = false,
 			GpuResourceType resourceType = GpuResourceType::Buffer);

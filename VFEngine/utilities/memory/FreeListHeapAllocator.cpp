@@ -6,18 +6,21 @@ namespace memory {
 
 	std::atomic<uint32_t> FreeListHeapAllocator::nextAllocatorId{1};
 
-	FreeListHeapAllocator::FreeListHeapAllocator(uint64_t capacity, const std::string& name)
+	FreeListHeapAllocator::FreeListHeapAllocator(uint64_t capacity, const std::string& name,
+		bool backingBuffer)
 		: capacity(capacity)
 		, name(name)
 		, allocatorId(nextAllocatorId.fetch_add(1)) {
-		buffer = static_cast<uint8_t*>(std::malloc(static_cast<size_t>(capacity)));
+		if (backingBuffer) {
+			buffer = static_cast<uint8_t*>(std::malloc(static_cast<size_t>(capacity)));
+		}
 
 		// Start with one free block spanning the entire heap
 		freeBlocks.push_back({0, capacity});
 	}
 
 	FreeListHeapAllocator::~FreeListHeapAllocator() {
-		std::free(buffer);
+		std::free(buffer); // free(nullptr) is safe
 	}
 
 	AllocationHandle FreeListHeapAllocator::allocate(uint64_t size, uint64_t alignment) {

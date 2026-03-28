@@ -54,7 +54,7 @@ namespace memory {
 			return config;
 		}
 
-		bool dirty = false; // True if UI changed values (needs restart to apply)
+		std::atomic<bool> dirty{false}; // True if UI changed values (needs restart to apply)
 	};
 
 }

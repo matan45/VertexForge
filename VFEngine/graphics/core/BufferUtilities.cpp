@@ -38,6 +38,8 @@ namespace core
 			buffer = nullptr;
 		}
 		if (allocation.isValid()) {
+			memory::GpuAllocationStats::managedAllocationCount.fetch_sub(1, std::memory_order_relaxed);
+			memory::GpuAllocationStats::managedAllocatedBytes.fetch_sub(allocation.size, std::memory_order_relaxed);
 			memManager.free(allocation);
 			allocation = {};
 		}
@@ -58,6 +60,7 @@ namespace core
 		}
 
 		auto* dev = VulkanContext::getDeviceRaw();
+		if (!dev) return;
 		auto& memManager = dev->getMemoryManager();
 
 		// Create staging buffer with host-visible memory
