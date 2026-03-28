@@ -12,8 +12,15 @@ namespace window
     class Window;
 }
 
+namespace memory
+{
+    class FreeListHeapAllocator;
+}
+
 namespace core
 {
+    class VulkanMemoryManager;
+
     // GPU memory information for resource allocation decisions
     struct DeviceMemoryInfo
     {
@@ -83,6 +90,8 @@ namespace core
         vk::UniquePipelineCache pipelineCache;
         std::filesystem::path pipelineCachePath;
 
+        std::unique_ptr<VulkanMemoryManager> memoryManager;
+
         mutable std::mutex graphicsQueueMutex;
         mutable std::mutex transferQueueMutex;
 
@@ -113,7 +122,7 @@ namespace core
 
     public:
         explicit Device(const window::Window* window);
-        ~Device() = default;
+        ~Device();
 
         void init();
         void cleanUp();
@@ -167,6 +176,8 @@ namespace core
         void savePipelineCacheToDisk() const;
 
         DeviceMemoryInfo getDeviceMemoryInfo() const;
+        VulkanMemoryManager& getMemoryManager() { return *memoryManager; }
+        const VulkanMemoryManager& getMemoryManager() const { return *memoryManager; }
 
         bool isMeshShaderSupported() const { return meshShaderCapabilities.meshShaderSupported; }
         bool isTaskShaderSupported() const { return meshShaderCapabilities.taskShaderSupported; }

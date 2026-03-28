@@ -1,5 +1,6 @@
 #include "BufferUtilities.hpp"
 #include "MemoryUtilities.hpp"
+#include "VulkanMemoryManager.hpp"
 #include "Utilities.hpp"
 #include <cstring>
 
@@ -34,6 +35,37 @@ namespace core
 
 		bufferMemory = bufferInfo.logicalDevice.allocateMemory(allocInfo);
 		bufferInfo.logicalDevice.bindBufferMemory(buffer, bufferMemory, 0);
+	}
+
+	void BufferUtilities::createBuffer(const BufferInfoRequest& bufferInfo, vk::Buffer& buffer,
+		VulkanAllocation& allocation, VulkanMemoryManager& memManager)
+	{
+		vk::BufferCreateInfo bufferCreateInfo{};
+		bufferCreateInfo.size = bufferInfo.size;
+		bufferCreateInfo.usage = bufferInfo.usage;
+		bufferCreateInfo.sharingMode = vk::SharingMode::eExclusive;
+
+		buffer = bufferInfo.logicalDevice.createBuffer(bufferCreateInfo);
+
+		vk::MemoryRequirements memRequirements = bufferInfo.logicalDevice.getBufferMemoryRequirements(buffer);
+
+		bool needsDeviceAddress = (bufferInfo.usage & vk::BufferUsageFlagBits::eShaderDeviceAddress) != vk::BufferUsageFlags{};
+
+		allocation = memManager.allocate(memRequirements, bufferInfo.properties, needsDeviceAddress);
+		bufferInfo.logicalDevice.bindBufferMemory(buffer, allocation.memory, allocation.offset);
+	}
+
+	void BufferUtilities::destroyBuffer(const vk::Device& device, vk::Buffer& buffer,
+		VulkanAllocation& allocation, VulkanMemoryManager& memManager)
+	{
+		if (buffer) {
+			device.destroyBuffer(buffer);
+			buffer = nullptr;
+		}
+		if (allocation.isValid()) {
+			memManager.free(allocation);
+			allocation = {};
+		}
 	}
 
 	void BufferUtilities::copyToBuffer(

@@ -1,5 +1,6 @@
 #include "ImageUtilities.hpp"
 #include "MemoryUtilities.hpp"
+#include "VulkanMemoryManager.hpp"
 #include "BufferUtilities.hpp"
 #include "Device.hpp"
 #include "Utilities.hpp"
@@ -33,6 +34,32 @@ namespace core
 
 		imageMemory = imageInfo.logicalDevice.allocateMemory(allocInfo);
 		imageInfo.logicalDevice.bindImageMemory(image, imageMemory, 0);
+	}
+
+	void ImageUtilities::createImage(const ImageInfoRequest& imageInfo, vk::Image& image,
+		VulkanAllocation& allocation, VulkanMemoryManager& memManager)
+	{
+		vk::ImageCreateInfo imageCreateInfo{};
+		imageCreateInfo.imageType = vk::ImageType::e2D;
+		imageCreateInfo.extent.width = imageInfo.width;
+		imageCreateInfo.extent.height = imageInfo.height;
+		imageCreateInfo.extent.depth = 1;
+		imageCreateInfo.mipLevels = imageInfo.mipLevels;
+		imageCreateInfo.arrayLayers = imageInfo.layers;
+		imageCreateInfo.format = imageInfo.format;
+		imageCreateInfo.tiling = imageInfo.tiling;
+		imageCreateInfo.initialLayout = vk::ImageLayout::eUndefined;
+		imageCreateInfo.usage = imageInfo.usage;
+		imageCreateInfo.samples = vk::SampleCountFlagBits::e1;
+		imageCreateInfo.sharingMode = vk::SharingMode::eExclusive;
+		imageCreateInfo.flags = imageInfo.imageFlags;
+
+		image = imageInfo.logicalDevice.createImage(imageCreateInfo);
+
+		vk::MemoryRequirements memRequirements = imageInfo.logicalDevice.getImageMemoryRequirements(image);
+
+		allocation = memManager.allocate(memRequirements, imageInfo.properties);
+		imageInfo.logicalDevice.bindImageMemory(image, allocation.memory, allocation.offset);
 	}
 
 	void ImageUtilities::createImageView(const ImageViewInfoRequest& imageInfoView, vk::ImageView& imageView)

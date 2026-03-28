@@ -1,4 +1,5 @@
 #include "Device.hpp"
+#include "VulkanMemoryManager.hpp"
 #include "print/Log.hpp"
 #include "../window/Window.hpp"
 
@@ -37,6 +38,8 @@ namespace core
     {
     }
 
+    Device::~Device() = default;
+
     void Device::init()
     {
         createInstance();
@@ -47,10 +50,15 @@ namespace core
         queryRayQueryCapabilities();
         createStagingCommandPool();
         createPipelineCache();
+
+        memoryManager = std::make_unique<VulkanMemoryManager>(*this);
     }
 
     void Device::cleanUp()
     {
+        // Destroy memory manager before device (frees all GPU memory blocks)
+        memoryManager.reset();
+
         savePipelineCacheToDisk();
         pipelineCache.reset();
 

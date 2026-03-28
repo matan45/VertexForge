@@ -139,6 +139,7 @@
     <ClInclude Include="core\RenderManager.hpp" />
     <ClInclude Include="core\RenderThread.hpp" />
     <ClInclude Include="core\Shader.hpp" />
+    <ClInclude Include="core\StagingRingBuffer.hpp" />
     <ClInclude Include="core\SwapChain.hpp" />
     <ClInclude Include="core\Texture.hpp" />
     <ClInclude Include="core\ThreadCommandPoolManager.hpp" />
@@ -146,6 +147,7 @@
     <ClInclude Include="core\UploadQueue.hpp" />
     <ClInclude Include="core\Utilities.hpp" />
     <ClInclude Include="core\VulkanContext.hpp" />
+    <ClInclude Include="core\VulkanMemoryManager.hpp" />
     <ClInclude Include="imguiPass\ImDrawDataSnapshot.hpp" />
     <ClInclude Include="imguiPass\ImguiRender.hpp" />
     <ClInclude Include="loaders\AsyncMeshLoader.hpp" />
@@ -375,6 +377,7 @@
     <ClCompile Include="core\RenderManager.cpp" />
     <ClCompile Include="core\RenderThread.cpp" />
     <ClCompile Include="core\Shader.cpp" />
+    <ClCompile Include="core\StagingRingBuffer.cpp" />
     <ClCompile Include="core\SwapChain.cpp" />
     <ClCompile Include="core\Texture.cpp" />
     <ClCompile Include="core\TextureLoad.cpp" />
@@ -382,6 +385,7 @@
     <ClCompile Include="core\TransferManager.cpp" />
     <ClCompile Include="core\Utilities.cpp" />
     <ClCompile Include="core\VulkanContext.cpp" />
+    <ClCompile Include="core\VulkanMemoryManager.cpp" />
     <ClCompile Include="imguiPass\ImguiRender.cpp" />
     <ClCompile Include="loaders\AsyncMeshLoader.cpp" />
     <ClCompile Include="loaders\AsyncTextureLoader.cpp" />
@@ -711,6 +715,9 @@
     </ProjectReference>
     <ProjectReference Include="..\ispc_texcomp.vcxproj">
       <Project>{73EAF6A7-5F4D-864C-08D3-BE02F41452CF}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\utilities\Memory.vcxproj">
+      <Project>{BE94DDC2-AA36-0899-93F1-1BED7F328FE9}</Project>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

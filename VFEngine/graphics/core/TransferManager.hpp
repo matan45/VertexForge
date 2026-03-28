@@ -3,6 +3,8 @@
 #include <vulkan/vulkan.hpp>
 #include <mutex>
 #include <vector>
+#include <memory>
+#include "StagingRingBuffer.hpp"
 
 namespace core
 {
@@ -10,9 +12,13 @@ namespace core
 	struct TransferOperation {
 		vk::Fence fence;
 		vk::CommandBuffer commandBuffer;
-		vk::Buffer stagingBuffer;
-		vk::DeviceMemory stagingMemory;
 		bool completed = false;
+
+		// Only set for overflow staging (ring buffer couldn't fit)
+		StagingRegion overflowRegion;
+
+		// End offset in the ring buffer for fence tracking
+		vk::DeviceSize ringEndOffset = 0;
 	};
 
 	// TransferManager: Handles async buffer/image transfers using fences
@@ -29,6 +35,9 @@ namespace core
 		vk::CommandPool commandPool;
 		mutable std::mutex transferMutex;
 		std::vector<TransferOperation> pendingTransfers;
+
+		std::unique_ptr<StagingRingBuffer> ringBuffer;
+
 	public:
 		TransferManager(Device& ownerDevice, uint32_t transferQueueFamily);
 		~TransferManager();
@@ -51,7 +60,6 @@ namespace core
 		bool hasPendingTransfers() const { std::lock_guard lock(transferMutex); return !pendingTransfers.empty(); }
 
 	private:
-
 		void cleanupTransfer(TransferOperation& op);
 	};
 }

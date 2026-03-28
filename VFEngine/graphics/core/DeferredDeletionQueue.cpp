@@ -1,4 +1,5 @@
 #include "DeferredDeletionQueue.hpp"
+#include "VulkanMemoryManager.hpp"
 #include "Device.hpp"
 #include <spdlog/spdlog.h>
 
@@ -23,6 +24,39 @@ namespace core
         pendingDeletions.push_back({
             BufferDeletion{buffer, memory},
             lastFrameNumber
+        });
+    }
+
+    void DeferredDeletionQueue::queueBuffer(vk::Buffer buffer, const VulkanAllocation& allocation, VulkanMemoryManager& memManager)
+    {
+        if (!buffer && !allocation.isValid())
+            return;
+
+        VulkanAllocation alloc = allocation;
+        queueCustom([buffer, alloc, &memManager](vk::Device device) {
+            if (buffer)
+                device.destroyBuffer(buffer);
+            if (alloc.isValid())
+                memManager.free(alloc);
+        });
+    }
+
+    void DeferredDeletionQueue::queueImage(vk::Image image, const VulkanAllocation& allocation, VulkanMemoryManager& memManager,
+                                           const std::vector<vk::ImageView>& views)
+    {
+        if (!image && !allocation.isValid() && views.empty())
+            return;
+
+        VulkanAllocation alloc = allocation;
+        queueCustom([image, alloc, &memManager, views](vk::Device device) {
+            for (auto view : views) {
+                if (view)
+                    device.destroyImageView(view);
+            }
+            if (image)
+                device.destroyImage(image);
+            if (alloc.isValid())
+                memManager.free(alloc);
         });
     }
 

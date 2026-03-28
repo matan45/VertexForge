@@ -257,7 +257,8 @@ project "Graphics"
       "Window",
 	  "VFX",
 	  "imgui",
-	  "ispc_texcomp"
+	  "ispc_texcomp",
+	  "Memory"
    }
 
    filter "configurations:Debug"
