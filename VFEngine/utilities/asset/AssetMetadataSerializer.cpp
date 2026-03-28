@@ -40,6 +40,11 @@ namespace asset
     {
         try
         {
+            if (!std::filesystem::exists(metaPath))
+            {
+                return std::nullopt;
+            }
+
             json j = resource::readJsonFile(metaPath.string());
             if (j.is_null())
             {

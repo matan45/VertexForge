@@ -196,8 +196,17 @@ namespace resource {
 			pendingLoads[guid] = sharedFuture;
 		}
 
-		return std::async(std::launch::deferred, [sf = std::move(sharedFuture)]() mutable {
-			return sf.get();
-		});
+		std::promise<std::shared_ptr<T>> promise;
+		auto resultFuture = promise.get_future();
+
+		std::thread([sf = std::move(sharedFuture), p = std::move(promise)]() mutable {
+			try {
+				p.set_value(sf.get());
+			} catch (...) {
+				p.set_exception(std::current_exception());
+			}
+		}).detach();
+
+		return resultFuture;
 	}
 }
