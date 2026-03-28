@@ -103,6 +103,7 @@ namespace memory {
 		stats.peakAllocated = peakAllocated;
 		stats.allocationCount = allocationCount;
 		stats.freeCount = freeCount;
+		stats.activeAllocationCount = allocationCount - freeCount;
 		stats.totalCapacity = capacity;
 
 		uint64_t totalFree = 0;

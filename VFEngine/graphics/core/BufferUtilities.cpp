@@ -23,7 +23,7 @@ namespace core
 
 		bool needsDeviceAddress = (bufferInfo.usage & vk::BufferUsageFlagBits::eShaderDeviceAddress) != vk::BufferUsageFlags{};
 
-		allocation = memManager.allocate(memRequirements, bufferInfo.properties, needsDeviceAddress);
+		allocation = memManager.allocate(memRequirements, bufferInfo.properties, needsDeviceAddress, GpuResourceType::Buffer);
 		bufferInfo.logicalDevice.bindBufferMemory(buffer, allocation.memory, allocation.offset);
 
 		memory::GpuAllocationStats::managedAllocationCount.fetch_add(1, std::memory_order_relaxed);

@@ -48,6 +48,7 @@ namespace memory {
 		uint64_t peakAllocated = 0;
 		uint64_t allocationCount = 0;
 		uint64_t freeCount = 0;
+		uint64_t activeAllocationCount = 0;
 		uint64_t largestFreeBlock = 0;
 		uint64_t totalCapacity = 0;
 		float fragmentationPercent = 0.0f;

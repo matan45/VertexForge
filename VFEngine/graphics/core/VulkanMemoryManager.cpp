@@ -3,6 +3,7 @@
 #include "MemoryUtilities.hpp"
 #include "memory/GpuAllocationStats.hpp"
 #include "print/Log.hpp"
+#include <algorithm>
 
 namespace core
 {
@@ -41,12 +42,24 @@ namespace core
 		}
 	}
 
-	VulkanAllocation VulkanMemoryBlock::allocate(vk::DeviceSize size, vk::DeviceSize alignment)
+	VulkanAllocation VulkanMemoryBlock::allocate(vk::DeviceSize size, vk::DeviceSize alignment,
+		GpuResourceType resourceType, vk::DeviceSize bufferImageGranularity)
 	{
-		auto handle = allocator.allocate(size, alignment);
+		// Enforce bufferImageGranularity when block contains mixed resource types
+		vk::DeviceSize effectiveAlignment = alignment;
+		bool isMixed = (resourceType == GpuResourceType::Buffer && hasImages) ||
+			(resourceType == GpuResourceType::Image && hasBuffers);
+		if (isMixed && bufferImageGranularity > 1) {
+			effectiveAlignment = std::max(alignment, bufferImageGranularity);
+		}
+
+		auto handle = allocator.allocate(size, effectiveAlignment);
 		if (!handle.isValid()) {
 			return {};
 		}
+
+		if (resourceType == GpuResourceType::Buffer) hasBuffers = true;
+		else hasImages = true;
 
 		VulkanAllocation allocation;
 		allocation.memory = memory;
@@ -78,7 +91,8 @@ namespace core
 		, device(device.getLogicalDevice())
 		, physicalDevice(device.getPhysicalDevice())
 	{
-		vfLogInfo("VulkanMemoryManager: Initialized");
+		bufferImageGranularity = physicalDevice.getProperties().limits.bufferImageGranularity;
+		vfLogInfo("VulkanMemoryManager: Initialized (bufferImageGranularity={})", bufferImageGranularity);
 	}
 
 	VulkanMemoryManager::~VulkanMemoryManager()
@@ -102,7 +116,8 @@ namespace core
 
 	VulkanAllocation VulkanMemoryManager::allocate(const vk::MemoryRequirements& memRequirements,
 		vk::MemoryPropertyFlags properties,
-		bool needsDeviceAddress)
+		bool needsDeviceAddress,
+		GpuResourceType resourceType)
 	{
 		if (memRequirements.size == 0) {
 			return {};
@@ -114,15 +129,18 @@ namespace core
 		bool hostVis = isHostVisible(memTypeIndex);
 		vk::DeviceSize blockSize = getBlockSizeForType(memTypeIndex);
 
-		// Use dedicated allocation for oversized requests or device-address buffers
-		if (needsDeviceAddress || memRequirements.size > blockSize / 2) {
+		// Use dedicated allocation for device-address buffers or oversized requests
+		auto& config = memory::MemoryPoolConfig::instance();
+		vk::DeviceSize threshold = std::min(blockSize / 2, static_cast<vk::DeviceSize>(config.dedicatedThreshold()));
+		if (needsDeviceAddress || memRequirements.size > threshold) {
 			return allocateDedicated(memRequirements.size, memTypeIndex, hostVis, needsDeviceAddress);
 		}
 
 		// Try existing blocks first
 		auto& typeData = memoryTypes[memTypeIndex];
 		for (auto& block : typeData.blocks) {
-			auto allocation = block->allocate(memRequirements.size, memRequirements.alignment);
+			auto allocation = block->allocate(memRequirements.size, memRequirements.alignment,
+				resourceType, bufferImageGranularity);
 			if (allocation.isValid()) {
 				return allocation;
 			}
@@ -130,7 +148,8 @@ namespace core
 
 		// All existing blocks full - create a new one
 		auto newBlock = std::make_unique<VulkanMemoryBlock>(device, memTypeIndex, blockSize, hostVis);
-		auto allocation = newBlock->allocate(memRequirements.size, memRequirements.alignment);
+		auto allocation = newBlock->allocate(memRequirements.size, memRequirements.alignment,
+			resourceType, bufferImageGranularity);
 		typeData.blocks.push_back(std::move(newBlock));
 
 		updateGlobalStats();
@@ -163,6 +182,23 @@ namespace core
 
 		if (allocation.block) {
 			allocation.block->free(allocation.offset, allocation.size);
+
+			// Reclaim empty blocks (keep at least 1 per memory type to avoid thrashing)
+			auto blockStats = allocation.block->getStats();
+			if (blockStats.activeAllocationCount == 0) {
+				uint32_t typeIdx = allocation.block->getMemoryTypeIndex();
+				auto& typeData = memoryTypes[typeIdx];
+				if (typeData.blocks.size() > 1) {
+					auto it = std::find_if(typeData.blocks.begin(), typeData.blocks.end(),
+						[&](const auto& b) { return b.get() == allocation.block; });
+					if (it != typeData.blocks.end()) {
+						vfLogInfo("VulkanMemoryManager: Reclaiming empty {}MB block (type {})",
+							(*it)->getBlockSize() / (1024 * 1024), typeIdx);
+						typeData.blocks.erase(it);
+						memory::GpuAllocationStats::blocksReclaimed.fetch_add(1, std::memory_order_relaxed);
+					}
+				}
+			}
 		}
 
 		updateGlobalStats();

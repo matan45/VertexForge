@@ -13,6 +13,8 @@ namespace core
 	class Device;
 	class VulkanMemoryBlock;
 
+	enum class GpuResourceType : uint8_t { Buffer, Image };
+
 	struct VulkanAllocation
 	{
 		vk::DeviceMemory memory;
@@ -36,7 +38,8 @@ namespace core
 		VulkanMemoryBlock(const VulkanMemoryBlock&) = delete;
 		VulkanMemoryBlock& operator=(const VulkanMemoryBlock&) = delete;
 
-		VulkanAllocation allocate(vk::DeviceSize size, vk::DeviceSize alignment);
+		VulkanAllocation allocate(vk::DeviceSize size, vk::DeviceSize alignment,
+			GpuResourceType resourceType, vk::DeviceSize bufferImageGranularity);
 		void free(vk::DeviceSize offset, vk::DeviceSize size);
 
 		vk::DeviceMemory getMemory() const { return memory; }
@@ -54,6 +57,8 @@ namespace core
 		uint32_t memoryTypeIndex;
 		bool hostVisible;
 		void* baseMappedPtr = nullptr;
+		bool hasBuffers = false;
+		bool hasImages = false;
 		memory::FreeListHeapAllocator allocator;
 	};
 
@@ -68,7 +73,8 @@ namespace core
 
 		VulkanAllocation allocate(const vk::MemoryRequirements& memRequirements,
 			vk::MemoryPropertyFlags properties,
-			bool needsDeviceAddress = false);
+			bool needsDeviceAddress = false,
+			GpuResourceType resourceType = GpuResourceType::Buffer);
 
 		void free(const VulkanAllocation& allocation);
 
@@ -96,6 +102,7 @@ namespace core
 
 		std::unordered_map<uint32_t, MemoryTypeData> memoryTypes;
 		mutable std::mutex managerMutex;
+		vk::DeviceSize bufferImageGranularity = 1;
 
 		// Dedicated allocations (oversized, device-address)
 		struct DedicatedAllocation

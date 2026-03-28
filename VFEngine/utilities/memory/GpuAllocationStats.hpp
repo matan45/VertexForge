@@ -26,6 +26,9 @@ namespace memory {
 		static inline std::atomic<uint32_t> dedicatedAllocationCount{0};
 		static inline std::atomic<uint64_t> dedicatedAllocatedBytes{0};
 
+		// Block reclamation
+		static inline std::atomic<uint64_t> blocksReclaimed{0};
+
 		// Staging ring buffer stats
 		static inline std::atomic<uint64_t> stagingRingSize{0};
 		static inline std::atomic<uint64_t> stagingRingUsed{0};
@@ -38,10 +41,12 @@ namespace memory {
 		uint64_t deviceLocalBlockSizeMB = 256;
 		uint64_t hostVisibleBlockSizeMB = 64;
 		uint64_t stagingRingBufferSizeMB = 64;
+		uint64_t dedicatedThresholdMB = 64;
 
 		uint64_t deviceLocalBlockSize() const { return deviceLocalBlockSizeMB * 1024 * 1024; }
 		uint64_t hostVisibleBlockSize() const { return hostVisibleBlockSizeMB * 1024 * 1024; }
 		uint64_t stagingRingBufferSize() const { return stagingRingBufferSizeMB * 1024 * 1024; }
+		uint64_t dedicatedThreshold() const { return dedicatedThresholdMB * 1024 * 1024; }
 
 		// Singleton - loaded once at startup, editable from UI (applies on restart)
 		static MemoryPoolConfig& instance() {

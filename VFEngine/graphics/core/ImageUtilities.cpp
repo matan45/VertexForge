@@ -30,7 +30,7 @@ namespace core
 
 		vk::MemoryRequirements memRequirements = imageInfo.logicalDevice.getImageMemoryRequirements(image);
 
-		allocation = memManager.allocate(memRequirements, imageInfo.properties);
+		allocation = memManager.allocate(memRequirements, imageInfo.properties, false, GpuResourceType::Image);
 		imageInfo.logicalDevice.bindImageMemory(image, allocation.memory, allocation.offset);
 
 		memory::GpuAllocationStats::managedAllocationCount.fetch_add(1, std::memory_order_relaxed);
