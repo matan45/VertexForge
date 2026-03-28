@@ -1,5 +1,6 @@
 #include "WaterMeshBuffer.hpp"
 #include "../../core/BufferUtilities.hpp"
+#include "../../core/VulkanContext.hpp"
 #include <cstring>
 
 namespace render::water
@@ -30,15 +31,14 @@ namespace render::water
         if (!device)
             return;
 
-        if (mappedTileData)
-        {
-            device.unmapMemory(tileSSBOMemory);
-            mappedTileData = nullptr;
-        }
+        mappedTileData = nullptr;
 
-        core::BufferUtilities::destroyBuffer(device, tileSSBO, tileSSBOMemory);
-        core::BufferUtilities::destroyBuffer(device, vertexBuffer, vertexMemory);
-        core::BufferUtilities::destroyBuffer(device, indexBuffer, indexMemory);
+        auto* dev = core::VulkanContext::getDeviceRaw();
+        auto& memManager = dev->getMemoryManager();
+
+        core::BufferUtilities::destroyBuffer(device, tileSSBO, tileSSBOAllocation, memManager);
+        core::BufferUtilities::destroyBuffer(device, vertexBuffer, vertexAllocation, memManager);
+        core::BufferUtilities::destroyBuffer(device, indexBuffer, indexAllocation, memManager);
 
         initialized = false;
     }
@@ -108,6 +108,9 @@ namespace render::water
             allIndices.insert(allIndices.end(), lodIndices.begin(), lodIndices.end());
         }
 
+        auto* dev = core::VulkanContext::getDeviceRaw();
+        auto& memManager = dev->getMemoryManager();
+
         // Upload combined vertex buffer
         vk::DeviceSize vertexSize = allVertices.size() * sizeof(WaterVertex);
         core::BufferInfoRequest vertexInfo(
@@ -115,7 +118,7 @@ namespace render::water
             vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst,
             vk::MemoryPropertyFlagBits::eDeviceLocal
         );
-        core::BufferUtilities::createBuffer(vertexInfo, vertexBuffer, vertexMemory);
+        core::BufferUtilities::createBuffer(vertexInfo, vertexBuffer, vertexAllocation, memManager);
         core::BufferUtilities::copyToBuffer(device, physicalDevice, graphicsQueue, commandPool,
                                             vertexBuffer, allVertices.data(), vertexSize);
 
@@ -126,7 +129,7 @@ namespace render::water
             vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eTransferDst,
             vk::MemoryPropertyFlagBits::eDeviceLocal
         );
-        core::BufferUtilities::createBuffer(indexInfo, indexBuffer, indexMemory);
+        core::BufferUtilities::createBuffer(indexInfo, indexBuffer, indexAllocation, memManager);
         core::BufferUtilities::copyToBuffer(device, physicalDevice, graphicsQueue, commandPool,
                                             indexBuffer, allIndices.data(), indexSize);
     }
@@ -135,14 +138,17 @@ namespace render::water
     {
         vk::DeviceSize ssboSize = MAX_OCEAN_GPU_INSTANCES * sizeof(WaterTileGPUData);
 
+        auto* dev = core::VulkanContext::getDeviceRaw();
+        auto& memManager = dev->getMemoryManager();
+
         core::BufferInfoRequest ssboInfo(
             device, physicalDevice, ssboSize,
             vk::BufferUsageFlagBits::eStorageBuffer,
             vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
         );
-        core::BufferUtilities::createBuffer(ssboInfo, tileSSBO, tileSSBOMemory);
+        core::BufferUtilities::createBuffer(ssboInfo, tileSSBO, tileSSBOAllocation, memManager);
 
-        mappedTileData = device.mapMemory(tileSSBOMemory, 0, ssboSize);
+        mappedTileData = tileSSBOAllocation.mappedPtr;
     }
 
     void WaterMeshBuffer::updateTileData(const std::vector<WaterTileGPUData>& tiles)

@@ -15,29 +15,15 @@ namespace core
         flush();
     }
 
-    void DeferredDeletionQueue::queueBuffer(vk::Buffer buffer, vk::DeviceMemory memory)
-    {
-        if (!buffer && !memory)
-            return;
-
-        std::lock_guard lock(mutex);
-        pendingDeletions.push_back({
-            BufferDeletion{buffer, memory},
-            lastFrameNumber
-        });
-    }
-
     void DeferredDeletionQueue::queueBuffer(vk::Buffer buffer, const VulkanAllocation& allocation, VulkanMemoryManager& memManager)
     {
         if (!buffer && !allocation.isValid())
             return;
 
-        VulkanAllocation alloc = allocation;
-        queueCustom([buffer, alloc, &memManager](vk::Device device) {
-            if (buffer)
-                device.destroyBuffer(buffer);
-            if (alloc.isValid())
-                memManager.free(alloc);
+        std::lock_guard lock(mutex);
+        pendingDeletions.push_back({
+            BufferDeletion{buffer, allocation, &memManager},
+            lastFrameNumber
         });
     }
 
@@ -47,28 +33,9 @@ namespace core
         if (!image && !allocation.isValid() && views.empty())
             return;
 
-        VulkanAllocation alloc = allocation;
-        queueCustom([image, alloc, &memManager, views](vk::Device device) {
-            for (auto view : views) {
-                if (view)
-                    device.destroyImageView(view);
-            }
-            if (image)
-                device.destroyImage(image);
-            if (alloc.isValid())
-                memManager.free(alloc);
-        });
-    }
-
-    void DeferredDeletionQueue::queueImage(vk::Image image, vk::DeviceMemory memory,
-                                           const std::vector<vk::ImageView>& views)
-    {
-        if (!image && !memory && views.empty())
-            return;
-
         std::lock_guard lock(mutex);
         pendingDeletions.push_back({
-            ImageDeletion{image, memory, views},
+            ImageDeletion{image, allocation, &memManager, views},
             lastFrameNumber
         });
     }
@@ -201,8 +168,8 @@ namespace core
             {
                 if (deletion.buffer)
                     logicalDevice.destroyBuffer(deletion.buffer);
-                if (deletion.memory)
-                    logicalDevice.freeMemory(deletion.memory);
+                if (deletion.allocation.isValid() && deletion.memManager)
+                    deletion.memManager->free(deletion.allocation);
             }
             else if constexpr (std::is_same_v<T, ImageDeletion>)
             {
@@ -213,8 +180,8 @@ namespace core
                 }
                 if (deletion.image)
                     logicalDevice.destroyImage(deletion.image);
-                if (deletion.memory)
-                    logicalDevice.freeMemory(deletion.memory);
+                if (deletion.allocation.isValid() && deletion.memManager)
+                    deletion.memManager->free(deletion.allocation);
             }
             else if constexpr (std::is_same_v<T, ImageViewDeletion>)
             {

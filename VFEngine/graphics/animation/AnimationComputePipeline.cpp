@@ -3,6 +3,7 @@
 #include "../core/Shader.hpp"
 #include "../core/BufferUtilities.hpp"
 #include "../core/PipelineUtilities.hpp"
+#include "../core/VulkanMemoryManager.hpp"
 #include "print/Log.hpp"
 
 namespace animation
@@ -159,17 +160,16 @@ namespace animation
             core::BufferUtilities::createBuffer(bufReq, buffer, alloc, device.getMemoryManager());
 
             vk::Buffer staging;
-            vk::DeviceMemory stagingMem;
+            core::VulkanAllocation stagingAllocation;
             core::BufferInfoRequest stagingReq(vkDevice, physicalDevice);
             stagingReq.size = size;
             stagingReq.usage = vk::BufferUsageFlagBits::eTransferSrc;
             stagingReq.properties = vk::MemoryPropertyFlagBits::eHostVisible |
                 vk::MemoryPropertyFlagBits::eHostCoherent;
-            core::BufferUtilities::createBuffer(stagingReq, staging, stagingMem);
+            core::BufferUtilities::createBuffer(stagingReq, staging, stagingAllocation, device.getMemoryManager());
 
-            void* mapped = vkDevice.mapMemory(stagingMem, 0, size, vk::MemoryMapFlags{});
+            void* mapped = stagingAllocation.mappedPtr;
             std::memcpy(mapped, vec.data(), size);
-            vkDevice.unmapMemory(stagingMem);
 
             vk::CommandPool cmdPool = device.getStagingCommandPool();
             vk::CommandBufferAllocateInfo cmdAllocInfo{};
@@ -192,7 +192,7 @@ namespace animation
             device.waitGraphicsIdle();
 
             vkDevice.freeCommandBuffers(cmdPool, 1, &cmd);
-            core::BufferUtilities::destroyBuffer(vkDevice, staging, stagingMem);
+            core::BufferUtilities::destroyBuffer(vkDevice, staging, stagingAllocation, device.getMemoryManager());
         };
 
         createAndUpload(skeletonBuffer, skeletonBufferAllocation, data.skeletonBones, sizeof(GPUBoneInfo));

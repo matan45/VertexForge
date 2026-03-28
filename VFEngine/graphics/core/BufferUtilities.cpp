@@ -1,44 +1,12 @@
 #include "BufferUtilities.hpp"
-#include "MemoryUtilities.hpp"
 #include "VulkanMemoryManager.hpp"
+#include "VulkanContext.hpp"
 #include "Utilities.hpp"
 #include "memory/GpuAllocationStats.hpp"
 #include <cstring>
 
 namespace core
 {
-	void BufferUtilities::createBuffer(const BufferInfoRequest& bufferInfo, vk::Buffer& buffer, vk::DeviceMemory& bufferMemory)
-	{
-		if (bufferInfo.size == 0) return;
-
-		vk::BufferCreateInfo bufferCreateInfo{};
-		bufferCreateInfo.size = bufferInfo.size;
-		bufferCreateInfo.usage = bufferInfo.usage;
-		bufferCreateInfo.sharingMode = vk::SharingMode::eExclusive;
-
-		buffer = bufferInfo.logicalDevice.createBuffer(bufferCreateInfo);
-
-		vk::MemoryRequirements memRequirements = bufferInfo.logicalDevice.getBufferMemoryRequirements(buffer);
-
-		vk::MemoryAllocateFlagsInfo allocFlags{};
-		bool needsDeviceAddress = (bufferInfo.usage & vk::BufferUsageFlagBits::eShaderDeviceAddress) != vk::BufferUsageFlags{};
-		if (needsDeviceAddress) {
-			allocFlags.flags = vk::MemoryAllocateFlagBits::eDeviceAddress;
-		}
-
-		vk::MemoryAllocateInfo allocInfo{};
-		allocInfo.pNext = needsDeviceAddress ? &allocFlags : nullptr;
-		allocInfo.allocationSize = memRequirements.size;
-		allocInfo.memoryTypeIndex = MemoryUtilities::findMemoryType(
-			bufferInfo.physicalDevice, memRequirements.memoryTypeBits, bufferInfo.properties);
-
-		bufferMemory = bufferInfo.logicalDevice.allocateMemory(allocInfo);
-		bufferInfo.logicalDevice.bindBufferMemory(buffer, bufferMemory, 0);
-
-		memory::GpuAllocationStats::legacyAllocationCount.fetch_add(1, std::memory_order_relaxed);
-		memory::GpuAllocationStats::legacyAllocatedBytes.fetch_add(memRequirements.size, std::memory_order_relaxed);
-	}
-
 	void BufferUtilities::createBuffer(const BufferInfoRequest& bufferInfo, vk::Buffer& buffer,
 		VulkanAllocation& allocation, VulkanMemoryManager& memManager)
 	{
@@ -89,9 +57,12 @@ namespace core
 			return;
 		}
 
+		auto* dev = VulkanContext::getDeviceRaw();
+		auto& memManager = dev->getMemoryManager();
+
 		// Create staging buffer with host-visible memory
 		vk::Buffer stagingBuffer;
-		vk::DeviceMemory stagingMemory;
+		VulkanAllocation stagingAllocation;
 
 		BufferInfoRequest stagingInfo(
 			device,
@@ -100,11 +71,9 @@ namespace core
 			vk::BufferUsageFlagBits::eTransferSrc,
 			vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
 		);
-		createBuffer(stagingInfo, stagingBuffer, stagingMemory);
+		createBuffer(stagingInfo, stagingBuffer, stagingAllocation, memManager);
 
-		void* mappedData = device.mapMemory(stagingMemory, 0, size, {});
-		std::memcpy(mappedData, srcData, static_cast<size_t>(size));
-		device.unmapMemory(stagingMemory);
+		std::memcpy(stagingAllocation.mappedPtr, srcData, static_cast<size_t>(size));
 
 		// Copy from staging to destination buffer with offset
 		try {
@@ -113,25 +82,12 @@ namespace core
 			cmd->copyBuffer(stagingBuffer, dstBuffer, copyRegion);
 			Utilities::endSingleTimeCommands(queue, cmd);
 		} catch (...) {
-			device.destroyBuffer(stagingBuffer);
-			device.freeMemory(stagingMemory);
+			BufferUtilities::destroyBuffer(device, stagingBuffer, stagingAllocation, memManager);
 			throw;
 		}
 
 		// Cleanup staging buffer
-		device.destroyBuffer(stagingBuffer);
-		device.freeMemory(stagingMemory);
+		BufferUtilities::destroyBuffer(device, stagingBuffer, stagingAllocation, memManager);
 	}
 
-	void BufferUtilities::destroyBuffer(const vk::Device& device, vk::Buffer& buffer, vk::DeviceMemory& memory)
-	{
-		if (buffer) {
-			device.destroyBuffer(buffer);
-			buffer = nullptr;
-		}
-		if (memory) {
-			device.freeMemory(memory);
-			memory = nullptr;
-		}
-	}
 }

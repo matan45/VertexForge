@@ -4,6 +4,7 @@
 #include "../../core/BufferUtilities.hpp"
 #include "../../core/ImageUtilities.hpp"
 #include "../../core/Utilities.hpp"
+#include "../../core/VulkanMemoryManager.hpp"
 #include "print/Log.hpp"
 
 namespace render::ibl
@@ -116,24 +117,21 @@ namespace render::ibl
         vertexInputInfo.pVertexAttributeDescriptions = vertexInputAttributes.data();
 
         vk::Buffer cubeVertexBuffer;
-        vk::DeviceMemory cubeVertexBufferMemory;
+        core::VulkanAllocation cubeVertexBufferAllocation;
 
         core::BufferInfoRequest cubeVertexBufferInfo(device.getLogicalDevice(), device.getPhysicalDevice());
         cubeVertexBufferInfo.size = sizeof(cubeVertices[0]) * cubeVertices.size();
         cubeVertexBufferInfo.usage = vk::BufferUsageFlagBits::eVertexBuffer;
         cubeVertexBufferInfo.properties = vk::MemoryPropertyFlagBits::eHostVisible |
             vk::MemoryPropertyFlagBits::eHostCoherent;
-        core::BufferUtilities::createBuffer(cubeVertexBufferInfo, cubeVertexBuffer, cubeVertexBufferMemory);
+        core::BufferUtilities::createBuffer(cubeVertexBufferInfo, cubeVertexBuffer, cubeVertexBufferAllocation, device.getMemoryManager());
 
-        void* data;
-        if (vk::Result result = device.getLogicalDevice().mapMemory(cubeVertexBufferMemory, 0,
-            cubeVertexBufferInfo.size, {},
-            &data); result != vk::Result::eSuccess)
+        void* data = cubeVertexBufferAllocation.mappedPtr;
+        if (!data)
         {
             vfLogError("failed to map memory");
         }
         memcpy(data, cubeVertices.data(), cubeVertexBufferInfo.size);
-        device.getLogicalDevice().unmapMemory(cubeVertexBufferMemory);
 
         // UniformBuffer
         vk::DescriptorPool descriptorPool;
@@ -199,13 +197,13 @@ namespace render::ibl
         device.getLogicalDevice().updateDescriptorSets(descriptorWriteCube, nullptr);
 
         vk::Buffer uboUniformBuffer;
-        vk::DeviceMemory uboUniformBufferMemory;
+        core::VulkanAllocation uboUniformBufferAllocation;
         core::BufferInfoRequest uboBufferRequest(device.getLogicalDevice(), device.getPhysicalDevice());
         uboBufferRequest.usage = vk::BufferUsageFlagBits::eUniformBuffer;
         uboBufferRequest.properties = vk::MemoryPropertyFlagBits::eHostVisible |
             vk::MemoryPropertyFlagBits::eHostCoherent;
         uboBufferRequest.size = sizeof(UniformBufferObject);
-        core::BufferUtilities::createBuffer(uboBufferRequest, uboUniformBuffer, uboUniformBufferMemory);
+        core::BufferUtilities::createBuffer(uboBufferRequest, uboUniformBuffer, uboUniformBufferAllocation, device.getMemoryManager());
 
         vk::DescriptorBufferInfo uboBufferInfo;
         uboBufferInfo.buffer = uboUniformBuffer;
@@ -309,7 +307,7 @@ namespace render::ibl
         imageRequest.width = CUBE_MAP_SIZE;
         imageRequest.height = CUBE_MAP_SIZE;
         imageRequest.usage = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eTransferSrc;
-        core::ImageUtilities::createImage(imageRequest, imageHelper.image, imageHelper.memory);
+        core::ImageUtilities::createImage(imageRequest, imageHelper.image, imageHelper.allocation, device.getMemoryManager());
 
         core::ImageViewInfoRequest imageViewRequest(device.getLogicalDevice(), imageHelper.image);
         imageViewRequest.format = vk::Format::eR16G16B16A16Sfloat;
@@ -364,7 +362,7 @@ namespace render::ibl
             {
                 // Update uniform buffer with this face's view matrix
                 updateUniformBuffer(CameraViewMatrix::captureViews[face], CameraViewMatrix::captureProjection,
-                    uboUniformBufferMemory);
+                    uboUniformBufferAllocation);
 
                 // Create a new command buffer for each face/mip
                 vk::UniqueCommandBuffer faceCommandBuffer = core::Utilities::beginSingleTimeCommands(
@@ -454,14 +452,12 @@ namespace render::ibl
         core::Utilities::endSingleTimeCommands(device, commandBufferEndTransition);
 
         // CleanUp
-        device.getLogicalDevice().destroyBuffer(cubeVertexBuffer);
-        device.getLogicalDevice().freeMemory(cubeVertexBufferMemory);
+        core::BufferUtilities::destroyBuffer(device.getLogicalDevice(), cubeVertexBuffer, cubeVertexBufferAllocation, device.getMemoryManager());
 
-        device.getLogicalDevice().destroyBuffer(uboUniformBuffer);
-        device.getLogicalDevice().freeMemory(uboUniformBufferMemory);
+        core::BufferUtilities::destroyBuffer(device.getLogicalDevice(), uboUniformBuffer, uboUniformBufferAllocation, device.getMemoryManager());
 
         device.getLogicalDevice().destroyFramebuffer(imageHelper.framebuffer);
-        device.getLogicalDevice().freeMemory(imageHelper.memory);
+        device.getMemoryManager().free(imageHelper.allocation);
         device.getLogicalDevice().destroyImageView(imageHelper.view);
         device.getLogicalDevice().destroyImage(imageHelper.image);
 
@@ -473,18 +469,15 @@ namespace render::ibl
     }
 
     void PrefilteredEnvGenerator::updateUniformBuffer(const glm::mat4& viewMatrix, const glm::mat4& projectionMatrix,
-        const vk::DeviceMemory& uniformBufferMemory) const
+        core::VulkanAllocation& uniformBufferAllocation) const
     {
         UniformBufferObject ubo;
         ubo.view = viewMatrix;
         ubo.projection = projectionMatrix;
 
-        void* data;
-        vk::Result result = device.getLogicalDevice().mapMemory(uniformBufferMemory, 0, sizeof(ubo), {}, &data);
-        if (result == vk::Result::eSuccess)
+        if (uniformBufferAllocation.mappedPtr)
         {
-            memcpy(data, &ubo, sizeof(ubo));
-            device.getLogicalDevice().unmapMemory(uniformBufferMemory);
+            memcpy(uniformBufferAllocation.mappedPtr, &ubo, sizeof(ubo));
         }
     }
 

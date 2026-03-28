@@ -1,5 +1,4 @@
 #include "ImageUtilities.hpp"
-#include "MemoryUtilities.hpp"
 #include "VulkanMemoryManager.hpp"
 #include "BufferUtilities.hpp"
 #include "Device.hpp"
@@ -9,37 +8,6 @@
 
 namespace core
 {
-	void ImageUtilities::createImage(const ImageInfoRequest& imageInfo, vk::Image& image, vk::DeviceMemory& imageMemory)
-	{
-		vk::ImageCreateInfo imageCreateInfo{};
-		imageCreateInfo.imageType = vk::ImageType::e2D;
-		imageCreateInfo.extent.width = imageInfo.width;
-		imageCreateInfo.extent.height = imageInfo.height;
-		imageCreateInfo.extent.depth = 1;
-		imageCreateInfo.mipLevels = imageInfo.mipLevels;
-		imageCreateInfo.arrayLayers = imageInfo.layers;
-		imageCreateInfo.format = imageInfo.format;
-		imageCreateInfo.tiling = imageInfo.tiling;
-		imageCreateInfo.initialLayout = vk::ImageLayout::eUndefined;
-		imageCreateInfo.usage = imageInfo.usage;
-		imageCreateInfo.samples = vk::SampleCountFlagBits::e1;
-		imageCreateInfo.sharingMode = vk::SharingMode::eExclusive;
-		imageCreateInfo.flags = imageInfo.imageFlags;
-
-		image = imageInfo.logicalDevice.createImage(imageCreateInfo);
-
-		vk::MemoryRequirements memRequirements = imageInfo.logicalDevice.getImageMemoryRequirements(image);
-		vk::MemoryAllocateInfo allocInfo{};
-		allocInfo.allocationSize = memRequirements.size;
-		allocInfo.memoryTypeIndex = MemoryUtilities::findMemoryType(imageInfo.physicalDevice, memRequirements.memoryTypeBits, imageInfo.properties);
-
-		imageMemory = imageInfo.logicalDevice.allocateMemory(allocInfo);
-		imageInfo.logicalDevice.bindImageMemory(image, imageMemory, 0);
-
-		memory::GpuAllocationStats::legacyAllocationCount.fetch_add(1, std::memory_order_relaxed);
-		memory::GpuAllocationStats::legacyAllocatedBytes.fetch_add(memRequirements.size, std::memory_order_relaxed);
-	}
-
 	void ImageUtilities::createImage(const ImageInfoRequest& imageInfo, vk::Image& image,
 		VulkanAllocation& allocation, VulkanMemoryManager& memManager)
 	{
@@ -213,19 +181,18 @@ namespace core
 		uint32_t width, uint32_t height)
 	{
 		auto vkDevice = device.getLogicalDevice();
+		auto& memManager = device.getMemoryManager();
 
 		vk::Buffer stagingBuffer;
-		vk::DeviceMemory stagingMemory;
+		VulkanAllocation stagingAllocation;
 		BufferInfoRequest stagingRequest(vkDevice, device.getPhysicalDevice());
 		stagingRequest.size = imageSize;
 		stagingRequest.usage = vk::BufferUsageFlagBits::eTransferSrc;
 		stagingRequest.properties = vk::MemoryPropertyFlagBits::eHostVisible |
 		                            vk::MemoryPropertyFlagBits::eHostCoherent;
-		BufferUtilities::createBuffer(stagingRequest, stagingBuffer, stagingMemory);
+		BufferUtilities::createBuffer(stagingRequest, stagingBuffer, stagingAllocation, memManager);
 
-		void* data = vkDevice.mapMemory(stagingMemory, 0, imageSize);
-		std::memcpy(data, pixelData, imageSize);
-		vkDevice.unmapMemory(stagingMemory);
+		std::memcpy(stagingAllocation.mappedPtr, pixelData, imageSize);
 
 		auto cmd = Utilities::beginSingleTimeCommands(vkDevice, device.getStagingCommandPool());
 
@@ -249,8 +216,7 @@ namespace core
 
 		Utilities::endSingleTimeCommands(device, cmd);
 
-		vkDevice.destroyBuffer(stagingBuffer);
-		vkDevice.freeMemory(stagingMemory);
+		BufferUtilities::destroyBuffer(vkDevice, stagingBuffer, stagingAllocation, memManager);
 	}
 
 	vk::Sampler ImageUtilities::createVFXSampler(const vk::Device& device)

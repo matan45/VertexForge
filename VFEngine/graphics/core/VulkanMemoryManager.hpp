@@ -72,12 +72,6 @@ namespace core
 
 		void free(const VulkanAllocation& allocation);
 
-		// Legacy API: allocate/free dedicated allocations by DeviceMemory handle
-		// Used by old createBuffer/createImage callers that store vk::DeviceMemory
-		VulkanAllocation allocateLegacy(const vk::MemoryRequirements& memRequirements,
-			vk::MemoryPropertyFlags properties, bool needsDeviceAddress = false);
-		void freeLegacy(vk::DeviceMemory memory);
-
 		struct MemoryTypeStats
 		{
 			uint32_t memoryTypeIndex = 0;

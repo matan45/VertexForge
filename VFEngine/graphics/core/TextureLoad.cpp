@@ -3,6 +3,7 @@
 #include "BufferUtilities.hpp"
 #include "ImageUtilities.hpp"
 #include "Utilities.hpp"
+#include "VulkanMemoryManager.hpp"
 #include "resource/ResourceManager.hpp"
 #include "resource/Types.hpp"
 #include "asset/AssetRef.hpp"
@@ -55,29 +56,25 @@ namespace core
                 totalSize += computeMipSize(mip, p.useDataSize);
 
             vk::Buffer stagingBuffer;
-            vk::DeviceMemory stagingBufferMemory;
-            bool mapped = false;
+            VulkanAllocation stagingAllocation;
 
             BufferInfoRequest bufferInfo(p.device.getLogicalDevice(), p.device.getPhysicalDevice());
             bufferInfo.size = totalSize;
             bufferInfo.usage = vk::BufferUsageFlagBits::eTransferSrc;
             bufferInfo.properties = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
-            BufferUtilities::createBuffer(bufferInfo, stagingBuffer, stagingBufferMemory);
+            BufferUtilities::createBuffer(bufferInfo, stagingBuffer, stagingAllocation, p.device.getMemoryManager());
 
             auto cleanupStaging = [&] {
-                if (mapped) p.device.getLogicalDevice().unmapMemory(stagingBufferMemory);
-                p.device.getLogicalDevice().destroyBuffer(stagingBuffer);
-                p.device.getLogicalDevice().freeMemory(stagingBufferMemory);
+                BufferUtilities::destroyBuffer(p.device.getLogicalDevice(), stagingBuffer, stagingAllocation, p.device.getMemoryManager());
             };
 
-            void* data;
-            if (p.device.getLogicalDevice().mapMemory(stagingBufferMemory, 0, totalSize, {}, &data) != vk::Result::eSuccess)
+            void* data = stagingAllocation.mappedPtr;
+            if (!data)
             {
                 vfLogError("failed to map memory");
                 cleanupStaging();
                 return false;
             }
-            mapped = true;
 
             vk::DeviceSize offset = 0;
             for (const auto& mip : p.mipData)
@@ -92,8 +89,6 @@ namespace core
                 memcpy(static_cast<char*>(data) + offset, mip.data.data(), mipSize);
                 offset += mipSize;
             }
-            p.device.getLogicalDevice().unmapMemory(stagingBufferMemory);
-            mapped = false;
 
             ImageInfoRequest imageInfo(p.device.getLogicalDevice(), p.device.getPhysicalDevice());
             imageInfo.width = p.width;

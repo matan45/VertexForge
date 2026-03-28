@@ -13,6 +13,8 @@ namespace core
 		, device(device.getLogicalDevice())
 		, ringSize(ringSize > 0 ? ringSize : FALLBACK_RING_SIZE)
 	{
+		auto& memManager = device.getMemoryManager();
+
 		// Create a single large host-visible staging buffer
 		BufferInfoRequest bufferInfo(
 			this->device,
@@ -21,10 +23,10 @@ namespace core
 			vk::BufferUsageFlagBits::eTransferSrc,
 			vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
 		);
-		BufferUtilities::createBuffer(bufferInfo, buffer, bufferMemory);
+		BufferUtilities::createBuffer(bufferInfo, buffer, bufferAllocation, memManager);
 
 		// Persistently map
-		baseMappedPtr = this->device.mapMemory(bufferMemory, 0, this->ringSize, {});
+		baseMappedPtr = bufferAllocation.mappedPtr;
 
 		vfLogInfo("StagingRingBuffer: Created {}MB ring buffer", this->ringSize / (1024 * 1024));
 	}
@@ -42,10 +44,9 @@ namespace core
 			pendingFences.clear();
 		}
 
-		if (baseMappedPtr) {
-			device.unmapMemory(bufferMemory);
-		}
-		BufferUtilities::destroyBuffer(device, buffer, bufferMemory);
+		baseMappedPtr = nullptr;
+		auto& memManager = ownerDevice.getMemoryManager();
+		BufferUtilities::destroyBuffer(device, buffer, bufferAllocation, memManager);
 	}
 
 	StagingRegion StagingRingBuffer::allocate(vk::DeviceSize size)
@@ -96,6 +97,7 @@ namespace core
 		region.isOverflow = true;
 		region.size = size;
 
+		auto& memManager = ownerDevice.getMemoryManager();
 		BufferInfoRequest overflowInfo(
 			device,
 			ownerDevice.getPhysicalDevice(),
@@ -103,8 +105,8 @@ namespace core
 			vk::BufferUsageFlagBits::eTransferSrc,
 			vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
 		);
-		BufferUtilities::createBuffer(overflowInfo, region.overflowBuffer, region.overflowMemory);
-		region.mappedPtr = device.mapMemory(region.overflowMemory, 0, size, {});
+		BufferUtilities::createBuffer(overflowInfo, region.overflowBuffer, region.overflowAllocation, memManager);
+		region.mappedPtr = region.overflowAllocation.mappedPtr;
 		region.offset = 0;
 
 		return region;
@@ -136,15 +138,8 @@ namespace core
 		if (!region.isOverflow) {
 			return;
 		}
-		if (region.overflowMemory) {
-			device.unmapMemory(region.overflowMemory);
-		}
-		if (region.overflowBuffer) {
-			device.destroyBuffer(region.overflowBuffer);
-		}
-		if (region.overflowMemory) {
-			device.freeMemory(region.overflowMemory);
-		}
+		auto& memManager = ownerDevice.getMemoryManager();
+		BufferUtilities::destroyBuffer(device, region.overflowBuffer, region.overflowAllocation, memManager);
 		region = {};
 	}
 

@@ -59,7 +59,7 @@ namespace render::ibl
     {
         vk::Image image;
         vk::ImageView view;
-        vk::DeviceMemory memory;
+        core::VulkanAllocation allocation;
         vk::Framebuffer framebuffer;
     };
 

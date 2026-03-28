@@ -1,5 +1,6 @@
 #pragma once
 
+#include "VulkanMemoryManager.hpp"
 #include <vulkan/vulkan.hpp>
 #include <vector>
 #include <variant>
@@ -10,8 +11,6 @@
 namespace core
 {
     class Device;
-    struct VulkanAllocation;
-    class VulkanMemoryManager;
 
     class DeferredDeletionQueue
     {
@@ -24,10 +23,7 @@ namespace core
         DeferredDeletionQueue(const DeferredDeletionQueue&) = delete;
         DeferredDeletionQueue& operator=(const DeferredDeletionQueue&) = delete;
 
-        void queueBuffer(vk::Buffer buffer, vk::DeviceMemory memory);
         void queueBuffer(vk::Buffer buffer, const VulkanAllocation& allocation, VulkanMemoryManager& memManager);
-        void queueImage(vk::Image image, vk::DeviceMemory memory,
-                        const std::vector<vk::ImageView>& views = {});
         void queueImage(vk::Image image, const VulkanAllocation& allocation, VulkanMemoryManager& memManager,
                         const std::vector<vk::ImageView>& views = {});
         void queueImageView(vk::ImageView view);
@@ -49,13 +45,15 @@ namespace core
         struct BufferDeletion
         {
             vk::Buffer buffer;
-            vk::DeviceMemory memory;
+            VulkanAllocation allocation;
+            VulkanMemoryManager* memManager = nullptr;
         };
 
         struct ImageDeletion
         {
             vk::Image image;
-            vk::DeviceMemory memory;
+            VulkanAllocation allocation;
+            VulkanMemoryManager* memManager = nullptr;
             std::vector<vk::ImageView> views;
         };
 

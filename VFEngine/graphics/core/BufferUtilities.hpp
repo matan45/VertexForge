@@ -39,9 +39,6 @@ namespace core
 
 	public:
 		static void createBuffer(const BufferInfoRequest& bufferInfo, vk::Buffer& buffer,
-			vk::DeviceMemory& bufferMemory);
-
-		static void createBuffer(const BufferInfoRequest& bufferInfo, vk::Buffer& buffer,
 			VulkanAllocation& allocation, VulkanMemoryManager& memManager);
 
 		static void copyToBuffer(
@@ -54,8 +51,6 @@ namespace core
 			vk::DeviceSize size,
 			vk::DeviceSize offset = 0
 		);
-
-		static void destroyBuffer(const vk::Device& device, vk::Buffer& buffer, vk::DeviceMemory& memory);
 
 		static void destroyBuffer(const vk::Device& device, vk::Buffer& buffer,
 			VulkanAllocation& allocation, VulkanMemoryManager& memManager);

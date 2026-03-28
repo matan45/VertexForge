@@ -1,5 +1,6 @@
 #pragma once
 
+#include "VulkanMemoryManager.hpp"
 #include <vulkan/vulkan.hpp>
 #include <vector>
 #include <mutex>
@@ -7,8 +8,6 @@
 namespace core
 {
 	class Device;
-	struct VulkanAllocation;
-	class VulkanMemoryManager;
 
 	struct StagingRegion
 	{
@@ -19,7 +18,7 @@ namespace core
 
 		// Overflow fallback fields (only valid when isOverflow == true)
 		vk::Buffer overflowBuffer;
-		vk::DeviceMemory overflowMemory;
+		VulkanAllocation overflowAllocation;
 	};
 
 	class StagingRingBuffer
@@ -45,7 +44,7 @@ namespace core
 		const vk::Device& device;
 
 		vk::Buffer buffer;
-		vk::DeviceMemory bufferMemory;
+		VulkanAllocation bufferAllocation;
 		void* baseMappedPtr = nullptr;
 		vk::DeviceSize ringSize;
 

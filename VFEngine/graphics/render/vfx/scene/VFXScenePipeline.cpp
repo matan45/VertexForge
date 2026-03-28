@@ -8,6 +8,7 @@
 #include "../../../core/BufferUtilities.hpp"
 #include "../../../core/ImageUtilities.hpp"
 #include "../../../core/Utilities.hpp"
+#include "../../../core/VulkanMemoryManager.hpp"
 #include "print/Log.hpp"
 #include <filesystem>
 
@@ -311,15 +312,13 @@ namespace render::vfx
                                     vk::MemoryPropertyFlagBits::eHostCoherent;
 
         vk::Buffer stagingBuffer;
-        vk::DeviceMemory stagingMemory;
-        core::BufferUtilities::createBuffer(stagingRequest, stagingBuffer, stagingMemory);
+        core::VulkanAllocation stagingAllocation;
+        core::BufferUtilities::createBuffer(stagingRequest, stagingBuffer, stagingAllocation, device.getMemoryManager());
 
-        void* data;
-        vk::Result mapResult = device.getLogicalDevice().mapMemory(stagingMemory, 0, imageSize, {}, &data);
-        if (mapResult == vk::Result::eSuccess)
+        void* data = stagingAllocation.mappedPtr;
+        if (data)
         {
             std::memcpy(data, pixelData.data(), imageSize);
-            device.getLogicalDevice().unmapMemory(stagingMemory);
         }
 
         auto cmd = core::Utilities::beginSingleTimeCommands(device.getLogicalDevice(), device.getStagingCommandPool());
@@ -347,8 +346,7 @@ namespace render::vfx
 
         core::Utilities::endSingleTimeCommands(device, cmd);
 
-        device.getLogicalDevice().destroyBuffer(stagingBuffer);
-        device.getLogicalDevice().freeMemory(stagingMemory);
+        core::BufferUtilities::destroyBuffer(device.getLogicalDevice(), stagingBuffer, stagingAllocation, device.getMemoryManager());
     }
 
     void VFXScenePipeline::createSampler()

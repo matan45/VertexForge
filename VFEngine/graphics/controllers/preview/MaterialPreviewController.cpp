@@ -4,6 +4,7 @@
 #include "../../core/BufferUtilities.hpp"
 #include "../../core/ImageUtilities.hpp"
 #include "../../core/Utilities.hpp"
+#include "../../core/VulkanMemoryManager.hpp"
 #include "../../render/preview/PreviewViewPort.hpp"
 #include "../../render/preview/PreviewRenderHandler.hpp"
 #include "../../render/mesh/StaticMeshPipeline.hpp"
@@ -185,17 +186,15 @@ namespace controllers
         vk::DeviceSize imageSize = width * height * 4;
 
         vk::Buffer stagingBuffer;
-        vk::DeviceMemory stagingBufferMemory;
+        core::VulkanAllocation stagingAllocation;
         core::BufferInfoRequest bufferInfo(device.getLogicalDevice(), device.getPhysicalDevice());
         bufferInfo.size = imageSize;
         bufferInfo.usage = vk::BufferUsageFlagBits::eTransferSrc;
         bufferInfo.properties = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
-        core::BufferUtilities::createBuffer(bufferInfo, stagingBuffer, stagingBufferMemory);
+        core::BufferUtilities::createBuffer(bufferInfo, stagingBuffer, stagingAllocation, device.getMemoryManager());
 
-        void* data;
-        static_cast<void>(device.getLogicalDevice().mapMemory(stagingBufferMemory, 0, imageSize, {}, &data));
+        void* data = stagingAllocation.mappedPtr;
         memcpy(data, pixels, imageSize);
-        device.getLogicalDevice().unmapMemory(stagingBufferMemory);
 
         core::ImageInfoRequest imageInfo(device.getLogicalDevice(), device.getPhysicalDevice());
         imageInfo.width = width;
@@ -208,8 +207,7 @@ namespace controllers
 
         uploadStagingToImage(device, stagingBuffer, tex.image, width, height);
 
-        device.getLogicalDevice().destroyBuffer(stagingBuffer);
-        device.getLogicalDevice().freeMemory(stagingBufferMemory);
+        core::BufferUtilities::destroyBuffer(device.getLogicalDevice(), stagingBuffer, stagingAllocation, device.getMemoryManager());
 
         createSamplerAndView(device, tex, enableAnisotropy);
         tex.valid = true;
@@ -256,17 +254,15 @@ namespace controllers
             PreviewTextureGPU tex{};
 
             vk::Buffer stagingBuffer;
-            vk::DeviceMemory stagingBufferMemory;
+            core::VulkanAllocation stagingAllocation;
             core::BufferInfoRequest bufferInfo(device.getLogicalDevice(), device.getPhysicalDevice());
             bufferInfo.size = imageSize;
             bufferInfo.usage = vk::BufferUsageFlagBits::eTransferSrc;
             bufferInfo.properties = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
-            core::BufferUtilities::createBuffer(bufferInfo, stagingBuffer, stagingBufferMemory);
+            core::BufferUtilities::createBuffer(bufferInfo, stagingBuffer, stagingAllocation, device.getMemoryManager());
 
-            void* data;
-            static_cast<void>(device.getLogicalDevice().mapMemory(stagingBufferMemory, 0, imageSize, {}, &data));
+            void* data = stagingAllocation.mappedPtr;
             memcpy(data, mip0.data.data(), imageSize);
-            device.getLogicalDevice().unmapMemory(stagingBufferMemory);
 
             core::ImageInfoRequest imageInfo(device.getLogicalDevice(), device.getPhysicalDevice());
             imageInfo.width = texturePtr->width;
@@ -279,8 +275,7 @@ namespace controllers
 
             uploadStagingToImage(device, stagingBuffer, tex.image, texturePtr->width, texturePtr->height);
 
-            device.getLogicalDevice().destroyBuffer(stagingBuffer);
-            device.getLogicalDevice().freeMemory(stagingBufferMemory);
+            core::BufferUtilities::destroyBuffer(device.getLogicalDevice(), stagingBuffer, stagingAllocation, device.getMemoryManager());
 
             // Create image view and sampler
             core::ImageViewInfoRequest viewReq(device.getLogicalDevice(), tex.image);
