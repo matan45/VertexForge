@@ -26,6 +26,7 @@
 #include "animation/AnimationDebugWindow.hpp"
 #include "procedural/HeightmapGeneratorWindow.hpp"
 #include "imageprocessing/BackgroundRemovalWindow.hpp"
+#include "debug/MemoryDiagnosticsWindow.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/project/SceneEvents.hpp"
 #include "events/render/RenderEvents.hpp"
@@ -317,6 +318,7 @@ namespace windows
             if (ImGui::MenuItem("Animation Stats") && animationDebugWindow) animationDebugWindow->show();
             if (ImGui::MenuItem("Light Streaming") && lightStreamingDebugWindow) lightStreamingDebugWindow->show();
             if (ImGui::MenuItem("Task Graph") && taskGraphWindow) taskGraphWindow->show();
+            if (ImGui::MenuItem("Memory Diagnostics") && memoryDiagnosticsWindow) memoryDiagnosticsWindow->show();
 
             ImGui::EndMenu();
         }
