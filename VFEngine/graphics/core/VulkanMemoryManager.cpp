@@ -104,6 +104,10 @@ namespace core
 		vk::MemoryPropertyFlags properties,
 		bool needsDeviceAddress)
 	{
+		if (memRequirements.size == 0) {
+			return {};
+		}
+
 		std::lock_guard lock(managerMutex);
 
 		uint32_t memTypeIndex = findMemoryType(memRequirements.memoryTypeBits, properties);
@@ -205,11 +209,16 @@ namespace core
 
 	vk::DeviceSize VulkanMemoryManager::getBlockSizeForType(uint32_t memoryTypeIndex) const
 	{
+		static constexpr vk::DeviceSize DEFAULT_DEVICE_LOCAL = 256ull * 1024 * 1024;
+		static constexpr vk::DeviceSize DEFAULT_HOST_VISIBLE = 64ull * 1024 * 1024;
+
 		auto& config = memory::MemoryPoolConfig::instance();
 		if (isHostVisible(memoryTypeIndex)) {
-			return config.hostVisibleBlockSize();
+			vk::DeviceSize size = config.hostVisibleBlockSize();
+			return size > 0 ? size : DEFAULT_HOST_VISIBLE;
 		}
-		return config.deviceLocalBlockSize();
+		vk::DeviceSize size = config.deviceLocalBlockSize();
+		return size > 0 ? size : DEFAULT_DEVICE_LOCAL;
 	}
 
 	VulkanAllocation VulkanMemoryManager::allocateDedicated(vk::DeviceSize size, uint32_t memoryTypeIndex,

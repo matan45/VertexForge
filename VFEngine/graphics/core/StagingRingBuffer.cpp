@@ -6,25 +6,27 @@
 
 namespace core
 {
+	static constexpr vk::DeviceSize FALLBACK_RING_SIZE = 64ull * 1024 * 1024;
+
 	StagingRingBuffer::StagingRingBuffer(Device& device, vk::DeviceSize ringSize)
 		: ownerDevice(device)
 		, device(device.getLogicalDevice())
-		, ringSize(ringSize > 0 ? ringSize : memory::MemoryPoolConfig::instance().stagingRingBufferSize())
+		, ringSize(ringSize > 0 ? ringSize : FALLBACK_RING_SIZE)
 	{
 		// Create a single large host-visible staging buffer
 		BufferInfoRequest bufferInfo(
 			this->device,
 			device.getPhysicalDevice(),
-			ringSize,
+			this->ringSize,
 			vk::BufferUsageFlagBits::eTransferSrc,
 			vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
 		);
 		BufferUtilities::createBuffer(bufferInfo, buffer, bufferMemory);
 
 		// Persistently map
-		baseMappedPtr = this->device.mapMemory(bufferMemory, 0, ringSize, {});
+		baseMappedPtr = this->device.mapMemory(bufferMemory, 0, this->ringSize, {});
 
-		vfLogInfo("StagingRingBuffer: Created {}MB ring buffer", ringSize / (1024 * 1024));
+		vfLogInfo("StagingRingBuffer: Created {}MB ring buffer", this->ringSize / (1024 * 1024));
 	}
 
 	StagingRingBuffer::~StagingRingBuffer()

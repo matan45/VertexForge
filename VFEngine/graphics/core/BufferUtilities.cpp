@@ -9,6 +9,8 @@ namespace core
 {
 	void BufferUtilities::createBuffer(const BufferInfoRequest& bufferInfo, vk::Buffer& buffer, vk::DeviceMemory& bufferMemory)
 	{
+		if (bufferInfo.size == 0) return;
+
 		vk::BufferCreateInfo bufferCreateInfo{};
 		bufferCreateInfo.size = bufferInfo.size;
 		bufferCreateInfo.usage = bufferInfo.usage;
@@ -44,6 +46,8 @@ namespace core
 	void BufferUtilities::createBuffer(const BufferInfoRequest& bufferInfo, vk::Buffer& buffer,
 		VulkanAllocation& allocation, VulkanMemoryManager& memManager)
 	{
+		if (bufferInfo.size == 0) return;
+
 		vk::BufferCreateInfo bufferCreateInfo{};
 		bufferCreateInfo.size = bufferInfo.size;
 		bufferCreateInfo.usage = bufferInfo.usage;
