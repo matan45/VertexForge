@@ -3,12 +3,9 @@
 #include "../../../core/Shader.hpp"
 #include "../../../core/BufferUtilities.hpp"
 #include "../../../core/PipelineUtilities.hpp"
-#include "../../../core/MappedMemoryGuard.hpp"
 #include "print/Log.hpp"
 
 #include <cstring>
-
-using render::MappedMemoryGuard;
 
 namespace render::gpudriven
 {
