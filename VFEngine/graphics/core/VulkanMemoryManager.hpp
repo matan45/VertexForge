@@ -82,6 +82,7 @@ namespace core
 		};
 
 		std::vector<MemoryTypeStats> getStats() const;
+		void updateGlobalStats() const;
 
 	private:
 		Device& ownerDevice;

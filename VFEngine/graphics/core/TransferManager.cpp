@@ -86,6 +86,7 @@ namespace core {
 		std::lock_guard lock(transferMutex);
 
 		ringBuffer->pollFences();
+		ringBuffer->updateGlobalStats();
 
 		auto it = pendingTransfers.begin();
 		while (it != pendingTransfers.end()) {

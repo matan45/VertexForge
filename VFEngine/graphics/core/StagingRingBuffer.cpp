@@ -92,6 +92,7 @@ namespace core
 
 		// If request is larger than ring buffer or no space, use overflow
 		vfLogWarning("StagingRingBuffer: Overflow allocation for {}KB", size / 1024);
+		overflowCount.fetch_add(1, std::memory_order_relaxed);
 
 		StagingRegion region;
 		region.isOverflow = true;
@@ -151,5 +152,15 @@ namespace core
 		}
 		// readOffset > writeOffset: free space between them
 		return readOffset - writeOffset;
+	}
+
+	void StagingRingBuffer::updateGlobalStats() const
+	{
+		std::lock_guard lock(ringMutex);
+		vk::DeviceSize used = (writeOffset >= readOffset) ? (writeOffset - readOffset) : (ringSize - readOffset + writeOffset);
+		memory::GpuAllocationStats::stagingRingSize.store(ringSize, std::memory_order_relaxed);
+		memory::GpuAllocationStats::stagingRingUsed.store(used, std::memory_order_relaxed);
+		memory::GpuAllocationStats::stagingPendingTransfers.store(static_cast<uint32_t>(pendingFences.size()), std::memory_order_relaxed);
+		memory::GpuAllocationStats::stagingOverflowCount.store(overflowCount.load(std::memory_order_relaxed), std::memory_order_relaxed);
 	}
 }

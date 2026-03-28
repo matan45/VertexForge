@@ -36,8 +36,12 @@ namespace core
 
 		vk::Buffer getBuffer() const { return buffer; }
 		vk::DeviceSize getRingSize() const { return ringSize; }
+		vk::DeviceSize getAvailableSpace() const { std::lock_guard lock(ringMutex); return availableSpace(); }
+		uint32_t getPendingFenceCount() const { std::lock_guard lock(ringMutex); return static_cast<uint32_t>(pendingFences.size()); }
+		static inline std::atomic<uint32_t> overflowCount{0};
 
 		void cleanupOverflow(StagingRegion& region);
+		void updateGlobalStats() const;
 
 	private:
 		Device& ownerDevice;

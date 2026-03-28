@@ -133,6 +133,7 @@ namespace core
 		auto allocation = newBlock->allocate(memRequirements.size, memRequirements.alignment);
 		typeData.blocks.push_back(std::move(newBlock));
 
+		updateGlobalStats();
 		return allocation;
 	}
 
@@ -163,6 +164,8 @@ namespace core
 		if (allocation.block) {
 			allocation.block->free(allocation.offset, allocation.size);
 		}
+
+		updateGlobalStats();
 	}
 
 	std::vector<VulkanMemoryManager::MemoryTypeStats> VulkanMemoryManager::getStats() const
@@ -189,7 +192,59 @@ namespace core
 			result.push_back(stats);
 		}
 
+		// Update global atomic stats for the UI (already under lock)
+		updateGlobalStats();
+
 		return result;
+	}
+
+	void VulkanMemoryManager::updateGlobalStats() const
+	{
+
+		uint32_t dlBlocks = 0, hvBlocks = 0;
+		uint64_t dlUsed = 0, dlCap = 0, hvUsed = 0, hvCap = 0;
+		float dlFrag = 0.0f, hvFrag = 0.0f;
+		uint32_t dlFragCount = 0, hvFragCount = 0;
+
+		for (const auto& [typeIndex, typeData] : memoryTypes) {
+			bool hostVis = isHostVisible(typeIndex);
+			for (const auto& block : typeData.blocks) {
+				auto bs = block->getStats();
+				if (hostVis) {
+					hvBlocks++;
+					hvUsed += bs.totalAllocated;
+					hvCap += bs.totalCapacity;
+					hvFrag += bs.fragmentationPercent;
+					hvFragCount++;
+				} else {
+					dlBlocks++;
+					dlUsed += bs.totalAllocated;
+					dlCap += bs.totalCapacity;
+					dlFrag += bs.fragmentationPercent;
+					dlFragCount++;
+				}
+			}
+		}
+
+		memory::GpuAllocationStats::deviceLocalBlockCount.store(dlBlocks, std::memory_order_relaxed);
+		memory::GpuAllocationStats::deviceLocalUsedBytes.store(dlUsed, std::memory_order_relaxed);
+		memory::GpuAllocationStats::deviceLocalCapacityBytes.store(dlCap, std::memory_order_relaxed);
+		memory::GpuAllocationStats::deviceLocalFragPercent.store(
+			dlFragCount > 0 ? static_cast<uint32_t>((dlFrag / dlFragCount) * 100) : 0, std::memory_order_relaxed);
+
+		memory::GpuAllocationStats::hostVisibleBlockCount.store(hvBlocks, std::memory_order_relaxed);
+		memory::GpuAllocationStats::hostVisibleUsedBytes.store(hvUsed, std::memory_order_relaxed);
+		memory::GpuAllocationStats::hostVisibleCapacityBytes.store(hvCap, std::memory_order_relaxed);
+		memory::GpuAllocationStats::hostVisibleFragPercent.store(
+			hvFragCount > 0 ? static_cast<uint32_t>((hvFrag / hvFragCount) * 100) : 0, std::memory_order_relaxed);
+
+		uint64_t dedBytes = 0;
+		for (const auto& ded : dedicatedAllocations) {
+			dedBytes += ded.size;
+		}
+		memory::GpuAllocationStats::dedicatedAllocationCount.store(
+			static_cast<uint32_t>(dedicatedAllocations.size()), std::memory_order_relaxed);
+		memory::GpuAllocationStats::dedicatedAllocatedBytes.store(dedBytes, std::memory_order_relaxed);
 	}
 
 	uint32_t VulkanMemoryManager::findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties) const
