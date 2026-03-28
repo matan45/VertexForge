@@ -3,6 +3,7 @@
 #include "../../events/save/ConfigEvents.hpp"
 #include "../../events/project/ProjectEvents.hpp"
 #include "print/Log.hpp"
+#include "resource/VFSHelpers.hpp"
 #include <fstream>
 #include <filesystem>
 
@@ -157,9 +158,8 @@ namespace services
 
         try
         {
-            std::ifstream file(path);
-            configData = json::parse(file);
-            file.close();
+            configData = resource::readJsonFile(path);
+            if (configData.is_null()) configData = json::object();
         }
         catch (const std::exception& e)
         {

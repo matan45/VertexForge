@@ -117,10 +117,20 @@ namespace core
 		PipelineUtilities() = delete;
 		~PipelineUtilities() = delete;
 
+		// Threading contract: setGlobalPipelineCache() must be called once during
+		// VulkanContext::init() on the main thread BEFORE any pipeline creation.
+		// After initialization the value is read-only, so concurrent reads are safe.
+		// Do NOT call setGlobalPipelineCache() after init or from worker threads.
+		static inline vk::PipelineCache globalPipelineCache = nullptr;
+
 	public:
+		static void setGlobalPipelineCache(vk::PipelineCache cache);
+
 		static WireframePipelineResult createWireframePipeline(const WireframePipelineConfig& config);
 		static GraphicsPipelineResult createGraphicsPipeline(const GraphicsPipelineConfig& config);
 		static MeshShaderPipelineResult createMeshShaderPipeline(const MeshShaderPipelineConfig& config);
+
+		static vk::Pipeline createComputePipeline(vk::Device device, const vk::ComputePipelineCreateInfo& info);
 
 		/// Create a descriptor set layout with eUpdateAfterBind on all bindings.
 		static vk::DescriptorSetLayout createUpdateAfterBindLayout(

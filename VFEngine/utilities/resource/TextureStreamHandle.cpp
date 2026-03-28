@@ -9,7 +9,9 @@ namespace resource
 
     TextureStreamHandle::TextureStreamHandle(TextureStreamHandle&& other) noexcept
         : header(std::move(other.header)),
-          filePath(std::move(other.filePath))
+          filePath(std::move(other.filePath)),
+          archiveFilePath(std::move(other.archiveFilePath)),
+          baseOffset(other.baseOffset)
     {
     }
 
@@ -19,6 +21,8 @@ namespace resource
         {
             header = std::move(other.header);
             filePath = std::move(other.filePath);
+            archiveFilePath = std::move(other.archiveFilePath);
+            baseOffset = other.baseOffset;
         }
         return *this;
     }
@@ -30,7 +34,30 @@ namespace resource
         // Open file temporarily to parse header and record mip offsets, then close.
         // The file is re-opened on demand for each readMipLevel call to avoid
         // holding OS file descriptors for potentially thousands of textures.
-        std::ifstream file(filePath, std::ios::binary);
+        std::ifstream file;
+
+        if (resource::VirtualFileSystem::instance().isArchiveMode())
+        {
+            auto region = resource::VirtualFileSystem::instance().openStream(filePath);
+            if (region)
+            {
+                baseOffset = region->baseOffset;
+                file = std::move(region->stream);
+                // Store the archive path for re-opening in readMipLevel
+                // The stream's underlying file is the archive file
+                archiveFilePath = filePath;
+            }
+            else
+            {
+                vfLogError("TextureStreamHandle: Failed to open file from archive: {}", filePath);
+                return false;
+            }
+        }
+        else
+        {
+            file.open(filePath, std::ios::binary);
+        }
+
         if (!file)
         {
             vfLogError("TextureStreamHandle: Failed to open file: {}", filePath);
@@ -50,6 +77,8 @@ namespace resource
     {
         header = {};
         filePath.clear();
+        archiveFilePath.clear();
+        baseOffset = 0;
     }
 
     bool TextureStreamHandle::parseHeader(std::ifstream& file)
@@ -94,8 +123,8 @@ namespace resource
 
         for (uint32_t level = 0; level < header.mipLevels; ++level)
         {
-            // Record position before reading mip header
-            header.mipInfos[level].fileOffset = file.tellg();
+            // Record position before reading mip header (relative to entry start)
+            header.mipInfos[level].fileOffset = file.tellg() - baseOffset;
 
             uint32_t mipWidth = endian::readLE<uint32_t>(file);
             uint32_t mipHeight = endian::readLE<uint32_t>(file);
@@ -147,7 +176,23 @@ namespace resource
         std::lock_guard lock(fileMutex);
 
         // Open file on demand — avoids holding OS file descriptors indefinitely
-        std::ifstream file(filePath, std::ios::binary);
+        std::ifstream file;
+
+        if (resource::VirtualFileSystem::instance().isArchiveMode())
+        {
+            auto region = resource::VirtualFileSystem::instance().openStream(filePath);
+            if (!region)
+            {
+                vfLogError("TextureStreamHandle: Failed to re-open file from archive for mip read: {}", filePath);
+                return false;
+            }
+            file = std::move(region->stream);
+        }
+        else
+        {
+            file.open(filePath, std::ios::binary);
+        }
+
         if (!file)
         {
             vfLogError("TextureStreamHandle: Failed to re-open file for mip read: {}", filePath);
@@ -156,8 +201,8 @@ namespace resource
 
         const auto& mipInfo = header.mipInfos[level];
 
-        // Seek to the mip's file position
-        file.seekg(mipInfo.fileOffset);
+        // Seek to the mip's file position (baseOffset + relative offset)
+        file.seekg(baseOffset + mipInfo.fileOffset);
         if (!file)
         {
             vfLogError("TextureStreamHandle: Failed to seek to mip level {} in {}", level, filePath);

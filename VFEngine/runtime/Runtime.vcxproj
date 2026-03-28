@@ -69,6 +69,8 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>delayimp.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalOptions>/DELAYLOAD:shaderc_shared.dll %(AdditionalOptions)</AdditionalOptions>
     </Link>
     <PostBuildEvent>
       <Command>IF EXIST ..\..\dependencies\openal-soft\build\Debug\OpenAL32.dll\ (xcopy /Q /E /Y /I ..\..\dependencies\openal-soft\build\Debug\OpenAL32.dll ..\..\bin\Runtime\Debug\x64 &gt; nul) ELSE (xcopy /Q /Y /I ..\..\dependencies\openal-soft\build\Debug\OpenAL32.dll ..\..\bin\Runtime\Debug\x64 &gt; nul)</Command>
@@ -93,6 +95,8 @@
       <SubSystem>Console</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
+      <AdditionalDependencies>delayimp.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalOptions>/DELAYLOAD:shaderc_shared.dll %(AdditionalOptions)</AdditionalOptions>
     </Link>
     <PostBuildEvent>
       <Command>IF EXIST ..\..\dependencies\openal-soft\build\Release\OpenAL32.dll\ (xcopy /Q /E /Y /I ..\..\dependencies\openal-soft\build\Release\OpenAL32.dll ..\..\bin\Runtime\Release\x64 &gt; nul) ELSE (xcopy /Q /Y /I ..\..\dependencies\openal-soft\build\Release\OpenAL32.dll ..\..\bin\Runtime\Release\x64 &gt; nul)</Command>

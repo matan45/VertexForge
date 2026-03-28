@@ -46,6 +46,28 @@ namespace windows
         bool followCamera = true;
         int gridRange = 8;
 
+        // HLOD state
+        bool hlodEnabled = false;
+        float hlodTier0Radius = 10.0f;
+        float hlodTier1Radius = 20.0f;
+        float hlodTier2Radius = 40.0f;
+        float hlodTier0Ratio = 0.10f;
+        float hlodTier1Ratio = 0.03f;
+        float hlodTier2Ratio = 0.01f;
+        bool hlodConfigLoaded = false;
+
+        // Async HLOD generation
+        bool hlodGenerating = false;
+        float hlodGenerationProgress = 0.0f;
+        std::string hlodGenerationStage;
+        std::vector<world::SectorCoord> hlodPendingSectors;
+        int hlodTotalToGenerate = 0;
+        int hlodDoneCount = 0;
+
+        // Cached HLOD status (refreshed on timer, not per-frame)
+        int cachedHLODCount = 0;
+        int cachedHLODTotal = 0;
+
     public:
         WorldSectorWindow() = default;
         ~WorldSectorWindow() override = default;
@@ -57,6 +79,7 @@ namespace windows
         void drawWorldInfo();
         void drawSectorGrid();
         void drawStreamingConfig();
+        void drawHLODConfig();
         void drawCreationWizard();
         void refreshStats();
 

@@ -141,14 +141,12 @@ namespace render::gpudriven
         pipelineInfo.stage = stages[0];
         pipelineInfo.layout = pipelineLayout;
 
-        auto result = vkDevice.createComputePipeline(nullptr, pipelineInfo);
-        if (result.result != vk::Result::eSuccess)
+        computePipeline = core::PipelineUtilities::createComputePipeline(vkDevice, pipelineInfo);
+        if (!computePipeline)
         {
             vfLogError("BrushComputePipeline: Failed to create compute pipeline");
             return;
         }
-
-        computePipeline = result.value;
     }
 
     void BrushComputePipeline::createDescriptorPool()

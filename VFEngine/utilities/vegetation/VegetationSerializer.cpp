@@ -1,5 +1,6 @@
 #include "VegetationSerializer.hpp"
 #include "../print/Log.hpp"
+#include "../resource/VFSHelpers.hpp"
 #include <fstream>
 #include <filesystem>
 #include <random>
@@ -114,11 +115,9 @@ namespace vegetation
     bool VegetationSerializer::loadBillboardPalette(const std::string& filePath,
                                                       std::vector<BillboardPaletteEntry>& palette)
     {
-        std::ifstream file(filePath);
-        if (!file.is_open()) return false;
-
         try {
-            nlohmann::json j = nlohmann::json::parse(file);
+            nlohmann::json j = resource::readJsonFile(filePath);
+            if (j.is_null()) return false;
             palette.clear();
             for (const auto& e : j)
             {

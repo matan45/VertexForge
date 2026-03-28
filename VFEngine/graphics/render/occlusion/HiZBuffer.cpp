@@ -3,6 +3,7 @@
 #include "../../core/SwapChain.hpp"
 #include "../../core/ImageUtilities.hpp"
 #include "../../core/Shader.hpp"
+#include "../../core/PipelineUtilities.hpp"
 #include "print/Log.hpp"
 #include <algorithm>
 #include <cmath>
@@ -196,8 +197,12 @@ namespace render::occlusion
         pipelineInfo.stage = stages[0];
         pipelineInfo.layout = pipelineLayout;
 
-        auto pipelineResult = device.getLogicalDevice().createComputePipeline(nullptr, pipelineInfo);
-        computePipeline = pipelineResult.value;
+        computePipeline = core::PipelineUtilities::createComputePipeline(device.getLogicalDevice(), pipelineInfo);
+        if (!computePipeline)
+        {
+            vfLogError("HiZBuffer: Failed to create compute pipeline");
+            return;
+        }
     }
 
     void HiZBuffer::createDescriptorSets()

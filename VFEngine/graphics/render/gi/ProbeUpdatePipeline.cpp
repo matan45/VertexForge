@@ -1,6 +1,7 @@
 #include "ProbeUpdatePipeline.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/Shader.hpp"
+#include "../../core/PipelineUtilities.hpp"
 #include "print/Log.hpp"
 
 namespace render::gi
@@ -98,8 +99,7 @@ namespace render::gi
         pipelineInfo.stage = stages[0];
         pipelineInfo.layout = pipelineLayout;
 
-        auto result = vkDevice.createComputePipeline(nullptr, pipelineInfo);
-        computePipeline = result.value;
+        computePipeline = core::PipelineUtilities::createComputePipeline(vkDevice, pipelineInfo);
     }
 
     void ProbeUpdatePipeline::dispatch(vk::CommandBuffer cmd,

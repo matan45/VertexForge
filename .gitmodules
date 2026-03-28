@@ -61,3 +61,6 @@
 [submodule "dependencies/libvorbis"]
 	path = dependencies/libvorbis
 	url = https://github.com/xiph/vorbis.git
+[submodule "dependencies/lz4"]
+	path = dependencies/lz4
+	url = https://github.com/lz4/lz4.git

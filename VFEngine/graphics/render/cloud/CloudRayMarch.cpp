@@ -5,6 +5,7 @@
 #include "../../core/ImageUtilities.hpp"
 #include "../../core/BufferUtilities.hpp"
 #include "../../core/MemoryUtilities.hpp"
+#include "../../core/PipelineUtilities.hpp"
 #include <cstring>
 
 // Windows defines MemoryBarrier as a macro - undefine it to use vk::MemoryBarrier
@@ -153,7 +154,7 @@ namespace render::cloud
         vk::ComputePipelineCreateInfo cpInfo{};
         cpInfo.stage = stages[0];
         cpInfo.layout = pipelineLayout;
-        pipeline = dev.createComputePipeline(nullptr, cpInfo).value;
+        pipeline = core::PipelineUtilities::createComputePipeline(dev, cpInfo);
 
         needsInitialTransition = true;
         initialized = true;

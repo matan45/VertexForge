@@ -203,6 +203,7 @@ namespace services
         worldDefinition = newDef;
         streamer.setConfig(newDef.streamingConfig);
         streamer.setEnabled(true);
+        hlodStreamer.setConfig(newDef.streamingConfig, newDef.hlodConfig);
 
         worldMode = true;
         currentWorldPath = filePath;
@@ -283,6 +284,9 @@ namespace services
         {
             root.removeComponent<components::WorldSectorComponent>();
         }
+
+        hlodProxyManager.unloadAll(*sceneGraph);
+        hlodStreamer.clear();
 
         worldDefinition = {};
         streamer.setEnabled(false);

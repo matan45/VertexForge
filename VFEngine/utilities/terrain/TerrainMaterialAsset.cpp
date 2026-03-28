@@ -3,6 +3,7 @@
 #include "../uuid/UUID.hpp"
 #include "../asset/AssetRef.hpp"
 #include "../serialization/AssetRefSerializationHelper.hpp"
+#include "../resource/VFSHelpers.hpp"
 #include <nlohmann/json.hpp>
 #include <fstream>
 #include <filesystem>
@@ -39,22 +40,20 @@ namespace terrain
             return std::nullopt;
         }
 
-        std::ifstream file(filePath);
-        if (!file.is_open())
-        {
-            vfLogError("Failed to open terrain material file: {}", path);
-            return std::nullopt;
-        }
-
         json j;
         try
         {
-            file >> j;
+            j = resource::readJsonFile(std::string(path));
         }
         catch (const json::parse_error& e)
         {
             vfLogError("Terrain material file '{}' contains invalid JSON at byte {}: {}",
                        path, e.byte, e.what());
+            return std::nullopt;
+        }
+        if (j.is_null())
+        {
+            vfLogError("Failed to open terrain material file: {}", path);
             return std::nullopt;
         }
 

@@ -34,6 +34,7 @@ namespace serialization
     class SceneSerialization
     {
         friend class PrefabSerialization;
+        friend class BinarySceneSerialization;
 
     public:
         // Extension point for plugin component serialization.

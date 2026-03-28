@@ -2,6 +2,7 @@
 #include "../../core/Device.hpp"
 #include "../../core/BufferUtilities.hpp"
 #include "../../core/Shader.hpp"
+#include "../../core/PipelineUtilities.hpp"
 #include "../../core/MappedMemoryGuard.hpp"
 #include "print/Log.hpp"
 
@@ -210,8 +211,12 @@ namespace render::shadow
         pipelineInfo.stage = stages[0];
         pipelineInfo.layout = pipelineLayout;
 
-        auto pipelineResult = device.getLogicalDevice().createComputePipeline(nullptr, pipelineInfo);
-        computePipeline = pipelineResult.value;
+        computePipeline = core::PipelineUtilities::createComputePipeline(device.getLogicalDevice(), pipelineInfo);
+        if (!computePipeline)
+        {
+            vfLogError("VSMFeedbackPipeline: Failed to create compute pipeline");
+            return;
+        }
     }
 
     void VSMFeedbackPipeline::createDescriptorSets()

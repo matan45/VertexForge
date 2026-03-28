@@ -2,9 +2,12 @@
 #include "Shader.hpp"
 #include "Device.hpp"
 #include "resource/PathResolver.hpp"
+#include "resource/ShaderBinaryFormat.hpp"
 #include <filesystem>
 #include <fstream>
 #include <sstream>
+#include <algorithm>
+#include <functional>
 
 namespace core {
 
@@ -89,6 +92,14 @@ namespace core {
 	void Shader::readShader(std::string_view path)
 	{
 		std::string resolvedPath = resource::PathResolver::resolveEnginePath(std::string(path));
+
+		if (resource::PathResolver::isExportedMode())
+		{
+			auto vfshaderPath = resolvePrecompiledPath(resolvedPath);
+			loadPrecompiledSPIRV(vfshaderPath);
+			return;
+		}
+
 		auto futureShaders = resource::ResourceManager::loadShaderAsync(resolvedPath);
 		std::string shaderName = std::filesystem::path(resolvedPath).stem().string();
 
@@ -123,6 +134,88 @@ namespace core {
 	void Shader::cleanUp()
 	{
 		shaderModules.clear();
+	}
+
+	bool Shader::loadPrecompiledShader(const std::string& vfshaderPath)
+	{
+		std::string resolved = resource::PathResolver::resolveEnginePath(vfshaderPath);
+		auto stages = resource::ShaderBinaryFormat::read(resolved);
+		if (stages.empty())
+		{
+			vfLogError("Failed to load pre-compiled shader: {}", resolved);
+			return false;
+		}
+
+		for (const auto& stage : stages)
+		{
+			createShaderModule(stage.spirv, static_cast<vk::ShaderStageFlagBits>(stage.stage));
+		}
+		return !shaderStages.empty();
+	}
+
+	void Shader::loadPrecompiledSPIRV(const std::filesystem::path& vfshaderPath)
+	{
+		auto stages = resource::ShaderBinaryFormat::read(vfshaderPath);
+		if (stages.empty())
+		{
+			vfLogError("Failed to load pre-compiled shader: {}", vfshaderPath.string());
+			return;
+		}
+
+		for (const auto& stage : stages)
+		{
+			createShaderModule(stage.spirv, static_cast<vk::ShaderStageFlagBits>(stage.stage));
+		}
+	}
+
+	std::filesystem::path Shader::resolvePrecompiledPath(const std::string& glslPath) const
+	{
+		std::filesystem::path path(glslPath);
+		std::string permKey = computePermutationKey();
+
+		if (permKey.empty())
+		{
+			path.replace_extension(".vfshader");
+		}
+		else
+		{
+			std::string stem = path.stem().string();
+			path.replace_filename(stem + "_" + permKey + ".vfshader");
+		}
+
+		return path;
+	}
+
+	std::string Shader::computePermutationKey() const
+	{
+		if (macroDefinitions.empty() && macroDefinitionsWithValue.empty())
+		{
+			return "";
+		}
+
+		std::vector<std::string> sorted;
+		for (const auto& name : macroDefinitions)
+		{
+			sorted.push_back(name);
+		}
+		for (const auto& [name, value] : macroDefinitionsWithValue)
+		{
+			sorted.push_back(name + "=" + value);
+		}
+		std::sort(sorted.begin(), sorted.end());
+
+		std::string combined;
+		for (const auto& s : sorted)
+		{
+			if (!combined.empty()) combined += ",";
+			combined += s;
+		}
+
+		size_t hash = std::hash<std::string>{}(combined);
+
+		char buf[17];
+		snprintf(buf, sizeof(buf), "%016zx", hash);
+		return std::string(buf);
 	}
 
 	std::vector<uint32_t> Shader::compileShaderToSPIRV(std::string_view source, vk::ShaderStageFlagBits stage, std::string_view shaderName)
@@ -165,7 +258,6 @@ namespace core {
 
 		if (result.GetCompilationStatus() != shaderc_compilation_status_success) {
 			lastCompilationError = result.GetErrorMessage();
-			vfLogError("Shader compilation failed for {}: {}", shaderName, lastCompilationError);
 			vfLogError("Shader compilation failed for {}: {}", shaderName, lastCompilationError);
 			return {};
 		}

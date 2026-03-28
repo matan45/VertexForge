@@ -1,6 +1,6 @@
 #pragma once
 #include <string_view>
-#include <fstream>
+#include <istream>
 #include "Types.hpp"
 
 namespace resource
@@ -15,7 +15,7 @@ namespace resource
         static std::streampos getEventDataOffset(std::string_view path);
 
     private:
-        static std::string readString(std::ifstream& file);
-        static void skipString(std::ifstream& file);
+        static std::string readString(std::istream& file);
+        static void skipString(std::istream& file);
     };
 }

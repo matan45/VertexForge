@@ -2,9 +2,11 @@
 #include "../print/Log.hpp"
 #include "../resource/EndianUtils.hpp"
 #include "../resource/BC7Decoder.hpp"
+#include "../resource/VFSHelpers.hpp"
 #include "../../graphics/render/svt/SVTFileFormat.hpp"
 
 #include <fstream>
+#include <sstream>
 #include <algorithm>
 #include <cmath>
 #include <filesystem>
@@ -68,12 +70,15 @@ namespace terrain
 
     std::shared_ptr<HeightmapData> HeightmapLoader::loadVFImage(const std::string& filePath)
     {
-        std::ifstream file(filePath, std::ios::binary);
-        if (!file.is_open())
+        auto rawData = resource::readFileBytes(filePath);
+        if (rawData.empty())
         {
-            vfLogError("HeightmapLoader: Failed to open vfImage file: {}", filePath);
+            vfLogError("HeightmapLoader: Failed to read vfImage file: {}", filePath);
             return nullptr;
         }
+
+        std::string dataStr(rawData.begin(), rawData.end());
+        std::istringstream file(dataStr, std::ios::binary);
 
         uint8_t fileType = resource::endian::readLE<uint8_t>(file);
         uint32_t vMajor = resource::endian::readLE<uint32_t>(file);
@@ -121,7 +126,6 @@ namespace terrain
             if (pixelData.empty())
             {
                 vfLogError("HeightmapLoader: Failed to decompress BC7 heightmap: {}", filePath);
-                file.close();
                 return nullptr;
             }
         }
@@ -129,10 +133,8 @@ namespace terrain
         {
             vfLogError("HeightmapLoader: Unsupported compression format {} in heightmap: {}",
                        compressionFormat, filePath);
-            file.close();
             return nullptr;
         }
-        file.close();
 
         auto result = std::make_shared<HeightmapData>();
         result->width = mipWidth;

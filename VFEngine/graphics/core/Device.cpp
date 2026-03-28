@@ -3,6 +3,7 @@
 #include "../window/Window.hpp"
 
 #include <cassert>
+#include <fstream>
 #include <unordered_set>
 
 VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
@@ -45,10 +46,14 @@ namespace core
         queryMeshShaderCapabilities();
         queryRayQueryCapabilities();
         createStagingCommandPool();
+        createPipelineCache();
     }
 
     void Device::cleanUp()
     {
+        savePipelineCacheToDisk();
+        pipelineCache.reset();
+
         // Reset staging command pool before device
         stagingCommandPool.reset();
 
@@ -363,6 +368,100 @@ namespace core
         {
             vfLogError("Failed to create staging command pool: {}", err.what());
             throw;
+        }
+    }
+
+    void Device::createPipelineCache()
+    {
+        namespace fs = std::filesystem;
+
+        fs::path cacheDir = fs::current_path() / "cache";
+        std::error_code ec;
+        fs::create_directories(cacheDir, ec);
+        if (ec)
+        {
+            vfLogWarning("Failed to create pipeline cache directory '{}': {}", cacheDir.string(), ec.message());
+        }
+        pipelineCachePath = cacheDir / "pipeline_cache.bin";
+
+        loadPipelineCacheFromDisk();
+
+        if (!pipelineCache)
+        {
+            vk::PipelineCacheCreateInfo cacheInfo{};
+            try
+            {
+                pipelineCache = logicalDevice->createPipelineCacheUnique(cacheInfo);
+                vfLogInfo("Pipeline cache created (empty)");
+            }
+            catch (const vk::SystemError& err)
+            {
+                vfLogWarning("Failed to create pipeline cache: {}", err.what());
+            }
+        }
+    }
+
+    void Device::loadPipelineCacheFromDisk()
+    {
+        if (!std::filesystem::exists(pipelineCachePath))
+        {
+            return;
+        }
+
+        std::ifstream file(pipelineCachePath, std::ios::binary | std::ios::ate);
+        if (!file.is_open())
+        {
+            return;
+        }
+
+        auto fileSize = file.tellg();
+        if (fileSize <= 0)
+        {
+            return;
+        }
+
+        std::vector<uint8_t> cacheData(static_cast<size_t>(fileSize));
+        file.seekg(0);
+        file.read(reinterpret_cast<char*>(cacheData.data()), fileSize);
+        file.close();
+
+        vk::PipelineCacheCreateInfo cacheInfo{};
+        cacheInfo.initialDataSize = cacheData.size();
+        cacheInfo.pInitialData = cacheData.data();
+
+        try
+        {
+            pipelineCache = logicalDevice->createPipelineCacheUnique(cacheInfo);
+            vfLogInfo("Pipeline cache loaded from disk ({} bytes)", cacheData.size());
+        }
+        catch (const vk::SystemError& err)
+        {
+            vfLogWarning("Failed to load pipeline cache from disk: {}", err.what());
+        }
+    }
+
+    void Device::savePipelineCacheToDisk() const
+    {
+        if (!pipelineCache || pipelineCachePath.empty())
+        {
+            return;
+        }
+
+        try
+        {
+            auto cacheData = logicalDevice->getPipelineCacheData(pipelineCache.get());
+
+            std::ofstream file(pipelineCachePath, std::ios::binary);
+            if (file.is_open())
+            {
+                file.write(reinterpret_cast<const char*>(cacheData.data()),
+                           static_cast<std::streamsize>(cacheData.size()));
+                vfLogInfo("Pipeline cache saved to disk ({} bytes)", cacheData.size());
+            }
+        }
+        catch (const vk::SystemError& err)
+        {
+            vfLogWarning("Failed to save pipeline cache: {}", err.what());
         }
     }
 

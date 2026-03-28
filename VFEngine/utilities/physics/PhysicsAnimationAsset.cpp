@@ -1,5 +1,6 @@
 #include "PhysicsAnimationAsset.hpp"
 #include "../print/Log.hpp"
+#include "../resource/VFSHelpers.hpp"
 #include <nlohmann/json.hpp>
 #include <fstream>
 #include <filesystem>
@@ -168,18 +169,16 @@ namespace physics
             return std::nullopt;
         }
 
-        std::ifstream file(filePath);
-        if (!file.is_open())
-        {
-            vfLogError("Failed to open physics animation file: {}", path);
-            return std::nullopt;
-        }
-
         json j;
-        try { file >> j; }
+        try { j = resource::readJsonFile(filePath.string()); }
         catch (const json::parse_error& e)
         {
             vfLogError("Physics animation file '{}' contains invalid JSON: {}", path, e.what());
+            return std::nullopt;
+        }
+        if (j.is_null())
+        {
+            vfLogError("Failed to open physics animation file: {}", path);
             return std::nullopt;
         }
 

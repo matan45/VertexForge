@@ -1,6 +1,6 @@
 #include "ShaderResource.hpp"
 #include "../print/Log.hpp"
-#include <fstream>
+#include "VFSHelpers.hpp"
 #include <sstream>
 
 namespace resource
@@ -8,13 +8,16 @@ namespace resource
     std::vector<ShaderModel> ShaderResource::readShaderFile(std::string_view filePath)
     {
         std::vector<ShaderModel> shaderModels;
-        std::ifstream file(filePath.data());
 
-        if (!file.is_open())
+        auto data = resource::readFileBytes(std::string(filePath));
+        if (data.empty())
         {
-            vfLogError("Failed to open shader file: {}", filePath);
+            vfLogError("Failed to read shader file: {}", filePath);
             return std::vector<ShaderModel>();
         }
+
+        std::string dataStr(data.begin(), data.end());
+        std::istringstream file(dataStr);
 
         std::string line;
         std::ostringstream shaderStream;

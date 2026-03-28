@@ -1,10 +1,22 @@
 #include "../print/Log.hpp"
 #include "GameExporter.hpp"
 #include "ExeIconEmbedder.hpp"
+#include "ShaderCompiler.hpp"
+#include "ShaderPermutationManifest.hpp"
 #include "../serialization/ProjectSerialization.hpp"
+#include "../resource/ShaderResource.hpp"
+#include "../resource/ShaderBinaryFormat.hpp"
+#include "../material/MaterialAsset.hpp"
+#include "../archive/VFPakWriter.hpp"
+#include "../archive/VFPakReader.hpp"
+#include "../serialization/BinarySceneSerialization.hpp"
+#include <nlohmann/json.hpp>
 #include <fstream>
 #include <memory>
 #include <cstdlib>
+#include <chrono>
+#include <unordered_map>
+#include <unordered_set>
 
 namespace gameExport
 {
@@ -24,6 +36,24 @@ namespace gameExport
 		report(0.0f, "Validating prerequisites...");
 		if (!validatePrerequisites(config, result)) return result;
 
+		// Load previous manifest for incremental export
+		fs::path manifestPath = config.outputDirectory / (config.gameName + ".vfmanifest");
+		newManifest = ExportManifest{};
+		newManifest.gameName = config.gameName;
+		newManifest.gameVersion = config.gameVersion;
+
+		if (!config.cleanBuild && fs::exists(manifestPath))
+		{
+			if (previousManifest.load(manifestPath))
+			{
+				vfLogInfo("Loaded previous export manifest ({} entries)", previousManifest.getEntries().size());
+			}
+		}
+		else
+		{
+			previousManifest = ExportManifest{};
+		}
+
 		report(0.05f, "Creating output structure...");
 		if (!createOutputStructure(config, result)) return result;
 
@@ -33,11 +63,25 @@ namespace gameExport
 		report(0.15f, "Copying runtime dependencies...");
 		if (!copyRuntimeDependencies(config, result)) return result;
 
-		report(0.25f, "Copying shaders...");
-		if (!copyShaders(config, result)) return result;
+		report(0.25f, "Compiling shaders...");
+		if (!compileShaders(config, result)) return result;
 
-		report(0.40f, "Copying assets...");
-		if (!copyAssets(config, result)) return result;
+		report(0.35f, "Compiling material shaders...");
+		if (!compileMaterialShaders(config, result)) return result;
+
+		report(0.40f, "Packing assets into archive...");
+		if (!packAssets(config, result)) return result;
+
+		// Save export manifest
+		{
+			auto now = std::chrono::system_clock::now();
+			auto time = std::chrono::system_clock::to_time_t(now);
+			char timeBuf[32];
+			std::strftime(timeBuf, sizeof(timeBuf), "%Y-%m-%dT%H:%M:%SZ", std::gmtime(&time));
+			newManifest.exportTimestamp = timeBuf;
+			newManifest.save(manifestPath);
+			vfLogInfo("Export manifest saved with {} entries", newManifest.getEntries().size());
+		}
 
 		report(0.80f, "Copying plugins...");
 		if (!copyPlugins(config, result)) return result;
@@ -108,19 +152,22 @@ namespace gameExport
 	{
 		std::error_code ec;
 
-		fs::create_directories(config.outputDirectory / "Assets", ec);
+		fs::create_directories(config.outputDirectory, ec);
 		if (ec)
 		{
-			result.errorMessage = "Failed to create Assets directory: " + ec.message();
+			result.errorMessage = "Failed to create output directory: " + ec.message();
 			return false;
 		}
 
-		fs::create_directories(config.outputDirectory / "resources" / "shaders", ec);
-		if (ec)
+		// On clean build, purge cached temp directories
+		if (config.cleanBuild)
 		{
-			result.errorMessage = "Failed to create resources/shaders directory: " + ec.message();
-			return false;
+			fs::remove_all(config.outputDirectory / "_temp_shaders", ec);
+			fs::remove_all(config.outputDirectory / "_temp_scenes", ec);
 		}
+
+		// Temp directory for intermediate shader compilation before packing into archive
+		fs::create_directories(config.outputDirectory / "_temp_shaders", ec);
 
 		return true;
 	}
@@ -171,55 +218,142 @@ namespace gameExport
 			}
 		}
 
-		{
-			char* vulkanSdkBuf = nullptr;
-			size_t vulkanSdkLen = 0;
-			_dupenv_s(&vulkanSdkBuf, &vulkanSdkLen, "VULKAN_SDK");
-			std::unique_ptr<char, decltype(&free)> vulkanSdkGuard(vulkanSdkBuf, &free);
-
-			if (vulkanSdkBuf)
-			{
-				fs::path shadercDll = fs::path(vulkanSdkBuf) / "Bin" / "shaderc_shared.dll";
-				if (fs::exists(shadercDll))
-				{
-					std::error_code ec;
-					fs::copy_file(shadercDll, config.outputDirectory / "shaderc_shared.dll",
-								  fs::copy_options::overwrite_existing, ec);
-					if (ec)
-					{
-						result.errorMessage = "Failed to copy shaderc_shared.dll: " + ec.message();
-						return false;
-					}
-				}
-				else
-				{
-					result.errorMessage = "shaderc_shared.dll not found at: " + shadercDll.string();
-					return false;
-				}
-			}
-			else
-			{
-				result.errorMessage = "VULKAN_SDK environment variable not set. Cannot locate shaderc_shared.dll";
-				return false;
-			}
-		}
+		// shaderc_shared.dll is no longer needed in exported builds:
+		// shaders are pre-compiled to SPIR-V at export time
 
 		return true;
 	}
 
-	bool GameExporter::copyShaders(const ExportConfig& config, ExportResult& result)
+	bool GameExporter::compileShaders(const ExportConfig& config, ExportResult& result)
 	{
 		fs::path shaderSrc = findShaderDirectory();
-		fs::path shaderDst = config.outputDirectory / "resources" / "shaders";
+		fs::path shaderDst = config.outputDirectory / "_temp_shaders" / "resources" / "shaders";
 
-		copyDirectoryRecursive(shaderSrc, shaderDst, result);
+		// Build permutation lookup: glslPath -> list of permutations
+		auto permutations = shaderCompiler::getShaderPermutations();
+		std::unordered_map<std::string, std::vector<const shaderCompiler::ShaderPermutation*>> permutationMap;
+		for (const auto& perm : permutations)
+		{
+			permutationMap[perm.glslPath].push_back(&perm);
+		}
+
+		// Walk all .glsl files and compile to .vfshader
+		std::error_code ec;
+		int compiledCount = 0;
+		int skippedCount = 0;
+		for (auto it = fs::recursive_directory_iterator(shaderSrc, ec); it != fs::recursive_directory_iterator(); ++it)
+		{
+			if (!it->is_regular_file() || it->path().extension() != ".glsl")
+			{
+				continue;
+			}
+
+			fs::path relativePath = fs::relative(it->path(), shaderSrc, ec);
+			std::string relativeStr = relativePath.generic_string();
+
+			// Check if source changed for incremental skip
+			std::string baseArchivePath = "resources/shaders/" + relativePath.generic_string();
+			{
+				fs::path baseOutPath = shaderDst / relativePath;
+				baseOutPath.replace_extension(".vfshader");
+
+				ManifestSource src;
+				src.path = relativeStr;
+				src.modifiedTime = getFileModifiedTime(it->path());
+				src.contentHash = hashFile(it->path());
+
+				if (!previousManifest.hasSourceChanged(baseArchivePath, {src}) && fs::exists(baseOutPath))
+				{
+					skippedCount++;
+					continue;
+				}
+			}
+
+			// Parse the GLSL file to get shader stages
+			auto shaderModels = resource::ShaderResource::readShaderFile(it->path().string());
+			if (shaderModels.empty())
+			{
+				result.warnings.push_back("Failed to parse shader: " + relativeStr);
+				continue;
+			}
+
+			// Compile base variant (no macros)
+			{
+				shaderCompiler::CompileOptions opts;
+				opts.includeBasePath = it->path().parent_path();
+
+				std::vector<resource::StageSPIRV> stages;
+				bool success = true;
+				for (const auto& model : shaderModels)
+				{
+					auto stage = shaderCompiler::shaderTypeToVulkanStage(static_cast<uint8_t>(model.type));
+					auto spirv = shaderCompiler::compile(model.source, stage, relativeStr, opts);
+					if (spirv.empty())
+					{
+						result.warnings.push_back("Failed to compile base variant: " + relativeStr);
+						success = false;
+						break;
+					}
+					stages.push_back({static_cast<uint32_t>(stage), std::move(spirv)});
+				}
+
+				if (success)
+				{
+					fs::path outPath = shaderDst / relativePath;
+					outPath.replace_extension(".vfshader");
+					fs::create_directories(outPath.parent_path(), ec);
+					resource::ShaderBinaryFormat::write(outPath, stages);
+					compiledCount++;
+				}
+			}
+
+			// Compile permutation variants
+			auto permIt = permutationMap.find(relativeStr);
+			if (permIt != permutationMap.end())
+			{
+				for (const auto* perm : permIt->second)
+				{
+					shaderCompiler::CompileOptions opts;
+					opts.macroNames = perm->macroNames;
+					opts.macroValues = perm->macroValues;
+					opts.includeBasePath = it->path().parent_path();
+
+					std::string permKey = shaderCompiler::computePermutationKey(opts);
+
+					std::vector<resource::StageSPIRV> stages;
+					bool success = true;
+					for (const auto& model : shaderModels)
+					{
+						auto stage = shaderCompiler::shaderTypeToVulkanStage(static_cast<uint8_t>(model.type));
+						auto spirv = shaderCompiler::compile(model.source, stage, relativeStr, opts);
+						if (spirv.empty())
+						{
+							result.warnings.push_back("Failed to compile permutation " + permKey + " of " + relativeStr);
+							success = false;
+							break;
+						}
+						stages.push_back({static_cast<uint32_t>(stage), std::move(spirv)});
+					}
+
+					if (success)
+					{
+						fs::path outPath = shaderDst / relativePath;
+						std::string stem = outPath.stem().string();
+						outPath.replace_filename(stem + "_" + permKey + ".vfshader");
+						resource::ShaderBinaryFormat::write(outPath, stages);
+						compiledCount++;
+					}
+				}
+			}
+		}
+
+		vfLogInfo("Compiled {} shader variants ({} unchanged, skipped)", compiledCount, skippedCount);
 
 		// Copy IBL resources (pre-baked BRDF LUT)
 		fs::path iblSrc = findIBLDirectory();
 		if (fs::exists(iblSrc))
 		{
-			fs::path iblDst = config.outputDirectory / "resources" / "ibl";
-			std::error_code ec;
+			fs::path iblDst = config.outputDirectory / "_temp_shaders" / "resources" / "ibl";
 			fs::create_directories(iblDst, ec);
 			copyDirectoryRecursive(iblSrc, iblDst, result);
 		}
@@ -227,10 +361,321 @@ namespace gameExport
 		return true;
 	}
 
-	bool GameExporter::copyAssets(const ExportConfig& config, ExportResult& result)
+	bool GameExporter::compileMaterialShaders(const ExportConfig& config, ExportResult& result)
 	{
-		fs::path assetsDst = config.outputDirectory / "Assets";
-		copyDirectoryFilteredRecursive(config.workingDirectory, assetsDst, result, config.outputDirectory);
+		fs::path compiledDir = config.outputDirectory / "_temp_shaders" / "Assets" / "materials" / "compiled";
+		std::error_code ec;
+		fs::create_directories(compiledDir, ec);
+
+		std::unordered_set<std::string> compiledHashes;
+		int compiledCount = 0;
+		int skippedMaterialCount = 0;
+
+		// Scan all .vfmaterial files in the working directory
+		for (auto it = fs::recursive_directory_iterator(config.workingDirectory, ec);
+		     it != fs::recursive_directory_iterator(); ++it)
+		{
+			if (!it->is_regular_file() || it->path().extension() != ".vfmaterial")
+			{
+				continue;
+			}
+
+			// Load the material to get cached shader source
+			auto materialOpt = material::MaterialAsset::load(it->path().string());
+			if (!materialOpt)
+			{
+				continue;
+			}
+			const auto& materialData = *materialOpt;
+
+			if (materialData.cachedVertexShader.empty() || materialData.cachedFragmentShader.empty())
+			{
+				continue;
+			}
+
+			// Compute hash key matching MaterialShaderCache::hashShaderSource (FNV-1a)
+			auto fmtHash = [](uint64_t h) {
+				char buf[17];
+				snprintf(buf, sizeof(buf), "%016llx", static_cast<unsigned long long>(h));
+				return std::string(buf);
+			};
+			std::string vsHash = fmtHash(archive::hashPath(materialData.cachedVertexShader));
+			std::string fsHash = fmtHash(archive::hashPath(materialData.cachedFragmentShader));
+			std::string combinedHash = vsHash + "_" + fsHash;
+
+			// Skip if already compiled (dedup by hash)
+			if (compiledHashes.count(combinedHash))
+			{
+				continue;
+			}
+			compiledHashes.insert(combinedHash);
+
+			// Incremental: check if material source changed
+			std::string archivePath = "Assets/materials/compiled/" + combinedHash + ".vfshader";
+			fs::path outPath = compiledDir / (combinedHash + ".vfshader");
+			{
+				ManifestSource src;
+				src.path = fs::relative(it->path(), config.workingDirectory, ec).generic_string();
+				src.modifiedTime = getFileModifiedTime(it->path());
+				src.contentHash = hashFile(it->path());
+
+				if (!previousManifest.hasSourceChanged(archivePath, {src}) && fs::exists(outPath))
+				{
+					skippedMaterialCount++;
+					continue;
+				}
+			}
+
+			// Compile vertex and fragment shaders
+			shaderCompiler::CompileOptions opts;
+			std::vector<resource::StageSPIRV> stages;
+
+			// Strip #type directive if present
+			std::string vsSource = materialData.cachedVertexShader;
+			if (auto pos = vsSource.find("#type"); pos != std::string::npos)
+			{
+				auto lineEnd = vsSource.find('\n', pos);
+				if (lineEnd != std::string::npos)
+					vsSource = vsSource.substr(lineEnd + 1);
+			}
+
+			std::string fsSource = materialData.cachedFragmentShader;
+			if (auto pos = fsSource.find("#type"); pos != std::string::npos)
+			{
+				auto lineEnd = fsSource.find('\n', pos);
+				if (lineEnd != std::string::npos)
+					fsSource = fsSource.substr(lineEnd + 1);
+			}
+
+			auto vsSPIRV = shaderCompiler::compile(vsSource,
+				vk::ShaderStageFlagBits::eVertex, materialData.name, opts);
+			if (vsSPIRV.empty())
+			{
+				result.warnings.push_back("Failed to compile vertex shader for material: " +
+					it->path().filename().string());
+				continue;
+			}
+			stages.push_back({static_cast<uint32_t>(vk::ShaderStageFlagBits::eVertex), std::move(vsSPIRV)});
+
+			auto fsSPIRV = shaderCompiler::compile(fsSource,
+				vk::ShaderStageFlagBits::eFragment, materialData.name, opts);
+			if (fsSPIRV.empty())
+			{
+				result.warnings.push_back("Failed to compile fragment shader for material: " +
+					it->path().filename().string());
+				continue;
+			}
+			stages.push_back({static_cast<uint32_t>(vk::ShaderStageFlagBits::eFragment), std::move(fsSPIRV)});
+
+			resource::ShaderBinaryFormat::write(outPath, stages);
+			compiledCount++;
+		}
+
+		if (compiledCount > 0 || skippedMaterialCount > 0)
+		{
+			vfLogInfo("Compiled {} material shader variants ({} unchanged, skipped)", compiledCount, skippedMaterialCount);
+		}
+
+		return true;
+	}
+
+	bool GameExporter::packAssets(const ExportConfig& config, ExportResult& result)
+	{
+		fs::path pakPath = config.outputDirectory / (config.gameName + ".vfpak");
+		archive::VFPakWriter writer;
+
+		if (!writer.create(pakPath))
+		{
+			result.errorMessage = "Failed to create archive file: " + pakPath.string();
+			return false;
+		}
+
+		// Extensions that should NOT be LZ4-compressed (already compressed or need streaming)
+		static const std::unordered_set<std::string> noCompressExts = {
+			".vfimage", ".vfhdr", ".vfmesh", ".vfaudio",
+			".vfterrain", ".vfsvt"
+		};
+
+		auto shouldCompress = [&](const std::string& ext) -> archive::CompressionType
+		{
+			std::string lower = ext;
+			for (char& c : lower) c = static_cast<char>(std::tolower(c));
+			if (noCompressExts.count(lower))
+				return archive::CompressionType::None;
+			return archive::CompressionType::LZ4;
+		};
+
+		// Helper to add a file to the archive and record it in the manifest
+		auto addToArchiveWithManifest = [&](const std::string& archivePath,
+											const fs::path& filePath,
+											archive::CompressionType compression,
+											const std::string& sourceType,
+											const std::vector<ManifestSource>& sources)
+		{
+			writer.addFile(archivePath, filePath, compression);
+
+			ManifestEntry manifestEntry;
+			manifestEntry.archivePath = archivePath;
+			manifestEntry.contentHash = hashFile(filePath);
+			std::error_code sizeEc;
+			manifestEntry.uncompressedSize = static_cast<uint64_t>(fs::file_size(filePath, sizeEc));
+			manifestEntry.sourceType = sourceType;
+			manifestEntry.sources = sources;
+			newManifest.addEntry(std::move(manifestEntry));
+		};
+
+		// 1. Pack game assets from working directory
+		std::error_code ec;
+		fs::path excludeAbsolute;
+		if (!config.outputDirectory.empty())
+		{
+			excludeAbsolute = fs::weakly_canonical(config.outputDirectory, ec);
+		}
+
+		uint32_t assetCount = 0;
+		for (auto it = fs::recursive_directory_iterator(config.workingDirectory, ec);
+		     it != fs::recursive_directory_iterator(); ++it)
+		{
+			const auto& entry = *it;
+
+			// Skip export output directory
+			if (entry.is_directory() && !excludeAbsolute.empty())
+			{
+				std::error_code cmpEc;
+				fs::path entryAbs = fs::weakly_canonical(entry.path(), cmpEc);
+				if (!cmpEc && entryAbs == excludeAbsolute)
+				{
+					it.disable_recursion_pending();
+					continue;
+				}
+			}
+
+			if (!entry.is_regular_file()) continue;
+
+			auto ext = entry.path().extension().string();
+
+			// Skip source scripts and project files
+			if (ext == ".mt" || ext == ".vfproj") continue;
+
+			fs::path relativePath = fs::relative(entry.path(), config.workingDirectory, ec);
+			std::string archivePath = "Assets/" + relativePath.generic_string();
+
+			ManifestSource assetSource;
+			assetSource.path = relativePath.generic_string();
+			assetSource.modifiedTime = getFileModifiedTime(entry.path());
+			assetSource.contentHash = hashFile(entry.path());
+
+			// Convert JSON scenes to binary MessagePack for faster loading
+			if (ext == ".vfscene")
+			{
+				fs::path tempBinary = config.outputDirectory / "_temp_scenes" / relativePath;
+
+				// Incremental: reuse cached binary if source unchanged
+				bool needsConversion = true;
+				if (!previousManifest.hasSourceChanged(archivePath, {assetSource}) && fs::exists(tempBinary))
+				{
+					needsConversion = false;
+				}
+
+				if (needsConversion)
+				{
+					fs::create_directories(tempBinary.parent_path(), ec);
+
+					if (serialization::BinarySceneSerialization::convertJsonToBinary(
+							entry.path().string(), tempBinary.string()))
+					{
+						// Conversion succeeded
+					}
+					else
+					{
+						// Validate that the JSON scene is at least parseable before packing
+						std::ifstream sceneFile(entry.path());
+						bool validJson = false;
+						if (sceneFile.is_open())
+						{
+							try
+							{
+								auto _ = nlohmann::json::parse(sceneFile);
+								validJson = true;
+							}
+							catch (const nlohmann::json::parse_error&) {}
+						}
+
+						if (validJson)
+						{
+							addToArchiveWithManifest(archivePath, entry.path(),
+								archive::CompressionType::LZ4, "scene", {assetSource});
+							result.warnings.push_back("Failed to convert scene to binary (packed as JSON): " + relativePath.string());
+							assetCount++;
+							continue;
+						}
+						else
+						{
+							result.errorMessage = "Corrupt scene file cannot be exported: " + relativePath.string();
+							return false;
+						}
+					}
+				}
+
+				addToArchiveWithManifest(archivePath, tempBinary,
+					archive::CompressionType::LZ4, "scene", {assetSource});
+				assetCount++;
+				continue;
+			}
+
+			addToArchiveWithManifest(archivePath, entry.path(), shouldCompress(ext), "asset", {assetSource});
+			assetCount++;
+		}
+
+		// 2. Pack compiled shaders from temp directory
+		fs::path tempShaders = config.outputDirectory / "_temp_shaders";
+		if (fs::exists(tempShaders))
+		{
+			for (auto it = fs::recursive_directory_iterator(tempShaders, ec);
+			     it != fs::recursive_directory_iterator(); ++it)
+			{
+				if (!it->is_regular_file()) continue;
+
+				fs::path relativePath = fs::relative(it->path(), tempShaders, ec);
+				std::string archivePath = relativePath.generic_string();
+
+				// Determine source type from path
+				std::string sourceType = "engine_shader";
+				if (archivePath.find("materials/compiled") != std::string::npos)
+					sourceType = "material_shader";
+				else if (archivePath.find("ibl") != std::string::npos)
+					sourceType = "ibl";
+
+				ManifestSource src;
+				src.path = relativePath.generic_string();
+				src.modifiedTime = getFileModifiedTime(it->path());
+				src.contentHash = hashFile(it->path());
+
+				addToArchiveWithManifest(archivePath, it->path(),
+					archive::CompressionType::LZ4, sourceType, {src});
+			}
+
+			// Only clean temp directories on clean builds
+			if (config.cleanBuild)
+			{
+				fs::remove_all(tempShaders, ec);
+			}
+		}
+
+		// Clean up temp scenes directory only on clean builds
+		fs::path tempScenes = config.outputDirectory / "_temp_scenes";
+		if (config.cleanBuild && fs::exists(tempScenes))
+		{
+			fs::remove_all(tempScenes, ec);
+		}
+
+		if (!writer.finalize())
+		{
+			result.errorMessage = "Failed to finalize archive";
+			return false;
+		}
+
+		vfLogInfo("Packed {} game assets into archive", assetCount);
 		return true;
 	}
 
@@ -310,8 +755,7 @@ namespace gameExport
 	{
 		fs::path exePath = config.outputDirectory / (config.gameName + ".exe");
 		fs::path projPath = config.outputDirectory / (config.gameName + ".vfproj");
-		fs::path assetsDir = config.outputDirectory / "Assets";
-		fs::path shadersDir = config.outputDirectory / "resources" / "shaders";
+		fs::path pakPath = config.outputDirectory / (config.gameName + ".vfpak");
 
 		if (!fs::exists(exePath))
 		{
@@ -325,22 +769,65 @@ namespace gameExport
 			return false;
 		}
 
-		if (!fs::exists(assetsDir) || fs::is_empty(assetsDir))
+		if (!fs::exists(pakPath))
 		{
-			result.warnings.push_back("Assets directory is empty");
-		}
-
-		if (!fs::exists(shadersDir) || fs::is_empty(shadersDir))
-		{
-			result.errorMessage = "Validation failed: shaders directory is empty";
+			result.errorMessage = "Validation failed: archive (.vfpak) not found in output";
 			return false;
 		}
 
-		fs::path scenePath = assetsDir / config.startupScene;
-		if (!fs::exists(scenePath))
+		// Verify archive is not empty
+		auto pakSize = fs::file_size(pakPath);
+		if (pakSize <= archive::VFPAK_HEADER_SIZE)
 		{
-			result.errorMessage = "Validation failed: startup scene not found in exported assets: " + config.startupScene;
+			result.errorMessage = "Validation failed: archive is empty or corrupt";
 			return false;
+		}
+
+		// Verify archive can be opened and contains the startup scene
+		archive::VFPakReader reader;
+		if (!reader.open(pakPath))
+		{
+			result.errorMessage = "Validation failed: failed to read archive";
+			return false;
+		}
+
+		std::string scenePath = "Assets/" + config.startupScene;
+		if (!reader.contains(scenePath))
+		{
+			result.errorMessage = "Validation failed: startup scene not found in archive: " + config.startupScene;
+			return false;
+		}
+
+		// Integrity verification using manifest
+		if (config.verifyIntegrity)
+		{
+			fs::path manifestPath = config.outputDirectory / (config.gameName + ".vfmanifest");
+			if (fs::exists(manifestPath))
+			{
+				ExportManifest manifest;
+				if (manifest.load(manifestPath))
+				{
+					int verified = 0;
+					for (const auto& entry : manifest.getEntries())
+					{
+						if (!reader.contains(entry.archivePath))
+						{
+							result.errorMessage = "Integrity check failed: missing from archive: " + entry.archivePath;
+							return false;
+						}
+
+						auto data = reader.readEntry(entry.archivePath);
+						uint64_t actualHash = archive::hashBytes(data.data(), data.size());
+						if (actualHash != entry.contentHash)
+						{
+							result.errorMessage = "Integrity check failed: hash mismatch for " + entry.archivePath;
+							return false;
+						}
+						verified++;
+					}
+					vfLogInfo("Integrity verification passed ({} entries)", verified);
+				}
+			}
 		}
 
 		return true;

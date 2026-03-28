@@ -1,9 +1,11 @@
 #include "SceneSerialization.hpp"
+#include "BinarySceneSerialization.hpp"
 #include "../print/Log.hpp"
 #include "JsonConverters.hpp"
 #include "../scene/SceneGraphSystem.hpp"
 #include "../components/Components.hpp"
 #include "../threading/JobSystem.hpp"
+#include "../resource/VFSHelpers.hpp"
 #include <fstream>
 #include <algorithm>
 
@@ -143,20 +145,27 @@ namespace serialization
     bool SceneSerialization::loadSceneInto(std::string_view filename, scene::SceneGraphSystem& sceneGraph,
                                            SceneLoadProgressCallback progressCallback)
     {
+        // Auto-detect binary scene format
+        auto rawData = resource::readFileBytes(std::string(filename));
+        if (BinarySceneSerialization::isBinaryScene(rawData))
+        {
+            return BinarySceneSerialization::loadBinarySceneInto(rawData, sceneGraph, progressCallback);
+        }
+
         json sceneJson;
 
         try
         {
-            std::string filePath{filename};
-            std::ifstream file{filePath};
-            if (!file.is_open())
+            if (!rawData.empty())
+            {
+                sceneJson = json::parse(rawData.begin(), rawData.end());
+            }
+
+            if (sceneJson.is_null())
             {
                 vfLogError("Failed to open file for reading: {}", filename);
                 return false;
             }
-
-            sceneJson = json::parse(file);
-            file.close();
 
             if (!sceneJson.is_object())
             {
@@ -209,20 +218,27 @@ namespace serialization
                                               scene::Entity& containerParent,
                                               SceneLoadProgressCallback progressCallback)
     {
+        // Auto-detect binary scene format
+        auto rawData = resource::readFileBytes(std::string(filename));
+        if (BinarySceneSerialization::isBinaryScene(rawData))
+        {
+            return BinarySceneSerialization::loadBinarySceneAdditive(rawData, sceneGraph, containerParent, progressCallback);
+        }
+
         json sceneJson;
 
         try
         {
-            std::string filePath{filename};
-            std::ifstream file{filePath};
-            if (!file.is_open())
+            if (!rawData.empty())
+            {
+                sceneJson = json::parse(rawData.begin(), rawData.end());
+            }
+
+            if (sceneJson.is_null())
             {
                 vfLogError("Failed to open file for additive loading: {}", filename);
                 return false;
             }
-
-            sceneJson = json::parse(file);
-            file.close();
 
             if (!sceneJson.is_object())
             {

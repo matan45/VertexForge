@@ -5,6 +5,21 @@
 
 namespace core
 {
+	void PipelineUtilities::setGlobalPipelineCache(vk::PipelineCache cache)
+	{
+		globalPipelineCache = cache;
+	}
+
+	vk::Pipeline PipelineUtilities::createComputePipeline(vk::Device device, const vk::ComputePipelineCreateInfo& info)
+	{
+		auto result = device.createComputePipeline(globalPipelineCache, info);
+		if (result.result != vk::Result::eSuccess)
+		{
+			return nullptr;
+		}
+		return result.value;
+	}
+
 	WireframePipelineResult PipelineUtilities::createWireframePipeline(const WireframePipelineConfig& config)
 	{
 		WireframePipelineResult result{};
@@ -125,7 +140,7 @@ namespace core
 		pipelineInfo.subpass = 0;
 
 		// RAII: Use unique handle for automatic cleanup on failure
-		vk::UniquePipeline uniquePipeline = config.device.createGraphicsPipelineUnique(nullptr, pipelineInfo).value;
+		vk::UniquePipeline uniquePipeline = config.device.createGraphicsPipelineUnique(globalPipelineCache, pipelineInfo).value;
 
 		// Success: release ownership to result (caller manages lifetime)
 		result.pipelineLayout = uniqueLayout.release();
@@ -268,7 +283,7 @@ namespace core
 		pipelineInfo.renderPass = config.renderPass;
 		pipelineInfo.subpass = 0;
 		
-		vk::UniquePipeline uniquePipeline = config.device.createGraphicsPipelineUnique(nullptr, pipelineInfo).value;
+		vk::UniquePipeline uniquePipeline = config.device.createGraphicsPipelineUnique(globalPipelineCache, pipelineInfo).value;
 
 		// Success: release ownership to result (caller manages lifetime)
 		if (uniqueLayout)
@@ -412,7 +427,7 @@ namespace core
 		pipelineInfo.renderPass = config.renderPass;
 		pipelineInfo.subpass = 0;
 
-		vk::UniquePipeline uniquePipeline = config.device.createGraphicsPipelineUnique(nullptr, pipelineInfo).value;
+		vk::UniquePipeline uniquePipeline = config.device.createGraphicsPipelineUnique(globalPipelineCache, pipelineInfo).value;
 
 		// Success: release ownership to result (caller manages lifetime)
 		if (uniqueLayout)

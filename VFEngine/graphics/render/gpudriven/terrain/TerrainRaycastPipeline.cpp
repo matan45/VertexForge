@@ -2,6 +2,7 @@
 #include "../../../core/Device.hpp"
 #include "../../../core/Shader.hpp"
 #include "../../../core/BufferUtilities.hpp"
+#include "../../../core/PipelineUtilities.hpp"
 #include "../../../core/MappedMemoryGuard.hpp"
 #include "print/Log.hpp"
 
@@ -191,14 +192,12 @@ namespace render::gpudriven
         pipelineInfo.stage = stages[0];
         pipelineInfo.layout = pipelineLayout;
 
-        auto result = vkDevice.createComputePipeline(nullptr, pipelineInfo);
-        if (result.result != vk::Result::eSuccess)
+        computePipeline = core::PipelineUtilities::createComputePipeline(vkDevice, pipelineInfo);
+        if (!computePipeline)
         {
             vfLogError("TerrainRaycastPipeline: Failed to create compute pipeline");
             return;
         }
-
-        computePipeline = result.value;
     }
 
     void TerrainRaycastPipeline::createDescriptorPool()

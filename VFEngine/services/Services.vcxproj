@@ -200,6 +200,7 @@
     <ClInclude Include="events\vfx\VFXRuntimeEvents.hpp" />
     <ClInclude Include="events\vfx\VFXSnapshotEvents.hpp" />
     <ClInclude Include="events\volumetric\VolumetricNavEvents.hpp" />
+    <ClInclude Include="events\world\HLODEvents.hpp" />
     <ClInclude Include="events\world\WorldSectorEvents.hpp" />
     <ClInclude Include="impl\ai\BehaviorTreePlayModeHandler.hpp" />
     <ClInclude Include="impl\ai\BehaviorTreeServiceImpl.hpp" />

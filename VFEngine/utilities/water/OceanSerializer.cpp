@@ -1,4 +1,5 @@
 #include "OceanSerializer.hpp"
+#include "../resource/VFSHelpers.hpp"
 #include <nlohmann/json.hpp>
 #include <fstream>
 
@@ -70,18 +71,16 @@ namespace ocean
 
     bool OceanSerializer::load(const std::string& path, OceanFileData& outData)
     {
-        std::ifstream file(path);
-        if (!file.is_open())
-        {
-            return false;
-        }
-
         nlohmann::json j;
         try
         {
-            file >> j;
+            j = resource::readJsonFile(path);
         }
         catch (const nlohmann::json::parse_error&)
+        {
+            return false;
+        }
+        if (j.is_null())
         {
             return false;
         }

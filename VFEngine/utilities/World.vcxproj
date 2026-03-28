@@ -57,7 +57,7 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <PreprocessorDefinitions>VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1;GLM_FORCE_DEPTH_ZERO_TO_ONE;_CRT_SECURE_NO_WARNINGS;DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\..\dependencies\spdlog\include;..\..\dependencies\glm;..\..\dependencies\entt\single_include;..\..\dependencies\json\single_include;.;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\..\dependencies\spdlog\include;..\..\dependencies\glm;..\..\dependencies\entt\single_include;..\..\dependencies\json\single_include;..\..\dependencies\meshoptimizer\src;.;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DebugInformationFormat>EditAndContinue</DebugInformationFormat>
       <Optimization>Disabled</Optimization>
       <AdditionalOptions>/utf-8 /MP %(AdditionalOptions)</AdditionalOptions>
@@ -74,7 +74,7 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <PreprocessorDefinitions>VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1;GLM_FORCE_DEPTH_ZERO_TO_ONE;_CRT_SECURE_NO_WARNINGS;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\..\dependencies\spdlog\include;..\..\dependencies\glm;..\..\dependencies\entt\single_include;..\..\dependencies\json\single_include;.;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\..\dependencies\spdlog\include;..\..\dependencies\glm;..\..\dependencies\entt\single_include;..\..\dependencies\json\single_include;..\..\dependencies\meshoptimizer\src;.;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <Optimization>Full</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
@@ -91,6 +91,10 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="world\HLODGenerator.hpp" />
+    <ClInclude Include="world\HLODProxyManager.hpp" />
+    <ClInclude Include="world\HLODStreamer.hpp" />
+    <ClInclude Include="world\HLODTypes.hpp" />
     <ClInclude Include="world\PendingReferenceResolver.hpp" />
     <ClInclude Include="world\SectorEntityLoader.hpp" />
     <ClInclude Include="world\SectorStreamer.hpp" />
@@ -100,6 +104,9 @@
     <ClInclude Include="world\WorldTypes.hpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="world\HLODGenerator.cpp" />
+    <ClCompile Include="world\HLODProxyManager.cpp" />
+    <ClCompile Include="world\HLODStreamer.cpp" />
     <ClCompile Include="world\PendingReferenceResolver.cpp" />
     <ClCompile Include="world\SectorEntityLoader.cpp" />
     <ClCompile Include="world\SectorStreamer.cpp" />
@@ -114,6 +121,9 @@
     </ProjectReference>
     <ProjectReference Include="Serialization.vcxproj">
       <Project>{2319AF09-8FD9-2A40-5814-74BDC4936F1C}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\meshoptimizer.vcxproj">
+      <Project>{75046AD2-E1C4-E508-AAFF-2E86167F2AE5}</Project>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

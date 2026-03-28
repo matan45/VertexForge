@@ -1,6 +1,7 @@
 #include "ProjectSerialization.hpp"
 #include "../print/Log.hpp"
 #include "../config/Config.hpp"
+#include "../resource/VFSHelpers.hpp"
 #include <fstream>
 #include <chrono>
 #include <iomanip>
@@ -14,24 +15,21 @@ namespace serialization
         try
         {
             std::string filePath{filename};
-            std::ifstream file{filePath};
-            if (!file.is_open())
-            {
-                vfLogError("Failed to open project file: {}", filename);
-                return std::nullopt;
-            }
-
             json projectJson;
             try
             {
-                projectJson = json::parse(file);
+                projectJson = resource::readJsonFile(filePath);
             }
             catch (const json::parse_error& e)
             {
                 vfLogError("JSON parse error in project file {}: {}", filename, e.what());
                 return std::nullopt;
             }
-            file.close();
+            if (projectJson.is_null())
+            {
+                vfLogError("Failed to open project file: {}", filename);
+                return std::nullopt;
+            }
 
             if (!validateStructure(projectJson))
             {
@@ -136,14 +134,11 @@ namespace serialization
         try
         {
             std::string filePath{filename};
-            std::ifstream file{filePath};
-            if (!file.is_open())
+            json projectJson = resource::readJsonFile(filePath);
+            if (projectJson.is_null())
             {
                 return false;
             }
-
-            json projectJson = json::parse(file);
-            file.close();
 
             return validateStructure(projectJson);
         }

@@ -4,6 +4,7 @@
 #include "JsonConverters.hpp"
 #include "../scene/SceneGraphSystem.hpp"
 #include "../components/Components.hpp"
+#include "../resource/VFSHelpers.hpp"
 #include <fstream>
 
 namespace serialization
@@ -46,15 +47,12 @@ namespace serialization
     std::optional<json> PrefabSerialization::parsePrefabJson(std::string_view filename)
     {
         std::string filePath{filename};
-        std::ifstream file{filePath};
-        if (!file.is_open())
+        json prefabJson = resource::readJsonFile(filePath);
+        if (prefabJson.is_null())
         {
             vfLogError("Failed to open prefab file: {}", filename);
             return std::nullopt;
         }
-
-        json prefabJson = json::parse(file);
-        file.close();
 
         if (!prefabJson.is_object())
         {
@@ -128,14 +126,11 @@ namespace serialization
         try
         {
             std::string filePath{filename};
-            std::ifstream file{filePath};
-            if (!file.is_open())
+            json prefabJson = resource::readJsonFile(filePath);
+            if (prefabJson.is_null())
             {
                 return false;
             }
-
-            json prefabJson = json::parse(file);
-            file.close();
 
             if (!prefabJson.is_object()) return false;
             if (!prefabJson.contains("prefab")) return false;

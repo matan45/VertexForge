@@ -1,6 +1,7 @@
 #include "WorldSectorWindow.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/world/WorldSectorEvents.hpp"
+#include "events/world/HLODEvents.hpp"
 #include "events/terrain/TerrainEvents.hpp"
 #include "events/render/ObjectStreamingEvents.hpp"
 #include "events/scene/EntityTransformEvents.hpp"
@@ -45,6 +46,11 @@ namespace windows
                     if (ImGui::BeginTabItem("Streaming Config"))
                     {
                         drawStreamingConfig();
+                        ImGui::EndTabItem();
+                    }
+                    if (ImGui::BeginTabItem("HLOD"))
+                    {
+                        drawHLODConfig();
                         ImGui::EndTabItem();
                     }
                     ImGui::EndTabBar();
@@ -425,6 +431,148 @@ namespace windows
                 }
             }
         }
+
+        // Refresh cached HLOD status counts
+        cachedHLODCount = 0;
+        cachedHLODTotal = 0;
+        for (const auto& info : cachedGrid)
+        {
+            if (!info.exists) continue;
+            cachedHLODTotal++;
+            events::world::hlod::IsHLODGeneratedQuery q;
+            q.coord = info.coord;
+            if (dispatcher.query(q)) cachedHLODCount++;
+        }
+    }
+
+    void WorldSectorWindow::drawHLODConfig()
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        // Load config once, not every frame (prevents clobbering slider edits)
+        if (!hlodConfigLoaded)
+        {
+            auto hlodConfig = dispatcher.query(events::world::hlod::GetHLODConfigQuery{});
+            hlodEnabled = hlodConfig.enabled;
+            if (hlodConfig.tiers.size() > 0)
+            {
+                hlodTier0Radius = hlodConfig.tiers[0].displayRadius;
+                hlodTier0Ratio = hlodConfig.tiers[0].simplificationRatio;
+            }
+            if (hlodConfig.tiers.size() > 1)
+            {
+                hlodTier1Radius = hlodConfig.tiers[1].displayRadius;
+                hlodTier1Ratio = hlodConfig.tiers[1].simplificationRatio;
+            }
+            if (hlodConfig.tiers.size() > 2)
+            {
+                hlodTier2Radius = hlodConfig.tiers[2].displayRadius;
+                hlodTier2Ratio = hlodConfig.tiers[2].simplificationRatio;
+            }
+            hlodConfigLoaded = true;
+        }
+
+        bool configChanged = false;
+
+        if (ImGui::Checkbox("Enable HLOD", &hlodEnabled))
+            configChanged = true;
+
+        ImGui::Spacing();
+        ImGui::Text("Tier 0 (Per-Sector)");
+        if (ImGui::SliderFloat("Display Radius##T0", &hlodTier0Radius, 5.0f, 50.0f, "%.0f sectors"))
+            configChanged = true;
+        if (ImGui::SliderFloat("Simplification##T0", &hlodTier0Ratio, 0.01f, 0.5f, "%.2f"))
+            configChanged = true;
+
+        ImGui::Spacing();
+        ImGui::Text("Tier 1 (2x2 Sectors)");
+        if (ImGui::SliderFloat("Display Radius##T1", &hlodTier1Radius, 10.0f, 80.0f, "%.0f sectors"))
+            configChanged = true;
+        if (ImGui::SliderFloat("Simplification##T1", &hlodTier1Ratio, 0.005f, 0.2f, "%.3f"))
+            configChanged = true;
+
+        ImGui::Spacing();
+        ImGui::Text("Tier 2 (4x4 Sectors)");
+        if (ImGui::SliderFloat("Display Radius##T2", &hlodTier2Radius, 20.0f, 100.0f, "%.0f sectors"))
+            configChanged = true;
+        if (ImGui::SliderFloat("Simplification##T2", &hlodTier2Ratio, 0.001f, 0.1f, "%.3f"))
+            configChanged = true;
+
+        if (configChanged)
+        {
+            events::world::hlod::SetHLODConfigCommand cmd;
+            cmd.config.enabled = hlodEnabled;
+            cmd.config.tiers = {
+                {0, 1, hlodTier0Radius, hlodTier0Ratio},
+                {1, 2, hlodTier1Radius, hlodTier1Ratio},
+                {2, 4, hlodTier2Radius, hlodTier2Ratio}
+            };
+            dispatcher.execute(cmd);
+        }
+
+        if (ImGui::Button("Reload Config"))
+            hlodConfigLoaded = false;
+
+        ImGui::Separator();
+        ImGui::Text("Generation");
+
+        if (hlodGenerating)
+        {
+            // Process one sector per frame to avoid blocking the UI thread
+            if (!hlodPendingSectors.empty())
+            {
+                const auto& coord = hlodPendingSectors.back();
+                events::world::hlod::GenerateHLODCommand cmd;
+                cmd.coord = coord;
+                cmd.tier = 0;
+                dispatcher.execute(cmd);
+                hlodPendingSectors.pop_back();
+                hlodDoneCount++;
+
+                hlodGenerationProgress = static_cast<float>(hlodDoneCount) /
+                    static_cast<float>(std::max(hlodTotalToGenerate, 1));
+                hlodGenerationStage = "Sector " + std::to_string(hlodDoneCount) +
+                    "/" + std::to_string(hlodTotalToGenerate);
+            }
+            else
+            {
+                hlodGenerating = false;
+                hlodGenerationProgress = 1.0f;
+                hlodGenerationStage = "Complete";
+                // Refresh cached status
+                cachedHLODCount = 0;
+                cachedHLODTotal = 0;
+                for (const auto& info : cachedGrid)
+                {
+                    if (!info.exists) continue;
+                    cachedHLODTotal++;
+                    events::world::hlod::IsHLODGeneratedQuery q;
+                    q.coord = info.coord;
+                    if (dispatcher.query(q)) cachedHLODCount++;
+                }
+            }
+
+            ImGui::ProgressBar(hlodGenerationProgress, ImVec2(-1, 0),
+                               hlodGenerationStage.c_str());
+        }
+        else
+        {
+            if (ImGui::Button("Generate All HLOD (Tier 0)"))
+            {
+                auto allCoords = dispatcher.query(events::world::GetLoadedSectorCoordsQuery{});
+                hlodPendingSectors = std::move(allCoords);
+                hlodTotalToGenerate = static_cast<int>(hlodPendingSectors.size());
+                hlodDoneCount = 0;
+                hlodGenerationProgress = 0.0f;
+                hlodGenerationStage = "Starting...";
+                hlodGenerating = true;
+            }
+        }
+
+        // Status: use cached counts (refreshed on timer in refreshStats, not per-frame)
+        ImGui::Separator();
+        ImGui::Text("Status");
+        ImGui::Text("HLOD Generated: %d / %d sectors", cachedHLODCount, cachedHLODTotal);
     }
 
 } // namespace windows

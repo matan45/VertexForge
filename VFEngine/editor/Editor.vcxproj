@@ -478,6 +478,9 @@
     <ProjectReference Include="..\utilities\ImageProcessing.vcxproj">
       <Project>{C5156011-31A1-CDD5-3AB2-50CAA6BC29D6}</Project>
     </ProjectReference>
+    <ProjectReference Include="..\utilities\GameExport.vcxproj">
+      <Project>{614E3318-4D06-7565-B60D-4EC1A2E40F56}</Project>
+    </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

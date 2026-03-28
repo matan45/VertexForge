@@ -11,6 +11,7 @@
 #include "../../events/project/ProjectEvents.hpp"
 #include "../../providers/scripting/IScriptingProvider.hpp"
 #include "print/Log.hpp"
+#include "resource/VFSHelpers.hpp"
 #include <nlohmann/json.hpp>
 #include <filesystem>
 #include <fstream>
@@ -303,8 +304,7 @@ namespace services
 
         try
         {
-            std::ifstream file(metaPath);
-            json j = json::parse(file);
+            json j = resource::readJsonFile(metaPath);
 
             if (j.contains("timestamp")) metadata.timestamp = j["timestamp"].get<std::string>();
             if (j.contains("playtimeSeconds")) metadata.playtimeSeconds = j["playtimeSeconds"].get<float>();
@@ -407,9 +407,7 @@ namespace services
 
         try
         {
-            std::ifstream file(scriptsPath);
-            json scriptStates = json::parse(file);
-            file.close();
+            json scriptStates = resource::readJsonFile(scriptsPath);
 
             if (!scriptStates.contains("instances") || !scriptStates["instances"].is_array())
                 return true;

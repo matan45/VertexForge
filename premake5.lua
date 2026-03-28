@@ -66,7 +66,8 @@ project "Editor"
 	  "Plugin",                         -- Plugin system
 	  "imgui",                          -- For imgui-node-editor in ShaderGraphEditor
 	  "ProceduralGen",                  -- Procedural heightmap generation
-	  "ImageProcessing"                 -- Image background removal
+	  "ImageProcessing",                -- Image background removal
+	  "GameExport"                      -- Game export pipeline with shader pre-compilation
    }
 
    defines { "_CRT_SECURE_NO_WARNINGS" }
@@ -293,6 +294,11 @@ project "Runtime"
 
    links { "Services", "Core", "Plugin" }  -- Core linked for RuntimeBootstrap, not direct access
 
+   -- Delay-load shaderc: exported builds ship pre-compiled SPIR-V,
+   -- so shaderc_shared.dll is not needed and never loaded at runtime
+   linkoptions { "/DELAYLOAD:shaderc_shared.dll" }
+   links { "delayimp" }
+
    filter "configurations:Debug"
       defines { "DEBUG" }
       symbols "On"
@@ -339,10 +345,19 @@ project "Utilities"
 	  "dependencies/json/single_include",
 	  "dependencies/meshoptimizer/src",  -- meshoptimizer for terrain meshlet generation
 	  "dependencies/enkiTS/src",         -- enkiTS task scheduler
-	  "dependencies/stb"                 -- stb_vorbis for runtime Vorbis decoding
+	  "dependencies/stb",               -- stb_vorbis for runtime Vorbis decoding
+      vulkanLibPath.."/Include",         -- Vulkan SDK for shader binary format types
+      "dependencies/lz4/lib"             -- LZ4 compression for .vfpak archives
    }
 
-   links { "spdLog", "meshoptimizer", "enkiTS" }
+   links { "spdLog", "meshoptimizer", "enkiTS", "lz4" }
+
+   -- Export pipeline compiled in GameExport subsystem
+   -- VFPakWriter is export-only; VFPakReader/Format stay in Utilities for runtime use
+   removefiles {
+      "VFEngine/utilities/export/**",
+      "VFEngine/utilities/archive/VFPakWriter.*"
+   }
 
    defines { "MESHOPTIMIZER_API=__declspec(dllimport)" }
 
@@ -652,7 +667,9 @@ project "Serialization"
       "VFEngine/utilities/world/WorldDefinitionSerialization.hpp",
       "VFEngine/utilities/world/WorldDefinitionSerialization.cpp",
       "VFEngine/utilities/world/WorldSectorSerialization.hpp",
-      "VFEngine/utilities/world/WorldSectorSerialization.cpp"
+      "VFEngine/utilities/world/WorldSectorSerialization.cpp",
+      "VFEngine/utilities/world/HLODSerialization.hpp",
+      "VFEngine/utilities/world/HLODSerialization.cpp"
    }
 
    includedirs {
@@ -709,7 +726,8 @@ project "World"
    -- Serialization files are compiled by the Serialization project
    removefiles {
       "VFEngine/utilities/world/WorldDefinitionSerialization.*",
-      "VFEngine/utilities/world/WorldSectorSerialization.*"
+      "VFEngine/utilities/world/WorldSectorSerialization.*",
+      "VFEngine/utilities/world/HLODSerialization.*"
    }
 
    includedirs {
@@ -717,12 +735,13 @@ project "World"
       "dependencies/glm",
       "dependencies/entt/single_include",
       "dependencies/json/single_include",
+      "dependencies/meshoptimizer/src",
       "VFEngine/utilities"
    }
 
    defines { "_CRT_SECURE_NO_WARNINGS" }
 
-   links { "Utilities", "Terrain", "Serialization" }
+   links { "Utilities", "Terrain", "Serialization", "meshoptimizer" }
 
    filter "configurations:Debug"
       defines { "DEBUG" }
@@ -815,8 +834,73 @@ project "VFX"
       links { "shaderc_shared.lib" }
 
 
+-- GameExport subsystem (extracted from Utilities - shader pre-compilation and game export pipeline)
+project "GameExport"
+   kind "StaticLib"
+   language "C++"
+   cppdialect "C++20"
+   location "VFEngine/utilities"
+   targetdir "bin/%{prj.name}/%{cfg.buildcfg}/%{cfg.platform}"
+
+   files {
+      "VFEngine/utilities/export/**.hpp",
+      "VFEngine/utilities/export/**.cpp",
+      "VFEngine/utilities/archive/VFPakWriter.hpp",
+      "VFEngine/utilities/archive/VFPakWriter.cpp"
+   }
+
+   includedirs {
+      "dependencies/spdlog/include",
+      "dependencies/glm",
+      "dependencies/entt/single_include",
+      "dependencies/json/single_include",
+      "dependencies/lz4/lib",
+      "VFEngine/utilities",
+      vulkanLibPath.."/Include"
+   }
+
+   libdirs {
+      vulkanLibPath.."/Lib"
+   }
+
+   defines { "_CRT_SECURE_NO_WARNINGS" }
+
+   links { "Utilities", "lz4", "shaderc_shared.lib" }
+
+   filter "configurations:Debug"
+      defines { "DEBUG" }
+      symbols "On"
+
+   filter "configurations:Release"
+      defines { "NDEBUG" }
+      optimize "On"
+
+
 -- Group for Libraries
 group "libs"
+
+-- Project: LZ4 (fast compression for .vfpak archives)
+project "lz4"
+   kind "StaticLib"
+   language "C"
+   targetdir "bin/%{prj.name}/%{cfg.buildcfg}/%{cfg.platform}"
+
+   files {
+      "dependencies/lz4/lib/lz4.h",
+      "dependencies/lz4/lib/lz4.c",
+      "dependencies/lz4/lib/lz4hc.h",
+      "dependencies/lz4/lib/lz4hc.c"
+   }
+
+   includedirs { "dependencies/lz4/lib" }
+
+   filter "configurations:Debug"
+      defines { "DEBUG" }
+      symbols "On"
+
+   filter "configurations:Release"
+      defines { "NDEBUG" }
+      optimize "On"
 
 -- Project: GLFW
 project "GLFW"

@@ -510,7 +510,7 @@ namespace render::postprocess
         pipelineInfo.stage = stages[0];
         pipelineInfo.layout = histogramPipelineLayout;
 
-        histogramPipeline = dev.createComputePipeline(nullptr, pipelineInfo).value;
+        histogramPipeline = core::PipelineUtilities::createComputePipeline(dev, pipelineInfo);
     }
 
     void AutoExposureEffect::createReducePipeline()
@@ -535,7 +535,7 @@ namespace render::postprocess
         pipelineInfo.stage = stages[0];
         pipelineInfo.layout = reducePipelineLayout;
 
-        reducePipeline = dev.createComputePipeline(nullptr, pipelineInfo).value;
+        reducePipeline = core::PipelineUtilities::createComputePipeline(dev, pipelineInfo);
     }
 
     void AutoExposureEffect::createPassthroughPipeline(vk::RenderPass renderPass, vk::Extent2D extent)

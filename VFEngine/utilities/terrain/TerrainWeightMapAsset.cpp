@@ -1,7 +1,9 @@
 #include "TerrainWeightMapAsset.hpp"
 #include "../print/Log.hpp"
 #include "../resource/EndianUtils.hpp"
+#include "../resource/VFSHelpers.hpp"
 #include <fstream>
+#include <sstream>
 #include <filesystem>
 #include <array>
 
@@ -106,21 +108,17 @@ namespace terrain
     {
         std::unordered_map<TileCoord, TileWeightMapData, TileCoordHash> result;
 
-        fs::path filePath(path);
-        if (!fs::exists(filePath))
-        {
-            vfLogWarning("TerrainWeightMapAsset: File not found: {}", path);
-            return result;
-        }
-
         try
         {
-            std::ifstream file(filePath, std::ios::binary);
-            if (!file.is_open())
+            auto fileData = resource::readFileBytes(std::string(path));
+            if (fileData.empty())
             {
-                vfLogError("TerrainWeightMapAsset: Failed to open file: {}", path);
+                vfLogWarning("TerrainWeightMapAsset: Failed to read file: {}", path);
                 return result;
             }
+
+            std::string dataStr(fileData.begin(), fileData.end());
+            std::istringstream file(dataStr, std::ios::binary);
 
             std::array<char, 4> magic{};
             file.read(magic.data(), 4);

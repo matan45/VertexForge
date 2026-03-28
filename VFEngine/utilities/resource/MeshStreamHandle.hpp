@@ -9,6 +9,7 @@
 #include "Types.hpp"
 #include "MeshletTypes.hpp"
 #include "ConvexHullTypes.hpp"
+#include "VirtualFileSystem.hpp"
 
 namespace resource
 {
@@ -69,6 +70,7 @@ namespace resource
         std::ifstream file;
         MeshStreamHeader header;
         std::string filePath;
+        std::streampos baseOffset = 0;  // Offset for archive-backed VFS access
         bool hasMeshlets = false;       // True if file has meshlet data (v0.0.4+)
         bool hasConvexHulls = false;    // True if file has convex hull data (v0.0.5+)
         bool hasSkeleton = false;       // True if file has full skeleton data (v0.0.7+)

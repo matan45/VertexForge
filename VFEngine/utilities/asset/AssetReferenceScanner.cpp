@@ -2,6 +2,7 @@
 #include "../print/Log.hpp"
 #include "../terrain/TerrainSerializer.hpp"
 #include "../threading/JobSystem.hpp"
+#include "../resource/VFSHelpers.hpp"
 #include <nlohmann/json.hpp>
 #include <fstream>
 #include <sstream>
@@ -196,15 +197,12 @@ namespace asset
     {
         try
         {
-            std::ifstream inFile(filePath);
-            if (!inFile.is_open())
+            json j = resource::readJsonFile(filePath.string());
+            if (j.is_null())
             {
                 vfLogError("Failed to open file for reading: {}", filePath.string());
                 return false;
             }
-
-            json j = json::parse(inFile);
-            inFile.close();
 
             std::string oldPathNorm = normalizePath(oldPath);
             std::string newPathNorm = normalizePath(newPath);

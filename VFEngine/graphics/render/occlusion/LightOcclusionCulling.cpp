@@ -4,6 +4,7 @@
 #include "../../core/SwapChain.hpp"
 #include "../../core/BufferUtilities.hpp"
 #include "../../core/Shader.hpp"
+#include "../../core/PipelineUtilities.hpp"
 #include "../../core/MappedMemoryGuard.hpp"
 #include "print/Log.hpp"
 
@@ -136,8 +137,7 @@ namespace render::occlusion
         pipelineInfo.stage = stages[0];
         pipelineInfo.layout = pipelineLayout;
 
-        auto pipelineResult = device.getLogicalDevice().createComputePipeline(nullptr, pipelineInfo);
-        cullPipeline = pipelineResult.value;
+        cullPipeline = core::PipelineUtilities::createComputePipeline(device.getLogicalDevice(), pipelineInfo);
     }
 
     void LightOcclusionCulling::createDescriptorSets()

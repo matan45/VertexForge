@@ -39,6 +39,9 @@ namespace core {
 
 		void readShader(std::string_view path);
 
+		// Load a pre-compiled .vfshader directly by archive path (no .glsl indirection)
+		bool loadPrecompiledShader(const std::string& vfshaderPath);
+
 		void addMacroDefinition(const std::string& name);
 		void addMacroDefinition(const std::string& name, const std::string& value);
 
@@ -59,6 +62,11 @@ namespace core {
 		std::vector<uint32_t> compileShaderToSPIRV(std::string_view source, vk::ShaderStageFlagBits stage, std::string_view shaderName);
 		void createShaderModule(const std::vector<uint32_t>& code, vk::ShaderStageFlagBits stage);
 		vk::ShaderStageFlagBits shaderTypeToVulkanStage(resource::ShaderType shaderType) const;
+
+		// Pre-compiled SPIR-V loading (exported builds)
+		void loadPrecompiledSPIRV(const std::filesystem::path& vfshaderPath);
+		std::filesystem::path resolvePrecompiledPath(const std::string& glslPath) const;
+		std::string computePermutationKey() const;
 
 		struct ShaderSource {
 			resource::ShaderType type;

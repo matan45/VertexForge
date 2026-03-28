@@ -57,7 +57,7 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <PreprocessorDefinitions>VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1;GLM_FORCE_DEPTH_ZERO_TO_ONE;MESHOPTIMIZER_API=__declspec(dllimport);DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\..\dependencies\spdlog\include;..\..\dependencies\glm;..\..\dependencies\entt\single_include;..\..\dependencies\json\single_include;..\..\dependencies\meshoptimizer\src;..\..\dependencies\enkiTS\src;..\..\dependencies\stb;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\..\dependencies\spdlog\include;..\..\dependencies\glm;..\..\dependencies\entt\single_include;..\..\dependencies\json\single_include;..\..\dependencies\meshoptimizer\src;..\..\dependencies\enkiTS\src;..\..\dependencies\stb;C:\VulkanSDK\1.4.335.0\Include;..\..\dependencies\lz4\lib;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DebugInformationFormat>EditAndContinue</DebugInformationFormat>
       <Optimization>Disabled</Optimization>
       <AdditionalOptions>/utf-8 /MP /bigobj %(AdditionalOptions)</AdditionalOptions>
@@ -74,7 +74,7 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <PreprocessorDefinitions>VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1;GLM_FORCE_DEPTH_ZERO_TO_ONE;MESHOPTIMIZER_API=__declspec(dllimport);NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\..\dependencies\spdlog\include;..\..\dependencies\glm;..\..\dependencies\entt\single_include;..\..\dependencies\json\single_include;..\..\dependencies\meshoptimizer\src;..\..\dependencies\enkiTS\src;..\..\dependencies\stb;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\..\dependencies\spdlog\include;..\..\dependencies\glm;..\..\dependencies\entt\single_include;..\..\dependencies\json\single_include;..\..\dependencies\meshoptimizer\src;..\..\dependencies\enkiTS\src;..\..\dependencies\stb;C:\VulkanSDK\1.4.335.0\Include;..\..\dependencies\lz4\lib;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <Optimization>Full</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
@@ -91,6 +91,8 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="archive\VFPakFormat.hpp" />
+    <ClInclude Include="archive\VFPakReader.hpp" />
     <ClInclude Include="asset\AssetDatabase.hpp" />
     <ClInclude Include="asset\AssetDatabaseMigrator.hpp" />
     <ClInclude Include="asset\AssetGUID.hpp" />
@@ -140,9 +142,6 @@
     <ClInclude Include="eqs\tests\OnNavMeshTest.hpp" />
     <ClInclude Include="eqs\tests\PathfindingCostTest.hpp" />
     <ClInclude Include="eqs\tests\TraceTest.hpp" />
-    <ClInclude Include="export\ExeIconEmbedder.hpp" />
-    <ClInclude Include="export\ExportConfig.hpp" />
-    <ClInclude Include="export\GameExporter.hpp" />
     <ClInclude Include="geometry\SphereGenerator.hpp" />
     <ClInclude Include="input\KeyCodes.hpp" />
     <ClInclude Include="material\MaterialAsset.hpp" />
@@ -187,11 +186,14 @@
     <ClInclude Include="resource\MeshletTypes.hpp" />
     <ClInclude Include="resource\PathResolver.hpp" />
     <ClInclude Include="resource\ResourceManager.hpp" />
+    <ClInclude Include="resource\ShaderBinaryFormat.hpp" />
     <ClInclude Include="resource\ShaderResource.hpp" />
     <ClInclude Include="resource\TextureResource.hpp" />
     <ClInclude Include="resource\TextureStreamHandle.hpp" />
     <ClInclude Include="resource\Types.hpp" />
+    <ClInclude Include="resource\VFSHelpers.hpp" />
     <ClInclude Include="resource\VertexQuantization.hpp" />
+    <ClInclude Include="resource\VirtualFileSystem.hpp" />
     <ClInclude Include="resource\VorbisDecoder.hpp" />
     <ClInclude Include="scene\Entity.hpp" />
     <ClInclude Include="scene\EntityRegistry.hpp" />
@@ -229,6 +231,7 @@
     <ClInclude Include="water\WaterTileGrid.hpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="archive\VFPakReader.cpp" />
     <ClCompile Include="asset\AssetDatabase.cpp" />
     <ClCompile Include="asset\AssetDatabaseMigrator.cpp" />
     <ClCompile Include="asset\AssetMetadataSerializer.cpp" />
@@ -250,8 +253,6 @@
     <ClCompile Include="eqs\tests\OnNavMeshTest.cpp" />
     <ClCompile Include="eqs\tests\PathfindingCostTest.cpp" />
     <ClCompile Include="eqs\tests\TraceTest.cpp" />
-    <ClCompile Include="export\ExeIconEmbedder.cpp" />
-    <ClCompile Include="export\GameExporter.cpp" />
     <ClCompile Include="geometry\SphereGenerator.cpp" />
     <ClCompile Include="material\MaterialAsset.cpp" />
     <ClCompile Include="material\MaterialAsset_Load.cpp" />
@@ -281,6 +282,8 @@
     <ClCompile Include="resource\ShaderResource.cpp" />
     <ClCompile Include="resource\TextureResource.cpp" />
     <ClCompile Include="resource\TextureStreamHandle.cpp" />
+    <ClCompile Include="resource\VFSHelpers.cpp" />
+    <ClCompile Include="resource\VirtualFileSystem.cpp" />
     <ClCompile Include="resource\VorbisDecoder.cpp" />
     <ClCompile Include="scene\EntityRegistry.cpp" />
     <ClCompile Include="scene\Level.cpp" />
@@ -309,6 +312,9 @@
     </ProjectReference>
     <ProjectReference Include="..\enkiTS.vcxproj">
       <Project>{130A7BFB-FFAB-A5D1-E866-B925D4A72C22}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\lz4.vcxproj">
+      <Project>{3F8E880B-AB97-887C-3413-9F7CA01B947C}</Project>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

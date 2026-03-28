@@ -4,6 +4,7 @@
 #include "../../core/Shader.hpp"
 #include "../../core/ImageUtilities.hpp"
 #include "../../core/BufferUtilities.hpp"
+#include "../../core/PipelineUtilities.hpp"
 #include "print/Log.hpp"
 #include <cstring>
 
@@ -175,14 +176,12 @@ namespace render::cloud
         pipelineInfo.stage = stages[0];
         pipelineInfo.layout = pipelineLayout;
 
-        auto result = device.getLogicalDevice().createComputePipeline(nullptr, pipelineInfo);
-        if (result.result != vk::Result::eSuccess)
+        pipeline = core::PipelineUtilities::createComputePipeline(device.getLogicalDevice(), pipelineInfo);
+        if (!pipeline)
         {
             vfLogError("CloudTemporal: Failed to create compute pipeline");
             return;
         }
-
-        pipeline = result.value;
         needsInitialTransition = true;
         initialized = true;
 

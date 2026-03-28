@@ -5,6 +5,7 @@
 #include "../../core/ImageUtilities.hpp"
 #include "../../core/BufferUtilities.hpp"
 #include "../../core/MemoryUtilities.hpp"
+#include "../../core/PipelineUtilities.hpp"
 
 // Windows defines MemoryBarrier as a macro - undefine it to use vk::MemoryBarrier
 #ifdef MemoryBarrier
@@ -328,7 +329,7 @@ namespace render::cloud
         vk::ComputePipelineCreateInfo cpInfo{};
         cpInfo.stage = stages[0];
         cpInfo.layout = noiseGenPipelineLayout;
-        noiseGenPipeline = dev.createComputePipeline(nullptr, cpInfo).value;
+        noiseGenPipeline = core::PipelineUtilities::createComputePipeline(dev, cpInfo);
 
         // Write descriptors
         vk::DescriptorImageInfo shapeImgInfo{nullptr, shapeView, vk::ImageLayout::eGeneral};
@@ -388,7 +389,7 @@ namespace render::cloud
         vk::ComputePipelineCreateInfo cpInfo{};
         cpInfo.stage = stages[0];
         cpInfo.layout = weatherGenPipelineLayout;
-        weatherGenPipeline = dev.createComputePipeline(nullptr, cpInfo).value;
+        weatherGenPipeline = core::PipelineUtilities::createComputePipeline(dev, cpInfo);
 
         // Write descriptors
         vk::DescriptorImageInfo weatherImgInfo{nullptr, weatherView, vk::ImageLayout::eGeneral};

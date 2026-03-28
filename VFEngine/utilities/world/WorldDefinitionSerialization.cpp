@@ -1,5 +1,6 @@
 #include "WorldDefinitionSerialization.hpp"
 #include "../print/Log.hpp"
+#include "../resource/VFSHelpers.hpp"
 #include <nlohmann/json.hpp>
 #include <fstream>
 
@@ -32,7 +33,26 @@ namespace world
             streamingJson["maxTerrainLoadsPerFrame"] = definition.streamingConfig.maxTerrainLoadsPerFrame;
             streamingJson["maxTerrainUnloadsPerFrame"] = definition.streamingConfig.maxTerrainUnloadsPerFrame;
             streamingJson["enableGPUObjectStreaming"] = definition.streamingConfig.enableGPUObjectStreaming;
+            streamingJson["hlodTier0Radius"] = definition.streamingConfig.hlodTier0Radius;
+            streamingJson["hlodTier1Radius"] = definition.streamingConfig.hlodTier1Radius;
+            streamingJson["hlodTier2Radius"] = definition.streamingConfig.hlodTier2Radius;
             worldJson["streamingConfig"] = streamingJson;
+
+            // HLOD config
+            json hlodJson;
+            hlodJson["enabled"] = definition.hlodConfig.enabled;
+            json tiersJson = json::array();
+            for (const auto& tier : definition.hlodConfig.tiers)
+            {
+                json t;
+                t["tier"] = tier.tier;
+                t["cellSize"] = tier.cellSize;
+                t["displayRadius"] = tier.displayRadius;
+                t["simplificationRatio"] = tier.simplificationRatio;
+                tiersJson.push_back(t);
+            }
+            hlodJson["tiers"] = tiersJson;
+            worldJson["hlodConfig"] = hlodJson;
 
             json sectorsJson = json::array();
             for (const auto& [coord, path] : definition.sectorFilePaths)
@@ -69,15 +89,12 @@ namespace world
     {
         try
         {
-            std::ifstream file{filePath};
-            if (!file.is_open())
+            json worldJson = resource::readJsonFile(filePath);
+            if (worldJson.is_null())
             {
                 vfLogError("Failed to open world file for reading: {}", filePath);
                 return false;
             }
-
-            json worldJson = json::parse(file);
-            file.close();
 
             outDefinition.name = worldJson.value("name", "Untitled World");
             outDefinition.terrainPath = worldJson.value("terrainPath", "");
@@ -102,6 +119,33 @@ namespace world
                 outDefinition.streamingConfig.maxTerrainLoadsPerFrame = stc.value("maxTerrainLoadsPerFrame", 4);
                 outDefinition.streamingConfig.maxTerrainUnloadsPerFrame = stc.value("maxTerrainUnloadsPerFrame", 4);
                 outDefinition.streamingConfig.enableGPUObjectStreaming = stc.value("enableGPUObjectStreaming", true);
+                outDefinition.streamingConfig.hlodTier0Radius = stc.value("hlodTier0Radius", 10.0f);
+                outDefinition.streamingConfig.hlodTier1Radius = stc.value("hlodTier1Radius", 20.0f);
+                outDefinition.streamingConfig.hlodTier2Radius = stc.value("hlodTier2Radius", 40.0f);
+            }
+
+            // HLOD config
+            if (worldJson.contains("hlodConfig"))
+            {
+                const auto& hc = worldJson["hlodConfig"];
+                outDefinition.hlodConfig.enabled = hc.value("enabled", false);
+                outDefinition.hlodConfig.tiers.clear();
+                if (hc.contains("tiers") && hc["tiers"].is_array())
+                {
+                    for (const auto& t : hc["tiers"])
+                    {
+                        HLODTierConfig tier;
+                        tier.tier = t.value("tier", uint8_t(0));
+                        tier.cellSize = t.value("cellSize", uint8_t(1));
+                        tier.displayRadius = t.value("displayRadius", 10.0f);
+                        tier.simplificationRatio = t.value("simplificationRatio", 0.1f);
+                        outDefinition.hlodConfig.tiers.push_back(tier);
+                    }
+                }
+            }
+            else
+            {
+                outDefinition.hlodConfig = HLODConfig::defaultConfig();
             }
 
             outDefinition.sectorFilePaths.clear();

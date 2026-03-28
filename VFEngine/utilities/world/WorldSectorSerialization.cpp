@@ -4,6 +4,7 @@
 #include "../scene/EntityRegistry.hpp"
 #include "../components/Components.hpp"
 #include "../resource/EndianUtils.hpp"
+#include "../resource/VFSHelpers.hpp"
 #include "../print/Log.hpp"
 #include <fstream>
 
@@ -234,15 +235,12 @@ namespace world
     {
         try
         {
-            std::ifstream file{filePath};
-            if (!file.is_open())
+            json sectorJson = resource::readJsonFile(filePath);
+            if (sectorJson.is_null())
             {
                 vfLogError("Failed to open sector file for reading: {}", filePath);
                 return false;
             }
-
-            json sectorJson = json::parse(file);
-            file.close();
 
             if (!sectorJson.contains("entities") || !sectorJson["entities"].is_array())
             {

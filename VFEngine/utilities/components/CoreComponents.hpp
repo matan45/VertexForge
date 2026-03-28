@@ -60,6 +60,16 @@ namespace components
         std::string worldFilePath;
     };
 
+    struct HLODProxyComponent
+    {
+        int32_t cellX = 0;
+        int32_t cellZ = 0;
+        uint8_t tier = 0;
+
+        HLODProxyComponent() = default;
+        HLODProxyComponent(int32_t x, int32_t z, uint8_t t) : cellX(x), cellZ(z), tier(t) {}
+    };
+
     struct AdditiveSceneComponent
     {
         std::string sceneName;

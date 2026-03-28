@@ -35,7 +35,7 @@ namespace resource
             return false;
         }
 
-        file.seekg(submeshInfo.meshletDataOffset);
+        file.seekg(baseOffset + submeshInfo.meshletDataOffset);
         if (file.fail())
         {
             vfLogError("MeshStreamHandle: Failed to seek to meshlet data for submesh {}", submeshIdx);
@@ -150,7 +150,7 @@ namespace resource
             return true;
         }
 
-        file.seekg(submeshInfo.convexDataOffset);
+        file.seekg(baseOffset + submeshInfo.convexDataOffset);
         if (file.fail())
         {
             vfLogError("MeshStreamHandle: Failed to seek to convex data for submesh {}", submeshIdx);
@@ -247,7 +247,7 @@ namespace resource
             return true;
         }
 
-        file.seekg(header.skeletonDataOffset);
+        file.seekg(baseOffset + header.skeletonDataOffset);
         if (file.fail())
         {
             vfLogError("MeshStreamHandle: Failed to seek to skeleton data");
