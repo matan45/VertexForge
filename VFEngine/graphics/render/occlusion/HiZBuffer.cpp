@@ -198,6 +198,11 @@ namespace render::occlusion
         pipelineInfo.layout = pipelineLayout;
 
         computePipeline = core::PipelineUtilities::createComputePipeline(device.getLogicalDevice(), pipelineInfo);
+        if (!computePipeline)
+        {
+            vfLogError("HiZBuffer: Failed to create compute pipeline");
+            return;
+        }
     }
 
     void HiZBuffer::createDescriptorSets()

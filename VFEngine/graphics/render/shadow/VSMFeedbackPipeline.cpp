@@ -212,6 +212,11 @@ namespace render::shadow
         pipelineInfo.layout = pipelineLayout;
 
         computePipeline = core::PipelineUtilities::createComputePipeline(device.getLogicalDevice(), pipelineInfo);
+        if (!computePipeline)
+        {
+            vfLogError("VSMFeedbackPipeline: Failed to create compute pipeline");
+            return;
+        }
     }
 
     void VSMFeedbackPipeline::createDescriptorSets()

@@ -159,6 +159,13 @@ namespace gameExport
 			return false;
 		}
 
+		// On clean build, purge cached temp directories
+		if (config.cleanBuild)
+		{
+			fs::remove_all(config.outputDirectory / "_temp_shaders", ec);
+			fs::remove_all(config.outputDirectory / "_temp_scenes", ec);
+		}
+
 		// Temp directory for intermediate shader compilation before packing into archive
 		fs::create_directories(config.outputDirectory / "_temp_shaders", ec);
 

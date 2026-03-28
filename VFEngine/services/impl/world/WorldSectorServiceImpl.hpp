@@ -10,6 +10,7 @@
 #include "world/PendingReferenceResolver.hpp"
 #include "world/HLODStreamer.hpp"
 #include "world/HLODProxyManager.hpp"
+#include <chrono>
 #include <future>
 #include <memory>
 #include <optional>
@@ -86,6 +87,7 @@ namespace services
         ::events::SubscriptionToken terrainLoadedToken;
 
         glm::vec3 cachedCameraPos{0.0f};
+        std::chrono::steady_clock::time_point lastUpdateTime = std::chrono::steady_clock::now();
 
         // Saved state for play/stop transitions
         world::WorldDefinition savedWorldDefinition;

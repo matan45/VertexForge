@@ -69,6 +69,15 @@ namespace archive
 
 		if (compression == CompressionType::LZ4 && size > 0)
 		{
+			if (size > static_cast<size_t>(INT_MAX))
+			{
+				vfLogWarning("VFPakWriter: File too large for LZ4 ({} bytes), storing uncompressed: {}", size, archivePath);
+				compression = CompressionType::None;
+			}
+		}
+
+		if (compression == CompressionType::LZ4 && size > 0)
+		{
 			int maxCompressedSize = LZ4_compressBound(static_cast<int>(size));
 			std::vector<char> compressed(maxCompressedSize);
 
@@ -160,10 +169,7 @@ namespace archive
 			file.write(entry.path.data(), pathLen);
 		}
 
-		uint64_t tocSize = currentOffset - tocOffset + static_cast<uint64_t>(file.tellp()) - tocOffset;
-		// Recalculate properly
-		auto endPos = static_cast<uint64_t>(file.tellp());
-		tocSize = endPos - tocOffset;
+		uint64_t tocSize = static_cast<uint64_t>(file.tellp()) - tocOffset;
 
 		// Patch header
 		file.seekp(0);

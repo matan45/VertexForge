@@ -2,6 +2,8 @@
 
 #include "VFPakFormat.hpp"
 #include <filesystem>
+#include <fstream>
+#include <mutex>
 #include <unordered_map>
 #include <optional>
 #include <vector>
@@ -37,6 +39,9 @@ namespace archive
 		std::filesystem::path filePath;
 		std::unordered_map<uint64_t, std::vector<size_t>> hashToIndices;
 		std::vector<VFPakEntry> entries;
+
+		mutable std::ifstream sharedStream;
+		mutable std::mutex streamMutex;
 
 		const VFPakEntry* findEntry(const std::string& path) const;
 	};

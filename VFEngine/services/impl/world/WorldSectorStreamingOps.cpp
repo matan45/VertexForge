@@ -27,6 +27,10 @@ namespace services
         if (!worldMode)
             return;
 
+        auto now = std::chrono::steady_clock::now();
+        float deltaTime = std::chrono::duration<float>(now - lastUpdateTime).count();
+        lastUpdateTime = now;
+
         // Poll completed async sector loads (works in both edit and play mode)
         pollAsyncSectorLoads();
 
@@ -92,8 +96,7 @@ namespace services
                     }
                 }
 
-                // deltaTime approximation (streaming runs per-frame)
-                hlodProxyManager.update(*sceneGraph, 1.0f / 60.0f);
+                hlodProxyManager.update(*sceneGraph, deltaTime);
             }
         }
 

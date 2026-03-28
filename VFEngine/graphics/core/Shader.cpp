@@ -136,6 +136,23 @@ namespace core {
 		shaderModules.clear();
 	}
 
+	bool Shader::loadPrecompiledShader(const std::string& vfshaderPath)
+	{
+		std::string resolved = resource::PathResolver::resolveEnginePath(vfshaderPath);
+		auto stages = resource::ShaderBinaryFormat::read(resolved);
+		if (stages.empty())
+		{
+			vfLogError("Failed to load pre-compiled shader: {}", resolved);
+			return false;
+		}
+
+		for (const auto& stage : stages)
+		{
+			createShaderModule(stage.spirv, static_cast<vk::ShaderStageFlagBits>(stage.stage));
+		}
+		return !shaderStages.empty();
+	}
+
 	void Shader::loadPrecompiledSPIRV(const std::filesystem::path& vfshaderPath)
 	{
 		auto stages = resource::ShaderBinaryFormat::read(vfshaderPath);

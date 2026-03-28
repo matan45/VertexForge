@@ -431,22 +431,45 @@ namespace windows
                 }
             }
         }
+
+        // Refresh cached HLOD status counts
+        cachedHLODCount = 0;
+        cachedHLODTotal = 0;
+        for (const auto& info : cachedGrid)
+        {
+            if (!info.exists) continue;
+            cachedHLODTotal++;
+            events::world::hlod::IsHLODGeneratedQuery q;
+            q.coord = info.coord;
+            if (dispatcher.query(q)) cachedHLODCount++;
+        }
     }
 
     void WorldSectorWindow::drawHLODConfig()
     {
         auto& dispatcher = events::EventDispatcher::instance();
-        auto hlodConfig = dispatcher.query(events::world::hlod::GetHLODConfigQuery{});
 
-        hlodEnabled = hlodConfig.enabled;
-        if (!hlodConfig.tiers.empty())
+        // Load config once, not every frame (prevents clobbering slider edits)
+        if (!hlodConfigLoaded)
         {
-            hlodTier0Radius = hlodConfig.tiers.size() > 0 ? hlodConfig.tiers[0].displayRadius : 10.0f;
-            hlodTier0Ratio = hlodConfig.tiers.size() > 0 ? hlodConfig.tiers[0].simplificationRatio : 0.1f;
-            hlodTier1Radius = hlodConfig.tiers.size() > 1 ? hlodConfig.tiers[1].displayRadius : 20.0f;
-            hlodTier1Ratio = hlodConfig.tiers.size() > 1 ? hlodConfig.tiers[1].simplificationRatio : 0.03f;
-            hlodTier2Radius = hlodConfig.tiers.size() > 2 ? hlodConfig.tiers[2].displayRadius : 40.0f;
-            hlodTier2Ratio = hlodConfig.tiers.size() > 2 ? hlodConfig.tiers[2].simplificationRatio : 0.01f;
+            auto hlodConfig = dispatcher.query(events::world::hlod::GetHLODConfigQuery{});
+            hlodEnabled = hlodConfig.enabled;
+            if (hlodConfig.tiers.size() > 0)
+            {
+                hlodTier0Radius = hlodConfig.tiers[0].displayRadius;
+                hlodTier0Ratio = hlodConfig.tiers[0].simplificationRatio;
+            }
+            if (hlodConfig.tiers.size() > 1)
+            {
+                hlodTier1Radius = hlodConfig.tiers[1].displayRadius;
+                hlodTier1Ratio = hlodConfig.tiers[1].simplificationRatio;
+            }
+            if (hlodConfig.tiers.size() > 2)
+            {
+                hlodTier2Radius = hlodConfig.tiers[2].displayRadius;
+                hlodTier2Ratio = hlodConfig.tiers[2].simplificationRatio;
+            }
+            hlodConfigLoaded = true;
         }
 
         bool configChanged = false;
@@ -487,11 +510,48 @@ namespace windows
             dispatcher.execute(cmd);
         }
 
+        if (ImGui::Button("Reload Config"))
+            hlodConfigLoaded = false;
+
         ImGui::Separator();
         ImGui::Text("Generation");
 
         if (hlodGenerating)
         {
+            // Process one sector per frame to avoid blocking the UI thread
+            if (!hlodPendingSectors.empty())
+            {
+                const auto& coord = hlodPendingSectors.back();
+                events::world::hlod::GenerateHLODCommand cmd;
+                cmd.coord = coord;
+                cmd.tier = 0;
+                dispatcher.execute(cmd);
+                hlodPendingSectors.pop_back();
+                hlodDoneCount++;
+
+                hlodGenerationProgress = static_cast<float>(hlodDoneCount) /
+                    static_cast<float>(std::max(hlodTotalToGenerate, 1));
+                hlodGenerationStage = "Sector " + std::to_string(hlodDoneCount) +
+                    "/" + std::to_string(hlodTotalToGenerate);
+            }
+            else
+            {
+                hlodGenerating = false;
+                hlodGenerationProgress = 1.0f;
+                hlodGenerationStage = "Complete";
+                // Refresh cached status
+                cachedHLODCount = 0;
+                cachedHLODTotal = 0;
+                for (const auto& info : cachedGrid)
+                {
+                    if (!info.exists) continue;
+                    cachedHLODTotal++;
+                    events::world::hlod::IsHLODGeneratedQuery q;
+                    q.coord = info.coord;
+                    if (dispatcher.query(q)) cachedHLODCount++;
+                }
+            }
+
             ImGui::ProgressBar(hlodGenerationProgress, ImVec2(-1, 0),
                                hlodGenerationStage.c_str());
         }
@@ -499,52 +559,20 @@ namespace windows
         {
             if (ImGui::Button("Generate All HLOD (Tier 0)"))
             {
-                hlodGenerating = true;
+                auto allCoords = dispatcher.query(events::world::GetLoadedSectorCoordsQuery{});
+                hlodPendingSectors = std::move(allCoords);
+                hlodTotalToGenerate = static_cast<int>(hlodPendingSectors.size());
+                hlodDoneCount = 0;
                 hlodGenerationProgress = 0.0f;
                 hlodGenerationStage = "Starting...";
-
-                // Generate for all loaded sectors (sectors must be loaded for geometry access)
-                auto allCoords = dispatcher.query(events::world::GetLoadedSectorCoordsQuery{});
-
-                int total = static_cast<int>(allCoords.size());
-                int done = 0;
-                bool allSuccess = true;
-
-                for (const auto& coord : allCoords)
-                {
-                    events::world::hlod::GenerateHLODCommand cmd;
-                    cmd.coord = coord;
-                    cmd.tier = 0;
-                    bool success = dispatcher.execute(cmd);
-                    if (!success) allSuccess = false;
-
-                    done++;
-                    hlodGenerationProgress = static_cast<float>(done) / static_cast<float>(std::max(total, 1));
-                    hlodGenerationStage = "Sector " + std::to_string(done) + "/" + std::to_string(total);
-                }
-
-                hlodGenerating = false;
-                hlodGenerationProgress = 1.0f;
-                hlodGenerationStage = allSuccess ? "Complete" : "Completed with errors";
+                hlodGenerating = true;
             }
         }
 
-        // Status: show which sectors have HLOD
+        // Status: use cached counts (refreshed on timer in refreshStats, not per-frame)
         ImGui::Separator();
         ImGui::Text("Status");
-
-        int hlodCount = 0;
-        int totalCount = 0;
-        for (const auto& info : cachedGrid)
-        {
-            if (!info.exists) continue;
-            totalCount++;
-            events::world::hlod::IsHLODGeneratedQuery hlodQuery;
-            hlodQuery.coord = info.coord;
-            bool hasHLOD = dispatcher.query(hlodQuery);
-            if (hasHLOD) hlodCount++;
-        }
-        ImGui::Text("HLOD Generated: %d / %d sectors", hlodCount, totalCount);
+        ImGui::Text("HLOD Generated: %d / %d sectors", cachedHLODCount, cachedHLODTotal);
     }
 
 } // namespace windows

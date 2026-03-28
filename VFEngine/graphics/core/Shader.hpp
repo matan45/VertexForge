@@ -39,6 +39,9 @@ namespace core {
 
 		void readShader(std::string_view path);
 
+		// Load a pre-compiled .vfshader directly by archive path (no .glsl indirection)
+		bool loadPrecompiledShader(const std::string& vfshaderPath);
+
 		void addMacroDefinition(const std::string& name);
 		void addMacroDefinition(const std::string& name, const std::string& value);
 

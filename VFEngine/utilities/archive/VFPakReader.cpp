@@ -84,6 +84,9 @@ namespace archive
 
 	void VFPakReader::close()
 	{
+		std::lock_guard<std::mutex> lock(streamMutex);
+		if (sharedStream.is_open())
+			sharedStream.close();
 		entries.clear();
 		hashToIndices.clear();
 		filePath.clear();
@@ -107,14 +110,19 @@ namespace archive
 			return {};
 		}
 
-		std::ifstream file(filePath, std::ios::binary);
-		if (!file.is_open())
+		std::lock_guard<std::mutex> lock(streamMutex);
+		if (!sharedStream.is_open())
 		{
-			vfLogError("VFPakReader: Failed to reopen archive for reading: {}", path);
-			return {};
+			sharedStream.open(filePath, std::ios::binary);
+			if (!sharedStream.is_open())
+			{
+				vfLogError("VFPakReader: Failed to open archive for reading: {}", path);
+				return {};
+			}
 		}
 
-		file.seekg(static_cast<std::streamoff>(entry->dataOffset));
+		sharedStream.seekg(static_cast<std::streamoff>(entry->dataOffset));
+		auto& file = sharedStream;
 
 		if (entry->compressionType == CompressionType::LZ4)
 		{

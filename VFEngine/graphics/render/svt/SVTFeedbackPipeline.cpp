@@ -232,6 +232,11 @@ namespace render::svt
         pipelineInfo.layout = pipelineLayout;
 
         pipeline = core::PipelineUtilities::createComputePipeline(device.getLogicalDevice(), pipelineInfo);
+        if (!pipeline)
+        {
+            vfLogError("SVTFeedbackPipeline: Failed to create compute pipeline");
+            return;
+        }
     }
 
     void SVTFeedbackPipeline::createFeedbackBuffers()

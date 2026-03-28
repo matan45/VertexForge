@@ -117,6 +117,10 @@ namespace core
 		PipelineUtilities() = delete;
 		~PipelineUtilities() = delete;
 
+		// Threading contract: setGlobalPipelineCache() must be called once during
+		// VulkanContext::init() on the main thread BEFORE any pipeline creation.
+		// After initialization the value is read-only, so concurrent reads are safe.
+		// Do NOT call setGlobalPipelineCache() after init or from worker threads.
 		static inline vk::PipelineCache globalPipelineCache = nullptr;
 
 	public:

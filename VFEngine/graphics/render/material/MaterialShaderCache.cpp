@@ -83,13 +83,11 @@ namespace render::mesh
 
         if (resource::PathResolver::isExportedMode())
         {
-            // In exported builds, load pre-compiled SPIR-V by source hash.
-            // Pass a .glsl path that resolvePrecompiledPath will convert to .vfshader
+            // In exported builds, load pre-compiled SPIR-V directly by hash
             std::string combinedHash = outData.vertexShaderHash + "_" + outData.fragmentShaderHash;
-            std::string fakePath = "Assets/materials/compiled/" + combinedHash + ".glsl";
-            outData.shader->readShader(fakePath);
+            std::string vfshaderPath = "Assets/materials/compiled/" + combinedHash + ".vfshader";
 
-            if (outData.shader->getShaderStages().empty())
+            if (!outData.shader->loadPrecompiledShader(vfshaderPath))
             {
                 vfLogError("Failed to load pre-compiled material shader: {}", materialPath);
                 return false;

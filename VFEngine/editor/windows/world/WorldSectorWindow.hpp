@@ -54,9 +54,19 @@ namespace windows
         float hlodTier0Ratio = 0.10f;
         float hlodTier1Ratio = 0.03f;
         float hlodTier2Ratio = 0.01f;
+        bool hlodConfigLoaded = false;
+
+        // Async HLOD generation
         bool hlodGenerating = false;
         float hlodGenerationProgress = 0.0f;
         std::string hlodGenerationStage;
+        std::vector<world::SectorCoord> hlodPendingSectors;
+        int hlodTotalToGenerate = 0;
+        int hlodDoneCount = 0;
+
+        // Cached HLOD status (refreshed on timer, not per-frame)
+        int cachedHLODCount = 0;
+        int cachedHLODTotal = 0;
 
     public:
         WorldSectorWindow() = default;

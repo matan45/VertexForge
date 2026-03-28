@@ -602,6 +602,48 @@ namespace services
                 return sector && !sector->hlodFilePath.empty();
             });
 
+        dispatcher.registerCommandHandler<::events::world::hlod::GenerateAllHLODCommand>(
+            [this](const ::events::world::hlod::GenerateAllHLODCommand&) -> bool
+            {
+                if (!worldMode) return false;
+                bool allSuccess = true;
+                sectorManager.forEachSector([&](world::WorldSector& sector)
+                {
+                    if (sector.filePath.empty()) return;
+
+                    auto& tiers = worldDefinition.hlodConfig.tiers;
+                    world::HLODTierConfig tierConfig;
+                    if (!tiers.empty()) tierConfig = tiers[0];
+
+                    std::string hlodPath = sector.filePath;
+                    auto dotPos = hlodPath.rfind('.');
+                    if (dotPos != std::string::npos)
+                        hlodPath = hlodPath.substr(0, dotPos);
+                    hlodPath += "_hlod0.vfHLOD";
+
+                    std::string workingDir = currentWorldPath.empty() ? "." :
+                        currentWorldPath.substr(0, currentWorldPath.find_last_of("/\\"));
+
+                    world::HLODGenerator generator;
+                    if (generator.generateForSector(sector.coord, sector.filePath, workingDir, tierConfig, hlodPath))
+                        sector.hlodFilePath = hlodPath;
+                    else
+                        allSuccess = false;
+                });
+                return allSuccess;
+            });
+
+        dispatcher.registerCommandHandler<::events::world::hlod::InvalidateHLODCommand>(
+            [this](const ::events::world::hlod::InvalidateHLODCommand& cmd)
+            {
+                auto* sector = sectorManager.getSector(cmd.coord);
+                if (sector)
+                {
+                    sector->hlodFilePath.clear();
+                    vfLogInfo("HLOD invalidated for sector [{},{}]", cmd.coord.x, cmd.coord.z);
+                }
+            });
+
         dispatcher.registerQueryHandler<::events::vfx::snapshot::GetVFXSnapshotQuery>(
             [this](const ::events::vfx::snapshot::GetVFXSnapshotQuery& query)
                 -> std::optional<::events::vfx::snapshot::VFXPlaybackSnapshot>

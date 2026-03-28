@@ -384,7 +384,6 @@ namespace core
         }
         pipelineCachePath = cacheDir / "pipeline_cache.bin";
 
-        std::vector<uint8_t> cacheData;
         loadPipelineCacheFromDisk();
 
         if (!pipelineCache)

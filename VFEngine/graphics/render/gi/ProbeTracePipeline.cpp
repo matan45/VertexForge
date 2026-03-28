@@ -122,6 +122,11 @@ namespace render::gi
         pipelineInfo.layout = pipelineLayout;
 
         computePipeline = core::PipelineUtilities::createComputePipeline(vkDevice, pipelineInfo);
+        if (!computePipeline)
+        {
+            vfLogError("ProbeTracePipeline: Failed to create compute pipeline");
+            return;
+        }
     }
 
     void ProbeTracePipeline::dispatch(vk::CommandBuffer cmd,
