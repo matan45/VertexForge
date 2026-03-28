@@ -1,31 +1,14 @@
 #pragma once
 
-#include "MemoryTypes.hpp"
-#include <vector>
 #include <string>
 #include <mutex>
 #include <functional>
 
 namespace memory {
 
-	class IAllocator;
-
-	struct RegisteredAllocator {
-		IAllocator* allocator = nullptr;
-		std::string name;
-		AllocatorStrategy strategy;
-	};
-
 	class MemoryDiagnostics {
 	public:
 		static MemoryDiagnostics& instance();
-
-		void registerAllocator(IAllocator* allocator);
-		void unregisterAllocator(IAllocator* allocator);
-
-		AllocatorStats getGlobalStats() const;
-		AllocatorStats getAllocatorStats(const std::string& name) const;
-		std::vector<std::pair<std::string, AllocatorStats>> getAllStats() const;
 
 		void logSummary() const;
 
@@ -37,7 +20,6 @@ namespace memory {
 		MemoryDiagnostics() = default;
 
 		mutable std::mutex diagMutex;
-		std::vector<RegisteredAllocator> allocators;
 		GpuStatsCallback gpuStatsCallback;
 	};
 
