@@ -59,5 +59,6 @@ namespace core
 
 		static void destroyBuffer(const vk::Device& device, vk::Buffer& buffer,
 			VulkanAllocation& allocation, VulkanMemoryManager& memManager);
+
 	};
 }

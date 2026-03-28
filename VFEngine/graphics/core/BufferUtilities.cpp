@@ -2,6 +2,7 @@
 #include "MemoryUtilities.hpp"
 #include "VulkanMemoryManager.hpp"
 #include "Utilities.hpp"
+#include "memory/GpuAllocationStats.hpp"
 #include <cstring>
 
 namespace core
@@ -35,6 +36,9 @@ namespace core
 
 		bufferMemory = bufferInfo.logicalDevice.allocateMemory(allocInfo);
 		bufferInfo.logicalDevice.bindBufferMemory(buffer, bufferMemory, 0);
+
+		memory::GpuAllocationStats::legacyAllocationCount.fetch_add(1, std::memory_order_relaxed);
+		memory::GpuAllocationStats::legacyAllocatedBytes.fetch_add(memRequirements.size, std::memory_order_relaxed);
 	}
 
 	void BufferUtilities::createBuffer(const BufferInfoRequest& bufferInfo, vk::Buffer& buffer,
@@ -53,6 +57,9 @@ namespace core
 
 		allocation = memManager.allocate(memRequirements, bufferInfo.properties, needsDeviceAddress);
 		bufferInfo.logicalDevice.bindBufferMemory(buffer, allocation.memory, allocation.offset);
+
+		memory::GpuAllocationStats::managedAllocationCount.fetch_add(1, std::memory_order_relaxed);
+		memory::GpuAllocationStats::managedAllocatedBytes.fetch_add(memRequirements.size, std::memory_order_relaxed);
 	}
 
 	void BufferUtilities::destroyBuffer(const vk::Device& device, vk::Buffer& buffer,

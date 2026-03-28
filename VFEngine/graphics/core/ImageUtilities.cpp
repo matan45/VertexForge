@@ -4,6 +4,7 @@
 #include "BufferUtilities.hpp"
 #include "Device.hpp"
 #include "Utilities.hpp"
+#include "memory/GpuAllocationStats.hpp"
 #include <cstring>
 
 namespace core
@@ -34,6 +35,9 @@ namespace core
 
 		imageMemory = imageInfo.logicalDevice.allocateMemory(allocInfo);
 		imageInfo.logicalDevice.bindImageMemory(image, imageMemory, 0);
+
+		memory::GpuAllocationStats::legacyAllocationCount.fetch_add(1, std::memory_order_relaxed);
+		memory::GpuAllocationStats::legacyAllocatedBytes.fetch_add(memRequirements.size, std::memory_order_relaxed);
 	}
 
 	void ImageUtilities::createImage(const ImageInfoRequest& imageInfo, vk::Image& image,
@@ -60,6 +64,9 @@ namespace core
 
 		allocation = memManager.allocate(memRequirements, imageInfo.properties);
 		imageInfo.logicalDevice.bindImageMemory(image, allocation.memory, allocation.offset);
+
+		memory::GpuAllocationStats::managedAllocationCount.fetch_add(1, std::memory_order_relaxed);
+		memory::GpuAllocationStats::managedAllocatedBytes.fetch_add(memRequirements.size, std::memory_order_relaxed);
 	}
 
 	void ImageUtilities::createImageView(const ImageViewInfoRequest& imageInfoView, vk::ImageView& imageView)
