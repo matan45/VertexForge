@@ -78,6 +78,10 @@ namespace core
 
 		void free(const VulkanAllocation& allocation);
 
+		// Reclaim empty blocks to return memory to the OS.
+		// Call at a safe point when no GPU work is in flight (e.g., after device idle).
+		void reclaimEmptyBlocks();
+
 		struct MemoryTypeStats
 		{
 			uint32_t memoryTypeIndex = 0;

@@ -182,21 +182,30 @@ namespace core
 
 		if (allocation.block) {
 			allocation.block->free(allocation.offset, allocation.size);
+		}
 
-			// Reclaim empty blocks (keep at least 1 per memory type to avoid thrashing)
-			auto blockStats = allocation.block->getStats();
-			if (blockStats.activeAllocationCount == 0) {
-				uint32_t typeIdx = allocation.block->getMemoryTypeIndex();
-				auto& typeData = memoryTypes[typeIdx];
-				if (typeData.blocks.size() > 1) {
-					auto it = std::find_if(typeData.blocks.begin(), typeData.blocks.end(),
-						[&](const auto& b) { return b.get() == allocation.block; });
-					if (it != typeData.blocks.end()) {
-						vfLogInfo("VulkanMemoryManager: Reclaiming empty {}MB block (type {})",
-							(*it)->getBlockSize() / (1024 * 1024), typeIdx);
-						typeData.blocks.erase(it);
-						memory::GpuAllocationStats::blocksReclaimed.fetch_add(1, std::memory_order_relaxed);
-					}
+		updateGlobalStats();
+	}
+
+	void VulkanMemoryManager::reclaimEmptyBlocks()
+	{
+		std::lock_guard lock(managerMutex);
+
+		for (auto& [typeIndex, typeData] : memoryTypes) {
+			if (typeData.blocks.size() <= 1) continue;
+
+			auto it = typeData.blocks.begin();
+			while (it != typeData.blocks.end()) {
+				if (typeData.blocks.size() <= 1) break;
+
+				auto blockStats = (*it)->getStats();
+				if (blockStats.activeAllocationCount == 0) {
+					vfLogInfo("VulkanMemoryManager: Reclaiming empty {}MB block (type {})",
+						(*it)->getBlockSize() / (1024 * 1024), typeIndex);
+					it = typeData.blocks.erase(it);
+					memory::GpuAllocationStats::blocksReclaimed.fetch_add(1, std::memory_order_relaxed);
+				} else {
+					++it;
 				}
 			}
 		}

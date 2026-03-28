@@ -75,7 +75,6 @@ namespace core {
 			op.overflowRegion = staging;
 		} else {
 			op.ringEndOffset = staging.offset + size;
-			ringBuffer->markFence(op.fence, op.ringEndOffset);
 		}
 
 		pendingTransfers.push_back(op);
@@ -85,7 +84,6 @@ namespace core {
 	{
 		std::lock_guard lock(transferMutex);
 
-		ringBuffer->pollFences();
 		ringBuffer->updateGlobalStats();
 
 		auto it = pendingTransfers.begin();
@@ -121,14 +119,14 @@ namespace core {
 
 		for (auto& op : localPending)
 			cleanupTransfer(op);
-
-		if (ringBuffer) {
-			ringBuffer->pollFences();
-		}
 	}
 
 	void TransferManager::cleanupTransfer(TransferOperation& op)
 	{
+		// Advance ring buffer read offset for non-overflow transfers
+		if (!op.overflowRegion.isOverflow && op.ringEndOffset > 0) {
+			ringBuffer->advanceReadOffset(op.ringEndOffset);
+		}
 		if (op.fence) {
 			device.destroyFence(op.fence);
 		}

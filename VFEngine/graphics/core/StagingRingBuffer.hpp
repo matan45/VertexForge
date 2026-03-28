@@ -31,13 +31,13 @@ namespace core
 		StagingRingBuffer& operator=(const StagingRingBuffer&) = delete;
 
 		StagingRegion allocate(vk::DeviceSize size);
-		void markFence(vk::Fence fence, vk::DeviceSize endOffset);
-		void pollFences();
+
+		// Advance the read offset when a transfer completes (called by TransferManager)
+		void advanceReadOffset(vk::DeviceSize newReadOffset);
 
 		vk::Buffer getBuffer() const { return buffer; }
 		vk::DeviceSize getRingSize() const { return ringSize; }
 		vk::DeviceSize getAvailableSpace() const { std::lock_guard lock(ringMutex); return availableSpace(); }
-		uint32_t getPendingFenceCount() const { std::lock_guard lock(ringMutex); return static_cast<uint32_t>(pendingFences.size()); }
 		static inline std::atomic<uint32_t> overflowCount{0};
 
 		void cleanupOverflow(StagingRegion& region);
@@ -54,13 +54,6 @@ namespace core
 
 		vk::DeviceSize writeOffset = 0;
 		vk::DeviceSize readOffset = 0;
-
-		struct FenceMarker
-		{
-			vk::Fence fence;
-			vk::DeviceSize endOffset;
-		};
-		std::vector<FenceMarker> pendingFences;
 
 		mutable std::mutex ringMutex;
 

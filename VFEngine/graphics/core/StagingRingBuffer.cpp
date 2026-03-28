@@ -33,17 +33,7 @@ namespace core
 
 	StagingRingBuffer::~StagingRingBuffer()
 	{
-		// Wait for all pending fences
-		if (!pendingFences.empty()) {
-			std::vector<vk::Fence> fences;
-			fences.reserve(pendingFences.size());
-			for (const auto& marker : pendingFences) {
-				fences.push_back(marker.fence);
-			}
-			(void)device.waitForFences(fences, VK_TRUE, UINT64_MAX);
-			pendingFences.clear();
-		}
-
+		// TransferManager::waitAll() ensures all fences are waited on before this destructor runs
 		baseMappedPtr = nullptr;
 		auto& memManager = ownerDevice.getMemoryManager();
 		BufferUtilities::destroyBuffer(device, buffer, bufferAllocation, memManager);
@@ -52,17 +42,6 @@ namespace core
 	StagingRegion StagingRingBuffer::allocate(vk::DeviceSize size)
 	{
 		std::lock_guard lock(ringMutex);
-
-		// Try to poll completed fences first
-		auto it = pendingFences.begin();
-		while (it != pendingFences.end()) {
-			if (device.getFenceStatus(it->fence) == vk::Result::eSuccess) {
-				readOffset = it->endOffset;
-				it = pendingFences.erase(it);
-			} else {
-				break; // Fences are ordered, stop at first incomplete
-			}
-		}
 
 		// Check if we have enough contiguous space
 		vk::DeviceSize available = availableSpace();
@@ -113,25 +92,10 @@ namespace core
 		return region;
 	}
 
-	void StagingRingBuffer::markFence(vk::Fence fence, vk::DeviceSize endOffset)
+	void StagingRingBuffer::advanceReadOffset(vk::DeviceSize newReadOffset)
 	{
 		std::lock_guard lock(ringMutex);
-		pendingFences.push_back({fence, endOffset});
-	}
-
-	void StagingRingBuffer::pollFences()
-	{
-		std::lock_guard lock(ringMutex);
-
-		auto it = pendingFences.begin();
-		while (it != pendingFences.end()) {
-			if (device.getFenceStatus(it->fence) == vk::Result::eSuccess) {
-				readOffset = it->endOffset;
-				it = pendingFences.erase(it);
-			} else {
-				break;
-			}
-		}
+		readOffset = newReadOffset;
 	}
 
 	void StagingRingBuffer::cleanupOverflow(StagingRegion& region)
@@ -160,7 +124,7 @@ namespace core
 		vk::DeviceSize used = (writeOffset >= readOffset) ? (writeOffset - readOffset) : (ringSize - readOffset + writeOffset);
 		memory::GpuAllocationStats::stagingRingSize.store(ringSize, std::memory_order_relaxed);
 		memory::GpuAllocationStats::stagingRingUsed.store(used, std::memory_order_relaxed);
-		memory::GpuAllocationStats::stagingPendingTransfers.store(static_cast<uint32_t>(pendingFences.size()), std::memory_order_relaxed);
+		memory::GpuAllocationStats::stagingPendingTransfers.store(0, std::memory_order_relaxed);
 		memory::GpuAllocationStats::stagingOverflowCount.store(overflowCount.load(std::memory_order_relaxed), std::memory_order_relaxed);
 	}
 }
