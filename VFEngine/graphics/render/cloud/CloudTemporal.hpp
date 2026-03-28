@@ -1,4 +1,5 @@
 #pragma once
+#include "../../core/VulkanMemoryManager.hpp"
 #include <vulkan/vulkan.hpp>
 #include <glm/glm.hpp>
 #include <memory>
@@ -25,12 +26,12 @@ namespace render::cloud
 
         // History image (RGBA16F, half-res)
         vk::Image historyImage;
-        vk::DeviceMemory historyMemory;
+        core::VulkanAllocation historyAllocation;
         vk::ImageView historyView;
 
         // UBO
         vk::Buffer paramsBuffer;
-        vk::DeviceMemory paramsBufferMemory;
+        core::VulkanAllocation paramsBufferAllocation;
         void* paramsBufferMapped = nullptr;
 
         // Compute pipeline

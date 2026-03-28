@@ -119,10 +119,10 @@ namespace render::shadow
             logicalDevice.destroyImage(poolImage);
             poolImage = nullptr;
         }
-        if (poolMemory)
+        if (poolAllocation.isValid())
         {
-            logicalDevice.freeMemory(poolMemory);
-            poolMemory = nullptr;
+            device.getMemoryManager().free(poolAllocation);
+            poolAllocation = {};
         }
 
         freeTiles.clear();
@@ -148,7 +148,7 @@ namespace render::shadow
             vk::MemoryPropertyFlagBits::eDeviceLocal
         );
 
-        core::ImageUtilities::createImage(imageInfo, poolImage, poolMemory);
+        core::ImageUtilities::createImage(imageInfo, poolImage, poolAllocation, device.getMemoryManager());
 
         core::ImageViewInfoRequest viewInfo(
             logicalDevice,

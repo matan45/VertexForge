@@ -98,12 +98,8 @@ namespace render::postprocess
 
         if (paramsBuffer)
         {
-            if (paramsBufferMapped)
-            {
-                dev.unmapMemory(paramsBufferMemory);
-                paramsBufferMapped = nullptr;
-            }
-            core::BufferUtilities::destroyBuffer(dev, paramsBuffer, paramsBufferMemory);
+            paramsBufferMapped = nullptr;
+            core::BufferUtilities::destroyBuffer(dev, paramsBuffer, paramsBufferAllocation, device.getMemoryManager());
         }
 
         if (sampler)

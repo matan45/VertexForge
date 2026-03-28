@@ -1,23 +1,11 @@
 #include "ImageUtilities.hpp"
 #include "MemoryUtilities.hpp"
 #include "VulkanMemoryManager.hpp"
-#include "VulkanContext.hpp"
 #include "BufferUtilities.hpp"
 #include "Device.hpp"
 #include "Utilities.hpp"
 #include "memory/GpuAllocationStats.hpp"
 #include <cstring>
-
-namespace {
-	core::VulkanMemoryManager* getGlobalMemManager()
-	{
-		auto* dev = core::VulkanContext::getDeviceRaw();
-		if (dev) {
-			return &dev->getMemoryManager();
-		}
-		return nullptr;
-	}
-}
 
 namespace core
 {
@@ -41,20 +29,6 @@ namespace core
 		image = imageInfo.logicalDevice.createImage(imageCreateInfo);
 
 		vk::MemoryRequirements memRequirements = imageInfo.logicalDevice.getImageMemoryRequirements(image);
-
-		// Route through VulkanMemoryManager if available
-		auto* memManager = getGlobalMemManager();
-		if (memManager) {
-			auto allocation = memManager->allocateLegacy(memRequirements, imageInfo.properties);
-			imageMemory = allocation.memory;
-			imageInfo.logicalDevice.bindImageMemory(image, imageMemory, 0);
-
-			memory::GpuAllocationStats::managedAllocationCount.fetch_add(1, std::memory_order_relaxed);
-			memory::GpuAllocationStats::managedAllocatedBytes.fetch_add(memRequirements.size, std::memory_order_relaxed);
-			return;
-		}
-
-		// Fallback: raw allocation (during early startup)
 		vk::MemoryAllocateInfo allocInfo{};
 		allocInfo.allocationSize = memRequirements.size;
 		allocInfo.memoryTypeIndex = MemoryUtilities::findMemoryType(imageInfo.physicalDevice, memRequirements.memoryTypeBits, imageInfo.properties);

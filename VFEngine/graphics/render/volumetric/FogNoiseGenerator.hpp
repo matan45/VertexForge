@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../../core/VulkanMemoryManager.hpp"
 #include <vulkan/vulkan.hpp>
 #include <memory>
 
@@ -18,7 +19,7 @@ namespace render::volumetric
 
         // 3D noise texture (64^3, RGBA8)
         vk::Image noiseImage;
-        vk::DeviceMemory noiseMemory;
+        core::VulkanAllocation noiseAllocation;
         vk::ImageView noiseView;
 
         // Sampler with Repeat address mode for tiling

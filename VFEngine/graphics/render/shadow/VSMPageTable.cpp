@@ -48,6 +48,7 @@ namespace render::shadow
     {
         const auto& logicalDevice = device.getLogicalDevice();
         const auto& physicalDevice = device.getPhysicalDevice();
+        auto& memManager = device.getMemoryManager();
 
         vk::DeviceSize bufferSize = sizeof(uint32_t) * totalEntries;
 
@@ -60,7 +61,7 @@ namespace render::shadow
                 vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst,
                 vk::MemoryPropertyFlagBits::eDeviceLocal
             );
-            core::BufferUtilities::createBuffer(request, pageTableBuffer, pageTableMemory);
+            core::BufferUtilities::createBuffer(request, pageTableBuffer, pageTableAllocation, memManager);
         }
 
         // Per-frame staging buffers
@@ -73,32 +74,23 @@ namespace render::shadow
                 vk::BufferUsageFlagBits::eTransferSrc,
                 vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
             );
-            core::BufferUtilities::createBuffer(request, sf.buffer, sf.memory);
-            sf.mapped = logicalDevice.mapMemory(sf.memory, 0, bufferSize);
+            core::BufferUtilities::createBuffer(request, sf.buffer, sf.allocation, memManager);
+            sf.mapped = sf.allocation.mappedPtr;
         }
     }
 
     void VSMPageTable::destroyBuffers()
     {
         const auto& logicalDevice = device.getLogicalDevice();
+        auto& memManager = device.getMemoryManager();
 
         for (auto& sf : stagingFrames)
         {
-            if (sf.mapped) { logicalDevice.unmapMemory(sf.memory); sf.mapped = nullptr; }
-            if (sf.buffer) { logicalDevice.destroyBuffer(sf.buffer); sf.buffer = nullptr; }
-            if (sf.memory) { logicalDevice.freeMemory(sf.memory); sf.memory = nullptr; }
+            sf.mapped = nullptr;
+            core::BufferUtilities::destroyBuffer(logicalDevice, sf.buffer, sf.allocation, memManager);
         }
 
-        if (pageTableBuffer)
-        {
-            logicalDevice.destroyBuffer(pageTableBuffer);
-            pageTableBuffer = nullptr;
-        }
-        if (pageTableMemory)
-        {
-            logicalDevice.freeMemory(pageTableMemory);
-            pageTableMemory = nullptr;
-        }
+        core::BufferUtilities::destroyBuffer(logicalDevice, pageTableBuffer, pageTableAllocation, memManager);
     }
 
     uint32_t VSMPageTable::allocateBlock(uint32_t pagesX, uint32_t pagesY)

@@ -88,12 +88,8 @@ namespace render::postprocess
 
         if (paramsBuffer)
         {
-            if (paramsBufferMapped)
-            {
-                dev.unmapMemory(paramsBufferMemory);
-                paramsBufferMapped = nullptr;
-            }
-            core::BufferUtilities::destroyBuffer(dev, paramsBuffer, paramsBufferMemory);
+            paramsBufferMapped = nullptr;
+            core::BufferUtilities::destroyBuffer(dev, paramsBuffer, paramsBufferAllocation, device.getMemoryManager());
         }
 
         if (sampler)
@@ -311,7 +307,7 @@ namespace render::postprocess
                       | vk::ImageUsageFlagBits::eSampled;
             req.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
 
-            core::ImageUtilities::createImage(req, historyBuffers[i].image, historyBuffers[i].memory);
+            core::ImageUtilities::createImage(req, historyBuffers[i].image, historyBuffers[i].allocation, device.getMemoryManager());
 
             core::ImageViewInfoRequest viewReq(dev, historyBuffers[i].image);
             viewReq.format = format;
@@ -354,8 +350,8 @@ namespace render::postprocess
         bufReq.properties = vk::MemoryPropertyFlagBits::eHostVisible
                           | vk::MemoryPropertyFlagBits::eHostCoherent;
 
-        core::BufferUtilities::createBuffer(bufReq, paramsBuffer, paramsBufferMemory);
-        paramsBufferMapped = dev.mapMemory(paramsBufferMemory, 0, sizeof(TAAParamsUBO));
+        core::BufferUtilities::createBuffer(bufReq, paramsBuffer, paramsBufferAllocation, device.getMemoryManager());
+        paramsBufferMapped = paramsBufferAllocation.mappedPtr;
     }
 
     void TAAEffect::createDescriptorSetLayouts()
@@ -625,7 +621,7 @@ namespace render::postprocess
             if (buf.framebuffer) { dev.destroyFramebuffer(buf.framebuffer); buf.framebuffer = nullptr; }
             if (buf.imageView) { dev.destroyImageView(buf.imageView); buf.imageView = nullptr; }
             if (buf.image) { dev.destroyImage(buf.image); buf.image = nullptr; }
-            if (buf.memory) { dev.freeMemory(buf.memory); buf.memory = nullptr; }
+            if (buf.allocation.isValid()) { device.getMemoryManager().free(buf.allocation); buf.allocation = {}; }
         }
     }
 

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "VSMTypes.hpp"
+#include "../../core/VulkanMemoryManager.hpp"
 #include <vulkan/vulkan.hpp>
 #include <glm/glm.hpp>
 #include <memory>
@@ -46,15 +47,15 @@ namespace render::shadow
 
         // Feedback buffer (device-local, one uint per possible page entry)
         vk::Buffer feedbackBuffer;
-        vk::DeviceMemory feedbackMemory;
+        core::VulkanAllocation feedbackAllocation;
 
         // Staging buffer for CPU readback
         vk::Buffer stagingBuffer;
-        vk::DeviceMemory stagingMemory;
+        core::VulkanAllocation stagingAllocation;
 
         // Camera/params UBO
         vk::Buffer paramsBuffer;
-        vk::DeviceMemory paramsMemory;
+        core::VulkanAllocation paramsAllocation;
 
         // Depth sampler for reading depth buffer
         vk::Sampler depthSampler;

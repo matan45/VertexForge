@@ -193,9 +193,8 @@ namespace core
     void DeferredDeletionQueue::executeDelete(const DeletionData& data)
     {
         const auto& logicalDevice = device.getLogicalDevice();
-        auto& memManager = device.getMemoryManager();
 
-        std::visit([&logicalDevice, &memManager](const auto& deletion) {
+        std::visit([&logicalDevice](const auto& deletion) {
             using T = std::decay_t<decltype(deletion)>;
 
             if constexpr (std::is_same_v<T, BufferDeletion>)
@@ -203,7 +202,7 @@ namespace core
                 if (deletion.buffer)
                     logicalDevice.destroyBuffer(deletion.buffer);
                 if (deletion.memory)
-                    memManager.freeLegacy(deletion.memory);
+                    logicalDevice.freeMemory(deletion.memory);
             }
             else if constexpr (std::is_same_v<T, ImageDeletion>)
             {
@@ -215,7 +214,7 @@ namespace core
                 if (deletion.image)
                     logicalDevice.destroyImage(deletion.image);
                 if (deletion.memory)
-                    memManager.freeLegacy(deletion.memory);
+                    logicalDevice.freeMemory(deletion.memory);
             }
             else if constexpr (std::is_same_v<T, ImageViewDeletion>)
             {

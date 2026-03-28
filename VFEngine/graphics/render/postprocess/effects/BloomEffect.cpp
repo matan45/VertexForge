@@ -424,7 +424,7 @@ namespace render::postprocess
                   | vk::ImageUsageFlagBits::eSampled;
         req.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
 
-        core::ImageUtilities::createImage(req, bloomImage, bloomMemory);
+        core::ImageUtilities::createImage(req, bloomImage, bloomAllocation, device.getMemoryManager());
 
         mipLevels.resize(mipCount);
         uint32_t mipW = w;
@@ -689,10 +689,10 @@ namespace render::postprocess
             dev.destroyImage(bloomImage);
             bloomImage = nullptr;
         }
-        if (bloomMemory)
+        if (bloomAllocation.isValid())
         {
-            dev.freeMemory(bloomMemory);
-            bloomMemory = nullptr;
+            device.getMemoryManager().free(bloomAllocation);
+            bloomAllocation = {};
         }
 
         mipCount = 0;

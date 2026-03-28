@@ -88,12 +88,8 @@ namespace render::postprocess
 
         if (dofBuffer)
         {
-            if (dofBufferMapped)
-            {
-                dev.unmapMemory(dofBufferMemory);
-                dofBufferMapped = nullptr;
-            }
-            core::BufferUtilities::destroyBuffer(dev, dofBuffer, dofBufferMemory);
+            dofBufferMapped = nullptr;
+            core::BufferUtilities::destroyBuffer(dev, dofBuffer, dofBufferAllocation, device.getMemoryManager());
         }
 
         if (sampler)
@@ -284,7 +280,7 @@ namespace render::postprocess
                   | vk::ImageUsageFlagBits::eSampled;
         req.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
 
-        core::ImageUtilities::createImage(req, blurImage, blurMemory);
+        core::ImageUtilities::createImage(req, blurImage, blurAllocation, device.getMemoryManager());
 
         core::ImageViewInfoRequest viewReq(dev, blurImage);
         viewReq.format = vk::Format::eR8G8B8A8Unorm;
@@ -326,8 +322,8 @@ namespace render::postprocess
         bufReq.properties = vk::MemoryPropertyFlagBits::eHostVisible
                           | vk::MemoryPropertyFlagBits::eHostCoherent;
 
-        core::BufferUtilities::createBuffer(bufReq, dofBuffer, dofBufferMemory);
-        dofBufferMapped = dev.mapMemory(dofBufferMemory, 0, sizeof(DoFParams));
+        core::BufferUtilities::createBuffer(bufReq, dofBuffer, dofBufferAllocation, device.getMemoryManager());
+        dofBufferMapped = dofBufferAllocation.mappedPtr;
     }
 
     void DepthOfFieldEffect::createDescriptorSetLayouts()
@@ -583,10 +579,10 @@ namespace render::postprocess
             blurImage = nullptr;
         }
 
-        if (blurMemory)
+        if (blurAllocation.isValid())
         {
-            dev.freeMemory(blurMemory);
-            blurMemory = nullptr;
+            device.getMemoryManager().free(blurAllocation);
+            blurAllocation = {};
         }
     }
 

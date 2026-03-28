@@ -2,7 +2,6 @@
 #include "../../core/Device.hpp"
 #include "../../core/ImageUtilities.hpp"
 #include "../../core/BufferUtilities.hpp"
-#include "../../core/MemoryUtilities.hpp"
 #include "../../core/Utilities.hpp"
 #include "print/Log.hpp"
 #include <cstring>
@@ -76,12 +75,8 @@ namespace render::volumetric
 
         if (paramsBuffer)
         {
-            if (paramsMapped)
-            {
-                dev.unmapMemory(paramsMemory);
-                paramsMapped = nullptr;
-            }
-            core::BufferUtilities::destroyBuffer(dev, paramsBuffer, paramsMemory);
+            paramsMapped = nullptr;
+            core::BufferUtilities::destroyBuffer(dev, paramsBuffer, paramsAllocation, device.getMemoryManager());
         }
 
         destroyImages();
@@ -120,11 +115,10 @@ namespace render::volumetric
         }
     }
 
-    void VolumetricGridManager::create3DImage(vk::Image& image, vk::DeviceMemory& memory,
+    void VolumetricGridManager::create3DImage(vk::Image& image, core::VulkanAllocation& allocation,
                                                vk::ImageView& view, vk::ImageUsageFlags usage)
     {
         auto& dev = device.getLogicalDevice();
-        auto& physDev = device.getPhysicalDevice();
 
         vk::ImageCreateInfo imageInfo{};
         imageInfo.imageType = vk::ImageType::e3D;
@@ -141,12 +135,8 @@ namespace render::volumetric
         image = dev.createImage(imageInfo);
 
         vk::MemoryRequirements memReqs = dev.getImageMemoryRequirements(image);
-        vk::MemoryAllocateInfo allocInfo{};
-        allocInfo.allocationSize = memReqs.size;
-        allocInfo.memoryTypeIndex = core::MemoryUtilities::findMemoryType(
-            physDev, memReqs.memoryTypeBits, vk::MemoryPropertyFlagBits::eDeviceLocal);
-        memory = dev.allocateMemory(allocInfo);
-        dev.bindImageMemory(image, memory, 0);
+        allocation = device.getMemoryManager().allocate(memReqs, vk::MemoryPropertyFlagBits::eDeviceLocal);
+        dev.bindImageMemory(image, allocation.memory, allocation.offset);
 
         core::ImageViewInfoRequest viewReq(dev, image);
         viewReq.format = vk::Format::eR16G16B16A16Sfloat;
@@ -155,7 +145,7 @@ namespace render::volumetric
         core::ImageUtilities::createImageView(viewReq, view);
     }
 
-    void VolumetricGridManager::destroy3DImage(vk::Image& image, vk::DeviceMemory& memory, vk::ImageView& view)
+    void VolumetricGridManager::destroy3DImage(vk::Image& image, core::VulkanAllocation& allocation, vk::ImageView& view)
     {
         auto& dev = device.getLogicalDevice();
 
@@ -169,25 +159,25 @@ namespace render::volumetric
             dev.destroyImage(image);
             image = nullptr;
         }
-        if (memory)
+        if (allocation.isValid())
         {
-            dev.freeMemory(memory);
-            memory = nullptr;
+            device.getMemoryManager().free(allocation);
+            allocation = {};
         }
     }
 
     void VolumetricGridManager::createImages()
     {
-        create3DImage(scatteringImage, scatteringMemory, scatteringView,
+        create3DImage(scatteringImage, scatteringAllocation, scatteringView,
                       vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eSampled);
 
         for (int i = 0; i < 2; ++i)
         {
-            create3DImage(historyImages[i], historyMemory[i], historyViews[i],
+            create3DImage(historyImages[i], historyAllocation[i], historyViews[i],
                           vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eSampled);
         }
 
-        create3DImage(integratedImage, integratedMemory, integratedView,
+        create3DImage(integratedImage, integratedAllocation, integratedView,
                       vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eSampled);
     }
 
@@ -244,10 +234,10 @@ namespace render::volumetric
 
     void VolumetricGridManager::destroyImages()
     {
-        destroy3DImage(scatteringImage, scatteringMemory, scatteringView);
+        destroy3DImage(scatteringImage, scatteringAllocation, scatteringView);
         for (int i = 0; i < 2; ++i)
-            destroy3DImage(historyImages[i], historyMemory[i], historyViews[i]);
-        destroy3DImage(integratedImage, integratedMemory, integratedView);
+            destroy3DImage(historyImages[i], historyAllocation[i], historyViews[i]);
+        destroy3DImage(integratedImage, integratedAllocation, integratedView);
     }
 
     void VolumetricGridManager::createSampler()
@@ -275,8 +265,8 @@ namespace render::volumetric
         bufReq.properties = vk::MemoryPropertyFlagBits::eHostVisible
                           | vk::MemoryPropertyFlagBits::eHostCoherent;
 
-        core::BufferUtilities::createBuffer(bufReq, paramsBuffer, paramsMemory);
-        paramsMapped = dev.mapMemory(paramsMemory, 0, sizeof(GPUVolumetricParams));
+        core::BufferUtilities::createBuffer(bufReq, paramsBuffer, paramsAllocation, device.getMemoryManager());
+        paramsMapped = paramsAllocation.mappedPtr;
 
         GPUVolumetricParams defaultParams{};
         std::memcpy(paramsMapped, &defaultParams, sizeof(GPUVolumetricParams));

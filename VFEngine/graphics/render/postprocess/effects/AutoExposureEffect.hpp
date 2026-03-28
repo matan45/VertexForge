@@ -2,6 +2,7 @@
 
 #include "../PostProcessEffect.hpp"
 #include "../../../core/RenderManager.hpp"
+#include "../../../core/VulkanMemoryManager.hpp"
 #include <array>
 #include <memory>
 
@@ -47,12 +48,12 @@ namespace render::postprocess
         vk::DescriptorSet reduceDescriptorSet;
 
         vk::Buffer histogramBuffer;
-        vk::DeviceMemory histogramBufferMemory;
+        core::VulkanAllocation histogramBufferAllocation;
 
         struct ExposureFrame
         {
             vk::Buffer buffer;
-            vk::DeviceMemory memory;
+            core::VulkanAllocation allocation;
             void* mapped = nullptr;
         };
 

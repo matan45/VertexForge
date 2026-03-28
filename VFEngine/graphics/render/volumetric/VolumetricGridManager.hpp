@@ -20,18 +20,18 @@ namespace render::volumetric
 
         // Scattering volume (written by injection, read by temporal)
         vk::Image scatteringImage;
-        vk::DeviceMemory scatteringMemory;
+        core::VulkanAllocation scatteringAllocation;
         vk::ImageView scatteringView;
 
         // History volumes (ping-pong for temporal reprojection)
         vk::Image historyImages[2];
-        vk::DeviceMemory historyMemory[2];
+        core::VulkanAllocation historyAllocation[2];
         vk::ImageView historyViews[2];
         uint32_t currentHistoryIndex = 0;
 
         // Integrated output (written by ray march, read by composite)
         vk::Image integratedImage;
-        vk::DeviceMemory integratedMemory;
+        core::VulkanAllocation integratedAllocation;
         vk::ImageView integratedView;
 
         vk::Sampler trilinearSampler;
@@ -40,7 +40,7 @@ namespace render::volumetric
         std::unique_ptr<FogNoiseGenerator> fogNoise;
 
         vk::Buffer paramsBuffer;
-        vk::DeviceMemory paramsMemory;
+        core::VulkanAllocation paramsAllocation;
         void* paramsMapped = nullptr;
 
         vk::DescriptorSetLayout descriptorSetLayout;
@@ -49,9 +49,9 @@ namespace render::volumetric
 
         bool initialized = false;
 
-        void create3DImage(vk::Image& image, vk::DeviceMemory& memory,
+        void create3DImage(vk::Image& image, core::VulkanAllocation& allocation,
                            vk::ImageView& view, vk::ImageUsageFlags usage);
-        void destroy3DImage(vk::Image& image, vk::DeviceMemory& memory, vk::ImageView& view);
+        void destroy3DImage(vk::Image& image, core::VulkanAllocation& allocation, vk::ImageView& view);
 
         void createImages();
         void transitionImagesToGeneral();

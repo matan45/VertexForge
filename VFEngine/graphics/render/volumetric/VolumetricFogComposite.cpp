@@ -84,12 +84,8 @@ namespace render::volumetric
 
         if (paramsBuffer)
         {
-            if (paramsBufferMapped)
-            {
-                dev.unmapMemory(paramsBufferMemory);
-                paramsBufferMapped = nullptr;
-            }
-            core::BufferUtilities::destroyBuffer(dev, paramsBuffer, paramsBufferMemory);
+            paramsBufferMapped = nullptr;
+            core::BufferUtilities::destroyBuffer(dev, paramsBuffer, paramsBufferAllocation, device.getMemoryManager());
         }
 
         if (sampler)
@@ -286,8 +282,8 @@ namespace render::volumetric
         bufReq.properties = vk::MemoryPropertyFlagBits::eHostVisible
                           | vk::MemoryPropertyFlagBits::eHostCoherent;
 
-        core::BufferUtilities::createBuffer(bufReq, paramsBuffer, paramsBufferMemory);
-        paramsBufferMapped = dev.mapMemory(paramsBufferMemory, 0, sizeof(VolumetricCompositeParams));
+        core::BufferUtilities::createBuffer(bufReq, paramsBuffer, paramsBufferAllocation, device.getMemoryManager());
+        paramsBufferMapped = paramsBufferAllocation.mappedPtr;
     }
 
     void VolumetricFogComposite::createDescriptorSetLayout()

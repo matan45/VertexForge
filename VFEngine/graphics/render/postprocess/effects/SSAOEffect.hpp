@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../PostProcessEffect.hpp"
+#include "../../../core/VulkanMemoryManager.hpp"
 #include "postprocess/PostProcessTypes.hpp"
 #include <glm/glm.hpp>
 #include <memory>
@@ -38,12 +39,12 @@ namespace render::postprocess
         PostProcessPipeline& pipeline;
 
         vk::Image ssaoRawImage;
-        vk::DeviceMemory ssaoRawMemory;
+        core::VulkanAllocation ssaoRawAllocation;
         vk::ImageView ssaoRawImageView;
         vk::Framebuffer ssaoRawFramebuffer;
 
         vk::Image ssaoBlurredImage;
-        vk::DeviceMemory ssaoBlurredMemory;
+        core::VulkanAllocation ssaoBlurredAllocation;
         vk::ImageView ssaoBlurredImageView;
         vk::Framebuffer ssaoBlurredFramebuffer;
 
@@ -75,7 +76,7 @@ namespace render::postprocess
         vk::DescriptorSet compositeDescriptorSet;
 
         vk::Buffer paramsBuffer;
-        vk::DeviceMemory paramsBufferMemory;
+        core::VulkanAllocation paramsBufferAllocation;
         void* paramsBufferMapped = nullptr;
 
         vk::Sampler sampler;

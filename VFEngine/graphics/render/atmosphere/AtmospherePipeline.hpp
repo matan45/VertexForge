@@ -2,6 +2,7 @@
 
 #include "AtmosphereTypes.hpp"
 #include "atmosphere/DayNightCycleController.hpp"
+#include "../../core/VulkanMemoryManager.hpp"
 #include <vulkan/vulkan.hpp>
 #include <memory>
 #include <vector>
@@ -40,7 +41,7 @@ namespace render::atmosphere
 
         // GPU params UBO
         vk::Buffer paramsBuffer;
-        vk::DeviceMemory paramsBufferMemory;
+        core::VulkanAllocation paramsBufferAllocation;
         void* paramsBufferMapped = nullptr;
 
         // Sampler (shared)
@@ -48,7 +49,7 @@ namespace render::atmosphere
 
         // --- Transmittance LUT (256x64, 2D) ---
         vk::Image transmittanceImage;
-        vk::DeviceMemory transmittanceMemory;
+        core::VulkanAllocation transmittanceAllocation;
         vk::ImageView transmittanceView;
         vk::DescriptorSetLayout transmittanceDSLayout;
         vk::DescriptorPool transmittanceDSPool;
@@ -59,7 +60,7 @@ namespace render::atmosphere
 
         // --- Multi-Scatter LUT (32x32, 2D) ---
         vk::Image multiScatterImage;
-        vk::DeviceMemory multiScatterMemory;
+        core::VulkanAllocation multiScatterAllocation;
         vk::ImageView multiScatterView;
         vk::DescriptorSetLayout multiScatterDSLayout;
         vk::DescriptorPool multiScatterDSPool;
@@ -70,7 +71,7 @@ namespace render::atmosphere
 
         // --- Sky-View LUT (192x108, 2D) ---
         vk::Image skyViewImage;
-        vk::DeviceMemory skyViewMemory;
+        core::VulkanAllocation skyViewAllocation;
         vk::ImageView skyViewView;
         vk::DescriptorSetLayout skyViewDSLayout;
         vk::DescriptorPool skyViewDSPool;
@@ -81,7 +82,7 @@ namespace render::atmosphere
 
         // --- Aerial Perspective LUT (32x32x32, 3D) ---
         vk::Image aerialImage;
-        vk::DeviceMemory aerialMemory;
+        core::VulkanAllocation aerialAllocation;
         vk::ImageView aerialView;
         vk::DescriptorSetLayout aerialDSLayout;
         vk::DescriptorPool aerialDSPool;
@@ -111,7 +112,7 @@ namespace render::atmosphere
         vk::Pipeline compositePipeline;
         std::shared_ptr<core::Shader> compositeShader;
         vk::Buffer compositeParamsBuffer;
-        vk::DeviceMemory compositeParamsMemory;
+        core::VulkanAllocation compositeParamsAllocation;
         void* compositeParamsMapped = nullptr;
 
         vk::ImageAspectFlags depthAspectMask;
@@ -188,10 +189,10 @@ namespace render::atmosphere
 
         // LUT image creation
         void create2DImage(uint32_t width, uint32_t height,
-                           vk::Image& image, vk::DeviceMemory& memory, vk::ImageView& view);
+                           vk::Image& image, core::VulkanAllocation& allocation, vk::ImageView& view);
         void create3DImage(uint32_t width, uint32_t height, uint32_t depth,
-                           vk::Image& image, vk::DeviceMemory& memory, vk::ImageView& view);
-        void destroyImage(vk::Image& image, vk::DeviceMemory& memory, vk::ImageView& view);
+                           vk::Image& image, core::VulkanAllocation& allocation, vk::ImageView& view);
+        void destroyImage(vk::Image& image, core::VulkanAllocation& allocation, vk::ImageView& view);
 
         // Compute pipeline helpers
         void createTransmittanceLUT();

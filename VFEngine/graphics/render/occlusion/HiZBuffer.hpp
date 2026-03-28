@@ -1,4 +1,5 @@
 #pragma once
+#include "../../core/VulkanMemoryManager.hpp"
 #include <vulkan/vulkan.hpp>
 #include <glm/glm.hpp>
 #include <vector>
@@ -31,7 +32,7 @@ namespace render::occlusion
         core::SwapChain& swapChain;
 
         vk::Image hiZImage;
-        vk::DeviceMemory hiZMemory;
+        core::VulkanAllocation hiZAllocation;
         vk::ImageView hiZImageView; // Full mip chain view
         std::vector<vk::ImageView> mipViews; // Per-mip views for compute shader
         vk::Sampler hiZSampler;
