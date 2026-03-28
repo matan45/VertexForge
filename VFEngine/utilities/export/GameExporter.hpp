@@ -1,5 +1,6 @@
 #pragma once
 #include "ExportConfig.hpp"
+#include "ExportManifest.hpp"
 
 namespace gameExport
 {
@@ -9,6 +10,8 @@ namespace gameExport
 		ExportResult exportGame(const ExportConfig& config, ExportProgressCallback progressCallback = nullptr);
 
 	private:
+		ExportManifest previousManifest;
+		ExportManifest newManifest;
 		bool validatePrerequisites(const ExportConfig& config, ExportResult& result);
 		bool createOutputStructure(const ExportConfig& config, ExportResult& result);
 		bool copyRuntimeExecutable(const ExportConfig& config, ExportResult& result);

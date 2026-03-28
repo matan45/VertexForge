@@ -378,6 +378,10 @@ namespace core
         fs::path cacheDir = fs::current_path() / "cache";
         std::error_code ec;
         fs::create_directories(cacheDir, ec);
+        if (ec)
+        {
+            vfLogWarning("Failed to create pipeline cache directory '{}': {}", cacheDir.string(), ec.message());
+        }
         pipelineCachePath = cacheDir / "pipeline_cache.bin";
 
         std::vector<uint8_t> cacheData;

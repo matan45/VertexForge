@@ -9,14 +9,8 @@ namespace resource
 		auto data = VirtualFileSystem::instance().readFile(path);
 		if (data.empty())
 		{
-			// Try to open directly from filesystem as fallback
-			std::ifstream file(path);
-			if (!file.is_open())
-			{
-				vfLogError("readJsonFile: Failed to read file: {}", path);
-				return nlohmann::json{};
-			}
-			return nlohmann::json::parse(file);
+			vfLogError("readJsonFile: Failed to read file: {}", path);
+			return nlohmann::json{};
 		}
 
 		return nlohmann::json::parse(data.begin(), data.end());

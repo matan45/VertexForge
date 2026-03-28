@@ -12,6 +12,7 @@ namespace resource
 
 	void VirtualFileSystem::initialize()
 	{
+		std::unique_lock lock(vfsMutex);
 		auto pakPath = findVfpakFile();
 		if (pakPath.empty())
 		{
@@ -35,6 +36,7 @@ namespace resource
 
 	void VirtualFileSystem::shutdown()
 	{
+		std::unique_lock lock(vfsMutex);
 		if (archive)
 		{
 			archive->close();
@@ -45,6 +47,7 @@ namespace resource
 
 	std::vector<uint8_t> VirtualFileSystem::readFile(const std::string& path) const
 	{
+		std::shared_lock lock(vfsMutex);
 		if (archiveMode && archive)
 		{
 			// Normalize path separators
@@ -78,6 +81,7 @@ namespace resource
 
 	std::optional<VirtualFileSystem::StreamRegion> VirtualFileSystem::openStream(const std::string& path) const
 	{
+		std::shared_lock lock(vfsMutex);
 		if (archiveMode && archive)
 		{
 			std::string normalized = path;
@@ -121,6 +125,7 @@ namespace resource
 
 	bool VirtualFileSystem::exists(const std::string& path) const
 	{
+		std::shared_lock lock(vfsMutex);
 		if (archiveMode && archive)
 		{
 			std::string normalized = path;

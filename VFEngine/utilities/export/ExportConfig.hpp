@@ -15,6 +15,8 @@ namespace gameExport
 		std::filesystem::path workingDirectory;
 		std::string startupScene;
 		std::string iconPath;    // .ico file path for exe icon embedding
+		bool cleanBuild = false;
+		bool verifyIntegrity = true;
 
 		bool isValid() const
 		{

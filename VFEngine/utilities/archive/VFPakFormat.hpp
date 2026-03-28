@@ -56,6 +56,17 @@ namespace archive
 		return hash;
 	}
 
+	inline uint64_t hashBytes(const uint8_t* data, size_t size)
+	{
+		uint64_t hash = 14695981039346656037ULL;
+		for (size_t i = 0; i < size; ++i)
+		{
+			hash ^= static_cast<uint64_t>(data[i]);
+			hash *= 1099511628211ULL;
+		}
+		return hash;
+	}
+
 	inline size_t alignTo(size_t value, size_t alignment)
 	{
 		return (value + alignment - 1) & ~(alignment - 1);

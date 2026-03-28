@@ -6,6 +6,7 @@
 #include <optional>
 #include <fstream>
 #include <filesystem>
+#include <shared_mutex>
 
 namespace archive { class VFPakReader; }
 
@@ -47,6 +48,7 @@ namespace resource
 
 		std::unique_ptr<archive::VFPakReader> archive;
 		bool archiveMode = false;
+		mutable std::shared_mutex vfsMutex;
 
 		std::filesystem::path findVfpakFile() const;
 	};

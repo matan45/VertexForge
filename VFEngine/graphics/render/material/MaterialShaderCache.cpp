@@ -6,6 +6,7 @@
 #include "material/MaterialTypes.hpp"
 #include "resource/PathResolver.hpp"
 #include "print/Log.hpp"
+#include "archive/VFPakFormat.hpp"
 #include <functional>
 
 namespace render::mesh
@@ -216,8 +217,9 @@ namespace render::mesh
 
     std::string MaterialShaderCache::hashShaderSource(const std::string& source)
     {
-        // Simple hash using std::hash
-        std::hash<std::string> hasher;
-        return std::to_string(hasher(source));
+        uint64_t hash = archive::hashPath(source);
+        char buf[17];
+        snprintf(buf, sizeof(buf), "%016llx", static_cast<unsigned long long>(hash));
+        return std::string(buf);
     }
 }

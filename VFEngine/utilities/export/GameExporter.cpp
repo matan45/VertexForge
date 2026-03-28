@@ -10,9 +10,11 @@
 #include "../archive/VFPakWriter.hpp"
 #include "../archive/VFPakReader.hpp"
 #include "../serialization/BinarySceneSerialization.hpp"
+#include <nlohmann/json.hpp>
 #include <fstream>
 #include <memory>
 #include <cstdlib>
+#include <chrono>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -34,6 +36,24 @@ namespace gameExport
 		report(0.0f, "Validating prerequisites...");
 		if (!validatePrerequisites(config, result)) return result;
 
+		// Load previous manifest for incremental export
+		fs::path manifestPath = config.outputDirectory / (config.gameName + ".vfmanifest");
+		newManifest = ExportManifest{};
+		newManifest.gameName = config.gameName;
+		newManifest.gameVersion = config.gameVersion;
+
+		if (!config.cleanBuild && fs::exists(manifestPath))
+		{
+			if (previousManifest.load(manifestPath))
+			{
+				vfLogInfo("Loaded previous export manifest ({} entries)", previousManifest.getEntries().size());
+			}
+		}
+		else
+		{
+			previousManifest = ExportManifest{};
+		}
+
 		report(0.05f, "Creating output structure...");
 		if (!createOutputStructure(config, result)) return result;
 
@@ -51,6 +71,17 @@ namespace gameExport
 
 		report(0.40f, "Packing assets into archive...");
 		if (!packAssets(config, result)) return result;
+
+		// Save export manifest
+		{
+			auto now = std::chrono::system_clock::now();
+			auto time = std::chrono::system_clock::to_time_t(now);
+			char timeBuf[32];
+			std::strftime(timeBuf, sizeof(timeBuf), "%Y-%m-%dT%H:%M:%SZ", std::gmtime(&time));
+			newManifest.exportTimestamp = timeBuf;
+			newManifest.save(manifestPath);
+			vfLogInfo("Export manifest saved with {} entries", newManifest.getEntries().size());
+		}
 
 		report(0.80f, "Copying plugins...");
 		if (!copyPlugins(config, result)) return result;
@@ -202,6 +233,7 @@ namespace gameExport
 		// Walk all .glsl files and compile to .vfshader
 		std::error_code ec;
 		int compiledCount = 0;
+		int skippedCount = 0;
 		for (auto it = fs::recursive_directory_iterator(shaderSrc, ec); it != fs::recursive_directory_iterator(); ++it)
 		{
 			if (!it->is_regular_file() || it->path().extension() != ".glsl")
@@ -211,6 +243,24 @@ namespace gameExport
 
 			fs::path relativePath = fs::relative(it->path(), shaderSrc, ec);
 			std::string relativeStr = relativePath.generic_string();
+
+			// Check if source changed for incremental skip
+			std::string baseArchivePath = "resources/shaders/" + relativePath.generic_string();
+			{
+				fs::path baseOutPath = shaderDst / relativePath;
+				baseOutPath.replace_extension(".vfshader");
+
+				ManifestSource src;
+				src.path = relativeStr;
+				src.modifiedTime = getFileModifiedTime(it->path());
+				src.contentHash = hashFile(it->path());
+
+				if (!previousManifest.hasSourceChanged(baseArchivePath, {src}) && fs::exists(baseOutPath))
+				{
+					skippedCount++;
+					continue;
+				}
+			}
 
 			// Parse the GLSL file to get shader stages
 			auto shaderModels = resource::ShaderResource::readShaderFile(it->path().string());
@@ -290,7 +340,7 @@ namespace gameExport
 			}
 		}
 
-		vfLogInfo("Compiled {} shader variants", compiledCount);
+		vfLogInfo("Compiled {} shader variants ({} unchanged, skipped)", compiledCount, skippedCount);
 
 		// Copy IBL resources (pre-baked BRDF LUT)
 		fs::path iblSrc = findIBLDirectory();
@@ -312,6 +362,7 @@ namespace gameExport
 
 		std::unordered_set<std::string> compiledHashes;
 		int compiledCount = 0;
+		int skippedMaterialCount = 0;
 
 		// Scan all .vfmaterial files in the working directory
 		for (auto it = fs::recursive_directory_iterator(config.workingDirectory, ec);
@@ -335,10 +386,14 @@ namespace gameExport
 				continue;
 			}
 
-			// Compute hash key matching MaterialShaderCache::hashShaderSource
-			std::hash<std::string> hasher;
-			std::string vsHash = std::to_string(hasher(materialData.cachedVertexShader));
-			std::string fsHash = std::to_string(hasher(materialData.cachedFragmentShader));
+			// Compute hash key matching MaterialShaderCache::hashShaderSource (FNV-1a)
+			auto fmtHash = [](uint64_t h) {
+				char buf[17];
+				snprintf(buf, sizeof(buf), "%016llx", static_cast<unsigned long long>(h));
+				return std::string(buf);
+			};
+			std::string vsHash = fmtHash(archive::hashPath(materialData.cachedVertexShader));
+			std::string fsHash = fmtHash(archive::hashPath(materialData.cachedFragmentShader));
 			std::string combinedHash = vsHash + "_" + fsHash;
 
 			// Skip if already compiled (dedup by hash)
@@ -347,6 +402,22 @@ namespace gameExport
 				continue;
 			}
 			compiledHashes.insert(combinedHash);
+
+			// Incremental: check if material source changed
+			std::string archivePath = "Assets/materials/compiled/" + combinedHash + ".vfshader";
+			fs::path outPath = compiledDir / (combinedHash + ".vfshader");
+			{
+				ManifestSource src;
+				src.path = fs::relative(it->path(), config.workingDirectory, ec).generic_string();
+				src.modifiedTime = getFileModifiedTime(it->path());
+				src.contentHash = hashFile(it->path());
+
+				if (!previousManifest.hasSourceChanged(archivePath, {src}) && fs::exists(outPath))
+				{
+					skippedMaterialCount++;
+					continue;
+				}
+			}
 
 			// Compile vertex and fragment shaders
 			shaderCompiler::CompileOptions opts;
@@ -389,14 +460,13 @@ namespace gameExport
 			}
 			stages.push_back({static_cast<uint32_t>(vk::ShaderStageFlagBits::eFragment), std::move(fsSPIRV)});
 
-			fs::path outPath = compiledDir / (combinedHash + ".vfshader");
 			resource::ShaderBinaryFormat::write(outPath, stages);
 			compiledCount++;
 		}
 
-		if (compiledCount > 0)
+		if (compiledCount > 0 || skippedMaterialCount > 0)
 		{
-			vfLogInfo("Compiled {} material shader variants", compiledCount);
+			vfLogInfo("Compiled {} material shader variants ({} unchanged, skipped)", compiledCount, skippedMaterialCount);
 		}
 
 		return true;
@@ -426,6 +496,24 @@ namespace gameExport
 			if (noCompressExts.count(lower))
 				return archive::CompressionType::None;
 			return archive::CompressionType::LZ4;
+		};
+
+		// Helper to add a file to the archive and record it in the manifest
+		auto addToArchiveWithManifest = [&](const std::string& archivePath,
+											const fs::path& filePath,
+											archive::CompressionType compression,
+											const std::string& sourceType,
+											const std::vector<ManifestSource>& sources)
+		{
+			writer.addFile(archivePath, filePath, compression);
+
+			ManifestEntry manifestEntry;
+			manifestEntry.archivePath = archivePath;
+			manifestEntry.contentHash = hashFile(filePath);
+			manifestEntry.uncompressedSize = static_cast<uint64_t>(fs::file_size(filePath, ec));
+			manifestEntry.sourceType = sourceType;
+			manifestEntry.sources = sources;
+			newManifest.addEntry(std::move(manifestEntry));
 		};
 
 		// 1. Pack game assets from working directory
@@ -464,28 +552,70 @@ namespace gameExport
 			fs::path relativePath = fs::relative(entry.path(), config.workingDirectory, ec);
 			std::string archivePath = "Assets/" + relativePath.generic_string();
 
+			ManifestSource assetSource;
+			assetSource.path = relativePath.generic_string();
+			assetSource.modifiedTime = getFileModifiedTime(entry.path());
+			assetSource.contentHash = hashFile(entry.path());
+
 			// Convert JSON scenes to binary MessagePack for faster loading
 			if (ext == ".vfscene")
 			{
 				fs::path tempBinary = config.outputDirectory / "_temp_scenes" / relativePath;
-				fs::create_directories(tempBinary.parent_path(), ec);
 
-				if (serialization::BinarySceneSerialization::convertJsonToBinary(
-						entry.path().string(), tempBinary.string()))
+				// Incremental: reuse cached binary if source unchanged
+				bool needsConversion = true;
+				if (!previousManifest.hasSourceChanged(archivePath, {assetSource}) && fs::exists(tempBinary))
 				{
-					writer.addFile(archivePath, tempBinary, archive::CompressionType::LZ4);
+					needsConversion = false;
 				}
-				else
+
+				if (needsConversion)
 				{
-					// Fallback: pack JSON as-is
-					writer.addFile(archivePath, entry.path(), archive::CompressionType::LZ4);
-					result.warnings.push_back("Failed to convert scene to binary: " + relativePath.string());
+					fs::create_directories(tempBinary.parent_path(), ec);
+
+					if (serialization::BinarySceneSerialization::convertJsonToBinary(
+							entry.path().string(), tempBinary.string()))
+					{
+						// Conversion succeeded
+					}
+					else
+					{
+						// Validate that the JSON scene is at least parseable before packing
+						std::ifstream sceneFile(entry.path());
+						bool validJson = false;
+						if (sceneFile.is_open())
+						{
+							try
+							{
+								nlohmann::json::parse(sceneFile);
+								validJson = true;
+							}
+							catch (const nlohmann::json::parse_error&) {}
+						}
+
+						if (validJson)
+						{
+							addToArchiveWithManifest(archivePath, entry.path(),
+								archive::CompressionType::LZ4, "scene", {assetSource});
+							result.warnings.push_back("Failed to convert scene to binary (packed as JSON): " + relativePath.string());
+							assetCount++;
+							continue;
+						}
+						else
+						{
+							result.errorMessage = "Corrupt scene file cannot be exported: " + relativePath.string();
+							return false;
+						}
+					}
 				}
+
+				addToArchiveWithManifest(archivePath, tempBinary,
+					archive::CompressionType::LZ4, "scene", {assetSource});
 				assetCount++;
 				continue;
 			}
 
-			writer.addFile(archivePath, entry.path(), shouldCompress(ext));
+			addToArchiveWithManifest(archivePath, entry.path(), shouldCompress(ext), "asset", {assetSource});
 			assetCount++;
 		}
 
@@ -501,17 +631,32 @@ namespace gameExport
 				fs::path relativePath = fs::relative(it->path(), tempShaders, ec);
 				std::string archivePath = relativePath.generic_string();
 
-				// .vfshader files benefit from LZ4 compression (SPIR-V is not pre-compressed)
-				writer.addFile(archivePath, it->path(), archive::CompressionType::LZ4);
+				// Determine source type from path
+				std::string sourceType = "engine_shader";
+				if (archivePath.find("materials/compiled") != std::string::npos)
+					sourceType = "material_shader";
+				else if (archivePath.find("ibl") != std::string::npos)
+					sourceType = "ibl";
+
+				ManifestSource src;
+				src.path = relativePath.generic_string();
+				src.modifiedTime = getFileModifiedTime(it->path());
+				src.contentHash = hashFile(it->path());
+
+				addToArchiveWithManifest(archivePath, it->path(),
+					archive::CompressionType::LZ4, sourceType, {src});
 			}
 
-			// Clean up temp directory
-			fs::remove_all(tempShaders, ec);
+			// Only clean temp directories on clean builds
+			if (config.cleanBuild)
+			{
+				fs::remove_all(tempShaders, ec);
+			}
 		}
 
-		// Clean up temp scenes directory
+		// Clean up temp scenes directory only on clean builds
 		fs::path tempScenes = config.outputDirectory / "_temp_scenes";
-		if (fs::exists(tempScenes))
+		if (config.cleanBuild && fs::exists(tempScenes))
 		{
 			fs::remove_all(tempScenes, ec);
 		}
@@ -643,6 +788,38 @@ namespace gameExport
 		{
 			result.errorMessage = "Validation failed: startup scene not found in archive: " + config.startupScene;
 			return false;
+		}
+
+		// Integrity verification using manifest
+		if (config.verifyIntegrity)
+		{
+			fs::path manifestPath = config.outputDirectory / (config.gameName + ".vfmanifest");
+			if (fs::exists(manifestPath))
+			{
+				ExportManifest manifest;
+				if (manifest.load(manifestPath))
+				{
+					int verified = 0;
+					for (const auto& entry : manifest.getEntries())
+					{
+						if (!reader.contains(entry.archivePath))
+						{
+							result.errorMessage = "Integrity check failed: missing from archive: " + entry.archivePath;
+							return false;
+						}
+
+						auto data = reader.readEntry(entry.archivePath);
+						uint64_t actualHash = archive::hashBytes(data.data(), data.size());
+						if (actualHash != entry.contentHash)
+						{
+							result.errorMessage = "Integrity check failed: hash mismatch for " + entry.archivePath;
+							return false;
+						}
+						verified++;
+					}
+					vfLogInfo("Integrity verification passed ({} entries)", verified);
+				}
+			}
 		}
 
 		return true;
