@@ -85,12 +85,12 @@ namespace core
 	{
 		std::lock_guard lock(managerMutex);
 
-		// Free dedicated allocations
-		for (auto& dedicated : dedicatedAllocations) {
-			if (dedicated.hostVisible && dedicated.mappedPtr) {
-				device.unmapMemory(dedicated.memory);
-			}
-			device.freeMemory(dedicated.memory);
+		// Don't free dedicated allocations here - callers own their memory lifecycle
+		// and will free via freeLegacy/destroyBuffer during their own cleanup.
+		// Only log any remaining as a diagnostic.
+		if (!dedicatedAllocations.empty()) {
+			vfLogInfo("VulkanMemoryManager: {} dedicated allocations still tracked at shutdown (callers handle cleanup)",
+				dedicatedAllocations.size());
 		}
 		dedicatedAllocations.clear();
 
@@ -165,6 +165,48 @@ namespace core
 		}
 	}
 
+	VulkanAllocation VulkanMemoryManager::allocateLegacy(const vk::MemoryRequirements& memRequirements,
+		vk::MemoryPropertyFlags properties, bool needsDeviceAddress)
+	{
+		if (memRequirements.size == 0) {
+			return {};
+		}
+
+		std::lock_guard lock(managerMutex);
+
+		uint32_t memTypeIndex = findMemoryType(memRequirements.memoryTypeBits, properties);
+		bool hostVis = isHostVisible(memTypeIndex);
+
+		// Legacy callers handle map/unmap themselves - don't auto-map
+		return allocateDedicated(memRequirements.size, memTypeIndex, hostVis, needsDeviceAddress, false);
+	}
+
+	void VulkanMemoryManager::freeLegacy(vk::DeviceMemory memory)
+	{
+		if (!memory) {
+			return;
+		}
+
+		std::lock_guard lock(managerMutex);
+
+		for (auto it = dedicatedAllocations.begin(); it != dedicatedAllocations.end(); ++it) {
+			if (it->memory == memory) {
+				// Legacy callers handle unmap themselves - just free and remove from tracking
+				dedicatedAllocations.erase(it);
+				device.freeMemory(memory);
+				return;
+			}
+		}
+
+		// Not tracked - either a pre-init allocation or already removed during shutdown
+		// Try to free directly, ignore if already freed
+		try {
+			device.freeMemory(memory);
+		} catch (...) {
+			// Memory was already freed (e.g., during shutdown cleanup)
+		}
+	}
+
 	std::vector<VulkanMemoryManager::MemoryTypeStats> VulkanMemoryManager::getStats() const
 	{
 		std::lock_guard lock(managerMutex);
@@ -222,7 +264,7 @@ namespace core
 	}
 
 	VulkanAllocation VulkanMemoryManager::allocateDedicated(vk::DeviceSize size, uint32_t memoryTypeIndex,
-		bool hostVisible, bool needsDeviceAddress)
+		bool hostVisible, bool needsDeviceAddress, bool autoMap)
 	{
 		vk::MemoryAllocateFlagsInfo allocFlags{};
 		if (needsDeviceAddress) {
@@ -241,7 +283,7 @@ namespace core
 		dedicated.size = size;
 		dedicated.hostVisible = hostVisible;
 
-		if (hostVisible) {
+		if (hostVisible && autoMap) {
 			dedicated.mappedPtr = device.mapMemory(memory, 0, size, {});
 		}
 

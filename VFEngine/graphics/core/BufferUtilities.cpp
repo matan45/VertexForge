@@ -1,9 +1,21 @@
 #include "BufferUtilities.hpp"
 #include "MemoryUtilities.hpp"
 #include "VulkanMemoryManager.hpp"
+#include "VulkanContext.hpp"
 #include "Utilities.hpp"
 #include "memory/GpuAllocationStats.hpp"
 #include <cstring>
+
+namespace {
+	core::VulkanMemoryManager* getGlobalMemManager()
+	{
+		auto* dev = core::VulkanContext::getDeviceRaw();
+		if (dev) {
+			return &dev->getMemoryManager();
+		}
+		return nullptr;
+	}
+}
 
 namespace core
 {
@@ -19,11 +31,23 @@ namespace core
 		buffer = bufferInfo.logicalDevice.createBuffer(bufferCreateInfo);
 
 		vk::MemoryRequirements memRequirements = bufferInfo.logicalDevice.getBufferMemoryRequirements(buffer);
-
-		vk::MemoryAllocateFlagsInfo allocFlags{};
 		bool needsDeviceAddress = (bufferInfo.usage & vk::BufferUsageFlagBits::eShaderDeviceAddress) != vk::BufferUsageFlags{};
-		if (needsDeviceAddress)
-		{
+
+		// Route through VulkanMemoryManager if available
+		auto* memManager = getGlobalMemManager();
+		if (memManager) {
+			auto allocation = memManager->allocateLegacy(memRequirements, bufferInfo.properties, needsDeviceAddress);
+			bufferMemory = allocation.memory;
+			bufferInfo.logicalDevice.bindBufferMemory(buffer, bufferMemory, 0);
+
+			memory::GpuAllocationStats::managedAllocationCount.fetch_add(1, std::memory_order_relaxed);
+			memory::GpuAllocationStats::managedAllocatedBytes.fetch_add(memRequirements.size, std::memory_order_relaxed);
+			return;
+		}
+
+		// Fallback: raw allocation (during early startup before Device is ready)
+		vk::MemoryAllocateFlagsInfo allocFlags{};
+		if (needsDeviceAddress) {
 			allocFlags.flags = vk::MemoryAllocateFlagBits::eDeviceAddress;
 		}
 
@@ -31,10 +55,7 @@ namespace core
 		allocInfo.pNext = needsDeviceAddress ? &allocFlags : nullptr;
 		allocInfo.allocationSize = memRequirements.size;
 		allocInfo.memoryTypeIndex = MemoryUtilities::findMemoryType(
-			bufferInfo.physicalDevice,
-			memRequirements.memoryTypeBits,
-			bufferInfo.properties
-		);
+			bufferInfo.physicalDevice, memRequirements.memoryTypeBits, bufferInfo.properties);
 
 		bufferMemory = bufferInfo.logicalDevice.allocateMemory(allocInfo);
 		bufferInfo.logicalDevice.bindBufferMemory(buffer, bufferMemory, 0);
@@ -134,7 +155,12 @@ namespace core
 			buffer = nullptr;
 		}
 		if (memory) {
-			device.freeMemory(memory);
+			auto* memManager = getGlobalMemManager();
+			if (memManager) {
+				memManager->freeLegacy(memory);
+			} else {
+				device.freeMemory(memory);
+			}
 			memory = nullptr;
 		}
 	}

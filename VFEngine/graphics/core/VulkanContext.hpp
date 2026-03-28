@@ -24,6 +24,9 @@ namespace core {
 			vfLogAssert(device == nullptr || device.get() == nullptr, "device is not initiated");
 			return device; }
 
+		// Safe accessor - returns nullptr if not yet initialized (for early startup)
+		static Device* getDeviceRaw() { return device.get(); }
+
 		static std::unique_ptr<SwapChain>& getSwapChain() {
 			vfLogAssert(swapChain == nullptr || swapChain.get() == nullptr, "swapChain is not initiated");
 			return swapChain; }

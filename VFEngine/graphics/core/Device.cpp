@@ -56,14 +56,15 @@ namespace core
 
     void Device::cleanUp()
     {
-        // Destroy memory manager before device (frees all GPU memory blocks)
-        memoryManager.reset();
-
         savePipelineCacheToDisk();
         pipelineCache.reset();
 
         // Reset staging command pool before device
         stagingCommandPool.reset();
+
+        // Destroy memory manager after all subsystems have cleaned up their buffers,
+        // but before the logical device is destroyed
+        memoryManager.reset();
 
         if (surface)
         {
