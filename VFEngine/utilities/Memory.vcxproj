@@ -91,18 +91,23 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="memory\DebugAllocatorWrapper.hpp" />
     <ClInclude Include="memory\FrameAllocator.hpp" />
     <ClInclude Include="memory\FreeListHeapAllocator.hpp" />
     <ClInclude Include="memory\IAllocator.hpp" />
     <ClInclude Include="memory\LinearAllocator.hpp" />
+    <ClInclude Include="memory\MemoryDebugMacros.hpp" />
+    <ClInclude Include="memory\MemoryDiagnostics.hpp" />
     <ClInclude Include="memory\MemoryTypes.hpp" />
     <ClInclude Include="memory\PoolAllocator.hpp" />
     <ClInclude Include="memory\TypedPoolAllocator.hpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="memory\DebugAllocatorWrapper.cpp" />
     <ClCompile Include="memory\FrameAllocator.cpp" />
     <ClCompile Include="memory\FreeListHeapAllocator.cpp" />
     <ClCompile Include="memory\LinearAllocator.cpp" />
+    <ClCompile Include="memory\MemoryDiagnostics.cpp" />
     <ClCompile Include="memory\PoolAllocator.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
