@@ -335,7 +335,8 @@ project "Utilities"
       "VFEngine/utilities/animator/**",
       "VFEngine/utilities/vfx/**",
       "VFEngine/utilities/procedural/**",
-      "VFEngine/utilities/imageprocessing/**"
+      "VFEngine/utilities/imageprocessing/**",
+      "VFEngine/utilities/memory/**"
    }
 
    includedirs {
@@ -540,6 +541,32 @@ project "Physics"
 
    filter "configurations:Debug"
       defines { "DEBUG", "JPH_ENABLE_ASSERTS" }
+      symbols "On"
+
+   filter "configurations:Release"
+      defines { "NDEBUG" }
+      optimize "On"
+
+
+-- Memory subsystem (extracted from Utilities)
+project "Memory"
+   kind "StaticLib"
+   language "C++"
+   cppdialect "C++20"
+   location "VFEngine/utilities"
+   targetdir "bin/%{prj.name}/%{cfg.buildcfg}/%{cfg.platform}"
+
+   files { "VFEngine/utilities/memory/**.hpp", "VFEngine/utilities/memory/**.cpp" }
+
+   includedirs {
+      "dependencies/spdlog/include",
+      "VFEngine/utilities"
+   }
+
+   defines { "_CRT_SECURE_NO_WARNINGS" }
+
+   filter "configurations:Debug"
+      defines { "DEBUG" }
       symbols "On"
 
    filter "configurations:Release"
