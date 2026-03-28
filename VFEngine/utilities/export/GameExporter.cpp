@@ -510,7 +510,8 @@ namespace gameExport
 			ManifestEntry manifestEntry;
 			manifestEntry.archivePath = archivePath;
 			manifestEntry.contentHash = hashFile(filePath);
-			manifestEntry.uncompressedSize = static_cast<uint64_t>(fs::file_size(filePath, ec));
+			std::error_code sizeEc;
+			manifestEntry.uncompressedSize = static_cast<uint64_t>(fs::file_size(filePath, sizeEc));
 			manifestEntry.sourceType = sourceType;
 			manifestEntry.sources = sources;
 			newManifest.addEntry(std::move(manifestEntry));
@@ -587,7 +588,7 @@ namespace gameExport
 						{
 							try
 							{
-								nlohmann::json::parse(sceneFile);
+								auto _ = nlohmann::json::parse(sceneFile);
 								validJson = true;
 							}
 							catch (const nlohmann::json::parse_error&) {}
