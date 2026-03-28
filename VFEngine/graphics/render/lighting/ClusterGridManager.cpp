@@ -104,9 +104,9 @@ namespace render::lighting
             request.size = bufferSize;
             request.usage = vk::BufferUsageFlagBits::eUniformBuffer;
             request.properties = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
-            core::BufferUtilities::createBuffer(request, paramsBuffer, paramsMemory);
+            core::BufferUtilities::createBuffer(request, paramsBuffer, paramsAllocation, device.getMemoryManager());
 
-            paramsMapped = logicalDevice.mapMemory(paramsMemory, 0, bufferSize, vk::MemoryMapFlags{});
+            paramsMapped = paramsAllocation.mappedPtr;
             std::memset(paramsMapped, 0, sizeof(GPUClusterGridParams));
         }
 
@@ -117,13 +117,13 @@ namespace render::lighting
             request.size = bufferSize;
             request.usage = vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst;
             request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-            core::BufferUtilities::createBuffer(request, clusterAABBBuffer, clusterAABBMemory);
+            core::BufferUtilities::createBuffer(request, clusterAABBBuffer, clusterAABBAllocation, device.getMemoryManager());
 
             request.usage = vk::BufferUsageFlagBits::eTransferSrc;
             request.properties = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
-            core::BufferUtilities::createBuffer(request, clusterAABBStagingBuffer, clusterAABBStagingMemory);
+            core::BufferUtilities::createBuffer(request, clusterAABBStagingBuffer, clusterAABBStagingAllocation, device.getMemoryManager());
 
-            clusterAABBStagingMapped = logicalDevice.mapMemory(clusterAABBStagingMemory, 0, bufferSize, vk::MemoryMapFlags{});
+            clusterAABBStagingMapped = clusterAABBStagingAllocation.mappedPtr;
         }
 
         vfLogInfo("ClusterGridManager: Created cluster grid buffers (~{} KB)",
@@ -134,20 +134,12 @@ namespace render::lighting
     {
         const auto& logicalDevice = device.getLogicalDevice();
 
-        if (paramsMapped)
-        {
-            logicalDevice.unmapMemory(paramsMemory);
-            paramsMapped = nullptr;
-        }
-        if (clusterAABBStagingMapped)
-        {
-            logicalDevice.unmapMemory(clusterAABBStagingMemory);
-            clusterAABBStagingMapped = nullptr;
-        }
+        paramsMapped = nullptr;
+        clusterAABBStagingMapped = nullptr;
 
-        core::BufferUtilities::destroyBuffer(logicalDevice, clusterAABBStagingBuffer, clusterAABBStagingMemory);
-        core::BufferUtilities::destroyBuffer(logicalDevice, clusterAABBBuffer, clusterAABBMemory);
-        core::BufferUtilities::destroyBuffer(logicalDevice, paramsBuffer, paramsMemory);
+        core::BufferUtilities::destroyBuffer(logicalDevice, clusterAABBStagingBuffer, clusterAABBStagingAllocation, device.getMemoryManager());
+        core::BufferUtilities::destroyBuffer(logicalDevice, clusterAABBBuffer, clusterAABBAllocation, device.getMemoryManager());
+        core::BufferUtilities::destroyBuffer(logicalDevice, paramsBuffer, paramsAllocation, device.getMemoryManager());
     }
 
     void ClusterGridManager::createDescriptorSetLayout()

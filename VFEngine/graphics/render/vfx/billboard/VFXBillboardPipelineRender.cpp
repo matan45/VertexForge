@@ -17,12 +17,9 @@ namespace render::vfx
         ubo.cameraPos = cameraPos;
         ubo.time = time;
 
-        void* data;
-        vk::Result result = device.getLogicalDevice().mapMemory(cameraUBOMemory, 0, sizeof(ubo), {}, &data);
-        if (result == vk::Result::eSuccess)
+        if (cameraUBOAllocation.mappedPtr)
         {
-            std::memcpy(data, &ubo, sizeof(ubo));
-            device.getLogicalDevice().unmapMemory(cameraUBOMemory);
+            std::memcpy(cameraUBOAllocation.mappedPtr, &ubo, sizeof(ubo));
         }
     }
 
@@ -37,13 +34,10 @@ namespace render::vfx
         currentInstanceCount = static_cast<uint32_t>(std::min(instances.size(),
                                                               static_cast<size_t>(maxInstances)));
 
-        void* data;
         vk::DeviceSize bufferSize = sizeof(VFXInstanceData) * currentInstanceCount;
-        vk::Result result = device.getLogicalDevice().mapMemory(instanceBufferMemory, 0, bufferSize, {}, &data);
-        if (result == vk::Result::eSuccess)
+        if (instanceBufferAllocation.mappedPtr)
         {
-            std::memcpy(data, instances.data(), bufferSize);
-            device.getLogicalDevice().unmapMemory(instanceBufferMemory);
+            std::memcpy(instanceBufferAllocation.mappedPtr, instances.data(), bufferSize);
         }
     }
 

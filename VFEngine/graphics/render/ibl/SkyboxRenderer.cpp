@@ -81,17 +81,17 @@ namespace render::ibl
         vertexCubeVerticesBufferRequest.usage = vk::BufferUsageFlagBits::eVertexBuffer;
         vertexCubeVerticesBufferRequest.properties = vk::MemoryPropertyFlagBits::eHostVisible |
             vk::MemoryPropertyFlagBits::eHostCoherent;
-        core::BufferUtilities::createBuffer(vertexCubeVerticesBufferRequest, vertexBuffer, vertexBufferMemory);
+        core::BufferUtilities::createBuffer(vertexCubeVerticesBufferRequest, vertexBuffer, vertexBufferAllocation, device.getMemoryManager());
 
-        void* data;
-        if (vk::Result result = device.getLogicalDevice().mapMemory(vertexBufferMemory, 0,
-            vertexCubeVerticesBufferRequest.size, {},
-            &data); result != vk::Result::eSuccess)
+        void* data = vertexBufferAllocation.mappedPtr;
+        if (!data)
         {
             vfLogError("failed to map memory");
         }
-        memcpy(data, skyboxVertices.data(), vertexCubeVerticesBufferRequest.size);
-        device.getLogicalDevice().unmapMemory(vertexBufferMemory);
+        else
+        {
+            memcpy(data, skyboxVertices.data(), vertexCubeVerticesBufferRequest.size);
+        }
 
         // UniformBuffer
         std::vector<vk::DescriptorPoolSize> poolSizes(2);
@@ -134,7 +134,7 @@ namespace render::ibl
         bufferRequest.properties = vk::MemoryPropertyFlagBits::eHostVisible |
             vk::MemoryPropertyFlagBits::eHostCoherent;
         bufferRequest.size = sizeof(UniformBufferObject);
-        core::BufferUtilities::createBuffer(bufferRequest, uniformBuffer, uniformBufferMemory);
+        core::BufferUtilities::createBuffer(bufferRequest, uniformBuffer, uniformBufferAllocation, device.getMemoryManager());
 
         vk::DescriptorSetAllocateInfo allocInfo;
         allocInfo.descriptorPool = descriptorPool;
@@ -433,12 +433,10 @@ namespace render::ibl
         ubo.view = viewMatrix;
         ubo.projection = projectionMatrix;
 
-        void* data;
-        vk::Result result = device.getLogicalDevice().mapMemory(uniformBufferMemory, 0, sizeof(ubo), {}, &data);
-        if (result == vk::Result::eSuccess)
+        void* data = uniformBufferAllocation.mappedPtr;
+        if (data)
         {
             memcpy(data, &ubo, sizeof(ubo));
-            device.getLogicalDevice().unmapMemory(uniformBufferMemory);
         }
     }
 
@@ -456,14 +454,12 @@ namespace render::ibl
         framebuffers.clear();
 
         device.getLogicalDevice().destroyBuffer(vertexBuffer);
-        device.getLogicalDevice().freeMemory(vertexBufferMemory);
+        device.getMemoryManager().free(vertexBufferAllocation); vertexBufferAllocation = {};
         vertexBuffer = nullptr;
-        vertexBufferMemory = nullptr;
 
         device.getLogicalDevice().destroyBuffer(uniformBuffer);
-        device.getLogicalDevice().freeMemory(uniformBufferMemory);
+        device.getMemoryManager().free(uniformBufferAllocation); uniformBufferAllocation = {};
         uniformBuffer = nullptr;
-        uniformBufferMemory = nullptr;
 
         device.getLogicalDevice().destroyRenderPass(renderPass);
         renderPass = nullptr;

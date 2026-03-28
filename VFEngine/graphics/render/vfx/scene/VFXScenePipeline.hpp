@@ -2,6 +2,7 @@
 
 #include "../billboard/VFXBillboardTypes.hpp"
 #include "../compute/GPUVFXTypes.hpp"
+#include "../../../core/VulkanMemoryManager.hpp"
 #include <memory>
 #include <vector>
 #include <string>
@@ -34,19 +35,19 @@ namespace render::vfx
         vk::DescriptorSet descriptorSet;
 
         vk::Buffer quadVertexBuffer;
-        vk::DeviceMemory quadVertexBufferMemory;
+        core::VulkanAllocation quadVertexBufferAllocation;
         vk::Buffer quadIndexBuffer;
-        vk::DeviceMemory quadIndexBufferMemory;
+        core::VulkanAllocation quadIndexBufferAllocation;
         vk::Buffer instanceBuffer;
-        vk::DeviceMemory instanceBufferMemory;
+        core::VulkanAllocation instanceBufferAllocation;
         vk::Buffer cameraUBO;
-        vk::DeviceMemory cameraUBOMemory;
+        core::VulkanAllocation cameraUBOAllocation;
 
         uint32_t maxInstances = 4096;
         uint32_t currentInstanceCount = 0;
 
         vk::Image defaultTextureImage;
-        vk::DeviceMemory defaultTextureMemory;
+        core::VulkanAllocation defaultTextureAllocation;
         vk::ImageView defaultTextureImageView;
         vk::Sampler textureSampler;
 

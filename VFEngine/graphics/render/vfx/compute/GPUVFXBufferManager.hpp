@@ -2,6 +2,7 @@
 
 #include "GPUVFXTypes.hpp"
 #include "../../../core/RenderManager.hpp"
+#include "../../../core/VulkanMemoryManager.hpp"
 #include <vulkan/vulkan.hpp>
 #include <glm/glm.hpp>
 #include <vector>
@@ -20,43 +21,43 @@ namespace render::vfx
         core::Device& device;
 
         vk::Buffer particleBuffer;
-        vk::DeviceMemory particleMemory;
+        core::VulkanAllocation particleAllocation;
 
         vk::Buffer configBuffer;
-        vk::DeviceMemory configMemory;
+        core::VulkanAllocation configAllocation;
         void* configMapped = nullptr;
 
         vk::Buffer stateBuffer;
-        vk::DeviceMemory stateMemory;
+        core::VulkanAllocation stateAllocation;
 
         std::array<vk::Buffer, core::MAX_FRAMES_IN_FLIGHT> stateStagingBuffers{};
-        std::array<vk::DeviceMemory, core::MAX_FRAMES_IN_FLIGHT> stateStagingMemories{};
+        std::array<core::VulkanAllocation, core::MAX_FRAMES_IN_FLIGHT> stateStagingAllocations{};
         std::array<void*, core::MAX_FRAMES_IN_FLIGHT> stateStagingMapped{};
 
         vk::Buffer drawCommandBuffer;
-        vk::DeviceMemory drawCommandMemory;
+        core::VulkanAllocation drawCommandAllocation;
 
         vk::Buffer lutBuffer;
-        vk::DeviceMemory lutMemory;
+        core::VulkanAllocation lutAllocation;
         void* lutMapped = nullptr;
 
         vk::Buffer ribbonRingBuffer;
-        vk::DeviceMemory ribbonRingMemory;
+        core::VulkanAllocation ribbonRingAllocation;
         vk::Buffer ribbonHeadBuffer;
-        vk::DeviceMemory ribbonHeadMemory;
+        core::VulkanAllocation ribbonHeadAllocation;
 
         vk::Buffer eventBuffer;
-        vk::DeviceMemory eventMemory;
+        core::VulkanAllocation eventAllocation;
         std::array<vk::Buffer, core::MAX_FRAMES_IN_FLIGHT> eventReadbackBuffers{};
-        std::array<vk::DeviceMemory, core::MAX_FRAMES_IN_FLIGHT> eventReadbackMemories{};
+        std::array<core::VulkanAllocation, core::MAX_FRAMES_IN_FLIGHT> eventReadbackAllocations{};
         std::array<void*, core::MAX_FRAMES_IN_FLIGHT> eventReadbackMapped{};
 
         vk::Buffer colliderBuffer;
-        vk::DeviceMemory colliderMemory;
+        core::VulkanAllocation colliderAllocation;
         void* colliderMapped = nullptr;
 
         vk::Buffer terrainBuffer;
-        vk::DeviceMemory terrainMemory;
+        core::VulkanAllocation terrainAllocation;
         void* terrainMapped = nullptr;
 
         uint32_t maxParticles = 0;

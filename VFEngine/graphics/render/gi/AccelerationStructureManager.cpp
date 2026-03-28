@@ -57,18 +57,18 @@ namespace render::gi
             vkDevice.destroyAccelerationStructureKHR(tlas);
             tlas = nullptr;
         }
-        core::BufferUtilities::destroyBuffer(vkDevice, tlasBuffer, tlasMemory);
-        core::BufferUtilities::destroyBuffer(vkDevice, tlasScratchBuffer, tlasScratchMemory);
-        core::BufferUtilities::destroyBuffer(vkDevice, instanceBuffer, instanceMemory);
+        core::BufferUtilities::destroyBuffer(vkDevice, tlasBuffer, tlasAllocation, device.getMemoryManager());
+        core::BufferUtilities::destroyBuffer(vkDevice, tlasScratchBuffer, tlasScratchAllocation, device.getMemoryManager());
+        core::BufferUtilities::destroyBuffer(vkDevice, instanceBuffer, instanceAllocation, device.getMemoryManager());
 
         if (blas)
         {
             vkDevice.destroyAccelerationStructureKHR(blas);
             blas = nullptr;
         }
-        core::BufferUtilities::destroyBuffer(vkDevice, blasBuffer, blasMemory);
-        core::BufferUtilities::destroyBuffer(vkDevice, blasScratchBuffer, blasScratchMemory);
-        core::BufferUtilities::destroyBuffer(vkDevice, tlasStagingBuffer, tlasStagingMemory);
+        core::BufferUtilities::destroyBuffer(vkDevice, blasBuffer, blasAllocation, device.getMemoryManager());
+        core::BufferUtilities::destroyBuffer(vkDevice, blasScratchBuffer, blasScratchAllocation, device.getMemoryManager());
+        core::BufferUtilities::destroyBuffer(vkDevice, tlasStagingBuffer, tlasStagingAllocation, device.getMemoryManager());
 
         if (descriptorPool)
         {
@@ -138,8 +138,8 @@ namespace render::gi
             vkDevice.destroyAccelerationStructureKHR(blas);
             blas = nullptr;
         }
-        core::BufferUtilities::destroyBuffer(vkDevice, blasBuffer, blasMemory);
-        core::BufferUtilities::destroyBuffer(vkDevice, blasScratchBuffer, blasScratchMemory);
+        core::BufferUtilities::destroyBuffer(vkDevice, blasBuffer, blasAllocation, device.getMemoryManager());
+        core::BufferUtilities::destroyBuffer(vkDevice, blasScratchBuffer, blasScratchAllocation, device.getMemoryManager());
 
         {
             core::BufferInfoRequest request(vkDevice, device.getPhysicalDevice());
@@ -147,7 +147,7 @@ namespace render::gi
             request.usage = vk::BufferUsageFlagBits::eAccelerationStructureStorageKHR |
                             vk::BufferUsageFlagBits::eShaderDeviceAddress;
             request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-            core::BufferUtilities::createBuffer(request, blasBuffer, blasMemory);
+            core::BufferUtilities::createBuffer(request, blasBuffer, blasAllocation, device.getMemoryManager());
         }
 
         vk::AccelerationStructureCreateInfoKHR createInfo{};
@@ -162,7 +162,7 @@ namespace render::gi
             request.usage = vk::BufferUsageFlagBits::eStorageBuffer |
                             vk::BufferUsageFlagBits::eShaderDeviceAddress;
             request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-            core::BufferUtilities::createBuffer(request, blasScratchBuffer, blasScratchMemory);
+            core::BufferUtilities::createBuffer(request, blasScratchBuffer, blasScratchAllocation, device.getMemoryManager());
         }
 
         vk::BufferDeviceAddressInfo scratchAddrInfo{};
@@ -238,7 +238,7 @@ namespace render::gi
 
         if (currentInstanceCount != objectCount)
         {
-            core::BufferUtilities::destroyBuffer(vkDevice, instanceBuffer, instanceMemory);
+            core::BufferUtilities::destroyBuffer(vkDevice, instanceBuffer, instanceAllocation, device.getMemoryManager());
         }
 
         vk::DeviceSize instanceBufferSize = sizeof(vk::AccelerationStructureInstanceKHR) * objectCount;
@@ -250,23 +250,22 @@ namespace render::gi
                             vk::BufferUsageFlagBits::eShaderDeviceAddress |
                             vk::BufferUsageFlagBits::eTransferDst;
             request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-            core::BufferUtilities::createBuffer(request, instanceBuffer, instanceMemory);
+            core::BufferUtilities::createBuffer(request, instanceBuffer, instanceAllocation, device.getMemoryManager());
         }
 
         // Destroy previous frame's staging buffer (safe now - previous cmd has completed)
-        core::BufferUtilities::destroyBuffer(vkDevice, tlasStagingBuffer, tlasStagingMemory);
+        core::BufferUtilities::destroyBuffer(vkDevice, tlasStagingBuffer, tlasStagingAllocation, device.getMemoryManager());
 
         {
             core::BufferInfoRequest request(vkDevice, device.getPhysicalDevice());
             request.size = instanceBufferSize;
             request.usage = vk::BufferUsageFlagBits::eTransferSrc;
             request.properties = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
-            core::BufferUtilities::createBuffer(request, tlasStagingBuffer, tlasStagingMemory);
+            core::BufferUtilities::createBuffer(request, tlasStagingBuffer, tlasStagingAllocation, device.getMemoryManager());
         }
 
-        void* mapped = vkDevice.mapMemory(tlasStagingMemory, 0, instanceBufferSize);
+        void* mapped = tlasStagingAllocation.mappedPtr;
         memcpy(mapped, instances.data(), instanceBufferSize);
-        vkDevice.unmapMemory(tlasStagingMemory);
 
         vk::BufferCopy copyRegion{};
         copyRegion.size = instanceBufferSize;
@@ -315,8 +314,8 @@ namespace render::gi
                 vkDevice.destroyAccelerationStructureKHR(tlas);
                 tlas = nullptr;
             }
-            core::BufferUtilities::destroyBuffer(vkDevice, tlasBuffer, tlasMemory);
-            core::BufferUtilities::destroyBuffer(vkDevice, tlasScratchBuffer, tlasScratchMemory);
+            core::BufferUtilities::destroyBuffer(vkDevice, tlasBuffer, tlasAllocation, device.getMemoryManager());
+            core::BufferUtilities::destroyBuffer(vkDevice, tlasScratchBuffer, tlasScratchAllocation, device.getMemoryManager());
 
             {
                 core::BufferInfoRequest request(vkDevice, device.getPhysicalDevice());
@@ -324,7 +323,7 @@ namespace render::gi
                 request.usage = vk::BufferUsageFlagBits::eAccelerationStructureStorageKHR |
                                 vk::BufferUsageFlagBits::eShaderDeviceAddress;
                 request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-                core::BufferUtilities::createBuffer(request, tlasBuffer, tlasMemory);
+                core::BufferUtilities::createBuffer(request, tlasBuffer, tlasAllocation, device.getMemoryManager());
             }
 
             vk::AccelerationStructureCreateInfoKHR tlasCreateInfo{};
@@ -341,7 +340,7 @@ namespace render::gi
                 request.usage = vk::BufferUsageFlagBits::eStorageBuffer |
                                 vk::BufferUsageFlagBits::eShaderDeviceAddress;
                 request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-                core::BufferUtilities::createBuffer(request, tlasScratchBuffer, tlasScratchMemory);
+                core::BufferUtilities::createBuffer(request, tlasScratchBuffer, tlasScratchAllocation, device.getMemoryManager());
             }
 
             buildInfo.mode = vk::BuildAccelerationStructureModeKHR::eBuild;

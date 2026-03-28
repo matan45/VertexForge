@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../../core/VulkanMemoryManager.hpp"
 #include <vulkan/vulkan.hpp>
 #include <cstdint>
 
@@ -68,7 +69,7 @@ namespace render::water
     struct FieldPair
     {
         vk::Image images[2];
-        vk::DeviceMemory memory[2];
+        core::VulkanAllocation allocation[2];
         vk::ImageView views[2];
     };
 

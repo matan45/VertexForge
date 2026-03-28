@@ -145,60 +145,33 @@ namespace render::vfx
     {
         auto& vkDevice = device.getLogicalDevice();
 
-        if (terrainMapped && terrainMemory)
-        {
-            vkDevice.unmapMemory(terrainMemory);
-            terrainMapped = nullptr;
-        }
-
-        if (colliderMapped && colliderMemory)
-        {
-            vkDevice.unmapMemory(colliderMemory);
-            colliderMapped = nullptr;
-        }
-
-        if (lutMapped && lutMemory)
-        {
-            vkDevice.unmapMemory(lutMemory);
-            lutMapped = nullptr;
-        }
-
-        if (configMapped && configMemory)
-        {
-            vkDevice.unmapMemory(configMemory);
-            configMapped = nullptr;
-        }
+        terrainMapped = nullptr;
+        colliderMapped = nullptr;
+        lutMapped = nullptr;
+        configMapped = nullptr;
 
         for (uint32_t i = 0; i < core::MAX_FRAMES_IN_FLIGHT; ++i)
         {
-            if (stateStagingMapped[i] && stateStagingMemories[i])
-            {
-                vkDevice.unmapMemory(stateStagingMemories[i]);
-                stateStagingMapped[i] = nullptr;
-            }
-            core::BufferUtilities::destroyBuffer(vkDevice, stateStagingBuffers[i], stateStagingMemories[i]);
+            stateStagingMapped[i] = nullptr;
+            core::BufferUtilities::destroyBuffer(vkDevice, stateStagingBuffers[i], stateStagingAllocations[i], device.getMemoryManager());
         }
 
-        core::BufferUtilities::destroyBuffer(vkDevice, particleBuffer, particleMemory);
-        core::BufferUtilities::destroyBuffer(vkDevice, configBuffer, configMemory);
-        core::BufferUtilities::destroyBuffer(vkDevice, stateBuffer, stateMemory);
-        core::BufferUtilities::destroyBuffer(vkDevice, drawCommandBuffer, drawCommandMemory);
-        core::BufferUtilities::destroyBuffer(vkDevice, lutBuffer, lutMemory);
-        core::BufferUtilities::destroyBuffer(vkDevice, ribbonRingBuffer, ribbonRingMemory);
-        core::BufferUtilities::destroyBuffer(vkDevice, ribbonHeadBuffer, ribbonHeadMemory);
+        core::BufferUtilities::destroyBuffer(vkDevice, particleBuffer, particleAllocation, device.getMemoryManager());
+        core::BufferUtilities::destroyBuffer(vkDevice, configBuffer, configAllocation, device.getMemoryManager());
+        core::BufferUtilities::destroyBuffer(vkDevice, stateBuffer, stateAllocation, device.getMemoryManager());
+        core::BufferUtilities::destroyBuffer(vkDevice, drawCommandBuffer, drawCommandAllocation, device.getMemoryManager());
+        core::BufferUtilities::destroyBuffer(vkDevice, lutBuffer, lutAllocation, device.getMemoryManager());
+        core::BufferUtilities::destroyBuffer(vkDevice, ribbonRingBuffer, ribbonRingAllocation, device.getMemoryManager());
+        core::BufferUtilities::destroyBuffer(vkDevice, ribbonHeadBuffer, ribbonHeadAllocation, device.getMemoryManager());
 
         for (uint32_t i = 0; i < core::MAX_FRAMES_IN_FLIGHT; ++i)
         {
-            if (eventReadbackMapped[i] && eventReadbackMemories[i])
-            {
-                vkDevice.unmapMemory(eventReadbackMemories[i]);
-                eventReadbackMapped[i] = nullptr;
-            }
-            core::BufferUtilities::destroyBuffer(vkDevice, eventReadbackBuffers[i], eventReadbackMemories[i]);
+            eventReadbackMapped[i] = nullptr;
+            core::BufferUtilities::destroyBuffer(vkDevice, eventReadbackBuffers[i], eventReadbackAllocations[i], device.getMemoryManager());
         }
-        core::BufferUtilities::destroyBuffer(vkDevice, eventBuffer, eventMemory);
-        core::BufferUtilities::destroyBuffer(vkDevice, colliderBuffer, colliderMemory);
-        core::BufferUtilities::destroyBuffer(vkDevice, terrainBuffer, terrainMemory);
+        core::BufferUtilities::destroyBuffer(vkDevice, eventBuffer, eventAllocation, device.getMemoryManager());
+        core::BufferUtilities::destroyBuffer(vkDevice, colliderBuffer, colliderAllocation, device.getMemoryManager());
+        core::BufferUtilities::destroyBuffer(vkDevice, terrainBuffer, terrainAllocation, device.getMemoryManager());
     }
 
     vk::DeviceSize GPUVFXBufferManager::getParticleBufferSize() const

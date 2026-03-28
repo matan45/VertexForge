@@ -1,6 +1,7 @@
 #pragma once
 
 #include "GITypes.hpp"
+#include "../../core/VulkanMemoryManager.hpp"
 #include <vulkan/vulkan.hpp>
 #include <vector>
 
@@ -18,16 +19,16 @@ namespace render::gi
 
         // Ping-pong probe data SSBOs (frame N-1 read, frame N write)
         vk::Buffer probeBufferA;
-        vk::DeviceMemory probeMemoryA;
+        core::VulkanAllocation probeAllocationA;
         vk::Buffer probeBufferB;
-        vk::DeviceMemory probeMemoryB;
+        core::VulkanAllocation probeAllocationB;
 
         vk::Buffer probeStagingBuffer;
-        vk::DeviceMemory probeStagingMemory;
+        core::VulkanAllocation probeStagingAllocation;
         void* probeStagingMapped = nullptr;
 
         vk::Buffer cascadeInfoBuffer;
-        vk::DeviceMemory cascadeInfoMemory;
+        core::VulkanAllocation cascadeInfoAllocation;
         void* cascadeInfoMapped = nullptr;
 
         vk::DescriptorSetLayout probeDataLayout;

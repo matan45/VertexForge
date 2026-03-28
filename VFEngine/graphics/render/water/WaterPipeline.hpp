@@ -1,6 +1,7 @@
 #pragma once
 
 #include "WaterGPUTypes.hpp"
+#include "../../core/VulkanMemoryManager.hpp"
 #include <vulkan/vulkan.hpp>
 #include <memory>
 
@@ -61,7 +62,7 @@ namespace render::water
         vk::DescriptorSet dudvTextureDescriptorSet;
 
         vk::Image dudvImage;
-        vk::DeviceMemory dudvImageMemory;
+        core::VulkanAllocation dudvImageAllocation;
         vk::ImageView dudvImageView;
         vk::Sampler dudvSampler;
 
@@ -84,7 +85,7 @@ namespace render::water
         vk::DescriptorPool oceanDummyPool;
         vk::DescriptorSet oceanDummyDescSet;
         vk::Image oceanDummyImage;
-        vk::DeviceMemory oceanDummyMemory;
+        core::VulkanAllocation oceanDummyAllocation;
         vk::ImageView oceanDummyView;
         vk::Sampler oceanDummySampler;
         bool initialized = false;

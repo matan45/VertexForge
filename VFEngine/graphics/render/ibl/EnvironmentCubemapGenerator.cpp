@@ -30,7 +30,7 @@ namespace render::ibl
             vk::ImageUsageFlagBits::eColorAttachment;
         cubeMapImageRequest.imageFlags = vk::ImageCreateFlagBits::eCubeCompatible;
         core::ImageUtilities::createImage(cubeMapImageRequest, imageEnvCubemap.image,
-            imageEnvCubemap.imageMemory);
+            imageEnvCubemap.imageAllocation, device.getMemoryManager());
 
         core::ImageViewInfoRequest cubeMapImageViewRequest(device.getLogicalDevice(), imageEnvCubemap.image);
         cubeMapImageViewRequest.format = vk::Format::eR16G16B16A16Sfloat;
@@ -471,7 +471,7 @@ namespace render::ibl
         device.getLogicalDevice().destroyImage(imageEnvCubemap.image);
         device.getLogicalDevice().destroyImageView(imageEnvCubemap.imageView);
         device.getLogicalDevice().destroySampler(imageEnvCubemap.sampler);
-        device.getLogicalDevice().freeMemory(imageEnvCubemap.imageMemory);
+        device.getMemoryManager().free(imageEnvCubemap.imageAllocation); imageEnvCubemap.imageAllocation = {};
     }
 
     void EnvironmentCubemapGenerator::cleanUpShader()

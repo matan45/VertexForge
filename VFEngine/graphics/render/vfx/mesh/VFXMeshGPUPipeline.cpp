@@ -139,12 +139,8 @@ namespace render::vfx
             descriptorSetLayout = nullptr;
         }
 
-        if (cameraUBOMapped && cameraUBOMemory)
-        {
-            vkDevice.unmapMemory(cameraUBOMemory);
-            cameraUBOMapped = nullptr;
-        }
-        core::BufferUtilities::destroyBuffer(vkDevice, cameraUBO, cameraUBOMemory);
+        cameraUBOMapped = nullptr;
+        core::BufferUtilities::destroyBuffer(vkDevice, cameraUBO, cameraUBOAllocation, device.getMemoryManager());
 
         if (depthSampler)
         {
@@ -167,9 +163,9 @@ namespace render::vfx
         if (defaultTextureImage)
         {
             vkDevice.destroyImage(defaultTextureImage);
-            vkDevice.freeMemory(defaultTextureMemory);
             defaultTextureImage = nullptr;
         }
+        if (defaultTextureAllocation) { device.getMemoryManager().free(defaultTextureAllocation); defaultTextureAllocation = {}; }
 
         textureEntries.clear();
         emitterConfigs.clear();
@@ -355,8 +351,8 @@ namespace render::vfx
         uboRequest.properties = vk::MemoryPropertyFlagBits::eHostVisible |
                                 vk::MemoryPropertyFlagBits::eHostCoherent;
         uboRequest.size = sizeof(GPUVFXCameraUBO);
-        core::BufferUtilities::createBuffer(uboRequest, cameraUBO, cameraUBOMemory);
-        cameraUBOMapped = vkDevice.mapMemory(cameraUBOMemory, 0, sizeof(GPUVFXCameraUBO));
+        core::BufferUtilities::createBuffer(uboRequest, cameraUBO, cameraUBOAllocation, device.getMemoryManager());
+        cameraUBOMapped = cameraUBOAllocation.mappedPtr;
     }
 
     void VFXMeshGPUPipeline::createDefaultTexture()
@@ -372,7 +368,7 @@ namespace render::vfx
             vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
             vk::MemoryPropertyFlagBits::eDeviceLocal
         );
-        core::ImageUtilities::createImage(imageInfo, defaultTextureImage, defaultTextureMemory);
+        core::ImageUtilities::createImage(imageInfo, defaultTextureImage, defaultTextureAllocation, device.getMemoryManager());
 
         core::ImageViewInfoRequest viewInfo(
             vkDevice, defaultTextureImage,

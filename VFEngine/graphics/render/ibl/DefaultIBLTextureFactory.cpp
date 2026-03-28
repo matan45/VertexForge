@@ -35,19 +35,19 @@ namespace render::ibl
         if (irradiance.sampler) logicalDevice.destroySampler(irradiance.sampler);
         if (irradiance.imageView) logicalDevice.destroyImageView(irradiance.imageView);
         if (irradiance.image) logicalDevice.destroyImage(irradiance.image);
-        if (irradiance.imageMemory) logicalDevice.freeMemory(irradiance.imageMemory);
+        if (irradiance.imageAllocation) { device.getMemoryManager().free(irradiance.imageAllocation); irradiance.imageAllocation = {}; }
 
         // Cleanup prefilter
         if (prefilter.sampler) logicalDevice.destroySampler(prefilter.sampler);
         if (prefilter.imageView) logicalDevice.destroyImageView(prefilter.imageView);
         if (prefilter.image) logicalDevice.destroyImage(prefilter.image);
-        if (prefilter.imageMemory) logicalDevice.freeMemory(prefilter.imageMemory);
+        if (prefilter.imageAllocation) { device.getMemoryManager().free(prefilter.imageAllocation); prefilter.imageAllocation = {}; }
 
         // Cleanup BRDF LUT
         if (brdfLUT.sampler) logicalDevice.destroySampler(brdfLUT.sampler);
         if (brdfLUT.imageView) logicalDevice.destroyImageView(brdfLUT.imageView);
         if (brdfLUT.image) logicalDevice.destroyImage(brdfLUT.image);
-        if (brdfLUT.imageMemory) logicalDevice.freeMemory(brdfLUT.imageMemory);
+        if (brdfLUT.imageAllocation) { device.getMemoryManager().free(brdfLUT.imageAllocation); brdfLUT.imageAllocation = {}; }
 
         texturesCreated = false;
     }
@@ -68,7 +68,7 @@ namespace render::ibl
         imageRequest.usage = vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst;
         imageRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
         imageRequest.imageFlags = vk::ImageCreateFlagBits::eCubeCompatible;
-        core::ImageUtilities::createImage(imageRequest, imageData.image, imageData.imageMemory);
+        core::ImageUtilities::createImage(imageRequest, imageData.image, imageData.imageAllocation, device.getMemoryManager());
 
         // Create staging buffer with color data for all 6 faces
         std::vector<float> pixels(6 * 4);  // 6 faces * 4 components (RGBA)
@@ -192,7 +192,7 @@ namespace render::ibl
         imageRequest.tiling = vk::ImageTiling::eOptimal;
         imageRequest.usage = vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst;
         imageRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-        core::ImageUtilities::createImage(imageRequest, imageData.image, imageData.imageMemory);
+        core::ImageUtilities::createImage(imageRequest, imageData.image, imageData.imageAllocation, device.getMemoryManager());
 
         vk::DeviceSize imageSize = sizeof(defaultBrdfPixel);
         vk::Buffer stagingBuffer;

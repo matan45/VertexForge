@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../compute/GPUVFXTypes.hpp"
+#include "../../../core/VulkanMemoryManager.hpp"
 #include <vulkan/vulkan.hpp>
 #include <memory>
 #include <string>
@@ -36,11 +37,11 @@ namespace render::vfx
 
         // Buffers
         vk::Buffer quadVertexBuffer;
-        vk::DeviceMemory quadVertexBufferMemory;
+        core::VulkanAllocation quadVertexBufferAllocation;
         vk::Buffer quadIndexBuffer;
-        vk::DeviceMemory quadIndexBufferMemory;
+        core::VulkanAllocation quadIndexBufferAllocation;
         vk::Buffer cameraUBO;
-        vk::DeviceMemory cameraUBOMemory;
+        core::VulkanAllocation cameraUBOAllocation;
         void* cameraUBOMapped = nullptr;  // Persistently mapped for efficient per-frame updates
 
         // Cached particle buffer info
@@ -52,7 +53,7 @@ namespace render::vfx
 
         // Default texture (white 1x1)
         vk::Image defaultTextureImage;
-        vk::DeviceMemory defaultTextureMemory;
+        core::VulkanAllocation defaultTextureAllocation;
         vk::ImageView defaultTextureImageView;
         vk::Sampler textureSampler;
 

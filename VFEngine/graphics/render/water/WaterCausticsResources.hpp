@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../../core/VulkanMemoryManager.hpp"
 #include <vulkan/vulkan.hpp>
 
 namespace core
@@ -45,7 +46,7 @@ namespace render::water
         vk::Sampler causticSampler;
 
         vk::Buffer paramsBuffer;
-        vk::DeviceMemory paramsMemory;
+        core::VulkanAllocation paramsAllocation;
         void* paramsMapped = nullptr;
 
         vk::DescriptorSetLayout descriptorSetLayout;

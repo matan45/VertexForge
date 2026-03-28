@@ -149,10 +149,10 @@ namespace render::water
             dudvImage = nullptr;
         }
 
-        if (dudvImageMemory)
+        if (dudvImageAllocation)
         {
-            vkDevice.freeMemory(dudvImageMemory);
-            dudvImageMemory = nullptr;
+            device.getMemoryManager().free(dudvImageAllocation);
+            dudvImageAllocation = {};
         }
 
         if (dudvTexturePool)
@@ -183,7 +183,7 @@ namespace render::water
         if (oceanDummySampler) { vkDevice.destroySampler(oceanDummySampler); oceanDummySampler = nullptr; }
         if (oceanDummyView)    { vkDevice.destroyImageView(oceanDummyView); oceanDummyView = nullptr; }
         if (oceanDummyImage)   { vkDevice.destroyImage(oceanDummyImage); oceanDummyImage = nullptr; }
-        if (oceanDummyMemory)  { vkDevice.freeMemory(oceanDummyMemory); oceanDummyMemory = nullptr; }
+        if (oceanDummyAllocation) { device.getMemoryManager().free(oceanDummyAllocation); oceanDummyAllocation = {}; }
         if (oceanDummyPool)
         {
             vkDevice.destroyDescriptorPool(oceanDummyPool);
@@ -313,7 +313,7 @@ namespace render::water
             vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
             vk::MemoryPropertyFlagBits::eDeviceLocal
         );
-        core::ImageUtilities::createImage(imageInfo, dudvImage, dudvImageMemory);
+        core::ImageUtilities::createImage(imageInfo, dudvImage, dudvImageAllocation, device.getMemoryManager());
 
         core::ImageViewInfoRequest viewInfo(
             device.getLogicalDevice(),
@@ -481,7 +481,7 @@ namespace render::water
             vk::ImageTiling::eOptimal,
             vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst,
             vk::MemoryPropertyFlagBits::eDeviceLocal);
-        core::ImageUtilities::createImage(imgReq, oceanDummyImage, oceanDummyMemory);
+        core::ImageUtilities::createImage(imgReq, oceanDummyImage, oceanDummyAllocation, device.getMemoryManager());
 
         core::ImageViewInfoRequest viewReq(vkDevice, oceanDummyImage,
             vk::Format::eR16G16B16A16Sfloat,

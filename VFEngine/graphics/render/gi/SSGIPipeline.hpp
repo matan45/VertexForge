@@ -1,6 +1,7 @@
 #pragma once
 
 #include "GITypes.hpp"
+#include "../../core/VulkanMemoryManager.hpp"
 #include <vulkan/vulkan.hpp>
 #include <glm/glm.hpp>
 #include <memory>
@@ -27,20 +28,20 @@ namespace render::gi
 
         // Intermediate images
         vk::Image ssgiRawImage;
-        vk::DeviceMemory ssgiRawMemory;
+        core::VulkanAllocation ssgiRawAllocation;
         vk::ImageView ssgiRawImageView;
 
         vk::Image ssgiDenoiseHorizImage;  // Horizontal blur output
-        vk::DeviceMemory ssgiDenoiseHorizMemory;
+        core::VulkanAllocation ssgiDenoiseHorizAllocation;
         vk::ImageView ssgiDenoiseHorizImageView;
 
         vk::Image ssgiDenoisedImage;  // Vertical blur output (final)
-        vk::DeviceMemory ssgiDenoisedMemory;
+        core::VulkanAllocation ssgiDenoisedAllocation;
         vk::ImageView ssgiDenoisedImageView;
 
         // Double-buffered history for temporal accumulation
         std::array<vk::Image, 2> ssgiHistoryImages{};
-        std::array<vk::DeviceMemory, 2> ssgiHistoryMemory{};
+        std::array<core::VulkanAllocation, 2> ssgiHistoryAllocations{};
         std::array<vk::ImageView, 2> ssgiHistoryImageViews{};
         uint32_t currentHistoryIdx = 0;
 
@@ -108,7 +109,7 @@ namespace render::gi
 
         // UBO
         vk::Buffer paramsBuffer;
-        vk::DeviceMemory paramsBufferMemory;
+        core::VulkanAllocation paramsBufferAllocation;
         void* paramsBufferMapped = nullptr;
 
         // Push constants for denoise pass (separable bilateral blur)
@@ -212,9 +213,9 @@ namespace render::gi
         void cleanupPipelines();
         void cleanupRenderPasses();
 
-        void createImageAndView(vk::Image& image, vk::DeviceMemory& memory,
+        void createImageAndView(vk::Image& image, core::VulkanAllocation& alloc,
                                 vk::ImageView& view, vk::Extent2D extent, vk::Format format);
-        void destroyImageAndView(vk::Image& image, vk::DeviceMemory& memory, vk::ImageView& view);
+        void destroyImageAndView(vk::Image& image, core::VulkanAllocation& alloc, vk::ImageView& view);
 
         vk::Pipeline createFullscreenPipeline(vk::PipelineLayout layout, vk::RenderPass rp,
                                                vk::Extent2D extent,

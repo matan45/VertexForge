@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../../core/VulkanMemoryManager.hpp"
 #include <vulkan/vulkan.hpp>
 
 namespace core
@@ -32,7 +33,7 @@ namespace render::water
         core::Device& device;
 
         vk::Image refractionImage;
-        vk::DeviceMemory refractionMemory;
+        core::VulkanAllocation refractionAllocation;
         vk::ImageView refractionView;
 
         vk::Sampler refractionSampler;

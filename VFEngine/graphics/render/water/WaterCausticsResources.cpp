@@ -1,5 +1,6 @@
 #include "WaterCausticsResources.hpp"
 #include "../../core/Device.hpp"
+#include "../../core/BufferUtilities.hpp"
 #include "../../core/MemoryUtilities.hpp"
 
 #include <cstring>
@@ -40,20 +41,12 @@ namespace render::water
 
         // Create params UBO (host-visible, persistently mapped)
         {
-            vk::BufferCreateInfo bufferInfo{};
-            bufferInfo.size = sizeof(CausticParams);
-            bufferInfo.usage = vk::BufferUsageFlagBits::eUniformBuffer;
-            paramsBuffer = vkDevice.createBuffer(bufferInfo);
-
-            auto memReqs = vkDevice.getBufferMemoryRequirements(paramsBuffer);
-            vk::MemoryAllocateInfo allocInfo{};
-            allocInfo.allocationSize = memReqs.size;
-            allocInfo.memoryTypeIndex = core::MemoryUtilities::findMemoryType(
-                device.getPhysicalDevice(), memReqs.memoryTypeBits,
-                vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
-            paramsMemory = vkDevice.allocateMemory(allocInfo);
-            vkDevice.bindBufferMemory(paramsBuffer, paramsMemory, 0);
-            paramsMapped = vkDevice.mapMemory(paramsMemory, 0, sizeof(CausticParams));
+            core::BufferInfoRequest req(vkDevice, device.getPhysicalDevice());
+            req.size = sizeof(CausticParams);
+            req.usage = vk::BufferUsageFlagBits::eUniformBuffer;
+            req.properties = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
+            core::BufferUtilities::createBuffer(req, paramsBuffer, paramsAllocation, device.getMemoryManager());
+            paramsMapped = paramsAllocation.mappedPtr;
         }
 
         // Create descriptor set layout (2 bindings, fragment stage)
@@ -150,13 +143,8 @@ namespace render::water
         if (descriptorSetLayout) { vkDevice.destroyDescriptorSetLayout(descriptorSetLayout); descriptorSetLayout = nullptr; }
         if (causticSampler)      { vkDevice.destroySampler(causticSampler); causticSampler = nullptr; }
 
-        if (paramsMapped)
-        {
-            vkDevice.unmapMemory(paramsMemory);
-            paramsMapped = nullptr;
-        }
-        if (paramsBuffer) { vkDevice.destroyBuffer(paramsBuffer); paramsBuffer = nullptr; }
-        if (paramsMemory) { vkDevice.freeMemory(paramsMemory); paramsMemory = nullptr; }
+        paramsMapped = nullptr;
+        core::BufferUtilities::destroyBuffer(vkDevice, paramsBuffer, paramsAllocation, device.getMemoryManager());
 
         initialized = false;
     }

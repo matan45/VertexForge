@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ClusterGridTypes.hpp"
+#include "../../core/VulkanMemoryManager.hpp"
 #include <vulkan/vulkan.hpp>
 #include <vector>
 
@@ -22,14 +23,14 @@ namespace render::lighting
 
         // Params UBO (HOST_VISIBLE for direct updates)
         vk::Buffer paramsBuffer;
-        vk::DeviceMemory paramsMemory;
+        core::VulkanAllocation paramsAllocation;
         void* paramsMapped = nullptr;
 
         // Cluster AABBs SSBO (DEVICE_LOCAL, updated via staging)
         vk::Buffer clusterAABBBuffer;
-        vk::DeviceMemory clusterAABBMemory;
+        core::VulkanAllocation clusterAABBAllocation;
         vk::Buffer clusterAABBStagingBuffer;
-        vk::DeviceMemory clusterAABBStagingMemory;
+        core::VulkanAllocation clusterAABBStagingAllocation;
         void* clusterAABBStagingMapped = nullptr;
 
         // Descriptor resources

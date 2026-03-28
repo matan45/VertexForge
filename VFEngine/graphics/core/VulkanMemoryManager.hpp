@@ -23,6 +23,7 @@ namespace core
 		bool isDedicated = false;
 
 		bool isValid() const { return memory && size > 0; }
+		explicit operator bool() const { return isValid(); }
 	};
 
 	class VulkanMemoryBlock

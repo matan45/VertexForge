@@ -37,7 +37,7 @@ namespace render::ibl
         imageRequest.width = mip0.width;
         imageRequest.height = mip0.height;
         imageRequest.usage = vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst;
-        core::ImageUtilities::createImage(imageRequest, brdfLUTImage.image, brdfLUTImage.imageMemory);
+        core::ImageUtilities::createImage(imageRequest, brdfLUTImage.image, brdfLUTImage.imageAllocation, device.getMemoryManager());
 
         core::ImageUtilities::uploadStagedPixelData(
             device, brdfLUTImage.image,
@@ -90,7 +90,7 @@ namespace render::ibl
         brdfLUTImageRequest.width = CUBE_MAP_SIZE;
         brdfLUTImageRequest.height = CUBE_MAP_SIZE;
         brdfLUTImageRequest.usage = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled;
-        core::ImageUtilities::createImage(brdfLUTImageRequest, brdfLUTImage.image, brdfLUTImage.imageMemory);
+        core::ImageUtilities::createImage(brdfLUTImageRequest, brdfLUTImage.image, brdfLUTImage.imageAllocation, device.getMemoryManager());
 
         core::ImageViewInfoRequest imageViewRequest(device.getLogicalDevice(), brdfLUTImage.image);
         imageViewRequest.format = vk::Format::eR16G16Sfloat;
@@ -309,7 +309,7 @@ namespace render::ibl
         device.getLogicalDevice().destroyImage(brdfLUTImage.image);
         device.getLogicalDevice().destroyImageView(brdfLUTImage.imageView);
         device.getLogicalDevice().destroySampler(brdfLUTImage.sampler);
-        device.getLogicalDevice().freeMemory(brdfLUTImage.imageMemory);
+        device.getMemoryManager().free(brdfLUTImage.imageAllocation); brdfLUTImage.imageAllocation = {};
     }
 
     void BRDFLUTGenerator::cleanUpShader()

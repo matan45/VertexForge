@@ -1,6 +1,7 @@
 #pragma once
 
 #include "LightCullingTypes.hpp"
+#include "../../core/VulkanMemoryManager.hpp"
 #include <vulkan/vulkan.hpp>
 #include <glm/glm.hpp>
 #include <memory>
@@ -30,13 +31,13 @@ namespace render::lighting
 
         // Output buffers (DEVICE_LOCAL)
         vk::Buffer clusterLightGridBuffer;       // Per-cluster offset+count
-        vk::DeviceMemory clusterLightGridMemory;
+        core::VulkanAllocation clusterLightGridAllocation;
 
         vk::Buffer clusterLightIndexListBuffer;  // Flat array of light indices
-        vk::DeviceMemory clusterLightIndexListMemory;
+        core::VulkanAllocation clusterLightIndexListAllocation;
 
         vk::Buffer globalsBuffer;                // Atomic counters and stats
-        vk::DeviceMemory globalsMemory;
+        core::VulkanAllocation globalsAllocation;
 
         // External descriptor set layouts (not owned)
         vk::DescriptorSetLayout clusterGridLayout;   // Set 0: ClusterGridManager

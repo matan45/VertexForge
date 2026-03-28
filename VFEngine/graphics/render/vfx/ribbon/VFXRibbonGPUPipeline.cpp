@@ -138,14 +138,10 @@ namespace render::vfx
             descriptorSetLayout = nullptr;
         }
 
-        if (cameraUBOMapped && cameraUBOMemory)
-        {
-            vkDevice.unmapMemory(cameraUBOMemory);
-            cameraUBOMapped = nullptr;
-        }
-        core::BufferUtilities::destroyBuffer(vkDevice, cameraUBO, cameraUBOMemory);
-        core::BufferUtilities::destroyBuffer(vkDevice, quadVertexBuffer, quadVertexBufferMemory);
-        core::BufferUtilities::destroyBuffer(vkDevice, quadIndexBuffer, quadIndexBufferMemory);
+        cameraUBOMapped = nullptr;
+        core::BufferUtilities::destroyBuffer(vkDevice, cameraUBO, cameraUBOAllocation, device.getMemoryManager());
+        core::BufferUtilities::destroyBuffer(vkDevice, quadVertexBuffer, quadVertexBufferAllocation, device.getMemoryManager());
+        core::BufferUtilities::destroyBuffer(vkDevice, quadIndexBuffer, quadIndexBufferAllocation, device.getMemoryManager());
 
         if (depthSampler)
         {
@@ -168,9 +164,9 @@ namespace render::vfx
         if (defaultTextureImage)
         {
             vkDevice.destroyImage(defaultTextureImage);
-            vkDevice.freeMemory(defaultTextureMemory);
             defaultTextureImage = nullptr;
         }
+        if (defaultTextureAllocation) { device.getMemoryManager().free(defaultTextureAllocation); defaultTextureAllocation = {}; }
 
         textureEntries.clear();
         emitterConfigs.clear();
@@ -340,8 +336,8 @@ namespace render::vfx
         uboRequest.properties = vk::MemoryPropertyFlagBits::eHostVisible |
                                 vk::MemoryPropertyFlagBits::eHostCoherent;
         uboRequest.size = sizeof(GPUVFXCameraUBO);
-        core::BufferUtilities::createBuffer(uboRequest, cameraUBO, cameraUBOMemory);
-        cameraUBOMapped = vkDevice.mapMemory(cameraUBOMemory, 0, sizeof(GPUVFXCameraUBO));
+        core::BufferUtilities::createBuffer(uboRequest, cameraUBO, cameraUBOAllocation, device.getMemoryManager());
+        cameraUBOMapped = cameraUBOAllocation.mappedPtr;
 
         constexpr vk::DeviceSize vertexBufferSize = sizeof(VFXQuadVertex) * QUAD_VERTICES.size();
         core::BufferInfoRequest vertexRequest(vkDevice, device.getPhysicalDevice());
@@ -349,7 +345,7 @@ namespace render::vfx
         vertexRequest.usage = vk::BufferUsageFlagBits::eVertexBuffer |
                               vk::BufferUsageFlagBits::eTransferDst;
         vertexRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-        core::BufferUtilities::createBuffer(vertexRequest, quadVertexBuffer, quadVertexBufferMemory);
+        core::BufferUtilities::createBuffer(vertexRequest, quadVertexBuffer, quadVertexBufferAllocation, device.getMemoryManager());
 
         constexpr vk::DeviceSize indexBufferSize = sizeof(uint16_t) * QUAD_INDICES.size();
         core::BufferInfoRequest indexRequest(vkDevice, device.getPhysicalDevice());
@@ -357,7 +353,7 @@ namespace render::vfx
         indexRequest.usage = vk::BufferUsageFlagBits::eIndexBuffer |
                              vk::BufferUsageFlagBits::eTransferDst;
         indexRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-        core::BufferUtilities::createBuffer(indexRequest, quadIndexBuffer, quadIndexBufferMemory);
+        core::BufferUtilities::createBuffer(indexRequest, quadIndexBuffer, quadIndexBufferAllocation, device.getMemoryManager());
 
         core::BufferUtilities::copyToBuffer(
             vkDevice,
@@ -393,7 +389,7 @@ namespace render::vfx
             vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
             vk::MemoryPropertyFlagBits::eDeviceLocal
         );
-        core::ImageUtilities::createImage(imageInfo, defaultTextureImage, defaultTextureMemory);
+        core::ImageUtilities::createImage(imageInfo, defaultTextureImage, defaultTextureAllocation, device.getMemoryManager());
 
         core::ImageViewInfoRequest viewInfo(
             vkDevice, defaultTextureImage,

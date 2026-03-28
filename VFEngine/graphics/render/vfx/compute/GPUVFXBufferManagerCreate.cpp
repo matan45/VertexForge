@@ -15,8 +15,8 @@ namespace render::vfx
             vk::MemoryPropertyFlagBits::eDeviceLocal
         );
 
-        core::BufferUtilities::createBuffer(request, particleBuffer, particleMemory);
-        return particleBuffer && particleMemory;
+        core::BufferUtilities::createBuffer(request, particleBuffer, particleAllocation, device.getMemoryManager());
+        return particleBuffer && particleAllocation;
     }
 
     bool GPUVFXBufferManager::createConfigBuffer()
@@ -31,13 +31,11 @@ namespace render::vfx
             vk::MemoryPropertyFlagBits::eHostCoherent
         );
 
-        core::BufferUtilities::createBuffer(request, configBuffer, configMemory);
+        core::BufferUtilities::createBuffer(request, configBuffer, configAllocation, device.getMemoryManager());
 
-        if (configBuffer && configMemory)
+        if (configBuffer && configAllocation)
         {
-            configMapped = device.getLogicalDevice().mapMemory(
-                configMemory, 0, getConfigBufferSize(), vk::MemoryMapFlags{}
-            );
+            configMapped = configAllocation.mappedPtr;
 
             std::memset(configMapped, 0, getConfigBufferSize());
             return true;
@@ -56,9 +54,9 @@ namespace render::vfx
             vk::MemoryPropertyFlagBits::eDeviceLocal
         );
 
-        core::BufferUtilities::createBuffer(stateRequest, stateBuffer, stateMemory);
+        core::BufferUtilities::createBuffer(stateRequest, stateBuffer, stateAllocation, device.getMemoryManager());
 
-        if (!stateBuffer || !stateMemory)
+        if (!stateBuffer || !stateAllocation)
         {
             return false;
         }
@@ -74,16 +72,14 @@ namespace render::vfx
                 vk::MemoryPropertyFlagBits::eHostCoherent
             );
 
-            core::BufferUtilities::createBuffer(stagingRequest, stateStagingBuffers[i], stateStagingMemories[i]);
+            core::BufferUtilities::createBuffer(stagingRequest, stateStagingBuffers[i], stateStagingAllocations[i], device.getMemoryManager());
 
-            if (!stateStagingBuffers[i] || !stateStagingMemories[i])
+            if (!stateStagingBuffers[i] || !stateStagingAllocations[i])
             {
                 return false;
             }
 
-            stateStagingMapped[i] = device.getLogicalDevice().mapMemory(
-                stateStagingMemories[i], 0, getStateBufferSize(), vk::MemoryMapFlags{}
-            );
+            stateStagingMapped[i] = stateStagingAllocations[i].mappedPtr;
 
             std::memset(stateStagingMapped[i], 0, getStateBufferSize());
         }
@@ -103,8 +99,8 @@ namespace render::vfx
             vk::MemoryPropertyFlagBits::eDeviceLocal
         );
 
-        core::BufferUtilities::createBuffer(request, drawCommandBuffer, drawCommandMemory);
-        return drawCommandBuffer && drawCommandMemory;
+        core::BufferUtilities::createBuffer(request, drawCommandBuffer, drawCommandAllocation, device.getMemoryManager());
+        return drawCommandBuffer && drawCommandAllocation;
     }
 
     bool GPUVFXBufferManager::createLUTBuffer()
@@ -118,13 +114,11 @@ namespace render::vfx
             vk::MemoryPropertyFlagBits::eHostCoherent
         );
 
-        core::BufferUtilities::createBuffer(request, lutBuffer, lutMemory);
+        core::BufferUtilities::createBuffer(request, lutBuffer, lutAllocation, device.getMemoryManager());
 
-        if (lutBuffer && lutMemory)
+        if (lutBuffer && lutAllocation)
         {
-            lutMapped = device.getLogicalDevice().mapMemory(
-                lutMemory, 0, getLUTBufferSize(), vk::MemoryMapFlags{}
-            );
+            lutMapped = lutAllocation.mappedPtr;
             std::memset(lutMapped, 0, getLUTBufferSize());
             return true;
         }
@@ -142,8 +136,8 @@ namespace render::vfx
             vk::MemoryPropertyFlagBits::eDeviceLocal
         );
 
-        core::BufferUtilities::createBuffer(ringRequest, ribbonRingBuffer, ribbonRingMemory);
-        if (!ribbonRingBuffer || !ribbonRingMemory)
+        core::BufferUtilities::createBuffer(ringRequest, ribbonRingBuffer, ribbonRingAllocation, device.getMemoryManager());
+        if (!ribbonRingBuffer || !ribbonRingAllocation)
         {
             return false;
         }
@@ -157,8 +151,8 @@ namespace render::vfx
             vk::MemoryPropertyFlagBits::eDeviceLocal
         );
 
-        core::BufferUtilities::createBuffer(headRequest, ribbonHeadBuffer, ribbonHeadMemory);
-        return ribbonHeadBuffer && ribbonHeadMemory;
+        core::BufferUtilities::createBuffer(headRequest, ribbonHeadBuffer, ribbonHeadAllocation, device.getMemoryManager());
+        return ribbonHeadBuffer && ribbonHeadAllocation;
     }
 
     bool GPUVFXBufferManager::createEventBuffers()
@@ -173,8 +167,8 @@ namespace render::vfx
             vk::MemoryPropertyFlagBits::eDeviceLocal
         );
 
-        core::BufferUtilities::createBuffer(eventRequest, eventBuffer, eventMemory);
-        if (!eventBuffer || !eventMemory)
+        core::BufferUtilities::createBuffer(eventRequest, eventBuffer, eventAllocation, device.getMemoryManager());
+        if (!eventBuffer || !eventAllocation)
         {
             return false;
         }
@@ -191,15 +185,13 @@ namespace render::vfx
             );
 
             core::BufferUtilities::createBuffer(readbackRequest,
-                eventReadbackBuffers[i], eventReadbackMemories[i]);
-            if (!eventReadbackBuffers[i] || !eventReadbackMemories[i])
+                eventReadbackBuffers[i], eventReadbackAllocations[i], device.getMemoryManager());
+            if (!eventReadbackBuffers[i] || !eventReadbackAllocations[i])
             {
                 return false;
             }
 
-            eventReadbackMapped[i] = device.getLogicalDevice().mapMemory(
-                eventReadbackMemories[i], 0, getEventBufferSize(), vk::MemoryMapFlags{}
-            );
+            eventReadbackMapped[i] = eventReadbackAllocations[i].mappedPtr;
             std::memset(eventReadbackMapped[i], 0, getEventBufferSize());
         }
         return true;
@@ -216,13 +208,11 @@ namespace render::vfx
             vk::MemoryPropertyFlagBits::eHostCoherent
         );
 
-        core::BufferUtilities::createBuffer(request, colliderBuffer, colliderMemory);
+        core::BufferUtilities::createBuffer(request, colliderBuffer, colliderAllocation, device.getMemoryManager());
 
-        if (colliderBuffer && colliderMemory)
+        if (colliderBuffer && colliderAllocation)
         {
-            colliderMapped = device.getLogicalDevice().mapMemory(
-                colliderMemory, 0, getColliderBufferSize(), vk::MemoryMapFlags{}
-            );
+            colliderMapped = colliderAllocation.mappedPtr;
             std::memset(colliderMapped, 0, getColliderBufferSize());
             return true;
         }
@@ -240,13 +230,11 @@ namespace render::vfx
             vk::MemoryPropertyFlagBits::eHostCoherent
         );
 
-        core::BufferUtilities::createBuffer(request, terrainBuffer, terrainMemory);
+        core::BufferUtilities::createBuffer(request, terrainBuffer, terrainAllocation, device.getMemoryManager());
 
-        if (terrainBuffer && terrainMemory)
+        if (terrainBuffer && terrainAllocation)
         {
-            terrainMapped = device.getLogicalDevice().mapMemory(
-                terrainMemory, 0, getTerrainBufferSize(), vk::MemoryMapFlags{}
-            );
+            terrainMapped = terrainAllocation.mappedPtr;
             std::memset(terrainMapped, 0, getTerrainBufferSize());
             return true;
         }

@@ -107,12 +107,8 @@ namespace render::gi
 
         if (paramsBuffer)
         {
-            if (paramsBufferMapped)
-            {
-                dev.unmapMemory(paramsBufferMemory);
-                paramsBufferMapped = nullptr;
-            }
-            core::BufferUtilities::destroyBuffer(dev, paramsBuffer, paramsBufferMemory);
+            paramsBufferMapped = nullptr;
+            core::BufferUtilities::destroyBuffer(dev, paramsBuffer, paramsBufferAllocation, device.getMemoryManager());
         }
 
         if (sampler)
@@ -246,7 +242,7 @@ namespace render::gi
         depthOnlyImageView = device.getLogicalDevice().createImageView(viewInfo);
     }
 
-    void SSGIPipeline::createImageAndView(vk::Image& image, vk::DeviceMemory& memory,
+    void SSGIPipeline::createImageAndView(vk::Image& image, core::VulkanAllocation& alloc,
                                            vk::ImageView& view, vk::Extent2D extent,
                                            vk::Format format)
     {
@@ -261,36 +257,36 @@ namespace render::gi
                   | vk::ImageUsageFlagBits::eTransferDst;
         req.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
 
-        core::ImageUtilities::createImage(req, image, memory);
+        core::ImageUtilities::createImage(req, image, alloc, device.getMemoryManager());
 
         core::ImageViewInfoRequest viewReq(device.getLogicalDevice(), image);
         viewReq.format = format;
         core::ImageUtilities::createImageView(viewReq, view);
     }
 
-    void SSGIPipeline::destroyImageAndView(vk::Image& image, vk::DeviceMemory& memory,
+    void SSGIPipeline::destroyImageAndView(vk::Image& image, core::VulkanAllocation& alloc,
                                             vk::ImageView& view)
     {
         auto& dev = device.getLogicalDevice();
         if (view)  { dev.destroyImageView(view); view = nullptr; }
         if (image) { dev.destroyImage(image); image = nullptr; }
-        if (memory) { dev.freeMemory(memory); memory = nullptr; }
+        if (alloc) { device.getMemoryManager().free(alloc); alloc = {}; }
     }
 
     void SSGIPipeline::createIntermediateImages()
     {
-        createImageAndView(ssgiRawImage, ssgiRawMemory, ssgiRawImageView,
+        createImageAndView(ssgiRawImage, ssgiRawAllocation, ssgiRawImageView,
                            traceExtent, SSGI_FORMAT);
 
-        createImageAndView(ssgiDenoiseHorizImage, ssgiDenoiseHorizMemory, ssgiDenoiseHorizImageView,
+        createImageAndView(ssgiDenoiseHorizImage, ssgiDenoiseHorizAllocation, ssgiDenoiseHorizImageView,
                            traceExtent, SSGI_FORMAT);
 
-        createImageAndView(ssgiDenoisedImage, ssgiDenoisedMemory, ssgiDenoisedImageView,
+        createImageAndView(ssgiDenoisedImage, ssgiDenoisedAllocation, ssgiDenoisedImageView,
                            traceExtent, SSGI_FORMAT);
 
         for (uint32_t i = 0; i < 2; ++i)
         {
-            createImageAndView(ssgiHistoryImages[i], ssgiHistoryMemory[i],
+            createImageAndView(ssgiHistoryImages[i], ssgiHistoryAllocations[i],
                                ssgiHistoryImageViews[i], traceExtent, SSGI_FORMAT);
         }
     }
@@ -305,8 +301,8 @@ namespace render::gi
         bufReq.properties = vk::MemoryPropertyFlagBits::eHostVisible
                           | vk::MemoryPropertyFlagBits::eHostCoherent;
 
-        core::BufferUtilities::createBuffer(bufReq, paramsBuffer, paramsBufferMemory);
-        paramsBufferMapped = dev.mapMemory(paramsBufferMemory, 0, sizeof(SSGIParamsUBO));
+        core::BufferUtilities::createBuffer(bufReq, paramsBuffer, paramsBufferAllocation, device.getMemoryManager());
+        paramsBufferMapped = paramsBufferAllocation.mappedPtr;
     }
 
     void SSGIPipeline::updateParamsBuffer()
@@ -337,13 +333,13 @@ namespace render::gi
 
     void SSGIPipeline::cleanupIntermediateImages()
     {
-        destroyImageAndView(ssgiRawImage, ssgiRawMemory, ssgiRawImageView);
-        destroyImageAndView(ssgiDenoiseHorizImage, ssgiDenoiseHorizMemory, ssgiDenoiseHorizImageView);
-        destroyImageAndView(ssgiDenoisedImage, ssgiDenoisedMemory, ssgiDenoisedImageView);
+        destroyImageAndView(ssgiRawImage, ssgiRawAllocation, ssgiRawImageView);
+        destroyImageAndView(ssgiDenoiseHorizImage, ssgiDenoiseHorizAllocation, ssgiDenoiseHorizImageView);
+        destroyImageAndView(ssgiDenoisedImage, ssgiDenoisedAllocation, ssgiDenoisedImageView);
 
         for (uint32_t i = 0; i < 2; ++i)
         {
-            destroyImageAndView(ssgiHistoryImages[i], ssgiHistoryMemory[i], ssgiHistoryImageViews[i]);
+            destroyImageAndView(ssgiHistoryImages[i], ssgiHistoryAllocations[i], ssgiHistoryImageViews[i]);
         }
     }
 

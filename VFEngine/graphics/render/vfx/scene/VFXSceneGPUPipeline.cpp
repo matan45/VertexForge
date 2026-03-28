@@ -131,14 +131,10 @@ namespace render::vfx
             descriptorSetLayout = nullptr;
         }
 
-        if (cameraUBOMapped && cameraUBOMemory)
-        {
-            vkDevice.unmapMemory(cameraUBOMemory);
-            cameraUBOMapped = nullptr;
-        }
-        core::BufferUtilities::destroyBuffer(vkDevice, cameraUBO, cameraUBOMemory);
-        core::BufferUtilities::destroyBuffer(vkDevice, quadVertexBuffer, quadVertexBufferMemory);
-        core::BufferUtilities::destroyBuffer(vkDevice, quadIndexBuffer, quadIndexBufferMemory);
+        cameraUBOMapped = nullptr;
+        core::BufferUtilities::destroyBuffer(vkDevice, cameraUBO, cameraUBOAllocation, device.getMemoryManager());
+        core::BufferUtilities::destroyBuffer(vkDevice, quadVertexBuffer, quadVertexBufferAllocation, device.getMemoryManager());
+        core::BufferUtilities::destroyBuffer(vkDevice, quadIndexBuffer, quadIndexBufferAllocation, device.getMemoryManager());
 
         if (depthSampler)
         {
@@ -161,9 +157,9 @@ namespace render::vfx
         if (defaultTextureImage)
         {
             vkDevice.destroyImage(defaultTextureImage);
-            vkDevice.freeMemory(defaultTextureMemory);
             defaultTextureImage = nullptr;
         }
+        if (defaultTextureAllocation) { device.getMemoryManager().free(defaultTextureAllocation); defaultTextureAllocation = {}; }
 
         textureEntries.clear();
         emitterConfigs.clear();

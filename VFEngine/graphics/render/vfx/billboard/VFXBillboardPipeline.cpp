@@ -3,6 +3,7 @@
 #include "../../../core/SwapChain.hpp"
 #include "../../../core/Shader.hpp"
 #include "../../../core/Texture.hpp"
+#include "../../../core/BufferUtilities.hpp"
 
 namespace render::vfx
 {
@@ -80,30 +81,10 @@ namespace render::vfx
 
         if (renderPass) { dev.destroyRenderPass(renderPass); renderPass = nullptr; }
 
-        if (cameraUBO)
-        {
-            dev.destroyBuffer(cameraUBO);
-            dev.freeMemory(cameraUBOMemory);
-            cameraUBO = nullptr;
-        }
-        if (quadVertexBuffer)
-        {
-            dev.destroyBuffer(quadVertexBuffer);
-            dev.freeMemory(quadVertexBufferMemory);
-            quadVertexBuffer = nullptr;
-        }
-        if (quadIndexBuffer)
-        {
-            dev.destroyBuffer(quadIndexBuffer);
-            dev.freeMemory(quadIndexBufferMemory);
-            quadIndexBuffer = nullptr;
-        }
-        if (instanceBuffer)
-        {
-            dev.destroyBuffer(instanceBuffer);
-            dev.freeMemory(instanceBufferMemory);
-            instanceBuffer = nullptr;
-        }
+        core::BufferUtilities::destroyBuffer(dev, cameraUBO, cameraUBOAllocation, device.getMemoryManager());
+        core::BufferUtilities::destroyBuffer(dev, quadVertexBuffer, quadVertexBufferAllocation, device.getMemoryManager());
+        core::BufferUtilities::destroyBuffer(dev, quadIndexBuffer, quadIndexBufferAllocation, device.getMemoryManager());
+        core::BufferUtilities::destroyBuffer(dev, instanceBuffer, instanceBufferAllocation, device.getMemoryManager());
 
         customTexture.reset();
         currentTexturePath.clear();
@@ -113,10 +94,9 @@ namespace render::vfx
         if (defaultTextureImage)
         {
             dev.destroyImage(defaultTextureImage);
-            dev.freeMemory(defaultTextureMemory);
             defaultTextureImage = nullptr;
-            defaultTextureMemory = nullptr;
         }
+        if (defaultTextureAllocation) { device.getMemoryManager().free(defaultTextureAllocation); defaultTextureAllocation = {}; }
 
         if (vfxShader)
         {

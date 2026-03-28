@@ -50,7 +50,7 @@ namespace render::water
 
         // h0 spectrum texture (RGBA32F)
         vk::Image h0Image;
-        vk::DeviceMemory h0Memory;
+        core::VulkanAllocation h0Allocation;
         vk::ImageView h0View;
 
         // Field textures: 3 fields (Dy, Dx, Dz) x 2 ping-pong each (RG32F)
@@ -58,15 +58,15 @@ namespace render::water
 
         // Output textures (RGBA16F)
         vk::Image displacementImage;
-        vk::DeviceMemory displacementMemory;
+        core::VulkanAllocation displacementAllocation;
         vk::ImageView displacementView;
 
         vk::Image normalImage;
-        vk::DeviceMemory normalMemory;
+        core::VulkanAllocation normalAllocation;
         vk::ImageView normalView;
 
         vk::Image causticImage;
-        vk::DeviceMemory causticMemory;
+        core::VulkanAllocation causticAllocation;
         vk::ImageView causticView;
 
         vk::Sampler outputSampler;

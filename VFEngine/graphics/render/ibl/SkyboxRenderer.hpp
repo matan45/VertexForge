@@ -25,9 +25,9 @@ namespace render::ibl
         vk::Pipeline graphicsPipeline;
         std::vector<vk::Framebuffer> framebuffers;
         vk::Buffer vertexBuffer;
-        vk::DeviceMemory vertexBufferMemory;
+        core::VulkanAllocation vertexBufferAllocation;
         vk::Buffer uniformBuffer;
-        vk::DeviceMemory uniformBufferMemory;
+        core::VulkanAllocation uniformBufferAllocation;
         vk::PipelineLayout pipelineLayout;
         vk::DescriptorSetLayout descriptorSetLayout;
         vk::DescriptorSet descriptorSet;
