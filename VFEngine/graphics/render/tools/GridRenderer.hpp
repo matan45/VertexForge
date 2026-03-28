@@ -30,9 +30,9 @@ namespace render::mesh
         vk::PipelineLayout gridPipelineLayout;
 
         vk::Buffer vertexBuffer;
-        vk::DeviceMemory vertexBufferMemory;
+        core::VulkanAllocation vertexBufferAllocation;
         vk::Buffer indexBuffer;
-        vk::DeviceMemory indexBufferMemory;
+        core::VulkanAllocation indexBufferAllocation;
 
         uint32_t indexCount = 0;
 

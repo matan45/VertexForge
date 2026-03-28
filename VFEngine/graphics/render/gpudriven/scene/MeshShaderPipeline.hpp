@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../../../core/VulkanMemoryManager.hpp"
 #include <vulkan/vulkan.hpp>
 #include <memory>
 
@@ -78,7 +79,7 @@ namespace render::gpudriven
         vk::DescriptorSet vertexDataDescriptorSet;
 
         vk::Buffer statsBuffer;
-        vk::DeviceMemory statsBufferMemory;
+        core::VulkanAllocation statsBufferAllocation;
         MeshletCullingStats cachedStats{};
 
         vk::DescriptorSet lightDataDescriptorSet;

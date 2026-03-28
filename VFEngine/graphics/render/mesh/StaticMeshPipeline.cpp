@@ -137,12 +137,10 @@ namespace render::mesh
 
         math::extractFrustumPlanes(projection * view, ubo.frustumPlanes);
 
-        void* data;
-        vk::Result result = device.getLogicalDevice().mapMemory(cameraUBOMemory, 0, sizeof(ubo), {}, &data);
-        if (result == vk::Result::eSuccess)
+        void* data = cameraUBOAllocation.mappedPtr;
+        if (data)
         {
             memcpy(data, &ubo, sizeof(ubo));
-            device.getLogicalDevice().unmapMemory(cameraUBOMemory);
         }
     }
 
@@ -157,9 +155,9 @@ namespace render::mesh
         if (cameraUBO && !externalCameraBuffer)
         {
             device.getLogicalDevice().destroyBuffer(cameraUBO);
-            device.getLogicalDevice().freeMemory(cameraUBOMemory);
             cameraUBO = nullptr;
-            cameraUBOMemory = nullptr;
+            device.getMemoryManager().free(cameraUBOAllocation);
+            cameraUBOAllocation = {};
         }
 
         if (renderPass)

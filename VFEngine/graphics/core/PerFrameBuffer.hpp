@@ -2,6 +2,7 @@
 
 #include "GraphicsConstants.hpp"
 #include "BufferUtilities.hpp"
+#include "VulkanMemoryManager.hpp"
 #include <vulkan/vulkan.hpp>
 #include <array>
 #include <cstring>
@@ -22,7 +23,8 @@ namespace core
 
         /// Create MAX_FRAMES_IN_FLIGHT buffers with the given size and usage.
         void create(const vk::Device& logicalDevice, const vk::PhysicalDevice& physicalDevice,
-                    vk::DeviceSize size, vk::BufferUsageFlagBits usage = vk::BufferUsageFlagBits::eUniformBuffer)
+                    vk::DeviceSize size, VulkanMemoryManager& memoryManager,
+                    vk::BufferUsageFlagBits usage = vk::BufferUsageFlagBits::eUniformBuffer)
         {
             bufferSize = size;
             for (auto& f : frames)
@@ -32,14 +34,14 @@ namespace core
                 request.usage = usage;
                 request.properties = vk::MemoryPropertyFlagBits::eHostVisible |
                                     vk::MemoryPropertyFlagBits::eHostCoherent;
-                BufferUtilities::createBuffer(request, f.buffer, f.memory);
-                f.mapped = logicalDevice.mapMemory(f.memory, 0, size, vk::MemoryMapFlags{});
+                BufferUtilities::createBuffer(request, f.buffer, f.allocation, memoryManager);
+                f.mapped = f.allocation.mappedPtr;
             }
         }
 
         /// Create MAX_FRAMES_IN_FLIGHT staging buffers (TransferSrc) for use with device-local buffers.
         void createStaging(const vk::Device& logicalDevice, const vk::PhysicalDevice& physicalDevice,
-                           vk::DeviceSize size)
+                           vk::DeviceSize size, VulkanMemoryManager& memoryManager)
         {
             bufferSize = size;
             for (auto& f : frames)
@@ -49,22 +51,18 @@ namespace core
                 request.usage = vk::BufferUsageFlagBits::eTransferSrc;
                 request.properties = vk::MemoryPropertyFlagBits::eHostVisible |
                                     vk::MemoryPropertyFlagBits::eHostCoherent;
-                BufferUtilities::createBuffer(request, f.buffer, f.memory);
-                f.mapped = logicalDevice.mapMemory(f.memory, 0, size, vk::MemoryMapFlags{});
+                BufferUtilities::createBuffer(request, f.buffer, f.allocation, memoryManager);
+                f.mapped = f.allocation.mappedPtr;
             }
         }
 
         /// Destroy all buffers.
-        void destroy(const vk::Device& logicalDevice)
+        void destroy(const vk::Device& logicalDevice, VulkanMemoryManager& memoryManager)
         {
             for (auto& f : frames)
             {
-                if (f.mapped)
-                {
-                    logicalDevice.unmapMemory(f.memory);
-                    f.mapped = nullptr;
-                }
-                BufferUtilities::destroyBuffer(logicalDevice, f.buffer, f.memory);
+                f.mapped = nullptr;
+                BufferUtilities::destroyBuffer(logicalDevice, f.buffer, f.allocation, memoryManager);
             }
         }
 
@@ -108,7 +106,7 @@ namespace core
         struct Frame
         {
             vk::Buffer buffer;
-            vk::DeviceMemory memory;
+            VulkanAllocation allocation;
             void* mapped = nullptr;
         };
 

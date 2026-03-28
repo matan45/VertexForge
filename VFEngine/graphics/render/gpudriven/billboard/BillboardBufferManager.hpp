@@ -1,6 +1,7 @@
 #pragma once
 
 #include "BillboardGPUTypes.hpp"
+#include "../../../core/VulkanMemoryManager.hpp"
 #include <vulkan/vulkan.hpp>
 #include <vector>
 #include <cstdint>
@@ -21,9 +22,9 @@ namespace render::gpudriven
         core::Device* devicePtr = nullptr;
 
         vk::Buffer instanceBuffer;
-        vk::DeviceMemory instanceBufferMemory;
+        core::VulkanAllocation instanceBufferAllocation;
         vk::Buffer countBuffer;
-        vk::DeviceMemory countBufferMemory;
+        core::VulkanAllocation countBufferAllocation;
 
         uint32_t capacity = 0;
         uint32_t currentInstanceCount = 0;

@@ -37,7 +37,7 @@ namespace render::mesh
         vertexBufferRequest.usage = vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst |
             vk::BufferUsageFlagBits::eTransferSrc;
         vertexBufferRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-        core::BufferUtilities::createBuffer(vertexBufferRequest, lodBuffers.vertexBuffer, lodBuffers.vertexBufferMemory);
+        core::BufferUtilities::createBuffer(vertexBufferRequest, lodBuffers.vertexBuffer, lodBuffers.vertexBufferAllocation, device.getMemoryManager());
 
         transferManager->copyToBufferAsync(
             lodBuffers.vertexBuffer,
@@ -54,7 +54,7 @@ namespace render::mesh
             indexBufferRequest.usage = vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eTransferDst |
                 vk::BufferUsageFlagBits::eTransferSrc;
             indexBufferRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-            core::BufferUtilities::createBuffer(indexBufferRequest, lodBuffers.indexBuffer, lodBuffers.indexBufferMemory);
+            core::BufferUtilities::createBuffer(indexBufferRequest, lodBuffers.indexBuffer, lodBuffers.indexBufferAllocation, device.getMemoryManager());
 
             transferManager->copyToBufferAsync(
                 lodBuffers.indexBuffer,
@@ -69,17 +69,17 @@ namespace render::mesh
         if (lodBuffers.vertexBuffer)
         {
             device.getLogicalDevice().destroyBuffer(lodBuffers.vertexBuffer);
-            device.getLogicalDevice().freeMemory(lodBuffers.vertexBufferMemory);
             lodBuffers.vertexBuffer = nullptr;
-            lodBuffers.vertexBufferMemory = nullptr;
         }
+        device.getMemoryManager().free(lodBuffers.vertexBufferAllocation);
+        lodBuffers.vertexBufferAllocation = {};
         if (lodBuffers.indexBuffer)
         {
             device.getLogicalDevice().destroyBuffer(lodBuffers.indexBuffer);
-            device.getLogicalDevice().freeMemory(lodBuffers.indexBufferMemory);
             lodBuffers.indexBuffer = nullptr;
-            lodBuffers.indexBufferMemory = nullptr;
         }
+        device.getMemoryManager().free(lodBuffers.indexBufferAllocation);
+        lodBuffers.indexBufferAllocation = {};
         lodBuffers.vertexCount = 0;
         lodBuffers.indexCount = 0;
     }

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "SVTTypes.hpp"
+#include "../../core/VulkanMemoryManager.hpp"
 #include <vulkan/vulkan.hpp>
 #include <vector>
 #include <cstdint>
@@ -25,7 +26,7 @@ namespace render::svt
         struct ChannelCache
         {
             vk::Image image;
-            vk::DeviceMemory memory;
+            core::VulkanAllocation allocation;
             vk::ImageView view;
             vk::Sampler sampler;
             vk::Format format = vk::Format::eUndefined;
@@ -44,7 +45,7 @@ namespace render::svt
 
         // Staging buffer for tile uploads
         vk::Buffer stagingBuffer;
-        vk::DeviceMemory stagingMemory;
+        core::VulkanAllocation stagingAllocation;
         void* stagingMapped = nullptr;
         size_t stagingBufferSize = 0;
 

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../../../core/VulkanMemoryManager.hpp"
 #include <vulkan/vulkan.hpp>
 #include <glm/glm.hpp>
 #include <memory>
@@ -48,15 +49,15 @@ namespace render::gpudriven
 
         // GPU buffers for height data
         vk::Buffer heightInputBuffer;
-        vk::DeviceMemory heightInputMemory;
+        core::VulkanAllocation heightInputAllocation;
         vk::Buffer heightOutputBuffer;
-        vk::DeviceMemory heightOutputMemory;
+        core::VulkanAllocation heightOutputAllocation;
 
         // Host-visible staging buffers for upload/readback
         vk::Buffer stagingUploadBuffer;
-        vk::DeviceMemory stagingUploadMemory;
+        core::VulkanAllocation stagingUploadAllocation;
         vk::Buffer stagingReadbackBuffer;
-        vk::DeviceMemory stagingReadbackMemory;
+        core::VulkanAllocation stagingReadbackAllocation;
 
         // Command pool for synchronous compute dispatches
         vk::CommandPool computeCommandPool;

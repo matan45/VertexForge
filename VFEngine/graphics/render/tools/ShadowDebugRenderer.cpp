@@ -35,10 +35,10 @@ namespace render::mesh
     {
         destroyPipelineAndLayout(frustumPipeline, frustumPipelineLayout);
         destroyPipelineAndLayout(spherePipeline, spherePipelineLayout);
-        destroyBufferPair(frustumVertexBuffer, frustumVertexBufferMemory);
-        destroyBufferPair(frustumIndexBuffer, frustumIndexBufferMemory);
-        destroyBufferPair(sphereVertexBuffer, sphereVertexBufferMemory);
-        destroyBufferPair(sphereIndexBuffer, sphereIndexBufferMemory);
+        destroyBufferPair(frustumVertexBuffer, frustumVertexBufferAllocation);
+        destroyBufferPair(frustumIndexBuffer, frustumIndexBufferAllocation);
+        destroyBufferPair(sphereVertexBuffer, sphereVertexBufferAllocation);
+        destroyBufferPair(sphereIndexBuffer, sphereIndexBufferAllocation);
         initialized = false;
     }
 
@@ -109,7 +109,7 @@ namespace render::mesh
         vertexRequest.size = vertexBufferSize;
         vertexRequest.usage = vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst;
         vertexRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-        core::BufferUtilities::createBuffer(vertexRequest, frustumVertexBuffer, frustumVertexBufferMemory);
+        core::BufferUtilities::createBuffer(vertexRequest, frustumVertexBuffer, frustumVertexBufferAllocation, device.getMemoryManager());
 
         core::BufferUtilities::copyToBuffer(
             device.getLogicalDevice(),
@@ -126,7 +126,7 @@ namespace render::mesh
         indexRequest.size = indexBufferSize;
         indexRequest.usage = vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eTransferDst;
         indexRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-        core::BufferUtilities::createBuffer(indexRequest, frustumIndexBuffer, frustumIndexBufferMemory);
+        core::BufferUtilities::createBuffer(indexRequest, frustumIndexBuffer, frustumIndexBufferAllocation, device.getMemoryManager());
 
         core::BufferUtilities::copyToBuffer(
             device.getLogicalDevice(),
@@ -193,7 +193,7 @@ namespace render::mesh
         vertexRequest.size = vertexBufferSize;
         vertexRequest.usage = vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst;
         vertexRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-        core::BufferUtilities::createBuffer(vertexRequest, sphereVertexBuffer, sphereVertexBufferMemory);
+        core::BufferUtilities::createBuffer(vertexRequest, sphereVertexBuffer, sphereVertexBufferAllocation, device.getMemoryManager());
 
         core::BufferUtilities::copyToBuffer(
             device.getLogicalDevice(),
@@ -210,7 +210,7 @@ namespace render::mesh
         indexRequest.size = indexBufferSize;
         indexRequest.usage = vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eTransferDst;
         indexRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-        core::BufferUtilities::createBuffer(indexRequest, sphereIndexBuffer, sphereIndexBufferMemory);
+        core::BufferUtilities::createBuffer(indexRequest, sphereIndexBuffer, sphereIndexBufferAllocation, device.getMemoryManager());
 
         core::BufferUtilities::copyToBuffer(
             device.getLogicalDevice(),

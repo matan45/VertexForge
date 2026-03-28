@@ -204,7 +204,7 @@ namespace controllers
         imageInfo.tiling = vk::ImageTiling::eOptimal;
         imageInfo.usage = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled;
         imageInfo.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-        core::ImageUtilities::createImage(imageInfo, tex.image, tex.memory);
+        core::ImageUtilities::createImage(imageInfo, tex.image, tex.allocation, device.getMemoryManager());
 
         uploadStagingToImage(device, stagingBuffer, tex.image, width, height);
 
@@ -275,7 +275,7 @@ namespace controllers
             imageInfo.tiling = vk::ImageTiling::eOptimal;
             imageInfo.usage = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled;
             imageInfo.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-            core::ImageUtilities::createImage(imageInfo, tex.image, tex.memory);
+            core::ImageUtilities::createImage(imageInfo, tex.image, tex.allocation, device.getMemoryManager());
 
             uploadStagingToImage(device, stagingBuffer, tex.image, texturePtr->width, texturePtr->height);
 
@@ -323,8 +323,11 @@ namespace controllers
             device.getLogicalDevice().destroySampler(tex.sampler);
         if (tex.image)
             device.getLogicalDevice().destroyImage(tex.image);
-        if (tex.memory)
-            device.getLogicalDevice().freeMemory(tex.memory);
+        if (tex.allocation)
+        {
+            device.getMemoryManager().free(tex.allocation);
+            tex.allocation = {};
+        }
 
         tex = PreviewTextureGPU{};
     }

@@ -270,7 +270,7 @@ namespace render::mesh
             if (defaultTexture.sampler) device.getLogicalDevice().destroySampler(defaultTexture.sampler);
             if (defaultTexture.view) device.getLogicalDevice().destroyImageView(defaultTexture.view);
             if (defaultTexture.image) device.getLogicalDevice().destroyImage(defaultTexture.image);
-            if (defaultTexture.memory) device.getLogicalDevice().freeMemory(defaultTexture.memory);
+            if (defaultTexture.allocation) { device.getMemoryManager().free(defaultTexture.allocation); defaultTexture.allocation = {}; }
             defaultTexture = {};
             defaultTextureCreated = false;
         }
@@ -289,7 +289,7 @@ namespace render::mesh
             vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst,
             vk::MemoryPropertyFlagBits::eDeviceLocal
         );
-        core::ImageUtilities::createImage(imageInfo, defaultTexture.image, defaultTexture.memory);
+        core::ImageUtilities::createImage(imageInfo, defaultTexture.image, defaultTexture.allocation, device.getMemoryManager());
 
         // Create staging buffer and copy
         constexpr vk::DeviceSize imageSize = sizeof(DEFAULT_TEXTURE_PIXELS);

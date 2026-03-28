@@ -87,8 +87,8 @@ namespace render::mesh
 
     void NavmeshDebugRenderer::destroyMeshBuffers()
     {
-        destroyBufferPair(vertexBuffer, vertexMemory);
-        destroyBufferPair(indexBuffer, indexMemory);
+        destroyBufferPair(vertexBuffer, vertexAllocation);
+        destroyBufferPair(indexBuffer, indexAllocation);
         indexCount = 0;
         hasData = false;
     }
@@ -108,7 +108,7 @@ namespace render::mesh
         vertexRequest.size = vertexBufferSize;
         vertexRequest.usage = vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst;
         vertexRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-        core::BufferUtilities::createBuffer(vertexRequest, vertexBuffer, vertexMemory);
+        core::BufferUtilities::createBuffer(vertexRequest, vertexBuffer, vertexAllocation, device.getMemoryManager());
 
         core::BufferUtilities::copyToBuffer(
             device.getLogicalDevice(),
@@ -125,7 +125,7 @@ namespace render::mesh
         indexRequest.size = indexBufferSize;
         indexRequest.usage = vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eTransferDst;
         indexRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-        core::BufferUtilities::createBuffer(indexRequest, indexBuffer, indexMemory);
+        core::BufferUtilities::createBuffer(indexRequest, indexBuffer, indexAllocation, device.getMemoryManager());
 
         core::BufferUtilities::copyToBuffer(
             device.getLogicalDevice(),

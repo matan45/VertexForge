@@ -24,19 +24,15 @@ namespace render::common
                              vk::MemoryPropertyFlagBits::eHostCoherent;
         request.size = sizeof(CameraUBO);
 
-        core::BufferUtilities::createBuffer(request, buffer, memory);
-        mapped = device.getLogicalDevice().mapMemory(memory, 0, sizeof(CameraUBO));
+        core::BufferUtilities::createBuffer(request, buffer, allocation, device.getMemoryManager());
+        mapped = allocation.mappedPtr;
     }
 
     void SharedCameraUBO::cleanup()
     {
-        if (mapped)
-        {
-            device.getLogicalDevice().unmapMemory(memory);
-            mapped = nullptr;
-        }
+        mapped = nullptr;
 
-        core::BufferUtilities::destroyBuffer(device.getLogicalDevice(), buffer, memory);
+        core::BufferUtilities::destroyBuffer(device.getLogicalDevice(), buffer, allocation, device.getMemoryManager());
     }
 
     void SharedCameraUBO::update(const glm::mat4& view, const glm::mat4& projection,

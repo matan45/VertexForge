@@ -443,7 +443,7 @@ namespace controllers
             imageInfo.usage = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled;
             imageInfo.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
             core::ImageUtilities::createImage(imageInfo, offscreenResources.colorImages[i].colorImage,
-                                               offscreenResources.colorImages[i].colorImageMemory);
+                                               offscreenResources.colorImages[i].colorImageAllocation, device.getMemoryManager());
 
             core::ImageViewInfoRequest viewInfo(device.getLogicalDevice(),
                                                  offscreenResources.colorImages[i].colorImage);
@@ -462,7 +462,7 @@ namespace controllers
         depthInfo.usage = vk::ImageUsageFlagBits::eDepthStencilAttachment;
         depthInfo.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
         core::ImageUtilities::createImage(depthInfo, offscreenResources.depthImage.depthImage,
-                                           offscreenResources.depthImage.depthImageMemory);
+                                           offscreenResources.depthImage.depthImageAllocation, device.getMemoryManager());
 
         core::ImageViewInfoRequest depthViewInfo(device.getLogicalDevice(),
                                                   offscreenResources.depthImage.depthImage);
@@ -477,7 +477,7 @@ namespace controllers
         {
             device.getLogicalDevice().destroyImageView(resources.colorImageView);
             device.getLogicalDevice().destroyImage(resources.colorImage);
-            device.getLogicalDevice().freeMemory(resources.colorImageMemory);
+            device.getMemoryManager().free(resources.colorImageAllocation);
         }
         offscreenResources.colorImages.clear();
 
@@ -491,10 +491,10 @@ namespace controllers
             device.getLogicalDevice().destroyImage(offscreenResources.depthImage.depthImage);
             offscreenResources.depthImage.depthImage = nullptr;
         }
-        if (offscreenResources.depthImage.depthImageMemory)
+        if (offscreenResources.depthImage.depthImageAllocation)
         {
-            device.getLogicalDevice().freeMemory(offscreenResources.depthImage.depthImageMemory);
-            offscreenResources.depthImage.depthImageMemory = nullptr;
+            device.getMemoryManager().free(offscreenResources.depthImage.depthImageAllocation);
+            offscreenResources.depthImage.depthImageAllocation = {};
         }
     }
 

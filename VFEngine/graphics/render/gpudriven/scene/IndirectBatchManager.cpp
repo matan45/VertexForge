@@ -154,7 +154,7 @@ namespace render::gpudriven
                     vk::BufferUsageFlagBits::eIndirectBuffer | // Indirect draw reads
                     vk::BufferUsageFlagBits::eTransferDst; // Clear/reset
                 request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-                core::BufferUtilities::createBuffer(request, combinedDrawCommandBuffer, combinedDrawCommandMemory);
+                core::BufferUtilities::createBuffer(request, combinedDrawCommandBuffer, combinedDrawCommandAllocation, device.getMemoryManager());
             }
 
             // Combined draw count buffer - BatchDrawStats for each batch
@@ -167,7 +167,7 @@ namespace render::gpudriven
                     vk::BufferUsageFlagBits::eTransferDst | // Reset to 0
                     vk::BufferUsageFlagBits::eTransferSrc; // Readback for debug
                 request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-                core::BufferUtilities::createBuffer(request, combinedDrawCountBuffer, combinedDrawCountMemory);
+                core::BufferUtilities::createBuffer(request, combinedDrawCountBuffer, combinedDrawCountAllocation, device.getMemoryManager());
             }
 
             // Combined per-draw data buffer - all batches contiguous
@@ -178,7 +178,7 @@ namespace render::gpudriven
                 request.usage = vk::BufferUsageFlagBits::eStorageBuffer | // Compute writes, VS/FS reads
                     vk::BufferUsageFlagBits::eTransferDst; // Clear if needed
                 request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-                core::BufferUtilities::createBuffer(request, combinedPerDrawDataBuffer, combinedPerDrawDataMemory);
+                core::BufferUtilities::createBuffer(request, combinedPerDrawDataBuffer, combinedPerDrawDataAllocation, device.getMemoryManager());
             }
 
             // Staging buffer for count reset and readback (needs to hold all batch stats)
@@ -189,11 +189,9 @@ namespace render::gpudriven
                     vk::BufferUsageFlagBits::eTransferDst;
                 request.properties = vk::MemoryPropertyFlagBits::eHostVisible |
                     vk::MemoryPropertyFlagBits::eHostCoherent;
-                core::BufferUtilities::createBuffer(request, stagingBuffer, stagingMemory);
+                core::BufferUtilities::createBuffer(request, stagingBuffer, stagingAllocation, device.getMemoryManager());
 
-                stagingMapped = logicalDevice.mapMemory(
-                    stagingMemory, 0, getCombinedDrawCountBufferSize(), vk::MemoryMapFlags{}
-                );
+                stagingMapped = stagingAllocation.mappedPtr;
                 // Initialize all stats to 0
                 std::memset(stagingMapped, 0, getCombinedDrawCountBufferSize());
             }
@@ -224,16 +222,12 @@ namespace render::gpudriven
     {
         const auto& logicalDevice = device.getLogicalDevice();
 
-        if (stagingMapped)
-        {
-            logicalDevice.unmapMemory(stagingMemory);
-            stagingMapped = nullptr;
-        }
+        stagingMapped = nullptr;
 
-        core::BufferUtilities::destroyBuffer(logicalDevice, stagingBuffer, stagingMemory);
-        core::BufferUtilities::destroyBuffer(logicalDevice, combinedPerDrawDataBuffer, combinedPerDrawDataMemory);
-        core::BufferUtilities::destroyBuffer(logicalDevice, combinedDrawCountBuffer, combinedDrawCountMemory);
-        core::BufferUtilities::destroyBuffer(logicalDevice, combinedDrawCommandBuffer, combinedDrawCommandMemory);
+        core::BufferUtilities::destroyBuffer(logicalDevice, stagingBuffer, stagingAllocation, device.getMemoryManager());
+        core::BufferUtilities::destroyBuffer(logicalDevice, combinedPerDrawDataBuffer, combinedPerDrawDataAllocation, device.getMemoryManager());
+        core::BufferUtilities::destroyBuffer(logicalDevice, combinedDrawCountBuffer, combinedDrawCountAllocation, device.getMemoryManager());
+        core::BufferUtilities::destroyBuffer(logicalDevice, combinedDrawCommandBuffer, combinedDrawCommandAllocation, device.getMemoryManager());
     }
 
     void IndirectBatchManager::resetAllBatches(vk::CommandBuffer cmd)

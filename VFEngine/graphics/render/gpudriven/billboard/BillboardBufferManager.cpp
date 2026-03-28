@@ -87,7 +87,7 @@ namespace render::gpudriven
             request.size = size;
             request.usage = vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst;
             request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-            core::BufferUtilities::createBuffer(request, instanceBuffer, instanceBufferMemory);
+            core::BufferUtilities::createBuffer(request, instanceBuffer, instanceBufferAllocation, devicePtr->getMemoryManager());
         }
 
         // Device-local count buffer
@@ -96,7 +96,7 @@ namespace render::gpudriven
             request.size = sizeof(uint32_t);
             request.usage = vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst;
             request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-            core::BufferUtilities::createBuffer(request, countBuffer, countBufferMemory);
+            core::BufferUtilities::createBuffer(request, countBuffer, countBufferAllocation, devicePtr->getMemoryManager());
         }
     }
 
@@ -106,8 +106,8 @@ namespace render::gpudriven
 
         vk::Device vkDevice = devicePtr->getLogicalDevice();
 
-        core::BufferUtilities::destroyBuffer(vkDevice, instanceBuffer, instanceBufferMemory);
-        core::BufferUtilities::destroyBuffer(vkDevice, countBuffer, countBufferMemory);
+        core::BufferUtilities::destroyBuffer(vkDevice, instanceBuffer, instanceBufferAllocation, devicePtr->getMemoryManager());
+        core::BufferUtilities::destroyBuffer(vkDevice, countBuffer, countBufferAllocation, devicePtr->getMemoryManager());
 
         capacity = 0;
         currentInstanceCount = 0;

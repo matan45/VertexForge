@@ -54,12 +54,8 @@ namespace render::svt
         if (!initialized) return;
 
         auto dev = device.getLogicalDevice();
-        if (mapped)
-        {
-            dev.unmapMemory(memory);
-            mapped = nullptr;
-        }
-        core::BufferUtilities::destroyBuffer(dev, buffer, memory);
+        mapped = nullptr;
+        core::BufferUtilities::destroyBuffer(dev, buffer, allocation, device.getMemoryManager());
 
         entries.clear();
         mipInfos.clear();
@@ -129,9 +125,9 @@ namespace render::svt
             vk::BufferUsageFlagBits::eStorageBuffer,
             vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
         );
-        core::BufferUtilities::createBuffer(bufReq, buffer, memory);
+        core::BufferUtilities::createBuffer(bufReq, buffer, allocation, device.getMemoryManager());
 
         // Persistently map
-        mapped = dev.mapMemory(memory, 0, bufferSize);
+        mapped = allocation.mappedPtr;
     }
 }

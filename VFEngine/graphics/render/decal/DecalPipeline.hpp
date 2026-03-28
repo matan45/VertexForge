@@ -1,6 +1,7 @@
 #pragma once
 
 #include <vulkan/vulkan.hpp>
+#include "../../core/VulkanMemoryManager.hpp"
 #include <glm/glm.hpp>
 #include <vector>
 #include <unordered_map>
@@ -62,19 +63,19 @@ namespace render::decal
         vk::Sampler textureSampler;
 
         vk::Buffer decalDataBuffer;
-        vk::DeviceMemory decalDataMemory;
+        core::VulkanAllocation decalDataAllocation;
         uint32_t maxDecals = 256;
 
         vk::Buffer cubeVertexBuffer;
-        vk::DeviceMemory cubeVertexMemory;
+        core::VulkanAllocation cubeVertexAllocation;
         vk::Buffer cubeIndexBuffer;
-        vk::DeviceMemory cubeIndexMemory;
+        core::VulkanAllocation cubeIndexAllocation;
         uint32_t cubeIndexCount = 0;
 
         using CameraUBO = render::common::GPUCameraData;
 
         vk::Buffer cameraUBOBuffer;
-        vk::DeviceMemory cameraUBOMemory;
+        core::VulkanAllocation cameraUBOAllocation;
 
         std::vector<DecalGPUData> gpuDecalData;
         std::vector<services::DecalRenderData> currentDecals;

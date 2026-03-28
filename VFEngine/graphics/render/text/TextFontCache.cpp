@@ -35,7 +35,8 @@ namespace render::text
             if (cached.atlasImage)
             {
                 dev.destroyImage(cached.atlasImage);
-                dev.freeMemory(cached.atlasImageMemory);
+                device.getMemoryManager().free(cached.atlasImageAllocation);
+                cached.atlasImageAllocation = {};
             }
         }
         fontCache.clear();
@@ -54,7 +55,8 @@ namespace render::text
         if (defaultImage)
         {
             dev.destroyImage(defaultImage);
-            dev.freeMemory(defaultImageMemory);
+            device.getMemoryManager().free(defaultImageAllocation);
+            defaultImageAllocation = {};
             defaultImage = nullptr;
         }
     }
@@ -72,7 +74,7 @@ namespace render::text
             vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
             vk::MemoryPropertyFlagBits::eDeviceLocal
         );
-        core::ImageUtilities::createImage(imageInfo, defaultImage, defaultImageMemory);
+        core::ImageUtilities::createImage(imageInfo, defaultImage, defaultImageAllocation, device.getMemoryManager());
 
         core::ImageViewInfoRequest viewInfo(
             device.getLogicalDevice(),
@@ -233,7 +235,7 @@ namespace render::text
             vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
             vk::MemoryPropertyFlagBits::eDeviceLocal
         );
-        core::ImageUtilities::createImage(imageInfo, cached.atlasImage, cached.atlasImageMemory);
+        core::ImageUtilities::createImage(imageInfo, cached.atlasImage, cached.atlasImageAllocation, device.getMemoryManager());
 
         core::ImageViewInfoRequest viewInfo(
             device.getLogicalDevice(),
@@ -324,7 +326,8 @@ namespace render::text
             if (cached.atlasImage)
             {
                 dev.destroyImage(cached.atlasImage);
-                dev.freeMemory(cached.atlasImageMemory);
+                device.getMemoryManager().free(cached.atlasImageAllocation);
+                cached.atlasImageAllocation = {};
             }
             return false;
         }

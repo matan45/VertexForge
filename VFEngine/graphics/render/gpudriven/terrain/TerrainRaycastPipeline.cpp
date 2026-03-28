@@ -85,11 +85,8 @@ namespace render::gpudriven
             resultBuffer = nullptr;
         }
 
-        if (resultMemory)
-        {
-            vkDevice.freeMemory(resultMemory);
-            resultMemory = nullptr;
-        }
+        device.getMemoryManager().free(resultAllocation);
+        resultAllocation = {};
 
         if (stagingBuffer)
         {
@@ -97,11 +94,8 @@ namespace render::gpudriven
             stagingBuffer = nullptr;
         }
 
-        if (stagingMemory)
-        {
-            vkDevice.freeMemory(stagingMemory);
-            stagingMemory = nullptr;
-        }
+        device.getMemoryManager().free(stagingAllocation);
+        stagingAllocation = {};
 
         shader.reset();
 
@@ -240,7 +234,7 @@ namespace render::gpudriven
             vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferSrc,
             vk::MemoryPropertyFlagBits::eDeviceLocal
         );
-        core::BufferUtilities::createBuffer(resultRequest, resultBuffer, resultMemory);
+        core::BufferUtilities::createBuffer(resultRequest, resultBuffer, resultAllocation, device.getMemoryManager());
 
         core::BufferInfoRequest stagingRequest(
             device.getLogicalDevice(),
@@ -249,7 +243,7 @@ namespace render::gpudriven
             vk::BufferUsageFlagBits::eTransferDst,
             vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
         );
-        core::BufferUtilities::createBuffer(stagingRequest, stagingBuffer, stagingMemory);
+        core::BufferUtilities::createBuffer(stagingRequest, stagingBuffer, stagingAllocation, device.getMemoryManager());
     }
 
     void TerrainRaycastPipeline::createDepthSampler()
@@ -393,10 +387,7 @@ namespace render::gpudriven
         };
 
         GPURaycastResult gpuResult{};
-        {
-            MappedMemoryGuard mapped(device.getLogicalDevice(), stagingMemory, 0, RESULT_BUFFER_SIZE);
-            std::memcpy(&gpuResult, mapped.data(), sizeof(GPURaycastResult));
-        }
+        std::memcpy(&gpuResult, stagingAllocation.mappedPtr, sizeof(GPURaycastResult));
 
         lastResult.hit = gpuResult.hitPosition.w > 0.5f;
         lastResult.position = glm::vec3(gpuResult.hitPosition);

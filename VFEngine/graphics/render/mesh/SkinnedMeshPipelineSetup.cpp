@@ -171,7 +171,7 @@ namespace render::mesh
         bufferRequest.size = bufferSize;
         bufferRequest.usage = vk::BufferUsageFlagBits::eUniformBuffer;
         bufferRequest.properties = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
-        core::BufferUtilities::createBuffer(bufferRequest, cameraUBO, cameraUBOMemory);
+        core::BufferUtilities::createBuffer(bufferRequest, cameraUBO, cameraUBOAllocation, device.getMemoryManager());
     }
 
     void SkinnedMeshPipeline::createBoneSSBO()
@@ -182,9 +182,10 @@ namespace render::mesh
         bufferRequest.size = bufferSize;
         bufferRequest.usage = vk::BufferUsageFlagBits::eStorageBuffer;
         bufferRequest.properties = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
-        core::BufferUtilities::createBuffer(bufferRequest, boneSSBO, boneSSBOMemory);
+        core::BufferUtilities::createBuffer(bufferRequest, boneSSBO, boneSSBOAllocation, device.getMemoryManager());
 
-        vk::Result result = device.getLogicalDevice().mapMemory(boneSSBOMemory, 0, bufferSize, {}, &boneSSBOMapped);
+        boneSSBOMapped = boneSSBOAllocation.mappedPtr;
+        vk::Result result = boneSSBOMapped ? vk::Result::eSuccess : vk::Result::eErrorMemoryMapFailed;
         if (result != vk::Result::eSuccess)
         {
             vfLogError("Failed to map bone SSBO memory");

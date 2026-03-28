@@ -71,10 +71,10 @@ namespace render::decal
         fallbackWhiteTexture.reset();
         fallbackNormalTexture.reset();
 
-        core::BufferUtilities::destroyBuffer(vkDevice, decalDataBuffer, decalDataMemory);
-        core::BufferUtilities::destroyBuffer(vkDevice, cameraUBOBuffer, cameraUBOMemory);
-        core::BufferUtilities::destroyBuffer(vkDevice, cubeVertexBuffer, cubeVertexMemory);
-        core::BufferUtilities::destroyBuffer(vkDevice, cubeIndexBuffer, cubeIndexMemory);
+        core::BufferUtilities::destroyBuffer(vkDevice, decalDataBuffer, decalDataAllocation, device.getMemoryManager());
+        core::BufferUtilities::destroyBuffer(vkDevice, cameraUBOBuffer, cameraUBOAllocation, device.getMemoryManager());
+        core::BufferUtilities::destroyBuffer(vkDevice, cubeVertexBuffer, cubeVertexAllocation, device.getMemoryManager());
+        core::BufferUtilities::destroyBuffer(vkDevice, cubeIndexBuffer, cubeIndexAllocation, device.getMemoryManager());
 
         initialized = false;
     }
@@ -226,7 +226,7 @@ namespace render::decal
         core::BufferInfoRequest vertReq(vkDevice, physDevice, vertSize,
             vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst,
             vk::MemoryPropertyFlagBits::eDeviceLocal);
-        core::BufferUtilities::createBuffer(vertReq, cubeVertexBuffer, cubeVertexMemory);
+        core::BufferUtilities::createBuffer(vertReq, cubeVertexBuffer, cubeVertexAllocation, device.getMemoryManager());
         core::BufferUtilities::copyToBuffer(vkDevice, physDevice,
             device.getGraphicsQueue(), device.getStagingCommandPool(),
             cubeVertexBuffer, vertices.data(), vertSize);
@@ -235,7 +235,7 @@ namespace render::decal
         core::BufferInfoRequest idxReq(vkDevice, physDevice, idxSize,
             vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eTransferDst,
             vk::MemoryPropertyFlagBits::eDeviceLocal);
-        core::BufferUtilities::createBuffer(idxReq, cubeIndexBuffer, cubeIndexMemory);
+        core::BufferUtilities::createBuffer(idxReq, cubeIndexBuffer, cubeIndexAllocation, device.getMemoryManager());
         core::BufferUtilities::copyToBuffer(vkDevice, physDevice,
             device.getGraphicsQueue(), device.getStagingCommandPool(),
             cubeIndexBuffer, indices.data(), idxSize);
@@ -249,12 +249,12 @@ namespace render::decal
         core::BufferInfoRequest decalReq(vkDevice, physDevice, sizeof(DecalGPUData) * maxDecals,
             vk::BufferUsageFlagBits::eStorageBuffer,
             vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
-        core::BufferUtilities::createBuffer(decalReq, decalDataBuffer, decalDataMemory);
+        core::BufferUtilities::createBuffer(decalReq, decalDataBuffer, decalDataAllocation, device.getMemoryManager());
 
         core::BufferInfoRequest cameraReq(vkDevice, physDevice, sizeof(CameraUBO),
             vk::BufferUsageFlagBits::eUniformBuffer,
             vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
-        core::BufferUtilities::createBuffer(cameraReq, cameraUBOBuffer, cameraUBOMemory);
+        core::BufferUtilities::createBuffer(cameraReq, cameraUBOBuffer, cameraUBOAllocation, device.getMemoryManager());
     }
 
     void DecalPipeline::createPipeline()

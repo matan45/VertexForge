@@ -33,7 +33,7 @@ namespace core
             Device& device;
             vk::UniqueCommandPool& commandPool;
             vk::Image& image;
-            vk::DeviceMemory& imageMemory;
+            VulkanAllocation& imageAllocation;
             const std::vector<resource::MipLevelData>& mipData;
             uint32_t width;
             uint32_t height;
@@ -103,7 +103,7 @@ namespace core
             imageInfo.tiling = vk::ImageTiling::eOptimal;
             imageInfo.usage = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled;
             imageInfo.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-            ImageUtilities::createImage(imageInfo, p.image, p.imageMemory);
+            ImageUtilities::createImage(imageInfo, p.image, p.imageAllocation, p.device.getMemoryManager());
 
             auto cmdA = Utilities::beginSingleTimeCommands(p.device.getLogicalDevice(), p.commandPool.get());
             ImageUtilities::transitionImageLayout(cmdA.get(), p.image, vk::ImageLayout::eUndefined,
@@ -171,7 +171,7 @@ namespace core
         imageData = {texturePtr->width, texturePtr->height, texturePtr->numbersOfChannels, texturePtr->mipLevels};
         vk::Format hdrFormat = resolveVulkanFormat(texturePtr->compressionFormat, vk::Format::eR32G32B32A32Sfloat);
 
-        MipUploadParams params{device, commandPool, image, imageMemory, texturePtr->mipData,
+        MipUploadParams params{device, commandPool, image, imageAllocation, texturePtr->mipData,
                                texturePtr->width, texturePtr->height, texturePtr->mipLevels, hdrFormat, true};
         if (!stageAndUploadMips(params)) return;
 
@@ -202,7 +202,7 @@ namespace core
         imageData = {hdrData.width, hdrData.height, hdrData.numbersOfChannels, hdrData.mipLevels};
         vk::Format hdrFormat = resolveVulkanFormat(hdrData.compressionFormat, vk::Format::eR32G32B32A32Sfloat);
 
-        MipUploadParams params{device, commandPool, image, imageMemory, hdrData.mipData,
+        MipUploadParams params{device, commandPool, image, imageAllocation, hdrData.mipData,
                                hdrData.width, hdrData.height, hdrData.mipLevels, hdrFormat, true};
         if (!stageAndUploadMips(params)) return;
 
@@ -236,7 +236,7 @@ namespace core
         vk::Format resolvedFormat = resolveVulkanFormat(texturePtr->compressionFormat, format);
 
         bool isCompressed = (texturePtr->compressionFormat != resource::TextureCompressionFormat::Uncompressed);
-        MipUploadParams params{device, commandPool, image, imageMemory, texturePtr->mipData,
+        MipUploadParams params{device, commandPool, image, imageAllocation, texturePtr->mipData,
                                texturePtr->width, texturePtr->height, texturePtr->mipLevels, resolvedFormat, isCompressed};
         if (!stageAndUploadMips(params)) return false;
 
@@ -270,7 +270,7 @@ namespace core
         vk::Format resolvedFormat = resolveVulkanFormat(textureData.compressionFormat, format);
 
         bool isCompressed = (textureData.compressionFormat != resource::TextureCompressionFormat::Uncompressed);
-        MipUploadParams params{device, commandPool, image, imageMemory, textureData.mipData,
+        MipUploadParams params{device, commandPool, image, imageAllocation, textureData.mipData,
                                textureData.width, textureData.height, textureData.mipLevels, resolvedFormat, isCompressed};
         if (!stageAndUploadMips(params)) return false;
 

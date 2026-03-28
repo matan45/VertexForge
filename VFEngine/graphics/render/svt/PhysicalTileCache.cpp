@@ -68,12 +68,8 @@ namespace render::svt
 
         if (stagingBuffer)
         {
-            if (stagingMapped)
-            {
-                dev.unmapMemory(stagingMemory);
-                stagingMapped = nullptr;
-            }
-            core::BufferUtilities::destroyBuffer(dev, stagingBuffer, stagingMemory);
+            stagingMapped = nullptr;
+            core::BufferUtilities::destroyBuffer(dev, stagingBuffer, stagingAllocation, device.getMemoryManager());
         }
 
         destroyChannelCache(albedoCache);
@@ -258,7 +254,7 @@ namespace render::svt
             vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
             vk::MemoryPropertyFlagBits::eDeviceLocal
         );
-        core::ImageUtilities::createImage(imgReq, cache.image, cache.memory);
+        core::ImageUtilities::createImage(imgReq, cache.image, cache.allocation, device.getMemoryManager());
 
         // Create image view as 2D array
         core::ImageViewInfoRequest viewReq(dev, cache.image,
@@ -326,7 +322,7 @@ namespace render::svt
         if (cache.sampler) dev.destroySampler(cache.sampler);
         if (cache.view) dev.destroyImageView(cache.view);
         if (cache.image) dev.destroyImage(cache.image);
-        if (cache.memory) dev.freeMemory(cache.memory);
+        device.getMemoryManager().free(cache.allocation);
         cache = {};
     }
 
@@ -344,8 +340,8 @@ namespace render::svt
             vk::BufferUsageFlagBits::eTransferSrc,
             vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
         );
-        core::BufferUtilities::createBuffer(bufReq, stagingBuffer, stagingMemory);
-        stagingMapped = dev.mapMemory(stagingMemory, 0, stagingBufferSize);
+        core::BufferUtilities::createBuffer(bufReq, stagingBuffer, stagingAllocation, device.getMemoryManager());
+        stagingMapped = stagingAllocation.mappedPtr;
     }
 
     void PhysicalTileCache::uploadToLayer(ChannelCache& cache, uint32_t layer,

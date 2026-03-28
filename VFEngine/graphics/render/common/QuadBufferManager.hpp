@@ -3,6 +3,7 @@
 #include "../../core/Device.hpp"
 #include "../../core/BufferUtilities.hpp"
 #include "../../core/DeferredDeletionQueue.hpp"
+#include "../../core/VulkanMemoryManager.hpp"
 #include <cstring>
 
 namespace render::common
@@ -15,12 +16,12 @@ namespace render::common
         core::DeferredDeletionQueue* deletionQueue = nullptr;
 
         vk::Buffer quadVertexBuffer;
-        vk::DeviceMemory quadVertexBufferMemory;
+        core::VulkanAllocation quadVertexBufferAllocation;
         vk::Buffer quadIndexBuffer;
-        vk::DeviceMemory quadIndexBufferMemory;
+        core::VulkanAllocation quadIndexBufferAllocation;
 
         vk::Buffer instanceBuffer;
-        vk::DeviceMemory instanceBufferMemory;
+        core::VulkanAllocation instanceBufferAllocation;
         uint32_t maxInstances;
         uint32_t currentInstanceCount = 0;
 
@@ -47,14 +48,14 @@ namespace render::common
             vertexRequest.size = vertexBufferSize;
             vertexRequest.usage = vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst;
             vertexRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-            core::BufferUtilities::createBuffer(vertexRequest, quadVertexBuffer, quadVertexBufferMemory);
+            core::BufferUtilities::createBuffer(vertexRequest, quadVertexBuffer, quadVertexBufferAllocation, device.getMemoryManager());
 
             constexpr vk::DeviceSize indexBufferSize = sizeof(uint16_t) * IdxCount;
             core::BufferInfoRequest indexRequest(device.getLogicalDevice(), device.getPhysicalDevice());
             indexRequest.size = indexBufferSize;
             indexRequest.usage = vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eTransferDst;
             indexRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-            core::BufferUtilities::createBuffer(indexRequest, quadIndexBuffer, quadIndexBufferMemory);
+            core::BufferUtilities::createBuffer(indexRequest, quadIndexBuffer, quadIndexBufferAllocation, device.getMemoryManager());
 
             core::BufferUtilities::copyToBuffer(
                 device.getLogicalDevice(), device.getPhysicalDevice(),
@@ -75,7 +76,7 @@ namespace render::common
             bufferRequest.usage = vk::BufferUsageFlagBits::eVertexBuffer;
             bufferRequest.properties = vk::MemoryPropertyFlagBits::eHostVisible |
                                        vk::MemoryPropertyFlagBits::eHostCoherent;
-            core::BufferUtilities::createBuffer(bufferRequest, instanceBuffer, instanceBufferMemory);
+            core::BufferUtilities::createBuffer(bufferRequest, instanceBuffer, instanceBufferAllocation, device.getMemoryManager());
         }
 
         void resizeInstanceBuffer(uint32_t requiredCount)
@@ -84,14 +85,15 @@ namespace render::common
             {
                 if (deletionQueue)
                 {
-                    deletionQueue->queueBuffer(instanceBuffer, instanceBufferMemory);
+                    deletionQueue->queueBuffer(instanceBuffer, instanceBufferAllocation, device.getMemoryManager());
                 }
                 else
                 {
                     auto& dev = device.getLogicalDevice();
                     dev.waitIdle();
                     dev.destroyBuffer(instanceBuffer);
-                    dev.freeMemory(instanceBufferMemory);
+                    device.getMemoryManager().free(instanceBufferAllocation);
+                    instanceBufferAllocation = {};
                 }
                 instanceBuffer = nullptr;
             }
@@ -115,14 +117,10 @@ namespace render::common
 
             currentInstanceCount = count;
 
-            void* mapped;
             vk::DeviceSize bufferSize = sizeof(InstanceT) * currentInstanceCount;
-            vk::Result result = device.getLogicalDevice().mapMemory(
-                instanceBufferMemory, 0, bufferSize, {}, &mapped);
-            if (result == vk::Result::eSuccess)
+            if (instanceBufferAllocation.mappedPtr)
             {
-                std::memcpy(mapped, data, bufferSize);
-                device.getLogicalDevice().unmapMemory(instanceBufferMemory);
+                std::memcpy(instanceBufferAllocation.mappedPtr, data, bufferSize);
             }
         }
 
@@ -133,19 +131,22 @@ namespace render::common
             if (quadVertexBuffer)
             {
                 dev.destroyBuffer(quadVertexBuffer);
-                dev.freeMemory(quadVertexBufferMemory);
+                device.getMemoryManager().free(quadVertexBufferAllocation);
+                quadVertexBufferAllocation = {};
                 quadVertexBuffer = nullptr;
             }
             if (quadIndexBuffer)
             {
                 dev.destroyBuffer(quadIndexBuffer);
-                dev.freeMemory(quadIndexBufferMemory);
+                device.getMemoryManager().free(quadIndexBufferAllocation);
+                quadIndexBufferAllocation = {};
                 quadIndexBuffer = nullptr;
             }
             if (instanceBuffer)
             {
                 dev.destroyBuffer(instanceBuffer);
-                dev.freeMemory(instanceBufferMemory);
+                device.getMemoryManager().free(instanceBufferAllocation);
+                instanceBufferAllocation = {};
                 instanceBuffer = nullptr;
             }
 

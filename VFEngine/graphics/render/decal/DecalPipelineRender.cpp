@@ -221,9 +221,10 @@ namespace render::decal
         if (gpuDecalData.empty()) return;
         uint32_t count = std::min(static_cast<uint32_t>(gpuDecalData.size()), maxDecals);
         vk::Device vkDevice = device.getLogicalDevice();
-        void* mapped = vkDevice.mapMemory(decalDataMemory, 0, sizeof(DecalGPUData) * count);
-        memcpy(mapped, gpuDecalData.data(), sizeof(DecalGPUData) * count);
-        vkDevice.unmapMemory(decalDataMemory);
+        if (decalDataAllocation.mappedPtr)
+        {
+            memcpy(decalDataAllocation.mappedPtr, gpuDecalData.data(), sizeof(DecalGPUData) * count);
+        }
     }
 
     void DecalPipeline::uploadCameraUBO()
@@ -238,10 +239,10 @@ namespace render::decal
         ubo.cameraPosition = glm::vec4(0.0f, 0.0f, 0.0f, currentNearPlane);
         ubo.farPlane = currentFarPlane;
 
-        vk::Device vkDevice = device.getLogicalDevice();
-        void* mapped = vkDevice.mapMemory(cameraUBOMemory, 0, sizeof(CameraUBO));
-        memcpy(mapped, &ubo, sizeof(CameraUBO));
-        vkDevice.unmapMemory(cameraUBOMemory);
+        if (cameraUBOAllocation.mappedPtr)
+        {
+            memcpy(cameraUBOAllocation.mappedPtr, &ubo, sizeof(CameraUBO));
+        }
     }
 
     void DecalPipeline::transitionDepthToReadOnly(const vk::CommandBuffer& cmd)

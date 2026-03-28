@@ -1,6 +1,7 @@
 #pragma once
 
 #include "UIRenderTypes.hpp"
+#include "../../core/VulkanMemoryManager.hpp"
 #include <vector>
 
 namespace core
@@ -18,12 +19,12 @@ namespace render::ui
         core::DeferredDeletionQueue* deletionQueue = nullptr;
 
         vk::Buffer quadVertexBuffer;
-        vk::DeviceMemory quadVertexBufferMemory;
+        core::VulkanAllocation quadVertexBufferAllocation;
         vk::Buffer quadIndexBuffer;
-        vk::DeviceMemory quadIndexBufferMemory;
+        core::VulkanAllocation quadIndexBufferAllocation;
 
         vk::Buffer instanceBuffer;
-        vk::DeviceMemory instanceBufferMemory;
+        core::VulkanAllocation instanceBufferAllocation;
         uint32_t maxInstances = 4096;
         uint32_t currentInstanceCount = 0;
 

@@ -2,6 +2,7 @@
 
 #include "BillboardTypes.hpp"
 #include "../common/QuadBufferManager.hpp"
+#include "../../core/VulkanMemoryManager.hpp"
 #include <array>
 #include <vector>
 
@@ -20,7 +21,7 @@ namespace render::billboard
     {
     private:
         vk::Buffer cameraUBO;
-        vk::DeviceMemory cameraUBOMemory;
+        core::VulkanAllocation cameraUBOAllocation;
         bool externalCameraBuffer = false;
 
     public:

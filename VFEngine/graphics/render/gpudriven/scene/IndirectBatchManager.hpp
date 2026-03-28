@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../GPUDrivenTypes.hpp"
+#include "../../../core/VulkanMemoryManager.hpp"
 #include <vulkan/vulkan.hpp>
 #include <vector>
 
@@ -16,16 +17,16 @@ namespace render::gpudriven {
         core::Device& device;
         
         vk::Buffer combinedDrawCommandBuffer;
-        vk::DeviceMemory combinedDrawCommandMemory;
+        core::VulkanAllocation combinedDrawCommandAllocation;
 
         vk::Buffer combinedDrawCountBuffer;
-        vk::DeviceMemory combinedDrawCountMemory;
+        core::VulkanAllocation combinedDrawCountAllocation;
 
         vk::Buffer combinedPerDrawDataBuffer;
-        vk::DeviceMemory combinedPerDrawDataMemory;
-        
+        core::VulkanAllocation combinedPerDrawDataAllocation;
+
         vk::Buffer stagingBuffer;
-        vk::DeviceMemory stagingMemory;
+        core::VulkanAllocation stagingAllocation;
         void* stagingMapped = nullptr;
 
         uint32_t batchCount = 0;

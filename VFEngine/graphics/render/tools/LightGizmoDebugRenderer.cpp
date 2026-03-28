@@ -34,12 +34,12 @@ namespace render::mesh
     void LightGizmoDebugRenderer::cleanUp()
     {
         destroyPipelineAndLayout(wireframePipeline, wireframePipelineLayout);
-        destroyBufferPair(sphereVertexBuffer, sphereVertexBufferMemory);
-        destroyBufferPair(sphereIndexBuffer, sphereIndexBufferMemory);
-        destroyBufferPair(coneVertexBuffer, coneVertexBufferMemory);
-        destroyBufferPair(coneIndexBuffer, coneIndexBufferMemory);
-        destroyBufferPair(arrowVertexBuffer, arrowVertexBufferMemory);
-        destroyBufferPair(arrowIndexBuffer, arrowIndexBufferMemory);
+        destroyBufferPair(sphereVertexBuffer, sphereVertexBufferAllocation);
+        destroyBufferPair(sphereIndexBuffer, sphereIndexBufferAllocation);
+        destroyBufferPair(coneVertexBuffer, coneVertexBufferAllocation);
+        destroyBufferPair(coneIndexBuffer, coneIndexBufferAllocation);
+        destroyBufferPair(arrowVertexBuffer, arrowVertexBufferAllocation);
+        destroyBufferPair(arrowIndexBuffer, arrowIndexBufferAllocation);
         initialized = false;
     }
 
@@ -126,7 +126,7 @@ namespace render::mesh
         vertexRequest.size = vertexBufferSize;
         vertexRequest.usage = vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst;
         vertexRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-        core::BufferUtilities::createBuffer(vertexRequest, sphereVertexBuffer, sphereVertexBufferMemory);
+        core::BufferUtilities::createBuffer(vertexRequest, sphereVertexBuffer, sphereVertexBufferAllocation, device.getMemoryManager());
 
         core::BufferUtilities::copyToBuffer(
             device.getLogicalDevice(),
@@ -143,7 +143,7 @@ namespace render::mesh
         indexRequest.size = indexBufferSize;
         indexRequest.usage = vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eTransferDst;
         indexRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-        core::BufferUtilities::createBuffer(indexRequest, sphereIndexBuffer, sphereIndexBufferMemory);
+        core::BufferUtilities::createBuffer(indexRequest, sphereIndexBuffer, sphereIndexBufferAllocation, device.getMemoryManager());
 
         core::BufferUtilities::copyToBuffer(
             device.getLogicalDevice(),
@@ -194,7 +194,7 @@ namespace render::mesh
         vertexRequest.size = vertexBufferSize;
         vertexRequest.usage = vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst;
         vertexRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-        core::BufferUtilities::createBuffer(vertexRequest, coneVertexBuffer, coneVertexBufferMemory);
+        core::BufferUtilities::createBuffer(vertexRequest, coneVertexBuffer, coneVertexBufferAllocation, device.getMemoryManager());
 
         core::BufferUtilities::copyToBuffer(
             device.getLogicalDevice(),
@@ -211,7 +211,7 @@ namespace render::mesh
         indexRequest.size = indexBufferSize;
         indexRequest.usage = vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eTransferDst;
         indexRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-        core::BufferUtilities::createBuffer(indexRequest, coneIndexBuffer, coneIndexBufferMemory);
+        core::BufferUtilities::createBuffer(indexRequest, coneIndexBuffer, coneIndexBufferAllocation, device.getMemoryManager());
 
         core::BufferUtilities::copyToBuffer(
             device.getLogicalDevice(),
@@ -259,7 +259,7 @@ namespace render::mesh
         vertexRequest.size = vertexBufferSize;
         vertexRequest.usage = vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst;
         vertexRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-        core::BufferUtilities::createBuffer(vertexRequest, arrowVertexBuffer, arrowVertexBufferMemory);
+        core::BufferUtilities::createBuffer(vertexRequest, arrowVertexBuffer, arrowVertexBufferAllocation, device.getMemoryManager());
 
         core::BufferUtilities::copyToBuffer(
             device.getLogicalDevice(),
@@ -276,7 +276,7 @@ namespace render::mesh
         indexRequest.size = indexBufferSize;
         indexRequest.usage = vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eTransferDst;
         indexRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-        core::BufferUtilities::createBuffer(indexRequest, arrowIndexBuffer, arrowIndexBufferMemory);
+        core::BufferUtilities::createBuffer(indexRequest, arrowIndexBuffer, arrowIndexBufferAllocation, device.getMemoryManager());
 
         core::BufferUtilities::copyToBuffer(
             device.getLogicalDevice(),

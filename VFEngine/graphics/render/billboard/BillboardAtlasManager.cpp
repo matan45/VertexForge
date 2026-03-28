@@ -41,7 +41,8 @@ namespace render::billboard
         if (defaultAtlasImage)
         {
             dev.destroyImage(defaultAtlasImage);
-            dev.freeMemory(defaultAtlasImageMemory);
+            device.getMemoryManager().free(defaultAtlasImageAllocation);
+            defaultAtlasImageAllocation = {};
             defaultAtlasImage = nullptr;
         }
 
@@ -61,7 +62,7 @@ namespace render::billboard
             vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
             vk::MemoryPropertyFlagBits::eDeviceLocal
         );
-        core::ImageUtilities::createImage(imageInfo, defaultAtlasImage, defaultAtlasImageMemory);
+        core::ImageUtilities::createImage(imageInfo, defaultAtlasImage, defaultAtlasImageAllocation, device.getMemoryManager());
 
         core::ImageViewInfoRequest viewInfo(
             device.getLogicalDevice(),

@@ -3,6 +3,7 @@
 #include "math/Frustum.hpp"
 #include "material/MaterialTypes.hpp"
 #include "../../core/VulkanContext.hpp"
+#include "../../core/VulkanMemoryManager.hpp"
 #include <memory>
 #include <string>
 
@@ -23,7 +24,7 @@ namespace controllers
     struct PreviewTextureGPU
     {
         vk::Image image;
-        vk::DeviceMemory memory;
+        core::VulkanAllocation allocation;
         vk::ImageView imageView;
         vk::Sampler sampler;
         bool valid = false;

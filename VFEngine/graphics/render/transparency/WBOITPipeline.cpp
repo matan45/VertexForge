@@ -169,7 +169,7 @@ namespace render::transparency
             req.tiling = vk::ImageTiling::eOptimal;
             req.usage = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled;
             req.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-            core::ImageUtilities::createImage(req, accumImage, accumMemory);
+            core::ImageUtilities::createImage(req, accumImage, accumAllocation, device.getMemoryManager());
 
             core::ImageViewInfoRequest viewReq(vkDevice, accumImage, vk::Format::eR16G16B16A16Sfloat);
             core::ImageUtilities::createImageView(viewReq, accumImageView);
@@ -183,7 +183,7 @@ namespace render::transparency
             req.tiling = vk::ImageTiling::eOptimal;
             req.usage = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled;
             req.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-            core::ImageUtilities::createImage(req, revealageImage, revealageMemory);
+            core::ImageUtilities::createImage(req, revealageImage, revealageAllocation, device.getMemoryManager());
 
             core::ImageViewInfoRequest viewReq(vkDevice, revealageImage, vk::Format::eR8Unorm);
             core::ImageUtilities::createImageView(viewReq, revealageImageView);
@@ -196,11 +196,11 @@ namespace render::transparency
 
         if (accumImageView) { vkDevice.destroyImageView(accumImageView); accumImageView = nullptr; }
         if (accumImage) { vkDevice.destroyImage(accumImage); accumImage = nullptr; }
-        if (accumMemory) { vkDevice.freeMemory(accumMemory); accumMemory = nullptr; }
+        if (accumAllocation) { device.getMemoryManager().free(accumAllocation); accumAllocation = {}; }
 
         if (revealageImageView) { vkDevice.destroyImageView(revealageImageView); revealageImageView = nullptr; }
         if (revealageImage) { vkDevice.destroyImage(revealageImage); revealageImage = nullptr; }
-        if (revealageMemory) { vkDevice.freeMemory(revealageMemory); revealageMemory = nullptr; }
+        if (revealageAllocation) { device.getMemoryManager().free(revealageAllocation); revealageAllocation = {}; }
     }
 
     void WBOITPipeline::createWBOITRenderPass()

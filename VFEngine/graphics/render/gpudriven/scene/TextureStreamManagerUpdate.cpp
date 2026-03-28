@@ -25,7 +25,7 @@ namespace render::gpudriven
             vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst,
             vk::MemoryPropertyFlagBits::eDeviceLocal
         );
-        core::ImageUtilities::createImage(imageInfo, tex.image, tex.memory);
+        core::ImageUtilities::createImage(imageInfo, tex.image, tex.allocation, device.getMemoryManager());
 
         tex.gpuMemoryUsage = estimateFullImageVRAM(header.width, header.height, header.mipLevels, tex.format);
         currentVRAMUsage += tex.gpuMemoryUsage;

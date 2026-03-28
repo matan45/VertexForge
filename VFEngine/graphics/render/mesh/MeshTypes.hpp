@@ -6,6 +6,7 @@
 #include "math/Frustum.hpp"
 #include "resource/Types.hpp"
 #include "material/MaterialTypes.hpp"
+#include "../../core/VulkanMemoryManager.hpp"
 #include <array>
 #include <cstddef>
 #include "../common/CameraTypes.hpp"
@@ -40,9 +41,9 @@ namespace render::mesh
     struct LODGPUBuffers
     {
         vk::Buffer vertexBuffer;
-        vk::DeviceMemory vertexBufferMemory;
+        core::VulkanAllocation vertexBufferAllocation;
         vk::Buffer indexBuffer;
-        vk::DeviceMemory indexBufferMemory;
+        core::VulkanAllocation indexBufferAllocation;
         uint32_t indexCount = 0;
         uint32_t vertexCount = 0;
 

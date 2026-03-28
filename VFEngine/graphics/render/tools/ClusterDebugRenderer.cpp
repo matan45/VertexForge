@@ -49,16 +49,15 @@ namespace render::mesh
             descriptorSetLayout = nullptr;
         }
 
-        destroyBufferPair(vertexBuffer, vertexBufferMemory);
-        destroyBufferPair(indexBuffer, indexBufferMemory);
+        destroyBufferPair(vertexBuffer, vertexBufferAllocation);
+        destroyBufferPair(indexBuffer, indexBufferAllocation);
 
         if (instanceBuffer)
         {
-            dev.unmapMemory(instanceBufferMemory);
             dev.destroyBuffer(instanceBuffer);
-            dev.freeMemory(instanceBufferMemory);
+            device.getMemoryManager().free(instanceBufferAllocation);
             instanceBuffer = nullptr;
-            instanceBufferMemory = nullptr;
+            instanceBufferAllocation = {};
             instanceBufferMapped = nullptr;
         }
 
@@ -226,7 +225,7 @@ namespace render::mesh
         vertexRequest.size = vertexBufferSize;
         vertexRequest.usage = vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst;
         vertexRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-        core::BufferUtilities::createBuffer(vertexRequest, vertexBuffer, vertexBufferMemory);
+        core::BufferUtilities::createBuffer(vertexRequest, vertexBuffer, vertexBufferAllocation, device.getMemoryManager());
 
         core::BufferUtilities::copyToBuffer(
             device.getLogicalDevice(),
@@ -243,7 +242,7 @@ namespace render::mesh
         indexRequest.size = indexBufferSize;
         indexRequest.usage = vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eTransferDst;
         indexRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-        core::BufferUtilities::createBuffer(indexRequest, indexBuffer, indexBufferMemory);
+        core::BufferUtilities::createBuffer(indexRequest, indexBuffer, indexBufferAllocation, device.getMemoryManager());
 
         core::BufferUtilities::copyToBuffer(
             device.getLogicalDevice(),
@@ -261,9 +260,9 @@ namespace render::mesh
         instanceRequest.usage = vk::BufferUsageFlagBits::eStorageBuffer;
         instanceRequest.properties = vk::MemoryPropertyFlagBits::eHostVisible |
                                      vk::MemoryPropertyFlagBits::eHostCoherent;
-        core::BufferUtilities::createBuffer(instanceRequest, instanceBuffer, instanceBufferMemory);
+        core::BufferUtilities::createBuffer(instanceRequest, instanceBuffer, instanceBufferAllocation, device.getMemoryManager());
 
-        instanceBufferMapped = device.getLogicalDevice().mapMemory(instanceBufferMemory, 0, instanceBufferSize);
+        instanceBufferMapped = instanceBufferAllocation.mappedPtr;
     }
 
     void ClusterDebugRenderer::createDescriptorPool()

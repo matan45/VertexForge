@@ -201,7 +201,7 @@ namespace render
         {
             device.getLogicalDevice().destroyImageView(resources.colorImageView);
             device.getLogicalDevice().destroyImage(resources.colorImage);
-            device.getLogicalDevice().freeMemory(resources.colorImageMemory);
+            device.getMemoryManager().free(resources.colorImageAllocation);
         }
         offscreenResources.colorImages.clear();
 
@@ -215,10 +215,10 @@ namespace render
             device.getLogicalDevice().destroyImage(offscreenResources.depthImage.depthImage);
             offscreenResources.depthImage.depthImage = nullptr;
         }
-        if (offscreenResources.depthImage.depthImageMemory)
+        if (offscreenResources.depthImage.depthImageAllocation)
         {
-            device.getLogicalDevice().freeMemory(offscreenResources.depthImage.depthImageMemory);
-            offscreenResources.depthImage.depthImageMemory = nullptr;
+            device.getMemoryManager().free(offscreenResources.depthImage.depthImageAllocation);
+            offscreenResources.depthImage.depthImageAllocation = {};
         }
 
         // Cleanup UI stencil image
@@ -232,10 +232,10 @@ namespace render
             device.getLogicalDevice().destroyImage(offscreenResources.uiStencilImage.stencilImage);
             offscreenResources.uiStencilImage.stencilImage = nullptr;
         }
-        if (offscreenResources.uiStencilImage.stencilImageMemory)
+        if (offscreenResources.uiStencilImage.stencilImageAllocation)
         {
-            device.getLogicalDevice().freeMemory(offscreenResources.uiStencilImage.stencilImageMemory);
-            offscreenResources.uiStencilImage.stencilImageMemory = nullptr;
+            device.getMemoryManager().free(offscreenResources.uiStencilImage.stencilImageAllocation);
+            offscreenResources.uiStencilImage.stencilImageAllocation = {};
         }
     }
 
@@ -296,7 +296,7 @@ namespace render
         imageDepthInfo.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
 
         core::DepthImage depth;
-        core::ImageUtilities::createImage(imageDepthInfo, depth.depthImage, depth.depthImageMemory);
+        core::ImageUtilities::createImage(imageDepthInfo, depth.depthImage, depth.depthImageAllocation, device.getMemoryManager());
         core::ImageViewInfoRequest imageDepthRequest(device.getLogicalDevice(), depth.depthImage);
 
         imageDepthRequest.format = depthFormat;
@@ -323,7 +323,7 @@ namespace render
             stencilInfo.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
 
             core::StencilImage stencil;
-            core::ImageUtilities::createImage(stencilInfo, stencil.stencilImage, stencil.stencilImageMemory);
+            core::ImageUtilities::createImage(stencilInfo, stencil.stencilImage, stencil.stencilImageAllocation, device.getMemoryManager());
 
             core::ImageViewInfoRequest stencilViewRequest(device.getLogicalDevice(), stencil.stencilImage);
             stencilViewRequest.format = vk::Format::eS8Uint;
@@ -346,7 +346,7 @@ namespace render
         for (size_t i = 0; i < swapChain.getImageCount(); i++)
         {
             core::ColorImage color;
-            core::ImageUtilities::createImage(imageColorInfo, color.colorImage, color.colorImageMemory);
+            core::ImageUtilities::createImage(imageColorInfo, color.colorImage, color.colorImageAllocation, device.getMemoryManager());
             core::ImageViewInfoRequest imageColorViewRequest(device.getLogicalDevice(), color.colorImage);
             imageColorViewRequest.format = colorFormat;
             core::ImageUtilities::createImageView(imageColorViewRequest, color.colorImageView);

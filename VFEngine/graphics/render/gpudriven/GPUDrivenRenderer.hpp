@@ -52,6 +52,7 @@
 #include "../svt/TerrainSVTCompositor.hpp"
 #include "../material/MaterialPBRExtractor.hpp"
 #include "../../core/Texture.hpp"
+#include "../../core/VulkanMemoryManager.hpp"
 #include "material/MaterialManager.hpp"
 #include <vulkan/vulkan.hpp>
 #include <glm/glm.hpp>
@@ -154,7 +155,7 @@ namespace render::gpudriven
 
             // SVT params GPU UBO
             vk::Buffer paramsBuffer;
-            vk::DeviceMemory paramsMemory;
+            core::VulkanAllocation paramsAllocation;
             void* paramsMapped = nullptr;
 
             bool enabled = false;
@@ -208,9 +209,9 @@ namespace render::gpudriven
 
             // Grass instance buffer (GPU-side output from compute pipeline)
             vk::Buffer grassInstanceBuffer;
-            vk::DeviceMemory grassInstanceBufferMemory;
+            core::VulkanAllocation grassInstanceBufferAllocation;
             vk::Buffer grassCounterBuffer;
-            vk::DeviceMemory grassCounterBufferMemory;
+            core::VulkanAllocation grassCounterBufferAllocation;
             uint32_t grassInstanceCapacity = 0;
             uint32_t currentGrassInstanceCount = 0;
 
@@ -237,7 +238,7 @@ namespace render::gpudriven
 
             // Instance staging buffer for direct upload
             vk::Buffer instanceStagingBuffer;
-            vk::DeviceMemory instanceStagingMemory;
+            core::VulkanAllocation instanceStagingAllocation;
             void* instanceStagingMapped = nullptr;
             uint32_t instanceStagingCapacity = 0;
 

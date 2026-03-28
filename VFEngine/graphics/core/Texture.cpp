@@ -41,7 +41,7 @@ namespace core
 
     Texture::~Texture()
     {
-        if (!image && !imageView && !sampler && !imageMemory && mipImageViews.empty())
+        if (!image && !imageView && !sampler && !imageAllocation && mipImageViews.empty())
             return;
 
         device.getLogicalDevice().waitIdle();
@@ -58,17 +58,18 @@ namespace core
 
         device.getLogicalDevice().destroyImageView(imageView);
         device.getLogicalDevice().destroyImage(image);
-        device.getLogicalDevice().freeMemory(imageMemory);
+        device.getMemoryManager().free(imageAllocation);
+        imageAllocation = {};
         device.getLogicalDevice().destroySampler(sampler);
     }
 
     void Texture::extractResources(DeferredDeletionQueue& queue)
     {
-        if (image || imageMemory || imageView)
+        if (image || imageAllocation || imageView)
         {
             std::vector<vk::ImageView> views;
             if (imageView) views.push_back(imageView);
-            queue.queueImage(image, imageMemory, views);
+            queue.queueImage(image, imageAllocation, device.getMemoryManager(), views);
         }
         if (sampler) queue.queueSampler(sampler);
 
@@ -77,7 +78,7 @@ namespace core
         for (auto& s : mipSamplers)
             if (s) queue.queueSampler(s);
 
-        image = nullptr; imageMemory = nullptr; imageView = nullptr; sampler = nullptr;
+        image = nullptr; imageAllocation = {}; imageView = nullptr; sampler = nullptr;
         mipImageViews.clear(); mipSamplers.clear();
     }
 

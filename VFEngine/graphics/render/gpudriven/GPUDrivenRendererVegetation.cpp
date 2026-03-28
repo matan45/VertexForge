@@ -43,7 +43,7 @@ namespace render::gpudriven
 
         core::BufferUtilities::createBuffer(instanceRequest,
                                             vegetation.grassInstanceBuffer,
-                                            vegetation.grassInstanceBufferMemory);
+                                            vegetation.grassInstanceBufferAllocation, device.getMemoryManager());
 
         // Counter buffer (device-local, reset via vkCmdFillBuffer on GPU timeline)
         core::BufferInfoRequest counterRequest(vkDevice, device.getPhysicalDevice());
@@ -53,7 +53,7 @@ namespace render::gpudriven
 
         core::BufferUtilities::createBuffer(counterRequest,
                                             vegetation.grassCounterBuffer,
-                                            vegetation.grassCounterBufferMemory);
+                                            vegetation.grassCounterBufferAllocation, device.getMemoryManager());
 
         vegetation.grassInstanceCapacity = maxInstances;
     }
@@ -324,13 +324,9 @@ namespace render::gpudriven
         vk::Device vkDevice = device.getLogicalDevice();
         vkDevice.waitIdle();
 
-        if (vegetation.instanceStagingMapped)
-        {
-            vkDevice.unmapMemory(vegetation.instanceStagingMemory);
-            vegetation.instanceStagingMapped = nullptr;
-        }
+        vegetation.instanceStagingMapped = nullptr;
         core::BufferUtilities::destroyBuffer(vkDevice,
-            vegetation.instanceStagingBuffer, vegetation.instanceStagingMemory);
+            vegetation.instanceStagingBuffer, vegetation.instanceStagingAllocation, device.getMemoryManager());
 
         vk::DeviceSize allocSize = requiredSize * 2;
         core::BufferInfoRequest request(vkDevice, device.getPhysicalDevice());
@@ -338,8 +334,8 @@ namespace render::gpudriven
         request.usage = vk::BufferUsageFlagBits::eTransferSrc;
         request.properties = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
         core::BufferUtilities::createBuffer(request,
-            vegetation.instanceStagingBuffer, vegetation.instanceStagingMemory);
-        vegetation.instanceStagingMapped = vkDevice.mapMemory(vegetation.instanceStagingMemory, 0, allocSize);
+            vegetation.instanceStagingBuffer, vegetation.instanceStagingAllocation, device.getMemoryManager());
+        vegetation.instanceStagingMapped = vegetation.instanceStagingAllocation.mappedPtr;
         vegetation.instanceStagingCapacity = static_cast<uint32_t>(allocSize);
     }
 
@@ -458,18 +454,14 @@ namespace render::gpudriven
 
         core::BufferUtilities::destroyBuffer(vkDevice,
                                              vegetation.grassInstanceBuffer,
-                                             vegetation.grassInstanceBufferMemory);
+                                             vegetation.grassInstanceBufferAllocation, device.getMemoryManager());
         core::BufferUtilities::destroyBuffer(vkDevice,
                                              vegetation.grassCounterBuffer,
-                                             vegetation.grassCounterBufferMemory);
+                                             vegetation.grassCounterBufferAllocation, device.getMemoryManager());
 
-        if (vegetation.instanceStagingMapped)
-        {
-            vkDevice.unmapMemory(vegetation.instanceStagingMemory);
-            vegetation.instanceStagingMapped = nullptr;
-        }
+        vegetation.instanceStagingMapped = nullptr;
         core::BufferUtilities::destroyBuffer(vkDevice,
-            vegetation.instanceStagingBuffer, vegetation.instanceStagingMemory);
+            vegetation.instanceStagingBuffer, vegetation.instanceStagingAllocation, device.getMemoryManager());
         vegetation.instanceStagingCapacity = 0;
 
         vegetation.registeredTileKeys.clear();

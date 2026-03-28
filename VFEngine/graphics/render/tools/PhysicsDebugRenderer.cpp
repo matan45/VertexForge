@@ -67,12 +67,12 @@ namespace render::mesh
     void PhysicsDebugRenderer::cleanUp()
     {
         destroyPipelineAndLayout(wireframePipeline, wireframePipelineLayout);
-        destroyBufferPair(boxVertexBuffer, boxVertexMemory);
-        destroyBufferPair(boxIndexBuffer, boxIndexMemory);
-        destroyBufferPair(sphereVertexBuffer, sphereVertexMemory);
-        destroyBufferPair(sphereIndexBuffer, sphereIndexMemory);
-        destroyBufferPair(capsuleVertexBuffer, capsuleVertexMemory);
-        destroyBufferPair(capsuleIndexBuffer, capsuleIndexMemory);
+        destroyBufferPair(boxVertexBuffer, boxVertexAllocation);
+        destroyBufferPair(boxIndexBuffer, boxIndexAllocation);
+        destroyBufferPair(sphereVertexBuffer, sphereVertexAllocation);
+        destroyBufferPair(sphereIndexBuffer, sphereIndexAllocation);
+        destroyBufferPair(capsuleVertexBuffer, capsuleVertexAllocation);
+        destroyBufferPair(capsuleIndexBuffer, capsuleIndexAllocation);
         cleanupMeshCache();
         cleanupHeightFieldCache();
         initialized = false;
@@ -87,12 +87,14 @@ namespace render::mesh
             if (meshData.vertexBuffer)
             {
                 dev.destroyBuffer(meshData.vertexBuffer);
-                dev.freeMemory(meshData.vertexMemory);
+                device.getMemoryManager().free(meshData.vertexAllocation);
+                meshData.vertexAllocation = {};
             }
             if (meshData.indexBuffer)
             {
                 dev.destroyBuffer(meshData.indexBuffer);
-                dev.freeMemory(meshData.indexMemory);
+                device.getMemoryManager().free(meshData.indexAllocation);
+                meshData.indexAllocation = {};
             }
         }
         meshCache.clear();
@@ -107,12 +109,14 @@ namespace render::mesh
             if (entry.buffers.vertexBuffer)
             {
                 dev.destroyBuffer(entry.buffers.vertexBuffer);
-                dev.freeMemory(entry.buffers.vertexMemory);
+                device.getMemoryManager().free(entry.buffers.vertexAllocation);
+                entry.buffers.vertexAllocation = {};
             }
             if (entry.buffers.indexBuffer)
             {
                 dev.destroyBuffer(entry.buffers.indexBuffer);
-                dev.freeMemory(entry.buffers.indexMemory);
+                device.getMemoryManager().free(entry.buffers.indexAllocation);
+                entry.buffers.indexAllocation = {};
             }
         }
         heightfieldCache.clear();
@@ -166,7 +170,7 @@ namespace render::mesh
         vertexRequest.size = vertexBufferSize;
         vertexRequest.usage = vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst;
         vertexRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-        core::BufferUtilities::createBuffer(vertexRequest, boxVertexBuffer, boxVertexMemory);
+        core::BufferUtilities::createBuffer(vertexRequest, boxVertexBuffer, boxVertexAllocation, device.getMemoryManager());
 
         core::BufferUtilities::copyToBuffer(
             device.getLogicalDevice(),
@@ -183,7 +187,7 @@ namespace render::mesh
         indexRequest.size = indexBufferSize;
         indexRequest.usage = vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eTransferDst;
         indexRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-        core::BufferUtilities::createBuffer(indexRequest, boxIndexBuffer, boxIndexMemory);
+        core::BufferUtilities::createBuffer(indexRequest, boxIndexBuffer, boxIndexAllocation, device.getMemoryManager());
 
         core::BufferUtilities::copyToBuffer(
             device.getLogicalDevice(),
@@ -250,7 +254,7 @@ namespace render::mesh
         vertexRequest.size = vertexBufferSize;
         vertexRequest.usage = vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst;
         vertexRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-        core::BufferUtilities::createBuffer(vertexRequest, sphereVertexBuffer, sphereVertexMemory);
+        core::BufferUtilities::createBuffer(vertexRequest, sphereVertexBuffer, sphereVertexAllocation, device.getMemoryManager());
 
         core::BufferUtilities::copyToBuffer(
             device.getLogicalDevice(),
@@ -267,7 +271,7 @@ namespace render::mesh
         indexRequest.size = indexBufferSize;
         indexRequest.usage = vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eTransferDst;
         indexRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-        core::BufferUtilities::createBuffer(indexRequest, sphereIndexBuffer, sphereIndexMemory);
+        core::BufferUtilities::createBuffer(indexRequest, sphereIndexBuffer, sphereIndexAllocation, device.getMemoryManager());
 
         core::BufferUtilities::copyToBuffer(
             device.getLogicalDevice(),
@@ -390,7 +394,7 @@ namespace render::mesh
         vertexRequest.size = vertexBufferSize;
         vertexRequest.usage = vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst;
         vertexRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-        core::BufferUtilities::createBuffer(vertexRequest, capsuleVertexBuffer, capsuleVertexMemory);
+        core::BufferUtilities::createBuffer(vertexRequest, capsuleVertexBuffer, capsuleVertexAllocation, device.getMemoryManager());
 
         core::BufferUtilities::copyToBuffer(
             device.getLogicalDevice(),
@@ -407,7 +411,7 @@ namespace render::mesh
         indexRequest.size = indexBufferSize;
         indexRequest.usage = vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eTransferDst;
         indexRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-        core::BufferUtilities::createBuffer(indexRequest, capsuleIndexBuffer, capsuleIndexMemory);
+        core::BufferUtilities::createBuffer(indexRequest, capsuleIndexBuffer, capsuleIndexAllocation, device.getMemoryManager());
 
         core::BufferUtilities::copyToBuffer(
             device.getLogicalDevice(),

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <vulkan/vulkan.hpp>
+#include "../../core/VulkanMemoryManager.hpp"
 
 namespace core
 {
@@ -21,7 +22,7 @@ namespace render::mesh
         ~DebugRendererBase() = default;
 
         void destroyPipelineAndLayout(vk::Pipeline& pipeline, vk::PipelineLayout& layout);
-        void destroyBufferPair(vk::Buffer& buffer, vk::DeviceMemory& memory);
+        void destroyBufferPair(vk::Buffer& buffer, core::VulkanAllocation& alloc);
 
     public:
         DebugRendererBase(const DebugRendererBase&) = delete;

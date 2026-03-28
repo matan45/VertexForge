@@ -1,6 +1,7 @@
 #pragma once
 
 #include <vulkan/vulkan.hpp>
+#include "../../core/VulkanMemoryManager.hpp"
 #include <vector>
 
 namespace core
@@ -22,11 +23,11 @@ namespace render::transparency
         bool initialized = false;
 
         vk::Image accumImage;
-        vk::DeviceMemory accumMemory;
+        core::VulkanAllocation accumAllocation;
         vk::ImageView accumImageView;
 
         vk::Image revealageImage;
-        vk::DeviceMemory revealageMemory;
+        core::VulkanAllocation revealageAllocation;
         vk::ImageView revealageImageView;
 
         vk::RenderPass wboitRenderPass;

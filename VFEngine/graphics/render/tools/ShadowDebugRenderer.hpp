@@ -75,14 +75,14 @@ namespace render::mesh
         vk::PipelineLayout spherePipelineLayout;
 
         vk::Buffer frustumVertexBuffer;
-        vk::DeviceMemory frustumVertexBufferMemory;
+        core::VulkanAllocation frustumVertexBufferAllocation;
         vk::Buffer frustumIndexBuffer;
-        vk::DeviceMemory frustumIndexBufferMemory;
+        core::VulkanAllocation frustumIndexBufferAllocation;
 
         vk::Buffer sphereVertexBuffer;
-        vk::DeviceMemory sphereVertexBufferMemory;
+        core::VulkanAllocation sphereVertexBufferAllocation;
         vk::Buffer sphereIndexBuffer;
-        vk::DeviceMemory sphereIndexBufferMemory;
+        core::VulkanAllocation sphereIndexBufferAllocation;
         uint32_t sphereIndexCount = 0;
 
     public:

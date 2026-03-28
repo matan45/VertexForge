@@ -1,5 +1,6 @@
 #pragma once
 #include <vulkan/vulkan.hpp>
+#include "../../core/VulkanMemoryManager.hpp"
 #include <array>
 #include <memory>
 #include <string>
@@ -75,7 +76,7 @@ namespace render::mesh
         struct DefaultTexture
         {
             vk::Image image;
-            vk::DeviceMemory memory;
+            core::VulkanAllocation allocation;
             vk::ImageView view;
             vk::Sampler sampler;
         };

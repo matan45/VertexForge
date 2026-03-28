@@ -2,6 +2,7 @@
 
 #include "GPUDrivenTypes.hpp"
 #include "../../core/RenderManager.hpp"
+#include "../../core/VulkanMemoryManager.hpp"
 #include <vulkan/vulkan.hpp>
 #include <glm/glm.hpp>
 #include <array>
@@ -46,7 +47,7 @@ namespace render::gpudriven
         core::SwapChain& swapChain;
 
         vk::Buffer buffer;
-        vk::DeviceMemory memory;
+        core::VulkanAllocation allocation;
         void* mapped = nullptr;
         GPUCameraData data{};
         uint32_t frameIndex = 0;
