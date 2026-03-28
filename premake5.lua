@@ -667,7 +667,9 @@ project "Serialization"
       "VFEngine/utilities/world/WorldDefinitionSerialization.hpp",
       "VFEngine/utilities/world/WorldDefinitionSerialization.cpp",
       "VFEngine/utilities/world/WorldSectorSerialization.hpp",
-      "VFEngine/utilities/world/WorldSectorSerialization.cpp"
+      "VFEngine/utilities/world/WorldSectorSerialization.cpp",
+      "VFEngine/utilities/world/HLODSerialization.hpp",
+      "VFEngine/utilities/world/HLODSerialization.cpp"
    }
 
    includedirs {
@@ -724,7 +726,8 @@ project "World"
    -- Serialization files are compiled by the Serialization project
    removefiles {
       "VFEngine/utilities/world/WorldDefinitionSerialization.*",
-      "VFEngine/utilities/world/WorldSectorSerialization.*"
+      "VFEngine/utilities/world/WorldSectorSerialization.*",
+      "VFEngine/utilities/world/HLODSerialization.*"
    }
 
    includedirs {
@@ -732,12 +735,13 @@ project "World"
       "dependencies/glm",
       "dependencies/entt/single_include",
       "dependencies/json/single_include",
+      "dependencies/meshoptimizer/src",
       "VFEngine/utilities"
    }
 
    defines { "_CRT_SECURE_NO_WARNINGS" }
 
-   links { "Utilities", "Terrain", "Serialization" }
+   links { "Utilities", "Terrain", "Serialization", "meshoptimizer" }
 
    filter "configurations:Debug"
       defines { "DEBUG" }

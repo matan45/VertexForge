@@ -16,6 +16,8 @@
 #include "../../events/terrain/TerrainEvents.hpp"
 #include "../../events/vfx/VFXSnapshotEvents.hpp"
 #include "../../events/audio/AudioSnapshotEvents.hpp"
+#include "../../events/world/HLODEvents.hpp"
+#include "world/HLODGenerator.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "resource/AssetLifecycleManager.hpp"
 #include "resource/AssetLifecycleHelpers.hpp"
@@ -540,6 +542,64 @@ namespace services
             [this](const ::events::world::IsStreamingSourceValidQuery& query) -> bool
             {
                 return streamingSources.contains(query.sourceId);
+            });
+
+        // HLOD commands/queries
+        dispatcher.registerCommandHandler<::events::world::hlod::GenerateHLODCommand>(
+            [this](const ::events::world::hlod::GenerateHLODCommand& cmd) -> bool
+            {
+                if (!worldMode) return false;
+                const auto* sector = sectorManager.getSector(cmd.coord);
+                if (!sector || sector->filePath.empty()) return false;
+
+                auto& tiers = worldDefinition.hlodConfig.tiers;
+                world::HLODTierConfig tierConfig;
+                for (const auto& t : tiers)
+                {
+                    if (t.tier == cmd.tier) { tierConfig = t; break; }
+                }
+
+                // Generate output path alongside sector file
+                std::string hlodPath = sector->filePath;
+                auto dotPos = hlodPath.rfind('.');
+                if (dotPos != std::string::npos)
+                    hlodPath = hlodPath.substr(0, dotPos);
+                hlodPath += "_hlod" + std::to_string(cmd.tier) + ".vfHLOD";
+
+                world::HLODGenerator generator;
+                std::string workingDir = currentWorldPath.empty() ? "." :
+                    currentWorldPath.substr(0, currentWorldPath.find_last_of("/\\"));
+
+                bool result = generator.generateForSector(
+                    cmd.coord, sector->filePath, workingDir,
+                    tierConfig, hlodPath);
+
+                if (result)
+                {
+                    sectorManager.getSector(cmd.coord)->hlodFilePath = hlodPath;
+                }
+
+                return result;
+            });
+
+        dispatcher.registerCommandHandler<::events::world::hlod::SetHLODConfigCommand>(
+            [this](const ::events::world::hlod::SetHLODConfigCommand& cmd)
+            {
+                worldDefinition.hlodConfig = cmd.config;
+                hlodStreamer.setConfig(worldDefinition.streamingConfig, worldDefinition.hlodConfig);
+            });
+
+        dispatcher.registerQueryHandler<::events::world::hlod::GetHLODConfigQuery>(
+            [this](const ::events::world::hlod::GetHLODConfigQuery&)
+            {
+                return worldDefinition.hlodConfig;
+            });
+
+        dispatcher.registerQueryHandler<::events::world::hlod::IsHLODGeneratedQuery>(
+            [this](const ::events::world::hlod::IsHLODGeneratedQuery& query) -> bool
+            {
+                const auto* sector = sectorManager.getSector(query.coord);
+                return sector && !sector->hlodFilePath.empty();
             });
 
         dispatcher.registerQueryHandler<::events::vfx::snapshot::GetVFXSnapshotQuery>(

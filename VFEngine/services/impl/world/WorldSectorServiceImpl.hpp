@@ -8,6 +8,8 @@
 #include "world/SectorStreamer.hpp"
 #include "world/SectorEntityLoader.hpp"
 #include "world/PendingReferenceResolver.hpp"
+#include "world/HLODStreamer.hpp"
+#include "world/HLODProxyManager.hpp"
 #include <future>
 #include <memory>
 #include <optional>
@@ -58,6 +60,8 @@ namespace services
         world::SectorStreamer streamer;
         world::SectorEntityLoader entityLoader;
         world::PendingReferenceResolver referenceResolver;
+        world::HLODStreamer hlodStreamer;
+        world::HLODProxyManager hlodProxyManager;
 
         bool worldMode = false;
         bool isPlayMode = false;
@@ -65,6 +69,7 @@ namespace services
         std::string currentWorldPath;
 
         std::vector<world::SectorStreamingAction> streamingActions;
+        std::vector<world::HLODStreamingAction> hlodActions;
 
         // Multiple streaming sources (camera + gameplay-registered sources)
         std::unordered_map<uint32_t, world::StreamingSource> streamingSources;

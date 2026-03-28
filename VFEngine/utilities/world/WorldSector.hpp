@@ -42,6 +42,7 @@ namespace world
         std::vector<uint64_t> entityUUIDs;
         bool dirty = false;
         std::string filePath;
+        std::string hlodFilePath;
         SectorMetadata metadata;
     };
 

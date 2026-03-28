@@ -60,6 +60,41 @@ namespace services
                     handleSectorUnload(action.coord);
                 }
             }
+
+            // HLOD proxy streaming (beyond sector unload radius)
+            if (worldDefinition.hlodConfig.enabled)
+            {
+                hlodActions.clear();
+                hlodStreamer.update(sources, sectorManager,
+                                   worldDefinition.sectorConfig, hlodActions);
+
+                for (const auto& action : hlodActions)
+                {
+                    if (action.isLoad)
+                    {
+                        // Resolve HLOD file path from the cell's sectors
+                        auto tier = action.cellCoord.tier;
+                        int32_t cs = (tier < worldDefinition.hlodConfig.tiers.size())
+                            ? worldDefinition.hlodConfig.tiers[tier].cellSize : 1;
+                        int32_t baseX = action.cellCoord.x * cs;
+                        int32_t baseZ = action.cellCoord.z * cs;
+                        world::SectorCoord baseSector(baseX, baseZ);
+
+                        const auto* sector = sectorManager.getSector(baseSector);
+                        if (sector && !sector->hlodFilePath.empty())
+                        {
+                            hlodProxyManager.loadProxy(action.cellCoord, sector->hlodFilePath);
+                        }
+                    }
+                    else
+                    {
+                        hlodProxyManager.unloadProxy(action.cellCoord, *sceneGraph);
+                    }
+                }
+
+                // deltaTime approximation (streaming runs per-frame)
+                hlodProxyManager.update(*sceneGraph, 1.0f / 60.0f);
+            }
         }
 
         drawDebugSectors();
