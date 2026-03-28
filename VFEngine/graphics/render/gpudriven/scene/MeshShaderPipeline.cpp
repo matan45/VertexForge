@@ -51,11 +51,9 @@ namespace render::gpudriven
         request.usage = vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst;
         request.properties = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
 
-        core::BufferUtilities::createBuffer(request, statsBuffer, statsBufferMemory);
+        core::BufferUtilities::createBuffer(request, statsBuffer, statsBufferAllocation, device.getMemoryManager());
 
-        void* data = vkDevice.mapMemory(statsBufferMemory, 0, sizeof(MeshletCullingStats));
-        std::memset(data, 0, sizeof(MeshletCullingStats));
-        vkDevice.unmapMemory(statsBufferMemory);
+        std::memset(statsBufferAllocation.mappedPtr, 0, sizeof(MeshletCullingStats));
 
     }
 
@@ -81,7 +79,7 @@ namespace render::gpudriven
             pipelineLayout = nullptr;
         }
 
-        core::BufferUtilities::destroyBuffer(vkDevice, statsBuffer, statsBufferMemory);
+        core::BufferUtilities::destroyBuffer(vkDevice, statsBuffer, statsBufferAllocation, device.getMemoryManager());
 
         if (perDrawDataPool)
         {
@@ -645,9 +643,7 @@ namespace render::gpudriven
 
         vk::Device vkDevice = device.getLogicalDevice();
 
-        void* data = vkDevice.mapMemory(statsBufferMemory, 0, sizeof(MeshletCullingStats));
-        std::memcpy(&cachedStats, data, sizeof(MeshletCullingStats));
-        vkDevice.unmapMemory(statsBufferMemory);
+        std::memcpy(&cachedStats, statsBufferAllocation.mappedPtr, sizeof(MeshletCullingStats));
 
         return cachedStats;
     }

@@ -1,5 +1,6 @@
 #include "RenderManager.hpp"
 #include "Device.hpp"
+#include "VulkanMemoryManager.hpp"
 #include "SwapChain.hpp"
 #include "CommandPool.hpp"
 #include "DeferredDeletionQueue.hpp"
@@ -144,6 +145,9 @@ namespace core {
 		{
 			deletionQueue->processDeletions(currentFrame);
 		}
+
+		// Reclaim GPU memory blocks that are now completely empty
+		device.getMemoryManager().reclaimEmptyBlocks();
 
 		// Advance to next frame
 		currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;

@@ -52,7 +52,7 @@ namespace render::occlusion
             vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eTransferDst,
             vk::MemoryPropertyFlagBits::eDeviceLocal
         );
-        core::ImageUtilities::createImage(imageRequest, hiZImage, hiZMemory);
+        core::ImageUtilities::createImage(imageRequest, hiZImage, hiZAllocation, device.getMemoryManager());
 
         // Create full mip chain view using utilities
         core::ImageViewInfoRequest viewRequest(
@@ -412,8 +412,9 @@ namespace render::occlusion
             device.getLogicalDevice().destroyImageView(view);
         }
         device.getLogicalDevice().destroyImageView(hiZImageView);
-        device.getLogicalDevice().freeMemory(hiZMemory);
         device.getLogicalDevice().destroyImage(hiZImage);
+        device.getMemoryManager().free(hiZAllocation);
+        hiZAllocation = {};
 
         if (shader)
         {

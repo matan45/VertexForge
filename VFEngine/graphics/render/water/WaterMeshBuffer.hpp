@@ -1,6 +1,7 @@
 #pragma once
 
 #include "WaterGPUTypes.hpp"
+#include "../../core/VulkanMemoryManager.hpp"
 #include <vulkan/vulkan.hpp>
 #include <vector>
 #include <array>
@@ -17,16 +18,16 @@ namespace render::water
 
         // Shared vertex/index buffers containing all LOD meshes
         vk::Buffer vertexBuffer;
-        vk::DeviceMemory vertexMemory;
+        core::VulkanAllocation vertexAllocation;
         vk::Buffer indexBuffer;
-        vk::DeviceMemory indexMemory;
+        core::VulkanAllocation indexAllocation;
 
         // Per-LOD mesh info (offsets into shared buffers)
         std::array<WaterLODMeshInfo, WATER_LOD_COUNT> lodMeshes;
 
         // Per-tile instance SSBO (host-visible, persistent mapped)
         vk::Buffer tileSSBO;
-        vk::DeviceMemory tileSSBOMemory;
+        core::VulkanAllocation tileSSBOAllocation;
         void* mappedTileData = nullptr;
         uint32_t currentTileCount = 0;
 

@@ -3,6 +3,7 @@
 #include "ShadowTypes.hpp"
 #include "VSMTypes.hpp"
 #include "../../core/RenderManager.hpp"
+#include "../../core/VulkanMemoryManager.hpp"
 #include <vulkan/vulkan.hpp>
 #include <array>
 #include <vector>
@@ -24,12 +25,12 @@ namespace render::shadow
 
         // Shadow data SSBO (GPUVSMLight array)
         vk::Buffer shadowDataBuffer;
-        vk::DeviceMemory shadowDataMemory;
+        core::VulkanAllocation shadowDataAllocation;
 
         struct ShadowStagingFrame
         {
             vk::Buffer buffer;
-            vk::DeviceMemory memory;
+            core::VulkanAllocation allocation;
             void* mapped = nullptr;
         };
 

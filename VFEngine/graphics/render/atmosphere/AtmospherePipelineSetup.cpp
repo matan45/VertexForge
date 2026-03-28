@@ -4,16 +4,14 @@
 #include "../../core/Shader.hpp"
 #include "../../core/OffScreen.hpp"
 #include "../../core/ImageUtilities.hpp"
-#include "../../core/MemoryUtilities.hpp"
 #include "../../core/PipelineUtilities.hpp"
 
 namespace render::atmosphere
 {
     void AtmospherePipeline::create2DImage(uint32_t width, uint32_t height,
-                                            vk::Image& image, vk::DeviceMemory& memory, vk::ImageView& view)
+                                            vk::Image& image, core::VulkanAllocation& allocation, vk::ImageView& view)
     {
         auto& dev = device.getLogicalDevice();
-        auto& physDev = device.getPhysicalDevice();
 
         vk::ImageCreateInfo imageInfo{};
         imageInfo.imageType = vk::ImageType::e2D;
@@ -29,12 +27,8 @@ namespace render::atmosphere
 
         image = dev.createImage(imageInfo);
         vk::MemoryRequirements memReqs = dev.getImageMemoryRequirements(image);
-        vk::MemoryAllocateInfo allocInfo{};
-        allocInfo.allocationSize = memReqs.size;
-        allocInfo.memoryTypeIndex = core::MemoryUtilities::findMemoryType(
-            physDev, memReqs.memoryTypeBits, vk::MemoryPropertyFlagBits::eDeviceLocal);
-        memory = dev.allocateMemory(allocInfo);
-        dev.bindImageMemory(image, memory, 0);
+        allocation = device.getMemoryManager().allocate(memReqs, vk::MemoryPropertyFlagBits::eDeviceLocal);
+        dev.bindImageMemory(image, allocation.memory, allocation.offset);
 
         core::ImageViewInfoRequest viewReq(dev, image);
         viewReq.format = vk::Format::eR16G16B16A16Sfloat;
@@ -44,10 +38,9 @@ namespace render::atmosphere
     }
 
     void AtmospherePipeline::create3DImage(uint32_t width, uint32_t height, uint32_t depth,
-                                            vk::Image& image, vk::DeviceMemory& memory, vk::ImageView& view)
+                                            vk::Image& image, core::VulkanAllocation& allocation, vk::ImageView& view)
     {
         auto& dev = device.getLogicalDevice();
-        auto& physDev = device.getPhysicalDevice();
 
         vk::ImageCreateInfo imageInfo{};
         imageInfo.imageType = vk::ImageType::e3D;
@@ -63,12 +56,8 @@ namespace render::atmosphere
 
         image = dev.createImage(imageInfo);
         vk::MemoryRequirements memReqs = dev.getImageMemoryRequirements(image);
-        vk::MemoryAllocateInfo allocInfo{};
-        allocInfo.allocationSize = memReqs.size;
-        allocInfo.memoryTypeIndex = core::MemoryUtilities::findMemoryType(
-            physDev, memReqs.memoryTypeBits, vk::MemoryPropertyFlagBits::eDeviceLocal);
-        memory = dev.allocateMemory(allocInfo);
-        dev.bindImageMemory(image, memory, 0);
+        allocation = device.getMemoryManager().allocate(memReqs, vk::MemoryPropertyFlagBits::eDeviceLocal);
+        dev.bindImageMemory(image, allocation.memory, allocation.offset);
 
         core::ImageViewInfoRequest viewReq(dev, image);
         viewReq.format = vk::Format::eR16G16B16A16Sfloat;
@@ -132,7 +121,7 @@ namespace render::atmosphere
 
     void AtmospherePipeline::createTransmittanceLUT()
     {
-        create2DImage(256, 64, transmittanceImage, transmittanceMemory, transmittanceView);
+        create2DImage(256, 64, transmittanceImage, transmittanceAllocation, transmittanceView);
 
         std::vector<vk::DescriptorSetLayoutBinding> bindings{
             {0, vk::DescriptorType::eStorageImage, 1, vk::ShaderStageFlagBits::eCompute},
@@ -165,7 +154,7 @@ namespace render::atmosphere
 
     void AtmospherePipeline::createMultiScatterLUT()
     {
-        create2DImage(32, 32, multiScatterImage, multiScatterMemory, multiScatterView);
+        create2DImage(32, 32, multiScatterImage, multiScatterAllocation, multiScatterView);
 
         std::vector<vk::DescriptorSetLayoutBinding> bindings{
             {0, vk::DescriptorType::eStorageImage, 1, vk::ShaderStageFlagBits::eCompute},
@@ -202,7 +191,7 @@ namespace render::atmosphere
 
     void AtmospherePipeline::createSkyViewLUT()
     {
-        create2DImage(192, 108, skyViewImage, skyViewMemory, skyViewView);
+        create2DImage(192, 108, skyViewImage, skyViewAllocation, skyViewView);
 
         std::vector<vk::DescriptorSetLayoutBinding> bindings{
             {0, vk::DescriptorType::eStorageImage, 1, vk::ShaderStageFlagBits::eCompute},
@@ -242,7 +231,7 @@ namespace render::atmosphere
 
     void AtmospherePipeline::createAerialPerspectiveLUT()
     {
-        create3DImage(32, 32, 32, aerialImage, aerialMemory, aerialView);
+        create3DImage(32, 32, 32, aerialImage, aerialAllocation, aerialView);
 
         std::vector<vk::DescriptorSetLayoutBinding> bindings{
             {0, vk::DescriptorType::eStorageImage, 1, vk::ShaderStageFlagBits::eCompute},

@@ -26,7 +26,7 @@ namespace render::mesh
         vk::PipelineLayout pipelineLayout;
 
         vk::Buffer vertexBuffer;
-        vk::DeviceMemory vertexMemory;
+        core::VulkanAllocation vertexAllocation;
         uint32_t currentVertexCount = 0;
         vk::DeviceSize currentBufferSize = 0;
 

@@ -63,9 +63,9 @@ namespace render::mesh
 
         // Static vertex buffer with NDC corners (never changes)
         vk::Buffer vertexBuffer;
-        vk::DeviceMemory vertexBufferMemory;
+        core::VulkanAllocation vertexBufferAllocation;
         vk::Buffer indexBuffer;
-        vk::DeviceMemory indexBufferMemory;
+        core::VulkanAllocation indexBufferAllocation;
 
     public:
         explicit FrustumDebugRenderer(core::Device& device, core::SwapChain& swapChain);

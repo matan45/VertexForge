@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../../core/VulkanMemoryManager.hpp"
 #include <vulkan/vulkan.hpp>
 #include <memory>
 
@@ -22,22 +23,22 @@ namespace render::cloud
 
         // Shape noise 3D (128^3, RGBA8)
         vk::Image shapeImage;
-        vk::DeviceMemory shapeMemory;
+        core::VulkanAllocation shapeAllocation;
         vk::ImageView shapeView;
 
         // Detail noise 3D (32^3, RGBA8)
         vk::Image detailImage;
-        vk::DeviceMemory detailMemory;
+        core::VulkanAllocation detailAllocation;
         vk::ImageView detailView;
 
         // Weather map 2D (1024x1024, RGBA8)
         vk::Image weatherImage;
-        vk::DeviceMemory weatherMemory;
+        core::VulkanAllocation weatherAllocation;
         vk::ImageView weatherView;
 
         // Blue noise 2D (128x128, R8)
         vk::Image blueNoiseImage;
-        vk::DeviceMemory blueNoiseMemory;
+        core::VulkanAllocation blueNoiseAllocation;
         vk::ImageView blueNoiseView;
 
         // Shared sampler
@@ -61,10 +62,10 @@ namespace render::cloud
 
         // Image helpers
         void create3DImage(uint32_t width, uint32_t height, uint32_t depth,
-                           vk::Image& image, vk::DeviceMemory& memory, vk::ImageView& view);
+                           vk::Image& image, core::VulkanAllocation& allocation, vk::ImageView& view);
         void create2DImage(uint32_t width, uint32_t height,
-                           vk::Image& image, vk::DeviceMemory& memory, vk::ImageView& view);
-        void destroyImage(vk::Image& image, vk::DeviceMemory& memory, vk::ImageView& view);
+                           vk::Image& image, core::VulkanAllocation& allocation, vk::ImageView& view);
+        void destroyImage(vk::Image& image, core::VulkanAllocation& allocation, vk::ImageView& view);
 
         void createSampler();
         void createNoiseGenPipeline();

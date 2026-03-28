@@ -94,7 +94,7 @@ namespace render::gi
             request.size = probeBufferSize;
             request.usage = vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eTransferSrc;
             request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-            core::BufferUtilities::createBuffer(request, probeBufferA, probeMemoryA);
+            core::BufferUtilities::createBuffer(request, probeBufferA, probeAllocationA, device.getMemoryManager());
         }
 
         {
@@ -102,7 +102,7 @@ namespace render::gi
             request.size = probeBufferSize;
             request.usage = vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eTransferSrc;
             request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-            core::BufferUtilities::createBuffer(request, probeBufferB, probeMemoryB);
+            core::BufferUtilities::createBuffer(request, probeBufferB, probeAllocationB, device.getMemoryManager());
         }
 
         {
@@ -110,8 +110,8 @@ namespace render::gi
             request.size = probeBufferSize;
             request.usage = vk::BufferUsageFlagBits::eTransferSrc;
             request.properties = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
-            core::BufferUtilities::createBuffer(request, probeStagingBuffer, probeStagingMemory);
-            probeStagingMapped = logicalDevice.mapMemory(probeStagingMemory, 0, probeBufferSize, vk::MemoryMapFlags{});
+            core::BufferUtilities::createBuffer(request, probeStagingBuffer, probeStagingAllocation, device.getMemoryManager());
+            probeStagingMapped = probeStagingAllocation.mappedPtr;
 
             std::memset(probeStagingMapped, 0, probeBufferSize);
         }
@@ -124,8 +124,8 @@ namespace render::gi
             request.size = cascadeBufferSize;
             request.usage = vk::BufferUsageFlagBits::eUniformBuffer | vk::BufferUsageFlagBits::eStorageBuffer;
             request.properties = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
-            core::BufferUtilities::createBuffer(request, cascadeInfoBuffer, cascadeInfoMemory);
-            cascadeInfoMapped = logicalDevice.mapMemory(cascadeInfoMemory, 0, cascadeBufferSize, vk::MemoryMapFlags{});
+            core::BufferUtilities::createBuffer(request, cascadeInfoBuffer, cascadeInfoAllocation, device.getMemoryManager());
+            cascadeInfoMapped = cascadeInfoAllocation.mappedPtr;
 
             std::memset(cascadeInfoMapped, 0, static_cast<size_t>(cascadeBufferSize));
         }
@@ -135,21 +135,13 @@ namespace render::gi
     {
         const auto& logicalDevice = device.getLogicalDevice();
 
-        if (probeStagingMapped)
-        {
-            logicalDevice.unmapMemory(probeStagingMemory);
-            probeStagingMapped = nullptr;
-        }
-        if (cascadeInfoMapped)
-        {
-            logicalDevice.unmapMemory(cascadeInfoMemory);
-            cascadeInfoMapped = nullptr;
-        }
+        probeStagingMapped = nullptr;
+        cascadeInfoMapped = nullptr;
 
-        core::BufferUtilities::destroyBuffer(logicalDevice, probeBufferA, probeMemoryA);
-        core::BufferUtilities::destroyBuffer(logicalDevice, probeBufferB, probeMemoryB);
-        core::BufferUtilities::destroyBuffer(logicalDevice, probeStagingBuffer, probeStagingMemory);
-        core::BufferUtilities::destroyBuffer(logicalDevice, cascadeInfoBuffer, cascadeInfoMemory);
+        core::BufferUtilities::destroyBuffer(logicalDevice, probeBufferA, probeAllocationA, device.getMemoryManager());
+        core::BufferUtilities::destroyBuffer(logicalDevice, probeBufferB, probeAllocationB, device.getMemoryManager());
+        core::BufferUtilities::destroyBuffer(logicalDevice, probeStagingBuffer, probeStagingAllocation, device.getMemoryManager());
+        core::BufferUtilities::destroyBuffer(logicalDevice, cascadeInfoBuffer, cascadeInfoAllocation, device.getMemoryManager());
     }
 
     void ProbeStorageBuffer::createDescriptorLayouts()

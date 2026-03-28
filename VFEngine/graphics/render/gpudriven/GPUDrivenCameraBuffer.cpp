@@ -31,21 +31,17 @@ namespace render::gpudriven
         request.properties = vk::MemoryPropertyFlagBits::eHostVisible |
                             vk::MemoryPropertyFlagBits::eHostCoherent;
 
-        core::BufferUtilities::createBuffer(request, buffer, memory);
-        mapped = logicalDevice.mapMemory(memory, 0, sizeof(GPUCameraData), vk::MemoryMapFlags{});
+        core::BufferUtilities::createBuffer(request, buffer, allocation, device.getMemoryManager());
+        mapped = allocation.mappedPtr;
     }
 
     void GPUDrivenCameraBuffer::cleanup()
     {
         const auto& logicalDevice = device.getLogicalDevice();
 
-        if (mapped)
-        {
-            logicalDevice.unmapMemory(memory);
-            mapped = nullptr;
-        }
+        mapped = nullptr;
 
-        core::BufferUtilities::destroyBuffer(logicalDevice, buffer, memory);
+        core::BufferUtilities::destroyBuffer(logicalDevice, buffer, allocation, device.getMemoryManager());
     }
 
     void GPUDrivenCameraBuffer::update(const CameraUpdateParams& params)

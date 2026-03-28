@@ -1,4 +1,5 @@
 #pragma once
+#include "../../core/VulkanMemoryManager.hpp"
 #include <vulkan/vulkan.hpp>
 #include <glm/glm.hpp>
 #include <vector>
@@ -70,17 +71,17 @@ namespace render::occlusion
         std::unique_ptr<core::Shader> shader;
 
         vk::Buffer lightBoundsBuffer;
-        vk::DeviceMemory lightBoundsMemory;
+        core::VulkanAllocation lightBoundsAllocation;
         vk::Buffer visibilityBuffer;
-        vk::DeviceMemory visibilityMemory;
+        core::VulkanAllocation visibilityAllocation;
         vk::Buffer cameraBuffer;
-        vk::DeviceMemory cameraMemory;
+        core::VulkanAllocation cameraAllocation;
 
         vk::Buffer stagingBuffer;
-        vk::DeviceMemory stagingMemory;
+        core::VulkanAllocation stagingAllocation;
 
         vk::Buffer uploadStagingBuffer;
-        vk::DeviceMemory uploadStagingMemory;
+        core::VulkanAllocation uploadStagingAllocation;
         void* uploadStagingMapped = nullptr;
         bool uploadPending = false;
         vk::DeviceSize pendingUploadSize = 0;

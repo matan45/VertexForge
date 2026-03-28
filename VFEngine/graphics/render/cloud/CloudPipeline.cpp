@@ -9,7 +9,6 @@
 #include "../../core/OffScreen.hpp"
 #include "../../core/ImageUtilities.hpp"
 #include "../../core/BufferUtilities.hpp"
-#include "../../core/MemoryUtilities.hpp"
 #include <cstring>
 #include <glm/gtc/matrix_inverse.hpp>
 
@@ -33,7 +32,6 @@ namespace render::cloud
     void CloudPipeline::createFallbackTexture()
     {
         auto& dev = device.getLogicalDevice();
-        auto& physDev = device.getPhysicalDevice();
 
         // 1x1 white RGBA16F image
         vk::ImageCreateInfo imgInfo{};
@@ -49,12 +47,8 @@ namespace render::cloud
         fallbackImage = dev.createImage(imgInfo);
 
         auto memReqs = dev.getImageMemoryRequirements(fallbackImage);
-        vk::MemoryAllocateInfo allocInfo{};
-        allocInfo.allocationSize = memReqs.size;
-        allocInfo.memoryTypeIndex = core::MemoryUtilities::findMemoryType(
-            physDev, memReqs.memoryTypeBits, vk::MemoryPropertyFlagBits::eDeviceLocal);
-        fallbackMemory = dev.allocateMemory(allocInfo);
-        dev.bindImageMemory(fallbackImage, fallbackMemory, 0);
+        fallbackAllocation = device.getMemoryManager().allocate(memReqs, vk::MemoryPropertyFlagBits::eDeviceLocal);
+        dev.bindImageMemory(fallbackImage, fallbackAllocation.memory, fallbackAllocation.offset);
 
         core::ImageViewInfoRequest viewReq(dev, fallbackImage);
         viewReq.format = vk::Format::eR16G16B16A16Sfloat;
@@ -80,7 +74,7 @@ namespace render::cloud
         if (fallbackSampler) { dev.destroySampler(fallbackSampler); fallbackSampler = nullptr; }
         if (fallbackView) { dev.destroyImageView(fallbackView); fallbackView = nullptr; }
         if (fallbackImage) { dev.destroyImage(fallbackImage); fallbackImage = nullptr; }
-        if (fallbackMemory) { dev.freeMemory(fallbackMemory); fallbackMemory = nullptr; }
+        if (fallbackAllocation.isValid()) { device.getMemoryManager().free(fallbackAllocation); fallbackAllocation = {}; }
     }
 
     void CloudPipeline::init()

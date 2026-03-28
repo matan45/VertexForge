@@ -50,22 +50,14 @@ namespace render::svt
         if (depthSampler) dev.destroySampler(depthSampler);
 
         // Params buffer
-        if (paramsMapped)
-        {
-            dev.unmapMemory(paramsMemory);
-            paramsMapped = nullptr;
-        }
-        core::BufferUtilities::destroyBuffer(dev, paramsBuffer, paramsMemory);
+        paramsMapped = nullptr;
+        core::BufferUtilities::destroyBuffer(dev, paramsBuffer, paramsAllocation, device.getMemoryManager());
 
         // Feedback buffers
         for (auto& frame : feedbackFrames)
         {
-            if (frame.feedbackMapped)
-            {
-                dev.unmapMemory(frame.feedbackMemory);
-                frame.feedbackMapped = nullptr;
-            }
-            core::BufferUtilities::destroyBuffer(dev, frame.feedbackBuffer, frame.feedbackMemory);
+            frame.feedbackMapped = nullptr;
+            core::BufferUtilities::destroyBuffer(dev, frame.feedbackBuffer, frame.feedbackAllocation, device.getMemoryManager());
         }
 
         if (descriptorPool) dev.destroyDescriptorPool(descriptorPool);
@@ -268,8 +260,8 @@ namespace render::svt
                 vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst,
                 vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
             );
-            core::BufferUtilities::createBuffer(bufReq, frame.feedbackBuffer, frame.feedbackMemory);
-            frame.feedbackMapped = dev.mapMemory(frame.feedbackMemory, 0, bufferSize);
+            core::BufferUtilities::createBuffer(bufReq, frame.feedbackBuffer, frame.feedbackAllocation, device.getMemoryManager());
+            frame.feedbackMapped = frame.feedbackAllocation.mappedPtr;
             std::memset(frame.feedbackMapped, 0, bufferSize);
 
             // Allocate descriptor set
@@ -291,7 +283,7 @@ namespace render::svt
             vk::BufferUsageFlagBits::eUniformBuffer,
             vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
         );
-        core::BufferUtilities::createBuffer(bufReq, paramsBuffer, paramsMemory);
-        paramsMapped = dev.mapMemory(paramsMemory, 0, sizeof(SVTFeedbackParamsGPU));
+        core::BufferUtilities::createBuffer(bufReq, paramsBuffer, paramsAllocation, device.getMemoryManager());
+        paramsMapped = paramsAllocation.mappedPtr;
     }
 }

@@ -5,12 +5,10 @@
 #include "../../core/BufferUtilities.hpp"
 #include "../../core/Shader.hpp"
 #include "../../core/PipelineUtilities.hpp"
-#include "../../core/MappedMemoryGuard.hpp"
 #include "print/Log.hpp"
 
 namespace render::occlusion
 {
-    using render::MappedMemoryGuard;
 
     LightOcclusionCulling::LightOcclusionCulling(core::Device& device, core::SwapChain& swapChain)
         : device(device), swapChain(swapChain)
@@ -37,6 +35,7 @@ namespace render::occlusion
     void LightOcclusionCulling::createBuffers(uint32_t maxLights)
     {
         maxLightCount = maxLights;
+        auto& memManager = device.getMemoryManager();
 
         core::BufferInfoRequest boundsRequest(
             device.getLogicalDevice(),
@@ -45,7 +44,7 @@ namespace render::occlusion
             vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst,
             vk::MemoryPropertyFlagBits::eDeviceLocal
         );
-        core::BufferUtilities::createBuffer(boundsRequest, lightBoundsBuffer, lightBoundsMemory);
+        core::BufferUtilities::createBuffer(boundsRequest, lightBoundsBuffer, lightBoundsAllocation, memManager);
 
         core::BufferInfoRequest visRequest(
             device.getLogicalDevice(),
@@ -54,7 +53,7 @@ namespace render::occlusion
             vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferSrc,
             vk::MemoryPropertyFlagBits::eDeviceLocal
         );
-        core::BufferUtilities::createBuffer(visRequest, visibilityBuffer, visibilityMemory);
+        core::BufferUtilities::createBuffer(visRequest, visibilityBuffer, visibilityAllocation, memManager);
 
         core::BufferInfoRequest cameraRequest(
             device.getLogicalDevice(),
@@ -63,7 +62,7 @@ namespace render::occlusion
             vk::BufferUsageFlagBits::eUniformBuffer,
             vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
         );
-        core::BufferUtilities::createBuffer(cameraRequest, cameraBuffer, cameraMemory);
+        core::BufferUtilities::createBuffer(cameraRequest, cameraBuffer, cameraAllocation, memManager);
 
         core::BufferInfoRequest stagingRequest(
             device.getLogicalDevice(),
@@ -72,7 +71,7 @@ namespace render::occlusion
             vk::BufferUsageFlagBits::eTransferDst,
             vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
         );
-        core::BufferUtilities::createBuffer(stagingRequest, stagingBuffer, stagingMemory);
+        core::BufferUtilities::createBuffer(stagingRequest, stagingBuffer, stagingAllocation, memManager);
 
         core::BufferInfoRequest uploadStagingRequest(
             device.getLogicalDevice(),
@@ -81,9 +80,9 @@ namespace render::occlusion
             vk::BufferUsageFlagBits::eTransferSrc,
             vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
         );
-        core::BufferUtilities::createBuffer(uploadStagingRequest, uploadStagingBuffer, uploadStagingMemory);
+        core::BufferUtilities::createBuffer(uploadStagingRequest, uploadStagingBuffer, uploadStagingAllocation, memManager);
 
-        uploadStagingMapped = device.getLogicalDevice().mapMemory(uploadStagingMemory, 0, sizeof(GPULightBounds) * maxLights);
+        uploadStagingMapped = uploadStagingAllocation.mappedPtr;
 
         cachedVisibility.resize(maxLights, 0);
         needsDescriptorUpdate = true;
@@ -169,20 +168,15 @@ namespace render::occlusion
     {
         device.getLogicalDevice().waitIdle();
 
-        device.getLogicalDevice().destroyBuffer(lightBoundsBuffer);
-        device.getLogicalDevice().freeMemory(lightBoundsMemory);
-        device.getLogicalDevice().destroyBuffer(visibilityBuffer);
-        device.getLogicalDevice().freeMemory(visibilityMemory);
-        device.getLogicalDevice().destroyBuffer(stagingBuffer);
-        device.getLogicalDevice().freeMemory(stagingMemory);
+        auto& memManager = device.getMemoryManager();
+        const auto& logicalDevice = device.getLogicalDevice();
 
-        if (uploadStagingMapped)
-        {
-            device.getLogicalDevice().unmapMemory(uploadStagingMemory);
-            uploadStagingMapped = nullptr;
-        }
-        device.getLogicalDevice().destroyBuffer(uploadStagingBuffer);
-        device.getLogicalDevice().freeMemory(uploadStagingMemory);
+        core::BufferUtilities::destroyBuffer(logicalDevice, lightBoundsBuffer, lightBoundsAllocation, memManager);
+        core::BufferUtilities::destroyBuffer(logicalDevice, visibilityBuffer, visibilityAllocation, memManager);
+        core::BufferUtilities::destroyBuffer(logicalDevice, stagingBuffer, stagingAllocation, memManager);
+
+        uploadStagingMapped = nullptr;
+        core::BufferUtilities::destroyBuffer(logicalDevice, uploadStagingBuffer, uploadStagingAllocation, memManager);
 
         createBuffers(newMaxLights);
 
@@ -268,8 +262,7 @@ namespace render::occlusion
         cameraData.padding0 = 0;
         cameraData.padding1 = 0;
 
-        MappedMemoryGuard mapped(device.getLogicalDevice(), cameraMemory, 0, sizeof(LightCullCameraData));
-        std::memcpy(mapped.data(), &cameraData, sizeof(LightCullCameraData));
+        std::memcpy(cameraAllocation.mappedPtr, &cameraData, sizeof(LightCullCameraData));
     }
 
     void LightOcclusionCulling::cull(vk::CommandBuffer cmd)
@@ -419,10 +412,7 @@ namespace render::occlusion
             return visibleLightIds;
         }
 
-        {
-            MappedMemoryGuard mapped(device.getLogicalDevice(), stagingMemory, 0, sizeof(uint32_t) * currentLightCount);
-            std::memcpy(cachedVisibility.data(), mapped.data(), sizeof(uint32_t) * currentLightCount);
-        }
+        std::memcpy(cachedVisibility.data(), stagingAllocation.mappedPtr, sizeof(uint32_t) * currentLightCount);
 
         for (uint32_t i = 0; i < currentLightCount; ++i)
         {
@@ -455,28 +445,20 @@ namespace render::occlusion
         }
 
         auto logicalDevice = device.getLogicalDevice();
+        auto& memManager = device.getMemoryManager();
 
         logicalDevice.destroyPipeline(cullPipeline);
         logicalDevice.destroyPipelineLayout(pipelineLayout);
         logicalDevice.destroyDescriptorPool(descriptorPool);
         logicalDevice.destroyDescriptorSetLayout(descriptorSetLayout);
 
-        logicalDevice.destroyBuffer(lightBoundsBuffer);
-        logicalDevice.freeMemory(lightBoundsMemory);
-        logicalDevice.destroyBuffer(visibilityBuffer);
-        logicalDevice.freeMemory(visibilityMemory);
-        logicalDevice.destroyBuffer(cameraBuffer);
-        logicalDevice.freeMemory(cameraMemory);
-        logicalDevice.destroyBuffer(stagingBuffer);
-        logicalDevice.freeMemory(stagingMemory);
+        core::BufferUtilities::destroyBuffer(logicalDevice, lightBoundsBuffer, lightBoundsAllocation, memManager);
+        core::BufferUtilities::destroyBuffer(logicalDevice, visibilityBuffer, visibilityAllocation, memManager);
+        core::BufferUtilities::destroyBuffer(logicalDevice, cameraBuffer, cameraAllocation, memManager);
+        core::BufferUtilities::destroyBuffer(logicalDevice, stagingBuffer, stagingAllocation, memManager);
 
-        if (uploadStagingMapped)
-        {
-            logicalDevice.unmapMemory(uploadStagingMemory);
-            uploadStagingMapped = nullptr;
-        }
-        logicalDevice.destroyBuffer(uploadStagingBuffer);
-        logicalDevice.freeMemory(uploadStagingMemory);
+        uploadStagingMapped = nullptr;
+        core::BufferUtilities::destroyBuffer(logicalDevice, uploadStagingBuffer, uploadStagingAllocation, memManager);
 
         shader.reset();
         initialized = false;

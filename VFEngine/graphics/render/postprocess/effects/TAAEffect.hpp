@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../PostProcessEffect.hpp"
+#include "../../../core/VulkanMemoryManager.hpp"
 #include "postprocess/PostProcessTypes.hpp"
 #include <glm/glm.hpp>
 #include <memory>
@@ -48,7 +49,7 @@ namespace render::postprocess
         struct HistoryBuffer
         {
             vk::Image image;
-            vk::DeviceMemory memory;
+            core::VulkanAllocation allocation;
             vk::ImageView imageView;
             vk::Framebuffer framebuffer;
         };
@@ -78,7 +79,7 @@ namespace render::postprocess
         vk::DescriptorSet sharpenDescriptorSets[2]; // one per history write target
 
         vk::Buffer paramsBuffer;
-        vk::DeviceMemory paramsBufferMemory;
+        core::VulkanAllocation paramsBufferAllocation;
         void* paramsBufferMapped = nullptr;
 
         vk::Sampler sampler;

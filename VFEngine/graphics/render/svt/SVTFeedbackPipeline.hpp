@@ -1,6 +1,7 @@
 #pragma once
 
 #include "SVTTypes.hpp"
+#include "../../core/VulkanMemoryManager.hpp"
 #include <vulkan/vulkan.hpp>
 #include <glm/glm.hpp>
 #include <vector>
@@ -43,7 +44,7 @@ namespace render::svt
         struct FeedbackFrame
         {
             vk::Buffer feedbackBuffer;
-            vk::DeviceMemory feedbackMemory;
+            core::VulkanAllocation feedbackAllocation;
             void* feedbackMapped = nullptr;
             vk::DescriptorSet descriptorSet;
         };
@@ -51,7 +52,7 @@ namespace render::svt
 
         // UBO for feedback params
         vk::Buffer paramsBuffer;
-        vk::DeviceMemory paramsMemory;
+        core::VulkanAllocation paramsAllocation;
         void* paramsMapped = nullptr;
 
         uint32_t totalPageTableEntries = 0;

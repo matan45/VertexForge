@@ -25,8 +25,8 @@ namespace render::vegetation
         request.properties = vk::MemoryPropertyFlagBits::eHostVisible |
                             vk::MemoryPropertyFlagBits::eHostCoherent;
 
-        core::BufferUtilities::createBuffer(request, buffer, memory);
-        mapped = logicalDevice.mapMemory(memory, 0, sizeof(GPUWindData), vk::MemoryMapFlags{});
+        core::BufferUtilities::createBuffer(request, buffer, allocation, device.getMemoryManager());
+        mapped = allocation.mappedPtr;
 
         // Create descriptor set layout (single UBO binding)
         vk::DescriptorSetLayoutBinding binding{};
@@ -114,11 +114,7 @@ namespace render::vegetation
 
         const auto& logicalDevice = device->getLogicalDevice();
 
-        if (mapped)
-        {
-            logicalDevice.unmapMemory(memory);
-            mapped = nullptr;
-        }
+        mapped = nullptr;
 
         if (descriptorPool)
         {
@@ -131,7 +127,7 @@ namespace render::vegetation
             descriptorSetLayout = nullptr;
         }
 
-        core::BufferUtilities::destroyBuffer(logicalDevice, buffer, memory);
+        core::BufferUtilities::destroyBuffer(logicalDevice, buffer, allocation, device->getMemoryManager());
         device = nullptr;
     }
 }

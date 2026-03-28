@@ -1,6 +1,7 @@
 #pragma once
 
 #include "BillboardTypes.hpp"
+#include "../../core/VulkanMemoryManager.hpp"
 #include <memory>
 #include <string>
 
@@ -21,7 +22,7 @@ namespace render::billboard
 
         // Default atlas (magenta placeholder)
         vk::Image defaultAtlasImage;
-        vk::DeviceMemory defaultAtlasImageMemory;
+        core::VulkanAllocation defaultAtlasImageAllocation;
         vk::ImageView defaultAtlasImageView;
         vk::Sampler defaultAtlasSampler;
 

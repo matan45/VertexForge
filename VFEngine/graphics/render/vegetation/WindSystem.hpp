@@ -1,6 +1,7 @@
 #pragma once
 
 #include <vulkan/vulkan.hpp>
+#include "../../core/VulkanMemoryManager.hpp"
 #include <glm/glm.hpp>
 
 namespace vegetation
@@ -27,7 +28,7 @@ namespace render::vegetation
         core::Device* device = nullptr;
 
         vk::Buffer buffer;
-        vk::DeviceMemory memory;
+        core::VulkanAllocation allocation;
         void* mapped = nullptr;
         GPUWindData data{};
         float elapsedTime = 0.0f;

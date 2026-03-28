@@ -3,6 +3,7 @@
 #include "../../core/BufferUtilities.hpp"
 #include "../../core/ImageUtilities.hpp"
 #include "../../core/Utilities.hpp"
+#include "../../core/VulkanMemoryManager.hpp"
 #include <cstring>
 
 namespace render::ibl
@@ -35,19 +36,19 @@ namespace render::ibl
         if (irradiance.sampler) logicalDevice.destroySampler(irradiance.sampler);
         if (irradiance.imageView) logicalDevice.destroyImageView(irradiance.imageView);
         if (irradiance.image) logicalDevice.destroyImage(irradiance.image);
-        if (irradiance.imageMemory) logicalDevice.freeMemory(irradiance.imageMemory);
+        if (irradiance.imageAllocation) { device.getMemoryManager().free(irradiance.imageAllocation); irradiance.imageAllocation = {}; }
 
         // Cleanup prefilter
         if (prefilter.sampler) logicalDevice.destroySampler(prefilter.sampler);
         if (prefilter.imageView) logicalDevice.destroyImageView(prefilter.imageView);
         if (prefilter.image) logicalDevice.destroyImage(prefilter.image);
-        if (prefilter.imageMemory) logicalDevice.freeMemory(prefilter.imageMemory);
+        if (prefilter.imageAllocation) { device.getMemoryManager().free(prefilter.imageAllocation); prefilter.imageAllocation = {}; }
 
         // Cleanup BRDF LUT
         if (brdfLUT.sampler) logicalDevice.destroySampler(brdfLUT.sampler);
         if (brdfLUT.imageView) logicalDevice.destroyImageView(brdfLUT.imageView);
         if (brdfLUT.image) logicalDevice.destroyImage(brdfLUT.image);
-        if (brdfLUT.imageMemory) logicalDevice.freeMemory(brdfLUT.imageMemory);
+        if (brdfLUT.imageAllocation) { device.getMemoryManager().free(brdfLUT.imageAllocation); brdfLUT.imageAllocation = {}; }
 
         texturesCreated = false;
     }
@@ -68,7 +69,7 @@ namespace render::ibl
         imageRequest.usage = vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst;
         imageRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
         imageRequest.imageFlags = vk::ImageCreateFlagBits::eCubeCompatible;
-        core::ImageUtilities::createImage(imageRequest, imageData.image, imageData.imageMemory);
+        core::ImageUtilities::createImage(imageRequest, imageData.image, imageData.imageAllocation, device.getMemoryManager());
 
         // Create staging buffer with color data for all 6 faces
         std::vector<float> pixels(6 * 4);  // 6 faces * 4 components (RGBA)
@@ -81,18 +82,16 @@ namespace render::ibl
 
         vk::DeviceSize imageSize = pixels.size() * sizeof(float);
         vk::Buffer stagingBuffer;
-        vk::DeviceMemory stagingMemory;
+        core::VulkanAllocation stagingAllocation;
 
         core::BufferInfoRequest stagingRequest(device.getLogicalDevice(), device.getPhysicalDevice());
         stagingRequest.size = imageSize;
         stagingRequest.usage = vk::BufferUsageFlagBits::eTransferSrc;
         stagingRequest.properties = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
-        core::BufferUtilities::createBuffer(stagingRequest, stagingBuffer, stagingMemory);
+        core::BufferUtilities::createBuffer(stagingRequest, stagingBuffer, stagingAllocation, device.getMemoryManager());
 
-        void* data;
-        [[maybe_unused]] auto mapResult = device.getLogicalDevice().mapMemory(stagingMemory, 0, imageSize, {}, &data);
+        void* data = stagingAllocation.mappedPtr;
         memcpy(data, pixels.data(), imageSize);
-        device.getLogicalDevice().unmapMemory(stagingMemory);
 
         // Transition image layout and copy data
         vk::CommandBufferAllocateInfo cmdAllocInfo{};
@@ -156,8 +155,7 @@ namespace render::ibl
         device.waitGraphicsIdle();
 
         device.getLogicalDevice().freeCommandBuffers(commandPool, cmd);
-        device.getLogicalDevice().destroyBuffer(stagingBuffer);
-        device.getLogicalDevice().freeMemory(stagingMemory);
+        core::BufferUtilities::destroyBuffer(device.getLogicalDevice(), stagingBuffer, stagingAllocation, device.getMemoryManager());
 
         // Create image view
         core::ImageViewInfoRequest viewRequest(device.getLogicalDevice(), imageData.image,
@@ -192,22 +190,20 @@ namespace render::ibl
         imageRequest.tiling = vk::ImageTiling::eOptimal;
         imageRequest.usage = vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst;
         imageRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-        core::ImageUtilities::createImage(imageRequest, imageData.image, imageData.imageMemory);
+        core::ImageUtilities::createImage(imageRequest, imageData.image, imageData.imageAllocation, device.getMemoryManager());
 
         vk::DeviceSize imageSize = sizeof(defaultBrdfPixel);
         vk::Buffer stagingBuffer;
-        vk::DeviceMemory stagingMemory;
+        core::VulkanAllocation stagingAllocation;
 
         core::BufferInfoRequest stagingRequest(device.getLogicalDevice(), device.getPhysicalDevice());
         stagingRequest.size = imageSize;
         stagingRequest.usage = vk::BufferUsageFlagBits::eTransferSrc;
         stagingRequest.properties = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
-        core::BufferUtilities::createBuffer(stagingRequest, stagingBuffer, stagingMemory);
+        core::BufferUtilities::createBuffer(stagingRequest, stagingBuffer, stagingAllocation, device.getMemoryManager());
 
-        void* data;
-        [[maybe_unused]] auto mapResult = device.getLogicalDevice().mapMemory(stagingMemory, 0, imageSize, {}, &data);
+        void* data = stagingAllocation.mappedPtr;
         memcpy(data, defaultBrdfPixel.data(), imageSize);
-        device.getLogicalDevice().unmapMemory(stagingMemory);
 
         vk::CommandBufferAllocateInfo cmdAllocInfo{};
         cmdAllocInfo.level = vk::CommandBufferLevel::ePrimary;
@@ -262,8 +258,7 @@ namespace render::ibl
         device.waitGraphicsIdle();
 
         device.getLogicalDevice().freeCommandBuffers(commandPool, cmd);
-        device.getLogicalDevice().destroyBuffer(stagingBuffer);
-        device.getLogicalDevice().freeMemory(stagingMemory);
+        core::BufferUtilities::destroyBuffer(device.getLogicalDevice(), stagingBuffer, stagingAllocation, device.getMemoryManager());
 
         // Create image view
         core::ImageViewInfoRequest viewRequest(device.getLogicalDevice(), imageData.image,

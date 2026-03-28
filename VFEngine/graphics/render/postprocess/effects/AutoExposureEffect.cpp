@@ -306,7 +306,7 @@ namespace render::postprocess
         histReq.usage = vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst;
         histReq.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
 
-        core::BufferUtilities::createBuffer(histReq, histogramBuffer, histogramBufferMemory);
+        core::BufferUtilities::createBuffer(histReq, histogramBuffer, histogramBufferAllocation, device.getMemoryManager());
 
         // Exposure buffers - host visible for CPU readback (per-frame)
         for (auto& ef : exposureFrames)
@@ -316,8 +316,8 @@ namespace render::postprocess
             expReq.usage = vk::BufferUsageFlagBits::eStorageBuffer;
             expReq.properties = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
 
-            core::BufferUtilities::createBuffer(expReq, ef.buffer, ef.memory);
-            ef.mapped = dev.mapMemory(ef.memory, 0, sizeof(ExposureData), {});
+            core::BufferUtilities::createBuffer(expReq, ef.buffer, ef.allocation, device.getMemoryManager());
+            ef.mapped = ef.allocation.mappedPtr;
         }
     }
 
@@ -562,15 +562,11 @@ namespace render::postprocess
 
         for (auto& ef : exposureFrames)
         {
-            if (ef.mapped)
-            {
-                dev.unmapMemory(ef.memory);
-                ef.mapped = nullptr;
-            }
-            core::BufferUtilities::destroyBuffer(dev, ef.buffer, ef.memory);
+            ef.mapped = nullptr;
+            core::BufferUtilities::destroyBuffer(dev, ef.buffer, ef.allocation, device.getMemoryManager());
         }
 
-        core::BufferUtilities::destroyBuffer(dev, histogramBuffer, histogramBufferMemory);
+        core::BufferUtilities::destroyBuffer(dev, histogramBuffer, histogramBufferAllocation, device.getMemoryManager());
     }
 
     void AutoExposureEffect::cleanupPipelines()

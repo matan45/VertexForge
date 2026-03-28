@@ -29,6 +29,6 @@ namespace render::ibl
 
     private:
         void updateUniformBuffer(const glm::mat4& viewMatrix, const glm::mat4& projectionMatrix,
-                                 const vk::DeviceMemory& uniformBufferMemory) const;
+                                 core::VulkanAllocation& uniformBufferAllocation) const;
     };
 }

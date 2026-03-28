@@ -10,6 +10,7 @@ namespace render::vfx
         : rng(static_cast<unsigned int>(std::chrono::steady_clock::now().time_since_epoch().count()))
     {
         particles.resize(VFXConstants::MAX_PARTICLES);
+        cachedSegments.reserve(256);
     }
 
     void VFXParticleSystem::setEmitterConfig(const VFXEmitterConfig& emitterConfig)

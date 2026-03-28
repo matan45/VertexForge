@@ -4,7 +4,6 @@
 #include "../../../core/PipelineUtilities.hpp"
 #include "../../../core/BufferUtilities.hpp"
 #include "../../../core/ImageUtilities.hpp"
-#include "../../../core/MemoryUtilities.hpp"
 #include "../../../core/Utilities.hpp"
 #include <spdlog/spdlog.h>
 #include <cstring>
@@ -91,12 +90,8 @@ namespace render::postprocess
 
         if (paramsBuffer)
         {
-            if (paramsBufferMapped)
-            {
-                dev.unmapMemory(paramsBufferMemory);
-                paramsBufferMapped = nullptr;
-            }
-            core::BufferUtilities::destroyBuffer(dev, paramsBuffer, paramsBufferMemory);
+            paramsBufferMapped = nullptr;
+            core::BufferUtilities::destroyBuffer(dev, paramsBuffer, paramsBufferAllocation, device.getMemoryManager());
         }
 
         if (lutSampler)
@@ -319,8 +314,8 @@ namespace render::postprocess
         bufReq.properties = vk::MemoryPropertyFlagBits::eHostVisible
                           | vk::MemoryPropertyFlagBits::eHostCoherent;
 
-        core::BufferUtilities::createBuffer(bufReq, paramsBuffer, paramsBufferMemory);
-        paramsBufferMapped = dev.mapMemory(paramsBufferMemory, 0, sizeof(ColorGradingParamsUBO));
+        core::BufferUtilities::createBuffer(bufReq, paramsBuffer, paramsBufferAllocation, device.getMemoryManager());
+        paramsBufferMapped = paramsBufferAllocation.mappedPtr;
     }
 
     void ColorGradingEffect::createDescriptorPool()
@@ -426,7 +421,6 @@ namespace render::postprocess
     void ColorGradingEffect::create3DImage(uint32_t size, LUTTexture& lut)
     {
         auto& dev = device.getLogicalDevice();
-        auto& physDev = device.getPhysicalDevice();
 
         vk::ImageCreateInfo imageInfo{};
         imageInfo.imageType = vk::ImageType::e3D;
@@ -443,13 +437,8 @@ namespace render::postprocess
         lut.image = dev.createImage(imageInfo);
 
         vk::MemoryRequirements memReqs = dev.getImageMemoryRequirements(lut.image);
-        vk::MemoryAllocateInfo allocInfo{};
-        allocInfo.allocationSize = memReqs.size;
-        allocInfo.memoryTypeIndex = core::MemoryUtilities::findMemoryType(
-            physDev, memReqs.memoryTypeBits, vk::MemoryPropertyFlagBits::eDeviceLocal);
-
-        lut.memory = dev.allocateMemory(allocInfo);
-        dev.bindImageMemory(lut.image, lut.memory, 0);
+        lut.allocation = device.getMemoryManager().allocate(memReqs, vk::MemoryPropertyFlagBits::eDeviceLocal);
+        dev.bindImageMemory(lut.image, lut.allocation.memory, lut.allocation.offset);
 
         core::ImageViewInfoRequest viewReq(dev, lut.image);
         viewReq.format = vk::Format::eR16G16B16A16Sfloat;
@@ -466,17 +455,15 @@ namespace render::postprocess
 
         // Create staging buffer
         vk::Buffer stagingBuffer;
-        vk::DeviceMemory stagingMemory;
+        core::VulkanAllocation stagingAllocation;
         core::BufferInfoRequest stagingReq(vkDevice, device.getPhysicalDevice());
         stagingReq.size = dataSize;
         stagingReq.usage = vk::BufferUsageFlagBits::eTransferSrc;
         stagingReq.properties = vk::MemoryPropertyFlagBits::eHostVisible
                               | vk::MemoryPropertyFlagBits::eHostCoherent;
-        core::BufferUtilities::createBuffer(stagingReq, stagingBuffer, stagingMemory);
+        core::BufferUtilities::createBuffer(stagingReq, stagingBuffer, stagingAllocation, device.getMemoryManager());
 
-        void* mapped = vkDevice.mapMemory(stagingMemory, 0, dataSize);
-        std::memcpy(mapped, data, dataSize);
-        vkDevice.unmapMemory(stagingMemory);
+        std::memcpy(stagingAllocation.mappedPtr, data, dataSize);
 
         auto cmd = core::Utilities::beginSingleTimeCommands(vkDevice, device.getStagingCommandPool());
 
@@ -500,8 +487,7 @@ namespace render::postprocess
 
         core::Utilities::endSingleTimeCommands(device, cmd);
 
-        vkDevice.destroyBuffer(stagingBuffer);
-        vkDevice.freeMemory(stagingMemory);
+        core::BufferUtilities::destroyBuffer(vkDevice, stagingBuffer, stagingAllocation, device.getMemoryManager());
     }
 
     void ColorGradingEffect::loadLUT(const std::string& path, LUTTexture& lut)
@@ -594,10 +580,10 @@ namespace render::postprocess
             dev.destroyImage(lut.image);
             lut.image = nullptr;
         }
-        if (lut.memory)
+        if (lut.allocation.isValid())
         {
-            dev.freeMemory(lut.memory);
-            lut.memory = nullptr;
+            device.getMemoryManager().free(lut.allocation);
+            lut.allocation = {};
         }
         lut.size = 0;
     }

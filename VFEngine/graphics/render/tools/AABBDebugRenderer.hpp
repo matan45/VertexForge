@@ -38,9 +38,9 @@ namespace render::mesh
         vk::PipelineLayout wireframePipelineLayout;
 
         vk::Buffer vertexBuffer;
-        vk::DeviceMemory vertexBufferMemory;
+        core::VulkanAllocation vertexBufferAllocation;
         vk::Buffer indexBuffer;
-        vk::DeviceMemory indexBufferMemory;
+        core::VulkanAllocation indexBufferAllocation;
 
     public:
         explicit AABBDebugRenderer(core::Device& device, core::SwapChain& swapChain);

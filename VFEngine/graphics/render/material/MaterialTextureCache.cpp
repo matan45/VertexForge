@@ -3,6 +3,7 @@
 #include "../../core/Texture.hpp"
 #include "../../core/BufferUtilities.hpp"
 #include "../../core/ImageUtilities.hpp"
+#include "../../core/VulkanMemoryManager.hpp"
 #include "material/MaterialTypes.hpp"
 #include "resource/AssetLifecycleManager.hpp"
 #include "asset/AssetRef.hpp"
@@ -270,7 +271,7 @@ namespace render::mesh
             if (defaultTexture.sampler) device.getLogicalDevice().destroySampler(defaultTexture.sampler);
             if (defaultTexture.view) device.getLogicalDevice().destroyImageView(defaultTexture.view);
             if (defaultTexture.image) device.getLogicalDevice().destroyImage(defaultTexture.image);
-            if (defaultTexture.memory) device.getLogicalDevice().freeMemory(defaultTexture.memory);
+            if (defaultTexture.allocation) { device.getMemoryManager().free(defaultTexture.allocation); defaultTexture.allocation = {}; }
             defaultTexture = {};
             defaultTextureCreated = false;
         }
@@ -289,24 +290,22 @@ namespace render::mesh
             vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst,
             vk::MemoryPropertyFlagBits::eDeviceLocal
         );
-        core::ImageUtilities::createImage(imageInfo, defaultTexture.image, defaultTexture.memory);
+        core::ImageUtilities::createImage(imageInfo, defaultTexture.image, defaultTexture.allocation, device.getMemoryManager());
 
         // Create staging buffer and copy
         constexpr vk::DeviceSize imageSize = sizeof(DEFAULT_TEXTURE_PIXELS);
         vk::Buffer stagingBuffer;
-        vk::DeviceMemory stagingMemory;
+        core::VulkanAllocation stagingAllocation;
 
         core::BufferInfoRequest stagingRequest(device.getLogicalDevice(), device.getPhysicalDevice());
         stagingRequest.size = imageSize;
         stagingRequest.usage = vk::BufferUsageFlagBits::eTransferSrc;
         stagingRequest.properties = vk::MemoryPropertyFlagBits::eHostVisible |
             vk::MemoryPropertyFlagBits::eHostCoherent;
-        core::BufferUtilities::createBuffer(stagingRequest, stagingBuffer, stagingMemory);
+        core::BufferUtilities::createBuffer(stagingRequest, stagingBuffer, stagingAllocation, device.getMemoryManager());
 
-        void* data;
-        [[maybe_unused]] auto mapResult = device.getLogicalDevice().mapMemory(stagingMemory, 0, imageSize, {}, &data);
+        void* data = stagingAllocation.mappedPtr;
         memcpy(data, DEFAULT_TEXTURE_PIXELS.data(), static_cast<size_t>(imageSize));
-        device.getLogicalDevice().unmapMemory(stagingMemory);
 
         // Transition and copy
         vk::CommandBufferAllocateInfo cmdAllocInfo{};
@@ -361,8 +360,7 @@ namespace render::mesh
         device.waitGraphicsIdle();
 
         device.getLogicalDevice().freeCommandBuffers(commandPool, cmd);
-        device.getLogicalDevice().destroyBuffer(stagingBuffer);
-        device.getLogicalDevice().freeMemory(stagingMemory);
+        core::BufferUtilities::destroyBuffer(device.getLogicalDevice(), stagingBuffer, stagingAllocation, device.getMemoryManager());
         
         core::ImageViewInfoRequest viewInfo(
             device.getLogicalDevice(),

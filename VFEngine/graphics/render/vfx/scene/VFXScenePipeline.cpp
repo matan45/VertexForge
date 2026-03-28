@@ -8,6 +8,7 @@
 #include "../../../core/BufferUtilities.hpp"
 #include "../../../core/ImageUtilities.hpp"
 #include "../../../core/Utilities.hpp"
+#include "../../../core/VulkanMemoryManager.hpp"
 #include "print/Log.hpp"
 #include <filesystem>
 
@@ -72,30 +73,10 @@ namespace render::vfx
         }
         if (descriptorSetLayout) { dev.destroyDescriptorSetLayout(descriptorSetLayout); descriptorSetLayout = nullptr; }
 
-        if (cameraUBO)
-        {
-            dev.destroyBuffer(cameraUBO);
-            dev.freeMemory(cameraUBOMemory);
-            cameraUBO = nullptr;
-        }
-        if (quadVertexBuffer)
-        {
-            dev.destroyBuffer(quadVertexBuffer);
-            dev.freeMemory(quadVertexBufferMemory);
-            quadVertexBuffer = nullptr;
-        }
-        if (quadIndexBuffer)
-        {
-            dev.destroyBuffer(quadIndexBuffer);
-            dev.freeMemory(quadIndexBufferMemory);
-            quadIndexBuffer = nullptr;
-        }
-        if (instanceBuffer)
-        {
-            dev.destroyBuffer(instanceBuffer);
-            dev.freeMemory(instanceBufferMemory);
-            instanceBuffer = nullptr;
-        }
+        core::BufferUtilities::destroyBuffer(dev, cameraUBO, cameraUBOAllocation, device.getMemoryManager());
+        core::BufferUtilities::destroyBuffer(dev, quadVertexBuffer, quadVertexBufferAllocation, device.getMemoryManager());
+        core::BufferUtilities::destroyBuffer(dev, quadIndexBuffer, quadIndexBufferAllocation, device.getMemoryManager());
+        core::BufferUtilities::destroyBuffer(dev, instanceBuffer, instanceBufferAllocation, device.getMemoryManager());
 
         customTexture.reset();
         currentTexturePath.clear();
@@ -105,10 +86,9 @@ namespace render::vfx
         if (defaultTextureImage)
         {
             dev.destroyImage(defaultTextureImage);
-            dev.freeMemory(defaultTextureMemory);
             defaultTextureImage = nullptr;
-            defaultTextureMemory = nullptr;
         }
+        if (defaultTextureAllocation) { device.getMemoryManager().free(defaultTextureAllocation); defaultTextureAllocation = {}; }
 
         if (vfxShader)
         {
@@ -253,21 +233,21 @@ namespace render::vfx
         uboRequest.properties = vk::MemoryPropertyFlagBits::eHostVisible |
                                 vk::MemoryPropertyFlagBits::eHostCoherent;
         uboRequest.size = sizeof(VFXCameraUBO);
-        core::BufferUtilities::createBuffer(uboRequest, cameraUBO, cameraUBOMemory);
+        core::BufferUtilities::createBuffer(uboRequest, cameraUBO, cameraUBOAllocation, device.getMemoryManager());
 
         constexpr vk::DeviceSize vertexBufferSize = sizeof(VFXQuadVertex) * QUAD_VERTICES.size();
         core::BufferInfoRequest vertexRequest(device.getLogicalDevice(), device.getPhysicalDevice());
         vertexRequest.size = vertexBufferSize;
         vertexRequest.usage = vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst;
         vertexRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-        core::BufferUtilities::createBuffer(vertexRequest, quadVertexBuffer, quadVertexBufferMemory);
+        core::BufferUtilities::createBuffer(vertexRequest, quadVertexBuffer, quadVertexBufferAllocation, device.getMemoryManager());
 
         constexpr vk::DeviceSize indexBufferSize = sizeof(uint16_t) * QUAD_INDICES.size();
         core::BufferInfoRequest indexRequest(device.getLogicalDevice(), device.getPhysicalDevice());
         indexRequest.size = indexBufferSize;
         indexRequest.usage = vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eTransferDst;
         indexRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-        core::BufferUtilities::createBuffer(indexRequest, quadIndexBuffer, quadIndexBufferMemory);
+        core::BufferUtilities::createBuffer(indexRequest, quadIndexBuffer, quadIndexBufferAllocation, device.getMemoryManager());
 
         core::BufferUtilities::copyToBuffer(
             device.getLogicalDevice(),
@@ -295,7 +275,7 @@ namespace render::vfx
         instanceRequest.usage = vk::BufferUsageFlagBits::eVertexBuffer;
         instanceRequest.properties = vk::MemoryPropertyFlagBits::eHostVisible |
                                      vk::MemoryPropertyFlagBits::eHostCoherent;
-        core::BufferUtilities::createBuffer(instanceRequest, instanceBuffer, instanceBufferMemory);
+        core::BufferUtilities::createBuffer(instanceRequest, instanceBuffer, instanceBufferAllocation, device.getMemoryManager());
     }
 
     void VFXScenePipeline::createDefaultTexture()
@@ -311,7 +291,7 @@ namespace render::vfx
             vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
             vk::MemoryPropertyFlagBits::eDeviceLocal
         );
-        core::ImageUtilities::createImage(imageInfo, defaultTextureImage, defaultTextureMemory);
+        core::ImageUtilities::createImage(imageInfo, defaultTextureImage, defaultTextureAllocation, device.getMemoryManager());
 
         core::ImageViewInfoRequest viewInfo(
             device.getLogicalDevice(),
@@ -332,15 +312,13 @@ namespace render::vfx
                                     vk::MemoryPropertyFlagBits::eHostCoherent;
 
         vk::Buffer stagingBuffer;
-        vk::DeviceMemory stagingMemory;
-        core::BufferUtilities::createBuffer(stagingRequest, stagingBuffer, stagingMemory);
+        core::VulkanAllocation stagingAllocation;
+        core::BufferUtilities::createBuffer(stagingRequest, stagingBuffer, stagingAllocation, device.getMemoryManager());
 
-        void* data;
-        vk::Result mapResult = device.getLogicalDevice().mapMemory(stagingMemory, 0, imageSize, {}, &data);
-        if (mapResult == vk::Result::eSuccess)
+        void* data = stagingAllocation.mappedPtr;
+        if (data)
         {
             std::memcpy(data, pixelData.data(), imageSize);
-            device.getLogicalDevice().unmapMemory(stagingMemory);
         }
 
         auto cmd = core::Utilities::beginSingleTimeCommands(device.getLogicalDevice(), device.getStagingCommandPool());
@@ -368,8 +346,7 @@ namespace render::vfx
 
         core::Utilities::endSingleTimeCommands(device, cmd);
 
-        device.getLogicalDevice().destroyBuffer(stagingBuffer);
-        device.getLogicalDevice().freeMemory(stagingMemory);
+        core::BufferUtilities::destroyBuffer(device.getLogicalDevice(), stagingBuffer, stagingAllocation, device.getMemoryManager());
     }
 
     void VFXScenePipeline::createSampler()
@@ -386,12 +363,9 @@ namespace render::vfx
         ubo.cameraPos = cameraPos;
         ubo.time = time;
 
-        void* data;
-        vk::Result result = device.getLogicalDevice().mapMemory(cameraUBOMemory, 0, sizeof(ubo), {}, &data);
-        if (result == vk::Result::eSuccess)
+        if (cameraUBOAllocation.mappedPtr)
         {
-            std::memcpy(data, &ubo, sizeof(ubo));
-            device.getLogicalDevice().unmapMemory(cameraUBOMemory);
+            std::memcpy(cameraUBOAllocation.mappedPtr, &ubo, sizeof(ubo));
         }
     }
 
@@ -406,13 +380,10 @@ namespace render::vfx
         currentInstanceCount = static_cast<uint32_t>(std::min(instances.size(),
                                                               static_cast<size_t>(maxInstances)));
 
-        void* data;
         vk::DeviceSize bufferSize = sizeof(VFXInstanceData) * currentInstanceCount;
-        vk::Result result = device.getLogicalDevice().mapMemory(instanceBufferMemory, 0, bufferSize, {}, &data);
-        if (result == vk::Result::eSuccess)
+        if (instanceBufferAllocation.mappedPtr)
         {
-            std::memcpy(data, instances.data(), bufferSize);
-            device.getLogicalDevice().unmapMemory(instanceBufferMemory);
+            std::memcpy(instanceBufferAllocation.mappedPtr, instances.data(), bufferSize);
         }
     }
 

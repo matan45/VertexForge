@@ -132,9 +132,9 @@ namespace render::gpudriven
         request.properties = vk::MemoryPropertyFlagBits::eHostVisible |
                              vk::MemoryPropertyFlagBits::eHostCoherent;
 
-        core::BufferUtilities::createBuffer(request, terrainLayerBuffer, terrainLayerBufferMemory);
+        core::BufferUtilities::createBuffer(request, terrainLayerBuffer, terrainLayerBufferAllocation, device.getMemoryManager());
 
-        terrainLayerBufferMapped = vkDevice.mapMemory(terrainLayerBufferMemory, 0, layerBufferSize);
+        terrainLayerBufferMapped = terrainLayerBufferAllocation.mappedPtr;
         std::memset(terrainLayerBufferMapped, 0, layerBufferSize);
 
         vk::DescriptorBufferInfo bufferInfo{};
@@ -258,20 +258,12 @@ namespace render::gpudriven
         if (graphicsPipeline) { vkDevice.destroyPipeline(graphicsPipeline); graphicsPipeline = nullptr; }
         if (pipelineLayout) { vkDevice.destroyPipelineLayout(pipelineLayout); pipelineLayout = nullptr; }
 
-        if (tileDataBufferMapped)
-        {
-            vkDevice.unmapMemory(tileDataBufferMemory);
-            tileDataBufferMapped = nullptr;
-        }
-        core::BufferUtilities::destroyBuffer(vkDevice, tileDataBuffer, tileDataBufferMemory);
-        core::BufferUtilities::destroyBuffer(vkDevice, statsBuffer, statsBufferMemory);
+        tileDataBufferMapped = nullptr;
+        core::BufferUtilities::destroyBuffer(vkDevice, tileDataBuffer, tileDataBufferAllocation, device.getMemoryManager());
+        core::BufferUtilities::destroyBuffer(vkDevice, statsBuffer, statsBufferAllocation, device.getMemoryManager());
 
-        if (terrainLayerBufferMapped)
-        {
-            vkDevice.unmapMemory(terrainLayerBufferMemory);
-            terrainLayerBufferMapped = nullptr;
-        }
-        core::BufferUtilities::destroyBuffer(vkDevice, terrainLayerBuffer, terrainLayerBufferMemory);
+        terrainLayerBufferMapped = nullptr;
+        core::BufferUtilities::destroyBuffer(vkDevice, terrainLayerBuffer, terrainLayerBufferAllocation, device.getMemoryManager());
 
         cleanupDescriptorResources();
 
@@ -289,9 +281,9 @@ namespace render::gpudriven
         request.properties = vk::MemoryPropertyFlagBits::eHostVisible |
                              vk::MemoryPropertyFlagBits::eHostCoherent;
 
-        core::BufferUtilities::createBuffer(request, tileDataBuffer, tileDataBufferMemory);
+        core::BufferUtilities::createBuffer(request, tileDataBuffer, tileDataBufferAllocation, device.getMemoryManager());
 
-        tileDataBufferMapped = vkDevice.mapMemory(tileDataBufferMemory, 0, bufferSize);
+        tileDataBufferMapped = tileDataBufferAllocation.mappedPtr;
         std::memset(tileDataBufferMapped, 0, bufferSize);
 
         vfLogInfo("TerrainMeshShaderPipeline: Created tile data buffer for {} tiles ({} bytes)",
@@ -307,11 +299,9 @@ namespace render::gpudriven
         request.usage = vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst;
         request.properties = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
 
-        core::BufferUtilities::createBuffer(request, statsBuffer, statsBufferMemory);
+        core::BufferUtilities::createBuffer(request, statsBuffer, statsBufferAllocation, device.getMemoryManager());
 
-        void* data = vkDevice.mapMemory(statsBufferMemory, 0, sizeof(TerrainCullingStats));
-        std::memset(data, 0, sizeof(TerrainCullingStats));
-        vkDevice.unmapMemory(statsBufferMemory);
+        std::memset(statsBufferAllocation.mappedPtr, 0, sizeof(TerrainCullingStats));
     }
 
     void TerrainMeshShaderPipeline::createSVTDescriptorLayout()

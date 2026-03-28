@@ -3,6 +3,7 @@
 #include "../core/Shader.hpp"
 #include "../core/BufferUtilities.hpp"
 #include "../core/PipelineUtilities.hpp"
+#include "../core/VulkanMemoryManager.hpp"
 #include "print/Log.hpp"
 
 namespace animation
@@ -82,8 +83,8 @@ namespace animation
             bufReq.usage = vk::BufferUsageFlagBits::eStorageBuffer;
             bufReq.properties = vk::MemoryPropertyFlagBits::eHostVisible |
                 vk::MemoryPropertyFlagBits::eHostCoherent;
-            core::BufferUtilities::createBuffer(bufReq, requestBuffer, requestBufferMemory);
-            requestMapped = logicalDevice.mapMemory(requestBufferMemory, 0, bufReq.size, vk::MemoryMapFlags{});
+            core::BufferUtilities::createBuffer(bufReq, requestBuffer, requestBufferAllocation, device.getMemoryManager());
+            requestMapped = requestBufferAllocation.mappedPtr;
         }
 
         initialized = true;
@@ -98,23 +99,19 @@ namespace animation
         vk::Device vkDevice = device.getLogicalDevice();
         vkDevice.waitIdle();
 
-        auto destroyBuf = [&](vk::Buffer& buf, vk::DeviceMemory& mem) {
-            core::BufferUtilities::destroyBuffer(vkDevice, buf, mem);
+        auto destroyBuf = [&](vk::Buffer& buf, core::VulkanAllocation& alloc) {
+            core::BufferUtilities::destroyBuffer(vkDevice, buf, alloc, device.getMemoryManager());
         };
 
-        if (requestMapped)
-        {
-            vkDevice.unmapMemory(requestBufferMemory);
-            requestMapped = nullptr;
-        }
+        requestMapped = nullptr;
 
-        destroyBuf(requestBuffer, requestBufferMemory);
-        destroyBuf(skeletonBuffer, skeletonBufferMemory);
-        destroyBuf(clipHeaderBuffer, clipHeaderBufferMemory);
-        destroyBuf(channelHeaderBuffer, channelHeaderBufferMemory);
-        destroyBuf(positionKeyBuffer, positionKeyBufferMemory);
-        destroyBuf(rotationKeyBuffer, rotationKeyBufferMemory);
-        destroyBuf(scaleKeyBuffer, scaleKeyBufferMemory);
+        destroyBuf(requestBuffer, requestBufferAllocation);
+        destroyBuf(skeletonBuffer, skeletonBufferAllocation);
+        destroyBuf(clipHeaderBuffer, clipHeaderBufferAllocation);
+        destroyBuf(channelHeaderBuffer, channelHeaderBufferAllocation);
+        destroyBuf(positionKeyBuffer, positionKeyBufferAllocation);
+        destroyBuf(rotationKeyBuffer, rotationKeyBufferAllocation);
+        destroyBuf(scaleKeyBuffer, scaleKeyBufferAllocation);
 
         if (computePipeline)
         {
@@ -149,31 +146,30 @@ namespace animation
         vk::Device vkDevice = device.getLogicalDevice();
         const auto& physicalDevice = device.getPhysicalDevice();
 
-        auto createAndUpload = [&](auto& buffer, auto& memory, const auto& vec, vk::DeviceSize elemSize) {
+        auto createAndUpload = [&](vk::Buffer& buffer, core::VulkanAllocation& alloc, const auto& vec, vk::DeviceSize elemSize) {
             if (vec.empty())
                 return;
 
-            core::BufferUtilities::destroyBuffer(vkDevice, buffer, memory);
+            core::BufferUtilities::destroyBuffer(vkDevice, buffer, alloc, device.getMemoryManager());
 
             vk::DeviceSize size = vec.size() * elemSize;
             core::BufferInfoRequest bufReq(vkDevice, physicalDevice);
             bufReq.size = size;
             bufReq.usage = vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst;
             bufReq.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-            core::BufferUtilities::createBuffer(bufReq, buffer, memory);
+            core::BufferUtilities::createBuffer(bufReq, buffer, alloc, device.getMemoryManager());
 
             vk::Buffer staging;
-            vk::DeviceMemory stagingMem;
+            core::VulkanAllocation stagingAllocation;
             core::BufferInfoRequest stagingReq(vkDevice, physicalDevice);
             stagingReq.size = size;
             stagingReq.usage = vk::BufferUsageFlagBits::eTransferSrc;
             stagingReq.properties = vk::MemoryPropertyFlagBits::eHostVisible |
                 vk::MemoryPropertyFlagBits::eHostCoherent;
-            core::BufferUtilities::createBuffer(stagingReq, staging, stagingMem);
+            core::BufferUtilities::createBuffer(stagingReq, staging, stagingAllocation, device.getMemoryManager());
 
-            void* mapped = vkDevice.mapMemory(stagingMem, 0, size, vk::MemoryMapFlags{});
+            void* mapped = stagingAllocation.mappedPtr;
             std::memcpy(mapped, vec.data(), size);
-            vkDevice.unmapMemory(stagingMem);
 
             vk::CommandPool cmdPool = device.getStagingCommandPool();
             vk::CommandBufferAllocateInfo cmdAllocInfo{};
@@ -196,15 +192,15 @@ namespace animation
             device.waitGraphicsIdle();
 
             vkDevice.freeCommandBuffers(cmdPool, 1, &cmd);
-            core::BufferUtilities::destroyBuffer(vkDevice, staging, stagingMem);
+            core::BufferUtilities::destroyBuffer(vkDevice, staging, stagingAllocation, device.getMemoryManager());
         };
 
-        createAndUpload(skeletonBuffer, skeletonBufferMemory, data.skeletonBones, sizeof(GPUBoneInfo));
-        createAndUpload(clipHeaderBuffer, clipHeaderBufferMemory, data.clipHeaders, sizeof(GPUAnimClipHeader));
-        createAndUpload(channelHeaderBuffer, channelHeaderBufferMemory, data.channelHeaders, sizeof(GPUChannelHeader));
-        createAndUpload(positionKeyBuffer, positionKeyBufferMemory, data.positionKeys, sizeof(GPUPositionKey));
-        createAndUpload(rotationKeyBuffer, rotationKeyBufferMemory, data.rotationKeys, sizeof(GPURotationKey));
-        createAndUpload(scaleKeyBuffer, scaleKeyBufferMemory, data.scaleKeys, sizeof(GPUScaleKey));
+        createAndUpload(skeletonBuffer, skeletonBufferAllocation, data.skeletonBones, sizeof(GPUBoneInfo));
+        createAndUpload(clipHeaderBuffer, clipHeaderBufferAllocation, data.clipHeaders, sizeof(GPUAnimClipHeader));
+        createAndUpload(channelHeaderBuffer, channelHeaderBufferAllocation, data.channelHeaders, sizeof(GPUChannelHeader));
+        createAndUpload(positionKeyBuffer, positionKeyBufferAllocation, data.positionKeys, sizeof(GPUPositionKey));
+        createAndUpload(rotationKeyBuffer, rotationKeyBufferAllocation, data.rotationKeys, sizeof(GPURotationKey));
+        createAndUpload(scaleKeyBuffer, scaleKeyBufferAllocation, data.scaleKeys, sizeof(GPUScaleKey));
 
         descriptorsNeedUpdate = true;
     }

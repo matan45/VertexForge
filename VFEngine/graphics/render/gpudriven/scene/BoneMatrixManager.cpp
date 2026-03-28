@@ -83,6 +83,7 @@ namespace render::gpudriven
     {
         const auto& logicalDevice = device.getLogicalDevice();
         const auto& physicalDevice = device.getPhysicalDevice();
+        auto& memManager = device.getMemoryManager();
 
         vk::DeviceSize bufferSize = maxBoneMatrices * sizeof(glm::mat4);
 
@@ -92,7 +93,7 @@ namespace render::gpudriven
             request.usage = vk::BufferUsageFlagBits::eStorageBuffer |
                 vk::BufferUsageFlagBits::eTransferDst;
             request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-            core::BufferUtilities::createBuffer(request, boneBuffer, boneBufferMemory);
+            core::BufferUtilities::createBuffer(request, boneBuffer, boneBufferAllocation, memManager);
         }
 
         for (auto& sf : stagingFrames)
@@ -102,9 +103,8 @@ namespace render::gpudriven
             request.usage = vk::BufferUsageFlagBits::eTransferSrc;
             request.properties = vk::MemoryPropertyFlagBits::eHostVisible |
                 vk::MemoryPropertyFlagBits::eHostCoherent;
-            core::BufferUtilities::createBuffer(request, sf.buffer, sf.memory);
-
-            sf.mapped = logicalDevice.mapMemory(sf.memory, 0, bufferSize, vk::MemoryMapFlags{});
+            core::BufferUtilities::createBuffer(request, sf.buffer, sf.allocation, memManager);
+            sf.mapped = sf.allocation.mappedPtr;
         }
 
         vfLogInfo("BoneMatrixManager: Created bone buffers ({} MB each, {} staging frames)",
@@ -114,18 +114,15 @@ namespace render::gpudriven
     void BoneMatrixManager::destroyBuffers()
     {
         const auto& logicalDevice = device.getLogicalDevice();
+        auto& memManager = device.getMemoryManager();
 
         for (auto& sf : stagingFrames)
         {
-            if (sf.mapped)
-            {
-                logicalDevice.unmapMemory(sf.memory);
-                sf.mapped = nullptr;
-            }
-            core::BufferUtilities::destroyBuffer(logicalDevice, sf.buffer, sf.memory);
+            sf.mapped = nullptr;
+            core::BufferUtilities::destroyBuffer(logicalDevice, sf.buffer, sf.allocation, memManager);
         }
 
-        core::BufferUtilities::destroyBuffer(logicalDevice, boneBuffer, boneBufferMemory);
+        core::BufferUtilities::destroyBuffer(logicalDevice, boneBuffer, boneBufferAllocation, memManager);
     }
 
     void BoneMatrixManager::initializeGPUBuffer()

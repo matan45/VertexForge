@@ -241,9 +241,7 @@ namespace render::gpudriven
         device.waitGraphicsIdle();
 
         vk::Device vkDevice = device.getLogicalDevice();
-        void* data = vkDevice.mapMemory(statsBufferMemory, 0, sizeof(TerrainCullingStats));
-        std::memcpy(&cachedStats, data, sizeof(TerrainCullingStats));
-        vkDevice.unmapMemory(statsBufferMemory);
+        std::memcpy(&cachedStats, statsBufferAllocation.mappedPtr, sizeof(TerrainCullingStats));
 
         return cachedStats;
     }

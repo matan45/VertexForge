@@ -215,7 +215,7 @@ namespace render::mesh
         bufferRequest.properties = vk::MemoryPropertyFlagBits::eHostVisible |
             vk::MemoryPropertyFlagBits::eHostCoherent;
         bufferRequest.size = sizeof(CameraUBO);
-        core::BufferUtilities::createBuffer(bufferRequest, cameraUBO, cameraUBOMemory);
+        core::BufferUtilities::createBuffer(bufferRequest, cameraUBO, cameraUBOAllocation, device.getMemoryManager());
     }
 
     void StaticMeshPipeline::createDescriptorSet(const ibl::ImageData& irradianceMap,

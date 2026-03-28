@@ -7,6 +7,9 @@ namespace world
     SectorStreamer::SectorStreamer(const SectorStreamingConfig& config)
         : config(config)
     {
+        // Pre-reserve to avoid per-frame growth
+        loadCandidates.reserve(64);
+        unloadCandidates.reserve(32);
     }
 
     void SectorStreamer::setConfig(const SectorStreamingConfig& config)
@@ -53,8 +56,8 @@ namespace world
         unloadCandidates.clear();
 
         // Load candidates: scan merged bounding box of all sources
-        // Use a set to avoid duplicate candidates from overlapping source radii
-        std::unordered_set<SectorCoord, SectorCoordHash> visitedCoords;
+        // Reuse member set to avoid per-frame allocation
+        visitedCoords.clear();
 
         for (const auto& source : sources)
         {

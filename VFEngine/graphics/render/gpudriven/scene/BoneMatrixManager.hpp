@@ -2,6 +2,7 @@
 
 #include "../FreeListAllocator.hpp"
 #include "../../../core/RenderManager.hpp"
+#include "../../../core/VulkanMemoryManager.hpp"
 #include <vulkan/vulkan.hpp>
 #include <glm/glm.hpp>
 #include <entt/entt.hpp>
@@ -32,12 +33,12 @@ namespace render::gpudriven {
         core::Device& device;
 
         vk::Buffer boneBuffer;
-        vk::DeviceMemory boneBufferMemory;
+        core::VulkanAllocation boneBufferAllocation;
 
         struct StagingFrame
         {
             vk::Buffer buffer;
-            vk::DeviceMemory memory;
+            core::VulkanAllocation allocation;
             void* mapped = nullptr;
         };
 

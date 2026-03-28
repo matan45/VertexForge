@@ -1,5 +1,6 @@
 #pragma once
 #include "CloudTypes.hpp"
+#include "../../core/VulkanMemoryManager.hpp"
 #include <vulkan/vulkan.hpp>
 #include <memory>
 
@@ -17,12 +18,12 @@ namespace render::cloud
 
         // Half-res cloud result image (RGBA16F)
         vk::Image resultImage;
-        vk::DeviceMemory resultMemory;
+        core::VulkanAllocation resultAllocation;
         vk::ImageView resultView;
 
         // UBO
         vk::Buffer paramsBuffer;
-        vk::DeviceMemory paramsBufferMemory;
+        core::VulkanAllocation paramsBufferAllocation;
         void* paramsBufferMapped = nullptr;
 
         // Compute pipeline

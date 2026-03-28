@@ -4,6 +4,7 @@
 #include <nlohmann/json.hpp>
 #include <deque>
 #include <vector>
+#include <unordered_set>
 #include <cstdint>
 #include <limits>
 #include <functional>
@@ -39,6 +40,7 @@ namespace world
 
         std::deque<PendingLoad> pendingLoads;
         std::deque<PendingUnload> pendingUnloads;
+        std::unordered_set<uint64_t> loadedThisFrame;
 
         EntityLoadedCallback onEntityLoaded;
         EntityUnloadedCallback onEntityUnloaded;

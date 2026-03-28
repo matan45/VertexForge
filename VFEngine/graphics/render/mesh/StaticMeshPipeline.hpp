@@ -4,6 +4,7 @@
 #include "../ibl/IBLTypes.hpp"
 #include "material/MaterialTypes.hpp"
 #include "material/MaterialManager.hpp"
+#include "../../core/VulkanMemoryManager.hpp"
 #include <array>
 #include <memory>
 #include <mutex>
@@ -80,7 +81,7 @@ namespace render::mesh
         std::unique_ptr<MaterialShaderCache> materialShaderCache;
 
         vk::Buffer cameraUBO;
-        vk::DeviceMemory cameraUBOMemory;
+        core::VulkanAllocation cameraUBOAllocation;
         bool externalCameraBuffer = false;
 
         mutable float currentTime{0.0f};

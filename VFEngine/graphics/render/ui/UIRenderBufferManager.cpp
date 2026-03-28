@@ -23,19 +23,22 @@ namespace render::ui
         if (quadVertexBuffer)
         {
             dev.destroyBuffer(quadVertexBuffer);
-            dev.freeMemory(quadVertexBufferMemory);
+            device.getMemoryManager().free(quadVertexBufferAllocation);
+            quadVertexBufferAllocation = {};
             quadVertexBuffer = nullptr;
         }
         if (quadIndexBuffer)
         {
             dev.destroyBuffer(quadIndexBuffer);
-            dev.freeMemory(quadIndexBufferMemory);
+            device.getMemoryManager().free(quadIndexBufferAllocation);
+            quadIndexBufferAllocation = {};
             quadIndexBuffer = nullptr;
         }
         if (instanceBuffer)
         {
             dev.destroyBuffer(instanceBuffer);
-            dev.freeMemory(instanceBufferMemory);
+            device.getMemoryManager().free(instanceBufferAllocation);
+            instanceBufferAllocation = {};
             instanceBuffer = nullptr;
         }
 
@@ -49,14 +52,14 @@ namespace render::ui
         vertexRequest.size = vertexBufferSize;
         vertexRequest.usage = vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst;
         vertexRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-        core::BufferUtilities::createBuffer(vertexRequest, quadVertexBuffer, quadVertexBufferMemory);
+        core::BufferUtilities::createBuffer(vertexRequest, quadVertexBuffer, quadVertexBufferAllocation, device.getMemoryManager());
 
         constexpr vk::DeviceSize indexBufferSize = sizeof(uint16_t) * QUAD_INDICES.size();
         core::BufferInfoRequest indexRequest(device.getLogicalDevice(), device.getPhysicalDevice());
         indexRequest.size = indexBufferSize;
         indexRequest.usage = vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eTransferDst;
         indexRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-        core::BufferUtilities::createBuffer(indexRequest, quadIndexBuffer, quadIndexBufferMemory);
+        core::BufferUtilities::createBuffer(indexRequest, quadIndexBuffer, quadIndexBufferAllocation, device.getMemoryManager());
 
         core::BufferUtilities::copyToBuffer(
             device.getLogicalDevice(),
@@ -87,7 +90,7 @@ namespace render::ui
         bufferRequest.usage = vk::BufferUsageFlagBits::eVertexBuffer;
         bufferRequest.properties = vk::MemoryPropertyFlagBits::eHostVisible |
                                    vk::MemoryPropertyFlagBits::eHostCoherent;
-        core::BufferUtilities::createBuffer(bufferRequest, instanceBuffer, instanceBufferMemory);
+        core::BufferUtilities::createBuffer(bufferRequest, instanceBuffer, instanceBufferAllocation, device.getMemoryManager());
     }
 
     void UIRenderBufferManager::resizeInstanceBuffer(uint32_t requiredCount)
@@ -96,14 +99,15 @@ namespace render::ui
         {
             if (deletionQueue)
             {
-                deletionQueue->queueBuffer(instanceBuffer, instanceBufferMemory);
+                deletionQueue->queueBuffer(instanceBuffer, instanceBufferAllocation, device.getMemoryManager());
             }
             else
             {
                 auto& dev = device.getLogicalDevice();
                 dev.waitIdle();
                 dev.destroyBuffer(instanceBuffer);
-                dev.freeMemory(instanceBufferMemory);
+                device.getMemoryManager().free(instanceBufferAllocation);
+                instanceBufferAllocation = {};
             }
             instanceBuffer = nullptr;
         }
@@ -129,13 +133,10 @@ namespace render::ui
 
         currentInstanceCount = count;
 
-        void* data;
         vk::DeviceSize bufferSize = sizeof(UIImageInstance) * currentInstanceCount;
-        vk::Result result = device.getLogicalDevice().mapMemory(instanceBufferMemory, 0, bufferSize, {}, &data);
-        if (result == vk::Result::eSuccess)
+        if (instanceBufferAllocation.mappedPtr)
         {
-            std::memcpy(data, instances.data(), bufferSize);
-            device.getLogicalDevice().unmapMemory(instanceBufferMemory);
+            std::memcpy(instanceBufferAllocation.mappedPtr, instances.data(), bufferSize);
         }
     }
 }

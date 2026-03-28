@@ -63,6 +63,7 @@ namespace render::shadow
     {
         const auto& logicalDevice = device.getLogicalDevice();
         const auto& physicalDevice = device.getPhysicalDevice();
+        auto& memManager = device.getMemoryManager();
 
         vk::DeviceSize bufferSize = sizeof(vsm::GPUVSMLight) * ShadowConstants::MAX_TOTAL_SHADOW_VIEWS;
 
@@ -75,7 +76,7 @@ namespace render::shadow
                 vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst,
                 vk::MemoryPropertyFlagBits::eDeviceLocal
             );
-            core::BufferUtilities::createBuffer(request, shadowDataBuffer, shadowDataMemory);
+            core::BufferUtilities::createBuffer(request, shadowDataBuffer, shadowDataAllocation, memManager);
         }
 
         // Per-frame staging buffers
@@ -88,32 +89,23 @@ namespace render::shadow
                 vk::BufferUsageFlagBits::eTransferSrc,
                 vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
             );
-            core::BufferUtilities::createBuffer(request, sf.buffer, sf.memory);
-            sf.mapped = logicalDevice.mapMemory(sf.memory, 0, bufferSize);
+            core::BufferUtilities::createBuffer(request, sf.buffer, sf.allocation, memManager);
+            sf.mapped = sf.allocation.mappedPtr;
         }
     }
 
     void ShadowGPUDataManager::destroyShadowDataBuffer()
     {
         const auto& logicalDevice = device.getLogicalDevice();
+        auto& memManager = device.getMemoryManager();
 
         for (auto& sf : stagingFrames)
         {
-            if (sf.mapped) { logicalDevice.unmapMemory(sf.memory); sf.mapped = nullptr; }
-            if (sf.buffer) { logicalDevice.destroyBuffer(sf.buffer); sf.buffer = nullptr; }
-            if (sf.memory) { logicalDevice.freeMemory(sf.memory); sf.memory = nullptr; }
+            sf.mapped = nullptr;
+            core::BufferUtilities::destroyBuffer(logicalDevice, sf.buffer, sf.allocation, memManager);
         }
 
-        if (shadowDataBuffer)
-        {
-            logicalDevice.destroyBuffer(shadowDataBuffer);
-            shadowDataBuffer = nullptr;
-        }
-        if (shadowDataMemory)
-        {
-            logicalDevice.freeMemory(shadowDataMemory);
-            shadowDataMemory = nullptr;
-        }
+        core::BufferUtilities::destroyBuffer(logicalDevice, shadowDataBuffer, shadowDataAllocation, memManager);
     }
 
     void ShadowGPUDataManager::createDescriptorResources()

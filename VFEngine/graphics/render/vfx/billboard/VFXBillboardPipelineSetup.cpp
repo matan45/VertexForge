@@ -226,21 +226,21 @@ namespace render::vfx
         uboRequest.properties = vk::MemoryPropertyFlagBits::eHostVisible |
                                 vk::MemoryPropertyFlagBits::eHostCoherent;
         uboRequest.size = sizeof(VFXCameraUBO);
-        core::BufferUtilities::createBuffer(uboRequest, cameraUBO, cameraUBOMemory);
+        core::BufferUtilities::createBuffer(uboRequest, cameraUBO, cameraUBOAllocation, device.getMemoryManager());
 
         constexpr vk::DeviceSize vertexBufferSize = sizeof(VFXQuadVertex) * QUAD_VERTICES.size();
         core::BufferInfoRequest vertexRequest(device.getLogicalDevice(), device.getPhysicalDevice());
         vertexRequest.size = vertexBufferSize;
         vertexRequest.usage = vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst;
         vertexRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-        core::BufferUtilities::createBuffer(vertexRequest, quadVertexBuffer, quadVertexBufferMemory);
+        core::BufferUtilities::createBuffer(vertexRequest, quadVertexBuffer, quadVertexBufferAllocation, device.getMemoryManager());
 
         constexpr vk::DeviceSize indexBufferSize = sizeof(uint16_t) * QUAD_INDICES.size();
         core::BufferInfoRequest indexRequest(device.getLogicalDevice(), device.getPhysicalDevice());
         indexRequest.size = indexBufferSize;
         indexRequest.usage = vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eTransferDst;
         indexRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-        core::BufferUtilities::createBuffer(indexRequest, quadIndexBuffer, quadIndexBufferMemory);
+        core::BufferUtilities::createBuffer(indexRequest, quadIndexBuffer, quadIndexBufferAllocation, device.getMemoryManager());
 
         core::BufferUtilities::copyToBuffer(
             device.getLogicalDevice(),
@@ -268,7 +268,7 @@ namespace render::vfx
         instanceRequest.usage = vk::BufferUsageFlagBits::eVertexBuffer;
         instanceRequest.properties = vk::MemoryPropertyFlagBits::eHostVisible |
                                      vk::MemoryPropertyFlagBits::eHostCoherent;
-        core::BufferUtilities::createBuffer(instanceRequest, instanceBuffer, instanceBufferMemory);
+        core::BufferUtilities::createBuffer(instanceRequest, instanceBuffer, instanceBufferAllocation, device.getMemoryManager());
     }
 
     void VFXBillboardPipeline::createDefaultTexture()
@@ -284,7 +284,7 @@ namespace render::vfx
             vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
             vk::MemoryPropertyFlagBits::eDeviceLocal
         );
-        core::ImageUtilities::createImage(imageInfo, defaultTextureImage, defaultTextureMemory);
+        core::ImageUtilities::createImage(imageInfo, defaultTextureImage, defaultTextureAllocation, device.getMemoryManager());
 
         core::ImageViewInfoRequest viewInfo(
             device.getLogicalDevice(),

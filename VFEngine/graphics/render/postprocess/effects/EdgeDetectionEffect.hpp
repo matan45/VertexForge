@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../PostProcessEffect.hpp"
+#include "../../../core/VulkanMemoryManager.hpp"
 #include "postprocess/PostProcessTypes.hpp"
 #include <memory>
 
@@ -37,7 +38,7 @@ namespace render::postprocess
         PostProcessPipeline& pipeline;
 
         vk::Image intermediateImage;
-        vk::DeviceMemory intermediateMemory;
+        core::VulkanAllocation intermediateAllocation;
         vk::ImageView intermediateImageView;
         vk::Framebuffer intermediateFramebuffer;
 

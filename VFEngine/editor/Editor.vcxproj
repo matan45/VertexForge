@@ -170,6 +170,7 @@
     <ClInclude Include="windows\contentbrowser\ContentBrowserTypes.hpp" />
     <ClInclude Include="windows\contentbrowser\PreviewWindowManager.hpp" />
     <ClInclude Include="windows\debug\ConsoleLog.hpp" />
+    <ClInclude Include="windows\debug\MemoryDiagnosticsWindow.hpp" />
     <ClInclude Include="windows\debug\TaskGraphWindow.hpp" />
     <ClInclude Include="windows\details\AddComponentPopup.hpp" />
     <ClInclude Include="windows\details\AudioSource2DDrawer.hpp" />
@@ -342,6 +343,7 @@
     <ClCompile Include="windows\contentbrowser\ContentBrowserModalsCreate.cpp" />
     <ClCompile Include="windows\contentbrowser\PreviewWindowManager.cpp" />
     <ClCompile Include="windows\debug\ConsoleLog.cpp" />
+    <ClCompile Include="windows\debug\MemoryDiagnosticsWindow.cpp" />
     <ClCompile Include="windows\debug\TaskGraphWindow.cpp" />
     <ClCompile Include="windows\details\AddComponentPopup.cpp" />
     <ClCompile Include="windows\details\AddComponentPopupUI.cpp" />

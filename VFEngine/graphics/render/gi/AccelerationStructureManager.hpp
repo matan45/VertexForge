@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../../core/VulkanMemoryManager.hpp"
 #include <vulkan/vulkan.hpp>
 #include <glm/glm.hpp>
 #include <vector>
@@ -25,24 +26,24 @@ namespace render::gi
         // Bottom-Level Acceleration Structure (scene geometry)
         vk::AccelerationStructureKHR blas;
         vk::Buffer blasBuffer;
-        vk::DeviceMemory blasMemory;
+        core::VulkanAllocation blasAllocation;
 
         // Top-Level Acceleration Structure (instances)
         vk::AccelerationStructureKHR tlas;
         vk::Buffer tlasBuffer;
-        vk::DeviceMemory tlasMemory;
+        core::VulkanAllocation tlasAllocation;
 
         vk::Buffer instanceBuffer;
-        vk::DeviceMemory instanceMemory;
+        core::VulkanAllocation instanceAllocation;
 
         vk::Buffer blasScratchBuffer;
-        vk::DeviceMemory blasScratchMemory;
+        core::VulkanAllocation blasScratchAllocation;
         vk::Buffer tlasScratchBuffer;
-        vk::DeviceMemory tlasScratchMemory;
+        core::VulkanAllocation tlasScratchAllocation;
 
         // Staging buffer for TLAS instance upload (kept alive until next frame)
         vk::Buffer tlasStagingBuffer;
-        vk::DeviceMemory tlasStagingMemory;
+        core::VulkanAllocation tlasStagingAllocation;
 
         vk::DescriptorSetLayout tlasDescriptorLayout;
         vk::DescriptorPool descriptorPool;

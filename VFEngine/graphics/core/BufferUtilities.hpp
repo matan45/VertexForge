@@ -4,6 +4,9 @@
 
 namespace core
 {
+	struct VulkanAllocation;
+	class VulkanMemoryManager;
+
 	struct BufferInfoRequest
 	{
 		const vk::Device& logicalDevice;
@@ -36,7 +39,7 @@ namespace core
 
 	public:
 		static void createBuffer(const BufferInfoRequest& bufferInfo, vk::Buffer& buffer,
-			vk::DeviceMemory& bufferMemory);
+			VulkanAllocation& allocation, VulkanMemoryManager& memManager);
 
 		static void copyToBuffer(
 			const vk::Device& device,
@@ -49,6 +52,8 @@ namespace core
 			vk::DeviceSize offset = 0
 		);
 
-		static void destroyBuffer(const vk::Device& device, vk::Buffer& buffer, vk::DeviceMemory& memory);
+		static void destroyBuffer(const vk::Device& device, vk::Buffer& buffer,
+			VulkanAllocation& allocation, VulkanMemoryManager& memManager);
+
 	};
 }

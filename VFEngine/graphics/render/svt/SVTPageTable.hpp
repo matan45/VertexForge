@@ -1,6 +1,7 @@
 #pragma once
 
 #include "SVTTypes.hpp"
+#include "../../core/VulkanMemoryManager.hpp"
 #include <vulkan/vulkan.hpp>
 #include <vector>
 #include <cstdint>
@@ -35,7 +36,7 @@ namespace render::svt
 
         // GPU SSBO
         vk::Buffer buffer;
-        vk::DeviceMemory memory;
+        core::VulkanAllocation allocation;
         void* mapped = nullptr;  // Persistently mapped (host-visible + coherent)
 
         bool initialized = false;

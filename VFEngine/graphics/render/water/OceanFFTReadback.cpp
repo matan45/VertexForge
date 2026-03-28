@@ -31,9 +31,9 @@ namespace render::water
                 vk::BufferUsageFlagBits::eTransferDst,
                 vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
 
-            core::BufferUtilities::createBuffer(req, readbackBuffers[i], readbackMemories[i]);
+            core::BufferUtilities::createBuffer(req, readbackBuffers[i], readbackAllocations[i], device.getMemoryManager());
 
-            readbackMapped[i] = device.getLogicalDevice().mapMemory(readbackMemories[i], 0, bufferSize);
+            readbackMapped[i] = readbackAllocations[i].mappedPtr;
         }
 
         readbackFrameIndex = 0;
@@ -45,16 +45,10 @@ namespace render::water
         vk::Device vkDevice = device.getLogicalDevice();
         for (uint32_t i = 0; i < core::MAX_FRAMES_IN_FLIGHT; ++i)
         {
-            if (readbackMapped[i])
-            {
-                vkDevice.unmapMemory(readbackMemories[i]);
-                readbackMapped[i] = nullptr;
-            }
+            readbackMapped[i] = nullptr;
             if (readbackBuffers[i])
             {
-                core::BufferUtilities::destroyBuffer(vkDevice, readbackBuffers[i], readbackMemories[i]);
-                readbackBuffers[i] = nullptr;
-                readbackMemories[i] = nullptr;
+                core::BufferUtilities::destroyBuffer(vkDevice, readbackBuffers[i], readbackAllocations[i], device.getMemoryManager());
             }
         }
         cpuDisplacementData.clear();

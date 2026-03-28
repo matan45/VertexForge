@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../../core/VulkanMemoryManager.hpp"
 #include <vulkan/vulkan.hpp>
 #include <memory>
 #include <vector>
@@ -53,7 +54,7 @@ namespace render::volumetric
         vk::ImageAspectFlags depthAspectMask;
 
         vk::Buffer paramsBuffer;
-        vk::DeviceMemory paramsBufferMemory;
+        core::VulkanAllocation paramsBufferAllocation;
         void* paramsBufferMapped = nullptr;
 
         float currentIntensity = 1.0f;

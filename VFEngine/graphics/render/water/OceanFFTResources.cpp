@@ -59,7 +59,7 @@ namespace render::water
                 vk::ImageTiling::eOptimal,
                 vk::ImageUsageFlagBits::eStorage,
                 vk::MemoryPropertyFlagBits::eDeviceLocal);
-            core::ImageUtilities::createImage(req, h0Image, h0Memory);
+            core::ImageUtilities::createImage(req, h0Image, h0Allocation, device.getMemoryManager());
 
             core::ImageViewInfoRequest viewReq(vkDevice, h0Image,
                 vk::Format::eR32G32B32A32Sfloat,
@@ -78,7 +78,7 @@ namespace render::water
                     vk::ImageTiling::eOptimal,
                     vk::ImageUsageFlagBits::eStorage,
                     vk::MemoryPropertyFlagBits::eDeviceLocal);
-                core::ImageUtilities::createImage(req, fields[f].images[p], fields[f].memory[p]);
+                core::ImageUtilities::createImage(req, fields[f].images[p], fields[f].allocation[p], device.getMemoryManager());
 
                 core::ImageViewInfoRequest viewReq(vkDevice, fields[f].images[p],
                     vk::Format::eR32G32Sfloat,
@@ -95,7 +95,7 @@ namespace render::water
                 vk::ImageTiling::eOptimal,
                 vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferSrc,
                 vk::MemoryPropertyFlagBits::eDeviceLocal);
-            core::ImageUtilities::createImage(req, displacementImage, displacementMemory);
+            core::ImageUtilities::createImage(req, displacementImage, displacementAllocation, device.getMemoryManager());
 
             core::ImageViewInfoRequest viewReq(vkDevice, displacementImage,
                 vk::Format::eR16G16B16A16Sfloat,
@@ -111,7 +111,7 @@ namespace render::water
                 vk::ImageTiling::eOptimal,
                 vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eSampled,
                 vk::MemoryPropertyFlagBits::eDeviceLocal);
-            core::ImageUtilities::createImage(req, normalImage, normalMemory);
+            core::ImageUtilities::createImage(req, normalImage, normalAllocation, device.getMemoryManager());
 
             core::ImageViewInfoRequest viewReq(vkDevice, normalImage,
                 vk::Format::eR16G16B16A16Sfloat,
@@ -127,7 +127,7 @@ namespace render::water
                 vk::ImageTiling::eOptimal,
                 vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eSampled,
                 vk::MemoryPropertyFlagBits::eDeviceLocal);
-            core::ImageUtilities::createImage(req, causticImage, causticMemory);
+            core::ImageUtilities::createImage(req, causticImage, causticAllocation, device.getMemoryManager());
 
             core::ImageViewInfoRequest viewReq(vkDevice, causticImage,
                 vk::Format::eR16Sfloat,
@@ -376,23 +376,23 @@ namespace render::water
     {
         vk::Device vkDevice = device.getLogicalDevice();
 
-        auto destroyImage = [&](vk::Image& img, vk::DeviceMemory& mem, vk::ImageView& view)
+        auto destroyImage = [&](vk::Image& img, core::VulkanAllocation& alloc, vk::ImageView& view)
         {
             if (view) { vkDevice.destroyImageView(view); view = nullptr; }
             if (img)  { vkDevice.destroyImage(img); img = nullptr; }
-            if (mem)  { vkDevice.freeMemory(mem); mem = nullptr; }
+            if (alloc) { device.getMemoryManager().free(alloc); alloc = {}; }
         };
 
-        destroyImage(h0Image, h0Memory, h0View);
+        destroyImage(h0Image, h0Allocation, h0View);
 
         for (int f = 0; f < 3; ++f)
         {
-            destroyImage(fields[f].images[0], fields[f].memory[0], fields[f].views[0]);
-            destroyImage(fields[f].images[1], fields[f].memory[1], fields[f].views[1]);
+            destroyImage(fields[f].images[0], fields[f].allocation[0], fields[f].views[0]);
+            destroyImage(fields[f].images[1], fields[f].allocation[1], fields[f].views[1]);
         }
 
-        destroyImage(displacementImage, displacementMemory, displacementView);
-        destroyImage(normalImage, normalMemory, normalView);
-        destroyImage(causticImage, causticMemory, causticView);
+        destroyImage(displacementImage, displacementAllocation, displacementView);
+        destroyImage(normalImage, normalAllocation, normalView);
+        destroyImage(causticImage, causticAllocation, causticView);
     }
 }

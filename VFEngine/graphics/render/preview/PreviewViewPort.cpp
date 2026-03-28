@@ -113,7 +113,7 @@ namespace render::preview
         {
             device.getLogicalDevice().destroyImageView(resources.colorImageView);
             device.getLogicalDevice().destroyImage(resources.colorImage);
-            device.getLogicalDevice().freeMemory(resources.colorImageMemory);
+            device.getMemoryManager().free(resources.colorImageAllocation);
         }
         offscreenResources.colorImages.clear();
 
@@ -127,10 +127,10 @@ namespace render::preview
             device.getLogicalDevice().destroyImage(offscreenResources.depthImage.depthImage);
             offscreenResources.depthImage.depthImage = nullptr;
         }
-        if (offscreenResources.depthImage.depthImageMemory)
+        if (offscreenResources.depthImage.depthImageAllocation)
         {
-            device.getLogicalDevice().freeMemory(offscreenResources.depthImage.depthImageMemory);
-            offscreenResources.depthImage.depthImageMemory = nullptr;
+            device.getMemoryManager().free(offscreenResources.depthImage.depthImageAllocation);
+            offscreenResources.depthImage.depthImageAllocation = {};
         }
     }
 
@@ -179,7 +179,7 @@ namespace render::preview
         imageDepthInfo.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
 
         core::DepthImage depth;
-        core::ImageUtilities::createImage(imageDepthInfo, depth.depthImage, depth.depthImageMemory);
+        core::ImageUtilities::createImage(imageDepthInfo, depth.depthImage, depth.depthImageAllocation, device.getMemoryManager());
         core::ImageViewInfoRequest imageDepthRequest(device.getLogicalDevice(), depth.depthImage);
 
         imageDepthRequest.format = depthFormat;
@@ -200,7 +200,7 @@ namespace render::preview
         for (size_t i = 0; i < swapChain.getImageCount(); i++)
         {
             core::ColorImage color;
-            core::ImageUtilities::createImage(imageColorInfo, color.colorImage, color.colorImageMemory);
+            core::ImageUtilities::createImage(imageColorInfo, color.colorImage, color.colorImageAllocation, device.getMemoryManager());
             core::ImageViewInfoRequest imageColorViewRequest(device.getLogicalDevice(), color.colorImage);
             imageColorViewRequest.format = colorFormat;
             core::ImageUtilities::createImageView(imageColorViewRequest, color.colorImageView);

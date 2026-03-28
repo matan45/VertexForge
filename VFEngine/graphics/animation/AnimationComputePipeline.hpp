@@ -2,6 +2,7 @@
 
 #include "AnimationGPUData.hpp"
 #include <vulkan/vulkan.hpp>
+#include "../core/VulkanMemoryManager.hpp"
 #include <memory>
 #include <vector>
 
@@ -27,26 +28,26 @@ namespace animation
         vk::DescriptorSet descriptorSet;
 
         vk::Buffer requestBuffer;
-        vk::DeviceMemory requestBufferMemory;
+        core::VulkanAllocation requestBufferAllocation;
         void* requestMapped = nullptr;
 
         vk::Buffer skeletonBuffer;
-        vk::DeviceMemory skeletonBufferMemory;
+        core::VulkanAllocation skeletonBufferAllocation;
 
         vk::Buffer clipHeaderBuffer;
-        vk::DeviceMemory clipHeaderBufferMemory;
+        core::VulkanAllocation clipHeaderBufferAllocation;
 
         vk::Buffer channelHeaderBuffer;
-        vk::DeviceMemory channelHeaderBufferMemory;
+        core::VulkanAllocation channelHeaderBufferAllocation;
 
         vk::Buffer positionKeyBuffer;
-        vk::DeviceMemory positionKeyBufferMemory;
+        core::VulkanAllocation positionKeyBufferAllocation;
 
         vk::Buffer rotationKeyBuffer;
-        vk::DeviceMemory rotationKeyBufferMemory;
+        core::VulkanAllocation rotationKeyBufferAllocation;
 
         vk::Buffer scaleKeyBuffer;
-        vk::DeviceMemory scaleKeyBufferMemory;
+        core::VulkanAllocation scaleKeyBufferAllocation;
 
         bool initialized = false;
         bool descriptorsNeedUpdate = true;

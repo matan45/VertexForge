@@ -3,6 +3,7 @@
 #include "GPULightTypes.hpp"
 #include "../shadow/ShadowTypes.hpp"
 #include "../../core/RenderManager.hpp"
+#include "../../core/VulkanMemoryManager.hpp"
 #include <vulkan/vulkan.hpp>
 #include <array>
 #include <optional>
@@ -28,27 +29,27 @@ namespace render::lighting
         core::Device& device;
 
         vk::Buffer directionalBuffer;
-        vk::DeviceMemory directionalMemory;
+        core::VulkanAllocation directionalAllocation;
 
         vk::Buffer pointBuffer;
-        vk::DeviceMemory pointMemory;
+        core::VulkanAllocation pointAllocation;
 
         vk::Buffer spotBuffer;
-        vk::DeviceMemory spotMemory;
+        core::VulkanAllocation spotAllocation;
 
         // Per-frame staging buffers for CPU→GPU light data uploads
         struct LightStagingFrame
         {
             vk::Buffer directionalStagingBuffer;
-            vk::DeviceMemory directionalStagingMemory;
+            core::VulkanAllocation directionalStagingAllocation;
             void* directionalStagingMapped = nullptr;
 
             vk::Buffer pointStagingBuffer;
-            vk::DeviceMemory pointStagingMemory;
+            core::VulkanAllocation pointStagingAllocation;
             void* pointStagingMapped = nullptr;
 
             vk::Buffer spotStagingBuffer;
-            vk::DeviceMemory spotStagingMemory;
+            core::VulkanAllocation spotStagingAllocation;
             void* spotStagingMapped = nullptr;
         };
 
@@ -56,7 +57,7 @@ namespace render::lighting
         uint32_t currentStagingFrame = 0;
 
         vk::Buffer countsBuffer;
-        vk::DeviceMemory countsMemory;
+        core::VulkanAllocation countsAllocation;
         void* countsMapped = nullptr;
 
         vk::DescriptorSetLayout descriptorSetLayout;

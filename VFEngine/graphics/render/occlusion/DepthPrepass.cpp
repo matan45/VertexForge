@@ -40,7 +40,7 @@ namespace render::occlusion
             vk::ImageUsageFlagBits::eDepthStencilAttachment | vk::ImageUsageFlagBits::eSampled,
             vk::MemoryPropertyFlagBits::eDeviceLocal
         );
-        core::ImageUtilities::createImage(imageRequest, depthImage, depthMemory);
+        core::ImageUtilities::createImage(imageRequest, depthImage, depthAllocation, device.getMemoryManager());
 
         core::ImageViewInfoRequest viewRequest(
             device.getLogicalDevice(), depthImage,
@@ -188,8 +188,9 @@ namespace render::occlusion
         device.getLogicalDevice().destroyFramebuffer(framebuffer);
         device.getLogicalDevice().destroyRenderPass(renderPass);
         device.getLogicalDevice().destroyImageView(depthImageView);
-        device.getLogicalDevice().freeMemory(depthMemory);
         device.getLogicalDevice().destroyImage(depthImage);
+        device.getMemoryManager().free(depthAllocation);
+        depthAllocation = {};
 
         initialized = false;
     }

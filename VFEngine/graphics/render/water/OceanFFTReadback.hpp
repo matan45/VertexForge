@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../../core/VulkanMemoryManager.hpp"
 #include <vulkan/vulkan.hpp>
 #include <glm/glm.hpp>
 #include <array>
@@ -34,7 +35,7 @@ namespace render::water
         core::Device& device;
 
         std::array<vk::Buffer, core::MAX_FRAMES_IN_FLIGHT> readbackBuffers{};
-        std::array<vk::DeviceMemory, core::MAX_FRAMES_IN_FLIGHT> readbackMemories{};
+        std::array<core::VulkanAllocation, core::MAX_FRAMES_IN_FLIGHT> readbackAllocations{};
         std::array<void*, core::MAX_FRAMES_IN_FLIGHT> readbackMapped{};
         std::vector<glm::vec4> cpuDisplacementData;
         uint32_t readbackFrameIndex = 0;

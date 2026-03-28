@@ -6,8 +6,6 @@
 #include "../components/Components.hpp"
 #include "../print/Log.hpp"
 #include <nlohmann/json.hpp>
-#include <unordered_set>
-
 namespace world
 {
     void SectorEntityLoader::queueSectorLoadFromData(const SectorCoord& coord, std::vector<std::pair<std::string, nlohmann::json>>& entityNamesAndJson)
@@ -75,7 +73,7 @@ namespace world
             ++processed;
         }
 
-        std::unordered_set<uint64_t> loadedThisFrame;
+        loadedThisFrame.clear();
         while (!pendingLoads.empty() && processed < maxEntitiesPerFrame)
         {
             auto pending = std::move(pendingLoads.front());

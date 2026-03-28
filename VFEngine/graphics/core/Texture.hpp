@@ -1,6 +1,7 @@
 #pragma once
 #define VULKAN_HPP_DISPATCH_LOADER_DYNAMIC 1
 #include <vulkan/vulkan.hpp>
+#include "VulkanMemoryManager.hpp"
 
 namespace resource
 {
@@ -27,7 +28,7 @@ namespace core {
 		vk::UniqueCommandPool commandPool;
 
 		vk::Image image;
-		vk::DeviceMemory imageMemory;
+		VulkanAllocation imageAllocation;
 		vk::ImageView imageView;
 		ImageData imageData;
 

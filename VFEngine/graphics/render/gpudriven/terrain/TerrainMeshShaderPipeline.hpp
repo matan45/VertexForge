@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../../../core/VulkanMemoryManager.hpp"
 #include <vulkan/vulkan.hpp>
 #include <memory>
 #include <vector>
@@ -57,12 +58,12 @@ namespace render::gpudriven
         vk::DescriptorSet terrainDataDescriptorSet;
 
         vk::Buffer tileDataBuffer;
-        vk::DeviceMemory tileDataBufferMemory;
+        core::VulkanAllocation tileDataBufferAllocation;
         uint32_t maxTileCount = 4096;
         uint32_t currentTileCount = 0;
 
         vk::Buffer statsBuffer;
-        vk::DeviceMemory statsBufferMemory;
+        core::VulkanAllocation statsBufferAllocation;
         TerrainCullingStats cachedStats{};
 
         void* tileDataBufferMapped = nullptr;
@@ -99,7 +100,7 @@ namespace render::gpudriven
 
         // Terrain layer info buffer (Set 1, binding 1) - host-visible for easy updates
         vk::Buffer terrainLayerBuffer;
-        vk::DeviceMemory terrainLayerBufferMemory;
+        core::VulkanAllocation terrainLayerBufferAllocation;
         void* terrainLayerBufferMapped = nullptr;
 
         // Shared descriptor sets (owned elsewhere)

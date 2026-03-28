@@ -58,9 +58,9 @@ namespace render::mesh
         vk::DescriptorPool descriptorPool;
 
         vk::Buffer vertexBuffer;
-        vk::DeviceMemory vertexBufferMemory;
+        core::VulkanAllocation vertexBufferAllocation;
         vk::Buffer indexBuffer;
-        vk::DeviceMemory indexBufferMemory;
+        core::VulkanAllocation indexBufferAllocation;
 
         struct TextureEntry
         {

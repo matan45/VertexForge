@@ -273,7 +273,7 @@ namespace render::postprocess
                   | vk::ImageUsageFlagBits::eSampled;
         req.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
 
-        core::ImageUtilities::createImage(req, intermediateImage, intermediateMemory);
+        core::ImageUtilities::createImage(req, intermediateImage, intermediateAllocation, device.getMemoryManager());
 
         core::ImageViewInfoRequest viewReq(dev, intermediateImage);
         viewReq.format = vk::Format::eR8G8B8A8Unorm;
@@ -531,7 +531,7 @@ namespace render::postprocess
         if (intermediateFramebuffer) { dev.destroyFramebuffer(intermediateFramebuffer); intermediateFramebuffer = nullptr; }
         if (intermediateImageView) { dev.destroyImageView(intermediateImageView); intermediateImageView = nullptr; }
         if (intermediateImage) { dev.destroyImage(intermediateImage); intermediateImage = nullptr; }
-        if (intermediateMemory) { dev.freeMemory(intermediateMemory); intermediateMemory = nullptr; }
+        if (intermediateAllocation.isValid()) { device.getMemoryManager().free(intermediateAllocation); intermediateAllocation = {}; }
     }
 
     void EdgeDetectionEffect::cleanupPipelines()

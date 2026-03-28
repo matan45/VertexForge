@@ -122,7 +122,7 @@ namespace render::lighting
             request.size = bufferSize;
             request.usage = vk::BufferUsageFlagBits::eStorageBuffer;
             request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-            core::BufferUtilities::createBuffer(request, clusterLightGridBuffer, clusterLightGridMemory);
+            core::BufferUtilities::createBuffer(request, clusterLightGridBuffer, clusterLightGridAllocation, device.getMemoryManager());
         }
 
         // ClusterLightIndexList buffer (DEVICE_LOCAL)
@@ -135,7 +135,7 @@ namespace render::lighting
             request.size = bufferSize;
             request.usage = vk::BufferUsageFlagBits::eStorageBuffer;
             request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-            core::BufferUtilities::createBuffer(request, clusterLightIndexListBuffer, clusterLightIndexListMemory);
+            core::BufferUtilities::createBuffer(request, clusterLightIndexListBuffer, clusterLightIndexListAllocation, device.getMemoryManager());
 
         }
 
@@ -147,7 +147,7 @@ namespace render::lighting
             request.size = bufferSize;
             request.usage = vk::BufferUsageFlagBits::eStorageBuffer;
             request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-            core::BufferUtilities::createBuffer(request, globalsBuffer, globalsMemory);
+            core::BufferUtilities::createBuffer(request, globalsBuffer, globalsAllocation, device.getMemoryManager());
 
         }
     }
@@ -156,9 +156,9 @@ namespace render::lighting
     {
         const auto& logicalDevice = device.getLogicalDevice();
 
-        core::BufferUtilities::destroyBuffer(logicalDevice, globalsBuffer, globalsMemory);
-        core::BufferUtilities::destroyBuffer(logicalDevice, clusterLightIndexListBuffer, clusterLightIndexListMemory);
-        core::BufferUtilities::destroyBuffer(logicalDevice, clusterLightGridBuffer, clusterLightGridMemory);
+        core::BufferUtilities::destroyBuffer(logicalDevice, globalsBuffer, globalsAllocation, device.getMemoryManager());
+        core::BufferUtilities::destroyBuffer(logicalDevice, clusterLightIndexListBuffer, clusterLightIndexListAllocation, device.getMemoryManager());
+        core::BufferUtilities::destroyBuffer(logicalDevice, clusterLightGridBuffer, clusterLightGridAllocation, device.getMemoryManager());
     }
 
     void LightCullingPipeline::createDescriptorSetLayout()

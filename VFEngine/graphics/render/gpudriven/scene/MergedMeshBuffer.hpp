@@ -6,6 +6,7 @@
 #include "../../../core/RenderManager.hpp"
 #include "material/MaterialManager.hpp"
 #include <vulkan/vulkan.hpp>
+#include "../../../core/VulkanMemoryManager.hpp"
 #include <entt/entt.hpp>
 #include <array>
 #include <cassert>
@@ -76,29 +77,29 @@ namespace render::gpudriven
         std::unique_ptr<core::TransferManager> transferManager;
 
         vk::Buffer vertexBuffer;
-        vk::DeviceMemory vertexBufferMemory;
+        core::VulkanAllocation vertexBufferAllocation;
         vk::Buffer indexBuffer;
-        vk::DeviceMemory indexBufferMemory;
+        core::VulkanAllocation indexBufferAllocation;
 
         vk::Buffer objectBuffer;
-        vk::DeviceMemory objectBufferMemory;
+        core::VulkanAllocation objectBufferAllocation;
 
         vk::Buffer instanceTransformBuffer;
-        vk::DeviceMemory instanceTransformBufferMemory;
+        core::VulkanAllocation instanceTransformBufferAllocation;
 
         // Per-frame staging buffers to allow CPU/GPU overlap
         struct StagingFrame
         {
             vk::Buffer objectStagingBuffer;
-            vk::DeviceMemory objectStagingMemory;
+            core::VulkanAllocation objectStagingAllocation;
             void* objectStagingMapped = nullptr;
 
             vk::Buffer instanceStagingBuffer;
-            vk::DeviceMemory instanceStagingMemory;
+            core::VulkanAllocation instanceStagingAllocation;
             void* instanceStagingMapped = nullptr;
 
             vk::Buffer activeIndexStagingBuffer;
-            vk::DeviceMemory activeIndexStagingMemory;
+            core::VulkanAllocation activeIndexStagingAllocation;
             void* activeIndexStagingMapped = nullptr;
         };
 
@@ -152,7 +153,7 @@ namespace render::gpudriven
 
         // Active-index GPU buffer
         vk::Buffer activeIndexBuffer;
-        vk::DeviceMemory activeIndexBufferMemory;
+        core::VulkanAllocation activeIndexBufferAllocation;
 
     public:
         explicit MergedMeshBuffer(core::Device& device);

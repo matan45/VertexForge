@@ -77,7 +77,7 @@ namespace render::postprocess
     {
         auto& dev = device.getLogicalDevice();
 
-        auto createR8Image = [&](vk::Image& img, vk::DeviceMemory& mem,
+        auto createR8Image = [&](vk::Image& img, core::VulkanAllocation& alloc,
                                   vk::ImageView& view, vk::Framebuffer& fb,
                                   vk::RenderPass rp) {
             core::ImageInfoRequest req(dev, device.getPhysicalDevice());
@@ -89,7 +89,7 @@ namespace render::postprocess
                       | vk::ImageUsageFlagBits::eSampled;
             req.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
 
-            core::ImageUtilities::createImage(req, img, mem);
+            core::ImageUtilities::createImage(req, img, alloc, device.getMemoryManager());
 
             core::ImageViewInfoRequest viewReq(dev, img);
             viewReq.format = vk::Format::eR8Unorm;
@@ -106,9 +106,9 @@ namespace render::postprocess
             fb = dev.createFramebuffer(fbInfo);
         };
 
-        createR8Image(ssaoRawImage, ssaoRawMemory, ssaoRawImageView,
+        createR8Image(ssaoRawImage, ssaoRawAllocation, ssaoRawImageView,
                        ssaoRawFramebuffer, ssaoRenderPass);
-        createR8Image(ssaoBlurredImage, ssaoBlurredMemory, ssaoBlurredImageView,
+        createR8Image(ssaoBlurredImage, ssaoBlurredAllocation, ssaoBlurredImageView,
                        ssaoBlurredFramebuffer, blurRenderPass);
     }
 
@@ -137,8 +137,8 @@ namespace render::postprocess
         bufReq.properties = vk::MemoryPropertyFlagBits::eHostVisible
                           | vk::MemoryPropertyFlagBits::eHostCoherent;
 
-        core::BufferUtilities::createBuffer(bufReq, paramsBuffer, paramsBufferMemory);
-        paramsBufferMapped = dev.mapMemory(paramsBufferMemory, 0, sizeof(SSAOParamsUBO));
+        core::BufferUtilities::createBuffer(bufReq, paramsBuffer, paramsBufferAllocation, device.getMemoryManager());
+        paramsBufferMapped = paramsBufferAllocation.mappedPtr;
     }
 
     void SSAOEffect::createDescriptorSetLayouts()
@@ -510,15 +510,15 @@ namespace render::postprocess
         auto& dev = device.getLogicalDevice();
 
         auto destroyImage = [&](vk::Framebuffer& fb, vk::ImageView& iv,
-                                 vk::Image& img, vk::DeviceMemory& mem) {
+                                 vk::Image& img, core::VulkanAllocation& alloc) {
             if (fb) { dev.destroyFramebuffer(fb); fb = nullptr; }
             if (iv) { dev.destroyImageView(iv); iv = nullptr; }
             if (img) { dev.destroyImage(img); img = nullptr; }
-            if (mem) { dev.freeMemory(mem); mem = nullptr; }
+            if (alloc.isValid()) { device.getMemoryManager().free(alloc); alloc = {}; }
         };
 
-        destroyImage(ssaoRawFramebuffer, ssaoRawImageView, ssaoRawImage, ssaoRawMemory);
-        destroyImage(ssaoBlurredFramebuffer, ssaoBlurredImageView, ssaoBlurredImage, ssaoBlurredMemory);
+        destroyImage(ssaoRawFramebuffer, ssaoRawImageView, ssaoRawImage, ssaoRawAllocation);
+        destroyImage(ssaoBlurredFramebuffer, ssaoBlurredImageView, ssaoBlurredImage, ssaoBlurredAllocation);
     }
 
     void SSAOEffect::cleanupPipelines()

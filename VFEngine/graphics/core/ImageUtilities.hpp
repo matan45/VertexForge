@@ -5,6 +5,8 @@
 namespace core
 {
 	class Device;
+	struct VulkanAllocation;
+	class VulkanMemoryManager;
 
 	struct ImageInfoRequest
 	{
@@ -85,7 +87,8 @@ namespace core
 		~ImageUtilities() = delete;
 
 	public:
-		static void createImage(const ImageInfoRequest& imageInfo, vk::Image& image, vk::DeviceMemory& imageMemory);
+		static void createImage(const ImageInfoRequest& imageInfo, vk::Image& image,
+			VulkanAllocation& allocation, VulkanMemoryManager& memManager);
 		static void createImageView(const ImageViewInfoRequest& imageInfoView, vk::ImageView& imageView);
 
 		static void transitionImageLayout(const vk::CommandBuffer& commandBuffer, vk::Image image,

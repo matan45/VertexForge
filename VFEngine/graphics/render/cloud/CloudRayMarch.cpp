@@ -4,7 +4,6 @@
 #include "../../core/Shader.hpp"
 #include "../../core/ImageUtilities.hpp"
 #include "../../core/BufferUtilities.hpp"
-#include "../../core/MemoryUtilities.hpp"
 #include "../../core/PipelineUtilities.hpp"
 #include <cstring>
 
@@ -54,12 +53,8 @@ namespace render::cloud
 
             resultImage = dev.createImage(imageInfo);
             vk::MemoryRequirements memReqs = dev.getImageMemoryRequirements(resultImage);
-            vk::MemoryAllocateInfo allocInfo{};
-            allocInfo.allocationSize = memReqs.size;
-            allocInfo.memoryTypeIndex = core::MemoryUtilities::findMemoryType(
-                physDev, memReqs.memoryTypeBits, vk::MemoryPropertyFlagBits::eDeviceLocal);
-            resultMemory = dev.allocateMemory(allocInfo);
-            dev.bindImageMemory(resultImage, resultMemory, 0);
+            resultAllocation = device.getMemoryManager().allocate(memReqs, vk::MemoryPropertyFlagBits::eDeviceLocal);
+            dev.bindImageMemory(resultImage, resultAllocation.memory, resultAllocation.offset);
 
             core::ImageViewInfoRequest viewReq(dev, resultImage);
             viewReq.format = vk::Format::eR16G16B16A16Sfloat;
@@ -74,8 +69,8 @@ namespace render::cloud
             bufReq.size = sizeof(GPUCloudParams);
             bufReq.usage = vk::BufferUsageFlagBits::eUniformBuffer;
             bufReq.properties = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
-            core::BufferUtilities::createBuffer(bufReq, paramsBuffer, paramsBufferMemory);
-            paramsBufferMapped = device.getLogicalDevice().mapMemory(paramsBufferMemory, 0, sizeof(GPUCloudParams));
+            core::BufferUtilities::createBuffer(bufReq, paramsBuffer, paramsBufferAllocation, device.getMemoryManager());
+            paramsBufferMapped = paramsBufferAllocation.mappedPtr;
         }
 
         // --- Create descriptor set layout ---
@@ -176,13 +171,13 @@ namespace render::cloud
         if (dsLayout) { dev.destroyDescriptorSetLayout(dsLayout); dsLayout = nullptr; }
 
         // Destroy UBO
-        if (paramsBufferMapped) { dev.unmapMemory(paramsBufferMemory); paramsBufferMapped = nullptr; }
-        if (paramsBuffer) { core::BufferUtilities::destroyBuffer(dev, paramsBuffer, paramsBufferMemory); }
+        paramsBufferMapped = nullptr;
+        if (paramsBuffer) { core::BufferUtilities::destroyBuffer(dev, paramsBuffer, paramsBufferAllocation, device.getMemoryManager()); }
 
         // Destroy result image
         if (resultView) { dev.destroyImageView(resultView); resultView = nullptr; }
         if (resultImage) { dev.destroyImage(resultImage); resultImage = nullptr; }
-        if (resultMemory) { dev.freeMemory(resultMemory); resultMemory = nullptr; }
+        if (resultAllocation.isValid()) { device.getMemoryManager().free(resultAllocation); resultAllocation = {}; }
 
         // Clean up shader
         if (shader) { shader->cleanUp(); shader.reset(); }
@@ -207,12 +202,10 @@ namespace render::cloud
         // Destroy old result image
         if (resultView) { dev.destroyImageView(resultView); resultView = nullptr; }
         if (resultImage) { dev.destroyImage(resultImage); resultImage = nullptr; }
-        if (resultMemory) { dev.freeMemory(resultMemory); resultMemory = nullptr; }
+        if (resultAllocation.isValid()) { device.getMemoryManager().free(resultAllocation); resultAllocation = {}; }
 
         // Recreate result image at new size
         {
-            auto& physDev = device.getPhysicalDevice();
-
             vk::ImageCreateInfo imageInfo{};
             imageInfo.imageType = vk::ImageType::e2D;
             imageInfo.extent = vk::Extent3D{halfExtent.width, halfExtent.height, 1};
@@ -227,12 +220,8 @@ namespace render::cloud
 
             resultImage = dev.createImage(imageInfo);
             vk::MemoryRequirements memReqs = dev.getImageMemoryRequirements(resultImage);
-            vk::MemoryAllocateInfo allocInfo{};
-            allocInfo.allocationSize = memReqs.size;
-            allocInfo.memoryTypeIndex = core::MemoryUtilities::findMemoryType(
-                physDev, memReqs.memoryTypeBits, vk::MemoryPropertyFlagBits::eDeviceLocal);
-            resultMemory = dev.allocateMemory(allocInfo);
-            dev.bindImageMemory(resultImage, resultMemory, 0);
+            resultAllocation = device.getMemoryManager().allocate(memReqs, vk::MemoryPropertyFlagBits::eDeviceLocal);
+            dev.bindImageMemory(resultImage, resultAllocation.memory, resultAllocation.offset);
 
             core::ImageViewInfoRequest viewReq(dev, resultImage);
             viewReq.format = vk::Format::eR16G16B16A16Sfloat;

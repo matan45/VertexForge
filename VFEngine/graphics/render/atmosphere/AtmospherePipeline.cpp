@@ -63,10 +63,10 @@ namespace render::atmosphere
         compositeRenderPass = nullptr;
         if (skyRenderPass) { dev.destroyRenderPass(skyRenderPass); skyRenderPass = nullptr; }
 
-        destroyImage(transmittanceImage, transmittanceMemory, transmittanceView);
-        destroyImage(multiScatterImage, multiScatterMemory, multiScatterView);
-        destroyImage(skyViewImage, skyViewMemory, skyViewView);
-        destroyImage(aerialImage, aerialMemory, aerialView);
+        destroyImage(transmittanceImage, transmittanceAllocation, transmittanceView);
+        destroyImage(multiScatterImage, multiScatterAllocation, multiScatterView);
+        destroyImage(skyViewImage, skyViewAllocation, skyViewView);
+        destroyImage(aerialImage, aerialAllocation, aerialView);
 
         if (depthOnlyImageView) { dev.destroyImageView(depthOnlyImageView); depthOnlyImageView = nullptr; }
 
@@ -81,11 +81,11 @@ namespace render::atmosphere
         destroyDS(skyRendererDSPool, skyRendererDSLayout);
         destroyDS(compositeDSPool, compositeDSLayout);
 
-        if (paramsBufferMapped) { dev.unmapMemory(paramsBufferMemory); paramsBufferMapped = nullptr; }
-        if (paramsBuffer) { core::BufferUtilities::destroyBuffer(dev, paramsBuffer, paramsBufferMemory); }
+        paramsBufferMapped = nullptr;
+        if (paramsBuffer) { core::BufferUtilities::destroyBuffer(dev, paramsBuffer, paramsBufferAllocation, device.getMemoryManager()); }
 
-        if (compositeParamsMapped) { dev.unmapMemory(compositeParamsMemory); compositeParamsMapped = nullptr; }
-        if (compositeParamsBuffer) { core::BufferUtilities::destroyBuffer(dev, compositeParamsBuffer, compositeParamsMemory); }
+        compositeParamsMapped = nullptr;
+        if (compositeParamsBuffer) { core::BufferUtilities::destroyBuffer(dev, compositeParamsBuffer, compositeParamsAllocation, device.getMemoryManager()); }
 
         if (lutSampler) { dev.destroySampler(lutSampler); lutSampler = nullptr; }
 
@@ -159,15 +159,15 @@ namespace render::atmosphere
         bufReq.size = sizeof(AtmosphereGPUParams);
         bufReq.usage = vk::BufferUsageFlagBits::eUniformBuffer;
         bufReq.properties = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
-        core::BufferUtilities::createBuffer(bufReq, paramsBuffer, paramsBufferMemory);
-        paramsBufferMapped = dev.mapMemory(paramsBufferMemory, 0, sizeof(AtmosphereGPUParams));
+        core::BufferUtilities::createBuffer(bufReq, paramsBuffer, paramsBufferAllocation, device.getMemoryManager());
+        paramsBufferMapped = paramsBufferAllocation.mappedPtr;
 
         core::BufferInfoRequest compositeReq(dev, device.getPhysicalDevice());
         compositeReq.size = sizeof(AtmosphereCompositeParams);
         compositeReq.usage = vk::BufferUsageFlagBits::eUniformBuffer;
         compositeReq.properties = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
-        core::BufferUtilities::createBuffer(compositeReq, compositeParamsBuffer, compositeParamsMemory);
-        compositeParamsMapped = dev.mapMemory(compositeParamsMemory, 0, sizeof(AtmosphereCompositeParams));
+        core::BufferUtilities::createBuffer(compositeReq, compositeParamsBuffer, compositeParamsAllocation, device.getMemoryManager());
+        compositeParamsMapped = compositeParamsAllocation.mappedPtr;
     }
 
     void AtmospherePipeline::updateParamsBuffer()
@@ -210,12 +210,12 @@ namespace render::atmosphere
         std::memcpy(paramsBufferMapped, &gpu, sizeof(gpu));
     }
 
-    void AtmospherePipeline::destroyImage(vk::Image& image, vk::DeviceMemory& memory, vk::ImageView& view)
+    void AtmospherePipeline::destroyImage(vk::Image& image, core::VulkanAllocation& allocation, vk::ImageView& view)
     {
         auto& dev = device.getLogicalDevice();
         if (view) { dev.destroyImageView(view); view = nullptr; }
         if (image) { dev.destroyImage(image); image = nullptr; }
-        if (memory) { dev.freeMemory(memory); memory = nullptr; }
+        if (allocation.isValid()) { device.getMemoryManager().free(allocation); allocation = {}; }
     }
 
     void AtmospherePipeline::cleanupSkyFramebuffers()

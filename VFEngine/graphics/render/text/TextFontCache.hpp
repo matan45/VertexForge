@@ -1,6 +1,7 @@
 #pragma once
 
 #include <vulkan/vulkan.hpp>
+#include "../../core/VulkanMemoryManager.hpp"
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -23,7 +24,7 @@ namespace render::text
         std::shared_ptr<resource::FontData> fontData;
 
         vk::Image atlasImage;
-        vk::DeviceMemory atlasImageMemory;
+        core::VulkanAllocation atlasImageAllocation;
         vk::ImageView atlasImageView;
         vk::Sampler atlasSampler;
 
@@ -39,7 +40,7 @@ namespace render::text
 
         // Default placeholder (1x1 white pixel)
         vk::Image defaultImage;
-        vk::DeviceMemory defaultImageMemory;
+        core::VulkanAllocation defaultImageAllocation;
         vk::ImageView defaultImageView;
         vk::Sampler defaultSampler;
 

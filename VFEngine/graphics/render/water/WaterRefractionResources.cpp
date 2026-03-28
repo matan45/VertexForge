@@ -47,7 +47,7 @@ namespace render::water
         if (refractionSampler)   { vkDevice.destroySampler(refractionSampler); refractionSampler = nullptr; }
         if (refractionView)      { vkDevice.destroyImageView(refractionView); refractionView = nullptr; }
         if (refractionImage)     { vkDevice.destroyImage(refractionImage); refractionImage = nullptr; }
-        if (refractionMemory)    { vkDevice.freeMemory(refractionMemory); refractionMemory = nullptr; }
+        if (refractionAllocation) { device.getMemoryManager().free(refractionAllocation); refractionAllocation = {}; }
 
         initialized = false;
     }
@@ -62,7 +62,7 @@ namespace render::water
             vk::ImageTiling::eOptimal,
             vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst,
             vk::MemoryPropertyFlagBits::eDeviceLocal);
-        core::ImageUtilities::createImage(req, refractionImage, refractionMemory);
+        core::ImageUtilities::createImage(req, refractionImage, refractionAllocation, device.getMemoryManager());
 
         core::ImageViewInfoRequest viewReq(vkDevice, refractionImage,
             format,

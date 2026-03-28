@@ -78,7 +78,7 @@ namespace render::gpudriven
                 vk::MemoryPropertyFlagBits::eDeviceLocal
             },
             meshletBuffer,
-            meshletBufferMemory
+            meshletBufferAllocation, device.getMemoryManager()
         );
 
         core::BufferUtilities::createBuffer(
@@ -89,7 +89,7 @@ namespace render::gpudriven
                 vk::MemoryPropertyFlagBits::eDeviceLocal
             },
             meshletVertexBuffer,
-            meshletVertexBufferMemory
+            meshletVertexBufferAllocation, device.getMemoryManager()
         );
 
         core::BufferUtilities::createBuffer(
@@ -100,7 +100,7 @@ namespace render::gpudriven
                 vk::MemoryPropertyFlagBits::eDeviceLocal
             },
             meshletPrimitiveBuffer,
-            meshletPrimitiveBufferMemory
+            meshletPrimitiveBufferAllocation, device.getMemoryManager()
         );
     }
 
@@ -113,33 +113,24 @@ namespace render::gpudriven
             logicalDevice.destroyBuffer(meshletBuffer);
             meshletBuffer = nullptr;
         }
-        if (meshletBufferMemory)
-        {
-            logicalDevice.freeMemory(meshletBufferMemory);
-            meshletBufferMemory = nullptr;
-        }
+        device.getMemoryManager().free(meshletBufferAllocation);
+        meshletBufferAllocation = {};
 
         if (meshletVertexBuffer)
         {
             logicalDevice.destroyBuffer(meshletVertexBuffer);
             meshletVertexBuffer = nullptr;
         }
-        if (meshletVertexBufferMemory)
-        {
-            logicalDevice.freeMemory(meshletVertexBufferMemory);
-            meshletVertexBufferMemory = nullptr;
-        }
+        device.getMemoryManager().free(meshletVertexBufferAllocation);
+        meshletVertexBufferAllocation = {};
 
         if (meshletPrimitiveBuffer)
         {
             logicalDevice.destroyBuffer(meshletPrimitiveBuffer);
             meshletPrimitiveBuffer = nullptr;
         }
-        if (meshletPrimitiveBufferMemory)
-        {
-            logicalDevice.freeMemory(meshletPrimitiveBufferMemory);
-            meshletPrimitiveBufferMemory = nullptr;
-        }
+        device.getMemoryManager().free(meshletPrimitiveBufferAllocation);
+        meshletPrimitiveBufferAllocation = {};
     }
 
     MeshletAllocation* MeshletBuffer::reserveMeshlets(const std::string& meshPath,

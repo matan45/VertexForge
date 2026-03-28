@@ -40,16 +40,16 @@ namespace render::mesh
         vk::PipelineLayout wireframePipelineLayout;
 
         vk::Buffer vertexBuffer;
-        vk::DeviceMemory vertexBufferMemory;
+        core::VulkanAllocation vertexBufferAllocation;
         vk::Buffer indexBuffer;
-        vk::DeviceMemory indexBufferMemory;
+        core::VulkanAllocation indexBufferAllocation;
 
         uint32_t indexCount = 0;
 
         vk::Buffer coneVertexBuffer;
-        vk::DeviceMemory coneVertexBufferMemory;
+        core::VulkanAllocation coneVertexBufferAllocation;
         vk::Buffer coneIndexBuffer;
-        vk::DeviceMemory coneIndexBufferMemory;
+        core::VulkanAllocation coneIndexBufferAllocation;
         uint32_t coneIndexCount = 0;
 
         static constexpr int SPHERE_SEGMENTS = 32;

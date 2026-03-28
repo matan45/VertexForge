@@ -1,6 +1,7 @@
 #pragma once
 #include "CloudTypes.hpp"
 #include "cloud/CloudSettings.hpp"
+#include "../../core/VulkanMemoryManager.hpp"
 #include <vulkan/vulkan.hpp>
 #include <glm/glm.hpp>
 #include <memory>
@@ -43,7 +44,7 @@ namespace render::cloud
 
         // Fallback 1x1 white texture (when atmosphere not available)
         vk::Image fallbackImage{};
-        vk::DeviceMemory fallbackMemory{};
+        core::VulkanAllocation fallbackAllocation;
         vk::ImageView fallbackView{};
         vk::Sampler fallbackSampler{};
 

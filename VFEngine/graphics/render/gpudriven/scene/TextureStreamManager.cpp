@@ -78,18 +78,17 @@ namespace render::gpudriven
             if (tex.currentSampler) vkDevice.destroySampler(tex.currentSampler);
             if (tex.view) vkDevice.destroyImageView(tex.view);
             if (tex.image) vkDevice.destroyImage(tex.image);
-            if (tex.memory) vkDevice.freeMemory(tex.memory);
+            if (tex.allocation) { device.getMemoryManager().free(tex.allocation); tex.allocation = {}; }
         }
         textures.clear();
         streamHandles.clear();
 
         if (stagingBuffer)
         {
-            vkDevice.unmapMemory(stagingMemory);
             vkDevice.destroyBuffer(stagingBuffer);
-            vkDevice.freeMemory(stagingMemory);
             stagingBuffer = nullptr;
-            stagingMemory = nullptr;
+            device.getMemoryManager().free(stagingAllocation);
+            stagingAllocation = {};
             stagingMapped = nullptr;
         }
 
@@ -106,9 +105,9 @@ namespace render::gpudriven
     {
         if (stagingBuffer)
         {
-            device.getLogicalDevice().unmapMemory(stagingMemory);
             device.getLogicalDevice().destroyBuffer(stagingBuffer);
-            device.getLogicalDevice().freeMemory(stagingMemory);
+            device.getMemoryManager().free(stagingAllocation);
+            stagingAllocation = {};
         }
 
         stagingBufferSize = size;
@@ -119,10 +118,9 @@ namespace render::gpudriven
         bufInfo.properties = vk::MemoryPropertyFlagBits::eHostVisible |
                              vk::MemoryPropertyFlagBits::eHostCoherent;
 
-        core::BufferUtilities::createBuffer(bufInfo, stagingBuffer, stagingMemory);
+        core::BufferUtilities::createBuffer(bufInfo, stagingBuffer, stagingAllocation, device.getMemoryManager());
 
-        [[maybe_unused]] auto result = device.getLogicalDevice().mapMemory(
-            stagingMemory, 0, static_cast<vk::DeviceSize>(size), {}, &stagingMapped);
+        stagingMapped = stagingAllocation.mappedPtr;
     }
 
     uint32_t TextureStreamManager::registerTexture(const std::string& path, vk::Format format)
@@ -173,7 +171,7 @@ namespace render::gpudriven
             vkDevice.destroySampler(tex.currentSampler);
             vkDevice.destroyImageView(tex.view);
             vkDevice.destroyImage(tex.image);
-            vkDevice.freeMemory(tex.memory);
+            device.getMemoryManager().free(tex.allocation); tex.allocation = {};
             return INVALID_TEXTURE_INDEX;
         }
 

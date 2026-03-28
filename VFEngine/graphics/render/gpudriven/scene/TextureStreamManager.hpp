@@ -94,7 +94,7 @@ namespace render::gpudriven
 
         // Staging buffer for GPU uploads
         vk::Buffer stagingBuffer;
-        vk::DeviceMemory stagingMemory;
+        core::VulkanAllocation stagingAllocation;
         void* stagingMapped = nullptr;
         size_t stagingBufferSize = 0;
 

@@ -72,21 +72,17 @@ namespace render::volumetric
         request.size = BUFFER_SIZE;
         request.usage = vk::BufferUsageFlagBits::eStorageBuffer;
         request.properties = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
-        core::BufferUtilities::createBuffer(request, fogVolumeBuffer, fogVolumeMemory);
+        core::BufferUtilities::createBuffer(request, fogVolumeBuffer, fogVolumeAllocation, device.getMemoryManager());
 
-        mappedMemory = dev.mapMemory(fogVolumeMemory, 0, BUFFER_SIZE, vk::MemoryMapFlags{});
+        mappedMemory = fogVolumeAllocation.mappedPtr;
     }
 
     void FogVolumeBufferManager::destroyBuffer()
     {
         const auto& dev = device.getLogicalDevice();
 
-        if (mappedMemory)
-        {
-            dev.unmapMemory(fogVolumeMemory);
-            mappedMemory = nullptr;
-        }
-        core::BufferUtilities::destroyBuffer(dev, fogVolumeBuffer, fogVolumeMemory);
+        mappedMemory = nullptr;
+        core::BufferUtilities::destroyBuffer(dev, fogVolumeBuffer, fogVolumeAllocation, device.getMemoryManager());
     }
 
     void FogVolumeBufferManager::createDescriptorSetLayout()

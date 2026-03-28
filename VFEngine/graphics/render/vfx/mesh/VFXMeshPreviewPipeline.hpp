@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../billboard/VFXBillboardTypes.hpp"
+#include "../../../core/VulkanMemoryManager.hpp"
 #include <memory>
 #include <vector>
 #include <string>
@@ -54,10 +55,10 @@ namespace render::vfx
         std::vector<vk::Framebuffer> framebuffers;
 
         vk::Buffer instanceBuffer;
-        vk::DeviceMemory instanceBufferMemory;
+        core::VulkanAllocation instanceBufferAllocation;
         void* instanceBufferMapped = nullptr;
         vk::Buffer cameraUBO;
-        vk::DeviceMemory cameraUBOMemory;
+        core::VulkanAllocation cameraUBOAllocation;
         void* cameraUBOMapped = nullptr;
 
         uint32_t maxInstances = 1024;
@@ -70,7 +71,7 @@ namespace render::vfx
         uint32_t meshIndexCount = 0;
 
         vk::Image defaultTextureImage;
-        vk::DeviceMemory defaultTextureMemory;
+        core::VulkanAllocation defaultTextureAllocation;
         vk::ImageView defaultTextureImageView;
         vk::Sampler textureSampler;
 

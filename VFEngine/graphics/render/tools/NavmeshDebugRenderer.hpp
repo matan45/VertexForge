@@ -27,9 +27,9 @@ namespace render::mesh
         vk::PipelineLayout wireframePipelineLayout;
 
         vk::Buffer vertexBuffer;
-        vk::DeviceMemory vertexMemory;
+        core::VulkanAllocation vertexAllocation;
         vk::Buffer indexBuffer;
-        vk::DeviceMemory indexMemory;
+        core::VulkanAllocation indexAllocation;
         uint32_t indexCount = 0;
 
         bool hasData = false;

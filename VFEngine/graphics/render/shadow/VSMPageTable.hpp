@@ -2,6 +2,7 @@
 
 #include "VSMTypes.hpp"
 #include "../../core/RenderManager.hpp"
+#include "../../core/VulkanMemoryManager.hpp"
 #include <vulkan/vulkan.hpp>
 #include <array>
 #include <vector>
@@ -21,12 +22,12 @@ namespace render::shadow
 
         // GPU SSBO holding page table entries
         vk::Buffer pageTableBuffer;
-        vk::DeviceMemory pageTableMemory;
+        core::VulkanAllocation pageTableAllocation;
 
         struct PageTableStagingFrame
         {
             vk::Buffer buffer;
-            vk::DeviceMemory memory;
+            core::VulkanAllocation allocation;
             void* mapped = nullptr;
         };
 

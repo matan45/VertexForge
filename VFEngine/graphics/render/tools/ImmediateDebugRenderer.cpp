@@ -88,7 +88,7 @@ namespace render::mesh
 
     void ImmediateDebugRenderer::destroyVertexBuffer()
     {
-        destroyBufferPair(vertexBuffer, vertexMemory);
+        destroyBufferPair(vertexBuffer, vertexAllocation);
         currentVertexCount = 0;
         currentBufferSize = 0;
     }
@@ -114,7 +114,7 @@ namespace render::mesh
             request.size = allocSize;
             request.usage = vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst;
             request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-            core::BufferUtilities::createBuffer(request, vertexBuffer, vertexMemory);
+            core::BufferUtilities::createBuffer(request, vertexBuffer, vertexAllocation, device.getMemoryManager());
 
             currentBufferSize = allocSize;
         }

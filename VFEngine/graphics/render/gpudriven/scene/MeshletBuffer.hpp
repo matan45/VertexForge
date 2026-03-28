@@ -2,6 +2,7 @@
 
 #include "../MeshletBufferTypes.hpp"
 #include "../FreeListAllocator.hpp"
+#include "../../../core/VulkanMemoryManager.hpp"
 #include <vulkan/vulkan.hpp>
 #include <memory>
 #include <string>
@@ -58,13 +59,13 @@ namespace render::gpudriven
         std::unique_ptr<core::TransferManager> transferManager;
         
         vk::Buffer meshletBuffer; // GPUMeshlet[] - meshlet descriptors + bounds
-        vk::DeviceMemory meshletBufferMemory;
+        core::VulkanAllocation meshletBufferAllocation;
 
         vk::Buffer meshletVertexBuffer; // uint32_t[] - local to global vertex mapping
-        vk::DeviceMemory meshletVertexBufferMemory;
+        core::VulkanAllocation meshletVertexBufferAllocation;
 
         vk::Buffer meshletPrimitiveBuffer; // uint32_t[] - packed triangle indices
-        vk::DeviceMemory meshletPrimitiveBufferMemory;
+        core::VulkanAllocation meshletPrimitiveBufferAllocation;
         
         uint32_t maxMeshletCount = 0;
         uint32_t maxVertexIndexCount = 0;

@@ -4,7 +4,6 @@
 #include "../../core/Shader.hpp"
 #include "../../core/ImageUtilities.hpp"
 #include "../../core/BufferUtilities.hpp"
-#include "../../core/MemoryUtilities.hpp"
 #include "../../core/PipelineUtilities.hpp"
 
 // Windows defines MemoryBarrier as a macro - undefine it to use vk::MemoryBarrier
@@ -27,9 +26,9 @@ namespace render::cloud
     void CloudNoise::init()
     {
         // Create images
-        create3DImage(128, 128, 128, shapeImage, shapeMemory, shapeView);
-        create3DImage(32, 32, 32, detailImage, detailMemory, detailView);
-        create2DImage(1024, 1024, weatherImage, weatherMemory, weatherView);
+        create3DImage(128, 128, 128, shapeImage, shapeAllocation, shapeView);
+        create3DImage(32, 32, 32, detailImage, detailAllocation, detailView);
+        create2DImage(1024, 1024, weatherImage, weatherAllocation, weatherView);
 
         createSampler();
         createBlueNoiseTexture();
@@ -69,10 +68,10 @@ namespace render::cloud
         if (noiseSampler) { dev.destroySampler(noiseSampler); noiseSampler = nullptr; }
 
         // Destroy images
-        destroyImage(shapeImage, shapeMemory, shapeView);
-        destroyImage(detailImage, detailMemory, detailView);
-        destroyImage(weatherImage, weatherMemory, weatherView);
-        destroyImage(blueNoiseImage, blueNoiseMemory, blueNoiseView);
+        destroyImage(shapeImage, shapeAllocation, shapeView);
+        destroyImage(detailImage, detailAllocation, detailView);
+        destroyImage(weatherImage, weatherAllocation, weatherView);
+        destroyImage(blueNoiseImage, blueNoiseAllocation, blueNoiseView);
 
         initialized = false;
         generated = false;
@@ -130,10 +129,9 @@ namespace render::cloud
     // ---------- Private helpers ----------
 
     void CloudNoise::create3DImage(uint32_t width, uint32_t height, uint32_t depth,
-                                    vk::Image& image, vk::DeviceMemory& memory, vk::ImageView& view)
+                                    vk::Image& image, core::VulkanAllocation& allocation, vk::ImageView& view)
     {
         auto& dev = device.getLogicalDevice();
-        auto& physDev = device.getPhysicalDevice();
 
         vk::ImageCreateInfo imageInfo{};
         imageInfo.imageType = vk::ImageType::e3D;
@@ -149,12 +147,8 @@ namespace render::cloud
 
         image = dev.createImage(imageInfo);
         vk::MemoryRequirements memReqs = dev.getImageMemoryRequirements(image);
-        vk::MemoryAllocateInfo allocInfo{};
-        allocInfo.allocationSize = memReqs.size;
-        allocInfo.memoryTypeIndex = core::MemoryUtilities::findMemoryType(
-            physDev, memReqs.memoryTypeBits, vk::MemoryPropertyFlagBits::eDeviceLocal);
-        memory = dev.allocateMemory(allocInfo);
-        dev.bindImageMemory(image, memory, 0);
+        allocation = device.getMemoryManager().allocate(memReqs, vk::MemoryPropertyFlagBits::eDeviceLocal);
+        dev.bindImageMemory(image, allocation.memory, allocation.offset);
 
         core::ImageViewInfoRequest viewReq(dev, image);
         viewReq.format = vk::Format::eR8G8B8A8Unorm;
@@ -164,10 +158,9 @@ namespace render::cloud
     }
 
     void CloudNoise::create2DImage(uint32_t width, uint32_t height,
-                                    vk::Image& image, vk::DeviceMemory& memory, vk::ImageView& view)
+                                    vk::Image& image, core::VulkanAllocation& allocation, vk::ImageView& view)
     {
         auto& dev = device.getLogicalDevice();
-        auto& physDev = device.getPhysicalDevice();
 
         vk::ImageCreateInfo imageInfo{};
         imageInfo.imageType = vk::ImageType::e2D;
@@ -183,12 +176,8 @@ namespace render::cloud
 
         image = dev.createImage(imageInfo);
         vk::MemoryRequirements memReqs = dev.getImageMemoryRequirements(image);
-        vk::MemoryAllocateInfo allocInfo{};
-        allocInfo.allocationSize = memReqs.size;
-        allocInfo.memoryTypeIndex = core::MemoryUtilities::findMemoryType(
-            physDev, memReqs.memoryTypeBits, vk::MemoryPropertyFlagBits::eDeviceLocal);
-        memory = dev.allocateMemory(allocInfo);
-        dev.bindImageMemory(image, memory, 0);
+        allocation = device.getMemoryManager().allocate(memReqs, vk::MemoryPropertyFlagBits::eDeviceLocal);
+        dev.bindImageMemory(image, allocation.memory, allocation.offset);
 
         core::ImageViewInfoRequest viewReq(dev, image);
         viewReq.format = vk::Format::eR8G8B8A8Unorm;
@@ -197,18 +186,17 @@ namespace render::cloud
         core::ImageUtilities::createImageView(viewReq, view);
     }
 
-    void CloudNoise::destroyImage(vk::Image& image, vk::DeviceMemory& memory, vk::ImageView& view)
+    void CloudNoise::destroyImage(vk::Image& image, core::VulkanAllocation& allocation, vk::ImageView& view)
     {
         auto& dev = device.getLogicalDevice();
         if (view) { dev.destroyImageView(view); view = nullptr; }
         if (image) { dev.destroyImage(image); image = nullptr; }
-        if (memory) { dev.freeMemory(memory); memory = nullptr; }
+        if (allocation.isValid()) { device.getMemoryManager().free(allocation); allocation = {}; }
     }
 
     void CloudNoise::createBlueNoiseTexture()
     {
         auto& dev = device.getLogicalDevice();
-        auto& physDev = device.getPhysicalDevice();
 
         // Create 128x128 R8 image for blue noise
         vk::ImageCreateInfo imageInfo{};
@@ -225,12 +213,8 @@ namespace render::cloud
 
         blueNoiseImage = dev.createImage(imageInfo);
         vk::MemoryRequirements memReqs = dev.getImageMemoryRequirements(blueNoiseImage);
-        vk::MemoryAllocateInfo allocInfo{};
-        allocInfo.allocationSize = memReqs.size;
-        allocInfo.memoryTypeIndex = core::MemoryUtilities::findMemoryType(
-            physDev, memReqs.memoryTypeBits, vk::MemoryPropertyFlagBits::eDeviceLocal);
-        blueNoiseMemory = dev.allocateMemory(allocInfo);
-        dev.bindImageMemory(blueNoiseImage, blueNoiseMemory, 0);
+        blueNoiseAllocation = device.getMemoryManager().allocate(memReqs, vk::MemoryPropertyFlagBits::eDeviceLocal);
+        dev.bindImageMemory(blueNoiseImage, blueNoiseAllocation.memory, blueNoiseAllocation.offset);
 
         core::ImageViewInfoRequest viewReq(dev, blueNoiseImage);
         viewReq.format = vk::Format::eR8Unorm;

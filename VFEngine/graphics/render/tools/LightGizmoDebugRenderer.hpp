@@ -45,21 +45,21 @@ namespace render::mesh
         vk::PipelineLayout wireframePipelineLayout;
 
         vk::Buffer sphereVertexBuffer;
-        vk::DeviceMemory sphereVertexBufferMemory;
+        core::VulkanAllocation sphereVertexBufferAllocation;
         vk::Buffer sphereIndexBuffer;
-        vk::DeviceMemory sphereIndexBufferMemory;
+        core::VulkanAllocation sphereIndexBufferAllocation;
         uint32_t sphereIndexCount = 0;
 
         vk::Buffer coneVertexBuffer;
-        vk::DeviceMemory coneVertexBufferMemory;
+        core::VulkanAllocation coneVertexBufferAllocation;
         vk::Buffer coneIndexBuffer;
-        vk::DeviceMemory coneIndexBufferMemory;
+        core::VulkanAllocation coneIndexBufferAllocation;
         uint32_t coneIndexCount = 0;
 
         vk::Buffer arrowVertexBuffer;
-        vk::DeviceMemory arrowVertexBufferMemory;
+        core::VulkanAllocation arrowVertexBufferAllocation;
         vk::Buffer arrowIndexBuffer;
-        vk::DeviceMemory arrowIndexBufferMemory;
+        core::VulkanAllocation arrowIndexBufferAllocation;
         uint32_t arrowIndexCount = 0;
 
         static constexpr int SPHERE_SEGMENTS = 32;

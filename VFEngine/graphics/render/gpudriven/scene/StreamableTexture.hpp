@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../../../core/VulkanMemoryManager.hpp"
 #include <vulkan/vulkan.hpp>
 #include <string>
 #include <cstdint>
@@ -9,7 +10,7 @@ namespace render::gpudriven
     struct StreamableTexture
     {
         vk::Image image;
-        vk::DeviceMemory memory;
+        core::VulkanAllocation allocation;
         vk::ImageView view;
         vk::Sampler currentSampler;
         uint32_t totalMipLevels = 0;

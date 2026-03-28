@@ -2,6 +2,7 @@
 
 #define VULKAN_HPP_DISPATCH_LOADER_DYNAMIC 1
 #include <vulkan/vulkan.hpp>
+#include "../../core/VulkanMemoryManager.hpp"
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -17,7 +18,7 @@ namespace render::ibl
     struct ImageData
     {
         vk::Image image;
-        vk::DeviceMemory imageMemory;
+        core::VulkanAllocation imageAllocation;
         vk::ImageView imageView;
         vk::Sampler sampler;
     };
@@ -58,7 +59,7 @@ namespace render::ibl
     {
         vk::Image image;
         vk::ImageView view;
-        vk::DeviceMemory memory;
+        core::VulkanAllocation allocation;
         vk::Framebuffer framebuffer;
     };
 

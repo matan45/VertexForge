@@ -1,4 +1,5 @@
 #include "Device.hpp"
+#include "VulkanMemoryManager.hpp"
 #include "print/Log.hpp"
 #include "../window/Window.hpp"
 
@@ -37,6 +38,8 @@ namespace core
     {
     }
 
+    Device::~Device() = default;
+
     void Device::init()
     {
         createInstance();
@@ -47,6 +50,8 @@ namespace core
         queryRayQueryCapabilities();
         createStagingCommandPool();
         createPipelineCache();
+
+        memoryManager = std::make_unique<VulkanMemoryManager>(*this);
     }
 
     void Device::cleanUp()
@@ -56,6 +61,10 @@ namespace core
 
         // Reset staging command pool before device
         stagingCommandPool.reset();
+
+        // Destroy memory manager after all subsystems have cleaned up their buffers,
+        // but before the logical device is destroyed
+        memoryManager.reset();
 
         if (surface)
         {

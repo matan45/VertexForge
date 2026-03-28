@@ -27,12 +27,14 @@ namespace render::mesh
             if (it->second.buffers.vertexBuffer)
             {
                 dev.destroyBuffer(it->second.buffers.vertexBuffer);
-                dev.freeMemory(it->second.buffers.vertexMemory);
+                device.getMemoryManager().free(it->second.buffers.vertexAllocation);
+                it->second.buffers.vertexAllocation = {};
             }
             if (it->second.buffers.indexBuffer)
             {
                 dev.destroyBuffer(it->second.buffers.indexBuffer);
-                dev.freeMemory(it->second.buffers.indexMemory);
+                device.getMemoryManager().free(it->second.buffers.indexAllocation);
+                it->second.buffers.indexAllocation = {};
             }
         }
 
@@ -49,7 +51,7 @@ namespace render::mesh
             vertexRequest.size = vertexBufferSize;
             vertexRequest.usage = vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst;
             vertexRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-            core::BufferUtilities::createBuffer(vertexRequest, entry.buffers.vertexBuffer, entry.buffers.vertexMemory);
+            core::BufferUtilities::createBuffer(vertexRequest, entry.buffers.vertexBuffer, entry.buffers.vertexAllocation, device.getMemoryManager());
 
             core::BufferUtilities::copyToBuffer(
                 device.getLogicalDevice(),
@@ -66,7 +68,7 @@ namespace render::mesh
             indexRequest.size = indexBufferSize;
             indexRequest.usage = vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eTransferDst;
             indexRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-            core::BufferUtilities::createBuffer(indexRequest, entry.buffers.indexBuffer, entry.buffers.indexMemory);
+            core::BufferUtilities::createBuffer(indexRequest, entry.buffers.indexBuffer, entry.buffers.indexAllocation, device.getMemoryManager());
 
             core::BufferUtilities::copyToBuffer(
                 device.getLogicalDevice(),
@@ -195,7 +197,7 @@ namespace render::mesh
             vertexRequest.size = vertexBufferSize;
             vertexRequest.usage = vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst;
             vertexRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-            core::BufferUtilities::createBuffer(vertexRequest, meshData.vertexBuffer, meshData.vertexMemory);
+            core::BufferUtilities::createBuffer(vertexRequest, meshData.vertexBuffer, meshData.vertexAllocation, device.getMemoryManager());
 
             core::BufferUtilities::copyToBuffer(
                 device.getLogicalDevice(),
@@ -212,7 +214,7 @@ namespace render::mesh
             indexRequest.size = indexBufferSize;
             indexRequest.usage = vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eTransferDst;
             indexRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-            core::BufferUtilities::createBuffer(indexRequest, meshData.indexBuffer, meshData.indexMemory);
+            core::BufferUtilities::createBuffer(indexRequest, meshData.indexBuffer, meshData.indexAllocation, device.getMemoryManager());
 
             core::BufferUtilities::copyToBuffer(
                 device.getLogicalDevice(),
@@ -233,12 +235,14 @@ namespace render::mesh
             if (meshData.vertexBuffer)
             {
                 dev.destroyBuffer(meshData.vertexBuffer);
-                dev.freeMemory(meshData.vertexMemory);
+                device.getMemoryManager().free(meshData.vertexAllocation);
+                meshData.vertexAllocation = {};
             }
             if (meshData.indexBuffer)
             {
                 dev.destroyBuffer(meshData.indexBuffer);
-                dev.freeMemory(meshData.indexMemory);
+                device.getMemoryManager().free(meshData.indexAllocation);
+                meshData.indexAllocation = {};
             }
             meshCache[meshPath] = MeshDebugData{};
             return nullptr;

@@ -2,6 +2,7 @@
 
 #define VULKAN_HPP_DISPATCH_LOADER_DYNAMIC 1
 #include <vulkan/vulkan.hpp>
+#include "../../core/VulkanMemoryManager.hpp"
 #include <glm/glm.hpp>
 #include "CameraTypes.hpp"
 
@@ -17,7 +18,7 @@ namespace render::common
     private:
         core::Device& device;
         vk::Buffer buffer;
-        vk::DeviceMemory memory;
+        core::VulkanAllocation allocation;
         void* mapped = nullptr;
 
     public:

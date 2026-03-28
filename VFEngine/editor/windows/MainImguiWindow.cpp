@@ -35,6 +35,7 @@ namespace windows
         menuBar.setInputActionMappingWindow(&inputActionMappingWindow);
         menuBar.setHeightmapGeneratorWindow(&heightmapGeneratorWindow);
         menuBar.setBackgroundRemovalWindow(&backgroundRemovalWindow);
+        menuBar.setMemoryDiagnosticsWindow(&memoryDiagnosticsWindow);
         subscribeToEvents();
     }
 
@@ -139,6 +140,7 @@ namespace windows
             inputActionMappingWindow.draw();
             heightmapGeneratorWindow.draw();
             backgroundRemovalWindow.draw();
+            memoryDiagnosticsWindow.draw();
         }
         ImGui::End();
     }

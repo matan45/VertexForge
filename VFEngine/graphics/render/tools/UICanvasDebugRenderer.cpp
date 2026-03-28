@@ -32,8 +32,8 @@ namespace render::mesh
     void UICanvasDebugRenderer::cleanUp()
     {
         destroyPipelineAndLayout(wireframePipeline, wireframePipelineLayout);
-        destroyBufferPair(vertexBuffer, vertexBufferMemory);
-        destroyBufferPair(indexBuffer, indexBufferMemory);
+        destroyBufferPair(vertexBuffer, vertexBufferAllocation);
+        destroyBufferPair(indexBuffer, indexBufferAllocation);
         initialized = false;
     }
 
@@ -74,7 +74,7 @@ namespace render::mesh
         vertexRequest.size = vertexBufferSize;
         vertexRequest.usage = vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst;
         vertexRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-        core::BufferUtilities::createBuffer(vertexRequest, vertexBuffer, vertexBufferMemory);
+        core::BufferUtilities::createBuffer(vertexRequest, vertexBuffer, vertexBufferAllocation, device.getMemoryManager());
 
         core::BufferUtilities::copyToBuffer(
             device.getLogicalDevice(),
@@ -92,7 +92,7 @@ namespace render::mesh
         indexRequest.size = indexBufferSize;
         indexRequest.usage = vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eTransferDst;
         indexRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-        core::BufferUtilities::createBuffer(indexRequest, indexBuffer, indexBufferMemory);
+        core::BufferUtilities::createBuffer(indexRequest, indexBuffer, indexBufferAllocation, device.getMemoryManager());
 
         core::BufferUtilities::copyToBuffer(
             device.getLogicalDevice(),

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../../../core/VulkanMemoryManager.hpp"
 #include <vulkan/vulkan.hpp>
 #include <glm/glm.hpp>
 #include <memory>
@@ -36,10 +37,10 @@ namespace render::gpudriven
         vk::Sampler depthSampler;
 
         vk::Buffer resultBuffer;
-        vk::DeviceMemory resultMemory;
+        core::VulkanAllocation resultAllocation;
 
         vk::Buffer stagingBuffer;
-        vk::DeviceMemory stagingMemory;
+        core::VulkanAllocation stagingAllocation;
 
         bool initialized = false;
         bool hasValidCursor = false;

@@ -34,8 +34,8 @@ namespace render::gpudriven
             sizeof(svt::SVTParamsGPU),
             vk::BufferUsageFlagBits::eUniformBuffer,
             vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
-        core::BufferUtilities::createBuffer(bufReq, svt.paramsBuffer, svt.paramsMemory);
-        svt.paramsMapped = dev.mapMemory(svt.paramsMemory, 0, sizeof(svt::SVTParamsGPU));
+        core::BufferUtilities::createBuffer(bufReq, svt.paramsBuffer, svt.paramsAllocation, device.getMemoryManager());
+        svt.paramsMapped = svt.paramsAllocation.mappedPtr;
         std::memset(svt.paramsMapped, 0, sizeof(svt::SVTParamsGPU));
 
         // Create stream manager
@@ -96,12 +96,8 @@ namespace render::gpudriven
         svt.pageTable.reset();
         svt.tileCache.reset();
 
-        if (svt.paramsMapped)
-        {
-            dev.unmapMemory(svt.paramsMemory);
-            svt.paramsMapped = nullptr;
-        }
-        core::BufferUtilities::destroyBuffer(dev, svt.paramsBuffer, svt.paramsMemory);
+        svt.paramsMapped = nullptr;
+        core::BufferUtilities::destroyBuffer(dev, svt.paramsBuffer, svt.paramsAllocation, device.getMemoryManager());
 
         if (terrain.pipeline)
         {

@@ -3,6 +3,7 @@
 #include "MeshTypes.hpp"
 #include "SkinnedMeshTypes.hpp"
 #include "../ibl/IBLTypes.hpp"
+#include "../../core/VulkanMemoryManager.hpp"
 #include <memory>
 #include <vector>
 #include <string>
@@ -63,11 +64,11 @@ namespace render::mesh
         std::vector<vk::Framebuffer> framebuffers;
 
         vk::Buffer cameraUBO;
-        vk::DeviceMemory cameraUBOMemory;
+        core::VulkanAllocation cameraUBOAllocation;
         bool externalCameraBuffer = false;
 
         vk::Buffer boneSSBO;
-        vk::DeviceMemory boneSSBOMemory;
+        core::VulkanAllocation boneSSBOAllocation;
         void* boneSSBOMapped = nullptr;
 
         std::unique_ptr<SkinnedMeshGPUData> loadedMesh;

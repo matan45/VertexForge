@@ -1,4 +1,5 @@
 #pragma once
+#include "../../core/VulkanMemoryManager.hpp"
 #include <vulkan/vulkan.hpp>
 #include <cstdint>
 
@@ -17,7 +18,7 @@ namespace render::occlusion
         core::SwapChain& swapChain;
 
         vk::Image depthImage;
-        vk::DeviceMemory depthMemory;
+        core::VulkanAllocation depthAllocation;
         vk::ImageView depthImageView;
         vk::RenderPass renderPass;
         vk::Framebuffer framebuffer;

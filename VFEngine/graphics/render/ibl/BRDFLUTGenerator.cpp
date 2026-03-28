@@ -4,6 +4,7 @@
 #include "../../core/BufferUtilities.hpp"
 #include "../../core/ImageUtilities.hpp"
 #include "../../core/Utilities.hpp"
+#include "../../core/VulkanMemoryManager.hpp"
 #include "resource/TextureResource.hpp"
 #include "resource/PathResolver.hpp"
 #include "print/Log.hpp"
@@ -37,7 +38,7 @@ namespace render::ibl
         imageRequest.width = mip0.width;
         imageRequest.height = mip0.height;
         imageRequest.usage = vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst;
-        core::ImageUtilities::createImage(imageRequest, brdfLUTImage.image, brdfLUTImage.imageMemory);
+        core::ImageUtilities::createImage(imageRequest, brdfLUTImage.image, brdfLUTImage.imageAllocation, device.getMemoryManager());
 
         core::ImageUtilities::uploadStagedPixelData(
             device, brdfLUTImage.image,
@@ -90,7 +91,7 @@ namespace render::ibl
         brdfLUTImageRequest.width = CUBE_MAP_SIZE;
         brdfLUTImageRequest.height = CUBE_MAP_SIZE;
         brdfLUTImageRequest.usage = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled;
-        core::ImageUtilities::createImage(brdfLUTImageRequest, brdfLUTImage.image, brdfLUTImage.imageMemory);
+        core::ImageUtilities::createImage(brdfLUTImageRequest, brdfLUTImage.image, brdfLUTImage.imageAllocation, device.getMemoryManager());
 
         core::ImageViewInfoRequest imageViewRequest(device.getLogicalDevice(), brdfLUTImage.image);
         imageViewRequest.format = vk::Format::eR16G16Sfloat;
@@ -163,23 +164,21 @@ namespace render::ibl
         vertexInputInfo.pVertexAttributeDescriptions = vertexInputAttributes.data();
 
         vk::Buffer quadVertexBuffer;
-        vk::DeviceMemory quadVertexBufferMemory;
+        core::VulkanAllocation quadVertexBufferAllocation;
 
         core::BufferInfoRequest quadBufferInfo(device.getLogicalDevice(), device.getPhysicalDevice());
         quadBufferInfo.size = sizeof(quad[0]) * quad.size();
         quadBufferInfo.usage = vk::BufferUsageFlagBits::eVertexBuffer;
         quadBufferInfo.properties = vk::MemoryPropertyFlagBits::eHostVisible |
             vk::MemoryPropertyFlagBits::eHostCoherent;
-        core::BufferUtilities::createBuffer(quadBufferInfo, quadVertexBuffer, quadVertexBufferMemory);
+        core::BufferUtilities::createBuffer(quadBufferInfo, quadVertexBuffer, quadVertexBufferAllocation, device.getMemoryManager());
 
-        void* data;
-        if (vk::Result result = device.getLogicalDevice().mapMemory(quadVertexBufferMemory, 0, quadBufferInfo.size, {},
-            &data); result != vk::Result::eSuccess)
+        void* data = quadVertexBufferAllocation.mappedPtr;
+        if (!data)
         {
             vfLogError("failed to map memory");
         }
         memcpy(data, quad.data(), quadBufferInfo.size);
-        device.getLogicalDevice().unmapMemory(quadVertexBufferMemory);
 
         vk::PipelineInputAssemblyStateCreateInfo inputAssembly;
         inputAssembly.topology = vk::PrimitiveTopology::eTriangleList;
@@ -296,8 +295,7 @@ namespace render::ibl
         device.getLogicalDevice().destroyFramebuffer(framebuffer);
         device.getLogicalDevice().destroyFence(renderFence);
 
-        device.getLogicalDevice().destroyBuffer(quadVertexBuffer);
-        device.getLogicalDevice().freeMemory(quadVertexBufferMemory);
+        core::BufferUtilities::destroyBuffer(device.getLogicalDevice(), quadVertexBuffer, quadVertexBufferAllocation, device.getMemoryManager());
 
         device.getLogicalDevice().destroyRenderPass(renderPass);
         device.getLogicalDevice().destroyPipeline(graphicsPipeline);
@@ -309,7 +307,7 @@ namespace render::ibl
         device.getLogicalDevice().destroyImage(brdfLUTImage.image);
         device.getLogicalDevice().destroyImageView(brdfLUTImage.imageView);
         device.getLogicalDevice().destroySampler(brdfLUTImage.sampler);
-        device.getLogicalDevice().freeMemory(brdfLUTImage.imageMemory);
+        device.getMemoryManager().free(brdfLUTImage.imageAllocation); brdfLUTImage.imageAllocation = {};
     }
 
     void BRDFLUTGenerator::cleanUpShader()

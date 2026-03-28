@@ -3,6 +3,7 @@
 #include "BufferUtilities.hpp"
 #include "ImageUtilities.hpp"
 #include "Utilities.hpp"
+#include "VulkanMemoryManager.hpp"
 #include "resource/ResourceManager.hpp"
 #include "resource/Types.hpp"
 #include "asset/AssetRef.hpp"
@@ -33,7 +34,7 @@ namespace core
             Device& device;
             vk::UniqueCommandPool& commandPool;
             vk::Image& image;
-            vk::DeviceMemory& imageMemory;
+            VulkanAllocation& imageAllocation;
             const std::vector<resource::MipLevelData>& mipData;
             uint32_t width;
             uint32_t height;
@@ -55,29 +56,25 @@ namespace core
                 totalSize += computeMipSize(mip, p.useDataSize);
 
             vk::Buffer stagingBuffer;
-            vk::DeviceMemory stagingBufferMemory;
-            bool mapped = false;
+            VulkanAllocation stagingAllocation;
 
             BufferInfoRequest bufferInfo(p.device.getLogicalDevice(), p.device.getPhysicalDevice());
             bufferInfo.size = totalSize;
             bufferInfo.usage = vk::BufferUsageFlagBits::eTransferSrc;
             bufferInfo.properties = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
-            BufferUtilities::createBuffer(bufferInfo, stagingBuffer, stagingBufferMemory);
+            BufferUtilities::createBuffer(bufferInfo, stagingBuffer, stagingAllocation, p.device.getMemoryManager());
 
             auto cleanupStaging = [&] {
-                if (mapped) p.device.getLogicalDevice().unmapMemory(stagingBufferMemory);
-                p.device.getLogicalDevice().destroyBuffer(stagingBuffer);
-                p.device.getLogicalDevice().freeMemory(stagingBufferMemory);
+                BufferUtilities::destroyBuffer(p.device.getLogicalDevice(), stagingBuffer, stagingAllocation, p.device.getMemoryManager());
             };
 
-            void* data;
-            if (p.device.getLogicalDevice().mapMemory(stagingBufferMemory, 0, totalSize, {}, &data) != vk::Result::eSuccess)
+            void* data = stagingAllocation.mappedPtr;
+            if (!data)
             {
                 vfLogError("failed to map memory");
                 cleanupStaging();
                 return false;
             }
-            mapped = true;
 
             vk::DeviceSize offset = 0;
             for (const auto& mip : p.mipData)
@@ -92,8 +89,6 @@ namespace core
                 memcpy(static_cast<char*>(data) + offset, mip.data.data(), mipSize);
                 offset += mipSize;
             }
-            p.device.getLogicalDevice().unmapMemory(stagingBufferMemory);
-            mapped = false;
 
             ImageInfoRequest imageInfo(p.device.getLogicalDevice(), p.device.getPhysicalDevice());
             imageInfo.width = p.width;
@@ -103,7 +98,7 @@ namespace core
             imageInfo.tiling = vk::ImageTiling::eOptimal;
             imageInfo.usage = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled;
             imageInfo.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-            ImageUtilities::createImage(imageInfo, p.image, p.imageMemory);
+            ImageUtilities::createImage(imageInfo, p.image, p.imageAllocation, p.device.getMemoryManager());
 
             auto cmdA = Utilities::beginSingleTimeCommands(p.device.getLogicalDevice(), p.commandPool.get());
             ImageUtilities::transitionImageLayout(cmdA.get(), p.image, vk::ImageLayout::eUndefined,
@@ -171,7 +166,7 @@ namespace core
         imageData = {texturePtr->width, texturePtr->height, texturePtr->numbersOfChannels, texturePtr->mipLevels};
         vk::Format hdrFormat = resolveVulkanFormat(texturePtr->compressionFormat, vk::Format::eR32G32B32A32Sfloat);
 
-        MipUploadParams params{device, commandPool, image, imageMemory, texturePtr->mipData,
+        MipUploadParams params{device, commandPool, image, imageAllocation, texturePtr->mipData,
                                texturePtr->width, texturePtr->height, texturePtr->mipLevels, hdrFormat, true};
         if (!stageAndUploadMips(params)) return;
 
@@ -202,7 +197,7 @@ namespace core
         imageData = {hdrData.width, hdrData.height, hdrData.numbersOfChannels, hdrData.mipLevels};
         vk::Format hdrFormat = resolveVulkanFormat(hdrData.compressionFormat, vk::Format::eR32G32B32A32Sfloat);
 
-        MipUploadParams params{device, commandPool, image, imageMemory, hdrData.mipData,
+        MipUploadParams params{device, commandPool, image, imageAllocation, hdrData.mipData,
                                hdrData.width, hdrData.height, hdrData.mipLevels, hdrFormat, true};
         if (!stageAndUploadMips(params)) return;
 
@@ -236,7 +231,7 @@ namespace core
         vk::Format resolvedFormat = resolveVulkanFormat(texturePtr->compressionFormat, format);
 
         bool isCompressed = (texturePtr->compressionFormat != resource::TextureCompressionFormat::Uncompressed);
-        MipUploadParams params{device, commandPool, image, imageMemory, texturePtr->mipData,
+        MipUploadParams params{device, commandPool, image, imageAllocation, texturePtr->mipData,
                                texturePtr->width, texturePtr->height, texturePtr->mipLevels, resolvedFormat, isCompressed};
         if (!stageAndUploadMips(params)) return false;
 
@@ -270,7 +265,7 @@ namespace core
         vk::Format resolvedFormat = resolveVulkanFormat(textureData.compressionFormat, format);
 
         bool isCompressed = (textureData.compressionFormat != resource::TextureCompressionFormat::Uncompressed);
-        MipUploadParams params{device, commandPool, image, imageMemory, textureData.mipData,
+        MipUploadParams params{device, commandPool, image, imageAllocation, textureData.mipData,
                                textureData.width, textureData.height, textureData.mipLevels, resolvedFormat, isCompressed};
         if (!stageAndUploadMips(params)) return false;
 

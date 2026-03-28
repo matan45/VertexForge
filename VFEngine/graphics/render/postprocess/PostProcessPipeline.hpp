@@ -1,6 +1,7 @@
 #pragma once
 
 #include "PostProcessEffect.hpp"
+#include "../../core/VulkanMemoryManager.hpp"
 #include <glm/glm.hpp>
 #include <memory>
 #include <optional>
@@ -43,7 +44,7 @@ namespace render::postprocess
     struct PingPongTarget
     {
         vk::Image image;
-        vk::DeviceMemory memory;
+        core::VulkanAllocation allocation;
         vk::ImageView imageView;
         vk::Framebuffer framebuffer;
     };

@@ -263,7 +263,7 @@ namespace render::postprocess
                       | vk::ImageUsageFlagBits::eTransferSrc;
             req.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
 
-            core::ImageUtilities::createImage(req, target.image, target.memory);
+            core::ImageUtilities::createImage(req, target.image, target.allocation, device.getMemoryManager());
 
             core::ImageViewInfoRequest viewReq(device.getLogicalDevice(), target.image);
             viewReq.format = format;
@@ -573,10 +573,10 @@ namespace render::postprocess
                 dev.destroyImage(target.image);
                 target.image = nullptr;
             }
-            if (target.memory)
+            if (target.allocation.isValid())
             {
-                dev.freeMemory(target.memory);
-                target.memory = nullptr;
+                device.getMemoryManager().free(target.allocation);
+                target.allocation = {};
             }
         };
 

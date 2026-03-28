@@ -47,13 +47,13 @@ namespace render::mesh
 
         // Unit cube geometry
         vk::Buffer vertexBuffer;
-        vk::DeviceMemory vertexBufferMemory;
+        core::VulkanAllocation vertexBufferAllocation;
         vk::Buffer indexBuffer;
-        vk::DeviceMemory indexBufferMemory;
+        core::VulkanAllocation indexBufferAllocation;
 
         // Instance data storage buffer
         vk::Buffer instanceBuffer;
-        vk::DeviceMemory instanceBufferMemory;
+        core::VulkanAllocation instanceBufferAllocation;
         void* instanceBufferMapped = nullptr;
         static constexpr uint32_t MAX_INSTANCES = lighting::ClusterConstants::MAX_CLUSTERS;
 

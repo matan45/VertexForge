@@ -1,6 +1,7 @@
 #pragma once
 
 #include "VSMTypes.hpp"
+#include "../../core/VulkanMemoryManager.hpp"
 #include <vulkan/vulkan.hpp>
 #include <vector>
 #include <cstdint>
@@ -18,7 +19,7 @@ namespace render::shadow
         core::Device& device;
 
         vk::Image poolImage;
-        vk::DeviceMemory poolMemory;
+        core::VulkanAllocation poolAllocation;
         vk::ImageView poolImageView;
 
         vk::Sampler comparisonSampler;

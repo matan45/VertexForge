@@ -151,28 +151,10 @@ namespace render::vfx
 
         if (renderPass) { dev.destroyRenderPass(renderPass); renderPass = nullptr; }
 
-        if (cameraUBOMapped && cameraUBOMemory)
-        {
-            dev.unmapMemory(cameraUBOMemory);
-            cameraUBOMapped = nullptr;
-        }
-        if (cameraUBO)
-        {
-            dev.destroyBuffer(cameraUBO);
-            dev.freeMemory(cameraUBOMemory);
-            cameraUBO = nullptr;
-        }
-        if (instanceBufferMapped && instanceBufferMemory)
-        {
-            dev.unmapMemory(instanceBufferMemory);
-            instanceBufferMapped = nullptr;
-        }
-        if (instanceBuffer)
-        {
-            dev.destroyBuffer(instanceBuffer);
-            dev.freeMemory(instanceBufferMemory);
-            instanceBuffer = nullptr;
-        }
+        cameraUBOMapped = nullptr;
+        core::BufferUtilities::destroyBuffer(dev, cameraUBO, cameraUBOAllocation, device.getMemoryManager());
+        instanceBufferMapped = nullptr;
+        core::BufferUtilities::destroyBuffer(dev, instanceBuffer, instanceBufferAllocation, device.getMemoryManager());
 
         customTexture.reset();
         currentTexturePath.clear();
@@ -187,10 +169,9 @@ namespace render::vfx
         if (defaultTextureImage)
         {
             dev.destroyImage(defaultTextureImage);
-            dev.freeMemory(defaultTextureMemory);
             defaultTextureImage = nullptr;
-            defaultTextureMemory = nullptr;
         }
+        if (defaultTextureAllocation) { device.getMemoryManager().free(defaultTextureAllocation); defaultTextureAllocation = {}; }
 
         if (meshShader)
         {
@@ -450,8 +431,8 @@ namespace render::vfx
         uboRequest.properties = vk::MemoryPropertyFlagBits::eHostVisible |
                                 vk::MemoryPropertyFlagBits::eHostCoherent;
         uboRequest.size = sizeof(VFXCameraUBO);
-        core::BufferUtilities::createBuffer(uboRequest, cameraUBO, cameraUBOMemory);
-        cameraUBOMapped = vkDevice.mapMemory(cameraUBOMemory, 0, sizeof(VFXCameraUBO));
+        core::BufferUtilities::createBuffer(uboRequest, cameraUBO, cameraUBOAllocation, device.getMemoryManager());
+        cameraUBOMapped = cameraUBOAllocation.mappedPtr;
 
         vk::DeviceSize instanceBufferSize = sizeof(VFXInstanceData) * maxInstances;
         core::BufferInfoRequest instanceRequest(vkDevice, device.getPhysicalDevice());
@@ -459,8 +440,8 @@ namespace render::vfx
         instanceRequest.usage = vk::BufferUsageFlagBits::eVertexBuffer;
         instanceRequest.properties = vk::MemoryPropertyFlagBits::eHostVisible |
                                      vk::MemoryPropertyFlagBits::eHostCoherent;
-        core::BufferUtilities::createBuffer(instanceRequest, instanceBuffer, instanceBufferMemory);
-        instanceBufferMapped = vkDevice.mapMemory(instanceBufferMemory, 0, instanceBufferSize);
+        core::BufferUtilities::createBuffer(instanceRequest, instanceBuffer, instanceBufferAllocation, device.getMemoryManager());
+        instanceBufferMapped = instanceBufferAllocation.mappedPtr;
     }
 
     void VFXMeshPreviewPipeline::createDefaultTexture()
@@ -476,7 +457,7 @@ namespace render::vfx
             vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
             vk::MemoryPropertyFlagBits::eDeviceLocal
         );
-        core::ImageUtilities::createImage(imageInfo, defaultTextureImage, defaultTextureMemory);
+        core::ImageUtilities::createImage(imageInfo, defaultTextureImage, defaultTextureAllocation, device.getMemoryManager());
 
         core::ImageViewInfoRequest viewInfo(
             device.getLogicalDevice(),

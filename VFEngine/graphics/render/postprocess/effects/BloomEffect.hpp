@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../PostProcessEffect.hpp"
+#include "../../../core/VulkanMemoryManager.hpp"
 #include <memory>
 #include <vector>
 
@@ -27,7 +28,7 @@ namespace render::postprocess
         core::Device& device;
 
         vk::Image bloomImage;
-        vk::DeviceMemory bloomMemory;
+        core::VulkanAllocation bloomAllocation;
         std::vector<BloomMipLevel> mipLevels;
         uint32_t mipCount = 0;
 

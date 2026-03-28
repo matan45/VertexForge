@@ -90,27 +90,20 @@ namespace render::mesh
             logicalDevice.destroyBuffer(cameraUBO);
             cameraUBO = nullptr;
         }
-        if (cameraUBOMemory && !externalCameraBuffer)
+        if (!externalCameraBuffer)
         {
-            logicalDevice.freeMemory(cameraUBOMemory);
-            cameraUBOMemory = nullptr;
+            device.getMemoryManager().free(cameraUBOAllocation);
+            cameraUBOAllocation = {};
         }
 
-        if (boneSSBOMapped && boneSSBOMemory)
-        {
-            logicalDevice.unmapMemory(boneSSBOMemory);
-            boneSSBOMapped = nullptr;
-        }
+        boneSSBOMapped = nullptr;
         if (boneSSBO)
         {
             logicalDevice.destroyBuffer(boneSSBO);
             boneSSBO = nullptr;
         }
-        if (boneSSBOMemory)
-        {
-            logicalDevice.freeMemory(boneSSBOMemory);
-            boneSSBOMemory = nullptr;
-        }
+        device.getMemoryManager().free(boneSSBOAllocation);
+        boneSSBOAllocation = {};
 
         if (cameraIBLDescriptorPool)
         {

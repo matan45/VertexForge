@@ -1,5 +1,7 @@
 #include "DeferredDeletionQueue.hpp"
+#include "VulkanMemoryManager.hpp"
 #include "Device.hpp"
+#include "memory/GpuAllocationStats.hpp"
 #include <spdlog/spdlog.h>
 
 namespace core
@@ -14,27 +16,27 @@ namespace core
         flush();
     }
 
-    void DeferredDeletionQueue::queueBuffer(vk::Buffer buffer, vk::DeviceMemory memory)
+    void DeferredDeletionQueue::queueBuffer(vk::Buffer buffer, const VulkanAllocation& allocation, VulkanMemoryManager& memManager)
     {
-        if (!buffer && !memory)
+        if (!buffer && !allocation.isValid())
             return;
 
         std::lock_guard lock(mutex);
         pendingDeletions.push_back({
-            BufferDeletion{buffer, memory},
+            BufferDeletion{buffer, allocation, &memManager},
             lastFrameNumber
         });
     }
 
-    void DeferredDeletionQueue::queueImage(vk::Image image, vk::DeviceMemory memory,
+    void DeferredDeletionQueue::queueImage(vk::Image image, const VulkanAllocation& allocation, VulkanMemoryManager& memManager,
                                            const std::vector<vk::ImageView>& views)
     {
-        if (!image && !memory && views.empty())
+        if (!image && !allocation.isValid() && views.empty())
             return;
 
         std::lock_guard lock(mutex);
         pendingDeletions.push_back({
-            ImageDeletion{image, memory, views},
+            ImageDeletion{image, allocation, &memManager, views},
             lastFrameNumber
         });
     }
@@ -167,8 +169,12 @@ namespace core
             {
                 if (deletion.buffer)
                     logicalDevice.destroyBuffer(deletion.buffer);
-                if (deletion.memory)
-                    logicalDevice.freeMemory(deletion.memory);
+                if (deletion.allocation.isValid() && deletion.memManager)
+                {
+                    memory::GpuAllocationStats::managedAllocationCount.fetch_sub(1, std::memory_order_relaxed);
+                    memory::GpuAllocationStats::managedAllocatedBytes.fetch_sub(deletion.allocation.size, std::memory_order_relaxed);
+                    deletion.memManager->free(deletion.allocation);
+                }
             }
             else if constexpr (std::is_same_v<T, ImageDeletion>)
             {
@@ -179,8 +185,12 @@ namespace core
                 }
                 if (deletion.image)
                     logicalDevice.destroyImage(deletion.image);
-                if (deletion.memory)
-                    logicalDevice.freeMemory(deletion.memory);
+                if (deletion.allocation.isValid() && deletion.memManager)
+                {
+                    memory::GpuAllocationStats::managedAllocationCount.fetch_sub(1, std::memory_order_relaxed);
+                    memory::GpuAllocationStats::managedAllocatedBytes.fetch_sub(deletion.allocation.size, std::memory_order_relaxed);
+                    deletion.memManager->free(deletion.allocation);
+                }
             }
             else if constexpr (std::is_same_v<T, ImageViewDeletion>)
             {

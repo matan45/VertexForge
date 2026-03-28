@@ -3,12 +3,10 @@
 #include "../../core/BufferUtilities.hpp"
 #include "../../core/Shader.hpp"
 #include "../../core/PipelineUtilities.hpp"
-#include "../../core/MappedMemoryGuard.hpp"
 #include "print/Log.hpp"
 
 namespace render::shadow
 {
-    using render::MappedMemoryGuard;
 
     VSMFeedbackPipeline::VSMFeedbackPipeline(core::Device& device)
         : device(device)
@@ -78,28 +76,11 @@ namespace render::shadow
             depthSampler = nullptr;
         }
 
-        if (paramsBuffer)
         {
-            logicalDevice.destroyBuffer(paramsBuffer);
-            logicalDevice.freeMemory(paramsMemory);
-            paramsBuffer = nullptr;
-            paramsMemory = nullptr;
-        }
-
-        if (stagingBuffer)
-        {
-            logicalDevice.destroyBuffer(stagingBuffer);
-            logicalDevice.freeMemory(stagingMemory);
-            stagingBuffer = nullptr;
-            stagingMemory = nullptr;
-        }
-
-        if (feedbackBuffer)
-        {
-            logicalDevice.destroyBuffer(feedbackBuffer);
-            logicalDevice.freeMemory(feedbackMemory);
-            feedbackBuffer = nullptr;
-            feedbackMemory = nullptr;
+            auto& memManager = device.getMemoryManager();
+            core::BufferUtilities::destroyBuffer(logicalDevice, paramsBuffer, paramsAllocation, memManager);
+            core::BufferUtilities::destroyBuffer(logicalDevice, stagingBuffer, stagingAllocation, memManager);
+            core::BufferUtilities::destroyBuffer(logicalDevice, feedbackBuffer, feedbackAllocation, memManager);
         }
 
         initialized = false;
@@ -109,6 +90,7 @@ namespace render::shadow
     {
         const auto& logicalDevice = device.getLogicalDevice();
         const auto& physicalDevice = device.getPhysicalDevice();
+        auto& memManager = device.getMemoryManager();
         vk::DeviceSize feedbackSize = sizeof(uint32_t) * totalFeedbackEntries;
 
         // Device-local feedback buffer
@@ -120,7 +102,7 @@ namespace render::shadow
                 vk::BufferUsageFlagBits::eTransferDst,
                 vk::MemoryPropertyFlagBits::eDeviceLocal
             );
-            core::BufferUtilities::createBuffer(request, feedbackBuffer, feedbackMemory);
+            core::BufferUtilities::createBuffer(request, feedbackBuffer, feedbackAllocation, memManager);
         }
 
         // Host-visible staging buffer for readback
@@ -130,7 +112,7 @@ namespace render::shadow
                 vk::BufferUsageFlagBits::eTransferDst,
                 vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
             );
-            core::BufferUtilities::createBuffer(request, stagingBuffer, stagingMemory);
+            core::BufferUtilities::createBuffer(request, stagingBuffer, stagingAllocation, memManager);
         }
 
         // UBO for params
@@ -140,7 +122,7 @@ namespace render::shadow
                 vk::BufferUsageFlagBits::eUniformBuffer,
                 vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
             );
-            core::BufferUtilities::createBuffer(request, paramsBuffer, paramsMemory);
+            core::BufferUtilities::createBuffer(request, paramsBuffer, paramsAllocation, memManager);
         }
     }
 
@@ -287,10 +269,7 @@ namespace render::shadow
         );
         params.lightCount = lightCount;
 
-        {
-            MappedMemoryGuard mapped(device.getLogicalDevice(), paramsMemory, 0, sizeof(FeedbackParams));
-            std::memcpy(mapped.data(), &params, sizeof(FeedbackParams));
-        }
+        std::memcpy(paramsAllocation.mappedPtr, &params, sizeof(FeedbackParams));
 
         // Update descriptor set — depth view can change per frame (resize, etc.)
         // so we always update. The needsDescriptorUpdate flag is not needed here.
@@ -397,8 +376,7 @@ namespace render::shadow
         count = std::min(count, totalFeedbackEntries);
         results.resize(count);
 
-        MappedMemoryGuard mapped(device.getLogicalDevice(), stagingMemory, 0, sizeof(uint32_t) * count);
-        std::memcpy(results.data(), mapped.data(), sizeof(uint32_t) * count);
+        std::memcpy(results.data(), stagingAllocation.mappedPtr, sizeof(uint32_t) * count);
 
         readbackState = FeedbackReadbackState::Idle;
         return results;

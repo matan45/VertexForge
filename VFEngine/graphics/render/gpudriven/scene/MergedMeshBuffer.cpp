@@ -1,6 +1,7 @@
 #include "MergedMeshBuffer.hpp"
 #include "../../../core/Device.hpp"
 #include "../../../core/BufferUtilities.hpp"
+#include "../../../core/VulkanMemoryManager.hpp"
 #include "../../../core/TransferManager.hpp"
 #include "resource/Types.hpp"
 #include "resource/MeshStreamHandle.hpp"
@@ -111,6 +112,7 @@ namespace render::gpudriven
     {
         const auto& logicalDevice = device.getLogicalDevice();
         const auto& physicalDevice = device.getPhysicalDevice();
+        auto& memManager = device.getMemoryManager();
 
         {
             core::BufferInfoRequest request(logicalDevice, physicalDevice);
@@ -121,7 +123,7 @@ namespace render::gpudriven
                 vk::BufferUsageFlagBits::eShaderDeviceAddress |
                 vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR;
             request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-            core::BufferUtilities::createBuffer(request, vertexBuffer, vertexBufferMemory);
+            core::BufferUtilities::createBuffer(request, vertexBuffer, vertexBufferAllocation, memManager);
         }
 
         {
@@ -133,7 +135,7 @@ namespace render::gpudriven
                 vk::BufferUsageFlagBits::eShaderDeviceAddress |
                 vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR;
             request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-            core::BufferUtilities::createBuffer(request, indexBuffer, indexBufferMemory);
+            core::BufferUtilities::createBuffer(request, indexBuffer, indexBufferAllocation, memManager);
         }
     }
 
@@ -141,13 +143,14 @@ namespace render::gpudriven
     {
         const auto& logicalDevice = device.getLogicalDevice();
         const auto& physicalDevice = device.getPhysicalDevice();
+        auto& memManager = device.getMemoryManager();
 
         {
             core::BufferInfoRequest request(logicalDevice, physicalDevice);
             request.size = maxObjectCount * sizeof(GPUObjectData);
             request.usage = vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst;
             request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-            core::BufferUtilities::createBuffer(request, objectBuffer, objectBufferMemory);
+            core::BufferUtilities::createBuffer(request, objectBuffer, objectBufferAllocation, memManager);
         }
 
         for (auto& sf : stagingFrames)
@@ -156,9 +159,8 @@ namespace render::gpudriven
             request.size = maxObjectCount * sizeof(GPUObjectData);
             request.usage = vk::BufferUsageFlagBits::eTransferSrc;
             request.properties = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
-            core::BufferUtilities::createBuffer(request, sf.objectStagingBuffer, sf.objectStagingMemory);
-
-            sf.objectStagingMapped = logicalDevice.mapMemory(sf.objectStagingMemory, 0, request.size, vk::MemoryMapFlags{});
+            core::BufferUtilities::createBuffer(request, sf.objectStagingBuffer, sf.objectStagingAllocation, memManager);
+            sf.objectStagingMapped = sf.objectStagingAllocation.mappedPtr;
         }
     }
 
@@ -166,13 +168,14 @@ namespace render::gpudriven
     {
         const auto& logicalDevice = device.getLogicalDevice();
         const auto& physicalDevice = device.getPhysicalDevice();
+        auto& memManager = device.getMemoryManager();
 
         {
             core::BufferInfoRequest request(logicalDevice, physicalDevice);
             request.size = maxInstanceCount * sizeof(GPUInstanceTransform);
             request.usage = vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst;
             request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-            core::BufferUtilities::createBuffer(request, instanceTransformBuffer, instanceTransformBufferMemory);
+            core::BufferUtilities::createBuffer(request, instanceTransformBuffer, instanceTransformBufferAllocation, memManager);
         }
 
         for (auto& sf : stagingFrames)
@@ -181,9 +184,8 @@ namespace render::gpudriven
             request.size = maxInstanceCount * sizeof(GPUInstanceTransform);
             request.usage = vk::BufferUsageFlagBits::eTransferSrc;
             request.properties = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
-            core::BufferUtilities::createBuffer(request, sf.instanceStagingBuffer, sf.instanceStagingMemory);
-
-            sf.instanceStagingMapped = logicalDevice.mapMemory(sf.instanceStagingMemory, 0, request.size, vk::MemoryMapFlags{});
+            core::BufferUtilities::createBuffer(request, sf.instanceStagingBuffer, sf.instanceStagingAllocation, memManager);
+            sf.instanceStagingMapped = sf.instanceStagingAllocation.mappedPtr;
         }
     }
 
@@ -191,13 +193,14 @@ namespace render::gpudriven
     {
         const auto& logicalDevice = device.getLogicalDevice();
         const auto& physicalDevice = device.getPhysicalDevice();
+        auto& memManager = device.getMemoryManager();
 
         {
             core::BufferInfoRequest request(logicalDevice, physicalDevice);
             request.size = maxObjectCount * sizeof(uint32_t);
             request.usage = vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst;
             request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-            core::BufferUtilities::createBuffer(request, activeIndexBuffer, activeIndexBufferMemory);
+            core::BufferUtilities::createBuffer(request, activeIndexBuffer, activeIndexBufferAllocation, memManager);
         }
 
         for (auto& sf : stagingFrames)
@@ -206,9 +209,8 @@ namespace render::gpudriven
             request.size = maxObjectCount * sizeof(uint32_t);
             request.usage = vk::BufferUsageFlagBits::eTransferSrc;
             request.properties = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
-            core::BufferUtilities::createBuffer(request, sf.activeIndexStagingBuffer, sf.activeIndexStagingMemory);
-
-            sf.activeIndexStagingMapped = logicalDevice.mapMemory(sf.activeIndexStagingMemory, 0, request.size, vk::MemoryMapFlags{});
+            core::BufferUtilities::createBuffer(request, sf.activeIndexStagingBuffer, sf.activeIndexStagingAllocation, memManager);
+            sf.activeIndexStagingMapped = sf.activeIndexStagingAllocation.mappedPtr;
         }
 
         activeObjectIndices.resize(maxObjectCount);
@@ -217,24 +219,25 @@ namespace render::gpudriven
     void MergedMeshBuffer::destroyBuffers()
     {
         const auto& logicalDevice = device.getLogicalDevice();
+        auto& memManager = device.getMemoryManager();
 
         for (auto& sf : stagingFrames)
         {
-            if (sf.activeIndexStagingMapped) { logicalDevice.unmapMemory(sf.activeIndexStagingMemory); sf.activeIndexStagingMapped = nullptr; }
-            core::BufferUtilities::destroyBuffer(logicalDevice, sf.activeIndexStagingBuffer, sf.activeIndexStagingMemory);
+            sf.activeIndexStagingMapped = nullptr;
+            core::BufferUtilities::destroyBuffer(logicalDevice, sf.activeIndexStagingBuffer, sf.activeIndexStagingAllocation, memManager);
 
-            if (sf.instanceStagingMapped) { logicalDevice.unmapMemory(sf.instanceStagingMemory); sf.instanceStagingMapped = nullptr; }
-            core::BufferUtilities::destroyBuffer(logicalDevice, sf.instanceStagingBuffer, sf.instanceStagingMemory);
+            sf.instanceStagingMapped = nullptr;
+            core::BufferUtilities::destroyBuffer(logicalDevice, sf.instanceStagingBuffer, sf.instanceStagingAllocation, memManager);
 
-            if (sf.objectStagingMapped) { logicalDevice.unmapMemory(sf.objectStagingMemory); sf.objectStagingMapped = nullptr; }
-            core::BufferUtilities::destroyBuffer(logicalDevice, sf.objectStagingBuffer, sf.objectStagingMemory);
+            sf.objectStagingMapped = nullptr;
+            core::BufferUtilities::destroyBuffer(logicalDevice, sf.objectStagingBuffer, sf.objectStagingAllocation, memManager);
         }
 
-        core::BufferUtilities::destroyBuffer(logicalDevice, activeIndexBuffer, activeIndexBufferMemory);
-        core::BufferUtilities::destroyBuffer(logicalDevice, instanceTransformBuffer, instanceTransformBufferMemory);
-        core::BufferUtilities::destroyBuffer(logicalDevice, objectBuffer, objectBufferMemory);
-        core::BufferUtilities::destroyBuffer(logicalDevice, indexBuffer, indexBufferMemory);
-        core::BufferUtilities::destroyBuffer(logicalDevice, vertexBuffer, vertexBufferMemory);
+        core::BufferUtilities::destroyBuffer(logicalDevice, activeIndexBuffer, activeIndexBufferAllocation, memManager);
+        core::BufferUtilities::destroyBuffer(logicalDevice, instanceTransformBuffer, instanceTransformBufferAllocation, memManager);
+        core::BufferUtilities::destroyBuffer(logicalDevice, objectBuffer, objectBufferAllocation, memManager);
+        core::BufferUtilities::destroyBuffer(logicalDevice, indexBuffer, indexBufferAllocation, memManager);
+        core::BufferUtilities::destroyBuffer(logicalDevice, vertexBuffer, vertexBufferAllocation, memManager);
     }
 
     void MergedMeshBuffer::uploadObjects(vk::CommandBuffer cmd)

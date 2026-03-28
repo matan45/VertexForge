@@ -2,7 +2,6 @@
 #include "../../core/Device.hpp"
 #include "../../core/Shader.hpp"
 #include "../../core/ImageUtilities.hpp"
-#include "../../core/MemoryUtilities.hpp"
 #include "../../core/PipelineUtilities.hpp"
 #include "print/Log.hpp"
 #include <array>
@@ -85,7 +84,6 @@ namespace render::volumetric
     void FogNoiseGenerator::createImage()
     {
         auto& dev = device.getLogicalDevice();
-        auto& physDev = device.getPhysicalDevice();
 
         vk::ImageCreateInfo imageInfo{};
         imageInfo.imageType = vk::ImageType::e3D;
@@ -101,12 +99,8 @@ namespace render::volumetric
 
         noiseImage = dev.createImage(imageInfo);
         vk::MemoryRequirements memReqs = dev.getImageMemoryRequirements(noiseImage);
-        vk::MemoryAllocateInfo allocInfo{};
-        allocInfo.allocationSize = memReqs.size;
-        allocInfo.memoryTypeIndex = core::MemoryUtilities::findMemoryType(
-            physDev, memReqs.memoryTypeBits, vk::MemoryPropertyFlagBits::eDeviceLocal);
-        noiseMemory = dev.allocateMemory(allocInfo);
-        dev.bindImageMemory(noiseImage, noiseMemory, 0);
+        noiseAllocation = device.getMemoryManager().allocate(memReqs, vk::MemoryPropertyFlagBits::eDeviceLocal);
+        dev.bindImageMemory(noiseImage, noiseAllocation.memory, noiseAllocation.offset);
 
         core::ImageViewInfoRequest viewReq(dev, noiseImage);
         viewReq.format = vk::Format::eR8G8B8A8Unorm;
@@ -120,7 +114,7 @@ namespace render::volumetric
         auto& dev = device.getLogicalDevice();
         if (noiseView) { dev.destroyImageView(noiseView); noiseView = nullptr; }
         if (noiseImage) { dev.destroyImage(noiseImage); noiseImage = nullptr; }
-        if (noiseMemory) { dev.freeMemory(noiseMemory); noiseMemory = nullptr; }
+        if (noiseAllocation.isValid()) { device.getMemoryManager().free(noiseAllocation); noiseAllocation = {}; }
     }
 
     void FogNoiseGenerator::createSampler()

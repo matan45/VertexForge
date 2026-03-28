@@ -24,7 +24,7 @@ namespace render::mesh
         }
     }
 
-    void DebugRendererBase::destroyBufferPair(vk::Buffer& buffer, vk::DeviceMemory& memory)
+    void DebugRendererBase::destroyBufferPair(vk::Buffer& buffer, core::VulkanAllocation& alloc)
     {
         auto& dev = device.getLogicalDevice();
 
@@ -33,10 +33,10 @@ namespace render::mesh
             dev.destroyBuffer(buffer);
             buffer = nullptr;
         }
-        if (memory)
+        if (alloc)
         {
-            dev.freeMemory(memory);
-            memory = nullptr;
+            device.getMemoryManager().free(alloc);
+            alloc = {};
         }
     }
 }

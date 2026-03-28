@@ -69,6 +69,7 @@ namespace render::gpudriven
     {
         vk::Device vkDevice = device_.getLogicalDevice();
         vk::PhysicalDevice physicalDevice = device_.getPhysicalDevice();
+        auto& memManager = device_.getMemoryManager();
 
         {
             core::BufferInfoRequest request(vkDevice, physicalDevice);
@@ -77,7 +78,7 @@ namespace render::gpudriven
                             vk::BufferUsageFlagBits::eStorageBuffer |
                             vk::BufferUsageFlagBits::eTransferDst;
             request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-            core::BufferUtilities::createBuffer(request, vertexBuffer_, vertexBufferMemory_);
+            core::BufferUtilities::createBuffer(request, vertexBuffer_, vertexBufferAllocation_, memManager);
         }
 
         {
@@ -87,7 +88,7 @@ namespace render::gpudriven
                             vk::BufferUsageFlagBits::eStorageBuffer |
                             vk::BufferUsageFlagBits::eTransferDst;
             request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-            core::BufferUtilities::createBuffer(request, indexBuffer_, indexBufferMemory_);
+            core::BufferUtilities::createBuffer(request, indexBuffer_, indexBufferAllocation_, memManager);
         }
 
         {
@@ -96,7 +97,7 @@ namespace render::gpudriven
             request.usage = vk::BufferUsageFlagBits::eStorageBuffer |
                             vk::BufferUsageFlagBits::eTransferDst;
             request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-            core::BufferUtilities::createBuffer(request, meshletBuffer_, meshletBufferMemory_);
+            core::BufferUtilities::createBuffer(request, meshletBuffer_, meshletBufferAllocation_, memManager);
         }
 
         {
@@ -105,7 +106,7 @@ namespace render::gpudriven
             request.usage = vk::BufferUsageFlagBits::eStorageBuffer |
                             vk::BufferUsageFlagBits::eTransferDst;
             request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-            core::BufferUtilities::createBuffer(request, meshletVertexBuffer_, meshletVertexBufferMemory_);
+            core::BufferUtilities::createBuffer(request, meshletVertexBuffer_, meshletVertexBufferAllocation_, memManager);
         }
 
         {
@@ -114,7 +115,7 @@ namespace render::gpudriven
             request.usage = vk::BufferUsageFlagBits::eStorageBuffer |
                             vk::BufferUsageFlagBits::eTransferDst;
             request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-            core::BufferUtilities::createBuffer(request, meshletPrimitiveBuffer_, meshletPrimitiveBufferMemory_);
+            core::BufferUtilities::createBuffer(request, meshletPrimitiveBuffer_, meshletPrimitiveBufferAllocation_, memManager);
         }
 
         {
@@ -123,55 +124,21 @@ namespace render::gpudriven
             request.usage = vk::BufferUsageFlagBits::eStorageBuffer |
                             vk::BufferUsageFlagBits::eTransferDst;
             request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
-            core::BufferUtilities::createBuffer(request, weightMapBuffer_, weightMapBufferMemory_);
+            core::BufferUtilities::createBuffer(request, weightMapBuffer_, weightMapBufferAllocation_, memManager);
         }
     }
 
     void TerrainMeshBuffer::destroyBuffers()
     {
         vk::Device vkDevice = device_.getLogicalDevice();
+        auto& memManager = device_.getMemoryManager();
 
-        if (weightMapBuffer_)
-        {
-            vkDevice.destroyBuffer(weightMapBuffer_);
-            vkDevice.freeMemory(weightMapBufferMemory_);
-            weightMapBuffer_ = nullptr;
-        }
-
-        if (meshletPrimitiveBuffer_)
-        {
-            vkDevice.destroyBuffer(meshletPrimitiveBuffer_);
-            vkDevice.freeMemory(meshletPrimitiveBufferMemory_);
-            meshletPrimitiveBuffer_ = nullptr;
-        }
-
-        if (meshletVertexBuffer_)
-        {
-            vkDevice.destroyBuffer(meshletVertexBuffer_);
-            vkDevice.freeMemory(meshletVertexBufferMemory_);
-            meshletVertexBuffer_ = nullptr;
-        }
-
-        if (meshletBuffer_)
-        {
-            vkDevice.destroyBuffer(meshletBuffer_);
-            vkDevice.freeMemory(meshletBufferMemory_);
-            meshletBuffer_ = nullptr;
-        }
-
-        if (indexBuffer_)
-        {
-            vkDevice.destroyBuffer(indexBuffer_);
-            vkDevice.freeMemory(indexBufferMemory_);
-            indexBuffer_ = nullptr;
-        }
-
-        if (vertexBuffer_)
-        {
-            vkDevice.destroyBuffer(vertexBuffer_);
-            vkDevice.freeMemory(vertexBufferMemory_);
-            vertexBuffer_ = nullptr;
-        }
+        core::BufferUtilities::destroyBuffer(vkDevice, weightMapBuffer_, weightMapBufferAllocation_, memManager);
+        core::BufferUtilities::destroyBuffer(vkDevice, meshletPrimitiveBuffer_, meshletPrimitiveBufferAllocation_, memManager);
+        core::BufferUtilities::destroyBuffer(vkDevice, meshletVertexBuffer_, meshletVertexBufferAllocation_, memManager);
+        core::BufferUtilities::destroyBuffer(vkDevice, meshletBuffer_, meshletBufferAllocation_, memManager);
+        core::BufferUtilities::destroyBuffer(vkDevice, indexBuffer_, indexBufferAllocation_, memManager);
+        core::BufferUtilities::destroyBuffer(vkDevice, vertexBuffer_, vertexBufferAllocation_, memManager);
     }
 
     TerrainTileGeometry* TerrainMeshBuffer::allocateTile(

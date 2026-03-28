@@ -130,7 +130,7 @@ namespace render::mesh
                     vk::BufferUsageFlagBits::eTransferDst;
                 vertexBufferRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
                 core::BufferUtilities::createBuffer(vertexBufferRequest, dstLOD.vertexBuffer,
-                                                    dstLOD.vertexBufferMemory);
+                                                    dstLOD.vertexBufferAllocation, device.getMemoryManager());
 
                 core::BufferUtilities::copyToBuffer(
                     device.getLogicalDevice(),
@@ -151,7 +151,7 @@ namespace render::mesh
                         vk::BufferUsageFlagBits::eTransferDst;
                     indexBufferRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
                     core::BufferUtilities::createBuffer(indexBufferRequest, dstLOD.indexBuffer,
-                                                        dstLOD.indexBufferMemory);
+                                                        dstLOD.indexBufferAllocation, device.getMemoryManager());
 
                     core::BufferUtilities::copyToBuffer(
                         device.getLogicalDevice(),
@@ -185,7 +185,7 @@ namespace render::mesh
                     vk::BufferUsageFlagBits::eTransferDst;
                 vertexBufferRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
                 core::BufferUtilities::createBuffer(vertexBufferRequest, dstLOD.vertexBuffer,
-                                                    dstLOD.vertexBufferMemory);
+                                                    dstLOD.vertexBufferAllocation, device.getMemoryManager());
 
                 core::BufferUtilities::copyToBuffer(
                     device.getLogicalDevice(),
@@ -206,7 +206,7 @@ namespace render::mesh
                         vk::BufferUsageFlagBits::eTransferDst;
                     indexBufferRequest.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
                     core::BufferUtilities::createBuffer(indexBufferRequest, dstLOD.indexBuffer,
-                                                        dstLOD.indexBufferMemory);
+                                                        dstLOD.indexBufferAllocation, device.getMemoryManager());
 
                     core::BufferUtilities::copyToBuffer(
                         device.getLogicalDevice(),
@@ -240,15 +240,17 @@ namespace render::mesh
                 if (lod.vertexBuffer)
                 {
                     logicalDevice.destroyBuffer(lod.vertexBuffer);
-                    logicalDevice.freeMemory(lod.vertexBufferMemory);
                     lod.vertexBuffer = nullptr;
                 }
+                device.getMemoryManager().free(lod.vertexBufferAllocation);
+                lod.vertexBufferAllocation = {};
                 if (lod.indexBuffer)
                 {
                     logicalDevice.destroyBuffer(lod.indexBuffer);
-                    logicalDevice.freeMemory(lod.indexBufferMemory);
                     lod.indexBuffer = nullptr;
                 }
+                device.getMemoryManager().free(lod.indexBufferAllocation);
+                lod.indexBufferAllocation = {};
             }
         }
     }
@@ -264,12 +266,10 @@ namespace render::mesh
         ubo.cameraPos = cameraPos;
         ubo.time = time;
 
-        void* data;
-        vk::Result result = device.getLogicalDevice().mapMemory(cameraUBOMemory, 0, sizeof(ubo), {}, &data);
-        if (result == vk::Result::eSuccess)
+        void* data = cameraUBOAllocation.mappedPtr;
+        if (data)
         {
             memcpy(data, &ubo, sizeof(ubo));
-            device.getLogicalDevice().unmapMemory(cameraUBOMemory);
         }
     }
 

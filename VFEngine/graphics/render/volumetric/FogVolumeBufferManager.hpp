@@ -2,6 +2,7 @@
 
 #include "VolumetricTypes.hpp"
 #include "../../core/RenderManager.hpp"
+#include "../../core/VulkanMemoryManager.hpp"
 #include <vulkan/vulkan.hpp>
 #include <vector>
 
@@ -22,7 +23,7 @@ namespace render::volumetric
         static constexpr vk::DeviceSize BUFFER_SIZE = HEADER_SIZE + MAX_FOG_VOLUMES * sizeof(GPUFogVolume);
 
         vk::Buffer fogVolumeBuffer;
-        vk::DeviceMemory fogVolumeMemory;
+        core::VulkanAllocation fogVolumeAllocation;
         void* mappedMemory = nullptr;
 
         vk::DescriptorSetLayout descriptorSetLayout;

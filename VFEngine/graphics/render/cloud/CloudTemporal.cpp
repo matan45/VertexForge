@@ -49,7 +49,7 @@ namespace render::cloud
             vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eSampled,
             vk::MemoryPropertyFlagBits::eDeviceLocal
         );
-        core::ImageUtilities::createImage(imageReq, historyImage, historyMemory);
+        core::ImageUtilities::createImage(imageReq, historyImage, historyAllocation, device.getMemoryManager());
 
         core::ImageViewInfoRequest viewReq(
             device.getLogicalDevice(),
@@ -70,8 +70,8 @@ namespace render::cloud
             vk::BufferUsageFlagBits::eUniformBuffer,
             vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
         );
-        core::BufferUtilities::createBuffer(bufReq, paramsBuffer, paramsBufferMemory);
-        paramsBufferMapped = device.getLogicalDevice().mapMemory(paramsBufferMemory, 0, sizeof(CloudTemporalUBO));
+        core::BufferUtilities::createBuffer(bufReq, paramsBuffer, paramsBufferAllocation, device.getMemoryManager());
+        paramsBufferMapped = paramsBufferAllocation.mappedPtr;
 
         // Create descriptor set layout
         // Binding 0: currentResult (storage image, read-write)
@@ -225,15 +225,11 @@ namespace render::cloud
             dsLayout = nullptr;
         }
 
-        if (paramsBufferMapped)
-        {
-            dev.unmapMemory(paramsBufferMemory);
-            paramsBufferMapped = nullptr;
-        }
+        paramsBufferMapped = nullptr;
 
         if (paramsBuffer)
         {
-            core::BufferUtilities::destroyBuffer(dev, paramsBuffer, paramsBufferMemory);
+            core::BufferUtilities::destroyBuffer(dev, paramsBuffer, paramsBufferAllocation, device.getMemoryManager());
         }
 
         if (historyView)
@@ -248,10 +244,10 @@ namespace render::cloud
             historyImage = nullptr;
         }
 
-        if (historyMemory)
+        if (historyAllocation.isValid())
         {
-            dev.freeMemory(historyMemory);
-            historyMemory = nullptr;
+            device.getMemoryManager().free(historyAllocation);
+            historyAllocation = {};
         }
 
         initialized = false;

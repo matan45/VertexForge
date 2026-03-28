@@ -21,7 +21,8 @@ namespace render::text
         if (cameraUBO && !externalCameraBuffer)
         {
             dev.destroyBuffer(cameraUBO);
-            dev.freeMemory(cameraUBOMemory);
+            device.getMemoryManager().free(cameraUBOAllocation);
+            cameraUBOAllocation = {};
             cameraUBO = nullptr;
         }
 
@@ -37,7 +38,7 @@ namespace render::text
         bufferRequest.properties = vk::MemoryPropertyFlagBits::eHostVisible |
                                    vk::MemoryPropertyFlagBits::eHostCoherent;
         bufferRequest.size = sizeof(TextCameraUBO);
-        core::BufferUtilities::createBuffer(bufferRequest, cameraUBO, cameraUBOMemory);
+        core::BufferUtilities::createBuffer(bufferRequest, cameraUBO, cameraUBOAllocation, device.getMemoryManager());
     }
 
     void TextBufferManager::updateCameraUBO(const glm::mat4& view, const glm::mat4& projection,
@@ -51,12 +52,9 @@ namespace render::text
         ubo.cameraPos = cameraPos;
         ubo.time = 0.0f;
 
-        void* data;
-        vk::Result result = device.getLogicalDevice().mapMemory(cameraUBOMemory, 0, sizeof(ubo), {}, &data);
-        if (result == vk::Result::eSuccess)
+        if (cameraUBOAllocation.mappedPtr)
         {
-            std::memcpy(data, &ubo, sizeof(ubo));
-            device.getLogicalDevice().unmapMemory(cameraUBOMemory);
+            std::memcpy(cameraUBOAllocation.mappedPtr, &ubo, sizeof(ubo));
         }
     }
 

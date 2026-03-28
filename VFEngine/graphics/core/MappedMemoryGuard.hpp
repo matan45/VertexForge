@@ -1,10 +1,14 @@
 #pragma once
 
+// DEPRECATED: This class uses raw vk::DeviceMemory map/unmap. New code should use
+// VulkanAllocation::mappedPtr from VulkanMemoryManager instead. Retained for
+// existing callers (e.g., TerrainRaycastPipeline) until they are migrated.
+
 #include "Device.hpp"
 
 namespace render
 {
-    class MappedMemoryGuard
+    class [[deprecated("Use VulkanAllocation::mappedPtr instead of manual map/unmap")]] MappedMemoryGuard
     {
     public:
         MappedMemoryGuard(vk::Device device, vk::DeviceMemory memory, vk::DeviceSize offset, vk::DeviceSize size)

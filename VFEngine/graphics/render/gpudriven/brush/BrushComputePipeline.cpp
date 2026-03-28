@@ -202,7 +202,7 @@ namespace render::gpudriven
             vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst,
             vk::MemoryPropertyFlagBits::eDeviceLocal
         );
-        core::BufferUtilities::createBuffer(inputRequest, heightInputBuffer, heightInputMemory);
+        core::BufferUtilities::createBuffer(inputRequest, heightInputBuffer, heightInputAllocation, device.getMemoryManager());
 
         // Device-local output buffer (compute writes to this)
         core::BufferInfoRequest outputRequest(
@@ -212,7 +212,7 @@ namespace render::gpudriven
             vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferSrc,
             vk::MemoryPropertyFlagBits::eDeviceLocal
         );
-        core::BufferUtilities::createBuffer(outputRequest, heightOutputBuffer, heightOutputMemory);
+        core::BufferUtilities::createBuffer(outputRequest, heightOutputBuffer, heightOutputAllocation, device.getMemoryManager());
 
         // Host-visible staging buffer for uploading height data to GPU
         core::BufferInfoRequest uploadRequest(
@@ -222,7 +222,7 @@ namespace render::gpudriven
             vk::BufferUsageFlagBits::eTransferSrc,
             vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
         );
-        core::BufferUtilities::createBuffer(uploadRequest, stagingUploadBuffer, stagingUploadMemory);
+        core::BufferUtilities::createBuffer(uploadRequest, stagingUploadBuffer, stagingUploadAllocation, device.getMemoryManager());
 
         // Host-visible staging buffer for reading back modified heights
         core::BufferInfoRequest readbackRequest(
@@ -232,7 +232,7 @@ namespace render::gpudriven
             vk::BufferUsageFlagBits::eTransferDst,
             vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
         );
-        core::BufferUtilities::createBuffer(readbackRequest, stagingReadbackBuffer, stagingReadbackMemory);
+        core::BufferUtilities::createBuffer(readbackRequest, stagingReadbackBuffer, stagingReadbackAllocation, device.getMemoryManager());
 
         currentBufferSize = requiredSize;
 
@@ -270,10 +270,10 @@ namespace render::gpudriven
     {
         vk::Device vkDevice = device.getLogicalDevice();
 
-        core::BufferUtilities::destroyBuffer(vkDevice, heightInputBuffer, heightInputMemory);
-        core::BufferUtilities::destroyBuffer(vkDevice, heightOutputBuffer, heightOutputMemory);
-        core::BufferUtilities::destroyBuffer(vkDevice, stagingUploadBuffer, stagingUploadMemory);
-        core::BufferUtilities::destroyBuffer(vkDevice, stagingReadbackBuffer, stagingReadbackMemory);
+        core::BufferUtilities::destroyBuffer(vkDevice, heightInputBuffer, heightInputAllocation, device.getMemoryManager());
+        core::BufferUtilities::destroyBuffer(vkDevice, heightOutputBuffer, heightOutputAllocation, device.getMemoryManager());
+        core::BufferUtilities::destroyBuffer(vkDevice, stagingUploadBuffer, stagingUploadAllocation, device.getMemoryManager());
+        core::BufferUtilities::destroyBuffer(vkDevice, stagingReadbackBuffer, stagingReadbackAllocation, device.getMemoryManager());
 
         currentBufferSize = 0;
     }
@@ -292,9 +292,8 @@ namespace render::gpudriven
         ensureBufferCapacity(dataSize);
 
         {
-            void* mapped = vkDevice.mapMemory(stagingUploadMemory, 0, dataSize);
+            void* mapped = stagingUploadAllocation.mappedPtr;
             std::memcpy(mapped, heightData.data(), dataSize);
-            vkDevice.unmapMemory(stagingUploadMemory);
         }
 
         vk::CommandBufferAllocateInfo allocInfo{};
@@ -410,9 +409,8 @@ namespace render::gpudriven
         }
 
         {
-            void* mapped = vkDevice.mapMemory(stagingReadbackMemory, 0, dataSize);
+            void* mapped = stagingReadbackAllocation.mappedPtr;
             std::memcpy(heightData.data(), mapped, dataSize);
-            vkDevice.unmapMemory(stagingReadbackMemory);
         }
 
         return true;

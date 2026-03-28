@@ -16,11 +16,14 @@ namespace core {
 		poolInfo.flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer |
 		                 vk::CommandPoolCreateFlagBits::eTransient;
 		commandPool = device.createCommandPool(poolInfo);
+
+		ringBuffer = std::make_unique<StagingRingBuffer>(ownerDevice);
 	}
 
 	TransferManager::~TransferManager()
 	{
 		waitAll();
+		ringBuffer.reset();
 		if (commandPool) {
 			device.destroyCommandPool(commandPool);
 		}
@@ -42,14 +45,9 @@ namespace core {
 		vk::FenceCreateInfo fenceInfo{};
 		op.fence = device.createFence(fenceInfo);
 
-		BufferInfoRequest stagingInfo(device, physicalDevice, size,
-			vk::BufferUsageFlagBits::eTransferSrc,
-			vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
-		BufferUtilities::createBuffer(stagingInfo, op.stagingBuffer, op.stagingMemory);
-
-		void* mappedData = device.mapMemory(op.stagingMemory, 0, size, {});
-		std::memcpy(mappedData, srcData, static_cast<size_t>(size));
-		device.unmapMemory(op.stagingMemory);
+		// Use ring buffer for staging instead of per-transfer allocation
+		auto staging = ringBuffer->allocate(size);
+		std::memcpy(staging.mappedPtr, srcData, static_cast<size_t>(size));
 
 		vk::CommandBufferAllocateInfo allocInfo{};
 		allocInfo.commandPool = commandPool;
@@ -61,8 +59,11 @@ namespace core {
 		vk::CommandBufferBeginInfo beginInfo{};
 		beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
 		op.commandBuffer.begin(beginInfo);
-		vk::BufferCopy copyRegion{0, offset, size};
-		op.commandBuffer.copyBuffer(op.stagingBuffer, dstBuffer, copyRegion);
+
+		// Use either ring buffer or overflow buffer as source
+		vk::Buffer srcBuffer = staging.isOverflow ? staging.overflowBuffer : ringBuffer->getBuffer();
+		vk::BufferCopy copyRegion{staging.offset, offset, size};
+		op.commandBuffer.copyBuffer(srcBuffer, dstBuffer, copyRegion);
 		op.commandBuffer.end();
 
 		vk::SubmitInfo submitInfo{};
@@ -70,12 +71,20 @@ namespace core {
 		submitInfo.pCommandBuffers = &op.commandBuffer;
 		ownerDevice.submitTransfer(submitInfo, op.fence);
 
+		if (staging.isOverflow) {
+			op.overflowRegion = staging;
+		} else {
+			op.ringEndOffset = staging.offset + size;
+		}
+
 		pendingTransfers.push_back(op);
 	}
 
 	void TransferManager::pollTransfers()
 	{
 		std::lock_guard lock(transferMutex);
+
+		ringBuffer->updateGlobalStats();
 
 		auto it = pendingTransfers.begin();
 		while (it != pendingTransfers.end()) {
@@ -114,17 +123,19 @@ namespace core {
 
 	void TransferManager::cleanupTransfer(TransferOperation& op)
 	{
+		// Advance ring buffer read offset for non-overflow transfers
+		if (!op.overflowRegion.isOverflow && op.ringEndOffset > 0) {
+			ringBuffer->advanceReadOffset(op.ringEndOffset);
+		}
 		if (op.fence) {
 			device.destroyFence(op.fence);
 		}
 		if (op.commandBuffer) {
 			device.freeCommandBuffers(commandPool, op.commandBuffer);
 		}
-		if (op.stagingBuffer) {
-			device.destroyBuffer(op.stagingBuffer);
-		}
-		if (op.stagingMemory) {
-			device.freeMemory(op.stagingMemory);
+		// Clean up overflow staging if used
+		if (op.overflowRegion.isOverflow) {
+			ringBuffer->cleanupOverflow(op.overflowRegion);
 		}
 	}
 

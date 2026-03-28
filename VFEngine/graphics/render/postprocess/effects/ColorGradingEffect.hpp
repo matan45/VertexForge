@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../PostProcessEffect.hpp"
+#include "../../../core/VulkanMemoryManager.hpp"
 #include <memory>
 #include <string>
 
@@ -41,7 +42,7 @@ namespace render::postprocess
         struct LUTTexture
         {
             vk::Image image;
-            vk::DeviceMemory memory;
+            core::VulkanAllocation allocation;
             vk::ImageView imageView;
             uint32_t size = 0;
         };
@@ -53,7 +54,7 @@ namespace render::postprocess
         vk::Sampler lutSampler;
 
         vk::Buffer paramsBuffer;
-        vk::DeviceMemory paramsBufferMemory;
+        core::VulkanAllocation paramsBufferAllocation;
         void* paramsBufferMapped = nullptr;
 
         vk::DescriptorPool descriptorPool;

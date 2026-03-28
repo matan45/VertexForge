@@ -3,6 +3,7 @@
 #include "../GPUDrivenTypes.hpp"
 #include "../MeshletBufferTypes.hpp"
 #include "../FreeListAllocator.hpp"
+#include "../../../core/VulkanMemoryManager.hpp"
 #include <vulkan/vulkan.hpp>
 #include <glm/glm.hpp>
 #include <array>
@@ -77,19 +78,19 @@ namespace render::gpudriven
         std::unique_ptr<core::TransferManager> transferManager_;
 
         vk::Buffer vertexBuffer_;
-        vk::DeviceMemory vertexBufferMemory_;
+        core::VulkanAllocation vertexBufferAllocation_;
         vk::Buffer indexBuffer_;
-        vk::DeviceMemory indexBufferMemory_;
+        core::VulkanAllocation indexBufferAllocation_;
 
         vk::Buffer meshletBuffer_;
-        vk::DeviceMemory meshletBufferMemory_;
+        core::VulkanAllocation meshletBufferAllocation_;
         vk::Buffer meshletVertexBuffer_;
-        vk::DeviceMemory meshletVertexBufferMemory_;
+        core::VulkanAllocation meshletVertexBufferAllocation_;
         vk::Buffer meshletPrimitiveBuffer_;
-        vk::DeviceMemory meshletPrimitiveBufferMemory_;
+        core::VulkanAllocation meshletPrimitiveBufferAllocation_;
 
         vk::Buffer weightMapBuffer_;
-        vk::DeviceMemory weightMapBufferMemory_;
+        core::VulkanAllocation weightMapBufferAllocation_;
 
         uint32_t maxVertexCount_ = 0;
         uint32_t maxIndexCount_ = 0;

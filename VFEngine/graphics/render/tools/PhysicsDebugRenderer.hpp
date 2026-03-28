@@ -36,9 +36,9 @@ namespace render::mesh
     struct MeshDebugData
     {
         vk::Buffer vertexBuffer;
-        vk::DeviceMemory vertexMemory;
+        core::VulkanAllocation vertexAllocation;
         vk::Buffer indexBuffer;
-        vk::DeviceMemory indexMemory;
+        core::VulkanAllocation indexAllocation;
         uint32_t indexCount = 0;
         bool isValid = false;
     };
@@ -58,21 +58,21 @@ namespace render::mesh
         vk::PipelineLayout wireframePipelineLayout;
 
         vk::Buffer boxVertexBuffer;
-        vk::DeviceMemory boxVertexMemory;
+        core::VulkanAllocation boxVertexAllocation;
         vk::Buffer boxIndexBuffer;
-        vk::DeviceMemory boxIndexMemory;
+        core::VulkanAllocation boxIndexAllocation;
         uint32_t boxIndexCount = 0;
 
         vk::Buffer sphereVertexBuffer;
-        vk::DeviceMemory sphereVertexMemory;
+        core::VulkanAllocation sphereVertexAllocation;
         vk::Buffer sphereIndexBuffer;
-        vk::DeviceMemory sphereIndexMemory;
+        core::VulkanAllocation sphereIndexAllocation;
         uint32_t sphereIndexCount = 0;
 
         vk::Buffer capsuleVertexBuffer;
-        vk::DeviceMemory capsuleVertexMemory;
+        core::VulkanAllocation capsuleVertexAllocation;
         vk::Buffer capsuleIndexBuffer;
-        vk::DeviceMemory capsuleIndexMemory;
+        core::VulkanAllocation capsuleIndexAllocation;
         uint32_t capsuleIndexCount = 0;
 
         mutable std::unordered_map<std::string, MeshDebugData> meshCache;

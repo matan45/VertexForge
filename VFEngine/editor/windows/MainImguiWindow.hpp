@@ -33,6 +33,7 @@
 #include "config/InputActionMappingWindow.hpp"
 #include "procedural/HeightmapGeneratorWindow.hpp"
 #include "imageprocessing/BackgroundRemovalWindow.hpp"
+#include "debug/MemoryDiagnosticsWindow.hpp"
 #include "MainMenuBar.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/terrain/TerrainEvents.hpp"
@@ -82,6 +83,7 @@ namespace windows
         InputActionMappingWindow inputActionMappingWindow;
         HeightmapGeneratorWindow heightmapGeneratorWindow;
         BackgroundRemovalWindow backgroundRemovalWindow;
+        MemoryDiagnosticsWindow memoryDiagnosticsWindow;
         MainMenuBar menuBar;
 
         events::SubscriptionToken sceneClearedToken;
