@@ -18,6 +18,10 @@ namespace render::lighting
         activeLightIds.clear();
         sectorLights.clear();
 
+        // Pre-reserve per-frame vectors to avoid growth during updates
+        sortedPriorities.reserve(config.maxPointLights + config.maxSpotLights);
+        sortedDefragAllocations.reserve(config.maxPointLights + config.maxSpotLights);
+
         vfLogInfo("LightStreamManager: Initialized with {} point, {} spot max slots",
                   config.maxPointLights, config.maxSpotLights);
     }

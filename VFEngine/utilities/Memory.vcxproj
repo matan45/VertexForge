@@ -93,6 +93,7 @@
   <ItemGroup>
     <ClInclude Include="memory\DebugAllocatorWrapper.hpp" />
     <ClInclude Include="memory\FrameAllocator.hpp" />
+    <ClInclude Include="memory\FrameVector.hpp" />
     <ClInclude Include="memory\FreeListHeapAllocator.hpp" />
     <ClInclude Include="memory\IAllocator.hpp" />
     <ClInclude Include="memory\LinearAllocator.hpp" />

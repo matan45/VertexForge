@@ -30,6 +30,7 @@ namespace world
         std::vector<Candidate> loadCandidates;
         std::vector<Candidate> unloadCandidates;
         std::unordered_set<SectorCoord, SectorCoordHash> loadedSectors;
+        std::unordered_set<SectorCoord, SectorCoordHash> visitedCoords;
 
     public:
         explicit SectorStreamer(const SectorStreamingConfig& config = {});
