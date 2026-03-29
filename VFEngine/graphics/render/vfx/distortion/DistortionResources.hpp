@@ -32,6 +32,8 @@ namespace render::vfx
         [[nodiscard]] vk::RenderPass getDistortionVectorRenderPass() const { return distortionVectorRenderPass; }
         [[nodiscard]] vk::RenderPass getCompositeRenderPass() const { return compositeRenderPass; }
         [[nodiscard]] vk::Framebuffer getDistortionVectorFramebuffer() const { return distortionVectorFramebuffer; }
+        // Composite descriptor layout and set are owned by this class but passed to
+        // VFXDistortionComposite for pipeline creation and draw-time binding.
         [[nodiscard]] vk::DescriptorSetLayout getCompositeDescriptorSetLayout() const { return compositeDescriptorSetLayout; }
         [[nodiscard]] vk::DescriptorSet getCompositeDescriptorSet() const { return compositeDescriptorSet; }
         [[nodiscard]] vk::Extent2D getExtent() const { return extent; }

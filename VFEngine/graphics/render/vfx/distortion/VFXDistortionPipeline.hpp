@@ -119,7 +119,7 @@ namespace render::vfx
             vk::CommandBuffer cmd,
             vk::Buffer drawCommandBuffer,
             uint32_t emitterCount,
-            const std::unordered_map<uint32_t, bool>& distortionEnabledMap) const;
+            const std::vector<bool>& distortionEnabledFlags) const;
 
     private:
         void loadShader();

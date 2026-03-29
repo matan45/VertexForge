@@ -243,7 +243,7 @@ namespace render
         clearColor->cleanUp();
     }
 
-    void RenderPassHandler::initDistortionPass() const
+    void RenderPassHandler::initDistortionPass()
     {
         if (distortionInitialized) return;
 

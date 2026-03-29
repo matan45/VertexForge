@@ -266,12 +266,16 @@ namespace controllers
                                                           glowColor);
         }
 
-        if (gpuDistortionPipeline && instances[id].gpuDriven && storedConfig.distortionEnabled)
+        if (storedConfig.distortionEnabled)
         {
-            gpuDistortionPipeline->setEmitterDistortionTexture(
-                instances[id].gpuEmitterIndex, storedConfig.distortionTexturePath);
-            gpuDistortionPipeline->setEmitterDistortionConfig(
-                instances[id].gpuEmitterIndex, storedConfig.distortionStrength);
+            activeDistortionCount++;
+            if (gpuDistortionPipeline && instances[id].gpuDriven)
+            {
+                gpuDistortionPipeline->setEmitterDistortionTexture(
+                    instances[id].gpuEmitterIndex, storedConfig.distortionTexturePath);
+                gpuDistortionPipeline->setEmitterDistortionConfig(
+                    instances[id].gpuEmitterIndex, storedConfig.distortionStrength);
+            }
         }
 
         vfLogDebug("Created VFX instance {} from asset: {} (GPU: {})",
@@ -284,6 +288,9 @@ namespace controllers
         auto it = instances.find(id);
         if (it != instances.end())
         {
+            if (it->second.config.distortionEnabled && activeDistortionCount > 0)
+                activeDistortionCount--;
+
             if (it->second.gpuDriven)
             {
                 uint32_t emitterIdx = it->second.gpuEmitterIndex;
@@ -352,6 +359,7 @@ namespace controllers
 
         activeSubEmitters.clear();
         pendingEmitterFrees.clear();
+        activeDistortionCount = 0;
         instances.clear();
         emitterIndexToInstanceId.clear();
 
@@ -641,12 +649,7 @@ namespace controllers
 
     bool VFXSceneRenderer::hasDistortionEmitters() const
     {
-        for (const auto& [id, instance] : instances)
-        {
-            if (instance.active && instance.config.distortionEnabled)
-                return true;
-        }
-        return false;
+        return activeDistortionCount > 0;
     }
 
     void VFXSceneRenderer::recordDistortionDrawCommands(vk::CommandBuffer cmd)
@@ -654,15 +657,21 @@ namespace controllers
         if (!gpuDistortionPipeline || !gpuDistortionPipeline->isInitialized() || !gpuBufferManager)
             return;
 
-        // Build map of which emitters have distortion enabled
-        std::unordered_map<uint32_t, bool> distortionMap;
+        uint32_t maxEmitters = gpuBufferManager->getMaxEmitters();
+        std::vector<bool> distortionFlags(maxEmitters, false);
+        bool anyEnabled = false;
+
         for (const auto& [id, instance] : instances)
         {
-            if (instance.gpuDriven && instance.active && instance.config.distortionEnabled)
-                distortionMap[instance.gpuEmitterIndex] = true;
+            if (instance.gpuDriven && instance.active && instance.config.distortionEnabled
+                && instance.gpuEmitterIndex < maxEmitters)
+            {
+                distortionFlags[instance.gpuEmitterIndex] = true;
+                anyEnabled = true;
+            }
         }
 
-        if (distortionMap.empty())
+        if (!anyEnabled)
             return;
 
         gpuDistortionPipeline->updateCameraUBO(currentView, currentProjection,
@@ -671,8 +680,8 @@ namespace controllers
         gpuDistortionPipeline->recordCommandsInline(
             cmd,
             gpuBufferManager->getDrawCommandBuffer(),
-            gpuBufferManager->getMaxEmitters(),
-            distortionMap);
+            maxEmitters,
+            distortionFlags);
     }
 
     void VFXSceneRenderer::recordCPUDrawCommands(vk::CommandBuffer cmd)

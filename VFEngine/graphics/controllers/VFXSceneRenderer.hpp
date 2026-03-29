@@ -127,6 +127,8 @@ namespace controllers
         glm::vec3 currentCameraPos{0.0f};
         float currentTime = 0.0f;
 
+        uint32_t activeDistortionCount = 0;
+
         bool distanceCullingEnabled = false;
         float maxVFXDistSq = 0.0f;
 

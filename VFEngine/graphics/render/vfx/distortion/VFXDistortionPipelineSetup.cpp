@@ -124,7 +124,7 @@ namespace render::vfx
             .vertexAttributes = {vertexAttribs.begin(), vertexAttribs.end()},
             .topology = vk::PrimitiveTopology::eTriangleList,
             .descriptorSetLayouts = {descriptorSetLayout},
-            .pushConstantSize = sizeof(GPUVFXBillboardPushConstants),
+            .pushConstantSize = sizeof(GPUVFXDistortionPushConstants),
             .pushConstantStages = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
             .cullMode = vk::CullModeFlagBits::eNone,
             .depthTestEnable = true,

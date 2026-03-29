@@ -317,6 +317,8 @@ namespace render::vfx
         for (uint32_t i = 0; i < emitterCount; ++i)
         {
             auto configIt = emitterConfigs.find(i);
+            // Skip mesh/ribbon (handled by dedicated pipelines) and distortion
+            // emitters (rendered in the separate distortion vector pass)
             if (configIt != emitterConfigs.end() &&
                 (configIt->second.renderMode == RenderModeFlags::MeshParticle ||
                  configIt->second.renderMode == RenderModeFlags::Ribbon ||

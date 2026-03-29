@@ -391,7 +391,7 @@ namespace editor::vfxeditor
                     std::string display = val->empty() ? "(none)"
                         : std::filesystem::path(*val).filename().string();
                     ImGui::SetNextItemWidth(inputWidth * 1.5f);
-                    ImGui::InputText("##distortionTexture", display.data(), display.size(),
+                    ImGui::InputText("##distortionTexture", display.data(), display.size() + 1,
                                      ImGuiInputTextFlags_ReadOnly);
                     ImGui::SameLine();
                     if (ImGui::Button("...##distortionTexBrowse"))

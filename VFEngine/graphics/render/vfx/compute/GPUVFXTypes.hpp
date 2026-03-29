@@ -321,6 +321,12 @@ namespace render::vfx
         float glowColorB = 1.0f;
     };
 
+    struct GPUVFXDistortionPushConstants
+    {
+        uint32_t emitterIndex;
+        float distortionStrength = 0.1f;
+    };
+
     struct GPUTerrainHeightfield
     {
         float worldOriginX;

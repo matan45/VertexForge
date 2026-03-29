@@ -118,6 +118,7 @@ layout(std430, set = 0, binding = 3) readonly buffer EmitterConfigBuffer {
 
 layout(push_constant) uniform PushConstants {
     uint emitterIndex;
+    float distortionStrength;
 } pc;
 
 void main() {
@@ -300,11 +301,7 @@ layout(binding = 4) uniform sampler2D sceneDepthTexture;
 
 layout(push_constant) uniform PushConstants {
     uint emitterIndex;
-    float alphaClipThreshold;
-    uint blendMode;
-    float distortionStrengthOverride; // passed via glowColorR
-    float _unused1;
-    float _unused2;
+    float distortionStrength;
 } pc;
 
 void main() {
@@ -314,7 +311,7 @@ void main() {
     vec2 distortionDir = texColor.rg * 2.0 - 1.0;
     float mask = texColor.a * fragColor.a;
 
-    float strength = pc.distortionStrengthOverride * mask;
+    float strength = pc.distortionStrength * mask;
 
     // Depth-aware fade (soft particles)
     GPUEmitterConfig config = configs[pc.emitterIndex];

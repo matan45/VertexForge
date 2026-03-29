@@ -44,7 +44,6 @@ namespace render::vfx
         if (!initialized) return;
 
         auto vkDevice = device.getLogicalDevice();
-        vkDevice.waitIdle();
 
         emitterConfigs.clear();
         textureEntries.clear();
@@ -258,7 +257,19 @@ namespace render::vfx
             auto& entry = textureEntries[texturePath];
             entry.texture = std::make_unique<core::Texture>(device);
             entry.texture->loadTextureFromFile(texturePath, vk::Format::eR8G8B8A8Unorm, false);
-            entry.descriptorSet = allocateDescriptorSetFromPool();
+
+            try
+            {
+                entry.descriptorSet = allocateDescriptorSetFromPool();
+            }
+            catch (const std::exception& e)
+            {
+                vfLogError("Distortion descriptor pool exhausted: {}", e.what());
+                textureEntries.erase(texturePath);
+                emitterConfigs[emitterIndex].texturePath.clear();
+                return;
+            }
+
             entry.refCount = 1;
 
             if (cachedParticleBuffer && cachedConfigBuffer)
@@ -305,7 +316,7 @@ namespace render::vfx
         vk::CommandBuffer cmd,
         vk::Buffer drawCommandBuffer,
         uint32_t emitterCount,
-        const std::unordered_map<uint32_t, bool>& distortionEnabledMap) const
+        const std::vector<bool>& distortionEnabledFlags) const
     {
         ++frameCounter;
 
@@ -325,8 +336,7 @@ namespace render::vfx
         for (uint32_t i = 0; i < emitterCount; ++i)
         {
             // Only draw emitters with distortion enabled
-            auto enabledIt = distortionEnabledMap.find(i);
-            if (enabledIt == distortionEnabledMap.end() || !enabledIt->second)
+            if (i >= distortionEnabledFlags.size() || !distortionEnabledFlags[i])
                 continue;
 
             vk::DescriptorSet setToBind = defaultDescriptorSet;
@@ -352,16 +362,12 @@ namespace render::vfx
                 lastBoundSet = setToBind;
             }
 
-            GPUVFXBillboardPushConstants pushConstants{};
+            GPUVFXDistortionPushConstants pushConstants{};
             pushConstants.emitterIndex = i;
-            pushConstants.alphaClipThreshold = 0.0f;
-            pushConstants.blendMode = 0;
-            pushConstants.glowColorR = strength;
-            pushConstants.glowColorG = 0.0f;
-            pushConstants.glowColorB = 0.0f;
+            pushConstants.distortionStrength = strength;
             cmd.pushConstants(pipelineLayout,
                               vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
-                              0, sizeof(GPUVFXBillboardPushConstants), &pushConstants);
+                              0, sizeof(GPUVFXDistortionPushConstants), &pushConstants);
 
             vk::DeviceSize offset = i * sizeof(VFXDrawIndirectCommand);
             cmd.drawIndexedIndirect(drawCommandBuffer, offset, 1, sizeof(VFXDrawIndirectCommand));

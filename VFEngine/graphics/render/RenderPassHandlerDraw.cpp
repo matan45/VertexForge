@@ -47,7 +47,7 @@ namespace
 
 namespace render
 {
-    void RenderPassHandler::draw(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const
+    void RenderPassHandler::draw(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex)
     {
         clearColor->recordCommandBuffer(commandBuffer, imageIndex);
 
@@ -522,7 +522,7 @@ namespace render
         meshPipeline->endRenderPass(commandBuffer);
     }
 
-    void RenderPassHandler::executeDistortionPass(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const
+    void RenderPassHandler::executeDistortionPass(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex)
     {
         if (!vfxRuntimeProvider || !vfxRuntimeProvider->isInitialized() || !vfxRuntimeProvider->hasDistortionEmitters())
             return;
@@ -542,16 +542,17 @@ namespace render
             extent.width, extent.height);
 
         // 2. Distortion vector pass (clear + render distortion emitters into R16G16 buffer)
-        std::array<vk::ClearValue, 2> clearValues{};
-        clearValues[0].color = vk::ClearColorValue{std::array<float, 4>{0.0f, 0.0f, 0.0f, 0.0f}};
+        // Only color attachment (index 0) is cleared; depth uses eLoad
+        vk::ClearValue colorClear{};
+        colorClear.color = vk::ClearColorValue{std::array<float, 4>{0.0f, 0.0f, 0.0f, 0.0f}};
 
         vk::RenderPassBeginInfo rpBegin{};
         rpBegin.renderPass = distortionResources->getDistortionVectorRenderPass();
         rpBegin.framebuffer = distortionResources->getDistortionVectorFramebuffer();
         rpBegin.renderArea.offset = vk::Offset2D{0, 0};
         rpBegin.renderArea.extent = extent;
-        rpBegin.clearValueCount = static_cast<uint32_t>(clearValues.size());
-        rpBegin.pClearValues = clearValues.data();
+        rpBegin.clearValueCount = 1;
+        rpBegin.pClearValues = &colorClear;
 
         commandBuffer.beginRenderPass(rpBegin, vk::SubpassContents::eInline);
 
