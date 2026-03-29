@@ -136,15 +136,22 @@ namespace core
             vfLogError("Validation layers requested, but not available!");
         }
         
-        surface = window->createWindowSurface(instance);
+        if (window)
+        {
+            surface = window->createWindowSurface(instance);
+        }
     }
 
     std::vector<const char*> Device::getRequiredExtensions() const
     {
-        uint32_t glfwExtensionCount = 0;
-        const char** glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
+        std::vector<const char*> extensions;
 
-        std::vector<const char*> extensions(glfwExtensions, glfwExtensions + glfwExtensionCount);
+        if (window)
+        {
+            uint32_t glfwExtensionCount = 0;
+            const char** glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
+            extensions.assign(glfwExtensions, glfwExtensions + glfwExtensionCount);
+        }
 
         if (debug)
         {
@@ -211,8 +218,8 @@ namespace core
     {
         queueFamilyIndices = Utilities::findQueueFamiliesFromDevice(physicalDevice, surface);
 
-        // Precondition: pickPhysicalDevice() ensures isComplete() was true
-        assert(queueFamilyIndices.isComplete() &&
+        // Precondition: pickPhysicalDevice() ensures queue families are available
+        assert((window ? queueFamilyIndices.isComplete() : queueFamilyIndices.isCompleteHeadless()) &&
             "Queue families must be complete - was pickPhysicalDevice() called first?");
 
         // Queue priorities: graphics=1.0, async compute=0.5
@@ -220,7 +227,10 @@ namespace core
 
         std::unordered_set<uint32_t> uniqueQueueFamilies;
         uniqueQueueFamilies.insert(queueFamilyIndices.graphicsAndComputeFamily.value());
-        uniqueQueueFamilies.insert(queueFamilyIndices.presentFamily.value());
+        if (queueFamilyIndices.presentFamily.has_value())
+        {
+            uniqueQueueFamilies.insert(queueFamilyIndices.presentFamily.value());
+        }
 
         // Add dedicated transfer queue if available and different
         if (queueFamilyIndices.hasDedicatedTransferQueue())
@@ -305,13 +315,22 @@ namespace core
         meshShaderFeatures.meshShader = VK_TRUE;
         meshShaderFeatures.pNext = &accelStructFeatures;
 
+        // Build active extension list — skip swapchain in headless mode
+        std::vector<const char*> activeDeviceExtensions;
+        for (const auto* ext : deviceExtensions)
+        {
+            if (!window && strcmp(ext, VK_KHR_SWAPCHAIN_EXTENSION_NAME) == 0)
+                continue;
+            activeDeviceExtensions.push_back(ext);
+        }
+
         vk::DeviceCreateInfo createInfo{};
         createInfo.pNext = &meshShaderFeatures;
         createInfo.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());
         createInfo.pQueueCreateInfos = queueCreateInfos.data();
         createInfo.pEnabledFeatures = &deviceFeatures;
-        createInfo.enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size());
-        createInfo.ppEnabledExtensionNames = deviceExtensions.data();
+        createInfo.enabledExtensionCount = static_cast<uint32_t>(activeDeviceExtensions.size());
+        createInfo.ppEnabledExtensionNames = activeDeviceExtensions.data();
 
         try
         {
@@ -320,7 +339,10 @@ namespace core
             VULKAN_HPP_DEFAULT_DISPATCHER.init(*logicalDevice);
             graphicsAndComputeQueue = logicalDevice.get().getQueue(queueFamilyIndices.graphicsAndComputeFamily.value(),
                                                                    0);
-            presentQueue = logicalDevice.get().getQueue(queueFamilyIndices.presentFamily.value(), 0);
+            if (queueFamilyIndices.presentFamily.has_value())
+            {
+                presentQueue = logicalDevice.get().getQueue(queueFamilyIndices.presentFamily.value(), 0);
+            }
 
             // Get transfer queue (dedicated if available, otherwise use graphics queue)
             if (queueFamilyIndices.hasDedicatedTransferQueue())
@@ -507,15 +529,31 @@ namespace core
                          static_cast<const char*>(deviceProperties.deviceName));
         }
 
-        return indices.isComplete() &&
+        bool queueComplete = window ? indices.isComplete() : indices.isCompleteHeadless();
+
+        // In headless mode, accept any GPU type (integrated, software) for CI/VM compatibility
+        bool gpuTypeOk = window
+            ? deviceProperties.deviceType == vk::PhysicalDeviceType::eDiscreteGpu
+            : (deviceProperties.deviceType == vk::PhysicalDeviceType::eDiscreteGpu ||
+               deviceProperties.deviceType == vk::PhysicalDeviceType::eIntegratedGpu ||
+               deviceProperties.deviceType == vk::PhysicalDeviceType::eVirtualGpu ||
+               deviceProperties.deviceType == vk::PhysicalDeviceType::eCpu);
+
+        return queueComplete &&
             extensionsSupported &&
             supportedFeatures.samplerAnisotropy &&
-            deviceProperties.deviceType == vk::PhysicalDeviceType::eDiscreteGpu;
+            gpuTypeOk;
     }
 
     bool Device::checkDeviceExtensionSupport(const vk::PhysicalDevice& device) const
     {
         std::unordered_set<std::string> requiredExtensions(deviceExtensions.begin(), deviceExtensions.end());
+
+        // Skip swapchain requirement in headless mode
+        if (!window)
+        {
+            requiredExtensions.erase(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+        }
 
         std::vector<vk::ExtensionProperties> availableExtensions = device.enumerateDeviceExtensionProperties();
 

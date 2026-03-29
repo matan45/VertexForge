@@ -308,7 +308,7 @@ project "Runtime"
    links { "delayimp" }
 
    filter "configurations:Debug"
-      defines { "DEBUG" }
+      defines { "DEBUG", "DOCTEST_CONFIG_DISABLE" }
       symbols "On"
       -- Copy OpenAL DLL to Runtime output directory
       postbuildcommands {
@@ -316,7 +316,7 @@ project "Runtime"
       }
 
    filter "configurations:Release"
-      defines { "NDEBUG" }
+      defines { "NDEBUG", "DOCTEST_CONFIG_DISABLE" }
       optimize "On"
       -- Copy OpenAL DLL to Runtime output directory
       postbuildcommands {
@@ -1045,6 +1045,90 @@ project "GameExport"
          "{MKDIR} ../../bin/Editor/Release/x64",
          "{COPY} ../../bin/GameExport/Release/x64/GameExport.dll ../../bin/Editor/Release/x64/"
       }
+
+
+-- Tests: doctest unit test runner (CPU-only tests, no rendering dependencies)
+project "Tests"
+   kind "ConsoleApp"
+   language "C++"
+   cppdialect "C++20"
+   location "VFEngine/tests"
+   targetdir "bin/%{prj.name}/%{cfg.buildcfg}/%{cfg.platform}"
+
+   files { "VFEngine/tests/**.hpp", "VFEngine/tests/**.cpp" }
+
+   includedirs {
+      "dependencies/doctest/doctest",
+      "dependencies/spdlog/include",
+      "dependencies/glm",
+      "dependencies/entt/single_include",
+      "dependencies/json/single_include",
+      "dependencies/meshoptimizer/src",
+      "dependencies/enkiTS/src",
+      "dependencies/stb",
+      "dependencies/glfw/include",
+      "dependencies/imgui",
+      "dependencies/imgui/backends",
+      "dependencies/ispc_texcomp",
+      "dependencies/IconFontCppHeaders",
+      "dependencies/lz4/lib",
+      "dependencies/recastnavigation/Recast/Include",
+      "dependencies/recastnavigation/Detour/Include",
+      "dependencies/recastnavigation/DetourCrowd/Include",
+      "dependencies/JoltPhysics",
+      "VFEngine/utilities",
+      "VFEngine/services",
+      "VFEngine/graphics",
+      "VFEngine/core",
+      "VFEngine/window/controllers",
+      vulkanLibPath.."/Include"
+   }
+
+   libdirs {
+      vulkanLibPath.."/Lib"
+   }
+
+   links {
+      "Utilities", "Memory", "Terrain", "World", "Serialization",
+      "Animation", "ECSRegistry", "Services",
+      "Graphics", "Window", "VFX", "imgui", "ispc_texcomp", "GLFW",
+      "spdLog", "meshoptimizer", "enkiTS", "lz4", "recast",
+      "vulkan-1.lib", "shaderc_shared.lib"
+   }
+
+   defines {
+      "_CRT_SECURE_NO_WARNINGS",
+      "MESHOPTIMIZER_API=__declspec(dllimport)",
+      "JPH_OBJECT_STREAM", "JPH_SHARED_LIBRARY"
+   }
+
+   buildoptions { "/bigobj" }
+
+   filter "configurations:Debug"
+      defines { "DEBUG", "JPH_ENABLE_ASSERTS" }
+      symbols "On"
+      postbuildcommands {
+         "{COPY} ../../bin/ECSRegistry/Debug/x64/ECSRegistry.dll ../../bin/Tests/Debug/x64/",
+         "{COPY} ../../bin/Terrain/Debug/x64/Terrain.dll ../../bin/Tests/Debug/x64/",
+         "{COPY} ../../bin/Serialization/Debug/x64/Serialization.dll ../../bin/Tests/Debug/x64/",
+         "{COPY} ../../bin/World/Debug/x64/World.dll ../../bin/Tests/Debug/x64/",
+         "{COPY} ../../bin/Animation/Debug/x64/Animation.dll ../../bin/Tests/Debug/x64/",
+         "{COPY} ../../bin/meshoptimizer/Debug/x64/meshoptimizer.dll ../../bin/Tests/Debug/x64/"
+      }
+
+   filter "configurations:Release"
+      defines { "NDEBUG" }
+      optimize "On"
+      postbuildcommands {
+         "{COPY} ../../bin/ECSRegistry/Release/x64/ECSRegistry.dll ../../bin/Tests/Release/x64/",
+         "{COPY} ../../bin/Terrain/Release/x64/Terrain.dll ../../bin/Tests/Release/x64/",
+         "{COPY} ../../bin/Serialization/Release/x64/Serialization.dll ../../bin/Tests/Release/x64/",
+         "{COPY} ../../bin/World/Release/x64/World.dll ../../bin/Tests/Release/x64/",
+         "{COPY} ../../bin/Animation/Release/x64/Animation.dll ../../bin/Tests/Release/x64/",
+         "{COPY} ../../bin/meshoptimizer/Release/x64/meshoptimizer.dll ../../bin/Tests/Release/x64/"
+      }
+
+   filter {}  -- reset filters before next group
 
 
 -- Group for Libraries

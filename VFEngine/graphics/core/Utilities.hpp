@@ -27,6 +27,12 @@ namespace core
 			return presentFamily.has_value() && graphicsAndComputeFamily.has_value();
 		}
 
+		// Headless mode: only requires compute, no present queue needed
+		bool isCompleteHeadless() const
+		{
+			return graphicsAndComputeFamily.has_value();
+		}
+
 		bool hasTransferQueue() const
 		{
 			return transferFamily.has_value();

@@ -64,3 +64,6 @@
 [submodule "dependencies/lz4"]
 	path = dependencies/lz4
 	url = https://github.com/lz4/lz4.git
+[submodule "dependencies/doctest"]
+	path = dependencies/doctest
+	url = https://github.com/doctest/doctest.git
