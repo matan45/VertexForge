@@ -170,7 +170,7 @@ namespace controllers
                     VFXInstanceId evictId = findLowestPriorityInstance(params.priority);
                     if (evictId != 0)
                     {
-                        vfLogDebug("Evicting lower-priority VFX instance {} to make room for new instance {}", evictId, id);
+                        vfLogInfo("Evicting lower-priority VFX instance {} to make room for new instance {}", evictId, id);
                         destroyInstance(evictId);
                         allocation = gpuBufferManager->allocateEmitter(
                             render::vfx::GPUVFXConstants::DEFAULT_PARTICLES_PER_EMITTER);

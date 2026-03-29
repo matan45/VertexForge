@@ -39,7 +39,7 @@ namespace windows
         const char* filterLabels[] = {"All", "Trace", "Debug", "Info", "Warning", "Error"};
         if (ImGui::BeginCombo("##Filter", filterLabels[static_cast<int>(currentFilter)]))
         {
-            for (int i = 0; i < 6; i++)
+            for (int i = 0; i < static_cast<int>(std::size(filterLabels)); i++)
             {
                 bool isSelected = (static_cast<int>(currentFilter) == i);
                 if (ImGui::Selectable(filterLabels[i], isSelected))

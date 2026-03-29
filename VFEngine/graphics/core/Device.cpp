@@ -573,7 +573,7 @@ namespace core
             {
                 for (const auto& ext : requiredExtensions)
                 {
-                    vfLogDebug("Device extension not available: {}", ext);
+                    vfLogWarning("Device extension not available: {}", ext);
                 }
             }
             return false;

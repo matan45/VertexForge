@@ -103,7 +103,7 @@ namespace core
 		// and will free via destroyBuffer during their own cleanup.
 		// Only log any remaining as a diagnostic.
 		if (!dedicatedAllocations.empty()) {
-			vfLogDebug("VulkanMemoryManager: {} dedicated allocations still tracked at shutdown (callers handle cleanup)",
+			vfLogWarning("VulkanMemoryManager: {} dedicated allocations still tracked at shutdown (callers handle cleanup)",
 				dedicatedAllocations.size());
 		}
 		dedicatedAllocations.clear();
