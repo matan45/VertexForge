@@ -28,6 +28,7 @@
 #include "vfx/distortion/DistortionResources.hpp"
 #include "vfx/distortion/VFXDistortionComposite.hpp"
 #include "threading/JobSystem.hpp"
+#include "print/Log.hpp"
 #include <chrono>
 
 namespace
@@ -524,11 +525,21 @@ namespace render
 
     void RenderPassHandler::executeDistortionPass(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const
     {
-        if (!distortionInitialized || !distortionResources || !distortionResources->isInitialized())
-            return;
-
         if (!vfxRuntimeProvider || !vfxRuntimeProvider->isInitialized() || !vfxRuntimeProvider->hasDistortionEmitters())
             return;
+
+        // Lazy init: create distortion resources on first use
+        if (!distortionInitialized)
+        {
+            vfLogInfo("Distortion: lazy-initializing distortion pass");
+            initDistortionPass();
+        }
+
+        if (!distortionInitialized || !distortionResources || !distortionResources->isInitialized())
+        {
+            vfLogWarning("Distortion: init failed or resources not ready");
+            return;
+        }
 
         auto extent = distortionResources->getExtent();
 

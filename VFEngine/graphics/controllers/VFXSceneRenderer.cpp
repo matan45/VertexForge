@@ -644,7 +644,12 @@ namespace controllers
         for (const auto& [id, instance] : instances)
         {
             if (instance.active && instance.config.distortionEnabled)
+            {
+                vfLogDebug("Distortion emitter found: id={} gpuIdx={} strength={} tex={}",
+                           id, instance.gpuEmitterIndex, instance.config.distortionStrength,
+                           instance.config.distortionTexturePath);
                 return true;
+            }
         }
         return false;
     }

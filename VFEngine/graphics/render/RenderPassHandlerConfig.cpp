@@ -44,12 +44,7 @@ namespace render
         if (postProcessPipeline) postProcessPipeline->setDeletionQueue(queue);
     }
 
-    void RenderPassHandler::setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider)
-    {
-        vfxRuntimeProvider = provider;
-        if (provider && meshPipelineInitialized && !distortionInitialized)
-            initDistortionPass();
-    }
+    void RenderPassHandler::setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider) { vfxRuntimeProvider = provider; }
     void RenderPassHandler::setVFXDistanceCullingEnabled(bool enabled) { if (vfxRuntimeProvider) vfxRuntimeProvider->setDistanceCullingEnabled(enabled); }
     void RenderPassHandler::setVFXDrawDistance(float distance) { if (vfxRuntimeProvider) vfxRuntimeProvider->setMaxDrawDistance(distance); }
     void RenderPassHandler::setBillboardDistanceCullingEnabled(bool enabled) { if (billboardPipelineInitialized && billboardPipeline) billboardPipeline->setDistanceCullingEnabled(enabled); }

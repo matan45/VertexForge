@@ -148,9 +148,9 @@ namespace render
         std::unique_ptr<decal::DecalPipeline> decalPipeline;
         bool decalRenderingEnabled = true;
 
-        std::unique_ptr<vfx::DistortionResources> distortionResources;
-        std::unique_ptr<vfx::VFXDistortionComposite> distortionComposite;
-        bool distortionInitialized = false;
+        mutable std::unique_ptr<vfx::DistortionResources> distortionResources;
+        mutable std::unique_ptr<vfx::VFXDistortionComposite> distortionComposite;
+        mutable bool distortionInitialized = false;
 
         core::OffscreenResources& offscreenResources;
 
@@ -451,7 +451,7 @@ namespace render
                                 const vk::CommandBuffer& commandBuffer,
                                 uint32_t imageIndex) const;
 
-        void initDistortionPass();
+        void initDistortionPass() const;
         void executeDistortionPass(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
     };
 }
