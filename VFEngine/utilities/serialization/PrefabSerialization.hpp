@@ -1,4 +1,5 @@
 #pragma once
+#include "SerializationExport.hpp"
 #include <string_view>
 #include <optional>
 #include <nlohmann/json.hpp>
@@ -12,7 +13,7 @@ namespace serialization
 {
 	using json = nlohmann::json;
 
-	class PrefabSerialization
+	class VF_SERIALIZATION_API PrefabSerialization
 	{
 	public:
 		static bool savePrefab(const scene::Entity& entity, std::string_view filename);

@@ -1,11 +1,12 @@
 #pragma once
 
+#include "../serialization/SerializationExport.hpp"
 #include "WorldDefinition.hpp"
 #include <string>
 
 namespace world
 {
-    class WorldDefinitionSerialization
+    class VF_SERIALIZATION_API WorldDefinitionSerialization
     {
     public:
         static bool save(const WorldDefinition& definition, const std::string& filePath);

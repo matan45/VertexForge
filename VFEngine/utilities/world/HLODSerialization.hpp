@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../serialization/SerializationExport.hpp"
 #include "HLODTypes.hpp"
 #include "../resource/Types.hpp"
 #include <array>
@@ -64,7 +65,7 @@ namespace world
         HLODMeshletData meshletData;
     };
 
-    class HLODSerialization
+    class VF_SERIALIZATION_API HLODSerialization
     {
     public:
         static bool save(const std::string& filePath, const HLODFileData& data);

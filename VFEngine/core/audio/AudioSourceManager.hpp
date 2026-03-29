@@ -1,4 +1,5 @@
 #pragma once
+#include "AudioExport.hpp"
 #include "AudioSource.hpp"
 #include <glm/glm.hpp>
 #include <cstdint>

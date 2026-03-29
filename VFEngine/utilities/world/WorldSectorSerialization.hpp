@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../serialization/SerializationExport.hpp"
 #include "WorldSector.hpp"
 #include <nlohmann/json.hpp>
 #include <string>
@@ -9,7 +10,7 @@ namespace world
 {
     using json = nlohmann::json;
 
-    class WorldSectorSerialization
+    class VF_SERIALIZATION_API WorldSectorSerialization
     {
     public:
         // Binary format (default) - writes header + MessagePack

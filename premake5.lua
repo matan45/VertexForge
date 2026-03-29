@@ -485,7 +485,7 @@ group "Subsystems"
 
 -- Audio subsystem (extracted from Core)
 project "Audio"
-   kind "StaticLib"
+   kind "SharedLib"
    language "C++"
    cppdialect "C++20"
    location "VFEngine/core"
@@ -503,19 +503,33 @@ project "Audio"
       "dependencies/openal-soft/include"
    }
 
-   defines { "_CRT_SECURE_NO_WARNINGS" }
+   defines { "_CRT_SECURE_NO_WARNINGS", "VF_AUDIO_BUILD_DLL" }
+
+   links { "Utilities", "Services", "Animation", "Terrain" }
 
    filter "configurations:Debug"
       defines { "DEBUG" }
       symbols "On"
       libdirs { "dependencies/openal-soft/build/Debug" }
       links { "OpenAL32.lib" }
+      postbuildcommands {
+         "{MKDIR} ../../bin/Editor/Debug/x64",
+         "{MKDIR} ../../bin/Runtime/Debug/x64",
+         "{COPY} ../../bin/Audio/Debug/x64/Audio.dll ../../bin/Editor/Debug/x64/",
+         "{COPY} ../../bin/Audio/Debug/x64/Audio.dll ../../bin/Runtime/Debug/x64/"
+      }
 
    filter "configurations:Release"
       defines { "NDEBUG" }
       optimize "On"
       libdirs { "dependencies/openal-soft/build/Release" }
       links { "OpenAL32.lib" }
+      postbuildcommands {
+         "{MKDIR} ../../bin/Editor/Release/x64",
+         "{MKDIR} ../../bin/Runtime/Release/x64",
+         "{COPY} ../../bin/Audio/Release/x64/Audio.dll ../../bin/Editor/Release/x64/",
+         "{COPY} ../../bin/Audio/Release/x64/Audio.dll ../../bin/Runtime/Release/x64/"
+      }
 
 
 -- Physics subsystem (extracted from Core)
@@ -683,7 +697,7 @@ project "ImageProcessing"
 
 -- Serialization subsystem (extracted from Utilities)
 project "Serialization"
-   kind "StaticLib"
+   kind "SharedLib"
    language "C++"
    cppdialect "C++20"
    location "VFEngine/utilities"
@@ -708,19 +722,31 @@ project "Serialization"
       "VFEngine/utilities"
    }
 
-   defines { "_CRT_SECURE_NO_WARNINGS" }
+   defines { "_CRT_SECURE_NO_WARNINGS", "VF_SERIALIZATION_BUILD_DLL" }
 
-   links { "Utilities" }
+   links { "Utilities", "Animation" }
 
    buildoptions { "/bigobj" }
 
    filter "configurations:Debug"
       defines { "DEBUG" }
       symbols "On"
+      postbuildcommands {
+         "{MKDIR} ../../bin/Editor/Debug/x64",
+         "{MKDIR} ../../bin/Runtime/Debug/x64",
+         "{COPY} ../../bin/Serialization/Debug/x64/Serialization.dll ../../bin/Editor/Debug/x64/",
+         "{COPY} ../../bin/Serialization/Debug/x64/Serialization.dll ../../bin/Runtime/Debug/x64/"
+      }
 
    filter "configurations:Release"
       defines { "NDEBUG" }
       optimize "On"
+      postbuildcommands {
+         "{MKDIR} ../../bin/Editor/Release/x64",
+         "{MKDIR} ../../bin/Runtime/Release/x64",
+         "{COPY} ../../bin/Serialization/Release/x64/Serialization.dll ../../bin/Editor/Release/x64/",
+         "{COPY} ../../bin/Serialization/Release/x64/Serialization.dll ../../bin/Runtime/Release/x64/"
+      }
 
 
 -- DataTypes (header-only, extracted from Services for dependency clarity)
@@ -893,7 +919,7 @@ project "GameExport"
 
    defines { "_CRT_SECURE_NO_WARNINGS" }
 
-   links { "Utilities", "lz4", "shaderc_shared.lib" }
+   links { "Utilities", "Serialization", "lz4", "shaderc_shared.lib" }
 
    filter "configurations:Debug"
       defines { "DEBUG" }

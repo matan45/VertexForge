@@ -118,6 +118,9 @@
     <ProjectReference Include="Utilities.vcxproj">
       <Project>{010A8043-6D74-34BA-B6B2-E55F225C120F}</Project>
     </ProjectReference>
+    <ProjectReference Include="Serialization.vcxproj">
+      <Project>{2319AF09-8FD9-2A40-5814-74BDC4936F1C}</Project>
+    </ProjectReference>
     <ProjectReference Include="..\lz4.vcxproj">
       <Project>{3F8E880B-AB97-887C-3413-9F7CA01B947C}</Project>
     </ProjectReference>

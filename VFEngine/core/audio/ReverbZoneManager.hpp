@@ -1,4 +1,5 @@
 #pragma once
+#include "AudioExport.hpp"
 #include "types/AudioEffectTypes.hpp"
 #include <glm/glm.hpp>
 #include <entt/entt.hpp>
@@ -7,7 +8,9 @@
 
 namespace core::audio
 {
-    class ReverbZoneManager
+    #pragma warning(push)
+    #pragma warning(disable: 4251)
+    class VF_AUDIO_API ReverbZoneManager
     {
     public:
         void init(int reservedSendIndex);
@@ -40,4 +43,5 @@ namespace core::audio
 
         std::vector<uint32_t> routedSources;
     };
+    #pragma warning(pop)
 }
