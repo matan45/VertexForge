@@ -6,9 +6,11 @@ namespace util
 {
     enum class LogLevel : uint8_t
     {
-        Info = 0,
-        Warning = 1,
-        Error = 2
+        Trace = 0,
+        Debug = 1,
+        Info = 2,
+        Warning = 3,
+        Error = 4
     };
 
     struct LogEntry

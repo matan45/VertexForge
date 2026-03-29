@@ -31,7 +31,7 @@ namespace render::gpudriven
         cpuBoneMatrices.resize(maxBoneMatrices, glm::mat4(1.0f));
         boneAllocator.reset(maxBoneMatrices);
 
-        vfLogInfo("BoneMatrixManager: Initializing with {} max bone matrices ({} MB)",
+        vfLogDebug("BoneMatrixManager: Initializing with {} max bone matrices ({} MB)",
                    maxBoneMatrices, (maxBoneMatrices * sizeof(glm::mat4)) / (1024 * 1024));
 
         createBuffers();
@@ -107,7 +107,7 @@ namespace render::gpudriven
             sf.mapped = sf.allocation.mappedPtr;
         }
 
-        vfLogInfo("BoneMatrixManager: Created bone buffers ({} MB each, {} staging frames)",
+        vfLogDebug("BoneMatrixManager: Created bone buffers ({} MB each, {} staging frames)",
                    bufferSize / (1024 * 1024), core::MAX_FRAMES_IN_FLIGHT);
     }
 
@@ -269,7 +269,7 @@ namespace render::gpudriven
 
         allocations[entity] = data;
 
-        vfLogInfo("BoneMatrixManager: Allocated {} bones at offset {} for entity {}",
+        vfLogDebug("BoneMatrixManager: Allocated {} bones at offset {} for entity {}",
                    boneCount, offset, static_cast<uint32_t>(entity));
 
         return offset;
@@ -292,7 +292,7 @@ namespace render::gpudriven
             dirtyEntities.erase(dirtyIt);
         }
 
-        vfLogInfo("BoneMatrixManager: Freed bone allocation for entity {}",
+        vfLogDebug("BoneMatrixManager: Freed bone allocation for entity {}",
                    static_cast<uint32_t>(entity));
     }
 

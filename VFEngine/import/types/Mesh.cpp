@@ -301,7 +301,7 @@ namespace
             }
         }
 
-        vfLogInfo("Mesh has {} vertices with bone weights out of {} total",
+        vfLogDebug("Mesh has {} vertices with bone weights out of {} total",
                   verticesWithBones, result.vertices.size());
     }
 
@@ -338,7 +338,7 @@ namespace
     {
         std::string meshName = assimpMesh->mName.C_Str();
 
-        vfLogInfo("Processing submesh '{}' ({} vertices, {} triangles)...",
+        vfLogDebug("Processing submesh '{}' ({} vertices, {} triangles)...",
                   meshName, assimpMesh->mNumVertices, assimpMesh->mNumFaces);
 
         uint32_t nameLength = static_cast<uint32_t>(meshName.length());
@@ -406,7 +406,7 @@ namespace types
         buildBoneHierarchy(scene, result, boneNamesInOrder);
         ensureParentBeforeChildOrder(result);
 
-        vfLogInfo("Extracted skeleton with {} bones (full hierarchy)", result.bones.size());
+        vfLogDebug("Extracted skeleton with {} bones (full hierarchy)", result.bones.size());
         return result;
     }
 
@@ -428,7 +428,7 @@ namespace types
 
         writeFileHeader(outFile, scene->mNumMeshes);
 
-        vfLogInfo("Generating LODs and meshlets for {} submeshes...", scene->mNumMeshes);
+        vfLogDebug("Generating LODs and meshlets for {} submeshes...", scene->mNumMeshes);
 
         MeshLODGenerator lodGen;
         MeshSerializer serializer;
@@ -443,7 +443,7 @@ namespace types
             for (uint32_t lod = 0; lod < resource::LOD_LEVEL_COUNT; ++lod)
                 serializer.writeLODLevelCompressed(outFile, lodLevels[lod]);
 
-            vfLogInfo("  Generating meshlets...");
+            vfLogDebug("  Generating meshlets...");
             std::array<MeshletBuildResult, resource::LOD_LEVEL_COUNT> meshletResults;
             for (uint32_t lod = 0; lod < resource::LOD_LEVEL_COUNT; ++lod)
                 meshletResults[lod] = lodGen.buildMeshletsForLOD(lodLevels[lod]);
@@ -463,6 +463,6 @@ namespace types
         MeshSerializer{}.writeSkeletonData(outFile, skeleton);
 
         outFile.close();
-        vfLogInfo("Mesh with LOD, meshlets and skeleton reference saved to: {}", newFileLocation.string());
+        vfLogDebug("Mesh with LOD, meshlets and skeleton reference saved to: {}", newFileLocation.string());
     }
 }

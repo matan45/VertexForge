@@ -18,6 +18,8 @@
 
 #define __FILENAME__ (strrchr(__FILE__, '\\') ? strrchr(__FILE__, '\\') + 1 : __FILE__)
 
+#define vfLogTrace(...) util::logTrace(__VA_ARGS__)
+#define vfLogDebug(...) util::logDebug(__VA_ARGS__)
 #define vfLogInfo(...) util::logInfo(__VA_ARGS__)
 #define vfLogWarning(...) util::logWarning(__VA_ARGS__)
 #define vfLogError(...) util::logError(__VA_ARGS__)
@@ -26,8 +28,10 @@
 
 namespace util {
 
-	// When true, only errors and asserts are logged (for exported/shipped games)
-	inline bool loggingEnabled = true;
+	// Minimum log level threshold. Default Info shows Info/Warning/Error.
+	// Set to LogLevel::Debug or LogLevel::Trace for verbose output.
+	// Set to LogLevel::Error for shipped/exported games (errors always log).
+	inline LogLevel minLogLevel = LogLevel::Info;
 
 	inline std::string getCurrentTime() {
 		auto now = std::chrono::system_clock::now();
@@ -62,8 +66,38 @@ namespace util {
 	using format_string_t = fmt::format_string<Args...>;
 
 	template<typename... Args>
+	inline void logTrace(format_string_t<Args...> fmt, Args&&... args) {
+		if (minLogLevel > LogLevel::Trace) return;
+		std::string currentTime = getCurrentTime();
+		std::string formattedMessage = fmt::format(fmt, std::forward<Args>(args)...);
+		std::string fullMessage = fmt::format("{}TRACE: {}", currentTime, formattedMessage);
+
+		setConsoleColor(FOREGROUND_INTENSITY);
+		printf("%s\n", fullMessage.c_str());
+		resetConsoleColor();
+
+		spdlog::trace(formattedMessage);
+		appendToConsoleBuffer(fullMessage, LogLevel::Trace);
+	}
+
+	template<typename... Args>
+	inline void logDebug(format_string_t<Args...> fmt, Args&&... args) {
+		if (minLogLevel > LogLevel::Debug) return;
+		std::string currentTime = getCurrentTime();
+		std::string formattedMessage = fmt::format(fmt, std::forward<Args>(args)...);
+		std::string fullMessage = fmt::format("{}DEBUG: {}", currentTime, formattedMessage);
+
+		setConsoleColor(FOREGROUND_GREEN | FOREGROUND_BLUE);
+		printf("%s\n", fullMessage.c_str());
+		resetConsoleColor();
+
+		spdlog::debug(formattedMessage);
+		appendToConsoleBuffer(fullMessage, LogLevel::Debug);
+	}
+
+	template<typename... Args>
 	inline void logInfo(format_string_t<Args...> fmt, Args&&... args) {
-		if (!loggingEnabled) return;
+		if (minLogLevel > LogLevel::Info) return;
 		std::string currentTime = getCurrentTime();
 		std::string formattedMessage = fmt::format(fmt, std::forward<Args>(args)...);
 		std::string fullMessage = fmt::format("{}INFO: {}", currentTime, formattedMessage);
@@ -78,7 +112,7 @@ namespace util {
 
 	template<typename... Args>
 	inline void logWarning(format_string_t<Args...> fmt, Args&&... args) {
-		if (!loggingEnabled) return;
+		if (minLogLevel > LogLevel::Warning) return;
 		std::string currentTime = getCurrentTime();
 		std::string formattedMessage = fmt::format(fmt, std::forward<Args>(args)...);
 		std::string fullMessage = fmt::format("{}WARNING: {}", currentTime, formattedMessage);

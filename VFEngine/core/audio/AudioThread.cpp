@@ -21,7 +21,7 @@ namespace core::audio
         if (running.load()) return;
         running.store(true);
         thread = std::thread(&AudioThread::threadLoop, this);
-        vfLogInfo("AudioThread started");
+        vfLogDebug("AudioThread started");
     }
 
     void AudioThread::stop()
@@ -33,7 +33,7 @@ namespace core::audio
             thread.join();
         }
         running.store(false);
-        vfLogInfo("AudioThread stopped");
+        vfLogDebug("AudioThread stopped");
     }
 
     AudioStateSnapshot AudioThread::getSnapshot() const
@@ -47,7 +47,7 @@ namespace core::audio
     {
         // Claim OpenAL context on this thread
         deps.audioSystem->acquireContext();
-        vfLogInfo("AudioThread acquired OpenAL context");
+        vfLogDebug("AudioThread acquired OpenAL context");
 
         std::vector<AudioCommand> commands;
         commands.reserve(64);

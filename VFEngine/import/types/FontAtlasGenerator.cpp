@@ -302,7 +302,7 @@ namespace types
             }
 
             reportUnpackedGlyphs(unpackedGlyphs, dims.actualWidth, dims.actualHeight);
-            vfLogInfo("Font atlas generated: {} glyphs packed, {} empty glyphs, {} failed to pack. "
+            vfLogDebug("Font atlas generated: {} glyphs packed, {} empty glyphs, {} failed to pack. "
                      "Atlas size: {}x{}",
                      packedCount, emptyGlyphCount, unpackedGlyphs.size(),
                      dims.actualWidth, dims.actualHeight);
@@ -490,7 +490,7 @@ namespace types
                 fontData.glyphs.push_back(glyph);
             }
 
-            vfLogInfo("Color font atlas generated: {} glyphs packed. Atlas size: {}x{}",
+            vfLogDebug("Color font atlas generated: {} glyphs packed. Atlas size: {}x{}",
                      packedCount, dims.actualWidth, dims.actualHeight);
         }
     } // anonymous namespace

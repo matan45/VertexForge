@@ -39,7 +39,7 @@ namespace loaders
         });
 
         pendingLoads[instanceId] = std::move(pending);
-        vfLogInfo("AsyncTextureLoader: Started async load for {} (HDR: {})", texturePath, isHDR);
+        vfLogDebug("AsyncTextureLoader: Started async load for {} (HDR: {})", texturePath, isHDR);
     }
 
     void AsyncTextureLoader::cancelLoad(void* instanceId)
@@ -221,7 +221,7 @@ namespace loaders
                 gpuUploadReadyInstance = nullptr;
             }
             pendingLoads.erase(it);
-            vfLogInfo("AsyncTextureLoader: Load was cancelled during GPU upload for {}", texturePath);
+            vfLogDebug("AsyncTextureLoader: Load was cancelled during GPU upload for {}", texturePath);
             return false;
         }
 
@@ -266,7 +266,7 @@ namespace loaders
             gpuUploadReadyInstance = nullptr;
         }
 
-        vfLogInfo("AsyncTextureLoader: GPU upload complete for {}", texturePath);
+        vfLogDebug("AsyncTextureLoader: GPU upload complete for {}", texturePath);
         return true;
     }
 

@@ -193,7 +193,7 @@ namespace controllers
 
             if (instance.gpuDriven)
             {
-                vfLogInfo("Created GPU-driven VFX instance {} with {} particles at offset {}",
+                vfLogDebug("Created GPU-driven VFX instance {} with {} particles at offset {}",
                            id, instance.gpuParticleCount, instance.gpuParticleOffset);
             }
         }
@@ -263,7 +263,7 @@ namespace controllers
                                                           glowColor);
         }
 
-        vfLogInfo("Created VFX instance {} from asset: {} (GPU: {})",
+        vfLogDebug("Created VFX instance {} from asset: {} (GPU: {})",
                    id, params.vfxAssetPath, instances[id].gpuDriven);
         return id;
     }

@@ -33,7 +33,7 @@ namespace render::gpudriven {
             effectiveMaxTextures = maxSampledImages;
         }
 
-        vfLogInfo("BindlessTextureManager: Initializing with max {} textures", effectiveMaxTextures);
+        vfLogDebug("BindlessTextureManager: Initializing with max {} textures", effectiveMaxTextures);
 
         createDescriptorSetLayout();
         createDescriptorPool();
@@ -98,7 +98,7 @@ namespace render::gpudriven {
         layoutInfo.pBindings = &textureBinding;
 
         descriptorSetLayout = vkDevice.createDescriptorSetLayout(layoutInfo);
-        vfLogInfo("BindlessTextureManager: Created descriptor set layout");
+        vfLogDebug("BindlessTextureManager: Created descriptor set layout");
     }
 
     void BindlessTextureManager::createDescriptorPool()
@@ -116,7 +116,7 @@ namespace render::gpudriven {
         poolInfo.pPoolSizes = &poolSize;
 
         descriptorPool = vkDevice.createDescriptorPool(poolInfo);
-        vfLogInfo("BindlessTextureManager: Created descriptor pool");
+        vfLogDebug("BindlessTextureManager: Created descriptor pool");
     }
 
     void BindlessTextureManager::allocateDescriptorSet()
@@ -138,7 +138,7 @@ namespace render::gpudriven {
         std::vector<vk::DescriptorSet> sets = vkDevice.allocateDescriptorSets(allocInfo);
         descriptorSet = sets[0];
 
-        vfLogInfo("BindlessTextureManager: Allocated descriptor set");
+        vfLogDebug("BindlessTextureManager: Allocated descriptor set");
     }
 
     void BindlessTextureManager::setDefaultTexture(vk::ImageView imageView, vk::Sampler sampler)
@@ -152,7 +152,7 @@ namespace render::gpudriven {
         updateDescriptor(0, imageView, sampler);
         defaultTextureSet = true;
 
-        vfLogInfo("BindlessTextureManager: Set default texture at index 0");
+        vfLogDebug("BindlessTextureManager: Set default texture at index 0");
     }
 
     uint32_t BindlessTextureManager::registerTexture(const std::string& path, vk::ImageView imageView, vk::Sampler sampler)
@@ -184,7 +184,7 @@ namespace render::gpudriven {
 
         updateDescriptor(index, imageView, sampler);
 
-        vfLogInfo("BindlessTextureManager: Registered texture '{}' at index {}", path, index);
+        vfLogDebug("BindlessTextureManager: Registered texture '{}' at index {}", path, index);
         return index;
     }
 
@@ -216,7 +216,7 @@ namespace render::gpudriven {
         freeIndices.push_back(index);
         texturePathToIndex.erase(it);
 
-        vfLogInfo("BindlessTextureManager: Unregistered texture '{}' at index {} (free slots: {})",
+        vfLogDebug("BindlessTextureManager: Unregistered texture '{}' at index {} (free slots: {})",
                   path, index, freeIndices.size());
     }
 

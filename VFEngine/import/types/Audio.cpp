@@ -75,7 +75,7 @@ namespace types
             {
                 audioData.compressionFormat = resource::AudioCompressionFormat::Vorbis;
                 audioData.compressedData = std::move(compressed);
-                vfLogInfo("Vorbis compression: {} -> {} bytes ({:.1f}x)",
+                vfLogDebug("Vorbis compression: {} -> {} bytes ({:.1f}x)",
                           decoded.data.size() * sizeof(short),
                           audioData.compressedData.size(),
                           static_cast<float>(decoded.data.size() * sizeof(short)) /

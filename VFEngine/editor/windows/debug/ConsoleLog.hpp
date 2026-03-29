@@ -10,9 +10,11 @@ namespace windows
     enum class LogFilter : int
     {
         All = 0,
-        Info = 1,
-        Warning = 2,
-        Error = 3
+        Trace = 1,
+        Debug = 2,
+        Info = 3,
+        Warning = 4,
+        Error = 5
     };
 
     class ConsoleLog : public controllers::imguiHandler::ImguiWindow

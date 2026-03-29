@@ -70,7 +70,7 @@ namespace
                             resource::ConvexDecompositionData& result)
     {
         uint32_t numHulls = vhacd->GetNConvexHulls();
-        vfLogInfo("  V-HACD generated {} convex hulls", numHulls);
+        vfLogDebug("  V-HACD generated {} convex hulls", numHulls);
 
         result.hasDecomposition = true;
         result.params.maxConvexHulls = effectiveConfig.maxConvexHulls;
@@ -144,7 +144,7 @@ namespace
         }
         else
         {
-            vfLogInfo("  Final hull count: {}, total vertices: {}",
+            vfLogDebug("  Final hull count: {}, total vertices: {}",
                       result.hulls.size(), result.getTotalVertexCount());
         }
     }
@@ -334,7 +334,7 @@ namespace types
         {
             lodLevels[level] = futures[level - 1].get();
 
-            vfLogInfo("  LOD{}: {} vertices, {} triangles ({}%)",
+            vfLogDebug("  LOD{}: {} vertices, {} triangles ({}%)",
                       level,
                       lodLevels[level].vertices.size(),
                       lodLevels[level].indices.size() / 3,
@@ -404,7 +404,7 @@ namespace types
         computeMeshletDescriptorsAndBounds(meshoptMeshlets, meshletVertexIndices,
                                            meshletTriangleIndices, meshletCount, lodMesh, result);
 
-        vfLogInfo("    Generated {} meshlets ({} vertex indices, {} primitives)",
+        vfLogDebug("    Generated {} meshlets ({} vertex indices, {} primitives)",
                   meshletCount, totalVertexIndices, result.meshletPrimitives.size());
 
         return result;
@@ -425,7 +425,7 @@ namespace types
 
         auto effectiveConfig = applyVHACDPreset(config);
 
-        vfLogInfo("  Running V-HACD convex decomposition (preset: {}, resolution: {})...",
+        vfLogDebug("  Running V-HACD convex decomposition (preset: {}, resolution: {})...",
                   static_cast<int>(config.vhacdPreset), effectiveConfig.vhacdResolution);
 
         std::vector<double> points;

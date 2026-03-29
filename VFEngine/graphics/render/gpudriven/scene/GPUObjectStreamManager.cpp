@@ -79,7 +79,7 @@ namespace render::gpudriven
             sectorSet.insert(uuid);
         }
 
-        vfLogInfo("GPUObjectStreamManager: Registered {} objects for sector {}",
+        vfLogDebug("GPUObjectStreamManager: Registered {} objects for sector {}",
                   entities.size(), sectorId);
     }
 
@@ -111,7 +111,7 @@ namespace render::gpudriven
             buffer.rebuildActiveIndexList();
         }
 
-        vfLogInfo("GPUObjectStreamManager: Unregistered sector {} ({} GPU slots freed)",
+        vfLogDebug("GPUObjectStreamManager: Unregistered sector {} ({} GPU slots freed)",
                   sectorId, freedCount);
     }
 

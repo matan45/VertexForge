@@ -191,7 +191,7 @@ namespace core
 
         if (debug)
         {
-            vfLogInfo("Found {} devices with Vulkan support.", devices.size());
+            vfLogDebug("Found {} devices with Vulkan support.", devices.size());
         }
 
         for (const vk::PhysicalDevice& device : devices)
@@ -372,7 +372,7 @@ namespace core
 
                 if (debug)
                 {
-                    vfLogInfo("Async compute queue enabled (family={}, dedicated={})",
+                    vfLogDebug("Async compute queue enabled (family={}, dedicated={})",
                               queueFamilyIndices.asyncComputeFamily.value(),
                               queueFamilyIndices.hasDedicatedComputeFamily());
                 }
@@ -423,7 +423,7 @@ namespace core
             try
             {
                 pipelineCache = logicalDevice->createPipelineCacheUnique(cacheInfo);
-                vfLogInfo("Pipeline cache created (empty)");
+                vfLogDebug("Pipeline cache created (empty)");
             }
             catch (const vk::SystemError& err)
             {
@@ -463,7 +463,7 @@ namespace core
         try
         {
             pipelineCache = logicalDevice->createPipelineCacheUnique(cacheInfo);
-            vfLogInfo("Pipeline cache loaded from disk ({} bytes)", cacheData.size());
+            vfLogDebug("Pipeline cache loaded from disk ({} bytes)", cacheData.size());
         }
         catch (const vk::SystemError& err)
         {
@@ -487,7 +487,7 @@ namespace core
             {
                 file.write(reinterpret_cast<const char*>(cacheData.data()),
                            static_cast<std::streamsize>(cacheData.size()));
-                vfLogInfo("Pipeline cache saved to disk ({} bytes)", cacheData.size());
+                vfLogDebug("Pipeline cache saved to disk ({} bytes)", cacheData.size());
             }
         }
         catch (const vk::SystemError& err)
@@ -573,7 +573,7 @@ namespace core
             {
                 for (const auto& ext : requiredExtensions)
                 {
-                    vfLogInfo("Device extension not available: {}", ext);
+                    vfLogWarning("Device extension not available: {}", ext);
                 }
             }
             return false;
@@ -679,10 +679,10 @@ namespace core
 
         if (debug)
         {
-            vfLogInfo("Ray Query supported: {}, Acceleration Structure supported: {}",
+            vfLogDebug("Ray Query supported: {}, Acceleration Structure supported: {}",
                       rayQueryCapabilities.rayQuerySupported,
                       rayQueryCapabilities.accelerationStructureSupported);
-            vfLogInfo("AS limits: maxGeometry={}, maxInstance={}, maxPrimitive={}",
+            vfLogDebug("AS limits: maxGeometry={}, maxInstance={}, maxPrimitive={}",
                       rayQueryCapabilities.maxGeometryCount,
                       rayQueryCapabilities.maxInstanceCount,
                       rayQueryCapabilities.maxPrimitiveCount);
