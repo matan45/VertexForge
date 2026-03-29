@@ -28,7 +28,6 @@
 #include "vfx/distortion/DistortionResources.hpp"
 #include "vfx/distortion/VFXDistortionComposite.hpp"
 #include "threading/JobSystem.hpp"
-#include "print/Log.hpp"
 #include <chrono>
 
 namespace
@@ -530,16 +529,10 @@ namespace render
 
         // Lazy init: create distortion resources on first use
         if (!distortionInitialized)
-        {
-            vfLogInfo("Distortion: lazy-initializing distortion pass");
             initDistortionPass();
-        }
 
         if (!distortionInitialized || !distortionResources || !distortionResources->isInitialized())
-        {
-            vfLogWarning("Distortion: init failed or resources not ready");
             return;
-        }
 
         auto extent = distortionResources->getExtent();
 

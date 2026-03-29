@@ -30,6 +30,7 @@ namespace asset
         if (ext == ".vfterrain")      return resource::AssetType::Terrain;
         if (ext == ".vfterrainmat")   return resource::AssetType::TerrainMaterial;
         if (ext == ".vfbehaviortree") return resource::AssetType::BehaviorTree;
+        if (ext == ".vfphysanim")  return resource::AssetType::PhysicsShape;
         return resource::AssetType::COUNT;
     }
 
@@ -49,7 +50,7 @@ namespace asset
             ".vfmat", ".vfmatinstance", ".vfanimator", ".vfvfx",
             ".vffont", ".vfscene", ".vfprefab", ".vfterrain",
             ".vfterrainmat", ".vfwater", ".vfnavmesh", ".vfimposter",
-            ".vfinputmapping", ".vfbehaviortree"
+            ".vfinputmapping", ".vfbehaviortree", ".vfphysanim"
         };
 
         try

@@ -66,7 +66,8 @@ namespace render::vfx
             .cullMode = vk::CullModeFlagBits::eNone,
             .depthTestEnable = false,
             .depthWriteEnable = false,
-            .blendEnable = false
+            .blendEnable = false,
+            .dynamicStates = {vk::DynamicState::eViewport, vk::DynamicState::eScissor}
         };
 
         auto result = core::PipelineUtilities::createGraphicsPipeline(config);
