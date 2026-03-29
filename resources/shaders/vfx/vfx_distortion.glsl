@@ -1,17 +1,12 @@
 #type VERTEX
 #version 460 core
 
-layout(location = 0) in vec3 inPosition;
-layout(location = 1) in vec3 inNormal;
-layout(location = 2) in vec2 inTexCoord;
+layout(location = 0) in vec2 inPosition;
+layout(location = 1) in vec2 inTexCoord;
 
 layout(location = 0) out vec2 fragTexCoord;
 layout(location = 1) out vec4 fragColor;
-layout(location = 2) out float fragLifetimeRatio;
-layout(location = 3) out float fragViewDepth;
-layout(location = 4) out vec3 fragNormal;
-layout(location = 5) out vec3 fragWorldPos;
-layout(location = 6) out float fragGlowIntensity;
+layout(location = 2) out float fragViewDepth;
 
 struct GPUParticle
 {
@@ -28,21 +23,6 @@ struct GPUParticle
     float glowIntensity;
     float _pad2;
     float _pad3;
-};
-
-layout(binding = 0) uniform CameraUBO {
-    mat4 view;
-    mat4 projection;
-    vec3 cameraPos;
-    float time;
-    float nearPlane;
-    float farPlane;
-    float _pad1;
-    float _pad2;
-} camera;
-
-layout(std430, set = 0, binding = 2) readonly buffer ParticleBuffer {
-    GPUParticle particles[];
 };
 
 struct GPUEmitterConfig
@@ -90,7 +70,6 @@ struct GPUEmitterConfig
     uint maxTrailPoints;
     float ribbonWidth;
     float ribbonMinDistance;
-
     float uvScrollSpeedU;
     float uvScrollSpeedV;
     uint eventFlags;
@@ -114,87 +93,9 @@ struct GPUEmitterConfig
     float _distortionPad1;
 };
 
-layout(std430, set = 0, binding = 3) readonly buffer EmitterConfigBuffer {
-    GPUEmitterConfig configs[];
-};
-
-layout(push_constant) uniform PushConstants {
-    uint emitterIndex;
-    float alphaClipThreshold;
-    uint blendMode;
-    float glowColorR;
-    float glowColorG;
-    float glowColorB;
-} pc;
-
-void main() {
-    uint particleIdx = gl_InstanceIndex;
-
-    GPUParticle p = particles[particleIdx];
-
-    // Cull dead particles
-    if (p.size <= 0.0) {
-        gl_Position = vec4(0.0, 0.0, 2.0, 1.0);
-        fragTexCoord = vec2(0.0);
-        fragColor = vec4(0.0);
-        fragLifetimeRatio = 1.0;
-        fragViewDepth = 0.0;
-        fragNormal = vec3(0.0);
-        fragWorldPos = vec3(0.0);
-        fragGlowIntensity = 0.0;
-        return;
-    }
-
-    GPUEmitterConfig config = configs[pc.emitterIndex];
-
-    // Build rotation matrix from velocity direction
-    vec3 forward = vec3(0.0, 1.0, 0.0);
-    float speed = length(p.velocity);
-    if (speed > 0.001) {
-        forward = p.velocity / speed;
-    }
-
-    vec3 up = abs(forward.y) < 0.999 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
-    vec3 right = normalize(cross(up, forward));
-    up = cross(forward, right);
-
-    // Apply rotation around forward axis (angular velocity roll)
-    float cosR = cos(p.rotation);
-    float sinR = sin(p.rotation);
-    vec3 rotRight = right * cosR + up * sinR;
-    vec3 rotUp = -right * sinR + up * cosR;
-
-    mat3 rotationMatrix = mat3(rotRight, rotUp, forward);
-
-    // Scale and transform mesh vertex
-    vec3 scaledPos = inPosition * p.size;
-    vec3 worldPos = p.position + rotationMatrix * scaledPos;
-
-    gl_Position = camera.projection * camera.view * vec4(worldPos, 1.0);
-
-    // View-space depth for soft particles
-    fragViewDepth = -(camera.view * vec4(worldPos, 1.0)).z;
-
-    fragTexCoord = inTexCoord + vec2(config.uvScrollSpeedU, config.uvScrollSpeedV) * camera.time;
-    fragColor = p.color;
-    fragLifetimeRatio = (p.maxLifetime > 0.0) ? (p.lifetime / p.maxLifetime) : 0.0;
-    fragNormal = rotationMatrix * inNormal;
-    fragWorldPos = worldPos;
-    fragGlowIntensity = p.glowIntensity;
-}
-
-#type FRAGMENT
-#version 460 core
-
-layout(location = 0) in vec2 fragTexCoord;
-layout(location = 1) in vec4 fragColor;
-layout(location = 2) in float fragLifetimeRatio;
-layout(location = 3) in float fragViewDepth;
-layout(location = 4) in vec3 fragNormal;
-layout(location = 5) in vec3 fragWorldPos;
-layout(location = 6) in float fragGlowIntensity;
-
-layout(location = 0) out vec4 outColor;
+const uint RENDER_MODE_BILLBOARD = 0u;
+const uint RENDER_MODE_STRETCHED = 1u;
+const uint RENDER_MODE_HORIZONTAL = 2u;
 
 layout(binding = 0) uniform CameraUBO {
     mat4 view;
@@ -207,7 +108,121 @@ layout(binding = 0) uniform CameraUBO {
     float _pad2;
 } camera;
 
-layout(binding = 1) uniform sampler2D particleTexture;
+layout(std430, set = 0, binding = 2) readonly buffer ParticleBuffer {
+    GPUParticle particles[];
+};
+
+layout(std430, set = 0, binding = 3) readonly buffer EmitterConfigBuffer {
+    GPUEmitterConfig configs[];
+};
+
+layout(push_constant) uniform PushConstants {
+    uint emitterIndex;
+} pc;
+
+void main() {
+    uint particleIdx = gl_InstanceIndex;
+    GPUParticle p = particles[particleIdx];
+
+    if (p.size <= 0.0) {
+        gl_Position = vec4(0.0, 0.0, 2.0, 1.0);
+        fragTexCoord = vec2(0.0);
+        fragColor = vec4(0.0);
+        fragViewDepth = 0.0;
+        return;
+    }
+
+    GPUEmitterConfig config = configs[pc.emitterIndex];
+
+    float cosR = cos(p.rotation);
+    float sinR = sin(p.rotation);
+    vec2 rotatedPos;
+    rotatedPos.x = inPosition.x * cosR - inPosition.y * sinR;
+    rotatedPos.y = inPosition.x * sinR + inPosition.y * cosR;
+
+    vec3 vertexPos;
+
+    if (config.renderMode == RENDER_MODE_STRETCHED) {
+        float speed = length(p.velocity);
+        if (speed < 0.001) {
+            vec3 cameraRight = vec3(camera.view[0][0], camera.view[1][0], camera.view[2][0]);
+            vec3 cameraUp = vec3(camera.view[0][1], camera.view[1][1], camera.view[2][1]);
+            vertexPos = p.position
+                + cameraRight * rotatedPos.x * p.size
+                + cameraUp * rotatedPos.y * p.size;
+        } else {
+            vec3 velDir = p.velocity / speed;
+            vec3 toCamera = normalize(camera.cameraPos - p.position);
+            vec3 rawRight = cross(toCamera, velDir);
+            float rightLen = length(rawRight);
+            vec3 right;
+            if (rightLen > 0.001) {
+                right = rawRight / rightLen;
+            } else {
+                vec3 alt = (abs(velDir.y) < 0.999) ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
+                right = normalize(cross(alt, velDir));
+            }
+            vertexPos = p.position
+                + right * rotatedPos.x * p.size
+                + velDir * rotatedPos.y * p.size * config.stretchMultiplier;
+        }
+    } else if (config.renderMode == RENDER_MODE_HORIZONTAL) {
+        vec3 right = vec3(1.0, 0.0, 0.0);
+        vec3 forward = vec3(0.0, 0.0, 1.0);
+        vertexPos = p.position
+            + right * rotatedPos.x * p.size
+            + forward * rotatedPos.y * p.size;
+    } else {
+        vec3 cameraRight = vec3(camera.view[0][0], camera.view[1][0], camera.view[2][0]);
+        vec3 cameraUp = vec3(camera.view[0][1], camera.view[1][1], camera.view[2][1]);
+        vertexPos = p.position
+            + cameraRight * rotatedPos.x * p.size
+            + cameraUp * rotatedPos.y * p.size;
+    }
+
+    gl_Position = camera.projection * camera.view * vec4(vertexPos, 1.0);
+    fragViewDepth = -(camera.view * vec4(vertexPos, 1.0)).z;
+
+    float totalFrames = config.flipbookColumns * config.flipbookRows;
+    float lifetimeRatio = (p.maxLifetime > 0.0) ? (p.lifetime / p.maxLifetime) : 0.0;
+    float frameIndex = 0.0;
+    if (totalFrames > 1.0) {
+        if (config.flipbookFrameRate > 0.0)
+            frameIndex = p.lifetime * config.flipbookFrameRate;
+        else
+            frameIndex = lifetimeRatio * totalFrames;
+        frameIndex = mod(frameIndex, totalFrames);
+    }
+    float col = mod(floor(frameIndex), config.flipbookColumns);
+    float row = floor(floor(frameIndex) / config.flipbookColumns);
+    vec2 tileSize = vec2(1.0 / config.flipbookColumns, 1.0 / config.flipbookRows);
+    fragTexCoord = (vec2(col, row) + inTexCoord) * tileSize;
+    fragTexCoord += vec2(config.uvScrollSpeedU, config.uvScrollSpeedV) * camera.time;
+
+    fragColor = p.color;
+}
+
+#type FRAGMENT
+#version 460 core
+
+layout(location = 0) in vec2 fragTexCoord;
+layout(location = 1) in vec4 fragColor;
+layout(location = 2) in float fragViewDepth;
+
+layout(location = 0) out vec2 outDistortion;
+
+layout(binding = 0) uniform CameraUBO {
+    mat4 view;
+    mat4 projection;
+    vec3 cameraPos;
+    float time;
+    float nearPlane;
+    float farPlane;
+    float _pad1;
+    float _pad2;
+} camera;
+
+layout(binding = 1) uniform sampler2D distortionTexture;
 
 struct GPUEmitterConfig
 {
@@ -283,95 +298,35 @@ layout(std430, set = 0, binding = 3) readonly buffer EmitterConfigBuffer {
 
 layout(binding = 4) uniform sampler2D sceneDepthTexture;
 
-// Lighting types (struct definitions + cluster helpers)
-#include "../common/lighting_functions.glsl"
-#include "../common/cluster_culling.glsl"
-
-// Lighting descriptor sets (shared from main renderer)
-layout(std430, set = 1, binding = 0) readonly buffer DirectionalLightBuffer {
-    DirectionalLight directionalLights[];
-};
-
-layout(std430, set = 1, binding = 1) readonly buffer PointLightBuffer {
-    PointLight pointLights[];
-};
-
-layout(std430, set = 1, binding = 2) readonly buffer SpotLightBuffer {
-    SpotLight spotLights[];
-};
-
-layout(std140, set = 1, binding = 3) uniform LightCountsUBO {
-    LightCounts lightCounts;
-};
-
-layout(std140, set = 2, binding = 0) uniform ClusterParamsUBO {
-    ClusterGridParams clusterParams;
-};
-
-layout(std430, set = 3, binding = 0) readonly buffer ClusterLightGridBuffer {
-    ClusterLightData clusterLightGrid[];
-};
-
-layout(std430, set = 3, binding = 1) readonly buffer ClusterLightIndexListBuffer {
-    uint lightIndexList[];
-};
-
-// VFX lighting evaluation (must come after buffer declarations above)
-#include "vfx_lighting.glsl"
-
 layout(push_constant) uniform PushConstants {
     uint emitterIndex;
     float alphaClipThreshold;
     uint blendMode;
-    float glowColorR;
-    float glowColorG;
-    float glowColorB;
+    float distortionStrengthOverride; // passed via glowColorR
+    float _unused1;
+    float _unused2;
 } pc;
 
 void main() {
-    vec4 texColor = texture(particleTexture, fragTexCoord);
-    vec4 finalColor = texColor * fragColor;
+    vec4 texColor = texture(distortionTexture, fragTexCoord);
 
+    // Interpret RG channels as distortion direction (normal map style)
+    vec2 distortionDir = texColor.rg * 2.0 - 1.0;
+    float mask = texColor.a * fragColor.a;
+
+    float strength = pc.distortionStrengthOverride * mask;
+
+    // Depth-aware fade (soft particles)
     GPUEmitterConfig config = configs[pc.emitterIndex];
-    vec3 normal = normalize(fragNormal);
-
-    // Lighting: use scene lights when available, fallback to hard-coded for unlit
-    if (config.lightingInfluence > 0.0 && pc.blendMode != 1u) {
-        finalColor.rgb = evaluateVFXLighting(
-            finalColor.rgb, normal, fragWorldPos, fragViewDepth,
-            config.ambientAmount, config.lightingInfluence);
-    } else {
-        // Fallback: basic hard-coded directional light for unlit mesh particles
-        vec3 lightDir = normalize(vec3(0.5, 1.0, 0.3));
-        float diffuse = max(dot(normal, lightDir), 0.0) * 0.6 + 0.4;
-        finalColor.rgb *= diffuse;
-    }
-
-    // Soft particles: fade near scene geometry
     if (config.softParticleDistance > 0.0) {
         vec2 screenUV = gl_FragCoord.xy / vec2(textureSize(sceneDepthTexture, 0));
         float rawDepth = texture(sceneDepthTexture, screenUV).r;
-
         float sceneLinearDepth = camera.nearPlane * camera.farPlane /
             (camera.farPlane - rawDepth * (camera.farPlane - camera.nearPlane));
-
         float depthDiff = sceneLinearDepth - fragViewDepth;
         float softFactor = clamp(depthDiff / config.softParticleDistance, 0.0, 1.0);
-        finalColor.a *= softFactor;
+        strength *= softFactor;
     }
 
-    // Glow: additive emissive color (applied after lighting)
-    vec3 glowColor = vec3(pc.glowColorR, pc.glowColorG, pc.glowColorB);
-    finalColor.rgb += glowColor * fragGlowIntensity;
-
-    if (finalColor.a < pc.alphaClipThreshold) {
-        discard;
-    }
-
-    if (pc.blendMode == 1u) {
-        // Additive blend
-        outColor = vec4(finalColor.rgb * finalColor.a, 0.0);
-    } else {
-        outColor = finalColor;
-    }
+    outDistortion = distortionDir * strength;
 }

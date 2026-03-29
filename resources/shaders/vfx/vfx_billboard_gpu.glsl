@@ -88,6 +88,12 @@ struct GPUEmitterConfig
     uint normalMode;
     float ambientAmount;
     float _lightPad0;
+
+    // Distortion
+    uint distortionEnabled;
+    float distortionStrength;
+    float _distortionPad0;
+    float _distortionPad1;
 };
 
 const uint FLIPBOOK_RANDOM_START = (1u << 14u);
@@ -306,6 +312,12 @@ struct GPUEmitterConfig
     uint normalMode;
     float ambientAmount;
     float _lightPad0;
+
+    // Distortion
+    uint distortionEnabled;
+    float distortionStrength;
+    float _distortionPad0;
+    float _distortionPad1;
 };
 
 layout(std430, set = 0, binding = 3) readonly buffer EmitterConfigBuffer {

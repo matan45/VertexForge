@@ -25,6 +25,9 @@
 #include "../../services/providers/terrain/ITerrainRenderProvider.hpp"
 #include "../../services/providers/terrain/IOceanRenderProvider.hpp"
 #include "../../services/providers/vegetation/IGrassRenderProvider.hpp"
+#include "vfx/distortion/DistortionResources.hpp"
+#include "vfx/distortion/VFXDistortionPipeline.hpp"
+#include "vfx/distortion/VFXDistortionComposite.hpp"
 #include "threading/JobSystem.hpp"
 #include <chrono>
 
@@ -102,6 +105,8 @@ namespace render
         drawSceneMeshes(commandBuffer, imageIndex);
 
         executeRenderHooks(plugin::RenderPassHookPoint::PostScene, commandBuffer, imageIndex);
+
+        executeDistortionPass(commandBuffer, imageIndex);
 
         drawOverlays(commandBuffer, imageIndex);
         executeOcclusionPasses(commandBuffer);
@@ -516,6 +521,54 @@ namespace render
         }
 
         meshPipeline->endRenderPass(commandBuffer);
+    }
+
+    void RenderPassHandler::executeDistortionPass(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const
+    {
+        if (!distortionInitialized || !distortionResources || !distortionResources->isInitialized())
+            return;
+
+        if (!vfxRuntimeProvider || !vfxRuntimeProvider->isInitialized() || !vfxRuntimeProvider->hasDistortionEmitters())
+            return;
+
+        auto extent = distortionResources->getExtent();
+
+        // 1. Copy scene color before distortion
+        distortionResources->copySceneColor(commandBuffer,
+            offscreenResources.colorImages[imageIndex].colorImage,
+            extent.width, extent.height);
+
+        // 2. Distortion vector pass (clear + render distortion emitters into R16G16 buffer)
+        std::array<vk::ClearValue, 2> clearValues{};
+        clearValues[0].color = vk::ClearColorValue{std::array<float, 4>{0.0f, 0.0f, 0.0f, 0.0f}};
+
+        vk::RenderPassBeginInfo rpBegin{};
+        rpBegin.renderPass = distortionResources->getDistortionVectorRenderPass();
+        rpBegin.framebuffer = distortionResources->getDistortionVectorFramebuffer();
+        rpBegin.renderArea.offset = vk::Offset2D{0, 0};
+        rpBegin.renderArea.extent = extent;
+        rpBegin.clearValueCount = static_cast<uint32_t>(clearValues.size());
+        rpBegin.pClearValues = clearValues.data();
+
+        commandBuffer.beginRenderPass(rpBegin, vk::SubpassContents::eInline);
+
+        vk::Viewport viewport{0.0f, 0.0f,
+            static_cast<float>(extent.width), static_cast<float>(extent.height),
+            0.0f, 1.0f};
+        commandBuffer.setViewport(0, viewport);
+        vk::Rect2D scissor{{0, 0}, extent};
+        commandBuffer.setScissor(0, scissor);
+
+        vfxRuntimeProvider->recordDistortionDrawCommands(commandBuffer);
+
+        commandBuffer.endRenderPass();
+
+        // 3. Composite pass: apply distortion to scene color
+        distortionComposite->record(commandBuffer,
+            distortionResources->getCompositeRenderPass(),
+            distortionResources->getCompositeFramebuffer(imageIndex),
+            extent,
+            distortionResources->getCompositeDescriptorSet());
     }
 
     void RenderPassHandler::drawOverlays(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const

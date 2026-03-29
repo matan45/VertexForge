@@ -253,6 +253,11 @@ namespace render::vfx
         float collisionBounce = 0.5f;
         float collisionFriction = 0.1f;
         float collisionLifetimeLoss = 0.0f;
+
+        // Distortion
+        bool distortionEnabled = false;
+        float distortionStrength = 0.1f;
+        std::string distortionTexturePath;
     };
 
     struct VFXFlipbookConfig

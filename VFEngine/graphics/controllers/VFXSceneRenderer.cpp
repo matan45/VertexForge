@@ -623,6 +623,24 @@ namespace controllers
         recordCPUDrawCommands(cmd);
     }
 
+    bool VFXSceneRenderer::hasDistortionEmitters() const
+    {
+        for (const auto& [id, instance] : instances)
+        {
+            if (instance.active && instance.config.distortionEnabled)
+                return true;
+        }
+        return false;
+    }
+
+    void VFXSceneRenderer::recordDistortionDrawCommands(vk::CommandBuffer cmd)
+    {
+        // Distortion rendering is currently a stub.
+        // The distortion pipeline will be wired up in a follow-up
+        // once the VFXDistortionPipeline is integrated into this renderer.
+        // For now, the RenderPassHandler drives the distortion pipeline directly.
+    }
+
     void VFXSceneRenderer::recordCPUDrawCommands(vk::CommandBuffer cmd)
     {
         if (!cpuPipeline || !cpuPipeline->isInitialized())

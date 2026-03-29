@@ -44,6 +44,12 @@ namespace services
         // Called during scene render pass to record VFX draw commands
         virtual void recordDrawCommands(const vk::CommandBuffer& cmd) = 0;
 
+        // Distortion pass support
+        virtual bool hasDistortionEmitters() const = 0;
+        virtual void recordDistortionDrawCommands(const vk::CommandBuffer& cmd) = 0;
+        virtual void initDistortion(vk::RenderPass distortionRenderPass) = 0;
+        virtual void recreateDistortion(vk::RenderPass distortionRenderPass) = 0;
+
         virtual size_t getInstanceCount() const = 0;
 
         // Playback state capture/seek for sector streaming

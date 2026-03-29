@@ -195,6 +195,9 @@ namespace controllers
 
         void recordDrawCommands(vk::CommandBuffer cmd);
 
+        bool hasDistortionEmitters() const;
+        void recordDistortionDrawCommands(vk::CommandBuffer cmd);
+
         size_t getInstanceCount() const { return instances.size(); }
         size_t getTotalParticleCount() const;
 

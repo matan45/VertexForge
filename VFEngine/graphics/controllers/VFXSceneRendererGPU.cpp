@@ -371,6 +371,8 @@ namespace controllers
         gpuConfig.lightingInfluence = cpuConfig.lightingInfluence;
         gpuConfig.normalMode = cpuConfig.normalMode;
         gpuConfig.ambientAmount = cpuConfig.ambientAmount;
+        gpuConfig.distortionEnabled = cpuConfig.distortionEnabled ? 1u : 0u;
+        gpuConfig.distortionStrength = cpuConfig.distortionStrength;
 
         return gpuConfig;
     }
