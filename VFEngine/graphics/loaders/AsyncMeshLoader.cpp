@@ -14,7 +14,7 @@ namespace loaders
         
         if (pendingLoads.find(meshPath) != pendingLoads.end())
         {
-            vfLogInfo("Mesh already being loaded: {}", meshPath);
+            vfLogDebug("Mesh already being loaded: {}", meshPath);
             return;
         }
 
@@ -28,7 +28,7 @@ namespace loaders
 
         pendingLoads[meshPath] = std::move(pending);
 
-        vfLogInfo("Started async mesh load: {}", meshPath);
+        vfLogDebug("Started async mesh load: {}", meshPath);
     }
 
     void AsyncMeshLoader::cancelLoad(const std::string& meshPath)
@@ -41,7 +41,7 @@ namespace loaders
             it->second->cancelled = true;
             it->second->state = services::LoadingState::Cancelled;
             it->second->statusMessage = "Cancelled";
-            vfLogInfo("Cancelled mesh load: {}", meshPath);
+            vfLogDebug("Cancelled mesh load: {}", meshPath);
         }
     }
 
@@ -75,7 +75,7 @@ namespace loaders
                                 pending->progress = 0.5f;
                                 pending->statusMessage = "Uploading to GPU...";
                                 gpuUploadReadyPath = path;
-                                vfLogInfo("Mesh loaded from disk, ready for GPU upload: {}", path);
+                                vfLogDebug("Mesh loaded from disk, ready for GPU upload: {}", path);
                             }
                             else
                             {
@@ -170,7 +170,7 @@ namespace loaders
             result.errorMessage = "Load was cancelled during GPU upload";
             pending->state = services::LoadingState::Cancelled;
             gpuUploadReadyPath.clear();
-            vfLogInfo("Mesh load cancelled during GPU upload: {}", meshPath);
+            vfLogDebug("Mesh load cancelled during GPU upload: {}", meshPath);
             return result;
         }
 
@@ -202,7 +202,7 @@ namespace loaders
         pendingLoads.erase(it);
         gpuUploadReadyPath.clear();
 
-        vfLogInfo("Mesh GPU upload complete: {}", meshPath);
+        vfLogDebug("Mesh GPU upload complete: {}", meshPath);
 
         return result;
     }

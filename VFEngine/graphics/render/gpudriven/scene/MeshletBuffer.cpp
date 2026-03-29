@@ -491,7 +491,7 @@ namespace render::gpudriven
 
         if (!keysToRemove.empty())
         {
-            vfLogInfo("MeshletBuffer::freeAllMeshlets: Freed {} allocations for '{}'",
+            vfLogDebug("MeshletBuffer::freeAllMeshlets: Freed {} allocations for '{}'",
                       keysToRemove.size(), meshPath);
         }
     }

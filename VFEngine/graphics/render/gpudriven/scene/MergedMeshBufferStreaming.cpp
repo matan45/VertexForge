@@ -136,7 +136,7 @@ namespace render::gpudriven
             freeMeshSlots.pop_back();
             meshPathToIndex[meshPath] = slot;
             registeredMeshes[slot] = std::move(meshInfo);
-            vfLogInfo("MergedMeshBuffer: Reserved space for mesh {} with {} submeshes (reused slot {})",
+            vfLogDebug("MergedMeshBuffer: Reserved space for mesh {} with {} submeshes (reused slot {})",
                        meshPath, header.numSubmeshes, slot);
             return &registeredMeshes[slot];
         }
@@ -144,7 +144,7 @@ namespace render::gpudriven
         meshPathToIndex[meshPath] = registeredMeshes.size();
         registeredMeshes.push_back(std::move(meshInfo));
 
-        vfLogInfo("MergedMeshBuffer: Reserved space for mesh {} with {} submeshes",
+        vfLogDebug("MergedMeshBuffer: Reserved space for mesh {} with {} submeshes",
                    meshPath, header.numSubmeshes);
         return &registeredMeshes.back();
     }
@@ -266,7 +266,7 @@ namespace render::gpudriven
         meshInfo = MergedMeshInfo{};
         freeMeshSlots.push_back(meshIdx);
 
-        vfLogInfo("MergedMeshBuffer::freeMesh: Freed mesh '{}'", meshPath);
+        vfLogDebug("MergedMeshBuffer::freeMesh: Freed mesh '{}'", meshPath);
     }
 
     void MergedMeshBuffer::setPersistentMode(bool enabled)

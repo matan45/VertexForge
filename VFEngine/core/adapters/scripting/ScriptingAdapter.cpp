@@ -343,7 +343,7 @@ namespace core
             info.className = className;
             info.scriptPath = scriptPath;
 
-            vfLogInfo("[ScriptingAdapter] Loaded script '{}' as class '{}' (instanceId={})",
+            vfLogDebug("[ScriptingAdapter] Loaded script '{}' as class '{}' (instanceId={})",
                       scriptPath, className, instanceId);
 
             return info;
@@ -399,7 +399,7 @@ namespace core
         instanceToPlaybackState.clear();
         instanceToPriority.clear();
         nextInstanceId = 1;
-        vfLogInfo("[ScriptingAdapter] All scripts unloaded, instance counter reset");
+        vfLogDebug("[ScriptingAdapter] All scripts unloaded, instance counter reset");
     }
 
     bool ScriptingAdapter::isScriptLoaded(uint64_t instanceId) const
@@ -435,7 +435,7 @@ namespace core
         {
             auto nativeFunc = std::any_cast<::services::NativeFunction>(function);
             interpreter->registerNativeFunction(name, std::move(nativeFunc));
-            vfLogInfo("[ScriptingAdapter] Registered plugin native function: {}", name);
+            vfLogDebug("[ScriptingAdapter] Registered plugin native function: {}", name);
         }
         catch (const std::bad_any_cast&)
         {

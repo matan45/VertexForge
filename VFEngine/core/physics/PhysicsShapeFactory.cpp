@@ -148,7 +148,7 @@ namespace core::physics
                 auto result = compoundSettings.Create();
                 if (!result.HasError())
                 {
-                    vfLogInfo("Created ConvexMesh compound collider with {} hulls from: {}",
+                    vfLogDebug("Created ConvexMesh compound collider with {} hulls from: {}",
                                compoundSettings.mSubShapes.size(), info.meshPath);
                     {
                         std::lock_guard lock(shapeCacheMutex);
@@ -184,7 +184,7 @@ namespace core::physics
             return makeBoxFallback(info.halfExtents);
         }
 
-        vfLogInfo("Created ConvexMesh collider with {} vertices from: {}",
+        vfLogDebug("Created ConvexMesh collider with {} vertices from: {}",
                    meshData->vertices.size(), info.meshPath);
         {
             std::lock_guard lock(shapeCacheMutex);
@@ -244,7 +244,7 @@ namespace core::physics
             return makeBoxFallback(info.halfExtents);
         }
 
-        vfLogInfo("Created TriangleMesh collider with {} triangles from: {}",
+        vfLogDebug("Created TriangleMesh collider with {} triangles from: {}",
                    triangles.size(), info.meshPath);
         {
             std::lock_guard lock(shapeCacheMutex);

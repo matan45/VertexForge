@@ -65,7 +65,7 @@ namespace core::physics
         entityCharacters[entityId] = character;
         entityCharacterLayers[entityId] = info.collisionLayer;
 
-        vfLogInfo("Character controller created for entity {} at ({:.1f}, {:.1f}, {:.1f})",
+        vfLogDebug("Character controller created for entity {} at ({:.1f}, {:.1f}, {:.1f})",
                    entityId, info.position.x, info.position.y, info.position.z);
         return true;
     }

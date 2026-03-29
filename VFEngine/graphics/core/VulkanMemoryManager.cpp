@@ -27,7 +27,7 @@ namespace core
 			baseMappedPtr = device.mapMemory(memory, 0, blockSize, {});
 		}
 
-		vfLogInfo("VulkanMemoryBlock: Allocated {}MB block (type {}{})",
+		vfLogDebug("VulkanMemoryBlock: Allocated {}MB block (type {}{})",
 			blockSize / (1024 * 1024), memoryTypeIndex,
 			hostVisible ? ", host-visible" : "");
 	}
@@ -103,7 +103,7 @@ namespace core
 		// and will free via destroyBuffer during their own cleanup.
 		// Only log any remaining as a diagnostic.
 		if (!dedicatedAllocations.empty()) {
-			vfLogInfo("VulkanMemoryManager: {} dedicated allocations still tracked at shutdown (callers handle cleanup)",
+			vfLogDebug("VulkanMemoryManager: {} dedicated allocations still tracked at shutdown (callers handle cleanup)",
 				dedicatedAllocations.size());
 		}
 		dedicatedAllocations.clear();
@@ -111,7 +111,7 @@ namespace core
 		// Blocks are cleaned up by their destructors via unique_ptr
 		memoryTypes.clear();
 
-		vfLogInfo("VulkanMemoryManager: Destroyed");
+		vfLogDebug("VulkanMemoryManager: Destroyed");
 	}
 
 	VulkanAllocation VulkanMemoryManager::allocate(const vk::MemoryRequirements& memRequirements,
@@ -200,7 +200,7 @@ namespace core
 
 				auto blockStats = (*it)->getStats();
 				if (blockStats.activeAllocationCount == 0) {
-					vfLogInfo("VulkanMemoryManager: Reclaiming empty {}MB block (type {})",
+					vfLogDebug("VulkanMemoryManager: Reclaiming empty {}MB block (type {})",
 						(*it)->getBlockSize() / (1024 * 1024), typeIndex);
 					it = typeData.blocks.erase(it);
 					memory::GpuAllocationStats::blocksReclaimed.fetch_add(1, std::memory_order_relaxed);
@@ -355,7 +355,7 @@ namespace core
 		allocation.block = nullptr;
 		allocation.isDedicated = true;
 
-		vfLogInfo("VulkanMemoryManager: Dedicated allocation {}MB (type {}{}{})",
+		vfLogDebug("VulkanMemoryManager: Dedicated allocation {}MB (type {}{}{})",
 			size / (1024 * 1024), memoryTypeIndex,
 			hostVisible ? ", host-visible" : "",
 			needsDeviceAddress ? ", device-address" : "");

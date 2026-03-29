@@ -102,7 +102,7 @@ namespace core::audio {
             {
                 // Query max auxiliary sends
                 alcGetIntegerv(device, ALC_MAX_AUXILIARY_SENDS, 1, &maxAuxiliarySends);
-                vfLogInfo("OpenAL EFX extension supported - max auxiliary sends: {}", maxAuxiliarySends);
+                vfLogDebug("OpenAL EFX extension supported - max auxiliary sends: {}", maxAuxiliarySends);
             }
         }
         else

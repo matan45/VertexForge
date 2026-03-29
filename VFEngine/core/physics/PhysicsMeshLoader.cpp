@@ -56,7 +56,7 @@ namespace core::physics
         }
         result.indices = std::move(indices);
 
-        vfLogInfo("PhysicsMeshLoader: Loaded {} vertices, {} indices from {} (LOD{})",
+        vfLogDebug("PhysicsMeshLoader: Loaded {} vertices, {} indices from {} (LOD{})",
                    result.vertices.size(), result.indices.size(), meshPath, lodLevel);
 
         return result;
@@ -122,7 +122,7 @@ namespace core::physics
             return std::nullopt;
         }
 
-        vfLogInfo("PhysicsMeshLoader: Loaded {} total vertices, {} indices from {} submeshes (LOD{})",
+        vfLogDebug("PhysicsMeshLoader: Loaded {} total vertices, {} indices from {} submeshes (LOD{})",
                    result.vertices.size(), result.indices.size(), header.numSubmeshes, lodLevel);
 
         return result;
@@ -172,7 +172,7 @@ namespace core::physics
             return std::nullopt;
         }
 
-        vfLogInfo("PhysicsMeshLoader: Loaded convex decomposition with {} hulls from {}",
+        vfLogDebug("PhysicsMeshLoader: Loaded convex decomposition with {} hulls from {}",
                    result.hulls.size(), meshPath);
 
         return result;

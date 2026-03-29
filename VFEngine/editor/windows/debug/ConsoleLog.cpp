@@ -36,10 +36,10 @@ namespace windows
 
 
         ImGui::SetNextItemWidth(100.0f);
-        const char* filterLabels[] = {"All", "Info", "Warning", "Error"};
+        const char* filterLabels[] = {"All", "Trace", "Debug", "Info", "Warning", "Error"};
         if (ImGui::BeginCombo("##Filter", filterLabels[static_cast<int>(currentFilter)]))
         {
-            for (int i = 0; i < 4; i++)
+            for (int i = 0; i < 6; i++)
             {
                 bool isSelected = (static_cast<int>(currentFilter) == i);
                 if (ImGui::Selectable(filterLabels[i], isSelected))
@@ -288,6 +288,10 @@ namespace windows
         {
         case LogFilter::All:
             return true;
+        case LogFilter::Trace:
+            return entry.level == util::LogLevel::Trace;
+        case LogFilter::Debug:
+            return entry.level == util::LogLevel::Debug;
         case LogFilter::Info:
             return entry.level == util::LogLevel::Info;
         case LogFilter::Warning:
@@ -307,6 +311,10 @@ namespace windows
             return ImVec4(1.0f, 0.3f, 0.3f, 1.0f); // Red
         case util::LogLevel::Warning:
             return ImVec4(1.0f, 1.0f, 0.0f, 1.0f); // Yellow
+        case util::LogLevel::Debug:
+            return ImVec4(0.4f, 0.8f, 1.0f, 1.0f); // Cyan
+        case util::LogLevel::Trace:
+            return ImVec4(0.6f, 0.6f, 0.6f, 1.0f); // Gray
         case util::LogLevel::Info:
         default:
             return ImVec4(1.0f, 1.0f, 1.0f, 1.0f); // White
