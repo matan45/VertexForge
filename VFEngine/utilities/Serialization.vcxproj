@@ -155,6 +155,9 @@ IF EXIST ..\..\bin\Serialization\Release\x64\Serialization.dll\ (xcopy /Q /E /Y 
     <ProjectReference Include="..\graphics\Animation.vcxproj">
       <Project>{859E00A2-F108-B518-3A47-66BEA6F0926D}</Project>
     </ProjectReference>
+    <ProjectReference Include="ECSRegistry.vcxproj">
+      <Project>{79DB43B4-E590-BCA9-6E85-B680DA39B3AD}</Project>
+    </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

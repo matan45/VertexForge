@@ -160,6 +160,9 @@ IF EXIST ..\..\bin\Audio\Release\x64\Audio.dll\ (xcopy /Q /E /Y /I ..\..\bin\Aud
     <ProjectReference Include="..\utilities\Terrain.vcxproj">
       <Project>{7AABC339-E68A-42D5-EFA2-CDAB5B01A936}</Project>
     </ProjectReference>
+    <ProjectReference Include="..\utilities\ECSRegistry.vcxproj">
+      <Project>{79DB43B4-E590-BCA9-6E85-B680DA39B3AD}</Project>
+    </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

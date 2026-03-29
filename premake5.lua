@@ -67,7 +67,8 @@ project "Editor"
 	  "imgui",                          -- For imgui-node-editor in ShaderGraphEditor
 	  "ProceduralGen",                  -- Procedural heightmap generation
 	  "ImageProcessing",                -- Image background removal
-	  "GameExport"                      -- Game export pipeline with shader pre-compilation
+	  "GameExport",                     -- Game export pipeline with shader pre-compilation
+	  "ECSRegistry"                     -- Shared ECS registry singleton DLL
    }
 
    defines { "_CRT_SECURE_NO_WARNINGS" }
@@ -293,7 +294,7 @@ project "Runtime"
       -- NOTE: NO VFEngine/core/controllers, NO VFEngine/graphics/controllers
    }
 
-   links { "Services", "Core", "Plugin" }  -- Core linked for RuntimeBootstrap, not direct access
+   links { "Services", "Core", "Plugin", "ECSRegistry" }  -- Core linked for RuntimeBootstrap, not direct access
 
    -- Delay-load shaderc: exported builds ship pre-compiled SPIR-V,
    -- so shaderc_shared.dll is not needed and never loaded at runtime
@@ -337,7 +338,8 @@ project "Utilities"
       "VFEngine/utilities/vfx/**",
       "VFEngine/utilities/procedural/**",
       "VFEngine/utilities/imageprocessing/**",
-      "VFEngine/utilities/memory/**"
+      "VFEngine/utilities/memory/**",
+      "VFEngine/utilities/scene/EntityRegistry.cpp"  -- compiled by ECSRegistry DLL
    }
 
    includedirs {
@@ -483,7 +485,55 @@ project "Window"
 -- Group for Extracted Subsystems
 group "Subsystems"
 
--- Audio subsystem (extracted from Core)
+-- ECSRegistry subsystem (owns the EnTT registry singleton, SharedLib/DLL)
+-- Required by any DLL that accesses EntityRegistry (Audio, Serialization, etc.)
+project "ECSRegistry"
+   kind "SharedLib"
+   language "C++"
+   cppdialect "C++20"
+   location "VFEngine/utilities"
+   targetdir "bin/%{prj.name}/%{cfg.buildcfg}/%{cfg.platform}"
+
+   files {
+      "VFEngine/utilities/scene/EntityRegistry.hpp",
+      "VFEngine/utilities/scene/EntityRegistry.cpp",
+      "VFEngine/utilities/scene/ECSRegistryExport.hpp"
+   }
+
+   includedirs {
+      "dependencies/spdlog/include",
+      "dependencies/glm",
+      "dependencies/entt/single_include",
+      "dependencies/json/single_include",
+      "VFEngine/utilities"
+   }
+
+   defines { "_CRT_SECURE_NO_WARNINGS", "VF_ECSREGISTRY_BUILD_DLL" }
+
+   links { "spdLog" }
+
+   filter "configurations:Debug"
+      defines { "DEBUG" }
+      symbols "On"
+      postbuildcommands {
+         "{MKDIR} ../../bin/Editor/Debug/x64",
+         "{MKDIR} ../../bin/Runtime/Debug/x64",
+         "{COPY} ../../bin/ECSRegistry/Debug/x64/ECSRegistry.dll ../../bin/Editor/Debug/x64/",
+         "{COPY} ../../bin/ECSRegistry/Debug/x64/ECSRegistry.dll ../../bin/Runtime/Debug/x64/"
+      }
+
+   filter "configurations:Release"
+      defines { "NDEBUG" }
+      optimize "On"
+      postbuildcommands {
+         "{MKDIR} ../../bin/Editor/Release/x64",
+         "{MKDIR} ../../bin/Runtime/Release/x64",
+         "{COPY} ../../bin/ECSRegistry/Release/x64/ECSRegistry.dll ../../bin/Editor/Release/x64/",
+         "{COPY} ../../bin/ECSRegistry/Release/x64/ECSRegistry.dll ../../bin/Runtime/Release/x64/"
+      }
+
+
+-- Audio subsystem (extracted from Core, SharedLib/DLL)
 project "Audio"
    kind "SharedLib"
    language "C++"
@@ -505,7 +555,7 @@ project "Audio"
 
    defines { "_CRT_SECURE_NO_WARNINGS", "VF_AUDIO_BUILD_DLL" }
 
-   links { "Utilities", "Services", "Animation", "Terrain" }
+   links { "Utilities", "Services", "Animation", "Terrain", "ECSRegistry" }
 
    filter "configurations:Debug"
       defines { "DEBUG" }
@@ -695,7 +745,7 @@ project "ImageProcessing"
       }
 
 
--- Serialization subsystem (extracted from Utilities)
+-- Serialization subsystem (extracted from Utilities, SharedLib/DLL)
 project "Serialization"
    kind "SharedLib"
    language "C++"
@@ -724,7 +774,7 @@ project "Serialization"
 
    defines { "_CRT_SECURE_NO_WARNINGS", "VF_SERIALIZATION_BUILD_DLL" }
 
-   links { "Utilities", "Animation" }
+   links { "Utilities", "Animation", "ECSRegistry" }
 
    buildoptions { "/bigobj" }
 
