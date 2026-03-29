@@ -136,8 +136,14 @@ namespace render::vfx
         int32_t normalMode = 0;               // 0 = sphere, 1 = view-aligned, 2 = mesh
         float ambientAmount = 0.3f;           // ambient light contribution
         float _lightPad0 = 0.0f;
+
+        // Distortion
+        uint32_t distortionEnabled = 0;
+        float distortionStrength = 0.0f;
+        float _distortionPad0 = 0.0f;
+        float _distortionPad1 = 0.0f;
     };
-    static_assert(sizeof(GPUEmitterConfig) == 336, "GPUEmitterConfig must be 336 bytes for GPU alignment");
+    static_assert(sizeof(GPUEmitterConfig) == 352, "GPUEmitterConfig must be 352 bytes for GPU alignment");
     static_assert(offsetof(GPUEmitterConfig, emitDirection) == 0, "GPUEmitterConfig::emitDirection offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, startColor) == 16, "GPUEmitterConfig::startColor offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, spawnRate) == 32, "GPUEmitterConfig::spawnRate offset mismatch");
@@ -182,6 +188,8 @@ namespace render::vfx
     static_assert(offsetof(GPUEmitterConfig, lightingInfluence) == 320, "GPUEmitterConfig::lightingInfluence offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, normalMode) == 324, "GPUEmitterConfig::normalMode offset mismatch");
     static_assert(offsetof(GPUEmitterConfig, ambientAmount) == 328, "GPUEmitterConfig::ambientAmount offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, distortionEnabled) == 336, "GPUEmitterConfig::distortionEnabled offset mismatch");
+    static_assert(offsetof(GPUEmitterConfig, distortionStrength) == 340, "GPUEmitterConfig::distortionStrength offset mismatch");
 
     struct alignas(16) GPUEmitterState
     {
@@ -311,6 +319,12 @@ namespace render::vfx
         float glowColorR = 1.0f;
         float glowColorG = 1.0f;
         float glowColorB = 1.0f;
+    };
+
+    struct GPUVFXDistortionPushConstants
+    {
+        uint32_t emitterIndex;
+        float distortionStrength = 0.1f;
     };
 
     struct GPUTerrainHeightfield

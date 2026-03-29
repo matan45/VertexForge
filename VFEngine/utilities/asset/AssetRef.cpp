@@ -66,8 +66,16 @@ namespace asset
         }
 
         auto pathOpt = AssetDatabase::instance().getPath(guid);
-        cachedPath = pathOpt ? *pathOpt : std::string{};
-        cacheValid = true;
+        if (pathOpt)
+        {
+            cachedPath = *pathOpt;
+            cacheValid = true;
+        }
+        else
+        {
+            // Don't cache failed lookups — the database may be populated later
+            cachedPath.clear();
+        }
         return cachedPath;
     }
 }

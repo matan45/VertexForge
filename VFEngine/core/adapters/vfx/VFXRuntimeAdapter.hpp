@@ -66,6 +66,12 @@ namespace core
         // Draw commands (call during render pass)
         void recordDrawCommands(const vk::CommandBuffer& cmd) override;
 
+        // Distortion pass
+        bool hasDistortionEmitters() const override;
+        void recordDistortionDrawCommands(const vk::CommandBuffer& cmd) override;
+        void initDistortion(vk::RenderPass distortionRenderPass) override;
+        void recreateDistortion(vk::RenderPass distortionRenderPass) override;
+
         size_t getInstanceCount() const override;
 
         void setLightingLayouts(vk::DescriptorSetLayout lightBufferLayout,

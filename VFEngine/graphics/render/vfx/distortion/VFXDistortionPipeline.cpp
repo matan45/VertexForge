@@ -1,25 +1,85 @@
-#include "VFXSceneGPUPipeline.hpp"
+#include "VFXDistortionPipeline.hpp"
 #include "../../../core/Device.hpp"
+#include "../../../core/SwapChain.hpp"
 #include "../../../core/Texture.hpp"
 #include "../../../core/DeferredDeletionQueue.hpp"
 #include "print/Log.hpp"
-#include "../compute/GPUVFXTypes.hpp"
 #include <filesystem>
 
 namespace render::vfx
 {
-    void VFXSceneGPUPipeline::updateCameraUBO(
-        const glm::mat4& view,
-        const glm::mat4& projection,
-        const glm::vec3& cameraPos,
-        float time,
-        float nearPlane,
-        float farPlane) const
+    VFXDistortionPipeline::VFXDistortionPipeline(core::Device& device, core::SwapChain& swapChain)
+        : device(device), swapChain(swapChain)
     {
-        if (!cameraUBOMapped)
-        {
-            return;
-        }
+    }
+
+    VFXDistortionPipeline::~VFXDistortionPipeline()
+    {
+        cleanup();
+    }
+
+    void VFXDistortionPipeline::init(vk::RenderPass renderPass)
+    {
+        externalRenderPass = renderPass;
+        loadShader();
+        createDescriptorSetLayout();
+        createDescriptorPool();
+        allocateDescriptorSet();
+        createBuffers();
+        createDefaultTexture();
+        createSampler();
+        createDepthSampler();
+        createPipeline();
+        initialized = true;
+    }
+
+    void VFXDistortionPipeline::recreate(vk::RenderPass renderPass)
+    {
+        cleanup();
+        init(renderPass);
+    }
+
+    void VFXDistortionPipeline::cleanup()
+    {
+        if (!initialized) return;
+
+        auto vkDevice = device.getLogicalDevice();
+
+        emitterConfigs.clear();
+        textureEntries.clear();
+        pendingDescriptorSets.clear();
+
+        if (graphicsPipeline) { vkDevice.destroyPipeline(graphicsPipeline); graphicsPipeline = nullptr; }
+        if (pipelineLayout) { vkDevice.destroyPipelineLayout(pipelineLayout); pipelineLayout = nullptr; }
+        if (descriptorPool) { vkDevice.destroyDescriptorPool(descriptorPool); descriptorPool = nullptr; }
+        if (descriptorSetLayout) { vkDevice.destroyDescriptorSetLayout(descriptorSetLayout); descriptorSetLayout = nullptr; }
+
+        if (textureSampler) { vkDevice.destroySampler(textureSampler); textureSampler = nullptr; }
+        if (depthSampler) { vkDevice.destroySampler(depthSampler); depthSampler = nullptr; }
+
+        if (defaultTextureImageView) { vkDevice.destroyImageView(defaultTextureImageView); defaultTextureImageView = nullptr; }
+        if (defaultTextureImage) { vkDevice.destroyImage(defaultTextureImage); defaultTextureImage = nullptr; }
+        if (defaultTextureAllocation) { device.getMemoryManager().free(defaultTextureAllocation); defaultTextureAllocation = {}; }
+
+        if (cameraUBO) { vkDevice.destroyBuffer(cameraUBO); cameraUBO = nullptr; }
+        if (cameraUBOAllocation) { device.getMemoryManager().free(cameraUBOAllocation); cameraUBOAllocation = {}; }
+        cameraUBOMapped = nullptr;
+
+        if (quadVertexBuffer) { vkDevice.destroyBuffer(quadVertexBuffer); quadVertexBuffer = nullptr; }
+        if (quadVertexBufferAllocation) { device.getMemoryManager().free(quadVertexBufferAllocation); quadVertexBufferAllocation = {}; }
+        if (quadIndexBuffer) { vkDevice.destroyBuffer(quadIndexBuffer); quadIndexBuffer = nullptr; }
+        if (quadIndexBufferAllocation) { device.getMemoryManager().free(quadIndexBufferAllocation); quadIndexBufferAllocation = {}; }
+
+        distortionShader.reset();
+        initialized = false;
+    }
+
+    void VFXDistortionPipeline::updateCameraUBO(
+        const glm::mat4& view, const glm::mat4& projection,
+        const glm::vec3& cameraPos, float time,
+        float nearPlane, float farPlane) const
+    {
+        if (!cameraUBOMapped) return;
 
         GPUVFXCameraUBO ubo{};
         ubo.view = view;
@@ -32,7 +92,7 @@ namespace render::vfx
         std::memcpy(cameraUBOMapped, &ubo, sizeof(ubo));
     }
 
-    void VFXSceneGPUPipeline::setSceneDepthImageView(vk::ImageView depthView)
+    void VFXDistortionPipeline::setSceneDepthImageView(vk::ImageView depthView)
     {
         if (sceneDepthImageView != depthView)
         {
@@ -41,7 +101,7 @@ namespace render::vfx
         }
     }
 
-    void VFXSceneGPUPipeline::updateParticleBuffer(vk::Buffer particleBuffer, vk::DeviceSize particleBufferSize)
+    void VFXDistortionPipeline::updateParticleBuffer(vk::Buffer particleBuffer, vk::DeviceSize particleBufferSize)
     {
         if (particleBuffer != cachedParticleBuffer || particleBufferSize != cachedParticleBufferSize)
         {
@@ -51,7 +111,7 @@ namespace render::vfx
         }
     }
 
-    void VFXSceneGPUPipeline::updateConfigBuffer(vk::Buffer configBuffer, vk::DeviceSize configBufferSize)
+    void VFXDistortionPipeline::updateConfigBuffer(vk::Buffer configBuffer, vk::DeviceSize configBufferSize)
     {
         if (configBuffer != cachedConfigBuffer || configBufferSize != cachedConfigBufferSize)
         {
@@ -61,24 +121,18 @@ namespace render::vfx
         }
     }
 
-    void VFXSceneGPUPipeline::writeDescriptors() const
+    void VFXDistortionPipeline::writeDescriptors() const
     {
-        if (!descriptorsNeedUpdate || !cachedParticleBuffer || !cachedConfigBuffer)
-        {
-            return;
-        }
+        if (!descriptorsNeedUpdate || !cachedParticleBuffer || !cachedConfigBuffer) return;
 
         writeDescriptorSet(defaultDescriptorSet, nullptr);
-
         for (const auto& [path, entry] : textureEntries)
-        {
             writeDescriptorSet(entry.descriptorSet, entry.texture.get());
-        }
 
         descriptorsNeedUpdate = false;
     }
 
-    void VFXSceneGPUPipeline::writeDescriptorSet(vk::DescriptorSet dstSet, core::Texture* texture) const
+    void VFXDistortionPipeline::writeDescriptorSet(vk::DescriptorSet dstSet, core::Texture* texture) const
     {
         auto vkDevice = device.getLogicalDevice();
 
@@ -152,14 +206,13 @@ namespace render::vfx
         vkDevice.updateDescriptorSets(writes, {});
     }
 
-    void VFXSceneGPUPipeline::setEmitterTexture(uint32_t emitterIndex, const std::string& texturePath)
+    void VFXDistortionPipeline::setEmitterDistortionTexture(uint32_t emitterIndex, const std::string& texturePath)
     {
         auto& config = emitterConfigs[emitterIndex];
         const std::string oldPath = config.texturePath;
         config.texturePath = texturePath;
 
-        if (oldPath == texturePath)
-            return;
+        if (oldPath == texturePath) return;
 
         if (!oldPath.empty())
         {
@@ -167,21 +220,14 @@ namespace render::vfx
             if (it != textureEntries.end() && --it->second.refCount == 0)
             {
                 if (deletionQueue && it->second.texture)
-                {
                     it->second.texture->extractResources(*deletionQueue);
-                }
                 if (it->second.descriptorSet)
-                {
                     pendingDescriptorSets.push_back({it->second.descriptorSet, frameCounter});
-                }
                 textureEntries.erase(it);
             }
         }
 
-        if (texturePath.empty())
-        {
-            return;
-        }
+        if (texturePath.empty()) return;
 
         if (textureEntries.count(texturePath))
         {
@@ -191,71 +237,60 @@ namespace render::vfx
 
         if (!std::filesystem::exists(texturePath))
         {
-            vfLogWarning("VFX GPU texture not found: {}", texturePath);
+            vfLogWarning("VFX distortion texture not found: {}", texturePath);
             emitterConfigs[emitterIndex].texturePath.clear();
             return;
         }
 
         if (textureEntries.size() >= MAX_TEXTURE_SLOTS)
         {
-            vfLogWarning("Max VFX texture slots ({}) reached, emitter {} will use default texture",
-                          MAX_TEXTURE_SLOTS, emitterIndex);
+            vfLogWarning("Max VFX distortion texture slots ({}) reached", MAX_TEXTURE_SLOTS);
             emitterConfigs[emitterIndex].texturePath.clear();
             return;
         }
 
         if (!deletionQueue)
-        {
             device.getLogicalDevice().waitIdle();
-        }
 
         try
         {
             auto& entry = textureEntries[texturePath];
             entry.texture = std::make_unique<core::Texture>(device);
-            entry.texture->loadTextureFromFile(texturePath, vk::Format::eR8G8B8A8Srgb, false);
-            entry.descriptorSet = allocateDescriptorSetFromPool();
+            entry.texture->loadTextureFromFile(texturePath, vk::Format::eR8G8B8A8Unorm, false);
+
+            try
+            {
+                entry.descriptorSet = allocateDescriptorSetFromPool();
+            }
+            catch (const std::exception& e)
+            {
+                vfLogError("Distortion descriptor pool exhausted: {}", e.what());
+                textureEntries.erase(texturePath);
+                emitterConfigs[emitterIndex].texturePath.clear();
+                return;
+            }
+
             entry.refCount = 1;
 
             if (cachedParticleBuffer && cachedConfigBuffer)
-            {
                 writeDescriptorSet(entry.descriptorSet, entry.texture.get());
-            }
             else
-            {
                 descriptorsNeedUpdate = true;
-            }
-
-            vfLogInfo("VFX GPU texture loaded: {}", texturePath);
         }
         catch (const std::exception& e)
         {
-            vfLogError("Failed to load VFX GPU texture '{}': {}", texturePath, e.what());
+            vfLogError("Failed to load VFX distortion texture '{}': {}", texturePath, e.what());
             textureEntries.erase(texturePath);
             emitterConfigs[emitterIndex].texturePath.clear();
         }
     }
 
-    void VFXSceneGPUPipeline::setEmitterRenderingConfig(uint32_t emitterIndex,
-                                                         float alphaClipThreshold, bool additiveBlend,
-                                                         const glm::vec3& glowColor)
+    void VFXDistortionPipeline::setEmitterDistortionConfig(uint32_t emitterIndex, float strength)
     {
-        emitterConfigs[emitterIndex].alphaClipThreshold = alphaClipThreshold;
-        emitterConfigs[emitterIndex].blendMode = additiveBlend ? 1u : 0u;
-        emitterConfigs[emitterIndex].glowColor = glowColor;
+        emitterConfigs[emitterIndex].distortionStrength = strength;
     }
 
-    void VFXSceneGPUPipeline::setEmitterRenderMode(uint32_t emitterIndex, uint32_t renderMode)
-    {
-        emitterConfigs[emitterIndex].renderMode = renderMode;
-    }
-
-    void VFXSceneGPUPipeline::setEmitterDistortionEnabled(uint32_t emitterIndex, bool enabled)
-    {
-        emitterConfigs[emitterIndex].distortionEnabled = enabled;
-    }
-
-    void VFXSceneGPUPipeline::removeEmitter(uint32_t emitterIndex)
+    void VFXDistortionPipeline::removeEmitter(uint32_t emitterIndex)
     {
         auto configIt = emitterConfigs.find(emitterIndex);
         if (configIt != emitterConfigs.end())
@@ -267,13 +302,9 @@ namespace render::vfx
                 if (texIt != textureEntries.end() && --texIt->second.refCount == 0)
                 {
                     if (deletionQueue && texIt->second.texture)
-                    {
                         texIt->second.texture->extractResources(*deletionQueue);
-                    }
                     if (texIt->second.descriptorSet)
-                    {
                         pendingDescriptorSets.push_back({texIt->second.descriptorSet, frameCounter});
-                    }
                     textureEntries.erase(texIt);
                 }
             }
@@ -281,31 +312,19 @@ namespace render::vfx
         }
     }
 
-    void VFXSceneGPUPipeline::recordCommandsInline(
+    void VFXDistortionPipeline::recordCommandsInline(
         vk::CommandBuffer cmd,
         vk::Buffer drawCommandBuffer,
-        uint32_t emitterCount) const
+        uint32_t emitterCount,
+        const std::vector<bool>& distortionEnabledFlags) const
     {
         ++frameCounter;
 
-        if (!initialized || emitterCount == 0 || !cachedParticleBuffer)
-        {
-            return;
-        }
+        if (!initialized || emitterCount == 0 || !cachedParticleBuffer) return;
 
         writeDescriptors();
 
         cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
-
-        // Bind lighting descriptor sets (sets 1-3) if available
-        if (lightingAvailable && cachedLightBufferSet && cachedClusterGridSet && cachedClusterLightGridSet)
-        {
-            std::array<vk::DescriptorSet, 3> lightingSets = {
-                cachedLightBufferSet, cachedClusterGridSet, cachedClusterLightGridSet
-            };
-            cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout,
-                                   1, lightingSets, {});
-        }
 
         vk::Buffer vertexBuffers[] = {quadVertexBuffer};
         vk::DeviceSize offsets[] = {0};
@@ -316,35 +335,23 @@ namespace render::vfx
 
         for (uint32_t i = 0; i < emitterCount; ++i)
         {
-            auto configIt = emitterConfigs.find(i);
-            // Skip mesh/ribbon (handled by dedicated pipelines) and distortion
-            // emitters (rendered in the separate distortion vector pass)
-            if (configIt != emitterConfigs.end() &&
-                (configIt->second.renderMode == RenderModeFlags::MeshParticle ||
-                 configIt->second.renderMode == RenderModeFlags::Ribbon ||
-                 configIt->second.distortionEnabled))
-            {
+            // Only draw emitters with distortion enabled
+            if (i >= distortionEnabledFlags.size() || !distortionEnabledFlags[i])
                 continue;
-            }
 
             vk::DescriptorSet setToBind = defaultDescriptorSet;
-            float alphaClip = 0.1f;
-            uint32_t blendMode = 0;
-            glm::vec3 gc(1.0f);
+            float strength = 0.1f;
 
+            auto configIt = emitterConfigs.find(i);
             if (configIt != emitterConfigs.end())
             {
-                alphaClip = configIt->second.alphaClipThreshold;
-                blendMode = configIt->second.blendMode;
-                gc = configIt->second.glowColor;
+                strength = configIt->second.distortionStrength;
 
                 if (!configIt->second.texturePath.empty())
                 {
                     auto texIt = textureEntries.find(configIt->second.texturePath);
                     if (texIt != textureEntries.end())
-                    {
                         setToBind = texIt->second.descriptorSet;
-                    }
                 }
             }
 
@@ -355,16 +362,12 @@ namespace render::vfx
                 lastBoundSet = setToBind;
             }
 
-            GPUVFXBillboardPushConstants pushConstants{};
+            GPUVFXDistortionPushConstants pushConstants{};
             pushConstants.emitterIndex = i;
-            pushConstants.alphaClipThreshold = alphaClip;
-            pushConstants.blendMode = blendMode;
-            pushConstants.glowColorR = gc.r;
-            pushConstants.glowColorG = gc.g;
-            pushConstants.glowColorB = gc.b;
+            pushConstants.distortionStrength = strength;
             cmd.pushConstants(pipelineLayout,
                               vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
-                              0, sizeof(GPUVFXBillboardPushConstants), &pushConstants);
+                              0, sizeof(GPUVFXDistortionPushConstants), &pushConstants);
 
             vk::DeviceSize offset = i * sizeof(VFXDrawIndirectCommand);
             cmd.drawIndexedIndirect(drawCommandBuffer, offset, 1, sizeof(VFXDrawIndirectCommand));

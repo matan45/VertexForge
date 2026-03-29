@@ -342,6 +342,82 @@ namespace editor::vfxeditor
                 }
             }
         }
+
+        ImGui::Spacing();
+        ImGui::Text("Distortion");
+        ImGui::Separator();
+
+        {
+            auto enableIt = node.properties.find("distortionEnabled");
+            if (enableIt != node.properties.end())
+            {
+                if (auto* val = std::get_if<bool>(&enableIt->second.value))
+                {
+                    ImGui::Text("Enable");
+                    ImGui::SameLine();
+                    if (ImGui::Checkbox("##distortionEnabled", val))
+                    {
+                        notifyChanged();
+                    }
+                }
+            }
+        }
+
+        {
+            auto strengthIt = node.properties.find("distortionStrength");
+            if (strengthIt != node.properties.end())
+            {
+                if (auto* val = std::get_if<float>(&strengthIt->second.value))
+                {
+                    ImGui::Text("Strength");
+                    ImGui::SameLine(100.0f);
+                    ImGui::SetNextItemWidth(inputWidth);
+                    if (ImGui::DragFloat("##distortionStrength", val, 0.01f, 0.0f, 2.0f, "%.2f"))
+                    {
+                        notifyChanged();
+                    }
+                }
+            }
+        }
+
+        {
+            auto texIt = node.properties.find("distortionTexture");
+            if (texIt != node.properties.end())
+            {
+                if (auto* val = std::get_if<std::string>(&texIt->second.value))
+                {
+                    ImGui::Text("Texture");
+                    ImGui::SameLine(100.0f);
+                    std::string display = val->empty() ? "(none)"
+                        : std::filesystem::path(*val).filename().string();
+                    ImGui::SetNextItemWidth(inputWidth * 1.5f);
+                    ImGui::InputText("##distortionTexture", display.data(), display.size() + 1,
+                                     ImGuiInputTextFlags_ReadOnly);
+                    ImGui::SameLine();
+                    if (ImGui::Button("...##distortionTexBrowse"))
+                    {
+                        nfd::FileDialog dialog;
+                        std::string path = dialog.openFileDialog({
+                            {L"VF Image", L"*.vfImage"}
+                        });
+                        if (!path.empty())
+                        {
+                            *val = path;
+                            notifyChanged();
+                        }
+                    }
+                    if (!val->empty())
+                    {
+                        ImGui::SameLine();
+                        if (ImGui::Button("X##distortionTexClear"))
+                        {
+                            val->clear();
+                            notifyChanged();
+                        }
+                    }
+                }
+            }
+        }
     }
 
     void VFXPropertyPanel::drawEventsProperties(vfx::VFXNode& node, float inputWidth)

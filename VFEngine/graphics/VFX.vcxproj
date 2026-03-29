@@ -115,6 +115,9 @@
     <ClInclude Include="render\vfx\compute\GPUVFXBufferManager.hpp" />
     <ClInclude Include="render\vfx\compute\GPUVFXComputePipeline.hpp" />
     <ClInclude Include="render\vfx\compute\GPUVFXTypes.hpp" />
+    <ClInclude Include="render\vfx\distortion\DistortionResources.hpp" />
+    <ClInclude Include="render\vfx\distortion\VFXDistortionComposite.hpp" />
+    <ClInclude Include="render\vfx\distortion\VFXDistortionPipeline.hpp" />
     <ClInclude Include="render\vfx\lut\VFXLUTBaker.hpp" />
     <ClInclude Include="render\vfx\mesh\VFXMeshGPUPipeline.hpp" />
     <ClInclude Include="render\vfx\mesh\VFXMeshPreviewPipeline.hpp" />
@@ -142,6 +145,10 @@
     <ClCompile Include="render\vfx\compute\GPUVFXBufferManagerCreate.cpp" />
     <ClCompile Include="render\vfx\compute\GPUVFXBufferManagerUpdate.cpp" />
     <ClCompile Include="render\vfx\compute\GPUVFXComputePipeline.cpp" />
+    <ClCompile Include="render\vfx\distortion\DistortionResources.cpp" />
+    <ClCompile Include="render\vfx\distortion\VFXDistortionComposite.cpp" />
+    <ClCompile Include="render\vfx\distortion\VFXDistortionPipeline.cpp" />
+    <ClCompile Include="render\vfx\distortion\VFXDistortionPipelineSetup.cpp" />
     <ClCompile Include="render\vfx\lut\VFXLUTBaker.cpp" />
     <ClCompile Include="render\vfx\mesh\VFXMeshGPUPipeline.cpp" />
     <ClCompile Include="render\vfx\mesh\VFXMeshGPUPipelineRender.cpp" />

@@ -99,6 +99,12 @@ struct GPUEmitterConfig
     uint normalMode;
     float ambientAmount;
     float _lightPad0;
+
+    // Distortion
+    uint distortionEnabled;
+    float distortionStrength;
+    float _distortionPad0;
+    float _distortionPad1;
 };
 
 struct GPUEmitterState

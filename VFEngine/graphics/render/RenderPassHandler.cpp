@@ -24,6 +24,8 @@
 #include "material/MaterialTextureCache.hpp"
 #include "../../services/providers/vfx/IVFXRuntimeProvider.hpp"
 #include "material/MaterialTypes.hpp"
+#include "vfx/distortion/DistortionResources.hpp"
+#include "vfx/distortion/VFXDistortionComposite.hpp"
 
 namespace render
 {
@@ -185,6 +187,19 @@ namespace render
         if (cloudPipeline && cloudPipeline->isInitialized()) cloudPipeline->recreate();
         if (wboitPipeline && wboitPipeline->isInitialized()) wboitPipeline->recreate();
         if (decalPipeline && decalPipeline->isInitialized()) decalPipeline->recreate();
+        if (distortionInitialized)
+        {
+            distortionResources->recreate(
+                swapChain.getSwapchainImageFormat(),
+                swapChain.getSwapchainDepthStencilFormat(),
+                swapChain.getSwapchainExtent(),
+                offscreenResources.depthImage.depthImageView,
+                offscreenResources);
+            distortionComposite->recreate(distortionResources->getCompositeRenderPass(),
+                                           distortionResources->getCompositeDescriptorSetLayout());
+            if (vfxRuntimeProvider && vfxRuntimeProvider->isInitialized())
+                vfxRuntimeProvider->recreateDistortion(distortionResources->getDistortionVectorRenderPass());
+        }
         if (postProcessPipeline && postProcessPipeline->isInitialized()) postProcessPipeline->recreate();
     }
 
@@ -215,10 +230,38 @@ namespace render
         if (ssgiPipeline) ssgiPipeline->cleanup();
         if (atmospherePipeline) atmospherePipeline->cleanup();
         if (cloudPipeline) cloudPipeline->cleanup();
+        if (distortionInitialized)
+        {
+            distortionComposite->cleanup();
+            distortionResources->cleanup();
+            distortionInitialized = false;
+        }
         if (postProcessPipeline) postProcessPipeline->cleanup();
         meshPipeline->cleanUp();
         if (sharedCameraUBO) sharedCameraUBO->cleanup();
         iblRenderer->cleanUp();
         clearColor->cleanUp();
+    }
+
+    void RenderPassHandler::initDistortionPass()
+    {
+        if (distortionInitialized) return;
+
+        distortionResources = std::make_unique<vfx::DistortionResources>(device);
+        distortionResources->init(
+            swapChain.getSwapchainImageFormat(),
+            swapChain.getSwapchainDepthStencilFormat(),
+            swapChain.getSwapchainExtent(),
+            offscreenResources.depthImage.depthImageView,
+            offscreenResources);
+
+        distortionComposite = std::make_unique<vfx::VFXDistortionComposite>(device, swapChain);
+        distortionComposite->init(distortionResources->getCompositeRenderPass(),
+                                   distortionResources->getCompositeDescriptorSetLayout());
+
+        if (vfxRuntimeProvider && vfxRuntimeProvider->isInitialized())
+            vfxRuntimeProvider->initDistortion(distortionResources->getDistortionVectorRenderPass());
+
+        distortionInitialized = true;
     }
 }

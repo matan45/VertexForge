@@ -52,6 +52,12 @@ namespace render::decal
     class DecalPipeline;
 }
 
+namespace render::vfx
+{
+    class DistortionResources;
+    class VFXDistortionComposite;
+}
+
 namespace render::volumetric
 {
     class VolumetricFogComposite;
@@ -141,6 +147,10 @@ namespace render
 
         std::unique_ptr<decal::DecalPipeline> decalPipeline;
         bool decalRenderingEnabled = true;
+
+        std::unique_ptr<vfx::DistortionResources> distortionResources;
+        std::unique_ptr<vfx::VFXDistortionComposite> distortionComposite;
+        bool distortionInitialized = false;
 
         core::OffscreenResources& offscreenResources;
 
@@ -404,7 +414,7 @@ namespace render
 
         void cleanUp();
 
-        void draw(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
+        void draw(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex);
         
     private:
         void initGPUDrivenRenderer();
@@ -440,5 +450,8 @@ namespace render
         void executeRenderHooks(plugin::RenderPassHookPoint hookPoint,
                                 const vk::CommandBuffer& commandBuffer,
                                 uint32_t imageIndex) const;
+
+        void initDistortionPass();
+        void executeDistortionPass(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex);
     };
 }

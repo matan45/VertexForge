@@ -179,6 +179,18 @@ namespace vfx
                 "collisionLifetimeLoss", VFXPropertyType::Float,
                 EmitterDefaults::COLLISION_LIFETIME_LOSS, 0.0f, 1.0f
             };
+            node.properties["distortionEnabled"] = VFXProperty{
+                "distortionEnabled", VFXPropertyType::Bool,
+                false, 0.0f, 1.0f
+            };
+            node.properties["distortionStrength"] = VFXProperty{
+                "distortionStrength", VFXPropertyType::Float,
+                0.1f, 0.0f, 2.0f
+            };
+            node.properties["distortionTexture"] = VFXProperty{
+                "distortionTexture", VFXPropertyType::String,
+                std::string(""), 0.0f, 0.0f
+            };
         }
 
         VFXNode createDefaultEmitterNode(uint32_t nodeId)

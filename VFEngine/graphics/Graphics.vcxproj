@@ -690,6 +690,8 @@
     <None Include="..\..\resources\shaders\vegetation\wind_common.glsl" />
     <None Include="..\..\resources\shaders\vfx\vfx_billboard.glsl" />
     <None Include="..\..\resources\shaders\vfx\vfx_billboard_gpu.glsl" />
+    <None Include="..\..\resources\shaders\vfx\vfx_distortion.glsl" />
+    <None Include="..\..\resources\shaders\vfx\vfx_distortion_composite.glsl" />
     <None Include="..\..\resources\shaders\vfx\vfx_lighting.glsl" />
     <None Include="..\..\resources\shaders\vfx\vfx_mesh_particle.glsl" />
     <None Include="..\..\resources\shaders\vfx\vfx_mesh_preview.glsl" />

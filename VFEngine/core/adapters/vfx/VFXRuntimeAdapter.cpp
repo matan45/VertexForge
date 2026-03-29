@@ -172,6 +172,31 @@ namespace core
         }
     }
 
+    bool VFXRuntimeAdapter::hasDistortionEmitters() const
+    {
+        return renderer && renderer->hasDistortionEmitters();
+    }
+
+    void VFXRuntimeAdapter::recordDistortionDrawCommands(const vk::CommandBuffer& cmd)
+    {
+        if (renderer)
+        {
+            renderer->recordDistortionDrawCommands(cmd);
+        }
+    }
+
+    void VFXRuntimeAdapter::initDistortion(vk::RenderPass distortionRenderPass)
+    {
+        if (renderer)
+            renderer->initDistortion(distortionRenderPass);
+    }
+
+    void VFXRuntimeAdapter::recreateDistortion(vk::RenderPass distortionRenderPass)
+    {
+        if (renderer)
+            renderer->recreateDistortion(distortionRenderPass);
+    }
+
     size_t VFXRuntimeAdapter::getInstanceCount() const
     {
         return renderer ? renderer->getInstanceCount() : 0;

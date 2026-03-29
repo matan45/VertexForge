@@ -2,8 +2,10 @@
 #include <nlohmann/json.hpp>
 #include "../asset/AssetRef.hpp"
 #include "../asset/AssetDatabase.hpp"
+#include "../asset/AssetDatabaseMigrator.hpp"
 #include "../asset/AssetMetadataSerializer.hpp"
 #include "../print/Log.hpp"
+#include <filesystem>
 #include <string>
 
 namespace serialization
@@ -57,6 +59,19 @@ namespace serialization
                             if (pathRef.isValid())
                             {
                                 return pathRef;
+                            }
+
+                            // fromPath failed — force-register the GUID with the stored path
+                            // so the original GUID remains usable (e.g., snapshot restore)
+                            if (std::filesystem::exists(fallbackPath))
+                            {
+                                auto type = asset::AssetDatabaseMigrator::detectAssetTypeFromPath(fallbackPath);
+                                asset::AssetDatabase::instance().registerAssetWithGUID(
+                                    ref.getGUID(), fallbackPath,
+                                    type != resource::AssetType::COUNT ? type : resource::AssetType::Texture);
+                                ref.invalidateCache();
+                                vfLogInfo("Re-registered missing asset GUID for: {}", fallbackPath);
+                                return ref;
                             }
                         }
                     }

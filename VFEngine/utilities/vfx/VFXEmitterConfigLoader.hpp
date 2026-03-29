@@ -170,6 +170,12 @@ namespace vfx
         config.collisionLifetimeLoss = std::clamp(
             getFloat(*emitterNode, "collisionLifetimeLoss", EmitterDefaults::COLLISION_LIFETIME_LOSS), 0.0f, 1.0f);
 
+        // Distortion
+        config.distortionEnabled = getBool(*emitterNode, "distortionEnabled", false);
+        config.distortionStrength = std::clamp(
+            getFloat(*emitterNode, "distortionStrength", 0.1f), 0.0f, 2.0f);
+        config.distortionTexturePath = getString(*emitterNode, "distortionTexture", "");
+
         return config;
     }
 }

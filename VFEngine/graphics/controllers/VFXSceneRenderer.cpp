@@ -8,6 +8,7 @@
 #include "../render/vfx/scene/VFXSceneGPUPipeline.hpp"
 #include "../render/vfx/mesh/VFXMeshGPUPipeline.hpp"
 #include "../render/vfx/ribbon/VFXRibbonGPUPipeline.hpp"
+#include "../render/vfx/distortion/VFXDistortionPipeline.hpp"
 #include "../render/vfx/particle/VFXEmitterPool.hpp"
 #include "../render/mesh/MeshGPUCache.hpp"
 #include "vfx/VFXEmitterConfigLoader.hpp"
@@ -240,6 +241,8 @@ namespace controllers
                                                           glowColor);
             gpuRenderPipeline->setEmitterRenderMode(instances[id].gpuEmitterIndex,
                                                       static_cast<uint32_t>(storedConfig.renderMode));
+            gpuRenderPipeline->setEmitterDistortionEnabled(instances[id].gpuEmitterIndex,
+                                                            storedConfig.distortionEnabled);
         }
         
         if (gpuMeshPipeline && instances[id].gpuDriven &&
@@ -263,6 +266,18 @@ namespace controllers
                                                           glowColor);
         }
 
+        if (storedConfig.distortionEnabled)
+        {
+            activeDistortionCount++;
+            if (gpuDistortionPipeline && instances[id].gpuDriven)
+            {
+                gpuDistortionPipeline->setEmitterDistortionTexture(
+                    instances[id].gpuEmitterIndex, storedConfig.distortionTexturePath);
+                gpuDistortionPipeline->setEmitterDistortionConfig(
+                    instances[id].gpuEmitterIndex, storedConfig.distortionStrength);
+            }
+        }
+
         vfLogDebug("Created VFX instance {} from asset: {} (GPU: {})",
                    id, params.vfxAssetPath, instances[id].gpuDriven);
         return id;
@@ -273,6 +288,9 @@ namespace controllers
         auto it = instances.find(id);
         if (it != instances.end())
         {
+            if (it->second.config.distortionEnabled && activeDistortionCount > 0)
+                activeDistortionCount--;
+
             if (it->second.gpuDriven)
             {
                 uint32_t emitterIdx = it->second.gpuEmitterIndex;
@@ -341,6 +359,7 @@ namespace controllers
 
         activeSubEmitters.clear();
         pendingEmitterFrees.clear();
+        activeDistortionCount = 0;
         instances.clear();
         emitterIndexToInstanceId.clear();
 
@@ -606,6 +625,11 @@ namespace controllers
         {
             gpuRibbonPipeline->setSceneDepthImageView(depthView);
         }
+
+        if (gpuDistortionPipeline && gpuDistortionPipeline->isInitialized())
+        {
+            gpuDistortionPipeline->setSceneDepthImageView(depthView);
+        }
     }
 
     void VFXSceneRenderer::recordDrawCommands(vk::CommandBuffer cmd)
@@ -621,6 +645,43 @@ namespace controllers
         }
 
         recordCPUDrawCommands(cmd);
+    }
+
+    bool VFXSceneRenderer::hasDistortionEmitters() const
+    {
+        return activeDistortionCount > 0;
+    }
+
+    void VFXSceneRenderer::recordDistortionDrawCommands(vk::CommandBuffer cmd)
+    {
+        if (!gpuDistortionPipeline || !gpuDistortionPipeline->isInitialized() || !gpuBufferManager)
+            return;
+
+        uint32_t maxEmitters = gpuBufferManager->getMaxEmitters();
+        std::vector<bool> distortionFlags(maxEmitters, false);
+        bool anyEnabled = false;
+
+        for (const auto& [id, instance] : instances)
+        {
+            if (instance.gpuDriven && instance.active && instance.config.distortionEnabled
+                && instance.gpuEmitterIndex < maxEmitters)
+            {
+                distortionFlags[instance.gpuEmitterIndex] = true;
+                anyEnabled = true;
+            }
+        }
+
+        if (!anyEnabled)
+            return;
+
+        gpuDistortionPipeline->updateCameraUBO(currentView, currentProjection,
+            currentCameraPos, currentTime);
+
+        gpuDistortionPipeline->recordCommandsInline(
+            cmd,
+            gpuBufferManager->getDrawCommandBuffer(),
+            maxEmitters,
+            distortionFlags);
     }
 
     void VFXSceneRenderer::recordCPUDrawCommands(vk::CommandBuffer cmd)
