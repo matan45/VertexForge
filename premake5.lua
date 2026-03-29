@@ -1055,11 +1055,7 @@ project "Tests"
    location "VFEngine/tests"
    targetdir "bin/%{prj.name}/%{cfg.buildcfg}/%{cfg.platform}"
 
-   files {
-      "VFEngine/tests/**.hpp", "VFEngine/tests/**.cpp",
-      -- VFXCurveTypes.cpp compiled here since VFX StaticLib is linked into Graphics (not Tests)
-      "VFEngine/utilities/vfx/VFXCurveTypes.cpp"
-   }
+   files { "VFEngine/tests/**.hpp", "VFEngine/tests/**.cpp" }
 
    includedirs {
       "dependencies/doctest/doctest",
@@ -1070,6 +1066,11 @@ project "Tests"
       "dependencies/meshoptimizer/src",
       "dependencies/enkiTS/src",
       "dependencies/stb",
+      "dependencies/glfw/include",
+      "dependencies/imgui",
+      "dependencies/imgui/backends",
+      "dependencies/ispc_texcomp",
+      "dependencies/IconFontCppHeaders",
       "dependencies/lz4/lib",
       "dependencies/recastnavigation/Recast/Include",
       "dependencies/recastnavigation/Detour/Include",
@@ -1081,10 +1082,16 @@ project "Tests"
       vulkanLibPath.."/Include"
    }
 
+   libdirs {
+      vulkanLibPath.."/Lib"
+   }
+
    links {
       "Utilities", "Memory", "Terrain", "World", "Serialization",
       "Animation", "ECSRegistry", "Services",
-      "spdLog", "meshoptimizer", "enkiTS", "lz4", "recast"
+      "Graphics", "Window", "VFX", "imgui", "ispc_texcomp", "GLFW",
+      "spdLog", "meshoptimizer", "enkiTS", "lz4", "recast",
+      "vulkan-1.lib", "shaderc_shared.lib"
    }
 
    defines {

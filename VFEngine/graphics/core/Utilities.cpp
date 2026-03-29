@@ -12,7 +12,7 @@ namespace core {
 		int i = 0;
 		for (const vk::QueueFamilyProperties& queueFamily : queueFamilies) {
 
-			if (device.getSurfaceSupportKHR(i, surface)) {
+			if (surface && device.getSurfaceSupportKHR(i, surface)) {
 				indices.presentFamily = i;
 			}
 
