@@ -1,5 +1,6 @@
 #pragma once
 
+#include "AnimationExport.hpp"
 #include <glm/glm.hpp>
 #include <cstdint>
 #include <vector>
@@ -15,13 +16,15 @@ namespace animation
         Count = 4
     };
 
-    struct AnimationLODConfig
+    struct VF_ANIMATION_API AnimationLODConfig
     {
         float distanceThresholds[4] = {25.0f, 75.0f, 150.0f, 300.0f};
         uint32_t updateIntervals[4] = {1, 2, 6, 0};  // 0 = frozen
     };
 
-    struct EntityAnimationLODState
+    #pragma warning(push)
+    #pragma warning(disable: 4251)
+    struct VF_ANIMATION_API EntityAnimationLODState
     {
         AnimationLODLevel currentLOD = AnimationLODLevel::LOD0;
         uint32_t framesSinceLastEval = 0;
@@ -32,8 +35,9 @@ namespace animation
         bool hasCachedPoseA = false;
         bool hasCachedPoseB = false;
     };
+    #pragma warning(pop)
 
-    class AnimationLODManager
+    class VF_ANIMATION_API AnimationLODManager
     {
     public:
         AnimationLODManager() = default;

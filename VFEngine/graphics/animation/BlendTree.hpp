@@ -1,5 +1,6 @@
 #pragma once
 
+#include "AnimationExport.hpp"
 #include "animator/BlendTreeTypes.hpp"
 #include "animator/AnimatorTypes.hpp"
 #include "AnimationEvaluator.hpp"
@@ -13,7 +14,7 @@ namespace animation
 {
     using AnimationLoadCallback = std::function<const resource::AnimationData*(const std::string& path)>;
 
-    class BlendTreeEvaluator
+    class VF_ANIMATION_API BlendTreeEvaluator
     {
     public:
         std::vector<glm::mat4> evaluate(

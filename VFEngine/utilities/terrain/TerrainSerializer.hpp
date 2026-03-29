@@ -1,4 +1,5 @@
 #pragma once
+#include "TerrainExport.hpp"
 
 #include "TerrainTypes.hpp"
 #include "TerrainTile.hpp"
@@ -62,6 +63,8 @@ namespace terrain
         int32_t maxUnloadsPerFrame = 4;
     };
 
+#pragma warning(push)
+#pragma warning(disable: 4251)
     struct TerrainFileHeader
     {
         uint32_t versionMajor = TERRAIN_FORMAT_VERSION_MAJOR;
@@ -151,7 +154,7 @@ namespace terrain
         TerrainStreamingConfig streamingConfig;
     };
 
-    class TerrainSerializer
+    class VF_TERRAIN_API TerrainSerializer
     {
     public:
         static bool save(const TerrainSaveParams& params);
@@ -246,4 +249,5 @@ namespace terrain
                                     std::vector<TileIndexEntry>& outIndex);
         static bool parseTileMeshletData(std::istream& file, TileLoadResult& result);
     };
+#pragma warning(pop)
 }

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "WorldExport.hpp"
 #include "HLODTypes.hpp"
 #include "HLODSerialization.hpp"
 #include "WorldSector.hpp"
@@ -10,7 +11,9 @@
 
 namespace world
 {
-    class HLODGenerator
+#pragma warning(push)
+#pragma warning(disable: 4251)
+    class VF_WORLD_API HLODGenerator
     {
     public:
         // Generate HLOD proxy for a single sector (tier 0)
@@ -54,5 +57,6 @@ namespace world
                                std::unordered_map<std::string, MergedSubmesh>& materialGroups,
                                HLODFileData& outData);
     };
+#pragma warning(pop)
 
 } // namespace world

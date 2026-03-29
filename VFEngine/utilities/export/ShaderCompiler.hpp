@@ -1,5 +1,6 @@
 #pragma once
 
+#include "GameExportExport.hpp"
 #include <string>
 #include <string_view>
 #include <vector>
@@ -36,13 +37,13 @@ namespace shaderCompiler
 		std::filesystem::path basePath;
 	};
 
-	std::vector<uint32_t> compile(
+	VF_GAMEEXPORT_API std::vector<uint32_t> compile(
 		std::string_view source,
 		vk::ShaderStageFlagBits stage,
 		std::string_view name,
 		const CompileOptions& options);
 
-	std::string computePermutationKey(const CompileOptions& options);
+	VF_GAMEEXPORT_API std::string computePermutationKey(const CompileOptions& options);
 
-	vk::ShaderStageFlagBits shaderTypeToVulkanStage(uint8_t shaderType);
+	VF_GAMEEXPORT_API vk::ShaderStageFlagBits shaderTypeToVulkanStage(uint8_t shaderType);
 }

@@ -19,13 +19,13 @@
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
-    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
     <CharacterSet>Unicode</CharacterSet>
     <PlatformToolset>v145</PlatformToolset>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
-    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
     <CharacterSet>Unicode</CharacterSet>
     <PlatformToolset>v145</PlatformToolset>
@@ -41,22 +41,24 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <LinkIncremental>true</LinkIncremental>
     <OutDir>$(ProjectDir)..\..\bin\Terrain\Debug\x64\</OutDir>
     <IntDir>$(ProjectDir)obj\x64\Debug\Terrain\</IntDir>
     <TargetName>Terrain</TargetName>
-    <TargetExt>.lib</TargetExt>
+    <TargetExt>.dll</TargetExt>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <LinkIncremental>false</LinkIncremental>
     <OutDir>$(ProjectDir)..\..\bin\Terrain\Release\x64\</OutDir>
     <IntDir>$(ProjectDir)obj\x64\Release\Terrain\</IntDir>
     <TargetName>Terrain</TargetName>
-    <TargetExt>.lib</TargetExt>
+    <TargetExt>.dll</TargetExt>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
-      <PreprocessorDefinitions>VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1;GLM_FORCE_DEPTH_ZERO_TO_ONE;_CRT_SECURE_NO_WARNINGS;MESHOPTIMIZER_API=__declspec(dllimport);DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1;GLM_FORCE_DEPTH_ZERO_TO_ONE;_CRT_SECURE_NO_WARNINGS;MESHOPTIMIZER_API=__declspec(dllimport);VF_TERRAIN_BUILD_DLL;DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>..\..\dependencies\spdlog\include;..\..\dependencies\glm;..\..\dependencies\entt\single_include;..\..\dependencies\json\single_include;..\..\dependencies\meshoptimizer\src;..\..\dependencies\enkiTS\src;..\..\dependencies\stb;.;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DebugInformationFormat>EditAndContinue</DebugInformationFormat>
       <Optimization>Disabled</Optimization>
@@ -67,13 +69,20 @@
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
+      <ImportLibrary>..\..\bin\Terrain\Debug\x64\Terrain.lib</ImportLibrary>
     </Link>
+    <PostBuildEvent>
+      <Command>IF NOT EXIST ..\..\bin\Editor\Debug\x64 (mkdir ..\..\bin\Editor\Debug\x64)
+IF NOT EXIST ..\..\bin\Runtime\Debug\x64 (mkdir ..\..\bin\Runtime\Debug\x64)
+IF EXIST ..\..\bin\Terrain\Debug\x64\Terrain.dll\ (xcopy /Q /E /Y /I ..\..\bin\Terrain\Debug\x64\Terrain.dll ..\..\bin\Editor\Debug\x64 &gt; nul) ELSE (xcopy /Q /Y /I ..\..\bin\Terrain\Debug\x64\Terrain.dll ..\..\bin\Editor\Debug\x64 &gt; nul)
+IF EXIST ..\..\bin\Terrain\Debug\x64\Terrain.dll\ (xcopy /Q /E /Y /I ..\..\bin\Terrain\Debug\x64\Terrain.dll ..\..\bin\Runtime\Debug\x64 &gt; nul) ELSE (xcopy /Q /Y /I ..\..\bin\Terrain\Debug\x64\Terrain.dll ..\..\bin\Runtime\Debug\x64 &gt; nul)</Command>
+    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
-      <PreprocessorDefinitions>VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1;GLM_FORCE_DEPTH_ZERO_TO_ONE;_CRT_SECURE_NO_WARNINGS;MESHOPTIMIZER_API=__declspec(dllimport);NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1;GLM_FORCE_DEPTH_ZERO_TO_ONE;_CRT_SECURE_NO_WARNINGS;MESHOPTIMIZER_API=__declspec(dllimport);VF_TERRAIN_BUILD_DLL;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>..\..\dependencies\spdlog\include;..\..\dependencies\glm;..\..\dependencies\entt\single_include;..\..\dependencies\json\single_include;..\..\dependencies\meshoptimizer\src;..\..\dependencies\enkiTS\src;..\..\dependencies\stb;.;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <Optimization>Full</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
@@ -88,7 +97,14 @@
       <SubSystem>Windows</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
+      <ImportLibrary>..\..\bin\Terrain\Release\x64\Terrain.lib</ImportLibrary>
     </Link>
+    <PostBuildEvent>
+      <Command>IF NOT EXIST ..\..\bin\Editor\Release\x64 (mkdir ..\..\bin\Editor\Release\x64)
+IF NOT EXIST ..\..\bin\Runtime\Release\x64 (mkdir ..\..\bin\Runtime\Release\x64)
+IF EXIST ..\..\bin\Terrain\Release\x64\Terrain.dll\ (xcopy /Q /E /Y /I ..\..\bin\Terrain\Release\x64\Terrain.dll ..\..\bin\Editor\Release\x64 &gt; nul) ELSE (xcopy /Q /Y /I ..\..\bin\Terrain\Release\x64\Terrain.dll ..\..\bin\Editor\Release\x64 &gt; nul)
+IF EXIST ..\..\bin\Terrain\Release\x64\Terrain.dll\ (xcopy /Q /E /Y /I ..\..\bin\Terrain\Release\x64\Terrain.dll ..\..\bin\Runtime\Release\x64 &gt; nul) ELSE (xcopy /Q /Y /I ..\..\bin\Terrain\Release\x64\Terrain.dll ..\..\bin\Runtime\Release\x64 &gt; nul)</Command>
+    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="terrain\BrushSampler.hpp" />
@@ -102,6 +118,7 @@
     <ClInclude Include="terrain\HoleBrushTypes.hpp" />
     <ClInclude Include="terrain\PaintBrushTypes.hpp" />
     <ClInclude Include="terrain\TerrainCompression.hpp" />
+    <ClInclude Include="terrain\TerrainExport.hpp" />
     <ClInclude Include="terrain\TerrainFileCache.hpp" />
     <ClInclude Include="terrain\TerrainGrid.hpp" />
     <ClInclude Include="terrain\TerrainHitResult.hpp" />
@@ -149,6 +166,9 @@
     </ProjectReference>
     <ProjectReference Include="..\enkiTS.vcxproj">
       <Project>{130A7BFB-FFAB-A5D1-E866-B925D4A72C22}</Project>
+    </ProjectReference>
+    <ProjectReference Include="ECSRegistry.vcxproj">
+      <Project>{79DB43B4-E590-BCA9-6E85-B680DA39B3AD}</Project>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

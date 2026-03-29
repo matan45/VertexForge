@@ -1,10 +1,13 @@
 #pragma once
+#include "GameExportExport.hpp"
 #include "ExportConfig.hpp"
 #include "ExportManifest.hpp"
 
 namespace gameExport
 {
-	class GameExporter
+	#pragma warning(push)
+	#pragma warning(disable: 4251)
+	class VF_GAMEEXPORT_API GameExporter
 	{
 	public:
 		ExportResult exportGame(const ExportConfig& config, ExportProgressCallback progressCallback = nullptr);
@@ -38,4 +41,5 @@ namespace gameExport
 											ExportResult& result,
 											const std::filesystem::path& excludeDir = {}) const;
 	};
+	#pragma warning(pop)
 }

@@ -231,6 +231,12 @@ project "Graphics"
       "VFEngine/graphics/animation/**",
       "VFEngine/graphics/render/vfx/**"
    }
+   -- AnimationComputePipeline stays in Graphics (depends on Vulkan core utilities)
+   files {
+      "VFEngine/graphics/animation/AnimationComputePipeline.hpp",
+      "VFEngine/graphics/animation/AnimationComputePipeline.cpp",
+      "VFEngine/graphics/animation/AnimationGPUData.hpp"
+   }
 
    includedirs {
       "dependencies/glfw/include",
@@ -639,9 +645,9 @@ project "Memory"
       optimize "On"
 
 
--- Terrain subsystem (extracted from Utilities)
+-- Terrain subsystem (extracted from Utilities, SharedLib/DLL)
 project "Terrain"
-   kind "StaticLib"
+   kind "SharedLib"
    language "C++"
    cppdialect "C++20"
    location "VFEngine/utilities"
@@ -660,19 +666,31 @@ project "Terrain"
       "VFEngine/utilities"
    }
 
-   defines { "_CRT_SECURE_NO_WARNINGS", "MESHOPTIMIZER_API=__declspec(dllimport)" }
+   defines { "_CRT_SECURE_NO_WARNINGS", "MESHOPTIMIZER_API=__declspec(dllimport)", "VF_TERRAIN_BUILD_DLL" }
 
-   links { "Utilities", "meshoptimizer", "enkiTS" }
+   links { "Utilities", "meshoptimizer", "enkiTS", "ECSRegistry" }
 
    buildoptions { "/bigobj" }
 
    filter "configurations:Debug"
       defines { "DEBUG" }
       symbols "On"
+      postbuildcommands {
+         "{MKDIR} ../../bin/Editor/Debug/x64",
+         "{MKDIR} ../../bin/Runtime/Debug/x64",
+         "{COPY} ../../bin/Terrain/Debug/x64/Terrain.dll ../../bin/Editor/Debug/x64/",
+         "{COPY} ../../bin/Terrain/Debug/x64/Terrain.dll ../../bin/Runtime/Debug/x64/"
+      }
 
    filter "configurations:Release"
       defines { "NDEBUG" }
       optimize "On"
+      postbuildcommands {
+         "{MKDIR} ../../bin/Editor/Release/x64",
+         "{MKDIR} ../../bin/Runtime/Release/x64",
+         "{COPY} ../../bin/Terrain/Release/x64/Terrain.dll ../../bin/Editor/Release/x64/",
+         "{COPY} ../../bin/Terrain/Release/x64/Terrain.dll ../../bin/Runtime/Release/x64/"
+      }
 
 
 -- ProceduralGen subsystem (extracted from Utilities, SharedLib/DLL)
@@ -774,7 +792,7 @@ project "Serialization"
 
    defines { "_CRT_SECURE_NO_WARNINGS", "VF_SERIALIZATION_BUILD_DLL" }
 
-   links { "Utilities", "Animation", "ECSRegistry" }
+   links { "Utilities", "ECSRegistry" }
 
    buildoptions { "/bigobj" }
 
@@ -819,7 +837,7 @@ project "DataTypes"
 
 -- World subsystem (extracted from Utilities)
 project "World"
-   kind "StaticLib"
+   kind "SharedLib"
    language "C++"
    cppdialect "C++20"
    location "VFEngine/utilities"
@@ -843,22 +861,34 @@ project "World"
       "VFEngine/utilities"
    }
 
-   defines { "_CRT_SECURE_NO_WARNINGS" }
+   defines { "_CRT_SECURE_NO_WARNINGS", "VF_WORLD_BUILD_DLL" }
 
-   links { "Utilities", "Terrain", "Serialization", "meshoptimizer" }
+   links { "Utilities", "Terrain", "Serialization", "meshoptimizer", "ECSRegistry" }
 
    filter "configurations:Debug"
       defines { "DEBUG" }
       symbols "On"
+      postbuildcommands {
+         "{MKDIR} ../../bin/Editor/Debug/x64",
+         "{MKDIR} ../../bin/Runtime/Debug/x64",
+         "{COPY} ../../bin/World/Debug/x64/World.dll ../../bin/Editor/Debug/x64/",
+         "{COPY} ../../bin/World/Debug/x64/World.dll ../../bin/Runtime/Debug/x64/"
+      }
 
    filter "configurations:Release"
       defines { "NDEBUG" }
       optimize "On"
+      postbuildcommands {
+         "{MKDIR} ../../bin/Editor/Release/x64",
+         "{MKDIR} ../../bin/Runtime/Release/x64",
+         "{COPY} ../../bin/World/Release/x64/World.dll ../../bin/Editor/Release/x64/",
+         "{COPY} ../../bin/World/Release/x64/World.dll ../../bin/Runtime/Release/x64/"
+      }
 
 
--- Animation subsystem (extracted from Graphics + Utilities)
+-- Animation subsystem (extracted from Graphics + Utilities, SharedLib/DLL)
 project "Animation"
-   kind "StaticLib"
+   kind "SharedLib"
    language "C++"
    cppdialect "C++20"
    location "VFEngine/graphics"
@@ -871,6 +901,15 @@ project "Animation"
       "VFEngine/utilities/animator/**.cpp"
    }
 
+   -- AnimationComputePipeline depends on Vulkan core utilities, compiled by Graphics instead
+   -- IKTypes.cpp functions moved to inline in header (breaks Serialization→Animation→Services→Serialization cycle)
+   removefiles {
+      "VFEngine/graphics/animation/AnimationComputePipeline.cpp",
+      "VFEngine/graphics/animation/AnimationGPUData.hpp",
+      "VFEngine/utilities/animator/IKTypes.cpp",
+      "VFEngine/utilities/animator/AnimatorTypes.cpp"
+   }
+
    includedirs {
       "dependencies/spdlog/include",
       "dependencies/glm",
@@ -881,15 +920,31 @@ project "Animation"
       vulkanLibPath.."/Include"
    }
 
-   defines { "_CRT_SECURE_NO_WARNINGS" }
+   defines { "_CRT_SECURE_NO_WARNINGS", "VF_ANIMATION_BUILD_DLL" }
+
+   links { "Utilities", "Services", "Terrain", "ECSRegistry" }
+
+   linkoptions { "/ignore:4217" }
 
    filter "configurations:Debug"
       defines { "DEBUG" }
       symbols "On"
+      postbuildcommands {
+         "{MKDIR} ../../bin/Editor/Debug/x64",
+         "{MKDIR} ../../bin/Runtime/Debug/x64",
+         "{COPY} ../../bin/Animation/Debug/x64/Animation.dll ../../bin/Editor/Debug/x64/",
+         "{COPY} ../../bin/Animation/Debug/x64/Animation.dll ../../bin/Runtime/Debug/x64/"
+      }
 
    filter "configurations:Release"
       defines { "NDEBUG" }
       optimize "On"
+      postbuildcommands {
+         "{MKDIR} ../../bin/Editor/Release/x64",
+         "{MKDIR} ../../bin/Runtime/Release/x64",
+         "{COPY} ../../bin/Animation/Release/x64/Animation.dll ../../bin/Editor/Release/x64/",
+         "{COPY} ../../bin/Animation/Release/x64/Animation.dll ../../bin/Runtime/Release/x64/"
+      }
 
 
 -- VFX subsystem (extracted from Graphics + Utilities)
@@ -938,9 +993,9 @@ project "VFX"
       links { "shaderc_shared.lib" }
 
 
--- GameExport subsystem (extracted from Utilities - shader pre-compilation and game export pipeline)
+-- GameExport subsystem (extracted from Utilities - shader pre-compilation and game export pipeline, SharedLib/DLL)
 project "GameExport"
-   kind "StaticLib"
+   kind "SharedLib"
    language "C++"
    cppdialect "C++20"
    location "VFEngine/utilities"
@@ -967,17 +1022,25 @@ project "GameExport"
       vulkanLibPath.."/Lib"
    }
 
-   defines { "_CRT_SECURE_NO_WARNINGS" }
+   defines { "_CRT_SECURE_NO_WARNINGS", "VF_GAMEEXPORT_BUILD_DLL" }
 
    links { "Utilities", "Serialization", "lz4", "shaderc_shared.lib" }
 
    filter "configurations:Debug"
       defines { "DEBUG" }
       symbols "On"
+      postbuildcommands {
+         "{MKDIR} ../../bin/Editor/Debug/x64",
+         "{COPY} ../../bin/GameExport/Debug/x64/GameExport.dll ../../bin/Editor/Debug/x64/"
+      }
 
    filter "configurations:Release"
       defines { "NDEBUG" }
       optimize "On"
+      postbuildcommands {
+         "{MKDIR} ../../bin/Editor/Release/x64",
+         "{COPY} ../../bin/GameExport/Release/x64/GameExport.dll ../../bin/Editor/Release/x64/"
+      }
 
 
 -- Group for Libraries

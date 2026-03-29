@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../../graphics/animation/AnimationExport.hpp"
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 
@@ -12,7 +13,7 @@ namespace animator::ik
         float blendSpeed = 5.0f;                    // Smoothing speed (per second)
     };
 
-    class LookAtIKHelper
+    class VF_ANIMATION_API LookAtIKHelper
     {
     public:
         // Calculate a clamped look-at target position for a head/spine IK chain.

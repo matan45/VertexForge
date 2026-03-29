@@ -1,5 +1,6 @@
 #pragma once
 
+#include "AnimationExport.hpp"
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include "resource/Types.hpp"
@@ -20,7 +21,9 @@ namespace animation
         glm::vec3 skinnedPosition{0.0f};
     };
 
-    class AnimationEvaluator
+#pragma warning(push)
+#pragma warning(disable: 4251)
+    class VF_ANIMATION_API AnimationEvaluator
     {
     private:
         const resource::AnimationData* animationData = nullptr;
@@ -60,4 +63,5 @@ namespace animation
 
         void buildBoneToChannelMap();
     };
+#pragma warning(pop)
 }

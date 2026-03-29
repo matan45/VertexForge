@@ -1,5 +1,6 @@
 #pragma once
 
+#include "WorldExport.hpp"
 #include <cstdint>
 #include <unordered_map>
 #include <vector>
@@ -20,7 +21,9 @@ namespace world
         ReferenceType type;
     };
 
-    class PendingReferenceResolver
+#pragma warning(push)
+#pragma warning(disable: 4251)
+    class VF_WORLD_API PendingReferenceResolver
     {
     private:
         std::vector<PendingReference> pendingRefs;
@@ -39,5 +42,6 @@ namespace world
 
    
     };
+#pragma warning(pop)
 
 } // namespace world

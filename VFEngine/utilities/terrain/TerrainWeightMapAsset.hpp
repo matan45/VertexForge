@@ -1,4 +1,5 @@
 #pragma once
+#include "TerrainExport.hpp"
 
 #include "TerrainWeightMap.hpp"
 #include "TerrainTypes.hpp"
@@ -7,7 +8,7 @@
 
 namespace terrain
 {
-    class TerrainWeightMapAsset
+    class VF_TERRAIN_API TerrainWeightMapAsset
     {
     public:
         static bool save(

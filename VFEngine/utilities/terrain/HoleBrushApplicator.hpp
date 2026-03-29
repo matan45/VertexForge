@@ -1,4 +1,5 @@
 #pragma once
+#include "TerrainExport.hpp"
 
 #include "HoleBrushTypes.hpp"
 #include <glm/glm.hpp>
@@ -7,7 +8,7 @@
 
 namespace terrain
 {
-    class HoleBrushApplicator
+    class VF_TERRAIN_API HoleBrushApplicator
     {
     public:
         struct ApplyParams

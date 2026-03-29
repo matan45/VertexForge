@@ -1,4 +1,5 @@
 #pragma once
+#include "TerrainExport.hpp"
 
 #include "TerrainTypes.hpp"
 #include <string>
@@ -8,7 +9,9 @@
 namespace terrain
 {
     // Heights normalized to [0, 1] range
-    struct HeightmapData
+#pragma warning(push)
+#pragma warning(disable: 4251)
+    struct VF_TERRAIN_API HeightmapData
     {
         uint32_t width = 0;
         uint32_t height = 0;
@@ -18,8 +21,9 @@ namespace terrain
 
         [[nodiscard]] float sample(float u, float v) const;
     };
+#pragma warning(pop)
 
-    class HeightmapLoader
+    class VF_TERRAIN_API HeightmapLoader
     {
     public:
         // Supported formats: .vfImage, .vfSVT
@@ -42,7 +46,7 @@ namespace terrain
     };
 
     // Maps world coordinates to heightmap UV based on terrain dimensions
-    HeightSampler createHeightSamplerFromMap(
+    VF_TERRAIN_API HeightSampler createHeightSamplerFromMap(
         std::shared_ptr<const HeightmapData> heightmap,
         const TerrainBounds& bounds
     );
@@ -50,7 +54,7 @@ namespace terrain
     // Creates a streaming height sampler from a .vfSVT file.
     // Only reads and decompresses tiles on demand (caches recent tiles).
     // Returns empty sampler if file can't be opened.
-    HeightSampler createStreamingHeightSamplerFromSVT(
+    VF_TERRAIN_API HeightSampler createStreamingHeightSamplerFromSVT(
         const std::string& svtPath,
         const TerrainBounds& bounds
     );
@@ -68,7 +72,7 @@ namespace terrain
     // Creates a composite sampler from multiple heightmap regions.
     // Each region maps its heightmap to its tile range. For overlapping regions,
     // the last region in the vector wins. Uncovered tiles return minHeight (flat).
-    HeightSampler createCompositeHeightSampler(
+    VF_TERRAIN_API HeightSampler createCompositeHeightSampler(
         const std::vector<HeightmapRegion>& regions,
         float worldTileSize,
         float minHeight,

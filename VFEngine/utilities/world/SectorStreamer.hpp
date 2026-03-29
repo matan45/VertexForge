@@ -1,5 +1,6 @@
 #pragma once
 
+#include "WorldExport.hpp"
 #include "WorldTypes.hpp"
 #include "WorldSectorManager.hpp"
 #include <glm/glm.hpp>
@@ -14,7 +15,9 @@ namespace world
         bool isLoad = true;
     };
 
-    class SectorStreamer
+#pragma warning(push)
+#pragma warning(disable: 4251)
+    class VF_WORLD_API SectorStreamer
     {
     private:
         struct Candidate
@@ -51,5 +54,6 @@ namespace world
                                               float sectorWorldSize) const;
         void seedLoadedSectors(const WorldSectorManager& manager);
     };
+#pragma warning(pop)
 
 } // namespace world

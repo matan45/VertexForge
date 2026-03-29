@@ -1,4 +1,5 @@
 #pragma once
+#include "TerrainExport.hpp"
 
 #include "CaveSDFData.hpp"
 #include "TerrainTile.hpp"
@@ -7,7 +8,7 @@
 
 namespace terrain
 {
-    class CaveMeshGenerator
+    class VF_TERRAIN_API CaveMeshGenerator
     {
     public:
         static bool generate(TerrainTile& tile);

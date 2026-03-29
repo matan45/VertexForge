@@ -1,5 +1,6 @@
 #pragma once
 
+#include "WorldExport.hpp"
 #include "WorldTypes.hpp"
 #include <nlohmann/json.hpp>
 #include <deque>
@@ -22,7 +23,9 @@ namespace world
     using EntityPostLoadCallback = std::function<void(uint64_t uuid, const std::string& meshPath, const std::string& animatorPath)>;
     using EntityPreDestroyCallback = std::function<void(uint64_t entityHandleId)>;
 
-    class SectorEntityLoader
+#pragma warning(push)
+#pragma warning(disable: 4251)
+    class VF_WORLD_API SectorEntityLoader
     {
     private:
         struct PendingLoad
@@ -74,5 +77,6 @@ namespace world
             return false;
         }
     };
+#pragma warning(pop)
 
 } // namespace world

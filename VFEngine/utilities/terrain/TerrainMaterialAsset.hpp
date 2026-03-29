@@ -1,11 +1,12 @@
 #pragma once
+#include "TerrainExport.hpp"
 #include "TerrainMaterialTypes.hpp"
 #include <string_view>
 #include <optional>
 
 namespace terrain
 {
-    class TerrainMaterialAsset
+    class VF_TERRAIN_API TerrainMaterialAsset
     {
     public:
         static std::optional<TerrainMaterialData> load(std::string_view path);

@@ -1,4 +1,5 @@
 #pragma once
+#include "GameExportExport.hpp"
 #include <cstdint>
 #include <filesystem>
 #include <string>
@@ -6,7 +7,7 @@
 
 namespace gameExport
 {
-	class ExeIconEmbedder
+	class VF_GAMEEXPORT_API ExeIconEmbedder
 	{
 	public:
 		// Embeds an .ico file as the main icon in a Windows .exe

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../export/GameExportExport.hpp"
 #include "VFPakFormat.hpp"
 #include <filesystem>
 #include <fstream>
@@ -10,7 +11,9 @@ namespace archive
 	using PackProgressCallback = std::function<void(uint32_t filesProcessed, uint32_t totalFiles,
 	                                                 const std::string& currentFile)>;
 
-	class VFPakWriter
+	#pragma warning(push)
+	#pragma warning(disable: 4251)
+	class VF_GAMEEXPORT_API VFPakWriter
 	{
 	public:
 		bool create(const std::filesystem::path& outputPath);
@@ -35,4 +38,5 @@ namespace archive
 
 		bool writeAlignedData(const void* data, size_t size, VFPakEntry& entry);
 	};
+	#pragma warning(pop)
 }

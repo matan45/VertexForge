@@ -152,9 +152,6 @@ IF EXIST ..\..\bin\Serialization\Release\x64\Serialization.dll\ (xcopy /Q /E /Y 
     <ProjectReference Include="Utilities.vcxproj">
       <Project>{010A8043-6D74-34BA-B6B2-E55F225C120F}</Project>
     </ProjectReference>
-    <ProjectReference Include="..\graphics\Animation.vcxproj">
-      <Project>{859E00A2-F108-B518-3A47-66BEA6F0926D}</Project>
-    </ProjectReference>
     <ProjectReference Include="ECSRegistry.vcxproj">
       <Project>{79DB43B4-E590-BCA9-6E85-B680DA39B3AD}</Project>
     </ProjectReference>

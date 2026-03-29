@@ -1,18 +1,21 @@
 #pragma once
 
+#include "../../graphics/animation/AnimationExport.hpp"
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <optional>
 
 namespace animator::ik
 {
-    struct FootIKConfig
+    #pragma warning(push)
+    #pragma warning(disable: 4251)
+    struct VF_ANIMATION_API FootIKConfig
     {
         float footHeight = 0.05f;       // Height of foot sole above ground contact
         float maxStepHeight = 0.5f;     // Max terrain deviation before IK disengages
     };
 
-    struct FootRaycastResult
+    struct VF_ANIMATION_API FootRaycastResult
     {
         bool hit = false;
         glm::vec3 hitPoint{0.0f};
@@ -20,7 +23,7 @@ namespace animator::ik
         float hitDistance = 0.0f;
     };
 
-    struct FootIKResult
+    struct VF_ANIMATION_API FootIKResult
     {
         glm::vec3 targetPosition{0.0f};
         std::optional<glm::quat> targetRotation;
@@ -28,7 +31,8 @@ namespace animator::ik
         bool isGrounded = false;
     };
 
-    class FootIKHelper
+    #pragma warning(pop)
+    class VF_ANIMATION_API FootIKHelper
     {
     public:
         // Calculate IK target for a single foot given its current world position
