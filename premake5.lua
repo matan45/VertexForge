@@ -561,7 +561,10 @@ project "Audio"
 
    defines { "_CRT_SECURE_NO_WARNINGS", "VF_AUDIO_BUILD_DLL" }
 
+   -- Services: EventDispatcher used by AudioSceneUpdater
+   -- Animation, Terrain: transitive deps from Utilities.lib (ResourceManager references AnimatorAsset/TerrainMaterialAsset)
    links { "Utilities", "Services", "Animation", "Terrain", "ECSRegistry" }
+   linkoptions { "/ignore:4217" }  -- LNK4217: Utilities.lib imports symbols that are local to this DLL
 
    filter "configurations:Debug"
       defines { "DEBUG" }
@@ -922,9 +925,10 @@ project "Animation"
 
    defines { "_CRT_SECURE_NO_WARNINGS", "VF_ANIMATION_BUILD_DLL" }
 
+   -- Services: EventDispatcher used by RuntimeAnimatorSystem
+   -- Terrain: transitive dep from Utilities.lib (ResourceManager references TerrainMaterialAsset)
    links { "Utilities", "Services", "Terrain", "ECSRegistry" }
-
-   linkoptions { "/ignore:4217" }
+   linkoptions { "/ignore:4217" }  -- LNK4217: Utilities.lib imports symbols that are local to this DLL
 
    filter "configurations:Debug"
       defines { "DEBUG" }

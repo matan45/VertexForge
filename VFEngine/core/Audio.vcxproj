@@ -72,6 +72,7 @@
       <AdditionalDependencies>OpenAL32.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>..\..\dependencies\openal-soft\build\Debug;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <ImportLibrary>..\..\bin\Audio\Debug\x64\Audio.lib</ImportLibrary>
+      <AdditionalOptions>/ignore:4217 %(AdditionalOptions)</AdditionalOptions>
     </Link>
     <PostBuildEvent>
       <Command>IF NOT EXIST ..\..\bin\Editor\Debug\x64 (mkdir ..\..\bin\Editor\Debug\x64)
@@ -102,6 +103,7 @@ IF EXIST ..\..\bin\Audio\Debug\x64\Audio.dll\ (xcopy /Q /E /Y /I ..\..\bin\Audio
       <AdditionalDependencies>OpenAL32.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>..\..\dependencies\openal-soft\build\Release;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <ImportLibrary>..\..\bin\Audio\Release\x64\Audio.lib</ImportLibrary>
+      <AdditionalOptions>/ignore:4217 %(AdditionalOptions)</AdditionalOptions>
     </Link>
     <PostBuildEvent>
       <Command>IF NOT EXIST ..\..\bin\Editor\Release\x64 (mkdir ..\..\bin\Editor\Release\x64)

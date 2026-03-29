@@ -14,8 +14,6 @@ namespace core
 
 namespace animation
 {
-#pragma warning(push)
-#pragma warning(disable: 4251)
     class AnimationComputePipeline
     {
     private:
@@ -71,5 +69,4 @@ namespace animation
         void dispatch(vk::CommandBuffer cmd, uint32_t entityCount, vk::Buffer outputBoneBuffer);
         void insertBarriersAfterDispatch(vk::CommandBuffer cmd, vk::Buffer outputBoneBuffer);
     };
-#pragma warning(pop)
 }

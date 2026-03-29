@@ -1,5 +1,6 @@
 #pragma once
 
+// Compiled by the Serialization DLL (not the World DLL) — see premake5.lua removefiles in World project
 #include "../serialization/SerializationExport.hpp"
 #include "WorldSector.hpp"
 #include <nlohmann/json.hpp>
