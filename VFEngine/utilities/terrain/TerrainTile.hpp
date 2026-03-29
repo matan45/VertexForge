@@ -1,4 +1,5 @@
 #pragma once
+#include "TerrainExport.hpp"
 
 #include "TerrainTypes.hpp"
 #include "TerrainWeightMap.hpp"
@@ -13,6 +14,8 @@
 
 namespace terrain
 {
+#pragma warning(push)
+#pragma warning(disable: 4251)
     struct TileLODData
     {
         std::vector<resource::Vertex> vertices;
@@ -43,7 +46,7 @@ namespace terrain
         }
     };
 
-    class TerrainTile
+    class VF_TERRAIN_API TerrainTile
     {
     public:
         TileCoord coord;
@@ -137,5 +140,6 @@ namespace terrain
         [[nodiscard]] size_t getHeightIndex(uint32_t x, uint32_t z) const;
 
     };
+#pragma warning(pop)
 
 } // namespace terrain

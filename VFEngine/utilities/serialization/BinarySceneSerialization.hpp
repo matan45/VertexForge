@@ -1,5 +1,6 @@
 #pragma once
 
+#include "SerializationExport.hpp"
 #include <string_view>
 #include <vector>
 #include <cstdint>
@@ -9,7 +10,7 @@ namespace scene { class SceneGraphSystem; }
 
 namespace serialization
 {
-	class BinarySceneSerialization
+	class VF_SERIALIZATION_API BinarySceneSerialization
 	{
 	public:
 		static constexpr char MAGIC[4] = {'V', 'F', 'B', 'S'};

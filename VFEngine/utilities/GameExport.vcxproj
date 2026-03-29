@@ -19,13 +19,13 @@
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
-    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
     <CharacterSet>Unicode</CharacterSet>
     <PlatformToolset>v145</PlatformToolset>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
-    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
     <CharacterSet>Unicode</CharacterSet>
     <PlatformToolset>v145</PlatformToolset>
@@ -41,22 +41,24 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <LinkIncremental>true</LinkIncremental>
     <OutDir>$(ProjectDir)..\..\bin\GameExport\Debug\x64\</OutDir>
     <IntDir>$(ProjectDir)obj\x64\Debug\GameExport\</IntDir>
     <TargetName>GameExport</TargetName>
-    <TargetExt>.lib</TargetExt>
+    <TargetExt>.dll</TargetExt>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <LinkIncremental>false</LinkIncremental>
     <OutDir>$(ProjectDir)..\..\bin\GameExport\Release\x64\</OutDir>
     <IntDir>$(ProjectDir)obj\x64\Release\GameExport\</IntDir>
     <TargetName>GameExport</TargetName>
-    <TargetExt>.lib</TargetExt>
+    <TargetExt>.dll</TargetExt>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
-      <PreprocessorDefinitions>VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1;GLM_FORCE_DEPTH_ZERO_TO_ONE;_CRT_SECURE_NO_WARNINGS;DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1;GLM_FORCE_DEPTH_ZERO_TO_ONE;_CRT_SECURE_NO_WARNINGS;VF_GAMEEXPORT_BUILD_DLL;DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>..\..\dependencies\spdlog\include;..\..\dependencies\glm;..\..\dependencies\entt\single_include;..\..\dependencies\json\single_include;..\..\dependencies\lz4\lib;.;C:\VulkanSDK\1.4.335.0\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DebugInformationFormat>EditAndContinue</DebugInformationFormat>
       <Optimization>Disabled</Optimization>
@@ -67,17 +69,20 @@
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-    </Link>
-    <Lib>
       <AdditionalDependencies>shaderc_shared.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>C:\VulkanSDK\1.4.335.0\Lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-    </Lib>
+      <ImportLibrary>..\..\bin\GameExport\Debug\x64\GameExport.lib</ImportLibrary>
+    </Link>
+    <PostBuildEvent>
+      <Command>IF NOT EXIST ..\..\bin\Editor\Debug\x64 (mkdir ..\..\bin\Editor\Debug\x64)
+IF EXIST ..\..\bin\GameExport\Debug\x64\GameExport.dll\ (xcopy /Q /E /Y /I ..\..\bin\GameExport\Debug\x64\GameExport.dll ..\..\bin\Editor\Debug\x64 &gt; nul) ELSE (xcopy /Q /Y /I ..\..\bin\GameExport\Debug\x64\GameExport.dll ..\..\bin\Editor\Debug\x64 &gt; nul)</Command>
+    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
-      <PreprocessorDefinitions>VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1;GLM_FORCE_DEPTH_ZERO_TO_ONE;_CRT_SECURE_NO_WARNINGS;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1;GLM_FORCE_DEPTH_ZERO_TO_ONE;_CRT_SECURE_NO_WARNINGS;VF_GAMEEXPORT_BUILD_DLL;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>..\..\dependencies\spdlog\include;..\..\dependencies\glm;..\..\dependencies\entt\single_include;..\..\dependencies\json\single_include;..\..\dependencies\lz4\lib;.;C:\VulkanSDK\1.4.335.0\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <Optimization>Full</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
@@ -92,17 +97,21 @@
       <SubSystem>Windows</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-    </Link>
-    <Lib>
       <AdditionalDependencies>shaderc_shared.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>C:\VulkanSDK\1.4.335.0\Lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-    </Lib>
+      <ImportLibrary>..\..\bin\GameExport\Release\x64\GameExport.lib</ImportLibrary>
+    </Link>
+    <PostBuildEvent>
+      <Command>IF NOT EXIST ..\..\bin\Editor\Release\x64 (mkdir ..\..\bin\Editor\Release\x64)
+IF EXIST ..\..\bin\GameExport\Release\x64\GameExport.dll\ (xcopy /Q /E /Y /I ..\..\bin\GameExport\Release\x64\GameExport.dll ..\..\bin\Editor\Release\x64 &gt; nul) ELSE (xcopy /Q /Y /I ..\..\bin\GameExport\Release\x64\GameExport.dll ..\..\bin\Editor\Release\x64 &gt; nul)</Command>
+    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="archive\VFPakWriter.hpp" />
     <ClInclude Include="export\ExeIconEmbedder.hpp" />
     <ClInclude Include="export\ExportConfig.hpp" />
     <ClInclude Include="export\ExportManifest.hpp" />
+    <ClInclude Include="export\GameExportExport.hpp" />
     <ClInclude Include="export\GameExporter.hpp" />
     <ClInclude Include="export\ShaderCompiler.hpp" />
     <ClInclude Include="export\ShaderPermutationManifest.hpp" />
@@ -117,6 +126,9 @@
   <ItemGroup>
     <ProjectReference Include="Utilities.vcxproj">
       <Project>{010A8043-6D74-34BA-B6B2-E55F225C120F}</Project>
+    </ProjectReference>
+    <ProjectReference Include="Serialization.vcxproj">
+      <Project>{2319AF09-8FD9-2A40-5814-74BDC4936F1C}</Project>
     </ProjectReference>
     <ProjectReference Include="..\lz4.vcxproj">
       <Project>{3F8E880B-AB97-887C-3413-9F7CA01B947C}</Project>

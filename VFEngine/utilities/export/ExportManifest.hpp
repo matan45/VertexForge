@@ -1,5 +1,6 @@
 #pragma once
 
+#include "GameExportExport.hpp"
 #include <string>
 #include <vector>
 #include <filesystem>
@@ -24,7 +25,9 @@ namespace gameExport
 		std::vector<ManifestSource> sources;
 	};
 
-	class ExportManifest
+	#pragma warning(push)
+	#pragma warning(disable: 4251)
+	class VF_GAMEEXPORT_API ExportManifest
 	{
 	public:
 		bool load(const std::filesystem::path& manifestPath);
@@ -48,15 +51,17 @@ namespace gameExport
 		std::unordered_map<std::string, size_t> archivePathIndex;
 	};
 
+	#pragma warning(pop)
+
 	// Hash a file's contents using FNV-1a
-	uint64_t hashFile(const std::filesystem::path& filePath);
+	VF_GAMEEXPORT_API uint64_t hashFile(const std::filesystem::path& filePath);
 
 	// Get file modification time as epoch seconds
-	int64_t getFileModifiedTime(const std::filesystem::path& filePath);
+	VF_GAMEEXPORT_API int64_t getFileModifiedTime(const std::filesystem::path& filePath);
 
 	// Format a uint64_t hash as "0x..." hex string
-	std::string formatHash(uint64_t hash);
+	VF_GAMEEXPORT_API std::string formatHash(uint64_t hash);
 
 	// Parse a "0x..." hex string back to uint64_t
-	uint64_t parseHash(const std::string& str);
+	VF_GAMEEXPORT_API uint64_t parseHash(const std::string& str);
 }

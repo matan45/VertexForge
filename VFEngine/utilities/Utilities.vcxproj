@@ -195,6 +195,7 @@
     <ClInclude Include="resource\VertexQuantization.hpp" />
     <ClInclude Include="resource\VirtualFileSystem.hpp" />
     <ClInclude Include="resource\VorbisDecoder.hpp" />
+    <ClInclude Include="scene\ECSRegistryExport.hpp" />
     <ClInclude Include="scene\Entity.hpp" />
     <ClInclude Include="scene\EntityRegistry.hpp" />
     <ClInclude Include="scene\Level.hpp" />
@@ -285,7 +286,6 @@
     <ClCompile Include="resource\VFSHelpers.cpp" />
     <ClCompile Include="resource\VirtualFileSystem.cpp" />
     <ClCompile Include="resource\VorbisDecoder.cpp" />
-    <ClCompile Include="scene\EntityRegistry.cpp" />
     <ClCompile Include="scene\Level.cpp" />
     <ClCompile Include="scene\LevelHandler.cpp" />
     <ClCompile Include="scene\LightBVH.cpp" />

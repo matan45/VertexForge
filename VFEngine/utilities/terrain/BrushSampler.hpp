@@ -1,4 +1,5 @@
 #pragma once
+#include "TerrainExport.hpp"
 
 #include "TerrainTypes.hpp"
 #include <vector>
@@ -6,7 +7,7 @@
 
 namespace terrain
 {
-    class BrushSampler
+    class VF_TERRAIN_API BrushSampler
     {
     public:
         static std::vector<TileCoord> getAffectedTiles(

@@ -1,4 +1,5 @@
 #pragma once
+#include "SerializationExport.hpp"
 #include <string_view>
 #include <functional>
 #include <shared_mutex>
@@ -22,7 +23,9 @@ namespace serialization
 
     using SceneLoadProgressCallback = std::function<void(const std::string&, size_t, size_t)>;
 
-    struct DeserializeEntityContext
+    #pragma warning(push)
+    #pragma warning(disable: 4251)
+    struct VF_SERIALIZATION_API DeserializeEntityContext
     {
         scene::SceneGraphSystem& sceneGraph;
         bool isRoot;
@@ -30,8 +33,11 @@ namespace serialization
         size_t& entitiesLoaded;
         size_t totalEntities;
     };
+    #pragma warning(pop)
 
-    class SceneSerialization
+    #pragma warning(push)
+    #pragma warning(disable: 4251)
+    class VF_SERIALIZATION_API SceneSerialization
     {
         friend class PrefabSerialization;
         friend class BinarySceneSerialization;
@@ -346,4 +352,5 @@ namespace serialization
         static PluginDeserializeFn pluginDeserializeHook;
         static std::shared_mutex pluginHookMutex;
     };
+    #pragma warning(pop)
 }

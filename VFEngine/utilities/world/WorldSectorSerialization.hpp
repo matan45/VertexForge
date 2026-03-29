@@ -1,5 +1,7 @@
 #pragma once
 
+// Compiled by the Serialization DLL (not the World DLL) — see premake5.lua removefiles in World project
+#include "../serialization/SerializationExport.hpp"
 #include "WorldSector.hpp"
 #include <nlohmann/json.hpp>
 #include <string>
@@ -9,7 +11,7 @@ namespace world
 {
     using json = nlohmann::json;
 
-    class WorldSectorSerialization
+    class VF_SERIALIZATION_API WorldSectorSerialization
     {
     public:
         // Binary format (default) - writes header + MessagePack

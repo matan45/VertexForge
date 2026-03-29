@@ -1,11 +1,12 @@
 #pragma once
+#include "AudioExport.hpp"
 #include <glm/glm.hpp>
 
 namespace core::audio {
 
     class ReverbZoneManager;
 
-    class AudioSceneUpdater {
+    class VF_AUDIO_API AudioSceneUpdater {
     public:
         explicit AudioSceneUpdater() = default;
         ~AudioSceneUpdater() = default;

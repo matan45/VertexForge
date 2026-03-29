@@ -1,5 +1,6 @@
 #pragma once
 
+#include "AnimationExport.hpp"
 #include "AnimatorStateMachine.hpp"
 #include "AnimationLayerStack.hpp"
 #include "AnimationLOD.hpp"
@@ -24,7 +25,9 @@ namespace animation
         bool enabled = false;
     };
 
-    class RuntimeAnimatorSystem
+#pragma warning(push)
+#pragma warning(disable: 4251)
+    class VF_ANIMATION_API RuntimeAnimatorSystem
     {
     private:
         AnimationDataCache dataCache;
@@ -157,4 +160,5 @@ namespace animation
         uint64_t computeInstanceGroupKey(const std::string& animatorPath, uint32_t stateId,
                                           uint8_t lodLevel, float normalizedTime) const;
     };
+#pragma warning(pop)
 }

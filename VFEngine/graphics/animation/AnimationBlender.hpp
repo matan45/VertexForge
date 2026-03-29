@@ -1,5 +1,6 @@
 #pragma once
 
+#include "AnimationExport.hpp"
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <vector>
@@ -15,7 +16,7 @@ namespace animation
         glm::vec3 scale{1.0f};
     };
 
-    class AnimationBlender
+    class VF_ANIMATION_API AnimationBlender
     {
     public:
         static std::vector<glm::mat4> blendPoses(

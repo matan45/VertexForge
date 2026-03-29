@@ -119,6 +119,9 @@
     <ProjectReference Include="..\plugin\Plugin.vcxproj">
       <Project>{F4F95FCA-E09B-8AA0-C956-9EF4B59711F1}</Project>
     </ProjectReference>
+    <ProjectReference Include="..\utilities\ECSRegistry.vcxproj">
+      <Project>{79DB43B4-E590-BCA9-6E85-B680DA39B3AD}</Project>
+    </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

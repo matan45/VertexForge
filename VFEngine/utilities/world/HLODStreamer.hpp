@@ -1,5 +1,6 @@
 #pragma once
 
+#include "WorldExport.hpp"
 #include "HLODTypes.hpp"
 #include "WorldTypes.hpp"
 #include "WorldSectorManager.hpp"
@@ -16,7 +17,9 @@ namespace world
         bool isLoad = true;
     };
 
-    class HLODStreamer
+#pragma warning(push)
+#pragma warning(disable: 4251)
+    class VF_WORLD_API HLODStreamer
     {
     public:
         void setConfig(const SectorStreamingConfig& streamConfig, const HLODConfig& hlodConfig);
@@ -49,5 +52,6 @@ namespace world
         float cellDistanceSq(const HLODCellCoord& cell, uint8_t cellSize,
                              const glm::vec3& pos, float sectorWorldSize) const;
     };
+#pragma warning(pop)
 
 } // namespace world

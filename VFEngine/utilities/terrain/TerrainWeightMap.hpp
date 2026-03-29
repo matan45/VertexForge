@@ -1,4 +1,5 @@
 #pragma once
+#include "TerrainExport.hpp"
 
 #include "TerrainMaterialTypes.hpp"
 #include <vector>
@@ -9,7 +10,9 @@ namespace terrain
 {
     static constexpr uint8_t WEIGHT_CHANNELS = 8;
 
-    struct TileWeightMapData
+#pragma warning(push)
+#pragma warning(disable: 4251)
+    struct VF_TERRAIN_API TileWeightMapData
     {
         // layerWeights[channel] = flat vector of size resolution*resolution
         // Values in [0.0, 1.0], sum across channels at each texel should be 1.0
@@ -37,4 +40,5 @@ namespace terrain
         // Assigns paletteLayer to a free or least-used channel. Returns channel index.
         uint8_t assignChannel(uint8_t paletteLayer);
     };
+#pragma warning(pop)
 }

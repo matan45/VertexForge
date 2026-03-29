@@ -1,5 +1,6 @@
 #pragma once
 
+#include "AnimationExport.hpp"
 #include "AnimatorStateMachine.hpp"
 #include "AnimationEvaluator.hpp"
 #include "AnimationBlender.hpp"
@@ -35,13 +36,26 @@ namespace animation
         animator::AdditiveReferencePose additiveRefPose = animator::AdditiveReferencePose::FirstFrame;
         float additiveRefFrame = 0.0f;
         std::vector<glm::mat4> referencePose;
+
+        AnimationLayerRuntime() = default;
+        ~AnimationLayerRuntime() = default;
+        AnimationLayerRuntime(AnimationLayerRuntime&&) noexcept = default;
+        AnimationLayerRuntime& operator=(AnimationLayerRuntime&&) noexcept = default;
+        AnimationLayerRuntime(const AnimationLayerRuntime&) = delete;
+        AnimationLayerRuntime& operator=(const AnimationLayerRuntime&) = delete;
     };
 
-    class AnimationLayerStack
+#pragma warning(push)
+#pragma warning(disable: 4251)
+    class VF_ANIMATION_API AnimationLayerStack
     {
     public:
         AnimationLayerStack();
         ~AnimationLayerStack();
+        AnimationLayerStack(AnimationLayerStack&&) noexcept = default;
+        AnimationLayerStack& operator=(AnimationLayerStack&&) noexcept = default;
+        AnimationLayerStack(const AnimationLayerStack&) = delete;
+        AnimationLayerStack& operator=(const AnimationLayerStack&) = delete;
 
         void initialize(const animator::AnimatorData& data, const resource::SkeletonData* skeleton,
                          AnimationLoadCallback loadCallback);
@@ -139,4 +153,5 @@ namespace animation
         void updateDirectClipPlayback(AnimationLayerRuntime& layer, float deltaTime);
         void collectFiredEvents();
     };
+#pragma warning(pop)
 }

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "AnimationExport.hpp"
 #include "animator/AnimatorTypes.hpp"
 #include "animator/AnimationEventTypes.hpp"
 #include "animator/SocketTypes.hpp"
@@ -32,7 +33,9 @@ namespace animation
         float previousNormalizedTime = 0.0f;
     };
 
-    class AnimatorStateMachine
+#pragma warning(push)
+#pragma warning(disable: 4251)
+    class VF_ANIMATION_API AnimatorStateMachine
     {
     private:
         const animator::AnimatorData* animatorData = nullptr;
@@ -143,4 +146,5 @@ namespace animation
         void fireTriggeredEvents();
         std::vector<const animator::AnimationEvent*> firedEventsThisFrame;
     };
+#pragma warning(pop)
 }

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "AnimationExport.hpp"
 #include "IKSolver.hpp"
 #include "animator/IKTypes.hpp"
 #include "components/IKComponent.hpp"
@@ -9,7 +10,7 @@
 
 namespace animation
 {
-    class IKPostProcessor
+    class VF_ANIMATION_API IKPostProcessor
     {
     public:
         static void applyIK(

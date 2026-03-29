@@ -1,4 +1,5 @@
 #pragma once
+#include "TerrainExport.hpp"
 
 #include "TerrainTile.hpp"
 #include "TerrainTileGenerator.hpp"
@@ -11,7 +12,9 @@
 
 namespace terrain
 {
-    class TerrainGrid
+#pragma warning(push)
+#pragma warning(disable: 4251)
+    class VF_TERRAIN_API TerrainGrid
     {
     private:
         TerrainTileConfig config;
@@ -80,5 +83,6 @@ namespace terrain
         void updateNeighborReferences(TerrainTile& tile);
         void updateAllNeighborReferences();
     };
+#pragma warning(pop)
 
 } // namespace terrain

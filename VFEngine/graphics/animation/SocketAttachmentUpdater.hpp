@@ -1,5 +1,6 @@
 #pragma once
 
+#include "AnimationExport.hpp"
 #include <entt/entt.hpp>
 #include <glm/glm.hpp>
 #include <memory>
@@ -12,7 +13,9 @@ namespace animation
     class AnimationLayerStack;
     class AnimationDataCache;
 
-    class SocketAttachmentUpdater
+#pragma warning(push)
+#pragma warning(disable: 4251)
+    class VF_ANIMATION_API SocketAttachmentUpdater
     {
     public:
         SocketAttachmentUpdater(
@@ -31,4 +34,5 @@ namespace animation
         AnimationDataCache& dataCache;
         std::unordered_map<entt::entity, std::vector<glm::mat4>> socketTransformCache;
     };
+#pragma warning(pop)
 }

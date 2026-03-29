@@ -1,4 +1,5 @@
 #pragma once
+#include "TerrainExport.hpp"
 
 #include "TerrainTypes.hpp"
 #include "TerrainTile.hpp"
@@ -9,7 +10,9 @@
 
 namespace terrain
 {
-    class TerrainQuadtree
+#pragma warning(push)
+#pragma warning(disable: 4251)
+    class VF_TERRAIN_API TerrainQuadtree
     {
     public:
         TerrainQuadtree();
@@ -91,5 +94,6 @@ namespace terrain
 
         void refitYBounds(uint32_t nodeIdx);
     };
+#pragma warning(pop)
 
 } // namespace terrain

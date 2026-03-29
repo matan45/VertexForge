@@ -1,11 +1,14 @@
 #pragma once
 
+#include "AudioExport.hpp"
 #include <glm/glm.hpp>
 #include <string>
 
 namespace core::audio
 {
-    struct PlaySoundParams
+    #pragma warning(push)
+    #pragma warning(disable: 4251)
+    struct VF_AUDIO_API PlaySoundParams
     {
         float volume = 1.0f;
         float pitch = 1.0f;
@@ -29,4 +32,5 @@ namespace core::audio
 
         std::string busName = "Master";
     };
+    #pragma warning(pop)
 }

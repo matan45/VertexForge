@@ -1,5 +1,6 @@
 #pragma once
 
+#include "AnimationExport.hpp"
 #include "animator/AnimatorTypes.hpp"
 #include "resource/Types.hpp"
 #include <entt/entt.hpp>
@@ -11,7 +12,9 @@ namespace animation
 {
     class AnimationLayerStack;
 
-    class AnimationDataCache
+#pragma warning(push)
+#pragma warning(disable: 4251)
+    class VF_ANIMATION_API AnimationDataCache
     {
     private:
         std::unordered_map<std::string, std::shared_ptr<animator::AnimatorData>> animatorDataCache;
@@ -28,4 +31,5 @@ namespace animation
 
         void cleanupUnused(const std::unordered_map<entt::entity, std::unique_ptr<AnimationLayerStack>>& animators);
     };
+#pragma warning(pop)
 }

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "AnimationExport.hpp"
 #include "animator/IKTypes.hpp"
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
@@ -7,7 +8,7 @@
 
 namespace animation
 {
-    class FABRIKSolver
+    class VF_ANIMATION_API FABRIKSolver
     {
     public:
         struct ChainInput

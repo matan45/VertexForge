@@ -99,6 +99,8 @@
     </Lib>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="animation\AnimationComputePipeline.hpp" />
+    <ClInclude Include="animation\AnimationGPUData.hpp" />
     <ClInclude Include="controllers\AnimatorSystemController.hpp" />
     <ClInclude Include="controllers\Graphics.hpp" />
     <ClInclude Include="controllers\OffScreenController.hpp" />
@@ -328,6 +330,7 @@
     <ClInclude Include="render\water\WaterRefractionResources.hpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="animation\AnimationComputePipeline.cpp" />
     <ClCompile Include="controllers\AnimatorSystemController.cpp" />
     <ClCompile Include="controllers\Graphics.cpp" />
     <ClCompile Include="controllers\OffScreenController.cpp" />

@@ -1,4 +1,5 @@
 #pragma once
+#include "TerrainExport.hpp"
 
 #include "CaveBrushTypes.hpp"
 #include "CaveSDFData.hpp"
@@ -6,7 +7,7 @@
 
 namespace terrain
 {
-    class CaveBrushApplicator
+    class VF_TERRAIN_API CaveBrushApplicator
     {
     public:
         struct ApplyParams

@@ -1,4 +1,5 @@
 #pragma once
+#include "AudioExport.hpp"
 #include "AudioSystem.hpp"
 #include "AudioBufferManager.hpp"
 #include "AudioSourceManager.hpp"
@@ -18,7 +19,9 @@
 
 namespace core::audio {
 
-    class AudioController {
+    #pragma warning(push)
+    #pragma warning(disable: 4251)
+    class VF_AUDIO_API AudioController {
     private:
         std::unique_ptr<AudioSystem> audioSystem;
         std::unique_ptr<AudioBufferManager> bufferManager;
@@ -109,5 +112,6 @@ namespace core::audio {
         AudioHandle playSound(const std::string& path, const PlaySoundParams& params);
         void stopAll();
     };
+    #pragma warning(pop)
 
 }

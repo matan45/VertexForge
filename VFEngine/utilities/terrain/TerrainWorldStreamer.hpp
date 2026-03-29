@@ -1,4 +1,5 @@
 #pragma once
+#include "TerrainExport.hpp"
 
 #include "TerrainTypes.hpp"
 #include "TerrainFileCache.hpp"
@@ -22,7 +23,9 @@ namespace terrain
         bool isLoad = true;
     };
 
-    class TerrainWorldStreamer
+#pragma warning(push)
+#pragma warning(disable: 4251)
+    class VF_TERRAIN_API TerrainWorldStreamer
     {
     public:
         explicit TerrainWorldStreamer(const StreamingConfig& config = {});
@@ -56,5 +59,6 @@ namespace terrain
         [[nodiscard]] float tileDistanceSq(const TileCoord& coord, const glm::vec3& cameraPos,
                                            float worldTileSize) const;
     };
+#pragma warning(pop)
 
 } // namespace terrain

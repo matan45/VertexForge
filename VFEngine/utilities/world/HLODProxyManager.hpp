@@ -1,5 +1,6 @@
 #pragma once
 
+#include "WorldExport.hpp"
 #include "HLODTypes.hpp"
 #include "HLODSerialization.hpp"
 #include "WorldTypes.hpp"
@@ -12,9 +13,16 @@ namespace scene { class SceneGraphSystem; }
 
 namespace world
 {
-    class HLODProxyManager
+#pragma warning(push)
+#pragma warning(disable: 4251)
+    class VF_WORLD_API HLODProxyManager
     {
     public:
+        HLODProxyManager() = default;
+        ~HLODProxyManager() = default;
+        HLODProxyManager(HLODProxyManager&&) noexcept = default;
+        HLODProxyManager& operator=(HLODProxyManager&&) noexcept = default;
+
         struct ProxyEntry
         {
             HLODCellCoord cellCoord;
@@ -49,12 +57,23 @@ namespace world
         {
             HLODCellCoord cellCoord;
             std::future<HLODFileData> future;
+
+            PendingLoad() = default;
+            ~PendingLoad() = default;
+            PendingLoad(PendingLoad&&) noexcept = default;
+            PendingLoad& operator=(PendingLoad&&) noexcept = default;
+            PendingLoad(const PendingLoad&) = delete;
+            PendingLoad& operator=(const PendingLoad&) = delete;
         };
         std::vector<PendingLoad> pendingLoads;
 
         void createProxyEntities(ProxyEntry& proxy, const HLODFileData& data,
                                   scene::SceneGraphSystem& sceneGraph);
         void destroyProxyEntities(ProxyEntry& proxy, scene::SceneGraphSystem& sceneGraph);
+
+        HLODProxyManager(const HLODProxyManager&) = delete;
+        HLODProxyManager& operator=(const HLODProxyManager&) = delete;
     };
+#pragma warning(pop)
 
 } // namespace world

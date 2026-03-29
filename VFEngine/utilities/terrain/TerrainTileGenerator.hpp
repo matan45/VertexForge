@@ -1,4 +1,5 @@
 #pragma once
+#include "TerrainExport.hpp"
 
 #include "TerrainTile.hpp"
 #include <memory>
@@ -9,7 +10,9 @@ namespace terrain
     // Callback to look up a neighbor tile by coordinate
     using TileLookup = std::function<const TerrainTile*(const TileCoord&)>;
 
-    class TerrainTileGenerator
+#pragma warning(push)
+#pragma warning(disable: 4251)
+    class VF_TERRAIN_API TerrainTileGenerator
     {
     private:
         TerrainTileConfig config;
@@ -128,5 +131,6 @@ namespace terrain
             const TileLookup& getTile
         ) const;
     };
+#pragma warning(pop)
 
 }

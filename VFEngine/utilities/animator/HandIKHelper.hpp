@@ -1,18 +1,21 @@
 #pragma once
 
+#include "../../graphics/animation/AnimationExport.hpp"
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <optional>
 
 namespace animator::ik
 {
-    struct HandIKConfig
+    #pragma warning(push)
+    #pragma warning(disable: 4251)
+    struct VF_ANIMATION_API HandIKConfig
     {
         float maxReachDistance = 1.5f;   // Max distance hand can reach before IK disengages
         float gripRotationBlend = 1.0f; // 0 = keep animation rotation, 1 = fully match target rotation
     };
 
-    struct HandIKResult
+    struct VF_ANIMATION_API HandIKResult
     {
         glm::vec3 targetPosition{0.0f};
         std::optional<glm::quat> targetRotation;
@@ -20,7 +23,8 @@ namespace animator::ik
         bool isReachable = false;
     };
 
-    class HandIKHelper
+    #pragma warning(pop)
+    class VF_ANIMATION_API HandIKHelper
     {
     public:
         // Calculate IK target for a hand/arm chain to reach a world position.

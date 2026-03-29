@@ -1,4 +1,5 @@
 #pragma once
+#include "TerrainExport.hpp"
 
 #include "TerrainWeightMap.hpp"
 #include "PaintBrushTypes.hpp"
@@ -6,7 +7,7 @@
 
 namespace terrain
 {
-    class WeightBrushApplicator
+    class VF_TERRAIN_API WeightBrushApplicator
     {
     public:
         struct ApplyParams

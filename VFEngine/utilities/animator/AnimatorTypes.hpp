@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <string>
 #include <vector>
 #include <unordered_map>
@@ -93,12 +94,43 @@ namespace animator
         // "Entry" node position in the node graph editor
         glm::vec2 entryPosition{50.0f, 50.0f};
 
-        const AnimatorState* findStateById(uint32_t id) const;
-        const AnimatorState* findStateByName(const std::string& name) const;
-        AnimatorState* findStateById(uint32_t id);
-        AnimatorState* findStateByName(const std::string& name);
-        const AnimatorParameter* findParameter(const std::string& name) const;
-        std::vector<const AnimatorTransition*> getTransitionsFromState(uint32_t stateId) const;
+        inline const AnimatorState* findStateById(uint32_t id) const {
+            auto it = std::find_if(states.begin(), states.end(),
+                [id](const AnimatorState& s) { return s.id == id; });
+            return it != states.end() ? &(*it) : nullptr;
+        }
+        inline const AnimatorState* findStateByName(const std::string& name) const {
+            auto it = std::find_if(states.begin(), states.end(),
+                [&name](const AnimatorState& s) { return s.name == name; });
+            return it != states.end() ? &(*it) : nullptr;
+        }
+        inline AnimatorState* findStateById(uint32_t id) {
+            auto it = std::find_if(states.begin(), states.end(),
+                [id](AnimatorState& s) { return s.id == id; });
+            return it != states.end() ? &(*it) : nullptr;
+        }
+        inline AnimatorState* findStateByName(const std::string& name) {
+            auto it = std::find_if(states.begin(), states.end(),
+                [&name](AnimatorState& s) { return s.name == name; });
+            return it != states.end() ? &(*it) : nullptr;
+        }
+        inline const AnimatorParameter* findParameter(const std::string& name) const {
+            auto it = std::find_if(parameters.begin(), parameters.end(),
+                [&name](const AnimatorParameter& p) { return p.name == name; });
+            return it != parameters.end() ? &(*it) : nullptr;
+        }
+        inline std::vector<const AnimatorTransition*> getTransitionsFromState(uint32_t stateId) const {
+            std::vector<const AnimatorTransition*> result;
+            for (const auto& transition : transitions) {
+                if (transition.sourceStateId == stateId || transition.sourceStateId == 0)
+                    result.push_back(&transition);
+            }
+            std::sort(result.begin(), result.end(),
+                [](const AnimatorTransition* a, const AnimatorTransition* b) {
+                    return a->priority < b->priority;
+                });
+            return result;
+        }
     };
 
     struct AnimationLayerData
@@ -129,27 +161,126 @@ namespace animator
     {
         std::unordered_map<std::string, AnimatorParameterValue> values;
 
-        void setFloat(const std::string& name, float value);
-        void setInt(const std::string& name, int32_t value);
-        void setBool(const std::string& name, bool value);
-        void setTrigger(const std::string& name);
-        void resetTrigger(const std::string& name);
+        inline void setFloat(const std::string& name, float value) { values[name] = value; }
+        inline void setInt(const std::string& name, int32_t value) { values[name] = value; }
+        inline void setBool(const std::string& name, bool value) { values[name] = value; }
+        inline void setTrigger(const std::string& name) { values[name] = true; }
+        inline void resetTrigger(const std::string& name) {
+            auto it = values.find(name);
+            if (it != values.end() && std::holds_alternative<bool>(it->second))
+                it->second = false;
+        }
 
-        float getFloat(const std::string& name, float defaultVal = 0.0f) const;
-        int32_t getInt(const std::string& name, int32_t defaultVal = 0) const;
-        bool getBool(const std::string& name, bool defaultVal = false) const;
-        bool getTrigger(const std::string& name) const;
+        inline float getFloat(const std::string& name, float defaultVal = 0.0f) const {
+            auto it = values.find(name);
+            return (it != values.end() && std::holds_alternative<float>(it->second))
+                ? std::get<float>(it->second) : defaultVal;
+        }
+        inline int32_t getInt(const std::string& name, int32_t defaultVal = 0) const {
+            auto it = values.find(name);
+            return (it != values.end() && std::holds_alternative<int32_t>(it->second))
+                ? std::get<int32_t>(it->second) : defaultVal;
+        }
+        inline bool getBool(const std::string& name, bool defaultVal = false) const {
+            auto it = values.find(name);
+            return (it != values.end() && std::holds_alternative<bool>(it->second))
+                ? std::get<bool>(it->second) : defaultVal;
+        }
+        inline bool getTrigger(const std::string& name) const { return getBool(name, false); }
 
-        void initializeFromGraph(const AnimatorGraph& graph);
+        inline void initializeFromGraph(const AnimatorGraph& graph) {
+            values.clear();
+            for (const auto& param : graph.parameters)
+                values[param.name] = param.defaultValue;
+        }
     };
 
-    const char* parameterTypeToString(AnimatorParameterType type);
-    AnimatorParameterType stringToParameterType(const std::string& str);
-    const char* comparisonOperatorToString(ComparisonOperator op);
-    ComparisonOperator stringToComparisonOperator(const std::string& str);
+    inline const char* parameterTypeToString(AnimatorParameterType type) {
+        switch (type) {
+            case AnimatorParameterType::Float:   return "Float";
+            case AnimatorParameterType::Int:     return "Int";
+            case AnimatorParameterType::Bool:    return "Bool";
+            case AnimatorParameterType::Trigger: return "Trigger";
+            default:                             return "Float";
+        }
+    }
+    inline AnimatorParameterType stringToParameterType(const std::string& str) {
+        if (str == "Int")     return AnimatorParameterType::Int;
+        if (str == "Bool")    return AnimatorParameterType::Bool;
+        if (str == "Trigger") return AnimatorParameterType::Trigger;
+        return AnimatorParameterType::Float;
+    }
+    inline const char* comparisonOperatorToString(ComparisonOperator op) {
+        switch (op) {
+            case ComparisonOperator::Greater:      return ">";
+            case ComparisonOperator::Less:         return "<";
+            case ComparisonOperator::GreaterEqual: return ">=";
+            case ComparisonOperator::LessEqual:    return "<=";
+            case ComparisonOperator::Equal:        return "==";
+            case ComparisonOperator::NotEqual:     return "!=";
+            default:                               return ">";
+        }
+    }
+    inline ComparisonOperator stringToComparisonOperator(const std::string& str) {
+        if (str == "<")  return ComparisonOperator::Less;
+        if (str == ">=") return ComparisonOperator::GreaterEqual;
+        if (str == "<=") return ComparisonOperator::LessEqual;
+        if (str == "==") return ComparisonOperator::Equal;
+        if (str == "!=") return ComparisonOperator::NotEqual;
+        return ComparisonOperator::Greater;
+    }
 
-    bool evaluateCondition(const TransitionCondition& condition,
-                           const AnimatorRuntimeParameters& params);
-    bool evaluateAllConditions(const std::vector<TransitionCondition>& conditions,
-                               const AnimatorRuntimeParameters& params);
+    inline bool evaluateCondition(const TransitionCondition& condition,
+                                  const AnimatorRuntimeParameters& params) {
+        auto it = params.values.find(condition.parameterName);
+        if (it == params.values.end()) return false;
+        const auto& paramValue = it->second;
+        const auto& conditionValue = condition.value;
+        if (std::holds_alternative<bool>(paramValue) && std::holds_alternative<bool>(conditionValue)) {
+            bool pVal = std::get<bool>(paramValue);
+            bool cVal = std::get<bool>(conditionValue);
+            switch (condition.op) {
+                case ComparisonOperator::Equal:    return pVal == cVal;
+                case ComparisonOperator::NotEqual: return pVal != cVal;
+                default:                           return pVal == cVal;
+            }
+        }
+        if (std::holds_alternative<float>(paramValue)) {
+            float pVal = std::get<float>(paramValue);
+            float cVal = std::holds_alternative<float>(conditionValue) ? std::get<float>(conditionValue)
+                       : std::holds_alternative<int32_t>(conditionValue) ? static_cast<float>(std::get<int32_t>(conditionValue)) : 0.0f;
+            switch (condition.op) {
+                case ComparisonOperator::Greater:      return pVal > cVal;
+                case ComparisonOperator::Less:         return pVal < cVal;
+                case ComparisonOperator::GreaterEqual: return pVal >= cVal;
+                case ComparisonOperator::LessEqual:    return pVal <= cVal;
+                case ComparisonOperator::Equal:        return pVal == cVal;
+                case ComparisonOperator::NotEqual:     return pVal != cVal;
+                default:                               return false;
+            }
+        }
+        if (std::holds_alternative<int32_t>(paramValue)) {
+            int32_t pVal = std::get<int32_t>(paramValue);
+            int32_t cVal = std::holds_alternative<int32_t>(conditionValue) ? std::get<int32_t>(conditionValue)
+                         : std::holds_alternative<float>(conditionValue) ? static_cast<int32_t>(std::get<float>(conditionValue)) : 0;
+            switch (condition.op) {
+                case ComparisonOperator::Greater:      return pVal > cVal;
+                case ComparisonOperator::Less:         return pVal < cVal;
+                case ComparisonOperator::GreaterEqual: return pVal >= cVal;
+                case ComparisonOperator::LessEqual:    return pVal <= cVal;
+                case ComparisonOperator::Equal:        return pVal == cVal;
+                case ComparisonOperator::NotEqual:     return pVal != cVal;
+                default:                               return false;
+            }
+        }
+        return false;
+    }
+
+    inline bool evaluateAllConditions(const std::vector<TransitionCondition>& conditions,
+                                      const AnimatorRuntimeParameters& params) {
+        if (conditions.empty()) return true;
+        for (const auto& condition : conditions)
+            if (!evaluateCondition(condition, params)) return false;
+        return true;
+    }
 }

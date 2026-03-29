@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../../graphics/animation/AnimationExport.hpp"
 #include "AnimatorTypes.hpp"
 #include <nlohmann/json_fwd.hpp>
 #include <string_view>
@@ -10,7 +11,7 @@ namespace animator
 {
     inline constexpr const char* ANIMATOR_FORMAT_VERSION = "1.0";
 
-    class AnimatorAsset
+    class VF_ANIMATION_API AnimatorAsset
     {
     public:
         static std::optional<AnimatorData> load(std::string_view path);

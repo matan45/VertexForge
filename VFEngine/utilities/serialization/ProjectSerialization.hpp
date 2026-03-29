@@ -1,4 +1,5 @@
 #pragma once
+#include "SerializationExport.hpp"
 #include <string_view>
 #include <optional>
 #include <nlohmann/json.hpp>
@@ -8,7 +9,7 @@ namespace serialization
 {
     using json = nlohmann::json;
 
-    class ProjectSerialization
+    class VF_SERIALIZATION_API ProjectSerialization
     {
     public:
         static std::optional<config::ProjectConfig> loadProject(std::string_view filename);

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "WorldExport.hpp"
 #include "WorldTypes.hpp"
 #include "WorldSector.hpp"
 #include "../terrain/TerrainTypes.hpp"
@@ -9,7 +10,9 @@
 
 namespace world
 {
-    class WorldSectorManager
+#pragma warning(push)
+#pragma warning(disable: 4251)
+    class VF_WORLD_API WorldSectorManager
     {
     public:
         explicit WorldSectorManager(const SectorConfig& config = {});
@@ -44,5 +47,6 @@ namespace world
         std::unordered_map<SectorCoord, WorldSector, SectorCoordHash> sectors;
         std::unordered_map<uint64_t, SectorCoord> entityToSector;
     };
+#pragma warning(pop)
 
 } // namespace world
