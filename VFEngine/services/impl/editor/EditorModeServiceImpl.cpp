@@ -60,6 +60,18 @@ namespace services
             return;
         }
 
+        // Save the IBL path now while it's still resolvable
+        savedIBLPath.clear();
+        scene::Entity& root = sceneGraph->GetRoot();
+        if (root.hasComponent<components::IBLComponent>())
+        {
+            const auto& iblComp = root.getComponent<components::IBLComponent>();
+            if (iblComp.hdrRef.isValid())
+            {
+                savedIBLPath = iblComp.hdrRef.resolve();
+            }
+        }
+
         playModeSnapshot = serialization::SceneSerialization::createSnapshot(*sceneGraph);
     }
 
@@ -106,17 +118,12 @@ namespace services
             return;
         }
 
-        // Re-set IBL if present on root entity
-        scene::Entity& root = sceneGraph->GetRoot();
-        if (root.hasComponent<components::IBLComponent>())
+        // Re-set IBL using the path saved before entering play mode
+        if (!savedIBLPath.empty())
         {
-            const auto& iblComp = root.getComponent<components::IBLComponent>();
-            if (iblComp.hdrRef.isValid())
-            {
-                events::render::SetIBLCommand setIblCmd;
-                setIblCmd.hdrPath = iblComp.hdrRef.resolve();
-                dispatcher.execute(setIblCmd);
-            }
+            events::render::SetIBLCommand setIblCmd;
+            setIblCmd.hdrPath = savedIBLPath;
+            dispatcher.execute(setIblCmd);
         }
 
         // Re-map terrain registrations to restored entity IDs

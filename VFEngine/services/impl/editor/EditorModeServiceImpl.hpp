@@ -17,6 +17,7 @@ namespace services
         EditorMode currentMode = EditorMode::Edit;
         std::shared_ptr<scene::SceneGraphSystem> sceneGraph;
         std::optional<nlohmann::json> playModeSnapshot;
+        std::string savedIBLPath;
 
     public:
         explicit EditorModeServiceImpl(std::shared_ptr<scene::SceneGraphSystem> sceneGraph);
