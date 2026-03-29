@@ -15,11 +15,16 @@
 // Uses headless Vulkan device (no surface/swapchain).
 // Run with: Tests.exe --test-suite="GPU"
 // Exclude with: Tests.exe --test-suite-exclude="GPU"
+//
+// NOTE: Tests within this suite run in declaration order.
+// The last test case tears down the shared Vulkan device.
 // ============================================================
 
 namespace {
 
-// Shared headless device for all GPU tests in this file
+// Shared headless device for all GPU tests in this file.
+// Initialized lazily on first use, torn down by the destructor
+// (guaranteed via static storage duration) or explicitly by shutdownGPU().
 struct HeadlessFixture
 {
     std::unique_ptr<core::Device> device;
@@ -32,12 +37,14 @@ struct HeadlessFixture
 
     ~HeadlessFixture()
     {
-        device->getLogicalDevice().waitIdle();
-        device->cleanUp();
+        if (device)
+        {
+            device->getLogicalDevice().waitIdle();
+            device->cleanUp();
+        }
     }
 };
 
-// Single fixture instance reused across tests
 static std::unique_ptr<HeadlessFixture> gpuFixture;
 
 void ensureGPU()
@@ -72,8 +79,6 @@ TEST_CASE("GPU: storage buffer create and readback") {
     auto& dev = *gpuFixture->device;
     const vk::Device vkDevice = dev.getLogicalDevice();
     const vk::PhysicalDevice physDevice = dev.getPhysicalDevice();
-    const vk::Queue queue = dev.getGraphicsQueue();
-    const vk::CommandPool cmdPool = dev.getStagingCommandPool();
     auto& memManager = dev.getMemoryManager();
 
     // Write test data to a host-visible buffer
@@ -136,7 +141,7 @@ void main() {
     REQUIRE(stages.size() == 1);
     REQUIRE(stages[0].stage == vk::ShaderStageFlagBits::eCompute);
 
-    // --- Create descriptor set layout (2 storage buffers) ---
+    // --- Create descriptor set layout (2 storage buffers, plain layout) ---
     std::array<vk::DescriptorSetLayoutBinding, 2> bindings{};
     bindings[0].binding = 0;
     bindings[0].descriptorType = vk::DescriptorType::eStorageBuffer;
@@ -147,14 +152,16 @@ void main() {
     bindings[1].descriptorCount = 1;
     bindings[1].stageFlags = vk::ShaderStageFlagBits::eCompute;
 
-    vk::DescriptorSetLayout dsLayout = core::PipelineUtilities::createUpdateAfterBindLayout(
-        vkDevice, bindings.data(), static_cast<uint32_t>(bindings.size()));
+    vk::DescriptorSetLayoutCreateInfo dsLayoutInfo{};
+    dsLayoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
+    dsLayoutInfo.pBindings = bindings.data();
+    vk::DescriptorSetLayout dsLayout = vkDevice.createDescriptorSetLayout(dsLayoutInfo);
 
     // --- Pipeline layout ---
-    vk::PipelineLayoutCreateInfo layoutInfo{};
-    layoutInfo.setLayoutCount = 1;
-    layoutInfo.pSetLayouts = &dsLayout;
-    vk::PipelineLayout pipelineLayout = vkDevice.createPipelineLayout(layoutInfo);
+    vk::PipelineLayoutCreateInfo plLayoutInfo{};
+    plLayoutInfo.setLayoutCount = 1;
+    plLayoutInfo.pSetLayouts = &dsLayout;
+    vk::PipelineLayout pipelineLayout = vkDevice.createPipelineLayout(plLayoutInfo);
 
     // --- Compute pipeline ---
     vk::ComputePipelineCreateInfo pipelineInfo{};
@@ -163,10 +170,13 @@ void main() {
     vk::Pipeline pipeline = core::PipelineUtilities::createComputePipeline(vkDevice, pipelineInfo);
     REQUIRE(pipeline);
 
-    // --- Descriptor pool + set ---
+    // --- Descriptor pool + set (plain pool, no UpdateAfterBind) ---
     vk::DescriptorPoolSize poolSize{vk::DescriptorType::eStorageBuffer, 2};
-    vk::DescriptorPool pool = core::PipelineUtilities::createUpdateAfterBindPool(
-        vkDevice, 1, &poolSize, 1);
+    vk::DescriptorPoolCreateInfo poolInfo{};
+    poolInfo.maxSets = 1;
+    poolInfo.poolSizeCount = 1;
+    poolInfo.pPoolSizes = &poolSize;
+    vk::DescriptorPool pool = vkDevice.createDescriptorPool(poolInfo);
 
     vk::DescriptorSetAllocateInfo dsAllocInfo{};
     dsAllocInfo.descriptorPool = pool;
@@ -199,8 +209,8 @@ void main() {
     core::BufferUtilities::createBuffer(outputReq, outputBuffer, outputAlloc, memManager);
 
     // --- Update descriptors ---
-    vk::DescriptorBufferInfo inputBufInfo{inputBuffer, 0, VK_WHOLE_SIZE};
-    vk::DescriptorBufferInfo outputBufInfo{outputBuffer, 0, VK_WHOLE_SIZE};
+    vk::DescriptorBufferInfo inputBufInfo{inputBuffer, 0, bufferSize};
+    vk::DescriptorBufferInfo outputBufInfo{outputBuffer, 0, bufferSize};
 
     std::array<vk::WriteDescriptorSet, 2> writes{};
     writes[0].dstSet = ds;
@@ -222,8 +232,9 @@ void main() {
     cmd->dispatch(1, 1, 1); // 1 workgroup of 8 invocations
     core::Utilities::endSingleTimeCommands(queue, cmd);
 
-    // Wait for GPU to finish all work before reading back
-    vkDevice.waitIdle();
+    // endSingleTimeCommands calls queue.waitIdle(), ensuring execution is complete.
+    // Both buffers use eHostCoherent, so no vkInvalidateMappedMemoryRanges is needed —
+    // writes from the GPU are automatically visible to the host after the queue is idle.
 
     // --- Readback and verify ---
     REQUIRE(outputAlloc.mappedPtr != nullptr);

@@ -31,6 +31,8 @@ TEST_CASE("UUID: construct from value") {
 }
 
 TEST_CASE("UUID: uniqueness") {
+    // UUID uses thread_local mt19937_64 seeded from random_device.
+    // Collision probability for 1000 64-bit values is negligible (~2.7e-14).
     constexpr int N = 1000;
     std::unordered_set<uint64_t> values;
     for (int i = 0; i < N; ++i) {

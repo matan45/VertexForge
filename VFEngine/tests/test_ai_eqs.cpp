@@ -125,7 +125,9 @@ TEST_CASE("DistanceTest: closer points score higher with Linear mode") {
     eqs::EQSProviderRefs providers;
     distTest.runTest(candidates, ctx, providers, config);
 
-    // DistanceTest scores by raw distance — farther = higher score (Linear mode)
+    // VertexForge DistanceTest: Linear mode normalizes distance to [0,1] where
+    // closer = lower raw distance = lower score. This is inverted from UE5 convention
+    // where closer candidates score higher. Verified empirically: score 5 < score 20.
     CHECK(candidates[0].totalScore < candidates[1].totalScore);
 }
 

@@ -1079,6 +1079,8 @@ project "Tests"
       "VFEngine/utilities",
       "VFEngine/services",
       "VFEngine/graphics",
+      "VFEngine/core",
+      "VFEngine/window/controllers",
       vulkanLibPath.."/Include"
    }
 
@@ -1125,6 +1127,8 @@ project "Tests"
          "{COPY} ../../bin/Animation/Release/x64/Animation.dll ../../bin/Tests/Release/x64/",
          "{COPY} ../../bin/meshoptimizer/Release/x64/meshoptimizer.dll ../../bin/Tests/Release/x64/"
       }
+
+   filter {}  -- reset filters before next group
 
 
 -- Group for Libraries

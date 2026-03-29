@@ -319,7 +319,7 @@ namespace core
         std::vector<const char*> activeDeviceExtensions;
         for (const auto* ext : deviceExtensions)
         {
-            if (!window && std::string_view(ext) == VK_KHR_SWAPCHAIN_EXTENSION_NAME)
+            if (!window && strcmp(ext, VK_KHR_SWAPCHAIN_EXTENSION_NAME) == 0)
                 continue;
             activeDeviceExtensions.push_back(ext);
         }
@@ -530,10 +530,19 @@ namespace core
         }
 
         bool queueComplete = window ? indices.isComplete() : indices.isCompleteHeadless();
+
+        // In headless mode, accept any GPU type (integrated, software) for CI/VM compatibility
+        bool gpuTypeOk = window
+            ? deviceProperties.deviceType == vk::PhysicalDeviceType::eDiscreteGpu
+            : (deviceProperties.deviceType == vk::PhysicalDeviceType::eDiscreteGpu ||
+               deviceProperties.deviceType == vk::PhysicalDeviceType::eIntegratedGpu ||
+               deviceProperties.deviceType == vk::PhysicalDeviceType::eVirtualGpu ||
+               deviceProperties.deviceType == vk::PhysicalDeviceType::eCpu);
+
         return queueComplete &&
             extensionsSupported &&
             supportedFeatures.samplerAnisotropy &&
-            deviceProperties.deviceType == vk::PhysicalDeviceType::eDiscreteGpu;
+            gpuTypeOk;
     }
 
     bool Device::checkDeviceExtensionSupport(const vk::PhysicalDevice& device) const
