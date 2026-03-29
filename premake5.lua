@@ -1055,7 +1055,11 @@ project "Tests"
    location "VFEngine/tests"
    targetdir "bin/%{prj.name}/%{cfg.buildcfg}/%{cfg.platform}"
 
-   files { "VFEngine/tests/**.hpp", "VFEngine/tests/**.cpp" }
+   files {
+      "VFEngine/tests/**.hpp", "VFEngine/tests/**.cpp",
+      -- VFXCurveTypes.cpp compiled here since VFX StaticLib is linked into Graphics (not Tests)
+      "VFEngine/utilities/vfx/VFXCurveTypes.cpp"
+   }
 
    includedirs {
       "dependencies/doctest/doctest",

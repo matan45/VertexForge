@@ -109,7 +109,24 @@ IF EXIST ..\..\bin\meshoptimizer\Release\x64\meshoptimizer.dll\ (xcopy /Q /E /Y 
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="..\utilities\vfx\VFXCurveTypes.cpp" />
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="test_ai_behaviortree.cpp" />
+    <ClCompile Include="test_ai_eqs.cpp" />
+    <ClCompile Include="test_animation.cpp" />
+    <ClCompile Include="test_core_utilities.cpp" />
+    <ClCompile Include="test_export_pipeline.cpp" />
+    <ClCompile Include="test_ik.cpp" />
+    <ClCompile Include="test_math_spatial.cpp" />
+    <ClCompile Include="test_memory_allocators.cpp" />
+    <ClCompile Include="test_navmesh_pathfinding.cpp" />
+    <ClCompile Include="test_ocean_water.cpp" />
+    <ClCompile Include="test_physics_animation.cpp" />
+    <ClCompile Include="test_rendering_config.cpp" />
+    <ClCompile Include="test_terrain.cpp" />
+    <ClCompile Include="test_vegetation_billboards.cpp" />
+    <ClCompile Include="test_vfx.cpp" />
+    <ClCompile Include="test_world_streaming.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\utilities\Utilities.vcxproj">
