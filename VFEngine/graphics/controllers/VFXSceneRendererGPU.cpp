@@ -4,6 +4,7 @@
 #include "../render/vfx/scene/VFXSceneGPUPipeline.hpp"
 #include "../render/vfx/mesh/VFXMeshGPUPipeline.hpp"
 #include "../render/vfx/ribbon/VFXRibbonGPUPipeline.hpp"
+#include "../render/vfx/distortion/VFXDistortionPipeline.hpp"
 #include "../render/vfx/particle/VFXEmitterPool.hpp"
 #include "../render/vfx/particle/VFXParticleSystem.hpp"
 #include "../render/vfx/lut/VFXLUTBaker.hpp"
@@ -110,6 +111,7 @@ namespace controllers
     void VFXSceneRenderer::cleanupGPUMode()
     {
         if (emitterPool) { emitterPool->reset(); emitterPool.reset(); }
+        if (gpuDistortionPipeline) { gpuDistortionPipeline->cleanup(); gpuDistortionPipeline.reset(); }
         if (gpuRibbonPipeline) { gpuRibbonPipeline->cleanup(); gpuRibbonPipeline.reset(); }
         if (gpuMeshPipeline) { gpuMeshPipeline->cleanup(); gpuMeshPipeline.reset(); }
         if (gpuMeshCache) { gpuMeshCache->unloadAllMeshes(); gpuMeshCache.reset(); }
@@ -230,6 +232,43 @@ namespace controllers
             gpuState.spawnThisFrame = spawnThisFrame;
             gpuBufferManager->updateEmitterState(instance.gpuEmitterIndex, gpuState);
         }
+    }
+
+    void VFXSceneRenderer::initDistortion(vk::RenderPass distortionRenderPass)
+    {
+        if (!gpuBufferManager || gpuDistortionPipeline)
+            return;
+
+        gpuDistortionPipeline = std::make_unique<render::vfx::VFXDistortionPipeline>(device, swapChain);
+        gpuDistortionPipeline->init(distortionRenderPass);
+        gpuDistortionPipeline->setDeletionQueue(core::RenderManager::getGlobalDeletionQueue());
+
+        gpuDistortionPipeline->updateParticleBuffer(
+            gpuBufferManager->getParticleBuffer(), gpuBufferManager->getParticleBufferSize());
+        gpuDistortionPipeline->updateConfigBuffer(
+            gpuBufferManager->getConfigBuffer(), gpuBufferManager->getConfigBufferSize());
+
+        // Set up existing distortion emitters
+        for (const auto& [id, instance] : instances)
+        {
+            if (instance.gpuDriven && instance.config.distortionEnabled)
+            {
+                gpuDistortionPipeline->setEmitterDistortionTexture(
+                    instance.gpuEmitterIndex, instance.config.distortionTexturePath);
+                gpuDistortionPipeline->setEmitterDistortionConfig(
+                    instance.gpuEmitterIndex, instance.config.distortionStrength);
+            }
+        }
+    }
+
+    void VFXSceneRenderer::recreateDistortion(vk::RenderPass distortionRenderPass)
+    {
+        if (gpuDistortionPipeline)
+        {
+            gpuDistortionPipeline->cleanup();
+            gpuDistortionPipeline.reset();
+        }
+        initDistortion(distortionRenderPass);
     }
 
     render::vfx::GPUEmitterConfig VFXSceneRenderer::toGPUConfig(

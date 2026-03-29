@@ -26,7 +26,6 @@
 #include "../../services/providers/terrain/IOceanRenderProvider.hpp"
 #include "../../services/providers/vegetation/IGrassRenderProvider.hpp"
 #include "vfx/distortion/DistortionResources.hpp"
-#include "vfx/distortion/VFXDistortionPipeline.hpp"
 #include "vfx/distortion/VFXDistortionComposite.hpp"
 #include "threading/JobSystem.hpp"
 #include <chrono>

@@ -187,12 +187,14 @@ namespace core
 
     void VFXRuntimeAdapter::initDistortion(vk::RenderPass distortionRenderPass)
     {
-        // Distortion pipeline initialization is handled by RenderPassHandler
+        if (renderer)
+            renderer->initDistortion(distortionRenderPass);
     }
 
     void VFXRuntimeAdapter::recreateDistortion(vk::RenderPass distortionRenderPass)
     {
-        // Distortion pipeline recreation is handled by RenderPassHandler
+        if (renderer)
+            renderer->recreateDistortion(distortionRenderPass);
     }
 
     size_t VFXRuntimeAdapter::getInstanceCount() const

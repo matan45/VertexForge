@@ -28,6 +28,7 @@ namespace render::vfx
     class VFXMeshGPUPipeline;
     class VFXRibbonGPUPipeline;
     class VFXEmitterPool;
+    class VFXDistortionPipeline;
 }
 
 namespace render::mesh
@@ -88,6 +89,7 @@ namespace controllers
         std::unique_ptr<render::vfx::VFXSceneGPUPipeline> gpuRenderPipeline;
         std::unique_ptr<render::vfx::VFXMeshGPUPipeline> gpuMeshPipeline;
         std::unique_ptr<render::vfx::VFXRibbonGPUPipeline> gpuRibbonPipeline;
+        std::unique_ptr<render::vfx::VFXDistortionPipeline> gpuDistortionPipeline;
         std::unique_ptr<render::mesh::MeshGPUCache> gpuMeshCache;
         std::unique_ptr<render::vfx::VFXEmitterPool> emitterPool;
 
@@ -196,6 +198,8 @@ namespace controllers
         void recordDrawCommands(vk::CommandBuffer cmd);
 
         bool hasDistortionEmitters() const;
+        void initDistortion(vk::RenderPass distortionRenderPass);
+        void recreateDistortion(vk::RenderPass distortionRenderPass);
         void recordDistortionDrawCommands(vk::CommandBuffer cmd);
 
         size_t getInstanceCount() const { return instances.size(); }

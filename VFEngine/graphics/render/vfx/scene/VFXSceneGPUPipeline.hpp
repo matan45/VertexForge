@@ -68,8 +68,9 @@ namespace render::vfx
             std::string texturePath;
             float alphaClipThreshold = 0.1f;
             uint32_t blendMode = 0;
-            uint32_t renderMode = 0; 
+            uint32_t renderMode = 0;
             glm::vec3 glowColor{1.0f, 1.0f, 1.0f};
+            bool distortionEnabled = false;
         };
 
         struct TextureEntry
@@ -128,6 +129,7 @@ namespace render::vfx
         void setEmitterRenderingConfig(uint32_t emitterIndex, float alphaClipThreshold, bool additiveBlend,
                                        const glm::vec3& glowColor = glm::vec3(1.0f));
         void setEmitterRenderMode(uint32_t emitterIndex, uint32_t renderMode);
+        void setEmitterDistortionEnabled(uint32_t emitterIndex, bool enabled);
         void removeEmitter(uint32_t emitterIndex);
 
         void setDeletionQueue(core::DeferredDeletionQueue* dq) { deletionQueue = dq; }

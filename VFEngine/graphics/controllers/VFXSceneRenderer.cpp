@@ -8,6 +8,7 @@
 #include "../render/vfx/scene/VFXSceneGPUPipeline.hpp"
 #include "../render/vfx/mesh/VFXMeshGPUPipeline.hpp"
 #include "../render/vfx/ribbon/VFXRibbonGPUPipeline.hpp"
+#include "../render/vfx/distortion/VFXDistortionPipeline.hpp"
 #include "../render/vfx/particle/VFXEmitterPool.hpp"
 #include "../render/mesh/MeshGPUCache.hpp"
 #include "vfx/VFXEmitterConfigLoader.hpp"
@@ -240,6 +241,8 @@ namespace controllers
                                                           glowColor);
             gpuRenderPipeline->setEmitterRenderMode(instances[id].gpuEmitterIndex,
                                                       static_cast<uint32_t>(storedConfig.renderMode));
+            gpuRenderPipeline->setEmitterDistortionEnabled(instances[id].gpuEmitterIndex,
+                                                            storedConfig.distortionEnabled);
         }
         
         if (gpuMeshPipeline && instances[id].gpuDriven &&
@@ -261,6 +264,14 @@ namespace controllers
                                                           storedConfig.alphaClipThreshold,
                                                           storedConfig.additiveBlend,
                                                           glowColor);
+        }
+
+        if (gpuDistortionPipeline && instances[id].gpuDriven && storedConfig.distortionEnabled)
+        {
+            gpuDistortionPipeline->setEmitterDistortionTexture(
+                instances[id].gpuEmitterIndex, storedConfig.distortionTexturePath);
+            gpuDistortionPipeline->setEmitterDistortionConfig(
+                instances[id].gpuEmitterIndex, storedConfig.distortionStrength);
         }
 
         vfLogDebug("Created VFX instance {} from asset: {} (GPU: {})",
@@ -606,6 +617,11 @@ namespace controllers
         {
             gpuRibbonPipeline->setSceneDepthImageView(depthView);
         }
+
+        if (gpuDistortionPipeline && gpuDistortionPipeline->isInitialized())
+        {
+            gpuDistortionPipeline->setSceneDepthImageView(depthView);
+        }
     }
 
     void VFXSceneRenderer::recordDrawCommands(vk::CommandBuffer cmd)
@@ -635,10 +651,28 @@ namespace controllers
 
     void VFXSceneRenderer::recordDistortionDrawCommands(vk::CommandBuffer cmd)
     {
-        // Distortion rendering is currently a stub.
-        // The distortion pipeline will be wired up in a follow-up
-        // once the VFXDistortionPipeline is integrated into this renderer.
-        // For now, the RenderPassHandler drives the distortion pipeline directly.
+        if (!gpuDistortionPipeline || !gpuDistortionPipeline->isInitialized() || !gpuBufferManager)
+            return;
+
+        // Build map of which emitters have distortion enabled
+        std::unordered_map<uint32_t, bool> distortionMap;
+        for (const auto& [id, instance] : instances)
+        {
+            if (instance.gpuDriven && instance.active && instance.config.distortionEnabled)
+                distortionMap[instance.gpuEmitterIndex] = true;
+        }
+
+        if (distortionMap.empty())
+            return;
+
+        gpuDistortionPipeline->updateCameraUBO(currentView, currentProjection,
+            currentCameraPos, currentTime);
+
+        gpuDistortionPipeline->recordCommandsInline(
+            cmd,
+            gpuBufferManager->getDrawCommandBuffer(),
+            gpuBufferManager->getMaxEmitters(),
+            distortionMap);
     }
 
     void VFXSceneRenderer::recordCPUDrawCommands(vk::CommandBuffer cmd)

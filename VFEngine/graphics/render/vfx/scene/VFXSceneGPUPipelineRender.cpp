@@ -250,6 +250,11 @@ namespace render::vfx
         emitterConfigs[emitterIndex].renderMode = renderMode;
     }
 
+    void VFXSceneGPUPipeline::setEmitterDistortionEnabled(uint32_t emitterIndex, bool enabled)
+    {
+        emitterConfigs[emitterIndex].distortionEnabled = enabled;
+    }
+
     void VFXSceneGPUPipeline::removeEmitter(uint32_t emitterIndex)
     {
         auto configIt = emitterConfigs.find(emitterIndex);
@@ -314,7 +319,8 @@ namespace render::vfx
             auto configIt = emitterConfigs.find(i);
             if (configIt != emitterConfigs.end() &&
                 (configIt->second.renderMode == RenderModeFlags::MeshParticle ||
-                 configIt->second.renderMode == RenderModeFlags::Ribbon))
+                 configIt->second.renderMode == RenderModeFlags::Ribbon ||
+                 configIt->second.distortionEnabled))
             {
                 continue;
             }

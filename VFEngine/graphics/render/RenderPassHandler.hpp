@@ -55,7 +55,6 @@ namespace render::decal
 namespace render::vfx
 {
     class DistortionResources;
-    class VFXDistortionPipeline;
     class VFXDistortionComposite;
 }
 
@@ -150,7 +149,6 @@ namespace render
         bool decalRenderingEnabled = true;
 
         std::unique_ptr<vfx::DistortionResources> distortionResources;
-        std::unique_ptr<vfx::VFXDistortionPipeline> distortionPipeline;
         std::unique_ptr<vfx::VFXDistortionComposite> distortionComposite;
         bool distortionInitialized = false;
 

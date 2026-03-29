@@ -25,7 +25,6 @@
 #include "../../services/providers/vfx/IVFXRuntimeProvider.hpp"
 #include "material/MaterialTypes.hpp"
 #include "vfx/distortion/DistortionResources.hpp"
-#include "vfx/distortion/VFXDistortionPipeline.hpp"
 #include "vfx/distortion/VFXDistortionComposite.hpp"
 
 namespace render
@@ -196,9 +195,10 @@ namespace render
                 swapChain.getSwapchainExtent(),
                 offscreenResources.depthImage.depthImageView,
                 offscreenResources);
-            distortionPipeline->recreate(distortionResources->getDistortionVectorRenderPass());
             distortionComposite->recreate(distortionResources->getCompositeRenderPass(),
                                            distortionResources->getCompositeDescriptorSetLayout());
+            if (vfxRuntimeProvider && vfxRuntimeProvider->isInitialized())
+                vfxRuntimeProvider->recreateDistortion(distortionResources->getDistortionVectorRenderPass());
         }
         if (postProcessPipeline && postProcessPipeline->isInitialized()) postProcessPipeline->recreate();
     }
@@ -233,7 +233,6 @@ namespace render
         if (distortionInitialized)
         {
             distortionComposite->cleanup();
-            distortionPipeline->cleanup();
             distortionResources->cleanup();
             distortionInitialized = false;
         }
@@ -256,12 +255,12 @@ namespace render
             offscreenResources.depthImage.depthImageView,
             offscreenResources);
 
-        distortionPipeline = std::make_unique<vfx::VFXDistortionPipeline>(device, swapChain);
-        distortionPipeline->init(distortionResources->getDistortionVectorRenderPass());
-
         distortionComposite = std::make_unique<vfx::VFXDistortionComposite>(device, swapChain);
         distortionComposite->init(distortionResources->getCompositeRenderPass(),
                                    distortionResources->getCompositeDescriptorSetLayout());
+
+        if (vfxRuntimeProvider && vfxRuntimeProvider->isInitialized())
+            vfxRuntimeProvider->initDistortion(distortionResources->getDistortionVectorRenderPass());
 
         distortionInitialized = true;
     }
