@@ -1091,7 +1091,7 @@ project "Tests"
    links {
       "Utilities", "Memory", "Terrain", "World", "Serialization",
       "Animation", "ECSRegistry", "Services",
-      "Graphics", "Window", "VFX", "imgui", "ispc_texcomp", "GLFW",
+      "Graphics", "Window", "VFX", "imgui", "ispc_texcomp", "GLFW", "GameExport",
       "spdLog", "meshoptimizer", "enkiTS", "lz4", "recast",
       "vulkan-1.lib", "shaderc_shared.lib"
    }
@@ -1113,7 +1113,8 @@ project "Tests"
          "{COPY} ../../bin/Serialization/Debug/x64/Serialization.dll ../../bin/Tests/Debug/x64/",
          "{COPY} ../../bin/World/Debug/x64/World.dll ../../bin/Tests/Debug/x64/",
          "{COPY} ../../bin/Animation/Debug/x64/Animation.dll ../../bin/Tests/Debug/x64/",
-         "{COPY} ../../bin/meshoptimizer/Debug/x64/meshoptimizer.dll ../../bin/Tests/Debug/x64/"
+         "{COPY} ../../bin/meshoptimizer/Debug/x64/meshoptimizer.dll ../../bin/Tests/Debug/x64/",
+         "{COPY} ../../bin/GameExport/Debug/x64/GameExport.dll ../../bin/Tests/Debug/x64/"
       }
 
    filter "configurations:Release"
@@ -1125,7 +1126,8 @@ project "Tests"
          "{COPY} ../../bin/Serialization/Release/x64/Serialization.dll ../../bin/Tests/Release/x64/",
          "{COPY} ../../bin/World/Release/x64/World.dll ../../bin/Tests/Release/x64/",
          "{COPY} ../../bin/Animation/Release/x64/Animation.dll ../../bin/Tests/Release/x64/",
-         "{COPY} ../../bin/meshoptimizer/Release/x64/meshoptimizer.dll ../../bin/Tests/Release/x64/"
+         "{COPY} ../../bin/meshoptimizer/Release/x64/meshoptimizer.dll ../../bin/Tests/Release/x64/",
+         "{COPY} ../../bin/GameExport/Release/x64/GameExport.dll ../../bin/Tests/Release/x64/"
       }
 
    filter {}  -- reset filters before next group

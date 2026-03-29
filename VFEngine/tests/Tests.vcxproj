@@ -78,7 +78,8 @@ IF EXIST ..\..\bin\Terrain\Debug\x64\Terrain.dll\ (xcopy /Q /E /Y /I ..\..\bin\T
 IF EXIST ..\..\bin\Serialization\Debug\x64\Serialization.dll\ (xcopy /Q /E /Y /I ..\..\bin\Serialization\Debug\x64\Serialization.dll ..\..\bin\Tests\Debug\x64 &gt; nul) ELSE (xcopy /Q /Y /I ..\..\bin\Serialization\Debug\x64\Serialization.dll ..\..\bin\Tests\Debug\x64 &gt; nul)
 IF EXIST ..\..\bin\World\Debug\x64\World.dll\ (xcopy /Q /E /Y /I ..\..\bin\World\Debug\x64\World.dll ..\..\bin\Tests\Debug\x64 &gt; nul) ELSE (xcopy /Q /Y /I ..\..\bin\World\Debug\x64\World.dll ..\..\bin\Tests\Debug\x64 &gt; nul)
 IF EXIST ..\..\bin\Animation\Debug\x64\Animation.dll\ (xcopy /Q /E /Y /I ..\..\bin\Animation\Debug\x64\Animation.dll ..\..\bin\Tests\Debug\x64 &gt; nul) ELSE (xcopy /Q /Y /I ..\..\bin\Animation\Debug\x64\Animation.dll ..\..\bin\Tests\Debug\x64 &gt; nul)
-IF EXIST ..\..\bin\meshoptimizer\Debug\x64\meshoptimizer.dll\ (xcopy /Q /E /Y /I ..\..\bin\meshoptimizer\Debug\x64\meshoptimizer.dll ..\..\bin\Tests\Debug\x64 &gt; nul) ELSE (xcopy /Q /Y /I ..\..\bin\meshoptimizer\Debug\x64\meshoptimizer.dll ..\..\bin\Tests\Debug\x64 &gt; nul)</Command>
+IF EXIST ..\..\bin\meshoptimizer\Debug\x64\meshoptimizer.dll\ (xcopy /Q /E /Y /I ..\..\bin\meshoptimizer\Debug\x64\meshoptimizer.dll ..\..\bin\Tests\Debug\x64 &gt; nul) ELSE (xcopy /Q /Y /I ..\..\bin\meshoptimizer\Debug\x64\meshoptimizer.dll ..\..\bin\Tests\Debug\x64 &gt; nul)
+IF EXIST ..\..\bin\GameExport\Debug\x64\GameExport.dll\ (xcopy /Q /E /Y /I ..\..\bin\GameExport\Debug\x64\GameExport.dll ..\..\bin\Tests\Debug\x64 &gt; nul) ELSE (xcopy /Q /Y /I ..\..\bin\GameExport\Debug\x64\GameExport.dll ..\..\bin\Tests\Debug\x64 &gt; nul)</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -109,7 +110,8 @@ IF EXIST ..\..\bin\Terrain\Release\x64\Terrain.dll\ (xcopy /Q /E /Y /I ..\..\bin
 IF EXIST ..\..\bin\Serialization\Release\x64\Serialization.dll\ (xcopy /Q /E /Y /I ..\..\bin\Serialization\Release\x64\Serialization.dll ..\..\bin\Tests\Release\x64 &gt; nul) ELSE (xcopy /Q /Y /I ..\..\bin\Serialization\Release\x64\Serialization.dll ..\..\bin\Tests\Release\x64 &gt; nul)
 IF EXIST ..\..\bin\World\Release\x64\World.dll\ (xcopy /Q /E /Y /I ..\..\bin\World\Release\x64\World.dll ..\..\bin\Tests\Release\x64 &gt; nul) ELSE (xcopy /Q /Y /I ..\..\bin\World\Release\x64\World.dll ..\..\bin\Tests\Release\x64 &gt; nul)
 IF EXIST ..\..\bin\Animation\Release\x64\Animation.dll\ (xcopy /Q /E /Y /I ..\..\bin\Animation\Release\x64\Animation.dll ..\..\bin\Tests\Release\x64 &gt; nul) ELSE (xcopy /Q /Y /I ..\..\bin\Animation\Release\x64\Animation.dll ..\..\bin\Tests\Release\x64 &gt; nul)
-IF EXIST ..\..\bin\meshoptimizer\Release\x64\meshoptimizer.dll\ (xcopy /Q /E /Y /I ..\..\bin\meshoptimizer\Release\x64\meshoptimizer.dll ..\..\bin\Tests\Release\x64 &gt; nul) ELSE (xcopy /Q /Y /I ..\..\bin\meshoptimizer\Release\x64\meshoptimizer.dll ..\..\bin\Tests\Release\x64 &gt; nul)</Command>
+IF EXIST ..\..\bin\meshoptimizer\Release\x64\meshoptimizer.dll\ (xcopy /Q /E /Y /I ..\..\bin\meshoptimizer\Release\x64\meshoptimizer.dll ..\..\bin\Tests\Release\x64 &gt; nul) ELSE (xcopy /Q /Y /I ..\..\bin\meshoptimizer\Release\x64\meshoptimizer.dll ..\..\bin\Tests\Release\x64 &gt; nul)
+IF EXIST ..\..\bin\GameExport\Release\x64\GameExport.dll\ (xcopy /Q /E /Y /I ..\..\bin\GameExport\Release\x64\GameExport.dll ..\..\bin\Tests\Release\x64 &gt; nul) ELSE (xcopy /Q /Y /I ..\..\bin\GameExport\Release\x64\GameExport.dll ..\..\bin\Tests\Release\x64 &gt; nul)</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
@@ -186,6 +188,9 @@ IF EXIST ..\..\bin\meshoptimizer\Release\x64\meshoptimizer.dll\ (xcopy /Q /E /Y 
     </ProjectReference>
     <ProjectReference Include="..\GLFW.vcxproj">
       <Project>{154B857C-0182-860D-AA6E-6C109684020F}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\utilities\GameExport.vcxproj">
+      <Project>{614E3318-4D06-7565-B60D-4EC1A2E40F56}</Project>
     </ProjectReference>
     <ProjectReference Include="..\spdLog.vcxproj">
       <Project>{6E25431C-5AC7-6DF2-4382-81462FC3F442}</Project>

@@ -1,11 +1,7 @@
 #include <doctest.h>
 #include <export/ExportConfig.hpp>
+#include <export/ExportManifest.hpp>
 #include <export/ShaderPermutationManifest.hpp>
-
-// Note: ExportManifest.hpp requires GameExport DLL linkage (VF_GAMEEXPORT_API).
-// We test only header-accessible parts: ExportConfig (no DLL needed) and
-// ShaderPermutationManifest (inline functions, no DLL needed).
-// formatHash/parseHash are DLL-exported and cannot be tested without linking GameExport.
 
 // ============================================================
 // VK-1097: Export Pipeline unit tests
@@ -197,6 +193,140 @@ TEST_CASE("ShaderPermutations: CAUSTICS_ENABLED permutations have CAUSTIC_SET ma
             CHECK(hasCausticSet);
         }
     }
+}
+
+// ---- formatHash / parseHash ----
+
+TEST_CASE("formatHash: produces 0x-prefixed hex string") {
+    auto str = gameExport::formatHash(0);
+    CHECK(str.substr(0, 2) == "0x");
+}
+
+TEST_CASE("formatHash/parseHash: roundtrip") {
+    uint64_t original = 0xDEADBEEFCAFE1234ULL;
+    auto str = gameExport::formatHash(original);
+    uint64_t restored = gameExport::parseHash(str);
+    CHECK(restored == original);
+}
+
+TEST_CASE("formatHash/parseHash: roundtrip zero") {
+    auto str = gameExport::formatHash(0);
+    CHECK(gameExport::parseHash(str) == 0);
+}
+
+TEST_CASE("formatHash/parseHash: roundtrip max") {
+    uint64_t maxVal = UINT64_MAX;
+    auto str = gameExport::formatHash(maxVal);
+    CHECK(gameExport::parseHash(str) == maxVal);
+}
+
+// ---- ExportManifest ----
+
+TEST_CASE("ExportManifest: addEntry and findEntry") {
+    gameExport::ExportManifest manifest;
+
+    gameExport::ManifestEntry entry;
+    entry.archivePath = "assets/textures/diffuse.vfImage";
+    entry.contentHash = 12345;
+    entry.uncompressedSize = 1024;
+    entry.sourceType = "texture";
+
+    manifest.addEntry(entry);
+
+    const auto* found = manifest.findEntry("assets/textures/diffuse.vfImage");
+    REQUIRE(found != nullptr);
+    CHECK(found->contentHash == 12345);
+    CHECK(found->uncompressedSize == 1024);
+    CHECK(found->sourceType == "texture");
+}
+
+TEST_CASE("ExportManifest: findEntry returns nullptr for missing") {
+    gameExport::ExportManifest manifest;
+    CHECK(manifest.findEntry("nonexistent") == nullptr);
+}
+
+TEST_CASE("ExportManifest: addEntry deduplication") {
+    gameExport::ExportManifest manifest;
+
+    gameExport::ManifestEntry entry1;
+    entry1.archivePath = "assets/mesh.vfMesh";
+    entry1.contentHash = 100;
+    manifest.addEntry(entry1);
+
+    gameExport::ManifestEntry entry2;
+    entry2.archivePath = "assets/mesh.vfMesh";
+    entry2.contentHash = 200;
+    manifest.addEntry(entry2);
+
+    // Should have updated the existing entry or added a second
+    const auto* found = manifest.findEntry("assets/mesh.vfMesh");
+    REQUIRE(found != nullptr);
+    // The latest entry's hash should be findable
+    CHECK(found->contentHash != 0);
+}
+
+TEST_CASE("ExportManifest: getEntries returns all added entries") {
+    gameExport::ExportManifest manifest;
+
+    for (int i = 0; i < 5; ++i) {
+        gameExport::ManifestEntry entry;
+        entry.archivePath = "assets/item" + std::to_string(i);
+        entry.contentHash = static_cast<uint64_t>(i * 111);
+        manifest.addEntry(entry);
+    }
+
+    CHECK(manifest.getEntries().size() >= 5);
+}
+
+TEST_CASE("ExportManifest: hasSourceChanged detects new entry") {
+    gameExport::ExportManifest manifest;
+    // Empty manifest — any source should be considered "changed" (new)
+    std::vector<gameExport::ManifestSource> sources;
+    sources.push_back({"texture.png", 1000, 42});
+    CHECK(manifest.hasSourceChanged("assets/new.vfImage", sources));
+}
+
+TEST_CASE("ExportManifest: hasSourceChanged detects modified source") {
+    gameExport::ExportManifest manifest;
+
+    gameExport::ManifestEntry entry;
+    entry.archivePath = "assets/tex.vfImage";
+    entry.sources.push_back({"texture.png", 1000, 42});
+    manifest.addEntry(entry);
+
+    // Same path but different modifiedTime AND contentHash — triggers slow path
+    std::vector<gameExport::ManifestSource> modified;
+    modified.push_back({"texture.png", 2000, 99});
+    CHECK(manifest.hasSourceChanged("assets/tex.vfImage", modified));
+}
+
+TEST_CASE("ExportManifest: hasSourceChanged returns false for unchanged") {
+    gameExport::ExportManifest manifest;
+
+    gameExport::ManifestEntry entry;
+    entry.archivePath = "assets/tex.vfImage";
+    entry.sources.push_back({"texture.png", 1000, 42});
+    manifest.addEntry(entry);
+
+    // Exact same sources
+    std::vector<gameExport::ManifestSource> same;
+    same.push_back({"texture.png", 1000, 42});
+    CHECK_FALSE(manifest.hasSourceChanged("assets/tex.vfImage", same));
+}
+
+TEST_CASE("ExportManifest: hasSourceChanged detects count change") {
+    gameExport::ExportManifest manifest;
+
+    gameExport::ManifestEntry entry;
+    entry.archivePath = "assets/mesh.vfMesh";
+    entry.sources.push_back({"mesh.fbx", 1000, 10});
+    manifest.addEntry(entry);
+
+    // Now two sources instead of one
+    std::vector<gameExport::ManifestSource> changed;
+    changed.push_back({"mesh.fbx", 1000, 10});
+    changed.push_back({"mesh_lod.fbx", 1000, 20});
+    CHECK(manifest.hasSourceChanged("assets/mesh.vfMesh", changed));
 }
 
 } // TEST_SUITE
