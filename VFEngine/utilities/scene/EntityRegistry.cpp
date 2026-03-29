@@ -3,8 +3,15 @@
 
 namespace scene
 {
-    // Static member definitions
-    entt::registry EntityRegistry::registry;
+    // Heap-allocated to avoid destruction-order issues during DLL unload.
+    // The OS reclaims all memory at process exit; explicit cleanup happens
+    // in the engine shutdown path (SceneGraphSystem::clear, etc.).
+    static entt::registry& getOrCreateRegistry()
+    {
+        static entt::registry* ptr = new entt::registry();
+        return *ptr;
+    }
+    entt::registry& EntityRegistry::registryRef = getOrCreateRegistry();
     std::atomic<bool> EntityRegistry::sceneTransitioning{ false };
     std::atomic<int> EntityRegistry::transitionSkipsRemaining{ 0 };
     std::unordered_map<uint64_t, entt::entity> EntityRegistry::uuidToEntity;
@@ -42,16 +49,16 @@ namespace scene
         if (initialized)
             return;
 
-        registry.on_construct<components::UUIDComponent>().connect<&onUUIDConstruct>();
-        registry.on_update<components::UUIDComponent>().connect<&onUUIDUpdate>();
-        registry.on_destroy<components::UUIDComponent>().connect<&onUUIDDestroy>();
+        registryRef.on_construct<components::UUIDComponent>().connect<&onUUIDConstruct>();
+        registryRef.on_update<components::UUIDComponent>().connect<&onUUIDUpdate>();
+        registryRef.on_destroy<components::UUIDComponent>().connect<&onUUIDDestroy>();
 
         initialized = true;
     }
 
     entt::registry& EntityRegistry::getRegistry()
     {
-        return registry;
+        return registryRef;
     }
 
     entt::entity EntityRegistry::findByUUID(uint64_t uuid)

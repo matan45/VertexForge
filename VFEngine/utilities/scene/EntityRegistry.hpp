@@ -10,7 +10,7 @@ namespace scene {
 	#pragma warning(disable: 4251)
 	class VF_ECSREGISTRY_API EntityRegistry {
 	private:
-		static entt::registry registry;
+		static entt::registry& registryRef;
 		static std::atomic<bool> sceneTransitioning;
 		static std::atomic<int> transitionSkipsRemaining;
 
