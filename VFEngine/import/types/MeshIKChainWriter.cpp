@@ -27,7 +27,7 @@ namespace types
         if (!writeIKChainFile(meshPath, prefixData, chains))
             return false;
 
-        vfLogInfo("MeshIKChainWriter: Saved {} IK chains to {}", chains.size(), meshPath);
+        vfLogDebug("MeshIKChainWriter: Saved {} IK chains to {}", chains.size(), meshPath);
         return true;
     }
 

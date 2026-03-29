@@ -70,7 +70,7 @@ namespace types
             }
         }
 
-        vfLogInfo("AnimationEventWriter: Saved {} events to {}", events.size(), animPath);
+        vfLogDebug("AnimationEventWriter: Saved {} events to {}", events.size(), animPath);
         return true;
     }
 

@@ -234,7 +234,7 @@ namespace types
         // Write socket data after skeleton
         writeSocketData(outFile, skeleton.sockets);
 
-        vfLogInfo("Written full skeleton data: {} bones with hierarchy, {} sockets", boneCount, skeleton.sockets.size());
+        vfLogDebug("Written full skeleton data: {} bones with hierarchy, {} sockets", boneCount, skeleton.sockets.size());
     }
 
     void MeshSerializer::writeSocketData(std::ofstream& outFile, const std::vector<animator::SocketDefinition>& sockets) const

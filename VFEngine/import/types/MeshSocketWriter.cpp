@@ -29,7 +29,7 @@ namespace types
         if (!writeSocketFile(meshPath, prefixData, sockets))
             return false;
 
-        vfLogInfo("MeshSocketWriter: Saved {} sockets to {}", sockets.size(), meshPath);
+        vfLogDebug("MeshSocketWriter: Saved {} sockets to {}", sockets.size(), meshPath);
         return true;
     }
 

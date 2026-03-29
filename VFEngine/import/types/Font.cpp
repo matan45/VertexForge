@@ -62,7 +62,7 @@ namespace types
         cleanupFT();
         if (progressCallback) progressCallback(1.0f);
 
-        vfLogInfo("Successfully imported font: {} ({} glyphs, {}x{} atlas, {})",
+        vfLogDebug("Successfully imported font: {} ({} glyphs, {}x{} atlas, {})",
                   fileName, fontData.glyphs.size(), fontData.atlas.width, fontData.atlas.height,
                   colorFont ? "color" : "SDF");
         return true;

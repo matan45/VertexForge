@@ -96,7 +96,7 @@ namespace types
                 progressCallback(progress);
             }
 
-            vfLogInfo("Exported animation: {} (duration: {:.2f}s, {} channels)",
+            vfLogDebug("Exported animation: {} (duration: {:.2f}s, {} channels)",
                       animData.name, animData.duration / animData.ticksPerSecond,
                       animData.channels.size());
         }
@@ -160,7 +160,7 @@ namespace types
         for (auto& [name, channel] : channelMap)
             animData.channels.push_back(std::move(channel));
 
-        vfLogInfo("Extracted {} bone channels", animData.channels.size());
+        vfLogDebug("Extracted {} bone channels", animData.channels.size());
 
         return animData;
     }
@@ -192,7 +192,7 @@ namespace types
         resource::endian::writeLE<uint32_t>(outFile, 0);
 
         outFile.close();
-        vfLogInfo("Animation saved: {} channels", animData.channels.size());
+        vfLogDebug("Animation saved: {} channels", animData.channels.size());
     }
 
     void Animation::writeString(std::ofstream& file, const std::string& str) const

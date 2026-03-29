@@ -52,7 +52,7 @@ namespace pipeline
         {
             for (const auto& stage : stages)
             {
-                vfLogInfo("Processing file {} through stage: {}", file.path, stage->getName());
+                vfLogDebug("Processing file {} through stage: {}", file.path, stage->getName());
                 
                 auto result = stage->process(std::move(context));
                 if (!result.has_value())
@@ -71,7 +71,7 @@ namespace pipeline
                 }
             }
             
-            vfLogInfo("Successfully processed file: {}", file.path);
+            vfLogDebug("Successfully processed file: {}", file.path);
             return context;
         }
         catch (const std::exception& e)

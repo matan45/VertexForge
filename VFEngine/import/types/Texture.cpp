@@ -498,7 +498,7 @@ namespace types
 			}
 		}
 
-		vfLogInfo("Compressed texture {}x{} to BC7 ({} mips)",
+		vfLogDebug("Compressed texture {}x{} to BC7 ({} mips)",
 			textureData.width, textureData.height,
 			textureData.mipLevels);
 	}
@@ -536,7 +536,7 @@ namespace types
 			}
 		}
 
-		vfLogInfo("Compressed HDR {}x{} to BC6H ({} mips)",
+		vfLogDebug("Compressed HDR {}x{} to BC6H ({} mips)",
 			hdrData.width, hdrData.height, hdrData.mipLevels);
 	}
 
