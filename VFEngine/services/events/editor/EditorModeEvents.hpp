@@ -31,6 +31,24 @@ namespace events::editor {
     };
 
     // ============================================
+    // PAUSE COMMANDS
+    // ============================================
+
+    struct SetEditorPausedCommand : ICommand<> {
+        bool paused;
+
+        std::string_view getName() const override { return "SetEditorPaused"; }
+    };
+
+    // ============================================
+    // PAUSE QUERIES
+    // ============================================
+
+    struct IsEditorPausedQuery : IQuery<bool> {
+        std::string_view getName() const override { return "IsEditorPaused"; }
+    };
+
+    // ============================================
     // NOTIFICATIONS - State change broadcasts
     // ============================================
 
@@ -39,6 +57,12 @@ namespace events::editor {
         services::EditorMode currentMode;
 
         std::string_view getName() const override { return "EditorModeChanged"; }
+    };
+
+    struct EditorPauseChangedNotification : INotification {
+        bool paused;
+
+        std::string_view getName() const override { return "EditorPauseChanged"; }
     };
 
 }

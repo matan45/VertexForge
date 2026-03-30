@@ -28,56 +28,56 @@ namespace handlers
         });
 
         frameTaskGraph->addTask("PhysicsKick", [this]() {
-            if (editorModeService && editorModeService->isPlayMode() && physicsPlayModeHandler) {
+            if (editorModeService && editorModeService->isPlayMode() && !editorModeService->isPaused() && physicsPlayModeHandler) {
                 float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
                 physicsPlayModeHandler->kickUpdate(dt);
             }
         });
 
         frameTaskGraph->addTask("PhysicsSync", [this]() {
-            if (editorModeService && editorModeService->isPlayMode() && physicsPlayModeHandler) {
+            if (editorModeService && editorModeService->isPlayMode() && !editorModeService->isPaused() && physicsPlayModeHandler) {
                 float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
                 physicsPlayModeHandler->syncUpdate(dt);
             }
         });
 
         frameTaskGraph->addTask("Scripts", [this]() {
-            if (editorModeService && editorModeService->isPlayMode() && scriptingService) {
+            if (editorModeService && editorModeService->isPlayMode() && !editorModeService->isPaused() && scriptingService) {
                 float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
                 scriptingService->updateScripts(dt);
             }
         });
 
         frameTaskGraph->addTask("Controllers", [this]() {
-            if (editorModeService && editorModeService->isPlayMode() && controllerService) {
+            if (editorModeService && editorModeService->isPlayMode() && !editorModeService->isPaused() && controllerService) {
                 float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
                 controllerService->applyControllerMovement(dt);
             }
         });
 
         frameTaskGraph->addTask("BehaviorTrees", [this]() {
-            if (editorModeService && editorModeService->isPlayMode() && behaviorTreeService) {
+            if (editorModeService && editorModeService->isPlayMode() && !editorModeService->isPaused() && behaviorTreeService) {
                 float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
                 behaviorTreeService->updateAll(dt);
             }
         });
 
         frameTaskGraph->addTask("VFX", [this]() {
-            if (editorModeService && editorModeService->isPlayMode() && vfxPlayModeHandler) {
+            if (editorModeService && editorModeService->isPlayMode() && !editorModeService->isPaused() && vfxPlayModeHandler) {
                 float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
                 vfxPlayModeHandler->update(dt);
             }
         });
 
         frameTaskGraph->addTask("RenderTexture", [this]() {
-            if (editorModeService && editorModeService->isPlayMode() && renderTexturePlayModeHandler) {
+            if (editorModeService && editorModeService->isPlayMode() && !editorModeService->isPaused() && renderTexturePlayModeHandler) {
                 float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
                 renderTexturePlayModeHandler->update(dt);
             }
         });
 
         frameTaskGraph->addTask("AudioListener", [this]() {
-            if (editorModeService && editorModeService->isPlayMode() && audioSceneUpdater) {
+            if (editorModeService && editorModeService->isPlayMode() && !editorModeService->isPaused() && audioSceneUpdater) {
                 audioSceneUpdater->updateListenerFromPrimaryCamera();
             }
         });
@@ -117,7 +117,7 @@ namespace handlers
         });
 
         frameTaskGraph->addTask("LateScripts", [this]() {
-            if (editorModeService && editorModeService->isPlayMode() && scriptingService) {
+            if (editorModeService && editorModeService->isPlayMode() && !editorModeService->isPaused() && scriptingService) {
                 float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
                 scriptingService->lateUpdateScripts(dt);
             }
