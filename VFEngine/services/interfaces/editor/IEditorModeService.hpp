@@ -26,6 +26,13 @@ namespace services {
 
         virtual bool isPlayMode() const = 0;
         virtual bool isEditMode() const = 0;
+
+        // ============================================
+        // Pause Control
+        // ============================================
+
+        virtual void setPaused(bool paused) = 0;
+        virtual bool isPaused() const = 0;
     };
 
 }

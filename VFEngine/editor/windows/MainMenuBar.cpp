@@ -332,7 +332,9 @@ namespace windows
 
         float menuBarWidth = ImGui::GetWindowWidth();
         float buttonWidth = 60.0f;
-        float totalWidth = buttonWidth + 10.0f; // Button + spacing for indicator
+        float spacing = 4.0f;
+        bool isPlayMode = (currentMode == services::EditorMode::Play);
+        float totalWidth = isPlayMode ? (buttonWidth * 2.0f + spacing + 10.0f) : (buttonWidth + 10.0f);
         float centerX = (menuBarWidth - totalWidth) * 0.5f;
         ImGui::SetCursorPosX(centerX);
 
@@ -371,6 +373,37 @@ namespace windows
         }
         else
         {
+            bool isPaused = dispatcher.query(events::editor::IsEditorPausedQuery{});
+
+            if (!isPaused)
+            {
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.6f, 0.1f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.7f, 0.2f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.6f, 0.5f, 0.0f, 1.0f));
+                if (ImGui::Button("Pause", ImVec2(buttonWidth, 0)))
+                {
+                    events::editor::SetEditorPausedCommand cmd;
+                    cmd.paused = true;
+                    dispatcher.execute(cmd);
+                }
+                ImGui::PopStyleColor(3);
+            }
+            else
+            {
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 0.2f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.7f, 0.3f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.1f, 0.5f, 0.1f, 1.0f));
+                if (ImGui::Button("Resume", ImVec2(buttonWidth, 0)))
+                {
+                    events::editor::SetEditorPausedCommand cmd;
+                    cmd.paused = false;
+                    dispatcher.execute(cmd);
+                }
+                ImGui::PopStyleColor(3);
+            }
+
+            ImGui::SameLine(0.0f, spacing);
+
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.2f, 0.2f, 1.0f));
             ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.3f, 0.3f, 1.0f));
             ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.6f, 0.1f, 0.1f, 1.0f));

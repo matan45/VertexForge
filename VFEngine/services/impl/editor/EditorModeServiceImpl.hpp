@@ -15,6 +15,7 @@ namespace services
     {
     private:
         EditorMode currentMode = EditorMode::Edit;
+        bool paused = false;
         std::shared_ptr<scene::SceneGraphSystem> sceneGraph;
         std::optional<nlohmann::json> playModeSnapshot;
         std::string savedIBLPath;
@@ -32,6 +33,10 @@ namespace services
         // Convenience Queries
         bool isPlayMode() const override;
         bool isEditMode() const override;
+
+        // Pause Control
+        void setPaused(bool paused) override;
+        bool isPaused() const override;
 
     private:
         void captureSnapshot();

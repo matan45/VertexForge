@@ -29,12 +29,15 @@ namespace services
 
         if (mode == EditorMode::Play && previousMode == EditorMode::Edit)
         {
+            paused = false;
             captureSnapshot();
         }
 
         // Publish notification BEFORE restoring snapshot so scripts can call onDestroy
         if (mode == EditorMode::Edit && previousMode == EditorMode::Play)
         {
+            paused = false;
+
             events::editor::EditorModeChangedNotification notification;
             notification.previousMode = previousMode;
             notification.currentMode = mode;
@@ -170,6 +173,25 @@ namespace services
         return currentMode == EditorMode::Edit;
     }
 
+    void EditorModeServiceImpl::setPaused(bool value)
+    {
+        if (!isPlayMode() || paused == value)
+        {
+            return;
+        }
+
+        paused = value;
+
+        events::editor::EditorPauseChangedNotification notification;
+        notification.paused = paused;
+        events::EventDispatcher::instance().publish(notification);
+    }
+
+    bool EditorModeServiceImpl::isPaused() const
+    {
+        return paused;
+    }
+
     void EditorModeServiceImpl::registerEventHandlers()
     {
         auto& dispatcher = events::EventDispatcher::instance();
@@ -196,6 +218,18 @@ namespace services
             [this](const events::editor::IsEditModeQuery&)
             {
                 return isEditMode();
+            });
+
+        dispatcher.registerCommandHandler<events::editor::SetEditorPausedCommand>(
+            [this](const events::editor::SetEditorPausedCommand& cmd)
+            {
+                setPaused(cmd.paused);
+            });
+
+        dispatcher.registerQueryHandler<events::editor::IsEditorPausedQuery>(
+            [this](const events::editor::IsEditorPausedQuery&)
+            {
+                return isPaused();
             });
     }
 }
