@@ -334,7 +334,7 @@ float sampleDirectionalShadowHybrid(int shadowIndex, int shadowMode,
         return texture(rtShadowMask, screenUV).r;
     }
 #endif
-    return sampleDirectionalShadowAuto(shadowIndex, shadowMode, worldPos, N, viewZ, cameraPos);
+    return 1.0; // No VSM fallback for directional lights — RT only
 }
 
 const uint LIGHT_INDEX_MASK = 0x7FFFFFFFu;

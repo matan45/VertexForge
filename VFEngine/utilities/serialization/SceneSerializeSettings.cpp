@@ -104,25 +104,6 @@ namespace serialization
         return types::ShadowQuality::High;
     }
 
-    std::string SceneSerialization::cascadeSplitModeToString(types::CascadeSplitMode mode)
-    {
-        switch (mode)
-        {
-        case types::CascadeSplitMode::Linear: return "linear";
-        case types::CascadeSplitMode::Logarithmic: return "logarithmic";
-        case types::CascadeSplitMode::Practical: return "practical";
-        default: return "practical";
-        }
-    }
-
-    types::CascadeSplitMode SceneSerialization::stringToCascadeSplitMode(const std::string& str)
-    {
-        if (str == "linear") return types::CascadeSplitMode::Linear;
-        if (str == "logarithmic") return types::CascadeSplitMode::Logarithmic;
-        if (str == "practical") return types::CascadeSplitMode::Practical;
-        return types::CascadeSplitMode::Practical;
-    }
-
     std::string SceneSerialization::toneMappingModeToString(postprocess::ToneMappingMode mode)
     {
         switch (mode)

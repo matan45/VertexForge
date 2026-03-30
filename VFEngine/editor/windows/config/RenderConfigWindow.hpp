@@ -16,7 +16,6 @@ namespace windows
         void drawCullingSection();
         void drawShadowSection();
         void drawShadowQualitySettings();
-        void drawDirectionalShadowSettings();
         void drawShadowBiasSettings();
         void drawShadowFilterSettings();
         void drawRTShadowSection();

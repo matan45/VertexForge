@@ -22,7 +22,6 @@ namespace windows
             {
                 ImGui::Spacing();
                 drawShadowQualitySettings();
-                drawDirectionalShadowSettings();
                 drawShadowBiasSettings();
                 drawShadowFilterSettings();
             }
@@ -47,71 +46,6 @@ namespace windows
         if (ImGui::IsItemHovered())
         {
             ImGui::SetTooltip("Click 'Apply' to change quality.\nThis may cause a brief stutter while the shadow atlas is resized.");
-        }
-    }
-
-    void RenderConfigWindow::drawDirectionalShadowSettings()
-    {
-        ImGui::Separator();
-        ImGui::Text("Directional Light");
-        ImGui::Spacing();
-
-        const char* dirModes[] = {"CSM (Cascaded)", "Clipmap"};
-        int currentDirMode = static_cast<int>(settings.shadows.directionalMode);
-        if (ImGui::Combo("Shadow Mode", &currentDirMode, dirModes, 2))
-        {
-            settings.shadows.directionalMode = static_cast<types::DirectionalShadowMode>(currentDirMode);
-            markDirty();
-        }
-        if (ImGui::IsItemHovered())
-        {
-            ImGui::SetTooltip("CSM: Traditional cascaded shadow maps (4 cascades max)\n"
-                              "Clipmap: Concentric shadow levels for large-scale worlds");
-        }
-
-        ImGui::Spacing();
-
-        if (settings.shadows.directionalMode == types::DirectionalShadowMode::CSM)
-        {
-            int cascades = settings.shadows.cascadeCount;
-            if (ImGui::SliderInt("Cascade Count", &cascades, 1, 4))
-            {
-                settings.shadows.cascadeCount = static_cast<uint8_t>(cascades);
-                markDirty();
-            }
-
-            const char* splitModes[] = {"Linear", "Logarithmic", "Practical"};
-            int currentMode = static_cast<int>(settings.shadows.cascadeSplitMode);
-            if (ImGui::Combo("Split Mode", &currentMode, splitModes, 3))
-            {
-                settings.shadows.cascadeSplitMode = static_cast<types::CascadeSplitMode>(currentMode);
-                markDirty();
-            }
-        }
-        else
-        {
-            int levels = settings.shadows.clipmapLevelCount;
-            if (ImGui::SliderInt("Level Count", &levels, 4, 16))
-            {
-                settings.shadows.clipmapLevelCount = static_cast<uint8_t>(levels);
-                markDirty();
-            }
-            if (ImGui::IsItemHovered())
-            {
-                ImGui::SetTooltip("Number of clipmap levels.\n"
-                                  "Each level doubles world coverage.\n"
-                                  "16 levels = ~65km range with 2m base extent.");
-            }
-
-            if (ImGui::DragFloat("Base Extent (m)", &settings.shadows.clipmapBaseExtent, 0.5f, 0.5f, 100.0f, "%.1f"))
-            {
-                markDirty();
-            }
-            if (ImGui::IsItemHovered())
-            {
-                ImGui::SetTooltip("World half-extent of level 0 (finest detail).\n"
-                                  "Smaller = higher near-shadow quality.");
-            }
         }
     }
 

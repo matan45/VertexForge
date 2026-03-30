@@ -25,19 +25,6 @@ namespace types
         Ultra // 4096px
     };
 
-    enum class CascadeSplitMode : uint8_t
-    {
-        Linear = 0,
-        Logarithmic,
-        Practical
-    };
-
-    enum class DirectionalShadowMode : uint8_t
-    {
-        CSM = 0,
-        Clipmap
-    };
-
     enum class ShadowDebugMode : uint8_t
     {
         None = 0,
@@ -71,10 +58,6 @@ namespace types
         bool enabled = true;
         ShadowQuality quality = ShadowQuality::High;
 
-        // CSM settings
-        uint8_t cascadeCount = 4;
-        CascadeSplitMode cascadeSplitMode = CascadeSplitMode::Practical;
-
         // Bias
         float shadowBias = 0.005f;
         float slopeBias = 1.5f;
@@ -88,15 +71,9 @@ namespace types
         // 0.0 = lighter shadows, 1.0 = darker shadows
         float shadowIntensity = 0.5f;
 
-        // VSM resolution (directional virtual map pages)
-        uint32_t directionalResolution = 2048;
+        // VSM resolution (spot/point virtual map pages)
         uint32_t spotResolution = 1024;
         uint32_t pointResolution = 512;
-
-        // Directional shadow mode
-        DirectionalShadowMode directionalMode = DirectionalShadowMode::CSM;
-        uint8_t clipmapLevelCount = 16;
-        float clipmapBaseExtent = 2.0f; // meters, level 0 half-extent
 
         // Debug visualization
         ShadowDebugMode debugMode = ShadowDebugMode::None;
@@ -206,7 +183,6 @@ namespace types
             {
             case RenderPreset::Low:
                 s.shadows.quality = ShadowQuality::Low;
-                s.shadows.cascadeCount = 2;
                 s.shadows.softShadows = false;
                 s.shadows.shadowIntensity = 0.4f;
                 s.rtShadows.enabled = false;
@@ -227,7 +203,6 @@ namespace types
 
             case RenderPreset::Medium:
                 s.shadows.quality = ShadowQuality::Medium;
-                s.shadows.cascadeCount = 3;
                 s.shadows.softShadows = false;
                 s.shadows.shadowIntensity = 0.5f;
                 s.rtShadows.spatialPasses = 2;
@@ -253,7 +228,6 @@ namespace types
 
             case RenderPreset::Ultra:
                 s.shadows.quality = ShadowQuality::Ultra;
-                s.shadows.cascadeCount = 4;
                 s.shadows.softShadows = true;
                 s.shadows.shadowIntensity = 0.6f;
                 s.rtShadows.spatialPasses = 4;

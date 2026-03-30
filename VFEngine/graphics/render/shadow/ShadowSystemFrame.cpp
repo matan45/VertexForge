@@ -1,5 +1,4 @@
 #include "ShadowSystem.hpp"
-#include "CascadeShadowCalculator.hpp"
 #include "PointShadowCalculator.hpp"
 #include "SpotShadowCalculator.hpp"
 #include "scene/EntityRegistry.hpp"
@@ -106,72 +105,15 @@ namespace render::shadow
         }
     }
 
-    void ShadowSystem::updateDirectionalCSMMatrices(LightShadowData& data, uint32_t entityId,
-                                                     const CameraContext& camera)
-    {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        auto entity = static_cast<entt::entity>(entityId);
-        if (!registry.valid(entity) ||
-            !registry.all_of<components::WorldTransformComponent>(entity))
-        {
-            vfLogWarning("ShadowSystem: DirectionalCSM light {} missing WorldTransformComponent", entityId);
-            return;
-        }
-
-        updateDirectionalCSMMatricesFromData(data,
-            registry.get<components::WorldTransformComponent>(entity).worldMatrix, camera);
-    }
-
-    void ShadowSystem::updateDirectionalCSMMatricesFromData(LightShadowData& data,
-                                                             const glm::mat4& worldMatrix,
-                                                             const CameraContext& camera)
-    {
-        glm::vec3 lightDirection = glm::normalize(
-            glm::vec3(worldMatrix * glm::vec4(0.0f, 0.0f, -1.0f, 0.0f)));
-
-        auto splits = CascadeShadowCalculator::computeSplitDistances(
-            camera.nearPlane, camera.farPlane,
-            data.settings.cascadeCount,
-            globalCascadeSplitMode,
-            data.settings.cascadeSplitLambda);
-
-        uint32_t viewCount = std::min(static_cast<uint32_t>(data.views.size()),
-                                      data.settings.cascadeCount);
-
-        for (uint32_t i = 0; i < viewCount; ++i)
-        {
-            auto& view = data.views[i];
-            float cascadeNear = splits[i];
-            float cascadeFar = splits[i + 1];
-
-            auto frustumCorners = CascadeShadowCalculator::getFrustumCornersWorldSpace(
-                camera.view, camera.projection, cascadeNear, cascadeFar);
-
-            auto cascadeData = CascadeShadowCalculator::computeCascadeMatrix(
-                frustumCorners, lightDirection, data.settings.resolution);
-
-            view.viewMatrix = cascadeData.viewMatrix;
-            view.projectionMatrix = cascadeData.projMatrix;
-            view.viewProjectionMatrix = cascadeData.viewProjMatrix;
-            view.nearPlane = cascadeNear;
-            view.farPlane = cascadeFar;
-            view.lightDirection = glm::vec4(lightDirection, 0.0f);
-            view.cascadeIndex = static_cast<uint16_t>(i);
-            view.depthBias = data.settings.depthBias;
-            view.slopeBias = data.settings.slopeBias;
-            view.normalBias = data.settings.normalBias;
-        }
-    }
-
     void ShadowSystem::collectShadowViewsForGPU(const std::unordered_set<uint32_t>* visibleLightIds)
     {
-        std::unordered_map<uint32_t, int32_t> dirIdx, ptIdx, spotIdx;
+        std::unordered_map<uint32_t, int32_t> ptIdx, spotIdx;
 
         for (auto& [entityId, data] : lightShadowData)
         {
             if (!data.settings.enabled || !data.settings.castShadows)
                 continue;
-            if (visibleLightIds && !data.isDirectionalType() && !visibleLightIds->contains(entityId))
+            if (visibleLightIds && !visibleLightIds->contains(entityId))
                 continue;
 
             float texelSize = 1.0f / static_cast<float>(data.settings.resolution);
@@ -195,8 +137,6 @@ namespace render::shadow
 
             switch (data.type)
             {
-            case ShadowMapType::DirectionalCSM:
-            case ShadowMapType::DirectionalClipmap: addViews(directionalShadowViews, dirIdx); break;
             case ShadowMapType::Spot2D:             addViews(spotShadowViews, spotIdx); break;
             case ShadowMapType::PointCube:
                 if (!data.views.empty()) addViews(pointShadowViews, ptIdx); break;
@@ -204,17 +144,14 @@ namespace render::shadow
             }
         }
 
-        int32_t ptOff = static_cast<int32_t>(directionalShadowViews.size());
-        int32_t spOff = ptOff + static_cast<int32_t>(pointShadowViews.size());
-        for (const auto& [id, i] : dirIdx)  entityToShadowIndex[id] = i;
-        for (const auto& [id, i] : ptIdx)   entityToShadowIndex[id] = ptOff + i;
+        int32_t spOff = static_cast<int32_t>(pointShadowViews.size());
+        for (const auto& [id, i] : ptIdx)   entityToShadowIndex[id] = i;
         for (const auto& [id, i] : spotIdx) entityToShadowIndex[id] = spOff + i;
     }
 
     void ShadowSystem::classifyLightsForUpdate(
         std::vector<PointLightRef>& pointLights,
-        std::vector<SpotLightRef>& spotLights,
-        std::vector<DirLightRef>& directionalLights)
+        std::vector<SpotLightRef>& spotLights)
     {
         auto& registry = scene::EntityRegistry::getRegistry();
         for (auto& [entityId, data] : lightShadowData)
@@ -256,8 +193,6 @@ namespace render::shadow
                   rng = registry.get<components::SpotLightComponent>(entity).range; }
                 spotLights.push_back({&data, wm, oa, rng});
             }
-            else if (data.isDirectionalType())
-                directionalLights.push_back({&data, wm});
             for (auto& view : data.views) view.cached = false;
             ++lastCacheStats.renderedThisFrame;
         }
@@ -286,13 +221,8 @@ namespace render::shadow
         buildEvictionHeap();
 
         glm::vec3 camPos = -glm::vec3(cameraView[3]) * glm::mat3(cameraView);
-        glm::vec3 camFwd = -glm::vec3(cameraView[0][2], cameraView[1][2], cameraView[2][2]);
-        cameraMovedThisFrame = glm::distance(camPos, lastCameraPosition) > CAMERA_MOVE_EPSILON
-                            || glm::distance(camFwd, lastCameraForward) > CAMERA_MOVE_EPSILON;
         lastCameraPosition = camPos;
-        lastCameraForward = camFwd;
 
-        directionalShadowViews.clear();
         pointShadowViews.clear();
         spotShadowViews.clear();
         entityToShadowIndex.clear();
@@ -302,8 +232,7 @@ namespace render::shadow
 
         std::vector<PointLightRef> ptLights;
         std::vector<SpotLightRef> spLights;
-        std::vector<DirLightRef> dirLights;
-        classifyLightsForUpdate(ptLights, spLights, dirLights);
+        classifyLightsForUpdate(ptLights, spLights);
 
         auto& jobs = threading::JobSystem::instance();
         auto f1 = jobs.submit([this, &ptLights]() {
@@ -314,16 +243,7 @@ namespace render::shadow
             for (auto& r : spLights)
                 updateSpotShadowMatricesFromData(*r.data, r.worldMatrix, r.outerAngle, r.range);
         }, threading::JobPriority::HIGH);
-        CameraContext camera{cameraView, cameraProjection, cameraNear, cameraFar};
-        auto f3 = jobs.submit([this, &dirLights, camera]() {
-            for (auto& r : dirLights) {
-                if (r.data->type == ShadowMapType::DirectionalClipmap)
-                    updateDirectionalClipmapMatricesFromData(*r.data, r.worldMatrix, camera);
-                else
-                    updateDirectionalCSMMatricesFromData(*r.data, r.worldMatrix, camera);
-            }
-        }, threading::JobPriority::HIGH);
-        f1.get(); f2.get(); f3.get();
+        f1.get(); f2.get();
 
         updateShadowCacheAfterRender();
         collectShadowViewsForGPU(visibleLightIds);
@@ -332,153 +252,4 @@ namespace render::shadow
         buildPageRenderList();
     }
 
-    void ShadowSystem::updateDirectionalClipmapMatricesFromData(LightShadowData& data,
-                                                                  const glm::mat4& worldMatrix,
-                                                                  const CameraContext& camera)
-    {
-        glm::vec3 lightDirection = glm::normalize(
-            glm::vec3(worldMatrix * glm::vec4(0.0f, 0.0f, -1.0f, 0.0f)));
-
-        glm::vec3 cameraWorldPos = -glm::vec3(camera.view[3]) * glm::mat3(camera.view);
-
-        auto axes = LightSpaceAxes::fromDirection(lightDirection);
-        float lightSpaceZ = glm::dot(cameraWorldPos, axes.lightDir);
-
-        uint32_t levelCount = std::min(static_cast<uint32_t>(data.views.size()),
-                                        data.settings.clipmapLevelCount);
-
-        for (uint32_t i = 0; i < levelCount; ++i)
-            updateClipmapLevelMatrices(data, i, cameraWorldPos, lightDirection, lightSpaceZ);
-    }
-
-    void ShadowSystem::updateClipmapLevelMatrices(LightShadowData& data, uint32_t level,
-                                                    const glm::vec3& cameraWorldPos,
-                                                    const glm::vec3& lightDirection,
-                                                    float lightSpaceZ)
-    {
-        uint32_t pagesPerSide = (level < data.clipmapLevelPagesPerSide.size())
-            ? data.clipmapLevelPagesPerSide[level] : 1;
-        uint32_t levelResolution = pagesPerSide * vsm::PAGE_SIZE;
-
-        auto texelSnapped = ClipmapShadowCalculator::computeClipmapLevel(
-            level, data.settings.clipmapBaseExtent, cameraWorldPos, lightDirection, levelResolution);
-
-        updateClipmapDirtyFlags(data, level, texelSnapped);
-
-        glm::vec2 pageGridOrigin = (level < data.clipmapPageGridOrigin.size())
-            ? data.clipmapPageGridOrigin[level] : glm::vec2(0.0f);
-        auto pageGridLevel = ClipmapShadowCalculator::computeClipmapLevelStable(
-            level, data.settings.clipmapBaseExtent, pageGridOrigin, lightSpaceZ,
-            lightDirection, levelResolution);
-
-        if (level < data.clipmapRenderVP.size())
-            data.clipmapRenderVP[level] = pageGridLevel.viewProjMatrix;
-
-        // Zero UV offset — use same VP for both lookup and rendering
-        if (level < data.clipmapUVOffset.size())
-            data.clipmapUVOffset[level] = glm::vec2(0.0f);
-
-        // Store page-grid VP (same as render VP) for GPU lookup
-        auto& view = data.views[level];
-        view.viewMatrix = pageGridLevel.viewMatrix;
-        view.projectionMatrix = pageGridLevel.projMatrix;
-        view.viewProjectionMatrix = pageGridLevel.viewProjMatrix;
-        view.nearPlane = texelSnapped.nearDistance;
-        view.farPlane = texelSnapped.farDistance;
-        view.lightDirection = glm::vec4(lightDirection, 0.0f);
-        view.cascadeIndex = static_cast<uint16_t>(level);
-        view.texelSize = texelSnapped.texelSize;
-
-        float biasScale = 1.0f + static_cast<float>(level) * 0.3f;
-        view.depthBias = data.settings.depthBias * biasScale;
-        view.slopeBias = data.settings.slopeBias * biasScale;
-        view.normalBias = data.settings.normalBias * biasScale;
-    }
-
-    void ShadowSystem::updateClipmapDirtyFlags(LightShadowData& data, uint32_t level,
-                                                const ClipmapLevelData& levelData)
-    {
-        if (level >= data.clipmapLastSnapPositions.size())
-            return;
-
-        if (level >= data.clipmapLevelPageOffsets.size() || level >= data.clipmapLevelPagesPerSide.size())
-            return;
-
-        if (level >= data.clipmapScrollOffset.size() || level >= data.clipmapPageGridOrigin.size())
-            return;
-
-        if (level >= data.clipmapLevelInitialized.size())
-            return;
-
-        uint32_t pps = data.clipmapLevelPagesPerSide[level];
-        uint32_t basePageIdx = data.clipmapLevelPageOffsets[level];
-
-        // Compute page-grid shift (how many whole pages the origin moved)
-        auto pgUpdate = ClipmapShadowCalculator::computePageGridShift(
-            levelData, pps, data.clipmapPageGridOrigin[level]);
-
-        bool isFirstFrame = !data.clipmapLevelInitialized[level];
-        data.clipmapLevelInitialized[level] = true;
-        data.clipmapPageGridOrigin[level] = pgUpdate.newPageGridOrigin;
-        data.clipmapLastSnapPositions[level] = levelData.snapPosition;
-
-        if (pgUpdate.pageShift.x == 0 && pgUpdate.pageShift.y == 0 && !isFirstFrame)
-            return; // No page boundary crossed — all cached pages remain valid
-
-        // Any page-grid shift invalidates ALL pages in this level because the
-        // lookup VP matches the render VP — stale pages have depth from old VP
-        for (uint32_t p = 0; p < pps * pps; ++p)
-        {
-            uint32_t pageIdx = basePageIdx + p;
-            if (pageIdx < data.vsmPageDirty.size())
-                data.vsmPageDirty[pageIdx] = true;
-        }
-
-        if (pgUpdate.fullInvalidation || isFirstFrame)
-        {
-            data.clipmapScrollOffset[level] = glm::ivec2(0);
-            return;
-        }
-
-        glm::ivec2& scroll = data.clipmapScrollOffset[level];
-        int ipps = static_cast<int>(pps);
-        scroll.x = ((scroll.x + pgUpdate.pageShift.x) % ipps + ipps) % ipps;
-        scroll.y = ((scroll.y + pgUpdate.pageShift.y) % ipps + ipps) % ipps;
-
-        markExposedScrollPages(data.vsmPageDirty, basePageIdx, pps, scroll, pgUpdate.pageShift);
-    }
-
-    void ShadowSystem::markExposedScrollPages(std::vector<bool>& pageDirty,
-                                                uint32_t basePageIdx, uint32_t pps,
-                                                const glm::ivec2& scroll,
-                                                const glm::ivec2& pageShift)
-    {
-        int ipps = static_cast<int>(pps);
-
-        for (int col = 0; col < std::abs(pageShift.x); ++col)
-        {
-            int vx = (pageShift.x > 0)
-                ? ((scroll.x - 1 - col) % ipps + ipps) % ipps
-                : (scroll.x + col) % ipps;
-            for (uint32_t vy = 0; vy < pps; ++vy)
-            {
-                uint32_t pageIdx = basePageIdx + vy * pps + static_cast<uint32_t>(vx);
-                if (pageIdx < pageDirty.size())
-                    pageDirty[pageIdx] = true;
-            }
-        }
-
-        for (int row = 0; row < std::abs(pageShift.y); ++row)
-        {
-            int vy = (pageShift.y > 0)
-                ? ((scroll.y - 1 - row) % ipps + ipps) % ipps
-                : (scroll.y + row) % ipps;
-            for (uint32_t vx = 0; vx < pps; ++vx)
-            {
-                uint32_t pageIdx = basePageIdx + static_cast<uint32_t>(vy) * pps + vx;
-                if (pageIdx < pageDirty.size())
-                    pageDirty[pageIdx] = true;
-            }
-        }
-    }
 }

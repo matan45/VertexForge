@@ -9,10 +9,9 @@ TEST_SUITE("RenderingConfig") {
 
 // ---- ShadowSettings ----
 
-TEST_CASE("ShadowSettings: default quality High means directionalResolution == 2048") {
+TEST_CASE("ShadowSettings: default quality is High") {
     types::ShadowSettings shadows;
     CHECK(shadows.quality == types::ShadowQuality::High);
-    CHECK(shadows.directionalResolution == 2048);
 }
 
 TEST_CASE("ShadowSettings: default bias values are positive") {
@@ -78,7 +77,6 @@ TEST_CASE("RenderSettings: createDefault produces valid sub-settings") {
 
     // Shadows
     CHECK(rs.shadows.enabled);
-    CHECK(rs.shadows.directionalResolution > 0);
 
     // Culling
     CHECK(rs.culling.frustumCullingEnabled);

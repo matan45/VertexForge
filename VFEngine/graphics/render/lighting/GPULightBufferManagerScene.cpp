@@ -93,26 +93,6 @@ namespace render::lighting
 
             const auto& light = view.get<components::DirectionalLightComponent>(entity);
 
-            uint32_t entityId = static_cast<uint32_t>(entity);
-            if (shadowSystem)
-            {
-                shadow::ShadowSettings settings{};
-                settings.depthBias = shadowSystem->getGlobalDepthBias();
-                settings.normalBias = shadowSystem->getGlobalNormalBias();
-                settings.cascadeCount = shadowSystem->getGlobalCascadeCount();
-                settings.clipmapLevelCount = shadowSystem->getGlobalClipmapLevelCount();
-                settings.clipmapBaseExtent = shadowSystem->getGlobalClipmapBaseExtent();
-                settings.lightSize = light.lightSize;
-                settings.enabled = true;
-                settings.castShadows = true;
-
-                auto dirMode = shadowSystem->getGlobalDirectionalMode();
-                auto shadowType = (dirMode == types::DirectionalShadowMode::Clipmap)
-                    ? shadow::ShadowMapType::DirectionalClipmap
-                    : shadow::ShadowMapType::DirectionalCSM;
-                pendingShadow.push_back({entityId, shadowType, settings});
-            }
-
             const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
             glm::vec3 direction = glm::normalize(glm::vec3(worldTransform.worldMatrix * glm::vec4(0.0f, 0.0f, -1.0f, 0.0f)));
 
@@ -120,9 +100,8 @@ namespace render::lighting
             gpuLight.direction = direction;
             gpuLight.intensity = light.intensity;
             gpuLight.color = light.color;
-            gpuLight.shadowIndex = shadowSystem ? shadowSystem->getShadowViewIndex(entityId) : -1;
-            gpuLight.shadowMode = (shadowSystem &&
-                shadowSystem->getGlobalDirectionalMode() == types::DirectionalShadowMode::Clipmap) ? 1 : 0;
+            gpuLight.shadowIndex = -1; // Directional lights use RT shadows, not VSM
+            gpuLight.shadowMode = 0;
 
             ++directionalCount;
         }
@@ -319,8 +298,7 @@ namespace render::lighting
                     shouldKeep = registry.get<components::PointLightComponent>(entity).castsShadow;
                 else if (registry.all_of<components::SpotLightComponent>(entity))
                     shouldKeep = registry.get<components::SpotLightComponent>(entity).castsShadow;
-                else if (registry.all_of<components::DirectionalLightComponent>(entity))
-                    shouldKeep = true; // directional always casts
+                // Directional lights use RT shadows, not VSM — unregister from shadow system
             }
 
             if (!shouldKeep)

@@ -67,7 +67,6 @@ namespace render::shadow
         void setPageTableBuffer(vk::Buffer buffer, vk::DeviceSize size);
 
         void buildGPUShadowData(
-            const std::vector<ShadowView>& directionalViews,
             const std::vector<ShadowView>& pointViews,
             const std::vector<ShadowView>& spotViews,
             const std::unordered_map<uint32_t, LightShadowData>& lightShadowData);

@@ -364,9 +364,7 @@ float sampleTerrainCascadeShadow(int shadowIndex, vec3 worldPos, vec3 worldNorma
 }
 
 float sampleTerrainDirectionalShadow(int baseShadowIndex, int shadowMode, vec3 worldPos, vec3 worldNormal, float viewZ, vec3 cameraPos) {
-    // Apply terrain-specific normal bias scaling before delegating to VSM sampling
-    vec3 biasedNormal = worldNormal * getTerrainNormalBiasScale();
-    return sampleDirectionalShadowAuto(baseShadowIndex, shadowMode, worldPos, biasedNormal, viewZ, cameraPos);
+    return 1.0; // Directional lights use RT shadows, not VSM
 }
 
 float sampleTerrainPointShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal,
