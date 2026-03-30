@@ -196,18 +196,37 @@ namespace windows
         }
 
 
-        // Apply channel view tint
-        ImVec4 tint(1, 1, 1, 1);
-        switch (channelView)
-        {
-        case 1: tint = ImVec4(1, 0, 0, 1); break; // R
-        case 2: tint = ImVec4(0, 1, 0, 1); break; // G
-        case 3: tint = ImVec4(0, 0, 1, 1); break; // B
-        default: break;
-        }
-
         void* displayDescriptor = imageHandle.getMipDescriptor(static_cast<uint32_t>(selectedMipLevel));
-        ImGui::Image(displayDescriptor, imageSize, ImVec2(0, 0), ImVec2(1, 1), tint);
+
+        // Apply channel view color mask
+        if (channelView > 0)
+        {
+            ImVec4 tint(1, 1, 1, 1);
+            switch (channelView)
+            {
+            case 1: tint = ImVec4(1, 0, 0, 1); break; // R
+            case 2: tint = ImVec4(0, 1, 0, 1); break; // G
+            case 3: tint = ImVec4(0, 0, 1, 1); break; // B
+            default: break;
+            }
+            ImGui::PushStyleColor(ImGuiCol_Text, tint); // unused but keeps stack balanced
+            ImGui::Image(displayDescriptor, imageSize);
+            ImGui::PopStyleColor();
+
+            // Draw tinted overlay
+            ImVec2 imgMin = ImGui::GetItemRectMin();
+            ImVec2 imgMax = ImGui::GetItemRectMax();
+            ImU32 maskColor = IM_COL32(
+                channelView == 1 ? 0 : 255,
+                channelView == 2 ? 0 : 255,
+                channelView == 3 ? 0 : 255,
+                180);
+            ImGui::GetWindowDrawList()->AddRectFilled(imgMin, imgMax, maskColor);
+        }
+        else
+        {
+            ImGui::Image(displayDescriptor, imageSize);
+        }
     }
 
     void ImagePreviewWindow::drawInfoPanel()

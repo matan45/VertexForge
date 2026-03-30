@@ -162,8 +162,14 @@ namespace windows
             style.PopupRounding = panelRounding;
             style.ScrollbarRounding = panelRounding;
             style.FrameRounding = controlRounding;
-            style.GrabRounding = controlRounding;
             style.TabRounding = controlRounding;
+
+            // Modern circular slider grab
+            style.GrabRounding = 12.0f;
+            style.GrabMinSize = 14.0f;
+
+            // Thin slider track
+            style.FramePadding = ImVec2(4.0f, 2.0f);
 
             style.WindowBorderSize = 1.0f;
             style.ChildBorderSize = 1.0f;
