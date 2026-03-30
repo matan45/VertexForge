@@ -44,6 +44,7 @@
 #include "../gi/ProbeUpdatePipeline.hpp"
 #include "../gi/GIDebugRenderer.hpp"
 #include "../raytracing/AccelerationStructureManager.hpp"
+#include "../raytracing/RTShadowPipeline.hpp"
 #include "../svt/SVTTypes.hpp"
 #include "../svt/PhysicalTileCache.hpp"
 #include "../svt/SVTPageTable.hpp"
@@ -351,6 +352,7 @@ namespace render::gpudriven
         std::unique_ptr<gi::ProbeUpdatePipeline> giUpdatePipeline;
         std::unique_ptr<gi::GIDebugRenderer> giDebugRenderer;
         std::unique_ptr<raytracing::AccelerationStructureManager> accelStructManager;
+        std::unique_ptr<raytracing::RTShadowPipeline> rtShadowPipeline;
         gi::GISettings cachedGISettings;
         bool giProbeBuffersNeedInit = true;
 
@@ -461,6 +463,9 @@ namespace render::gpudriven
         void initDepthPrepass();
         void renderDepthPrepass(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet);
         void generatePrepassHiZ(vk::CommandBuffer cmd);
+        void dispatchRTShadow(vk::CommandBuffer cmd);
+        bool isRTShadowReady() const;
+        raytracing::RTShadowPipeline* getRTShadowPipeline() const { return rtShadowPipeline.get(); }
 
         void setDistanceCullingEnabled(bool enabled) { culling.distanceCullingEnabled = enabled; }
         bool isDistanceCullingEnabled() const { return culling.distanceCullingEnabled; }

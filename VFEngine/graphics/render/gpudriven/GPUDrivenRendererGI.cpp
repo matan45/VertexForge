@@ -1,4 +1,5 @@
 #include "GPUDrivenRenderer.hpp"
+#include "../occlusion/DepthPrepass.hpp"
 #include "../../core/SwapChain.hpp"
 #include "../../core/Device.hpp"
 #include <algorithm>
@@ -217,6 +218,7 @@ namespace render::gpudriven
         if (giDebugRenderer) { giDebugRenderer->cleanup(); giDebugRenderer.reset(); }
         if (giUpdatePipeline) { giUpdatePipeline->cleanup(); giUpdatePipeline.reset(); }
         if (giTracePipeline) { giTracePipeline->cleanup(); giTracePipeline.reset(); }
+        if (rtShadowPipeline) { rtShadowPipeline->cleanup(); rtShadowPipeline.reset(); }
         if (accelStructManager) { accelStructManager->cleanup(); accelStructManager.reset(); }
         if (giCascadeManager) { giCascadeManager->cleanup(); giCascadeManager.reset(); }
         giProbeBuffersNeedInit = true;
@@ -376,5 +378,54 @@ namespace render::gpudriven
             dispatchGrassCompute(asyncCmd, vegetation.cachedVisibleTiles);
 
         dispatchGIProbeUpdate(asyncCmd);
+    }
+
+    bool GPUDrivenRenderer::isRTShadowReady() const
+    {
+        return device.isRayQuerySupported() &&
+               accelStructManager && accelStructManager->isTLASReady() &&
+               depthPrepass && depthPrepass->isInitialized() &&
+               lightBufferManager && lightBufferManager->getDirectionalLightCount() > 0;
+    }
+
+    void GPUDrivenRenderer::dispatchRTShadow(vk::CommandBuffer cmd)
+    {
+        if (!isRTShadowReady()) return;
+
+        // Lazy init
+        if (!rtShadowPipeline)
+        {
+            rtShadowPipeline = std::make_unique<raytracing::RTShadowPipeline>(device);
+            rtShadowPipeline->init(
+                depthPrepass->getWidth(), depthPrepass->getHeight(),
+                accelStructManager->getTLASDescriptorLayout());
+        }
+
+        if (!rtShadowPipeline->isInitialized()) return;
+
+        // Handle resize
+        if (depthPrepass->getWidth() != 0 && depthPrepass->getHeight() != 0)
+        {
+            rtShadowPipeline->resize(depthPrepass->getWidth(), depthPrepass->getHeight());
+        }
+
+        auto lightDir = lightBufferManager->getFirstDirectionalLightDirection();
+        if (!lightDir.has_value()) return;
+
+        const auto& camData = cameraBuffer->getData();
+
+        rtShadowPipeline->dispatch(cmd,
+            depthPrepass->getDepthImageView(),
+            depthPrepass->getDepthImage(),
+            depthPrepass->getNormalImageView(),
+            depthPrepass->getNormalImage(),
+            accelStructManager->getTLASDescriptorSet(),
+            camData.invViewProjection,
+            glm::vec3(camData.cameraPosition),
+            camData.farPlane,
+            lightDir.value(),
+            500.0f,
+            depthPrepass->getWidth(),
+            depthPrepass->getHeight());
     }
 }

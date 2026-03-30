@@ -236,6 +236,12 @@ namespace render
             gpuDrivenRenderer->generatePrepassHiZ(commandBuffer);
         }
 
+        // RT shadow dispatch (after depth+normal prepass, before forward pass)
+        if (gpuDrivenRenderer->isRTShadowReady())
+        {
+            gpuDrivenRenderer->dispatchRTShadow(commandBuffer);
+        }
+
         if (oceanFFTInitialized)
         {
             gpuDrivenRenderer->readbackOceanDisplacement();
