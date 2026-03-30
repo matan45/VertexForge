@@ -44,6 +44,8 @@ namespace services
 
         virtual void setMeshPreviewParams(PreviewInstanceId instanceId, const MeshPreviewParams& params) = 0;
 
+        virtual void setPreviewEnvironment(PreviewInstanceId instanceId, const PreviewEnvironmentParams& params) = 0;
+
         virtual void updateMeshCamera(PreviewInstanceId instanceId, const glm::mat4& view, const glm::mat4& projection,
                                       const glm::vec3& cameraPos) = 0;
 

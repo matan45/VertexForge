@@ -1,4 +1,6 @@
 #include "PreviewRenderHandler.hpp"
+#include "PreviewBackgroundRenderer.hpp"
+#include "PreviewGridRenderer.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
 #include "../ClearColor.hpp"
@@ -16,6 +18,8 @@ namespace render::preview
         , clearColor{std::make_unique<ClearColor>(device, swapChain, offscreenResources)}
         , iblRenderer{std::make_unique<IBL>(device, swapChain, offscreenResources)}
         , meshPipeline{std::make_unique<mesh::StaticMeshPipeline>(device, swapChain, offscreenResources)}
+        , backgroundRenderer{std::make_unique<PreviewBackgroundRenderer>(device, swapChain, offscreenResources)}
+        , previewGrid{std::make_unique<PreviewGridRenderer>(device, swapChain, offscreenResources)}
     {
     }
 
@@ -24,6 +28,12 @@ namespace render::preview
     void PreviewRenderHandler::init()
     {
         clearColor->init();
+
+        backgroundRenderer->init();
+        backgroundInitialized = true;
+
+        previewGrid->init();
+        gridInitialized = true;
     }
 
     void PreviewRenderHandler::initMeshPipeline()
@@ -89,13 +99,38 @@ namespace render::preview
 
     void PreviewRenderHandler::draw(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const
     {
+        // Apply environment background color
+        if (envParams.backgroundMode == 0)
+        {
+            clearColor->setClearColor(envParams.backgroundColor);
+        }
+        else
+        {
+            // For gradient mode, use bottom color as clear base
+            clearColor->setClearColor(envParams.gradientBottomColor);
+        }
+
         clearColor->recordCommandBuffer(commandBuffer, imageIndex);
+
+        // Draw gradient background if in gradient mode
+        if (envParams.backgroundMode == 1 && backgroundInitialized)
+        {
+            backgroundRenderer->render(commandBuffer, imageIndex,
+                                        envParams.gradientTopColor, envParams.gradientBottomColor);
+        }
+
         iblRenderer->recordCommandBuffer(commandBuffer, imageIndex);
 
         if (meshPipelineInitialized && !currentMeshDrawList.empty())
         {
             meshPipeline->recordCommandBuffer(commandBuffer, imageIndex, currentMeshDrawList, currentFrustum,
-                                               nullptr, glm::mat4{1.0f}, glm::mat4{1.0f});
+                                               nullptr, cachedView, cachedProjection);
+        }
+
+        // Draw grid overlay in a separate render pass (loads existing color+depth)
+        if (gridInitialized && envParams.showGrid)
+        {
+            previewGrid->render(commandBuffer, imageIndex, cachedView, cachedProjection, true);
         }
     }
 
@@ -103,6 +138,16 @@ namespace render::preview
     {
         iblRenderer->recreate();
         clearColor->recreate();
+
+        if (backgroundInitialized)
+        {
+            backgroundRenderer->recreate();
+        }
+
+        if (gridInitialized)
+        {
+            previewGrid->recreate();
+        }
 
         if (meshPipelineInitialized)
         {
@@ -112,6 +157,18 @@ namespace render::preview
 
     void PreviewRenderHandler::cleanUp() const
     {
+        if (gridInitialized)
+        {
+            previewGrid->cleanUpShader();
+            previewGrid->cleanUp();
+        }
+
+        if (backgroundInitialized)
+        {
+            backgroundRenderer->cleanUpShader();
+            backgroundRenderer->cleanUp();
+        }
+
         if (meshPipelineInitialized)
         {
             meshPipeline->cleanUpShader();

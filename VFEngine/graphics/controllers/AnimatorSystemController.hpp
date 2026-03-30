@@ -1,5 +1,6 @@
 #pragma once
 #include <entt/entt.hpp>
+#include "../../services/data/AnimatorDebugTypes.hpp"
 #include <string>
 #include <cstdint>
 
@@ -35,6 +36,9 @@ namespace controllers
 
         void setRootMotion(entt::entity entity, bool enabled);
         [[nodiscard]] bool getRootMotion(entt::entity entity) const;
+
+        // Debug
+        [[nodiscard]] services::AnimatorRuntimeDebugData getDebugData(entt::entity entity, uint32_t layerIndex) const;
 
         // Layer management
         void setLayerWeight(entt::entity entity, uint32_t layerIndex, float weight);

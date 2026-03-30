@@ -1,5 +1,6 @@
 #include "AnimationViewport.hpp"
 #include "../../camera/OrbitCamera.hpp"
+#include "../preview/PreviewInputHandler.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/animation/AnimationPreviewEvents.hpp"
 #include "imgui.h"
@@ -48,7 +49,7 @@ namespace windows::animation
         if (availSize.x <= 0 || availSize.y <= 0) return;
 
         ctx.camera->setAspectRatio(availSize.x / availSize.y);
-        handlePreviewInput(ctx.camera, ctx.isDraggingPreview);
+        handlePreviewInput(ctx.camera, ctx.isDraggingPreview, ctx.isDraggingPan);
 
         if (ctx.isPlaying)
         {
@@ -110,42 +111,9 @@ namespace windows::animation
         }
     }
 
-    void AnimationViewport::handlePreviewInput(editor::OrbitCamera* camera, bool& isDraggingPreview)
+    void AnimationViewport::handlePreviewInput(editor::OrbitCamera* camera, bool& isDraggingPreview, bool& isDraggingPan)
     {
-        bool isHovered = ImGui::IsWindowHovered();
-
-        if (isHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
-        {
-            isDraggingPreview = true;
-        }
-        if (ImGui::IsMouseReleased(ImGuiMouseButton_Left))
-        {
-            isDraggingPreview = false;
-        }
-
-        if (!isHovered) return;
-
-        ImGuiIO& io = ImGui::GetIO();
-
-        if (io.MouseWheel != 0.0f)
-        {
-            float zoomFactor = 1.0f - io.MouseWheel * camera->zoomSensitivity * 0.1f;
-            camera->setDistance(camera->distance * zoomFactor);
-            camera->updateMatrices();
-        }
-
-        if (isDraggingPreview && ImGui::IsMouseDown(ImGuiMouseButton_Left))
-        {
-            ImVec2 delta = io.MouseDelta;
-
-            if (delta.x != 0.0f || delta.y != 0.0f)
-            {
-                camera->yaw += delta.x * camera->orbitSensitivity;
-                camera->pitch -= delta.y * camera->orbitSensitivity;
-                camera->pitch = glm::clamp(camera->pitch, -89.0f, 89.0f);
-                camera->updateMatrices();
-            }
-        }
+        editor::preview::PreviewInputHandler::handleInput(camera, isDraggingPreview, isDraggingPan);
     }
 
     void AnimationViewport::drawPlaceholder(const ImVec2& windowPos, const ImVec2& availSize)

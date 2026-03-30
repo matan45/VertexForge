@@ -1,6 +1,7 @@
 #include "AnimatorSystemController.hpp"
 #include "../animation/RuntimeAnimatorSystem.hpp"
 #include "../animation/AnimationLayerStack.hpp"
+#include "../animation/AnimatorStateMachine.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
 
@@ -175,6 +176,123 @@ namespace controllers
             return registry.get<components::AnimatorComponent>(entity).applyRootMotion;
         }
         return false;
+    }
+
+    services::AnimatorRuntimeDebugData AnimatorSystemController::getDebugData(entt::entity entity, uint32_t layerIndex) const
+    {
+        services::AnimatorRuntimeDebugData result;
+
+        auto* stack = animation::RuntimeAnimatorSystem::instance().getLayerStack(entity);
+        if (!stack)
+            return result;
+
+        const auto* sm = stack->getLayerStateMachine(layerIndex);
+        if (!sm || !sm->isInitialized())
+            return result;
+
+        result.isValid = true;
+
+        // State machine state
+        const auto& machineState = sm->getMachineState();
+        result.currentStateId = machineState.currentStateId;
+        result.previousStateId = machineState.previousStateId;
+        result.stateTime = machineState.stateTime;
+        result.isBlending = machineState.isBlending;
+        result.blendProgress = (machineState.blendDuration > 0.0f)
+            ? (machineState.blendElapsed / machineState.blendDuration)
+            : 0.0f;
+
+        // Find active transition
+        const auto* graph = sm->getActiveGraph();
+        if (graph && machineState.isBlending)
+        {
+            for (const auto& transition : graph->transitions)
+            {
+                if (transition.sourceStateId == machineState.previousStateId &&
+                    transition.targetStateId == machineState.currentStateId)
+                {
+                    result.activeTransitionId = transition.id;
+                    break;
+                }
+            }
+        }
+
+        // Current parameter values
+        const auto& params = stack->getSharedParameters();
+        if (graph)
+        {
+            for (const auto& paramDef : graph->parameters)
+            {
+                services::AnimatorParameterDebugInfo info;
+                info.name = paramDef.name;
+                info.type = paramDef.type;
+
+                switch (paramDef.type)
+                {
+                case animator::AnimatorParameterType::Float:
+                    info.currentValue = params.getFloat(paramDef.name);
+                    break;
+                case animator::AnimatorParameterType::Int:
+                    info.currentValue = params.getInt(paramDef.name);
+                    break;
+                case animator::AnimatorParameterType::Bool:
+                case animator::AnimatorParameterType::Trigger:
+                    info.currentValue = params.getBool(paramDef.name);
+                    break;
+                }
+                result.parameters.push_back(info);
+            }
+
+            // Evaluate conditions for outgoing transitions from current state
+            for (const auto& transition : graph->transitions)
+            {
+                if (transition.sourceStateId != machineState.currentStateId &&
+                    transition.sourceStateId != 0) // 0 = Any State
+                    continue;
+
+                for (const auto& condition : transition.conditions)
+                {
+                    services::AnimatorConditionEval eval;
+                    eval.transitionId = transition.id;
+                    eval.parameterName = condition.parameterName;
+                    eval.op = condition.op;
+                    eval.threshold = condition.value;
+
+                    switch (condition.op)
+                    {
+                    default:
+                        eval.currentValue = params.getFloat(condition.parameterName);
+                        break;
+                    }
+                    // Use actual parameter type
+                    for (const auto& paramDef : graph->parameters)
+                    {
+                        if (paramDef.name == condition.parameterName)
+                        {
+                            switch (paramDef.type)
+                            {
+                            case animator::AnimatorParameterType::Float:
+                                eval.currentValue = params.getFloat(condition.parameterName);
+                                break;
+                            case animator::AnimatorParameterType::Int:
+                                eval.currentValue = params.getInt(condition.parameterName);
+                                break;
+                            case animator::AnimatorParameterType::Bool:
+                            case animator::AnimatorParameterType::Trigger:
+                                eval.currentValue = params.getBool(condition.parameterName);
+                                break;
+                            }
+                            break;
+                        }
+                    }
+
+                    eval.result = animator::evaluateCondition(condition, params);
+                    result.conditionResults.push_back(eval);
+                }
+            }
+        }
+
+        return result;
     }
 
     void AnimatorSystemController::setLayerWeight(entt::entity entity, uint32_t layerIndex, float weight)

@@ -1,5 +1,6 @@
 #pragma once
 #include "imguiHandler/ImguiWindow.hpp"
+#include "PreviewEnvironment.hpp"
 #include "data/DTOs.hpp"
 #include "data/AsyncLoadingTypes.hpp"
 #include "animator/SocketTypes.hpp"
@@ -23,6 +24,7 @@ namespace windows
         std::string meshPath;
         std::string windowTitle;
         std::unique_ptr<editor::OrbitCamera> camera;
+        editor::preview::PreviewEnvironment environment;
 
         math::AABB meshBounds;
         std::vector<services::SubMeshInfo> subMeshes;
@@ -30,7 +32,13 @@ namespace windows
         int selectedSubMesh = -1;
         int selectedLOD = -1;
 
-        bool isDraggingPreview = false;
+        bool isDraggingOrbit = false;
+        bool isDraggingPan = false;
+
+        // VK-1131 display options
+        bool wireframeMode = false;
+        bool showBoundingBox = false;
+        int materialOverrideMode = 0;
 
         bool isOpen = true;
         bool needsInit = true;
@@ -60,6 +68,6 @@ namespace windows
         void drawLoadingIndicator(float width, float height);
         void onLoadingComplete();
         void loadSkeletonData();
-        void handlePreviewInput();
+        void sendEnvironmentParams();
     };
 }

@@ -146,9 +146,11 @@
     <ClInclude Include="windows\animation\AnimationTimelinePanel.hpp" />
     <ClInclude Include="windows\animation\AnimationViewport.hpp" />
     <ClInclude Include="windows\animation\AnimatorEditorWindow.hpp" />
+    <ClInclude Include="windows\animation\AnimatorGraphValidator.hpp" />
     <ClInclude Include="windows\animation\AnimatorLayerPanel.hpp" />
     <ClInclude Include="windows\animation\AnimatorNodeGraph.hpp" />
     <ClInclude Include="windows\animation\AnimatorPropertiesPanel.hpp" />
+    <ClInclude Include="windows\animation\BlendTreeVisualizer.hpp" />
     <ClInclude Include="windows\animation\BoneMaskEditorPanel.hpp" />
     <ClInclude Include="windows\animation\ColliderOverlayRenderer.hpp" />
     <ClInclude Include="windows\asset\AssetLifecycleWindow.hpp" />
@@ -258,6 +260,9 @@
     <ClInclude Include="windows\preview\ImagePreviewWindow.hpp" />
     <ClInclude Include="windows\preview\MeshPreviewWindow.hpp" />
     <ClInclude Include="windows\preview\PrefabPreviewWindow.hpp" />
+    <ClInclude Include="windows\preview\PreviewEnvironment.hpp" />
+    <ClInclude Include="windows\preview\PreviewInputHandler.hpp" />
+    <ClInclude Include="windows\preview\PreviewToolbar.hpp" />
     <ClInclude Include="windows\preview\SVTPreviewWindow.hpp" />
     <ClInclude Include="windows\procedural\HeightmapGeneratorWindow.hpp" />
     <ClInclude Include="windows\scene\EntityDetailsPanel.hpp" />
@@ -322,9 +327,11 @@
     <ClCompile Include="windows\animation\AnimationTimelinePanel.cpp" />
     <ClCompile Include="windows\animation\AnimationViewport.cpp" />
     <ClCompile Include="windows\animation\AnimatorEditorWindow.cpp" />
+    <ClCompile Include="windows\animation\AnimatorGraphValidator.cpp" />
     <ClCompile Include="windows\animation\AnimatorLayerPanel.cpp" />
     <ClCompile Include="windows\animation\AnimatorNodeGraph.cpp" />
     <ClCompile Include="windows\animation\AnimatorPropertiesPanel.cpp" />
+    <ClCompile Include="windows\animation\BlendTreeVisualizer.cpp" />
     <ClCompile Include="windows\animation\BoneMaskEditorPanel.cpp" />
     <ClCompile Include="windows\animation\ColliderOverlayRenderer.cpp" />
     <ClCompile Include="windows\asset\AssetLifecycleWindow.cpp" />
@@ -438,6 +445,8 @@
     <ClCompile Include="windows\preview\ImagePreviewWindow.cpp" />
     <ClCompile Include="windows\preview\MeshPreviewWindow.cpp" />
     <ClCompile Include="windows\preview\PrefabPreviewWindow.cpp" />
+    <ClCompile Include="windows\preview\PreviewInputHandler.cpp" />
+    <ClCompile Include="windows\preview\PreviewToolbar.cpp" />
     <ClCompile Include="windows\preview\SVTPreviewWindow.cpp" />
     <ClCompile Include="windows\procedural\HeightmapGeneratorWindow.cpp" />
     <ClCompile Include="windows\scene\EntityDetailsPanel.cpp" />

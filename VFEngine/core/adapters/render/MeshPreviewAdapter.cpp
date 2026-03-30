@@ -79,6 +79,19 @@ namespace core
         controller->setModelMatrix(params.modelMatrix);
         controller->setHighlightedSubMesh(params.highlightedSubMesh);
         controller->setForceLODLevel(params.forceLODLevel);
+        controller->setWireframeMode(params.wireframeMode);
+        controller->setShowBoundingBox(params.showBoundingBox);
+        controller->setMaterialOverrideMode(params.materialOverrideMode);
+    }
+
+    void MeshPreviewAdapter::setPreviewEnvironment(services::PreviewInstanceId instanceId,
+                                                  const services::PreviewEnvironmentParams& params)
+    {
+        auto* controller = getController(instanceId);
+        if (controller)
+        {
+            controller->setEnvironment(params);
+        }
     }
 
     void MeshPreviewAdapter::updateMeshCamera(services::PreviewInstanceId instanceId, const glm::mat4& view,

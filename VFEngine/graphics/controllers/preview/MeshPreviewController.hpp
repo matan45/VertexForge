@@ -3,6 +3,7 @@
 #include "math/Frustum.hpp"
 #include "../../../services/data/DTOs.hpp"
 #include "../../../services/data/AsyncLoadingTypes.hpp"
+#include "../../../services/providers/render/IMeshPreviewProvider.hpp"
 #include <memory>
 #include <string>
 #include <vector>
@@ -38,6 +39,10 @@ namespace controllers
         glm::mat4 modelMatrix{ 1.0f };
         int highlightedSubMesh = -1;  // -1 = none highlighted
         int forceLODLevel = -1;       // -1 = auto, 0-3 = force specific LOD
+        bool wireframeMode = false;
+        bool showBoundingBox = false;
+        int materialOverrideMode = 0; // 0=default, 1=clay, 2=normals, 3=UVs
+        services::PreviewEnvironmentParams environmentParams;
         bool initialized = false;
 
         // Async loading support
@@ -68,6 +73,11 @@ namespace controllers
         void setForceLODLevel(int level) { forceLODLevel = level; }
         int getForceLODLevel() const { return forceLODLevel; }
         
+        void setWireframeMode(bool enabled) { wireframeMode = enabled; }
+        void setShowBoundingBox(bool show) { showBoundingBox = show; }
+        void setMaterialOverrideMode(int mode) { materialOverrideMode = mode; }
+        void setEnvironment(const services::PreviewEnvironmentParams& params) { environmentParams = params; }
+
         void setModelMatrix(const glm::mat4& matrix) { modelMatrix = matrix; }
         
         void updateCamera(const glm::mat4& view, const glm::mat4& projection,

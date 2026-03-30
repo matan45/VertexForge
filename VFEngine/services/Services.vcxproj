@@ -92,6 +92,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="data\ActionMappingTypes.hpp" />
+    <ClInclude Include="data\AnimatorDebugTypes.hpp" />
     <ClInclude Include="data\AsyncLoadingTypes.hpp" />
     <ClInclude Include="data\CullingCategories.hpp" />
     <ClInclude Include="data\DTOs.hpp" />

@@ -1,7 +1,9 @@
 #include "AnimatorPropertiesPanel.hpp"
+#include "BlendTreeVisualizer.hpp"
 #include "nfd/FileDialog.hpp"
 #include "asset/AssetRef.hpp"
 #include "imgui.h"
+#include <IconsFontAwesome6.h>
 #include <filesystem>
 #include <cstring>
 
@@ -467,6 +469,147 @@ namespace windows::animation
             }
 
             ImGui::EndPopup();
+        }
+    }
+
+    static std::string paramValueToString(const animator::AnimatorParameterValue& value)
+    {
+        return std::visit([](auto&& v) -> std::string {
+            using T = std::decay_t<decltype(v)>;
+            if constexpr (std::is_same_v<T, float>)
+                return std::to_string(v);
+            else if constexpr (std::is_same_v<T, int32_t>)
+                return std::to_string(v);
+            else if constexpr (std::is_same_v<T, bool>)
+                return v ? "true" : "false";
+            else
+                return "?";
+        }, value);
+    }
+
+    static const char* compOpToString(animator::ComparisonOperator op)
+    {
+        switch (op)
+        {
+        case animator::ComparisonOperator::Greater:      return ">";
+        case animator::ComparisonOperator::Less:         return "<";
+        case animator::ComparisonOperator::GreaterEqual: return ">=";
+        case animator::ComparisonOperator::LessEqual:    return "<=";
+        case animator::ComparisonOperator::Equal:        return "==";
+        case animator::ComparisonOperator::NotEqual:     return "!=";
+        default: return "?";
+        }
+    }
+
+    void AnimatorPropertiesPanel::drawRuntimeDebugOverlay(const services::AnimatorRuntimeDebugData& debugData,
+                                                           animator::AnimatorData* animatorData,
+                                                           uint32_t selectedTransitionId)
+    {
+        if (!debugData.isValid)
+            return;
+
+        // Runtime Parameters
+        if (ImGui::CollapsingHeader(ICON_FA_GAUGE " Runtime Parameters", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            for (const auto& param : debugData.parameters)
+            {
+                std::string valueStr = paramValueToString(param.currentValue);
+                ImGui::TextColored(ImVec4(0.4f, 0.9f, 1.0f, 1.0f), "%s", param.name.c_str());
+                ImGui::SameLine(150.0f);
+                ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.4f, 1.0f), "%s", valueStr.c_str());
+            }
+        }
+
+        // State info
+        if (ImGui::CollapsingHeader(ICON_FA_CIRCLE_INFO " State Info", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            // Find current state name
+            if (animatorData)
+            {
+                for (const auto& state : animatorData->graph.states)
+                {
+                    if (state.id == debugData.currentStateId)
+                    {
+                        ImGui::Text("Current: %s", state.name.c_str());
+                        break;
+                    }
+                }
+            }
+            ImGui::Text("Time: %.2fs", debugData.stateTime);
+            if (debugData.isBlending)
+            {
+                ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.3f, 1.0f), "Blending: %.0f%%",
+                                   debugData.blendProgress * 100.0f);
+                ImGui::ProgressBar(debugData.blendProgress, ImVec2(-1, 0));
+            }
+        }
+
+        // Condition evaluations for selected transition
+        if (selectedTransitionId != 0 && !debugData.conditionResults.empty())
+        {
+            if (ImGui::CollapsingHeader(ICON_FA_CHECK_DOUBLE " Condition Results", ImGuiTreeNodeFlags_DefaultOpen))
+            {
+                for (const auto& eval : debugData.conditionResults)
+                {
+                    if (eval.transitionId != selectedTransitionId)
+                        continue;
+
+                    ImVec4 color = eval.result
+                        ? ImVec4(0.3f, 0.9f, 0.3f, 1.0f)
+                        : ImVec4(0.9f, 0.3f, 0.3f, 1.0f);
+                    const char* icon = eval.result ? ICON_FA_CHECK : ICON_FA_XMARK;
+
+                    ImGui::TextColored(color, "%s %s %s %s (current: %s)",
+                                       icon,
+                                       eval.parameterName.c_str(),
+                                       compOpToString(eval.op),
+                                       paramValueToString(eval.threshold).c_str(),
+                                       paramValueToString(eval.currentValue).c_str());
+                }
+            }
+        }
+
+        // Blend tree visualization for current state
+        if (animatorData)
+        {
+            for (const auto& state : animatorData->graph.states)
+            {
+                if (state.id == debugData.currentStateId && state.blendTree.has_value())
+                {
+                    const auto& bt = *state.blendTree;
+                    if (ImGui::CollapsingHeader(ICON_FA_SLIDERS " Blend Tree", ImGuiTreeNodeFlags_DefaultOpen))
+                    {
+                        ImVec2 availSize = ImGui::GetContentRegionAvail();
+
+                        if (bt.type == animator::BlendTreeType::BlendTree1D)
+                        {
+                            float paramVal = 0.0f;
+                            for (const auto& p : debugData.parameters)
+                            {
+                                if (p.name == bt.parameterName)
+                                {
+                                    paramVal = std::get<float>(p.currentValue);
+                                    break;
+                                }
+                            }
+                            BlendTreeVisualizer::draw1D(bt, paramVal, ImVec2(availSize.x, 80.0f));
+                        }
+                        else
+                        {
+                            float paramX = 0.0f, paramY = 0.0f;
+                            for (const auto& p : debugData.parameters)
+                            {
+                                if (p.name == bt.parameterName)
+                                    paramX = std::get<float>(p.currentValue);
+                                if (p.name == bt.parameterNameY)
+                                    paramY = std::get<float>(p.currentValue);
+                            }
+                            BlendTreeVisualizer::draw2D(bt, paramX, paramY, ImVec2(availSize.x, availSize.x));
+                        }
+                    }
+                    break;
+                }
+            }
         }
     }
 }

@@ -2,6 +2,7 @@
 
 #include "animator/AnimatorTypes.hpp"
 #include "animator/BlendTreeTypes.hpp"
+#include "data/AnimatorDebugTypes.hpp"
 #include <string>
 
 namespace windows::animation
@@ -26,6 +27,10 @@ namespace windows::animation
                                     std::string& newParameterName,
                                     animator::AnimatorParameterType& newParameterType,
                                     bool& isDirty);
+
+        void drawRuntimeDebugOverlay(const services::AnimatorRuntimeDebugData& debugData,
+                                      animator::AnimatorData* animatorData,
+                                      uint32_t selectedTransitionId);
 
     private:
         void drawParameterEditor(animator::AnimatorParameter& param, size_t index, bool& isDirty);

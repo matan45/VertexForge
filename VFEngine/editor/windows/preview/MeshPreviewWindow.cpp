@@ -1,11 +1,15 @@
 #include "print/Log.hpp"
 #include "MeshPreviewWindow.hpp"
+#include "PreviewInputHandler.hpp"
+#include "PreviewToolbar.hpp"
 #include "../../camera/OrbitCamera.hpp"
 #include "resource/MeshStreamHandle.hpp"
 #include "imgui.h"
 #include "events/EventDispatcher.hpp"
 #include "events/render/PreviewEvents.hpp"
+#include <IconsFontAwesome6.h>
 #include <filesystem>
+#include <map>
 
 namespace windows
 {
@@ -168,42 +172,21 @@ namespace windows
         sockets = skeleton.sockets;
     }
 
-    void MeshPreviewWindow::handlePreviewInput()
+    void MeshPreviewWindow::sendEnvironmentParams()
     {
-        bool isHovered = ImGui::IsWindowHovered();
+        services::PreviewEnvironmentParams envParams;
+        envParams.backgroundMode = static_cast<uint8_t>(environment.backgroundMode);
+        envParams.backgroundColor = environment.backgroundColor;
+        envParams.gradientTopColor = environment.gradientTopColor;
+        envParams.gradientBottomColor = environment.gradientBottomColor;
+        envParams.showGrid = environment.showGrid;
+        envParams.lightingMode = static_cast<uint8_t>(environment.lightingMode);
+        envParams.lightingIntensity = environment.lightingIntensity;
 
-        if (isHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
-        {
-            isDraggingPreview = true;
-        }
-        if (ImGui::IsMouseReleased(ImGuiMouseButton_Left))
-        {
-            isDraggingPreview = false;
-        }
-
-        if (!isHovered) return;
-
-        ImGuiIO& io = ImGui::GetIO();
-
-        if (io.MouseWheel != 0.0f)
-        {
-            float zoomFactor = 1.0f - io.MouseWheel * camera->zoomSensitivity * 0.1f;
-            camera->setDistance(camera->distance * zoomFactor);
-            camera->updateMatrices();
-        }
-
-        if (isDraggingPreview && ImGui::IsMouseDown(ImGuiMouseButton_Left))
-        {
-            ImVec2 delta = io.MouseDelta;
-
-            if (delta.x != 0.0f || delta.y != 0.0f)
-            {
-                camera->yaw += delta.x * camera->orbitSensitivity;
-                camera->pitch -= delta.y * camera->orbitSensitivity;
-                camera->pitch = glm::clamp(camera->pitch, -89.0f, 89.0f);
-                camera->updateMatrices();
-            }
-        }
+        services::events::preview::SetPreviewEnvironmentCommand envCmd;
+        envCmd.instanceId = services::PreviewInstanceId(this);
+        envCmd.params = envParams;
+        events::EventDispatcher::instance().execute(envCmd);
     }
 
     void MeshPreviewWindow::drawViewport(float width, float height)
@@ -212,9 +195,43 @@ namespace windows
         {
             return;
         }
+
+        // Toolbar at top of viewport
+        editor::preview::PreviewToolbar::draw(environment, camera.get(), &meshBounds);
+
+        // Display mode toggles
+        ImGui::SameLine();
+        ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
+        ImGui::SameLine();
+
+        if (ImGui::SmallButton(wireframeMode ? (ICON_FA_DRAW_POLYGON " Wire") : (ICON_FA_CUBE " Solid")))
+        {
+            wireframeMode = !wireframeMode;
+        }
+        ImGui::SameLine();
+        if (ImGui::SmallButton(showBoundingBox ? (ICON_FA_VECTOR_SQUARE " BBox") : (ICON_FA_SQUARE " BBox")))
+        {
+            showBoundingBox = !showBoundingBox;
+        }
+        ImGui::SameLine();
+
+        ImGui::SetNextItemWidth(80.0f);
+        const char* matItems[] = { "Default", "Clay", "Normals", "UVs" };
+        ImGui::Combo("##MatOverride", &materialOverrideMode, matItems, 4);
+
+        ImGui::Separator();
+
+        // Recalculate viewport size after toolbar
+        ImVec2 viewportSize = ImGui::GetContentRegionAvail();
+        width = viewportSize.x;
+        height = viewportSize.y;
+        if (width <= 0 || height <= 0) return;
+
         camera->setAspectRatio(width / height);
 
-        handlePreviewInput();
+        editor::preview::PreviewInputHandler::handleInput(camera.get(), isDraggingOrbit, isDraggingPan);
+
+        sendEnvironmentParams();
 
         glm::mat4 model = glm::mat4(1.0f);
 
@@ -222,6 +239,9 @@ namespace windows
         meshParams.modelMatrix = model;
         meshParams.highlightedSubMesh = selectedSubMesh;
         meshParams.forceLODLevel = selectedLOD;
+        meshParams.wireframeMode = wireframeMode;
+        meshParams.showBoundingBox = showBoundingBox;
+        meshParams.materialOverrideMode = materialOverrideMode;
 
         services::events::preview::SetMeshPreviewParamsCommand meshCmd;
         meshCmd.instanceId = services::PreviewInstanceId(this);
@@ -256,34 +276,92 @@ namespace windows
             return;
         }
 
+        // "All" option with total count
         bool allSelected = (selectedSubMesh == -1);
-        if (ImGui::Selectable("All Submeshes", allSelected))
+        char allLabel[64];
+        snprintf(allLabel, sizeof(allLabel), "All (%zu)", subMeshes.size());
+        if (ImGui::Selectable(allLabel, allSelected))
         {
             selectedSubMesh = -1;
         }
 
         ImGui::Separator();
 
+        // Group submeshes by name
+        std::map<std::string, std::vector<int>> groups;
         for (size_t i = 0; i < subMeshes.size(); ++i)
         {
-            const auto& info = subMeshes[i];
-            bool isSelected = (selectedSubMesh == static_cast<int>(i));
+            groups[subMeshes[i].name].push_back(static_cast<int>(i));
+        }
 
-            ImGui::PushID(static_cast<int>(i));
-            if (ImGui::Selectable(info.name.c_str(), isSelected))
+        for (const auto& [groupName, indices] : groups)
+        {
+            if (indices.size() == 1)
             {
-                selectedSubMesh = static_cast<int>(i);
+                // Single item - render flat
+                int idx = indices[0];
+                bool isSelected = (selectedSubMesh == idx);
+                ImGui::PushID(idx);
+                if (ImGui::Selectable(groupName.c_str(), isSelected))
+                {
+                    selectedSubMesh = idx;
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::BeginTooltip();
+                    ImGui::Text("Vertices: %u", subMeshes[idx].vertexCount);
+                    ImGui::Text("Triangles: %u", subMeshes[idx].indexCount / 3);
+                    ImGui::EndTooltip();
+                }
+                ImGui::PopID();
             }
+            else
+            {
+                // Group with count - collapsible
+                char groupLabel[256];
+                snprintf(groupLabel, sizeof(groupLabel), "%s (%zu)", groupName.c_str(), indices.size());
 
-            if (ImGui::IsItemHovered())
-            {
-                ImGui::BeginTooltip();
-                ImGui::Text("Vertices: %u", info.vertexCount);
-                ImGui::Text("Indices: %u", info.indexCount);
-                ImGui::Text("Triangles: %u", info.indexCount / 3);
-                ImGui::EndTooltip();
+                bool anySelected = false;
+                for (int idx : indices)
+                {
+                    if (selectedSubMesh == idx) { anySelected = true; break; }
+                }
+
+                ImGui::PushID(groupName.c_str());
+                ImGuiTreeNodeFlags flags = anySelected ? ImGuiTreeNodeFlags_Selected : 0;
+                bool open = ImGui::TreeNodeEx(groupLabel, flags);
+
+                // Click on group header selects first instance
+                if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
+                {
+                    selectedSubMesh = indices[0];
+                }
+
+                if (open)
+                {
+                    for (int idx : indices)
+                    {
+                        bool isSelected = (selectedSubMesh == idx);
+                        char itemLabel[64];
+                        snprintf(itemLabel, sizeof(itemLabel), "#%d", idx);
+                        ImGui::PushID(idx);
+                        if (ImGui::Selectable(itemLabel, isSelected))
+                        {
+                            selectedSubMesh = idx;
+                        }
+                        if (ImGui::IsItemHovered())
+                        {
+                            ImGui::BeginTooltip();
+                            ImGui::Text("Vertices: %u", subMeshes[idx].vertexCount);
+                            ImGui::Text("Triangles: %u", subMeshes[idx].indexCount / 3);
+                            ImGui::EndTooltip();
+                        }
+                        ImGui::PopID();
+                    }
+                    ImGui::TreePop();
+                }
+                ImGui::PopID();
             }
-            ImGui::PopID();
         }
 
         ImGui::Separator();

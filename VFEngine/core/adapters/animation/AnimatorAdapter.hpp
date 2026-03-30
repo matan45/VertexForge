@@ -48,6 +48,9 @@ namespace core
         [[nodiscard]] LODConfig getLODConfig() const override;
         void setLODConfig(const LODConfig& config) override;
 
+        // Debug
+        [[nodiscard]] services::AnimatorRuntimeDebugData getDebugData(services::EntityHandle entity, uint32_t layerIndex) const override;
+
         // Layer management
         void setLayerWeight(services::EntityHandle entity, uint32_t layerIndex, float weight) override;
         [[nodiscard]] float getLayerWeight(services::EntityHandle entity, uint32_t layerIndex) const override;

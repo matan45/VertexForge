@@ -9,10 +9,23 @@
 
 namespace services {
 
+    struct PreviewEnvironmentParams {
+        uint8_t backgroundMode = 0;   // 0=solid, 1=gradient
+        glm::vec4 backgroundColor{ 0.15f, 0.15f, 0.15f, 1.0f };
+        glm::vec4 gradientTopColor{ 0.165f, 0.184f, 0.271f, 1.0f };
+        glm::vec4 gradientBottomColor{ 0.106f, 0.118f, 0.169f, 1.0f };
+        bool showGrid = true;
+        uint8_t lightingMode = 0;     // 0=default, 1=three-point
+        float lightingIntensity = 1.0f;
+    };
+
     struct MeshPreviewParams {
         glm::mat4 modelMatrix{ 1.0f };
         int highlightedSubMesh = -1;  // -1 = none highlighted
         int forceLODLevel = -1;       // -1 = auto LOD selection, 0-3 = force specific LOD
+        bool wireframeMode = false;
+        bool showBoundingBox = false;
+        int materialOverrideMode = 0; // 0=default, 1=clay, 2=normals, 3=UVs
     };
 
     class IMeshPreviewProvider {
@@ -34,6 +47,8 @@ namespace services {
         virtual math::AABB getPreviewMeshBounds(PreviewInstanceId instanceId) const = 0;
 
         virtual void setMeshPreviewParams(PreviewInstanceId instanceId, const MeshPreviewParams& params) = 0;
+
+        virtual void setPreviewEnvironment(PreviewInstanceId instanceId, const PreviewEnvironmentParams& params) = 0;
 
         virtual void updateMeshCamera(PreviewInstanceId instanceId, const glm::mat4& view, const glm::mat4& projection,
                                        const glm::vec3& cameraPos) = 0;

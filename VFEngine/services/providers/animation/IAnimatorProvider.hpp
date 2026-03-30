@@ -1,5 +1,6 @@
 #pragma once
 #include "../../data/EntityHandle.hpp"
+#include "../../data/AnimatorDebugTypes.hpp"
 #include <string>
 #include <cstdint>
 
@@ -57,6 +58,9 @@ namespace services
 
         virtual void setRootMotion(EntityHandle entity, bool enabled) = 0;
         [[nodiscard]] virtual bool getRootMotion(EntityHandle entity) const = 0;
+
+        // Debug
+        [[nodiscard]] virtual AnimatorRuntimeDebugData getDebugData(EntityHandle entity, uint32_t layerIndex) const = 0;
 
         // Layer management
         virtual void setLayerWeight(EntityHandle entity, uint32_t layerIndex, float weight) = 0;

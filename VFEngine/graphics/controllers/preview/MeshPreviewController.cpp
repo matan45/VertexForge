@@ -252,6 +252,7 @@ namespace controllers
             renderHandler->getMeshPipeline()->updateCameraUBO(view, projection, cameraPos);
         }
 
+        renderHandler->setCachedCameraMatrices(view, projection);
         currentFrustum.extractFromMatrix(projection * view);
     }
 
@@ -266,15 +267,20 @@ namespace controllers
 
         std::vector<render::mesh::MeshRenderData> meshDrawList;
 
+        // Apply environment settings
+        renderHandler->setEnvironmentParams(environmentParams);
+
         render::mesh::MeshRenderData renderData;
         renderData.meshPath = loadedMeshPath;
         renderData.modelMatrix = modelMatrix;
         renderData.albedo = glm::vec4(0.5294f, 0.8078f, 0.9216f, 1.0f); // Light blue
         renderData.metallic = 0.0f;
-        renderData.roughness = 1.0f;
+        renderData.roughness = 0.6f; // Slightly reflective for better shape readability
         renderData.ao = 1.0f;
         renderData.emission = 0.0f;
-        renderData.showBoundingBox = false;
+        renderData.showBoundingBox = showBoundingBox;
+        renderData.wireframeMode = wireframeMode;
+        renderData.materialOverrideMode = materialOverrideMode;
         renderData.highlightedSubMesh = highlightedSubMesh;
         renderData.forceLODLevel = forceLODLevel;
 
