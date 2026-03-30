@@ -1,5 +1,7 @@
 #include "MainImguiWindow.hpp"
 #include "config/ThemeManager.hpp"
+#include "../handlers/EditorLayoutManager.hpp"
+#include <imgui_internal.h>
 #include "events/project/SceneEvents.hpp"
 #include "events/project/ApplicationEvents.hpp"
 #include "events/editor/EditorSettingsEvents.hpp"
@@ -111,15 +113,32 @@ namespace windows
     void MainImguiWindow::draw()
     {
         const ImGuiViewport* viewport = ImGui::GetMainViewport();
-        ImGui::SetNextWindowPos(viewport->WorkPos);
-        ImGui::SetNextWindowSize(viewport->WorkSize);
+        float toolbarH = engineToolbar.getHeight();
+        float statusBarH = statusBar.getHeight();
+
+        // Toolbar (between menu bar and dockspace)
+        engineToolbar.draw(viewport);
+
+        // Dockspace (offset by toolbar, shrunk by status bar)
+        ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x, viewport->WorkPos.y + toolbarH));
+        ImGui::SetNextWindowSize(ImVec2(viewport->WorkSize.x, viewport->WorkSize.y - toolbarH - statusBarH));
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
         if (ImGui::Begin("Vulkan Engine", nullptr, windowFlags))
         {
             ImGui::PopStyleVar(1);
 
-            ImGui::DockSpace(ImGui::GetID("MyDockSpace"), ImVec2(0.0f, 0.0f),
+            ImGuiID dockId = ImGui::GetID("MyDockSpace");
+            ImGui::DockSpace(dockId, ImVec2(0.0f, 0.0f),
                              ImGuiDockNodeFlags_PassthruCentralNode | ImGuiDockNodeFlags_None);
+
+            // Apply default layout on first launch
+            static bool layoutChecked = false;
+            if (!layoutChecked)
+            {
+                layoutChecked = true;
+                if (ImGui::DockBuilderGetNode(dockId) == nullptr)
+                    handlers::EditorLayoutManager::buildDefaultLayout(dockId);
+            }
 
             menuBar.draw();
             iblWindow.draw();
@@ -158,5 +177,8 @@ namespace windows
             editorPreferencesWindow.draw();
         }
         ImGui::End();
+
+        // Status bar (below dockspace)
+        statusBar.draw(viewport, toolbarH);
     }
 }

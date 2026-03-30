@@ -6,6 +6,7 @@
 #include "events/project/ResourceEvents.hpp"
 #include "events/project/FileOperationsEvents.hpp"
 #include "events/editor/UndoRedoEvents.hpp"
+#include "events/editor/EditorKeybindingEvents.hpp"
 #include "events/project/ApplicationEvents.hpp"
 #include "events/project/ProjectEvents.hpp"
 #include "events/terrain/TerrainEvents.hpp"
@@ -25,6 +26,7 @@ namespace windows
         : gridRenderer(std::make_unique<AssetGridRenderer>())
           , modals(std::make_unique<ContentBrowserModals>([this]() { loadDirectory(currentPath); }))
           , previewManager(std::make_unique<PreviewWindowManager>())
+          , bookmarkManager(std::make_unique<BookmarkManager>())
     {
         modals->setClipboardCallbacks(
             [this]() { performCut(); },
@@ -34,6 +36,28 @@ namespace windows
         );
 
         auto& dispatcher = events::EventDispatcher::instance();
+
+        // Register default editor keybindings
+        auto reg = [&](const std::string& name, const std::string& display, int key, bool ctrl = false, bool shift = false) {
+            events::editor::RegisterEditorActionCommand cmd;
+            cmd.actionName = name;
+            cmd.category = "Content Browser";
+            cmd.displayName = display;
+            services::InputBinding b;
+            b.type = services::BindingType::Key;
+            b.code = key;
+            b.requireCtrl = ctrl;
+            cmd.defaultBindings = {b};
+            dispatcher.execute(cmd);
+        };
+        reg("ContentBrowser.Copy", "Copy", ImGuiKey_C, true);
+        reg("ContentBrowser.Cut", "Cut", ImGuiKey_X, true);
+        reg("ContentBrowser.Paste", "Paste", ImGuiKey_V, true);
+        reg("ContentBrowser.Undo", "Undo", ImGuiKey_Z, true);
+        reg("ContentBrowser.Redo", "Redo", ImGuiKey_Y, true);
+        reg("ContentBrowser.SelectAll", "Select All", ImGuiKey_A, true);
+        reg("ContentBrowser.Delete", "Delete", ImGuiKey_Delete);
+        reg("ContentBrowser.Cancel", "Cancel", ImGuiKey_Escape);
 
         auto projectOpt = dispatcher.query(events::project::GetCurrentProjectQuery{});
         if (projectOpt && !projectOpt->workingDirectory.empty())
@@ -250,6 +274,18 @@ namespace windows
                 asset.path = StringUtil::wstringToUtf8(entry.path().wstring());
                 asset.name = StringUtil::wstringToUtf8(entry.path().filename().wstring());
                 asset.type = detectAssetType(entry);
+                asset.extension = entry.path().extension().string();
+
+                std::error_code sizeEc;
+                if (entry.is_regular_file(sizeEc))
+                    asset.fileSize = entry.file_size(sizeEc);
+
+                std::error_code timeEc;
+                auto ftime = entry.last_write_time(timeEc);
+                if (!timeEc)
+                    asset.lastModified = std::chrono::duration_cast<std::chrono::seconds>(
+                        ftime.time_since_epoch()).count();
+
                 assets.push_back(asset);
             }
             catch (const std::exception&) { continue; }
@@ -274,26 +310,29 @@ namespace windows
     {
         auto& dispatcher = events::EventDispatcher::instance();
 
-        if (ImGui::IsKeyDown(ImGuiMod_Ctrl))
+        auto isPressed = [&](const std::string& action) {
+            events::editor::IsEditorActionPressedQuery q;
+            q.actionName = action;
+            return dispatcher.query(q);
+        };
+
+        if (isPressed("ContentBrowser.Copy"))
+            performCopy();
+        if (isPressed("ContentBrowser.Cut"))
+            performCut();
+        if (isPressed("ContentBrowser.Paste"))
+            performPaste();
+        if (isPressed("ContentBrowser.Undo"))
+            dispatcher.execute(events::undoredo::UndoCommand{});
+        if (isPressed("ContentBrowser.Redo"))
+            dispatcher.execute(events::undoredo::RedoCommand{});
+        if (isPressed("ContentBrowser.SelectAll"))
         {
-            if (ImGui::IsKeyPressed(ImGuiKey_C, false))
-                performCopy();
-            if (ImGui::IsKeyPressed(ImGuiKey_X, false))
-                performCut();
-            if (ImGui::IsKeyPressed(ImGuiKey_V, false))
-                performPaste();
-            if (ImGui::IsKeyPressed(ImGuiKey_Z, false))
-                dispatcher.execute(events::undoredo::UndoCommand{});
-            if (ImGui::IsKeyPressed(ImGuiKey_Y, false))
-                dispatcher.execute(events::undoredo::RedoCommand{});
-            if (ImGui::IsKeyPressed(ImGuiKey_A, false))
-            {
-                for (const auto& asset : assets)
-                    selectedPaths.insert(asset.path);
-            }
+            for (const auto& asset : assets)
+                selectedPaths.insert(asset.path);
         }
 
-        if (ImGui::IsKeyPressed(ImGuiKey_Escape, false))
+        if (isPressed("ContentBrowser.Cancel"))
         {
             auto& clipboard = ClipboardManager::instance();
             if (clipboard.isCut())
@@ -303,7 +342,7 @@ namespace windows
             }
         }
 
-        if (ImGui::IsKeyPressed(ImGuiKey_Delete, false))
+        if (isPressed("ContentBrowser.Delete"))
         {
             auto paths = getSelectedPaths();
             if (!paths.empty() && !selectedFile.empty())

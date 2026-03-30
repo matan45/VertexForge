@@ -2,6 +2,8 @@
 #include "events/EventDispatcher.hpp"
 #include "events/project/SceneEvents.hpp"
 #include "events/editor/SculptModeEvents.hpp"
+#include "events/scene/EntityTransformEvents.hpp"
+#include <IconsFontAwesome6.h>
 #include <imgui.h>
 
 namespace windows
@@ -31,6 +33,41 @@ namespace windows
     {
         selectedHandle = services::EntityHandle::invalid();
         expandedHandles.clear();
+        hiddenEntities.clear();
+        lockedEntities.clear();
+    }
+
+    const char* SceneHierarchyPanel::getEntityIcon(const services::EntityData& data) const
+    {
+        using CT = services::ComponentTypeId;
+        if (data.hasComponent(CT::Camera)) return ICON_FA_VIDEO;
+        if (data.hasComponent(CT::DirectionalLight)) return ICON_FA_SUN;
+        if (data.hasComponent(CT::PointLight)) return ICON_FA_LIGHTBULB;
+        if (data.hasComponent(CT::SpotLight)) return ICON_FA_BOLT;
+        if (data.hasComponent(CT::Mesh)) return ICON_FA_CUBE;
+        if (data.hasComponent(CT::AudioSource2D) || data.hasComponent(CT::AudioSource3D)) return ICON_FA_VOLUME_HIGH;
+        if (data.hasComponent(CT::VFX)) return ICON_FA_FIRE;
+        if (data.hasComponent(CT::Script)) return ICON_FA_CODE;
+        if (data.hasComponent(CT::Text)) return ICON_FA_FONT;
+        if (data.hasComponent(CT::Decal)) return ICON_FA_STAMP;
+        if (data.hasComponent(CT::NavmeshAgent)) return ICON_FA_ROUTE;
+        return ICON_FA_CIRCLE_DOT;
+    }
+
+    bool SceneHierarchyPanel::matchesTypeFilter(const services::EntityData& data) const
+    {
+        using CT = services::ComponentTypeId;
+        switch (entityTypeFilter)
+        {
+        case 0: return true; // All
+        case 1: return data.hasComponent(CT::Camera);
+        case 2: return data.hasComponent(CT::DirectionalLight) || data.hasComponent(CT::PointLight) || data.hasComponent(CT::SpotLight);
+        case 3: return data.hasComponent(CT::Mesh);
+        case 4: return data.hasComponent(CT::AudioSource2D) || data.hasComponent(CT::AudioSource3D);
+        case 5: return data.hasComponent(CT::VFX);
+        case 6: return data.hasComponent(CT::Script);
+        default: return true;
+        }
     }
 
     void SceneHierarchyPanel::draw()
@@ -51,6 +88,12 @@ namespace windows
 
         if (ImGui::Begin("SceneGraph"))
         {
+            // Type filter dropdown
+            const char* filterOptions[] = {"All", "Camera", "Light", "Mesh", "Audio", "VFX", "Script"};
+            ImGui::SetNextItemWidth(120.0f);
+            ImGui::Combo("##TypeFilter", &entityTypeFilter, filterOptions, 7);
+            ImGui::Separator();
+
             // Query root entity through event system
             events::scene::GetSceneHierarchyQuery hierarchyQuery;
             auto hierarchy = dispatcher.query(hierarchyQuery);
@@ -133,19 +176,69 @@ namespace windows
         static const std::string unknownName = "Unknown";
         const std::string& entityName = entityDataOpt.has_value() ? entityDataOpt->name : unknownName;
 
+        // Type filter: skip non-matching entities but recurse children
+        bool matchesFilter = !entityDataOpt.has_value() || matchesTypeFilter(*entityDataOpt);
+        if (!matchesFilter && entityTypeFilter != 0)
+        {
+            // Still recurse children to find matching descendants
+            if (entityDataOpt.has_value())
+            {
+                for (const auto& child : entityDataOpt->children)
+                    drawEntityNode(child);
+            }
+            ImGui::PopID();
+            return;
+        }
+
         if (expandedHandles.count(handle.id) > 0)
         {
             ImGui::SetNextItemOpen(true);
-            expandedHandles.erase(handle.id); // Only expand once
+            expandedHandles.erase(handle.id);
         }
 
         ImGuiTreeNodeFlags flags = (selectedHandle.id == handle.id) ? ImGuiTreeNodeFlags_Selected : 0;
         flags |= ImGuiTreeNodeFlags_OpenOnArrow;
 
-        bool nodeOpen = ImGui::TreeNodeEx((void*)handle.id, flags, "%s", entityName.c_str());
+        // Entity icon
+        const char* icon = entityDataOpt.has_value() ? getEntityIcon(*entityDataOpt) : ICON_FA_CIRCLE_DOT;
+        char label[256];
+        snprintf(label, sizeof(label), "%s  %s", icon, entityName.c_str());
 
-        // Select the entity when clicked (blocked during sculpt mode)
-        if (ImGui::IsItemClicked())
+        bool nodeOpen = ImGui::TreeNodeEx((void*)handle.id, flags, "%s", label);
+
+        // Visibility toggle (eye icon) on same line
+        ImGui::SameLine(ImGui::GetContentRegionAvail().x + ImGui::GetCursorPosX() - 40.0f);
+        bool isHidden = hiddenEntities.count(handle.id) > 0;
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+        if (ImGui::SmallButton(isHidden ? ICON_FA_EYE_SLASH : ICON_FA_EYE))
+        {
+            if (isHidden)
+                hiddenEntities.erase(handle.id);
+            else
+                hiddenEntities.insert(handle.id);
+
+            events::scene::SetEntityActiveCommand cmd;
+            cmd.entity = handle;
+            cmd.isActive = isHidden; // toggle: was hidden -> now active
+            dispatcher.execute(cmd);
+        }
+        ImGui::PopStyleColor();
+
+        // Lock toggle
+        ImGui::SameLine();
+        bool isLocked = lockedEntities.count(handle.id) > 0;
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+        if (ImGui::SmallButton(isLocked ? ICON_FA_LOCK : ICON_FA_LOCK_OPEN))
+        {
+            if (isLocked)
+                lockedEntities.erase(handle.id);
+            else
+                lockedEntities.insert(handle.id);
+        }
+        ImGui::PopStyleColor();
+
+        // Select entity when clicked (blocked during sculpt mode or when locked)
+        if (ImGui::IsItemClicked() && !isLocked)
         {
             bool isSculptMode = dispatcher.query(events::sculpt::IsSculptModeActiveQuery{});
             if (!isSculptMode)
@@ -158,9 +251,8 @@ namespace windows
             }
         }
 
-        if (ImGui::BeginDragDropSource())
+        if (!isLocked && ImGui::BeginDragDropSource())
         {
-            // Use single payload type for both entity reparenting and prefab creation
             ImGui::SetDragDropPayload("DND_SCENE_ENTITY", &handle, sizeof(services::EntityHandle));
             ImGui::Text("Move %s", entityName.c_str());
             ImGui::EndDragDropSource();

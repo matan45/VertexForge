@@ -57,6 +57,7 @@ namespace windows
 
         drawToolbar(gizmo, overlayFlags, overlayPos);
         drawViewModeDropdown(overlayFlags, windowPos, contentMin);
+        drawDebugViewDropdown(overlayFlags, windowPos, contentMin);
 
         ImGui::PopStyleVar(2);
     }
@@ -238,6 +239,87 @@ namespace windows
             {
                 ImGui::SetTooltip("Viewport visualization mode");
             }
+        }
+        ImGui::End();
+    }
+
+    void ViewPortOverlay::drawDebugViewDropdown(ImGuiWindowFlags overlayFlags, const ImVec2& windowPos,
+                                                const ImVec2& contentMin)
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        ImVec2 contentMax = ImGui::GetWindowContentRegionMax();
+        float dropdownWidth = 130.0f;
+        ImVec2 dropdownPos = ImVec2(
+            windowPos.x + contentMax.x - dropdownWidth - 8.0f,
+            windowPos.y + contentMin.y + 34.0f // Below the view mode dropdown
+        );
+
+        ImGui::SetNextWindowPos(dropdownPos);
+        ImGui::SetNextWindowBgAlpha(0.75f);
+
+        if (ImGui::Begin("##DebugViewOverlay", nullptr, overlayFlags))
+        {
+            // Determine current debug view from query state
+            bool wireframe = dispatcher.query(events::render::GetShowWireframeQuery{});
+            bool overdraw = dispatcher.query(events::render::GetShowOverdrawQuery{});
+            auto shadowDebug = dispatcher.query(events::render::GetShadowDebugModeQuery{});
+
+            if (wireframe) currentDebugView = 1;
+            else if (overdraw) currentDebugView = 2;
+            else if (shadowDebug == types::ShadowDebugMode::CascadeOverlay) currentDebugView = 3;
+            else if (shadowDebug == types::ShadowDebugMode::TilePoolHeatmap) currentDebugView = 4;
+            else currentDebugView = 0;
+
+            const char* debugLabels[] = {
+                "Debug: None",
+                "Wireframe",
+                "Overdraw",
+                "Shadow Cascades",
+                "Shadow Pool Heatmap"
+            };
+
+            ImGui::SetNextItemWidth(dropdownWidth);
+            if (ImGui::Combo("##DebugView", &currentDebugView, debugLabels, 5))
+            {
+                // Clear all debug modes first
+                events::render::SetShowWireframeCommand wireCmd;
+                wireCmd.show = false;
+                dispatcher.execute(wireCmd);
+
+                events::render::SetShowOverdrawCommand overdrawCmd;
+                overdrawCmd.show = false;
+                dispatcher.execute(overdrawCmd);
+
+                events::render::SetShadowDebugModeCommand shadowCmd;
+                shadowCmd.mode = types::ShadowDebugMode::None;
+                dispatcher.execute(shadowCmd);
+
+                // Apply selected mode
+                switch (currentDebugView)
+                {
+                case 1:
+                    wireCmd.show = true;
+                    dispatcher.execute(wireCmd);
+                    break;
+                case 2:
+                    overdrawCmd.show = true;
+                    dispatcher.execute(overdrawCmd);
+                    break;
+                case 3:
+                    shadowCmd.mode = types::ShadowDebugMode::CascadeOverlay;
+                    dispatcher.execute(shadowCmd);
+                    break;
+                case 4:
+                    shadowCmd.mode = types::ShadowDebugMode::TilePoolHeatmap;
+                    dispatcher.execute(shadowCmd);
+                    break;
+                default: break;
+                }
+            }
+
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Debug visualization overlay");
         }
         ImGui::End();
     }

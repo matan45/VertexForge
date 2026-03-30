@@ -1,7 +1,12 @@
 #include "EditorPreferencesWindow.hpp"
 #include "SettingsTooltip.hpp"
+#include "events/EventDispatcher.hpp"
+#include "events/editor/EditorKeybindingEvents.hpp"
+#include "data/EditorKeybindingTypes.hpp"
+#include "input/KeyCodes.hpp"
 #include <imgui.h>
 #include <cstring>
+#include <algorithm>
 
 namespace windows
 {
@@ -359,12 +364,145 @@ namespace windows
     }
 
     // ============================================
-    // Keybindings (placeholder)
+    // Keybindings
     // ============================================
+
+    static std::string getKeyName(int code)
+    {
+        const char* name = ImGui::GetKeyName(static_cast<ImGuiKey>(code));
+        return name ? name : "Unknown";
+    }
+
+    static std::string getBindingDisplayName(const services::InputBinding& b)
+    {
+        std::string result;
+        if (b.requireCtrl) result += "Ctrl+";
+        if (b.requireShift) result += "Shift+";
+        if (b.requireAlt) result += "Alt+";
+
+        if (b.type == services::BindingType::Key)
+            result += getKeyName(b.code);
+        else
+            result += "Mouse " + std::to_string(b.code);
+
+        return result;
+    }
 
     void EditorPreferencesWindow::drawKeybindingsSection()
     {
-        ImGui::TextDisabled("Keybinding configuration will be available in a future update (VK-1119).");
+        auto& dispatcher = events::EventDispatcher::instance();
+        auto allActions = dispatcher.query(events::editor::GetAllEditorActionsQuery{});
+
+        // Key capture overlay
+        if (waitingForKey)
+        {
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.8f, 0.0f, 1.0f));
+            ImGui::Text("Press a key combination for \"%s\"... (Escape to cancel)", captureAction.c_str());
+            ImGui::PopStyleColor();
+
+            if (ImGui::IsKeyPressed(ImGuiKey_Escape, false))
+            {
+                waitingForKey = false;
+                captureAction.clear();
+            }
+            else
+            {
+                bool shiftHeld = ImGui::IsKeyDown(ImGuiMod_Shift);
+                bool ctrlHeld = ImGui::IsKeyDown(ImGuiMod_Ctrl);
+                bool altHeld = ImGui::IsKeyDown(ImGuiMod_Alt);
+
+                for (int key = ImGuiKey_Space; key < ImGuiKey_COUNT; ++key)
+                {
+                    if (key == ImGuiKey_LeftShift || key == ImGuiKey_RightShift ||
+                        key == ImGuiKey_LeftCtrl || key == ImGuiKey_RightCtrl ||
+                        key == ImGuiKey_LeftAlt || key == ImGuiKey_RightAlt)
+                        continue;
+
+                    if (ImGui::IsKeyPressed(static_cast<ImGuiKey>(key), false))
+                    {
+                        services::InputBinding newBinding;
+                        newBinding.type = services::BindingType::Key;
+                        newBinding.code = key;
+                        newBinding.requireShift = shiftHeld;
+                        newBinding.requireCtrl = ctrlHeld;
+                        newBinding.requireAlt = altHeld;
+
+                        events::editor::SetEditorActionBindingsCommand cmd;
+                        cmd.actionName = captureAction;
+                        cmd.bindings = {newBinding};
+                        dispatcher.execute(cmd);
+
+                        waitingForKey = false;
+                        captureAction.clear();
+                        break;
+                    }
+                }
+            }
+
+            ImGui::Separator();
+            ImGui::Spacing();
+        }
+
+        // Group actions by category
+        std::map<std::string, std::vector<services::EditorActionInfo>> grouped;
+        for (const auto& action : allActions)
+            grouped[action.category].push_back(action);
+
+        for (const auto& [category, actions] : grouped)
+        {
+            if (ImGui::CollapsingHeader(category.c_str(), ImGuiTreeNodeFlags_DefaultOpen))
+            {
+                ImGui::Indent(10.0f);
+                for (const auto& action : actions)
+                {
+                    ImGui::PushID(action.name.c_str());
+
+                    ImGui::Text("%s", action.displayName.c_str());
+                    ImGui::SameLine(200.0f);
+
+                    if (!action.currentBindings.empty())
+                        ImGui::Text("%s", getBindingDisplayName(action.currentBindings[0]).c_str());
+                    else
+                        ImGui::TextDisabled("None");
+
+                    ImGui::SameLine(350.0f);
+
+                    if (!waitingForKey)
+                    {
+                        if (ImGui::SmallButton("Rebind"))
+                        {
+                            waitingForKey = true;
+                            captureAction = action.name;
+                        }
+                        ImGui::SameLine();
+                        if (ImGui::SmallButton("Reset"))
+                        {
+                            events::editor::ResetEditorActionBindingsCommand cmd;
+                            cmd.actionName = action.name;
+                            dispatcher.execute(cmd);
+                        }
+                    }
+
+                    ImGui::PopID();
+                }
+                ImGui::Unindent(10.0f);
+            }
+        }
+
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        if (ImGui::Button("Reset All Keybindings"))
+        {
+            events::editor::ResetEditorActionBindingsCommand cmd;
+            dispatcher.execute(cmd);
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Save Keybindings"))
+        {
+            dispatcher.execute(events::editor::SaveEditorKeybindingsCommand{});
+        }
     }
 
     // ============================================

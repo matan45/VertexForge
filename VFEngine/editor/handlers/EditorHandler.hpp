@@ -76,6 +76,7 @@ namespace services {
 	class SaveService;
 	class ConfigService;
 	class EditorSettingsService;
+	class EditorKeybindingServiceImpl;
 }
 
 namespace handlers {
@@ -149,6 +150,7 @@ namespace handlers {
 		std::unique_ptr<services::SaveService> saveService;
 		std::unique_ptr<services::ConfigService> configService;
 		std::unique_ptr<services::EditorSettingsService> editorSettingsService;
+		std::shared_ptr<services::EditorKeybindingServiceImpl> editorKeybindingService;
 
 		std::unique_ptr<plugin::PluginManager> pluginManager;
 

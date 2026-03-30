@@ -203,11 +203,11 @@ namespace windows
     private:
         void handleFileMenu();
         void handleEditMenu();
+        void handleWindowMenu();
         void handleSettingsMenu();
         void handleAddMenu();
         void handleScriptsMenu();
         void handleToolsMenu();
         void handleDebug();
-        void handlePlayControls();
     };
 }

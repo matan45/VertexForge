@@ -18,6 +18,8 @@ namespace windows
     {
         if (ImGui::Begin("Content Folder"))
         {
+            drawBookmarkPanel();
+
             if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows))
             {
                 handleKeyboardShortcuts();
@@ -51,7 +53,7 @@ namespace windows
                 asset.isSelected = selectedPaths.find(asset.path) != selectedPaths.end();
             }
 
-            AssetClickResult clickResult = gridRenderer->draw(assets, searchQuery);
+            AssetClickResult clickResult = gridRenderer->draw(assets, filter.searchQuery);
             handleAssetClick(clickResult);
 
             ImGui::Columns(1);
@@ -170,12 +172,80 @@ namespace windows
         ImGui::SameLine();
         ImGui::SetNextItemWidth(150.0f);
         char searchBuffer[256];
-        std::strncpy(searchBuffer, searchQuery.c_str(), sizeof(searchBuffer) - 1);
+        std::strncpy(searchBuffer, filter.searchQuery.c_str(), sizeof(searchBuffer) - 1);
         searchBuffer[sizeof(searchBuffer) - 1] = '\0';
         if (ImGui::InputText("##Search", searchBuffer, sizeof(searchBuffer)))
         {
-            searchQuery = std::string(searchBuffer);
+            filter.searchQuery = std::string(searchBuffer);
         }
+
+        ImGui::SameLine();
+        if (ImGui::Button("Filter"))
+            ImGui::OpenPopup("AssetFilterPopup");
+        drawFilterPopup();
+
+        ImGui::SameLine();
+        if (bookmarkManager && ImGui::Button(bookmarkManager->isBookmarked(currentPath.string()) ? "Unbookmark" : "Bookmark"))
+        {
+            if (bookmarkManager->isBookmarked(currentPath.string()))
+            {
+                auto& bm = bookmarkManager->getBookmarks();
+                for (size_t i = 0; i < bm.size(); ++i)
+                {
+                    if (bm[i].path == currentPath.string())
+                    {
+                        bookmarkManager->removeBookmark(i);
+                        break;
+                    }
+                }
+            }
+            else
+            {
+                bookmarkManager->addBookmark(currentPath.string());
+            }
+        }
+    }
+
+    void ContentBrowser::drawFilterPopup()
+    {
+        if (ImGui::BeginPopup("AssetFilterPopup"))
+        {
+            const char* typeNames[] = {"All", "Texture", "HDR", "Model", "Audio", "Animation",
+                "Scene", "Material", "Animator", "VFX", "Prefab", "Script", "Font"};
+            int typeIdx = (filter.typeFilter == AssetType::Other) ? 0 : static_cast<int>(filter.typeFilter) + 1;
+            if (ImGui::Combo("Type", &typeIdx, typeNames, 13))
+            {
+                filter.typeFilter = (typeIdx == 0) ? AssetType::Other : static_cast<AssetType>(typeIdx - 1);
+            }
+
+            const char* sortNames[] = {"Name", "Date", "Size", "Type"};
+            int sortIdx = static_cast<int>(filter.sortBy);
+            if (ImGui::Combo("Sort By", &sortIdx, sortNames, 4))
+                filter.sortBy = static_cast<SortField>(sortIdx);
+
+            ImGui::Checkbox("Ascending", &filter.sortAscending);
+
+            ImGui::EndPopup();
+        }
+    }
+
+    void ContentBrowser::drawBookmarkPanel()
+    {
+        if (!bookmarkManager) return;
+        const auto& bookmarks = bookmarkManager->getBookmarks();
+        if (bookmarks.empty()) return;
+
+        ImGui::Text("Bookmarks");
+        ImGui::Separator();
+        for (size_t i = 0; i < bookmarks.size(); ++i)
+        {
+            ImGui::PushID(static_cast<int>(i));
+            if (ImGui::Selectable(bookmarks[i].name.c_str()))
+                navigateTo(bookmarks[i].path);
+            ImGui::PopID();
+        }
+        ImGui::Separator();
+        ImGui::Spacing();
     }
 
     void ContentBrowser::drawPathBar(float availableWidth)

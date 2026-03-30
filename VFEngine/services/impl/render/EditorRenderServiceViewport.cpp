@@ -102,6 +102,18 @@ namespace services
                 return offScreenProvider ? offScreenProvider->getShowWireframe() : false;
             });
 
+        dispatcher.registerCommandHandler<events::render::SetShowOverdrawCommand>(
+            [this](const events::render::SetShowOverdrawCommand& cmd)
+            {
+                showOverdraw = cmd.show;
+            });
+
+        dispatcher.registerQueryHandler<events::render::GetShowOverdrawQuery>(
+            [this](const events::render::GetShowOverdrawQuery&)
+            {
+                return showOverdraw;
+            });
+
         dispatcher.registerCommandHandler<events::render::SetShowNavmeshDebugCommand>(
             [this](const events::render::SetShowNavmeshDebugCommand& cmd)
             {

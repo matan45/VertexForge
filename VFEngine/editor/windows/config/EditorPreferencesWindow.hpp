@@ -32,6 +32,10 @@ namespace windows
         std::vector<SettingsEntry> settingsRegistry;
         bool registryBuilt = false;
 
+        // Keybinding UI state
+        bool waitingForKey = false;
+        std::string captureAction;
+
         void loadSettings();
         void saveSettings();
         void resetToDefaults();

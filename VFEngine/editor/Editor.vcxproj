@@ -126,11 +126,14 @@
     <ClInclude Include="graph\nodes\ShaderNode.hpp" />
     <ClInclude Include="graph\nodes\TerrainNodes.hpp" />
     <ClInclude Include="handlers\EditorHandler.hpp" />
+    <ClInclude Include="handlers\EditorLayoutManager.hpp" />
     <ClInclude Include="handlers\ExportHandler.hpp" />
     <ClInclude Include="handlers\WindowImguiHandler.hpp" />
     <ClInclude Include="splash\SplashScreen.hpp" />
+    <ClInclude Include="windows\EngineToolbar.hpp" />
     <ClInclude Include="windows\MainImguiWindow.hpp" />
     <ClInclude Include="windows\MainMenuBar.hpp" />
+    <ClInclude Include="windows\StatusBar.hpp" />
     <ClInclude Include="windows\ai\BTPropertyPanel.hpp" />
     <ClInclude Include="windows\ai\BehaviorTreeEditorWindow.hpp" />
     <ClInclude Include="windows\animation\AnimationDebugWindow.hpp" />
@@ -169,6 +172,7 @@
     <ClInclude Include="windows\config\ThemeManager.hpp" />
     <ClInclude Include="windows\config\VolumetricFogConfigWindow.hpp" />
     <ClInclude Include="windows\contentbrowser\AssetGridRenderer.hpp" />
+    <ClInclude Include="windows\contentbrowser\BookmarkManager.hpp" />
     <ClInclude Include="windows\contentbrowser\ContentBrowser.hpp" />
     <ClInclude Include="windows\contentbrowser\ContentBrowserModals.hpp" />
     <ClInclude Include="windows\contentbrowser\ContentBrowserTypes.hpp" />
@@ -296,13 +300,16 @@
     <ClCompile Include="graph\nodes\ShaderNodeFactory.cpp" />
     <ClCompile Include="handlers\EditorFrameTaskGraph.cpp" />
     <ClCompile Include="handlers\EditorHandler.cpp" />
+    <ClCompile Include="handlers\EditorLayoutManager.cpp" />
     <ClCompile Include="handlers\EditorServiceBootstrap.cpp" />
     <ClCompile Include="handlers\ExportHandler.cpp" />
     <ClCompile Include="handlers\WindowImguiHandler.cpp" />
     <ClCompile Include="run\Main.cpp" />
     <ClCompile Include="splash\SplashScreen.cpp" />
+    <ClCompile Include="windows\EngineToolbar.cpp" />
     <ClCompile Include="windows\MainImguiWindow.cpp" />
     <ClCompile Include="windows\MainMenuBar.cpp" />
+    <ClCompile Include="windows\StatusBar.cpp" />
     <ClCompile Include="windows\ai\BTPropertyPanel.cpp" />
     <ClCompile Include="windows\ai\BehaviorTreeEditorWindow.cpp" />
     <ClCompile Include="windows\animation\AnimationDebugWindow.cpp" />
@@ -343,6 +350,7 @@
     <ClCompile Include="windows\config\RenderConfigWindowSections.cpp" />
     <ClCompile Include="windows\config\VolumetricFogConfigWindow.cpp" />
     <ClCompile Include="windows\contentbrowser\AssetGridRenderer.cpp" />
+    <ClCompile Include="windows\contentbrowser\BookmarkManager.cpp" />
     <ClCompile Include="windows\contentbrowser\ContentBrowser.cpp" />
     <ClCompile Include="windows\contentbrowser\ContentBrowserDraw.cpp" />
     <ClCompile Include="windows\contentbrowser\ContentBrowserModals.cpp" />

@@ -4,6 +4,7 @@
 #include "impl/save/SaveService.hpp"
 #include "impl/save/ConfigService.hpp"
 #include "impl/editor/EditorSettingsService.hpp"
+#include "impl/editor/EditorKeybindingServiceImpl.hpp"
 #include "editor/EditorBootstrap.hpp"
 #include "../splash/SplashScreen.hpp"
 #include "impl/physics/PhysicsPlayModeHandler.hpp"
