@@ -87,6 +87,34 @@ namespace windows
             handleDebug();
             ImGui::EndMainMenuBar();
         }
+
+        // Save Layout modal - drawn outside menu bar context
+        if (openSaveLayoutPopup)
+        {
+            ImGui::OpenPopup("SaveLayoutPopup");
+            openSaveLayoutPopup = false;
+        }
+
+        if (ImGui::BeginPopupModal("SaveLayoutPopup", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        {
+            ImGui::Text("Layout Name:");
+            ImGui::SetNextItemWidth(200.0f);
+            ImGui::InputText("##LayoutName", layoutName, sizeof(layoutName));
+            ImGui::Spacing();
+            if (ImGui::Button("Save", ImVec2(100, 0)) && layoutName[0] != '\0')
+            {
+                handlers::EditorLayoutManager::saveLayout(layoutName);
+                layoutName[0] = '\0';
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel", ImVec2(100, 0)))
+            {
+                layoutName[0] = '\0';
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::EndPopup();
+        }
     }
 
     void MainMenuBar::handleFileMenu()
@@ -190,26 +218,7 @@ namespace windows
 
         if (ImGui::MenuItem("Save Layout..."))
         {
-            ImGui::OpenPopup("SaveLayoutPopup");
-        }
-
-        if (ImGui::BeginPopup("SaveLayoutPopup"))
-        {
-            static char layoutName[128] = "";
-            ImGui::Text("Layout Name:");
-            ImGui::InputText("##LayoutName", layoutName, sizeof(layoutName));
-            if (ImGui::Button("Save") && layoutName[0] != '\0')
-            {
-                handlers::EditorLayoutManager::saveLayout(layoutName);
-                layoutName[0] = '\0';
-                ImGui::CloseCurrentPopup();
-            }
-            ImGui::SameLine();
-            if (ImGui::Button("Cancel"))
-            {
-                ImGui::CloseCurrentPopup();
-            }
-            ImGui::EndPopup();
+            openSaveLayoutPopup = true;
         }
 
         if (ImGui::BeginMenu("Load Layout"))

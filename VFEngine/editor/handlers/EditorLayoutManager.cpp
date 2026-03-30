@@ -46,8 +46,16 @@ namespace handlers
 
         std::string destPath = layoutsDir + "/" + name + ".ini";
 
-        // Save current ImGui settings to the layout file
-        ImGui::SaveIniSettingsToDisk(destPath.c_str());
+        // Get current settings from memory (always up-to-date)
+        size_t settingsSize = 0;
+        const char* settingsData = ImGui::SaveIniSettingsToMemory(&settingsSize);
+
+        // Write to file
+        std::ofstream file(destPath, std::ios::binary);
+        if (file.is_open())
+        {
+            file.write(settingsData, settingsSize);
+        }
     }
 
     void EditorLayoutManager::loadLayout(const std::string& name)
@@ -58,7 +66,19 @@ namespace handlers
         std::string srcPath = layoutsDir + "/" + name + ".ini";
         if (!std::filesystem::exists(srcPath)) return;
 
-        ImGui::LoadIniSettingsFromDisk(srcPath.c_str());
+        // Read the ini file content
+        std::ifstream file(srcPath);
+        if (!file.is_open()) return;
+        std::string content((std::istreambuf_iterator<char>(file)),
+                             std::istreambuf_iterator<char>());
+        file.close();
+
+        // Load from memory so ImGui applies it immediately
+        ImGui::LoadIniSettingsFromMemory(content.c_str(), content.size());
+
+        // Mark settings as loaded so ImGui applies docking layout
+        ImGuiContext& g = *ImGui::GetCurrentContext();
+        g.SettingsLoaded = true;
     }
 
     void EditorLayoutManager::resetLayout(ImGuiID dockId)

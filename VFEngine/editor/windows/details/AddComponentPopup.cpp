@@ -9,9 +9,34 @@
 #include "events/scene/ReverbZoneEvents.hpp"
 #include "events/scene/FogVolumeEvents.hpp"
 #include <imgui.h>
+#include <cctype>
+#include <cstring>
 
 namespace windows::details
 {
+    bool AddComponentPopup::matchesFilter(const char* label, const char* filter)
+    {
+        if (!filter || filter[0] == '\0') return true;
+        size_t needleLen = std::strlen(filter);
+        size_t hayLen = std::strlen(label);
+        if (needleLen > hayLen) return false;
+        for (size_t i = 0; i <= hayLen - needleLen; ++i)
+        {
+            bool match = true;
+            for (size_t j = 0; j < needleLen; ++j)
+            {
+                if (std::tolower(static_cast<unsigned char>(label[i + j])) !=
+                    std::tolower(static_cast<unsigned char>(filter[j])))
+                {
+                    match = false;
+                    break;
+                }
+            }
+            if (match) return true;
+        }
+        return false;
+    }
+
     void AddComponentPopup::draw(const ComponentPresence& c)
     {
         ImGui::Spacing();
@@ -40,30 +65,53 @@ namespace windows::details
 
         if (ImGui::BeginPopup("AddComponentPopup"))
         {
-            drawGeneralSection(c);
-            drawPhysicsSection(c);
-            drawAnimationSection(c);
-            drawLightingSection(c);
-            drawUISection(c);
-            drawPluginSection(c);
+            ImGui::SetNextItemWidth(200.0f);
+            ImGui::InputTextWithHint("##CompSearch", "Search...", searchBuffer, sizeof(searchBuffer));
+            ImGui::Separator();
 
-            bool allAdded = c.hasCamera && c.hasMesh && c.hasAudio2D && c.hasAudio3D && c.hasScript &&
-                           c.hasCollider && c.hasRigidBody && c.hasPhysicsAnimation &&
-                           c.hasVFX && c.hasBillboard && c.hasText &&
-                           c.hasDirectionalLight && c.hasPointLight && c.hasSpotLight &&
-                           c.hasSocketAttachment && c.hasUICanvas &&
-                           c.hasUIRect && c.hasUIImage && c.hasUILabel && c.hasUIScroll && c.hasUILayoutGroup &&
-                           c.hasUIButton && c.hasUITextInput && c.hasUICheckbox && c.hasUIDropdown &&
-                           c.hasUITabs && c.hasUISlider && c.hasUIProgressBar && c.hasUIAnimation && c.hasUIMask &&
-                           c.hasUIDraggable && c.hasUIDropTarget &&
-                           c.hasNavmeshAgent && c.hasOffMeshLink && c.hasNavmeshObstacle && c.hasNavmeshModifierVolume && c.hasNavInvoker && c.hasRenderTexture && c.hasController &&
-                           c.hasIK && c.hasBehaviorTree && c.hasDecal && c.hasReverbZone &&
-                           c.hasFogVolume &&
-                           c.hasVolumetricNavVolume && c.hasVolumetricAgent;
-            if (allAdded)
+            const char* filter = searchBuffer[0] != '\0' ? searchBuffer : nullptr;
+
+            if (filter)
             {
-                ImGui::Spacing();
-                ImGui::TextDisabled("All components added");
+                drawGeneralSection(c, filter);
+                drawPhysicsSection(c, filter);
+                drawAnimationSection(c, filter);
+                drawLightingSection(c, filter);
+                drawUISection(c, filter);
+                drawPluginSection(c, filter);
+            }
+            else
+            {
+                if (ImGui::BeginMenu("Components"))
+                {
+                    drawGeneralSection(c);
+                    ImGui::EndMenu();
+                }
+                if (ImGui::BeginMenu("Physics"))
+                {
+                    drawPhysicsSection(c);
+                    ImGui::EndMenu();
+                }
+                if (ImGui::BeginMenu("Animation"))
+                {
+                    drawAnimationSection(c);
+                    ImGui::EndMenu();
+                }
+                if (ImGui::BeginMenu("Lighting"))
+                {
+                    drawLightingSection(c);
+                    ImGui::EndMenu();
+                }
+                if (ImGui::BeginMenu("UI"))
+                {
+                    drawUISection(c);
+                    ImGui::EndMenu();
+                }
+                if (ImGui::BeginMenu("Plugins"))
+                {
+                    drawPluginSection(c);
+                    ImGui::EndMenu();
+                }
             }
 
             ImGui::EndPopup();
@@ -72,15 +120,12 @@ namespace windows::details
         ImGui::PopStyleVar(2);
     }
 
-    void AddComponentPopup::drawGeneralSection(const ComponentPresence& c)
+    void AddComponentPopup::drawGeneralSection(const ComponentPresence& c, const char* filter)
     {
         auto handle = c.handle;
         auto& dispatcher = events::EventDispatcher::instance();
 
-        ImGui::TextDisabled("Components");
-        ImGui::Separator();
-
-        if (!c.hasCamera)
+        if (!c.hasCamera && matchesFilter("Camera", filter))
         {
             if (ImGui::Selectable("  Camera"))
             {
@@ -90,7 +135,7 @@ namespace windows::details
             }
         }
 
-        if (!c.hasMesh)
+        if (!c.hasMesh && matchesFilter("Mesh", filter))
         {
             if (ImGui::Selectable("  Mesh"))
             {
@@ -100,7 +145,7 @@ namespace windows::details
             }
         }
 
-        if (!c.hasAudio2D)
+        if (!c.hasAudio2D && matchesFilter("Audio Source 2D", filter))
         {
             if (ImGui::Selectable("  Audio Source 2D"))
             {
@@ -112,7 +157,7 @@ namespace windows::details
                 ImGui::SetTooltip("Streaming audio for background music and ambient sounds");
         }
 
-        if (!c.hasAudio3D)
+        if (!c.hasAudio3D && matchesFilter("Audio Source 3D", filter))
         {
             if (ImGui::Selectable("  Audio Source 3D"))
             {
@@ -124,7 +169,7 @@ namespace windows::details
                 ImGui::SetTooltip("Cached audio for spatial sound effects");
         }
 
-        if (!c.hasReverbZone)
+        if (!c.hasReverbZone && matchesFilter("Reverb Zone", filter))
         {
             if (ImGui::Selectable("  Reverb Zone"))
             {
@@ -136,7 +181,7 @@ namespace windows::details
                 ImGui::SetTooltip("Environmental reverb zone with shape volume and presets");
         }
 
-        if (!c.hasScript)
+        if (!c.hasScript && matchesFilter("Script", filter))
         {
             if (ImGui::Selectable("  Script"))
             {
@@ -150,7 +195,7 @@ namespace windows::details
                 ImGui::SetTooltip("mType script for custom behavior");
         }
 
-        if (!c.hasVFX)
+        if (!c.hasVFX && matchesFilter("VFX", filter))
         {
             if (ImGui::Selectable("  VFX"))
             {
@@ -162,7 +207,7 @@ namespace windows::details
                 ImGui::SetTooltip("Visual effects particle system");
         }
 
-        if (!c.hasBillboard)
+        if (!c.hasBillboard && matchesFilter("Billboard", filter))
         {
             if (ImGui::Selectable("  Billboard"))
             {
@@ -174,7 +219,7 @@ namespace windows::details
                 ImGui::SetTooltip("Camera-facing textured quad");
         }
 
-        if (!c.hasText)
+        if (!c.hasText && matchesFilter("Text", filter))
         {
             if (ImGui::Selectable("  Text"))
             {
@@ -186,7 +231,7 @@ namespace windows::details
                 ImGui::SetTooltip("SDF text rendering with custom fonts");
         }
 
-        if (!c.hasRenderTexture)
+        if (!c.hasRenderTexture && matchesFilter("Render Texture", filter))
         {
             if (ImGui::Selectable("  Render Texture"))
             {
@@ -198,7 +243,7 @@ namespace windows::details
                 ImGui::SetTooltip("Renders camera view to a texture (requires Camera component)");
         }
 
-        if (!c.hasDecal)
+        if (!c.hasDecal && matchesFilter("Decal", filter))
         {
             if (ImGui::Selectable("  Decal"))
             {
@@ -211,16 +256,12 @@ namespace windows::details
         }
     }
 
-    void AddComponentPopup::drawPhysicsSection(const ComponentPresence& c)
+    void AddComponentPopup::drawPhysicsSection(const ComponentPresence& c, const char* filter)
     {
         auto handle = c.handle;
         auto& dispatcher = events::EventDispatcher::instance();
 
-        ImGui::Spacing();
-        ImGui::TextDisabled("Physics");
-        ImGui::Separator();
-
-        if (!c.hasCollider)
+        if (!c.hasCollider && matchesFilter("Collider", filter))
         {
             if (ImGui::Selectable("  Collider"))
             {
@@ -232,7 +273,7 @@ namespace windows::details
                 ImGui::SetTooltip("Collision shape (Box, Sphere, Capsule, Convex Mesh, or Triangle Mesh)");
         }
 
-        if (!c.hasRigidBody)
+        if (!c.hasRigidBody && matchesFilter("Rigid Body", filter))
         {
             if (ImGui::Selectable("  Rigid Body"))
             {
@@ -244,7 +285,7 @@ namespace windows::details
                 ImGui::SetTooltip("Physics body for dynamics simulation");
         }
 
-        if (!c.hasPhysicsAnimation)
+        if (!c.hasPhysicsAnimation && matchesFilter("Physics Animation", filter))
         {
             if (ImGui::Selectable("  Physics Animation"))
             {
@@ -256,7 +297,7 @@ namespace windows::details
                 ImGui::SetTooltip("Ragdoll and kinematic bone physics for animated meshes");
         }
 
-        if (!c.hasNavmeshAgent)
+        if (!c.hasNavmeshAgent && matchesFilter("Navmesh Agent", filter))
         {
             if (ImGui::Selectable("  Navmesh Agent"))
             {
@@ -268,7 +309,7 @@ namespace windows::details
                 ImGui::SetTooltip("Navigation mesh agent for pathfinding and crowd movement");
         }
 
-        if (!c.hasOffMeshLink)
+        if (!c.hasOffMeshLink && matchesFilter("Off-Mesh Link", filter))
         {
             if (ImGui::Selectable("  Off-Mesh Link"))
             {
@@ -280,7 +321,7 @@ namespace windows::details
                 ImGui::SetTooltip("Off-mesh connection for jumps, climbs, and drops between navmesh regions");
         }
 
-        if (!c.hasNavmeshObstacle)
+        if (!c.hasNavmeshObstacle && matchesFilter("Navmesh Obstacle", filter))
         {
             if (ImGui::Selectable("  Navmesh Obstacle"))
             {
@@ -292,7 +333,7 @@ namespace windows::details
                 ImGui::SetTooltip("Dynamic obstacle that carves holes in navmesh or triggers agent avoidance");
         }
 
-        if (!c.hasNavmeshModifierVolume)
+        if (!c.hasNavmeshModifierVolume && matchesFilter("Navmesh Modifier Volume", filter))
         {
             if (ImGui::Selectable("  Navmesh Modifier Volume"))
             {
@@ -304,7 +345,7 @@ namespace windows::details
                 ImGui::SetTooltip("Volume that overrides navmesh area type (Road, Mud, Water, etc.)");
         }
 
-        if (!c.hasNavInvoker)
+        if (!c.hasNavInvoker && matchesFilter("Nav Invoker", filter))
         {
             if (ImGui::Selectable("  Nav Invoker"))
             {
@@ -316,7 +357,7 @@ namespace windows::details
                 ImGui::SetTooltip("Streaming source that generates navmesh tiles around this entity");
         }
 
-        if (!c.hasVolumetricNavVolume)
+        if (!c.hasVolumetricNavVolume && matchesFilter("Volumetric Nav Volume", filter))
         {
             if (ImGui::Selectable("  Volumetric Nav Volume"))
             {
@@ -328,7 +369,7 @@ namespace windows::details
                 ImGui::SetTooltip("3D volumetric navigation volume for flying/swimming pathfinding");
         }
 
-        if (!c.hasVolumetricAgent)
+        if (!c.hasVolumetricAgent && matchesFilter("Volumetric Agent", filter))
         {
             if (ImGui::Selectable("  Volumetric Agent"))
             {
@@ -340,7 +381,7 @@ namespace windows::details
                 ImGui::SetTooltip("3D volumetric navigation agent for flying/swimming movement");
         }
 
-        if (!c.hasController)
+        if (!c.hasController && matchesFilter("Controller", filter))
         {
             if (ImGui::Selectable("  Controller"))
             {
@@ -353,16 +394,12 @@ namespace windows::details
         }
     }
 
-    void AddComponentPopup::drawAnimationSection(const ComponentPresence& c)
+    void AddComponentPopup::drawAnimationSection(const ComponentPresence& c, const char* filter)
     {
         auto handle = c.handle;
         auto& dispatcher = events::EventDispatcher::instance();
 
-        ImGui::Spacing();
-        ImGui::TextDisabled("Animation");
-        ImGui::Separator();
-
-        if (!c.hasSocketAttachment)
+        if (!c.hasSocketAttachment && matchesFilter("Socket Attachment", filter))
         {
             if (ImGui::Selectable("  Socket Attachment"))
             {
@@ -374,7 +411,7 @@ namespace windows::details
                 ImGui::SetTooltip("Attach this entity to an animation socket on a parent skeleton");
         }
 
-        if (!c.hasIK)
+        if (!c.hasIK && matchesFilter("Inverse Kinematics", filter))
         {
             if (ImGui::Selectable("  Inverse Kinematics"))
             {
@@ -386,7 +423,7 @@ namespace windows::details
                 ImGui::SetTooltip("FABRIK IK solver for bone chain targeting (feet, hands, look-at)");
         }
 
-        if (!c.hasBehaviorTree)
+        if (!c.hasBehaviorTree && matchesFilter("Behavior Tree", filter))
         {
             if (ImGui::Selectable("  Behavior Tree"))
             {
@@ -399,16 +436,12 @@ namespace windows::details
         }
     }
 
-    void AddComponentPopup::drawLightingSection(const ComponentPresence& c)
+    void AddComponentPopup::drawLightingSection(const ComponentPresence& c, const char* filter)
     {
         auto handle = c.handle;
         auto& dispatcher = events::EventDispatcher::instance();
 
-        ImGui::Spacing();
-        ImGui::TextDisabled("Lighting");
-        ImGui::Separator();
-
-        if (!c.hasDirectionalLight)
+        if (!c.hasDirectionalLight && matchesFilter("Directional Light", filter))
         {
             if (ImGui::Selectable("  Directional Light"))
             {
@@ -420,7 +453,7 @@ namespace windows::details
                 ImGui::SetTooltip("Infinite distance light (sun, moon)");
         }
 
-        if (!c.hasPointLight)
+        if (!c.hasPointLight && matchesFilter("Point Light", filter))
         {
             if (ImGui::Selectable("  Point Light"))
             {
@@ -432,7 +465,7 @@ namespace windows::details
                 ImGui::SetTooltip("Omnidirectional light with range attenuation");
         }
 
-        if (!c.hasSpotLight)
+        if (!c.hasSpotLight && matchesFilter("Spot Light", filter))
         {
             if (ImGui::Selectable("  Spot Light"))
             {
@@ -444,7 +477,7 @@ namespace windows::details
                 ImGui::SetTooltip("Cone-shaped light with inner/outer angles");
         }
 
-        if (!c.hasFogVolume)
+        if (!c.hasFogVolume && matchesFilter("Fog Volume", filter))
         {
             if (ImGui::Selectable("  Fog Volume"))
             {

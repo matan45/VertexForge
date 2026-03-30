@@ -206,7 +206,21 @@ namespace windows
 
         bool nodeOpen = ImGui::TreeNodeEx((void*)handle.id, flags, "%s", label);
 
-        // Visibility toggle (eye icon) on same line
+        // Select entity when tree node is clicked
+        if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
+        {
+            bool isSculptMode = dispatcher.query(events::sculpt::IsSculptModeActiveQuery{});
+            if (!isSculptMode)
+            {
+                selectedHandle = handle;
+
+                events::scene::SelectEntityCommand cmd;
+                cmd.entity = handle;
+                dispatcher.execute(cmd);
+            }
+        }
+
+        // Visibility toggle (eye icon)
         ImGui::SameLine(ImGui::GetContentRegionAvail().x + ImGui::GetCursorPosX() - 40.0f);
         bool isHidden = hiddenEntities.count(handle.id) > 0;
         ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
@@ -219,7 +233,7 @@ namespace windows
 
             events::scene::SetEntityActiveCommand cmd;
             cmd.entity = handle;
-            cmd.isActive = isHidden; // toggle: was hidden -> now active
+            cmd.isActive = isHidden;
             dispatcher.execute(cmd);
         }
         ImGui::PopStyleColor();
@@ -236,20 +250,6 @@ namespace windows
                 lockedEntities.insert(handle.id);
         }
         ImGui::PopStyleColor();
-
-        // Select entity when clicked (blocked during sculpt mode or when locked)
-        if (ImGui::IsItemClicked() && !isLocked)
-        {
-            bool isSculptMode = dispatcher.query(events::sculpt::IsSculptModeActiveQuery{});
-            if (!isSculptMode)
-            {
-                selectedHandle = handle;
-
-                events::scene::SelectEntityCommand cmd;
-                cmd.entity = handle;
-                dispatcher.execute(cmd);
-            }
-        }
 
         if (!isLocked && ImGui::BeginDragDropSource())
         {
