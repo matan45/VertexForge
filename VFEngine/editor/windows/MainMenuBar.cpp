@@ -1,4 +1,5 @@
 #include "MainMenuBar.hpp"
+#include "config/EditorSettingsWindow.hpp"
 #include "lighting/IBLWindow.hpp"
 #include "config/EditorCameraWindow.hpp"
 #include "config/CullingStatsWindow.hpp"
@@ -27,6 +28,8 @@
 #include "procedural/HeightmapGeneratorWindow.hpp"
 #include "imageprocessing/BackgroundRemovalWindow.hpp"
 #include "debug/MemoryDiagnosticsWindow.hpp"
+#include "config/EditorPreferencesWindow.hpp"
+#include "../handlers/EditorLayoutManager.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/project/SceneEvents.hpp"
 #include "events/render/RenderEvents.hpp"
@@ -76,13 +79,41 @@ namespace windows
         if (ImGui::BeginMainMenuBar())
         {
             handleFileMenu();
-            handleSettingsMenu();
+            handleEditMenu();
+            handleWindowMenu();
             handleAddMenu();
             handleToolsMenu();
             handleScriptsMenu();
             handleDebug();
-            handlePlayControls();
             ImGui::EndMainMenuBar();
+        }
+
+        // Save Layout modal - drawn outside menu bar context
+        if (openSaveLayoutPopup)
+        {
+            ImGui::OpenPopup("SaveLayoutPopup");
+            openSaveLayoutPopup = false;
+        }
+
+        if (ImGui::BeginPopupModal("SaveLayoutPopup", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        {
+            ImGui::Text("Layout Name:");
+            ImGui::SetNextItemWidth(200.0f);
+            ImGui::InputText("##LayoutName", layoutName, sizeof(layoutName));
+            ImGui::Spacing();
+            if (ImGui::Button("Save", ImVec2(100, 0)) && layoutName[0] != '\0')
+            {
+                handlers::EditorLayoutManager::saveLayout(layoutName);
+                layoutName[0] = '\0';
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel", ImVec2(100, 0)))
+            {
+                layoutName[0] = '\0';
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::EndPopup();
         }
     }
 
@@ -167,17 +198,69 @@ namespace windows
         }
     }
 
+    void MainMenuBar::handleEditMenu()
+    {
+        if (!ImGui::BeginMenu("Edit")) return;
+        if (ImGui::MenuItem("Preferences") && editorPreferencesWindow) editorPreferencesWindow->show();
+        if (ImGui::MenuItem("Settings") && editorSettingsWindow) editorSettingsWindow->show();
+        ImGui::EndMenu();
+    }
+
+    void MainMenuBar::handleWindowMenu()
+    {
+        if (!ImGui::BeginMenu("Window")) return;
+
+        if (ImGui::MenuItem("Reset Layout"))
+        {
+            ImGuiID dockId = ImGui::GetID("MyDockSpace");
+            handlers::EditorLayoutManager::resetLayout(dockId);
+        }
+
+        if (ImGui::MenuItem("Save Layout..."))
+        {
+            openSaveLayoutPopup = true;
+        }
+
+        if (ImGui::BeginMenu("Load Layout"))
+        {
+            auto layouts = handlers::EditorLayoutManager::getSavedLayouts();
+            if (layouts.empty())
+            {
+                ImGui::TextDisabled("No saved layouts");
+            }
+            else
+            {
+                for (const auto& name : layouts)
+                {
+                    if (ImGui::MenuItem(name.c_str()))
+                        handlers::EditorLayoutManager::loadLayout(name);
+                }
+            }
+            ImGui::EndMenu();
+        }
+
+        ImGui::EndMenu();
+    }
+
     void MainMenuBar::handleSettingsMenu()
     {
         if (!ImGui::BeginMenu("Settings")) return;
-        if (ImGui::MenuItem("Project") && projectSettingsWindow) projectSettingsWindow->show();
-        else if (ImGui::MenuItem("Editor Camera") && editorCameraWindow) editorCameraWindow->show();
-        else if (ImGui::MenuItem("Physics Config") && physicsConfigWindow) physicsConfigWindow->show();
-        else if (ImGui::MenuItem("Audio Config") && audioConfigWindow) audioConfigWindow->show();
-        else if (ImGui::MenuItem("Audio Mixer") && audioMixerWindow) audioMixerWindow->show();
-        else if (ImGui::MenuItem("Render Config") && renderConfigWindow) renderConfigWindow->show();
-        else if (ImGui::MenuItem("Input Action Mapping") && inputActionMappingWindow) inputActionMappingWindow->show();
-        else if (ImGui::MenuItem("Plugin Manager") && pluginManagerWindow) pluginManagerWindow->show();
+        if (ImGui::MenuItem("Project") && editorSettingsWindow)
+            editorSettingsWindow->show(EditorSettingsWindow::Project);
+        if (ImGui::MenuItem("Editor Camera") && editorSettingsWindow)
+            editorSettingsWindow->show(EditorSettingsWindow::EditorCamera);
+        if (ImGui::MenuItem("Physics Config") && editorSettingsWindow)
+            editorSettingsWindow->show(EditorSettingsWindow::Physics);
+        if (ImGui::MenuItem("Audio Config") && editorSettingsWindow)
+            editorSettingsWindow->show(EditorSettingsWindow::AudioConfig);
+        if (ImGui::MenuItem("Audio Mixer") && editorSettingsWindow)
+            editorSettingsWindow->show(EditorSettingsWindow::AudioMixer);
+        if (ImGui::MenuItem("Render Config") && editorSettingsWindow)
+            editorSettingsWindow->show(EditorSettingsWindow::Rendering);
+        if (ImGui::MenuItem("Input Action Mapping") && editorSettingsWindow)
+            editorSettingsWindow->show(EditorSettingsWindow::InputMapping);
+        if (ImGui::MenuItem("Plugin Manager") && editorSettingsWindow)
+            editorSettingsWindow->show(EditorSettingsWindow::Plugins);
         ImGui::EndMenu();
     }
 
@@ -324,104 +407,4 @@ namespace windows
         }
     }
 
-    void MainMenuBar::handlePlayControls()
-    {
-        auto& dispatcher = events::EventDispatcher::instance();
-        auto currentMode = dispatcher.query(events::editor::GetEditorModeQuery{});
-        bool isScriptsCompiled = dispatcher.query(events::scripting::IsScriptsCompiledQuery{});
-
-        float menuBarWidth = ImGui::GetWindowWidth();
-        float buttonWidth = 60.0f;
-        float spacing = 4.0f;
-        bool isPlayMode = (currentMode == services::EditorMode::Play);
-        float totalWidth = isPlayMode ? (buttonWidth * 2.0f + spacing + 10.0f) : (buttonWidth + 10.0f);
-        float centerX = (menuBarWidth - totalWidth) * 0.5f;
-        ImGui::SetCursorPosX(centerX);
-
-        if (!isScriptsCompiled && currentMode == services::EditorMode::Edit)
-        {
-            ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "[!]");
-            if (ImGui::IsItemHovered())
-            {
-                ImGui::SetTooltip("Scripts not built.\nGo to Scripts > Build Scripts before playing.");
-            }
-            ImGui::SameLine();
-        }
-
-        if (currentMode == services::EditorMode::Edit)
-        {
-            bool isSculptMode = dispatcher.query(events::sculpt::IsSculptModeActiveQuery{});
-            ImGui::BeginDisabled(isSculptMode);
-
-            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 0.2f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.7f, 0.3f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.1f, 0.5f, 0.1f, 1.0f));
-            if (ImGui::Button("Play", ImVec2(buttonWidth, 0)))
-            {
-                events::editor::SetEditorModeCommand cmd;
-                cmd.mode = services::EditorMode::Play;
-                dispatcher.execute(cmd);
-            }
-            ImGui::PopStyleColor(3);
-
-            ImGui::EndDisabled();
-
-            if (isSculptMode && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-            {
-                ImGui::SetTooltip("Exit Sculpt Mode before entering Play Mode");
-            }
-        }
-        else
-        {
-            bool isPaused = dispatcher.query(events::editor::IsEditorPausedQuery{});
-
-            if (!isPaused)
-            {
-                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.6f, 0.1f, 1.0f));
-                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.7f, 0.2f, 1.0f));
-                ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.6f, 0.5f, 0.0f, 1.0f));
-                if (ImGui::Button("Pause", ImVec2(buttonWidth, 0)))
-                {
-                    events::editor::SetEditorPausedCommand cmd;
-                    cmd.paused = true;
-                    dispatcher.execute(cmd);
-                }
-                ImGui::PopStyleColor(3);
-            }
-            else
-            {
-                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 0.2f, 1.0f));
-                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.7f, 0.3f, 1.0f));
-                ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.1f, 0.5f, 0.1f, 1.0f));
-                if (ImGui::Button("Resume", ImVec2(buttonWidth, 0)))
-                {
-                    events::editor::SetEditorPausedCommand cmd;
-                    cmd.paused = false;
-                    dispatcher.execute(cmd);
-                }
-                ImGui::PopStyleColor(3);
-            }
-
-            ImGui::SameLine(0.0f, spacing);
-
-            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.2f, 0.2f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.3f, 0.3f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.6f, 0.1f, 0.1f, 1.0f));
-            if (ImGui::Button("Stop", ImVec2(buttonWidth, 0)))
-            {
-                events::editor::SetEditorModeCommand cmd;
-                cmd.mode = services::EditorMode::Edit;
-                dispatcher.execute(cmd);
-            }
-            ImGui::PopStyleColor(3);
-        }
-
-        if (!currentSceneName.empty())
-        {
-            ImGui::SameLine();
-            ImGui::TextDisabled("|");
-            ImGui::SameLine();
-            ImGui::Text("%s", currentSceneName.c_str());
-        }
-    }
 }

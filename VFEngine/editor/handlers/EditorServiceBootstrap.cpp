@@ -61,6 +61,8 @@
 #include "resource/PathResolver.hpp"
 #include "impl/save/SaveService.hpp"
 #include "impl/save/ConfigService.hpp"
+#include "impl/editor/EditorSettingsService.hpp"
+#include "impl/editor/EditorKeybindingServiceImpl.hpp"
 
 namespace handlers
 {
@@ -143,6 +145,8 @@ namespace handlers
             bootstrap->getScriptingProvider()
         );
         configService = std::make_unique<services::ConfigService>();
+        editorSettingsService = std::make_unique<services::EditorSettingsService>();
+        editorKeybindingService = std::make_shared<services::EditorKeybindingServiceImpl>();
     }
 
     void EditorHandler::createPhysicsServices()
@@ -315,6 +319,8 @@ namespace handlers
         behaviorTreeService->registerEventHandlers();
         saveService->registerEventHandlers(events::EventDispatcher::instance());
         configService->registerEventHandlers(events::EventDispatcher::instance());
+        editorSettingsService->registerEventHandlers(events::EventDispatcher::instance());
+        editorKeybindingService->registerEventHandlers();
 
         events::render::LoadBillboardAtlasCommand atlasCmd;
         atlasCmd.atlasPath = resource::PathResolver::resolveEnginePath("../../resources/editor/billboardAtlas.vfImage");

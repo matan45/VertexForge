@@ -33,6 +33,8 @@ namespace windows
     class HeightmapGeneratorWindow;
     class BackgroundRemovalWindow;
     class MemoryDiagnosticsWindow;
+    class EditorPreferencesWindow;
+    class EditorSettingsWindow;
     class MainMenuBar
     {
     private:
@@ -40,6 +42,8 @@ namespace windows
         std::string currentSceneName;
         events::SubscriptionToken sceneLoadedToken;
         events::SubscriptionToken sceneClearedToken;
+        bool openSaveLayoutPopup = false;
+        char layoutName[128] = {};
 
         IBLWindow* iblWindow = nullptr;
         EditorCameraWindow* editorCameraWindow = nullptr;
@@ -69,6 +73,8 @@ namespace windows
         HeightmapGeneratorWindow* heightmapGeneratorWindow = nullptr;
         BackgroundRemovalWindow* backgroundRemovalWindow = nullptr;
         MemoryDiagnosticsWindow* memoryDiagnosticsWindow = nullptr;
+        EditorPreferencesWindow* editorPreferencesWindow = nullptr;
+        EditorSettingsWindow* editorSettingsWindow = nullptr;
     public:
         MainMenuBar();
         ~MainMenuBar();
@@ -193,13 +199,24 @@ namespace windows
             memoryDiagnosticsWindow = window;
         }
 
+        void setEditorPreferencesWindow(EditorPreferencesWindow* window)
+        {
+            editorPreferencesWindow = window;
+        }
+
+        void setEditorSettingsWindow(EditorSettingsWindow* window)
+        {
+            editorSettingsWindow = window;
+        }
+
     private:
         void handleFileMenu();
+        void handleEditMenu();
+        void handleWindowMenu();
         void handleSettingsMenu();
         void handleAddMenu();
         void handleScriptsMenu();
         void handleToolsMenu();
         void handleDebug();
-        void handlePlayControls();
     };
 }

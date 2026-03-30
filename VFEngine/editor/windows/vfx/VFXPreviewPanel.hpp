@@ -17,7 +17,8 @@ namespace editor::vfxeditor
         void* instanceId;
         std::unique_ptr<OrbitCamera> camera;
         bool needsInit = true;
-        bool isDraggingPreview = false;
+        bool isDraggingOrbit = false;
+        bool isDraggingPan = false;
         bool isPlaying = false;
         float lastFrameTime = 0.0f;
 

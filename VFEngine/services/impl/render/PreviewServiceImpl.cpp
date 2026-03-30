@@ -93,6 +93,12 @@ namespace services
                 updateMeshCamera(cmd.instanceId, cmd.view, cmd.projection, cmd.cameraPos);
             });
 
+        dispatcher.registerCommandHandler<events::preview::SetPreviewEnvironmentCommand>(
+            [this](const events::preview::SetPreviewEnvironmentCommand& cmd)
+            {
+                setPreviewEnvironment(cmd.instanceId, cmd.params);
+            });
+
         dispatcher.registerQueryHandler<events::preview::GetPreviewMeshSubMeshInfoQuery>(
             [this](const events::preview::GetPreviewMeshSubMeshInfoQuery& query)
             {
@@ -370,6 +376,11 @@ namespace services
     void PreviewServiceImpl::setMeshPreviewParams(PreviewInstanceId instanceId, const MeshPreviewParams& params)
     {
         meshProvider->setMeshPreviewParams(instanceId, params);
+    }
+
+    void PreviewServiceImpl::setPreviewEnvironment(PreviewInstanceId instanceId, const PreviewEnvironmentParams& params)
+    {
+        meshProvider->setPreviewEnvironment(instanceId, params);
     }
 
     void PreviewServiceImpl::updateMeshCamera(PreviewInstanceId instanceId, const glm::mat4& view,

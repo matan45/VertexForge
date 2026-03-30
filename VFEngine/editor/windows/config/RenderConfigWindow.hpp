@@ -11,6 +11,8 @@ namespace windows
         bool settingsLoaded = false;
         bool isDirty = false;
 
+        void drawPresetSection();
+        void markDirty();
         void drawCullingSection();
         void drawShadowSection();
         void drawShadowQualitySettings();
@@ -31,6 +33,7 @@ namespace windows
 
     public:
         void draw();
+        void drawContent();
         void show();
     };
 }

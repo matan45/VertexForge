@@ -3,6 +3,7 @@
 #include "imgui.h"
 #include <nfd/FileDialog.hpp>
 #include <filesystem>
+#include <unordered_set>
 
 namespace ed = ax::NodeEditor;
 
@@ -97,11 +98,14 @@ namespace editor::graph {
 
     void VFXGraphEditor::drawNodeProperties(vfx::VFXNode& node, const std::string& idPrefix,
                                              float labelWidth, float inputWidth) {
+        // Only show core properties in the node — rest goes to the property panel
+        static const std::unordered_set<std::string> coreProperties = {
+            "spawnRate", "lifetime", "startSize", "startVelocity",
+            "startColor", "looping", "texture"
+        };
+
         for (auto& [propName, prop] : node.properties) {
-            if (propName == "shapeType") continue;
-            if (propName.rfind("flipbook", 0) == 0) continue;  // shown in property panel
-            if (propName == "alphaClipThreshold" || propName == "additiveBlend") continue;  // shown in property panel
-            if (propName == "meshPath") continue;  
+            if (!coreProperties.count(propName)) continue;
 
             std::string widgetId = "##" + idPrefix + propName + std::to_string(node.id);
 

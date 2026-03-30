@@ -138,6 +138,7 @@ namespace core
             controller->setAlbedo(params.albedo);
             controller->setMetallic(params.metallic);
             controller->setRoughness(params.roughness);
+            controller->setClearColor(params.clearColor);
         }
     }
 

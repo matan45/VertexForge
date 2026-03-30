@@ -64,7 +64,26 @@ namespace windows
         std::string name;
         std::string path;
         AssetType type;
-        bool isSelected = false;  // For multi-selection
-        bool isCut = false;       // For visual dimming of cut items
+        std::string extension;
+        uint64_t fileSize = 0;
+        int64_t lastModified = 0;
+        bool isSelected = false;
+        bool isCut = false;
+    };
+
+    enum class SortField : uint8_t
+    {
+        Name = 0,
+        Date,
+        Size,
+        Type
+    };
+
+    struct AssetFilter
+    {
+        std::string searchQuery;
+        AssetType typeFilter = AssetType::Other; // Other = "All"
+        SortField sortBy = SortField::Name;
+        bool sortAscending = true;
     };
 }

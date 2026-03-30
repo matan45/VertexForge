@@ -190,6 +190,16 @@ namespace events::render {
         std::string_view getName() const override { return "GetShowWireframe"; }
     };
 
+    struct SetShowOverdrawCommand : ICommand<> {
+        bool show = false;
+
+        std::string_view getName() const override { return "SetShowOverdraw"; }
+    };
+
+    struct GetShowOverdrawQuery : IQuery<bool> {
+        std::string_view getName() const override { return "GetShowOverdraw"; }
+    };
+
     struct GetCullingStatsQuery : IQuery<services::CullingDebugStats> {
         std::string_view getName() const override { return "GetCullingStats"; }
     };

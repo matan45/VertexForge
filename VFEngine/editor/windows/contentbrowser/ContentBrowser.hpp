@@ -4,6 +4,7 @@
 #include "AssetGridRenderer.hpp"
 #include "ContentBrowserModals.hpp"
 #include "PreviewWindowManager.hpp"
+#include "BookmarkManager.hpp"
 #include "events/EventTypes.hpp"
 
 #include <string>
@@ -27,7 +28,7 @@ namespace windows
 
         fs::path selectedFile;
         AssetType selectedType = AssetType::Other;
-        std::string searchQuery;
+        AssetFilter filter;
 
         // Multi-selection state
         std::unordered_set<std::string> selectedPaths;
@@ -52,6 +53,7 @@ namespace windows
         std::unique_ptr<AssetGridRenderer> gridRenderer;
         std::unique_ptr<ContentBrowserModals> modals;
         std::unique_ptr<PreviewWindowManager> previewManager;
+        std::unique_ptr<BookmarkManager> bookmarkManager;
     public:
         explicit ContentBrowser();
         ~ContentBrowser() override;
@@ -65,6 +67,8 @@ namespace windows
         void drawToolbar();
         void drawPathBar(float availableWidth);
         void drawContentPanel();
+        void drawBookmarkPanel();
+        void drawFilterPopup();
         void handleAssetClick(const AssetClickResult& clickResult);
         void handleDoubleClick();
         void handleDragDrop();

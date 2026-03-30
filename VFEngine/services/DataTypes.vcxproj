@@ -53,9 +53,11 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="data\ActionMappingTypes.hpp" />
+    <ClInclude Include="data\AnimatorDebugTypes.hpp" />
     <ClInclude Include="data\AsyncLoadingTypes.hpp" />
     <ClInclude Include="data\CullingCategories.hpp" />
     <ClInclude Include="data\DTOs.hpp" />
+    <ClInclude Include="data\EditorKeybindingTypes.hpp" />
     <ClInclude Include="data\EditorMode.hpp" />
     <ClInclude Include="data\EntityConversion.hpp" />
     <ClInclude Include="data\EntityHandle.hpp" />

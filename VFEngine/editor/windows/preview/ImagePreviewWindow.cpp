@@ -197,6 +197,7 @@ namespace windows
 
 
         void* displayDescriptor = imageHandle.getMipDescriptor(static_cast<uint32_t>(selectedMipLevel));
+
         ImGui::Image(displayDescriptor, imageSize);
     }
 

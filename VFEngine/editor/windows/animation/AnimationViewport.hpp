@@ -2,6 +2,7 @@
 
 #include "providers/animation/IAnimationPreviewProvider.hpp"
 #include "providers/PreviewInstanceId.hpp"
+#include "../preview/PreviewEnvironment.hpp"
 #include "ColliderOverlayRenderer.hpp"
 #include "types/PhysicsAnimationTypes.hpp"
 #include "animator/SocketTypes.hpp"
@@ -28,6 +29,8 @@ namespace windows::animation
         bool showBoneVisualization;
         const services::PreviewInstanceId& instanceId;
         bool& isDraggingPreview;
+        bool& isDraggingPan;
+        editor::preview::PreviewEnvironment& environment;
         bool showColliderOverlay = false;
         const types::PhysicsAnimationConfig* physicsConfig = nullptr;
         const std::unordered_map<std::string, size_t>* boneNameToIndex = nullptr;
@@ -43,7 +46,7 @@ namespace windows::animation
         void draw(const ViewportDrawContext& ctx);
 
     private:
-        void handlePreviewInput(editor::OrbitCamera* camera, bool& isDraggingPreview);
+        void handlePreviewInput(editor::OrbitCamera* camera, bool& isDraggingPreview, bool& isDraggingPan);
         void drawBoneVisualization(const ImVec2& viewportPos, const ImVec2& viewportSize,
                                    const std::vector<services::EvaluatedBoneInfo>& evaluatedBones,
                                    int selectedChannel,

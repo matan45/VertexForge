@@ -59,12 +59,16 @@ namespace windows::details {
         void draw(const ComponentPresence& components);
 
     private:
-        void drawGeneralSection(const ComponentPresence& c);
-        void drawPhysicsSection(const ComponentPresence& c);
-        void drawAnimationSection(const ComponentPresence& c);
-        void drawLightingSection(const ComponentPresence& c);
-        void drawUISection(const ComponentPresence& c);
-        void drawPluginSection(const ComponentPresence& c);
+        char searchBuffer[128] = {};
+
+        void drawGeneralSection(const ComponentPresence& c, const char* filter = nullptr);
+        void drawPhysicsSection(const ComponentPresence& c, const char* filter = nullptr);
+        void drawAnimationSection(const ComponentPresence& c, const char* filter = nullptr);
+        void drawLightingSection(const ComponentPresence& c, const char* filter = nullptr);
+        void drawUISection(const ComponentPresence& c, const char* filter = nullptr);
+        void drawPluginSection(const ComponentPresence& c, const char* filter = nullptr);
+
+        static bool matchesFilter(const char* label, const char* filter);
     };
 
 }

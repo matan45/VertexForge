@@ -1,5 +1,6 @@
 #pragma once
 #include <material/MaterialTypes.hpp>
+#include "../preview/PreviewEnvironment.hpp"
 #include <memory>
 #include <functional>
 #include <string>
@@ -16,9 +17,11 @@ namespace editor::materialeditor
     private:
         void* instanceId;
         std::unique_ptr<OrbitCamera> camera;
+        preview::PreviewEnvironment environment;
         bool needsInit = true;
         float panelWidth = 250.0f;
-        bool isDraggingPreview = false;
+        bool isDraggingOrbit = false;
+        bool isDraggingPan = false;
         std::string lastShaderError;
     
     public:

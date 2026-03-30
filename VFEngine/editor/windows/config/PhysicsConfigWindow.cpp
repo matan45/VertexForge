@@ -28,52 +28,57 @@ namespace windows
         ImGui::SetNextWindowSize(ImVec2(500, 650), ImGuiCond_FirstUseEver);
         if (ImGui::Begin("Physics Configuration", &visible))
         {
-            drawGravitySection();
-            ImGui::Spacing();
-            drawSimulationSection();
-            ImGui::Spacing();
-            drawSleepSection();
-            ImGui::Spacing();
-            drawLayersSection();
-            ImGui::Spacing();
-            drawCollisionMatrixSection();
-            ImGui::Spacing();
-            drawVFXCollisionSection();
-
-            ImGui::Spacing();
-            ImGui::Separator();
-            ImGui::Spacing();
-
-            if (ImGui::Button("Save to Scene", ImVec2(100, 0)))
-            {
-                saveToScene();
-            }
-            ImGui::SameLine();
-            if (ImGui::Button("Reload", ImVec2(80, 0)))
-            {
-                loadFromScene();
-            }
-            ImGui::SameLine();
-            if (ImGui::Button("Apply", ImVec2(80, 0)))
-            {
-                applySettings();
-            }
-            ImGui::SameLine();
-            if (ImGui::Button("Reset Defaults", ImVec2(100, 0)))
-            {
-                resetToDefaults();
-            }
-
-            if (isDirty)
-            {
-                ImGui::SameLine();
-                ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "(Modified)");
-            }
-
-            ImGui::Spacing();
-            ImGui::TextDisabled("Physics settings are saved with the scene file.");
+            drawContent();
         }
         ImGui::End();
+    }
+
+    void PhysicsConfigWindow::drawContent()
+    {
+        drawGravitySection();
+        ImGui::Spacing();
+        drawSimulationSection();
+        ImGui::Spacing();
+        drawSleepSection();
+        ImGui::Spacing();
+        drawLayersSection();
+        ImGui::Spacing();
+        drawCollisionMatrixSection();
+        ImGui::Spacing();
+        drawVFXCollisionSection();
+
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        if (ImGui::Button("Save to Scene", ImVec2(100, 0)))
+        {
+            saveToScene();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Reload", ImVec2(80, 0)))
+        {
+            loadFromScene();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Apply", ImVec2(80, 0)))
+        {
+            applySettings();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Reset Defaults", ImVec2(100, 0)))
+        {
+            resetToDefaults();
+        }
+
+        if (isDirty)
+        {
+            ImGui::SameLine();
+            ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "(Modified)");
+        }
+
+        ImGui::Spacing();
+        ImGui::TextDisabled("Physics settings are saved with the scene file.");
     }
 
     void PhysicsConfigWindow::drawGravitySection()

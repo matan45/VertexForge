@@ -200,4 +200,10 @@ namespace core
     {
         return withEntityOr<std::string>(entity, "", [&](entt::entity e) { return controller->getLayerName(e, layerIndex); });
     }
+
+    services::AnimatorRuntimeDebugData AnimatorAdapter::getDebugData(services::EntityHandle entity, uint32_t layerIndex) const
+    {
+        return withEntityOr<services::AnimatorRuntimeDebugData>(entity, services::AnimatorRuntimeDebugData{},
+            [&](entt::entity e) { return controller->getDebugData(e, layerIndex); });
+    }
 }

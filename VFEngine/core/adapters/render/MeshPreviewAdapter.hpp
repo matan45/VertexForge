@@ -26,6 +26,8 @@ namespace core
         math::AABB getPreviewMeshBounds(services::PreviewInstanceId instanceId) const override;
         void setMeshPreviewParams(services::PreviewInstanceId instanceId,
                                   const services::MeshPreviewParams& params) override;
+        void setPreviewEnvironment(services::PreviewInstanceId instanceId,
+                                   const services::PreviewEnvironmentParams& params) override;
         void updateMeshCamera(services::PreviewInstanceId instanceId, const glm::mat4& view,
                               const glm::mat4& projection,
                               const glm::vec3& cameraPos) override;

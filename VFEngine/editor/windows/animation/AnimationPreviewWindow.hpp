@@ -61,6 +61,8 @@ namespace windows
         bool previewInitialized = false;
         bool previewCleanedUp = false;
         bool isDraggingPreview = false;
+        bool isDraggingPan = false;
+        editor::preview::PreviewEnvironment environment;
 
         float lastFrameTime = 0.0f;
         int currentFrame = 0;

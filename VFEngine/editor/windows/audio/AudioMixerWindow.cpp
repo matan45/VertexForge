@@ -22,21 +22,26 @@ namespace windows
         ImGui::SetNextWindowSize(ImVec2(600, 500), ImGuiCond_FirstUseEver);
         if (ImGui::Begin("Audio Mixer", &visible))
         {
-            drawBusChannels();
-            ImGui::Spacing();
-            ImGui::Separator();
-            ImGui::Spacing();
-            drawEffectChainSection();
-            ImGui::Spacing();
-            ImGui::Separator();
-            ImGui::Spacing();
-            drawCreateBusSection();
-            ImGui::Spacing();
-            ImGui::Separator();
-            ImGui::Spacing();
-            drawSnapshotSection();
+            drawContent();
         }
         ImGui::End();
+    }
+
+    void AudioMixerWindow::drawContent()
+    {
+        drawBusChannels();
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+        drawEffectChainSection();
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+        drawCreateBusSection();
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+        drawSnapshotSection();
     }
 
     void AudioMixerWindow::drawBusChannels()

@@ -2,6 +2,7 @@
 
 #include "../EventTypes.hpp"
 #include "../../data/EntityHandle.hpp"
+#include "../../data/AnimatorDebugTypes.hpp"
 #include <string>
 
 namespace services::events::animator
@@ -160,5 +161,12 @@ namespace services::events::animator
         ::services::EntityHandle entity;
         uint32_t layerIndex;
         std::string_view getName() const override { return "GetAnimationLayerName"; }
+    };
+
+    struct GetAnimatorRuntimeDebugDataQuery : ::events::IQuery<::services::AnimatorRuntimeDebugData>
+    {
+        ::services::EntityHandle entity;
+        uint32_t layerIndex = 0;
+        std::string_view getName() const override { return "GetAnimatorRuntimeDebugData"; }
     };
 }

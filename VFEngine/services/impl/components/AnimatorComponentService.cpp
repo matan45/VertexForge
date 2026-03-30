@@ -294,6 +294,12 @@ namespace services
                 return animatorProvider->getLayerName(query.entity, query.layerIndex);
             });
 
+        dispatcher.registerQueryHandler<events::animator::GetAnimatorRuntimeDebugDataQuery>(
+            [this](const events::animator::GetAnimatorRuntimeDebugDataQuery& query)
+            {
+                return animatorProvider->getDebugData(query.entity, query.layerIndex);
+            });
+
         dispatcher.subscribe<::events::scene::SceneLoadedNotification>(
             [this](const ::events::scene::SceneLoadedNotification&)
             {

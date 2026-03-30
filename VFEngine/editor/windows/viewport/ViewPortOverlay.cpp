@@ -195,7 +195,7 @@ namespace windows
         auto& dispatcher = events::EventDispatcher::instance();
 
         ImVec2 contentMax = ImGui::GetWindowContentRegionMax();
-        float dropdownWidth = 95.0f;
+        float dropdownWidth = 140.0f;
         ImVec2 dropdownPos = ImVec2(
             windowPos.x + contentMax.x - dropdownWidth - 8.0f,
             windowPos.y + contentMin.y + 8.0f
@@ -206,38 +206,107 @@ namespace windows
 
         if (ImGui::Begin("##ViewModeOverlay", nullptr, overlayFlags))
         {
+            // Query current state
             currentViewMode = static_cast<int>(dispatcher.query(events::render::GetViewModeQuery{}));
+            bool wireframe = dispatcher.query(events::render::GetShowWireframeQuery{});
+            auto shadowDebug = dispatcher.query(events::render::GetShadowDebugModeQuery{});
 
-            const char* viewModeLabels[] = {
-                "Color",          // 0
-                "Meshlet",        // 1
-                "LOD",            // 2
-                "Mipmap",         // 3
-                "Cluster",        // 4
-                "Depth",          // 5
-                "Shadow",         // 6
-                "Terrain Tile",   // 7
-                "Terrain UV",     // 8
-                "Weight Map",     // 9
-                "Shadow Level",   // 10 (dropdown) → 14 (shader)
-                "Shadow UV"       // 11 (dropdown) → 15 (shader)
-            };
-            // Map dropdown index to shader viewMode value
+            // Unified dropdown entries:
+            // 0-11: View modes (Color, Meshlet, LOD, ...)
+            // 12-16: Debug modes (Wireframe, Overdraw, Shadow Cascades, Shadow Pool Heatmap)
             static const int viewModeMap[] = {0,1,2,3,4,5,6,7,8,9,14,15};
             static const int reverseMap[] = {0,1,2,3,4,5,6,7,8,9,0,0,0,0,10,11};
-            int displayIdx = (currentViewMode < 16) ? reverseMap[currentViewMode] : 0;
+
+            // Determine unified selected index
+            int unifiedIdx = 0;
+            if (wireframe) unifiedIdx = 12;
+            else if (shadowDebug == types::ShadowDebugMode::CascadeOverlay) unifiedIdx = 13;
+            else if (shadowDebug == types::ShadowDebugMode::TilePoolHeatmap) unifiedIdx = 14;
+            else unifiedIdx = (currentViewMode < 16) ? reverseMap[currentViewMode] : 0;
+
+            const char* allLabels[] = {
+                "Color",              // 0
+                "Meshlet",            // 1
+                "LOD",                // 2
+                "Mipmap",             // 3
+                "Cluster",            // 4
+                "Depth",              // 5
+                "Shadow",             // 6
+                "Terrain Tile",       // 7
+                "Terrain UV",         // 8
+                "Weight Map",         // 9
+                "Shadow Level",       // 10
+                "Shadow UV",          // 11
+                "Wireframe",          // 12
+                "Shadow Cascades",    // 13
+                "Shadow Pool Heatmap" // 14
+            };
+            static constexpr int VIEW_MODE_COUNT = 12;
+            static constexpr int DEBUG_START = 12;
+            static constexpr int TOTAL_COUNT = 15;
+
             ImGui::SetNextItemWidth(dropdownWidth);
-            if (ImGui::Combo("##ViewMode", &displayIdx, viewModeLabels, 12))
+            if (ImGui::BeginCombo("##ViewMode", allLabels[unifiedIdx]))
             {
-                events::render::SetViewModeCommand cmd;
-                cmd.mode = static_cast<uint32_t>(viewModeMap[displayIdx]);
-                dispatcher.execute(cmd);
+                // View modes section
+                ImGui::TextDisabled("View Mode");
+                ImGui::Separator();
+                for (int i = 0; i < VIEW_MODE_COUNT; ++i)
+                {
+                    bool selected = (unifiedIdx == i);
+                    if (ImGui::Selectable(allLabels[i], selected))
+                    {
+                        // Clear debug modes
+                        events::render::SetShowWireframeCommand wireCmd; wireCmd.show = false;
+                        dispatcher.execute(wireCmd);
+                        events::render::SetShadowDebugModeCommand shadowCmd;
+                        shadowCmd.mode = types::ShadowDebugMode::None;
+                        dispatcher.execute(shadowCmd);
+
+                        // Set view mode
+                        events::render::SetViewModeCommand cmd;
+                        cmd.mode = static_cast<uint32_t>(viewModeMap[i]);
+                        dispatcher.execute(cmd);
+                    }
+                }
+
+                // Debug modes section
+                ImGui::Spacing();
+                ImGui::TextDisabled("Debug");
+                ImGui::Separator();
+                for (int i = DEBUG_START; i < TOTAL_COUNT; ++i)
+                {
+                    bool selected = (unifiedIdx == i);
+                    if (ImGui::Selectable(allLabels[i], selected))
+                    {
+                        // Clear all debug modes first
+                        events::render::SetShowWireframeCommand wireCmd; wireCmd.show = false;
+                        dispatcher.execute(wireCmd);
+                        events::render::SetShadowDebugModeCommand shadowCmd;
+                        shadowCmd.mode = types::ShadowDebugMode::None;
+                        dispatcher.execute(shadowCmd);
+
+                        // Reset view mode to Color
+                        events::render::SetViewModeCommand viewCmd;
+                        viewCmd.mode = 0;
+                        dispatcher.execute(viewCmd);
+
+                        // Apply selected debug mode
+                        switch (i)
+                        {
+                        case 12: wireCmd.show = true; dispatcher.execute(wireCmd); break;
+                        case 13: shadowCmd.mode = types::ShadowDebugMode::CascadeOverlay; dispatcher.execute(shadowCmd); break;
+                        case 14: shadowCmd.mode = types::ShadowDebugMode::TilePoolHeatmap; dispatcher.execute(shadowCmd); break;
+                        default: break;
+                        }
+                    }
+                }
+
+                ImGui::EndCombo();
             }
 
             if (ImGui::IsItemHovered())
-            {
                 ImGui::SetTooltip("Viewport visualization mode");
-            }
         }
         ImGui::End();
     }

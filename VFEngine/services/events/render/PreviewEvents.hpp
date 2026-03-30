@@ -79,6 +79,12 @@ namespace services::events::preview {
         std::string_view getName() const override { return "SetMeshPreviewParams"; }
     };
 
+    struct SetPreviewEnvironmentCommand : ::events::ICommand<void> {
+        PreviewInstanceId instanceId;
+        PreviewEnvironmentParams params;
+        std::string_view getName() const override { return "SetPreviewEnvironment"; }
+    };
+
    
     struct UpdateMeshCameraCommand : ::events::ICommand<void> {
         PreviewInstanceId instanceId;

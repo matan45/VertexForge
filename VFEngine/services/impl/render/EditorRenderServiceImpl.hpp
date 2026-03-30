@@ -26,6 +26,8 @@ namespace services
         uint32_t viewportHeight = 0;
         uint64_t frameCounter = 0;
         bool showNavmeshDebug = false;
+        bool showOverdraw = false;
+        uint32_t savedViewModeBeforeOverdraw = 0;
         types::ShadowDebugMode shadowDebugMode = types::ShadowDebugMode::None;
         ViewportTextureHandle lastViewportHandle{};
         bool viewportPrepared = false;  // true after prepare, consumed by render thread

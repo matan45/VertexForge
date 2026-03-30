@@ -3,8 +3,16 @@
 #include "animator/AnimatorAsset.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/project/ResourceEvents.hpp"
+#include "events/animation/AnimatorEvents.hpp"
+#include "events/scene/EntityTransformEvents.hpp"
 #include "imgui.h"
+#include <imgui_internal.h>
+#include <imgui_node_editor.h>
+#include <IconsFontAwesome6.h>
 #include <filesystem>
+#include <cctype>
+
+namespace ed = ax::NodeEditor;
 
 namespace fs = std::filesystem;
 
@@ -194,6 +202,13 @@ namespace windows
                     }
                 }
 
+                // Runtime debug overlay
+                if (debugMode && debugData.isValid)
+                {
+                    ImGui::Separator();
+                    propertiesPanel.drawRuntimeDebugOverlay(debugData, animatorData.get(), selectedTransitionId);
+                }
+
                 ImGui::EndChild();
 
                 ImGui::SameLine();
@@ -201,8 +216,25 @@ namespace windows
                 ImGui::BeginChild("NodeGraphPanel", ImVec2(graphWidth, innerSize.y), true,
                                   ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
 
+                // Poll debug data if in debug mode
+                if (debugMode && debugEntity.isValid())
+                {
+                    services::events::animator::GetAnimatorRuntimeDebugDataQuery debugQuery;
+                    debugQuery.entity = debugEntity;
+                    debugQuery.layerIndex = selectedLayerIndex;
+                    debugData = events::EventDispatcher::instance().query(debugQuery);
+                }
+                else
+                {
+                    debugData = services::AnimatorRuntimeDebugData{};
+                }
+
+                const services::AnimatorRuntimeDebugData* debugDataPtr =
+                    (debugMode && debugData.isValid) ? &debugData : nullptr;
+
                 nodeGraph.draw(animatorData.get(), selectedStateId, selectedTransitionId,
-                               isDirty, needsPositionInit, needsNavigateToContent, pendingZoomSteps);
+                               isDirty, needsPositionInit, needsNavigateToContent, pendingZoomSteps,
+                               debugDataPtr);
 
                 // Swap the edited graph back into the selected layer
                 if (animatorData && !animatorData->layers.empty() && selectedLayerIndex < animatorData->layers.size())
@@ -290,6 +322,128 @@ namespace windows
             }
         }
 
+        ImGui::SameLine();
+        ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
+        ImGui::SameLine();
+
+        // Debug mode toggle
+        if (debugMode)
+        {
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 0.2f, 1.0f));
+        }
+        if (ImGui::Button(ICON_FA_BUG " Debug"))
+        {
+            debugMode = !debugMode;
+            if (debugMode)
+            {
+                // Auto-select currently selected entity in scene
+                events::scene::GetSelectedEntityQuery selQuery;
+                auto selected = events::EventDispatcher::instance().query(selQuery);
+                if (selected.has_value())
+                {
+                    debugEntity = selected.value();
+                }
+            }
+        }
+        if (debugMode)
+        {
+            ImGui::PopStyleColor();
+        }
+
+        if (debugMode)
+        {
+            ImGui::SameLine();
+            if (debugEntity.isValid())
+            {
+                ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "Entity: %llu", debugEntity.id);
+            }
+            else
+            {
+                ImGui::TextColored(ImVec4(0.8f, 0.4f, 0.4f, 1.0f), "No entity");
+            }
+
+            ImGui::SameLine();
+            if (ImGui::SmallButton(ICON_FA_CROSSHAIRS " Pick"))
+            {
+                events::scene::GetSelectedEntityQuery selQuery;
+                auto selected = events::EventDispatcher::instance().query(selQuery);
+                if (selected.has_value())
+                {
+                    debugEntity = selected.value();
+                }
+            }
+        }
+
+        ImGui::SameLine();
+        ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
+        ImGui::SameLine();
+
+        // Search
+        ImGui::SetNextItemWidth(150.0f);
+        if (ImGui::InputTextWithHint("##Search", ICON_FA_MAGNIFYING_GLASS " Search...", searchBuffer, sizeof(searchBuffer)))
+        {
+            // Navigate to first matching state
+            if (searchBuffer[0] != '\0' && animatorData)
+            {
+                std::string query(searchBuffer);
+                for (auto& c : query) c = static_cast<char>(std::tolower(c));
+
+                for (const auto& state : animatorData->graph.states)
+                {
+                    std::string name = state.name;
+                    for (auto& c : name) c = static_cast<char>(std::tolower(c));
+
+                    if (name.find(query) != std::string::npos)
+                    {
+                        selectedStateId = state.id;
+                        auto* ctx = nodeGraph.getContext();
+                        if (ctx)
+                        {
+                            ed::SetCurrentEditor(ctx);
+                            ed::SelectNode(ed::NodeId(static_cast<uintptr_t>(state.id + 1000)), false);
+                            ed::NavigateToSelection();
+                            ed::SetCurrentEditor(nullptr);
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+
+        ImGui::SameLine();
+
+        // Validate graph
+        if (ImGui::SmallButton(ICON_FA_TRIANGLE_EXCLAMATION " Validate"))
+        {
+            if (animatorData)
+            {
+                validationWarnings = animation::AnimatorGraphValidator::validate(*animatorData);
+                showValidationPanel = !validationWarnings.empty();
+            }
+        }
+
+        if (!validationWarnings.empty())
+        {
+            ImGui::SameLine();
+            ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.2f, 1.0f), "(%zu)", validationWarnings.size());
+        }
+
         ImGui::Separator();
+
+        // Validation warnings panel
+        if (showValidationPanel && !validationWarnings.empty())
+        {
+            ImGui::BeginChild("ValidationPanel", ImVec2(0, 80), true);
+            for (const auto& warning : validationWarnings)
+            {
+                ImVec4 color = (warning.level == animation::GraphWarning::Level::Error)
+                    ? ImVec4(0.9f, 0.3f, 0.3f, 1.0f)
+                    : ImVec4(1.0f, 0.7f, 0.2f, 1.0f);
+                const char* icon = (warning.level == animation::GraphWarning::Level::Error)
+                    ? ICON_FA_CIRCLE_EXCLAMATION : ICON_FA_TRIANGLE_EXCLAMATION;
+                ImGui::TextColored(color, "%s %s", icon, warning.message.c_str());
+            }
+            ImGui::EndChild();
+        }
     }
 }

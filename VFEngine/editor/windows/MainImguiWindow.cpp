@@ -1,6 +1,10 @@
 #include "MainImguiWindow.hpp"
+#include "config/ThemeManager.hpp"
+#include "../handlers/EditorLayoutManager.hpp"
+#include <imgui_internal.h>
 #include "events/project/SceneEvents.hpp"
 #include "events/project/ApplicationEvents.hpp"
+#include "events/editor/EditorSettingsEvents.hpp"
 #include <imgui.h>
 
 namespace windows
@@ -36,7 +40,19 @@ namespace windows
         menuBar.setHeightmapGeneratorWindow(&heightmapGeneratorWindow);
         menuBar.setBackgroundRemovalWindow(&backgroundRemovalWindow);
         menuBar.setMemoryDiagnosticsWindow(&memoryDiagnosticsWindow);
+        menuBar.setEditorPreferencesWindow(&editorPreferencesWindow);
+
+        editorSettingsWindow.setWindows(&projectSettingsWindow, &editorCameraWindow,
+                                         &physicsConfigWindow, &audioConfigWindow,
+                                         &audioMixerWindow, &renderConfigWindow,
+                                         &inputActionMappingWindow, &pluginManagerWindow);
+        menuBar.setEditorSettingsWindow(&editorSettingsWindow);
+
         subscribeToEvents();
+
+        // Apply saved theme on startup
+        auto savedSettings = events::EventDispatcher::instance().query(events::editor::GetEditorSettingsQuery{});
+        windows::ThemeManager::applyTheme(savedSettings.appearance);
     }
 
     MainImguiWindow::~MainImguiWindow()
@@ -47,6 +63,7 @@ namespace windows
         dispatcher.unsubscribe(openImportDialogToken);
         dispatcher.unsubscribe(openInputMappingToken);
         dispatcher.unsubscribe(openBackgroundRemovalToken);
+        dispatcher.unsubscribe(settingsChangedToken);
     }
 
     void MainImguiWindow::subscribeToEvents()
@@ -87,6 +104,12 @@ namespace windows
             {
                 backgroundRemovalWindow.showWithFile(n.filePath);
             });
+
+        settingsChangedToken = dispatcher.subscribe<events::editor::EditorSettingsChangedNotification>(
+            [](const events::editor::EditorSettingsChangedNotification& n)
+            {
+                windows::ThemeManager::applyTheme(n.settings.appearance);
+            });
     }
 
     void MainImguiWindow::onSceneCleared()
@@ -97,15 +120,32 @@ namespace windows
     void MainImguiWindow::draw()
     {
         const ImGuiViewport* viewport = ImGui::GetMainViewport();
-        ImGui::SetNextWindowPos(viewport->WorkPos);
-        ImGui::SetNextWindowSize(viewport->WorkSize);
+        float toolbarH = engineToolbar.getHeight();
+        float statusBarH = statusBar.getHeight();
+
+        // Toolbar (between menu bar and dockspace)
+        engineToolbar.draw(viewport);
+
+        // Dockspace (offset by toolbar, shrunk by status bar)
+        ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x, viewport->WorkPos.y + toolbarH));
+        ImGui::SetNextWindowSize(ImVec2(viewport->WorkSize.x, viewport->WorkSize.y - toolbarH - statusBarH));
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
         if (ImGui::Begin("Vulkan Engine", nullptr, windowFlags))
         {
             ImGui::PopStyleVar(1);
 
-            ImGui::DockSpace(ImGui::GetID("MyDockSpace"), ImVec2(0.0f, 0.0f),
+            ImGuiID dockId = ImGui::GetID("MyDockSpace");
+            ImGui::DockSpace(dockId, ImVec2(0.0f, 0.0f),
                              ImGuiDockNodeFlags_PassthruCentralNode | ImGuiDockNodeFlags_None);
+
+            // Apply default layout on first launch
+            static bool layoutChecked = false;
+            if (!layoutChecked)
+            {
+                layoutChecked = true;
+                if (ImGui::DockBuilderGetNode(dockId) == nullptr)
+                    handlers::EditorLayoutManager::buildDefaultLayout(dockId);
+            }
 
             menuBar.draw();
             iblWindow.draw();
@@ -141,7 +181,12 @@ namespace windows
             heightmapGeneratorWindow.draw();
             backgroundRemovalWindow.draw();
             memoryDiagnosticsWindow.draw();
+            editorPreferencesWindow.draw();
+            editorSettingsWindow.draw();
         }
         ImGui::End();
+
+        // Status bar (below dockspace)
+        statusBar.draw(viewport);
     }
 }

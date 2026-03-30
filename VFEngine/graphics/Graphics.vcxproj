@@ -254,6 +254,8 @@
     <ClInclude Include="render\postprocess\effects\ToneMappingEffect.hpp" />
     <ClInclude Include="render\postprocess\effects\UnderwaterEffect.hpp" />
     <ClInclude Include="render\postprocess\effects\VignetteEffect.hpp" />
+    <ClInclude Include="render\preview\PreviewBackgroundRenderer.hpp" />
+    <ClInclude Include="render\preview\PreviewGridRenderer.hpp" />
     <ClInclude Include="render\preview\PreviewRenderHandler.hpp" />
     <ClInclude Include="render\preview\PreviewViewPort.hpp" />
     <ClInclude Include="render\shadow\CascadeShadowCalculator.hpp" />
@@ -506,6 +508,8 @@
     <ClCompile Include="render\postprocess\effects\ToneMappingEffect.cpp" />
     <ClCompile Include="render\postprocess\effects\UnderwaterEffect.cpp" />
     <ClCompile Include="render\postprocess\effects\VignetteEffect.cpp" />
+    <ClCompile Include="render\preview\PreviewBackgroundRenderer.cpp" />
+    <ClCompile Include="render\preview\PreviewGridRenderer.cpp" />
     <ClCompile Include="render\preview\PreviewRenderHandler.cpp" />
     <ClCompile Include="render\preview\PreviewViewPort.cpp" />
     <ClCompile Include="render\shadow\CascadeShadowCalculator.cpp" />

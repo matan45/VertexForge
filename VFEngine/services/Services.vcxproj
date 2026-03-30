@@ -92,9 +92,11 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="data\ActionMappingTypes.hpp" />
+    <ClInclude Include="data\AnimatorDebugTypes.hpp" />
     <ClInclude Include="data\AsyncLoadingTypes.hpp" />
     <ClInclude Include="data\CullingCategories.hpp" />
     <ClInclude Include="data\DTOs.hpp" />
+    <ClInclude Include="data\EditorKeybindingTypes.hpp" />
     <ClInclude Include="data\EditorMode.hpp" />
     <ClInclude Include="data\EntityConversion.hpp" />
     <ClInclude Include="data\EntityHandle.hpp" />
@@ -123,7 +125,9 @@
     <ClInclude Include="events\audio\AudioEvents.hpp" />
     <ClInclude Include="events\audio\AudioSettingsEvents.hpp" />
     <ClInclude Include="events\audio\AudioSnapshotEvents.hpp" />
+    <ClInclude Include="events\editor\EditorKeybindingEvents.hpp" />
     <ClInclude Include="events\editor\EditorModeEvents.hpp" />
+    <ClInclude Include="events\editor\EditorSettingsEvents.hpp" />
     <ClInclude Include="events\editor\SculptModeEvents.hpp" />
     <ClInclude Include="events\editor\UndoRedoEvents.hpp" />
     <ClInclude Include="events\input\ActionMappingEvents.hpp" />
@@ -225,7 +229,9 @@
     <ClInclude Include="impl\components\TextComponentService.hpp" />
     <ClInclude Include="impl\components\UIComponentService.hpp" />
     <ClInclude Include="impl\components\VFXComponentService.hpp" />
+    <ClInclude Include="impl\editor\EditorKeybindingServiceImpl.hpp" />
     <ClInclude Include="impl\editor\EditorModeServiceImpl.hpp" />
+    <ClInclude Include="impl\editor\EditorSettingsService.hpp" />
     <ClInclude Include="impl\editor\SculptModeServiceImpl.hpp" />
     <ClInclude Include="impl\editor\UndoRedoServiceImpl.hpp" />
     <ClInclude Include="impl\editor\WindowStateServiceImpl.hpp" />
@@ -290,6 +296,7 @@
     <ClInclude Include="interfaces\animation\IAnimationService.hpp" />
     <ClInclude Include="interfaces\asset\IAssetDatabaseService.hpp" />
     <ClInclude Include="interfaces\audio\IAudioService.hpp" />
+    <ClInclude Include="interfaces\editor\IEditorKeybindingService.hpp" />
     <ClInclude Include="interfaces\editor\IEditorModeService.hpp" />
     <ClInclude Include="interfaces\editor\ISculptModeService.hpp" />
     <ClInclude Include="interfaces\editor\IUndoRedoService.hpp" />
@@ -402,7 +409,9 @@
     <ClCompile Include="impl\components\UIScrollLayoutOps.cpp" />
     <ClCompile Include="impl\components\UISliderProgressOps.cpp" />
     <ClCompile Include="impl\components\VFXComponentService.cpp" />
+    <ClCompile Include="impl\editor\EditorKeybindingServiceImpl.cpp" />
     <ClCompile Include="impl\editor\EditorModeServiceImpl.cpp" />
+    <ClCompile Include="impl\editor\EditorSettingsService.cpp" />
     <ClCompile Include="impl\editor\SculptModeServiceImpl.cpp" />
     <ClCompile Include="impl\editor\UndoRedoServiceImpl.cpp" />
     <ClCompile Include="impl\editor\WindowStateServiceImpl.cpp" />

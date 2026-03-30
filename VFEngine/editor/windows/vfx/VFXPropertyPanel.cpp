@@ -1,6 +1,7 @@
 #include "VFXPropertyPanel.hpp"
 #include "imgui.h"
 #include <algorithm>
+#include <unordered_set>
 
 namespace editor::vfxeditor
 {
@@ -272,9 +273,93 @@ namespace editor::vfxeditor
 
         if (node->type == vfx::VFXNodeType::Emitter)
         {
+            // Advanced properties not shown in the compact node
+            static const std::unordered_set<std::string> coreProperties = {
+                "spawnRate", "lifetime", "startSize", "startVelocity",
+                "startColor", "looping", "texture"
+            };
+            static const std::unordered_set<std::string> handledProperties = {
+                "shapeType", "flipbookColumns", "flipbookRows", "flipbookFrameRate",
+                "flipbookRandomStart", "alphaClipThreshold", "additiveBlend", "meshPath",
+                "renderMode", "softParticleDistance", "stretchMultiplier",
+                "maxTrailPoints", "ribbonWidth", "ribbonMinDistance",
+                "uvScrollSpeedU", "uvScrollSpeedV"
+            };
+
+            if (ImGui::CollapsingHeader("Advanced Properties", ImGuiTreeNodeFlags_DefaultOpen))
+            {
+                float labelWidth = 160.0f;
+                float inputWidth = 80.0f;
+
+                for (auto& [propName, prop] : node->properties)
+                {
+                    if (coreProperties.count(propName)) continue;
+                    if (handledProperties.count(propName)) continue;
+                    if (propName.rfind("flipbook", 0) == 0) continue;
+                    if (propName.rfind("event", 0) == 0) continue;
+                    if (propName.rfind("collision", 0) == 0) continue;
+
+                    std::string widgetId = "##adv" + propName + std::to_string(node->id);
+
+                    switch (prop.type)
+                    {
+                    case vfx::VFXPropertyType::Float: {
+                        float* val = std::get_if<float>(&prop.value);
+                        if (val) {
+                            ImGui::Text("%s", propName.c_str());
+                            ImGui::SameLine(labelWidth);
+                            ImGui::PushItemWidth(inputWidth);
+                            if (ImGui::DragFloat(widgetId.c_str(), val, 0.01f, prop.min, prop.max, "%.2f"))
+                                notifyChanged();
+                            ImGui::PopItemWidth();
+                        }
+                        break;
+                    }
+                    case vfx::VFXPropertyType::Int: {
+                        int32_t* val = std::get_if<int32_t>(&prop.value);
+                        if (val) {
+                            ImGui::Text("%s", propName.c_str());
+                            ImGui::SameLine(labelWidth);
+                            ImGui::PushItemWidth(inputWidth);
+                            if (ImGui::DragInt(widgetId.c_str(), val, 1,
+                                    static_cast<int>(prop.min), static_cast<int>(prop.max)))
+                                notifyChanged();
+                            ImGui::PopItemWidth();
+                        }
+                        break;
+                    }
+                    case vfx::VFXPropertyType::Bool: {
+                        bool* val = std::get_if<bool>(&prop.value);
+                        if (val) {
+                            ImGui::Text("%s", propName.c_str());
+                            ImGui::SameLine(labelWidth);
+                            if (ImGui::Checkbox(widgetId.c_str(), val))
+                                notifyChanged();
+                        }
+                        break;
+                    }
+                    case vfx::VFXPropertyType::String: {
+                        std::string* val = std::get_if<std::string>(&prop.value);
+                        if (val) {
+                            ImGui::Text("%s", propName.c_str());
+                            ImGui::SameLine(labelWidth);
+                            ImGui::TextDisabled("%s", val->empty() ? "(none)" : val->c_str());
+                        }
+                        break;
+                    }
+                    default: break;
+                    }
+                }
+            }
+
+            ImGui::Spacing();
             drawFlipbookProperties(*node);
             ImGui::Spacing();
             drawRenderingProperties(*node);
+            ImGui::Spacing();
+            drawRibbonProperties(*node, 80.0f);
+            ImGui::Spacing();
+            drawUVScrollProperties(*node, 80.0f);
             ImGui::Spacing();
             drawEventsProperties(*node, 80.0f);
             ImGui::Spacing();

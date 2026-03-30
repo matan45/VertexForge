@@ -319,7 +319,8 @@ namespace render::mesh
         renderPassInfo.renderArea.extent = swapChain.getSwapchainExtent();
 
         std::array<vk::ClearValue, 2> clearValues{};
-        clearValues[0].color = vk::ClearColorValue(std::array<float, 4>{0.36f, 0.38f, 0.48f, 1.0f});
+        clearValues[0].color = vk::ClearColorValue(std::array<float, 4>{
+            clearColorValue.r, clearColorValue.g, clearColorValue.b, clearColorValue.a});
         clearValues[1].depthStencil = vk::ClearDepthStencilValue(1.0f, 0);
 
         renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());

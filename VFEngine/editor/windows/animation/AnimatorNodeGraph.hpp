@@ -1,6 +1,7 @@
 #pragma once
 
 #include "animator/AnimatorTypes.hpp"
+#include "data/AnimatorDebugTypes.hpp"
 #include <imgui_node_editor.h>
 #include <imgui.h>
 
@@ -20,14 +21,17 @@ namespace windows::animation
                   bool& isDirty,
                   bool& needsPositionInit,
                   bool& needsNavigateToContent,
-                  int& pendingZoomSteps);
+                  int& pendingZoomSteps,
+                  const services::AnimatorRuntimeDebugData* debugData = nullptr);
 
         ax::NodeEditor::EditorContext* getContext() const { return nodeEditorContext; }
 
     private:
         void drawSpecialNodes();
-        void drawStateNode(const animator::AnimatorState& state, uint32_t defaultStateId);
-        void drawTransitionLinks(animator::AnimatorData* animatorData);
+        void drawStateNode(const animator::AnimatorState& state, uint32_t defaultStateId,
+                           const services::AnimatorRuntimeDebugData* debugData = nullptr);
+        void drawTransitionLinks(animator::AnimatorData* animatorData,
+                                  const services::AnimatorRuntimeDebugData* debugData = nullptr);
         void handleNodeCreation(animator::AnimatorData* animatorData, bool& isDirty);
         void handleDeletion(animator::AnimatorData* animatorData,
                             uint32_t& selectedStateId,
@@ -46,7 +50,11 @@ namespace windows::animation
         uint32_t nodeIdToStateId(ax::NodeEditor::NodeId nodeId) const;
         uint32_t linkIdToTransitionId(ax::NodeEditor::LinkId linkId) const;
 
+        void handleCopyPaste(animator::AnimatorData* animatorData, bool& isDirty);
+
     private:
+        std::vector<animator::AnimatorState> clipboard;
+
         ax::NodeEditor::EditorContext* nodeEditorContext = nullptr;
 
         static constexpr uintptr_t SPECIAL_NODE_OFFSET = 100;

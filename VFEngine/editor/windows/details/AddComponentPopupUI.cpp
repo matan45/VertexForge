@@ -6,16 +6,12 @@
 
 namespace windows::details
 {
-    void AddComponentPopup::drawUISection(const ComponentPresence& c)
+    void AddComponentPopup::drawUISection(const ComponentPresence& c, const char* filter)
     {
         auto handle = c.handle;
         auto& dispatcher = events::EventDispatcher::instance();
 
-        ImGui::Spacing();
-        ImGui::TextDisabled("UI");
-        ImGui::Separator();
-
-        if (!c.hasUICanvas)
+        if (!c.hasUICanvas && matchesFilter("UI Canvas", filter))
         {
             if (ImGui::Selectable("  UI Canvas"))
             {
@@ -27,7 +23,7 @@ namespace windows::details
                 ImGui::SetTooltip("UI Canvas with reference resolution and auto-scaling");
         }
 
-        if (!c.hasUIRect)
+        if (!c.hasUIRect && matchesFilter("UI Rect", filter))
         {
             if (ImGui::Selectable("  UI Rect"))
             {
@@ -39,7 +35,7 @@ namespace windows::details
                 ImGui::SetTooltip("Rect transform for UI anchoring and layout");
         }
 
-        if (!c.hasUIImage)
+        if (!c.hasUIImage && matchesFilter("UI Image", filter))
         {
             if (ImGui::Selectable("  UI Image"))
             {
@@ -51,7 +47,7 @@ namespace windows::details
                 ImGui::SetTooltip("Screen-space image with texture and color tint");
         }
 
-        if (!c.hasUILabel)
+        if (!c.hasUILabel && matchesFilter("UI Label", filter))
         {
             if (ImGui::Selectable("  UI Label"))
             {
@@ -63,7 +59,7 @@ namespace windows::details
                 ImGui::SetTooltip("Text label with font, alignment, and overflow settings");
         }
 
-        if (!c.hasUIScroll)
+        if (!c.hasUIScroll && matchesFilter("UI Scroll", filter))
         {
             if (ImGui::Selectable("  UI Scroll"))
             {
@@ -75,7 +71,7 @@ namespace windows::details
                 ImGui::SetTooltip("Scrollable container with clipping and scrollbars");
         }
 
-        if (!c.hasUILayoutGroup)
+        if (!c.hasUILayoutGroup && matchesFilter("UI Layout Group", filter))
         {
             if (ImGui::Selectable("  UI Layout Group"))
             {
@@ -87,7 +83,7 @@ namespace windows::details
                 ImGui::SetTooltip("Auto-stack children vertically or horizontally");
         }
 
-        if (!c.hasUIButton)
+        if (!c.hasUIButton && matchesFilter("UI Button", filter))
         {
             if (ImGui::Selectable("  UI Button"))
             {
@@ -99,7 +95,7 @@ namespace windows::details
                 ImGui::SetTooltip("Interactive button with state colors and click events");
         }
 
-        if (!c.hasUITextInput)
+        if (!c.hasUITextInput && matchesFilter("UI Text Input", filter))
         {
             if (ImGui::Selectable("  UI Text Input"))
             {
@@ -111,7 +107,7 @@ namespace windows::details
                 ImGui::SetTooltip("Editable text input field with focus and selection");
         }
 
-        if (!c.hasUICheckbox)
+        if (!c.hasUICheckbox && matchesFilter("UI Checkbox", filter))
         {
             if (ImGui::Selectable("  UI Checkbox"))
             {
@@ -123,7 +119,7 @@ namespace windows::details
                 ImGui::SetTooltip("Toggleable checkbox with radio group support");
         }
 
-        if (!c.hasUIDropdown)
+        if (!c.hasUIDropdown && matchesFilter("UI Dropdown", filter))
         {
             if (ImGui::Selectable("  UI Dropdown"))
             {
@@ -135,7 +131,7 @@ namespace windows::details
                 ImGui::SetTooltip("Dropdown / combo box with selectable options");
         }
 
-        if (!c.hasUITabs)
+        if (!c.hasUITabs && matchesFilter("UI Tabs", filter))
         {
             if (ImGui::Selectable("  UI Tabs"))
             {
@@ -147,7 +143,7 @@ namespace windows::details
                 ImGui::SetTooltip("Tabbed panel container with switchable content views");
         }
 
-        if (!c.hasUISlider)
+        if (!c.hasUISlider && matchesFilter("UI Slider", filter))
         {
             if (ImGui::Selectable("  UI Slider"))
             {
@@ -159,7 +155,7 @@ namespace windows::details
                 ImGui::SetTooltip("Draggable slider for numeric value input");
         }
 
-        if (!c.hasUIProgressBar)
+        if (!c.hasUIProgressBar && matchesFilter("UI Progress Bar", filter))
         {
             if (ImGui::Selectable("  UI Progress Bar"))
             {
@@ -171,7 +167,7 @@ namespace windows::details
                 ImGui::SetTooltip("Non-interactive bar displaying progress");
         }
 
-        if (!c.hasUIAnimation)
+        if (!c.hasUIAnimation && matchesFilter("UI Animation", filter))
         {
             if (ImGui::Selectable("  UI Animation"))
             {
@@ -183,7 +179,7 @@ namespace windows::details
                 ImGui::SetTooltip("Tween animation system for UI elements");
         }
 
-        if (!c.hasUIMask)
+        if (!c.hasUIMask && matchesFilter("UI Mask", filter))
         {
             if (ImGui::Selectable("  UI Mask"))
             {
@@ -195,7 +191,7 @@ namespace windows::details
                 ImGui::SetTooltip("Stencil mask for clipping children to arbitrary shapes");
         }
 
-        if (!c.hasUIDraggable)
+        if (!c.hasUIDraggable && matchesFilter("UI Draggable", filter))
         {
             if (ImGui::Selectable("  UI Draggable"))
             {
@@ -207,7 +203,7 @@ namespace windows::details
                 ImGui::SetTooltip("Marks this element as a drag source for drag-and-drop");
         }
 
-        if (!c.hasUIDropTarget)
+        if (!c.hasUIDropTarget && matchesFilter("UI Drop Target", filter))
         {
             if (ImGui::Selectable("  UI Drop Target"))
             {
@@ -220,7 +216,7 @@ namespace windows::details
         }
     }
 
-    void AddComponentPopup::drawPluginSection(const ComponentPresence& c)
+    void AddComponentPopup::drawPluginSection(const ComponentPresence& c, const char* filter)
     {
         auto handle = c.handle;
         auto& dispatcher = events::EventDispatcher::instance();
@@ -254,12 +250,11 @@ namespace windows::details
         if (available.empty())
             return;
 
-        ImGui::Spacing();
-        ImGui::TextDisabled("Plugin");
-        ImGui::Separator();
-
         for (const auto& [qualifiedName, displayName] : available)
         {
+            if (!matchesFilter(displayName.c_str(), filter))
+                continue;
+
             std::string label = "  " + displayName;
             if (ImGui::Selectable(label.c_str()))
             {

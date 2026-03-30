@@ -187,6 +187,8 @@ namespace render::mesh
         std::string defaultMaterialPath;
 
         bool showBoundingBox = false;
+        bool wireframeMode = false;
+        int materialOverrideMode = 0; // 0=default, 1=clay, 2=normals, 3=UVs
         int highlightedSubMesh = -1;
 
         float lodBias = 0.0f;

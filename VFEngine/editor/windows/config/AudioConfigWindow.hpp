@@ -23,6 +23,7 @@ namespace windows
 
     public:
         void draw();
+        void drawContent();
         void show();
     };
 }

@@ -47,6 +47,7 @@ namespace services
         [[nodiscard]] std::vector<LODInfo> getPreviewMeshLODInfo(PreviewInstanceId instanceId) const override;
         [[nodiscard]] math::AABB getPreviewMeshBounds(PreviewInstanceId instanceId) const override;
         void setMeshPreviewParams(PreviewInstanceId instanceId, const MeshPreviewParams& params) override;
+        void setPreviewEnvironment(PreviewInstanceId instanceId, const PreviewEnvironmentParams& params) override;
         void updateMeshCamera(PreviewInstanceId instanceId, const glm::mat4& view, const glm::mat4& projection,
                               const glm::vec3& cameraPos) override;
         [[nodiscard]] ViewportTextureHandle renderMeshPreview(PreviewInstanceId instanceId) override;

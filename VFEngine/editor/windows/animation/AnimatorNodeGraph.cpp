@@ -1,4 +1,5 @@
 #include "AnimatorNodeGraph.hpp"
+#include <IconsFontAwesome6.h>
 #include <algorithm>
 #include <cmath>
 #include <filesystem>
@@ -31,7 +32,8 @@ namespace windows::animation
                                   bool& isDirty,
                                   bool& needsPositionInit,
                                   bool& needsNavigateToContent,
-                                  int& pendingZoomSteps)
+                                  int& pendingZoomSteps,
+                                  const services::AnimatorRuntimeDebugData* debugData)
     {
         if (!animatorData || !nodeEditorContext)
             return;
@@ -92,13 +94,14 @@ namespace windows::animation
 
         for (const auto& state : animatorData->graph.states)
         {
-            drawStateNode(state, animatorData->graph.defaultStateId);
+            drawStateNode(state, animatorData->graph.defaultStateId, debugData);
         }
 
-        drawTransitionLinks(animatorData);
+        drawTransitionLinks(animatorData, debugData);
 
         handleNodeCreation(animatorData, isDirty);
         handleDeletion(animatorData, selectedStateId, selectedTransitionId, isDirty);
+        handleCopyPaste(animatorData, isDirty);
 
         updateSelection(selectedStateId, selectedTransitionId);
 
@@ -134,16 +137,33 @@ namespace windows::animation
         ed::EndNode();
     }
 
-    void AnimatorNodeGraph::drawStateNode(const animator::AnimatorState& state, uint32_t defaultStateId)
+    void AnimatorNodeGraph::drawStateNode(const animator::AnimatorState& state, uint32_t defaultStateId,
+                                          const services::AnimatorRuntimeDebugData* debugData)
     {
         ed::NodeId nodeId = stateIdToNodeId(state.id);
         ed::PinId inputPinId = statePinId(state.id, true);
         ed::PinId outputPinId = statePinId(state.id, false);
 
         bool isDefault = (state.id == defaultStateId);
+        bool isActiveState = debugData && debugData->currentStateId == state.id;
+        bool isPreviousState = debugData && debugData->isBlending && debugData->previousStateId == state.id;
 
         const ImVec4& nodeColor = isDefault ? DEFAULT_STATE_COLOR : STATE_NODE_COLOR;
         ed::PushStyleColor(ed::StyleColor_NodeBg, nodeColor);
+
+        // Active state: pulsing green border
+        if (isActiveState)
+        {
+            float pulse = 0.6f + 0.4f * std::sin(static_cast<float>(ImGui::GetTime()) * 3.0f);
+            ed::PushStyleColor(ed::StyleColor_NodeBorder, ImVec4(0.2f, pulse, 0.2f, 1.0f));
+            ed::PushStyleVar(ed::StyleVar_NodeBorderWidth, 3.0f);
+        }
+        else if (isPreviousState)
+        {
+            float fade = 1.0f - debugData->blendProgress;
+            ed::PushStyleColor(ed::StyleColor_NodeBorder, ImVec4(0.9f, 0.7f, 0.2f, fade));
+            ed::PushStyleVar(ed::StyleVar_NodeBorderWidth, 2.5f);
+        }
 
         ed::BeginNode(nodeId);
 
@@ -158,6 +178,10 @@ namespace windows::animation
         if (isDefault)
         {
             ImGui::TextColored(ImVec4(0.7f, 1.0f, 0.7f, 1.0f), "(Default)");
+        }
+        if (isActiveState)
+        {
+            ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.3f, 1.0f), ICON_FA_PLAY " Active");
         }
         if (state.blendTree.has_value())
         {
@@ -179,10 +203,17 @@ namespace windows::animation
         ed::EndPin();
 
         ed::EndNode();
+
+        if (isActiveState || isPreviousState)
+        {
+            ed::PopStyleVar();
+            ed::PopStyleColor();
+        }
         ed::PopStyleColor();
     }
 
-    void AnimatorNodeGraph::drawTransitionLinks(animator::AnimatorData* animatorData)
+    void AnimatorNodeGraph::drawTransitionLinks(animator::AnimatorData* animatorData,
+                                                const services::AnimatorRuntimeDebugData* debugData)
     {
         for (const auto& transition : animatorData->graph.transitions)
         {
@@ -200,11 +231,25 @@ namespace windows::animation
 
             ed::PinId endPin = statePinId(transition.targetStateId, true);
 
-            ImVec4 linkColor = transition.conditions.empty()
-                                   ? ImVec4(0.8f, 0.8f, 0.8f, 1.0f)
-                                   : ImVec4(0.4f, 0.8f, 1.0f, 1.0f);
+            bool isActive = debugData && debugData->activeTransitionId == transition.id && debugData->isBlending;
 
-            ed::Link(linkId, startPin, endPin, linkColor, 2.0f);
+            ImVec4 linkColor;
+            float thickness;
+            if (isActive)
+            {
+                float pulse = 0.7f + 0.3f * std::sin(static_cast<float>(ImGui::GetTime()) * 4.0f);
+                linkColor = ImVec4(0.2f, pulse, 0.2f, 1.0f);
+                thickness = 4.0f;
+            }
+            else
+            {
+                linkColor = transition.conditions.empty()
+                    ? ImVec4(0.8f, 0.8f, 0.8f, 1.0f)
+                    : ImVec4(0.4f, 0.8f, 1.0f, 1.0f);
+                thickness = 2.0f;
+            }
+
+            ed::Link(linkId, startPin, endPin, linkColor, thickness);
         }
 
         if (animatorData->graph.defaultStateId != 0)
@@ -477,5 +522,59 @@ namespace windows::animation
             return static_cast<uint32_t>(id - LINK_OFFSET);
         }
         return 0;
+    }
+
+    void AnimatorNodeGraph::handleCopyPaste(animator::AnimatorData* animatorData, bool& isDirty)
+    {
+        if (!animatorData)
+            return;
+
+        bool canHandleKeys = ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows);
+        if (!canHandleKeys) return;
+
+        ImGuiIO& io = ImGui::GetIO();
+
+        // Copy: Ctrl+C
+        if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_C))
+        {
+            std::vector<ed::NodeId> selectedNodes;
+            int count = ed::GetSelectedObjectCount();
+            selectedNodes.resize(count);
+            int nodeCount = ed::GetSelectedNodes(selectedNodes.data(), count);
+
+            clipboard.clear();
+            for (int i = 0; i < nodeCount; ++i)
+            {
+                uint32_t stateId = nodeIdToStateId(selectedNodes[i]);
+                if (stateId == 0)
+                    continue;
+
+                for (const auto& state : animatorData->graph.states)
+                {
+                    if (state.id == stateId)
+                    {
+                        clipboard.push_back(state);
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Paste: Ctrl+V
+        if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_V) && !clipboard.empty())
+        {
+            glm::vec2 offset(50.0f, 50.0f);
+
+            for (const auto& copiedState : clipboard)
+            {
+                animator::AnimatorState newState = copiedState;
+                newState.id = animatorData->graph.nextStateId++;
+                newState.name = copiedState.name + " (Copy)";
+                newState.position = copiedState.position + offset;
+                animatorData->graph.states.push_back(std::move(newState));
+            }
+
+            isDirty = true;
+        }
     }
 }

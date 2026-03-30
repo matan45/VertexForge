@@ -734,6 +734,15 @@ void main() {
         }
     }
 
+    // Overdraw Visualization - flat per-fragment color for heatmap accumulation
+    if (viewModeValue == 20u) {
+        // Output a flat low-intensity color per fragment.
+        // With additive-like accumulation, overlapping fragments produce brighter colors.
+        // Single coverage: green tint. Multiple: shifts toward yellow/red.
+        float depth01 = gl_FragCoord.z;
+        color = vec3(0.15, 0.4, 0.05); // Base green per fragment
+    }
+
 #ifdef WBOIT_ENABLED
     // Weighted Blended OIT (McGuire & Bavoil 2013)
     float viewZ = linearizeDepth(gl_FragCoord.z);

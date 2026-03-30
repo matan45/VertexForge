@@ -1,0 +1,130 @@
+#include "EditorSettingsService.hpp"
+#include "../../events/editor/EditorSettingsEvents.hpp"
+#include "config/EditorPreferencesSerializer.hpp"
+#include "print/Log.hpp"
+#include <fstream>
+#include <filesystem>
+#include <cstdlib>
+
+namespace services
+{
+    using json = nlohmann::json;
+
+    EditorSettingsService::EditorSettingsService()
+    {
+        currentSettings = config::EditorPreferences::createDefault();
+    }
+
+    void EditorSettingsService::registerEventHandlers(::events::EventDispatcher& dispatcher)
+    {
+        dispatcher.registerCommandHandler<::events::editor::SetEditorSettingsCommand>(
+            [this](const ::events::editor::SetEditorSettingsCommand& cmd)
+            {
+                std::lock_guard<std::mutex> lock(settingsMutex);
+                ensureLoaded();
+                currentSettings = cmd.settings;
+                save();
+                notifySettingsChanged();
+                return true;
+            });
+
+        dispatcher.registerCommandHandler<::events::editor::SaveEditorSettingsCommand>(
+            [this](const ::events::editor::SaveEditorSettingsCommand&)
+            {
+                std::lock_guard<std::mutex> lock(settingsMutex);
+                ensureLoaded();
+                save();
+                return true;
+            });
+
+        dispatcher.registerCommandHandler<::events::editor::ResetEditorSettingsCommand>(
+            [this](const ::events::editor::ResetEditorSettingsCommand&)
+            {
+                std::lock_guard<std::mutex> lock(settingsMutex);
+                currentSettings = config::EditorPreferences::createDefault();
+                save();
+                notifySettingsChanged();
+                return true;
+            });
+
+        dispatcher.registerQueryHandler<::events::editor::GetEditorSettingsQuery>(
+            [this](const ::events::editor::GetEditorSettingsQuery&)
+            {
+                std::lock_guard<std::mutex> lock(settingsMutex);
+                ensureLoaded();
+                return currentSettings;
+            });
+    }
+
+    void EditorSettingsService::ensureLoaded()
+    {
+        if (loaded) return;
+        loaded = true;
+
+        std::string path = getSettingsPath();
+        if (path.empty()) return;
+
+        if (!std::filesystem::exists(path))
+        {
+            save();
+            return;
+        }
+
+        try
+        {
+            std::ifstream file(path);
+            if (!file.is_open()) return;
+
+            json j = json::parse(file);
+            file.close();
+
+            if (!j.is_null())
+                currentSettings = j.get<config::EditorPreferences>();
+        }
+        catch (const std::exception& e)
+        {
+            vfLogWarning("[EditorSettingsService] Failed to load settings: {}", e.what());
+            currentSettings = config::EditorPreferences::createDefault();
+        }
+    }
+
+    void EditorSettingsService::save()
+    {
+        std::string path = getSettingsPath();
+        if (path.empty()) return;
+
+        try
+        {
+            auto parentDir = std::filesystem::path(path).parent_path();
+            if (!std::filesystem::exists(parentDir))
+                std::filesystem::create_directories(parentDir);
+
+            json j = currentSettings;
+            std::ofstream file(path);
+            file << j.dump(2);
+            file.close();
+        }
+        catch (const std::exception& e)
+        {
+            vfLogError("[EditorSettingsService] Failed to save settings: {}", e.what());
+        }
+    }
+
+    void EditorSettingsService::notifySettingsChanged()
+    {
+        ::events::editor::EditorSettingsChangedNotification notification;
+        notification.settings = currentSettings;
+        ::events::EventDispatcher::instance().publish(notification);
+    }
+
+    std::string EditorSettingsService::getSettingsPath() const
+    {
+        const char* home = std::getenv("USERPROFILE");
+        if (!home)
+            home = std::getenv("HOME");
+        if (!home)
+            return "";
+
+        return std::string(home) + "/.vertexforge/editor_settings.json";
+    }
+}

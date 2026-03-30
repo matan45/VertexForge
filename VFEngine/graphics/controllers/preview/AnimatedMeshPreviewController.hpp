@@ -88,6 +88,7 @@ namespace controllers
         void setAlbedo(const glm::vec4& color) { renderData.albedo = color; }
         void setMetallic(float value) { renderData.metallic = value; }
         void setRoughness(float value) { renderData.roughness = value; }
+        void setClearColor(const glm::vec4& color);
 
         void* render();
 

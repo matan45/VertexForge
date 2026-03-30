@@ -5,8 +5,11 @@
 #include "AnimatorPropertiesPanel.hpp"
 #include "AnimatorLayerPanel.hpp"
 #include "BoneMaskEditorPanel.hpp"
+#include "AnimatorGraphValidator.hpp"
 #include "animator/AnimatorTypes.hpp"
 #include "providers/PreviewInstanceId.hpp"
+#include "data/AnimatorDebugTypes.hpp"
+#include "data/EntityHandle.hpp"
 #include <string>
 #include <memory>
 
@@ -36,7 +39,19 @@ namespace windows
 
         services::PreviewInstanceId instanceId;
 
+        // Debug mode
+        bool debugMode = false;
+        services::EntityHandle debugEntity = services::EntityHandle::invalid();
+        services::AnimatorRuntimeDebugData debugData;
+
         uint32_t selectedLayerIndex = 0;
+
+        // Search
+        char searchBuffer[256] = {};
+
+        // Validation
+        std::vector<animation::GraphWarning> validationWarnings;
+        bool showValidationPanel = false;
 
         animation::AnimatorNodeGraph nodeGraph;
         animation::AnimatorPropertiesPanel propertiesPanel;
