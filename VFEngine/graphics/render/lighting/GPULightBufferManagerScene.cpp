@@ -348,6 +348,7 @@ namespace render::lighting
         counts.pointCount = pointCount;
         counts.spotCount = spotCount;
         counts.shadowIntensity = shadowIntensity;
+        counts.rtShadowActive = rtShadowActive ? 1u : 0u;
 
         std::memcpy(countsMapped, &counts, sizeof(GPULightCounts));
     }
@@ -359,6 +360,15 @@ namespace render::lighting
             shadowIntensity = intensity;
             updateCountsBuffer();
             needsUpload = true;
+        }
+    }
+
+    void GPULightBufferManager::setRTShadowActive(bool active)
+    {
+        if (rtShadowActive != active)
+        {
+            rtShadowActive = active;
+            updateCountsBuffer();
         }
     }
 

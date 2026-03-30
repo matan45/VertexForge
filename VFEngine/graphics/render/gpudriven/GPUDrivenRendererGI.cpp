@@ -527,6 +527,9 @@ namespace render::gpudriven
         const auto& camData = cameraBuffer->getData();
         bool useDenoiser = rtShadowDenoiser && rtShadowDenoiser->isInitialized();
 
+        // Set runtime flag so fragment shader uses RT for directional shadows
+        lightBufferManager->setRTShadowActive(useDenoiser);
+
         rtShadowPipeline->dispatch(cmd,
             depthPrepass->getDepthImageView(),
             depthPrepass->getDepthImage(),

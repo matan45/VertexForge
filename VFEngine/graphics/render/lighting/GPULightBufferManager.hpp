@@ -88,6 +88,7 @@ namespace render::lighting
 
         shadow::ShadowSystem* shadowSystem = nullptr;
         float shadowIntensity = 0.5f;
+        bool rtShadowActive = false;
         std::unordered_set<uint32_t> registeredShadowLights;
 
         struct PendingShadowReg
@@ -135,6 +136,7 @@ namespace render::lighting
         void setShadowSystem(shadow::ShadowSystem* system) { shadowSystem = system; }
         void setShadowIntensity(float intensity);
         float getShadowIntensity() const { return shadowIntensity; }
+        void setRTShadowActive(bool active);
 
     private:
         void createBuffers();

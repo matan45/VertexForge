@@ -53,6 +53,8 @@ namespace render::lighting
         uint32_t pointCount;
         uint32_t spotCount;
         float shadowIntensity;
+        uint32_t rtShadowActive;  // 1 = use RT for directional shadows, 0 = use VSM
+        uint32_t pad[3];
     };
-    static_assert(sizeof(GPULightCounts) == 16);
+    static_assert(sizeof(GPULightCounts) == 32);
 }

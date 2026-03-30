@@ -94,6 +94,10 @@ struct LightCounts {
     uint pointCount;
     uint spotCount;
     float shadowIntensity;
+    uint rtShadowActive;
+    uint _lcpad1;
+    uint _lcpad2;
+    uint _lcpad3;
 };
 
 layout(std140, set = 2, binding = 3) uniform LightCountsUBO {

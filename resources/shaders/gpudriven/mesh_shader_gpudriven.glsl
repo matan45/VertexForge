@@ -326,6 +326,17 @@ layout(set = CAUSTIC_SET, binding = 1) uniform CausticParamsUBO {
 layout(set = 13, binding = 0) uniform sampler2D rtShadowMask;
 #endif
 
+float sampleDirectionalShadowHybrid(int shadowIndex, int shadowMode,
+                                     vec3 worldPos, vec3 N, float viewZ, vec3 cameraPos) {
+#ifdef RT_SHADOW_ENABLED
+    if (lightCounts.rtShadowActive != 0u) {
+        vec2 screenUV = gl_FragCoord.xy * camera.screenParams.zw;
+        return texture(rtShadowMask, screenUV).r;
+    }
+#endif
+    return sampleDirectionalShadowAuto(shadowIndex, shadowMode, worldPos, N, viewZ, cameraPos);
+}
+
 const uint LIGHT_INDEX_MASK = 0x7FFFFFFFu;
 
 float linearizeDepth(float windowZ) {
@@ -519,12 +530,7 @@ void main() {
 
     for (uint i = 0u; i < lightCounts.directionalCount; ++i) {
         DirectionalLight light = directionalLights[i];
-#ifdef RT_SHADOW_ENABLED
-        vec2 screenUV = gl_FragCoord.xy * camera.screenParams.zw;
-        float shadow = texture(rtShadowMask, screenUV).r;
-#else
-        float shadow = sampleDirectionalShadowAuto(light.shadowIndex, light.shadowMode, fragWorldPos, N, linearZ, camera.cameraPos);
-#endif
+        float shadow = sampleDirectionalShadowHybrid(light.shadowIndex, light.shadowMode, fragWorldPos, N, linearZ, camera.cameraPos);
         minShadow = min(minShadow, shadow);
         vec3 lightContrib = evaluateDirectionalLight(N, V, albedo, metallic, roughness, F0, light) * shadow;
 #ifdef CAUSTICS_ENABLED
@@ -652,12 +658,7 @@ void main() {
 
         for (uint i = 0u; i < lightCounts.directionalCount; ++i) {
             DirectionalLight light = directionalLights[i];
-#ifdef RT_SHADOW_ENABLED
-            vec2 shadowUV = gl_FragCoord.xy * camera.screenParams.zw;
-            float shadow = texture(rtShadowMask, shadowUV).r;
-#else
-            float shadow = sampleDirectionalShadowAuto(light.shadowIndex, light.shadowMode, fragWorldPos, N, linearZ, camera.cameraPos);
-#endif
+            float shadow = sampleDirectionalShadowHybrid(light.shadowIndex, light.shadowMode, fragWorldPos, N, linearZ, camera.cameraPos);
             totalShadow = min(totalShadow, shadow);
         }
 
