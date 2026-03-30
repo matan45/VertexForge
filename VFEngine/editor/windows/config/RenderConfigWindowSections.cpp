@@ -15,7 +15,7 @@ namespace windows
 
             if (ImGui::Checkbox("Enable Shadows", &settings.shadows.enabled))
             {
-                isDirty = true;
+                markDirty();
             }
 
             if (settings.shadows.enabled)
@@ -41,7 +41,7 @@ namespace windows
         if (ImGui::Combo("Quality", &currentQuality, qualityItems, 5))
         {
             settings.shadows.quality = static_cast<types::ShadowQuality>(currentQuality);
-            isDirty = true;
+            markDirty();
         }
         if (ImGui::IsItemHovered())
         {
@@ -60,7 +60,7 @@ namespace windows
         if (ImGui::Combo("Shadow Mode", &currentDirMode, dirModes, 2))
         {
             settings.shadows.directionalMode = static_cast<types::DirectionalShadowMode>(currentDirMode);
-            isDirty = true;
+            markDirty();
         }
         if (ImGui::IsItemHovered())
         {
@@ -76,7 +76,7 @@ namespace windows
             if (ImGui::SliderInt("Cascade Count", &cascades, 1, 4))
             {
                 settings.shadows.cascadeCount = static_cast<uint8_t>(cascades);
-                isDirty = true;
+                markDirty();
             }
 
             const char* splitModes[] = {"Linear", "Logarithmic", "Practical"};
@@ -84,7 +84,7 @@ namespace windows
             if (ImGui::Combo("Split Mode", &currentMode, splitModes, 3))
             {
                 settings.shadows.cascadeSplitMode = static_cast<types::CascadeSplitMode>(currentMode);
-                isDirty = true;
+                markDirty();
             }
         }
         else
@@ -93,7 +93,7 @@ namespace windows
             if (ImGui::SliderInt("Level Count", &levels, 4, 16))
             {
                 settings.shadows.clipmapLevelCount = static_cast<uint8_t>(levels);
-                isDirty = true;
+                markDirty();
             }
             if (ImGui::IsItemHovered())
             {
@@ -104,7 +104,7 @@ namespace windows
 
             if (ImGui::DragFloat("Base Extent (m)", &settings.shadows.clipmapBaseExtent, 0.5f, 0.5f, 100.0f, "%.1f"))
             {
-                isDirty = true;
+                markDirty();
             }
             if (ImGui::IsItemHovered())
             {
@@ -121,17 +121,17 @@ namespace windows
         ImGui::Spacing();
 
         if (ImGui::DragFloat("Depth Bias", &settings.shadows.shadowBias, 0.0001f, 0.0f, 0.1f, "%.4f"))
-            isDirty = true;
+            markDirty();
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip("Constant depth offset to reduce shadow acne.");
 
         if (ImGui::DragFloat("Slope Bias", &settings.shadows.slopeBias, 0.01f, 0.0f, 5.0f, "%.2f"))
-            isDirty = true;
+            markDirty();
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip("Slope-scaled bias for surfaces at grazing angles.\nHigher values reduce shadow acne on angled surfaces.");
 
         if (ImGui::DragFloat("Normal Bias", &settings.shadows.normalBias, 0.001f, 0.0f, 1.0f, "%.3f"))
-            isDirty = true;
+            markDirty();
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip("Offset along surface normal to reduce peter-panning.\nHigher values push shadows away from caster.");
     }
@@ -143,17 +143,17 @@ namespace windows
         ImGui::Spacing();
 
         if (ImGui::Checkbox("Soft Shadows (PCSS)", &settings.shadows.softShadows))
-            isDirty = true;
+            markDirty();
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip("Enable/disable PCSS contact-hardening soft shadows globally.\nWhen off, hard shadows are used (single tap).");
 
         if (ImGui::DragFloat("Light Size", &settings.shadows.globalLightSize, 0.01f, 0.01f, 10.0f))
-            isDirty = true;
+            markDirty();
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip("Controls penumbra width for soft shadows (PCSS)");
 
         if (ImGui::DragFloat("Search Radius", &settings.shadows.searchRadiusMultiplier, 0.01f, 0.1f, 5.0f))
-            isDirty = true;
+            markDirty();
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip("Multiplier for PCSS blocker search radius");
 
@@ -162,7 +162,7 @@ namespace windows
         ImGui::Spacing();
 
         if (ImGui::SliderFloat("Shadow Intensity", &settings.shadows.shadowIntensity, 0.0f, 1.0f, "%.2f"))
-            isDirty = true;
+            markDirty();
         if (ImGui::IsItemHovered())
         {
             ImGui::SetTooltip("Controls how dark shadowed areas are.\n"
@@ -199,7 +199,7 @@ namespace windows
         if (ImGui::Combo("Debug Mode", &currentMode, debugModes, 4))
         {
             settings.shadows.debugMode = static_cast<types::ShadowDebugMode>(currentMode);
-            isDirty = true;
+            markDirty();
         }
         if (ImGui::IsItemHovered())
         {
@@ -308,7 +308,7 @@ namespace windows
 
             if (ImGui::Checkbox("Enable Terrain Rendering", &settings.terrain.enabled))
             {
-                isDirty = true;
+                markDirty();
                 events::render::SetTerrainRenderingEnabledCommand cmd;
                 cmd.enabled = settings.terrain.enabled;
                 dispatcher.execute(cmd);
@@ -322,7 +322,7 @@ namespace windows
 
                 if (ImGui::DragFloat("LOD Bias", &settings.terrain.lodBias, 0.1f, 0.1f, 5.0f, "%.1f"))
                 {
-                    isDirty = true;
+                    markDirty();
                     events::render::SetTerrainLODBiasCommand cmd;
                     cmd.bias = settings.terrain.lodBias;
                     dispatcher.execute(cmd);
@@ -332,7 +332,7 @@ namespace windows
 
                 if (ImGui::DragFloat("Error Threshold", &settings.terrain.errorThreshold, 0.1f, 0.5f, 10.0f, "%.1f"))
                 {
-                    isDirty = true;
+                    markDirty();
                     events::render::SetTerrainErrorThresholdCommand cmd;
                     cmd.threshold = settings.terrain.errorThreshold;
                     dispatcher.execute(cmd);
@@ -346,7 +346,7 @@ namespace windows
 
                 if (ImGui::DragFloat("Texture Scale", &settings.terrain.textureScale, 0.01f, 0.01f, 1.0f, "%.2f"))
                 {
-                    isDirty = true;
+                    markDirty();
                     events::render::SetTerrainTextureScaleCommand cmd;
                     cmd.scale = settings.terrain.textureScale;
                     dispatcher.execute(cmd);
@@ -384,7 +384,7 @@ namespace windows
 
             if (changed)
             {
-                isDirty = true;
+                markDirty();
                 services::events::vfxruntime::SetVFXLODConfigCommand cmd;
                 cmd.lod0Distance = settings.vfxLOD.lod0Distance;
                 cmd.lod1Distance = settings.vfxLOD.lod1Distance;
@@ -450,7 +450,7 @@ namespace windows
 
             if (changed)
             {
-                isDirty = true;
+                markDirty();
                 services::events::animation::SetAnimationLODConfigCommand cmd;
                 cmd.lod0Distance = settings.animationLOD.lod0Distance;
                 cmd.lod1Distance = settings.animationLOD.lod1Distance;

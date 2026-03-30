@@ -11,6 +11,8 @@ namespace windows
         bool settingsLoaded = false;
         bool isDirty = false;
 
+        void drawPresetSection();
+        void markDirty();
         void drawCullingSection();
         void drawShadowSection();
         void drawShadowQualitySettings();

@@ -75,6 +75,7 @@ namespace services {
 	class EditorRenderServiceImpl;
 	class SaveService;
 	class ConfigService;
+	class EditorSettingsService;
 }
 
 namespace handlers {
@@ -147,6 +148,7 @@ namespace handlers {
 
 		std::unique_ptr<services::SaveService> saveService;
 		std::unique_ptr<services::ConfigService> configService;
+		std::unique_ptr<services::EditorSettingsService> editorSettingsService;
 
 		std::unique_ptr<plugin::PluginManager> pluginManager;
 

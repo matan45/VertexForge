@@ -124,6 +124,7 @@
     <ClInclude Include="events\audio\AudioSettingsEvents.hpp" />
     <ClInclude Include="events\audio\AudioSnapshotEvents.hpp" />
     <ClInclude Include="events\editor\EditorModeEvents.hpp" />
+    <ClInclude Include="events\editor\EditorSettingsEvents.hpp" />
     <ClInclude Include="events\editor\SculptModeEvents.hpp" />
     <ClInclude Include="events\editor\UndoRedoEvents.hpp" />
     <ClInclude Include="events\input\ActionMappingEvents.hpp" />
@@ -226,6 +227,7 @@
     <ClInclude Include="impl\components\UIComponentService.hpp" />
     <ClInclude Include="impl\components\VFXComponentService.hpp" />
     <ClInclude Include="impl\editor\EditorModeServiceImpl.hpp" />
+    <ClInclude Include="impl\editor\EditorSettingsService.hpp" />
     <ClInclude Include="impl\editor\SculptModeServiceImpl.hpp" />
     <ClInclude Include="impl\editor\UndoRedoServiceImpl.hpp" />
     <ClInclude Include="impl\editor\WindowStateServiceImpl.hpp" />
@@ -403,6 +405,7 @@
     <ClCompile Include="impl\components\UISliderProgressOps.cpp" />
     <ClCompile Include="impl\components\VFXComponentService.cpp" />
     <ClCompile Include="impl\editor\EditorModeServiceImpl.cpp" />
+    <ClCompile Include="impl\editor\EditorSettingsService.cpp" />
     <ClCompile Include="impl\editor\SculptModeServiceImpl.cpp" />
     <ClCompile Include="impl\editor\UndoRedoServiceImpl.cpp" />
     <ClCompile Include="impl\editor\WindowStateServiceImpl.cpp" />

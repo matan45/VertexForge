@@ -2,6 +2,7 @@
 #include "events/EventDispatcher.hpp"
 #include "events/project/SceneEvents.hpp"
 #include "events/render/RenderEvents.hpp"
+#include "events/save/ConfigEvents.hpp"
 #include "events/vfx/VFXRuntimeEvents.hpp"
 #include "events/animation/AnimationBudgetEvents.hpp"
 #include <imgui.h>
@@ -19,11 +20,38 @@ namespace windows
         }
     }
 
+    void RenderConfigWindow::markDirty()
+    {
+        isDirty = true;
+        settings.activePreset = types::RenderPreset::Custom;
+    }
+
+    void RenderConfigWindow::drawPresetSection()
+    {
+        const char* presetNames[] = {"Low", "Medium", "High", "Ultra", "Custom"};
+        int presetIdx = static_cast<int>(settings.activePreset);
+        if (ImGui::Combo("Quality Preset", &presetIdx, presetNames, 5))
+        {
+            auto newPreset = static_cast<types::RenderPreset>(presetIdx);
+            if (newPreset != types::RenderPreset::Custom)
+            {
+                settings = types::RenderSettings::fromPreset(newPreset);
+                isDirty = true;
+            }
+        }
+        ImGui::Separator();
+    }
+
     void RenderConfigWindow::loadFromScene()
     {
         auto& dispatcher = events::EventDispatcher::instance();
         events::scene::GetRenderSettingsQuery query;
         settings = dispatcher.query(query);
+
+        events::save::GetConfigIntQuery presetQuery;
+        presetQuery.key = "renderPreset";
+        presetQuery.defaultValue = static_cast<int64_t>(types::RenderPreset::High);
+        settings.activePreset = static_cast<types::RenderPreset>(dispatcher.query(presetQuery));
 
         if (!std::isfinite(settings.terrain.lodBias) || settings.terrain.lodBias < 0.1f || settings.terrain.lodBias > 10.0f)
             settings.terrain.lodBias = 1.0f;
@@ -41,6 +69,12 @@ namespace windows
         events::scene::SetRenderSettingsCommand cmd;
         cmd.settings = settings;
         dispatcher.execute(cmd);
+
+        events::save::SetConfigIntCommand presetCmd;
+        presetCmd.key = "renderPreset";
+        presetCmd.value = static_cast<int64_t>(settings.activePreset);
+        dispatcher.execute(presetCmd);
+
         isDirty = false;
     }
 
@@ -103,7 +137,7 @@ namespace windows
 
             if (ImGui::Checkbox("Frustum Culling", &settings.culling.frustumCullingEnabled))
             {
-                isDirty = true;
+                markDirty();
                 events::render::SetFrustumCullingCommand cmd;
                 cmd.enabled = settings.culling.frustumCullingEnabled;
                 dispatcher.execute(cmd);
@@ -113,7 +147,7 @@ namespace windows
 
             if (ImGui::Checkbox("Occlusion Culling (Hi-Z)", &settings.culling.occlusionCullingEnabled))
             {
-                isDirty = true;
+                markDirty();
                 events::render::SetOcclusionCullingCommand cmd;
                 cmd.enabled = settings.culling.occlusionCullingEnabled;
                 dispatcher.execute(cmd);
@@ -123,7 +157,7 @@ namespace windows
 
             if (ImGui::Checkbox("LOD Selection", &settings.culling.lodSelectionEnabled))
             {
-                isDirty = true;
+                markDirty();
                 events::render::SetLODSelectionCommand cmd;
                 cmd.enabled = settings.culling.lodSelectionEnabled;
                 dispatcher.execute(cmd);
@@ -135,7 +169,7 @@ namespace windows
             {
                 if (ImGui::Checkbox("LOD Crossfade", &settings.culling.lodCrossfadeEnabled))
                 {
-                    isDirty = true;
+                    markDirty();
                     events::render::SetLODCrossfadeCommand cmd;
                     cmd.enabled = settings.culling.lodCrossfadeEnabled;
                     dispatcher.execute(cmd);
@@ -145,7 +179,7 @@ namespace windows
 
                 if (ImGui::DragFloat("Global LOD Bias", &settings.culling.globalLodBias, 0.1f, -4.0f, 4.0f, "%.1f"))
                 {
-                    isDirty = true;
+                    markDirty();
                     events::render::SetGlobalLodBiasCommand cmd;
                     cmd.bias = settings.culling.globalLodBias;
                     dispatcher.execute(cmd);
@@ -165,7 +199,7 @@ namespace windows
 
             if (ImGui::Checkbox("Meshlet Frustum Culling", &settings.culling.meshletFrustumCullingEnabled))
             {
-                isDirty = true;
+                markDirty();
                 events::render::SetMeshletFrustumCullingCommand cmd;
                 cmd.enabled = settings.culling.meshletFrustumCullingEnabled;
                 dispatcher.execute(cmd);
@@ -175,7 +209,7 @@ namespace windows
 
             if (ImGui::Checkbox("Meshlet Backface Culling", &settings.culling.meshletBackfaceCullingEnabled))
             {
-                isDirty = true;
+                markDirty();
                 events::render::SetMeshletBackfaceCullingCommand cmd;
                 cmd.enabled = settings.culling.meshletBackfaceCullingEnabled;
                 dispatcher.execute(cmd);
@@ -185,7 +219,7 @@ namespace windows
 
             if (ImGui::Checkbox("Meshlet Occlusion Culling", &settings.culling.meshletOcclusionCullingEnabled))
             {
-                isDirty = true;
+                markDirty();
                 events::render::SetMeshletOcclusionCullingCommand cmd;
                 cmd.enabled = settings.culling.meshletOcclusionCullingEnabled;
                 dispatcher.execute(cmd);
@@ -199,7 +233,7 @@ namespace windows
 
             if (ImGui::Checkbox("Terrain Frustum Culling", &settings.culling.terrainFrustumCullingEnabled))
             {
-                isDirty = true;
+                markDirty();
                 events::render::SetTerrainFrustumCullingCommand cmd;
                 cmd.enabled = settings.culling.terrainFrustumCullingEnabled;
                 dispatcher.execute(cmd);
@@ -209,7 +243,7 @@ namespace windows
 
             if (ImGui::Checkbox("Terrain Meshlet Culling", &settings.culling.terrainMeshletCullingEnabled))
             {
-                isDirty = true;
+                markDirty();
                 events::render::SetTerrainMeshletCullingCommand cmd;
                 cmd.enabled = settings.culling.terrainMeshletCullingEnabled;
                 dispatcher.execute(cmd);
@@ -223,7 +257,7 @@ namespace windows
 
             if (ImGui::Checkbox("Enable Distance Culling", &settings.distanceCulling.enabled))
             {
-                isDirty = true;
+                markDirty();
                 events::render::SetDistanceCullingCommand cmd;
                 cmd.enabled = settings.distanceCulling.enabled;
                 dispatcher.execute(cmd);
@@ -243,49 +277,49 @@ namespace windows
                 if (ImGui::DragFloat("Static Mesh Distance", &settings.distanceCulling.staticMeshDistance,
                                      10.0f, 50.0f, 50000.0f, "%.0f"))
                 {
-                    isDirty = true;
+                    markDirty();
                     dispatchDistance(0, settings.distanceCulling.staticMeshDistance);
                 }
                 if (ImGui::DragFloat("Terrain Distance", &settings.distanceCulling.terrainDistance,
                                      10.0f, 50.0f, 50000.0f, "%.0f"))
                 {
-                    isDirty = true;
+                    markDirty();
                     dispatchDistance(1, settings.distanceCulling.terrainDistance);
                 }
                 if (ImGui::DragFloat("Foliage Distance", &settings.distanceCulling.foliageDistance,
                                      10.0f, 50.0f, 50000.0f, "%.0f"))
                 {
-                    isDirty = true;
+                    markDirty();
                     dispatchDistance(2, settings.distanceCulling.foliageDistance);
                 }
                 if (ImGui::DragFloat("VFX Distance", &settings.distanceCulling.vfxDistance,
                                      10.0f, 50.0f, 50000.0f, "%.0f"))
                 {
-                    isDirty = true;
+                    markDirty();
                     dispatchDistance(3, settings.distanceCulling.vfxDistance);
                 }
                 if (ImGui::DragFloat("Decals Distance", &settings.distanceCulling.decalDistance,
                                      10.0f, 50.0f, 50000.0f, "%.0f"))
                 {
-                    isDirty = true;
+                    markDirty();
                     dispatchDistance(4, settings.distanceCulling.decalDistance);
                 }
                 if (ImGui::DragFloat("Billboard Distance", &settings.distanceCulling.billboardDistance,
                                      10.0f, 50.0f, 50000.0f, "%.0f"))
                 {
-                    isDirty = true;
+                    markDirty();
                     dispatchDistance(5, settings.distanceCulling.billboardDistance);
                 }
                 if (ImGui::DragFloat("Water Distance", &settings.distanceCulling.waterDistance,
                                      10.0f, 50.0f, 50000.0f, "%.0f"))
                 {
-                    isDirty = true;
+                    markDirty();
                     dispatchDistance(6, settings.distanceCulling.waterDistance);
                 }
                 if (ImGui::DragFloat("Shadow Distance Multiplier", &settings.distanceCulling.shadowDistanceMultiplier,
                                      0.05f, 0.1f, 2.0f, "%.2f"))
                 {
-                    isDirty = true;
+                    markDirty();
                     events::render::SetShadowDistanceMultiplierCommand cmd;
                     cmd.multiplier = settings.distanceCulling.shadowDistanceMultiplier;
                     dispatcher.execute(cmd);
@@ -300,7 +334,7 @@ namespace windows
 
             if (ImGui::Checkbox("Weighted Blended OIT", &settings.transparency.wboitEnabled))
             {
-                isDirty = true;
+                markDirty();
                 events::render::SetWBOITCommand cmd;
                 cmd.enabled = settings.transparency.wboitEnabled;
                 dispatcher.execute(cmd);
@@ -321,6 +355,7 @@ namespace windows
 
         if (ImGui::Begin("Render Configuration", &visible))
         {
+            drawPresetSection();
             drawCullingSection();
             drawTerrainSection();
             drawShadowSection();

@@ -127,6 +127,8 @@
     <ClInclude Include="components\VegetationComponents.hpp" />
     <ClInclude Include="components\VolumetricComponents.hpp" />
     <ClInclude Include="config\Config.hpp" />
+    <ClInclude Include="config\EditorPreferences.hpp" />
+    <ClInclude Include="config\EditorPreferencesSerializer.hpp" />
     <ClInclude Include="config\ProjectConfig.hpp" />
     <ClInclude Include="eqs\EQSQuery.hpp" />
     <ClInclude Include="eqs\EQSQueryEngine.hpp" />
