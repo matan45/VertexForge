@@ -19,6 +19,7 @@ namespace windows
         void drawDirectionalShadowSettings();
         void drawShadowBiasSettings();
         void drawShadowFilterSettings();
+        void drawRTShadowSection();
         void drawShadowDebugSection();
         void drawShadowStatistics();
         void drawTerrainSection();

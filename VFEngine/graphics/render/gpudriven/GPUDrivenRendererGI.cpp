@@ -2,6 +2,7 @@
 #include "../occlusion/DepthPrepass.hpp"
 #include "../../core/SwapChain.hpp"
 #include "../../core/Device.hpp"
+#include "types/RenderSettings.hpp"
 #include <algorithm>
 
 #ifdef MemoryBarrier
@@ -540,7 +541,6 @@ namespace render::gpudriven
             glm::vec3(camData.cameraPosition),
             camData.farPlane,
             lightDir.value(),
-            500.0f,
             w, h,
             useDenoiser); // skip final transitions when denoiser handles them
 
@@ -557,6 +557,25 @@ namespace render::gpudriven
                 camData.viewProjection,
                 w, h,
                 camData.frameIndex);
+        }
+    }
+
+    void GPUDrivenRenderer::applyRTShadowSettings(const types::RTShadowSettings& settings)
+    {
+        if (rtShadowPipeline)
+        {
+            rtShadowPipeline->setMaxRayDistance(settings.maxRayDistance);
+            rtShadowPipeline->setNormalBias(settings.normalBias);
+            rtShadowPipeline->setRayTMin(settings.rayTMin);
+        }
+        if (rtShadowDenoiser)
+        {
+            rtShadowDenoiser->setTemporalBlend(settings.temporalBlend);
+            rtShadowDenoiser->setDepthThreshold(settings.depthThreshold);
+            rtShadowDenoiser->setNormalThreshold(settings.normalThreshold);
+            rtShadowDenoiser->setSpatialPhiDepth(settings.spatialPhiDepth);
+            rtShadowDenoiser->setSpatialPhiNormal(settings.spatialPhiNormal);
+            rtShadowDenoiser->setSpatialPasses(settings.spatialPasses);
         }
     }
 }

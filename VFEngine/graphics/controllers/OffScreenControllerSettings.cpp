@@ -39,6 +39,8 @@ namespace controllers
         if (lightBufferManager)
             lightBufferManager->setShadowIntensity(settings.shadows.shadowIntensity);
 
+        gpuDriven->applyRTShadowSettings(settings.rtShadows);
+
         gpuDriven->setFrustumCullingEnabled(settings.culling.frustumCullingEnabled);
         gpuDriven->setOcclusionCullingEnabled(settings.culling.occlusionCullingEnabled);
         gpuDriven->setLODSelectionEnabled(settings.culling.lodSelectionEnabled);

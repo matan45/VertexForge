@@ -1,4 +1,5 @@
 #include "RTShadowDenoiser.hpp"
+#include <algorithm>
 #include "../../core/Device.hpp"
 #include "../../core/Shader.hpp"
 #include "../../core/BufferUtilities.hpp"
@@ -280,13 +281,13 @@ namespace render::raytracing
         temporalPoolInfo.pPoolSizes = temporalPoolSizes.data();
         temporalDSPool = vkDevice.createDescriptorPool(temporalPoolInfo);
 
-        // Spatial pool: 3 sets (one per à-trous pass)
+        // Spatial pool: up to MAX_SPATIAL_PASSES sets
         std::array<vk::DescriptorPoolSize, 2> spatialPoolSizes{};
-        spatialPoolSizes[0] = {vk::DescriptorType::eStorageImage, 6};           // 2 per set * 3
-        spatialPoolSizes[1] = {vk::DescriptorType::eCombinedImageSampler, 6};   // 2 per set * 3
+        spatialPoolSizes[0] = {vk::DescriptorType::eStorageImage, static_cast<uint32_t>(2 * MAX_SPATIAL_PASSES)};
+        spatialPoolSizes[1] = {vk::DescriptorType::eCombinedImageSampler, static_cast<uint32_t>(2 * MAX_SPATIAL_PASSES)};
 
         vk::DescriptorPoolCreateInfo spatialPoolInfo{};
-        spatialPoolInfo.maxSets = 3;
+        spatialPoolInfo.maxSets = MAX_SPATIAL_PASSES;
         spatialPoolInfo.poolSizeCount = static_cast<uint32_t>(spatialPoolSizes.size());
         spatialPoolInfo.pPoolSizes = spatialPoolSizes.data();
         spatialDSPool = vkDevice.createDescriptorPool(spatialPoolInfo);
@@ -314,16 +315,16 @@ namespace render::raytracing
         temporalDescSets[0] = temporalSets[0];
         temporalDescSets[1] = temporalSets[1];
 
-        // Spatial: 3 sets
-        std::array<vk::DescriptorSetLayout, 3> spatialLayouts = {spatialDSLayout, spatialDSLayout, spatialDSLayout};
+        // Spatial: MAX_SPATIAL_PASSES sets
+        std::array<vk::DescriptorSetLayout, MAX_SPATIAL_PASSES> spatialLayouts;
+        spatialLayouts.fill(spatialDSLayout);
         vk::DescriptorSetAllocateInfo spatialAllocInfo{};
         spatialAllocInfo.descriptorPool = spatialDSPool;
-        spatialAllocInfo.descriptorSetCount = 3;
+        spatialAllocInfo.descriptorSetCount = MAX_SPATIAL_PASSES;
         spatialAllocInfo.pSetLayouts = spatialLayouts.data();
         auto spatialSets = vkDevice.allocateDescriptorSets(spatialAllocInfo);
-        spatialDescSets[0] = spatialSets[0];
-        spatialDescSets[1] = spatialSets[1];
-        spatialDescSets[2] = spatialSets[2];
+        for (int i = 0; i < MAX_SPATIAL_PASSES; ++i)
+            spatialDescSets[i] = spatialSets[i];
 
         // Denoised mask sampler set
         vk::DescriptorSetAllocateInfo maskAllocInfo{};
@@ -428,10 +429,10 @@ namespace render::raytracing
             static_cast<float>(screenWidth), static_cast<float>(screenHeight),
             1.0f / static_cast<float>(screenWidth), 1.0f / static_cast<float>(screenHeight));
         ubo.temporalParams = glm::vec4(
-            historyValid ? 0.9f : 0.0f,  // blend factor (0 on first frame)
+            historyValid ? temporalBlend : 0.0f,
             static_cast<float>(frameIndex),
-            0.01f,   // depth threshold
-            0.9f     // normal threshold
+            depthThreshold,
+            normalThreshold
         );
         memcpy(paramsAllocation.mappedPtr, &ubo, sizeof(ShadowDenoiserUBO));
 
@@ -555,30 +556,30 @@ namespace render::raytracing
             vk::ImageLayout::eGeneral,
             vk::ImageAspectFlagBits::eColor);
 
-        const int stepSizes[3] = {1, 2, 4};
+        const int stepSizes[MAX_SPATIAL_PASSES] = {1, 2, 4, 8, 16};
+        int numPasses = std::clamp(spatialPassCount, 1, MAX_SPATIAL_PASSES);
 
-        // Input/output views for each spatial pass
-        vk::ImageView spatialInputViews[3] = {
-            history[writeIdx].storageView,  // Read temporal output
-            spatialBuf[0].storageView,
-            spatialBuf[1].storageView
+        // Build input/output view arrays dynamically
+        // Pattern: temporal → buf[0] → buf[1] → buf[0] → ... → denoisedOutput
+        auto getSpatialInput = [&](int pass) -> vk::ImageView {
+            if (pass == 0) return history[writeIdx].storageView;
+            return spatialBuf[(pass - 1) % 2].storageView;
         };
-        vk::ImageView spatialOutputViews[3] = {
-            spatialBuf[0].storageView,
-            spatialBuf[1].storageView,
-            denoisedOutputStorageView       // Final pass writes to R8Unorm output
+        auto getSpatialOutput = [&](int pass) -> vk::ImageView {
+            if (pass == numPasses - 1) return denoisedOutputStorageView;
+            return spatialBuf[pass % 2].storageView;
         };
 
         cmd.bindPipeline(vk::PipelineBindPoint::eCompute, spatialPipeline);
 
-        for (int pass = 0; pass < 3; ++pass)
+        for (int pass = 0; pass < numPasses; ++pass)
         {
             // Update spatial descriptor set for this pass
             {
                 std::array<vk::WriteDescriptorSet, 4> writes{};
 
                 vk::DescriptorImageInfo inputInfo{};
-                inputInfo.imageView = spatialInputViews[pass];
+                inputInfo.imageView = getSpatialInput(pass);
                 inputInfo.imageLayout = vk::ImageLayout::eGeneral;
                 writes[0].dstSet = spatialDescSets[pass];
                 writes[0].dstBinding = 0;
@@ -587,7 +588,7 @@ namespace render::raytracing
                 writes[0].pImageInfo = &inputInfo;
 
                 vk::DescriptorImageInfo outputInfo{};
-                outputInfo.imageView = spatialOutputViews[pass];
+                outputInfo.imageView = getSpatialOutput(pass);
                 outputInfo.imageLayout = vk::ImageLayout::eGeneral;
                 writes[1].dstSet = spatialDescSets[pass];
                 writes[1].dstBinding = 1;
@@ -624,8 +625,8 @@ namespace render::raytracing
 
             ShadowSpatialPushConstants pc{};
             pc.stepSize = stepSizes[pass];
-            pc.phiDepth = 0.005f;
-            pc.phiNormal = 32.0f;
+            pc.phiDepth = spatialPhiDepth;
+            pc.phiNormal = spatialPhiNormal;
             pc.passIndex = static_cast<uint32_t>(pass);
             cmd.pushConstants(spatialPipelineLayout, vk::ShaderStageFlagBits::eCompute,
                               0, sizeof(ShadowSpatialPushConstants), &pc);
@@ -633,7 +634,7 @@ namespace render::raytracing
             cmd.dispatch(groupsX, groupsY, 1);
 
             // Barrier between spatial passes
-            if (pass < 2)
+            if (pass < numPasses - 1)
             {
                 cmd.pipelineBarrier(
                     vk::PipelineStageFlagBits::eComputeShader,

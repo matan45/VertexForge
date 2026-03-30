@@ -72,6 +72,11 @@ namespace core
     class DeferredDeletionQueue;
 }
 
+namespace types
+{
+    struct RTShadowSettings;
+}
+
 namespace material
 {
     struct MaterialData;
@@ -468,6 +473,7 @@ namespace render::gpudriven
         void dispatchRTShadow(vk::CommandBuffer cmd);
         bool isRTShadowReady() const;
         raytracing::RTShadowPipeline* getRTShadowPipeline() const { return rtShadowPipeline.get(); }
+        void applyRTShadowSettings(const types::RTShadowSettings& settings);
 
         void setDistanceCullingEnabled(bool enabled) { culling.distanceCullingEnabled = enabled; }
         bool isDistanceCullingEnabled() const { return culling.distanceCullingEnabled; }

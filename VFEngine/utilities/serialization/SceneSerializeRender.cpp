@@ -126,6 +126,49 @@ namespace serialization
                 settings.clipmapBaseExtent = std::clamp(shadows["clipmapBaseExtent"].get<float>(), 0.5f, 10.0f);
         }
 
+        json serializeRTShadowSettings(const types::RTShadowSettings& s)
+        {
+            return {
+                {"enabled", s.enabled},
+                {"maxRayDistance", s.maxRayDistance},
+                {"normalBias", s.normalBias},
+                {"rayTMin", s.rayTMin},
+                {"temporalBlend", s.temporalBlend},
+                {"depthThreshold", s.depthThreshold},
+                {"normalThreshold", s.normalThreshold},
+                {"spatialPhiDepth", s.spatialPhiDepth},
+                {"spatialPhiNormal", s.spatialPhiNormal},
+                {"spatialPasses", s.spatialPasses}
+            };
+        }
+
+        void deserializeRTShadowSettings(const json& j, types::RTShadowSettings& settings)
+        {
+            if (!j.contains("rtShadows") || !j["rtShadows"].is_object())
+                return;
+            const auto& rt = j["rtShadows"];
+            if (rt.contains("enabled") && rt["enabled"].is_boolean())
+                settings.enabled = rt["enabled"].get<bool>();
+            if (rt.contains("maxRayDistance") && rt["maxRayDistance"].is_number())
+                settings.maxRayDistance = rt["maxRayDistance"].get<float>();
+            if (rt.contains("normalBias") && rt["normalBias"].is_number())
+                settings.normalBias = rt["normalBias"].get<float>();
+            if (rt.contains("rayTMin") && rt["rayTMin"].is_number())
+                settings.rayTMin = rt["rayTMin"].get<float>();
+            if (rt.contains("temporalBlend") && rt["temporalBlend"].is_number())
+                settings.temporalBlend = rt["temporalBlend"].get<float>();
+            if (rt.contains("depthThreshold") && rt["depthThreshold"].is_number())
+                settings.depthThreshold = rt["depthThreshold"].get<float>();
+            if (rt.contains("normalThreshold") && rt["normalThreshold"].is_number())
+                settings.normalThreshold = rt["normalThreshold"].get<float>();
+            if (rt.contains("spatialPhiDepth") && rt["spatialPhiDepth"].is_number())
+                settings.spatialPhiDepth = rt["spatialPhiDepth"].get<float>();
+            if (rt.contains("spatialPhiNormal") && rt["spatialPhiNormal"].is_number())
+                settings.spatialPhiNormal = rt["spatialPhiNormal"].get<float>();
+            if (rt.contains("spatialPasses") && rt["spatialPasses"].is_number_integer())
+                settings.spatialPasses = std::clamp(rt["spatialPasses"].get<int>(), 1, 5);
+        }
+
         json serializeCullingSettings(const types::CullingSettings& s)
         {
             return {
@@ -411,6 +454,7 @@ namespace serialization
         json j;
 
         j["shadows"] = serializeShadowSettings(settings.shadows);
+        j["rtShadows"] = serializeRTShadowSettings(settings.rtShadows);
         j["culling"] = serializeCullingSettings(settings.culling);
         j["distanceCulling"] = serializeDistanceCullingSettings(settings.distanceCulling);
         j["transparency"] = { {"wboitEnabled", settings.transparency.wboitEnabled} };
@@ -428,6 +472,7 @@ namespace serialization
     void SceneSerialization::deserializeRenderSettings(const json& j, types::RenderSettings& settings)
     {
         deserializeShadowSettings(j, settings.shadows);
+        deserializeRTShadowSettings(j, settings.rtShadows);
 
         deserializeCullingSettings(j, settings.culling);
         deserializeDistanceCullingSettings(j, settings.distanceCulling);

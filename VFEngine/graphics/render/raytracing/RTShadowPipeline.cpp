@@ -323,7 +323,6 @@ namespace render::raytracing
                                      const glm::vec3& cameraPos,
                                      float farPlane,
                                      const glm::vec3& lightDirection,
-                                     float maxRayDistance,
                                      uint32_t screenWidth, uint32_t screenHeight,
                                      bool skipFinalTransitions)
     {
@@ -403,8 +402,8 @@ namespace render::raytracing
                                0, static_cast<uint32_t>(descSets.size()), descSets.data(), 0, nullptr);
 
         RTShadowPushConstants pc{};
-        pc.lightDirection = glm::vec4(glm::normalize(lightDirection), maxRayDistance);
-        pc.biasParams = glm::vec4(0.05f, 0.01f, 0.0f, 0.0f); // normal bias, t_min
+        pc.lightDirection = glm::vec4(glm::normalize(lightDirection), this->maxRayDistance);
+        pc.biasParams = glm::vec4(this->normalBias, this->rayTMin, 0.0f, 0.0f);
         cmd.pushConstants(pipelineLayout, vk::ShaderStageFlagBits::eCompute, 0, sizeof(RTShadowPushConstants), &pc);
 
         uint32_t groupsX = (screenWidth + 7) / 8;

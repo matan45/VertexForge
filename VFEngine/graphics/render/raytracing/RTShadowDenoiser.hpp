@@ -62,6 +62,14 @@ namespace render::raytracing
         vk::DescriptorSetLayout getDenoisedMaskSamplerLayout() const { return denoisedMaskSamplerLayout; }
         vk::DescriptorSet getDenoisedMaskSamplerDescriptorSet() const { return denoisedMaskSamplerDescSet; }
 
+        // Tunable parameters
+        void setTemporalBlend(float v) { temporalBlend = v; }
+        void setDepthThreshold(float v) { depthThreshold = v; }
+        void setNormalThreshold(float v) { normalThreshold = v; }
+        void setSpatialPhiDepth(float v) { spatialPhiDepth = v; }
+        void setSpatialPhiNormal(float v) { spatialPhiNormal = v; }
+        void setSpatialPasses(int v) { spatialPassCount = v; }
+
     private:
         core::Device& device;
         bool initialized = false;
@@ -69,6 +77,14 @@ namespace render::raytracing
         uint32_t maskWidth = 0;
         uint32_t maskHeight = 0;
         glm::mat4 prevViewProjection{1.0f};
+
+        // Tunable parameters
+        float temporalBlend = 0.9f;
+        float depthThreshold = 0.01f;
+        float normalThreshold = 0.9f;
+        float spatialPhiDepth = 0.005f;
+        float spatialPhiNormal = 32.0f;
+        int spatialPassCount = 3;
 
         // Temporal pass
         vk::Pipeline temporalPipeline;
@@ -93,7 +109,8 @@ namespace render::raytracing
         std::unique_ptr<core::Shader> spatialShader;
         vk::DescriptorSetLayout spatialDSLayout;
         vk::DescriptorPool spatialDSPool;
-        vk::DescriptorSet spatialDescSets[3]; // one per à-trous iteration
+        static constexpr int MAX_SPATIAL_PASSES = 5;
+        vk::DescriptorSet spatialDescSets[MAX_SPATIAL_PASSES];
 
         struct SpatialBuffer
         {

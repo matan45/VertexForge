@@ -27,6 +27,7 @@ namespace windows
                 drawShadowFilterSettings();
             }
 
+            drawRTShadowSection();
             drawShadowDebugSection();
             drawShadowStatistics();
 
@@ -461,6 +462,49 @@ namespace windows
                 cmd.lod2Interval = settings.animationLOD.lod2Interval;
                 cmd.maxStreamingInitPerFrame = settings.animationLOD.maxStreamingInitPerFrame;
                 dispatcher.execute(cmd);
+            }
+
+            ImGui::Unindent(10.0f);
+        }
+    }
+
+    void RenderConfigWindow::drawRTShadowSection()
+    {
+        if (ImGui::CollapsingHeader("Ray Traced Shadows"))
+        {
+            ImGui::Indent(10.0f);
+
+            if (ImGui::Checkbox("Enable RT Shadows", &settings.rtShadows.enabled))
+                markDirty();
+
+            if (settings.rtShadows.enabled)
+            {
+                ImGui::Spacing();
+                ImGui::SeparatorText("Ray Parameters");
+                if (ImGui::SliderFloat("Max Ray Distance", &settings.rtShadows.maxRayDistance, 50.0f, 2000.0f, "%.0f"))
+                    markDirty();
+                if (ImGui::SliderFloat("RT Normal Bias", &settings.rtShadows.normalBias, 0.001f, 0.2f, "%.4f"))
+                    markDirty();
+                if (ImGui::SliderFloat("Ray T-Min", &settings.rtShadows.rayTMin, 0.001f, 0.1f, "%.4f"))
+                    markDirty();
+
+                ImGui::Spacing();
+                ImGui::SeparatorText("Denoiser - Temporal");
+                if (ImGui::SliderFloat("Temporal Blend", &settings.rtShadows.temporalBlend, 0.0f, 0.99f, "%.2f"))
+                    markDirty();
+                if (ImGui::SliderFloat("Depth Threshold", &settings.rtShadows.depthThreshold, 0.001f, 0.1f, "%.4f"))
+                    markDirty();
+                if (ImGui::SliderFloat("Normal Threshold", &settings.rtShadows.normalThreshold, 0.5f, 1.0f, "%.2f"))
+                    markDirty();
+
+                ImGui::Spacing();
+                ImGui::SeparatorText("Denoiser - Spatial");
+                if (ImGui::SliderFloat("Phi Depth", &settings.rtShadows.spatialPhiDepth, 0.001f, 0.05f, "%.4f"))
+                    markDirty();
+                if (ImGui::SliderFloat("Phi Normal", &settings.rtShadows.spatialPhiNormal, 1.0f, 128.0f, "%.1f"))
+                    markDirty();
+                if (ImGui::SliderInt("Spatial Passes", &settings.rtShadows.spatialPasses, 1, 5))
+                    markDirty();
             }
 
             ImGui::Unindent(10.0f);

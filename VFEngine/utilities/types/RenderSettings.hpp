@@ -46,6 +46,26 @@ namespace types
         BiasVisualization
     };
 
+    struct RTShadowSettings
+    {
+        bool enabled = true;
+
+        // Ray parameters
+        float maxRayDistance = 500.0f;
+        float normalBias = 0.05f;
+        float rayTMin = 0.01f;
+
+        // Denoiser temporal
+        float temporalBlend = 0.9f;
+        float depthThreshold = 0.01f;
+        float normalThreshold = 0.9f;
+
+        // Denoiser spatial
+        float spatialPhiDepth = 0.005f;
+        float spatialPhiNormal = 32.0f;
+        int spatialPasses = 3;
+    };
+
     struct ShadowSettings
     {
         bool enabled = true;
@@ -159,6 +179,7 @@ namespace types
         RenderPreset activePreset = RenderPreset::High;
 
         ShadowSettings shadows;
+        RTShadowSettings rtShadows;
         LightStreamingSettings lightStreaming;
         CullingSettings culling;
         DistanceCullingSettings distanceCulling;
@@ -188,6 +209,7 @@ namespace types
                 s.shadows.cascadeCount = 2;
                 s.shadows.softShadows = false;
                 s.shadows.shadowIntensity = 0.4f;
+                s.rtShadows.enabled = false;
                 s.culling.lodCrossfadeEnabled = false;
                 s.culling.globalLodBias = 2.0f;
                 s.distanceCulling.enabled = true;
@@ -208,6 +230,7 @@ namespace types
                 s.shadows.cascadeCount = 3;
                 s.shadows.softShadows = false;
                 s.shadows.shadowIntensity = 0.5f;
+                s.rtShadows.spatialPasses = 2;
                 s.culling.lodCrossfadeEnabled = false;
                 s.culling.globalLodBias = 1.0f;
                 s.distanceCulling.enabled = true;
@@ -233,6 +256,8 @@ namespace types
                 s.shadows.cascadeCount = 4;
                 s.shadows.softShadows = true;
                 s.shadows.shadowIntensity = 0.6f;
+                s.rtShadows.spatialPasses = 4;
+                s.rtShadows.maxRayDistance = 1000.0f;
                 s.culling.lodCrossfadeEnabled = true;
                 s.culling.globalLodBias = -1.0f;
                 s.distanceCulling.enabled = false;

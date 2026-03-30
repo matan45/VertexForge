@@ -53,7 +53,6 @@ namespace render::raytracing
                       const glm::vec3& cameraPos,
                       float farPlane,
                       const glm::vec3& lightDirection,
-                      float maxRayDistance,
                       uint32_t screenWidth, uint32_t screenHeight,
                       bool skipFinalTransitions = false);
 
@@ -67,6 +66,11 @@ namespace render::raytracing
         // For denoiser access to raw shadow mask
         vk::Image getShadowMaskImage() const { return shadowMaskImage; }
         vk::ImageView getShadowMaskStorageView() const { return shadowMaskStorageView; }
+
+        // Tunable parameters
+        void setMaxRayDistance(float d) { maxRayDistance = d; }
+        void setNormalBias(float b) { normalBias = b; }
+        void setRayTMin(float t) { rayTMin = t; }
 
     private:
         core::Device& device;
@@ -110,6 +114,11 @@ namespace render::raytracing
         uint32_t maskHeight = 0;
         bool initialized = false;
         bool firstFrame = true;
+
+        // Tunable parameters
+        float maxRayDistance = 500.0f;
+        float normalBias = 0.05f;
+        float rayTMin = 0.01f;
 
         void createShadowMaskImage(uint32_t w, uint32_t h);
         void createSamplers();
