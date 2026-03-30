@@ -33,7 +33,8 @@
       "WebFetch(domain:docs.godotengine.org)",
       "WebFetch(domain:github.com)",
       "WebFetch(domain:raw.githubusercontent.com)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "mcp__mcp-atlassian__jira_update_issue"
     ],
     "deny": [],
     "ask": []

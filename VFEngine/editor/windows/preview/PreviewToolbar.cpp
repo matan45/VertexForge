@@ -1,6 +1,7 @@
 #include "PreviewToolbar.hpp"
 #include "../../camera/OrbitCamera.hpp"
 #include <imgui.h>
+#include <imgui_internal.h>
 #include <IconsFontAwesome6.h>
 
 namespace editor::preview
