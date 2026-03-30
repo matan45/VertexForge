@@ -58,11 +58,6 @@ namespace windows
             ImGui::EndCombo();
         }
 
-        ImGui::SameLine();
-        ImGui::Text("FPS: %.2f", engineTime::Timer::getFPS());
-        ImGui::SameLine();
-        ImGui::Text("Delta Time: %.4f", engineTime::Timer::getDeltaTime());
-
         if (!selectedEntries.empty())
         {
             ImGui::SameLine();

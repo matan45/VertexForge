@@ -152,8 +152,10 @@ namespace windows
 
         ImGui::SameLine();
 
-        float availableWidth = ImGui::GetContentRegionAvail().x - 300.0f;
-        if (availableWidth < 200.0f) availableWidth = 200.0f;
+        // Reserve space for: Import + Search label + SearchInput(150) + Filter + Bookmark + spacing
+        float reservedRight = 500.0f;
+        float availableWidth = ImGui::GetContentRegionAvail().x - reservedRight;
+        if (availableWidth < 100.0f) availableWidth = 100.0f;
 
         drawPathBar(availableWidth);
 
