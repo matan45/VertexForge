@@ -670,7 +670,6 @@
     <None Include="..\..\resources\shaders\postprocess\underwater.glsl" />
     <None Include="..\..\resources\shaders\postprocess\vignette.glsl" />
     <None Include="..\..\resources\shaders\postprocess\volumetric_fog_sample.glsl" />
-    <None Include="..\..\resources\shaders\preview\gradient_background.glsl" />
     <None Include="..\..\resources\shaders\shadow\shadow.glsl" />
     <None Include="..\..\resources\shaders\shadow\shadow_terrain.glsl" />
     <None Include="..\..\resources\shaders\shadow\vsm_feedback.glsl" />

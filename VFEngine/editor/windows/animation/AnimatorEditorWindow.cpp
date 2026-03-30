@@ -6,6 +6,7 @@
 #include "events/animation/AnimatorEvents.hpp"
 #include "events/scene/EntityTransformEvents.hpp"
 #include "imgui.h"
+#include <imgui_internal.h>
 #include <imgui_node_editor.h>
 #include <IconsFontAwesome6.h>
 #include <filesystem>

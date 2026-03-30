@@ -5,6 +5,7 @@
 #include "../../camera/OrbitCamera.hpp"
 #include "resource/MeshStreamHandle.hpp"
 #include "imgui.h"
+#include <imgui_internal.h>
 #include "events/EventDispatcher.hpp"
 #include "events/render/PreviewEvents.hpp"
 #include <IconsFontAwesome6.h>

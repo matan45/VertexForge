@@ -720,6 +720,11 @@ void main() {
         }
     }
 
+    // Overdraw Visualization
+    if (viewModeValue == 20u) {
+        color = vec3(0.15, 0.4, 0.05);
+    }
+
     // Tile selection highlight
     const uint FLAG_SELECTED = 1u << 13;
     if ((tiles[fragTileIndex].flags & FLAG_SELECTED) != 0u) {

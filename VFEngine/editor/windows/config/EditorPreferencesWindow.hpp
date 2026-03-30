@@ -1,6 +1,8 @@
 #pragma once
 #include "SettingsEntry.hpp"
 #include "config/EditorPreferences.hpp"
+#include "data/EditorKeybindingTypes.hpp"
+#include "data/ActionMappingTypes.hpp"
 #include <string>
 #include <vector>
 
@@ -35,6 +37,10 @@ namespace windows
         // Keybinding UI state
         bool waitingForKey = false;
         std::string captureAction;
+        bool showConflictModal = false;
+        services::InputBinding pendingBinding;
+        std::string pendingAction;
+        std::vector<services::KeybindingConflict> pendingConflicts;
 
         void loadSettings();
         void saveSettings();

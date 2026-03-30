@@ -427,10 +427,27 @@ namespace windows
                         newBinding.requireCtrl = ctrlHeld;
                         newBinding.requireAlt = altHeld;
 
-                        events::editor::SetEditorActionBindingsCommand cmd;
-                        cmd.actionName = captureAction;
-                        cmd.bindings = {newBinding};
-                        dispatcher.execute(cmd);
+                        // Check for conflicts before applying
+                        events::editor::GetKeybindingConflictsQuery conflictQuery;
+                        conflictQuery.actionName = captureAction;
+                        conflictQuery.binding = newBinding;
+                        auto conflicts = dispatcher.query(conflictQuery);
+
+                        if (conflicts.empty())
+                        {
+                            events::editor::SetEditorActionBindingsCommand cmd;
+                            cmd.actionName = captureAction;
+                            cmd.bindings = {newBinding};
+                            dispatcher.execute(cmd);
+                        }
+                        else
+                        {
+                            pendingBinding = newBinding;
+                            pendingAction = captureAction;
+                            pendingConflicts = conflicts;
+                            showConflictModal = true;
+                            ImGui::OpenPopup("Keybinding Conflict");
+                        }
 
                         waitingForKey = false;
                         captureAction.clear();
@@ -456,6 +473,13 @@ namespace windows
                 for (const auto& action : actions)
                 {
                     ImGui::PushID(action.name.c_str());
+
+                    bool isConflicting = showConflictModal && std::any_of(
+                        pendingConflicts.begin(), pendingConflicts.end(),
+                        [&](const auto& c) { return c.conflictingAction == action.name; });
+
+                    if (isConflicting)
+                        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.4f, 0.4f, 1.0f));
 
                     ImGui::Text("%s", action.displayName.c_str());
                     ImGui::SameLine(200.0f);
@@ -483,6 +507,9 @@ namespace windows
                         }
                     }
 
+                    if (isConflicting)
+                        ImGui::PopStyleColor();
+
                     ImGui::PopID();
                 }
                 ImGui::Unindent(10.0f);
@@ -502,6 +529,55 @@ namespace windows
         if (ImGui::Button("Save Keybindings"))
         {
             dispatcher.execute(events::editor::SaveEditorKeybindingsCommand{});
+        }
+
+        // Conflict detection modal
+        if (showConflictModal)
+        {
+            ImGui::OpenPopup("Keybinding Conflict");
+        }
+
+        if (ImGui::BeginPopupModal("Keybinding Conflict", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        {
+            ImGui::Text("This binding conflicts with:");
+            ImGui::Spacing();
+            for (const auto& conflict : pendingConflicts)
+            {
+                ImGui::BulletText("%s", conflict.conflictingAction.c_str());
+            }
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+            ImGui::Text("Override will clear the binding from conflicting action(s).");
+            ImGui::Spacing();
+
+            if (ImGui::Button("Override", ImVec2(120, 0)))
+            {
+                for (const auto& conflict : pendingConflicts)
+                {
+                    events::editor::SetEditorActionBindingsCommand clearCmd;
+                    clearCmd.actionName = conflict.conflictingAction;
+                    clearCmd.bindings = {};
+                    dispatcher.execute(clearCmd);
+                }
+
+                events::editor::SetEditorActionBindingsCommand cmd;
+                cmd.actionName = pendingAction;
+                cmd.bindings = {pendingBinding};
+                dispatcher.execute(cmd);
+
+                showConflictModal = false;
+                pendingConflicts.clear();
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel", ImVec2(120, 0)))
+            {
+                showConflictModal = false;
+                pendingConflicts.clear();
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::EndPopup();
         }
     }
 

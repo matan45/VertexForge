@@ -106,6 +106,18 @@ namespace services
             [this](const events::render::SetShowOverdrawCommand& cmd)
             {
                 showOverdraw = cmd.show;
+                if (offScreenProvider)
+                {
+                    if (cmd.show)
+                    {
+                        savedViewModeBeforeOverdraw = offScreenProvider->getViewMode();
+                        offScreenProvider->setViewMode(20); // Overdraw visualization mode
+                    }
+                    else
+                    {
+                        offScreenProvider->setViewMode(savedViewModeBeforeOverdraw);
+                    }
+                }
             });
 
         dispatcher.registerQueryHandler<events::render::GetShowOverdrawQuery>(

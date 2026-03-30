@@ -60,6 +60,8 @@ namespace windows
         bool isPlaying = false;
         float playbackPosition = 0.0f;
         float volume = 1.0f;
+        bool loopEnabled = false;
+        float pitch = 1.0f;
         services::AudioHandle currentAudioHandle;
         float audioDurationSeconds = 0.0f;
 

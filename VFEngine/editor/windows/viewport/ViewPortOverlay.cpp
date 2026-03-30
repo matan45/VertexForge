@@ -226,6 +226,11 @@ namespace windows
             // Map dropdown index to shader viewMode value
             static const int viewModeMap[] = {0,1,2,3,4,5,6,7,8,9,14,15};
             static const int reverseMap[] = {0,1,2,3,4,5,6,7,8,9,0,0,0,0,10,11};
+            // Disable viewMode dropdown when overdraw debug view is active
+            bool overdrawActive = dispatcher.query(events::render::GetShowOverdrawQuery{});
+            if (overdrawActive)
+                ImGui::BeginDisabled();
+
             int displayIdx = (currentViewMode < 16) ? reverseMap[currentViewMode] : 0;
             ImGui::SetNextItemWidth(dropdownWidth);
             if (ImGui::Combo("##ViewMode", &displayIdx, viewModeLabels, 12))
@@ -235,9 +240,14 @@ namespace windows
                 dispatcher.execute(cmd);
             }
 
-            if (ImGui::IsItemHovered())
+            if (overdrawActive)
+                ImGui::EndDisabled();
+
+            if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
             {
-                ImGui::SetTooltip("Viewport visualization mode");
+                ImGui::SetTooltip(overdrawActive
+                    ? "Disabled while overdraw visualization is active"
+                    : "Viewport visualization mode");
             }
         }
         ImGui::End();

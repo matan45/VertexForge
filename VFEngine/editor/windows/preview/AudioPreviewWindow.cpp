@@ -349,6 +349,8 @@ namespace windows
                         events::audio::PlayStreamingSoundCommand playCmd;
                         playCmd.path = audioPath;
                         playCmd.params.volume = volume;
+                        playCmd.params.loop = loopEnabled;
+                        playCmd.params.pitch = pitch;
                         currentAudioHandle = dispatcher.execute(playCmd);
                         
                         if (currentAudioHandle.isValid())
@@ -378,6 +380,8 @@ namespace windows
                 }
                 playbackPosition = 0.0f;
             }
+
+            ImGui::Checkbox("Loop", &loopEnabled);
             
             if (ImGui::SliderFloat("##Position", &playbackPosition, 0.0f, 1.0f, ""))
             {
@@ -414,6 +418,20 @@ namespace windows
                     volCmd.handle = currentAudioHandle;
                     volCmd.volume = volume;
                     dispatcher.execute(volCmd);
+                }
+            }
+
+            ImGui::Spacing();
+
+            ImGui::Text("Pitch");
+            if (ImGui::SliderFloat("##Pitch", &pitch, 0.5f, 2.0f, "%.2fx", ImGuiSliderFlags_AlwaysClamp))
+            {
+                if (currentAudioHandle.isValid())
+                {
+                    events::audio::SetSoundPitchCommand pitchCmd;
+                    pitchCmd.handle = currentAudioHandle;
+                    pitchCmd.pitch = pitch;
+                    dispatcher.execute(pitchCmd);
                 }
             }
         }
@@ -469,6 +487,22 @@ namespace windows
                 2.0f);
         }
         
-        ImGui::Dummy(canvasSize);
+        // Click/drag on waveform to scrub playback position
+        ImGui::SetCursorScreenPos(canvasPos);
+        ImGui::InvisibleButton("##WaveformCanvas", canvasSize);
+        if (ImGui::IsItemActive())
+        {
+            float clickX = (ImGui::GetIO().MousePos.x - canvasPos.x) / canvasSize.x;
+            clickX = std::clamp(clickX, 0.0f, 1.0f);
+            playbackPosition = clickX;
+
+            if (currentAudioHandle.isValid() && audioDurationSeconds > 0.0f)
+            {
+                events::audio::SetPlaybackPositionCommand seekCmd;
+                seekCmd.handle = currentAudioHandle;
+                seekCmd.seconds = clickX * audioDurationSeconds;
+                events::EventDispatcher::instance().execute(seekCmd);
+            }
+        }
     }
 }
