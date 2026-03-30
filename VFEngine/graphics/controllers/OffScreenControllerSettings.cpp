@@ -96,7 +96,6 @@ namespace controllers
         stats.atlasUtilization = shadowSystem->getPoolUtilization();
         stats.activeShadowCasters = shadowSystem->getActiveShadowCasterCount();
         stats.activeShadowViews = shadowSystem->getActiveShadowViewCount();
-        stats.directionalLightCount = static_cast<uint32_t>(shadowSystem->getDirectionalShadowViews().size());
         stats.pointLightCount = static_cast<uint32_t>(shadowSystem->getPointShadowViews().size());
         stats.spotLightCount = static_cast<uint32_t>(shadowSystem->getSpotShadowViews().size());
         stats.pointResolution = render::shadow::vsm::PAGE_SIZE;

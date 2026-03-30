@@ -176,8 +176,7 @@ namespace windows
         {
             ImGui::Text("Active: %u casters, %u views",
                        shadowStats.activeShadowCasters, shadowStats.activeShadowViews);
-            ImGui::TextDisabled("  Dir: %u  Point: %u  Spot: %u",
-                               shadowStats.directionalLightCount,
+            ImGui::TextDisabled("  Point: %u  Spot: %u",
                                shadowStats.pointLightCount,
                                shadowStats.spotLightCount);
         }

@@ -161,7 +161,6 @@ namespace services {
         float atlasUtilization = 0.0f;
         uint32_t activeShadowCasters = 0;
         uint32_t activeShadowViews = 0;
-        uint32_t directionalLightCount = 0;
         uint32_t pointLightCount = 0;
         uint32_t spotLightCount = 0;
         uint32_t pointResolution = 512;
