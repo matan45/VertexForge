@@ -45,6 +45,7 @@
 #include "../gi/GIDebugRenderer.hpp"
 #include "../raytracing/AccelerationStructureManager.hpp"
 #include "../raytracing/RTShadowPipeline.hpp"
+#include "../raytracing/RTShadowDenoiser.hpp"
 #include "../svt/SVTTypes.hpp"
 #include "../svt/PhysicalTileCache.hpp"
 #include "../svt/SVTPageTable.hpp"
@@ -353,6 +354,7 @@ namespace render::gpudriven
         std::unique_ptr<gi::GIDebugRenderer> giDebugRenderer;
         std::unique_ptr<raytracing::AccelerationStructureManager> accelStructManager;
         std::unique_ptr<raytracing::RTShadowPipeline> rtShadowPipeline;
+        std::unique_ptr<raytracing::RTShadowDenoiser> rtShadowDenoiser;
         gi::GISettings cachedGISettings;
         bool giProbeBuffersNeedInit = true;
 

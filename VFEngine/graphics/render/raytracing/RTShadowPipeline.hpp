@@ -54,7 +54,8 @@ namespace render::raytracing
                       float farPlane,
                       const glm::vec3& lightDirection,
                       float maxRayDistance,
-                      uint32_t screenWidth, uint32_t screenHeight);
+                      uint32_t screenWidth, uint32_t screenHeight,
+                      bool skipFinalTransitions = false);
 
         bool isInitialized() const { return initialized; }
 
@@ -62,6 +63,10 @@ namespace render::raytracing
         vk::DescriptorSetLayout getShadowMaskSamplerLayout() const { return shadowMaskSamplerLayout; }
         vk::DescriptorSet getShadowMaskSamplerDescriptorSet() const { return shadowMaskSamplerDescSet; }
         vk::ImageView getShadowMaskImageView() const { return shadowMaskSampledView; }
+
+        // For denoiser access to raw shadow mask
+        vk::Image getShadowMaskImage() const { return shadowMaskImage; }
+        vk::ImageView getShadowMaskStorageView() const { return shadowMaskStorageView; }
 
     private:
         core::Device& device;

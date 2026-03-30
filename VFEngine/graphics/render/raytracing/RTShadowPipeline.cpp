@@ -324,7 +324,8 @@ namespace render::raytracing
                                      float farPlane,
                                      const glm::vec3& lightDirection,
                                      float maxRayDistance,
-                                     uint32_t screenWidth, uint32_t screenHeight)
+                                     uint32_t screenWidth, uint32_t screenHeight,
+                                     bool skipFinalTransitions)
     {
         if (!initialized || !computePipeline) return;
 
@@ -410,23 +411,26 @@ namespace render::raytracing
         uint32_t groupsY = (screenHeight + 7) / 8;
         cmd.dispatch(groupsX, groupsY, 1);
 
-        // Transition shadow mask: general -> shader read (for fragment shader)
-        core::ImageUtilities::transitionImageLayout(cmd, shadowMaskImage,
-            vk::ImageLayout::eGeneral,
-            vk::ImageLayout::eShaderReadOnlyOptimal,
-            vk::ImageAspectFlagBits::eColor);
+        if (!skipFinalTransitions)
+        {
+            // Transition shadow mask: general -> shader read (for fragment shader)
+            core::ImageUtilities::transitionImageLayout(cmd, shadowMaskImage,
+                vk::ImageLayout::eGeneral,
+                vk::ImageLayout::eShaderReadOnlyOptimal,
+                vk::ImageAspectFlagBits::eColor);
 
-        // Transition depth back: shader read -> attachment
-        core::ImageUtilities::transitionImageLayout(cmd, depthImage,
-            vk::ImageLayout::eShaderReadOnlyOptimal,
-            vk::ImageLayout::eDepthStencilAttachmentOptimal,
-            vk::ImageAspectFlagBits::eDepth);
+            // Transition depth back: shader read -> attachment
+            core::ImageUtilities::transitionImageLayout(cmd, depthImage,
+                vk::ImageLayout::eShaderReadOnlyOptimal,
+                vk::ImageLayout::eDepthStencilAttachmentOptimal,
+                vk::ImageAspectFlagBits::eDepth);
 
-        // Transition normal back: shader read -> color attachment
-        core::ImageUtilities::transitionImageLayout(cmd, normalImage,
-            vk::ImageLayout::eShaderReadOnlyOptimal,
-            vk::ImageLayout::eColorAttachmentOptimal,
-            vk::ImageAspectFlagBits::eColor);
+            // Transition normal back: shader read -> color attachment
+            core::ImageUtilities::transitionImageLayout(cmd, normalImage,
+                vk::ImageLayout::eShaderReadOnlyOptimal,
+                vk::ImageLayout::eColorAttachmentOptimal,
+                vk::ImageAspectFlagBits::eColor);
+        }
 
         firstFrame = false;
     }

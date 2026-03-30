@@ -258,6 +258,7 @@
     <ClInclude Include="render\preview\PreviewRenderHandler.hpp" />
     <ClInclude Include="render\preview\PreviewViewPort.hpp" />
     <ClInclude Include="render\raytracing\AccelerationStructureManager.hpp" />
+    <ClInclude Include="render\raytracing\RTShadowDenoiser.hpp" />
     <ClInclude Include="render\raytracing\RTShadowPipeline.hpp" />
     <ClInclude Include="render\raytracing\ScratchBufferPool.hpp" />
     <ClInclude Include="render\shadow\CascadeShadowCalculator.hpp" />
@@ -514,6 +515,7 @@
     <ClCompile Include="render\preview\PreviewRenderHandler.cpp" />
     <ClCompile Include="render\preview\PreviewViewPort.cpp" />
     <ClCompile Include="render\raytracing\AccelerationStructureManager.cpp" />
+    <ClCompile Include="render\raytracing\RTShadowDenoiser.cpp" />
     <ClCompile Include="render\raytracing\RTShadowPipeline.cpp" />
     <ClCompile Include="render\shadow\CascadeShadowCalculator.cpp" />
     <ClCompile Include="render\shadow\ClipmapShadowCalculator.cpp" />
@@ -676,6 +678,8 @@
     <None Include="..\..\resources\shaders\postprocess\volumetric_fog_sample.glsl" />
     <None Include="..\..\resources\shaders\preview\gradient_background.glsl" />
     <None Include="..\..\resources\shaders\shadow\rt_shadow.glsl" />
+    <None Include="..\..\resources\shaders\shadow\rt_shadow_spatial.glsl" />
+    <None Include="..\..\resources\shaders\shadow\rt_shadow_temporal.glsl" />
     <None Include="..\..\resources\shaders\shadow\shadow.glsl" />
     <None Include="..\..\resources\shaders\shadow\shadow_terrain.glsl" />
     <None Include="..\..\resources\shaders\shadow\vsm_feedback.glsl" />

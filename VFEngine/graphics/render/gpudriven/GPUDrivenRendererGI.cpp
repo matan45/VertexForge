@@ -231,6 +231,7 @@ namespace render::gpudriven
         if (giDebugRenderer) { giDebugRenderer->cleanup(); giDebugRenderer.reset(); }
         if (giUpdatePipeline) { giUpdatePipeline->cleanup(); giUpdatePipeline.reset(); }
         if (giTracePipeline) { giTracePipeline->cleanup(); giTracePipeline.reset(); }
+        if (rtShadowDenoiser) { rtShadowDenoiser->cleanup(); rtShadowDenoiser.reset(); }
         if (rtShadowPipeline) { rtShadowPipeline->cleanup(); rtShadowPipeline.reset(); }
         if (accelStructManager) { accelStructManager->cleanup(); accelStructManager.reset(); }
         if (giCascadeManager) { giCascadeManager->cleanup(); giCascadeManager.reset(); }
@@ -434,10 +435,22 @@ namespace render::gpudriven
 
             if (rtShadowPipeline->isInitialized() && meshShaderPipeline && shadowSystem)
             {
+                // Init denoiser
+                rtShadowDenoiser = std::make_unique<raytracing::RTShadowDenoiser>(device);
+                rtShadowDenoiser->init(depthPrepass->getWidth(), depthPrepass->getHeight());
+
                 vk::DescriptorSetLayout giLayout = (giCascadeManager && giCascadeManager->getProbeStorage())
                     ? giCascadeManager->getProbeStorage()->getSamplingLayout() : nullptr;
                 vk::DescriptorSetLayout causticLayout = (water.causticsResources && water.causticsResources->isInitialized())
                     ? water.causticsResources->getDescriptorSetLayout() : nullptr;
+
+                // Use denoiser layout/descriptor for set 13 if available, else raw shadow
+                vk::DescriptorSetLayout rtMaskLayout = (rtShadowDenoiser && rtShadowDenoiser->isInitialized())
+                    ? rtShadowDenoiser->getDenoisedMaskSamplerLayout()
+                    : rtShadowPipeline->getShadowMaskSamplerLayout();
+                vk::DescriptorSet rtMaskDescSet = (rtShadowDenoiser && rtShadowDenoiser->isInitialized())
+                    ? rtShadowDenoiser->getDenoisedMaskSamplerDescriptorSet()
+                    : rtShadowPipeline->getShadowMaskSamplerDescriptorSet();
 
                 MeshPipelineInitInfo pipelineInfo{
                     .iblLayout = cachedIBLLayout,
@@ -450,12 +463,12 @@ namespace render::gpudriven
                     .shadowTextureLayout = shadowSystem->getShadowTextureLayout(),
                     .giProbeDataLayout = giLayout,
                     .causticLayout = causticLayout,
-                    .rtShadowMaskLayout = rtShadowPipeline->getShadowMaskSamplerLayout(),
+                    .rtShadowMaskLayout = rtMaskLayout,
                     .renderPass = cachedRenderPass
                 };
 
                 meshShaderPipeline->recreate(pipelineInfo);
-                meshShaderPipeline->updateRTShadowMaskDescriptor(rtShadowPipeline->getShadowMaskSamplerDescriptorSet());
+                meshShaderPipeline->updateRTShadowMaskDescriptor(rtMaskDescSet);
                 if (giLayout && giCascadeManager)
                     meshShaderPipeline->updateGIProbeDescriptor(giCascadeManager->getProbeStorage()->getSamplingDescSet());
                 if (causticLayout)
@@ -465,7 +478,7 @@ namespace render::gpudriven
                 {
                     pipelineInfo.transparentMode = true;
                     transparentMeshShaderPipeline->recreate(pipelineInfo);
-                    transparentMeshShaderPipeline->updateRTShadowMaskDescriptor(rtShadowPipeline->getShadowMaskSamplerDescriptorSet());
+                    transparentMeshShaderPipeline->updateRTShadowMaskDescriptor(rtMaskDescSet);
                     if (giLayout && giCascadeManager)
                         transparentMeshShaderPipeline->updateGIProbeDescriptor(giCascadeManager->getProbeStorage()->getSamplingDescSet());
                     if (causticLayout)
@@ -478,7 +491,7 @@ namespace render::gpudriven
                     pipelineInfo.renderPass = cachedWBOITRenderPass;
                     pipelineInfo.wboitMode = true;
                     wboitMeshShaderPipeline->recreate(pipelineInfo);
-                    wboitMeshShaderPipeline->updateRTShadowMaskDescriptor(rtShadowPipeline->getShadowMaskSamplerDescriptorSet());
+                    wboitMeshShaderPipeline->updateRTShadowMaskDescriptor(rtMaskDescSet);
                     if (giLayout && giCascadeManager)
                         wboitMeshShaderPipeline->updateGIProbeDescriptor(giCascadeManager->getProbeStorage()->getSamplingDescSet());
                     if (causticLayout)
@@ -490,15 +503,29 @@ namespace render::gpudriven
         if (!rtShadowPipeline->isInitialized()) return;
 
         // Handle resize
-        if (depthPrepass->getWidth() != 0 && depthPrepass->getHeight() != 0)
+        uint32_t w = depthPrepass->getWidth();
+        uint32_t h = depthPrepass->getHeight();
+        if (w != 0 && h != 0)
         {
-            rtShadowPipeline->resize(depthPrepass->getWidth(), depthPrepass->getHeight());
+            rtShadowPipeline->resize(w, h);
+            if (rtShadowDenoiser && rtShadowDenoiser->isInitialized())
+            {
+                rtShadowDenoiser->resize(w, h);
+                // Re-bind denoised output after resize
+                if (meshShaderPipeline)
+                    meshShaderPipeline->updateRTShadowMaskDescriptor(rtShadowDenoiser->getDenoisedMaskSamplerDescriptorSet());
+                if (transparentMeshShaderPipeline)
+                    transparentMeshShaderPipeline->updateRTShadowMaskDescriptor(rtShadowDenoiser->getDenoisedMaskSamplerDescriptorSet());
+                if (wboitMeshShaderPipeline)
+                    wboitMeshShaderPipeline->updateRTShadowMaskDescriptor(rtShadowDenoiser->getDenoisedMaskSamplerDescriptorSet());
+            }
         }
 
         auto lightDir = lightBufferManager->getFirstDirectionalLightDirection();
         if (!lightDir.has_value()) return;
 
         const auto& camData = cameraBuffer->getData();
+        bool useDenoiser = rtShadowDenoiser && rtShadowDenoiser->isInitialized();
 
         rtShadowPipeline->dispatch(cmd,
             depthPrepass->getDepthImageView(),
@@ -511,7 +538,22 @@ namespace render::gpudriven
             camData.farPlane,
             lightDir.value(),
             500.0f,
-            depthPrepass->getWidth(),
-            depthPrepass->getHeight());
+            w, h,
+            useDenoiser); // skip final transitions when denoiser handles them
+
+        if (useDenoiser)
+        {
+            rtShadowDenoiser->dispatch(cmd,
+                rtShadowPipeline->getShadowMaskStorageView(),
+                rtShadowPipeline->getShadowMaskImage(),
+                depthPrepass->getDepthImageView(),
+                depthPrepass->getDepthImage(),
+                depthPrepass->getNormalImageView(),
+                depthPrepass->getNormalImage(),
+                camData.invViewProjection,
+                camData.viewProjection,
+                w, h,
+                camData.frameIndex);
+        }
     }
 }
