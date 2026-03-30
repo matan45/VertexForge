@@ -614,6 +614,7 @@
     <None Include="..\..\resources\shaders\common\svt_types.glsl" />
     <None Include="..\..\resources\shaders\common\volumetric_common.glsl" />
     <None Include="..\..\resources\shaders\decal\decal.glsl" />
+    <None Include="..\..\resources\shaders\depthprepass\frag_depth_prepass.glsl" />
     <None Include="..\..\resources\shaders\depthprepass\mesh_depth_prepass.glsl" />
     <None Include="..\..\resources\shaders\depthprepass\mesh_terrain_depth_prepass.glsl" />
     <None Include="..\..\resources\shaders\depthprepass\task_depth_prepass.glsl" />

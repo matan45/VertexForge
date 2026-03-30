@@ -55,6 +55,9 @@ layout(push_constant) uniform PushConstants {
 
 const uint VERTEX_STRIDE = 16; // 64 bytes / 4 bytes per float
 
+// Output world-space normal to color attachment
+layout(location = 0) out vec3 outWorldNormal[];
+
 void main() {
     uint meshletSlot = gl_WorkGroupID.x;
     if (meshletSlot >= payload.meshletCount) return;
@@ -70,6 +73,7 @@ void main() {
     PerDrawData drawData = perDrawData[payload.drawIndex];
     mat4 modelMatrix = drawData.modelMatrix;
     mat4 viewProjection = camera.projection * camera.view;
+    mat3 normalMatrix = mat3(modelMatrix);
 
     for (uint i = gl_LocalInvocationID.x; i < vertexCount; i += 32) {
         uint localVertexIndex = meshletVertices[meshlet.vertexOffset + i];
@@ -81,8 +85,15 @@ void main() {
             vertexData[globalVertexIndex * VERTEX_STRIDE + 2]
         );
 
+        vec3 normal = vec3(
+            vertexData[globalVertexIndex * VERTEX_STRIDE + 3],
+            vertexData[globalVertexIndex * VERTEX_STRIDE + 4],
+            vertexData[globalVertexIndex * VERTEX_STRIDE + 5]
+        );
+
         vec4 worldPos = modelMatrix * vec4(pos, 1.0);
         gl_MeshVerticesEXT[i].gl_Position = viewProjection * worldPos;
+        outWorldNormal[i] = normalize(normalMatrix * normal);
     }
 
     for (uint i = gl_LocalInvocationID.x; i < primitiveCount; i += 32) {

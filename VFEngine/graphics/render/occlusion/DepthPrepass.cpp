@@ -21,17 +21,18 @@ namespace render::occlusion
         width = w;
         height = h;
 
-        createDepthImage();
+        createImages();
         createRenderPass();
         createFramebuffer();
 
         initialized = true;
-        vfLogInfo("Depth prepass initialized: {}x{}", width, height);
+        vfLogInfo("Depth prepass initialized: {}x{} (with normal output)", width, height);
     }
 
-    void DepthPrepass::createDepthImage()
+    void DepthPrepass::createImages()
     {
-        core::ImageInfoRequest imageRequest(
+        // Depth image (unchanged)
+        core::ImageInfoRequest depthRequest(
             device.getLogicalDevice(),
             device.getPhysicalDevice(),
             width, height, 1, 1,
@@ -40,19 +41,38 @@ namespace render::occlusion
             vk::ImageUsageFlagBits::eDepthStencilAttachment | vk::ImageUsageFlagBits::eSampled,
             vk::MemoryPropertyFlagBits::eDeviceLocal
         );
-        core::ImageUtilities::createImage(imageRequest, depthImage, depthAllocation, device.getMemoryManager());
+        core::ImageUtilities::createImage(depthRequest, depthImage, depthAllocation, device.getMemoryManager());
 
-        core::ImageViewInfoRequest viewRequest(
+        core::ImageViewInfoRequest depthViewRequest(
             device.getLogicalDevice(), depthImage,
             vk::Format::eD32Sfloat, vk::ImageAspectFlagBits::eDepth,
             vk::ImageViewType::e2D, 1, 1
         );
-        core::ImageUtilities::createImageView(viewRequest, depthImageView);
+        core::ImageUtilities::createImageView(depthViewRequest, depthImageView);
 
-        transitionInitialLayout();
+        // Normal image (world-space normals)
+        core::ImageInfoRequest normalRequest(
+            device.getLogicalDevice(),
+            device.getPhysicalDevice(),
+            width, height, 1, 1,
+            vk::Format::eR16G16B16A16Sfloat,
+            vk::ImageTiling::eOptimal,
+            vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled,
+            vk::MemoryPropertyFlagBits::eDeviceLocal
+        );
+        core::ImageUtilities::createImage(normalRequest, normalImage, normalAllocation, device.getMemoryManager());
+
+        core::ImageViewInfoRequest normalViewRequest(
+            device.getLogicalDevice(), normalImage,
+            vk::Format::eR16G16B16A16Sfloat, vk::ImageAspectFlagBits::eColor,
+            vk::ImageViewType::e2D, 1, 1
+        );
+        core::ImageUtilities::createImageView(normalViewRequest, normalImageView);
+
+        transitionInitialLayouts();
     }
 
-    void DepthPrepass::transitionInitialLayout()
+    void DepthPrepass::transitionInitialLayouts()
     {
         vk::CommandPoolCreateInfo poolInfo{};
         poolInfo.queueFamilyIndex = device.getQueueFamilyIndices().graphicsAndComputeFamily.value();
@@ -69,21 +89,34 @@ namespace render::occlusion
         beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
         cmd.begin(beginInfo);
 
-        vk::ImageMemoryBarrier barrier{};
-        barrier.oldLayout = vk::ImageLayout::eUndefined;
-        barrier.newLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
-        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        barrier.image = depthImage;
-        barrier.subresourceRange = {vk::ImageAspectFlagBits::eDepth, 0, 1, 0, 1};
-        barrier.srcAccessMask = vk::AccessFlagBits::eNone;
-        barrier.dstAccessMask = vk::AccessFlagBits::eDepthStencilAttachmentRead |
-                                vk::AccessFlagBits::eDepthStencilAttachmentWrite;
+        // Transition depth image
+        vk::ImageMemoryBarrier depthBarrier{};
+        depthBarrier.oldLayout = vk::ImageLayout::eUndefined;
+        depthBarrier.newLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
+        depthBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        depthBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        depthBarrier.image = depthImage;
+        depthBarrier.subresourceRange = {vk::ImageAspectFlagBits::eDepth, 0, 1, 0, 1};
+        depthBarrier.srcAccessMask = vk::AccessFlagBits::eNone;
+        depthBarrier.dstAccessMask = vk::AccessFlagBits::eDepthStencilAttachmentRead |
+                                     vk::AccessFlagBits::eDepthStencilAttachmentWrite;
 
+        // Transition normal image
+        vk::ImageMemoryBarrier normalBarrier{};
+        normalBarrier.oldLayout = vk::ImageLayout::eUndefined;
+        normalBarrier.newLayout = vk::ImageLayout::eColorAttachmentOptimal;
+        normalBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        normalBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        normalBarrier.image = normalImage;
+        normalBarrier.subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};
+        normalBarrier.srcAccessMask = vk::AccessFlagBits::eNone;
+        normalBarrier.dstAccessMask = vk::AccessFlagBits::eColorAttachmentWrite;
+
+        std::array<vk::ImageMemoryBarrier, 2> barriers = {depthBarrier, normalBarrier};
         cmd.pipelineBarrier(
             vk::PipelineStageFlagBits::eTopOfPipe,
-            vk::PipelineStageFlagBits::eEarlyFragmentTests,
-            {}, {}, {}, barrier);
+            vk::PipelineStageFlagBits::eEarlyFragmentTests | vk::PipelineStageFlagBits::eColorAttachmentOutput,
+            {}, {}, {}, barriers);
 
         cmd.end();
 
@@ -98,6 +131,7 @@ namespace render::occlusion
 
     void DepthPrepass::createRenderPass()
     {
+        // Attachment 0: Depth
         vk::AttachmentDescription depthAttachment{};
         depthAttachment.format = vk::Format::eD32Sfloat;
         depthAttachment.samples = vk::SampleCountFlagBits::e1;
@@ -108,27 +142,49 @@ namespace render::occlusion
         depthAttachment.initialLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
         depthAttachment.finalLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
 
+        // Attachment 1: World-space normals
+        vk::AttachmentDescription normalAttachment{};
+        normalAttachment.format = vk::Format::eR16G16B16A16Sfloat;
+        normalAttachment.samples = vk::SampleCountFlagBits::e1;
+        normalAttachment.loadOp = vk::AttachmentLoadOp::eClear;
+        normalAttachment.storeOp = vk::AttachmentStoreOp::eStore;
+        normalAttachment.stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
+        normalAttachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
+        normalAttachment.initialLayout = vk::ImageLayout::eColorAttachmentOptimal;
+        normalAttachment.finalLayout = vk::ImageLayout::eColorAttachmentOptimal;
+
+        std::array<vk::AttachmentDescription, 2> attachments = {depthAttachment, normalAttachment};
+
         vk::AttachmentReference depthRef{};
         depthRef.attachment = 0;
         depthRef.layout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
 
+        vk::AttachmentReference normalRef{};
+        normalRef.attachment = 1;
+        normalRef.layout = vk::ImageLayout::eColorAttachmentOptimal;
+
         vk::SubpassDescription subpass{};
         subpass.pipelineBindPoint = vk::PipelineBindPoint::eGraphics;
-        subpass.colorAttachmentCount = 0;
+        subpass.colorAttachmentCount = 1;
+        subpass.pColorAttachments = &normalRef;
         subpass.pDepthStencilAttachment = &depthRef;
 
         vk::SubpassDependency dependency{};
         dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
         dependency.dstSubpass = 0;
-        dependency.srcStageMask = vk::PipelineStageFlagBits::eLateFragmentTests;
-        dependency.dstStageMask = vk::PipelineStageFlagBits::eEarlyFragmentTests;
-        dependency.srcAccessMask = vk::AccessFlagBits::eDepthStencilAttachmentWrite;
+        dependency.srcStageMask = vk::PipelineStageFlagBits::eLateFragmentTests |
+                                  vk::PipelineStageFlagBits::eColorAttachmentOutput;
+        dependency.dstStageMask = vk::PipelineStageFlagBits::eEarlyFragmentTests |
+                                  vk::PipelineStageFlagBits::eColorAttachmentOutput;
+        dependency.srcAccessMask = vk::AccessFlagBits::eDepthStencilAttachmentWrite |
+                                   vk::AccessFlagBits::eColorAttachmentWrite;
         dependency.dstAccessMask = vk::AccessFlagBits::eDepthStencilAttachmentRead |
-                                   vk::AccessFlagBits::eDepthStencilAttachmentWrite;
+                                   vk::AccessFlagBits::eDepthStencilAttachmentWrite |
+                                   vk::AccessFlagBits::eColorAttachmentWrite;
 
         vk::RenderPassCreateInfo renderPassInfo{};
-        renderPassInfo.attachmentCount = 1;
-        renderPassInfo.pAttachments = &depthAttachment;
+        renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
+        renderPassInfo.pAttachments = attachments.data();
         renderPassInfo.subpassCount = 1;
         renderPassInfo.pSubpasses = &subpass;
         renderPassInfo.dependencyCount = 1;
@@ -139,10 +195,12 @@ namespace render::occlusion
 
     void DepthPrepass::createFramebuffer()
     {
+        std::array<vk::ImageView, 2> attachments = {depthImageView, normalImageView};
+
         vk::FramebufferCreateInfo fbInfo{};
         fbInfo.renderPass = renderPass;
-        fbInfo.attachmentCount = 1;
-        fbInfo.pAttachments = &depthImageView;
+        fbInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
+        fbInfo.pAttachments = attachments.data();
         fbInfo.width = width;
         fbInfo.height = height;
         fbInfo.layers = 1;
@@ -152,16 +210,17 @@ namespace render::occlusion
 
     void DepthPrepass::beginPass(vk::CommandBuffer cmd) const
     {
-        vk::ClearValue clearValue{};
-        clearValue.depthStencil = vk::ClearDepthStencilValue{1.0f, 0};
+        std::array<vk::ClearValue, 2> clearValues{};
+        clearValues[0].depthStencil = vk::ClearDepthStencilValue{1.0f, 0};
+        clearValues[1].color = vk::ClearColorValue{std::array<float, 4>{0.0f, 0.0f, 0.0f, 0.0f}};
 
         vk::RenderPassBeginInfo rpInfo{};
         rpInfo.renderPass = renderPass;
         rpInfo.framebuffer = framebuffer;
         rpInfo.renderArea.offset = vk::Offset2D{0, 0};
         rpInfo.renderArea.extent = vk::Extent2D{width, height};
-        rpInfo.clearValueCount = 1;
-        rpInfo.pClearValues = &clearValue;
+        rpInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
+        rpInfo.pClearValues = clearValues.data();
 
         cmd.beginRenderPass(rpInfo, vk::SubpassContents::eInline);
 
@@ -187,10 +246,16 @@ namespace render::occlusion
 
         device.getLogicalDevice().destroyFramebuffer(framebuffer);
         device.getLogicalDevice().destroyRenderPass(renderPass);
+
         device.getLogicalDevice().destroyImageView(depthImageView);
         device.getLogicalDevice().destroyImage(depthImage);
         device.getMemoryManager().free(depthAllocation);
         depthAllocation = {};
+
+        device.getLogicalDevice().destroyImageView(normalImageView);
+        device.getLogicalDevice().destroyImage(normalImage);
+        device.getMemoryManager().free(normalAllocation);
+        normalAllocation = {};
 
         initialized = false;
     }

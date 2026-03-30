@@ -20,6 +20,11 @@ namespace render::occlusion
         vk::Image depthImage;
         core::VulkanAllocation depthAllocation;
         vk::ImageView depthImageView;
+
+        vk::Image normalImage;
+        core::VulkanAllocation normalAllocation;
+        vk::ImageView normalImageView;
+
         vk::RenderPass renderPass;
         vk::Framebuffer framebuffer;
 
@@ -42,14 +47,16 @@ namespace render::occlusion
 
         vk::Image getDepthImage() const { return depthImage; }
         vk::ImageView getDepthImageView() const { return depthImageView; }
+        vk::Image getNormalImage() const { return normalImage; }
+        vk::ImageView getNormalImageView() const { return normalImageView; }
         vk::RenderPass getRenderPass() const { return renderPass; }
         uint32_t getWidth() const { return width; }
         uint32_t getHeight() const { return height; }
         bool isInitialized() const { return initialized; }
 
     private:
-        void createDepthImage();
-        void transitionInitialLayout();
+        void createImages();
+        void transitionInitialLayouts();
         void createRenderPass();
         void createFramebuffer();
     };
