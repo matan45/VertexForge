@@ -132,6 +132,12 @@ namespace windows
         if (ImGui::Button("Reset Defaults", ImVec2(110, 0)))
             resetToDefaults();
 
+        if (isDirty)
+        {
+            ImGui::SameLine();
+            ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "(Modified)");
+        }
+
         ImGui::SameLine(ImGui::GetContentRegionAvail().x - 170.0f);
 
         if (ImGui::Button("Cancel", ImVec2(80, 0)))
@@ -145,12 +151,6 @@ namespace windows
 
         if (ImGui::Button("Apply", ImVec2(80, 0)))
             saveSettings();
-
-        if (isDirty)
-        {
-            ImGui::SameLine();
-            ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "(Modified)");
-        }
     }
 
     void EditorPreferencesWindow::drawSearchResults()

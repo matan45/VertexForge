@@ -127,7 +127,9 @@ namespace windows
             ImVec4 semiTransparent = ImVec4(accent.x, accent.y, accent.z, 0.35f);
             ImVec4 transparent70 = ImVec4(accent.x, accent.y, accent.z, 0.70f);
 
-            style.Colors[ImGuiCol_CheckMark] = base;
+            // Filled circular checkbox using accent color with white checkmark
+            style.Colors[ImGuiCol_CheckMark] = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
+            style.Colors[ImGuiCol_FrameBgActive] = base;
             style.Colors[ImGuiCol_SliderGrab] = base;
             style.Colors[ImGuiCol_SliderGrabActive] = brighter;
             style.Colors[ImGuiCol_ButtonActive] = base;
@@ -161,7 +163,7 @@ namespace windows
             style.ChildRounding = panelRounding;
             style.PopupRounding = panelRounding;
             style.ScrollbarRounding = panelRounding;
-            style.FrameRounding = controlRounding;
+            style.FrameRounding = 12.0f; // Circular checkboxes
             style.TabRounding = controlRounding;
 
             // Modern circular slider grab
