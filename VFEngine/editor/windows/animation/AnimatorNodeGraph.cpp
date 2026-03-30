@@ -529,6 +529,9 @@ namespace windows::animation
         if (!animatorData)
             return;
 
+        bool canHandleKeys = ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows);
+        if (!canHandleKeys) return;
+
         ImGuiIO& io = ImGui::GetIO();
 
         // Copy: Ctrl+C

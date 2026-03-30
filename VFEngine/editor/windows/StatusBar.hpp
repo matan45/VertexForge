@@ -25,7 +25,7 @@ namespace windows
         StatusBar();
         ~StatusBar();
 
-        void draw(const ImGuiViewport* viewport, float toolbarHeight);
+        void draw(const ImGuiViewport* viewport);
         float getHeight() const { return height; }
     };
 }

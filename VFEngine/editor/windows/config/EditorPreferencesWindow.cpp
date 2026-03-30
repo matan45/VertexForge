@@ -138,7 +138,7 @@ namespace windows
             ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "(Modified)");
         }
 
-        ImGui::SameLine(ImGui::GetContentRegionAvail().x - 170.0f);
+        ImGui::SameLine(ImGui::GetContentRegionMax().x - 170.0f);
 
         if (ImGui::Button("Cancel", ImVec2(80, 0)))
         {

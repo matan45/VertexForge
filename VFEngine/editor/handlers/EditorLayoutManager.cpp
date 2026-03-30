@@ -39,6 +39,11 @@ namespace handlers
 
     void EditorLayoutManager::saveLayout(const std::string& name)
     {
+        for (char c : name)
+        {
+            if (c == '/' || c == '\\' || c == '.' || c == ':') return;
+        }
+
         std::string layoutsDir = getLayoutsPath();
         if (layoutsDir.empty()) return;
 
@@ -75,10 +80,6 @@ namespace handlers
 
         // Load from memory so ImGui applies it immediately
         ImGui::LoadIniSettingsFromMemory(content.c_str(), content.size());
-
-        // Mark settings as loaded so ImGui applies docking layout
-        ImGuiContext& g = *ImGui::GetCurrentContext();
-        g.SettingsLoaded = true;
     }
 
     void EditorLayoutManager::resetLayout(ImGuiID dockId)

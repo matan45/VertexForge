@@ -187,6 +187,6 @@ namespace windows
         ImGui::End();
 
         // Status bar (below dockspace)
-        statusBar.draw(viewport, toolbarH);
+        statusBar.draw(viewport);
     }
 }

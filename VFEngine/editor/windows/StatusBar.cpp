@@ -28,7 +28,7 @@ namespace windows
         if (sceneClearedToken.isValid()) dispatcher.unsubscribe(sceneClearedToken);
     }
 
-    void StatusBar::draw(const ImGuiViewport* viewport, float toolbarHeight)
+    void StatusBar::draw(const ImGuiViewport* viewport)
     {
         ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
             ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoCollapse |
@@ -57,7 +57,7 @@ namespace windows
                         events::render::GetCullingStatsQuery{});
                     cachedDrawCalls = stats.gpuDriven.visibleObjects;
                 }
-                catch (...)
+                catch (const std::exception&)
                 {
                     cachedDrawCalls = 0;
                 }
