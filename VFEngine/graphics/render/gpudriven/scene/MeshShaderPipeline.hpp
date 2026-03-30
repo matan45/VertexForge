@@ -28,6 +28,7 @@ namespace render::gpudriven
         vk::DescriptorSetLayout shadowTextureLayout;
         vk::DescriptorSetLayout giProbeDataLayout;
         vk::DescriptorSetLayout causticLayout;
+        vk::DescriptorSetLayout rtShadowMaskLayout;
         vk::RenderPass renderPass;
         bool transparentMode = false;
         bool wboitMode = false;
@@ -90,6 +91,7 @@ namespace render::gpudriven
         vk::DescriptorSet shadowTextureDescriptorSet;
         vk::DescriptorSet giProbeDataDescriptorSet;
         vk::DescriptorSet causticDescriptorSet;
+        vk::DescriptorSet rtShadowMaskDescriptorSet;
 
         vk::DescriptorSetLayout cachedLightDataLayout;
         vk::DescriptorSetLayout cachedClusterGridLayout;
@@ -134,6 +136,7 @@ namespace render::gpudriven
 
         void updateGIProbeDescriptor(vk::DescriptorSet giProbeDescSet);
         void updateCausticDescriptor(vk::DescriptorSet causticDescSet);
+        void updateRTShadowMaskDescriptor(vk::DescriptorSet rtShadowMaskDescSet);
 
         vk::Pipeline getPipeline() const { return graphicsPipeline; }
         vk::PipelineLayout getPipelineLayout() const { return pipelineLayout; }
@@ -147,6 +150,7 @@ namespace render::gpudriven
         vk::DescriptorSet getShadowTextureDescriptorSet() const { return shadowTextureDescriptorSet; }
         vk::DescriptorSet getGIProbeDataDescriptorSet() const { return giProbeDataDescriptorSet; }
         vk::DescriptorSet getCausticDescriptorSet() const { return causticDescriptorSet; }
+        vk::DescriptorSet getRTShadowMaskDescriptorSet() const { return rtShadowMaskDescriptorSet; }
 
         vk::DescriptorSetLayout getPerDrawDataLayout() const { return perDrawDataLayout; }
         vk::DescriptorSetLayout getMeshletDataLayout() const { return meshletDataLayout; }

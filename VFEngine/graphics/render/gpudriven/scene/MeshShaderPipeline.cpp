@@ -307,6 +307,11 @@ namespace render::gpudriven
         causticDescriptorSet = causticDescSet;
     }
 
+    void MeshShaderPipeline::updateRTShadowMaskDescriptor(vk::DescriptorSet rtShadowMaskDescSet)
+    {
+        rtShadowMaskDescriptorSet = rtShadowMaskDescSet;
+    }
+
     void MeshShaderPipeline::createPerDrawDataDescriptor()
     {
         vk::Device vkDevice = device.getLogicalDevice();
@@ -532,6 +537,21 @@ namespace render::gpudriven
                 setLayouts.push_back(emptyPlaceholderLayout); // Set 11 placeholder
             }
             setLayouts.push_back(info.causticLayout); // Set 12
+        }
+
+        if (info.rtShadowMaskLayout)
+        {
+            // Pad with empty placeholders up to set 13
+            if (!emptyPlaceholderLayout)
+            {
+                vk::DescriptorSetLayoutCreateInfo emptyLayoutInfo{};
+                emptyLayoutInfo.bindingCount = 0;
+                emptyLayoutInfo.pBindings = nullptr;
+                emptyPlaceholderLayout = vkDevice.createDescriptorSetLayout(emptyLayoutInfo);
+            }
+            while (setLayouts.size() < 13)
+                setLayouts.push_back(emptyPlaceholderLayout);
+            setLayouts.push_back(info.rtShadowMaskLayout); // Set 13
         }
 
         vk::PushConstantRange pushConstantRange{};
