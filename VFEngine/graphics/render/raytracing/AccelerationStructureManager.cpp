@@ -58,7 +58,7 @@ namespace render::raytracing
         vk::Device vkDevice = device.getLogicalDevice();
         vkDevice.waitIdle();
 
-        // Destroy all BLAS entries
+        // Destroy all mesh BLAS entries
         for (auto& [key, entry] : blasCache)
         {
             destroyBLASEntry(entry);
@@ -66,6 +66,15 @@ namespace render::raytracing
         blasCache.clear();
         pendingBLASBuilds.clear();
         geometryOffsetToSubmeshKey.clear();
+
+        // Destroy all terrain BLAS entries
+        for (auto& [key, entry] : terrainBlasCache)
+        {
+            destroyBLASEntry(entry);
+        }
+        terrainBlasCache.clear();
+        pendingTerrainBLASBuilds.clear();
+        terrainOffsetToTileKey.clear();
 
         // Destroy TLAS
         if (tlas)
@@ -136,7 +145,7 @@ namespace render::raytracing
         if (lod0.vertexCount == 0 || lod0.indexCount == 0) return;
 
         PendingBLAS pending;
-        pending.submeshKey = key;
+        pending.key = key;
         pending.vertexOffset = lod0.vertexOffset;
         pending.vertexCount = lod0.vertexCount;
         pending.indexOffset = lod0.indexOffset;
@@ -168,7 +177,7 @@ namespace render::raytracing
         // Also remove from pending builds
         pendingBLASBuilds.erase(
             std::remove_if(pendingBLASBuilds.begin(), pendingBLASBuilds.end(),
-                [&key](const PendingBLAS& p) { return p.submeshKey == key; }),
+                [&key](const PendingBLAS& p) { return p.key == key; }),
             pendingBLASBuilds.end());
     }
 
@@ -218,7 +227,7 @@ namespace render::raytracing
                 &buildInfo, &triangleCount, &sizeInfo);
 
             // Destroy old entry if exists
-            auto it = blasCache.find(pending.submeshKey);
+            auto it = blasCache.find(pending.key);
             if (it != blasCache.end() && it->second.blas)
             {
                 destroyBLASEntry(it->second);
@@ -267,7 +276,7 @@ namespace render::raytracing
             memoryBudget.blasTotalBytes += entry.size;
             memoryBudget.blasCount++;
 
-            blasCache[pending.submeshKey] = entry;
+            blasCache[pending.key] = entry;
         }
 
         // Single barrier after all BLAS builds
@@ -524,6 +533,362 @@ namespace render::raytracing
         core::BufferUtilities::createBuffer(request, tlasScratchBuffer, tlasScratchAllocation, device.getMemoryManager());
 
         tlasScratchSize = requiredSize;
+    }
+
+    // ============================================================
+    // Terrain BLAS support
+    // ============================================================
+
+    void AccelerationStructureManager::notifyTerrainTileReady(const std::string& tileKey,
+                                                               uint32_t vertexOffset, uint32_t vertexCount,
+                                                               uint32_t indexOffset, uint32_t indexCount)
+    {
+        if (!initialized) return;
+        if (vertexCount == 0 || indexCount == 0) return;
+
+        // If tile already has a BLAS (LOD change), destroy old one first
+        auto it = terrainBlasCache.find(tileKey);
+        if (it != terrainBlasCache.end() && it->second.deviceAddress != 0)
+        {
+            // Check if geometry actually changed
+            if (it->second.lod0VertexOffset == vertexOffset && it->second.lod0IndexOffset == indexOffset)
+                return; // Same geometry, skip
+
+            // Remove old reverse mapping
+            uint64_t oldKey = makeGeometryOffsetKey(it->second.lod0VertexOffset, it->second.lod0IndexOffset);
+            terrainOffsetToTileKey.erase(oldKey);
+            destroyBLASEntry(it->second);
+            terrainBlasCache.erase(it);
+        }
+
+        PendingBLAS pending;
+        pending.key = tileKey;
+        pending.vertexOffset = vertexOffset;
+        pending.vertexCount = vertexCount;
+        pending.indexOffset = indexOffset;
+        pending.indexCount = indexCount;
+        pendingTerrainBLASBuilds.push_back(std::move(pending));
+
+        uint64_t offsetKey = makeGeometryOffsetKey(vertexOffset, indexOffset);
+        terrainOffsetToTileKey[offsetKey] = tileKey;
+    }
+
+    void AccelerationStructureManager::notifyTerrainTileRemoved(const std::string& tileKey)
+    {
+        if (!initialized) return;
+
+        auto it = terrainBlasCache.find(tileKey);
+        if (it == terrainBlasCache.end()) return;
+
+        uint64_t offsetKey = makeGeometryOffsetKey(it->second.lod0VertexOffset, it->second.lod0IndexOffset);
+        terrainOffsetToTileKey.erase(offsetKey);
+        destroyBLASEntry(it->second);
+        terrainBlasCache.erase(it);
+
+        pendingTerrainBLASBuilds.erase(
+            std::remove_if(pendingTerrainBLASBuilds.begin(), pendingTerrainBLASBuilds.end(),
+                [&tileKey](const PendingBLAS& p) { return p.key == tileKey; }),
+            pendingTerrainBLASBuilds.end());
+    }
+
+    void AccelerationStructureManager::buildPendingTerrainBLAS(vk::CommandBuffer cmd,
+                                                                vk::Buffer terrainVertexBuffer, uint32_t vertexStride,
+                                                                vk::Buffer terrainIndexBuffer)
+    {
+        if (!initialized || pendingTerrainBLASBuilds.empty()) return;
+
+        vk::Device vkDevice = device.getLogicalDevice();
+
+        vk::DeviceAddress vertexBufferAddress = vkDevice.getBufferAddress({terrainVertexBuffer});
+        vk::DeviceAddress indexBufferAddress = vkDevice.getBufferAddress({terrainIndexBuffer});
+
+        for (const auto& pending : pendingTerrainBLASBuilds)
+        {
+            uint32_t triangleCount = pending.indexCount / 3;
+            if (triangleCount == 0) continue;
+
+            vk::AccelerationStructureGeometryTrianglesDataKHR triangleData{};
+            triangleData.vertexFormat = vk::Format::eR32G32B32Sfloat;
+            triangleData.vertexData.deviceAddress = vertexBufferAddress +
+                static_cast<vk::DeviceSize>(pending.vertexOffset) * vertexStride;
+            triangleData.vertexStride = vertexStride;
+            triangleData.maxVertex = pending.vertexCount - 1;
+            triangleData.indexType = vk::IndexType::eUint32;
+            triangleData.indexData.deviceAddress = indexBufferAddress +
+                static_cast<vk::DeviceSize>(pending.indexOffset) * sizeof(uint32_t);
+
+            vk::AccelerationStructureGeometryKHR geometry{};
+            geometry.geometryType = vk::GeometryTypeKHR::eTriangles;
+            geometry.geometry.triangles = triangleData;
+            geometry.flags = vk::GeometryFlagBitsKHR::eOpaque;
+
+            vk::AccelerationStructureBuildGeometryInfoKHR buildInfo{};
+            buildInfo.type = vk::AccelerationStructureTypeKHR::eBottomLevel;
+            buildInfo.flags = vk::BuildAccelerationStructureFlagBitsKHR::ePreferFastTrace;
+            buildInfo.mode = vk::BuildAccelerationStructureModeKHR::eBuild;
+            buildInfo.geometryCount = 1;
+            buildInfo.pGeometries = &geometry;
+
+            vk::AccelerationStructureBuildSizesInfoKHR sizeInfo{};
+            vkDevice.getAccelerationStructureBuildSizesKHR(
+                vk::AccelerationStructureBuildTypeKHR::eDevice,
+                &buildInfo, &triangleCount, &sizeInfo);
+
+            BLASEntry entry{};
+            entry.size = sizeInfo.accelerationStructureSize;
+            entry.lod0VertexOffset = pending.vertexOffset;
+            entry.lod0IndexOffset = pending.indexOffset;
+            entry.lod0VertexCount = pending.vertexCount;
+            entry.lod0IndexCount = pending.indexCount;
+
+            {
+                core::BufferInfoRequest request(vkDevice, device.getPhysicalDevice());
+                request.size = sizeInfo.accelerationStructureSize;
+                request.usage = vk::BufferUsageFlagBits::eAccelerationStructureStorageKHR |
+                                vk::BufferUsageFlagBits::eShaderDeviceAddress;
+                request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
+                core::BufferUtilities::createBuffer(request, entry.buffer, entry.allocation, device.getMemoryManager());
+            }
+
+            vk::AccelerationStructureCreateInfoKHR createInfo{};
+            createInfo.buffer = entry.buffer;
+            createInfo.size = sizeInfo.accelerationStructureSize;
+            createInfo.type = vk::AccelerationStructureTypeKHR::eBottomLevel;
+            entry.blas = vkDevice.createAccelerationStructureKHR(createInfo);
+
+            vk::DeviceAddress scratchAddress = blasScratchPool.acquire(sizeInfo.buildScratchSize, device);
+
+            buildInfo.dstAccelerationStructure = entry.blas;
+            buildInfo.scratchData.deviceAddress = scratchAddress;
+
+            vk::AccelerationStructureBuildRangeInfoKHR rangeInfo{};
+            rangeInfo.primitiveCount = triangleCount;
+            const vk::AccelerationStructureBuildRangeInfoKHR* pRangeInfo = &rangeInfo;
+            cmd.buildAccelerationStructuresKHR(1, &buildInfo, &pRangeInfo);
+
+            entry.deviceAddress = vkDevice.getAccelerationStructureAddressKHR({entry.blas});
+
+            memoryBudget.blasTotalBytes += entry.size;
+            memoryBudget.blasCount++;
+
+            terrainBlasCache[pending.key] = entry;
+        }
+
+        vk::MemoryBarrier barrier{
+            vk::AccessFlagBits::eAccelerationStructureWriteKHR,
+            vk::AccessFlagBits::eAccelerationStructureReadKHR
+        };
+        cmd.pipelineBarrier(
+            vk::PipelineStageFlagBits::eAccelerationStructureBuildKHR,
+            vk::PipelineStageFlagBits::eAccelerationStructureBuildKHR,
+            vk::DependencyFlags{},
+            1, &barrier, 0, nullptr, 0, nullptr);
+
+        memoryBudget.scratchPeakBytes = blasScratchPool.getPeakSize();
+
+        vfLogInfo("AccelerationStructureManager: Built {} terrain BLAS entries (total terrain: {})",
+                  pendingTerrainBLASBuilds.size(), terrainBlasCache.size());
+
+        pendingTerrainBLASBuilds.clear();
+    }
+
+    void AccelerationStructureManager::buildTLASWithTerrain(vk::CommandBuffer cmd,
+                                                             const std::vector<gpudriven::GPUObjectData>& objects,
+                                                             uint32_t objectCount,
+                                                             const gpudriven::MergedMeshBuffer& mergedBuffer,
+                                                             const std::vector<gpudriven::TerrainTileGPUData>& terrainTiles,
+                                                             uint32_t terrainTileCount)
+    {
+        if (!initialized || (objectCount == 0 && terrainTileCount == 0)) return;
+        if (blasCache.empty() && terrainBlasCache.empty()) return;
+
+        vk::Device vkDevice = device.getLogicalDevice();
+
+        std::vector<vk::AccelerationStructureInstanceKHR> instances;
+        instances.reserve(objectCount + terrainTileCount);
+
+        // Mesh object instances (same as buildTLAS)
+        for (uint32_t i = 0; i < objectCount; ++i)
+        {
+            const auto& obj = objects[i];
+
+            if (obj.flags & (gpudriven::ObjectFlags::Translucent | gpudriven::ObjectFlags::AdditiveBlend))
+                continue;
+            if (obj.flags & gpudriven::ObjectFlags::TerrainTile)
+                continue;
+
+            uint32_t vertexOffset = obj.lod0Data.x;
+            uint32_t indexOffset = obj.lod0Data.y;
+            uint64_t offsetKey = makeGeometryOffsetKey(vertexOffset, indexOffset);
+
+            auto keyIt = geometryOffsetToSubmeshKey.find(offsetKey);
+            if (keyIt == geometryOffsetToSubmeshKey.end()) continue;
+
+            auto blasIt = blasCache.find(keyIt->second);
+            if (blasIt == blasCache.end() || blasIt->second.deviceAddress == 0) continue;
+
+            const glm::mat4& m = obj.modelMatrix;
+            vk::TransformMatrixKHR transform{};
+            transform.matrix[0][0] = m[0][0]; transform.matrix[0][1] = m[1][0]; transform.matrix[0][2] = m[2][0]; transform.matrix[0][3] = m[3][0];
+            transform.matrix[1][0] = m[0][1]; transform.matrix[1][1] = m[1][1]; transform.matrix[1][2] = m[2][1]; transform.matrix[1][3] = m[3][1];
+            transform.matrix[2][0] = m[0][2]; transform.matrix[2][1] = m[1][2]; transform.matrix[2][2] = m[2][2]; transform.matrix[2][3] = m[3][2];
+
+            vk::AccelerationStructureInstanceKHR inst{};
+            inst.transform = transform;
+            inst.instanceCustomIndex = i;
+            inst.mask = 0xFF;
+            inst.instanceShaderBindingTableRecordOffset = 0;
+            inst.flags = static_cast<VkGeometryInstanceFlagsKHR>(
+                vk::GeometryInstanceFlagBitsKHR::eTriangleFacingCullDisable);
+            inst.accelerationStructureReference = blasIt->second.deviceAddress;
+            instances.push_back(inst);
+        }
+
+        // Terrain tile instances
+        for (uint32_t i = 0; i < terrainTileCount; ++i)
+        {
+            const auto& tile = terrainTiles[i];
+
+            // Find the best LOD BLAS — use lod0MeshletData.z (baseVertexOffset) as part of key
+            // Terrain tiles use coordX/coordZ as unique identifier
+            std::string tileKey = std::to_string(tile.coordX) + "_" + std::to_string(tile.coordZ);
+
+            auto blasIt = terrainBlasCache.find(tileKey);
+            if (blasIt == terrainBlasCache.end() || blasIt->second.deviceAddress == 0) continue;
+
+            const glm::mat4& m = tile.modelMatrix;
+            vk::TransformMatrixKHR transform{};
+            transform.matrix[0][0] = m[0][0]; transform.matrix[0][1] = m[1][0]; transform.matrix[0][2] = m[2][0]; transform.matrix[0][3] = m[3][0];
+            transform.matrix[1][0] = m[0][1]; transform.matrix[1][1] = m[1][1]; transform.matrix[1][2] = m[2][1]; transform.matrix[1][3] = m[3][1];
+            transform.matrix[2][0] = m[0][2]; transform.matrix[2][1] = m[1][2]; transform.matrix[2][2] = m[2][2]; transform.matrix[2][3] = m[3][2];
+
+            vk::AccelerationStructureInstanceKHR inst{};
+            inst.transform = transform;
+            inst.instanceCustomIndex = objectCount + i;
+            inst.mask = 0xFF;
+            inst.instanceShaderBindingTableRecordOffset = 0;
+            inst.flags = static_cast<VkGeometryInstanceFlagsKHR>(
+                vk::GeometryInstanceFlagBitsKHR::eTriangleFacingCullDisable);
+            inst.accelerationStructureReference = blasIt->second.deviceAddress;
+            instances.push_back(inst);
+        }
+
+        if (instances.empty()) return;
+
+        // The rest is identical to buildTLAS — upload instances, build/update TLAS
+        uint32_t instanceCount = static_cast<uint32_t>(instances.size());
+        vk::DeviceSize instanceDataSize = sizeof(vk::AccelerationStructureInstanceKHR) * instanceCount;
+
+        ensureInstanceBuffer(instanceDataSize);
+
+        auto& staging = instanceStagingBuffers[currentStagingFrame];
+        ensureStagingBuffer(staging, instanceDataSize);
+
+        memcpy(staging.allocation.mappedPtr, instances.data(), instanceDataSize);
+
+        vk::BufferCopy copyRegion{};
+        copyRegion.size = instanceDataSize;
+        cmd.copyBuffer(staging.buffer, instanceBuffer, 1, &copyRegion);
+
+        vk::MemoryBarrier copyBarrier{
+            vk::AccessFlagBits::eTransferWrite,
+            vk::AccessFlagBits::eAccelerationStructureReadKHR
+        };
+        cmd.pipelineBarrier(
+            vk::PipelineStageFlagBits::eTransfer,
+            vk::PipelineStageFlagBits::eAccelerationStructureBuildKHR,
+            vk::DependencyFlags{},
+            1, &copyBarrier, 0, nullptr, 0, nullptr);
+
+        vk::DeviceAddress instanceAddress = vkDevice.getBufferAddress({instanceBuffer});
+
+        vk::AccelerationStructureGeometryInstancesDataKHR instancesData{};
+        instancesData.arrayOfPointers = VK_FALSE;
+        instancesData.data.deviceAddress = instanceAddress;
+
+        vk::AccelerationStructureGeometryKHR tlasGeometry{};
+        tlasGeometry.geometryType = vk::GeometryTypeKHR::eInstances;
+        tlasGeometry.geometry.instances = instancesData;
+
+        bool canUpdate = tlasBuilt && (currentInstanceCount == instanceCount);
+
+        vk::AccelerationStructureBuildGeometryInfoKHR buildInfo{};
+        buildInfo.type = vk::AccelerationStructureTypeKHR::eTopLevel;
+        buildInfo.flags = vk::BuildAccelerationStructureFlagBitsKHR::ePreferFastTrace |
+                          vk::BuildAccelerationStructureFlagBitsKHR::eAllowUpdate;
+        buildInfo.mode = canUpdate ? vk::BuildAccelerationStructureModeKHR::eUpdate
+                                   : vk::BuildAccelerationStructureModeKHR::eBuild;
+        buildInfo.geometryCount = 1;
+        buildInfo.pGeometries = &tlasGeometry;
+
+        vk::AccelerationStructureBuildSizesInfoKHR sizeInfo{};
+        vkDevice.getAccelerationStructureBuildSizesKHR(
+            vk::AccelerationStructureBuildTypeKHR::eDevice,
+            &buildInfo, &instanceCount, &sizeInfo);
+
+        if (!canUpdate)
+        {
+            if (tlas)
+            {
+                vkDevice.destroyAccelerationStructureKHR(tlas);
+                tlas = nullptr;
+            }
+            core::BufferUtilities::destroyBuffer(vkDevice, tlasBuffer, tlasAllocation, device.getMemoryManager());
+
+            {
+                core::BufferInfoRequest request(vkDevice, device.getPhysicalDevice());
+                request.size = sizeInfo.accelerationStructureSize;
+                request.usage = vk::BufferUsageFlagBits::eAccelerationStructureStorageKHR |
+                                vk::BufferUsageFlagBits::eShaderDeviceAddress;
+                request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
+                core::BufferUtilities::createBuffer(request, tlasBuffer, tlasAllocation, device.getMemoryManager());
+            }
+
+            vk::AccelerationStructureCreateInfoKHR tlasCreateInfo{};
+            tlasCreateInfo.buffer = tlasBuffer;
+            tlasCreateInfo.size = sizeInfo.accelerationStructureSize;
+            tlasCreateInfo.type = vk::AccelerationStructureTypeKHR::eTopLevel;
+            tlas = vkDevice.createAccelerationStructureKHR(tlasCreateInfo);
+
+            buildInfo.mode = vk::BuildAccelerationStructureModeKHR::eBuild;
+            memoryBudget.tlasTotalBytes = sizeInfo.accelerationStructureSize;
+        }
+
+        vk::DeviceSize requiredScratch = std::max(sizeInfo.buildScratchSize, sizeInfo.updateScratchSize);
+        ensureTlasScratch(requiredScratch);
+
+        vk::DeviceAddress scratchAddress = vkDevice.getBufferAddress({tlasScratchBuffer});
+
+        if (canUpdate)
+        {
+            buildInfo.srcAccelerationStructure = tlas;
+        }
+        buildInfo.dstAccelerationStructure = tlas;
+        buildInfo.scratchData.deviceAddress = scratchAddress;
+
+        vk::AccelerationStructureBuildRangeInfoKHR rangeInfo{};
+        rangeInfo.primitiveCount = instanceCount;
+        const vk::AccelerationStructureBuildRangeInfoKHR* pRangeInfo = &rangeInfo;
+
+        cmd.buildAccelerationStructuresKHR(1, &buildInfo, &pRangeInfo);
+
+        vk::MemoryBarrier barrier{
+            vk::AccessFlagBits::eAccelerationStructureWriteKHR,
+            vk::AccessFlagBits::eAccelerationStructureReadKHR
+        };
+        cmd.pipelineBarrier(
+            vk::PipelineStageFlagBits::eAccelerationStructureBuildKHR,
+            vk::PipelineStageFlagBits::eComputeShader | vk::PipelineStageFlagBits::eFragmentShader,
+            vk::DependencyFlags{},
+            1, &barrier, 0, nullptr, 0, nullptr);
+
+        currentInstanceCount = instanceCount;
+        tlasBuilt = true;
+        memoryBudget.tlasInstanceCount = instanceCount;
+
+        currentStagingFrame = (currentStagingFrame + 1) % MAX_FRAMES_IN_FLIGHT;
+
+        updateDescriptor();
     }
 
     void AccelerationStructureManager::createDescriptorLayout()

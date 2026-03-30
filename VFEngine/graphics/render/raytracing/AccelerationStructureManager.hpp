@@ -74,6 +74,24 @@ namespace render::raytracing
                        uint32_t objectCount,
                        const gpudriven::MergedMeshBuffer& mergedBuffer);
 
+        // Terrain BLAS support
+        void notifyTerrainTileReady(const std::string& tileKey,
+                                    uint32_t vertexOffset, uint32_t vertexCount,
+                                    uint32_t indexOffset, uint32_t indexCount);
+        void notifyTerrainTileRemoved(const std::string& tileKey);
+        void buildPendingTerrainBLAS(vk::CommandBuffer cmd,
+                                     vk::Buffer terrainVertexBuffer, uint32_t vertexStride,
+                                     vk::Buffer terrainIndexBuffer);
+        bool hasPendingTerrainBLASBuilds() const { return !pendingTerrainBLASBuilds.empty(); }
+
+        // Extended TLAS build with terrain
+        void buildTLASWithTerrain(vk::CommandBuffer cmd,
+                                  const std::vector<gpudriven::GPUObjectData>& objects,
+                                  uint32_t objectCount,
+                                  const gpudriven::MergedMeshBuffer& mergedBuffer,
+                                  const std::vector<gpudriven::TerrainTileGPUData>& terrainTiles,
+                                  uint32_t terrainTileCount);
+
         bool isInitialized() const { return initialized; }
         bool isTLASReady() const { return tlasBuilt; }
         bool hasPendingBLASBuilds() const { return !pendingBLASBuilds.empty(); }
@@ -94,7 +112,7 @@ namespace render::raytracing
         // Pending BLAS builds queued via notifyMeshReady
         struct PendingBLAS
         {
-            std::string submeshKey;
+            std::string key;
             uint32_t vertexOffset;
             uint32_t vertexCount;
             uint32_t indexOffset;
@@ -104,6 +122,11 @@ namespace render::raytracing
 
         // Reverse map: (lod0VertexOffset << 32 | lod0IndexOffset) -> submeshKey
         std::unordered_map<uint64_t, std::string> geometryOffsetToSubmeshKey;
+
+        // Terrain BLAS: tileKey -> BLASEntry
+        std::unordered_map<std::string, BLASEntry> terrainBlasCache;
+        std::vector<PendingBLAS> pendingTerrainBLASBuilds;
+        std::unordered_map<uint64_t, std::string> terrainOffsetToTileKey;
 
         // TLAS
         vk::AccelerationStructureKHR tlas;

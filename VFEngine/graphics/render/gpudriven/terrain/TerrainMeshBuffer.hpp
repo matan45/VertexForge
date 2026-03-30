@@ -178,6 +178,7 @@ namespace render::gpudriven
         bool uploadWeightMapData(const std::string& tileKey, const void* data, uint32_t sizeBytes);
 
         vk::Buffer getVertexBuffer() const { return vertexBuffer_; }
+        vk::Buffer getIndexBuffer() const { return indexBuffer_; }
         vk::Buffer getMeshletBuffer() const { return meshletBuffer_; }
         vk::Buffer getMeshletVertexBuffer() const { return meshletVertexBuffer_; }
         vk::Buffer getMeshletPrimitiveBuffer() const { return meshletPrimitiveBuffer_; }

@@ -189,6 +189,23 @@ namespace render::gpudriven
         it->second.isUploaded = it->second.hasAnyAllocation();
         gpuTileDataDirty_ = true;
 
+        // Notify acceleration structure manager about the best available LOD
+        if (onTileLODReady)
+        {
+            // Find best (lowest number) allocated LOD for this tile
+            for (uint32_t lod = 0; lod < TERRAIN_LOD_LEVEL_COUNT; ++lod)
+            {
+                const auto& lodAlloc = it->second.lodAllocs[lod];
+                if (lodAlloc.isAllocated && lodAlloc.vertexCount > 0 && lodAlloc.indexCount > 0)
+                {
+                    std::string asTileKey = std::to_string(key.coordX) + "_" + std::to_string(key.coordZ);
+                    onTileLODReady(asTileKey, lodAlloc.vertexOffset, lodAlloc.vertexCount,
+                                   lodAlloc.indexOffset, lodAlloc.indexCount);
+                    break;
+                }
+            }
+        }
+
         return true;
     }
 
@@ -224,6 +241,11 @@ namespace render::gpudriven
     {
         for (auto& [key, alloc] : allocations_)
         {
+            if (onTileRemoved)
+            {
+                std::string asTileKey = std::to_string(key.coordX) + "_" + std::to_string(key.coordZ);
+                onTileRemoved(asTileKey);
+            }
             std::string tileKey = alloc.getMeshPath();
             terrainBuffer_.freeTile(tileKey);
         }

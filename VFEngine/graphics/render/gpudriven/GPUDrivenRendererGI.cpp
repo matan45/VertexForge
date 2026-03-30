@@ -140,6 +140,19 @@ namespace render::gpudriven
                                 if (accelStructManager) accelStructManager->notifyMeshRemoved(path, name, idx);
                             };
                         }
+
+                        // Wire terrain callbacks
+                        if (terrain.adapter)
+                        {
+                            terrain.adapter->onTileLODReady = [this](const std::string& tileKey,
+                                                                      uint32_t vOff, uint32_t vCount,
+                                                                      uint32_t iOff, uint32_t iCount) {
+                                if (accelStructManager) accelStructManager->notifyTerrainTileReady(tileKey, vOff, vCount, iOff, iCount);
+                            };
+                            terrain.adapter->onTileRemoved = [this](const std::string& tileKey) {
+                                if (accelStructManager) accelStructManager->notifyTerrainTileRemoved(tileKey);
+                            };
+                        }
                     }
                 }
 
@@ -342,7 +355,26 @@ namespace render::gpudriven
                     mergedBuffer->getVertexBuffer(), 64,
                     mergedBuffer->getIndexBuffer());
             }
-            if (mergedBuffer->getObjectCount() > 0)
+            if (accelStructManager->hasPendingTerrainBLASBuilds() && terrain.meshBuffer)
+            {
+                accelStructManager->buildPendingTerrainBLAS(cmd,
+                    terrain.meshBuffer->getVertexBuffer(), 64,
+                    terrain.meshBuffer->getIndexBuffer());
+            }
+
+            bool hasTerrainAS = terrain.adapter && terrain.pipeline &&
+                                terrain.pipeline->getCurrentTileCount() > 0;
+
+            if (hasTerrainAS)
+            {
+                accelStructManager->buildTLASWithTerrain(cmd,
+                    mergedBuffer->getCPUObjectData(),
+                    mergedBuffer->getObjectCount(),
+                    *mergedBuffer,
+                    terrain.adapter->getCachedGPUTileData(),
+                    terrain.pipeline->getCurrentTileCount());
+            }
+            else if (mergedBuffer->getObjectCount() > 0)
             {
                 accelStructManager->buildTLAS(cmd,
                     mergedBuffer->getCPUObjectData(),

@@ -7,6 +7,7 @@
 #include <array>
 #include <vector>
 #include <unordered_map>
+#include <functional>
 #include <cstdint>
 
 namespace terrain
@@ -130,11 +131,18 @@ namespace render::gpudriven
 
         void markGPUTileDataDirty() { gpuTileDataDirty_ = true; }
 
+        // Acceleration structure callbacks — invoked when tile LOD geometry is uploaded or removed
+        std::function<void(const std::string& tileKey, uint32_t vertexOffset, uint32_t vertexCount,
+                           uint32_t indexOffset, uint32_t indexCount)> onTileLODReady;
+        std::function<void(const std::string& tileKey)> onTileRemoved;
+
         void setSelectedTile(int32_t coordX, int32_t coordZ);
         void clearSelectedTile();
 
         const std::vector<TerrainTileGPUData>& buildGPUTileData(
             const std::vector<terrain::TerrainTile*>& tiles);
+
+        const std::vector<TerrainTileGPUData>& getCachedGPUTileData() const { return cachedGPUTileData_; }
 
     private:
         bool uploadLODData(
