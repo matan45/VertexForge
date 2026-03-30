@@ -322,6 +322,10 @@ layout(set = CAUSTIC_SET, binding = 1) uniform CausticParamsUBO {
 #include "../common/caustic_sampling.glsl"
 #endif
 
+#ifdef RT_SHADOW_ENABLED
+layout(set = 13, binding = 0) uniform sampler2D rtShadowMask;
+#endif
+
 const uint LIGHT_INDEX_MASK = 0x7FFFFFFFu;
 
 float linearizeDepth(float windowZ) {
@@ -515,7 +519,12 @@ void main() {
 
     for (uint i = 0u; i < lightCounts.directionalCount; ++i) {
         DirectionalLight light = directionalLights[i];
+#ifdef RT_SHADOW_ENABLED
+        vec2 screenUV = gl_FragCoord.xy * camera.screenParams.zw;
+        float shadow = texture(rtShadowMask, screenUV).r;
+#else
         float shadow = sampleDirectionalShadowAuto(light.shadowIndex, light.shadowMode, fragWorldPos, N, linearZ, camera.cameraPos);
+#endif
         minShadow = min(minShadow, shadow);
         vec3 lightContrib = evaluateDirectionalLight(N, V, albedo, metallic, roughness, F0, light) * shadow;
 #ifdef CAUSTICS_ENABLED
@@ -643,7 +652,12 @@ void main() {
 
         for (uint i = 0u; i < lightCounts.directionalCount; ++i) {
             DirectionalLight light = directionalLights[i];
+#ifdef RT_SHADOW_ENABLED
+            vec2 shadowUV = gl_FragCoord.xy * camera.screenParams.zw;
+            float shadow = texture(rtShadowMask, shadowUV).r;
+#else
             float shadow = sampleDirectionalShadowAuto(light.shadowIndex, light.shadowMode, fragWorldPos, N, linearZ, camera.cameraPos);
+#endif
             totalShadow = min(totalShadow, shadow);
         }
 

@@ -476,6 +476,10 @@ namespace render::gpudriven
             meshShader->addMacroDefinition("CAUSTICS_ENABLED");
             meshShader->addMacroDefinition("CAUSTIC_SET", "12");
         }
+        if (info.rtShadowMaskLayout)
+        {
+            meshShader->addMacroDefinition("RT_SHADOW_ENABLED");
+        }
         meshShader->readShader("../../resources/shaders/gpudriven/task_gpudriven.glsl");
         meshShader->readShader("../../resources/shaders/gpudriven/mesh_shader_gpudriven.glsl");
 

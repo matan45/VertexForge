@@ -392,13 +392,67 @@ namespace render::gpudriven
     {
         if (!isRTShadowReady()) return;
 
-        // Lazy init
+        // Lazy init — create RT shadow pipeline and recreate mesh pipelines with set 13
         if (!rtShadowPipeline)
         {
             rtShadowPipeline = std::make_unique<raytracing::RTShadowPipeline>(device);
             rtShadowPipeline->init(
                 depthPrepass->getWidth(), depthPrepass->getHeight(),
                 accelStructManager->getTLASDescriptorLayout());
+
+            if (rtShadowPipeline->isInitialized() && meshShaderPipeline && shadowSystem)
+            {
+                vk::DescriptorSetLayout giLayout = (giCascadeManager && giCascadeManager->getProbeStorage())
+                    ? giCascadeManager->getProbeStorage()->getSamplingLayout() : nullptr;
+                vk::DescriptorSetLayout causticLayout = (water.causticsResources && water.causticsResources->isInitialized())
+                    ? water.causticsResources->getDescriptorSetLayout() : nullptr;
+
+                MeshPipelineInitInfo pipelineInfo{
+                    .iblLayout = cachedIBLLayout,
+                    .bindlessTextureLayout = bindlessTextures->getDescriptorSetLayout(),
+                    .boneMatrixLayout = boneMatrixManager->getDescriptorSetLayout(),
+                    .lightDataLayout = lightBufferManager->getDescriptorSetLayout(),
+                    .clusterGridLayout = clusterGridManager->getDescriptorSetLayout(),
+                    .cullingOutputLayout = lightCullingPipeline->getDescriptorSetLayout(),
+                    .shadowDataLayout = shadowSystem->getShadowDataLayout(),
+                    .shadowTextureLayout = shadowSystem->getShadowTextureLayout(),
+                    .giProbeDataLayout = giLayout,
+                    .causticLayout = causticLayout,
+                    .rtShadowMaskLayout = rtShadowPipeline->getShadowMaskSamplerLayout(),
+                    .renderPass = cachedRenderPass
+                };
+
+                meshShaderPipeline->recreate(pipelineInfo);
+                meshShaderPipeline->updateRTShadowMaskDescriptor(rtShadowPipeline->getShadowMaskSamplerDescriptorSet());
+                if (giLayout && giCascadeManager)
+                    meshShaderPipeline->updateGIProbeDescriptor(giCascadeManager->getProbeStorage()->getSamplingDescSet());
+                if (causticLayout)
+                    meshShaderPipeline->updateCausticDescriptor(water.causticsResources->getDescriptorSet());
+
+                if (transparentMeshShaderPipeline)
+                {
+                    pipelineInfo.transparentMode = true;
+                    transparentMeshShaderPipeline->recreate(pipelineInfo);
+                    transparentMeshShaderPipeline->updateRTShadowMaskDescriptor(rtShadowPipeline->getShadowMaskSamplerDescriptorSet());
+                    if (giLayout && giCascadeManager)
+                        transparentMeshShaderPipeline->updateGIProbeDescriptor(giCascadeManager->getProbeStorage()->getSamplingDescSet());
+                    if (causticLayout)
+                        transparentMeshShaderPipeline->updateCausticDescriptor(water.causticsResources->getDescriptorSet());
+                    pipelineInfo.transparentMode = false;
+                }
+
+                if (wboitMeshShaderPipeline && cachedWBOITRenderPass)
+                {
+                    pipelineInfo.renderPass = cachedWBOITRenderPass;
+                    pipelineInfo.wboitMode = true;
+                    wboitMeshShaderPipeline->recreate(pipelineInfo);
+                    wboitMeshShaderPipeline->updateRTShadowMaskDescriptor(rtShadowPipeline->getShadowMaskSamplerDescriptorSet());
+                    if (giLayout && giCascadeManager)
+                        wboitMeshShaderPipeline->updateGIProbeDescriptor(giCascadeManager->getProbeStorage()->getSamplingDescSet());
+                    if (causticLayout)
+                        wboitMeshShaderPipeline->updateCausticDescriptor(water.causticsResources->getDescriptorSet());
+                }
+            }
         }
 
         if (!rtShadowPipeline->isInitialized()) return;
