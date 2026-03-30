@@ -59,7 +59,6 @@ namespace imguiPass {
 
 	private:
 		
-		void theme() const;
 		void createRenderPass();
 		void createDescriptorPool();
 		void createFrameBuffers();

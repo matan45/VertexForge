@@ -166,6 +166,7 @@
     <ClInclude Include="windows\config\RenderConfigWindow.hpp" />
     <ClInclude Include="windows\config\SettingsEntry.hpp" />
     <ClInclude Include="windows\config\SettingsTooltip.hpp" />
+    <ClInclude Include="windows\config\ThemeManager.hpp" />
     <ClInclude Include="windows\config\VolumetricFogConfigWindow.hpp" />
     <ClInclude Include="windows\contentbrowser\AssetGridRenderer.hpp" />
     <ClInclude Include="windows\contentbrowser\ContentBrowser.hpp" />

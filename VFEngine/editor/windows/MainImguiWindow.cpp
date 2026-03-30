@@ -1,6 +1,8 @@
 #include "MainImguiWindow.hpp"
+#include "config/ThemeManager.hpp"
 #include "events/project/SceneEvents.hpp"
 #include "events/project/ApplicationEvents.hpp"
+#include "events/editor/EditorSettingsEvents.hpp"
 #include <imgui.h>
 
 namespace windows
@@ -38,6 +40,10 @@ namespace windows
         menuBar.setMemoryDiagnosticsWindow(&memoryDiagnosticsWindow);
         menuBar.setEditorPreferencesWindow(&editorPreferencesWindow);
         subscribeToEvents();
+
+        // Apply saved theme on startup
+        auto savedSettings = events::EventDispatcher::instance().query(events::editor::GetEditorSettingsQuery{});
+        windows::ThemeManager::applyTheme(savedSettings.appearance);
     }
 
     MainImguiWindow::~MainImguiWindow()
@@ -48,6 +54,7 @@ namespace windows
         dispatcher.unsubscribe(openImportDialogToken);
         dispatcher.unsubscribe(openInputMappingToken);
         dispatcher.unsubscribe(openBackgroundRemovalToken);
+        dispatcher.unsubscribe(settingsChangedToken);
     }
 
     void MainImguiWindow::subscribeToEvents()
@@ -87,6 +94,12 @@ namespace windows
             [this](const events::application::OpenBackgroundRemovalNotification& n)
             {
                 backgroundRemovalWindow.showWithFile(n.filePath);
+            });
+
+        settingsChangedToken = dispatcher.subscribe<events::editor::EditorSettingsChangedNotification>(
+            [](const events::editor::EditorSettingsChangedNotification& n)
+            {
+                windows::ThemeManager::applyTheme(n.settings.appearance);
             });
     }
 

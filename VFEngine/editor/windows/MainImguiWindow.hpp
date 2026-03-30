@@ -93,6 +93,7 @@ namespace windows
         events::SubscriptionToken openImportDialogToken;
         events::SubscriptionToken openInputMappingToken;
         events::SubscriptionToken openBackgroundRemovalToken;
+        events::SubscriptionToken settingsChangedToken;
 
     public:
         explicit MainImguiWindow();

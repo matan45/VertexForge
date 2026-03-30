@@ -63,7 +63,7 @@ namespace imguiPass {
 		// Load Font Awesome font (ensure the path points to the Font Awesome .ttf file)
 		io.Fonts->AddFontFromFileTTF("../../resources/editor/fa-solid-900.ttf", 16.0f, &config, icons_ranges);
 
-		theme();
+		ImGui::StyleColorsDark();
 	}
 
 	void ImguiRender::cleanUp() const
@@ -178,62 +178,6 @@ namespace imguiPass {
 		commandBuffer.endRenderPass();
 	}
 
-	void ImguiRender::theme() const
-	{
-		ImGuiStyle& style = ImGui::GetStyle();
-		style.Colors[ImGuiCol_Text] = ImVec4(1.00f, 1.00f, 1.00f, 1.00f);            // White text
-		style.Colors[ImGuiCol_TextDisabled] = ImVec4(0.50f, 0.50f, 0.50f, 1.00f);    // Gray for disabled text
-		style.Colors[ImGuiCol_WindowBg] = ImVec4(0.10f, 0.10f, 0.20f, 1.00f);        // Midnight blue background
-		style.Colors[ImGuiCol_ChildBg] = ImVec4(0.10f, 0.10f, 0.20f, 1.00f);         // Same as WindowBg
-		style.Colors[ImGuiCol_PopupBg] = ImVec4(0.12f, 0.12f, 0.24f, 1.00f);         // Slightly brighter midnight blue for popups
-		style.Colors[ImGuiCol_Border] = ImVec4(0.43f, 0.43f, 0.50f, 0.50f);          // Light border, same as default
-		style.Colors[ImGuiCol_BorderShadow] = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);    // No shadow
-		style.Colors[ImGuiCol_FrameBg] = ImVec4(0.15f, 0.15f, 0.30f, 1.00f);         // Darker blue for frames
-		style.Colors[ImGuiCol_FrameBgHovered] = ImVec4(0.25f, 0.25f, 0.50f, 1.00f);  // Brighter on hover
-		style.Colors[ImGuiCol_FrameBgActive] = ImVec4(0.40f, 0.40f, 0.70f, 1.00f);   // Active frame is lighter blue
-		style.Colors[ImGuiCol_TitleBg] = ImVec4(0.08f, 0.08f, 0.16f, 1.00f);         // Midnight blue for title bar
-		style.Colors[ImGuiCol_TitleBgActive] = ImVec4(0.10f, 0.10f, 0.20f, 1.00f);   // Active title bar in Midnight Blue
-		style.Colors[ImGuiCol_TitleBgCollapsed] = ImVec4(0.05f, 0.05f, 0.10f, 1.00f);// Collapsed state is very dark blue
-		style.Colors[ImGuiCol_MenuBarBg] = ImVec4(0.10f, 0.10f, 0.20f, 1.00f);       // Menu bar in Midnight Blue
-		style.Colors[ImGuiCol_ScrollbarBg] = ImVec4(0.02f, 0.02f, 0.05f, 0.53f);     // Almost black background for scrollbar
-		style.Colors[ImGuiCol_ScrollbarGrab] = ImVec4(0.50f, 0.50f, 0.10f, 1.00f);   // Gold scrollbar
-		style.Colors[ImGuiCol_ScrollbarGrabHovered] = ImVec4(0.70f, 0.70f, 0.20f, 1.00f); // Bright Gold when hovered
-		style.Colors[ImGuiCol_ScrollbarGrabActive] = ImVec4(0.90f, 0.90f, 0.25f, 1.00f);  // Active state for scrollbar in bright Gold
-		style.Colors[ImGuiCol_CheckMark] = ImVec4(0.90f, 0.75f, 0.10f, 1.00f);       // Gold check mark
-		style.Colors[ImGuiCol_SliderGrab] = ImVec4(0.90f, 0.75f, 0.10f, 1.00f);      // Gold slider grab
-		style.Colors[ImGuiCol_SliderGrabActive] = ImVec4(1.00f, 0.85f, 0.00f, 1.00f);// Brighter Gold when active
-		style.Colors[ImGuiCol_Button] = ImVec4(0.15f, 0.15f, 0.30f, 1.00f);          // Midnight blue button
-		style.Colors[ImGuiCol_ButtonHovered] = ImVec4(0.25f, 0.25f, 0.50f, 1.00f);   // Brighter on hover
-		style.Colors[ImGuiCol_ButtonActive] = ImVec4(0.90f, 0.75f, 0.10f, 1.00f);    // Gold when active
-		style.Colors[ImGuiCol_Header] = ImVec4(0.9f, 0.3f, 0.3f, 0.8f);          // Midnight blue header
-		style.Colors[ImGuiCol_HeaderHovered] = ImVec4(0.20f, 0.20f, 0.40f, 1.00f);   // Lighter blue on hover
-		style.Colors[ImGuiCol_HeaderActive] = ImVec4(0.90f, 0.75f, 0.10f, 1.00f);    // Gold when active
-		style.Colors[ImGuiCol_Separator] = ImVec4(0.43f, 0.43f, 0.50f, 0.50f);       // Default separator color
-		style.Colors[ImGuiCol_SeparatorHovered] = ImVec4(0.90f, 0.75f, 0.10f, 1.00f);// Gold when hovered
-		style.Colors[ImGuiCol_SeparatorActive] = ImVec4(0.90f, 0.75f, 0.10f, 1.00f); // Gold when active
-		style.Colors[ImGuiCol_ResizeGrip] = ImVec4(0.10f, 0.10f, 0.20f, 1.00f);      // Midnight blue resize grip
-		style.Colors[ImGuiCol_ResizeGripHovered] = ImVec4(0.90f, 0.75f, 0.10f, 1.00f);// Gold when hovered
-		style.Colors[ImGuiCol_ResizeGripActive] = ImVec4(0.90f, 0.75f, 0.10f, 1.00f);// Gold when active
-		style.Colors[ImGuiCol_Tab] = ImVec4(0.10f, 0.10f, 0.20f, 1.00f);             // Midnight blue tabs
-		style.Colors[ImGuiCol_TabHovered] = ImVec4(0.90f, 0.75f, 0.10f, 1.00f);      // Gold when hovered
-		style.Colors[ImGuiCol_TabActive] = ImVec4(0.90f, 0.75f, 0.10f, 1.00f);       // Gold when active
-		style.Colors[ImGuiCol_TabUnfocused] = ImVec4(0.05f, 0.05f, 0.10f, 1.00f);    // Dark blue for unfocused tabs
-		style.Colors[ImGuiCol_TabUnfocusedActive] = ImVec4(0.25f, 0.25f, 0.50f, 1.00f);// Light blue for active but unfocused tabs
-		style.Colors[ImGuiCol_DockingPreview] = ImVec4(0.90f, 0.75f, 0.10f, 0.70f);  // Gold for docking preview
-		style.Colors[ImGuiCol_DockingEmptyBg] = ImVec4(0.10f, 0.10f, 0.20f, 1.00f);  // Midnight blue for docking background
-		style.Colors[ImGuiCol_PlotLines] = ImVec4(0.61f, 0.61f, 0.61f, 1.00f);       // Default plot line color
-		style.Colors[ImGuiCol_PlotLinesHovered] = ImVec4(1.00f, 0.60f, 0.00f, 1.00f);// Gold on hover
-		style.Colors[ImGuiCol_PlotHistogram] = ImVec4(0.90f, 0.75f, 0.10f, 1.00f);   // Gold for histograms
-		style.Colors[ImGuiCol_PlotHistogramHovered] = ImVec4(1.00f, 0.85f, 0.00f, 1.00f);// Brighter gold when hovered
-		style.Colors[ImGuiCol_TextSelectedBg] = ImVec4(0.90f, 0.75f, 0.10f, 0.35f);  // Gold for selected text background
-		style.Colors[ImGuiCol_DragDropTarget] = ImVec4(0.90f, 0.75f, 0.10f, 1.00f);  // Gold for drag and drop target
-		style.Colors[ImGuiCol_NavHighlight] = ImVec4(0.90f, 0.75f, 0.10f, 1.00f);    // Gold for navigation highlight
-		style.Colors[ImGuiCol_NavWindowingHighlight] = ImVec4(1.00f, 1.00f, 1.00f, 0.70f); // Bright white for windowing highlight
-		style.Colors[ImGuiCol_NavWindowingDimBg] = ImVec4(0.80f, 0.80f, 0.80f, 0.20f);// Dim background for windowing
-		style.Colors[ImGuiCol_ModalWindowDimBg] = ImVec4(0.10f, 0.10f, 0.20f, 0.35f);// Midnight blue for modal window dim background
-		style.GrabRounding = style.FrameRounding = 2.3f;                             // Slightly rounded edges
-
-	}
 
 	void ImguiRender::createRenderPass()
 	{
