@@ -51,34 +51,35 @@ namespace windows
     private:
         static inline void applyDarkTheme(ImGuiStyle& style)
         {
-            style.Colors[ImGuiCol_Text] = ImVec4(1.00f, 1.00f, 1.00f, 1.00f);
+            // Unreal Engine-style neutral dark gray
+            style.Colors[ImGuiCol_Text] = ImVec4(0.92f, 0.92f, 0.92f, 1.00f);
             style.Colors[ImGuiCol_TextDisabled] = ImVec4(0.50f, 0.50f, 0.50f, 1.00f);
-            style.Colors[ImGuiCol_WindowBg] = ImVec4(0.10f, 0.10f, 0.20f, 1.00f);
-            style.Colors[ImGuiCol_ChildBg] = ImVec4(0.10f, 0.10f, 0.20f, 1.00f);
-            style.Colors[ImGuiCol_PopupBg] = ImVec4(0.12f, 0.12f, 0.24f, 1.00f);
-            style.Colors[ImGuiCol_Border] = ImVec4(0.43f, 0.43f, 0.50f, 0.50f);
-            style.Colors[ImGuiCol_FrameBg] = ImVec4(0.15f, 0.15f, 0.30f, 1.00f);
-            style.Colors[ImGuiCol_FrameBgHovered] = ImVec4(0.25f, 0.25f, 0.50f, 1.00f);
-            style.Colors[ImGuiCol_FrameBgActive] = ImVec4(0.40f, 0.40f, 0.70f, 1.00f);
-            style.Colors[ImGuiCol_TitleBg] = ImVec4(0.08f, 0.08f, 0.16f, 1.00f);
-            style.Colors[ImGuiCol_TitleBgActive] = ImVec4(0.10f, 0.10f, 0.20f, 1.00f);
-            style.Colors[ImGuiCol_TitleBgCollapsed] = ImVec4(0.05f, 0.05f, 0.10f, 1.00f);
-            style.Colors[ImGuiCol_MenuBarBg] = ImVec4(0.10f, 0.10f, 0.20f, 1.00f);
-            style.Colors[ImGuiCol_ScrollbarBg] = ImVec4(0.02f, 0.02f, 0.05f, 0.53f);
-            style.Colors[ImGuiCol_Button] = ImVec4(0.15f, 0.15f, 0.30f, 1.00f);
-            style.Colors[ImGuiCol_ButtonHovered] = ImVec4(0.25f, 0.25f, 0.50f, 1.00f);
-            style.Colors[ImGuiCol_Header] = ImVec4(0.15f, 0.15f, 0.30f, 0.80f);
-            style.Colors[ImGuiCol_HeaderHovered] = ImVec4(0.20f, 0.20f, 0.40f, 1.00f);
-            style.Colors[ImGuiCol_Separator] = ImVec4(0.43f, 0.43f, 0.50f, 0.50f);
-            style.Colors[ImGuiCol_ResizeGrip] = ImVec4(0.10f, 0.10f, 0.20f, 1.00f);
-            style.Colors[ImGuiCol_Tab] = ImVec4(0.10f, 0.10f, 0.20f, 1.00f);
-            style.Colors[ImGuiCol_TabUnfocused] = ImVec4(0.05f, 0.05f, 0.10f, 1.00f);
-            style.Colors[ImGuiCol_TabUnfocusedActive] = ImVec4(0.25f, 0.25f, 0.50f, 1.00f);
-            style.Colors[ImGuiCol_DockingEmptyBg] = ImVec4(0.10f, 0.10f, 0.20f, 1.00f);
+            style.Colors[ImGuiCol_WindowBg] = ImVec4(0.15f, 0.15f, 0.15f, 1.00f);
+            style.Colors[ImGuiCol_ChildBg] = ImVec4(0.15f, 0.15f, 0.15f, 1.00f);
+            style.Colors[ImGuiCol_PopupBg] = ImVec4(0.18f, 0.18f, 0.18f, 1.00f);
+            style.Colors[ImGuiCol_Border] = ImVec4(0.30f, 0.30f, 0.30f, 0.50f);
+            style.Colors[ImGuiCol_FrameBg] = ImVec4(0.20f, 0.20f, 0.20f, 1.00f);
+            style.Colors[ImGuiCol_FrameBgHovered] = ImVec4(0.28f, 0.28f, 0.28f, 1.00f);
+            style.Colors[ImGuiCol_FrameBgActive] = ImVec4(0.35f, 0.35f, 0.35f, 1.00f);
+            style.Colors[ImGuiCol_TitleBg] = ImVec4(0.10f, 0.10f, 0.10f, 1.00f);
+            style.Colors[ImGuiCol_TitleBgActive] = ImVec4(0.12f, 0.12f, 0.12f, 1.00f);
+            style.Colors[ImGuiCol_TitleBgCollapsed] = ImVec4(0.08f, 0.08f, 0.08f, 1.00f);
+            style.Colors[ImGuiCol_MenuBarBg] = ImVec4(0.12f, 0.12f, 0.12f, 1.00f);
+            style.Colors[ImGuiCol_ScrollbarBg] = ImVec4(0.10f, 0.10f, 0.10f, 0.53f);
+            style.Colors[ImGuiCol_Button] = ImVec4(0.22f, 0.22f, 0.22f, 1.00f);
+            style.Colors[ImGuiCol_ButtonHovered] = ImVec4(0.30f, 0.30f, 0.30f, 1.00f);
+            style.Colors[ImGuiCol_Header] = ImVec4(0.22f, 0.22f, 0.22f, 0.80f);
+            style.Colors[ImGuiCol_HeaderHovered] = ImVec4(0.28f, 0.28f, 0.28f, 1.00f);
+            style.Colors[ImGuiCol_Separator] = ImVec4(0.30f, 0.30f, 0.30f, 0.50f);
+            style.Colors[ImGuiCol_ResizeGrip] = ImVec4(0.20f, 0.20f, 0.20f, 1.00f);
+            style.Colors[ImGuiCol_Tab] = ImVec4(0.15f, 0.15f, 0.15f, 1.00f);
+            style.Colors[ImGuiCol_TabUnfocused] = ImVec4(0.10f, 0.10f, 0.10f, 1.00f);
+            style.Colors[ImGuiCol_TabUnfocusedActive] = ImVec4(0.20f, 0.20f, 0.20f, 1.00f);
+            style.Colors[ImGuiCol_DockingEmptyBg] = ImVec4(0.12f, 0.12f, 0.12f, 1.00f);
             style.Colors[ImGuiCol_PlotLines] = ImVec4(0.61f, 0.61f, 0.61f, 1.00f);
             style.Colors[ImGuiCol_NavWindowingHighlight] = ImVec4(1.00f, 1.00f, 1.00f, 0.70f);
             style.Colors[ImGuiCol_NavWindowingDimBg] = ImVec4(0.80f, 0.80f, 0.80f, 0.20f);
-            style.Colors[ImGuiCol_ModalWindowDimBg] = ImVec4(0.10f, 0.10f, 0.20f, 0.35f);
+            style.Colors[ImGuiCol_ModalWindowDimBg] = ImVec4(0.12f, 0.12f, 0.12f, 0.35f);
         }
 
         static inline void applyLightTheme(ImGuiStyle& style)
