@@ -330,7 +330,7 @@ float sampleDirectionalShadowHybrid(int shadowIndex, int shadowMode,
                                      vec3 worldPos, vec3 N, float viewZ, vec3 cameraPos) {
 #ifdef RT_SHADOW_ENABLED
     if (lightCounts.rtShadowActive != 0u) {
-        vec2 screenUV = gl_FragCoord.xy * camera.screenParams.zw;
+        vec2 screenUV = gl_FragCoord.xy / vec2(pc.screenWidth, pc.screenHeight);
         return texture(rtShadowMask, screenUV).r;
     }
 #endif

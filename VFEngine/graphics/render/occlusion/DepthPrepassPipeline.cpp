@@ -137,7 +137,7 @@ namespace render::occlusion
     void DepthPrepassPipeline::pushSceneConstants(vk::CommandBuffer cmd, const DepthPrepassPushConstants& pc) const
     {
         cmd.pushConstants(scenePipelineLayout,
-                          vk::ShaderStageFlagBits::eTaskEXT | vk::ShaderStageFlagBits::eMeshEXT,
+                          vk::ShaderStageFlagBits::eTaskEXT | vk::ShaderStageFlagBits::eMeshEXT | vk::ShaderStageFlagBits::eFragment,
                           0, sizeof(DepthPrepassPushConstants), &pc);
     }
 
@@ -149,7 +149,7 @@ namespace render::occlusion
     void DepthPrepassPipeline::pushTerrainConstants(vk::CommandBuffer cmd, const TerrainDepthPrepassPushConstants& pc) const
     {
         cmd.pushConstants(terrainPipelineLayout,
-                          vk::ShaderStageFlagBits::eTaskEXT | vk::ShaderStageFlagBits::eMeshEXT,
+                          vk::ShaderStageFlagBits::eTaskEXT | vk::ShaderStageFlagBits::eMeshEXT | vk::ShaderStageFlagBits::eFragment,
                           0, sizeof(TerrainDepthPrepassPushConstants), &pc);
     }
 

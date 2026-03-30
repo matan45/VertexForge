@@ -3,6 +3,7 @@
 #include "../../core/SwapChain.hpp"
 #include "../../core/Device.hpp"
 #include "types/RenderSettings.hpp"
+#include "print/Log.hpp"
 #include <algorithm>
 
 #ifdef MemoryBarrier
@@ -309,6 +310,9 @@ namespace render::gpudriven
     {
         if (!initialized || !enabled) return;
 
+        // Lazy init acceleration structures for RT shadows (independent of GI)
+        initAccelerationStructures();
+
         if (mergedBuffer) mergedBuffer->flushPendingTransfers();
         if (meshletBuffer) meshletBuffer->flushPendingTransfers();
         if (terrain.meshBuffer) terrain.meshBuffer->flushPendingTransfers();
@@ -422,9 +426,61 @@ namespace render::gpudriven
                lightBufferManager && lightBufferManager->getDirectionalLightCount() > 0;
     }
 
+    void GPUDrivenRenderer::initAccelerationStructures()
+    {
+        if (accelStructManager || !device.isRayQuerySupported()) return;
+        if (!depthPrepass || !depthPrepass->isInitialized()) return;
+        if (!lightBufferManager || lightBufferManager->getDirectionalLightCount() == 0) return;
+
+        accelStructManager = std::make_unique<raytracing::AccelerationStructureManager>(device);
+        accelStructManager->init();
+
+        if (accelStructManager->isInitialized())
+        {
+            if (mergedBuffer)
+            {
+                mergedBuffer->onSubmeshLOD0Ready = [this](const std::string& path, const std::string& name,
+                                                           uint32_t idx, const SubmeshLocation& loc) {
+                    if (accelStructManager) accelStructManager->notifyMeshReady(path, name, idx, loc);
+                };
+                mergedBuffer->onSubmeshRemoved = [this](const std::string& path, const std::string& name,
+                                                         uint32_t idx) {
+                    if (accelStructManager) accelStructManager->notifyMeshRemoved(path, name, idx);
+                };
+            }
+
+            if (terrain.adapter)
+            {
+                terrain.adapter->onTileLODReady = [this](const std::string& tileKey,
+                                                          uint32_t vOff, uint32_t vCount,
+                                                          uint32_t iOff, uint32_t iCount) {
+                    if (accelStructManager) accelStructManager->notifyTerrainTileReady(tileKey, vOff, vCount, iOff, iCount);
+                };
+                terrain.adapter->onTileRemoved = [this](const std::string& tileKey) {
+                    if (accelStructManager) accelStructManager->notifyTerrainTileRemoved(tileKey);
+                };
+            }
+
+
+        }
+    }
+
     void GPUDrivenRenderer::dispatchRTShadow(vk::CommandBuffer cmd)
     {
-        if (!isRTShadowReady()) return;
+        if (!isRTShadowReady())
+        {
+            static uint32_t debugCounter = 0;
+            if (debugCounter++ % 300 == 0) // Log every ~5 seconds at 60fps
+            {
+                vfLogWarning("RT Shadow not ready: rayQuery={} accelMgr={} tlasReady={} prepass={} dirLights={}",
+                    device.isRayQuerySupported(),
+                    accelStructManager != nullptr,
+                    accelStructManager ? accelStructManager->isTLASReady() : false,
+                    depthPrepass && depthPrepass->isInitialized(),
+                    lightBufferManager ? lightBufferManager->getDirectionalLightCount() : 0);
+            }
+            return;
+        }
 
         // Lazy init — create RT shadow pipeline and recreate mesh pipelines with set 13
         if (!rtShadowPipeline)

@@ -59,7 +59,7 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <PreprocessorDefinitions>VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1;GLM_FORCE_DEPTH_ZERO_TO_ONE;_CRT_SECURE_NO_WARNINGS;VF_GAMEEXPORT_BUILD_DLL;DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\..\dependencies\spdlog\include;..\..\dependencies\glm;..\..\dependencies\entt\single_include;..\..\dependencies\json\single_include;..\..\dependencies\lz4\lib;.;C:\VulkanSDK\1.4.335.0\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\..\dependencies\spdlog\include;..\..\dependencies\glm;..\..\dependencies\entt\single_include;..\..\dependencies\json\single_include;..\..\dependencies\lz4\lib;.;C:\VulkanSDK\1.4.341.1\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DebugInformationFormat>EditAndContinue</DebugInformationFormat>
       <Optimization>Disabled</Optimization>
       <AdditionalOptions>/utf-8 /MP %(AdditionalOptions)</AdditionalOptions>
@@ -70,7 +70,7 @@
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalDependencies>shaderc_shared.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>C:\VulkanSDK\1.4.335.0\Lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>C:\VulkanSDK\1.4.341.1\Lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <ImportLibrary>..\..\bin\GameExport\Debug\x64\GameExport.lib</ImportLibrary>
     </Link>
     <PostBuildEvent>
@@ -83,7 +83,7 @@ IF EXIST ..\..\bin\GameExport\Debug\x64\GameExport.dll\ (xcopy /Q /E /Y /I ..\..
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <PreprocessorDefinitions>VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1;GLM_FORCE_DEPTH_ZERO_TO_ONE;_CRT_SECURE_NO_WARNINGS;VF_GAMEEXPORT_BUILD_DLL;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\..\dependencies\spdlog\include;..\..\dependencies\glm;..\..\dependencies\entt\single_include;..\..\dependencies\json\single_include;..\..\dependencies\lz4\lib;.;C:\VulkanSDK\1.4.335.0\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\..\dependencies\spdlog\include;..\..\dependencies\glm;..\..\dependencies\entt\single_include;..\..\dependencies\json\single_include;..\..\dependencies\lz4\lib;.;C:\VulkanSDK\1.4.341.1\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <Optimization>Full</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
@@ -98,7 +98,7 @@ IF EXIST ..\..\bin\GameExport\Debug\x64\GameExport.dll\ (xcopy /Q /E /Y /I ..\..
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <AdditionalDependencies>shaderc_shared.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>C:\VulkanSDK\1.4.335.0\Lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>C:\VulkanSDK\1.4.341.1\Lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <ImportLibrary>..\..\bin\GameExport\Release\x64\GameExport.lib</ImportLibrary>
     </Link>
     <PostBuildEvent>

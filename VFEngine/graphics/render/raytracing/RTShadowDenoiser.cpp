@@ -92,6 +92,7 @@ namespace render::raytracing
         createDenoisedMaskSamplerDescriptor();
 
         historyValid = false;
+        spatialImagesReady = false;
         vfLogInfo("RTShadowDenoiser: Resized to {}x{}", width, height);
     }
 
@@ -142,12 +143,12 @@ namespace render::raytracing
             core::ImageUtilities::createImageView(viewReq, spatialBuf[i].storageView);
         }
 
-        // Denoised output (R8Unorm)
+        // Denoised output (R16Sfloat — matches spatial shader format, sampler handles conversion)
         {
             core::ImageInfoRequest request(
                 device.getLogicalDevice(), device.getPhysicalDevice(),
                 w, h, 1, 1,
-                vk::Format::eR8Unorm,
+                vk::Format::eR16Sfloat,
                 vk::ImageTiling::eOptimal,
                 vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eSampled,
                 vk::MemoryPropertyFlagBits::eDeviceLocal
@@ -156,14 +157,14 @@ namespace render::raytracing
 
             core::ImageViewInfoRequest storageViewReq(
                 device.getLogicalDevice(), denoisedOutputImage,
-                vk::Format::eR8Unorm, vk::ImageAspectFlagBits::eColor,
+                vk::Format::eR16Sfloat, vk::ImageAspectFlagBits::eColor,
                 vk::ImageViewType::e2D, 1, 1
             );
             core::ImageUtilities::createImageView(storageViewReq, denoisedOutputStorageView);
 
             core::ImageViewInfoRequest sampledViewReq(
                 device.getLogicalDevice(), denoisedOutputImage,
-                vk::Format::eR8Unorm, vk::ImageAspectFlagBits::eColor,
+                vk::Format::eR16Sfloat, vk::ImageAspectFlagBits::eColor,
                 vk::ImageViewType::e2D, 1, 1
             );
             core::ImageUtilities::createImageView(sampledViewReq, denoisedOutputSampledView);
@@ -512,12 +513,22 @@ namespace render::raytracing
         }
 
         // Transition history images to eGeneral
-        for (int i = 0; i < 2; ++i)
+        if (!historyValid)
         {
-            core::ImageUtilities::transitionImageLayout(cmd, history[i].image,
-                historyValid ? vk::ImageLayout::eGeneral : vk::ImageLayout::eUndefined,
-                vk::ImageLayout::eGeneral,
-                vk::ImageAspectFlagBits::eColor);
+            for (int i = 0; i < 2; ++i)
+            {
+                vk::ImageMemoryBarrier barrier{};
+                barrier.srcAccessMask = {};
+                barrier.dstAccessMask = vk::AccessFlagBits::eShaderWrite | vk::AccessFlagBits::eShaderRead;
+                barrier.oldLayout = vk::ImageLayout::eUndefined;
+                barrier.newLayout = vk::ImageLayout::eGeneral;
+                barrier.image = history[i].image;
+                barrier.subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};
+                cmd.pipelineBarrier(
+                    vk::PipelineStageFlagBits::eTopOfPipe,
+                    vk::PipelineStageFlagBits::eComputeShader,
+                    {}, 0, nullptr, 0, nullptr, 1, &barrier);
+            }
         }
 
         // === TEMPORAL PASS ===
@@ -541,20 +552,30 @@ namespace render::raytracing
         // === SPATIAL PASSES (3 à-trous iterations) ===
         // Pass 0: history[writeIdx] -> spatialBuf[0]
         // Pass 1: spatialBuf[0] -> spatialBuf[1]
-        // Pass 2: spatialBuf[1] -> denoisedOutput (R8Unorm)
+        // Pass 2: spatialBuf[1] -> denoisedOutput (R16Sfloat)
 
         // Transition spatial buffers and denoised output to eGeneral
-        for (int i = 0; i < 2; ++i)
+        // On first frame: undefined→general; on subsequent: already general from previous dispatch
+        if (!spatialImagesReady)
         {
-            core::ImageUtilities::transitionImageLayout(cmd, spatialBuf[i].image,
-                vk::ImageLayout::eUndefined,
-                vk::ImageLayout::eGeneral,
-                vk::ImageAspectFlagBits::eColor);
+            auto initBarrier = [&](vk::Image image) {
+                vk::ImageMemoryBarrier barrier{};
+                barrier.srcAccessMask = {};
+                barrier.dstAccessMask = vk::AccessFlagBits::eShaderWrite | vk::AccessFlagBits::eShaderRead;
+                barrier.oldLayout = vk::ImageLayout::eUndefined;
+                barrier.newLayout = vk::ImageLayout::eGeneral;
+                barrier.image = image;
+                barrier.subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};
+                cmd.pipelineBarrier(
+                    vk::PipelineStageFlagBits::eTopOfPipe,
+                    vk::PipelineStageFlagBits::eComputeShader,
+                    {}, 0, nullptr, 0, nullptr, 1, &barrier);
+            };
+            for (int i = 0; i < 2; ++i)
+                initBarrier(spatialBuf[i].image);
+            initBarrier(denoisedOutputImage);
+            spatialImagesReady = true;
         }
-        core::ImageUtilities::transitionImageLayout(cmd, denoisedOutputImage,
-            vk::ImageLayout::eUndefined,
-            vk::ImageLayout::eGeneral,
-            vk::ImageAspectFlagBits::eColor);
 
         const int stepSizes[MAX_SPATIAL_PASSES] = {1, 2, 4, 8, 16};
         int numPasses = std::clamp(spatialPassCount, 1, MAX_SPATIAL_PASSES);

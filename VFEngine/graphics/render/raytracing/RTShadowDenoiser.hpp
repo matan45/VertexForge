@@ -76,6 +76,7 @@ namespace render::raytracing
         bool historyValid = false;
         uint32_t maskWidth = 0;
         uint32_t maskHeight = 0;
+        bool spatialImagesReady = false;
         glm::mat4 prevViewProjection{1.0f};
 
         // Tunable parameters
