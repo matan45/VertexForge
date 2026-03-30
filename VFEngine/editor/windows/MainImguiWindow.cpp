@@ -36,6 +36,7 @@ namespace windows
         menuBar.setHeightmapGeneratorWindow(&heightmapGeneratorWindow);
         menuBar.setBackgroundRemovalWindow(&backgroundRemovalWindow);
         menuBar.setMemoryDiagnosticsWindow(&memoryDiagnosticsWindow);
+        menuBar.setEditorPreferencesWindow(&editorPreferencesWindow);
         subscribeToEvents();
     }
 
@@ -141,6 +142,7 @@ namespace windows
             heightmapGeneratorWindow.draw();
             backgroundRemovalWindow.draw();
             memoryDiagnosticsWindow.draw();
+            editorPreferencesWindow.draw();
         }
         ImGui::End();
     }

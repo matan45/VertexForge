@@ -27,6 +27,7 @@
 #include "procedural/HeightmapGeneratorWindow.hpp"
 #include "imageprocessing/BackgroundRemovalWindow.hpp"
 #include "debug/MemoryDiagnosticsWindow.hpp"
+#include "config/EditorPreferencesWindow.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/project/SceneEvents.hpp"
 #include "events/render/RenderEvents.hpp"
@@ -76,6 +77,7 @@ namespace windows
         if (ImGui::BeginMainMenuBar())
         {
             handleFileMenu();
+            handleEditMenu();
             handleSettingsMenu();
             handleAddMenu();
             handleToolsMenu();
@@ -165,6 +167,13 @@ namespace windows
             }
             ImGui::EndMenu();
         }
+    }
+
+    void MainMenuBar::handleEditMenu()
+    {
+        if (!ImGui::BeginMenu("Edit")) return;
+        if (ImGui::MenuItem("Preferences") && editorPreferencesWindow) editorPreferencesWindow->show();
+        ImGui::EndMenu();
     }
 
     void MainMenuBar::handleSettingsMenu()

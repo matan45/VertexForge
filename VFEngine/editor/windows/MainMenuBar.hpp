@@ -33,6 +33,7 @@ namespace windows
     class HeightmapGeneratorWindow;
     class BackgroundRemovalWindow;
     class MemoryDiagnosticsWindow;
+    class EditorPreferencesWindow;
     class MainMenuBar
     {
     private:
@@ -69,6 +70,7 @@ namespace windows
         HeightmapGeneratorWindow* heightmapGeneratorWindow = nullptr;
         BackgroundRemovalWindow* backgroundRemovalWindow = nullptr;
         MemoryDiagnosticsWindow* memoryDiagnosticsWindow = nullptr;
+        EditorPreferencesWindow* editorPreferencesWindow = nullptr;
     public:
         MainMenuBar();
         ~MainMenuBar();
@@ -193,8 +195,14 @@ namespace windows
             memoryDiagnosticsWindow = window;
         }
 
+        void setEditorPreferencesWindow(EditorPreferencesWindow* window)
+        {
+            editorPreferencesWindow = window;
+        }
+
     private:
         void handleFileMenu();
+        void handleEditMenu();
         void handleSettingsMenu();
         void handleAddMenu();
         void handleScriptsMenu();

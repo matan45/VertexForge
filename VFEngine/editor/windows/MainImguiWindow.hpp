@@ -34,6 +34,7 @@
 #include "procedural/HeightmapGeneratorWindow.hpp"
 #include "imageprocessing/BackgroundRemovalWindow.hpp"
 #include "debug/MemoryDiagnosticsWindow.hpp"
+#include "config/EditorPreferencesWindow.hpp"
 #include "MainMenuBar.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/terrain/TerrainEvents.hpp"
@@ -84,6 +85,7 @@ namespace windows
         HeightmapGeneratorWindow heightmapGeneratorWindow;
         BackgroundRemovalWindow backgroundRemovalWindow;
         MemoryDiagnosticsWindow memoryDiagnosticsWindow;
+        EditorPreferencesWindow editorPreferencesWindow;
         MainMenuBar menuBar;
 
         events::SubscriptionToken sceneClearedToken;

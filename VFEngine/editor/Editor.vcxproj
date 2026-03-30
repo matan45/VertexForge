@@ -155,6 +155,7 @@
     <ClInclude Include="windows\config\CloudConfigWindow.hpp" />
     <ClInclude Include="windows\config\CullingStatsWindow.hpp" />
     <ClInclude Include="windows\config\EditorCameraWindow.hpp" />
+    <ClInclude Include="windows\config\EditorPreferencesWindow.hpp" />
     <ClInclude Include="windows\config\GIConfigWindow.hpp" />
     <ClInclude Include="windows\config\InputActionMappingWindow.hpp" />
     <ClInclude Include="windows\config\LightStreamingDebugWindow.hpp" />
@@ -163,6 +164,8 @@
     <ClInclude Include="windows\config\PostProcessConfigWindow.hpp" />
     <ClInclude Include="windows\config\ProjectSettingsWindow.hpp" />
     <ClInclude Include="windows\config\RenderConfigWindow.hpp" />
+    <ClInclude Include="windows\config\SettingsEntry.hpp" />
+    <ClInclude Include="windows\config\SettingsTooltip.hpp" />
     <ClInclude Include="windows\config\VolumetricFogConfigWindow.hpp" />
     <ClInclude Include="windows\contentbrowser\AssetGridRenderer.hpp" />
     <ClInclude Include="windows\contentbrowser\ContentBrowser.hpp" />
@@ -323,6 +326,8 @@
     <ClCompile Include="windows\config\CloudConfigWindow.cpp" />
     <ClCompile Include="windows\config\CullingStatsWindow.cpp" />
     <ClCompile Include="windows\config\EditorCameraWindow.cpp" />
+    <ClCompile Include="windows\config\EditorPreferencesWindow.cpp" />
+    <ClCompile Include="windows\config\EditorPreferencesWindowSections.cpp" />
     <ClCompile Include="windows\config\GIConfigWindow.cpp" />
     <ClCompile Include="windows\config\InputActionMappingWindow.cpp" />
     <ClCompile Include="windows\config\InputActionMappingWindowAxis.cpp" />
