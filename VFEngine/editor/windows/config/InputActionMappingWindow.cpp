@@ -114,124 +114,160 @@ namespace windows
         ImGui::SetNextWindowSize(ImVec2(550, 450), ImGuiCond_FirstUseEver);
         if (ImGui::Begin("Input Action Mapping", &visible))
         {
-            if (ImGui::Button("Reset All"))
+            drawContent();
+        }
+        ImGui::End();
+    }
+
+    void InputActionMappingWindow::drawContent()
+    {
+        if (ImGui::Button("Reset All"))
+        {
+            auto& dispatcher = events::EventDispatcher::instance();
+            dispatcher.execute(events::input::ResetAllActionBindingsCommand{});
+            needsRefresh = true;
+        }
+
+        ImGui::SameLine();
+        if (ImGui::Button("Save"))
+        {
+            std::vector<std::pair<std::wstring, std::wstring>> fileTypes = {
+                {L"VF Input Mapping (*.vfInputMapping)", L"*.vfInputMapping"}
+            };
+            std::string savePath = fileDialog.saveFileDialog(fileTypes, L"vfInputMapping");
+            if (!savePath.empty())
             {
                 auto& dispatcher = events::EventDispatcher::instance();
-                dispatcher.execute(events::input::ResetAllActionBindingsCommand{});
+                events::input::SaveActionBindingsCommand cmd;
+                cmd.filePath = savePath;
+                dispatcher.execute(cmd);
+            }
+        }
+
+        ImGui::SameLine();
+        if (ImGui::Button("Load"))
+        {
+            std::vector<std::pair<std::wstring, std::wstring>> fileTypes = {
+                {L"VF Input Mapping (*.vfInputMapping)", L"*.vfInputMapping"}
+            };
+            std::string loadPath = fileDialog.openFileDialog(fileTypes);
+            if (!loadPath.empty())
+            {
+                auto& dispatcher = events::EventDispatcher::instance();
+                events::input::LoadActionBindingsCommand cmd;
+                cmd.filePath = loadPath;
+                dispatcher.execute(cmd);
                 needsRefresh = true;
             }
+        }
 
-            ImGui::SameLine();
-            if (ImGui::Button("Save"))
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        drawContextFilter();
+
+        ImGui::SetNextItemWidth(150.0f);
+        ImGui::InputTextWithHint("##newaction", "Action name...", newActionName, sizeof(newActionName));
+        ImGui::SameLine();
+        if (ImGui::Button("+ New Action"))
+        {
+            std::string name(newActionName);
+            if (!name.empty())
             {
-                std::vector<std::pair<std::wstring, std::wstring>> fileTypes = {
-                    {L"VF Input Mapping (*.vfInputMapping)", L"*.vfInputMapping"}
-                };
-                std::string savePath = fileDialog.saveFileDialog(fileTypes, L"vfInputMapping");
-                if (!savePath.empty())
+                auto& dispatcher = events::EventDispatcher::instance();
+                events::input::RegisterActionCommand cmd;
+                cmd.actionName = name;
+                cmd.context = selectedContextFilter != "All" ? selectedContextFilter : "Default";
+                dispatcher.execute(cmd);
+                newActionName[0] = '\0';
+                needsRefresh = true;
+            }
+        }
+
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        if (entries.empty())
+        {
+            ImGui::TextDisabled("No actions defined. Use '+ New Action' above to create one.");
+        }
+        else
+        {
+            if (waitingForKey)
+            {
+                auto& dispatcher = events::EventDispatcher::instance();
+                events::input::IsKeyDownQuery shiftQ; shiftQ.keyCode = input::Key::LeftShift;
+                events::input::IsKeyDownQuery shiftQ2; shiftQ2.keyCode = input::Key::RightShift;
+                events::input::IsKeyDownQuery ctrlQ; ctrlQ.keyCode = input::Key::LeftControl;
+                events::input::IsKeyDownQuery ctrlQ2; ctrlQ2.keyCode = input::Key::RightControl;
+                events::input::IsKeyDownQuery altQ; altQ.keyCode = input::Key::LeftAlt;
+                events::input::IsKeyDownQuery altQ2; altQ2.keyCode = input::Key::RightAlt;
+                bool shiftHeld = dispatcher.query(shiftQ) || dispatcher.query(shiftQ2);
+                bool ctrlHeld = dispatcher.query(ctrlQ) || dispatcher.query(ctrlQ2);
+                bool altHeld = dispatcher.query(altQ) || dispatcher.query(altQ2);
+
+                std::string hint = "Press any key or mouse button to bind...";
+                if (shiftHeld || ctrlHeld || altHeld)
                 {
-                    auto& dispatcher = events::EventDispatcher::instance();
-                    events::input::SaveActionBindingsCommand cmd;
-                    cmd.filePath = savePath;
-                    dispatcher.execute(cmd);
+                    hint = "Combo: ";
+                    if (shiftHeld) hint += "Shift+";
+                    if (ctrlHeld) hint += "Ctrl+";
+                    if (altHeld) hint += "Alt+";
+                    hint += "?";
                 }
-            }
-
-            ImGui::SameLine();
-            if (ImGui::Button("Load"))
-            {
-                std::vector<std::pair<std::wstring, std::wstring>> fileTypes = {
-                    {L"VF Input Mapping (*.vfInputMapping)", L"*.vfInputMapping"}
-                };
-                std::string loadPath = fileDialog.openFileDialog(fileTypes);
-                if (!loadPath.empty())
+                ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "%s", hint.c_str());
+                ImGui::SameLine();
+                if (ImGui::SmallButton("Cancel"))
                 {
-                    auto& dispatcher = events::EventDispatcher::instance();
-                    events::input::LoadActionBindingsCommand cmd;
-                    cmd.filePath = loadPath;
-                    dispatcher.execute(cmd);
-                    needsRefresh = true;
+                    waitingForKey = false;
+                    captureActionIndex = -1;
                 }
-            }
 
-            ImGui::Separator();
-            ImGui::Spacing();
-
-            drawContextFilter();
-
-            ImGui::SetNextItemWidth(150.0f);
-            ImGui::InputTextWithHint("##newaction", "Action name...", newActionName, sizeof(newActionName));
-            ImGui::SameLine();
-            if (ImGui::Button("+ New Action"))
-            {
-                std::string name(newActionName);
-                if (!name.empty())
+                for (int key = input::Key::Space; key <= input::Key::Last; ++key)
                 {
-                    auto& dispatcher = events::EventDispatcher::instance();
-                    events::input::RegisterActionCommand cmd;
-                    cmd.actionName = name;
-                    cmd.context = selectedContextFilter != "All" ? selectedContextFilter : "Default";
-                    dispatcher.execute(cmd);
-                    newActionName[0] = '\0';
-                    needsRefresh = true;
-                }
-            }
+                    if (key == input::Key::LeftShift || key == input::Key::RightShift ||
+                        key == input::Key::LeftControl || key == input::Key::RightControl ||
+                        key == input::Key::LeftAlt || key == input::Key::RightAlt)
+                        continue;
 
-            ImGui::Separator();
-            ImGui::Spacing();
-
-            if (entries.empty())
-            {
-                ImGui::TextDisabled("No actions defined. Use '+ New Action' above to create one.");
-            }
-            else
-            {
-                if (waitingForKey)
-                {
-                    auto& dispatcher = events::EventDispatcher::instance();
-                    events::input::IsKeyDownQuery shiftQ; shiftQ.keyCode = input::Key::LeftShift;
-                    events::input::IsKeyDownQuery shiftQ2; shiftQ2.keyCode = input::Key::RightShift;
-                    events::input::IsKeyDownQuery ctrlQ; ctrlQ.keyCode = input::Key::LeftControl;
-                    events::input::IsKeyDownQuery ctrlQ2; ctrlQ2.keyCode = input::Key::RightControl;
-                    events::input::IsKeyDownQuery altQ; altQ.keyCode = input::Key::LeftAlt;
-                    events::input::IsKeyDownQuery altQ2; altQ2.keyCode = input::Key::RightAlt;
-                    bool shiftHeld = dispatcher.query(shiftQ) || dispatcher.query(shiftQ2);
-                    bool ctrlHeld = dispatcher.query(ctrlQ) || dispatcher.query(ctrlQ2);
-                    bool altHeld = dispatcher.query(altQ) || dispatcher.query(altQ2);
-
-                    std::string hint = "Press any key or mouse button to bind...";
-                    if (shiftHeld || ctrlHeld || altHeld)
+                    events::input::IsKeyPressedQuery query;
+                    query.keyCode = key;
+                    if (dispatcher.query(query))
                     {
-                        hint = "Combo: ";
-                        if (shiftHeld) hint += "Shift+";
-                        if (ctrlHeld) hint += "Ctrl+";
-                        if (altHeld) hint += "Alt+";
-                        hint += "?";
-                    }
-                    ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "%s", hint.c_str());
-                    ImGui::SameLine();
-                    if (ImGui::SmallButton("Cancel"))
-                    {
+                        if (captureActionIndex >= 0 && captureActionIndex < static_cast<int>(entries.size()))
+                        {
+                            services::InputBinding binding;
+                            binding.type = services::BindingType::Key;
+                            binding.code = key;
+                            binding.requireShift = shiftHeld;
+                            binding.requireCtrl = ctrlHeld;
+                            binding.requireAlt = altHeld;
+
+                            events::input::AddActionBindingCommand cmd;
+                            cmd.actionName = entries[captureActionIndex].name;
+                            cmd.binding = binding;
+                            dispatcher.execute(cmd);
+                            needsRefresh = true;
+                        }
                         waitingForKey = false;
                         captureActionIndex = -1;
+                        break;
                     }
+                }
 
-                    for (int key = input::Key::Space; key <= input::Key::Last; ++key)
+                if (waitingForKey)
+                {
+                    for (int btn = 0; btn <= input::Mouse::Last; ++btn)
                     {
-                        if (key == input::Key::LeftShift || key == input::Key::RightShift ||
-                            key == input::Key::LeftControl || key == input::Key::RightControl ||
-                            key == input::Key::LeftAlt || key == input::Key::RightAlt)
-                            continue;
-
-                        events::input::IsKeyPressedQuery query;
-                        query.keyCode = key;
+                        events::input::IsMouseButtonPressedQuery query;
+                        query.button = btn;
                         if (dispatcher.query(query))
                         {
                             if (captureActionIndex >= 0 && captureActionIndex < static_cast<int>(entries.size()))
                             {
                                 services::InputBinding binding;
-                                binding.type = services::BindingType::Key;
-                                binding.code = key;
+                                binding.type = services::BindingType::MouseButton;
+                                binding.code = btn;
                                 binding.requireShift = shiftHeld;
                                 binding.requireCtrl = ctrlHeld;
                                 binding.requireAlt = altHeld;
@@ -247,62 +283,31 @@ namespace windows
                             break;
                         }
                     }
-
-                    if (waitingForKey)
-                    {
-                        for (int btn = 0; btn <= input::Mouse::Last; ++btn)
-                        {
-                            events::input::IsMouseButtonPressedQuery query;
-                            query.button = btn;
-                            if (dispatcher.query(query))
-                            {
-                                if (captureActionIndex >= 0 && captureActionIndex < static_cast<int>(entries.size()))
-                                {
-                                    services::InputBinding binding;
-                                    binding.type = services::BindingType::MouseButton;
-                                    binding.code = btn;
-                                    binding.requireShift = shiftHeld;
-                                    binding.requireCtrl = ctrlHeld;
-                                    binding.requireAlt = altHeld;
-
-                                    events::input::AddActionBindingCommand cmd;
-                                    cmd.actionName = entries[captureActionIndex].name;
-                                    cmd.binding = binding;
-                                    dispatcher.execute(cmd);
-                                    needsRefresh = true;
-                                }
-                                waitingForKey = false;
-                                captureActionIndex = -1;
-                                break;
-                            }
-                        }
-                    }
-
-                    ImGui::Separator();
-                    ImGui::Spacing();
                 }
 
-                for (int i = 0; i < static_cast<int>(entries.size()); ++i)
-                {
-                    if (selectedContextFilter != "All" && entries[i].context != selectedContextFilter)
-                        continue;
-                    drawActionEntry(i);
-                }
+                ImGui::Separator();
+                ImGui::Spacing();
             }
 
-            ImGui::Separator();
-            ImGui::Spacing();
-            drawAxis1DSection();
-
-            ImGui::Separator();
-            ImGui::Spacing();
-            drawAxis2DSection();
-
-            ImGui::Separator();
-            ImGui::Spacing();
-            drawContextSection();
+            for (int i = 0; i < static_cast<int>(entries.size()); ++i)
+            {
+                if (selectedContextFilter != "All" && entries[i].context != selectedContextFilter)
+                    continue;
+                drawActionEntry(i);
+            }
         }
-        ImGui::End();
+
+        ImGui::Separator();
+        ImGui::Spacing();
+        drawAxis1DSection();
+
+        ImGui::Separator();
+        ImGui::Spacing();
+        drawAxis2DSection();
+
+        ImGui::Separator();
+        ImGui::Spacing();
+        drawContextSection();
     }
 
     void InputActionMappingWindow::drawActionEntry(int index)

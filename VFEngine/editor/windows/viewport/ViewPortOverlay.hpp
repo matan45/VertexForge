@@ -27,7 +27,6 @@ namespace windows
         services::EditorTextureHandle iconAtlas;
         bool iconsLoaded = false;
         int currentViewMode = 0;
-        int currentDebugView = 0;
         static constexpr uint32_t ATLAS_COLUMNS = 4;
         static constexpr uint32_t ATLAS_ROWS = 4;
         static constexpr float ICON_SIZE = 32.0f;
@@ -41,8 +40,6 @@ namespace windows
         void drawToolbar(ViewPortGizmo& gizmo, ImGuiWindowFlags overlayFlags, const ImVec2& overlayPos);
         void drawViewModeDropdown(ImGuiWindowFlags overlayFlags, const ImVec2& windowPos,
                                   const ImVec2& contentMin);
-        void drawDebugViewDropdown(ImGuiWindowFlags overlayFlags, const ImVec2& windowPos,
-                                   const ImVec2& contentMin);
         bool isTerrainSelected() const;
 
         void loadIconAtlas();

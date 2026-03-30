@@ -15,6 +15,7 @@ namespace windows
         ~InputActionMappingWindow() override;
 
         void draw() override;
+        void drawContent();
         void show() { visible = true; needsRefresh = true; }
 
     private:

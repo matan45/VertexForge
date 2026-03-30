@@ -161,6 +161,7 @@
     <ClInclude Include="windows\config\CullingStatsWindow.hpp" />
     <ClInclude Include="windows\config\EditorCameraWindow.hpp" />
     <ClInclude Include="windows\config\EditorPreferencesWindow.hpp" />
+    <ClInclude Include="windows\config\EditorSettingsWindow.hpp" />
     <ClInclude Include="windows\config\GIConfigWindow.hpp" />
     <ClInclude Include="windows\config\InputActionMappingWindow.hpp" />
     <ClInclude Include="windows\config\LightStreamingDebugWindow.hpp" />
@@ -343,6 +344,7 @@
     <ClCompile Include="windows\config\EditorCameraWindow.cpp" />
     <ClCompile Include="windows\config\EditorPreferencesWindow.cpp" />
     <ClCompile Include="windows\config\EditorPreferencesWindowSections.cpp" />
+    <ClCompile Include="windows\config\EditorSettingsWindow.cpp" />
     <ClCompile Include="windows\config\GIConfigWindow.cpp" />
     <ClCompile Include="windows\config\InputActionMappingWindow.cpp" />
     <ClCompile Include="windows\config\InputActionMappingWindowAxis.cpp" />

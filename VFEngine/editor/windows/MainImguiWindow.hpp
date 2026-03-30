@@ -35,6 +35,7 @@
 #include "imageprocessing/BackgroundRemovalWindow.hpp"
 #include "debug/MemoryDiagnosticsWindow.hpp"
 #include "config/EditorPreferencesWindow.hpp"
+#include "config/EditorSettingsWindow.hpp"
 #include "EngineToolbar.hpp"
 #include "StatusBar.hpp"
 #include "MainMenuBar.hpp"
@@ -88,6 +89,7 @@ namespace windows
         BackgroundRemovalWindow backgroundRemovalWindow;
         MemoryDiagnosticsWindow memoryDiagnosticsWindow;
         EditorPreferencesWindow editorPreferencesWindow;
+        EditorSettingsWindow editorSettingsWindow;
         EngineToolbar engineToolbar;
         StatusBar statusBar;
         MainMenuBar menuBar;

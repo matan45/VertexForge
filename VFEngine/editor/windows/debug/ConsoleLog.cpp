@@ -67,7 +67,6 @@ namespace windows
 
     void ConsoleLog::drawLogEntries()
     {
-        ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.05f, 0.05f, 0.15f, 1.0f));
         ImGui::BeginChild("ScrollingRegion", ImVec2(0, -ImGui::GetFrameHeightWithSpacing()), false,
                           ImGuiWindowFlags_HorizontalScrollbar);
 
@@ -156,7 +155,6 @@ namespace windows
             ImGui::SetScrollHereY(1.0f);
         }
 
-        ImGui::PopStyleColor();
         ImGui::EndChild();
     }
 

@@ -13,6 +13,7 @@ namespace windows
         ~PluginManagerWindow() override = default;
 
         void draw() override;
+        void drawContent();
         void show() { visible = true; needsRefresh = true; }
 
     private:

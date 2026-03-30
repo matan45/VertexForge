@@ -1,4 +1,5 @@
 #include "MainMenuBar.hpp"
+#include "config/EditorSettingsWindow.hpp"
 #include "lighting/IBLWindow.hpp"
 #include "config/EditorCameraWindow.hpp"
 #include "config/CullingStatsWindow.hpp"
@@ -80,7 +81,6 @@ namespace windows
             handleFileMenu();
             handleEditMenu();
             handleWindowMenu();
-            handleSettingsMenu();
             handleAddMenu();
             handleToolsMenu();
             handleScriptsMenu();
@@ -174,6 +174,7 @@ namespace windows
     {
         if (!ImGui::BeginMenu("Edit")) return;
         if (ImGui::MenuItem("Preferences") && editorPreferencesWindow) editorPreferencesWindow->show();
+        if (ImGui::MenuItem("Settings") && editorSettingsWindow) editorSettingsWindow->show();
         ImGui::EndMenu();
     }
 
@@ -235,14 +236,22 @@ namespace windows
     void MainMenuBar::handleSettingsMenu()
     {
         if (!ImGui::BeginMenu("Settings")) return;
-        if (ImGui::MenuItem("Project") && projectSettingsWindow) projectSettingsWindow->show();
-        else if (ImGui::MenuItem("Editor Camera") && editorCameraWindow) editorCameraWindow->show();
-        else if (ImGui::MenuItem("Physics Config") && physicsConfigWindow) physicsConfigWindow->show();
-        else if (ImGui::MenuItem("Audio Config") && audioConfigWindow) audioConfigWindow->show();
-        else if (ImGui::MenuItem("Audio Mixer") && audioMixerWindow) audioMixerWindow->show();
-        else if (ImGui::MenuItem("Render Config") && renderConfigWindow) renderConfigWindow->show();
-        else if (ImGui::MenuItem("Input Action Mapping") && inputActionMappingWindow) inputActionMappingWindow->show();
-        else if (ImGui::MenuItem("Plugin Manager") && pluginManagerWindow) pluginManagerWindow->show();
+        if (ImGui::MenuItem("Project") && editorSettingsWindow)
+            editorSettingsWindow->show(EditorSettingsWindow::Project);
+        if (ImGui::MenuItem("Editor Camera") && editorSettingsWindow)
+            editorSettingsWindow->show(EditorSettingsWindow::EditorCamera);
+        if (ImGui::MenuItem("Physics Config") && editorSettingsWindow)
+            editorSettingsWindow->show(EditorSettingsWindow::Physics);
+        if (ImGui::MenuItem("Audio Config") && editorSettingsWindow)
+            editorSettingsWindow->show(EditorSettingsWindow::AudioConfig);
+        if (ImGui::MenuItem("Audio Mixer") && editorSettingsWindow)
+            editorSettingsWindow->show(EditorSettingsWindow::AudioMixer);
+        if (ImGui::MenuItem("Render Config") && editorSettingsWindow)
+            editorSettingsWindow->show(EditorSettingsWindow::Rendering);
+        if (ImGui::MenuItem("Input Action Mapping") && editorSettingsWindow)
+            editorSettingsWindow->show(EditorSettingsWindow::InputMapping);
+        if (ImGui::MenuItem("Plugin Manager") && editorSettingsWindow)
+            editorSettingsWindow->show(EditorSettingsWindow::Plugins);
         ImGui::EndMenu();
     }
 

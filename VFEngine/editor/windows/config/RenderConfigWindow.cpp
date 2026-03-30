@@ -355,38 +355,43 @@ namespace windows
 
         if (ImGui::Begin("Render Configuration", &visible))
         {
-            drawPresetSection();
-            drawCullingSection();
-            drawTerrainSection();
-            drawShadowSection();
-            drawVFXLODSection();
-            drawAnimationLODSection();
-
-            ImGui::Spacing();
-            ImGui::Separator();
-            ImGui::Spacing();
-
-            if (ImGui::Button("Save to Scene", ImVec2(100, 0)))
-                saveToScene();
-            ImGui::SameLine();
-            if (ImGui::Button("Reload", ImVec2(80, 0)))
-                loadFromScene();
-            ImGui::SameLine();
-            if (ImGui::Button("Apply", ImVec2(80, 0)))
-                applySettings();
-            ImGui::SameLine();
-            if (ImGui::Button("Reset Defaults", ImVec2(100, 0)))
-                resetToDefaults();
-
-            if (isDirty)
-            {
-                ImGui::SameLine();
-                ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "(Modified)");
-            }
-
-            ImGui::Spacing();
-            ImGui::TextDisabled("Render settings are saved with the scene file.");
+            drawContent();
         }
         ImGui::End();
+    }
+
+    void RenderConfigWindow::drawContent()
+    {
+        drawPresetSection();
+        drawCullingSection();
+        drawTerrainSection();
+        drawShadowSection();
+        drawVFXLODSection();
+        drawAnimationLODSection();
+
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        if (ImGui::Button("Save to Scene", ImVec2(100, 0)))
+            saveToScene();
+        ImGui::SameLine();
+        if (ImGui::Button("Reload", ImVec2(80, 0)))
+            loadFromScene();
+        ImGui::SameLine();
+        if (ImGui::Button("Apply", ImVec2(80, 0)))
+            applySettings();
+        ImGui::SameLine();
+        if (ImGui::Button("Reset Defaults", ImVec2(100, 0)))
+            resetToDefaults();
+
+        if (isDirty)
+        {
+            ImGui::SameLine();
+            ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "(Modified)");
+        }
+
+        ImGui::Spacing();
+        ImGui::TextDisabled("Render settings are saved with the scene file.");
     }
 }

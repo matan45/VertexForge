@@ -34,6 +34,7 @@ namespace windows
     class BackgroundRemovalWindow;
     class MemoryDiagnosticsWindow;
     class EditorPreferencesWindow;
+    class EditorSettingsWindow;
     class MainMenuBar
     {
     private:
@@ -71,6 +72,7 @@ namespace windows
         BackgroundRemovalWindow* backgroundRemovalWindow = nullptr;
         MemoryDiagnosticsWindow* memoryDiagnosticsWindow = nullptr;
         EditorPreferencesWindow* editorPreferencesWindow = nullptr;
+        EditorSettingsWindow* editorSettingsWindow = nullptr;
     public:
         MainMenuBar();
         ~MainMenuBar();
@@ -198,6 +200,11 @@ namespace windows
         void setEditorPreferencesWindow(EditorPreferencesWindow* window)
         {
             editorPreferencesWindow = window;
+        }
+
+        void setEditorSettingsWindow(EditorSettingsWindow* window)
+        {
+            editorSettingsWindow = window;
         }
 
     private:

@@ -1,11 +1,33 @@
 #include "StatusBar.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/render/RenderEvents.hpp"
+#include "events/scene/ScenePersistenceEvents.hpp"
 #include "memory/GpuAllocationStats.hpp"
 #include <imgui.h>
+#include <filesystem>
 
 namespace windows
 {
+    StatusBar::StatusBar()
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+        sceneLoadedToken = dispatcher.subscribe<events::scene::SceneLoadedNotification>(
+            [this](const events::scene::SceneLoadedNotification& n) {
+                currentSceneName = std::filesystem::path(n.scenePath).stem().string();
+            });
+        sceneClearedToken = dispatcher.subscribe<events::scene::SceneClearedNotification>(
+            [this](const events::scene::SceneClearedNotification&) {
+                currentSceneName.clear();
+            });
+    }
+
+    StatusBar::~StatusBar()
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+        if (sceneLoadedToken.isValid()) dispatcher.unsubscribe(sceneLoadedToken);
+        if (sceneClearedToken.isValid()) dispatcher.unsubscribe(sceneClearedToken);
+    }
+
     void StatusBar::draw(const ImGuiViewport* viewport, float toolbarHeight)
     {
         ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
@@ -56,6 +78,16 @@ namespace windows
             ImGui::TextDisabled("|");
             ImGui::SameLine(0.0f, 16.0f);
             ImGui::Text("VRAM: %llu MB", static_cast<unsigned long long>(cachedVramMB));
+
+            // Scene name on the right
+            const char* sceneLabel = currentSceneName.empty() ? "No Scene" : currentSceneName.c_str();
+            float textWidth = ImGui::CalcTextSize(sceneLabel).x;
+            float rightX = ImGui::GetWindowContentRegionMax().x - textWidth;
+            ImGui::SameLine(rightX);
+            if (currentSceneName.empty())
+                ImGui::TextDisabled("%s", sceneLabel);
+            else
+                ImGui::Text("Scene: %s", sceneLabel);
         }
         ImGui::End();
         ImGui::PopStyleVar();

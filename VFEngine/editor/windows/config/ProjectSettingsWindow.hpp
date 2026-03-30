@@ -26,6 +26,7 @@ namespace windows
 
     public:
         void draw();
+        void drawContent();
         void show();
         void hide() { visible = false; }
         bool isVisible() const { return visible; }

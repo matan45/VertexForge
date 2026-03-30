@@ -21,40 +21,45 @@ namespace windows
         ImGui::SetNextWindowSize(ImVec2(500, 400), ImGuiCond_FirstUseEver);
         if (ImGui::Begin("Plugin Manager", &visible))
         {
-            // Header
-            ImGui::Text("Engine API Version: %u", plugin::VF_PLUGIN_API_VERSION);
-
-            auto* pm = plugin::PluginManager::getActive();
-            if (pm)
-            {
-                ImGui::SameLine();
-                ImGui::TextDisabled("| %s", pm->getPluginsDirectory().string().c_str());
-            }
-
-            ImGui::SameLine(ImGui::GetContentRegionAvail().x + ImGui::GetCursorPosX() - 60.0f);
-            if (ImGui::Button("Refresh"))
-                needsRefresh = true;
-
-            ImGui::Separator();
-            ImGui::Spacing();
-
-            if (entries.empty())
-            {
-                ImGui::TextDisabled("No plugins found");
-            }
-            else
-            {
-                for (auto& entry : entries)
-                {
-                    drawPluginEntry(entry);
-                }
-            }
-
-            ImGui::Spacing();
-            ImGui::Separator();
-            ImGui::TextDisabled("Changes to enabled state take effect on next editor launch");
+            drawContent();
         }
         ImGui::End();
+    }
+
+    void PluginManagerWindow::drawContent()
+    {
+        // Header
+        ImGui::Text("Engine API Version: %u", plugin::VF_PLUGIN_API_VERSION);
+
+        auto* pm = plugin::PluginManager::getActive();
+        if (pm)
+        {
+            ImGui::SameLine();
+            ImGui::TextDisabled("| %s", pm->getPluginsDirectory().string().c_str());
+        }
+
+        ImGui::SameLine(ImGui::GetContentRegionAvail().x + ImGui::GetCursorPosX() - 60.0f);
+        if (ImGui::Button("Refresh"))
+            needsRefresh = true;
+
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        if (entries.empty())
+        {
+            ImGui::TextDisabled("No plugins found");
+        }
+        else
+        {
+            for (auto& entry : entries)
+            {
+                drawPluginEntry(entry);
+            }
+        }
+
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::TextDisabled("Changes to enabled state take effect on next editor launch");
     }
 
     void PluginManagerWindow::refresh()

@@ -15,6 +15,7 @@ namespace windows
 
     public:
         void draw();
+        void drawContent();
 
         void setEditorCamera(editor::EditorCamera* camera) { editorCameraRef = camera; }
 

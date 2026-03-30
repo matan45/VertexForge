@@ -434,18 +434,6 @@ namespace windows
                 camera->setDistance(dist);
             }
 
-            if (ImGui::Button("+", ImVec2(itemWidth / 2 - 2, 0)))
-            {
-                camera->setDistance(dist * 0.9f);
-            }
-            ImGui::SameLine();
-            if (ImGui::Button("-", ImVec2(itemWidth / 2 - 2, 0)))
-            {
-                camera->setDistance(dist * 1.1f);
-            }
-
-            ImGui::Spacing();
-
             if (ImGui::Button("Fit to Mesh", ImVec2(-1, 0)))
             {
                 camera->fitToBounds(meshBounds);

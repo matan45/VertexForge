@@ -41,6 +41,13 @@ namespace windows
         menuBar.setBackgroundRemovalWindow(&backgroundRemovalWindow);
         menuBar.setMemoryDiagnosticsWindow(&memoryDiagnosticsWindow);
         menuBar.setEditorPreferencesWindow(&editorPreferencesWindow);
+
+        editorSettingsWindow.setWindows(&projectSettingsWindow, &editorCameraWindow,
+                                         &physicsConfigWindow, &audioConfigWindow,
+                                         &audioMixerWindow, &renderConfigWindow,
+                                         &inputActionMappingWindow, &pluginManagerWindow);
+        menuBar.setEditorSettingsWindow(&editorSettingsWindow);
+
         subscribeToEvents();
 
         // Apply saved theme on startup
@@ -175,6 +182,7 @@ namespace windows
             backgroundRemovalWindow.draw();
             memoryDiagnosticsWindow.draw();
             editorPreferencesWindow.draw();
+            editorSettingsWindow.draw();
         }
         ImGui::End();
 
