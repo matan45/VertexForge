@@ -1,6 +1,7 @@
 #include "AnimationViewport.hpp"
 #include "../../camera/OrbitCamera.hpp"
 #include "../preview/PreviewInputHandler.hpp"
+#include "../preview/PreviewToolbar.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/animation/AnimationPreviewEvents.hpp"
 #include "imgui.h"
@@ -11,30 +12,7 @@ namespace windows::animation
 {
     void AnimationViewport::draw(const ViewportDrawContext& ctx)
     {
-        ImGui::Text("3D Preview");
-        ImGui::SameLine();
-
-        float panStep = ctx.camera ? ctx.camera->distance * 0.1f : 0.5f;
-        if (ImGui::ArrowButton("##CamUp", ImGuiDir_Up))
-        {
-            if (ctx.camera)
-            {
-                ctx.camera->target.y += panStep;
-                ctx.camera->updateMatrices();
-            }
-        }
-        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Move camera up");
-        ImGui::SameLine();
-        if (ImGui::ArrowButton("##CamDown", ImGuiDir_Down))
-        {
-            if (ctx.camera)
-            {
-                ctx.camera->target.y -= panStep;
-                ctx.camera->updateMatrices();
-            }
-        }
-        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Move camera down");
-
+        editor::preview::PreviewToolbar::draw(ctx.environment, ctx.camera, nullptr);
         ImGui::Separator();
 
         ImVec2 availSize = ImGui::GetContentRegionAvail();
@@ -66,6 +44,7 @@ namespace windows::animation
         params.albedo = glm::vec4(0.8f, 0.8f, 0.8f, 1.0f);
         params.metallic = 0.0f;
         params.roughness = 0.5f;
+        params.clearColor = ctx.environment.backgroundColor;
 
         services::events::animpreview::SetAnimationPreviewParamsCommand paramsCmd;
         paramsCmd.instanceId = ctx.instanceId;

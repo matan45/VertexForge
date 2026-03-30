@@ -63,6 +63,8 @@ namespace render::mesh
 
         std::vector<vk::Framebuffer> framebuffers;
 
+        glm::vec4 clearColorValue{0.06f, 0.06f, 0.06f, 1.0f};
+
         vk::Buffer cameraUBO;
         core::VulkanAllocation cameraUBOAllocation;
         bool externalCameraBuffer = false;
@@ -98,6 +100,8 @@ namespace render::mesh
         }
 
         void updateBoneMatrices(const std::vector<glm::mat4>& boneMatrices);
+
+        void setClearColor(const glm::vec4& color) { clearColorValue = color; }
 
         void recordCommandBuffer(const vk::CommandBuffer& commandBuffer,
                                  uint32_t imageIndex,

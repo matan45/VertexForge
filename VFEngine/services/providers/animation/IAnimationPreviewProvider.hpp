@@ -27,6 +27,7 @@ namespace services
         glm::vec4 albedo{0.8f, 0.8f, 0.8f, 1.0f};
         float metallic = 0.0f;
         float roughness = 0.5f;
+        glm::vec4 clearColor{0.06f, 0.06f, 0.06f, 1.0f};
     };
 
     class IAnimationPreviewProvider

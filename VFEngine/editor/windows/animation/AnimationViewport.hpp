@@ -2,6 +2,7 @@
 
 #include "providers/animation/IAnimationPreviewProvider.hpp"
 #include "providers/PreviewInstanceId.hpp"
+#include "../preview/PreviewEnvironment.hpp"
 #include "ColliderOverlayRenderer.hpp"
 #include "types/PhysicsAnimationTypes.hpp"
 #include "animator/SocketTypes.hpp"
@@ -29,6 +30,7 @@ namespace windows::animation
         const services::PreviewInstanceId& instanceId;
         bool& isDraggingPreview;
         bool& isDraggingPan;
+        editor::preview::PreviewEnvironment& environment;
         bool showColliderOverlay = false;
         const types::PhysicsAnimationConfig* physicsConfig = nullptr;
         const std::unordered_map<std::string, size_t>* boneNameToIndex = nullptr;

@@ -196,8 +196,18 @@ namespace windows
         }
 
 
+        // Apply channel view tint
+        ImVec4 tint(1, 1, 1, 1);
+        switch (channelView)
+        {
+        case 1: tint = ImVec4(1, 0, 0, 1); break; // R
+        case 2: tint = ImVec4(0, 1, 0, 1); break; // G
+        case 3: tint = ImVec4(0, 0, 1, 1); break; // B
+        default: break;
+        }
+
         void* displayDescriptor = imageHandle.getMipDescriptor(static_cast<uint32_t>(selectedMipLevel));
-        ImGui::Image(displayDescriptor, imageSize);
+        ImGui::Image(displayDescriptor, imageSize, ImVec2(0, 0), ImVec2(1, 1), tint);
     }
 
     void ImagePreviewWindow::drawInfoPanel()
@@ -272,6 +282,34 @@ namespace windows
             ImGui::Separator();
             ImGui::Spacing();
         }
+
+        if (ImGui::CollapsingHeader("Channels", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            const char* channelLabels[] = { "RGBA", "R", "G", "B" };
+            ImVec4 channelColors[] = {
+                ImVec4(0.9f, 0.9f, 0.9f, 1.0f),
+                ImVec4(1.0f, 0.3f, 0.3f, 1.0f),
+                ImVec4(0.3f, 1.0f, 0.3f, 1.0f),
+                ImVec4(0.3f, 0.5f, 1.0f, 1.0f)
+            };
+
+            for (int i = 0; i < 4; ++i)
+            {
+                if (i > 0) ImGui::SameLine();
+                bool selected = (channelView == i);
+                if (selected)
+                    ImGui::PushStyleColor(ImGuiCol_Button, channelColors[i]);
+                if (ImGui::SmallButton(channelLabels[i]))
+                {
+                    channelView = i;
+                }
+                if (selected)
+                    ImGui::PopStyleColor();
+            }
+        }
+
+        ImGui::Separator();
+        ImGui::Spacing();
 
         if (ImGui::CollapsingHeader("View", ImGuiTreeNodeFlags_DefaultOpen))
         {

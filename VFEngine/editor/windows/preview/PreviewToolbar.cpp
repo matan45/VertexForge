@@ -42,20 +42,6 @@ namespace editor::preview
         }
 
         ImGui::SameLine();
-
-        // Toggle Lighting
-        const char* lightLabel = (env.lightingMode == LightingMode::ThreePoint)
-            ? ICON_FA_LIGHTBULB " 3-Point"
-            : ICON_FA_SUN " Default";
-        if (ImGui::SmallButton(lightLabel))
-        {
-            env.lightingMode = (env.lightingMode == LightingMode::Default)
-                ? LightingMode::ThreePoint
-                : LightingMode::Default;
-            changed = true;
-        }
-
-        ImGui::SameLine();
         ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
         ImGui::SameLine();
 

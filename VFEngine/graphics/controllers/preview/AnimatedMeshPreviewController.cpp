@@ -382,6 +382,14 @@ namespace controllers
         }
     }
 
+    void AnimatedMeshPreviewController::setClearColor(const glm::vec4& color)
+    {
+        if (skinnedPipeline)
+        {
+            skinnedPipeline->setClearColor(color);
+        }
+    }
+
     void AnimatedMeshPreviewController::updateCamera(const glm::mat4& view, const glm::mat4& projection,
                                                      const glm::vec3& cameraPos)
     {

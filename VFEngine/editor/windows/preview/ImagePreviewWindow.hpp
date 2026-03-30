@@ -23,6 +23,7 @@ namespace windows
         float zoom = 1.0f;
 
         int selectedMipLevel = 0;
+        int channelView = 0; // 0=RGBA, 1=R, 2=G, 3=B
 
     public:
         explicit ImagePreviewWindow(const std::string& filePath, bool hdr = false);

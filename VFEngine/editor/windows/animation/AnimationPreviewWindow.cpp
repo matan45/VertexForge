@@ -112,6 +112,7 @@ namespace windows
                                    getPreviewInstanceId(),
                                    isDraggingPreview,
                                    isDraggingPan,
+                                   environment,
                                    showPhysicsPanel && showColliderOverlay,
                                    &physicsConfig,
                                    &boneNameToIndex,

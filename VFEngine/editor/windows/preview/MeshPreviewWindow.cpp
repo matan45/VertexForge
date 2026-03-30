@@ -199,27 +199,6 @@ namespace windows
 
         // Toolbar at top of viewport
         editor::preview::PreviewToolbar::draw(environment, camera.get(), &meshBounds);
-
-        // Display mode toggles
-        ImGui::SameLine();
-        ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
-        ImGui::SameLine();
-
-        if (ImGui::SmallButton(wireframeMode ? (ICON_FA_DRAW_POLYGON " Wire") : (ICON_FA_CUBE " Solid")))
-        {
-            wireframeMode = !wireframeMode;
-        }
-        ImGui::SameLine();
-        if (ImGui::SmallButton(showBoundingBox ? (ICON_FA_VECTOR_SQUARE " BBox") : (ICON_FA_SQUARE " BBox")))
-        {
-            showBoundingBox = !showBoundingBox;
-        }
-        ImGui::SameLine();
-
-        ImGui::SetNextItemWidth(80.0f);
-        const char* matItems[] = { "Default", "Clay", "Normals", "UVs" };
-        ImGui::Combo("##MatOverride", &materialOverrideMode, matItems, 4);
-
         ImGui::Separator();
 
         // Recalculate viewport size after toolbar

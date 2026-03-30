@@ -21,6 +21,13 @@ namespace windows
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8.0f, 4.0f));
         if (ImGui::Begin("##EngineToolbar", nullptr, flags))
         {
+            float windowWidth = ImGui::GetWindowWidth();
+            // Estimate play controls width: Play(60) + gap + Pause(60) + gap + Stop(60) ~ 200
+            float controlsWidth = 200.0f;
+            float centerX = (windowWidth - controlsWidth) * 0.5f;
+            if (centerX < 8.0f) centerX = 8.0f;
+
+            ImGui::SetCursorPosX(centerX);
             drawPlayControls();
 
             ImGui::SameLine(0.0f, 16.0f);
