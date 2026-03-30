@@ -176,7 +176,6 @@
     <ClInclude Include="render\common\QuadBufferManager.hpp" />
     <ClInclude Include="render\common\SharedCameraUBO.hpp" />
     <ClInclude Include="render\decal\DecalPipeline.hpp" />
-    <ClInclude Include="render\gi\AccelerationStructureManager.hpp" />
     <ClInclude Include="render\gi\GIDebugRenderer.hpp" />
     <ClInclude Include="render\gi\GITypes.hpp" />
     <ClInclude Include="render\gi\ProbeStorageBuffer.hpp" />
@@ -258,6 +257,8 @@
     <ClInclude Include="render\preview\PreviewGridRenderer.hpp" />
     <ClInclude Include="render\preview\PreviewRenderHandler.hpp" />
     <ClInclude Include="render\preview\PreviewViewPort.hpp" />
+    <ClInclude Include="render\raytracing\AccelerationStructureManager.hpp" />
+    <ClInclude Include="render\raytracing\ScratchBufferPool.hpp" />
     <ClInclude Include="render\shadow\CascadeShadowCalculator.hpp" />
     <ClInclude Include="render\shadow\ClipmapShadowCalculator.hpp" />
     <ClInclude Include="render\shadow\PointShadowCalculator.hpp" />
@@ -419,7 +420,6 @@
     <ClCompile Include="render\common\SharedCameraUBO.cpp" />
     <ClCompile Include="render\decal\DecalPipeline.cpp" />
     <ClCompile Include="render\decal\DecalPipelineRender.cpp" />
-    <ClCompile Include="render\gi\AccelerationStructureManager.cpp" />
     <ClCompile Include="render\gi\GIDebugRenderer.cpp" />
     <ClCompile Include="render\gi\ProbeStorageBuffer.cpp" />
     <ClCompile Include="render\gi\ProbeTracePipeline.cpp" />
@@ -512,6 +512,7 @@
     <ClCompile Include="render\preview\PreviewGridRenderer.cpp" />
     <ClCompile Include="render\preview\PreviewRenderHandler.cpp" />
     <ClCompile Include="render\preview\PreviewViewPort.cpp" />
+    <ClCompile Include="render\raytracing\AccelerationStructureManager.cpp" />
     <ClCompile Include="render\shadow\CascadeShadowCalculator.cpp" />
     <ClCompile Include="render\shadow\ClipmapShadowCalculator.cpp" />
     <ClCompile Include="render\shadow\PointShadowCalculator.cpp" />
@@ -670,6 +671,7 @@
     <None Include="..\..\resources\shaders\postprocess\underwater.glsl" />
     <None Include="..\..\resources\shaders\postprocess\vignette.glsl" />
     <None Include="..\..\resources\shaders\postprocess\volumetric_fog_sample.glsl" />
+    <None Include="..\..\resources\shaders\preview\gradient_background.glsl" />
     <None Include="..\..\resources\shaders\shadow\shadow.glsl" />
     <None Include="..\..\resources\shaders\shadow\shadow_terrain.glsl" />
     <None Include="..\..\resources\shaders\shadow\vsm_feedback.glsl" />

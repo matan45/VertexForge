@@ -43,7 +43,7 @@
 #include "../gi/ProbeTracePipeline.hpp"
 #include "../gi/ProbeUpdatePipeline.hpp"
 #include "../gi/GIDebugRenderer.hpp"
-#include "../gi/AccelerationStructureManager.hpp"
+#include "../raytracing/AccelerationStructureManager.hpp"
 #include "../svt/SVTTypes.hpp"
 #include "../svt/PhysicalTileCache.hpp"
 #include "../svt/SVTPageTable.hpp"
@@ -350,9 +350,8 @@ namespace render::gpudriven
         std::unique_ptr<gi::ProbeTracePipeline> giTracePipeline;
         std::unique_ptr<gi::ProbeUpdatePipeline> giUpdatePipeline;
         std::unique_ptr<gi::GIDebugRenderer> giDebugRenderer;
-        std::unique_ptr<gi::AccelerationStructureManager> accelStructManager;
+        std::unique_ptr<raytracing::AccelerationStructureManager> accelStructManager;
         gi::GISettings cachedGISettings;
-        bool blasNeedsRebuild = true;
         bool giProbeBuffersNeedInit = true;
 
         std::unique_ptr<mesh::MeshStreamManager> meshStreamManager;

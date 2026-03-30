@@ -18,23 +18,8 @@ namespace render::gpudriven
         giCascadeManager->updateCameraPosition(cachedCamera.position);
         giCascadeManager->beginFrame();
 
-        if (accelStructManager && accelStructManager->isInitialized() && mergedBuffer)
-        {
-            if (blasNeedsRebuild && mergedBuffer->getTotalVertexCount() > 0 &&
-                mergedBuffer->getTotalIndexCount() > 0)
-            {
-                accelStructManager->buildBLAS(cmd,
-                    mergedBuffer->getVertexBuffer(), mergedBuffer->getTotalVertexCount(), 64,
-                    mergedBuffer->getIndexBuffer(), mergedBuffer->getTotalIndexCount());
-                blasNeedsRebuild = false;
-            }
-
-            if (accelStructManager->isTLASReady() || !blasNeedsRebuild)
-            {
-                if (mergedBuffer->getObjectCount() > 0)
-                    accelStructManager->buildTLAS(cmd, mergedBuffer->getCPUObjectData(), mergedBuffer->getObjectCount());
-            }
-        }
+        // BLAS/TLAS are now built in dispatchGraphicsCompute() before shadow passes.
+        // GI just reads the shared TLAS descriptor set.
 
         auto* storage = giCascadeManager->getProbeStorage();
 
@@ -136,12 +121,24 @@ namespace render::gpudriven
                 vk::DescriptorSetLayout tlasLayout = nullptr;
                 if (device.isRayQuerySupported())
                 {
-                    accelStructManager = std::make_unique<gi::AccelerationStructureManager>(device);
+                    accelStructManager = std::make_unique<raytracing::AccelerationStructureManager>(device);
                     accelStructManager->init();
                     if (accelStructManager->isInitialized())
                     {
                         tlasLayout = accelStructManager->getTLASDescriptorLayout();
-                        blasNeedsRebuild = true;
+
+                        // Wire mesh streaming callbacks to notify AS manager
+                        if (mergedBuffer)
+                        {
+                            mergedBuffer->onSubmeshLOD0Ready = [this](const std::string& path, const std::string& name,
+                                                                       uint32_t idx, const SubmeshLocation& loc) {
+                                if (accelStructManager) accelStructManager->notifyMeshReady(path, name, idx, loc);
+                            };
+                            mergedBuffer->onSubmeshRemoved = [this](const std::string& path, const std::string& name,
+                                                                     uint32_t idx) {
+                                if (accelStructManager) accelStructManager->notifyMeshRemoved(path, name, idx);
+                            };
+                        }
                     }
                 }
 
@@ -222,7 +219,6 @@ namespace render::gpudriven
         if (giTracePipeline) { giTracePipeline->cleanup(); giTracePipeline.reset(); }
         if (accelStructManager) { accelStructManager->cleanup(); accelStructManager.reset(); }
         if (giCascadeManager) { giCascadeManager->cleanup(); giCascadeManager.reset(); }
-        blasNeedsRebuild = true;
         giProbeBuffersNeedInit = true;
     }
 
@@ -334,6 +330,24 @@ namespace render::gpudriven
             vk::AccessFlagBits::eShaderRead | vk::AccessFlagBits::eShaderWrite};
         cmd.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eComputeShader,
                             vk::DependencyFlags{}, 1, &memBarrier, 0, nullptr, 0, nullptr);
+
+        // Build/update acceleration structures for RT shadows and GI
+        if (accelStructManager && accelStructManager->isInitialized() && mergedBuffer)
+        {
+            if (accelStructManager->hasPendingBLASBuilds())
+            {
+                accelStructManager->buildPendingBLAS(cmd,
+                    mergedBuffer->getVertexBuffer(), 64,
+                    mergedBuffer->getIndexBuffer());
+            }
+            if (mergedBuffer->getObjectCount() > 0)
+            {
+                accelStructManager->buildTLAS(cmd,
+                    mergedBuffer->getCPUObjectData(),
+                    mergedBuffer->getObjectCount(),
+                    *mergedBuffer);
+            }
+        }
 
         cullPipeline->dispatch(cmd, stats.totalObjects);
         batchManager->insertBarriersAfterCompute(cmd);
