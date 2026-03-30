@@ -3,6 +3,7 @@
 #include "ExportHandler.hpp"
 #include "impl/save/SaveService.hpp"
 #include "impl/save/ConfigService.hpp"
+#include "impl/editor/EditorSettingsService.hpp"
 #include "editor/EditorBootstrap.hpp"
 #include "../splash/SplashScreen.hpp"
 #include "impl/physics/PhysicsPlayModeHandler.hpp"
