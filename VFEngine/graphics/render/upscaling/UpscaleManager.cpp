@@ -89,17 +89,51 @@ namespace render::upscaling
 #endif
     }
 
+    std::vector<const char*> UpscaleManager::getRequiredInstanceExtensions()
+    {
+        std::vector<const char*> extensions;
+#ifdef VF_STREAMLINE_ENABLED
+        if (!streamlineAvailable) return extensions;
+
+        sl::FeatureRequirements reqs{};
+        sl::Result result = slGetFeatureRequirements(sl::kFeatureDLSS, reqs);
+        if (result == sl::Result::eOk && reqs.vkNumInstanceExtensions > 0)
+        {
+            for (uint32_t i = 0; i < reqs.vkNumInstanceExtensions; ++i)
+                extensions.push_back(reqs.vkInstanceExtensions[i]);
+            vfLogInfo("Streamline requires {} instance extensions", reqs.vkNumInstanceExtensions);
+        }
+#endif
+        return extensions;
+    }
+
+    std::vector<const char*> UpscaleManager::getRequiredDeviceExtensions()
+    {
+        std::vector<const char*> extensions;
+#ifdef VF_STREAMLINE_ENABLED
+        if (!streamlineAvailable) return extensions;
+
+        sl::FeatureRequirements reqs{};
+        sl::Result result = slGetFeatureRequirements(sl::kFeatureDLSS, reqs);
+        if (result == sl::Result::eOk && reqs.vkNumDeviceExtensions > 0)
+        {
+            for (uint32_t i = 0; i < reqs.vkNumDeviceExtensions; ++i)
+                extensions.push_back(reqs.vkDeviceExtensions[i]);
+            vfLogInfo("Streamline requires {} device extensions", reqs.vkNumDeviceExtensions);
+        }
+#endif
+        return extensions;
+    }
+
     bool UpscaleManager::setVulkanDevice(core::Device& device)
     {
 #ifdef VF_STREAMLINE_ENABLED
         if (!streamlineAvailable) return false;
 
-        // In manual hook mode, Streamline intercepts vkCreateDevice and already
-        // knows the Vulkan device. We skip slSetVulkanInfo — calling it causes
-        // ErrorInvalidIntegration because the device was already set via interception.
-        //
-        // slSetVulkanInfo is only needed when NOT using Streamline's Vulkan proxies.
-        vfLogInfo("Streamline: device set via interception (manual hook mode, skipping slSetVulkanInfo)");
+        // In manual hook mode with sl.interposer.dll deployed as vulkan-1.dll,
+        // Streamline intercepts vkCreateInstance/vkCreateDevice and already tracks
+        // the Vulkan handles. slSetVulkanInfo is not needed.
+        vfLogInfo("Streamline: device set via interception (manual hook mode)");
 
         deviceSet = true;
         instance = this;
@@ -245,11 +279,11 @@ namespace render::upscaling
 #endif
     }
 
-    void UpscaleManager::evaluate(vk::CommandBuffer cmd, uint32_t frameIndex,
+    bool UpscaleManager::evaluate(vk::CommandBuffer cmd, uint32_t frameIndex,
                                    const UpscaleInputs& inputs)
     {
 #ifdef VF_STREAMLINE_ENABLED
-        if (!deviceSet || activeMode == ::postprocess::UpscaleMode::Off) return;
+        if (!deviceSet || activeMode == ::postprocess::UpscaleMode::Off) return false;
 
         sl::Feature feature = (activeMode == ::postprocess::UpscaleMode::DLSS)
             ? sl::kFeatureDLSS
@@ -260,7 +294,7 @@ namespace render::upscaling
         // Get frame token
         sl::FrameToken* frameToken = nullptr;
         sl::Result tokenResult = slGetNewFrameToken(frameToken, &frameIndex);
-        if (tokenResult != sl::Result::eOk || !frameToken) return;
+        if (tokenResult != sl::Result::eOk || !frameToken) return false;
 
         // Set constants (camera jitter, motion vector info, etc.)
         sl::Constants constants{};
@@ -312,8 +346,14 @@ namespace render::upscaling
                          reinterpret_cast<sl::CommandBuffer*>(static_cast<VkCommandBuffer>(cmd)));
         if (tagResult != sl::Result::eOk)
         {
-            vfLogError("Streamline setTag failed: {} ({})",
-                       slResultToString(tagResult), static_cast<int>(tagResult));
+            static bool loggedOnce = false;
+            if (!loggedOnce)
+            {
+                vfLogWarning("Streamline setTag failed: {} ({}) — using bilinear fallback",
+                             slResultToString(tagResult), static_cast<int>(tagResult));
+                loggedOnce = true;
+            }
+            return false;
         }
 
         // Evaluate
@@ -322,9 +362,18 @@ namespace render::upscaling
                           reinterpret_cast<sl::CommandBuffer*>(static_cast<VkCommandBuffer>(cmd)));
         if (evalResult != sl::Result::eOk)
         {
-            vfLogError("Streamline evaluate failed: {} ({})",
-                       slResultToString(evalResult), static_cast<int>(evalResult));
+            static bool loggedOnce = false;
+            if (!loggedOnce)
+            {
+                vfLogError("Streamline evaluate failed: {} ({})",
+                           slResultToString(evalResult), static_cast<int>(evalResult));
+                loggedOnce = true;
+            }
+            return false;
         }
+        return true;
+#else
+        return false;
 #endif
     }
 

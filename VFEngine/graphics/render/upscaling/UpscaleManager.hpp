@@ -5,6 +5,7 @@
 #include <vulkan/vulkan.hpp>
 #include <glm/glm.hpp>
 #include <memory>
+#include <vector>
 
 namespace core
 {
@@ -67,8 +68,8 @@ namespace render::upscaling
         void applySettings(const ::postprocess::UpscaleSettings& settings,
                            uint32_t outputWidth, uint32_t outputHeight);
 
-        /// Evaluate the upscaler for the current frame.
-        void evaluate(vk::CommandBuffer cmd, uint32_t frameIndex,
+        /// Evaluate the upscaler for the current frame. Returns true on success.
+        bool evaluate(vk::CommandBuffer cmd, uint32_t frameIndex,
                       const UpscaleInputs& inputs);
 
         /// Reset temporal history (camera cut, scene transition).
@@ -80,6 +81,10 @@ namespace render::upscaling
 
         bool isActive() const { return activeMode != ::postprocess::UpscaleMode::Off; }
         ::postprocess::UpscaleMode getActiveMode() const { return activeMode; }
+
+        /// Query Streamline's required Vulkan extensions (call after initStreamline, before device creation)
+        static std::vector<const char*> getRequiredInstanceExtensions();
+        static std::vector<const char*> getRequiredDeviceExtensions();
 
         static bool isStreamlineAvailable() { return streamlineAvailable; }
         static bool isDLSSAvailable() { return instance && instance->dlssSupported; }

@@ -185,6 +185,10 @@ namespace core
             extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
         }
 
+        // Add Streamline SDK required instance extensions (for DLSS)
+        auto slExtensions = render::upscaling::UpscaleManager::getRequiredInstanceExtensions();
+        extensions.insert(extensions.end(), slExtensions.begin(), slExtensions.end());
+
         return extensions;
     }
 
@@ -366,6 +370,11 @@ namespace core
                 continue;
             activeDeviceExtensions.push_back(ext);
         }
+
+        // Add Streamline SDK required device extensions (for DLSS)
+        auto slDeviceExtensions = render::upscaling::UpscaleManager::getRequiredDeviceExtensions();
+        activeDeviceExtensions.insert(activeDeviceExtensions.end(),
+                                      slDeviceExtensions.begin(), slDeviceExtensions.end());
 
         vk::DeviceCreateInfo createInfo{};
         createInfo.pNext = &meshShaderFeatures;

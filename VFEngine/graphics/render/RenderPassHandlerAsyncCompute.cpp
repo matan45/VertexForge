@@ -440,32 +440,33 @@ namespace render
         inputs.jitterOffset = currentJitterOffset;
         inputs.resetAccumulation = resetAccum;
 
-        // TODO: Re-enable when Streamline integration is fixed
-        // upscaleManager->evaluate(commandBuffer, taaFrameIndex, inputs);
+        // Try DLSS evaluate; fall back to bilinear blit if it fails
+        bool evaluateOk = upscaleManager->evaluate(commandBuffer, taaFrameIndex, inputs);
+        if (!evaluateOk)
+        {
+            // Fallback: blit scene color (render-res) to upscale output (display-res)
+            core::ImageUtilities::transitionImageLayout(commandBuffer, colorImage,
+                vk::ImageLayout::eShaderReadOnlyOptimal, vk::ImageLayout::eTransferSrcOptimal,
+                vk::ImageAspectFlagBits::eColor);
 
-        // Fallback: blit scene color (render-res) to upscale output (display-res)
-        core::ImageUtilities::transitionImageLayout(commandBuffer, colorImage,
-            vk::ImageLayout::eShaderReadOnlyOptimal, vk::ImageLayout::eTransferSrcOptimal,
-            vk::ImageAspectFlagBits::eColor);
+            vk::ImageBlit sceneBlit{};
+            sceneBlit.srcSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+            sceneBlit.srcSubresource.layerCount = 1;
+            sceneBlit.srcOffsets[1] = vk::Offset3D{static_cast<int32_t>(renderRes.width),
+                                                    static_cast<int32_t>(renderRes.height), 1};
+            sceneBlit.dstSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+            sceneBlit.dstSubresource.layerCount = 1;
+            sceneBlit.dstOffsets[1] = vk::Offset3D{static_cast<int32_t>(displayRes.width),
+                                                    static_cast<int32_t>(displayRes.height), 1};
 
-        vk::ImageBlit sceneBlit{};
-        sceneBlit.srcSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
-        sceneBlit.srcSubresource.layerCount = 1;
-        sceneBlit.srcOffsets[1] = vk::Offset3D{static_cast<int32_t>(renderRes.width),
-                                                static_cast<int32_t>(renderRes.height), 1};
-        sceneBlit.dstSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
-        sceneBlit.dstSubresource.layerCount = 1;
-        sceneBlit.dstOffsets[1] = vk::Offset3D{static_cast<int32_t>(displayRes.width),
-                                                static_cast<int32_t>(displayRes.height), 1};
+            commandBuffer.blitImage(colorImage, vk::ImageLayout::eTransferSrcOptimal,
+                                    offscreenResources.upscaleOutput.image, vk::ImageLayout::eGeneral,
+                                    sceneBlit, vk::Filter::eLinear);
 
-        commandBuffer.blitImage(colorImage, vk::ImageLayout::eTransferSrcOptimal,
-                                offscreenResources.upscaleOutput.image, vk::ImageLayout::eGeneral,
-                                sceneBlit, vk::Filter::eLinear);
-
-        // Transition color back to shader read
-        core::ImageUtilities::transitionImageLayout(commandBuffer, colorImage,
-            vk::ImageLayout::eTransferSrcOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
-            vk::ImageAspectFlagBits::eColor);
+            core::ImageUtilities::transitionImageLayout(commandBuffer, colorImage,
+                vk::ImageLayout::eTransferSrcOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
+                vk::ImageAspectFlagBits::eColor);
+        }
 
         // Transition depth back to attachment optimal
         core::ImageUtilities::transitionImageLayout(commandBuffer,

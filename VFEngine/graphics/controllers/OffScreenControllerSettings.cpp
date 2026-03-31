@@ -237,7 +237,8 @@ namespace controllers
 
         if (cameraController)
         {
-            // Enable jitter when TAA is active (upscaling jitter re-enabled when Streamline evaluate works)
+            // Enable jitter when TAA is active. Upscaling jitter is enabled only when DLSS evaluate succeeds.
+            // (Currently Streamline integration needs manual hook fix — jitter disabled for upscaling fallback)
             bool needsJitter = settings.enabled && settings.taa.enabled;
             cameraController->setTAAEnabled(needsJitter);
             auto extent = swapChain.getSwapchainExtent();
