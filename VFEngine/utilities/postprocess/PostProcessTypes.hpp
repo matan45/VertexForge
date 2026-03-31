@@ -7,7 +7,6 @@ namespace postprocess
     enum class EffectType : uint8_t
     {
         ToneMapping = 0,
-        TAA,
         Bloom,
         Vignette,
         ChromaticAberration,
@@ -36,14 +35,6 @@ namespace postprocess
         GranTurismo,
         AgX,
         KhronosPBRNeutral
-    };
-
-    struct TAASettings
-    {
-        bool enabled = false;
-        float blendFactor = 0.1f;
-        float sharpenStrength = 0.5f;
-        bool useVarianceClipping = true;
     };
 
     struct ToneMappingSettings
@@ -240,7 +231,6 @@ namespace postprocess
         bool enabled = false;
 
         ToneMappingSettings toneMapping;
-        TAASettings taa;
         UpscaleSettings upscale;
         BloomSettings bloom;
         VignetteSettings vignette;

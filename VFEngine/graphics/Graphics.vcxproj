@@ -251,7 +251,6 @@
     <ClInclude Include="render\postprocess\effects\EdgeDetectionEffect.hpp" />
     <ClInclude Include="render\postprocess\effects\FilmGrainEffect.hpp" />
     <ClInclude Include="render\postprocess\effects\SSAOEffect.hpp" />
-    <ClInclude Include="render\postprocess\effects\TAAEffect.hpp" />
     <ClInclude Include="render\postprocess\effects\ToneMappingEffect.hpp" />
     <ClInclude Include="render\postprocess\effects\UnderwaterEffect.hpp" />
     <ClInclude Include="render\postprocess\effects\VignetteEffect.hpp" />
@@ -511,7 +510,6 @@
     <ClCompile Include="render\postprocess\effects\FilmGrainEffect.cpp" />
     <ClCompile Include="render\postprocess\effects\SSAOEffect.cpp" />
     <ClCompile Include="render\postprocess\effects\SSAOEffectResources.cpp" />
-    <ClCompile Include="render\postprocess\effects\TAAEffect.cpp" />
     <ClCompile Include="render\postprocess\effects\ToneMappingEffect.cpp" />
     <ClCompile Include="render\postprocess\effects\UnderwaterEffect.cpp" />
     <ClCompile Include="render\postprocess\effects\VignetteEffect.cpp" />
@@ -680,8 +678,6 @@
     <None Include="..\..\resources\shaders\postprocess\ssao.glsl" />
     <None Include="..\..\resources\shaders\postprocess\ssao_blur.glsl" />
     <None Include="..\..\resources\shaders\postprocess\ssao_composite.glsl" />
-    <None Include="..\..\resources\shaders\postprocess\taa_resolve.glsl" />
-    <None Include="..\..\resources\shaders\postprocess\taa_sharpen.glsl" />
     <None Include="..\..\resources\shaders\postprocess\tonemapping.glsl" />
     <None Include="..\..\resources\shaders\postprocess\underwater.glsl" />
     <None Include="..\..\resources\shaders\postprocess\vignette.glsl" />

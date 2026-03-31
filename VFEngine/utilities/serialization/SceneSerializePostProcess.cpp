@@ -40,16 +40,6 @@ namespace serialization
             };
         }
 
-        json serializeTAA(const postprocess::TAASettings& s)
-        {
-            return {
-                {"enabled", s.enabled},
-                {"blendFactor", s.blendFactor},
-                {"sharpenStrength", s.sharpenStrength},
-                {"useVarianceClipping", s.useVarianceClipping}
-            };
-        }
-
         json serializeBloom(const postprocess::BloomSettings& s)
         {
             return {
@@ -240,21 +230,6 @@ namespace serialization
                 s.toe = std::clamp(tm["toe"].get<float>(), 0.0f, 1.0f);
             if (tm.contains("shoulder") && tm["shoulder"].is_number())
                 s.shoulder = std::clamp(tm["shoulder"].get<float>(), 0.0f, 1.0f);
-        }
-
-        void deserializeTAA(const json& j, postprocess::TAASettings& s)
-        {
-            if (!j.contains("taa") || !j["taa"].is_object())
-                return;
-            const auto& taa = j["taa"];
-            if (taa.contains("enabled") && taa["enabled"].is_boolean())
-                s.enabled = taa["enabled"].get<bool>();
-            if (taa.contains("blendFactor") && taa["blendFactor"].is_number())
-                s.blendFactor = std::clamp(taa["blendFactor"].get<float>(), 0.01f, 0.5f);
-            if (taa.contains("sharpenStrength") && taa["sharpenStrength"].is_number())
-                s.sharpenStrength = std::clamp(taa["sharpenStrength"].get<float>(), 0.0f, 1.0f);
-            if (taa.contains("useVarianceClipping") && taa["useVarianceClipping"].is_boolean())
-                s.useVarianceClipping = taa["useVarianceClipping"].get<bool>();
         }
 
         void deserializeBloom(const json& j, postprocess::BloomSettings& s)
@@ -540,7 +515,6 @@ namespace serialization
         json j;
         j["enabled"] = settings.enabled;
         j["toneMapping"] = serializeToneMapping(settings.toneMapping);
-        j["taa"] = serializeTAA(settings.taa);
         j["bloom"] = serializeBloom(settings.bloom);
         j["vignette"] = serializeVignette(settings.vignette);
         j["chromaticAberration"] = serializeChromaticAberration(settings.chromaticAberration);
@@ -560,7 +534,6 @@ namespace serialization
         if (j.contains("enabled") && j["enabled"].is_boolean())
             settings.enabled = j["enabled"].get<bool>();
         deserializeToneMapping(j, settings.toneMapping);
-        deserializeTAA(j, settings.taa);
         deserializeBloom(j, settings.bloom);
         deserializeVignette(j, settings.vignette);
         deserializeChromaticAberration(j, settings.chromaticAberration);

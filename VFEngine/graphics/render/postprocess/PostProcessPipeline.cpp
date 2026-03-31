@@ -1,6 +1,5 @@
 #include "PostProcessPipeline.hpp"
 #include "effects/ToneMappingEffect.hpp"
-#include "effects/TAAEffect.hpp"
 #include "effects/BloomEffect.hpp"
 #include "effects/VignetteEffect.hpp"
 #include "effects/ChromaticAberrationEffect.hpp"
@@ -158,7 +157,7 @@ namespace render::postprocess
     }
 
     void PostProcessPipeline::executePreUpscale(const vk::CommandBuffer& commandBuffer,
-                                                  uint32_t imageIndex, bool skipTAA)
+                                                  uint32_t imageIndex)
     {
         if (!hasEnabledEffects())
             return;
@@ -171,7 +170,6 @@ namespace render::postprocess
         {
             if (!e->isEnabled() || !e->isInitialized()) continue;
             if (!e->isPreUpscale()) continue;
-            if (skipTAA && e->getType() == ::postprocess::EffectType::TAA) continue;
             activeEffects.push_back(e.get());
         }
         if (activeEffects.empty())
@@ -708,11 +706,6 @@ namespace render::postprocess
 
         syncEffect(::postprocess::EffectType::ToneMapping, settings.toneMapping.enabled,
             [this]() { return std::make_unique<ToneMappingEffect>(device); });
-
-        // TAA is mutually exclusive with upscaling — upscalers perform their own temporal AA
-        bool taaEnabled = settings.taa.enabled && !settings.upscale.enabled;
-        syncEffect(::postprocess::EffectType::TAA, taaEnabled,
-            [this]() { return std::make_unique<TAAEffect>(device, swapChain, offscreenResources, *this); });
 
         syncEffect(::postprocess::EffectType::Bloom, settings.bloom.enabled,
             [this]() { return std::make_unique<BloomEffect>(device); });

@@ -163,58 +163,6 @@ namespace core::api
             });
 
         // =============================================
-        // TAA
-        // =============================================
-
-        interpreter->registerNativeFunction("_native_postprocess_taa_isEnabled",
-            [&dispatcher](const std::vector<value::Value>&) -> value::Value
-            {
-                auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
-                return value::Value(s.taa.enabled);
-            });
-
-        interpreter->registerNativeFunction("_native_postprocess_taa_setEnabled",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
-                return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
-                {
-                    s.taa.enabled = extractBool(args[0]);
-                });
-            });
-
-        interpreter->registerNativeFunction("_native_postprocess_taa_getBlendFactor",
-            [&dispatcher](const std::vector<value::Value>&) -> value::Value
-            {
-                auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
-                return value::Value(s.taa.blendFactor);
-            });
-
-        interpreter->registerNativeFunction("_native_postprocess_taa_setBlendFactor",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
-                return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
-                {
-                    s.taa.blendFactor = extractFloat(args[0], "PostProcess.taa.setBlendFactor");
-                });
-            });
-
-        interpreter->registerNativeFunction("_native_postprocess_taa_getSharpenStrength",
-            [&dispatcher](const std::vector<value::Value>&) -> value::Value
-            {
-                auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
-                return value::Value(s.taa.sharpenStrength);
-            });
-
-        interpreter->registerNativeFunction("_native_postprocess_taa_setSharpenStrength",
-            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
-            {
-                return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
-                {
-                    s.taa.sharpenStrength = extractFloat(args[0], "PostProcess.taa.setSharpenStrength");
-                });
-            });
-
-        // =============================================
         // Bloom
         // =============================================
 

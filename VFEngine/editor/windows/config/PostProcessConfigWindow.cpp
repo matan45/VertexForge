@@ -209,52 +209,6 @@ namespace windows
         }
     }
 
-    void PostProcessConfigWindow::drawTAASection()
-    {
-        if (ImGui::CollapsingHeader("TAA (Temporal Anti-Aliasing)", ImGuiTreeNodeFlags_DefaultOpen))
-        {
-            ImGui::Indent(10.0f);
-
-            if (ImGui::Checkbox("Enable TAA", &settings.taa.enabled))
-            {
-                isDirty = true;
-            }
-
-            if (settings.taa.enabled)
-            {
-                ImGui::Spacing();
-
-                if (ImGui::DragFloat("Blend Factor", &settings.taa.blendFactor, 0.01f, 0.01f, 0.5f, "%.2f"))
-                {
-                    isDirty = true;
-                }
-                if (ImGui::IsItemHovered())
-                {
-                    ImGui::SetTooltip("How much of the current frame to blend in.\nLower = more temporal smoothing, higher = more responsive.");
-                }
-
-                if (ImGui::DragFloat("Sharpen Strength", &settings.taa.sharpenStrength, 0.01f, 0.0f, 1.0f, "%.2f"))
-                {
-                    isDirty = true;
-                }
-                if (ImGui::IsItemHovered())
-                {
-                    ImGui::SetTooltip("Contrast-adaptive sharpening intensity.\nCounteracts TAA blur.");
-                }
-
-                if (ImGui::Checkbox("Variance Clipping", &settings.taa.useVarianceClipping))
-                {
-                    isDirty = true;
-                }
-                if (ImGui::IsItemHovered())
-                {
-                    ImGui::SetTooltip("Use variance-based clipping instead of min/max AABB.\nMore robust against ghosting artifacts.");
-                }
-            }
-
-            ImGui::Unindent(10.0f);
-        }
-    }
 
     void PostProcessConfigWindow::drawUpscaleSection()
     {
@@ -300,12 +254,6 @@ namespace windows
                     ImGui::TextColored(ImVec4(0.9f, 0.8f, 0.1f, 1.0f),
                         "Streamline SDK not available. Build Streamline first.");
                 }
-            }
-
-            if (settings.upscale.enabled && settings.taa.enabled)
-            {
-                ImGui::TextColored(ImVec4(0.9f, 0.8f, 0.1f, 1.0f),
-                    "Note: TAA is automatically disabled when upscaling is active.");
             }
 
             ImGui::Unindent(10.0f);
@@ -493,7 +441,6 @@ namespace windows
             ImGui::Spacing();
 
             drawToneMappingSection();
-            drawTAASection();
             drawUpscaleSection();
             drawBloomSection();
             drawVignetteSection();

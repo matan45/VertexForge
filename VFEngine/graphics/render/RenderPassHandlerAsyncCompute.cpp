@@ -519,8 +519,7 @@ namespace render
         if (gpuDrivenRendererInitialized)
             updateSunScreenPosition();
 
-        // Skip TAA when upscaling (DLSS replaces temporal reconstruction)
-        postProcessPipeline->executePreUpscale(commandBuffer, imageIndex, true);
+        postProcessPipeline->executePreUpscale(commandBuffer, imageIndex);
     }
 
     void RenderPassHandler::executePostUpscalePostProcess(const vk::CommandBuffer& commandBuffer,
