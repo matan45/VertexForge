@@ -258,7 +258,7 @@ namespace render::gpudriven
         vkDevice.waitIdle();
 
         cleanupGI();
-        // Safety net: ensure RT shadow resources are cleaned even if GI path was never initialized
+        // Safety net: ensure RT shadow resources are cleaned even if GI cleanup path missed them
         if (rtShadowDenoiser) { rtShadowDenoiser->cleanup(); rtShadowDenoiser.reset(); }
         if (rtShadowPipeline) { rtShadowPipeline->cleanup(); rtShadowPipeline.reset(); }
         if (accelStructManager) { accelStructManager->cleanup(); accelStructManager.reset(); }

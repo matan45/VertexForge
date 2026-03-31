@@ -139,9 +139,12 @@ namespace render::raytracing
             vkDevice.destroyAccelerationStructureKHR(entry.blas);
             entry.blas = nullptr;
         }
-        core::BufferUtilities::destroyBuffer(vkDevice, entry.buffer, entry.allocation, device.getMemoryManager());
-        memoryBudget.blasTotalBytes -= entry.size;
-        memoryBudget.blasCount--;
+        if (entry.buffer)
+        {
+            core::BufferUtilities::destroyBuffer(vkDevice, entry.buffer, entry.allocation, device.getMemoryManager());
+            memoryBudget.blasTotalBytes -= entry.size;
+            memoryBudget.blasCount--;
+        }
     }
 
     void AccelerationStructureManager::flushDeferredDeletions()
