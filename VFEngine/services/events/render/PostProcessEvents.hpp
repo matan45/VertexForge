@@ -1,6 +1,7 @@
 #pragma once
 #include "../EventTypes.hpp"
 #include "postprocess/PostProcessTypes.hpp"
+#include "../../providers/render/IPostProcessProvider.hpp"
 
 namespace events::postprocess
 {
@@ -26,5 +27,10 @@ namespace events::postprocess
     struct GetPostProcessEnabledQuery : IQuery<bool>
     {
         std::string_view getName() const override { return "GetPostProcessEnabled"; }
+    };
+
+    struct GetUpscaleStatusQuery : IQuery<services::UpscaleStatus>
+    {
+        std::string_view getName() const override { return "GetUpscaleStatus"; }
     };
 }

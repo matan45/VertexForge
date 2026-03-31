@@ -58,6 +58,7 @@ namespace render::gpudriven
         if (!initialized_) return;
 
         device_.getLogicalDevice().waitIdle();
+        transferManager_.reset();
 
         tileAllocations_.clear();
         destroyBuffers();
@@ -76,7 +77,9 @@ namespace render::gpudriven
             request.size = maxVertexCount_ * VERTEX_STRIDE;
             request.usage = vk::BufferUsageFlagBits::eVertexBuffer |
                             vk::BufferUsageFlagBits::eStorageBuffer |
-                            vk::BufferUsageFlagBits::eTransferDst;
+                            vk::BufferUsageFlagBits::eTransferDst |
+                            vk::BufferUsageFlagBits::eShaderDeviceAddress |
+                            vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR;
             request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
             core::BufferUtilities::createBuffer(request, vertexBuffer_, vertexBufferAllocation_, memManager);
         }
@@ -86,7 +89,9 @@ namespace render::gpudriven
             request.size = maxIndexCount_ * sizeof(uint32_t);
             request.usage = vk::BufferUsageFlagBits::eIndexBuffer |
                             vk::BufferUsageFlagBits::eStorageBuffer |
-                            vk::BufferUsageFlagBits::eTransferDst;
+                            vk::BufferUsageFlagBits::eTransferDst |
+                            vk::BufferUsageFlagBits::eShaderDeviceAddress |
+                            vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR;
             request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
             core::BufferUtilities::createBuffer(request, indexBuffer_, indexBufferAllocation_, memManager);
         }

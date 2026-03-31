@@ -25,19 +25,6 @@ namespace types
         Ultra // 4096px
     };
 
-    enum class CascadeSplitMode : uint8_t
-    {
-        Linear = 0,
-        Logarithmic,
-        Practical
-    };
-
-    enum class DirectionalShadowMode : uint8_t
-    {
-        CSM = 0,
-        Clipmap
-    };
-
     enum class ShadowDebugMode : uint8_t
     {
         None = 0,
@@ -46,14 +33,61 @@ namespace types
         BiasVisualization
     };
 
+    struct RTShadowSettings
+    {
+        bool enabled = true;
+
+        // Ray parameters
+        float maxRayDistance = 500.0f;
+        float normalBias = 0.05f;
+        float rayTMin = 0.01f;
+
+        // Denoiser temporal
+        float temporalBlend = 0.9f;
+        float depthThreshold = 0.01f;
+        float normalThreshold = 0.9f;
+
+        // Denoiser spatial
+        float spatialPhiDepth = 0.005f;
+        float spatialPhiNormal = 32.0f;
+        int spatialPasses = 3;
+
+        // Adaptive budget
+        bool adaptiveBudgetEnabled = true;
+        float budgetMs = 2.0f;
+        float asMemoryBudgetMB = 256.0f;
+    };
+
+    struct RTShadowStats
+    {
+        // GPU timing (EMA-smoothed, milliseconds)
+        float rayDispatchMs = 0.0f;
+        float denoiserMs = 0.0f;
+        float totalRTShadowMs = 0.0f;
+        float blasBuildMs = 0.0f;
+        float tlasBuildMs = 0.0f;
+
+        // Acceleration structure memory
+        uint64_t blasTotalBytes = 0;
+        uint64_t tlasTotalBytes = 0;
+        uint64_t scratchPeakBytes = 0;
+        uint32_t blasCount = 0;
+        uint32_t tlasInstanceCount = 0;
+        bool asMemoryOverBudget = false;
+
+        // Adaptive budget state
+        float budgetMs = 2.0f;
+        float currentMaxRayDistance = 500.0f;
+        int currentSpatialPasses = 3;
+        bool isThrottled = false;
+        uint32_t framesOverBudget = 0;
+        uint32_t framesUnderBudget = 0;
+    };
+
     struct ShadowSettings
     {
         bool enabled = true;
         ShadowQuality quality = ShadowQuality::High;
-
-        // CSM settings
-        uint8_t cascadeCount = 4;
-        CascadeSplitMode cascadeSplitMode = CascadeSplitMode::Practical;
 
         // Bias
         float shadowBias = 0.005f;
@@ -68,15 +102,9 @@ namespace types
         // 0.0 = lighter shadows, 1.0 = darker shadows
         float shadowIntensity = 0.5f;
 
-        // VSM resolution (directional virtual map pages)
-        uint32_t directionalResolution = 2048;
+        // VSM resolution (spot/point virtual map pages)
         uint32_t spotResolution = 1024;
         uint32_t pointResolution = 512;
-
-        // Directional shadow mode
-        DirectionalShadowMode directionalMode = DirectionalShadowMode::CSM;
-        uint8_t clipmapLevelCount = 16;
-        float clipmapBaseExtent = 2.0f; // meters, level 0 half-extent
 
         // Debug visualization
         ShadowDebugMode debugMode = ShadowDebugMode::None;
@@ -159,6 +187,7 @@ namespace types
         RenderPreset activePreset = RenderPreset::High;
 
         ShadowSettings shadows;
+        RTShadowSettings rtShadows;
         LightStreamingSettings lightStreaming;
         CullingSettings culling;
         DistanceCullingSettings distanceCulling;
@@ -185,9 +214,10 @@ namespace types
             {
             case RenderPreset::Low:
                 s.shadows.quality = ShadowQuality::Low;
-                s.shadows.cascadeCount = 2;
                 s.shadows.softShadows = false;
                 s.shadows.shadowIntensity = 0.4f;
+                s.rtShadows.enabled = false;
+                s.rtShadows.budgetMs = 1.0f;
                 s.culling.lodCrossfadeEnabled = false;
                 s.culling.globalLodBias = 2.0f;
                 s.distanceCulling.enabled = true;
@@ -205,9 +235,10 @@ namespace types
 
             case RenderPreset::Medium:
                 s.shadows.quality = ShadowQuality::Medium;
-                s.shadows.cascadeCount = 3;
                 s.shadows.softShadows = false;
                 s.shadows.shadowIntensity = 0.5f;
+                s.rtShadows.spatialPasses = 2;
+                s.rtShadows.budgetMs = 1.5f;
                 s.culling.lodCrossfadeEnabled = false;
                 s.culling.globalLodBias = 1.0f;
                 s.distanceCulling.enabled = true;
@@ -230,9 +261,11 @@ namespace types
 
             case RenderPreset::Ultra:
                 s.shadows.quality = ShadowQuality::Ultra;
-                s.shadows.cascadeCount = 4;
                 s.shadows.softShadows = true;
                 s.shadows.shadowIntensity = 0.6f;
+                s.rtShadows.spatialPasses = 4;
+                s.rtShadows.maxRayDistance = 1000.0f;
+                s.rtShadows.budgetMs = 4.0f;
                 s.culling.lodCrossfadeEnabled = true;
                 s.culling.globalLodBias = -1.0f;
                 s.distanceCulling.enabled = false;

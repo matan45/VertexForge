@@ -4,7 +4,6 @@
 #include "../../core/BufferUtilities.hpp"
 #include "../../core/PipelineUtilities.hpp"
 #include "print/Log.hpp"
-#include <glm/gtc/packing.hpp>
 #include <cmath>
 
 namespace render::shadow
@@ -312,41 +311,12 @@ namespace render::shadow
         enum class ViewType { Directional, Point, Spot };
 
         void packRangeParams(vsm::GPUVSMLight& gpu, const ShadowView& view,
-                             const LightShadowData* ld, ViewType viewType, bool isClipmap)
+                             const LightShadowData* ld, ViewType viewType)
         {
-            if (isClipmap && ld)
-            {
-                float baseExtent = ld->settings.clipmapBaseExtent;
-                float levelCount = static_cast<float>(ld->settings.clipmapLevelCount);
-
-                // Pack per-level UV offset for toroidal scrolling into rangeParams.y
-                // UV offset = (texelSnapped - pageGridOrigin) / (2 * worldExtent)
-                // GPU applies this to convert lookup UV to render-aligned UV
-                glm::vec2 uvOffset(0.0f);
-                uint32_t levelIdx = view.cascadeIndex;
-                if (levelIdx < ld->clipmapUVOffset.size())
-                    uvOffset = ld->clipmapUVOffset[levelIdx];
-
-                // Pack two floats as half-floats via intBitsToFloat
-                uint32_t packed = glm::packHalf2x16(uvOffset);
-                float packedAsFloat = glm::intBitsToFloat(static_cast<int>(packed));
-
-                gpu.rangeParams = glm::vec4(baseExtent, packedAsFloat, levelCount,
-                                             static_cast<float>(view.cascadeIndex));
-            }
-            else if (viewType == ViewType::Directional)
-            {
-                float cascadeCount = ld ? static_cast<float>(ld->settings.cascadeCount) : 4.0f;
-                gpu.rangeParams = glm::vec4(view.nearPlane, view.farPlane,
-                                             cascadeCount, static_cast<float>(view.cascadeIndex));
-            }
-            else
-            {
-                float range = view.farPlane - view.nearPlane;
-                float invRange = (range > 0.0001f) ? (1.0f / range) : 0.0f;
-                gpu.rangeParams = glm::vec4(view.nearPlane, view.farPlane,
-                                             invRange, static_cast<float>(view.cascadeIndex));
-            }
+            float range = view.farPlane - view.nearPlane;
+            float invRange = (range > 0.0001f) ? (1.0f / range) : 0.0f;
+            gpu.rangeParams = glm::vec4(view.nearPlane, view.farPlane,
+                                         invRange, static_cast<float>(view.cascadeIndex));
         }
 
         void packPCSSParams(vsm::GPUVSMLight& gpu, const ShadowView& view,
@@ -358,11 +328,10 @@ namespace render::shadow
         }
 
         void packPageTableInfo(vsm::GPUVSMLight& gpu, const ShadowView& view,
-                               const LightShadowData* ld, ViewType viewType, bool isClipmap)
+                               const LightShadowData* ld, ViewType viewType)
         {
             int lightType = 0;
-            if (isClipmap) lightType = 3;
-            else if (viewType == ViewType::Spot) lightType = 1;
+            if (viewType == ViewType::Spot) lightType = 1;
             else if (viewType == ViewType::Point) lightType = 2;
 
             if (!ld || !ld->usesVSM())
@@ -375,30 +344,13 @@ namespace render::shadow
             uint32_t pagesY = ld->vsmPagesY;
             uint32_t ptOffset = ld->vsmPageTableOffset;
 
-            if (ld->type == ShadowMapType::DirectionalCSM)
-            {
-                uint32_t ppc = ld->vsmPagesX;
-                pagesX = ppc;
-                pagesY = ppc;
-                ptOffset = ld->vsmPageTableOffset + view.cascadeIndex * ppc * ppc;
-            }
-            else if (ld->type == ShadowMapType::PointCube)
+            if (ld->type == ShadowMapType::PointCube)
             {
                 // Each face gets pagesPerFace x pagesPerFace pages
                 uint32_t pagesPerFace = ld->vsmPagesX;
                 pagesX = pagesPerFace;
                 pagesY = pagesPerFace;
                 ptOffset = ld->vsmPageTableOffset + view.cascadeIndex * pagesPerFace * pagesPerFace;
-            }
-            else if (ld->type == ShadowMapType::DirectionalClipmap)
-            {
-                uint32_t levelIdx = view.cascadeIndex;
-                if (levelIdx < ld->clipmapLevelPagesPerSide.size())
-                {
-                    pagesX = ld->clipmapLevelPagesPerSide[levelIdx];
-                    pagesY = pagesX;
-                    ptOffset = ld->vsmPageTableOffset + ld->clipmapLevelPageOffsets[levelIdx];
-                }
             }
 
             gpu.pageTableInfo = glm::ivec4(
@@ -408,7 +360,6 @@ namespace render::shadow
     }
 
     void ShadowGPUDataManager::buildGPUShadowData(
-        const std::vector<ShadowView>& directionalViews,
         const std::vector<ShadowView>& pointViews,
         const std::vector<ShadowView>& spotViews,
         const std::unordered_map<uint32_t, LightShadowData>& lightShadowData)
@@ -421,21 +372,19 @@ namespace render::shadow
             {
                 auto itData = lightShadowData.find(view.entityId);
                 const LightShadowData* ld = (itData != lightShadowData.end()) ? &itData->second : nullptr;
-                bool isClipmap = ld && ld->type == ShadowMapType::DirectionalClipmap;
 
                 vsm::GPUVSMLight gpu{};
                 gpu.viewProjection = view.viewProjectionMatrix;
                 gpu.biasParams = glm::vec4(view.depthBias, view.slopeBias, view.normalBias, view.texelSize);
 
-                packRangeParams(gpu, view, ld, viewType, isClipmap);
+                packRangeParams(gpu, view, ld, viewType);
                 packPCSSParams(gpu, view, viewType);
-                packPageTableInfo(gpu, view, ld, viewType, isClipmap);
+                packPageTableInfo(gpu, view, ld, viewType);
 
                 gpuShadowData.push_back(gpu);
             }
         };
 
-        addViews(directionalViews, ViewType::Directional);
         addViews(pointViews, ViewType::Point);
         addViews(spotViews, ViewType::Spot);
     }

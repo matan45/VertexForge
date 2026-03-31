@@ -7,7 +7,6 @@ namespace postprocess
     enum class EffectType : uint8_t
     {
         ToneMapping = 0,
-        TAA,
         Bloom,
         Vignette,
         ChromaticAberration,
@@ -36,14 +35,6 @@ namespace postprocess
         GranTurismo,
         AgX,
         KhronosPBRNeutral
-    };
-
-    struct TAASettings
-    {
-        bool enabled = false;
-        float blendFactor = 0.1f;
-        float sharpenStrength = 0.5f;
-        bool useVarianceClipping = true;
     };
 
     struct ToneMappingSettings
@@ -198,12 +189,49 @@ namespace postprocess
         float maxFogDistance = 100.0f;
     };
 
+    enum class UpscaleMode : uint8_t
+    {
+        Off = 0,
+        DLSS,
+        FSR2,
+        Auto  // DLSS if available, else FSR2
+    };
+
+    enum class UpscaleQuality : uint8_t
+    {
+        Native = 0,       // 1.0x (no upscaling, only AA)
+        Quality,           // 1.5x
+        Balanced,          // 1.7x
+        Performance,       // 2.0x
+        UltraPerformance   // 3.0x
+    };
+
+    struct UpscaleSettings
+    {
+        bool enabled = false;
+        UpscaleMode mode = UpscaleMode::DLSS;
+        UpscaleQuality quality = UpscaleQuality::Quality;
+
+        static float getScaleFactor(UpscaleQuality q)
+        {
+            switch (q)
+            {
+            case UpscaleQuality::Native:           return 1.0f;
+            case UpscaleQuality::Quality:          return 1.5f;
+            case UpscaleQuality::Balanced:         return 1.7f;
+            case UpscaleQuality::Performance:      return 2.0f;
+            case UpscaleQuality::UltraPerformance: return 3.0f;
+            default: return 1.0f;
+            }
+        }
+    };
+
     struct PostProcessSettings
     {
         bool enabled = false;
 
         ToneMappingSettings toneMapping;
-        TAASettings taa;
+        UpscaleSettings upscale;
         BloomSettings bloom;
         VignetteSettings vignette;
         ChromaticAberrationSettings chromaticAberration;

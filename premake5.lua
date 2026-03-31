@@ -83,7 +83,16 @@ project "Editor"
       symbols "On"
       -- Copy OpenAL DLL to Editor output directory
       postbuildcommands {
-         "{COPY} ../../dependencies/openal-soft/build/Debug/OpenAL32.dll ../../bin/Editor/Debug/x64/"
+         "{COPY} ../../dependencies/openal-soft/build/Debug/OpenAL32.dll ../../bin/Editor/Debug/x64/",
+         -- Copy Streamline development DLLs (no App ID required)
+         "{COPY} ../../dependencies/streamline/bin/x64/development/sl.interposer.dll ../../bin/Editor/Debug/x64/",
+         "{COPY} ../../dependencies/streamline/bin/x64/development/sl.common.dll ../../bin/Editor/Debug/x64/",
+         "{COPY} ../../dependencies/streamline/bin/x64/development/sl.pcl.dll ../../bin/Editor/Debug/x64/",
+         "{COPY} ../../dependencies/streamline/bin/x64/development/sl.dlss.dll ../../bin/Editor/Debug/x64/",
+         "{COPY} ../../dependencies/streamline/bin/x64/development/nvngx_dlss.dll ../../bin/Editor/Debug/x64/",
+         "{COPY} ../../dependencies/streamline/bin/x64/development/sl.directsr.dll ../../bin/Editor/Debug/x64/",
+         "{COPY} ../../dependencies/streamline/bin/x64/development/sl.reflex.dll ../../bin/Editor/Debug/x64/",
+         "{COPY} ../../dependencies/streamline/bin/x64/development/NvLowLatencyVk.dll ../../bin/Editor/Debug/x64/"
       }
 
    filter "configurations:Release"
@@ -93,7 +102,16 @@ project "Editor"
       optimize "On"
       -- Copy OpenAL DLL to Editor output directory
       postbuildcommands {
-         "{COPY} ../../dependencies/openal-soft/build/Release/OpenAL32.dll ../../bin/Editor/Release/x64/"
+         "{COPY} ../../dependencies/openal-soft/build/Release/OpenAL32.dll ../../bin/Editor/Release/x64/",
+         -- Copy Streamline production DLLs (requires NVIDIA App ID for shipping)
+         "{COPY} ../../dependencies/streamline/bin/x64/sl.interposer.dll ../../bin/Editor/Release/x64/",
+         "{COPY} ../../dependencies/streamline/bin/x64/sl.common.dll ../../bin/Editor/Release/x64/",
+         "{COPY} ../../dependencies/streamline/bin/x64/sl.pcl.dll ../../bin/Editor/Release/x64/",
+         "{COPY} ../../dependencies/streamline/bin/x64/sl.dlss.dll ../../bin/Editor/Release/x64/",
+         "{COPY} ../../dependencies/streamline/bin/x64/nvngx_dlss.dll ../../bin/Editor/Release/x64/",
+         "{COPY} ../../dependencies/streamline/bin/x64/sl.directsr.dll ../../bin/Editor/Release/x64/",
+         "{COPY} ../../dependencies/streamline/bin/x64/sl.reflex.dll ../../bin/Editor/Release/x64/",
+         "{COPY} ../../dependencies/streamline/bin/x64/NvLowLatencyVk.dll ../../bin/Editor/Release/x64/"
       }
 
 -- Project 2: Core
@@ -251,13 +269,15 @@ project "Graphics"
       "VFEngine/window/controllers",
 	  "dependencies/IconFontCppHeaders",
       "dependencies/ispc_texcomp",
+      "dependencies/streamline/include",
       vulkanLibPath.."/Include"
    }
 
-   defines { "_CRT_SECURE_NO_WARNINGS" }
+   defines { "_CRT_SECURE_NO_WARNINGS", "VF_STREAMLINE_ENABLED" }
 
    libdirs {
-      vulkanLibPath.."/Lib"
+      vulkanLibPath.."/Lib",
+      "dependencies/streamline/lib/x64"
    }
 
    links {
@@ -265,8 +285,12 @@ project "Graphics"
 	  "VFX",
 	  "imgui",
 	  "ispc_texcomp",
-	  "Memory"
+	  "Memory",
+	  "sl.interposer.lib"
    }
+
+   -- Suppress LNK4006: __NULL_IMPORT_DESCRIPTOR collision between sl.interposer.lib and shaderc_shared.lib
+   linkoptions { "/ignore:4006" }
 
    filter "configurations:Debug"
       defines { "DEBUG" }

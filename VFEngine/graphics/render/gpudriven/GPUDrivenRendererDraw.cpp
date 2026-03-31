@@ -38,8 +38,20 @@ namespace render::gpudriven
         vk::DescriptorSet causticSet = pipeline.getCausticDescriptorSet();
         if (causticSet)
         {
-            // Caustics always at set 12 (after GI at set 11)
             cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, layout, 12, 1, &causticSet, 0, nullptr);
+        }
+    }
+
+    static void bindRTShadowMaskDescriptorSet(vk::CommandBuffer cmd, vk::PipelineLayout layout,
+                                               MeshShaderPipeline& pipeline)
+    {
+        if (!pipeline.hasRTShadowLayout())
+            return;
+
+        vk::DescriptorSet rtShadowSet = pipeline.getRTShadowMaskDescriptorSet();
+        if (rtShadowSet)
+        {
+            cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, layout, 13, 1, &rtShadowSet, 0, nullptr);
         }
     }
 
@@ -71,6 +83,7 @@ namespace render::gpudriven
             0, nullptr);
 
         bindCausticDescriptorSet(cmd, layout, *meshShaderPipeline);
+        bindRTShadowMaskDescriptorSet(cmd, layout, *meshShaderPipeline);
 
         float dispatchWidth, dispatchHeight;
         if (screenWidth > 0 && screenHeight > 0)
@@ -155,6 +168,7 @@ namespace render::gpudriven
             0, nullptr);
 
         bindCausticDescriptorSet(cmd, layout, *transparentMeshShaderPipeline);
+        bindRTShadowMaskDescriptorSet(cmd, layout, *transparentMeshShaderPipeline);
 
         float dispatchWidth, dispatchHeight;
         if (screenWidth > 0 && screenHeight > 0)
@@ -234,6 +248,7 @@ namespace render::gpudriven
             0, nullptr);
 
         bindCausticDescriptorSet(cmd, layout, *wboitMeshShaderPipeline);
+        bindRTShadowMaskDescriptorSet(cmd, layout, *wboitMeshShaderPipeline);
 
         float dispatchWidth, dispatchHeight;
         if (screenWidth > 0 && screenHeight > 0)
@@ -313,6 +328,7 @@ namespace render::gpudriven
             0, nullptr);
 
         bindCausticDescriptorSet(cmd, layout, *transparentMeshShaderPipeline);
+        bindRTShadowMaskDescriptorSet(cmd, layout, *transparentMeshShaderPipeline);
 
         float dispatchWidth, dispatchHeight;
         if (screenWidth > 0 && screenHeight > 0)

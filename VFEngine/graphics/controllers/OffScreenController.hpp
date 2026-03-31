@@ -157,6 +157,7 @@ namespace controllers
 
         void applyShadowSettings(const types::RenderSettings& settings);
         services::ShadowStats getShadowStats() const;
+        types::RTShadowStats getRTShadowStats() const;
         services::GPUPipelineStatus getGPUPipelineStatus() const;
 
         void setPlayMode(bool playMode);

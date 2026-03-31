@@ -50,6 +50,7 @@ namespace render::gpudriven
         core::VulkanAllocation allocation;
         void* mapped = nullptr;
         GPUCameraData data{};
+        glm::mat4 storedPrevViewProjection{1.0f};
         uint32_t frameIndex = 0;
 
     public:

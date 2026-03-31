@@ -22,11 +22,11 @@ namespace windows
             {
                 ImGui::Spacing();
                 drawShadowQualitySettings();
-                drawDirectionalShadowSettings();
                 drawShadowBiasSettings();
                 drawShadowFilterSettings();
             }
 
+            drawRTShadowSection();
             drawShadowDebugSection();
             drawShadowStatistics();
 
@@ -46,71 +46,6 @@ namespace windows
         if (ImGui::IsItemHovered())
         {
             ImGui::SetTooltip("Click 'Apply' to change quality.\nThis may cause a brief stutter while the shadow atlas is resized.");
-        }
-    }
-
-    void RenderConfigWindow::drawDirectionalShadowSettings()
-    {
-        ImGui::Separator();
-        ImGui::Text("Directional Light");
-        ImGui::Spacing();
-
-        const char* dirModes[] = {"CSM (Cascaded)", "Clipmap"};
-        int currentDirMode = static_cast<int>(settings.shadows.directionalMode);
-        if (ImGui::Combo("Shadow Mode", &currentDirMode, dirModes, 2))
-        {
-            settings.shadows.directionalMode = static_cast<types::DirectionalShadowMode>(currentDirMode);
-            markDirty();
-        }
-        if (ImGui::IsItemHovered())
-        {
-            ImGui::SetTooltip("CSM: Traditional cascaded shadow maps (4 cascades max)\n"
-                              "Clipmap: Concentric shadow levels for large-scale worlds");
-        }
-
-        ImGui::Spacing();
-
-        if (settings.shadows.directionalMode == types::DirectionalShadowMode::CSM)
-        {
-            int cascades = settings.shadows.cascadeCount;
-            if (ImGui::SliderInt("Cascade Count", &cascades, 1, 4))
-            {
-                settings.shadows.cascadeCount = static_cast<uint8_t>(cascades);
-                markDirty();
-            }
-
-            const char* splitModes[] = {"Linear", "Logarithmic", "Practical"};
-            int currentMode = static_cast<int>(settings.shadows.cascadeSplitMode);
-            if (ImGui::Combo("Split Mode", &currentMode, splitModes, 3))
-            {
-                settings.shadows.cascadeSplitMode = static_cast<types::CascadeSplitMode>(currentMode);
-                markDirty();
-            }
-        }
-        else
-        {
-            int levels = settings.shadows.clipmapLevelCount;
-            if (ImGui::SliderInt("Level Count", &levels, 4, 16))
-            {
-                settings.shadows.clipmapLevelCount = static_cast<uint8_t>(levels);
-                markDirty();
-            }
-            if (ImGui::IsItemHovered())
-            {
-                ImGui::SetTooltip("Number of clipmap levels.\n"
-                                  "Each level doubles world coverage.\n"
-                                  "16 levels = ~65km range with 2m base extent.");
-            }
-
-            if (ImGui::DragFloat("Base Extent (m)", &settings.shadows.clipmapBaseExtent, 0.5f, 0.5f, 100.0f, "%.1f"))
-            {
-                markDirty();
-            }
-            if (ImGui::IsItemHovered())
-            {
-                ImGui::SetTooltip("World half-extent of level 0 (finest detail).\n"
-                                  "Smaller = higher near-shadow quality.");
-            }
         }
     }
 
@@ -241,8 +176,7 @@ namespace windows
         {
             ImGui::Text("Active: %u casters, %u views",
                        shadowStats.activeShadowCasters, shadowStats.activeShadowViews);
-            ImGui::TextDisabled("  Dir: %u  Point: %u  Spot: %u",
-                               shadowStats.directionalLightCount,
+            ImGui::TextDisabled("  Point: %u  Spot: %u",
                                shadowStats.pointLightCount,
                                shadowStats.spotLightCount);
         }
@@ -461,6 +395,94 @@ namespace windows
                 cmd.lod2Interval = settings.animationLOD.lod2Interval;
                 cmd.maxStreamingInitPerFrame = settings.animationLOD.maxStreamingInitPerFrame;
                 dispatcher.execute(cmd);
+            }
+
+            ImGui::Unindent(10.0f);
+        }
+    }
+
+    void RenderConfigWindow::drawRTShadowSection()
+    {
+        if (ImGui::CollapsingHeader("Ray Traced Shadows"))
+        {
+            ImGui::Indent(10.0f);
+
+            if (ImGui::Checkbox("Enable RT Shadows", &settings.rtShadows.enabled))
+                markDirty();
+
+            if (settings.rtShadows.enabled)
+            {
+                ImGui::Spacing();
+                ImGui::SeparatorText("Ray Parameters");
+                if (ImGui::SliderFloat("Max Ray Distance", &settings.rtShadows.maxRayDistance, 50.0f, 2000.0f, "%.0f"))
+                    markDirty();
+                if (ImGui::SliderFloat("RT Normal Bias", &settings.rtShadows.normalBias, 0.001f, 0.2f, "%.4f"))
+                    markDirty();
+                if (ImGui::SliderFloat("Ray T-Min", &settings.rtShadows.rayTMin, 0.001f, 10.0f, "%.4f"))
+                    markDirty();
+
+                ImGui::Spacing();
+                ImGui::SeparatorText("Denoiser - Temporal");
+                if (ImGui::SliderFloat("Temporal Blend", &settings.rtShadows.temporalBlend, 0.0f, 0.99f, "%.2f"))
+                    markDirty();
+                if (ImGui::SliderFloat("Depth Threshold", &settings.rtShadows.depthThreshold, 0.001f, 0.1f, "%.4f"))
+                    markDirty();
+                if (ImGui::SliderFloat("Normal Threshold", &settings.rtShadows.normalThreshold, 0.5f, 1.0f, "%.2f"))
+                    markDirty();
+
+                ImGui::Spacing();
+                ImGui::SeparatorText("Denoiser - Spatial");
+                if (ImGui::SliderFloat("Phi Depth", &settings.rtShadows.spatialPhiDepth, 0.001f, 0.05f, "%.4f"))
+                    markDirty();
+                if (ImGui::SliderFloat("Phi Normal", &settings.rtShadows.spatialPhiNormal, 1.0f, 128.0f, "%.1f"))
+                    markDirty();
+                if (ImGui::SliderInt("Spatial Passes", &settings.rtShadows.spatialPasses, 1, 5))
+                    markDirty();
+
+                ImGui::Spacing();
+                ImGui::SeparatorText("Adaptive Budget");
+                if (ImGui::Checkbox("Enable Adaptive Budget", &settings.rtShadows.adaptiveBudgetEnabled))
+                    markDirty();
+                if (settings.rtShadows.adaptiveBudgetEnabled)
+                {
+                    if (ImGui::SliderFloat("Budget (ms)", &settings.rtShadows.budgetMs, 0.5f, 8.0f, "%.1f"))
+                        markDirty();
+                    if (ImGui::SliderFloat("AS Memory Budget (MB)", &settings.rtShadows.asMemoryBudgetMB, 64.0f, 1024.0f, "%.0f"))
+                        markDirty();
+                }
+
+                ImGui::Spacing();
+                ImGui::SeparatorText("Performance");
+                auto& dispatcher = events::EventDispatcher::instance();
+                auto rtStats = dispatcher.query(events::render::GetRTShadowStatsQuery{});
+
+                float ratio = rtStats.budgetMs > 0.0f ? rtStats.totalRTShadowMs / rtStats.budgetMs : 0.0f;
+                ImVec4 color = ratio < 0.7f ? ImVec4(0.2f, 0.8f, 0.2f, 1.0f)
+                             : ratio < 1.0f ? ImVec4(0.9f, 0.8f, 0.1f, 1.0f)
+                                            : ImVec4(0.9f, 0.2f, 0.2f, 1.0f);
+                ImGui::TextColored(color, "Total: %.2f ms (budget: %.1f ms)",
+                                   rtStats.totalRTShadowMs, rtStats.budgetMs);
+                ImGui::Text("  Ray dispatch: %.2f ms", rtStats.rayDispatchMs);
+                ImGui::Text("  Denoiser: %.2f ms", rtStats.denoiserMs);
+
+                if (rtStats.isThrottled)
+                {
+                    ImGui::TextColored(ImVec4(0.9f, 0.8f, 0.1f, 1.0f),
+                        "  [THROTTLED] ray dist=%.0f, passes=%d",
+                        rtStats.currentMaxRayDistance, rtStats.currentSpatialPasses);
+                }
+
+                ImGui::Spacing();
+                float asMB = static_cast<float>(rtStats.blasTotalBytes + rtStats.tlasTotalBytes) / (1024.0f * 1024.0f);
+                ImGui::Text("AS Memory: %.1f MB (%u BLAS, %u instances)",
+                            asMB, rtStats.blasCount, rtStats.tlasInstanceCount);
+                if (rtStats.asMemoryOverBudget)
+                    ImGui::TextColored(ImVec4(0.9f, 0.2f, 0.2f, 1.0f), "  [OVER BUDGET]");
+
+                float scratchMB = static_cast<float>(rtStats.scratchPeakBytes) / (1024.0f * 1024.0f);
+                ImGui::Text("Scratch peak: %.1f MB", scratchMB);
+                ImGui::Text("BLAS build: %.2f ms | TLAS build: %.2f ms",
+                            rtStats.blasBuildMs, rtStats.tlasBuildMs);
             }
 
             ImGui::Unindent(10.0f);

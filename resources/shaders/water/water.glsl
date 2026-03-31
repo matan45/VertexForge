@@ -277,10 +277,7 @@ void main() {
     for (uint i = 0u; i < lightCounts.directionalCount; ++i) {
         DirectionalLight light = directionalLights[i];
 
-        float shadow = 1.0;
-        if (light.shadowIndex >= 0) {
-            shadow = sampleDirectionalShadowAuto(light.shadowIndex, light.shadowMode, fragWorldPos, N, linearZ, camera.cameraPos);
-        }
+        float shadow = 1.0; // Directional lights use RT shadows, not VSM
         minShadow = min(minShadow, shadow);
 
         vec3 lightContrib = evaluateDirectionalLight(N, V, albedo, metallic, directRoughness, F0, light);

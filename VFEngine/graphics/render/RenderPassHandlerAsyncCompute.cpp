@@ -21,6 +21,10 @@
 #include "decal/DecalPipeline.hpp"
 #include "atmosphere/AtmospherePipeline.hpp"
 #include "cloud/CloudPipeline.hpp"
+#include "upscaling/UpscaleManager.hpp"
+#include "upscaling/MotionVectorPass.hpp"
+#include "../core/ImageUtilities.hpp"
+#include "time/Timer.hpp"
 #include "shadow/ShadowSystem.hpp"
 #include "../../services/providers/vfx/IVFXRuntimeProvider.hpp"
 #include "../../services/providers/terrain/ITerrainRenderProvider.hpp"
@@ -304,6 +308,200 @@ namespace render
             updateSunScreenPosition();
 
         postProcessPipeline->execute(commandBuffer, imageIndex);
+    }
+
+    void RenderPassHandler::executeUpscale(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex)
+    {
+        auto* upscaleManager = device.getUpscaleManager();
+        if (!upscaleManager || !upscaleManager->isActive())
+            return;
+
+        // Upscale resources are created by OffScreenViewPort::createUpscaleResources()
+        // during recreate(). If not ready yet (first frame before recreate), skip.
+        if (!offscreenResources.upscaleResourcesCreated)
+            return;
+
+        // Lazy-init motion vector pass
+        if (!motionVectorPass)
+        {
+            motionVectorPass = std::make_unique<upscaling::MotionVectorPass>(device);
+            motionVectorPass->init();
+        }
+
+        auto& resMgr = upscaleManager->getResolutionManager();
+        auto renderRes = resMgr.getRenderResolution();
+        auto displayRes = resMgr.getDisplayResolution();
+
+        // Compute inverse VP and prev VP for motion vector generation
+        glm::mat4 viewProjection = currentProjection * currentView;
+        glm::mat4 invVP = glm::inverse(viewProjection);
+        glm::mat4 prevVP = prevProjection * prevView;
+
+        vk::ImageAspectFlags depthStencilAspect =
+            vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil;
+
+        // Transition depth to shader read for the motion vector compute pass
+        core::ImageUtilities::transitionImageLayout(commandBuffer,
+            offscreenResources.depthImage.depthImage,
+            vk::ImageLayout::eDepthStencilAttachmentOptimal,
+            vk::ImageLayout::eDepthStencilReadOnlyOptimal,
+            depthStencilAspect);
+
+        // Dispatch motion vector compute pass
+        motionVectorPass->dispatch(commandBuffer,
+            offscreenResources.depthImage.depthImageView,
+            offscreenResources.depthImage.depthImage,
+            offscreenResources.motionVectors.imageView,
+            offscreenResources.motionVectors.image,
+            invVP, prevVP,
+            renderRes.width, renderRes.height,
+            taaFrameIndex);
+
+        // Transition upscale output to general for write
+        core::ImageUtilities::transitionImageLayout(commandBuffer,
+            offscreenResources.upscaleOutput.image,
+            vk::ImageLayout::eUndefined, vk::ImageLayout::eGeneral,
+            vk::ImageAspectFlagBits::eColor);
+
+        // Camera cut detection: reset accumulation on large camera jumps or first frame
+        bool resetAccum = upscaleFirstFrame;
+        if (!upscaleFirstFrame)
+        {
+            glm::vec3 prevPos = glm::vec3(glm::inverse(prevView)[3]);
+            float dist = glm::length(currentCameraPosition - prevPos);
+            if (dist > 10.0f) // threshold for teleport detection
+                resetAccum = true;
+        }
+        upscaleFirstFrame = false;
+
+        // Build upscale inputs
+        vk::Image colorImage = offscreenResources.colorImages[imageIndex].colorImage;
+
+        render::upscaling::UpscaleInputs inputs{};
+        inputs.colorInput = colorImage;
+        inputs.colorView = offscreenResources.colorImages[imageIndex].colorImageView;
+        inputs.depthInput = offscreenResources.depthImage.depthImage;
+        inputs.depthView = offscreenResources.depthImage.depthImageView;
+        inputs.motionVectors = offscreenResources.motionVectors.image;
+        inputs.motionView = offscreenResources.motionVectors.sampledView;
+        inputs.output = offscreenResources.upscaleOutput.image;
+        inputs.outputView = offscreenResources.upscaleOutput.imageView;
+        inputs.renderExtent = renderRes;
+        inputs.displayExtent = displayRes;
+        inputs.jitterOffset = currentJitterOffset;
+        inputs.resetAccumulation = resetAccum;
+        inputs.viewMatrix = currentView;
+        inputs.projectionMatrix = currentProjection;
+        inputs.prevViewMatrix = prevView;
+        inputs.prevProjectionMatrix = prevProjection;
+        inputs.cameraPosition = currentCameraPosition;
+        inputs.nearPlane = currentNearPlane;
+        inputs.farPlane = currentFarPlane;
+
+        // Try DLSS evaluate; fall back to bilinear blit if it fails
+        bool evaluateOk = upscaleManager->evaluate(commandBuffer, taaFrameIndex, inputs);
+        if (evaluateOk)
+        {
+            // After DLSS evaluate, Streamline may leave the output in an unknown layout.
+            // Ensure it's in eGeneral for the post-process blit stage.
+            core::ImageUtilities::transitionImageLayout(commandBuffer,
+                offscreenResources.upscaleOutput.image,
+                vk::ImageLayout::eUndefined, vk::ImageLayout::eGeneral,
+                vk::ImageAspectFlagBits::eColor);
+        }
+        if (!evaluateOk)
+        {
+            // Fallback: blit scene color (render-res) to upscale output (display-res)
+            core::ImageUtilities::transitionImageLayout(commandBuffer, colorImage,
+                vk::ImageLayout::eShaderReadOnlyOptimal, vk::ImageLayout::eTransferSrcOptimal,
+                vk::ImageAspectFlagBits::eColor);
+
+            vk::ImageBlit sceneBlit{};
+            sceneBlit.srcSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+            sceneBlit.srcSubresource.layerCount = 1;
+            sceneBlit.srcOffsets[1] = vk::Offset3D{static_cast<int32_t>(renderRes.width),
+                                                    static_cast<int32_t>(renderRes.height), 1};
+            sceneBlit.dstSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+            sceneBlit.dstSubresource.layerCount = 1;
+            sceneBlit.dstOffsets[1] = vk::Offset3D{static_cast<int32_t>(displayRes.width),
+                                                    static_cast<int32_t>(displayRes.height), 1};
+
+            commandBuffer.blitImage(colorImage, vk::ImageLayout::eTransferSrcOptimal,
+                                    offscreenResources.upscaleOutput.image, vk::ImageLayout::eGeneral,
+                                    sceneBlit, vk::Filter::eLinear);
+
+            core::ImageUtilities::transitionImageLayout(commandBuffer, colorImage,
+                vk::ImageLayout::eTransferSrcOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
+                vk::ImageAspectFlagBits::eColor);
+        }
+
+        // Transition depth back to attachment optimal
+        core::ImageUtilities::transitionImageLayout(commandBuffer,
+            offscreenResources.depthImage.depthImage,
+            vk::ImageLayout::eDepthStencilReadOnlyOptimal,
+            vk::ImageLayout::eDepthStencilAttachmentOptimal,
+            depthStencilAspect);
+    }
+
+    void RenderPassHandler::executePreUpscalePostProcess(const vk::CommandBuffer& commandBuffer,
+                                                          uint32_t imageIndex) const
+    {
+        render::postprocess::CameraInfo camInfo{};
+        camInfo.nearPlane = currentNearPlane;
+        camInfo.farPlane = currentFarPlane;
+        camInfo.cameraPosition = currentCameraPosition;
+        camInfo.viewMatrix = currentView;
+        camInfo.projectionMatrix = currentProjection;
+        camInfo.unjitteredProjectionMatrix = unjitteredProjection;
+        camInfo.jitterOffset = currentJitterOffset;
+        camInfo.frameIndex = taaFrameIndex;
+        camInfo.time = currentTime;
+        if (oceanRenderProvider && oceanRenderProvider->hasActiveOcean())
+        {
+            float waterH = oceanRenderProvider->getBaseWaterHeight();
+            float diff = waterH - currentCameraPosition.y;
+            camInfo.submersionFactor = glm::clamp((diff + 0.5f) / 1.0f, 0.0f, 1.0f);
+            camInfo.isUnderwater = camInfo.submersionFactor > 0.01f;
+            camInfo.waterHeight = waterH;
+        }
+        postProcessPipeline->setCameraData(camInfo);
+
+        if (gpuDrivenRendererInitialized)
+            updateSunScreenPosition();
+
+        postProcessPipeline->executePreUpscale(commandBuffer, imageIndex);
+    }
+
+    void RenderPassHandler::executePostUpscalePostProcess(const vk::CommandBuffer& commandBuffer,
+                                                           uint32_t imageIndex) const
+    {
+        // Set camera data for post-process effects (tone mapping needs exposure, etc.)
+        render::postprocess::CameraInfo camInfo{};
+        camInfo.nearPlane = currentNearPlane;
+        camInfo.farPlane = currentFarPlane;
+        camInfo.cameraPosition = currentCameraPosition;
+        camInfo.viewMatrix = currentView;
+        camInfo.projectionMatrix = currentProjection;
+        camInfo.unjitteredProjectionMatrix = unjitteredProjection;
+        camInfo.jitterOffset = currentJitterOffset;
+        camInfo.frameIndex = taaFrameIndex;
+        camInfo.time = currentTime;
+        if (oceanRenderProvider && oceanRenderProvider->hasActiveOcean())
+        {
+            float waterH = oceanRenderProvider->getBaseWaterHeight();
+            float diff = waterH - currentCameraPosition.y;
+            camInfo.submersionFactor = glm::clamp((diff + 0.5f) / 1.0f, 0.0f, 1.0f);
+            camInfo.isUnderwater = camInfo.submersionFactor > 0.01f;
+            camInfo.waterHeight = waterH;
+        }
+        postProcessPipeline->setCameraData(camInfo);
+
+        if (gpuDrivenRendererInitialized)
+            updateSunScreenPosition();
+
+        postProcessPipeline->executePostUpscale(commandBuffer, imageIndex,
+            offscreenResources.upscaleOutput.image,
+            offscreenResources.upscaleOutput.imageView);
     }
 
     void RenderPassHandler::updateSunScreenPosition() const

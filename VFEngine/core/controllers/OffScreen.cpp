@@ -170,6 +170,11 @@ namespace controllers {
 		return offScreenController->getShadowStats();
 	}
 
+	types::RTShadowStats OffScreen::getRTShadowStats() const
+	{
+		return offScreenController->getRTShadowStats();
+	}
+
 	services::GPUPipelineStatus OffScreen::getGPUPipelineStatus() const
 	{
 		return offScreenController->getGPUPipelineStatus();

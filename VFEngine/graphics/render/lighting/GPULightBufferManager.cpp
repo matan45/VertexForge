@@ -149,7 +149,7 @@ namespace render::lighting
 
             countsMapped = countsAllocation.mappedPtr;
 
-            GPULightCounts counts{0, 0, 0, 0.5f};
+            GPULightCounts counts{0, 0, 0, 0.5f, 0, {}};
             std::memcpy(countsMapped, &counts, sizeof(GPULightCounts));
         }
 

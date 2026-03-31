@@ -66,8 +66,14 @@ namespace render::postprocess
         PingPongTarget targetA{};
         PingPongTarget targetB{};
 
+        // Display-resolution ping-pong targets (only used for post-upscale effects)
+        PingPongTarget displayTargetA{};
+        PingPongTarget displayTargetB{};
+
         vk::DescriptorSet descriptorSetA;
         vk::DescriptorSet descriptorSetB;
+        vk::DescriptorSet displayDescriptorSetA;
+        vk::DescriptorSet displayDescriptorSetB;
         std::vector<vk::DescriptorSet> sceneDescriptorSets;
 
         SunInfo sunInfo{};
@@ -83,6 +89,14 @@ namespace render::postprocess
         ~PostProcessPipeline();
 
         void execute(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex);
+
+        /// Execute only pre-upscale effects (at render resolution).
+        void executePreUpscale(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex);
+
+        /// Execute only post-upscale effects (at display resolution).
+        /// sourceImage/sourceView: the upscaled image to use as initial input.
+        void executePostUpscale(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex,
+                                vk::Image sourceImage, vk::ImageView sourceView);
 
         void recreate();
         void cleanup();

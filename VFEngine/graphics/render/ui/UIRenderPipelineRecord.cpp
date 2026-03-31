@@ -185,7 +185,7 @@ namespace render::ui
         renderPassInfo.renderPass = renderPass;
         renderPassInfo.framebuffer = framebuffers[imageIndex];
         renderPassInfo.renderArea.offset = vk::Offset2D{0, 0};
-        renderPassInfo.renderArea.extent = swapChain.getSwapchainExtent();
+        renderPassInfo.renderArea.extent = swapChain.getDisplayExtent();
         renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
         renderPassInfo.pClearValues = clearValues.data();
 
@@ -198,8 +198,8 @@ namespace render::ui
         commandBuffer.bindVertexBuffers(0, 2, vertexBuffers, offsets);
         commandBuffer.bindIndexBuffer(bufferManager.getQuadIndexBuffer(), 0, vk::IndexType::eUint16);
 
-        glm::vec2 viewportSize(static_cast<float>(swapChain.getSwapchainExtent().width),
-                               static_cast<float>(swapChain.getSwapchainExtent().height));
+        glm::vec2 viewportSize(static_cast<float>(swapChain.getDisplayExtent().width),
+                               static_cast<float>(swapChain.getDisplayExtent().height));
 
         for (const auto& group : scissorGroups)
         {
@@ -214,7 +214,7 @@ namespace render::ui
             else
             {
                 scissor.offset = vk::Offset2D{0, 0};
-                scissor.extent = swapChain.getSwapchainExtent();
+                scissor.extent = swapChain.getDisplayExtent();
             }
             commandBuffer.setScissor(0, 1, &scissor);
 

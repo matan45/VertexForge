@@ -211,6 +211,11 @@ namespace render::gpudriven
 
             peakVertexCount = std::max(peakVertexCount, totalVertexCount);
             peakIndexCount = std::max(peakIndexCount, totalIndexCount);
+
+            if (lodLevel == 0 && onSubmeshLOD0Ready)
+            {
+                onSubmeshLOD0Ready(meshPath, submeshName, submeshIndex, *loc);
+            }
         }
     }
 
@@ -247,6 +252,11 @@ namespace render::gpudriven
 
             size_t locIdx = keyIt->second;
             auto& loc = allSubmeshLocations[locIdx];
+
+            if (onSubmeshRemoved && loc.lodStates[0] == LODStreamState::Ready)
+            {
+                onSubmeshRemoved(meshPath, meshInfo.submeshes[subIdx].submeshName, subIdx);
+            }
 
             for (uint32_t lod = 0; lod < LOD_LEVEL_COUNT; ++lod)
             {

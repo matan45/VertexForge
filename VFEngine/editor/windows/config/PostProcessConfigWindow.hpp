@@ -12,7 +12,7 @@ namespace windows
         bool isDirty = false;
 
         void drawToneMappingSection();
-        void drawTAASection();
+        void drawUpscaleSection();
         void drawBloomSection();
         void drawVignetteSection();
         void drawChromaticAberrationSection();

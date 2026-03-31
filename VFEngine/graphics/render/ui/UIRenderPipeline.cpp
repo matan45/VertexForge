@@ -200,7 +200,7 @@ namespace render::ui
 
         core::GraphicsPipelineConfig config{
             .device = device.getLogicalDevice(), .renderPass = renderPass,
-            .extent = swapChain.getSwapchainExtent(), .shaderStages = uiShader->getShaderStages(),
+            .extent = swapChain.getDisplayExtent(), .shaderStages = uiShader->getShaderStages(),
             .vertexBindings = {vertexBinding, instanceBinding}, .vertexAttributes = allAttribs,
             .topology = vk::PrimitiveTopology::eTriangleList, .descriptorSetLayouts = {descriptorSetLayout},
             .pushConstantSize = sizeof(UIPushConstants),
@@ -240,19 +240,21 @@ namespace render::ui
 
     void UIRenderPipeline::createFramebuffers()
     {
-        framebuffers.resize(offscreenResources.colorImages.size());
+        bool hasDisplay = !offscreenResources.displayColorImages.empty();
+        auto& colorSrc = hasDisplay ? offscreenResources.displayColorImages : offscreenResources.colorImages;
+        framebuffers.resize(colorSrc.size());
         for (uint32_t i = 0; i < framebuffers.size(); i++)
         {
             std::array<vk::ImageView, 2> attachments = {
-                offscreenResources.colorImages[i].colorImageView,
+                colorSrc[i].colorImageView,
                 offscreenResources.uiStencilImage.stencilImageView
             };
             vk::FramebufferCreateInfo framebufferInfo{};
             framebufferInfo.renderPass = renderPass;
             framebufferInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
             framebufferInfo.pAttachments = attachments.data();
-            framebufferInfo.width = swapChain.getSwapchainExtent().width;
-            framebufferInfo.height = swapChain.getSwapchainExtent().height;
+            framebufferInfo.width = swapChain.getDisplayExtent().width;
+            framebufferInfo.height = swapChain.getDisplayExtent().height;
             framebufferInfo.layers = 1;
             framebuffers[i] = device.getLogicalDevice().createFramebuffer(framebufferInfo);
         }

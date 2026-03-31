@@ -54,8 +54,6 @@ namespace render::shadow
 
         inline constexpr uint32_t MAX_POINT_SHADOW_CASTERS = 32;
 
-        inline constexpr uint32_t DEFAULT_CSM_CASCADES = 4;
-
         inline constexpr float DEFAULT_DEPTH_BIAS = 0.005f;
         inline constexpr float DEFAULT_SLOPE_BIAS = 1.5f;
         inline constexpr float DEFAULT_NORMAL_BIAS = 0.02f;
@@ -66,10 +64,8 @@ namespace render::shadow
     enum class ShadowMapType : uint8_t
     {
         None = 0,
-        DirectionalCSM,
         PointCube,
-        Spot2D,
-        DirectionalClipmap
+        Spot2D
     };
 
     enum class ShadowQuality : uint8_t
@@ -93,17 +89,11 @@ namespace render::shadow
         float nearPlane = 0.1f;
         float farPlane = 100.0f;
 
-        uint32_t cascadeCount = ShadowConstants::DEFAULT_CSM_CASCADES;
-        float cascadeSplitLambda = 0.75f;
-
         float lightSize = 1.0f;
 
         bool enabled = true;
         bool castShadows = true;
 
-        // Clipmap settings
-        uint32_t clipmapLevelCount = 16;
-        float clipmapBaseExtent = 5.0f;
     };
 
     struct ShadowView
@@ -178,18 +168,6 @@ namespace render::shadow
         // Light movement tracking: detect when VP matrix changes to invalidate cached pages
         glm::mat4 lastViewProjection{0.0f}; // initialized to zero so first frame always dirty
 
-        // Clipmap tracking (only used when type == DirectionalClipmap)
-        std::vector<glm::vec2> clipmapLastSnapPositions;  // per-level snap position for dirty detection
-        std::vector<uint32_t> clipmapLevelPageOffsets;     // per-level offset within page table block
-        std::vector<uint32_t> clipmapLevelPagesPerSide;    // per-level page grid dimension (variable density)
-
-        // Toroidal scrolling state (per-level, only for DirectionalClipmap)
-        std::vector<glm::ivec2> clipmapScrollOffset;     // scroll offset in page units, [0, pps)
-        std::vector<glm::vec2>  clipmapPageGridOrigin;   // light-space XY origin snapped to page boundaries
-        std::vector<glm::mat4>  clipmapRenderVP;         // page-grid-snapped VP for rendering (stable)
-        std::vector<glm::vec2>  clipmapUVOffset;         // per-level UV offset: (texelSnapped - pageGrid) / (2*worldExtent)
-        std::vector<bool>       clipmapLevelInitialized; // per-level: true after first dirty-flag pass
-
         void invalidate()
         {
             for (auto& view : views)
@@ -213,27 +191,11 @@ namespace render::shadow
             {
                 vsmPageDirty[i] = true;
             }
-            // Reset toroidal scroll state
-            for (auto& s : clipmapScrollOffset)
-                s = glm::ivec2(0);
-            for (auto& o : clipmapPageGridOrigin)
-                o = glm::vec2(0.0f);
-            for (auto& v : clipmapRenderVP)
-                v = glm::mat4(1.0f);
-            for (auto& u : clipmapUVOffset)
-                u = glm::vec2(0.0f);
         }
 
         [[nodiscard]] bool usesVSM() const
         {
-            return type == ShadowMapType::Spot2D || type == ShadowMapType::PointCube
-                || type == ShadowMapType::DirectionalCSM || type == ShadowMapType::DirectionalClipmap;
-        }
-
-        [[nodiscard]] bool isDirectionalType() const
-        {
-            return type == ShadowMapType::DirectionalCSM
-                || type == ShadowMapType::DirectionalClipmap;
+            return type == ShadowMapType::Spot2D || type == ShadowMapType::PointCube;
         }
     };
 

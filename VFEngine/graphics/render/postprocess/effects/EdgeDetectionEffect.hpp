@@ -90,6 +90,7 @@ namespace render::postprocess
 
         ::postprocess::EffectType getType() const override { return ::postprocess::EffectType::EdgeDetection; }
         uint32_t getPriority() const override { return 250; }
+        bool isPreUpscale() const override { return false; }
 
     private:
         void createSampler();

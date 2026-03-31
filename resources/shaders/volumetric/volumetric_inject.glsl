@@ -94,6 +94,10 @@ struct LightCounts {
     uint pointCount;
     uint spotCount;
     float shadowIntensity;
+    uint rtShadowActive;
+    uint _lcpad1;
+    uint _lcpad2;
+    uint _lcpad3;
 };
 
 layout(std140, set = 2, binding = 3) uniform LightCountsUBO {
@@ -393,56 +397,7 @@ vec2 vsmLookupPhysicalUVVol(ShadowData sd, vec2 uv, out bool valid) {
     return physicalUV;
 }
 
-float sampleCascadeShadowSimple(int shadowIndex, vec3 worldPos) {
-    if (shadowIndex < 0 || shadowIndex >= MAX_SHADOW_VIEWS) return 1.0;
-
-    ShadowData sd = shadowData[shadowIndex];
-
-    vec4 lightSpacePos = sd.viewProjection * vec4(worldPos, 1.0);
-    if (lightSpacePos.w <= 0.0) return 1.0;
-
-    vec3 ndc = lightSpacePos.xyz / lightSpacePos.w;
-    if (any(greaterThan(abs(ndc.xy), vec2(1.0)))) return 1.0;
-
-    vec2 uv = ndc.xy * 0.5 + 0.5;
-    float receiverDepth = clamp(ndc.z, 0.0, 1.0);
-
-    bool valid;
-    vec2 physicalUV = vsmLookupPhysicalUVVol(sd, uv, valid);
-    if (!valid) return 1.0;
-
-    return texture(physicalPoolShadow, vec3(physicalUV, receiverDepth));
-}
-
-float sampleDirectionalShadowVolumetric(int baseShadowIndex, vec3 worldPos, float viewZ) {
-    if (baseShadowIndex < 0 || baseShadowIndex >= MAX_SHADOW_VIEWS) return 1.0;
-
-    int cascadeCount = int(shadowData[baseShadowIndex].rangeParams.z);
-    cascadeCount = clamp(cascadeCount, 1, 4);
-
-    if (baseShadowIndex + cascadeCount > MAX_SHADOW_VIEWS) {
-        cascadeCount = MAX_SHADOW_VIEWS - baseShadowIndex;
-        if (cascadeCount <= 0) return 1.0;
-    }
-
-    int cascadeIdx = 0;
-    for (int i = 0; i < cascadeCount; ++i) {
-        if (viewZ < shadowData[baseShadowIndex + i].rangeParams.y) {
-            cascadeIdx = i;
-            break;
-        }
-        cascadeIdx = i;
-    }
-
-    int shadowIndex = baseShadowIndex + cascadeIdx;
-    float shadow = sampleCascadeShadowSimple(shadowIndex, worldPos);
-
-    // Fade shadow at max cascade distance
-    float maxDistance = shadowData[baseShadowIndex + cascadeCount - 1].rangeParams.y;
-    float fadeStart = maxDistance * 0.85;
-    float fadeFactor = 1.0 - smoothstep(fadeStart, maxDistance, viewZ);
-
-    return mix(1.0, shadow, fadeFactor);
+// Directional lights use RT shadows — no VSM sampling needed in volumetrics
 }
 
 float smoothDistanceAttenuation(float distance, float range) {
@@ -554,12 +509,7 @@ void main() {
         float phase = henyeyGreenstein(dot(viewDir, L), anisotropy);
         vec3 lightContrib = light.color * light.intensity * phase;
 
-        float shadowFactor = 1.0;
-        if (light.shadowIndex >= 0) {
-            shadowFactor = sampleDirectionalShadowVolumetric(light.shadowIndex, worldPos, viewZ);
-            // Mix with shadow intensity to allow partial shadow strength
-            shadowFactor = mix(1.0, shadowFactor, 1.0 - lightCounts.shadowIntensity);
-        }
+        float shadowFactor = 1.0; // Directional lights use RT shadows, not VSM
 
         inScattered += lightContrib * shadowFactor;
     }

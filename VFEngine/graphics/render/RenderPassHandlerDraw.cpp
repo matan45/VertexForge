@@ -21,6 +21,7 @@
 #include "atmosphere/AtmospherePipeline.hpp"
 #include "cloud/CloudPipeline.hpp"
 #include "transparency/WBOITPipeline.hpp"
+#include "upscaling/UpscaleManager.hpp"
 #include "../../services/providers/vfx/IVFXRuntimeProvider.hpp"
 #include "../../services/providers/terrain/ITerrainRenderProvider.hpp"
 #include "../../services/providers/terrain/IOceanRenderProvider.hpp"
@@ -129,7 +130,24 @@ namespace render
         }
 
         executeRenderHooks(plugin::RenderPassHookPoint::PrePostProcess, commandBuffer, imageIndex);
-        executePostProcess(commandBuffer, imageIndex);
+
+        {
+            auto* upscaleManager = device.getUpscaleManager();
+            bool upscalingActive = upscaleManager && upscaleManager->isActive();
+
+            if (upscalingActive)
+            {
+                // Feed raw HDR scene color directly to DLSS (no pre-upscale post-process).
+                // DLSS expects jittered HDR input. All post-process runs after at display resolution.
+                executeUpscale(commandBuffer, imageIndex);
+                executePostUpscalePostProcess(commandBuffer, imageIndex);
+            }
+            else
+            {
+                executePostProcess(commandBuffer, imageIndex);
+            }
+        }
+
         executeRenderHooks(plugin::RenderPassHookPoint::PostPostProcess, commandBuffer, imageIndex);
 
         drawUIOverlays(commandBuffer, imageIndex);
@@ -223,7 +241,7 @@ namespace render
     {
         updateGPUDrivenHiZ();
         if (asyncComputeActive)
-            gpuDrivenRenderer->dispatchGraphicsCompute(commandBuffer);
+            gpuDrivenRenderer->dispatchGraphicsCompute(commandBuffer, imageIndex);
         else
             gpuDrivenRenderer->dispatchCompute(commandBuffer);
 
@@ -234,6 +252,12 @@ namespace render
         {
             gpuDrivenRenderer->renderDepthPrepass(commandBuffer, iblDescriptorSet);
             gpuDrivenRenderer->generatePrepassHiZ(commandBuffer);
+        }
+
+        // RT shadow dispatch (after depth+normal prepass, before forward pass)
+        if (gpuDrivenRenderer->isRTShadowReady())
+        {
+            gpuDrivenRenderer->dispatchRTShadow(commandBuffer, imageIndex);
         }
 
         if (oceanFFTInitialized)

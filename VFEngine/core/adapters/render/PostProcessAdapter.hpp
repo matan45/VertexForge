@@ -21,5 +21,6 @@ namespace core
         postprocess::PostProcessSettings getPostProcessSettings() const override;
         void setPostProcessEnabled(bool enabled) override;
         bool isPostProcessEnabled() const override;
+        services::UpscaleStatus getUpscaleStatus() const override;
     };
 }

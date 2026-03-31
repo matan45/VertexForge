@@ -209,46 +209,49 @@ namespace windows
         }
     }
 
-    void PostProcessConfigWindow::drawTAASection()
+
+    void PostProcessConfigWindow::drawUpscaleSection()
     {
-        if (ImGui::CollapsingHeader("TAA (Temporal Anti-Aliasing)", ImGuiTreeNodeFlags_DefaultOpen))
+        if (ImGui::CollapsingHeader("Upscaling (DLSS)"))
         {
             ImGui::Indent(10.0f);
 
-            if (ImGui::Checkbox("Enable TAA", &settings.taa.enabled))
-            {
+            if (ImGui::Checkbox("Enable Upscaling", &settings.upscale.enabled))
                 isDirty = true;
-            }
 
-            if (settings.taa.enabled)
+            if (settings.upscale.enabled)
             {
                 ImGui::Spacing();
 
-                if (ImGui::DragFloat("Blend Factor", &settings.taa.blendFactor, 0.01f, 0.01f, 0.5f, "%.2f"))
+                const char* qualityNames[] = {"Native (DLAA)", "Quality (1.5x)", "Balanced (1.7x)"};
+                int currentQuality = static_cast<int>(settings.upscale.quality);
+                if (ImGui::Combo("Quality", &currentQuality, qualityNames, IM_ARRAYSIZE(qualityNames)))
                 {
+                    settings.upscale.quality = static_cast<postprocess::UpscaleQuality>(currentQuality);
                     isDirty = true;
-                }
-                if (ImGui::IsItemHovered())
-                {
-                    ImGui::SetTooltip("How much of the current frame to blend in.\nLower = more temporal smoothing, higher = more responsive.");
                 }
 
-                if (ImGui::DragFloat("Sharpen Strength", &settings.taa.sharpenStrength, 0.01f, 0.0f, 1.0f, "%.2f"))
+                ImGui::Spacing();
+                ImGui::SeparatorText("Status");
+
+                auto& dispatcher = events::EventDispatcher::instance();
+                auto status = dispatcher.query(events::postprocess::GetUpscaleStatusQuery{});
+
+                ImGui::Text("Streamline: %s", status.streamlineAvailable ? "Available" : "Not Available");
+                ImGui::Text("DLSS: %s", status.dlssSupported ? "Supported" : "Not Supported");
+                ImGui::Text("Active: %s", status.activeMode == postprocess::UpscaleMode::DLSS ? "DLSS" : "Off");
+
+                if (status.renderWidth > 0 && status.displayWidth > 0)
                 {
-                    isDirty = true;
-                }
-                if (ImGui::IsItemHovered())
-                {
-                    ImGui::SetTooltip("Contrast-adaptive sharpening intensity.\nCounteracts TAA blur.");
+                    ImGui::Text("Render: %ux%u -> Display: %ux%u",
+                                status.renderWidth, status.renderHeight,
+                                status.displayWidth, status.displayHeight);
                 }
 
-                if (ImGui::Checkbox("Variance Clipping", &settings.taa.useVarianceClipping))
+                if (settings.upscale.enabled && !status.streamlineAvailable)
                 {
-                    isDirty = true;
-                }
-                if (ImGui::IsItemHovered())
-                {
-                    ImGui::SetTooltip("Use variance-based clipping instead of min/max AABB.\nMore robust against ghosting artifacts.");
+                    ImGui::TextColored(ImVec4(0.9f, 0.8f, 0.1f, 1.0f),
+                        "Streamline SDK not available. Build Streamline first.");
                 }
             }
 
@@ -437,7 +440,7 @@ namespace windows
             ImGui::Spacing();
 
             drawToneMappingSection();
-            drawTAASection();
+            drawUpscaleSection();
             drawBloomSection();
             drawVignetteSection();
             drawChromaticAberrationSection();

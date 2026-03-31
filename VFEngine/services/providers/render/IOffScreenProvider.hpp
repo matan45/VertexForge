@@ -161,7 +161,6 @@ namespace services {
         float atlasUtilization = 0.0f;
         uint32_t activeShadowCasters = 0;
         uint32_t activeShadowViews = 0;
-        uint32_t directionalLightCount = 0;
         uint32_t pointLightCount = 0;
         uint32_t spotLightCount = 0;
         uint32_t pointResolution = 512;
@@ -236,6 +235,7 @@ namespace services {
 
         virtual void applyShadowSettings(const types::RenderSettings& settings) = 0;
         virtual ShadowStats getShadowStats() const = 0;
+        virtual types::RTShadowStats getRTShadowStats() const = 0;
         virtual GPUPipelineStatus getGPUPipelineStatus() const = 0;
 
         virtual void setPlayMode(bool playMode) = 0;

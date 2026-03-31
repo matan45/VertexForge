@@ -1,5 +1,6 @@
 #include "PostProcessAdapter.hpp"
 #include "../../controllers/OffScreen.hpp"
+#include "../../graphics/render/upscaling/UpscaleManager.hpp"
 
 namespace core
 {
@@ -32,5 +33,24 @@ namespace core
     bool PostProcessAdapter::isPostProcessEnabled() const
     {
         return offScreen && offScreen->isPostProcessEnabled();
+    }
+
+    services::UpscaleStatus PostProcessAdapter::getUpscaleStatus() const
+    {
+        services::UpscaleStatus status{};
+        status.streamlineAvailable = render::upscaling::UpscaleManager::isStreamlineAvailable();
+        status.dlssSupported = render::upscaling::UpscaleManager::isDLSSAvailable();
+        status.directSRSupported = render::upscaling::UpscaleManager::isDirectSRAvailable();
+        auto* mgr = render::upscaling::UpscaleManager::getInstance();
+        if (mgr)
+        {
+            status.activeMode = mgr->getActiveMode();
+            const auto& res = mgr->getResolutionManager();
+            status.renderWidth = res.getRenderWidth();
+            status.renderHeight = res.getRenderHeight();
+            status.displayWidth = res.getDisplayWidth();
+            status.displayHeight = res.getDisplayHeight();
+        }
+        return status;
     }
 }

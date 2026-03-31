@@ -217,6 +217,12 @@ namespace services
                 return offScreenProvider ? offScreenProvider->getShadowStats() : services::ShadowStats{};
             });
 
+        dispatcher.registerQueryHandler<events::render::GetRTShadowStatsQuery>(
+            [this](const events::render::GetRTShadowStatsQuery&)
+            {
+                return offScreenProvider ? offScreenProvider->getRTShadowStats() : types::RTShadowStats{};
+            });
+
         dispatcher.registerCommandHandler<events::render::SetUIViewportOffsetCommand>(
             [this](const events::render::SetUIViewportOffsetCommand& cmd)
             {

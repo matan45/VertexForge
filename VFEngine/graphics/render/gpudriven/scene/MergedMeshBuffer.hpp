@@ -202,6 +202,7 @@ namespace render::gpudriven
                                                   uint32_t submeshIndex) const;
 
         const std::vector<MergedMeshInfo>& getRegisteredMeshes() const { return registeredMeshes; }
+        const std::vector<SubmeshLocation>& getAllSubmeshLocations() const { return allSubmeshLocations; }
 
         // Persistent slot mode (play mode streaming)
         void setPersistentMode(bool enabled);
@@ -229,6 +230,12 @@ namespace render::gpudriven
             return cpuObjectData[slot];
         }
         void markSlotDirty(uint32_t slot) { dirtySlots.push_back(slot); }
+
+        // Acceleration structure callbacks - invoked when submesh LOD 0 becomes ready or mesh is freed
+        std::function<void(const std::string& meshPath, const std::string& submeshName,
+                           uint32_t submeshIndex, const SubmeshLocation& loc)> onSubmeshLOD0Ready;
+        std::function<void(const std::string& meshPath, const std::string& submeshName,
+                           uint32_t submeshIndex)> onSubmeshRemoved;
 
         MergedMeshInfo* reserveMesh(const std::string& meshPath,
                                     const resource::MeshStreamHeader& header);

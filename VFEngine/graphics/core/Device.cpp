@@ -2,12 +2,38 @@
 #include "VulkanMemoryManager.hpp"
 #include "print/Log.hpp"
 #include "../window/Window.hpp"
+#include "../render/upscaling/UpscaleManager.hpp"
 
 #include <cassert>
 #include <fstream>
 #include <unordered_set>
 
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
 VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
+
+// When Streamline is enabled, route all Vulkan calls through the interposer
+// so that Streamline can track resources for DLSS/Reflex.
+static PFN_vkGetInstanceProcAddr getVulkanProcAddr()
+{
+#ifdef VF_STREAMLINE_ENABLED
+    HMODULE slModule = GetModuleHandleW(L"sl.interposer.dll");
+    if (slModule)
+    {
+        auto proc = reinterpret_cast<PFN_vkGetInstanceProcAddr>(
+            GetProcAddress(slModule, "vkGetInstanceProcAddr"));
+        if (proc)
+        {
+            vfLogInfo("Using Streamline interposer vkGetInstanceProcAddr for Vulkan dispatch");
+            return proc;
+        }
+    }
+    vfLogWarning("sl.interposer.dll not found, falling back to native vkGetInstanceProcAddr");
+#endif
+    return vkGetInstanceProcAddr;
+}
 
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
@@ -16,6 +42,36 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
     const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
     void* pUserData)
 {
+    // Suppress known harmless Streamline SDK interposer validation artifacts.
+    // The interposer wraps Vulkan handles (descriptor sets, images) and manages
+    // internal resource copies (sl.tag.*) that the validation layer doesn't understand.
+    if (pCallbackData->pMessageIdName)
+    {
+        std::string_view vuid(pCallbackData->pMessageIdName);
+        if (vuid == "VUID-VkDeviceCreateInfo-pNext-04748" ||
+            vuid == "VUID-vkCmdBindDescriptorSets-pDescriptorSets-parameter" ||
+            vuid == "VUID-vkCmdBindDescriptorSets-pDescriptorSets-06563" ||
+            vuid == "VUID-vkCmdDrawIndexed-None-08600" ||
+            vuid == "VUID-vkCmdDraw-None-09600" ||
+            vuid == "VUID-VkImageMemoryBarrier-oldLayout-01197" ||
+            vuid == "VUID-VkImageMemoryBarrier-image-03320" ||
+            vuid == "VUID-vkDestroyDevice-device-05137")
+        {
+            return VK_FALSE;
+        }
+    }
+    // Suppress Streamline object tracking messages (proxy handles, internal resource copies)
+    if (pCallbackData->pMessage)
+    {
+        std::string_view msg(pCallbackData->pMessage);
+        if (msg.find("Couldn't find VkDescriptorSet Object") != std::string_view::npos ||
+            msg.find("sl.tag.") != std::string_view::npos ||
+            msg.find("Object Tracking") != std::string_view::npos)
+        {
+            return VK_FALSE;
+        }
+    }
+
     if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT)
     {
         vfLogWarning("Validation layer warning: {}", pCallbackData->pMessage);
@@ -42,6 +98,10 @@ namespace core
 
     void Device::init()
     {
+        // Initialize Streamline SDK BEFORE Vulkan calls so it can intercept
+        // vkCreateInstance/vkCreateDevice for DLSS/Reflex setup.
+        render::upscaling::UpscaleManager::initStreamline();
+
         createInstance();
         createDebugMessenger();
         pickPhysicalDevice();
@@ -52,6 +112,13 @@ namespace core
         createPipelineCache();
 
         memoryManager = std::make_unique<VulkanMemoryManager>(*this);
+
+        // Provide Vulkan device info to Streamline after device is fully created
+        if (render::upscaling::UpscaleManager::isStreamlineAvailable())
+        {
+            upscaleManager = std::make_unique<render::upscaling::UpscaleManager>();
+            upscaleManager->setVulkanDevice(*this);
+        }
     }
 
     void Device::cleanUp()
@@ -61,6 +128,17 @@ namespace core
 
         // Reset staging command pool before device
         stagingCommandPool.reset();
+
+        // Wait for GPU to finish all work before Streamline cleanup
+        if (logicalDevice)
+            logicalDevice.get().waitIdle();
+
+        // Shut down Streamline before destroying memory manager and device
+        if (upscaleManager)
+        {
+            upscaleManager->shutdown();
+            upscaleManager.reset();
+        }
 
         // Destroy memory manager after all subsystems have cleaned up their buffers,
         // but before the logical device is destroyed
@@ -81,8 +159,10 @@ namespace core
 
     void Device::createInstance()
     {
-        // Initialize the default dispatcher with vkGetInstanceProcAddr before any Vulkan calls
-        VULKAN_HPP_DEFAULT_DISPATCHER.init(vkGetInstanceProcAddr);
+        // Use Streamline interposer's vkGetInstanceProcAddr (if available) so that
+        // Streamline can track all Vulkan resources for DLSS/Reflex.
+        vulkanProcAddr = getVulkanProcAddr();
+        VULKAN_HPP_DEFAULT_DISPATCHER.init(vulkanProcAddr);
 
         vk::ApplicationInfo appInfo{
             "Vulkan App",
@@ -158,6 +238,10 @@ namespace core
             extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
         }
 
+        // Add Streamline SDK required instance extensions (for DLSS)
+        auto slExtensions = render::upscaling::UpscaleManager::getRequiredInstanceExtensions();
+        extensions.insert(extensions.end(), slExtensions.begin(), slExtensions.end());
+
         return extensions;
     }
 
@@ -166,7 +250,7 @@ namespace core
         using enum vk::DebugUtilsMessageTypeFlagBitsEXT;
         if (!debug) return;
 
-        dldi = vk::detail::DispatchLoaderDynamic(*instance, vkGetInstanceProcAddr);
+        dldi = vk::detail::DispatchLoaderDynamic(*instance, vulkanProcAddr);
 
         vk::DebugUtilsMessengerCreateInfoEXT createInfo{};
         createInfo.messageSeverity = vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning |
@@ -203,6 +287,17 @@ namespace core
                 {
                     vfLogInfo("Selected physical device: {}",
                               static_cast<const char*>(physicalDevice.getProperties().deviceName));
+
+                    auto extensions = physicalDevice.enumerateDeviceExtensionProperties();
+                    for (const auto* req : deviceExtensions)
+                    {
+                        bool found = false;
+                        for (const auto& ext : extensions)
+                        {
+                            if (strcmp(ext.extensionName.data(), req) == 0) { found = true; break; }
+                        }
+                        vfLogInfo("  Extension {}: {}", req, found ? "supported" : "NOT supported");
+                    }
                 }
                 break;
             }
@@ -290,7 +385,11 @@ namespace core
         vulkan12Features.descriptorBindingSampledImageUpdateAfterBind = VK_TRUE;
         vulkan12Features.descriptorBindingStorageBufferUpdateAfterBind = VK_TRUE;
         vulkan12Features.descriptorBindingUniformBufferUpdateAfterBind = VK_TRUE;
-        vulkan12Features.bufferDeviceAddress = VK_TRUE; // Required for acceleration structures
+        // Required for acceleration structures.
+        // Note: Streamline injects VK_EXT_buffer_device_address which technically conflicts
+        // with the Vulkan 1.2 core feature. The validation warning is suppressed in debugCallback
+        // (VUID-VkDeviceCreateInfo-pNext-04748) — both paths enable the same functionality.
+        vulkan12Features.bufferDeviceAddress = VK_TRUE;
         vulkan12Features.timelineSemaphore = VK_TRUE; // Required for async compute synchronization
         vulkan12Features.pNext = &vulkan11Features;
 
@@ -307,6 +406,7 @@ namespace core
         // Acceleration structure features (VK_KHR_acceleration_structure)
         vk::PhysicalDeviceAccelerationStructureFeaturesKHR accelStructFeatures{};
         accelStructFeatures.accelerationStructure = VK_TRUE;
+        accelStructFeatures.descriptorBindingAccelerationStructureUpdateAfterBind = VK_TRUE;
         accelStructFeatures.pNext = &rayQueryFeatures;
 
         // Mesh shader features (VK_EXT_mesh_shader)
@@ -323,6 +423,11 @@ namespace core
                 continue;
             activeDeviceExtensions.push_back(ext);
         }
+
+        // Add Streamline SDK required device extensions (for DLSS)
+        auto slDeviceExtensions = render::upscaling::UpscaleManager::getRequiredDeviceExtensions();
+        activeDeviceExtensions.insert(activeDeviceExtensions.end(),
+                                      slDeviceExtensions.begin(), slDeviceExtensions.end());
 
         vk::DeviceCreateInfo createInfo{};
         createInfo.pNext = &meshShaderFeatures;
@@ -571,9 +676,10 @@ namespace core
         {
             if (debug)
             {
+                std::string deviceName = static_cast<const char*>(device.getProperties().deviceName);
                 for (const auto& ext : requiredExtensions)
                 {
-                    vfLogWarning("Device extension not available: {}", ext);
+                    vfLogDebug("Skipping device '{}': missing extension {}", deviceName, ext);
                 }
             }
             return false;

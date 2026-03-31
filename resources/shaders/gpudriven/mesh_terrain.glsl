@@ -327,6 +327,10 @@ layout(std430, set = 9, binding = 1) readonly buffer PageTableBuffer {
 layout(set = 10, binding = 0) uniform sampler2DShadow physicalPoolShadow;
 layout(set = 10, binding = 1) uniform sampler2D physicalPoolDepth;
 
+#ifdef RT_SHADOW_ENABLED
+layout(set = 13, binding = 0) uniform sampler2D rtShadowMask;
+#endif
+
 #ifdef CAUSTICS_ENABLED
 layout(set = CAUSTIC_SET, binding = 0) uniform sampler2D causticMap;
 layout(set = CAUSTIC_SET, binding = 1) uniform CausticParamsUBO {
@@ -364,9 +368,13 @@ float sampleTerrainCascadeShadow(int shadowIndex, vec3 worldPos, vec3 worldNorma
 }
 
 float sampleTerrainDirectionalShadow(int baseShadowIndex, int shadowMode, vec3 worldPos, vec3 worldNormal, float viewZ, vec3 cameraPos) {
-    // Apply terrain-specific normal bias scaling before delegating to VSM sampling
-    vec3 biasedNormal = worldNormal * getTerrainNormalBiasScale();
-    return sampleDirectionalShadowAuto(baseShadowIndex, shadowMode, worldPos, biasedNormal, viewZ, cameraPos);
+#ifdef RT_SHADOW_ENABLED
+    if (lightCounts.rtShadowActive != 0u) {
+        vec2 screenUV = gl_FragCoord.xy / vec2(pc.screenWidth, pc.screenHeight);
+        return texture(rtShadowMask, screenUV).r;
+    }
+#endif
+    return 1.0;
 }
 
 float sampleTerrainPointShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal,
@@ -497,10 +505,7 @@ void main() {
     for (uint i = 0u; i < lightCounts.directionalCount; ++i) {
         DirectionalLight light = directionalLights[i];
 
-        float shadow = 1.0;
-        if (light.shadowIndex >= 0) {
-            shadow = sampleTerrainDirectionalShadow(light.shadowIndex, light.shadowMode, fragWorldPos, N, linearZ, camera.cameraPos);
-        }
+        float shadow = sampleTerrainDirectionalShadow(light.shadowIndex, light.shadowMode, fragWorldPos, N, linearZ, camera.cameraPos);
         minShadow = min(minShadow, shadow);
 
         vec3 lightContrib = evaluateDirectionalLight(N, V, albedo, metallic, roughness, F0, light) * shadow;

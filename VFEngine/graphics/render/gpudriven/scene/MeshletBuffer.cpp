@@ -52,6 +52,7 @@ namespace render::gpudriven
         if (!initialized) return;
 
         flushPendingTransfers();
+        transferManager.reset();
 
         allocations.clear();
         allocationKeyToIndex.clear();

@@ -178,6 +178,10 @@ namespace core {
         return offScreen ? offScreen->getShadowStats() : services::ShadowStats{};
     }
 
+    types::RTShadowStats OffScreenAdapter::getRTShadowStats() const {
+        return offScreen ? offScreen->getRTShadowStats() : types::RTShadowStats{};
+    }
+
     services::GPUPipelineStatus OffScreenAdapter::getGPUPipelineStatus() const {
         return offScreen ? offScreen->getGPUPipelineStatus() : services::GPUPipelineStatus{};
     }

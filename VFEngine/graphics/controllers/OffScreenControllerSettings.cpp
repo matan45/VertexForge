@@ -8,6 +8,7 @@
 #include "../render/RenderPassHandler.hpp"
 #include "../render/gpudriven/GPUDrivenRenderer.hpp"
 #include "../render/shadow/ShadowSystem.hpp"
+#include "../render/upscaling/UpscaleManager.hpp"
 #include "../render/postprocess/PostProcessPipeline.hpp"
 #include "../render/volumetric/VolumetricFogComposite.hpp"
 #include "offscreen/CullingStatsCollector.hpp"
@@ -38,6 +39,8 @@ namespace controllers
         auto* lightBufferManager = gpuDriven->getLightBufferManager();
         if (lightBufferManager)
             lightBufferManager->setShadowIntensity(settings.shadows.shadowIntensity);
+
+        gpuDriven->applyRTShadowSettings(settings.rtShadows);
 
         gpuDriven->setFrustumCullingEnabled(settings.culling.frustumCullingEnabled);
         gpuDriven->setOcclusionCullingEnabled(settings.culling.occlusionCullingEnabled);
@@ -94,7 +97,6 @@ namespace controllers
         stats.atlasUtilization = shadowSystem->getPoolUtilization();
         stats.activeShadowCasters = shadowSystem->getActiveShadowCasterCount();
         stats.activeShadowViews = shadowSystem->getActiveShadowViewCount();
-        stats.directionalLightCount = static_cast<uint32_t>(shadowSystem->getDirectionalShadowViews().size());
         stats.pointLightCount = static_cast<uint32_t>(shadowSystem->getPointShadowViews().size());
         stats.spotLightCount = static_cast<uint32_t>(shadowSystem->getSpotShadowViews().size());
         stats.pointResolution = render::shadow::vsm::PAGE_SIZE;
@@ -126,6 +128,17 @@ namespace controllers
         }
 
         return stats;
+    }
+
+    types::RTShadowStats OffScreenController::getRTShadowStats() const
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (!renderHandler) return {};
+
+        auto* gpuDriven = renderHandler->getGPUDrivenRenderer();
+        if (!gpuDriven) return {};
+
+        return gpuDriven->getRTShadowStats();
     }
 
     services::GPUPipelineStatus OffScreenController::getGPUPipelineStatus() const
@@ -224,7 +237,9 @@ namespace controllers
 
         if (cameraController)
         {
-            cameraController->setTAAEnabled(settings.enabled && settings.taa.enabled);
+            // Enable jitter when DLSS upscaling is active (DLSS requires temporal jitter)
+            bool needsJitter = settings.enabled && settings.upscale.enabled;
+            cameraController->setTAAEnabled(needsJitter);
             auto extent = swapChain.getSwapchainExtent();
             cameraController->setViewportExtent(extent.width, extent.height);
         }
@@ -232,6 +247,48 @@ namespace controllers
         auto* pipeline = renderHandler->getPostProcessPipeline();
         if (pipeline)
             pipeline->applySettings(settings);
+
+        // Apply upscale settings to the UpscaleManager on the Device
+        auto* upscaleManager = device.getUpscaleManager();
+        if (upscaleManager)
+        {
+            bool wasActive = upscaleManager->isActive();
+            auto prevQuality = upscaleManager->getResolutionManager().getQualityMode();
+
+            // Always pass display extent so ResolutionManager computes render res correctly
+            auto displayExtent = swapChain.getDisplayExtent();
+            upscaleManager->applySettings(settings.upscale, displayExtent.width, displayExtent.height);
+
+            bool isActive = upscaleManager->isActive();
+            auto newQuality = upscaleManager->getResolutionManager().getQualityMode();
+
+            bool stateChanged = wasActive != isActive;
+            bool qualityChanged = wasActive && isActive && prevQuality != newQuality;
+
+            if (stateChanged || qualityChanged)
+            {
+                if (isActive)
+                {
+                    auto renderRes = upscaleManager->getResolutionManager().getRenderResolution();
+                    swapChain.setRenderExtentOverride(renderRes);
+                }
+                else
+                {
+                    swapChain.setRenderExtentOverride({0, 0});
+                }
+
+                device.getLogicalDevice().waitIdle();
+                offScreen->recreate();
+                offScreen->setUpscaleResourcesDirty(true);
+
+                // Re-apply DLSS options after recreation so Streamline refreshes its internal state
+                if (isActive)
+                {
+                    auto freshDisplayExtent = swapChain.getDisplayExtent();
+                    upscaleManager->applySettings(settings.upscale, freshDisplayExtent.width, freshDisplayExtent.height);
+                }
+            }
+        }
     }
 
     postprocess::PostProcessSettings OffScreenController::getPostProcessSettings() const

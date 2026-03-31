@@ -119,12 +119,15 @@ namespace services
 
     std::string EditorSettingsService::getSettingsPath() const
     {
-        const char* home = std::getenv("USERPROFILE");
+        char* home = nullptr;
+        size_t len = 0;
+        _dupenv_s(&home, &len, "USERPROFILE");
         if (!home)
-            home = std::getenv("HOME");
+            _dupenv_s(&home, &len, "HOME");
         if (!home)
             return "";
-
-        return std::string(home) + "/.vertexforge/editor_settings.json";
+        std::string result = std::string(home) + "/.vertexforge/editor_settings.json";
+        free(home);
+        return result;
     }
 }

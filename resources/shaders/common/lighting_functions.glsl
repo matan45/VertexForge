@@ -53,6 +53,10 @@ struct LightCounts {
     uint pointCount;
     uint spotCount;
     float shadowIntensity;
+    uint rtShadowActive;
+    uint _lcpad1;
+    uint _lcpad2;
+    uint _lcpad3;
 };
 
 //-----------------------------------------------------------------------------

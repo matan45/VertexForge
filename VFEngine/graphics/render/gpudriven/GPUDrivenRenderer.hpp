@@ -43,7 +43,10 @@
 #include "../gi/ProbeTracePipeline.hpp"
 #include "../gi/ProbeUpdatePipeline.hpp"
 #include "../gi/GIDebugRenderer.hpp"
-#include "../gi/AccelerationStructureManager.hpp"
+#include "../raytracing/AccelerationStructureManager.hpp"
+#include "../raytracing/RTShadowPipeline.hpp"
+#include "../raytracing/RTShadowDenoiser.hpp"
+#include "../raytracing/RTShadowProfiler.hpp"
 #include "../svt/SVTTypes.hpp"
 #include "../svt/PhysicalTileCache.hpp"
 #include "../svt/SVTPageTable.hpp"
@@ -68,6 +71,11 @@ namespace core
     class Device;
     class SwapChain;
     class DeferredDeletionQueue;
+}
+
+namespace types
+{
+    struct RTShadowSettings;
 }
 
 namespace material
@@ -350,9 +358,12 @@ namespace render::gpudriven
         std::unique_ptr<gi::ProbeTracePipeline> giTracePipeline;
         std::unique_ptr<gi::ProbeUpdatePipeline> giUpdatePipeline;
         std::unique_ptr<gi::GIDebugRenderer> giDebugRenderer;
-        std::unique_ptr<gi::AccelerationStructureManager> accelStructManager;
+        std::unique_ptr<raytracing::AccelerationStructureManager> accelStructManager;
+        std::unique_ptr<raytracing::RTShadowPipeline> rtShadowPipeline;
+        std::unique_ptr<raytracing::RTShadowDenoiser> rtShadowDenoiser;
+        std::unique_ptr<raytracing::RTShadowProfiler> rtShadowProfiler;
+        bool rtShadowEnabled = true;
         gi::GISettings cachedGISettings;
-        bool blasNeedsRebuild = true;
         bool giProbeBuffersNeedInit = true;
 
         std::unique_ptr<mesh::MeshStreamManager> meshStreamManager;
@@ -418,7 +429,7 @@ namespace render::gpudriven
 
         // Split compute dispatch for async compute queue support
         // Records uploads, light occlusion, object culling, shadows, volumetric fog on graphics queue
-        void dispatchGraphicsCompute(vk::CommandBuffer cmd);
+        void dispatchGraphicsCompute(vk::CommandBuffer cmd, uint32_t imageIndex = 0);
         // Records light culling, grass compute, GI probe update on async compute queue
         void dispatchAsyncCompute(vk::CommandBuffer asyncCmd);
 
@@ -462,6 +473,13 @@ namespace render::gpudriven
         void initDepthPrepass();
         void renderDepthPrepass(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet);
         void generatePrepassHiZ(vk::CommandBuffer cmd);
+        void initAccelerationStructures();
+        void ensureAccelerationStructureManager();
+        void dispatchRTShadow(vk::CommandBuffer cmd, uint32_t imageIndex);
+        bool isRTShadowReady() const;
+        raytracing::RTShadowPipeline* getRTShadowPipeline() const { return rtShadowPipeline.get(); }
+        void applyRTShadowSettings(const types::RTShadowSettings& settings);
+        types::RTShadowStats getRTShadowStats() const;
 
         void setDistanceCullingEnabled(bool enabled) { culling.distanceCullingEnabled = enabled; }
         bool isDistanceCullingEnabled() const { return culling.distanceCullingEnabled; }

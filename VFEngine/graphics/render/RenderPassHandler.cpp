@@ -1,4 +1,5 @@
 #include "RenderPassHandler.hpp"
+#include "upscaling/MotionVectorPass.hpp"
 #include "../core/Device.hpp"
 #include "../core/SwapChain.hpp"
 #include "ClearColor.hpp"

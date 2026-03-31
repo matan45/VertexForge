@@ -226,6 +226,11 @@ namespace render::gpudriven
             pipelineLayout = nullptr;
         }
 
+        if (terrainShader)
+        {
+            terrainShader->cleanUp();
+        }
+
         createTerrainGraphicsPipeline(iblLayout, bindlessTextureLayout,
                                       meshletDataLayout, vertexDataLayout,
                                       lightDataLayout, clusterGridLayout,
@@ -450,7 +455,11 @@ namespace render::gpudriven
         {
             terrainShader->addMacroDefinition("SVT_ENABLED");
         }
-        if (causticEnabled && cachedCausticLayout)
+        if (rtShadowEnabled && rtShadowMaskLayout)
+        {
+            terrainShader->addMacroDefinition("RT_SHADOW_ENABLED");
+        }
+        else if (causticEnabled && cachedCausticLayout)
         {
             terrainShader->addMacroDefinition("CAUSTICS_ENABLED");
             terrainShader->addMacroDefinition("CAUSTIC_SET", "13");
@@ -507,9 +516,16 @@ namespace render::gpudriven
             svtLayout  // Set 12: SVT page table + params + cache textures
         };
 
-        if (causticEnabled && cachedCausticLayout)
+        pipelineHasSet13 = false;
+        if (rtShadowEnabled && rtShadowMaskLayout)
+        {
+            setLayouts.push_back(rtShadowMaskLayout); // Set 13
+            pipelineHasSet13 = true;
+        }
+        else if (causticEnabled && cachedCausticLayout)
         {
             setLayouts.push_back(cachedCausticLayout); // Set 13
+            pipelineHasSet13 = true;
         }
 
         vk::PushConstantRange pushConstantRange{};

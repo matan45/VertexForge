@@ -97,7 +97,6 @@ namespace render::shadow
         }
 
         lightShadowData.clear();
-        directionalShadowViews.clear();
         pointShadowViews.clear();
         spotShadowViews.clear();
         pageRenderList.clear();
@@ -223,14 +222,8 @@ namespace render::shadow
         uint32_t viewCount = 1;
         switch (type)
         {
-        case ShadowMapType::DirectionalCSM:
-            viewCount = settings.cascadeCount;
-            break;
         case ShadowMapType::PointCube:
             viewCount = 6;
-            break;
-        case ShadowMapType::DirectionalClipmap:
-            viewCount = settings.clipmapLevelCount;
             break;
         case ShadowMapType::Spot2D:
             viewCount = 1;
@@ -278,64 +271,6 @@ namespace render::shadow
 
         lightShadowData.erase(it);
         needsUpdate = true;
-    }
-
-    ShadowSystem::PageDimensions ShadowSystem::allocateCSMPages(LightShadowData& data)
-    {
-        static constexpr uint32_t MAX_DIR_PAGES = 4;
-        uint32_t pagesPerCascade = std::clamp(data.settings.resolution / vsm::PAGE_SIZE, 1u, MAX_DIR_PAGES);
-        data.settings.resolution = pagesPerCascade * vsm::PAGE_SIZE;
-
-        for (size_t i = 0; i < data.views.size(); ++i)
-        {
-            data.views[i].cascadeIndex = static_cast<uint16_t>(i);
-            data.views[i].type = data.type;
-        }
-
-        return {pagesPerCascade, pagesPerCascade * data.settings.cascadeCount, true};
-    }
-
-    ShadowSystem::PageDimensions ShadowSystem::allocateClipmapPages(LightShadowData& data)
-    {
-        // Near level resolution scales with quality
-        uint32_t nearPagesPerSide = 4;
-        switch (globalQuality)
-        {
-        case ShadowQuality::High:  nearPagesPerSide = 8;  break; // 1024
-        case ShadowQuality::Ultra: nearPagesPerSide = 16; break; // 2048
-        default: break;
-        }
-
-        uint32_t levelCount = data.settings.clipmapLevelCount;
-        data.clipmapLevelPagesPerSide.resize(levelCount);
-        data.clipmapLevelPageOffsets.resize(levelCount);
-        data.clipmapLastSnapPositions.resize(levelCount, glm::vec2(0.0f));
-        data.clipmapScrollOffset.resize(levelCount, glm::ivec2(0));
-        data.clipmapPageGridOrigin.resize(levelCount, glm::vec2(0.0f));
-        data.clipmapRenderVP.resize(levelCount, glm::mat4(1.0f));
-        data.clipmapUVOffset.resize(levelCount, glm::vec2(0.0f));
-        data.clipmapLevelInitialized.resize(levelCount, false);
-
-        uint32_t totalPages = 0;
-        for (uint32_t i = 0; i < levelCount; ++i)
-        {
-            uint32_t pps;
-            if (i < 4)       pps = nearPagesPerSide;
-            else if (i < 8)  pps = std::max(2u, nearPagesPerSide / 4);
-            else             pps = 1;
-
-            data.clipmapLevelPagesPerSide[i] = pps;
-            data.clipmapLevelPageOffsets[i] = totalPages;
-            totalPages += pps * pps;
-        }
-
-        for (size_t i = 0; i < data.views.size(); ++i)
-        {
-            data.views[i].cascadeIndex = static_cast<uint16_t>(i);
-            data.views[i].type = data.type;
-        }
-
-        return {totalPages, 1, true};
     }
 
     ShadowSystem::PageDimensions ShadowSystem::allocateSpotPages(LightShadowData& data, uint32_t maxPages)
@@ -475,8 +410,6 @@ namespace render::shadow
         PageDimensions dims;
         switch (data.type)
         {
-        case ShadowMapType::DirectionalCSM:    dims = allocateCSMPages(data); break;
-        case ShadowMapType::DirectionalClipmap: dims = allocateClipmapPages(data); break;
         case ShadowMapType::Spot2D:            dims = allocateSpotPages(data, maxSpotPages); break;
         case ShadowMapType::PointCube:         dims = allocatePointPages(data, maxSpotPages); break;
         default: return false;
@@ -520,16 +453,6 @@ namespace render::shadow
         data.vsmPagesX = 0;
         data.vsmPagesY = 0;
         data.vsmPageTableOffset = 0;
-
-        // Clear clipmap tracking
-        data.clipmapLastSnapPositions.clear();
-        data.clipmapLevelPageOffsets.clear();
-        data.clipmapLevelPagesPerSide.clear();
-        data.clipmapScrollOffset.clear();
-        data.clipmapPageGridOrigin.clear();
-        data.clipmapRenderVP.clear();
-        data.clipmapUVOffset.clear();
-        data.clipmapLevelInitialized.clear();
     }
 
     void ShadowSystem::setDeletionQueue(core::DeferredDeletionQueue* queue)
@@ -601,10 +524,6 @@ namespace render::shadow
 
             switch (data.type)
             {
-            case ShadowMapType::DirectionalCSM:
-            case ShadowMapType::DirectionalClipmap:
-                info.type = 0;
-                break;
             case ShadowMapType::Spot2D:
                 info.type = 1;
                 break;
@@ -679,7 +598,6 @@ namespace render::shadow
     uint32_t ShadowSystem::getActiveShadowViewCount() const
     {
         return static_cast<uint32_t>(
-            directionalShadowViews.size() +
             pointShadowViews.size() +
             spotShadowViews.size()
         );
@@ -688,30 +606,6 @@ namespace render::shadow
     float ShadowSystem::getPoolUtilization() const
     {
         return tilePool ? tilePool->getUtilization() : 0.0f;
-    }
-
-    void ShadowSystem::addDirectionalDebugInfos(std::vector<ShadowDebugInfo>& infos) const
-    {
-        for (const auto& [entityId, data] : lightShadowData)
-        {
-            if (!data.settings.enabled || !data.settings.castShadows || !data.isDirectionalType())
-                continue;
-
-            for (size_t i = 0; i < data.views.size(); ++i)
-            {
-                const auto& view = data.views[i];
-                ShadowDebugInfo info;
-                info.type = data.type;
-                info.cascadeIndex = static_cast<uint32_t>(i);
-                info.entityId = entityId;
-                info.viewProjectionMatrix = view.viewProjectionMatrix;
-                info.lightPosition = glm::vec3(view.lightPosition);
-                info.lightDirection = glm::vec3(view.lightDirection);
-                info.nearPlane = view.nearPlane;
-                info.farPlane = view.farPlane;
-                infos.push_back(info);
-            }
-        }
     }
 
     void ShadowSystem::addSingleViewDebugInfo(std::vector<ShadowDebugInfo>& infos, ShadowMapType type) const
@@ -746,12 +640,10 @@ namespace render::shadow
             return debugInfos;
 
         debugInfos.reserve(
-            directionalShadowViews.size() +
             pointShadowViews.size() +
             spotShadowViews.size()
         );
 
-        addDirectionalDebugInfos(debugInfos);
         addSingleViewDebugInfo(debugInfos, ShadowMapType::PointCube);
         addSingleViewDebugInfo(debugInfos, ShadowMapType::Spot2D);
         return debugInfos;

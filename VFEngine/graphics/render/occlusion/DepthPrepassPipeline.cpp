@@ -34,7 +34,8 @@ namespace render::occlusion
         const auto& stages = shader.getShaderStages();
 
         vk::PushConstantRange pushRange{};
-        pushRange.stageFlags = vk::ShaderStageFlagBits::eTaskEXT | vk::ShaderStageFlagBits::eMeshEXT;
+        pushRange.stageFlags = vk::ShaderStageFlagBits::eTaskEXT | vk::ShaderStageFlagBits::eMeshEXT |
+                               vk::ShaderStageFlagBits::eFragment;
         pushRange.offset = 0;
         pushRange.size = pushConstantSize;
 
@@ -46,6 +47,12 @@ namespace render::occlusion
 
         vk::PipelineLayout pipelineLayout = vkDevice.createPipelineLayout(layoutInfo);
 
+        // Color blend attachment for normal output (no blending, write all channels)
+        vk::PipelineColorBlendAttachmentState normalBlend{};
+        normalBlend.blendEnable = VK_FALSE;
+        normalBlend.colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG |
+                                     vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA;
+
         core::MeshShaderPipelineConfig config{
             .device = vkDevice,
             .renderPass = renderPass,
@@ -56,7 +63,8 @@ namespace render::occlusion
             .depthTestEnable = true,
             .depthWriteEnable = true,
             .depthCompareOp = vk::CompareOp::eLess,
-            .blendEnable = false
+            .blendEnable = false,
+            .colorBlendAttachments = {normalBlend}
         };
         config.dynamicStates = {vk::DynamicState::eViewport, vk::DynamicState::eScissor};
 
@@ -69,8 +77,9 @@ namespace render::occlusion
         sceneShader = std::make_unique<core::Shader>(device);
         sceneShader->readShader("../../resources/shaders/depthprepass/task_depth_prepass.glsl");
         sceneShader->readShader("../../resources/shaders/depthprepass/mesh_depth_prepass.glsl");
+        sceneShader->readShader("../../resources/shaders/depthprepass/frag_depth_prepass.glsl");
 
-        if (sceneShader->getShaderStages().size() < 2)
+        if (sceneShader->getShaderStages().size() < 3)
         {
             vfLogError("DepthPrepassPipeline: Failed to load scene shaders: {}",
                         sceneShader->getLastCompilationError());
@@ -93,8 +102,9 @@ namespace render::occlusion
         terrainShader = std::make_unique<core::Shader>(device);
         terrainShader->readShader("../../resources/shaders/depthprepass/task_terrain_depth_prepass.glsl");
         terrainShader->readShader("../../resources/shaders/depthprepass/mesh_terrain_depth_prepass.glsl");
+        terrainShader->readShader("../../resources/shaders/depthprepass/frag_depth_prepass.glsl");
 
-        if (terrainShader->getShaderStages().size() < 2)
+        if (terrainShader->getShaderStages().size() < 3)
         {
             vfLogError("DepthPrepassPipeline: Failed to load terrain shaders: {}",
                         terrainShader->getLastCompilationError());
@@ -127,7 +137,7 @@ namespace render::occlusion
     void DepthPrepassPipeline::pushSceneConstants(vk::CommandBuffer cmd, const DepthPrepassPushConstants& pc) const
     {
         cmd.pushConstants(scenePipelineLayout,
-                          vk::ShaderStageFlagBits::eTaskEXT | vk::ShaderStageFlagBits::eMeshEXT,
+                          vk::ShaderStageFlagBits::eTaskEXT | vk::ShaderStageFlagBits::eMeshEXT | vk::ShaderStageFlagBits::eFragment,
                           0, sizeof(DepthPrepassPushConstants), &pc);
     }
 
@@ -139,7 +149,7 @@ namespace render::occlusion
     void DepthPrepassPipeline::pushTerrainConstants(vk::CommandBuffer cmd, const TerrainDepthPrepassPushConstants& pc) const
     {
         cmd.pushConstants(terrainPipelineLayout,
-                          vk::ShaderStageFlagBits::eTaskEXT | vk::ShaderStageFlagBits::eMeshEXT,
+                          vk::ShaderStageFlagBits::eTaskEXT | vk::ShaderStageFlagBits::eMeshEXT | vk::ShaderStageFlagBits::eFragment,
                           0, sizeof(TerrainDepthPrepassPushConstants), &pc);
     }
 

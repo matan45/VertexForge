@@ -4,8 +4,11 @@
 #include <array>
 #include <mutex>
 #include <filesystem>
+#include <memory>
 
 #include "Utilities.hpp"
+
+namespace render::upscaling { class UpscaleManager; }
 
 namespace window
 {
@@ -71,6 +74,7 @@ namespace core
 
         vk::DebugUtilsMessengerEXT debugMessenger{nullptr};
         vk::detail::DispatchLoaderDynamic dldi;
+        PFN_vkGetInstanceProcAddr vulkanProcAddr = nullptr;
 
         vk::SurfaceKHR surface{nullptr};
         vk::Queue presentQueue{nullptr};
@@ -91,6 +95,7 @@ namespace core
         std::filesystem::path pipelineCachePath;
 
         std::unique_ptr<VulkanMemoryManager> memoryManager;
+        std::unique_ptr<render::upscaling::UpscaleManager> upscaleManager;
 
         mutable std::mutex graphicsQueueMutex;
         mutable std::mutex transferQueueMutex;
@@ -186,5 +191,8 @@ namespace core
         bool isRayQuerySupported() const { return rayQueryCapabilities.rayQuerySupported; }
         bool isAccelerationStructureSupported() const { return rayQueryCapabilities.accelerationStructureSupported; }
         const RayQueryCapabilities& getRayQueryCapabilities() const { return rayQueryCapabilities; }
+
+        render::upscaling::UpscaleManager* getUpscaleManager() { return upscaleManager.get(); }
+        const render::upscaling::UpscaleManager* getUpscaleManager() const { return upscaleManager.get(); }
     };
 }

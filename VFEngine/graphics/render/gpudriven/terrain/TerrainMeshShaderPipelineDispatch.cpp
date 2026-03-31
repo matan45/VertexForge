@@ -215,9 +215,16 @@ namespace render::gpudriven
             svtEnabled ? svtDescriptorSet : vk::DescriptorSet{nullptr}  // Set 12: SVT (optional)
         };
 
-        if (causticEnabled && causticDescriptorSet)
+        if (pipelineHasSet13)
         {
-            currentSets.push_back(causticDescriptorSet); // Set 13
+            if (rtShadowEnabled && rtShadowMaskDescriptorSet)
+            {
+                currentSets.push_back(rtShadowMaskDescriptorSet); // Set 13
+            }
+            else if (causticEnabled && causticDescriptorSet)
+            {
+                currentSets.push_back(causticDescriptorSet); // Set 13
+            }
         }
 
         bindDescriptorSetsInBatches(cmd, currentSets.data(), static_cast<uint32_t>(currentSets.size()));

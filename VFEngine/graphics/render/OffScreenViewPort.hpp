@@ -35,6 +35,7 @@ namespace render
 
         // Async compute (non-owning, set by controller)
         core::AsyncComputeManager* asyncComputeManager = nullptr;
+        bool upscaleResourcesDirty = false;
 
     public:
         explicit OffScreenViewPort(core::Device& device, core::SwapChain& swapChain);
@@ -57,11 +58,20 @@ namespace render
         void setBrushOverlayParams(float radius, float falloff, float shape);
         void setAsyncComputeManager(core::AsyncComputeManager* manager);
 
+        const core::OffscreenResources& getOffscreenResources() const { return offscreenResources; }
+        core::OffscreenResources& getOffscreenResources() { return offscreenResources; }
+
+        void setUpscaleResourcesDirty(bool dirty) { upscaleResourcesDirty = dirty; }
+        bool isUpscaleResourcesDirty() const { return upscaleResourcesDirty; }
+
     private:
         void draw(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
 
         void createOffscreenResources();
         void cleanupOffscreenResources();
+        void createUpscaleResources(uint32_t renderWidth, uint32_t renderHeight,
+                                     uint32_t displayWidth, uint32_t displayHeight);
+        void cleanupUpscaleResources();
         void updateDescriptorSets(vk::DescriptorSet& descriptorSet, const vk::ImageView& imageView) const;
         void createSampler();
     };

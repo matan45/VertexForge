@@ -355,8 +355,8 @@ namespace core
 		allocation.block = nullptr;
 		allocation.isDedicated = true;
 
-		vfLogDebug("VulkanMemoryManager: Dedicated allocation {}MB (type {}{}{})",
-			size / (1024 * 1024), memoryTypeIndex,
+		vfLogDebug("VulkanMemoryManager: Dedicated allocation {} bytes ({:.2f}MB) (type {}{}{})",
+			size, static_cast<float>(size) / (1024.0f * 1024.0f), memoryTypeIndex,
 			hostVisible ? ", host-visible" : "",
 			needsDeviceAddress ? ", device-address" : "");
 
