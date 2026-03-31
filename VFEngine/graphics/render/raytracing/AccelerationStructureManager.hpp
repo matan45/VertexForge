@@ -10,6 +10,7 @@
 #include <vector>
 #include <string>
 #include <array>
+#include <mutex>
 
 namespace core
 {
@@ -83,7 +84,7 @@ namespace render::raytracing
         void buildPendingTerrainBLAS(vk::CommandBuffer cmd,
                                      vk::Buffer terrainVertexBuffer, uint32_t vertexStride,
                                      vk::Buffer terrainIndexBuffer);
-        bool hasPendingTerrainBLASBuilds() const { return !pendingTerrainBLASBuilds.empty(); }
+        bool hasPendingTerrainBLASBuilds() const { std::lock_guard<std::mutex> lock(pendingMutex); return !pendingTerrainBLASBuilds.empty(); }
 
         // Extended TLAS build with terrain
         void buildTLASWithTerrain(vk::CommandBuffer cmd,
@@ -95,7 +96,7 @@ namespace render::raytracing
 
         bool isInitialized() const { return initialized; }
         bool isTLASReady() const { return tlasBuilt; }
-        bool hasPendingBLASBuilds() const { return !pendingBLASBuilds.empty(); }
+        bool hasPendingBLASBuilds() const { std::lock_guard<std::mutex> lock(pendingMutex); return !pendingBLASBuilds.empty(); }
 
         vk::DescriptorSetLayout getTLASDescriptorLayout() const { return tlasDescriptorLayout; }
         vk::DescriptorSet getTLASDescriptorSet() const { return tlasDescriptorSet; }
@@ -104,6 +105,7 @@ namespace render::raytracing
 
     private:
 
+        mutable std::mutex pendingMutex;
         core::Device& device;
 
         // Per-submesh BLAS cache: submeshKey -> BLASEntry

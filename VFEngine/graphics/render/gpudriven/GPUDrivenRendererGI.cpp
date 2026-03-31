@@ -510,12 +510,17 @@ namespace render::gpudriven
         // Lazy init — create RT shadow pipeline and recreate mesh pipelines with set 13
         if (!rtShadowPipeline)
         {
-            rtShadowPipeline = std::make_unique<raytracing::RTShadowPipeline>(device);
-            rtShadowPipeline->init(
+            auto pipeline = std::make_unique<raytracing::RTShadowPipeline>(device);
+            pipeline->init(
                 depthPrepass->getWidth(), depthPrepass->getHeight(),
                 accelStructManager->getTLASDescriptorLayout());
 
-            if (rtShadowPipeline->isInitialized() && meshShaderPipeline && shadowSystem)
+            if (!pipeline->isInitialized())
+                return; // local destroyed; retry next frame
+
+            rtShadowPipeline = std::move(pipeline);
+
+            if (meshShaderPipeline && shadowSystem)
             {
                 // Init denoiser
                 rtShadowDenoiser = std::make_unique<raytracing::RTShadowDenoiser>(device);
@@ -620,6 +625,19 @@ namespace render::gpudriven
                     wboitMeshShaderPipeline->updateRTShadowMaskDescriptor(rtShadowDenoiser->getDenoisedMaskSamplerDescriptorSet());
                 if (terrain.pipeline)
                     terrain.pipeline->updateRTShadowMaskDescriptor(rtShadowDenoiser->getDenoisedMaskSamplerDescriptorSet());
+            }
+            else
+            {
+                // No denoiser: update mesh pipelines with raw shadow mask after resize
+                vk::DescriptorSet rawMask = rtShadowPipeline->getShadowMaskSamplerDescriptorSet();
+                if (meshShaderPipeline)
+                    meshShaderPipeline->updateRTShadowMaskDescriptor(rawMask);
+                if (transparentMeshShaderPipeline)
+                    transparentMeshShaderPipeline->updateRTShadowMaskDescriptor(rawMask);
+                if (wboitMeshShaderPipeline)
+                    wboitMeshShaderPipeline->updateRTShadowMaskDescriptor(rawMask);
+                if (terrain.pipeline)
+                    terrain.pipeline->updateRTShadowMaskDescriptor(rawMask);
             }
         }
 

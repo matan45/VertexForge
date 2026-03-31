@@ -173,6 +173,8 @@ namespace render::raytracing
 
         std::string key = makeSubmeshKey(meshPath, submeshName, submeshIndex);
 
+        std::lock_guard<std::mutex> lock(pendingMutex);
+
         // Skip if already built
         if (blasCache.count(key) && blasCache[key].deviceAddress != 0) return;
 
@@ -198,6 +200,8 @@ namespace render::raytracing
     {
         if (!initialized) return;
 
+        std::lock_guard<std::mutex> lock(pendingMutex);
+
         std::string key = makeSubmeshKey(meshPath, submeshName, submeshIndex);
         auto it = blasCache.find(key);
         if (it == blasCache.end()) return;
@@ -220,14 +224,60 @@ namespace render::raytracing
                                                          vk::Buffer vertexBuffer, uint32_t vertexStride,
                                                          vk::Buffer indexBuffer)
     {
-        if (!initialized || pendingBLASBuilds.empty()) return;
+        if (!initialized) return;
+
+        // Swap pending list under lock so streaming thread can continue queuing
+        std::vector<PendingBLAS> localPending;
+        {
+            std::lock_guard<std::mutex> lock(pendingMutex);
+            if (pendingBLASBuilds.empty()) return;
+            localPending = std::move(pendingBLASBuilds);
+            pendingBLASBuilds.clear();
+        }
 
         vk::Device vkDevice = device.getLogicalDevice();
 
         vk::DeviceAddress vertexBufferAddress = vkDevice.getBufferAddress({vertexBuffer});
         vk::DeviceAddress indexBufferAddress = vkDevice.getBufferAddress({indexBuffer});
 
-        for (const auto& pending : pendingBLASBuilds)
+        // Pre-calculate max scratch size to avoid reallocation during command recording (VK-1182)
+        vk::DeviceSize maxScratchSize = 0;
+        for (const auto& pending : localPending)
+        {
+            uint32_t triCount = pending.indexCount / 3;
+            if (triCount == 0) continue;
+
+            vk::AccelerationStructureGeometryTrianglesDataKHR triData{};
+            triData.vertexFormat = vk::Format::eR32G32B32Sfloat;
+            triData.vertexData.deviceAddress = vertexBufferAddress +
+                static_cast<vk::DeviceSize>(pending.vertexOffset) * vertexStride;
+            triData.vertexStride = vertexStride;
+            triData.maxVertex = pending.vertexCount - 1;
+            triData.indexType = vk::IndexType::eUint32;
+            triData.indexData.deviceAddress = indexBufferAddress +
+                static_cast<vk::DeviceSize>(pending.indexOffset) * sizeof(uint32_t);
+
+            vk::AccelerationStructureGeometryKHR geom{};
+            geom.geometryType = vk::GeometryTypeKHR::eTriangles;
+            geom.geometry.triangles = triData;
+            geom.flags = vk::GeometryFlagBitsKHR::eOpaque;
+
+            vk::AccelerationStructureBuildGeometryInfoKHR bi{};
+            bi.type = vk::AccelerationStructureTypeKHR::eBottomLevel;
+            bi.flags = vk::BuildAccelerationStructureFlagBitsKHR::ePreferFastTrace;
+            bi.mode = vk::BuildAccelerationStructureModeKHR::eBuild;
+            bi.geometryCount = 1;
+            bi.pGeometries = &geom;
+
+            vk::AccelerationStructureBuildSizesInfoKHR si{};
+            vkDevice.getAccelerationStructureBuildSizesKHR(
+                vk::AccelerationStructureBuildTypeKHR::eDevice, &bi, &triCount, &si);
+            maxScratchSize = std::max(maxScratchSize, si.buildScratchSize);
+        }
+        if (maxScratchSize > 0)
+            blasScratchPool.acquire(maxScratchSize, device);
+
+        for (const auto& pending : localPending)
         {
             uint32_t triangleCount = pending.indexCount / 3;
             if (triangleCount == 0) continue;
@@ -343,9 +393,7 @@ namespace render::raytracing
         memoryBudget.scratchPeakBytes = blasScratchPool.getPeakSize();
 
         vfLogInfo("AccelerationStructureManager: Built {} BLAS entries (total: {})",
-                  pendingBLASBuilds.size(), memoryBudget.blasCount);
-
-        pendingBLASBuilds.clear();
+                  localPending.size(), memoryBudget.blasCount);
     }
 
     void AccelerationStructureManager::insertTLASCrossFrameBarrier(vk::CommandBuffer cmd)
@@ -623,6 +671,8 @@ namespace render::raytracing
         if (!initialized) return;
         if (vertexCount == 0 || indexCount == 0) return;
 
+        std::lock_guard<std::mutex> lock(pendingMutex);
+
         // If tile already has a BLAS (LOD change), destroy old one first
         auto it = terrainBlasCache.find(tileKey);
         if (it != terrainBlasCache.end() && it->second.deviceAddress != 0)
@@ -654,6 +704,8 @@ namespace render::raytracing
     {
         if (!initialized) return;
 
+        std::lock_guard<std::mutex> lock(pendingMutex);
+
         auto it = terrainBlasCache.find(tileKey);
         if (it == terrainBlasCache.end()) return;
 
@@ -672,14 +724,59 @@ namespace render::raytracing
                                                                 vk::Buffer terrainVertexBuffer, uint32_t vertexStride,
                                                                 vk::Buffer terrainIndexBuffer)
     {
-        if (!initialized || pendingTerrainBLASBuilds.empty()) return;
+        if (!initialized) return;
+
+        std::vector<PendingBLAS> localPending;
+        {
+            std::lock_guard<std::mutex> lock(pendingMutex);
+            if (pendingTerrainBLASBuilds.empty()) return;
+            localPending = std::move(pendingTerrainBLASBuilds);
+            pendingTerrainBLASBuilds.clear();
+        }
 
         vk::Device vkDevice = device.getLogicalDevice();
 
         vk::DeviceAddress vertexBufferAddress = vkDevice.getBufferAddress({terrainVertexBuffer});
         vk::DeviceAddress indexBufferAddress = vkDevice.getBufferAddress({terrainIndexBuffer});
 
-        for (const auto& pending : pendingTerrainBLASBuilds)
+        // Pre-calculate max scratch size to avoid reallocation during command recording (VK-1182)
+        vk::DeviceSize maxScratchSize = 0;
+        for (const auto& pending : localPending)
+        {
+            uint32_t triCount = pending.indexCount / 3;
+            if (triCount == 0) continue;
+
+            vk::AccelerationStructureGeometryTrianglesDataKHR triData{};
+            triData.vertexFormat = vk::Format::eR32G32B32Sfloat;
+            triData.vertexData.deviceAddress = vertexBufferAddress +
+                static_cast<vk::DeviceSize>(pending.vertexOffset) * vertexStride;
+            triData.vertexStride = vertexStride;
+            triData.maxVertex = pending.vertexCount - 1;
+            triData.indexType = vk::IndexType::eUint32;
+            triData.indexData.deviceAddress = indexBufferAddress +
+                static_cast<vk::DeviceSize>(pending.indexOffset) * sizeof(uint32_t);
+
+            vk::AccelerationStructureGeometryKHR geom{};
+            geom.geometryType = vk::GeometryTypeKHR::eTriangles;
+            geom.geometry.triangles = triData;
+            geom.flags = vk::GeometryFlagBitsKHR::eOpaque;
+
+            vk::AccelerationStructureBuildGeometryInfoKHR bi{};
+            bi.type = vk::AccelerationStructureTypeKHR::eBottomLevel;
+            bi.flags = vk::BuildAccelerationStructureFlagBitsKHR::ePreferFastTrace;
+            bi.mode = vk::BuildAccelerationStructureModeKHR::eBuild;
+            bi.geometryCount = 1;
+            bi.pGeometries = &geom;
+
+            vk::AccelerationStructureBuildSizesInfoKHR si{};
+            vkDevice.getAccelerationStructureBuildSizesKHR(
+                vk::AccelerationStructureBuildTypeKHR::eDevice, &bi, &triCount, &si);
+            maxScratchSize = std::max(maxScratchSize, si.buildScratchSize);
+        }
+        if (maxScratchSize > 0)
+            blasScratchPool.acquire(maxScratchSize, device);
+
+        for (const auto& pending : localPending)
         {
             uint32_t triangleCount = pending.indexCount / 3;
             if (triangleCount == 0) continue;
@@ -786,9 +883,7 @@ namespace render::raytracing
         memoryBudget.scratchPeakBytes = blasScratchPool.getPeakSize();
 
         vfLogInfo("AccelerationStructureManager: Built {} terrain BLAS entries (total terrain: {})",
-                  pendingTerrainBLASBuilds.size(), terrainBlasCache.size());
-
-        pendingTerrainBLASBuilds.clear();
+                  localPending.size(), terrainBlasCache.size());
     }
 
     void AccelerationStructureManager::buildTLASWithTerrain(vk::CommandBuffer cmd,
