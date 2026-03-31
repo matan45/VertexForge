@@ -416,7 +416,7 @@ namespace services
             {
                 return postProcessProvider
                     ? postProcessProvider->getUpscaleStatus()
-                    : events::postprocess::UpscaleStatus{};
+                    : services::UpscaleStatus{};
             });
     }
 

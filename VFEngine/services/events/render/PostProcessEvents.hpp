@@ -1,6 +1,7 @@
 #pragma once
 #include "../EventTypes.hpp"
 #include "postprocess/PostProcessTypes.hpp"
+#include "../../providers/render/IPostProcessProvider.hpp"
 
 namespace events::postprocess
 {
@@ -28,19 +29,7 @@ namespace events::postprocess
         std::string_view getName() const override { return "GetPostProcessEnabled"; }
     };
 
-    struct UpscaleStatus
-    {
-        bool streamlineAvailable = false;
-        bool dlssSupported = false;
-        bool directSRSupported = false;
-        ::postprocess::UpscaleMode activeMode = ::postprocess::UpscaleMode::Off;
-        uint32_t renderWidth = 0;
-        uint32_t renderHeight = 0;
-        uint32_t displayWidth = 0;
-        uint32_t displayHeight = 0;
-    };
-
-    struct GetUpscaleStatusQuery : IQuery<UpscaleStatus>
+    struct GetUpscaleStatusQuery : IQuery<services::UpscaleStatus>
     {
         std::string_view getName() const override { return "GetUpscaleStatus"; }
     };

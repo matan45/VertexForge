@@ -35,9 +35,9 @@ namespace core
         return offScreen && offScreen->isPostProcessEnabled();
     }
 
-    events::postprocess::UpscaleStatus PostProcessAdapter::getUpscaleStatus() const
+    services::UpscaleStatus PostProcessAdapter::getUpscaleStatus() const
     {
-        events::postprocess::UpscaleStatus status{};
+        services::UpscaleStatus status{};
         // Upscale status will be populated once UpscaleManager is fully integrated
         // into the OffScreen rendering pipeline. For now, report Streamline availability.
 #ifdef VF_STREAMLINE_ENABLED

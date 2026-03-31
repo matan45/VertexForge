@@ -84,10 +84,15 @@ project "Editor"
       -- Copy OpenAL DLL to Editor output directory
       postbuildcommands {
          "{COPY} ../../dependencies/openal-soft/build/Debug/OpenAL32.dll ../../bin/Editor/Debug/x64/",
-         -- Copy Streamline DLLs (if built)
-         "{COPY} ../../dependencies/streamline/lib/x64/sl.interposer.dll ../../bin/Editor/Debug/x64/ 2>nul || echo Streamline DLLs not built yet",
-         "{COPY} ../../dependencies/streamline/lib/x64/sl.common.dll ../../bin/Editor/Debug/x64/ 2>nul || echo Streamline DLLs not built yet",
-         "{COPY} ../../dependencies/streamline/lib/x64/sl.dlss.dll ../../bin/Editor/Debug/x64/ 2>nul || echo Streamline DLLs not built yet"
+         -- Copy Streamline DLLs
+         "{COPY} ../../dependencies/streamline/bin/x64/sl.interposer.dll ../../bin/Editor/Debug/x64/",
+         "{COPY} ../../dependencies/streamline/bin/x64/sl.common.dll ../../bin/Editor/Debug/x64/",
+         "{COPY} ../../dependencies/streamline/bin/x64/sl.pcl.dll ../../bin/Editor/Debug/x64/",
+         "{COPY} ../../dependencies/streamline/bin/x64/sl.dlss.dll ../../bin/Editor/Debug/x64/",
+         "{COPY} ../../dependencies/streamline/bin/x64/nvngx_dlss.dll ../../bin/Editor/Debug/x64/",
+         "{COPY} ../../dependencies/streamline/bin/x64/sl.directsr.dll ../../bin/Editor/Debug/x64/",
+         "{COPY} ../../dependencies/streamline/bin/x64/sl.reflex.dll ../../bin/Editor/Debug/x64/",
+         "{COPY} ../../dependencies/streamline/bin/x64/NvLowLatencyVk.dll ../../bin/Editor/Debug/x64/"
       }
 
    filter "configurations:Release"
@@ -98,10 +103,15 @@ project "Editor"
       -- Copy OpenAL DLL to Editor output directory
       postbuildcommands {
          "{COPY} ../../dependencies/openal-soft/build/Release/OpenAL32.dll ../../bin/Editor/Release/x64/",
-         -- Copy Streamline DLLs (if built)
-         "{COPY} ../../dependencies/streamline/lib/x64/sl.interposer.dll ../../bin/Editor/Release/x64/ 2>nul || echo Streamline DLLs not built yet",
-         "{COPY} ../../dependencies/streamline/lib/x64/sl.common.dll ../../bin/Editor/Release/x64/ 2>nul || echo Streamline DLLs not built yet",
-         "{COPY} ../../dependencies/streamline/lib/x64/sl.dlss.dll ../../bin/Editor/Release/x64/ 2>nul || echo Streamline DLLs not built yet"
+         -- Copy Streamline DLLs
+         "{COPY} ../../dependencies/streamline/bin/x64/sl.interposer.dll ../../bin/Editor/Release/x64/",
+         "{COPY} ../../dependencies/streamline/bin/x64/sl.common.dll ../../bin/Editor/Release/x64/",
+         "{COPY} ../../dependencies/streamline/bin/x64/sl.pcl.dll ../../bin/Editor/Release/x64/",
+         "{COPY} ../../dependencies/streamline/bin/x64/sl.dlss.dll ../../bin/Editor/Release/x64/",
+         "{COPY} ../../dependencies/streamline/bin/x64/nvngx_dlss.dll ../../bin/Editor/Release/x64/",
+         "{COPY} ../../dependencies/streamline/bin/x64/sl.directsr.dll ../../bin/Editor/Release/x64/",
+         "{COPY} ../../dependencies/streamline/bin/x64/sl.reflex.dll ../../bin/Editor/Release/x64/",
+         "{COPY} ../../dependencies/streamline/bin/x64/NvLowLatencyVk.dll ../../bin/Editor/Release/x64/"
       }
 
 -- Project 2: Core
@@ -275,7 +285,8 @@ project "Graphics"
 	  "VFX",
 	  "imgui",
 	  "ispc_texcomp",
-	  "Memory"
+	  "Memory",
+	  "sl.interposer.lib"
    }
 
    filter "configurations:Debug"

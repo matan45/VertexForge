@@ -186,7 +186,7 @@ namespace render::upscaling
 
         // Get frame token
         sl::FrameToken* frameToken = nullptr;
-        slGetNewFrameToken(&frameToken, &frameIndex);
+        slGetNewFrameToken(frameToken, &frameIndex);
         if (!frameToken) return;
 
         // Set constants (camera jitter, motion vector info, etc.)

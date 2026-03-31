@@ -67,6 +67,3 @@
 [submodule "dependencies/doctest"]
 	path = dependencies/doctest
 	url = https://github.com/doctest/doctest.git
-[submodule "dependencies/streamline"]
-	path = dependencies/streamline
-	url = https://github.com/NVIDIAGameWorks/Streamline.git
