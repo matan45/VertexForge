@@ -42,12 +42,20 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
     const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
     void* pUserData)
 {
-    // Suppress known harmless Streamline SDK conflict:
-    // Streamline injects VK_EXT_buffer_device_address which conflicts with Vulkan 1.2 core feature
-    if (pCallbackData->pMessageIdName &&
-        std::string_view(pCallbackData->pMessageIdName) == "VUID-VkDeviceCreateInfo-pNext-04748")
+    if (pCallbackData->pMessageIdName)
     {
-        return VK_FALSE;
+        std::string_view vuid(pCallbackData->pMessageIdName);
+
+        // Suppress known harmless Streamline SDK conflicts:
+        // 1. Streamline injects VK_EXT_buffer_device_address which conflicts with Vulkan 1.2 core
+        // 2-4. Interposer wraps VkDescriptorSet handles — validation layer doesn't recognize proxied handles
+        if (vuid == "VUID-VkDeviceCreateInfo-pNext-04748" ||
+            vuid == "VUID-vkCmdBindDescriptorSets-pDescriptorSets-parameter" ||
+            vuid == "VUID-vkCmdBindDescriptorSets-pDescriptorSets-06563" ||
+            vuid == "VUID-vkCmdDrawIndexed-None-08600")
+        {
+            return VK_FALSE;
+        }
     }
 
     if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT)
@@ -106,6 +114,10 @@ namespace core
 
         // Reset staging command pool before device
         stagingCommandPool.reset();
+
+        // Wait for GPU to finish all work before Streamline cleanup
+        if (logicalDevice)
+            logicalDevice.get().waitIdle();
 
         // Shut down Streamline before destroying memory manager and device
         if (upscaleManager)
