@@ -38,11 +38,19 @@ namespace core
     services::UpscaleStatus PostProcessAdapter::getUpscaleStatus() const
     {
         services::UpscaleStatus status{};
-        // Upscale status will be populated once UpscaleManager is fully integrated
-        // into the OffScreen rendering pipeline. For now, report Streamline availability.
-#ifdef VF_STREAMLINE_ENABLED
         status.streamlineAvailable = render::upscaling::UpscaleManager::isStreamlineAvailable();
-#endif
+        status.dlssSupported = render::upscaling::UpscaleManager::isDLSSAvailable();
+        status.directSRSupported = render::upscaling::UpscaleManager::isDirectSRAvailable();
+        auto* mgr = render::upscaling::UpscaleManager::getInstance();
+        if (mgr)
+        {
+            status.activeMode = mgr->getActiveMode();
+            const auto& res = mgr->getResolutionManager();
+            status.renderWidth = res.getRenderWidth();
+            status.renderHeight = res.getRenderHeight();
+            status.displayWidth = res.getDisplayWidth();
+            status.displayHeight = res.getDisplayHeight();
+        }
         return status;
     }
 }

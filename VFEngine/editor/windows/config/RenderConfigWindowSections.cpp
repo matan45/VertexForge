@@ -418,7 +418,7 @@ namespace windows
                     markDirty();
                 if (ImGui::SliderFloat("RT Normal Bias", &settings.rtShadows.normalBias, 0.001f, 0.2f, "%.4f"))
                     markDirty();
-                if (ImGui::SliderFloat("Ray T-Min", &settings.rtShadows.rayTMin, 0.001f, 0.1f, "%.4f"))
+                if (ImGui::SliderFloat("Ray T-Min", &settings.rtShadows.rayTMin, 0.001f, 10.0f, "%.4f"))
                     markDirty();
 
                 ImGui::Spacing();

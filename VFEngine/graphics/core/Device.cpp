@@ -43,9 +43,6 @@ namespace core
 
     void Device::init()
     {
-        // Initialize Streamline SDK before any Vulkan calls (manual hook mode)
-        render::upscaling::UpscaleManager::initStreamline();
-
         createInstance();
         createDebugMessenger();
         pickPhysicalDevice();
@@ -57,7 +54,10 @@ namespace core
 
         memoryManager = std::make_unique<VulkanMemoryManager>(*this);
 
-        // Provide Vulkan device info to Streamline (after device is fully created)
+        // Initialize Streamline SDK AFTER device creation (manual hook mode).
+        // In manual mode, SL doesn't intercept vkCreateInstance/vkCreateDevice —
+        // it just needs the Vulkan handles via slSetVulkanInfo.
+        render::upscaling::UpscaleManager::initStreamline();
         if (render::upscaling::UpscaleManager::isStreamlineAvailable())
         {
             upscaleManager = std::make_unique<render::upscaling::UpscaleManager>();

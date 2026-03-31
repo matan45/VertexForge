@@ -21,11 +21,21 @@ namespace render::upscaling
 #ifdef VF_STREAMLINE_ENABLED
         if (streamlineInitialized) return streamlineAvailable;
 
+        // Features we want to load
+        sl::Feature featuresToLoad[] = {
+            sl::kFeatureDLSS,
+            sl::kFeatureDirectSR,
+            sl::kFeatureReflex
+        };
+
         sl::Preferences prefs{};
         prefs.showConsole = false;
-        prefs.logLevel = sl::LogLevel::eOff;
-        prefs.featuresToLoad = nullptr;
-        prefs.numFeaturesToLoad = 0; // Load all available features
+        prefs.logLevel = sl::LogLevel::eDefault;
+        prefs.featuresToLoad = featuresToLoad;
+        prefs.numFeaturesToLoad = _countof(featuresToLoad);
+        prefs.engine = sl::EngineType::eCustom;
+        prefs.engineVersion = "1.0.0";
+        prefs.renderAPI = sl::RenderAPI::eVulkan;
 
         // Use manual hooking mode (not interposer proxy)
         prefs.flags = sl::PreferenceFlags::eUseManualHooking;
@@ -75,6 +85,7 @@ namespace render::upscaling
         }
 
         deviceSet = true;
+        instance = this;
         queryFeatureSupport();
 
         vfLogInfo("Streamline Vulkan device set. DLSS={}, DirectSR={}",
@@ -95,6 +106,7 @@ namespace render::upscaling
             streamlineAvailable = false;
             streamlineInitialized = false;
             deviceSet = false;
+            instance = nullptr;
             vfLogInfo("Streamline SDK shut down");
         }
 #endif

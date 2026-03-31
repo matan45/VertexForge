@@ -82,6 +82,9 @@ namespace render::upscaling
         postprocess::UpscaleMode getActiveMode() const { return activeMode; }
 
         static bool isStreamlineAvailable() { return streamlineAvailable; }
+        static bool isDLSSAvailable() { return instance && instance->dlssSupported; }
+        static bool isDirectSRAvailable() { return instance && instance->directSRSupported; }
+        static const UpscaleManager* getInstance() { return instance; }
 
     private:
         ResolutionManager resolutionManager;
@@ -93,6 +96,7 @@ namespace render::upscaling
 
         static inline bool streamlineAvailable = false;
         static inline bool streamlineInitialized = false;
+        static inline UpscaleManager* instance = nullptr;
 
         void queryFeatureSupport();
     };
