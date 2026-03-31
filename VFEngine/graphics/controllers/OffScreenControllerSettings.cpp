@@ -236,7 +236,9 @@ namespace controllers
 
         if (cameraController)
         {
-            cameraController->setTAAEnabled(settings.enabled && settings.taa.enabled);
+            // Enable jitter when either TAA or upscaling is active (both need temporal jitter)
+            bool needsJitter = settings.enabled && (settings.taa.enabled || settings.upscale.enabled);
+            cameraController->setTAAEnabled(needsJitter);
             auto extent = swapChain.getSwapchainExtent();
             cameraController->setViewportExtent(extent.width, extent.height);
         }

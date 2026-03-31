@@ -76,7 +76,10 @@
       <AdditionalDependencies>gdiplus.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PostBuildEvent>
-      <Command>IF EXIST ..\..\dependencies\openal-soft\build\Debug\OpenAL32.dll\ (xcopy /Q /E /Y /I ..\..\dependencies\openal-soft\build\Debug\OpenAL32.dll ..\..\bin\Editor\Debug\x64 &gt; nul) ELSE (xcopy /Q /Y /I ..\..\dependencies\openal-soft\build\Debug\OpenAL32.dll ..\..\bin\Editor\Debug\x64 &gt; nul)</Command>
+      <Command>IF EXIST ..\..\dependencies\openal-soft\build\Debug\OpenAL32.dll\ (xcopy /Q /E /Y /I ..\..\dependencies\openal-soft\build\Debug\OpenAL32.dll ..\..\bin\Editor\Debug\x64 &gt; nul) ELSE (xcopy /Q /Y /I ..\..\dependencies\openal-soft\build\Debug\OpenAL32.dll ..\..\bin\Editor\Debug\x64 &gt; nul)
+IF EXIST ..\..\dependencies\streamline\lib\x64\sl.interposer.dll\ (xcopy /Q /E /Y /I ..\..\dependencies\streamline\lib\x64\sl.interposer.dll ..\..\bin\Editor\Debug\x64 2&gt;nul || echo Streamline DLLs not built yet &gt; nul) ELSE (xcopy /Q /Y /I ..\..\dependencies\streamline\lib\x64\sl.interposer.dll ..\..\bin\Editor\Debug\x64 2&gt;nul || echo Streamline DLLs not built yet &gt; nul)
+IF EXIST ..\..\dependencies\streamline\lib\x64\sl.common.dll\ (xcopy /Q /E /Y /I ..\..\dependencies\streamline\lib\x64\sl.common.dll ..\..\bin\Editor\Debug\x64 2&gt;nul || echo Streamline DLLs not built yet &gt; nul) ELSE (xcopy /Q /Y /I ..\..\dependencies\streamline\lib\x64\sl.common.dll ..\..\bin\Editor\Debug\x64 2&gt;nul || echo Streamline DLLs not built yet &gt; nul)
+IF EXIST ..\..\dependencies\streamline\lib\x64\sl.dlss.dll\ (xcopy /Q /E /Y /I ..\..\dependencies\streamline\lib\x64\sl.dlss.dll ..\..\bin\Editor\Debug\x64 2&gt;nul || echo Streamline DLLs not built yet &gt; nul) ELSE (xcopy /Q /Y /I ..\..\dependencies\streamline\lib\x64\sl.dlss.dll ..\..\bin\Editor\Debug\x64 2&gt;nul || echo Streamline DLLs not built yet &gt; nul)</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -106,7 +109,10 @@
       <EntryPointSymbol>mainCRTStartup</EntryPointSymbol>
     </Link>
     <PostBuildEvent>
-      <Command>IF EXIST ..\..\dependencies\openal-soft\build\Release\OpenAL32.dll\ (xcopy /Q /E /Y /I ..\..\dependencies\openal-soft\build\Release\OpenAL32.dll ..\..\bin\Editor\Release\x64 &gt; nul) ELSE (xcopy /Q /Y /I ..\..\dependencies\openal-soft\build\Release\OpenAL32.dll ..\..\bin\Editor\Release\x64 &gt; nul)</Command>
+      <Command>IF EXIST ..\..\dependencies\openal-soft\build\Release\OpenAL32.dll\ (xcopy /Q /E /Y /I ..\..\dependencies\openal-soft\build\Release\OpenAL32.dll ..\..\bin\Editor\Release\x64 &gt; nul) ELSE (xcopy /Q /Y /I ..\..\dependencies\openal-soft\build\Release\OpenAL32.dll ..\..\bin\Editor\Release\x64 &gt; nul)
+IF EXIST ..\..\dependencies\streamline\lib\x64\sl.interposer.dll\ (xcopy /Q /E /Y /I ..\..\dependencies\streamline\lib\x64\sl.interposer.dll ..\..\bin\Editor\Release\x64 2&gt;nul || echo Streamline DLLs not built yet &gt; nul) ELSE (xcopy /Q /Y /I ..\..\dependencies\streamline\lib\x64\sl.interposer.dll ..\..\bin\Editor\Release\x64 2&gt;nul || echo Streamline DLLs not built yet &gt; nul)
+IF EXIST ..\..\dependencies\streamline\lib\x64\sl.common.dll\ (xcopy /Q /E /Y /I ..\..\dependencies\streamline\lib\x64\sl.common.dll ..\..\bin\Editor\Release\x64 2&gt;nul || echo Streamline DLLs not built yet &gt; nul) ELSE (xcopy /Q /Y /I ..\..\dependencies\streamline\lib\x64\sl.common.dll ..\..\bin\Editor\Release\x64 2&gt;nul || echo Streamline DLLs not built yet &gt; nul)
+IF EXIST ..\..\dependencies\streamline\lib\x64\sl.dlss.dll\ (xcopy /Q /E /Y /I ..\..\dependencies\streamline\lib\x64\sl.dlss.dll ..\..\bin\Editor\Release\x64 2&gt;nul || echo Streamline DLLs not built yet &gt; nul) ELSE (xcopy /Q /Y /I ..\..\dependencies\streamline\lib\x64\sl.dlss.dll ..\..\bin\Editor\Release\x64 2&gt;nul || echo Streamline DLLs not built yet &gt; nul)</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>

@@ -410,6 +410,14 @@ namespace services
             {
                 return postProcessProvider ? postProcessProvider->isPostProcessEnabled() : true;
             });
+
+        dispatcher.registerQueryHandler<events::postprocess::GetUpscaleStatusQuery>(
+            [this](const events::postprocess::GetUpscaleStatusQuery&)
+            {
+                return postProcessProvider
+                    ? postProcessProvider->getUpscaleStatus()
+                    : events::postprocess::UpscaleStatus{};
+            });
     }
 
     std::string EditorRenderServiceImpl::loadMesh(const std::string& meshPath)

@@ -434,7 +434,9 @@ namespace render::postprocess
         syncEffect(::postprocess::EffectType::ToneMapping, settings.toneMapping.enabled,
             [this]() { return std::make_unique<ToneMappingEffect>(device); });
 
-        syncEffect(::postprocess::EffectType::TAA, settings.taa.enabled,
+        // TAA is mutually exclusive with upscaling — upscalers perform their own temporal AA
+        bool taaEnabled = settings.taa.enabled && !settings.upscale.enabled;
+        syncEffect(::postprocess::EffectType::TAA, taaEnabled,
             [this]() { return std::make_unique<TAAEffect>(device, swapChain, offscreenResources, *this); });
 
         syncEffect(::postprocess::EffectType::Bloom, settings.bloom.enabled,

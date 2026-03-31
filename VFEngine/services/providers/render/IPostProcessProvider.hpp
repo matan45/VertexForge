@@ -1,5 +1,6 @@
 #pragma once
 #include "postprocess/PostProcessTypes.hpp"
+#include "events/render/PostProcessEvents.hpp"
 
 namespace services
 {
@@ -12,5 +13,6 @@ namespace services
         virtual postprocess::PostProcessSettings getPostProcessSettings() const = 0;
         virtual void setPostProcessEnabled(bool enabled) = 0;
         virtual bool isPostProcessEnabled() const = 0;
+        virtual events::postprocess::UpscaleStatus getUpscaleStatus() const = 0;
     };
 }

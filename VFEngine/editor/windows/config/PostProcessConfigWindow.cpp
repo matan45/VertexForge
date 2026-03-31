@@ -256,6 +256,79 @@ namespace windows
         }
     }
 
+    void PostProcessConfigWindow::drawUpscaleSection()
+    {
+        if (ImGui::CollapsingHeader("Upscaling (DLSS / FSR 2)"))
+        {
+            ImGui::Indent(10.0f);
+
+            if (ImGui::Checkbox("Enable Upscaling", &settings.upscale.enabled))
+                isDirty = true;
+
+            if (settings.upscale.enabled)
+            {
+                ImGui::Spacing();
+
+                const char* modeNames[] = {"Off", "DLSS", "FSR 2 (DirectSR)", "Auto"};
+                int currentMode = static_cast<int>(settings.upscale.mode);
+                if (ImGui::Combo("Mode", &currentMode, modeNames, IM_ARRAYSIZE(modeNames)))
+                {
+                    settings.upscale.mode = static_cast<postprocess::UpscaleMode>(currentMode);
+                    isDirty = true;
+                }
+
+                const char* qualityNames[] = {"Native (DLAA)", "Quality (1.5x)", "Balanced (1.7x)",
+                                               "Performance (2.0x)", "Ultra Performance (3.0x)"};
+                int currentQuality = static_cast<int>(settings.upscale.quality);
+                if (ImGui::Combo("Quality", &currentQuality, qualityNames, IM_ARRAYSIZE(qualityNames)))
+                {
+                    settings.upscale.quality = static_cast<postprocess::UpscaleQuality>(currentQuality);
+                    isDirty = true;
+                }
+
+                ImGui::Spacing();
+                ImGui::SeparatorText("Status");
+
+                auto& dispatcher = events::EventDispatcher::instance();
+                auto status = dispatcher.query(events::postprocess::GetUpscaleStatusQuery{});
+
+                ImGui::Text("Streamline: %s", status.streamlineAvailable ? "Available" : "Not Available");
+                ImGui::Text("DLSS: %s", status.dlssSupported ? "Supported" : "Not Supported");
+                ImGui::Text("DirectSR: %s", status.directSRSupported ? "Supported" : "Not Supported");
+
+                const char* activeModeStr = "Off";
+                switch (status.activeMode)
+                {
+                case postprocess::UpscaleMode::DLSS: activeModeStr = "DLSS"; break;
+                case postprocess::UpscaleMode::FSR2: activeModeStr = "FSR 2 (DirectSR)"; break;
+                default: break;
+                }
+                ImGui::Text("Active: %s", activeModeStr);
+
+                if (status.renderWidth > 0 && status.displayWidth > 0)
+                {
+                    ImGui::Text("Render: %ux%u -> Display: %ux%u",
+                                status.renderWidth, status.renderHeight,
+                                status.displayWidth, status.displayHeight);
+                }
+
+                if (settings.upscale.enabled && !status.streamlineAvailable)
+                {
+                    ImGui::TextColored(ImVec4(0.9f, 0.8f, 0.1f, 1.0f),
+                        "Streamline SDK not available. Build Streamline first.");
+                }
+            }
+
+            if (settings.upscale.enabled && settings.taa.enabled)
+            {
+                ImGui::TextColored(ImVec4(0.9f, 0.8f, 0.1f, 1.0f),
+                    "Note: TAA is automatically disabled when upscaling is active.");
+            }
+
+            ImGui::Unindent(10.0f);
+        }
+    }
+
     void PostProcessConfigWindow::drawBloomSection()
     {
         if (ImGui::CollapsingHeader("Bloom", ImGuiTreeNodeFlags_DefaultOpen))
@@ -438,6 +511,7 @@ namespace windows
 
             drawToneMappingSection();
             drawTAASection();
+            drawUpscaleSection();
             drawBloomSection();
             drawVignetteSection();
             drawChromaticAberrationSection();

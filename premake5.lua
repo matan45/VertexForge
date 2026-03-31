@@ -83,7 +83,11 @@ project "Editor"
       symbols "On"
       -- Copy OpenAL DLL to Editor output directory
       postbuildcommands {
-         "{COPY} ../../dependencies/openal-soft/build/Debug/OpenAL32.dll ../../bin/Editor/Debug/x64/"
+         "{COPY} ../../dependencies/openal-soft/build/Debug/OpenAL32.dll ../../bin/Editor/Debug/x64/",
+         -- Copy Streamline DLLs (if built)
+         "{COPY} ../../dependencies/streamline/lib/x64/sl.interposer.dll ../../bin/Editor/Debug/x64/ 2>nul || echo Streamline DLLs not built yet",
+         "{COPY} ../../dependencies/streamline/lib/x64/sl.common.dll ../../bin/Editor/Debug/x64/ 2>nul || echo Streamline DLLs not built yet",
+         "{COPY} ../../dependencies/streamline/lib/x64/sl.dlss.dll ../../bin/Editor/Debug/x64/ 2>nul || echo Streamline DLLs not built yet"
       }
 
    filter "configurations:Release"
@@ -93,7 +97,11 @@ project "Editor"
       optimize "On"
       -- Copy OpenAL DLL to Editor output directory
       postbuildcommands {
-         "{COPY} ../../dependencies/openal-soft/build/Release/OpenAL32.dll ../../bin/Editor/Release/x64/"
+         "{COPY} ../../dependencies/openal-soft/build/Release/OpenAL32.dll ../../bin/Editor/Release/x64/",
+         -- Copy Streamline DLLs (if built)
+         "{COPY} ../../dependencies/streamline/lib/x64/sl.interposer.dll ../../bin/Editor/Release/x64/ 2>nul || echo Streamline DLLs not built yet",
+         "{COPY} ../../dependencies/streamline/lib/x64/sl.common.dll ../../bin/Editor/Release/x64/ 2>nul || echo Streamline DLLs not built yet",
+         "{COPY} ../../dependencies/streamline/lib/x64/sl.dlss.dll ../../bin/Editor/Release/x64/ 2>nul || echo Streamline DLLs not built yet"
       }
 
 -- Project 2: Core
@@ -251,13 +259,15 @@ project "Graphics"
       "VFEngine/window/controllers",
 	  "dependencies/IconFontCppHeaders",
       "dependencies/ispc_texcomp",
+      "dependencies/streamline/include",
       vulkanLibPath.."/Include"
    }
 
-   defines { "_CRT_SECURE_NO_WARNINGS" }
+   defines { "_CRT_SECURE_NO_WARNINGS", "VF_STREAMLINE_ENABLED" }
 
    libdirs {
-      vulkanLibPath.."/Lib"
+      vulkanLibPath.."/Lib",
+      "dependencies/streamline/lib/x64"
    }
 
    links {

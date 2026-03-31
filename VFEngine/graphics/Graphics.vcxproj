@@ -56,8 +56,8 @@
     <ClCompile>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
-      <PreprocessorDefinitions>VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1;GLM_FORCE_DEPTH_ZERO_TO_ONE;_CRT_SECURE_NO_WARNINGS;DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\..\dependencies\glfw\include;..\..\dependencies\spdlog\include;..\..\dependencies\imgui;..\..\dependencies\imgui\backends;..\..\dependencies\glm;..\..\dependencies\entt\single_include;..\..\dependencies\stb;..\..\dependencies\json\single_include;..\utilities;..\window\controllers;..\..\dependencies\IconFontCppHeaders;..\..\dependencies\ispc_texcomp;C:\VulkanSDK\1.4.341.1\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1;GLM_FORCE_DEPTH_ZERO_TO_ONE;_CRT_SECURE_NO_WARNINGS;VF_STREAMLINE_ENABLED;DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..\..\dependencies\glfw\include;..\..\dependencies\spdlog\include;..\..\dependencies\imgui;..\..\dependencies\imgui\backends;..\..\dependencies\glm;..\..\dependencies\entt\single_include;..\..\dependencies\stb;..\..\dependencies\json\single_include;..\utilities;..\window\controllers;..\..\dependencies\IconFontCppHeaders;..\..\dependencies\ispc_texcomp;..\..\dependencies\streamline\include;C:\VulkanSDK\1.4.341.1\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DebugInformationFormat>EditAndContinue</DebugInformationFormat>
       <Optimization>Disabled</Optimization>
       <AdditionalOptions>/utf-8 /MP %(AdditionalOptions)</AdditionalOptions>
@@ -70,15 +70,15 @@
     </Link>
     <Lib>
       <AdditionalDependencies>shaderc_shared.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>C:\VulkanSDK\1.4.341.1\Lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>C:\VulkanSDK\1.4.341.1\Lib;..\..\dependencies\streamline\lib\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Lib>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
-      <PreprocessorDefinitions>VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1;GLM_FORCE_DEPTH_ZERO_TO_ONE;_CRT_SECURE_NO_WARNINGS;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\..\dependencies\glfw\include;..\..\dependencies\spdlog\include;..\..\dependencies\imgui;..\..\dependencies\imgui\backends;..\..\dependencies\glm;..\..\dependencies\entt\single_include;..\..\dependencies\stb;..\..\dependencies\json\single_include;..\utilities;..\window\controllers;..\..\dependencies\IconFontCppHeaders;..\..\dependencies\ispc_texcomp;C:\VulkanSDK\1.4.341.1\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1;GLM_FORCE_DEPTH_ZERO_TO_ONE;_CRT_SECURE_NO_WARNINGS;VF_STREAMLINE_ENABLED;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..\..\dependencies\glfw\include;..\..\dependencies\spdlog\include;..\..\dependencies\imgui;..\..\dependencies\imgui\backends;..\..\dependencies\glm;..\..\dependencies\entt\single_include;..\..\dependencies\stb;..\..\dependencies\json\single_include;..\utilities;..\window\controllers;..\..\dependencies\IconFontCppHeaders;..\..\dependencies\ispc_texcomp;..\..\dependencies\streamline\include;C:\VulkanSDK\1.4.341.1\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <Optimization>Full</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
@@ -95,7 +95,7 @@
     </Link>
     <Lib>
       <AdditionalDependencies>shaderc_shared.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>C:\VulkanSDK\1.4.341.1\Lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>C:\VulkanSDK\1.4.341.1\Lib;..\..\dependencies\streamline\lib\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Lib>
   </ItemDefinitionGroup>
   <ItemGroup>
@@ -309,6 +309,8 @@
     <ClInclude Include="render\ui\UITextBufferManager.hpp" />
     <ClInclude Include="render\ui\UITextPipeline.hpp" />
     <ClInclude Include="render\ui\UITextRenderTypes.hpp" />
+    <ClInclude Include="render\upscaling\ResolutionManager.hpp" />
+    <ClInclude Include="render\upscaling\UpscaleManager.hpp" />
     <ClInclude Include="render\vegetation\GrassMeshShaderPipeline.hpp" />
     <ClInclude Include="render\vegetation\GrassStreamManager.hpp" />
     <ClInclude Include="render\vegetation\VegetationBufferManager.hpp" />
@@ -563,6 +565,8 @@
     <ClCompile Include="render\ui\UITextBufferManager.cpp" />
     <ClCompile Include="render\ui\UITextPipeline.cpp" />
     <ClCompile Include="render\ui\UITextPipelineSetup.cpp" />
+    <ClCompile Include="render\upscaling\ResolutionManager.cpp" />
+    <ClCompile Include="render\upscaling\UpscaleManager.cpp" />
     <ClCompile Include="render\vegetation\GrassMeshShaderPipeline.cpp" />
     <ClCompile Include="render\vegetation\GrassStreamManager.cpp" />
     <ClCompile Include="render\vegetation\VegetationBufferManager.cpp" />
@@ -612,6 +616,7 @@
     <None Include="..\..\resources\shaders\common\ibl_functions.glsl" />
     <None Include="..\..\resources\shaders\common\lighting_functions.glsl" />
     <None Include="..\..\resources\shaders\common\lod_crossfade.glsl" />
+    <None Include="..\..\resources\shaders\common\motion_vectors.glsl" />
     <None Include="..\..\resources\shaders\common\shadow_sampling.glsl" />
     <None Include="..\..\resources\shaders\common\shadow_sampling_types.glsl" />
     <None Include="..\..\resources\shaders\common\svt_sampling.glsl" />

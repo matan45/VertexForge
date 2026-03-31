@@ -1,0 +1,99 @@
+#pragma once
+
+#include "ResolutionManager.hpp"
+#include "../../../utilities/postprocess/PostProcessTypes.hpp"
+#include <vulkan/vulkan.hpp>
+#include <glm/glm.hpp>
+#include <memory>
+
+namespace core
+{
+    class Device;
+    class SwapChain;
+}
+
+namespace render::upscaling
+{
+    /// Input resources for a single upscale evaluation.
+    struct UpscaleInputs
+    {
+        vk::Image colorInput;         // Jittered HDR color at render resolution
+        vk::ImageView colorView;
+        vk::Image depthInput;         // Depth at render resolution
+        vk::ImageView depthView;
+        vk::Image motionVectors;      // Screen-space velocity (R16G16_SFLOAT)
+        vk::ImageView motionView;
+        vk::Image reactiveMask;       // Transparency/particle mask (R8_UNORM)
+        vk::ImageView reactiveView;
+        vk::Image output;             // Upscaled output at display resolution
+        vk::ImageView outputView;
+        vk::Extent2D renderExtent;
+        vk::Extent2D displayExtent;
+        glm::vec2 jitterOffset{0.0f};
+        float deltaTime = 0.016f;
+        float preExposure = 1.0f;
+        bool resetAccumulation = false; // True on camera cuts / teleports
+    };
+
+    /// Manages DLSS and FSR2 upscaling via NVIDIA Streamline SDK.
+    /// All Streamline calls are behind #ifdef VF_STREAMLINE_ENABLED.
+    class UpscaleManager
+    {
+    public:
+        UpscaleManager() = default;
+        ~UpscaleManager();
+
+        UpscaleManager(const UpscaleManager&) = delete;
+        UpscaleManager& operator=(const UpscaleManager&) = delete;
+
+        /// Initialize Streamline. Call BEFORE Vulkan instance creation.
+        /// Returns true if Streamline loaded successfully.
+        static bool initStreamline();
+
+        /// Provide Vulkan device info to Streamline. Call AFTER device creation.
+        bool setVulkanDevice(core::Device& device);
+
+        /// Shut down Streamline. Call before device destruction.
+        void shutdown();
+
+        /// Check feature availability (call after setVulkanDevice).
+        bool isDLSSSupported() const { return dlssSupported; }
+        bool isDirectSRSupported() const { return directSRSupported; }
+
+        /// Determine the active upscale mode based on settings and hardware.
+        postprocess::UpscaleMode resolveActiveMode(postprocess::UpscaleMode requested) const;
+
+        /// Set options for the active upscaler (mode, quality, output resolution).
+        void applySettings(const postprocess::UpscaleSettings& settings,
+                           uint32_t outputWidth, uint32_t outputHeight);
+
+        /// Evaluate the upscaler for the current frame.
+        void evaluate(vk::CommandBuffer cmd, uint32_t frameIndex,
+                      const UpscaleInputs& inputs);
+
+        /// Reset temporal history (camera cut, scene transition).
+        void resetHistory();
+
+        /// Resolution manager for internal vs display resolution.
+        ResolutionManager& getResolutionManager() { return resolutionManager; }
+        const ResolutionManager& getResolutionManager() const { return resolutionManager; }
+
+        bool isActive() const { return activeMode != postprocess::UpscaleMode::Off; }
+        postprocess::UpscaleMode getActiveMode() const { return activeMode; }
+
+        static bool isStreamlineAvailable() { return streamlineAvailable; }
+
+    private:
+        ResolutionManager resolutionManager;
+
+        postprocess::UpscaleMode activeMode = postprocess::UpscaleMode::Off;
+        bool dlssSupported = false;
+        bool directSRSupported = false;
+        bool deviceSet = false;
+
+        static inline bool streamlineAvailable = false;
+        static inline bool streamlineInitialized = false;
+
+        void queryFeatureSupport();
+    };
+}

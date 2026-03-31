@@ -2,6 +2,7 @@
 #include "VulkanMemoryManager.hpp"
 #include "print/Log.hpp"
 #include "../window/Window.hpp"
+#include "../render/upscaling/UpscaleManager.hpp"
 
 #include <cassert>
 #include <fstream>
@@ -42,6 +43,9 @@ namespace core
 
     void Device::init()
     {
+        // Initialize Streamline SDK before any Vulkan calls (manual hook mode)
+        render::upscaling::UpscaleManager::initStreamline();
+
         createInstance();
         createDebugMessenger();
         pickPhysicalDevice();
@@ -52,6 +56,13 @@ namespace core
         createPipelineCache();
 
         memoryManager = std::make_unique<VulkanMemoryManager>(*this);
+
+        // Provide Vulkan device info to Streamline (after device is fully created)
+        if (render::upscaling::UpscaleManager::isStreamlineAvailable())
+        {
+            upscaleManager = std::make_unique<render::upscaling::UpscaleManager>();
+            upscaleManager->setVulkanDevice(*this);
+        }
     }
 
     void Device::cleanUp()
@@ -61,6 +72,13 @@ namespace core
 
         // Reset staging command pool before device
         stagingCommandPool.reset();
+
+        // Shut down Streamline before destroying memory manager and device
+        if (upscaleManager)
+        {
+            upscaleManager->shutdown();
+            upscaleManager.reset();
+        }
 
         // Destroy memory manager after all subsystems have cleaned up their buffers,
         // but before the logical device is destroyed

@@ -13,6 +13,7 @@ namespace windows
 
         void drawToneMappingSection();
         void drawTAASection();
+        void drawUpscaleSection();
         void drawBloomSection();
         void drawVignetteSection();
         void drawChromaticAberrationSection();
