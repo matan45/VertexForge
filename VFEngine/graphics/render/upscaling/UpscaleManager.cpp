@@ -47,7 +47,6 @@ namespace render::upscaling
 #ifdef VF_STREAMLINE_ENABLED
         if (streamlineInitialized) return streamlineAvailable;
 
-        // Features we want to load
         sl::Feature featuresToLoad[] = {
             sl::kFeatureDLSS,
             sl::kFeatureDirectSR,
@@ -55,15 +54,30 @@ namespace render::upscaling
         };
 
         sl::Preferences prefs{};
+#ifdef _DEBUG
+        prefs.showConsole = true;
+        prefs.logLevel = sl::LogLevel::eVerbose;
+#else
         prefs.showConsole = false;
         prefs.logLevel = sl::LogLevel::eDefault;
+#endif
         prefs.featuresToLoad = featuresToLoad;
         prefs.numFeaturesToLoad = static_cast<uint32_t>(std::size(featuresToLoad));
         prefs.engine = sl::EngineType::eCustom;
         prefs.engineVersion = "1.0.0";
         prefs.renderAPI = sl::RenderAPI::eVulkan;
+        prefs.logMessageCallback = [](sl::LogType type, const char* msg)
+        {
+            switch (type)
+            {
+            case sl::LogType::eError:   vfLogError("Streamline: {}", msg); break;
+            case sl::LogType::eWarn:    vfLogWarning("Streamline: {}", msg); break;
+            case sl::LogType::eInfo:    vfLogInfo("Streamline: {}", msg); break;
+            default:                    vfLogTrace("Streamline: {}", msg); break;
+            }
+        };
 
-        // Use manual hooking mode (not interposer proxy)
+        // Use manual hooking — we call slSetVulkanInfo explicitly after device creation
         prefs.flags = sl::PreferenceFlags::eUseManualHooking;
 
         sl::Result result = slInit(prefs);
@@ -77,9 +91,9 @@ namespace render::upscaling
         else
         {
             streamlineAvailable = false;
-            vfLogWarning("Streamline SDK init failed (result={}). "
+            vfLogWarning("Streamline SDK init failed: {} ({}). "
                          "Upscaling features will not be available.",
-                         static_cast<int>(result));
+                         slResultToString(result), static_cast<int>(result));
         }
 
         return streamlineAvailable;
@@ -130,10 +144,28 @@ namespace render::upscaling
 #ifdef VF_STREAMLINE_ENABLED
         if (!streamlineAvailable) return false;
 
-        // In manual hook mode with sl.interposer.dll deployed as vulkan-1.dll,
-        // Streamline intercepts vkCreateInstance/vkCreateDevice and already tracks
-        // the Vulkan handles. slSetVulkanInfo is not needed.
-        vfLogInfo("Streamline: device set via interception (manual hook mode)");
+        // In manual hooking mode, Streamline does NOT intercept Vulkan API calls,
+        // so we must explicitly provide Vulkan handles via slSetVulkanInfo.
+        sl::VulkanInfo vkInfo{};
+        vkInfo.device = static_cast<VkDevice>(device.getLogicalDevice());
+        vkInfo.instance = static_cast<VkInstance>(device.getInstance());
+        vkInfo.physicalDevice = static_cast<VkPhysicalDevice>(device.getPhysicalDevice());
+
+        const auto& queueIndices = device.getQueueFamilyIndices();
+        vkInfo.graphicsQueueFamily = queueIndices.graphicsAndComputeFamily.value();
+        vkInfo.graphicsQueueIndex = 0;
+        vkInfo.computeQueueFamily = queueIndices.graphicsAndComputeFamily.value();
+        vkInfo.computeQueueIndex = 0;
+
+        sl::Result result = slSetVulkanInfo(vkInfo);
+        if (result != sl::Result::eOk)
+        {
+            vfLogError("slSetVulkanInfo failed: {} ({})",
+                       slResultToString(result), static_cast<int>(result));
+            return false;
+        }
+
+        vfLogInfo("Streamline: Vulkan info set via slSetVulkanInfo (manual hook mode)");
 
         deviceSet = true;
         instance = this;
@@ -299,7 +331,8 @@ namespace render::upscaling
         // Set constants (camera jitter, motion vector info, etc.)
         sl::Constants constants{};
         constants.jitterOffset = {inputs.jitterOffset.x, inputs.jitterOffset.y};
-        constants.mvecScale = {1.0f, 1.0f}; // Motion vectors in pixel space
+        constants.mvecScale = {1.0f / static_cast<float>(inputs.renderExtent.width),
+                               1.0f / static_cast<float>(inputs.renderExtent.height)};
         constants.reset = inputs.resetAccumulation ? sl::Boolean::eTrue : sl::Boolean::eFalse;
         constants.depthInverted = sl::Boolean::eTrue; // Reverse-Z
         constants.cameraPinholeOffset = {0.0f, 0.0f};
@@ -312,24 +345,44 @@ namespace render::upscaling
         sl::Resource colorRes{sl::ResourceType::eTex2d, inputs.colorInput,
                               nullptr, static_cast<VkImageView>(inputs.colorView),
                               VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+        colorRes.width = inputs.renderExtent.width;
+        colorRes.height = inputs.renderExtent.height;
+        colorRes.nativeFormat = static_cast<uint32_t>(inputs.colorFormat);
+        colorRes.mipLevels = 1;
+        colorRes.arrayLayers = 1;
         tags[tagCount++] = sl::ResourceTag{&colorRes, sl::kBufferTypeScalingInputColor,
                                             sl::ResourceLifecycle::eOnlyValidNow, nullptr};
 
         sl::Resource depthRes{sl::ResourceType::eTex2d, inputs.depthInput,
                               nullptr, static_cast<VkImageView>(inputs.depthView),
                               VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+        depthRes.width = inputs.renderExtent.width;
+        depthRes.height = inputs.renderExtent.height;
+        depthRes.nativeFormat = static_cast<uint32_t>(inputs.depthFormat);
+        depthRes.mipLevels = 1;
+        depthRes.arrayLayers = 1;
         tags[tagCount++] = sl::ResourceTag{&depthRes, sl::kBufferTypeDepth,
                                             sl::ResourceLifecycle::eOnlyValidNow, nullptr};
 
         sl::Resource mvecRes{sl::ResourceType::eTex2d, inputs.motionVectors,
                              nullptr, static_cast<VkImageView>(inputs.motionView),
                              VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+        mvecRes.width = inputs.renderExtent.width;
+        mvecRes.height = inputs.renderExtent.height;
+        mvecRes.nativeFormat = static_cast<uint32_t>(inputs.motionFormat);
+        mvecRes.mipLevels = 1;
+        mvecRes.arrayLayers = 1;
         tags[tagCount++] = sl::ResourceTag{&mvecRes, sl::kBufferTypeMotionVectors,
                                             sl::ResourceLifecycle::eOnlyValidNow, nullptr};
 
         sl::Resource outputRes{sl::ResourceType::eTex2d, inputs.output,
                                nullptr, static_cast<VkImageView>(inputs.outputView),
                                VK_IMAGE_LAYOUT_GENERAL};
+        outputRes.width = inputs.displayExtent.width;
+        outputRes.height = inputs.displayExtent.height;
+        outputRes.nativeFormat = static_cast<uint32_t>(inputs.outputFormat);
+        outputRes.mipLevels = 1;
+        outputRes.arrayLayers = 1;
         tags[tagCount++] = sl::ResourceTag{&outputRes, sl::kBufferTypeScalingOutputColor,
                                             sl::ResourceLifecycle::eOnlyValidNow, nullptr};
 
@@ -338,6 +391,11 @@ namespace render::upscaling
             sl::Resource reactiveRes{sl::ResourceType::eTex2d, inputs.reactiveMask,
                                      nullptr, static_cast<VkImageView>(inputs.reactiveView),
                                      VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+            reactiveRes.width = inputs.renderExtent.width;
+            reactiveRes.height = inputs.renderExtent.height;
+            reactiveRes.nativeFormat = static_cast<uint32_t>(inputs.reactiveFormat);
+            reactiveRes.mipLevels = 1;
+            reactiveRes.arrayLayers = 1;
             tags[tagCount++] = sl::ResourceTag{&reactiveRes, sl::kBufferTypeTransparencyHint,
                                                 sl::ResourceLifecycle::eOnlyValidNow, nullptr};
         }
