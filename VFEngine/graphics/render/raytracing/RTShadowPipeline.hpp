@@ -115,6 +115,7 @@ namespace render::raytracing
         uint32_t maskHeight = 0;
         bool initialized = false;
         bool firstFrame = true;
+        bool shadowMaskInGeneral = false;
 
         // Tunable parameters
         float maxRayDistance = 500.0f;

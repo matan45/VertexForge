@@ -396,19 +396,34 @@ namespace render::raytracing
             vk::ImageLayout::eShaderReadOnlyOptimal,
             vk::ImageAspectFlagBits::eColor);
 
-        // Transition shadow mask: shader read (or undefined on first frame) -> general for compute write
+        // Transition shadow mask to general for compute write
         {
             vk::ImageMemoryBarrier barrier{};
-            barrier.srcAccessMask = firstFrame ? vk::AccessFlags{} : vk::AccessFlagBits::eShaderRead;
             barrier.dstAccessMask = vk::AccessFlagBits::eShaderWrite;
-            barrier.oldLayout = firstFrame ? vk::ImageLayout::eUndefined : vk::ImageLayout::eShaderReadOnlyOptimal;
             barrier.newLayout = vk::ImageLayout::eGeneral;
             barrier.image = shadowMaskImage;
             barrier.subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};
-            cmd.pipelineBarrier(
-                firstFrame ? vk::PipelineStageFlagBits::eTopOfPipe : vk::PipelineStageFlagBits::eFragmentShader,
-                vk::PipelineStageFlagBits::eComputeShader,
-                {}, 0, nullptr, 0, nullptr, 1, &barrier);
+
+            if (firstFrame) {
+                barrier.srcAccessMask = {};
+                barrier.oldLayout = vk::ImageLayout::eUndefined;
+                cmd.pipelineBarrier(vk::PipelineStageFlagBits::eTopOfPipe,
+                    vk::PipelineStageFlagBits::eComputeShader,
+                    {}, 0, nullptr, 0, nullptr, 1, &barrier);
+            } else if (shadowMaskInGeneral) {
+                // Denoiser left it in eGeneral last frame — just need execution+memory barrier
+                barrier.srcAccessMask = vk::AccessFlagBits::eShaderRead;
+                barrier.oldLayout = vk::ImageLayout::eGeneral;
+                cmd.pipelineBarrier(vk::PipelineStageFlagBits::eComputeShader,
+                    vk::PipelineStageFlagBits::eComputeShader,
+                    {}, 0, nullptr, 0, nullptr, 1, &barrier);
+            } else {
+                barrier.srcAccessMask = vk::AccessFlagBits::eShaderRead;
+                barrier.oldLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+                cmd.pipelineBarrier(vk::PipelineStageFlagBits::eFragmentShader,
+                    vk::PipelineStageFlagBits::eComputeShader,
+                    {}, 0, nullptr, 0, nullptr, 1, &barrier);
+            }
         }
 
         // Bind and dispatch
@@ -419,7 +434,7 @@ namespace render::raytracing
                                0, static_cast<uint32_t>(descSets.size()), descSets.data(), 0, nullptr);
 
         RTShadowPushConstants pc{};
-        pc.lightDirection = glm::vec4(glm::normalize(lightDirection), this->maxRayDistance);
+        pc.lightDirection = glm::vec4(-glm::normalize(lightDirection), this->maxRayDistance);
         pc.biasParams = glm::vec4(this->normalBias, this->rayTMin, 0.0f, 0.0f);
         cmd.pushConstants(pipelineLayout, vk::ShaderStageFlagBits::eCompute, 0, sizeof(RTShadowPushConstants), &pc);
 
@@ -446,6 +461,12 @@ namespace render::raytracing
                 vk::ImageLayout::eShaderReadOnlyOptimal,
                 vk::ImageLayout::eColorAttachmentOptimal,
                 vk::ImageAspectFlagBits::eColor);
+
+            shadowMaskInGeneral = false;
+        }
+        else
+        {
+            shadowMaskInGeneral = true;
         }
 
         firstFrame = false;
