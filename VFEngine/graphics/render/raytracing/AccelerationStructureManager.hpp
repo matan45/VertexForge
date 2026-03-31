@@ -2,6 +2,7 @@
 
 #include "ScratchBufferPool.hpp"
 #include "../../core/VulkanMemoryManager.hpp"
+#include "../../core/GraphicsConstants.hpp"
 #include "../gpudriven/GPUDrivenTypes.hpp"
 #include <vulkan/vulkan.hpp>
 #include <glm/glm.hpp>
@@ -102,7 +103,6 @@ namespace render::raytracing
         const ASMemoryBudget& getMemoryBudget() const { return memoryBudget; }
 
     private:
-        static constexpr uint32_t MAX_FRAMES_IN_FLIGHT = 3;
 
         core::Device& device;
 
@@ -145,7 +145,7 @@ namespace render::raytracing
             core::VulkanAllocation allocation;
             vk::DeviceSize capacity = 0;
         };
-        std::array<StagingBuffer, MAX_FRAMES_IN_FLIGHT> instanceStagingBuffers{};
+        std::array<StagingBuffer, core::MAX_FRAMES_IN_FLIGHT> instanceStagingBuffers{};
         uint32_t currentStagingFrame = 0;
 
         // Scratch buffers

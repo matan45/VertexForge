@@ -79,6 +79,7 @@ namespace render::gpudriven
         instanceToParentCache.clear();
 
         device.getLogicalDevice().waitIdle();
+        transferManager.reset(); // Destroy StagingRingBuffer while VulkanMemoryManager is still alive
         destroyBuffers();
 
         registeredMeshes.clear();

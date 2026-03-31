@@ -125,7 +125,7 @@ namespace render::raytracing
 
     void AccelerationStructureManager::destroyBLASEntry(BLASEntry& entry)
     {
-        deferredBLASDeletions.push_back({entry, MAX_FRAMES_IN_FLIGHT});
+        deferredBLASDeletions.push_back({entry, core::MAX_FRAMES_IN_FLIGHT});
         entry.blas = nullptr;
         entry.buffer = nullptr;
         entry.allocation = {};
@@ -349,7 +349,7 @@ namespace render::raytracing
 
     void AccelerationStructureManager::insertTLASCrossFrameBarrier(vk::CommandBuffer cmd)
     {
-        // With MAX_FRAMES_IN_FLIGHT=2, the previous frame's RT shadow compute may still
+        // With core::MAX_FRAMES_IN_FLIGHT=2, the previous frame's RT shadow compute may still
         // be reading the TLAS via ray queries when the current frame rebuilds it.
         // This barrier ensures the previous frame's TLAS reads and builds complete before
         // we overwrite the shared instance buffer, TLAS, and scratch buffer.
@@ -550,7 +550,7 @@ namespace render::raytracing
         tlasBuilt = true;
         memoryBudget.tlasInstanceCount = instanceCount;
 
-        currentStagingFrame = (currentStagingFrame + 1) % MAX_FRAMES_IN_FLIGHT;
+        currentStagingFrame = (currentStagingFrame + 1) % core::MAX_FRAMES_IN_FLIGHT;
 
         updateDescriptor();
     }
@@ -760,6 +760,13 @@ namespace render::raytracing
             memoryBudget.blasTotalBytes += entry.size;
             memoryBudget.blasCount++;
 
+            // Destroy existing entry if present (avoids leak when tile is rebuilt)
+            auto existingIt = terrainBlasCache.find(pending.key);
+            if (existingIt != terrainBlasCache.end())
+            {
+                destroyBLASEntry(existingIt->second);
+                terrainBlasCache.erase(existingIt);
+            }
             terrainBlasCache[pending.key] = entry;
         }
 
@@ -981,7 +988,7 @@ namespace render::raytracing
         tlasBuilt = true;
         memoryBudget.tlasInstanceCount = instanceCount;
 
-        currentStagingFrame = (currentStagingFrame + 1) % MAX_FRAMES_IN_FLIGHT;
+        currentStagingFrame = (currentStagingFrame + 1) % core::MAX_FRAMES_IN_FLIGHT;
 
         updateDescriptor();
     }

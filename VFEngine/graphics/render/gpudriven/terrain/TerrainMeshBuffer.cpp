@@ -58,6 +58,7 @@ namespace render::gpudriven
         if (!initialized_) return;
 
         device_.getLogicalDevice().waitIdle();
+        transferManager_.reset();
 
         tileAllocations_.clear();
         destroyBuffers();

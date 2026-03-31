@@ -251,6 +251,7 @@ namespace render::mesh
         }
 
         loadedMeshes.clear();
+        transferManager.reset();
         vfLogInfo("Unloaded all meshes");
     }
 
