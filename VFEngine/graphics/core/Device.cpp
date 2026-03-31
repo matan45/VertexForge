@@ -203,6 +203,17 @@ namespace core
                 {
                     vfLogInfo("Selected physical device: {}",
                               static_cast<const char*>(physicalDevice.getProperties().deviceName));
+
+                    auto extensions = physicalDevice.enumerateDeviceExtensionProperties();
+                    for (const auto* req : deviceExtensions)
+                    {
+                        bool found = false;
+                        for (const auto& ext : extensions)
+                        {
+                            if (strcmp(ext.extensionName.data(), req) == 0) { found = true; break; }
+                        }
+                        vfLogInfo("  Extension {}: {}", req, found ? "supported" : "NOT supported");
+                    }
                 }
                 break;
             }
@@ -571,9 +582,10 @@ namespace core
         {
             if (debug)
             {
+                std::string deviceName = static_cast<const char*>(device.getProperties().deviceName);
                 for (const auto& ext : requiredExtensions)
                 {
-                    vfLogWarning("Device extension not available: {}", ext);
+                    vfLogDebug("Skipping device '{}': missing extension {}", deviceName, ext);
                 }
             }
             return false;

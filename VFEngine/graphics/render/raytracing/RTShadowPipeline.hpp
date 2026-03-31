@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../../core/VulkanMemoryManager.hpp"
+#include "../../core/PerFrameBuffer.hpp"
 #include <vulkan/vulkan.hpp>
 #include <glm/glm.hpp>
 #include <memory>
@@ -54,7 +55,8 @@ namespace render::raytracing
                       float farPlane,
                       const glm::vec3& lightDirection,
                       uint32_t screenWidth, uint32_t screenHeight,
-                      bool skipFinalTransitions = false);
+                      bool skipFinalTransitions = false,
+                      uint32_t frameIndex = 0);
 
         bool isInitialized() const { return initialized; }
 
@@ -87,12 +89,11 @@ namespace render::raytracing
 
         // Descriptor pools and sets
         vk::DescriptorPool descriptorPool;
-        vk::DescriptorSet inputDescSet;
+        vk::DescriptorSet inputDescSet[core::MAX_FRAMES_IN_FLIGHT];
         vk::DescriptorSet outputDescSet;
 
-        // Params UBO
-        vk::Buffer paramsBuffer;
-        core::VulkanAllocation paramsAllocation;
+        // Params UBO (per-frame to avoid write-after-read hazards)
+        core::PerFrameBuffer paramsBuffer;
 
         // Samplers
         vk::Sampler depthSampler;

@@ -66,7 +66,7 @@ namespace render::raytracing
         vkDevice.destroySampler(nearestSampler);
         vkDevice.destroySampler(denoisedMaskSampler);
 
-        core::BufferUtilities::destroyBuffer(vkDevice, paramsBuffer, paramsAllocation, device.getMemoryManager());
+        paramsBuffer.destroy(vkDevice, device.getMemoryManager());
 
         destroyImages();
 
@@ -219,12 +219,8 @@ namespace render::raytracing
 
     void RTShadowDenoiser::createParamsBuffer()
     {
-        core::BufferInfoRequest request(device.getLogicalDevice(), device.getPhysicalDevice());
-        request.size = sizeof(ShadowDenoiserUBO);
-        request.usage = vk::BufferUsageFlagBits::eUniformBuffer;
-        request.properties = vk::MemoryPropertyFlagBits::eHostVisible |
-                             vk::MemoryPropertyFlagBits::eHostCoherent;
-        core::BufferUtilities::createBuffer(request, paramsBuffer, paramsAllocation, device.getMemoryManager());
+        paramsBuffer.create(device.getLogicalDevice(), device.getPhysicalDevice(),
+                            sizeof(ShadowDenoiserUBO), device.getMemoryManager());
     }
 
     void RTShadowDenoiser::createDescriptorLayouts()
@@ -282,13 +278,14 @@ namespace render::raytracing
         temporalPoolInfo.pPoolSizes = temporalPoolSizes.data();
         temporalDSPool = vkDevice.createDescriptorPool(temporalPoolInfo);
 
-        // Spatial pool: up to MAX_SPATIAL_PASSES sets
+        // Spatial pool: per-frame sets to avoid descriptor update races
+        uint32_t totalSpatialSets = MAX_SPATIAL_PASSES * core::MAX_FRAMES_IN_FLIGHT;
         std::array<vk::DescriptorPoolSize, 2> spatialPoolSizes{};
-        spatialPoolSizes[0] = {vk::DescriptorType::eStorageImage, static_cast<uint32_t>(2 * MAX_SPATIAL_PASSES)};
-        spatialPoolSizes[1] = {vk::DescriptorType::eCombinedImageSampler, static_cast<uint32_t>(2 * MAX_SPATIAL_PASSES)};
+        spatialPoolSizes[0] = {vk::DescriptorType::eStorageImage, 2 * totalSpatialSets};
+        spatialPoolSizes[1] = {vk::DescriptorType::eCombinedImageSampler, 2 * totalSpatialSets};
 
         vk::DescriptorPoolCreateInfo spatialPoolInfo{};
-        spatialPoolInfo.maxSets = MAX_SPATIAL_PASSES;
+        spatialPoolInfo.maxSets = totalSpatialSets;
         spatialPoolInfo.poolSizeCount = static_cast<uint32_t>(spatialPoolSizes.size());
         spatialPoolInfo.pPoolSizes = spatialPoolSizes.data();
         spatialDSPool = vkDevice.createDescriptorPool(spatialPoolInfo);
@@ -316,16 +313,19 @@ namespace render::raytracing
         temporalDescSets[0] = temporalSets[0];
         temporalDescSets[1] = temporalSets[1];
 
-        // Spatial: MAX_SPATIAL_PASSES sets
-        std::array<vk::DescriptorSetLayout, MAX_SPATIAL_PASSES> spatialLayouts;
-        spatialLayouts.fill(spatialDSLayout);
-        vk::DescriptorSetAllocateInfo spatialAllocInfo{};
-        spatialAllocInfo.descriptorPool = spatialDSPool;
-        spatialAllocInfo.descriptorSetCount = MAX_SPATIAL_PASSES;
-        spatialAllocInfo.pSetLayouts = spatialLayouts.data();
-        auto spatialSets = vkDevice.allocateDescriptorSets(spatialAllocInfo);
-        for (int i = 0; i < MAX_SPATIAL_PASSES; ++i)
-            spatialDescSets[i] = spatialSets[i];
+        // Spatial: per-frame sets to avoid descriptor update races
+        for (uint32_t f = 0; f < core::MAX_FRAMES_IN_FLIGHT; ++f)
+        {
+            std::array<vk::DescriptorSetLayout, MAX_SPATIAL_PASSES> spatialLayouts;
+            spatialLayouts.fill(spatialDSLayout);
+            vk::DescriptorSetAllocateInfo spatialAllocInfo{};
+            spatialAllocInfo.descriptorPool = spatialDSPool;
+            spatialAllocInfo.descriptorSetCount = MAX_SPATIAL_PASSES;
+            spatialAllocInfo.pSetLayouts = spatialLayouts.data();
+            auto spatialSets = vkDevice.allocateDescriptorSets(spatialAllocInfo);
+            for (int i = 0; i < MAX_SPATIAL_PASSES; ++i)
+                spatialDescSets[f][i] = spatialSets[i];
+        }
 
         // Denoised mask sampler set
         vk::DescriptorSetAllocateInfo maskAllocInfo{};
@@ -418,11 +418,16 @@ namespace render::raytracing
                                      const glm::mat4& viewProjection,
                                      uint32_t screenWidth,
                                      uint32_t screenHeight,
-                                     uint32_t frameIndex)
+                                     uint32_t frameIndex,
+                                     uint32_t resourceFrameIndex)
     {
         if (!initialized || !temporalPipeline || !spatialPipeline) return;
 
-        // Update UBO
+        // Use caller-provided frame index aligned with OffScreenViewPort fence scheme
+        uint32_t fi = resourceFrameIndex % core::MAX_FRAMES_IN_FLIGHT;
+        paramsBuffer.setFrame(fi);
+
+        // Update UBO for this frame slot
         ShadowDenoiserUBO ubo{};
         ubo.invViewProjection = invViewProjection;
         ubo.prevViewProjection = historyValid ? prevViewProjection : glm::mat4(1.0f);
@@ -435,7 +440,7 @@ namespace render::raytracing
             depthThreshold,
             normalThreshold
         );
-        memcpy(paramsAllocation.mappedPtr, &ubo, sizeof(ShadowDenoiserUBO));
+        paramsBuffer.write(&ubo, sizeof(ShadowDenoiserUBO));
 
         // Determine ping-pong: read from prev history, write to current
         uint32_t readIdx = 1 - currentHistoryIndex;
@@ -497,9 +502,9 @@ namespace render::raytracing
             writes[4].descriptorType = vk::DescriptorType::eCombinedImageSampler;
             writes[4].pImageInfo = &normalInfo;
 
-            // Binding 5: UBO
+            // Binding 5: UBO (per-frame buffer)
             vk::DescriptorBufferInfo paramsInfo{};
-            paramsInfo.buffer = paramsBuffer;
+            paramsInfo.buffer = paramsBuffer.getBuffer();
             paramsInfo.offset = 0;
             paramsInfo.range = sizeof(ShadowDenoiserUBO);
             writes[5].dstSet = temporalDescSets[writeIdx];
@@ -604,7 +609,7 @@ namespace render::raytracing
                 vk::DescriptorImageInfo inputInfo{};
                 inputInfo.imageView = getSpatialInput(pass);
                 inputInfo.imageLayout = vk::ImageLayout::eGeneral;
-                writes[0].dstSet = spatialDescSets[pass];
+                writes[0].dstSet = spatialDescSets[fi][pass];
                 writes[0].dstBinding = 0;
                 writes[0].descriptorCount = 1;
                 writes[0].descriptorType = vk::DescriptorType::eStorageImage;
@@ -613,7 +618,7 @@ namespace render::raytracing
                 vk::DescriptorImageInfo outputInfo{};
                 outputInfo.imageView = getSpatialOutput(pass);
                 outputInfo.imageLayout = vk::ImageLayout::eGeneral;
-                writes[1].dstSet = spatialDescSets[pass];
+                writes[1].dstSet = spatialDescSets[fi][pass];
                 writes[1].dstBinding = 1;
                 writes[1].descriptorCount = 1;
                 writes[1].descriptorType = vk::DescriptorType::eStorageImage;
@@ -623,7 +628,7 @@ namespace render::raytracing
                 depthInfo.sampler = nearestSampler;
                 depthInfo.imageView = depthView;
                 depthInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-                writes[2].dstSet = spatialDescSets[pass];
+                writes[2].dstSet = spatialDescSets[fi][pass];
                 writes[2].dstBinding = 2;
                 writes[2].descriptorCount = 1;
                 writes[2].descriptorType = vk::DescriptorType::eCombinedImageSampler;
@@ -633,7 +638,7 @@ namespace render::raytracing
                 normalInfo.sampler = nearestSampler;
                 normalInfo.imageView = normalView;
                 normalInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-                writes[3].dstSet = spatialDescSets[pass];
+                writes[3].dstSet = spatialDescSets[fi][pass];
                 writes[3].dstBinding = 3;
                 writes[3].descriptorCount = 1;
                 writes[3].descriptorType = vk::DescriptorType::eCombinedImageSampler;
@@ -644,7 +649,7 @@ namespace render::raytracing
             }
 
             cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, spatialPipelineLayout,
-                                   0, 1, &spatialDescSets[pass], 0, nullptr);
+                                   0, 1, &spatialDescSets[fi][pass], 0, nullptr);
 
             ShadowSpatialPushConstants pc{};
             pc.stepSize = stepSizes[pass];

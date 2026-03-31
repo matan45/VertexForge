@@ -71,7 +71,7 @@ namespace render::raytracing
         vkDevice.destroySampler(normalSampler);
         vkDevice.destroySampler(shadowMaskSampler);
 
-        core::BufferUtilities::destroyBuffer(vkDevice, paramsBuffer, paramsAllocation, device.getMemoryManager());
+        paramsBuffer.destroy(vkDevice, device.getMemoryManager());
 
         vkDevice.destroyImageView(shadowMaskStorageView);
         vkDevice.destroyImageView(shadowMaskSampledView);
@@ -161,12 +161,8 @@ namespace render::raytracing
 
     void RTShadowPipeline::createParamsBuffer()
     {
-        core::BufferInfoRequest request(device.getLogicalDevice(), device.getPhysicalDevice());
-        request.size = sizeof(RTShadowParams);
-        request.usage = vk::BufferUsageFlagBits::eUniformBuffer;
-        request.properties = vk::MemoryPropertyFlagBits::eHostVisible |
-                             vk::MemoryPropertyFlagBits::eHostCoherent;
-        core::BufferUtilities::createBuffer(request, paramsBuffer, paramsAllocation, device.getMemoryManager());
+        paramsBuffer.create(device.getLogicalDevice(), device.getPhysicalDevice(),
+                            sizeof(RTShadowParams), device.getMemoryManager());
     }
 
     void RTShadowPipeline::createDescriptorLayouts(vk::DescriptorSetLayout tlasLayout)
@@ -206,12 +202,12 @@ namespace render::raytracing
         vk::Device vkDevice = device.getLogicalDevice();
 
         std::array<vk::DescriptorPoolSize, 3> poolSizes{};
-        poolSizes[0] = {vk::DescriptorType::eCombinedImageSampler, 2}; // depth + normal
-        poolSizes[1] = {vk::DescriptorType::eUniformBuffer, 1};        // params
-        poolSizes[2] = {vk::DescriptorType::eStorageImage, 1};         // shadow mask output
+        poolSizes[0] = {vk::DescriptorType::eCombinedImageSampler, 2 * core::MAX_FRAMES_IN_FLIGHT}; // depth + normal per frame
+        poolSizes[1] = {vk::DescriptorType::eUniformBuffer, core::MAX_FRAMES_IN_FLIGHT};             // params per frame
+        poolSizes[2] = {vk::DescriptorType::eStorageImage, 1};                                       // shadow mask output
 
         vk::DescriptorPoolCreateInfo poolInfo{};
-        poolInfo.maxSets = 2; // input + output
+        poolInfo.maxSets = 1 + core::MAX_FRAMES_IN_FLIGHT; // 1 output + N input
         poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
         poolInfo.pPoolSizes = poolSizes.data();
         descriptorPool = vkDevice.createDescriptorPool(poolInfo);
@@ -229,14 +225,22 @@ namespace render::raytracing
     {
         vk::Device vkDevice = device.getLogicalDevice();
 
-        std::array<vk::DescriptorSetLayout, 2> layouts = {inputLayout, outputLayout};
-        vk::DescriptorSetAllocateInfo allocInfo{};
-        allocInfo.descriptorPool = descriptorPool;
-        allocInfo.descriptorSetCount = static_cast<uint32_t>(layouts.size());
-        allocInfo.pSetLayouts = layouts.data();
-        auto sets = vkDevice.allocateDescriptorSets(allocInfo);
-        inputDescSet = sets[0];
-        outputDescSet = sets[1];
+        // Allocate per-frame input descriptor sets
+        for (uint32_t i = 0; i < core::MAX_FRAMES_IN_FLIGHT; ++i)
+        {
+            vk::DescriptorSetAllocateInfo allocInfo{};
+            allocInfo.descriptorPool = descriptorPool;
+            allocInfo.descriptorSetCount = 1;
+            allocInfo.pSetLayouts = &inputLayout;
+            inputDescSet[i] = vkDevice.allocateDescriptorSets(allocInfo)[0];
+        }
+
+        // Allocate single output descriptor set
+        vk::DescriptorSetAllocateInfo outputAllocInfo{};
+        outputAllocInfo.descriptorPool = descriptorPool;
+        outputAllocInfo.descriptorSetCount = 1;
+        outputAllocInfo.pSetLayouts = &outputLayout;
+        outputDescSet = vkDevice.allocateDescriptorSets(outputAllocInfo)[0];
 
         // Fragment shader sampler set
         vk::DescriptorSetAllocateInfo maskAllocInfo{};
@@ -324,20 +328,25 @@ namespace render::raytracing
                                      float farPlane,
                                      const glm::vec3& lightDirection,
                                      uint32_t screenWidth, uint32_t screenHeight,
-                                     bool skipFinalTransitions)
+                                     bool skipFinalTransitions,
+                                     uint32_t frameIndex)
     {
         if (!initialized || !computePipeline) return;
 
-        // Update params UBO
+        // Use caller-provided frame index aligned with OffScreenViewPort fence scheme
+        uint32_t fi = frameIndex % core::MAX_FRAMES_IN_FLIGHT;
+        paramsBuffer.setFrame(fi);
+
+        // Update params UBO for this frame slot
         RTShadowParams params{};
         params.invViewProjection = invViewProjection;
         params.screenParams = glm::vec4(
             static_cast<float>(screenWidth), static_cast<float>(screenHeight),
             1.0f / static_cast<float>(screenWidth), 1.0f / static_cast<float>(screenHeight));
         params.cameraPosition = glm::vec4(cameraPos, farPlane);
-        memcpy(paramsAllocation.mappedPtr, &params, sizeof(RTShadowParams));
+        paramsBuffer.write(&params, sizeof(RTShadowParams));
 
-        // Update input descriptor set with current views
+        // Update this frame's input descriptor set
         vk::DescriptorImageInfo depthInfo{};
         depthInfo.sampler = depthSampler;
         depthInfo.imageView = depthView;
@@ -349,24 +358,24 @@ namespace render::raytracing
         normalInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
 
         vk::DescriptorBufferInfo paramsInfo{};
-        paramsInfo.buffer = paramsBuffer;
+        paramsInfo.buffer = paramsBuffer.getBuffer();
         paramsInfo.offset = 0;
         paramsInfo.range = sizeof(RTShadowParams);
 
         std::array<vk::WriteDescriptorSet, 3> writes{};
-        writes[0].dstSet = inputDescSet;
+        writes[0].dstSet = inputDescSet[fi];
         writes[0].dstBinding = 0;
         writes[0].descriptorCount = 1;
         writes[0].descriptorType = vk::DescriptorType::eCombinedImageSampler;
         writes[0].pImageInfo = &depthInfo;
 
-        writes[1].dstSet = inputDescSet;
+        writes[1].dstSet = inputDescSet[fi];
         writes[1].dstBinding = 1;
         writes[1].descriptorCount = 1;
         writes[1].descriptorType = vk::DescriptorType::eCombinedImageSampler;
         writes[1].pImageInfo = &normalInfo;
 
-        writes[2].dstSet = inputDescSet;
+        writes[2].dstSet = inputDescSet[fi];
         writes[2].dstBinding = 2;
         writes[2].descriptorCount = 1;
         writes[2].descriptorType = vk::DescriptorType::eUniformBuffer;
@@ -405,7 +414,7 @@ namespace render::raytracing
         // Bind and dispatch
         cmd.bindPipeline(vk::PipelineBindPoint::eCompute, computePipeline);
 
-        std::array<vk::DescriptorSet, 3> descSets = {tlasDescriptorSet, inputDescSet, outputDescSet};
+        std::array<vk::DescriptorSet, 3> descSets = {tlasDescriptorSet, inputDescSet[fi], outputDescSet};
         cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, pipelineLayout,
                                0, static_cast<uint32_t>(descSets.size()), descSets.data(), 0, nullptr);
 

@@ -269,6 +269,20 @@ namespace render::raytracing
             const vk::AccelerationStructureBuildRangeInfoKHR* pRangeInfo = &rangeInfo;
             cmd.buildAccelerationStructuresKHR(1, &buildInfo, &pRangeInfo);
 
+            // Barrier between individual BLAS builds — required because they share scratch memory
+            // (Vulkan spec: scratch memory must not be accessed by builds not separated by a barrier)
+            {
+                vk::MemoryBarrier buildBarrier{
+                    vk::AccessFlagBits::eAccelerationStructureWriteKHR,
+                    vk::AccessFlagBits::eAccelerationStructureWriteKHR
+                };
+                cmd.pipelineBarrier(
+                    vk::PipelineStageFlagBits::eAccelerationStructureBuildKHR,
+                    vk::PipelineStageFlagBits::eAccelerationStructureBuildKHR,
+                    vk::DependencyFlags{},
+                    1, &buildBarrier, 0, nullptr, 0, nullptr);
+            }
+
             // Get device address
             entry.deviceAddress = vkDevice.getAccelerationStructureAddressKHR({entry.blas});
 
@@ -296,6 +310,28 @@ namespace render::raytracing
                   pendingBLASBuilds.size(), memoryBudget.blasCount);
 
         pendingBLASBuilds.clear();
+    }
+
+    void AccelerationStructureManager::insertTLASCrossFrameBarrier(vk::CommandBuffer cmd)
+    {
+        // With MAX_FRAMES_IN_FLIGHT=2, the previous frame's RT shadow compute may still
+        // be reading the TLAS via ray queries when the current frame rebuilds it.
+        // This barrier ensures the previous frame's TLAS reads and builds complete before
+        // we overwrite the shared instance buffer, TLAS, and scratch buffer.
+        vk::MemoryBarrier barrier{
+            vk::AccessFlagBits::eAccelerationStructureReadKHR |   // RT shadow compute reads TLAS
+            vk::AccessFlagBits::eAccelerationStructureWriteKHR,   // previous TLAS build writes
+            vk::AccessFlagBits::eTransferWrite |                   // instance buffer copy
+            vk::AccessFlagBits::eAccelerationStructureWriteKHR |   // TLAS build
+            vk::AccessFlagBits::eAccelerationStructureReadKHR      // TLAS build reads instance data
+        };
+        cmd.pipelineBarrier(
+            vk::PipelineStageFlagBits::eComputeShader |
+            vk::PipelineStageFlagBits::eAccelerationStructureBuildKHR,
+            vk::PipelineStageFlagBits::eTransfer |
+            vk::PipelineStageFlagBits::eAccelerationStructureBuildKHR,
+            vk::DependencyFlags{},
+            1, &barrier, 0, nullptr, 0, nullptr);
     }
 
     void AccelerationStructureManager::buildTLAS(vk::CommandBuffer cmd,
@@ -354,6 +390,9 @@ namespace render::raytracing
         }
 
         if (instances.empty()) return;
+
+        // Protect shared TLAS/instance/scratch buffers from cross-frame races
+        insertTLASCrossFrameBarrier(cmd);
 
         uint32_t instanceCount = static_cast<uint32_t>(instances.size());
         vk::DeviceSize instanceDataSize = sizeof(vk::AccelerationStructureInstanceKHR) * instanceCount;
@@ -666,6 +705,19 @@ namespace render::raytracing
             const vk::AccelerationStructureBuildRangeInfoKHR* pRangeInfo = &rangeInfo;
             cmd.buildAccelerationStructuresKHR(1, &buildInfo, &pRangeInfo);
 
+            // Barrier between individual BLAS builds — required because they share scratch memory
+            {
+                vk::MemoryBarrier buildBarrier{
+                    vk::AccessFlagBits::eAccelerationStructureWriteKHR,
+                    vk::AccessFlagBits::eAccelerationStructureWriteKHR
+                };
+                cmd.pipelineBarrier(
+                    vk::PipelineStageFlagBits::eAccelerationStructureBuildKHR,
+                    vk::PipelineStageFlagBits::eAccelerationStructureBuildKHR,
+                    vk::DependencyFlags{},
+                    1, &buildBarrier, 0, nullptr, 0, nullptr);
+            }
+
             entry.deviceAddress = vkDevice.getAccelerationStructureAddressKHR({entry.blas});
 
             memoryBudget.blasTotalBytes += entry.size;
@@ -674,6 +726,7 @@ namespace render::raytracing
             terrainBlasCache[pending.key] = entry;
         }
 
+        // Final barrier: BLAS builds → TLAS build reads
         vk::MemoryBarrier barrier{
             vk::AccessFlagBits::eAccelerationStructureWriteKHR,
             vk::AccessFlagBits::eAccelerationStructureReadKHR
@@ -774,6 +827,9 @@ namespace render::raytracing
         }
 
         if (instances.empty()) return;
+
+        // Protect shared TLAS/instance/scratch buffers from cross-frame races
+        insertTLASCrossFrameBarrier(cmd);
 
         // The rest is identical to buildTLAS — upload instances, build/update TLAS
         uint32_t instanceCount = static_cast<uint32_t>(instances.size());

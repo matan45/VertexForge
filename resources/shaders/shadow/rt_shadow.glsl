@@ -49,15 +49,35 @@ void main() {
     }
 
     vec3 worldPos = reconstructWorldPos(uv, depth);
-    vec3 N = normalize(texture(normalBuffer, uv).xyz);
+    vec3 rawNormal = texture(normalBuffer, uv).xyz;
+    float normalLen = length(rawNormal);
+
+    // Guard against zero/NaN normals that would produce NaN ray origins
+    if (normalLen < 0.001 || isnan(normalLen) || isinf(normalLen)) {
+        imageStore(shadowMask, pixel, vec4(1.0));
+        return;
+    }
+    vec3 N = rawNormal / normalLen;
 
     // Apply normal bias to prevent self-shadowing
     vec3 biasedPos = worldPos + N * biasParams.x;
+
+    // Guard against NaN/Inf ray origins (would cause GPU hang in ray traversal)
+    if (any(isnan(biasedPos)) || any(isinf(biasedPos))) {
+        imageStore(shadowMask, pixel, vec4(1.0));
+        return;
+    }
 
     // Shadow ray toward the light
     vec3 rayDir = normalize(lightDirection.xyz);
     float tMin = biasParams.y;
     float tMax = lightDirection.w;
+
+    // Guard against bad ray parameters
+    if (any(isnan(rayDir)) || any(isinf(rayDir)) || tMax <= tMin || tMax <= 0.0) {
+        imageStore(shadowMask, pixel, vec4(1.0));
+        return;
+    }
 
     // Trace shadow ray using ray query
     rayQueryEXT rq;

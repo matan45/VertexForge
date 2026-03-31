@@ -179,5 +179,6 @@ namespace render::raytracing
         void ensureInstanceBuffer(vk::DeviceSize requiredSize);
         void ensureStagingBuffer(StagingBuffer& staging, vk::DeviceSize requiredSize);
         void ensureTlasScratch(vk::DeviceSize requiredSize);
+        void insertTLASCrossFrameBarrier(vk::CommandBuffer cmd);
     };
 }

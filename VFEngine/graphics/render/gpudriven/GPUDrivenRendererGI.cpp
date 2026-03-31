@@ -2,6 +2,7 @@
 #include "../occlusion/DepthPrepass.hpp"
 #include "../../core/SwapChain.hpp"
 #include "../../core/Device.hpp"
+#include "../../core/GraphicsConstants.hpp"
 #include "types/RenderSettings.hpp"
 #include <algorithm>
 
@@ -367,24 +368,26 @@ namespace render::gpudriven
                     terrain.meshBuffer->getIndexBuffer());
             }
 
-            bool hasTerrainAS = terrain.adapter && terrain.pipeline &&
-                                terrain.pipeline->getCurrentTileCount() > 0;
+            {
+                bool hasTerrainAS = terrain.adapter && terrain.pipeline &&
+                                    terrain.pipeline->getCurrentTileCount() > 0;
 
-            if (hasTerrainAS)
-            {
-                accelStructManager->buildTLASWithTerrain(cmd,
-                    mergedBuffer->getCPUObjectData(),
-                    mergedBuffer->getObjectCount(),
-                    *mergedBuffer,
-                    terrain.adapter->getCachedGPUTileData(),
-                    terrain.pipeline->getCurrentTileCount());
-            }
-            else if (mergedBuffer->getObjectCount() > 0)
-            {
-                accelStructManager->buildTLAS(cmd,
-                    mergedBuffer->getCPUObjectData(),
-                    mergedBuffer->getObjectCount(),
-                    *mergedBuffer);
+                if (hasTerrainAS)
+                {
+                    accelStructManager->buildTLASWithTerrain(cmd,
+                        mergedBuffer->getCPUObjectData(),
+                        mergedBuffer->getObjectCount(),
+                        *mergedBuffer,
+                        terrain.adapter->getCachedGPUTileData(),
+                        terrain.pipeline->getCurrentTileCount());
+                }
+                else if (mergedBuffer->getObjectCount() > 0)
+                {
+                    accelStructManager->buildTLAS(cmd,
+                        mergedBuffer->getCPUObjectData(),
+                        mergedBuffer->getObjectCount(),
+                        *mergedBuffer);
+                }
             }
         }
 
@@ -419,7 +422,8 @@ namespace render::gpudriven
 
     bool GPUDrivenRenderer::isRTShadowReady() const
     {
-        return device.isRayQuerySupported() &&
+        return rtShadowEnabled &&
+               device.isRayQuerySupported() &&
                accelStructManager && accelStructManager->isTLASReady() &&
                depthPrepass && depthPrepass->isInitialized() &&
                lightBufferManager && lightBufferManager->getDirectionalLightCount() > 0;
@@ -464,7 +468,7 @@ namespace render::gpudriven
         }
     }
 
-    void GPUDrivenRenderer::dispatchRTShadow(vk::CommandBuffer cmd)
+    void GPUDrivenRenderer::dispatchRTShadow(vk::CommandBuffer cmd, uint32_t imageIndex)
     {
         if (!isRTShadowReady()) return;
 
@@ -564,6 +568,9 @@ namespace render::gpudriven
             }
         }
 
+        // Skip RT shadow dispatch if TLAS isn't ready
+        if (!accelStructManager || !accelStructManager->isTLASReady()) return;
+
         auto lightDir = lightBufferManager->getFirstDirectionalLightDirection();
         if (!lightDir.has_value()) return;
 
@@ -572,6 +579,8 @@ namespace render::gpudriven
 
         // Set runtime flag so fragment shader uses RT for directional shadows
         lightBufferManager->setRTShadowActive(useDenoiser);
+
+        uint32_t fi = imageIndex % core::MAX_FRAMES_IN_FLIGHT;
 
         rtShadowPipeline->dispatch(cmd,
             depthPrepass->getDepthImageView(),
@@ -584,7 +593,8 @@ namespace render::gpudriven
             camData.farPlane,
             lightDir.value(),
             w, h,
-            useDenoiser); // skip final transitions when denoiser handles them
+            useDenoiser, // skip final transitions when denoiser handles them
+            fi);
 
         if (useDenoiser)
         {
@@ -598,12 +608,14 @@ namespace render::gpudriven
                 camData.invViewProjection,
                 camData.viewProjection,
                 w, h,
-                camData.frameIndex);
+                camData.frameIndex,
+                fi);
         }
     }
 
     void GPUDrivenRenderer::applyRTShadowSettings(const types::RTShadowSettings& settings)
     {
+        rtShadowEnabled = settings.enabled;
         if (rtShadowPipeline)
         {
             rtShadowPipeline->setMaxRayDistance(settings.maxRayDistance);

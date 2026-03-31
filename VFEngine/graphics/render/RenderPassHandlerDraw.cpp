@@ -239,7 +239,7 @@ namespace render
         // RT shadow dispatch (after depth+normal prepass, before forward pass)
         if (gpuDrivenRenderer->isRTShadowReady())
         {
-            gpuDrivenRenderer->dispatchRTShadow(commandBuffer);
+            gpuDrivenRenderer->dispatchRTShadow(commandBuffer, imageIndex);
         }
 
         if (oceanFFTInitialized)

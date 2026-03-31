@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../../core/VulkanMemoryManager.hpp"
+#include "../../core/PerFrameBuffer.hpp"
 #include <vulkan/vulkan.hpp>
 #include <glm/glm.hpp>
 #include <memory>
@@ -55,7 +56,8 @@ namespace render::raytracing
                       const glm::mat4& viewProjection,
                       uint32_t screenWidth,
                       uint32_t screenHeight,
-                      uint32_t frameIndex);
+                      uint32_t frameIndex,
+                      uint32_t resourceFrameIndex);
 
         bool isInitialized() const { return initialized; }
 
@@ -111,7 +113,7 @@ namespace render::raytracing
         vk::DescriptorSetLayout spatialDSLayout;
         vk::DescriptorPool spatialDSPool;
         static constexpr int MAX_SPATIAL_PASSES = 5;
-        vk::DescriptorSet spatialDescSets[MAX_SPATIAL_PASSES];
+        vk::DescriptorSet spatialDescSets[core::MAX_FRAMES_IN_FLIGHT][MAX_SPATIAL_PASSES];
 
         struct SpatialBuffer
         {
@@ -133,9 +135,8 @@ namespace render::raytracing
         vk::DescriptorSet denoisedMaskSamplerDescSet;
         vk::Sampler denoisedMaskSampler;
 
-        // UBO
-        vk::Buffer paramsBuffer;
-        core::VulkanAllocation paramsAllocation;
+        // UBO (per-frame to avoid write-after-read hazards)
+        core::PerFrameBuffer paramsBuffer;
 
         // Samplers
         vk::Sampler nearestSampler;

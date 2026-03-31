@@ -70,7 +70,15 @@ namespace core {
 		vk::Result result = device.getLogicalDevice().waitForFences(
 			1, &inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
 		if (result != vk::Result::eSuccess) {
-			vfLogError("failed to wait for in-flight fence");
+			vfLogError("FENCE DEBUG: waitForFences[{}] returned {} (frame {})",
+				currentFrame, vk::to_string(result), debugFrameCounter);
+		}
+
+		// Verify the fence is actually signaled after the wait
+		vk::Result fenceStatus = device.getLogicalDevice().getFenceStatus(inFlightFences[currentFrame]);
+		if (fenceStatus != vk::Result::eSuccess) {
+			vfLogError("FENCE DEBUG: getFenceStatus[{}] = {} AFTER wait (frame {})",
+				currentFrame, vk::to_string(fenceStatus), debugFrameCounter);
 		}
 
 		uint32_t acquiredImageIndex = 0;
@@ -94,16 +102,25 @@ namespace core {
 			result = device.getLogicalDevice().waitForFences(
 				1, &imagesInFlight[acquiredImageIndex], VK_TRUE, UINT64_MAX);
 			if (result != vk::Result::eSuccess) {
-				vfLogError("failed to wait for image in flight fence");
+				vfLogError("FENCE DEBUG: imagesInFlight[{}] wait returned {} (frame {})",
+					acquiredImageIndex, vk::to_string(result), debugFrameCounter);
 			}
 		}
 		// Mark this image as now being in use by this frame
 		imagesInFlight[acquiredImageIndex] = inFlightFences[currentFrame];
 
+		// Verify fence is still signaled right before reset
+		fenceStatus = device.getLogicalDevice().getFenceStatus(inFlightFences[currentFrame]);
+		if (fenceStatus != vk::Result::eSuccess) {
+			vfLogError("FENCE DEBUG: getFenceStatus[{}] = {} BEFORE reset (frame {})",
+				currentFrame, vk::to_string(fenceStatus), debugFrameCounter);
+		}
+
 		// Reset the fence only after we know we will submit work
 		result = device.getLogicalDevice().resetFences(1, &inFlightFences[currentFrame]);
 		if (result != vk::Result::eSuccess) {
-			vfLogError("failed to reset fence");
+			vfLogError("FENCE DEBUG: resetFences[{}] returned {} (frame {})",
+				currentFrame, vk::to_string(result), debugFrameCounter);
 		}
 
 		commandPool->resetCommandBuffer(acquiredImageIndex);
@@ -151,6 +168,7 @@ namespace core {
 
 		// Advance to next frame
 		currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
+		++debugFrameCounter;
 	}
 
 	void RenderManager::recreate(uint32_t width, uint32_t height)

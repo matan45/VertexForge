@@ -360,6 +360,7 @@ namespace render::gpudriven
         std::unique_ptr<raytracing::AccelerationStructureManager> accelStructManager;
         std::unique_ptr<raytracing::RTShadowPipeline> rtShadowPipeline;
         std::unique_ptr<raytracing::RTShadowDenoiser> rtShadowDenoiser;
+        bool rtShadowEnabled = true;
         gi::GISettings cachedGISettings;
         bool giProbeBuffersNeedInit = true;
 
@@ -471,7 +472,7 @@ namespace render::gpudriven
         void renderDepthPrepass(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet);
         void generatePrepassHiZ(vk::CommandBuffer cmd);
         void initAccelerationStructures();
-        void dispatchRTShadow(vk::CommandBuffer cmd);
+        void dispatchRTShadow(vk::CommandBuffer cmd, uint32_t imageIndex);
         bool isRTShadowReady() const;
         raytracing::RTShadowPipeline* getRTShadowPipeline() const { return rtShadowPipeline.get(); }
         void applyRTShadowSettings(const types::RTShadowSettings& settings);

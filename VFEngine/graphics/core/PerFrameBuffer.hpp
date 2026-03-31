@@ -88,6 +88,9 @@ namespace core
         /// Advance to the next frame. Call once per frame before writing.
         void advance() { currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT; }
 
+        /// Set the current frame slot directly (for callers that know their frame index).
+        void setFrame(uint32_t frame) { currentFrame = frame % MAX_FRAMES_IN_FLIGHT; }
+
         /// Get current frame's buffer.
         vk::Buffer getBuffer() const { return frames[currentFrame].buffer; }
 
