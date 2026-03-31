@@ -7,6 +7,7 @@
 #include "../core/RenderManager.hpp"
 #include "../core/AsyncComputeManager.hpp"
 #include "../render/RenderPassHandler.hpp"
+#include "upscaling/UpscaleManager.hpp"
 #include "types/CameraTypes.hpp"
 #include <imgui.h>
 #include <imgui_impl_vulkan.h>
@@ -237,6 +238,8 @@ namespace render
             device.getMemoryManager().free(offscreenResources.uiStencilImage.stencilImageAllocation);
             offscreenResources.uiStencilImage.stencilImageAllocation = {};
         }
+
+        cleanupUpscaleResources();
     }
 
     void OffScreenViewPort::recreate()
@@ -251,6 +254,11 @@ namespace render
                 {
                     ImGui_ImplVulkan_RemoveTexture(resources.descriptorSet);
                 }
+            }
+            if (offscreenResources.upscaleOutput.descriptorSet)
+            {
+                ImGui_ImplVulkan_RemoveTexture(offscreenResources.upscaleOutput.descriptorSet);
+                offscreenResources.upscaleOutput.descriptorSet = nullptr;
             }
         }
 
@@ -279,17 +287,31 @@ namespace render
         vk::Format colorFormat = swapChain.getSwapchainImageFormat();
         vk::Format depthFormat = swapChain.getSwapchainDepthStencilFormat();
 
+        // Determine render resolution: when upscaling is active, render at internal resolution
+        uint32_t renderWidth = swapChain.getSwapchainExtent().width;
+        uint32_t renderHeight = swapChain.getSwapchainExtent().height;
+        uint32_t displayWidth = renderWidth;
+        uint32_t displayHeight = renderHeight;
+
+        auto* upscaleManager = device.getUpscaleManager();
+        if (upscaleManager && upscaleManager->isActive())
+        {
+            auto renderRes = upscaleManager->getResolutionManager().getRenderResolution();
+            renderWidth = renderRes.width;
+            renderHeight = renderRes.height;
+        }
+
         core::ImageInfoRequest imageColorInfo(device.getLogicalDevice(), device.getPhysicalDevice());
-        imageColorInfo.width = swapChain.getSwapchainExtent().width;
-        imageColorInfo.height = swapChain.getSwapchainExtent().height;
+        imageColorInfo.width = renderWidth;
+        imageColorInfo.height = renderHeight;
         imageColorInfo.format = colorFormat;
         imageColorInfo.tiling = vk::ImageTiling::eOptimal;
         imageColorInfo.usage = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eTransferSrc;
         imageColorInfo.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
 
         core::ImageInfoRequest imageDepthInfo(device.getLogicalDevice(), device.getPhysicalDevice());
-        imageDepthInfo.width = swapChain.getSwapchainExtent().width;
-        imageDepthInfo.height = swapChain.getSwapchainExtent().height;
+        imageDepthInfo.width = renderWidth;
+        imageDepthInfo.height = renderHeight;
         imageDepthInfo.format = depthFormat;
         imageDepthInfo.tiling = vk::ImageTiling::eOptimal;
         imageDepthInfo.usage = vk::ImageUsageFlagBits::eDepthStencilAttachment | vk::ImageUsageFlagBits::eSampled;
@@ -362,6 +384,12 @@ namespace render
 
             offscreenResources.colorImages.push_back(std::move(color));
         }
+
+        // Create upscale resources when upscaling is active
+        if (upscaleManager && upscaleManager->isActive())
+        {
+            createUpscaleResources(renderWidth, renderHeight, displayWidth, displayHeight);
+        }
     }
 
     void OffScreenViewPort::updateDescriptorSets(vk::DescriptorSet& descriptorSet, const vk::ImageView& imageView) const
@@ -395,6 +423,103 @@ namespace render
         samplerInfo.compareOp = vk::CompareOp::eAlways;
 
         sampler = device.getLogicalDevice().createSampler(samplerInfo);
+    }
+
+    void OffScreenViewPort::createUpscaleResources(uint32_t renderWidth, uint32_t renderHeight,
+                                                     uint32_t displayWidth, uint32_t displayHeight)
+    {
+        if (offscreenResources.upscaleResourcesCreated) return;
+
+        vk::Format colorFormat = swapChain.getSwapchainImageFormat();
+
+        // Motion vector image (R16G16_SFLOAT) at render resolution
+        {
+            core::ImageInfoRequest mvInfo(device.getLogicalDevice(), device.getPhysicalDevice(),
+                renderWidth, renderHeight, 1, 1,
+                vk::Format::eR16G16Sfloat,
+                vk::ImageTiling::eOptimal,
+                vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eSampled,
+                vk::MemoryPropertyFlagBits::eDeviceLocal);
+
+            core::ImageUtilities::createImage(mvInfo,
+                offscreenResources.motionVectors.image,
+                offscreenResources.motionVectors.allocation,
+                device.getMemoryManager());
+
+            // Storage view (for compute write)
+            core::ImageViewInfoRequest storageView(device.getLogicalDevice(),
+                offscreenResources.motionVectors.image,
+                vk::Format::eR16G16Sfloat, vk::ImageAspectFlagBits::eColor,
+                vk::ImageViewType::e2D, 1, 1);
+            core::ImageUtilities::createImageView(storageView, offscreenResources.motionVectors.imageView);
+
+            // Sampled view (for upscaler read)
+            core::ImageViewInfoRequest sampledView(device.getLogicalDevice(),
+                offscreenResources.motionVectors.image,
+                vk::Format::eR16G16Sfloat, vk::ImageAspectFlagBits::eColor,
+                vk::ImageViewType::e2D, 1, 1);
+            core::ImageUtilities::createImageView(sampledView, offscreenResources.motionVectors.sampledView);
+        }
+
+        // Upscale output image at display resolution
+        {
+            core::ImageInfoRequest outputInfo(device.getLogicalDevice(), device.getPhysicalDevice(),
+                displayWidth, displayHeight, 1, 1,
+                colorFormat,
+                vk::ImageTiling::eOptimal,
+                vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eSampled |
+                vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst |
+                vk::ImageUsageFlagBits::eColorAttachment,
+                vk::MemoryPropertyFlagBits::eDeviceLocal);
+
+            core::ImageUtilities::createImage(outputInfo,
+                offscreenResources.upscaleOutput.image,
+                offscreenResources.upscaleOutput.allocation,
+                device.getMemoryManager());
+
+            core::ImageViewInfoRequest outputView(device.getLogicalDevice(),
+                offscreenResources.upscaleOutput.image,
+                colorFormat, vk::ImageAspectFlagBits::eColor,
+                vk::ImageViewType::e2D, 1, 1);
+            core::ImageUtilities::createImageView(outputView, offscreenResources.upscaleOutput.imageView);
+
+            // Create ImGui descriptor for display
+            updateDescriptorSets(offscreenResources.upscaleOutput.descriptorSet,
+                                 offscreenResources.upscaleOutput.imageView);
+        }
+
+        offscreenResources.upscaleResourcesCreated = true;
+    }
+
+    void OffScreenViewPort::cleanupUpscaleResources()
+    {
+        if (!offscreenResources.upscaleResourcesCreated) return;
+
+        vk::Device vkDevice = device.getLogicalDevice();
+
+        // Motion vectors
+        if (offscreenResources.motionVectors.sampledView)
+            vkDevice.destroyImageView(offscreenResources.motionVectors.sampledView);
+        if (offscreenResources.motionVectors.imageView)
+            vkDevice.destroyImageView(offscreenResources.motionVectors.imageView);
+        if (offscreenResources.motionVectors.image)
+            vkDevice.destroyImage(offscreenResources.motionVectors.image);
+        if (offscreenResources.motionVectors.allocation)
+            device.getMemoryManager().free(offscreenResources.motionVectors.allocation);
+        offscreenResources.motionVectors = {};
+
+        // Upscale output
+        if (offscreenResources.upscaleOutput.descriptorSet && ImGui::GetCurrentContext())
+            ImGui_ImplVulkan_RemoveTexture(offscreenResources.upscaleOutput.descriptorSet);
+        if (offscreenResources.upscaleOutput.imageView)
+            vkDevice.destroyImageView(offscreenResources.upscaleOutput.imageView);
+        if (offscreenResources.upscaleOutput.image)
+            vkDevice.destroyImage(offscreenResources.upscaleOutput.image);
+        if (offscreenResources.upscaleOutput.allocation)
+            device.getMemoryManager().free(offscreenResources.upscaleOutput.allocation);
+        offscreenResources.upscaleOutput = {};
+
+        offscreenResources.upscaleResourcesCreated = false;
     }
 
     void OffScreenViewPort::setRaycastCursorUV(const glm::vec2& uv)

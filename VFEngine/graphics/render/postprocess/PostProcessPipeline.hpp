@@ -84,6 +84,15 @@ namespace render::postprocess
 
         void execute(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex);
 
+        /// Execute only pre-upscale effects (at render resolution).
+        void executePreUpscale(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex,
+                               bool skipTAA);
+
+        /// Execute only post-upscale effects (at display resolution).
+        /// sourceImage/sourceView: the upscaled image to use as initial input.
+        void executePostUpscale(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex,
+                                vk::Image sourceImage, vk::ImageView sourceView);
+
         void recreate();
         void cleanup();
 

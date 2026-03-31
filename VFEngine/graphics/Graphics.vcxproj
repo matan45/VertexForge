@@ -311,6 +311,7 @@
     <ClInclude Include="render\ui\UITextBufferManager.hpp" />
     <ClInclude Include="render\ui\UITextPipeline.hpp" />
     <ClInclude Include="render\ui\UITextRenderTypes.hpp" />
+    <ClInclude Include="render\upscaling\MotionVectorPass.hpp" />
     <ClInclude Include="render\upscaling\ResolutionManager.hpp" />
     <ClInclude Include="render\upscaling\UpscaleManager.hpp" />
     <ClInclude Include="render\vegetation\GrassMeshShaderPipeline.hpp" />
@@ -567,6 +568,7 @@
     <ClCompile Include="render\ui\UITextBufferManager.cpp" />
     <ClCompile Include="render\ui\UITextPipeline.cpp" />
     <ClCompile Include="render\ui\UITextPipelineSetup.cpp" />
+    <ClCompile Include="render\upscaling\MotionVectorPass.cpp" />
     <ClCompile Include="render\upscaling\ResolutionManager.cpp" />
     <ClCompile Include="render\upscaling\UpscaleManager.cpp" />
     <ClCompile Include="render\vegetation\GrassMeshShaderPipeline.cpp" />
@@ -674,6 +676,7 @@
     <None Include="..\..\resources\shaders\postprocess\edge_detection_composite.glsl" />
     <None Include="..\..\resources\shaders\postprocess\film_grain.glsl" />
     <None Include="..\..\resources\shaders\postprocess\fullscreen_vert.glsl" />
+    <None Include="..\..\resources\shaders\postprocess\motion_vectors_fullscreen.glsl" />
     <None Include="..\..\resources\shaders\postprocess\ssao.glsl" />
     <None Include="..\..\resources\shaders\postprocess\ssao_blur.glsl" />
     <None Include="..\..\resources\shaders\postprocess\ssao_composite.glsl" />

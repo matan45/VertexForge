@@ -52,6 +52,7 @@ namespace render::gpudriven
         data.projection = params.projection;
         data.viewProjection = viewProjection;
         data.invViewProjection = glm::inverse(viewProjection);
+        data.prevViewProjection = storedPrevViewProjection;
 
         data.cameraPosition = glm::vec4(params.cameraPosition, params.nearPlane);
 
@@ -87,6 +88,8 @@ namespace render::gpudriven
         data.categoryDistSq1 = glm::vec4(d[4] * d[4], d[5] * d[5], d[6] * d[6], params.shadowDistanceMultiplier);
 
         std::memcpy(mapped, &data, sizeof(GPUCameraData));
+
+        storedPrevViewProjection = viewProjection;
     }
 
     void GPUDrivenCameraBuffer::extractFrustumPlanes(const glm::mat4& viewProjection, glm::vec4 planes[6])

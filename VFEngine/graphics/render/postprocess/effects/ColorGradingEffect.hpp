@@ -85,6 +85,7 @@ namespace render::postprocess
 
         ::postprocess::EffectType getType() const override { return ::postprocess::EffectType::ColorGrading; }
         uint32_t getPriority() const override { return 110; }
+        bool isPreUpscale() const override { return false; }
 
     private:
         void loadShader();

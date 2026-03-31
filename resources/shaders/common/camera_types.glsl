@@ -10,12 +10,13 @@ struct CameraData {
     vec4 frustumPlanes[6];
 };
 
-// Must match GPUCameraData in GPUDrivenTypes.hpp (464 bytes)
+// Must match GPUCameraData in GPUDrivenTypes.hpp (528 bytes)
 struct GPUCameraData {
     mat4 view;
     mat4 projection;
     mat4 viewProjection;
     mat4 invViewProjection;
+    mat4 prevViewProjection;
 
     vec4 cameraPosition;
     vec4 screenParams;

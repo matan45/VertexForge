@@ -36,6 +36,7 @@ namespace render::postprocess
 
         ::postprocess::EffectType getType() const override { return ::postprocess::EffectType::ChromaticAberration; }
         uint32_t getPriority() const override { return 300; }
+        bool isPreUpscale() const override { return false; }
 
     private:
         void loadShader();

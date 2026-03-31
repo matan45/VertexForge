@@ -30,6 +30,10 @@ namespace render::postprocess
         virtual ::postprocess::EffectType getType() const = 0;
         virtual uint32_t getPriority() const = 0;
 
+        /// Whether this effect runs before upscaling (at render resolution).
+        /// Effects that return false run after upscaling (at display resolution).
+        virtual bool isPreUpscale() const { return true; }
+
         bool isEnabled() const { return enabled; }
         void setEnabled(bool value) { enabled = value; }
         bool isInitialized() const { return initialized; }

@@ -21,6 +21,7 @@
 #include "atmosphere/AtmospherePipeline.hpp"
 #include "cloud/CloudPipeline.hpp"
 #include "transparency/WBOITPipeline.hpp"
+#include "upscaling/UpscaleManager.hpp"
 #include "../../services/providers/vfx/IVFXRuntimeProvider.hpp"
 #include "../../services/providers/terrain/ITerrainRenderProvider.hpp"
 #include "../../services/providers/terrain/IOceanRenderProvider.hpp"
@@ -129,8 +130,24 @@ namespace render
         }
 
         executeRenderHooks(plugin::RenderPassHookPoint::PrePostProcess, commandBuffer, imageIndex);
-        executePostProcess(commandBuffer, imageIndex);
-        executeUpscale(commandBuffer, imageIndex);
+
+        {
+            auto* upscaleManager = device.getUpscaleManager();
+            bool upscalingActive = upscaleManager && upscaleManager->isActive()
+                                   && offscreenResources.upscaleResourcesCreated;
+
+            if (upscalingActive)
+            {
+                executePreUpscalePostProcess(commandBuffer, imageIndex);
+                executeUpscale(commandBuffer, imageIndex);
+                executePostUpscalePostProcess(commandBuffer, imageIndex);
+            }
+            else
+            {
+                executePostProcess(commandBuffer, imageIndex);
+            }
+        }
+
         executeRenderHooks(plugin::RenderPassHookPoint::PostPostProcess, commandBuffer, imageIndex);
 
         drawUIOverlays(commandBuffer, imageIndex);

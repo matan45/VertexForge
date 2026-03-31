@@ -58,6 +58,12 @@ namespace render::vfx
     class VFXDistortionComposite;
 }
 
+namespace render::upscaling
+{
+    class MotionVectorPass;
+    class UpscaleManager;
+}
+
 namespace render::volumetric
 {
     class VolumetricFogComposite;
@@ -145,6 +151,9 @@ namespace render
         std::unique_ptr<transparency::WBOITPipeline> wboitPipeline;
         bool wboitEnabled = true;
 
+        std::unique_ptr<upscaling::MotionVectorPass> motionVectorPass;
+        bool upscaleFirstFrame = true;
+
         std::unique_ptr<decal::DecalPipeline> decalPipeline;
         bool decalRenderingEnabled = true;
 
@@ -178,6 +187,8 @@ namespace render
         glm::mat4 currentView{1.0f};
         glm::mat4 currentProjection{1.0f};
         glm::mat4 unjitteredProjection{1.0f};
+        glm::mat4 prevView{1.0f};
+        glm::mat4 prevProjection{1.0f};
         glm::vec2 currentJitterOffset{0.0f};
         uint32_t taaFrameIndex = 0;
 
@@ -444,7 +455,9 @@ namespace render
         void executeOcclusionPasses(const vk::CommandBuffer& commandBuffer) const;
         void dispatchTerrainRaycast(const vk::CommandBuffer& commandBuffer) const;
         void executePostProcess(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
-        void executeUpscale(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
+        void executeUpscale(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex);
+        void executePreUpscalePostProcess(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
+        void executePostUpscalePostProcess(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
         void updateSunScreenPosition() const;
         void drawUIOverlays(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
 

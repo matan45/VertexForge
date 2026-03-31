@@ -28,6 +28,7 @@ namespace render::common
         glm::mat4 projection;
         glm::mat4 viewProjection;
         glm::mat4 invViewProjection;
+        glm::mat4 prevViewProjection;
         glm::vec4 cameraPosition;
         glm::vec4 screenParams;
         glm::vec4 frustumPlanes[6];
@@ -46,5 +47,5 @@ namespace render::common
         glm::vec4 categoryDistSq0;     // [staticMesh^2, terrain^2, foliage^2, vfx^2]
         glm::vec4 categoryDistSq1;     // [decals^2, 0, 0, shadowMultiplier]
     };
-    static_assert(sizeof(GPUCameraData) == 464, "GPUCameraData must be 464 bytes to match GLSL GPUCameraData");
+    static_assert(sizeof(GPUCameraData) == 528, "GPUCameraData must be 528 bytes to match GLSL GPUCameraData");
 }
