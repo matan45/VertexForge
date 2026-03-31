@@ -555,25 +555,27 @@ namespace render::raytracing
         // Pass 2: spatialBuf[1] -> denoisedOutput (R16Sfloat)
 
         // Transition spatial buffers and denoised output to eGeneral
-        // On first frame: undefined→general; on subsequent: already general from previous dispatch
-        if (!spatialImagesReady)
         {
-            auto initBarrier = [&](vk::Image image) {
+            auto toGeneral = [&](vk::Image image, vk::ImageLayout oldLayout) {
                 vk::ImageMemoryBarrier barrier{};
-                barrier.srcAccessMask = {};
+                barrier.srcAccessMask = (oldLayout == vk::ImageLayout::eUndefined) ? vk::AccessFlags{} : vk::AccessFlagBits::eShaderRead;
                 barrier.dstAccessMask = vk::AccessFlagBits::eShaderWrite | vk::AccessFlagBits::eShaderRead;
-                barrier.oldLayout = vk::ImageLayout::eUndefined;
+                barrier.oldLayout = oldLayout;
                 barrier.newLayout = vk::ImageLayout::eGeneral;
                 barrier.image = image;
                 barrier.subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};
                 cmd.pipelineBarrier(
-                    vk::PipelineStageFlagBits::eTopOfPipe,
+                    (oldLayout == vk::ImageLayout::eUndefined) ? vk::PipelineStageFlagBits::eTopOfPipe : vk::PipelineStageFlagBits::eFragmentShader,
                     vk::PipelineStageFlagBits::eComputeShader,
                     {}, 0, nullptr, 0, nullptr, 1, &barrier);
             };
+            // Spatial ping-pong: undefined on first frame, eGeneral after
+            vk::ImageLayout spatialOld = spatialImagesReady ? vk::ImageLayout::eGeneral : vk::ImageLayout::eUndefined;
             for (int i = 0; i < 2; ++i)
-                initBarrier(spatialBuf[i].image);
-            initBarrier(denoisedOutputImage);
+                toGeneral(spatialBuf[i].image, spatialOld);
+            // Denoised output: undefined on first frame, eShaderReadOnlyOptimal after (fragment shader reads it)
+            vk::ImageLayout outputOld = spatialImagesReady ? vk::ImageLayout::eShaderReadOnlyOptimal : vk::ImageLayout::eUndefined;
+            toGeneral(denoisedOutputImage, outputOld);
             spatialImagesReady = true;
         }
 

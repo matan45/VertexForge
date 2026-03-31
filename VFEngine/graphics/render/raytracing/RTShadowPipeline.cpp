@@ -388,11 +388,19 @@ namespace render::raytracing
             vk::ImageAspectFlagBits::eColor);
 
         // Transition shadow mask: shader read (or undefined on first frame) -> general for compute write
-        vk::ImageLayout oldMaskLayout = firstFrame ? vk::ImageLayout::eUndefined : vk::ImageLayout::eShaderReadOnlyOptimal;
-        core::ImageUtilities::transitionImageLayout(cmd, shadowMaskImage,
-            oldMaskLayout,
-            vk::ImageLayout::eGeneral,
-            vk::ImageAspectFlagBits::eColor);
+        {
+            vk::ImageMemoryBarrier barrier{};
+            barrier.srcAccessMask = firstFrame ? vk::AccessFlags{} : vk::AccessFlagBits::eShaderRead;
+            barrier.dstAccessMask = vk::AccessFlagBits::eShaderWrite;
+            barrier.oldLayout = firstFrame ? vk::ImageLayout::eUndefined : vk::ImageLayout::eShaderReadOnlyOptimal;
+            barrier.newLayout = vk::ImageLayout::eGeneral;
+            barrier.image = shadowMaskImage;
+            barrier.subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};
+            cmd.pipelineBarrier(
+                firstFrame ? vk::PipelineStageFlagBits::eTopOfPipe : vk::PipelineStageFlagBits::eFragmentShader,
+                vk::PipelineStageFlagBits::eComputeShader,
+                {}, 0, nullptr, 0, nullptr, 1, &barrier);
+        }
 
         // Bind and dispatch
         cmd.bindPipeline(vk::PipelineBindPoint::eCompute, computePipeline);

@@ -3,7 +3,6 @@
 #include "../../core/SwapChain.hpp"
 #include "../../core/Device.hpp"
 #include "types/RenderSettings.hpp"
-#include "print/Log.hpp"
 #include <algorithm>
 
 #ifdef MemoryBarrier
@@ -467,20 +466,7 @@ namespace render::gpudriven
 
     void GPUDrivenRenderer::dispatchRTShadow(vk::CommandBuffer cmd)
     {
-        if (!isRTShadowReady())
-        {
-            static uint32_t debugCounter = 0;
-            if (debugCounter++ % 300 == 0) // Log every ~5 seconds at 60fps
-            {
-                vfLogWarning("RT Shadow not ready: rayQuery={} accelMgr={} tlasReady={} prepass={} dirLights={}",
-                    device.isRayQuerySupported(),
-                    accelStructManager != nullptr,
-                    accelStructManager ? accelStructManager->isTLASReady() : false,
-                    depthPrepass && depthPrepass->isInitialized(),
-                    lightBufferManager ? lightBufferManager->getDirectionalLightCount() : 0);
-            }
-            return;
-        }
+        if (!isRTShadowReady()) return;
 
         // Lazy init — create RT shadow pipeline and recreate mesh pipelines with set 13
         if (!rtShadowPipeline)
