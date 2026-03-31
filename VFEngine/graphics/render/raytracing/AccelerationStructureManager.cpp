@@ -309,7 +309,8 @@ namespace render::raytracing
             {
                 vk::MemoryBarrier buildBarrier{
                     vk::AccessFlagBits::eAccelerationStructureWriteKHR,
-                    vk::AccessFlagBits::eAccelerationStructureWriteKHR
+                    vk::AccessFlagBits::eAccelerationStructureWriteKHR |
+                    vk::AccessFlagBits::eAccelerationStructureReadKHR
                 };
                 cmd.pipelineBarrier(
                     vk::PipelineStageFlagBits::eAccelerationStructureBuildKHR,
@@ -746,7 +747,8 @@ namespace render::raytracing
             {
                 vk::MemoryBarrier buildBarrier{
                     vk::AccessFlagBits::eAccelerationStructureWriteKHR,
-                    vk::AccessFlagBits::eAccelerationStructureWriteKHR
+                    vk::AccessFlagBits::eAccelerationStructureWriteKHR |
+                    vk::AccessFlagBits::eAccelerationStructureReadKHR
                 };
                 cmd.pipelineBarrier(
                     vk::PipelineStageFlagBits::eAccelerationStructureBuildKHR,

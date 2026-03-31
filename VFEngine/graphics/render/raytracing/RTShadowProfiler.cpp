@@ -83,7 +83,7 @@ namespace render::raytracing
             updateEMA(tlasMs, emaTlasBuildMs);
         }
 
-        const_cast<RTShadowProfiler*>(this)->emaInitialized = true;
+        emaInitialized = true;
 
         // AS memory budget check
         float usedBytes = static_cast<float>(asBudget.blasTotalBytes + asBudget.tlasTotalBytes);
@@ -113,7 +113,7 @@ namespace render::raytracing
         }
     }
 
-    AdaptiveAction RTShadowProfiler::evaluateBudget() const
+    AdaptiveAction RTShadowProfiler::evaluateBudget()
     {
         AdaptiveAction action{};
 
@@ -134,18 +134,17 @@ namespace render::raytracing
             {
                 action.skipFrame = true;
             }
+            consecutiveOverBudget = 0; // Reset after taking action
         }
         // Restore quality when under budget for sustained period
         else if (consecutiveUnderBudget >= HYSTERESIS_FRAMES_UP)
         {
             if (skipNextFrame)
             {
-                // Un-skip frames first
                 action.skipFrame = false;
             }
             else if (appliedMaxRayDistance < baseMaxRayDistance)
             {
-                // Gradual restore: 10% toward base
                 float step = (baseMaxRayDistance - appliedMaxRayDistance) * 0.1f;
                 action.newMaxRayDistance = appliedMaxRayDistance + std::max(step, 10.0f);
                 if (action.newMaxRayDistance.value() > baseMaxRayDistance)
@@ -155,7 +154,22 @@ namespace render::raytracing
             {
                 action.newSpatialPasses = appliedSpatialPasses + 1;
             }
+            consecutiveUnderBudget = 0; // Reset after taking action
         }
+
+        // Update applied state so next evaluation uses current values
+        if (action.newMaxRayDistance.has_value())
+            appliedMaxRayDistance = action.newMaxRayDistance.value();
+        if (action.newSpatialPasses.has_value())
+            appliedSpatialPasses = action.newSpatialPasses.value();
+        if (action.skipFrame)
+            skipNextFrame = true;
+        else if (skipNextFrame && !action.skipFrame)
+            skipNextFrame = false;
+
+        throttled = (appliedMaxRayDistance < baseMaxRayDistance ||
+                     appliedSpatialPasses < baseSpatialPasses ||
+                     skipNextFrame);
 
         return action;
     }

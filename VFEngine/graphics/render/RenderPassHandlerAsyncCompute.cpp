@@ -310,38 +310,11 @@ namespace render
 
     void RenderPassHandler::executeUpscale(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const
     {
-        auto* upscaleManager = device.getUpscaleManager();
-        if (!upscaleManager || !upscaleManager->isActive()) return;
-
-        auto& colorImg = offscreenResources.colorImages[imageIndex];
-        auto& depthImg = offscreenResources.depthImage;
-
-        upscaling::UpscaleInputs inputs{};
-        inputs.colorInput = colorImg.colorImage;
-        inputs.colorView = colorImg.colorImageView;
-        inputs.depthInput = depthImg.depthImage;
-        inputs.depthView = depthImg.depthImageView;
-
-        // Motion vectors and reactive mask — use null for now (depth-based reprojection)
-        inputs.motionVectors = nullptr;
-        inputs.motionView = nullptr;
-        inputs.reactiveMask = nullptr;
-        inputs.reactiveView = nullptr;
-
-        // Output goes back to scene color
-        inputs.output = colorImg.colorImage;
-        inputs.outputView = colorImg.colorImageView;
-
-        auto extent = swapChain.getSwapchainExtent();
-        inputs.displayExtent = extent;
-        inputs.renderExtent = extent; // Same for now until resolution split is implemented
-
-        inputs.jitterOffset = currentJitterOffset;
-        inputs.deltaTime = static_cast<float>(engineTime::Timer::getDeltaTime());
-        inputs.preExposure = 1.0f;
-        inputs.resetAccumulation = false;
-
-        upscaleManager->evaluate(commandBuffer, taaFrameIndex, inputs);
+        // Upscale pass is not yet fully functional — requires motion vectors and resolution split.
+        // Guard: do not call Streamline evaluate() until those are implemented.
+        // The UpscaleManager settings/UI/detection are active but the actual GPU pass is disabled.
+        (void)commandBuffer;
+        (void)imageIndex;
     }
 
     void RenderPassHandler::updateSunScreenPosition() const

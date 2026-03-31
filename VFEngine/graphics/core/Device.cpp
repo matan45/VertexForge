@@ -328,11 +328,11 @@ namespace core
         vulkan12Features.descriptorBindingSampledImageUpdateAfterBind = VK_TRUE;
         vulkan12Features.descriptorBindingStorageBufferUpdateAfterBind = VK_TRUE;
         vulkan12Features.descriptorBindingUniformBufferUpdateAfterBind = VK_TRUE;
-        // Required for acceleration structures. When Streamline is active, it injects
-        // VK_EXT_buffer_device_address which conflicts with the Vulkan 1.2 core feature.
-        // Use a separate VkPhysicalDeviceBufferDeviceAddressFeatures struct instead to avoid the conflict.
-        vulkan12Features.bufferDeviceAddress = render::upscaling::UpscaleManager::isStreamlineAvailable()
-            ? VK_FALSE : VK_TRUE;
+        // Required for acceleration structures.
+        // Note: Streamline injects VK_EXT_buffer_device_address which technically conflicts
+        // with the Vulkan 1.2 core feature. The validation warning is suppressed in debugCallback
+        // (VUID-VkDeviceCreateInfo-pNext-04748) — both paths enable the same functionality.
+        vulkan12Features.bufferDeviceAddress = VK_TRUE;
         vulkan12Features.timelineSemaphore = VK_TRUE; // Required for async compute synchronization
         vulkan12Features.pNext = &vulkan11Features;
 

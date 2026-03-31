@@ -60,7 +60,7 @@ namespace render::raytracing
                                const ASMemoryBudget& asBudget);
 
         /// Evaluate the adaptive budget and return recommended changes.
-        AdaptiveAction evaluateBudget() const;
+        AdaptiveAction evaluateBudget();
 
         /// Set the user's base quality settings (before adaptive modification).
         void setBaseSettings(float maxRayDist, int spatialPasses);

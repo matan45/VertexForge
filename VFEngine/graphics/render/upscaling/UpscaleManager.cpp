@@ -58,7 +58,7 @@ namespace render::upscaling
         prefs.showConsole = false;
         prefs.logLevel = sl::LogLevel::eDefault;
         prefs.featuresToLoad = featuresToLoad;
-        prefs.numFeaturesToLoad = _countof(featuresToLoad);
+        prefs.numFeaturesToLoad = static_cast<uint32_t>(std::size(featuresToLoad));
         prefs.engine = sl::EngineType::eCustom;
         prefs.engineVersion = "1.0.0";
         prefs.renderAPI = sl::RenderAPI::eVulkan;
@@ -259,8 +259,8 @@ namespace render::upscaling
 
         // Get frame token
         sl::FrameToken* frameToken = nullptr;
-        slGetNewFrameToken(frameToken, &frameIndex);
-        if (!frameToken) return;
+        sl::Result tokenResult = slGetNewFrameToken(frameToken, &frameIndex);
+        if (tokenResult != sl::Result::eOk || !frameToken) return;
 
         // Set constants (camera jitter, motion vector info, etc.)
         sl::Constants constants{};
