@@ -30,9 +30,9 @@ namespace render::raytracing
         /// Reset the pool for this frame index. Must be called before any writeTimestamp.
         void resetFrame(vk::CommandBuffer cmd, uint32_t frameIndex);
 
-        /// Write a timestamp at the given pipeline stage.
+        /// Write a timestamp at the given pipeline stage (Vulkan 1.0, no synchronization2 needed).
         void writeTimestamp(vk::CommandBuffer cmd, uint32_t frameIndex,
-                           uint32_t queryIndex, vk::PipelineStageFlagBits2 stage);
+                           uint32_t queryIndex, vk::PipelineStageFlagBits stage);
 
         /// Read results from a completed frame.
         /// Returns true if results are available, fills outTimestamps.

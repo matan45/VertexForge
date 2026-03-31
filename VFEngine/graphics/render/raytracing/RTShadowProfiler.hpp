@@ -52,7 +52,7 @@ namespace render::raytracing
 
         /// Write a timestamp.
         void writeTimestamp(vk::CommandBuffer cmd, uint32_t frameIndex,
-                           RTShadowTimestamp slot, vk::PipelineStageFlagBits2 stage);
+                           RTShadowTimestamp slot, vk::PipelineStageFlagBits stage);
 
         /// Read back completed frame's results and update EMA.
         /// Call at the start of the frame, before dispatch.
@@ -114,6 +114,9 @@ namespace render::raytracing
         // Per-frame flags for conditional timestamp reads
         bool blasBuiltThisFrame = false;
         bool tlasBuiltThisFrame = false;
+
+        // Track which frame slots have been reset (avoid reading uninitialized queries)
+        bool frameSlotReady[core::MAX_FRAMES_IN_FLIGHT]{};
 
         // AS memory
         bool asOverBudget = false;

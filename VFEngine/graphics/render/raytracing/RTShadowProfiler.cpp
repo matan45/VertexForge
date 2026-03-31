@@ -20,10 +20,12 @@ namespace render::raytracing
         blasBuiltThisFrame = false;
         tlasBuiltThisFrame = false;
         queryPool.resetFrame(cmd, frameIndex);
+        uint32_t fi = frameIndex % core::MAX_FRAMES_IN_FLIGHT;
+        frameSlotReady[fi] = true;
     }
 
     void RTShadowProfiler::writeTimestamp(vk::CommandBuffer cmd, uint32_t frameIndex,
-                                           RTShadowTimestamp slot, vk::PipelineStageFlagBits2 stage)
+                                           RTShadowTimestamp slot, vk::PipelineStageFlagBits stage)
     {
         queryPool.writeTimestamp(cmd, frameIndex, static_cast<uint32_t>(slot), stage);
     }
@@ -41,8 +43,13 @@ namespace render::raytracing
     {
         if (!queryPool.isValid()) return;
 
+        // Read the PREVIOUS frame's slot (the one that has completed on the GPU).
+        // Current frame's slot was just reset — it's not ready to read.
+        uint32_t prevFI = (frameIndex + core::MAX_FRAMES_IN_FLIGHT - 1) % core::MAX_FRAMES_IN_FLIGHT;
+        if (!frameSlotReady[prevFI]) return;
+
         std::vector<uint64_t> timestamps;
-        if (!queryPool.readResults(logicalDevice, frameIndex, timestamps)) return;
+        if (!queryPool.readResults(logicalDevice, prevFI, timestamps)) return;
 
         // Ray dispatch timing
         float rayMs = queryPool.toMilliseconds(

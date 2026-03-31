@@ -284,6 +284,14 @@ namespace render::gpudriven
     {
         if (!initialized || !enabled) return;
 
+        // Lazy-init profiler if RT shadow pipeline exists (or will be created this frame).
+        // Must happen before any timestamp writes in this function or dispatchRTShadow.
+        if (!rtShadowProfiler && rtShadowEnabled && accelStructManager && accelStructManager->isInitialized())
+        {
+            rtShadowProfiler = std::make_unique<raytracing::RTShadowProfiler>();
+            rtShadowProfiler->init(device);
+        }
+
         // Reset profiler query pool at the start of the frame (before any timestamp writes).
         // Both dispatchGraphicsCompute (BLAS/TLAS) and dispatchRTShadow write into this pool.
         if (rtShadowProfiler && rtShadowProfiler->isValid())
@@ -345,7 +353,7 @@ namespace render::gpudriven
             {
                 rtShadowProfiler->writeTimestamp(cmd, profilerFI,
                     raytracing::RTShadowTimestamp::BeforeBLASBuild,
-                    vk::PipelineStageFlagBits2::eAccelerationStructureBuildKHR);
+                    vk::PipelineStageFlagBits::eAllCommands);
             }
 
             if (hasPendingBLAS)
@@ -365,7 +373,7 @@ namespace render::gpudriven
             {
                 rtShadowProfiler->writeTimestamp(cmd, profilerFI,
                     raytracing::RTShadowTimestamp::AfterBLASBuild,
-                    vk::PipelineStageFlagBits2::eAccelerationStructureBuildKHR);
+                    vk::PipelineStageFlagBits::eAllCommands);
                 rtShadowProfiler->markBLASBuilt();
             }
 
@@ -394,7 +402,7 @@ namespace render::gpudriven
                 {
                     rtShadowProfiler->writeTimestamp(cmd, profilerFI,
                         raytracing::RTShadowTimestamp::AfterTLASBuild,
-                        vk::PipelineStageFlagBits2::eAccelerationStructureBuildKHR);
+                        vk::PipelineStageFlagBits::eAllCommands);
                     rtShadowProfiler->markTLASBuilt();
                 }
             }
@@ -594,13 +602,6 @@ namespace render::gpudriven
 
         if (!rtShadowPipeline->isInitialized()) return;
 
-        // Initialize profiler alongside pipeline (lazy init)
-        if (!rtShadowProfiler)
-        {
-            rtShadowProfiler = std::make_unique<raytracing::RTShadowProfiler>();
-            rtShadowProfiler->init(device);
-        }
-
         // Handle resize
         uint32_t w = depthPrepass->getWidth();
         uint32_t h = depthPrepass->getHeight();
@@ -651,7 +652,7 @@ namespace render::gpudriven
 
             rtShadowProfiler->writeTimestamp(cmd, fi,
                 raytracing::RTShadowTimestamp::BeforeRayDispatch,
-                vk::PipelineStageFlagBits2::eComputeShader);
+                vk::PipelineStageFlagBits::eComputeShader);
         }
 
         rtShadowPipeline->dispatch(cmd,
@@ -672,7 +673,7 @@ namespace render::gpudriven
         {
             rtShadowProfiler->writeTimestamp(cmd, fi,
                 raytracing::RTShadowTimestamp::AfterRayDispatch,
-                vk::PipelineStageFlagBits2::eComputeShader);
+                vk::PipelineStageFlagBits::eComputeShader);
         }
 
         if (useDenoiser)
@@ -695,7 +696,7 @@ namespace render::gpudriven
         {
             rtShadowProfiler->writeTimestamp(cmd, fi,
                 raytracing::RTShadowTimestamp::AfterDenoiser,
-                vk::PipelineStageFlagBits2::eComputeShader);
+                vk::PipelineStageFlagBits::eComputeShader);
         }
     }
 

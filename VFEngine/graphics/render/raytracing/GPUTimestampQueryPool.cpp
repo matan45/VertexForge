@@ -61,11 +61,11 @@ namespace render::raytracing
     }
 
     void GPUTimestampQueryPool::writeTimestamp(vk::CommandBuffer cmd, uint32_t frameIndex,
-                                               uint32_t queryIndex, vk::PipelineStageFlagBits2 stage)
+                                               uint32_t queryIndex, vk::PipelineStageFlagBits stage)
     {
         if (!valid || queryIndex >= queryCount) return;
         uint32_t fi = frameIndex % core::MAX_FRAMES_IN_FLIGHT;
-        cmd.writeTimestamp2(stage, pools[fi], queryIndex);
+        cmd.writeTimestamp(stage, pools[fi], queryIndex);
     }
 
     bool GPUTimestampQueryPool::readResults(const vk::Device& logicalDevice, uint32_t frameIndex,
