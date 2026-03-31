@@ -455,6 +455,10 @@ namespace render::gpudriven
             terrainShader->addMacroDefinition("CAUSTICS_ENABLED");
             terrainShader->addMacroDefinition("CAUSTIC_SET", "13");
         }
+        if (rtShadowEnabled && rtShadowMaskLayout)
+        {
+            terrainShader->addMacroDefinition("RT_SHADOW_ENABLED");
+        }
         terrainShader->readShader("../../resources/shaders/gpudriven/task_terrain.glsl");
         terrainShader->readShader("../../resources/shaders/gpudriven/mesh_terrain.glsl");
 
@@ -507,9 +511,16 @@ namespace render::gpudriven
             svtLayout  // Set 12: SVT page table + params + cache textures
         };
 
+        pipelineHasSet13 = false;
         if (causticEnabled && cachedCausticLayout)
         {
             setLayouts.push_back(cachedCausticLayout); // Set 13
+            pipelineHasSet13 = true;
+        }
+        else if (rtShadowEnabled && rtShadowMaskLayout)
+        {
+            setLayouts.push_back(rtShadowMaskLayout); // Set 13
+            pipelineHasSet13 = true;
         }
 
         vk::PushConstantRange pushConstantRange{};

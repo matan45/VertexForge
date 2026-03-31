@@ -1,5 +1,4 @@
 #include "OffScreenViewPort.hpp"
-#include "print/Log.hpp"
 #include "../core/Device.hpp"
 #include "../core/SwapChain.hpp"
 #include "../core/CommandPool.hpp"
@@ -55,9 +54,6 @@ namespace render
 
         vk::Result result = device.getLogicalDevice().waitForFences(
             1, &inFlightFences[imageIndex], VK_TRUE, UINT64_MAX);
-        if (result != vk::Result::eSuccess) {
-            vfLogError("FENCE DEBUG OffScreen: waitForFences[{}] returned {}", imageIndex, vk::to_string(result));
-        }
 
         // Also wait for any other swapchain image that shares the same frame-in-flight
         // secondary command buffer slot (e.g., images 0 and 2 both map to fi=0 when
@@ -68,23 +64,12 @@ namespace render
         {
             if (i != imageIndex && (i % core::MAX_FRAMES_IN_FLIGHT) == fi)
             {
-                result = device.getLogicalDevice().waitForFences(1, &inFlightFences[i], VK_TRUE, UINT64_MAX);
-                if (result != vk::Result::eSuccess) {
-                    vfLogError("FENCE DEBUG OffScreen: waitForFences[{}] (same-fi) returned {}", i, vk::to_string(result));
-                }
+                (void)device.getLogicalDevice().waitForFences(1, &inFlightFences[i], VK_TRUE, UINT64_MAX);
             }
         }
 
-        // Verify fence is signaled before reset
-        vk::Result fenceStatus = device.getLogicalDevice().getFenceStatus(inFlightFences[imageIndex]);
-        if (fenceStatus != vk::Result::eSuccess) {
-            vfLogError("FENCE DEBUG OffScreen: getFenceStatus[{}] = {} BEFORE reset", imageIndex, vk::to_string(fenceStatus));
-        }
-
         result = device.getLogicalDevice().resetFences(1, &inFlightFences[imageIndex]);
-        if (result != vk::Result::eSuccess) {
-            vfLogError("FENCE DEBUG OffScreen: resetFences[{}] returned {}", imageIndex, vk::to_string(result));
-        }
+        (void)result;
 
         // Read back previous frame's results and update brush overlay BEFORE rendering
         // so the overlay position matches the current raycast hit in this frame's render

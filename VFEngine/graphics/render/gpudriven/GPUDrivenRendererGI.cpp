@@ -544,6 +544,24 @@ namespace render::gpudriven
                     if (causticLayout)
                         wboitMeshShaderPipeline->updateCausticDescriptor(water.causticsResources->getDescriptorSet());
                 }
+
+                // Terrain pipeline: set RT shadow mask layout and recreate
+                if (terrain.pipeline)
+                {
+                    terrain.pipeline->setRTShadowMaskLayout(rtMaskLayout);
+                    terrain.pipeline->updateRTShadowMaskDescriptor(rtMaskDescSet);
+                    terrain.pipeline->recreate(
+                        cachedIBLLayout,
+                        bindlessTextures->getDescriptorSetLayout(),
+                        terrain.pipeline->getCachedMeshletLayout(),
+                        terrain.pipeline->getCachedVertexLayout(),
+                        lightBufferManager->getDescriptorSetLayout(),
+                        clusterGridManager->getDescriptorSetLayout(),
+                        lightCullingPipeline->getDescriptorSetLayout(),
+                        shadowSystem->getShadowDataLayout(),
+                        shadowSystem->getShadowTextureLayout(),
+                        cachedRenderPass);
+                }
             }
         }
 
@@ -565,6 +583,8 @@ namespace render::gpudriven
                     transparentMeshShaderPipeline->updateRTShadowMaskDescriptor(rtShadowDenoiser->getDenoisedMaskSamplerDescriptorSet());
                 if (wboitMeshShaderPipeline)
                     wboitMeshShaderPipeline->updateRTShadowMaskDescriptor(rtShadowDenoiser->getDenoisedMaskSamplerDescriptorSet());
+                if (terrain.pipeline)
+                    terrain.pipeline->updateRTShadowMaskDescriptor(rtShadowDenoiser->getDenoisedMaskSamplerDescriptorSet());
             }
         }
 

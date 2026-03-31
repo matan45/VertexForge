@@ -93,6 +93,12 @@ namespace render::gpudriven
         vk::DescriptorSet causticDescriptorSet;
         bool causticEnabled = false;
 
+        // RT shadow mask descriptor set (Set 13, when caustics not active)
+        vk::DescriptorSetLayout rtShadowMaskLayout;
+        vk::DescriptorSet rtShadowMaskDescriptorSet;
+        bool rtShadowEnabled = false;
+        bool pipelineHasSet13 = false;  // True when the active pipeline layout includes set 13
+
         // Weight map + layer info descriptor (Set 1)
         vk::DescriptorSetLayout weightMapLayout;
         vk::DescriptorPool weightMapPool;
@@ -175,6 +181,9 @@ namespace render::gpudriven
                                      vk::DescriptorSet cullingOutputDescSet,
                                      vk::DescriptorSet shadowDataDescSet,
                                      vk::DescriptorSet shadowTextureDescSet);
+
+        void setRTShadowMaskLayout(vk::DescriptorSetLayout layout) { rtShadowMaskLayout = layout; rtShadowEnabled = true; }
+        void updateRTShadowMaskDescriptor(vk::DescriptorSet descSet) { rtShadowMaskDescriptorSet = descSet; }
 
         void dispatch(vk::CommandBuffer cmd,
                       uint32_t viewMode,
