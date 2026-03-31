@@ -301,7 +301,7 @@ namespace render::upscaling
 
             dlssOptions.outputWidth = outputWidth;
             dlssOptions.outputHeight = outputHeight;
-            dlssOptions.colorBuffersHDR = sl::Boolean::eTrue;
+            dlssOptions.colorBuffersHDR = sl::Boolean::eFalse;
 
             slDLSSSetOptions(sl::ViewportHandle{0}, dlssOptions);
         }
@@ -320,9 +320,12 @@ namespace render::upscaling
 
         sl::ViewportHandle viewport{0};
 
-        // Get frame token
+        // Get frame token — use a monotonically increasing counter, not taaFrameIndex
+        // which wraps around and causes "Setting constants multiple times" errors.
+        static uint32_t slFrameCounter = 0;
+        uint32_t currentFrame = slFrameCounter++;
         sl::FrameToken* frameToken = nullptr;
-        sl::Result tokenResult = slGetNewFrameToken(frameToken, &frameIndex);
+        sl::Result tokenResult = slGetNewFrameToken(frameToken, &currentFrame);
         if (tokenResult != sl::Result::eOk || !frameToken) return false;
 
         // Set constants — all SL matrices are row-major, GLM is column-major

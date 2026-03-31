@@ -258,7 +258,7 @@ namespace windows
 
     void PostProcessConfigWindow::drawUpscaleSection()
     {
-        if (ImGui::CollapsingHeader("Upscaling (DLSS / FSR 2)"))
+        if (ImGui::CollapsingHeader("Upscaling (DLSS)"))
         {
             ImGui::Indent(10.0f);
 
@@ -268,14 +268,6 @@ namespace windows
             if (settings.upscale.enabled)
             {
                 ImGui::Spacing();
-
-                const char* modeNames[] = {"Off", "DLSS", "FSR 2 (DirectSR)", "Auto"};
-                int currentMode = static_cast<int>(settings.upscale.mode);
-                if (ImGui::Combo("Mode", &currentMode, modeNames, IM_ARRAYSIZE(modeNames)))
-                {
-                    settings.upscale.mode = static_cast<postprocess::UpscaleMode>(currentMode);
-                    isDirty = true;
-                }
 
                 const char* qualityNames[] = {"Native (DLAA)", "Quality (1.5x)", "Balanced (1.7x)",
                                                "Performance (2.0x)", "Ultra Performance (3.0x)"};
@@ -294,16 +286,7 @@ namespace windows
 
                 ImGui::Text("Streamline: %s", status.streamlineAvailable ? "Available" : "Not Available");
                 ImGui::Text("DLSS: %s", status.dlssSupported ? "Supported" : "Not Supported");
-                ImGui::Text("DirectSR: %s", status.directSRSupported ? "Supported" : "Not Supported");
-
-                const char* activeModeStr = "Off";
-                switch (status.activeMode)
-                {
-                case postprocess::UpscaleMode::DLSS: activeModeStr = "DLSS"; break;
-                case postprocess::UpscaleMode::FSR2: activeModeStr = "FSR 2 (DirectSR)"; break;
-                default: break;
-                }
-                ImGui::Text("Active: %s", activeModeStr);
+                ImGui::Text("Active: %s", status.activeMode == postprocess::UpscaleMode::DLSS ? "DLSS" : "Off");
 
                 if (status.renderWidth > 0 && status.displayWidth > 0)
                 {

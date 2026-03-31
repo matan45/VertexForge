@@ -218,7 +218,7 @@ namespace postprocess
     struct UpscaleSettings
     {
         bool enabled = false;
-        UpscaleMode mode = UpscaleMode::Auto;
+        UpscaleMode mode = UpscaleMode::DLSS;
         UpscaleQuality quality = UpscaleQuality::Quality;
 
         static float getScaleFactor(UpscaleQuality q)
