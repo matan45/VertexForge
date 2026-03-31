@@ -13,7 +13,7 @@ namespace render::upscaling
     {
     public:
         void setDisplayResolution(uint32_t width, uint32_t height);
-        void setQualityMode(postprocess::UpscaleQuality quality);
+        void setQualityMode(::postprocess::UpscaleQuality quality);
 
         vk::Extent2D getDisplayResolution() const { return displayResolution; }
         vk::Extent2D getRenderResolution() const { return renderResolution; }
@@ -26,13 +26,13 @@ namespace render::upscaling
         float getScaleFactor() const { return scaleFactor; }
         bool isUpscaling() const { return scaleFactor > 1.0f; }
 
-        postprocess::UpscaleQuality getQualityMode() const { return currentQuality; }
+        ::postprocess::UpscaleQuality getQualityMode() const { return currentQuality; }
 
     private:
         vk::Extent2D displayResolution{1920, 1080};
         vk::Extent2D renderResolution{1920, 1080};
         float scaleFactor = 1.0f;
-        postprocess::UpscaleQuality currentQuality = postprocess::UpscaleQuality::Native;
+        ::postprocess::UpscaleQuality currentQuality = ::postprocess::UpscaleQuality::Native;
 
         void recompute();
     };

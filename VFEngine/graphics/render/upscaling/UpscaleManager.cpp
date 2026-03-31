@@ -11,6 +11,32 @@
 
 namespace render::upscaling
 {
+#ifdef VF_STREAMLINE_ENABLED
+    static const char* slResultToString(sl::Result r)
+    {
+        switch (r)
+        {
+        case sl::Result::eOk: return "Ok";
+        case sl::Result::eErrorDriverOutOfDate: return "ErrorDriverOutOfDate";
+        case sl::Result::eErrorOSOutOfDate: return "ErrorOSOutOfDate";
+        case sl::Result::eErrorDeviceNotCreated: return "ErrorDeviceNotCreated";
+        case sl::Result::eErrorNoSupportedAdapterFound: return "ErrorNoSupportedAdapterFound";
+        case sl::Result::eErrorAdapterNotSupported: return "ErrorAdapterNotSupported";
+        case sl::Result::eErrorNoPlugins: return "ErrorNoPlugins";
+        case sl::Result::eErrorVulkanAPI: return "ErrorVulkanAPI";
+        case sl::Result::eErrorNGXFailed: return "ErrorNGXFailed";
+        case sl::Result::eErrorInvalidIntegration: return "ErrorInvalidIntegration";
+        case sl::Result::eErrorNotInitialized: return "ErrorNotInitialized";
+        case sl::Result::eErrorInitNotCalled: return "ErrorInitNotCalled";
+        case sl::Result::eErrorFeatureMissing: return "ErrorFeatureMissing";
+        case sl::Result::eErrorFeatureNotSupported: return "ErrorFeatureNotSupported";
+        case sl::Result::eErrorFeatureFailedToLoad: return "ErrorFeatureFailedToLoad";
+        case sl::Result::eErrorFeatureMissingDependency: return "ErrorFeatureMissingDependency";
+        default: return "Unknown";
+        }
+    }
+#endif
+
     UpscaleManager::~UpscaleManager()
     {
         shutdown();
@@ -68,21 +94,12 @@ namespace render::upscaling
 #ifdef VF_STREAMLINE_ENABLED
         if (!streamlineAvailable) return false;
 
-        sl::VulkanInfo vkInfo{};
-        vkInfo.device = static_cast<VkDevice>(device.getLogicalDevice());
-        vkInfo.instance = static_cast<VkInstance>(device.getInstance());
-        vkInfo.physicalDevice = static_cast<VkPhysicalDevice>(device.getPhysicalDevice());
-        vkInfo.graphicsQueueFamily = device.getQueueFamilyIndices().graphicsAndComputeFamily.value();
-        vkInfo.graphicsQueueIndex = 0;
-        vkInfo.computeQueueFamily = device.getQueueFamilyIndices().graphicsAndComputeFamily.value();
-        vkInfo.computeQueueIndex = 0;
-
-        sl::Result result = slSetVulkanInfo(vkInfo);
-        if (result != sl::Result::eOk)
-        {
-            vfLogWarning("Streamline slSetVulkanInfo failed (result={})", static_cast<int>(result));
-            return false;
-        }
+        // In manual hook mode, Streamline intercepts vkCreateDevice and already
+        // knows the Vulkan device. We skip slSetVulkanInfo — calling it causes
+        // ErrorInvalidIntegration because the device was already set via interception.
+        //
+        // slSetVulkanInfo is only needed when NOT using Streamline's Vulkan proxies.
+        vfLogInfo("Streamline: device set via interception (manual hook mode, skipping slSetVulkanInfo)");
 
         deviceSet = true;
         instance = this;
@@ -118,61 +135,105 @@ namespace render::upscaling
         if (!deviceSet) return;
 
         sl::AdapterInfo adapterInfo{};
-        dlssSupported = (slIsFeatureSupported(sl::kFeatureDLSS, adapterInfo) == sl::Result::eOk);
-        directSRSupported = (slIsFeatureSupported(sl::kFeatureDirectSR, adapterInfo) == sl::Result::eOk);
+
+        sl::Result dlssResult = slIsFeatureSupported(sl::kFeatureDLSS, adapterInfo);
+        dlssSupported = (dlssResult == sl::Result::eOk);
+        vfLogInfo("Streamline DLSS support query: {} ({})",
+                  slResultToString(dlssResult), static_cast<int>(dlssResult));
+
+        sl::Result directSRResult = slIsFeatureSupported(sl::kFeatureDirectSR, adapterInfo);
+        directSRSupported = (directSRResult == sl::Result::eOk);
+        vfLogInfo("Streamline DirectSR support query: {} ({})",
+                  slResultToString(directSRResult), static_cast<int>(directSRResult));
+
+        // Check if DLSS feature actually loaded
+        if (dlssSupported)
+        {
+            bool loaded = false;
+            sl::Result loadResult = slIsFeatureLoaded(sl::kFeatureDLSS, loaded);
+            vfLogInfo("Streamline DLSS loaded: {} (query result: {})",
+                      loaded ? "yes" : "no", slResultToString(loadResult));
+        }
+
+        // Check feature requirements for more details
+        sl::FeatureRequirements reqs{};
+        sl::Result reqResult = slGetFeatureRequirements(sl::kFeatureDLSS, reqs);
+        if (reqResult == sl::Result::eOk)
+        {
+            vfLogInfo("Streamline DLSS requirements: flags=0x{:x}, computeQueues={}, graphicsQueues={}, vkExtensions={}",
+                      static_cast<uint32_t>(reqs.flags),
+                      reqs.vkNumComputeQueuesRequired,
+                      reqs.vkNumGraphicsQueuesRequired,
+                      reqs.vkNumDeviceExtensions);
+            vfLogInfo("Streamline DLSS OS: detected={}.{}.{}, required={}.{}.{}",
+                      reqs.osVersionDetected.major, reqs.osVersionDetected.minor, reqs.osVersionDetected.build,
+                      reqs.osVersionRequired.major, reqs.osVersionRequired.minor, reqs.osVersionRequired.build);
+            vfLogInfo("Streamline DLSS driver: detected={}.{}.{}, required={}.{}.{}",
+                      reqs.driverVersionDetected.major, reqs.driverVersionDetected.minor, reqs.driverVersionDetected.build,
+                      reqs.driverVersionRequired.major, reqs.driverVersionRequired.minor, reqs.driverVersionRequired.build);
+
+            bool vulkanSupported = (static_cast<uint32_t>(reqs.flags) &
+                                    static_cast<uint32_t>(sl::FeatureRequirementFlags::eVulkanSupported)) != 0;
+            vfLogInfo("Streamline DLSS Vulkan supported flag: {}", vulkanSupported ? "yes" : "no");
+        }
+        else
+        {
+            vfLogWarning("Streamline DLSS requirements query failed: {} ({})",
+                         slResultToString(reqResult), static_cast<int>(reqResult));
+        }
 #endif
     }
 
-    postprocess::UpscaleMode UpscaleManager::resolveActiveMode(postprocess::UpscaleMode requested) const
+    ::postprocess::UpscaleMode UpscaleManager::resolveActiveMode(::postprocess::UpscaleMode requested) const
     {
-        if (requested == postprocess::UpscaleMode::Off)
-            return postprocess::UpscaleMode::Off;
+        if (requested == ::postprocess::UpscaleMode::Off)
+            return ::postprocess::UpscaleMode::Off;
 
-        if (requested == postprocess::UpscaleMode::DLSS)
-            return dlssSupported ? postprocess::UpscaleMode::DLSS : postprocess::UpscaleMode::Off;
+        if (requested == ::postprocess::UpscaleMode::DLSS)
+            return dlssSupported ? ::postprocess::UpscaleMode::DLSS : ::postprocess::UpscaleMode::Off;
 
-        if (requested == postprocess::UpscaleMode::FSR2)
-            return directSRSupported ? postprocess::UpscaleMode::FSR2 : postprocess::UpscaleMode::Off;
+        if (requested == ::postprocess::UpscaleMode::FSR2)
+            return directSRSupported ? ::postprocess::UpscaleMode::FSR2 : ::postprocess::UpscaleMode::Off;
 
         // Auto: prefer DLSS, fall back to DirectSR
-        if (requested == postprocess::UpscaleMode::Auto)
+        if (requested == ::postprocess::UpscaleMode::Auto)
         {
-            if (dlssSupported) return postprocess::UpscaleMode::DLSS;
-            if (directSRSupported) return postprocess::UpscaleMode::FSR2;
-            return postprocess::UpscaleMode::Off;
+            if (dlssSupported) return ::postprocess::UpscaleMode::DLSS;
+            if (directSRSupported) return ::postprocess::UpscaleMode::FSR2;
+            return ::postprocess::UpscaleMode::Off;
         }
 
-        return postprocess::UpscaleMode::Off;
+        return ::postprocess::UpscaleMode::Off;
     }
 
-    void UpscaleManager::applySettings(const postprocess::UpscaleSettings& settings,
+    void UpscaleManager::applySettings(const ::postprocess::UpscaleSettings& settings,
                                         uint32_t outputWidth, uint32_t outputHeight)
     {
         activeMode = settings.enabled
             ? resolveActiveMode(settings.mode)
-            : postprocess::UpscaleMode::Off;
+            : ::postprocess::UpscaleMode::Off;
 
         resolutionManager.setDisplayResolution(outputWidth, outputHeight);
 
-        if (activeMode != postprocess::UpscaleMode::Off)
+        if (activeMode != ::postprocess::UpscaleMode::Off)
             resolutionManager.setQualityMode(settings.quality);
         else
-            resolutionManager.setQualityMode(postprocess::UpscaleQuality::Native);
+            resolutionManager.setQualityMode(::postprocess::UpscaleQuality::Native);
 
 #ifdef VF_STREAMLINE_ENABLED
-        if (!deviceSet || activeMode == postprocess::UpscaleMode::Off) return;
+        if (!deviceSet || activeMode == ::postprocess::UpscaleMode::Off) return;
 
-        if (activeMode == postprocess::UpscaleMode::DLSS)
+        if (activeMode == ::postprocess::UpscaleMode::DLSS)
         {
             sl::DLSSOptions dlssOptions{};
 
             switch (settings.quality)
             {
-            case postprocess::UpscaleQuality::Native:          dlssOptions.mode = sl::DLSSMode::eDLAA; break;
-            case postprocess::UpscaleQuality::Quality:         dlssOptions.mode = sl::DLSSMode::eMaxQuality; break;
-            case postprocess::UpscaleQuality::Balanced:        dlssOptions.mode = sl::DLSSMode::eBalanced; break;
-            case postprocess::UpscaleQuality::Performance:     dlssOptions.mode = sl::DLSSMode::eMaxPerformance; break;
-            case postprocess::UpscaleQuality::UltraPerformance:dlssOptions.mode = sl::DLSSMode::eUltraPerformance; break;
+            case ::postprocess::UpscaleQuality::Native:          dlssOptions.mode = sl::DLSSMode::eDLAA; break;
+            case ::postprocess::UpscaleQuality::Quality:         dlssOptions.mode = sl::DLSSMode::eMaxQuality; break;
+            case ::postprocess::UpscaleQuality::Balanced:        dlssOptions.mode = sl::DLSSMode::eBalanced; break;
+            case ::postprocess::UpscaleQuality::Performance:     dlssOptions.mode = sl::DLSSMode::eMaxPerformance; break;
+            case ::postprocess::UpscaleQuality::UltraPerformance:dlssOptions.mode = sl::DLSSMode::eUltraPerformance; break;
             }
 
             dlssOptions.outputWidth = outputWidth;
@@ -188,9 +249,9 @@ namespace render::upscaling
                                    const UpscaleInputs& inputs)
     {
 #ifdef VF_STREAMLINE_ENABLED
-        if (!deviceSet || activeMode == postprocess::UpscaleMode::Off) return;
+        if (!deviceSet || activeMode == ::postprocess::UpscaleMode::Off) return;
 
-        sl::Feature feature = (activeMode == postprocess::UpscaleMode::DLSS)
+        sl::Feature feature = (activeMode == ::postprocess::UpscaleMode::DLSS)
             ? sl::kFeatureDLSS
             : sl::kFeatureDirectSR;
 

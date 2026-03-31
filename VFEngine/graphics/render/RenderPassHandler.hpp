@@ -444,6 +444,7 @@ namespace render
         void executeOcclusionPasses(const vk::CommandBuffer& commandBuffer) const;
         void dispatchTerrainRaycast(const vk::CommandBuffer& commandBuffer) const;
         void executePostProcess(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
+        void executeUpscale(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
         void updateSunScreenPosition() const;
         void drawUIOverlays(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
 

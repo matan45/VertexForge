@@ -84,15 +84,15 @@ project "Editor"
       -- Copy OpenAL DLL to Editor output directory
       postbuildcommands {
          "{COPY} ../../dependencies/openal-soft/build/Debug/OpenAL32.dll ../../bin/Editor/Debug/x64/",
-         -- Copy Streamline DLLs
-         "{COPY} ../../dependencies/streamline/bin/x64/sl.interposer.dll ../../bin/Editor/Debug/x64/",
-         "{COPY} ../../dependencies/streamline/bin/x64/sl.common.dll ../../bin/Editor/Debug/x64/",
-         "{COPY} ../../dependencies/streamline/bin/x64/sl.pcl.dll ../../bin/Editor/Debug/x64/",
-         "{COPY} ../../dependencies/streamline/bin/x64/sl.dlss.dll ../../bin/Editor/Debug/x64/",
-         "{COPY} ../../dependencies/streamline/bin/x64/nvngx_dlss.dll ../../bin/Editor/Debug/x64/",
-         "{COPY} ../../dependencies/streamline/bin/x64/sl.directsr.dll ../../bin/Editor/Debug/x64/",
-         "{COPY} ../../dependencies/streamline/bin/x64/sl.reflex.dll ../../bin/Editor/Debug/x64/",
-         "{COPY} ../../dependencies/streamline/bin/x64/NvLowLatencyVk.dll ../../bin/Editor/Debug/x64/"
+         -- Copy Streamline development DLLs (no App ID required)
+         "{COPY} ../../dependencies/streamline/bin/x64/development/sl.interposer.dll ../../bin/Editor/Debug/x64/",
+         "{COPY} ../../dependencies/streamline/bin/x64/development/sl.common.dll ../../bin/Editor/Debug/x64/",
+         "{COPY} ../../dependencies/streamline/bin/x64/development/sl.pcl.dll ../../bin/Editor/Debug/x64/",
+         "{COPY} ../../dependencies/streamline/bin/x64/development/sl.dlss.dll ../../bin/Editor/Debug/x64/",
+         "{COPY} ../../dependencies/streamline/bin/x64/development/nvngx_dlss.dll ../../bin/Editor/Debug/x64/",
+         "{COPY} ../../dependencies/streamline/bin/x64/development/sl.directsr.dll ../../bin/Editor/Debug/x64/",
+         "{COPY} ../../dependencies/streamline/bin/x64/development/sl.reflex.dll ../../bin/Editor/Debug/x64/",
+         "{COPY} ../../dependencies/streamline/bin/x64/development/NvLowLatencyVk.dll ../../bin/Editor/Debug/x64/"
       }
 
    filter "configurations:Release"
@@ -103,7 +103,7 @@ project "Editor"
       -- Copy OpenAL DLL to Editor output directory
       postbuildcommands {
          "{COPY} ../../dependencies/openal-soft/build/Release/OpenAL32.dll ../../bin/Editor/Release/x64/",
-         -- Copy Streamline DLLs
+         -- Copy Streamline production DLLs (requires NVIDIA App ID for shipping)
          "{COPY} ../../dependencies/streamline/bin/x64/sl.interposer.dll ../../bin/Editor/Release/x64/",
          "{COPY} ../../dependencies/streamline/bin/x64/sl.common.dll ../../bin/Editor/Release/x64/",
          "{COPY} ../../dependencies/streamline/bin/x64/sl.pcl.dll ../../bin/Editor/Release/x64/",

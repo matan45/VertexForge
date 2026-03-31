@@ -21,6 +21,8 @@
 #include "decal/DecalPipeline.hpp"
 #include "atmosphere/AtmospherePipeline.hpp"
 #include "cloud/CloudPipeline.hpp"
+#include "upscaling/UpscaleManager.hpp"
+#include "time/Timer.hpp"
 #include "shadow/ShadowSystem.hpp"
 #include "../../services/providers/vfx/IVFXRuntimeProvider.hpp"
 #include "../../services/providers/terrain/ITerrainRenderProvider.hpp"
@@ -304,6 +306,42 @@ namespace render
             updateSunScreenPosition();
 
         postProcessPipeline->execute(commandBuffer, imageIndex);
+    }
+
+    void RenderPassHandler::executeUpscale(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const
+    {
+        auto* upscaleManager = device.getUpscaleManager();
+        if (!upscaleManager || !upscaleManager->isActive()) return;
+
+        auto& colorImg = offscreenResources.colorImages[imageIndex];
+        auto& depthImg = offscreenResources.depthImage;
+
+        upscaling::UpscaleInputs inputs{};
+        inputs.colorInput = colorImg.colorImage;
+        inputs.colorView = colorImg.colorImageView;
+        inputs.depthInput = depthImg.depthImage;
+        inputs.depthView = depthImg.depthImageView;
+
+        // Motion vectors and reactive mask — use null for now (depth-based reprojection)
+        inputs.motionVectors = nullptr;
+        inputs.motionView = nullptr;
+        inputs.reactiveMask = nullptr;
+        inputs.reactiveView = nullptr;
+
+        // Output goes back to scene color
+        inputs.output = colorImg.colorImage;
+        inputs.outputView = colorImg.colorImageView;
+
+        auto extent = swapChain.getSwapchainExtent();
+        inputs.displayExtent = extent;
+        inputs.renderExtent = extent; // Same for now until resolution split is implemented
+
+        inputs.jitterOffset = currentJitterOffset;
+        inputs.deltaTime = static_cast<float>(engineTime::Timer::getDeltaTime());
+        inputs.preExposure = 1.0f;
+        inputs.resetAccumulation = false;
+
+        upscaleManager->evaluate(commandBuffer, taaFrameIndex, inputs);
     }
 
     void RenderPassHandler::updateSunScreenPosition() const

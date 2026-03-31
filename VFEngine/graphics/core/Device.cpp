@@ -43,6 +43,10 @@ namespace core
 
     void Device::init()
     {
+        // Initialize Streamline SDK BEFORE Vulkan calls so it can intercept
+        // vkCreateInstance/vkCreateDevice for DLSS/Reflex setup.
+        render::upscaling::UpscaleManager::initStreamline();
+
         createInstance();
         createDebugMessenger();
         pickPhysicalDevice();
@@ -54,10 +58,7 @@ namespace core
 
         memoryManager = std::make_unique<VulkanMemoryManager>(*this);
 
-        // Initialize Streamline SDK AFTER device creation (manual hook mode).
-        // In manual mode, SL doesn't intercept vkCreateInstance/vkCreateDevice —
-        // it just needs the Vulkan handles via slSetVulkanInfo.
-        render::upscaling::UpscaleManager::initStreamline();
+        // Provide Vulkan device info to Streamline after device is fully created
         if (render::upscaling::UpscaleManager::isStreamlineAvailable())
         {
             upscaleManager = std::make_unique<render::upscaling::UpscaleManager>();
@@ -319,7 +320,11 @@ namespace core
         vulkan12Features.descriptorBindingSampledImageUpdateAfterBind = VK_TRUE;
         vulkan12Features.descriptorBindingStorageBufferUpdateAfterBind = VK_TRUE;
         vulkan12Features.descriptorBindingUniformBufferUpdateAfterBind = VK_TRUE;
-        vulkan12Features.bufferDeviceAddress = VK_TRUE; // Required for acceleration structures
+        // Required for acceleration structures. When Streamline is active, it injects
+        // VK_EXT_buffer_device_address which conflicts with the Vulkan 1.2 core feature.
+        // Use a separate VkPhysicalDeviceBufferDeviceAddressFeatures struct instead to avoid the conflict.
+        vulkan12Features.bufferDeviceAddress = render::upscaling::UpscaleManager::isStreamlineAvailable()
+            ? VK_FALSE : VK_TRUE;
         vulkan12Features.timelineSemaphore = VK_TRUE; // Required for async compute synchronization
         vulkan12Features.pNext = &vulkan11Features;
 

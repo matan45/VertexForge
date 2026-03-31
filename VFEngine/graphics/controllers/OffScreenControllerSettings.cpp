@@ -8,6 +8,7 @@
 #include "../render/RenderPassHandler.hpp"
 #include "../render/gpudriven/GPUDrivenRenderer.hpp"
 #include "../render/shadow/ShadowSystem.hpp"
+#include "../render/upscaling/UpscaleManager.hpp"
 #include "../render/postprocess/PostProcessPipeline.hpp"
 #include "../render/volumetric/VolumetricFogComposite.hpp"
 #include "offscreen/CullingStatsCollector.hpp"
@@ -246,6 +247,14 @@ namespace controllers
         auto* pipeline = renderHandler->getPostProcessPipeline();
         if (pipeline)
             pipeline->applySettings(settings);
+
+        // Apply upscale settings to the UpscaleManager on the Device
+        auto* upscaleManager = device.getUpscaleManager();
+        if (upscaleManager)
+        {
+            auto extent = swapChain.getSwapchainExtent();
+            upscaleManager->applySettings(settings.upscale, extent.width, extent.height);
+        }
     }
 
     postprocess::PostProcessSettings OffScreenController::getPostProcessSettings() const

@@ -130,6 +130,7 @@ namespace render
 
         executeRenderHooks(plugin::RenderPassHookPoint::PrePostProcess, commandBuffer, imageIndex);
         executePostProcess(commandBuffer, imageIndex);
+        executeUpscale(commandBuffer, imageIndex);
         executeRenderHooks(plugin::RenderPassHookPoint::PostPostProcess, commandBuffer, imageIndex);
 
         drawUIOverlays(commandBuffer, imageIndex);

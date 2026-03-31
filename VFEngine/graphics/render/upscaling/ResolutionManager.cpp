@@ -9,7 +9,7 @@ namespace render::upscaling
         recompute();
     }
 
-    void ResolutionManager::setQualityMode(postprocess::UpscaleQuality quality)
+    void ResolutionManager::setQualityMode(::postprocess::UpscaleQuality quality)
     {
         currentQuality = quality;
         recompute();
@@ -17,7 +17,7 @@ namespace render::upscaling
 
     void ResolutionManager::recompute()
     {
-        scaleFactor = postprocess::UpscaleSettings::getScaleFactor(currentQuality);
+        scaleFactor = ::postprocess::UpscaleSettings::getScaleFactor(currentQuality);
 
         uint32_t renderW = std::max(1u, static_cast<uint32_t>(
             static_cast<float>(displayResolution.width) / scaleFactor));

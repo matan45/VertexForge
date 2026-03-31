@@ -61,10 +61,10 @@ namespace render::upscaling
         bool isDirectSRSupported() const { return directSRSupported; }
 
         /// Determine the active upscale mode based on settings and hardware.
-        postprocess::UpscaleMode resolveActiveMode(postprocess::UpscaleMode requested) const;
+        ::postprocess::UpscaleMode resolveActiveMode(::postprocess::UpscaleMode requested) const;
 
         /// Set options for the active upscaler (mode, quality, output resolution).
-        void applySettings(const postprocess::UpscaleSettings& settings,
+        void applySettings(const ::postprocess::UpscaleSettings& settings,
                            uint32_t outputWidth, uint32_t outputHeight);
 
         /// Evaluate the upscaler for the current frame.
@@ -78,8 +78,8 @@ namespace render::upscaling
         ResolutionManager& getResolutionManager() { return resolutionManager; }
         const ResolutionManager& getResolutionManager() const { return resolutionManager; }
 
-        bool isActive() const { return activeMode != postprocess::UpscaleMode::Off; }
-        postprocess::UpscaleMode getActiveMode() const { return activeMode; }
+        bool isActive() const { return activeMode != ::postprocess::UpscaleMode::Off; }
+        ::postprocess::UpscaleMode getActiveMode() const { return activeMode; }
 
         static bool isStreamlineAvailable() { return streamlineAvailable; }
         static bool isDLSSAvailable() { return instance && instance->dlssSupported; }
@@ -89,7 +89,7 @@ namespace render::upscaling
     private:
         ResolutionManager resolutionManager;
 
-        postprocess::UpscaleMode activeMode = postprocess::UpscaleMode::Off;
+        ::postprocess::UpscaleMode activeMode = ::postprocess::UpscaleMode::Off;
         bool dlssSupported = false;
         bool directSRSupported = false;
         bool deviceSet = false;
