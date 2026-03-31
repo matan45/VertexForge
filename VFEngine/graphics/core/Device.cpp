@@ -42,17 +42,31 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
     const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
     void* pUserData)
 {
+    // Suppress known harmless Streamline SDK interposer validation artifacts.
+    // The interposer wraps Vulkan handles (descriptor sets, images) and manages
+    // internal resource copies (sl.tag.*) that the validation layer doesn't understand.
     if (pCallbackData->pMessageIdName)
     {
         std::string_view vuid(pCallbackData->pMessageIdName);
-
-        // Suppress known harmless Streamline SDK conflicts:
-        // 1. Streamline injects VK_EXT_buffer_device_address which conflicts with Vulkan 1.2 core
-        // 2-4. Interposer wraps VkDescriptorSet handles — validation layer doesn't recognize proxied handles
         if (vuid == "VUID-VkDeviceCreateInfo-pNext-04748" ||
             vuid == "VUID-vkCmdBindDescriptorSets-pDescriptorSets-parameter" ||
             vuid == "VUID-vkCmdBindDescriptorSets-pDescriptorSets-06563" ||
-            vuid == "VUID-vkCmdDrawIndexed-None-08600")
+            vuid == "VUID-vkCmdDrawIndexed-None-08600" ||
+            vuid == "VUID-vkCmdDraw-None-09600" ||
+            vuid == "VUID-VkImageMemoryBarrier-oldLayout-01197" ||
+            vuid == "VUID-VkImageMemoryBarrier-image-03320" ||
+            vuid == "VUID-vkDestroyDevice-device-05137")
+        {
+            return VK_FALSE;
+        }
+    }
+    // Suppress Streamline object tracking messages (proxy handles, internal resource copies)
+    if (pCallbackData->pMessage)
+    {
+        std::string_view msg(pCallbackData->pMessage);
+        if (msg.find("Couldn't find VkDescriptorSet Object") != std::string_view::npos ||
+            msg.find("sl.tag.") != std::string_view::npos ||
+            msg.find("Object Tracking") != std::string_view::npos)
         {
             return VK_FALSE;
         }

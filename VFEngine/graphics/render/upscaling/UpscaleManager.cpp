@@ -182,6 +182,18 @@ namespace render::upscaling
 #endif
     }
 
+    void UpscaleManager::freeFeatureResources()
+    {
+#ifdef VF_STREAMLINE_ENABLED
+        if (deviceSet)
+        {
+            slFreeResources(sl::kFeatureDLSS, sl::ViewportHandle{0});
+            slFreeResources(sl::kFeatureDirectSR, sl::ViewportHandle{0});
+            vfLogInfo("Streamline: freed feature resources for resolution change");
+        }
+#endif
+    }
+
     void UpscaleManager::queryFeatureSupport()
     {
 #ifdef VF_STREAMLINE_ENABLED

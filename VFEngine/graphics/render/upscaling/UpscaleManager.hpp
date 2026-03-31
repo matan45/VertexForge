@@ -71,6 +71,9 @@ namespace render::upscaling
         /// Shut down Streamline. Call before device destruction.
         void shutdown();
 
+        /// Free DLSS/DirectSR feature resources. Call before resolution change.
+        void freeFeatureResources();
+
         /// Check feature availability (call after setVulkanDevice).
         bool isDLSSSupported() const { return dlssSupported; }
         bool isDirectSRSupported() const { return directSRSupported; }

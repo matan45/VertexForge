@@ -316,58 +316,8 @@ namespace render
         if (!upscaleManager || !upscaleManager->isActive())
             return;
 
-        // Lazy-create upscale resources if needed
-        if (!offscreenResources.upscaleResourcesCreated)
-        {
-            auto extent = swapChain.getSwapchainExtent();
-
-            // Motion vector image (R16G16_SFLOAT)
-            core::ImageInfoRequest mvInfo(device.getLogicalDevice(), device.getPhysicalDevice(),
-                extent.width, extent.height, 1, 1,
-                vk::Format::eR16G16Sfloat, vk::ImageTiling::eOptimal,
-                vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eSampled |
-                vk::ImageUsageFlagBits::eTransferSrc,
-                vk::MemoryPropertyFlagBits::eDeviceLocal);
-            core::ImageUtilities::createImage(mvInfo,
-                offscreenResources.motionVectors.image,
-                offscreenResources.motionVectors.allocation,
-                device.getMemoryManager());
-
-            core::ImageViewInfoRequest mvStorageView(device.getLogicalDevice(),
-                offscreenResources.motionVectors.image,
-                vk::Format::eR16G16Sfloat, vk::ImageAspectFlagBits::eColor,
-                vk::ImageViewType::e2D, 1, 1);
-            core::ImageUtilities::createImageView(mvStorageView, offscreenResources.motionVectors.imageView);
-
-            core::ImageViewInfoRequest mvSampledView(device.getLogicalDevice(),
-                offscreenResources.motionVectors.image,
-                vk::Format::eR16G16Sfloat, vk::ImageAspectFlagBits::eColor,
-                vk::ImageViewType::e2D, 1, 1);
-            core::ImageUtilities::createImageView(mvSampledView, offscreenResources.motionVectors.sampledView);
-
-            // Upscale output image at display resolution (R16G16B16A16_SFLOAT — SRGB doesn't support storage)
-            auto displayExtent = swapChain.getDisplayExtent();
-            core::ImageInfoRequest outputInfo(device.getLogicalDevice(), device.getPhysicalDevice(),
-                displayExtent.width, displayExtent.height, 1, 1,
-                vk::Format::eR16G16B16A16Sfloat, vk::ImageTiling::eOptimal,
-                vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eSampled |
-                vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst,
-                vk::MemoryPropertyFlagBits::eDeviceLocal);
-            core::ImageUtilities::createImage(outputInfo,
-                offscreenResources.upscaleOutput.image,
-                offscreenResources.upscaleOutput.allocation,
-                device.getMemoryManager());
-
-            core::ImageViewInfoRequest outputView(device.getLogicalDevice(),
-                offscreenResources.upscaleOutput.image,
-                vk::Format::eR16G16B16A16Sfloat, vk::ImageAspectFlagBits::eColor,
-                vk::ImageViewType::e2D, 1, 1);
-            core::ImageUtilities::createImageView(outputView, offscreenResources.upscaleOutput.imageView);
-
-            offscreenResources.upscaleResourcesCreated = true;
-            vfLogInfo("Upscale resources created: MV {}x{}, output {}x{}", extent.width, extent.height, displayExtent.width, displayExtent.height);
-        }
-
+        // Upscale resources are created by OffScreenViewPort::createUpscaleResources()
+        // during recreate(). If not ready yet (first frame before recreate), skip.
         if (!offscreenResources.upscaleResourcesCreated)
             return;
 

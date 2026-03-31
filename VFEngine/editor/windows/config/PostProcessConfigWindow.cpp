@@ -223,8 +223,7 @@ namespace windows
             {
                 ImGui::Spacing();
 
-                const char* qualityNames[] = {"Native (DLAA)", "Quality (1.5x)", "Balanced (1.7x)",
-                                               "Performance (2.0x)", "Ultra Performance (3.0x)"};
+                const char* qualityNames[] = {"Native (DLAA)", "Quality (1.5x)", "Balanced (1.7x)"};
                 int currentQuality = static_cast<int>(settings.upscale.quality);
                 if (ImGui::Combo("Quality", &currentQuality, qualityNames, IM_ARRAYSIZE(qualityNames)))
                 {
