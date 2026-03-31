@@ -287,19 +287,15 @@ namespace render
         vk::Format colorFormat = swapChain.getSwapchainImageFormat();
         vk::Format depthFormat = swapChain.getSwapchainDepthStencilFormat();
 
-        // Determine render resolution: when upscaling is active, render at internal resolution
+        // NOTE: Color/depth stay at display resolution for now.
+        // Full resolution split (render at lower internal res) requires refactoring
+        // all framebuffers and render passes — deferred to a follow-up ticket.
         uint32_t renderWidth = swapChain.getSwapchainExtent().width;
         uint32_t renderHeight = swapChain.getSwapchainExtent().height;
         uint32_t displayWidth = renderWidth;
         uint32_t displayHeight = renderHeight;
 
         auto* upscaleManager = device.getUpscaleManager();
-        if (upscaleManager && upscaleManager->isActive())
-        {
-            auto renderRes = upscaleManager->getResolutionManager().getRenderResolution();
-            renderWidth = renderRes.width;
-            renderHeight = renderRes.height;
-        }
 
         core::ImageInfoRequest imageColorInfo(device.getLogicalDevice(), device.getPhysicalDevice());
         imageColorInfo.width = renderWidth;
@@ -385,11 +381,8 @@ namespace render
             offscreenResources.colorImages.push_back(std::move(color));
         }
 
-        // Create upscale resources when upscaling is active
-        if (upscaleManager && upscaleManager->isActive())
-        {
-            createUpscaleResources(renderWidth, renderHeight, displayWidth, displayHeight);
-        }
+        // Upscale resources (MV image, upscale output) are created lazily
+        // in RenderPassHandler::executeUpscale() when first needed.
     }
 
     void OffScreenViewPort::updateDescriptorSets(vk::DescriptorSet& descriptorSet, const vk::ImageView& imageView) const
@@ -462,10 +455,13 @@ namespace render
         }
 
         // Upscale output image at display resolution
+        // Use R16G16B16A16_SFLOAT because SRGB formats don't support storage writes
         {
+            vk::Format upscaleOutputFormat = vk::Format::eR16G16B16A16Sfloat;
+
             core::ImageInfoRequest outputInfo(device.getLogicalDevice(), device.getPhysicalDevice(),
                 displayWidth, displayHeight, 1, 1,
-                colorFormat,
+                upscaleOutputFormat,
                 vk::ImageTiling::eOptimal,
                 vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eSampled |
                 vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst |
@@ -479,7 +475,7 @@ namespace render
 
             core::ImageViewInfoRequest outputView(device.getLogicalDevice(),
                 offscreenResources.upscaleOutput.image,
-                colorFormat, vk::ImageAspectFlagBits::eColor,
+                upscaleOutputFormat, vk::ImageAspectFlagBits::eColor,
                 vk::ImageViewType::e2D, 1, 1);
             core::ImageUtilities::createImageView(outputView, offscreenResources.upscaleOutput.imageView);
 

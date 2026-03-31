@@ -556,6 +556,11 @@ namespace render::gpudriven
             while (setLayouts.size() < 13)
                 setLayouts.push_back(emptyPlaceholderLayout);
             setLayouts.push_back(info.rtShadowMaskLayout); // Set 13
+            rtShadowLayoutBound = true;
+        }
+        else
+        {
+            rtShadowLayoutBound = false;
         }
 
         vk::PushConstantRange pushConstantRange{};

@@ -367,10 +367,19 @@ namespace render::postprocess
             vk::ImageLayout::eShaderReadOnlyOptimal, vk::ImageLayout::eTransferDstOptimal,
             vk::ImageAspectFlagBits::eColor);
 
+        vk::ImageCopy finalCopy{};
+        finalCopy.srcSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+        finalCopy.srcSubresource.layerCount = 1;
+        finalCopy.dstSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+        finalCopy.dstSubresource.layerCount = 1;
+        finalCopy.extent.width = extent.width;
+        finalCopy.extent.height = extent.height;
+        finalCopy.extent.depth = 1;
+
         commandBuffer.copyImage(
             lastWritten->image, vk::ImageLayout::eTransferSrcOptimal,
             sceneImage, vk::ImageLayout::eTransferDstOptimal,
-            copyRegion);
+            finalCopy);
 
         core::ImageUtilities::transitionImageLayout(commandBuffer, sceneImage,
             vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,

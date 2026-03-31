@@ -171,7 +171,7 @@ namespace render::upscaling
         vk::DescriptorImageInfo depthInfo{};
         depthInfo.sampler = depthSampler;
         depthInfo.imageView = depthView;
-        depthInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+        depthInfo.imageLayout = vk::ImageLayout::eDepthStencilReadOnlyOptimal;
 
         vk::DescriptorBufferInfo bufferInfo{};
         bufferInfo.buffer = paramsBuffer.getBuffer();
@@ -211,11 +211,11 @@ namespace render::upscaling
         mvBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         mvBarrier.image = motionVectorImage;
         mvBarrier.subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};
-        mvBarrier.srcAccessMask = {};
+        mvBarrier.srcAccessMask = vk::AccessFlagBits::eShaderRead;
         mvBarrier.dstAccessMask = vk::AccessFlagBits::eShaderWrite;
 
         cmd.pipelineBarrier(
-            vk::PipelineStageFlagBits::eTopOfPipe,
+            vk::PipelineStageFlagBits::eComputeShader,
             vk::PipelineStageFlagBits::eComputeShader,
             {}, {}, {}, mvBarrier);
 

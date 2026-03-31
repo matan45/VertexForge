@@ -105,6 +105,7 @@ namespace render::gpudriven
         vk::DescriptorSetLayout emptyPlaceholderLayout;
 
         bool isTransparentMode = false;
+        bool rtShadowLayoutBound = false;
         bool isWBOITMode = false;
         bool isWireframeMode = false;
     public:
@@ -151,6 +152,7 @@ namespace render::gpudriven
         vk::DescriptorSet getGIProbeDataDescriptorSet() const { return giProbeDataDescriptorSet; }
         vk::DescriptorSet getCausticDescriptorSet() const { return causticDescriptorSet; }
         vk::DescriptorSet getRTShadowMaskDescriptorSet() const { return rtShadowMaskDescriptorSet; }
+        bool hasRTShadowLayout() const { return rtShadowLayoutBound; }
 
         vk::DescriptorSetLayout getPerDrawDataLayout() const { return perDrawDataLayout; }
         vk::DescriptorSetLayout getMeshletDataLayout() const { return meshletDataLayout; }

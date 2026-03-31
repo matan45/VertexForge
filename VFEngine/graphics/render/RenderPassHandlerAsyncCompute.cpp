@@ -316,6 +316,56 @@ namespace render
         if (!upscaleManager || !upscaleManager->isActive())
             return;
 
+        // Lazy-create upscale resources if needed
+        if (!offscreenResources.upscaleResourcesCreated)
+        {
+            auto extent = swapChain.getSwapchainExtent();
+
+            // Motion vector image (R16G16_SFLOAT)
+            core::ImageInfoRequest mvInfo(device.getLogicalDevice(), device.getPhysicalDevice(),
+                extent.width, extent.height, 1, 1,
+                vk::Format::eR16G16Sfloat, vk::ImageTiling::eOptimal,
+                vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eSampled,
+                vk::MemoryPropertyFlagBits::eDeviceLocal);
+            core::ImageUtilities::createImage(mvInfo,
+                offscreenResources.motionVectors.image,
+                offscreenResources.motionVectors.allocation,
+                device.getMemoryManager());
+
+            core::ImageViewInfoRequest mvStorageView(device.getLogicalDevice(),
+                offscreenResources.motionVectors.image,
+                vk::Format::eR16G16Sfloat, vk::ImageAspectFlagBits::eColor,
+                vk::ImageViewType::e2D, 1, 1);
+            core::ImageUtilities::createImageView(mvStorageView, offscreenResources.motionVectors.imageView);
+
+            core::ImageViewInfoRequest mvSampledView(device.getLogicalDevice(),
+                offscreenResources.motionVectors.image,
+                vk::Format::eR16G16Sfloat, vk::ImageAspectFlagBits::eColor,
+                vk::ImageViewType::e2D, 1, 1);
+            core::ImageUtilities::createImageView(mvSampledView, offscreenResources.motionVectors.sampledView);
+
+            // Upscale output image (R16G16B16A16_SFLOAT — SRGB doesn't support storage)
+            core::ImageInfoRequest outputInfo(device.getLogicalDevice(), device.getPhysicalDevice(),
+                extent.width, extent.height, 1, 1,
+                vk::Format::eR16G16B16A16Sfloat, vk::ImageTiling::eOptimal,
+                vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eSampled |
+                vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst,
+                vk::MemoryPropertyFlagBits::eDeviceLocal);
+            core::ImageUtilities::createImage(outputInfo,
+                offscreenResources.upscaleOutput.image,
+                offscreenResources.upscaleOutput.allocation,
+                device.getMemoryManager());
+
+            core::ImageViewInfoRequest outputView(device.getLogicalDevice(),
+                offscreenResources.upscaleOutput.image,
+                vk::Format::eR16G16B16A16Sfloat, vk::ImageAspectFlagBits::eColor,
+                vk::ImageViewType::e2D, 1, 1);
+            core::ImageUtilities::createImageView(outputView, offscreenResources.upscaleOutput.imageView);
+
+            offscreenResources.upscaleResourcesCreated = true;
+            vfLogInfo("Upscale resources created: {}x{}", extent.width, extent.height);
+        }
+
         if (!offscreenResources.upscaleResourcesCreated)
             return;
 
@@ -335,6 +385,16 @@ namespace render
         glm::mat4 invVP = glm::inverse(viewProjection);
         glm::mat4 prevVP = prevProjection * prevView;
 
+        vk::ImageAspectFlags depthStencilAspect =
+            vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil;
+
+        // Transition depth to shader read for the motion vector compute pass
+        core::ImageUtilities::transitionImageLayout(commandBuffer,
+            offscreenResources.depthImage.depthImage,
+            vk::ImageLayout::eDepthStencilAttachmentOptimal,
+            vk::ImageLayout::eDepthStencilReadOnlyOptimal,
+            depthStencilAspect);
+
         // Dispatch motion vector compute pass
         motionVectorPass->dispatch(commandBuffer,
             offscreenResources.depthImage.depthImageView,
@@ -344,19 +404,6 @@ namespace render
             invVP, prevVP,
             renderRes.width, renderRes.height,
             taaFrameIndex);
-
-        // Transition color image for upscaler read
-        vk::Image colorImage = offscreenResources.colorImages[imageIndex].colorImage;
-        core::ImageUtilities::transitionImageLayout(commandBuffer, colorImage,
-            vk::ImageLayout::eShaderReadOnlyOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
-            vk::ImageAspectFlagBits::eColor);
-
-        // Transition depth for upscaler read
-        core::ImageUtilities::transitionImageLayout(commandBuffer,
-            offscreenResources.depthImage.depthImage,
-            vk::ImageLayout::eDepthStencilAttachmentOptimal,
-            vk::ImageLayout::eShaderReadOnlyOptimal,
-            vk::ImageAspectFlagBits::eDepth);
 
         // Transition upscale output to general for write
         core::ImageUtilities::transitionImageLayout(commandBuffer,
@@ -376,6 +423,8 @@ namespace render
         upscaleFirstFrame = false;
 
         // Build upscale inputs
+        vk::Image colorImage = offscreenResources.colorImages[imageIndex].colorImage;
+
         render::upscaling::UpscaleInputs inputs{};
         inputs.colorInput = colorImage;
         inputs.colorView = offscreenResources.colorImages[imageIndex].colorImageView;
@@ -395,9 +444,9 @@ namespace render
         // Transition depth back to attachment optimal
         core::ImageUtilities::transitionImageLayout(commandBuffer,
             offscreenResources.depthImage.depthImage,
-            vk::ImageLayout::eShaderReadOnlyOptimal,
+            vk::ImageLayout::eDepthStencilReadOnlyOptimal,
             vk::ImageLayout::eDepthStencilAttachmentOptimal,
-            vk::ImageAspectFlagBits::eDepth);
+            depthStencilAspect);
     }
 
     void RenderPassHandler::executePreUpscalePostProcess(const vk::CommandBuffer& commandBuffer,
@@ -433,6 +482,30 @@ namespace render
     void RenderPassHandler::executePostUpscalePostProcess(const vk::CommandBuffer& commandBuffer,
                                                            uint32_t imageIndex) const
     {
+        // Set camera data for post-process effects (tone mapping needs exposure, etc.)
+        render::postprocess::CameraInfo camInfo{};
+        camInfo.nearPlane = currentNearPlane;
+        camInfo.farPlane = currentFarPlane;
+        camInfo.cameraPosition = currentCameraPosition;
+        camInfo.viewMatrix = currentView;
+        camInfo.projectionMatrix = currentProjection;
+        camInfo.unjitteredProjectionMatrix = unjitteredProjection;
+        camInfo.jitterOffset = currentJitterOffset;
+        camInfo.frameIndex = taaFrameIndex;
+        camInfo.time = currentTime;
+        if (oceanRenderProvider && oceanRenderProvider->hasActiveOcean())
+        {
+            float waterH = oceanRenderProvider->getBaseWaterHeight();
+            float diff = waterH - currentCameraPosition.y;
+            camInfo.submersionFactor = glm::clamp((diff + 0.5f) / 1.0f, 0.0f, 1.0f);
+            camInfo.isUnderwater = camInfo.submersionFactor > 0.01f;
+            camInfo.waterHeight = waterH;
+        }
+        postProcessPipeline->setCameraData(camInfo);
+
+        if (gpuDrivenRendererInitialized)
+            updateSunScreenPosition();
+
         postProcessPipeline->executePostUpscale(commandBuffer, imageIndex,
             offscreenResources.upscaleOutput.image,
             offscreenResources.upscaleOutput.imageView);

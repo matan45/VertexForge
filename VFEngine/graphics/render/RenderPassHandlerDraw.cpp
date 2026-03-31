@@ -133,12 +133,12 @@ namespace render
 
         {
             auto* upscaleManager = device.getUpscaleManager();
-            bool upscalingActive = upscaleManager && upscaleManager->isActive()
-                                   && offscreenResources.upscaleResourcesCreated;
+            bool upscalingActive = upscaleManager && upscaleManager->isActive();
 
             if (upscalingActive)
             {
-                executePreUpscalePostProcess(commandBuffer, imageIndex);
+                // Feed raw HDR scene color directly to DLSS (no pre-upscale post-process).
+                // DLSS expects jittered HDR input. All post-process runs after at display resolution.
                 executeUpscale(commandBuffer, imageIndex);
                 executePostUpscalePostProcess(commandBuffer, imageIndex);
             }

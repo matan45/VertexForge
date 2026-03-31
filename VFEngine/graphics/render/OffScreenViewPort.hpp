@@ -35,6 +35,7 @@ namespace render
 
         // Async compute (non-owning, set by controller)
         core::AsyncComputeManager* asyncComputeManager = nullptr;
+        bool upscaleResourcesDirty = false;
 
     public:
         explicit OffScreenViewPort(core::Device& device, core::SwapChain& swapChain);
@@ -59,6 +60,9 @@ namespace render
 
         const core::OffscreenResources& getOffscreenResources() const { return offscreenResources; }
         core::OffscreenResources& getOffscreenResources() { return offscreenResources; }
+
+        void setUpscaleResourcesDirty(bool dirty) { upscaleResourcesDirty = dirty; }
+        bool isUpscaleResourcesDirty() const { return upscaleResourcesDirty; }
 
     private:
         void draw(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;

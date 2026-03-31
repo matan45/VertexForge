@@ -252,8 +252,25 @@ namespace controllers
         auto* upscaleManager = device.getUpscaleManager();
         if (upscaleManager)
         {
+            bool wasActive = upscaleManager->isActive();
+            auto prevQuality = upscaleManager->getResolutionManager().getQualityMode();
+
             auto extent = swapChain.getSwapchainExtent();
             upscaleManager->applySettings(settings.upscale, extent.width, extent.height);
+
+            bool isActive = upscaleManager->isActive();
+            auto newQuality = upscaleManager->getResolutionManager().getQualityMode();
+
+            // NOTE: Resolution split (render at lower internal res) is not yet implemented.
+            // For now, all quality modes render at display resolution — only DLAA/temporal
+            // reconstruction is active. Quality/Performance upscaling requires a deeper
+            // refactor of framebuffer and render pass infrastructure (separate ticket).
+
+            // Mark upscale resources dirty when state changes
+            if (wasActive != isActive)
+            {
+                offScreen->setUpscaleResourcesDirty(true);
+            }
         }
     }
 

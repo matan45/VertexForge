@@ -26,6 +26,7 @@ namespace core {
 		vk::Format swapchainImageFormat{ vk::Format::eUndefined };
 		vk::Format swapchainDepthStencilFormat{ vk::Format::eUndefined };
 		vk::Extent2D swapchainExtent;
+		vk::Extent2D renderExtentOverride{0, 0};
 
 	public:
 		explicit SwapChain(Device& device);
@@ -44,8 +45,19 @@ namespace core {
 		vk::Format getSwapchainDepthStencilFormat() const { return swapchainDepthStencilFormat; }
 		vk::Format getSwapchainImageFormat() const { return swapchainImageFormat; }
 
-		vk::Extent2D getSwapchainExtent() const { return swapchainExtent; }
+		/// Returns the active rendering extent. When upscaling is active, this returns
+		/// the internal render resolution. Otherwise returns the native swapchain extent.
+		vk::Extent2D getSwapchainExtent() const
+		{
+			return renderExtentOverride.width > 0 ? renderExtentOverride : swapchainExtent;
+		}
 
+		/// Returns the true display/window resolution (always the native swapchain extent).
+		vk::Extent2D getDisplayExtent() const { return swapchainExtent; }
+
+		/// Override the extent returned by getSwapchainExtent() for resolution split.
+		/// Pass {0,0} to clear the override.
+		void setRenderExtentOverride(vk::Extent2D extent) { renderExtentOverride = extent; }
 
 		void recreate(uint32_t width, uint32_t height);
 

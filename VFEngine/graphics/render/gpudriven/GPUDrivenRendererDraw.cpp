@@ -45,6 +45,9 @@ namespace render::gpudriven
     static void bindRTShadowMaskDescriptorSet(vk::CommandBuffer cmd, vk::PipelineLayout layout,
                                                MeshShaderPipeline& pipeline)
     {
+        if (!pipeline.hasRTShadowLayout())
+            return;
+
         vk::DescriptorSet rtShadowSet = pipeline.getRTShadowMaskDescriptorSet();
         if (rtShadowSet)
         {
