@@ -472,6 +472,7 @@ namespace render::gpudriven
         void renderDepthPrepass(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet);
         void generatePrepassHiZ(vk::CommandBuffer cmd);
         void initAccelerationStructures();
+        void ensureAccelerationStructureManager();
         void dispatchRTShadow(vk::CommandBuffer cmd, uint32_t imageIndex);
         bool isRTShadowReady() const;
         raytracing::RTShadowPipeline* getRTShadowPipeline() const { return rtShadowPipeline.get(); }

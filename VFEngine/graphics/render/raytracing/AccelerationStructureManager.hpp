@@ -172,6 +172,8 @@ namespace render::raytracing
         static uint64_t makeGeometryOffsetKey(uint32_t vertexOffset, uint32_t indexOffset);
 
         void destroyBLASEntry(BLASEntry& entry);
+        void destroyBLASEntryImmediate(BLASEntry& entry);
+        void flushDeferredDeletions();
         void createDescriptorLayout();
         void createDescriptorPool();
         void allocateDescriptorSet();
@@ -180,5 +182,12 @@ namespace render::raytracing
         void ensureStagingBuffer(StagingBuffer& staging, vk::DeviceSize requiredSize);
         void ensureTlasScratch(vk::DeviceSize requiredSize);
         void insertTLASCrossFrameBarrier(vk::CommandBuffer cmd);
+
+        struct DeferredBLASDeletion
+        {
+            BLASEntry entry;
+            uint32_t frameCountdown;
+        };
+        std::vector<DeferredBLASDeletion> deferredBLASDeletions;
     };
 }

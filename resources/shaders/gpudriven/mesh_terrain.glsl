@@ -369,7 +369,10 @@ float sampleTerrainCascadeShadow(int shadowIndex, vec3 worldPos, vec3 worldNorma
 
 float sampleTerrainDirectionalShadow(int baseShadowIndex, int shadowMode, vec3 worldPos, vec3 worldNormal, float viewZ, vec3 cameraPos) {
 #ifdef RT_SHADOW_ENABLED
-    return 0.0; // DEBUG: force shadow when RT_SHADOW_ENABLED is active
+    if (lightCounts.rtShadowActive != 0u) {
+        vec2 screenUV = gl_FragCoord.xy / vec2(pc.screenWidth, pc.screenHeight);
+        return texture(rtShadowMask, screenUV).r;
+    }
 #endif
     return 1.0;
 }
@@ -502,10 +505,7 @@ void main() {
     for (uint i = 0u; i < lightCounts.directionalCount; ++i) {
         DirectionalLight light = directionalLights[i];
 
-        float shadow = 1.0;
-        if (light.shadowIndex >= 0) {
-            shadow = sampleTerrainDirectionalShadow(light.shadowIndex, light.shadowMode, fragWorldPos, N, linearZ, camera.cameraPos);
-        }
+        float shadow = sampleTerrainDirectionalShadow(light.shadowIndex, light.shadowMode, fragWorldPos, N, linearZ, camera.cameraPos);
         minShadow = min(minShadow, shadow);
 
         vec3 lightContrib = evaluateDirectionalLight(N, V, albedo, metallic, roughness, F0, light) * shadow;

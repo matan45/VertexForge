@@ -226,6 +226,11 @@ namespace render::gpudriven
             pipelineLayout = nullptr;
         }
 
+        if (terrainShader)
+        {
+            terrainShader->cleanUp();
+        }
+
         createTerrainGraphicsPipeline(iblLayout, bindlessTextureLayout,
                                       meshletDataLayout, vertexDataLayout,
                                       lightDataLayout, clusterGridLayout,
@@ -450,14 +455,14 @@ namespace render::gpudriven
         {
             terrainShader->addMacroDefinition("SVT_ENABLED");
         }
-        if (causticEnabled && cachedCausticLayout)
-        {
-            terrainShader->addMacroDefinition("CAUSTICS_ENABLED");
-            terrainShader->addMacroDefinition("CAUSTIC_SET", "13");
-        }
         if (rtShadowEnabled && rtShadowMaskLayout)
         {
             terrainShader->addMacroDefinition("RT_SHADOW_ENABLED");
+        }
+        else if (causticEnabled && cachedCausticLayout)
+        {
+            terrainShader->addMacroDefinition("CAUSTICS_ENABLED");
+            terrainShader->addMacroDefinition("CAUSTIC_SET", "13");
         }
         terrainShader->readShader("../../resources/shaders/gpudriven/task_terrain.glsl");
         terrainShader->readShader("../../resources/shaders/gpudriven/mesh_terrain.glsl");
@@ -512,14 +517,14 @@ namespace render::gpudriven
         };
 
         pipelineHasSet13 = false;
-        if (causticEnabled && cachedCausticLayout)
-        {
-            setLayouts.push_back(cachedCausticLayout); // Set 13
-            pipelineHasSet13 = true;
-        }
-        else if (rtShadowEnabled && rtShadowMaskLayout)
+        if (rtShadowEnabled && rtShadowMaskLayout)
         {
             setLayouts.push_back(rtShadowMaskLayout); // Set 13
+            pipelineHasSet13 = true;
+        }
+        else if (causticEnabled && cachedCausticLayout)
+        {
+            setLayouts.push_back(cachedCausticLayout); // Set 13
             pipelineHasSet13 = true;
         }
 

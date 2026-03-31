@@ -217,13 +217,13 @@ namespace render::gpudriven
 
         if (pipelineHasSet13)
         {
-            if (causticEnabled && causticDescriptorSet)
-            {
-                currentSets.push_back(causticDescriptorSet); // Set 13
-            }
-            else if (rtShadowEnabled && rtShadowMaskDescriptorSet)
+            if (rtShadowEnabled && rtShadowMaskDescriptorSet)
             {
                 currentSets.push_back(rtShadowMaskDescriptorSet); // Set 13
+            }
+            else if (causticEnabled && causticDescriptorSet)
+            {
+                currentSets.push_back(causticDescriptorSet); // Set 13
             }
         }
 

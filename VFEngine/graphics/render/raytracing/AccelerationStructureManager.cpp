@@ -58,10 +58,17 @@ namespace render::raytracing
         vk::Device vkDevice = device.getLogicalDevice();
         vkDevice.waitIdle();
 
+        // Flush deferred deletions immediately (GPU is idle)
+        for (auto& deferred : deferredBLASDeletions)
+        {
+            destroyBLASEntryImmediate(deferred.entry);
+        }
+        deferredBLASDeletions.clear();
+
         // Destroy all mesh BLAS entries
         for (auto& [key, entry] : blasCache)
         {
-            destroyBLASEntry(entry);
+            destroyBLASEntryImmediate(entry);
         }
         blasCache.clear();
         pendingBLASBuilds.clear();
@@ -70,7 +77,7 @@ namespace render::raytracing
         // Destroy all terrain BLAS entries
         for (auto& [key, entry] : terrainBlasCache)
         {
-            destroyBLASEntry(entry);
+            destroyBLASEntryImmediate(entry);
         }
         terrainBlasCache.clear();
         pendingTerrainBLASBuilds.clear();
@@ -118,6 +125,14 @@ namespace render::raytracing
 
     void AccelerationStructureManager::destroyBLASEntry(BLASEntry& entry)
     {
+        deferredBLASDeletions.push_back({entry, MAX_FRAMES_IN_FLIGHT});
+        entry.blas = nullptr;
+        entry.buffer = nullptr;
+        entry.allocation = {};
+    }
+
+    void AccelerationStructureManager::destroyBLASEntryImmediate(BLASEntry& entry)
+    {
         vk::Device vkDevice = device.getLogicalDevice();
         if (entry.blas)
         {
@@ -127,6 +142,23 @@ namespace render::raytracing
         core::BufferUtilities::destroyBuffer(vkDevice, entry.buffer, entry.allocation, device.getMemoryManager());
         memoryBudget.blasTotalBytes -= entry.size;
         memoryBudget.blasCount--;
+    }
+
+    void AccelerationStructureManager::flushDeferredDeletions()
+    {
+        auto it = deferredBLASDeletions.begin();
+        while (it != deferredBLASDeletions.end())
+        {
+            if (--it->frameCountdown == 0)
+            {
+                destroyBLASEntryImmediate(it->entry);
+                it = deferredBLASDeletions.erase(it);
+            }
+            else
+            {
+                ++it;
+            }
+        }
     }
 
     void AccelerationStructureManager::notifyMeshReady(const std::string& meshPath,
@@ -340,6 +372,8 @@ namespace render::raytracing
                                                   const gpudriven::MergedMeshBuffer& mergedBuffer)
     {
         if (!initialized || objectCount == 0 || blasCache.empty()) return;
+
+        flushDeferredDeletions();
 
         vk::Device vkDevice = device.getLogicalDevice();
 
@@ -755,6 +789,8 @@ namespace render::raytracing
         if (!initialized || (objectCount == 0 && terrainTileCount == 0)) return;
         if (blasCache.empty() && terrainBlasCache.empty()) return;
 
+        flushDeferredDeletions();
+
         vk::Device vkDevice = device.getLogicalDevice();
 
         std::vector<vk::AccelerationStructureInstanceKHR> instances;
@@ -957,7 +993,14 @@ namespace render::raytracing
         tlasBinding.descriptorCount = 1;
         tlasBinding.stageFlags = vk::ShaderStageFlagBits::eCompute | vk::ShaderStageFlagBits::eFragment;
 
+        vk::DescriptorBindingFlags bindingFlags = vk::DescriptorBindingFlagBits::eUpdateAfterBind;
+        vk::DescriptorSetLayoutBindingFlagsCreateInfo flagsInfo{};
+        flagsInfo.bindingCount = 1;
+        flagsInfo.pBindingFlags = &bindingFlags;
+
         vk::DescriptorSetLayoutCreateInfo layoutInfo{};
+        layoutInfo.pNext = &flagsInfo;
+        layoutInfo.flags = vk::DescriptorSetLayoutCreateFlagBits::eUpdateAfterBindPool;
         layoutInfo.bindingCount = 1;
         layoutInfo.pBindings = &tlasBinding;
 
@@ -973,6 +1016,7 @@ namespace render::raytracing
         poolSize.descriptorCount = 1;
 
         vk::DescriptorPoolCreateInfo poolInfo{};
+        poolInfo.flags = vk::DescriptorPoolCreateFlagBits::eUpdateAfterBind;
         poolInfo.maxSets = 1;
         poolInfo.poolSizeCount = 1;
         poolInfo.pPoolSizes = &poolSize;

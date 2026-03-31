@@ -318,6 +318,7 @@ namespace core
         // Acceleration structure features (VK_KHR_acceleration_structure)
         vk::PhysicalDeviceAccelerationStructureFeaturesKHR accelStructFeatures{};
         accelStructFeatures.accelerationStructure = VK_TRUE;
+        accelStructFeatures.descriptorBindingAccelerationStructureUpdateAfterBind = VK_TRUE;
         accelStructFeatures.pNext = &rayQueryFeatures;
 
         // Mesh shader features (VK_EXT_mesh_shader)

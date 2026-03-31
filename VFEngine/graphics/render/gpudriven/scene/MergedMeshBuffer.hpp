@@ -202,6 +202,7 @@ namespace render::gpudriven
                                                   uint32_t submeshIndex) const;
 
         const std::vector<MergedMeshInfo>& getRegisteredMeshes() const { return registeredMeshes; }
+        const std::vector<SubmeshLocation>& getAllSubmeshLocations() const { return allSubmeshLocations; }
 
         // Persistent slot mode (play mode streaming)
         void setPersistentMode(bool enabled);

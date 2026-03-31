@@ -124,37 +124,10 @@ namespace render::gpudriven
                 vk::DescriptorSetLayout tlasLayout = nullptr;
                 if (device.isRayQuerySupported())
                 {
-                    accelStructManager = std::make_unique<raytracing::AccelerationStructureManager>(device);
-                    accelStructManager->init();
-                    if (accelStructManager->isInitialized())
+                    ensureAccelerationStructureManager();
+                    if (accelStructManager && accelStructManager->isInitialized())
                     {
                         tlasLayout = accelStructManager->getTLASDescriptorLayout();
-
-                        // Wire mesh streaming callbacks to notify AS manager
-                        if (mergedBuffer)
-                        {
-                            mergedBuffer->onSubmeshLOD0Ready = [this](const std::string& path, const std::string& name,
-                                                                       uint32_t idx, const SubmeshLocation& loc) {
-                                if (accelStructManager) accelStructManager->notifyMeshReady(path, name, idx, loc);
-                            };
-                            mergedBuffer->onSubmeshRemoved = [this](const std::string& path, const std::string& name,
-                                                                     uint32_t idx) {
-                                if (accelStructManager) accelStructManager->notifyMeshRemoved(path, name, idx);
-                            };
-                        }
-
-                        // Wire terrain callbacks
-                        if (terrain.adapter)
-                        {
-                            terrain.adapter->onTileLODReady = [this](const std::string& tileKey,
-                                                                      uint32_t vOff, uint32_t vCount,
-                                                                      uint32_t iOff, uint32_t iCount) {
-                                if (accelStructManager) accelStructManager->notifyTerrainTileReady(tileKey, vOff, vCount, iOff, iCount);
-                            };
-                            terrain.adapter->onTileRemoved = [this](const std::string& tileKey) {
-                                if (accelStructManager) accelStructManager->notifyTerrainTileRemoved(tileKey);
-                            };
-                        }
                     }
                 }
 
@@ -435,36 +408,54 @@ namespace render::gpudriven
         if (!depthPrepass || !depthPrepass->isInitialized()) return;
         if (!lightBufferManager || lightBufferManager->getDirectionalLightCount() == 0) return;
 
+        ensureAccelerationStructureManager();
+    }
+
+    void GPUDrivenRenderer::ensureAccelerationStructureManager()
+    {
+        if (accelStructManager) return;
+        if (!device.isRayQuerySupported()) return;
+
         accelStructManager = std::make_unique<raytracing::AccelerationStructureManager>(device);
         accelStructManager->init();
 
-        if (accelStructManager->isInitialized())
+        if (!accelStructManager->isInitialized())
         {
-            if (mergedBuffer)
+            accelStructManager.reset();
+            return;
+        }
+
+        if (mergedBuffer)
+        {
+            mergedBuffer->onSubmeshLOD0Ready = [this](const std::string& path, const std::string& name,
+                                                       uint32_t idx, const SubmeshLocation& loc) {
+                if (accelStructManager) accelStructManager->notifyMeshReady(path, name, idx, loc);
+            };
+            mergedBuffer->onSubmeshRemoved = [this](const std::string& path, const std::string& name,
+                                                     uint32_t idx) {
+                if (accelStructManager) accelStructManager->notifyMeshRemoved(path, name, idx);
+            };
+
+            // Retroactively notify about already-loaded submeshes
+            for (const auto& loc : mergedBuffer->getAllSubmeshLocations())
             {
-                mergedBuffer->onSubmeshLOD0Ready = [this](const std::string& path, const std::string& name,
-                                                           uint32_t idx, const SubmeshLocation& loc) {
-                    if (accelStructManager) accelStructManager->notifyMeshReady(path, name, idx, loc);
-                };
-                mergedBuffer->onSubmeshRemoved = [this](const std::string& path, const std::string& name,
-                                                         uint32_t idx) {
-                    if (accelStructManager) accelStructManager->notifyMeshRemoved(path, name, idx);
-                };
+                if (loc.lodStates[0] == LODStreamState::Ready)
+                {
+                    accelStructManager->notifyMeshReady(loc.meshPath, loc.submeshName, loc.submeshIndex, loc);
+                }
             }
+        }
 
-            if (terrain.adapter)
-            {
-                terrain.adapter->onTileLODReady = [this](const std::string& tileKey,
-                                                          uint32_t vOff, uint32_t vCount,
-                                                          uint32_t iOff, uint32_t iCount) {
-                    if (accelStructManager) accelStructManager->notifyTerrainTileReady(tileKey, vOff, vCount, iOff, iCount);
-                };
-                terrain.adapter->onTileRemoved = [this](const std::string& tileKey) {
-                    if (accelStructManager) accelStructManager->notifyTerrainTileRemoved(tileKey);
-                };
-            }
-
-
+        if (terrain.adapter)
+        {
+            terrain.adapter->onTileLODReady = [this](const std::string& tileKey,
+                                                      uint32_t vOff, uint32_t vCount,
+                                                      uint32_t iOff, uint32_t iCount) {
+                if (accelStructManager) accelStructManager->notifyTerrainTileReady(tileKey, vOff, vCount, iOff, iCount);
+            };
+            terrain.adapter->onTileRemoved = [this](const std::string& tileKey) {
+                if (accelStructManager) accelStructManager->notifyTerrainTileRemoved(tileKey);
+            };
         }
     }
 
