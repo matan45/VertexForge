@@ -235,6 +235,7 @@ namespace services {
 
         virtual void applyShadowSettings(const types::RenderSettings& settings) = 0;
         virtual ShadowStats getShadowStats() const = 0;
+        virtual types::RTShadowStats getRTShadowStats() const = 0;
         virtual GPUPipelineStatus getGPUPipelineStatus() const = 0;
 
         virtual void setPlayMode(bool playMode) = 0;

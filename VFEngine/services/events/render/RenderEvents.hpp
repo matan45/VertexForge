@@ -214,6 +214,10 @@ namespace events::render {
         std::string_view getName() const override { return "GetShadowStats"; }
     };
 
+    struct GetRTShadowStatsQuery : IQuery<types::RTShadowStats> {
+        std::string_view getName() const override { return "GetRTShadowStats"; }
+    };
+
     struct GetGPUPipelineStatusQuery : IQuery<services::GPUPipelineStatus> {
         std::string_view getName() const override { return "GetGPUPipelineStatus"; }
     };

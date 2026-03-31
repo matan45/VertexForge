@@ -206,6 +206,7 @@ namespace render::gpudriven
         if (giDebugRenderer) { giDebugRenderer->cleanup(); giDebugRenderer.reset(); }
         if (giUpdatePipeline) { giUpdatePipeline->cleanup(); giUpdatePipeline.reset(); }
         if (giTracePipeline) { giTracePipeline->cleanup(); giTracePipeline.reset(); }
+        if (rtShadowProfiler) { rtShadowProfiler->cleanup(device.getLogicalDevice()); rtShadowProfiler.reset(); }
         if (rtShadowDenoiser) { rtShadowDenoiser->cleanup(); rtShadowDenoiser.reset(); }
         if (rtShadowPipeline) { rtShadowPipeline->cleanup(); rtShadowPipeline.reset(); }
         if (accelStructManager) { accelStructManager->cleanup(); accelStructManager.reset(); }
@@ -279,9 +280,17 @@ namespace render::gpudriven
         }
     }
 
-    void GPUDrivenRenderer::dispatchGraphicsCompute(vk::CommandBuffer cmd)
+    void GPUDrivenRenderer::dispatchGraphicsCompute(vk::CommandBuffer cmd, uint32_t imageIndex)
     {
         if (!initialized || !enabled) return;
+
+        // Reset profiler query pool at the start of the frame (before any timestamp writes).
+        // Both dispatchGraphicsCompute (BLAS/TLAS) and dispatchRTShadow write into this pool.
+        if (rtShadowProfiler && rtShadowProfiler->isValid())
+        {
+            uint32_t profilerFI = imageIndex % core::MAX_FRAMES_IN_FLIGHT;
+            rtShadowProfiler->resetFrame(cmd, profilerFI);
+        }
 
         // Lazy init acceleration structures for RT shadows (independent of GI)
         initAccelerationStructures();
@@ -328,17 +337,36 @@ namespace render::gpudriven
         // Build/update acceleration structures for RT shadows and GI
         if (accelStructManager && accelStructManager->isInitialized() && mergedBuffer)
         {
-            if (accelStructManager->hasPendingBLASBuilds())
+            bool hasPendingBLAS = accelStructManager->hasPendingBLASBuilds();
+            bool hasPendingTerrainBLAS = accelStructManager->hasPendingTerrainBLASBuilds() && terrain.meshBuffer;
+            uint32_t profilerFI = imageIndex % core::MAX_FRAMES_IN_FLIGHT;
+
+            if (rtShadowProfiler && rtShadowProfiler->isValid() && (hasPendingBLAS || hasPendingTerrainBLAS))
+            {
+                rtShadowProfiler->writeTimestamp(cmd, profilerFI,
+                    raytracing::RTShadowTimestamp::BeforeBLASBuild,
+                    vk::PipelineStageFlagBits2::eAccelerationStructureBuildKHR);
+            }
+
+            if (hasPendingBLAS)
             {
                 accelStructManager->buildPendingBLAS(cmd,
                     mergedBuffer->getVertexBuffer(), 64,
                     mergedBuffer->getIndexBuffer());
             }
-            if (accelStructManager->hasPendingTerrainBLASBuilds() && terrain.meshBuffer)
+            if (hasPendingTerrainBLAS)
             {
                 accelStructManager->buildPendingTerrainBLAS(cmd,
                     terrain.meshBuffer->getVertexBuffer(), 64,
                     terrain.meshBuffer->getIndexBuffer());
+            }
+
+            if (rtShadowProfiler && rtShadowProfiler->isValid() && (hasPendingBLAS || hasPendingTerrainBLAS))
+            {
+                rtShadowProfiler->writeTimestamp(cmd, profilerFI,
+                    raytracing::RTShadowTimestamp::AfterBLASBuild,
+                    vk::PipelineStageFlagBits2::eAccelerationStructureBuildKHR);
+                rtShadowProfiler->markBLASBuilt();
             }
 
             {
@@ -360,6 +388,14 @@ namespace render::gpudriven
                         mergedBuffer->getCPUObjectData(),
                         mergedBuffer->getObjectCount(),
                         *mergedBuffer);
+                }
+
+                if (rtShadowProfiler && rtShadowProfiler->isValid())
+                {
+                    rtShadowProfiler->writeTimestamp(cmd, profilerFI,
+                        raytracing::RTShadowTimestamp::AfterTLASBuild,
+                        vk::PipelineStageFlagBits2::eAccelerationStructureBuildKHR);
+                    rtShadowProfiler->markTLASBuilt();
                 }
             }
         }
@@ -558,6 +594,13 @@ namespace render::gpudriven
 
         if (!rtShadowPipeline->isInitialized()) return;
 
+        // Initialize profiler alongside pipeline (lazy init)
+        if (!rtShadowProfiler)
+        {
+            rtShadowProfiler = std::make_unique<raytracing::RTShadowProfiler>();
+            rtShadowProfiler->init(device);
+        }
+
         // Handle resize
         uint32_t w = depthPrepass->getWidth();
         uint32_t h = depthPrepass->getHeight();
@@ -593,6 +636,24 @@ namespace render::gpudriven
 
         uint32_t fi = imageIndex % core::MAX_FRAMES_IN_FLIGHT;
 
+        // Readback previous frame's profiling data and evaluate adaptive budget
+        if (rtShadowProfiler && rtShadowProfiler->isValid())
+        {
+            rtShadowProfiler->readbackAndUpdate(device.getLogicalDevice(), fi,
+                                                 accelStructManager->getMemoryBudget());
+
+            auto action = rtShadowProfiler->evaluateBudget();
+            if (action.skipFrame) return;
+            if (action.newMaxRayDistance.has_value())
+                rtShadowPipeline->setMaxRayDistance(action.newMaxRayDistance.value());
+            if (action.newSpatialPasses.has_value() && rtShadowDenoiser)
+                rtShadowDenoiser->setSpatialPasses(action.newSpatialPasses.value());
+
+            rtShadowProfiler->writeTimestamp(cmd, fi,
+                raytracing::RTShadowTimestamp::BeforeRayDispatch,
+                vk::PipelineStageFlagBits2::eComputeShader);
+        }
+
         rtShadowPipeline->dispatch(cmd,
             depthPrepass->getDepthImageView(),
             depthPrepass->getDepthImage(),
@@ -606,6 +667,13 @@ namespace render::gpudriven
             w, h,
             useDenoiser, // skip final transitions when denoiser handles them
             fi);
+
+        if (rtShadowProfiler && rtShadowProfiler->isValid())
+        {
+            rtShadowProfiler->writeTimestamp(cmd, fi,
+                raytracing::RTShadowTimestamp::AfterRayDispatch,
+                vk::PipelineStageFlagBits2::eComputeShader);
+        }
 
         if (useDenoiser)
         {
@@ -621,6 +689,13 @@ namespace render::gpudriven
                 w, h,
                 camData.frameIndex,
                 fi);
+        }
+
+        if (rtShadowProfiler && rtShadowProfiler->isValid())
+        {
+            rtShadowProfiler->writeTimestamp(cmd, fi,
+                raytracing::RTShadowTimestamp::AfterDenoiser,
+                vk::PipelineStageFlagBits2::eComputeShader);
         }
     }
 
@@ -642,5 +717,19 @@ namespace render::gpudriven
             rtShadowDenoiser->setSpatialPhiNormal(settings.spatialPhiNormal);
             rtShadowDenoiser->setSpatialPasses(settings.spatialPasses);
         }
+        if (rtShadowProfiler)
+        {
+            rtShadowProfiler->setBaseSettings(settings.maxRayDistance, settings.spatialPasses);
+            rtShadowProfiler->applyBudgetSettings(settings);
+        }
+    }
+
+    types::RTShadowStats GPUDrivenRenderer::getRTShadowStats() const
+    {
+        if (!rtShadowProfiler) return {};
+        raytracing::ASMemoryBudget asBudget;
+        if (accelStructManager)
+            asBudget = accelStructManager->getMemoryBudget();
+        return rtShadowProfiler->getStats(asBudget);
     }
 }

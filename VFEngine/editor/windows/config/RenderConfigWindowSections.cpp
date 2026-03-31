@@ -438,6 +438,51 @@ namespace windows
                     markDirty();
                 if (ImGui::SliderInt("Spatial Passes", &settings.rtShadows.spatialPasses, 1, 5))
                     markDirty();
+
+                ImGui::Spacing();
+                ImGui::SeparatorText("Adaptive Budget");
+                if (ImGui::Checkbox("Enable Adaptive Budget", &settings.rtShadows.adaptiveBudgetEnabled))
+                    markDirty();
+                if (settings.rtShadows.adaptiveBudgetEnabled)
+                {
+                    if (ImGui::SliderFloat("Budget (ms)", &settings.rtShadows.budgetMs, 0.5f, 8.0f, "%.1f"))
+                        markDirty();
+                    if (ImGui::SliderFloat("AS Memory Budget (MB)", &settings.rtShadows.asMemoryBudgetMB, 64.0f, 1024.0f, "%.0f"))
+                        markDirty();
+                }
+
+                ImGui::Spacing();
+                ImGui::SeparatorText("Performance");
+                auto& dispatcher = events::EventDispatcher::instance();
+                auto rtStats = dispatcher.query(events::render::GetRTShadowStatsQuery{});
+
+                float ratio = rtStats.budgetMs > 0.0f ? rtStats.totalRTShadowMs / rtStats.budgetMs : 0.0f;
+                ImVec4 color = ratio < 0.7f ? ImVec4(0.2f, 0.8f, 0.2f, 1.0f)
+                             : ratio < 1.0f ? ImVec4(0.9f, 0.8f, 0.1f, 1.0f)
+                                            : ImVec4(0.9f, 0.2f, 0.2f, 1.0f);
+                ImGui::TextColored(color, "Total: %.2f ms (budget: %.1f ms)",
+                                   rtStats.totalRTShadowMs, rtStats.budgetMs);
+                ImGui::Text("  Ray dispatch: %.2f ms", rtStats.rayDispatchMs);
+                ImGui::Text("  Denoiser: %.2f ms", rtStats.denoiserMs);
+
+                if (rtStats.isThrottled)
+                {
+                    ImGui::TextColored(ImVec4(0.9f, 0.8f, 0.1f, 1.0f),
+                        "  [THROTTLED] ray dist=%.0f, passes=%d",
+                        rtStats.currentMaxRayDistance, rtStats.currentSpatialPasses);
+                }
+
+                ImGui::Spacing();
+                float asMB = static_cast<float>(rtStats.blasTotalBytes + rtStats.tlasTotalBytes) / (1024.0f * 1024.0f);
+                ImGui::Text("AS Memory: %.1f MB (%u BLAS, %u instances)",
+                            asMB, rtStats.blasCount, rtStats.tlasInstanceCount);
+                if (rtStats.asMemoryOverBudget)
+                    ImGui::TextColored(ImVec4(0.9f, 0.2f, 0.2f, 1.0f), "  [OVER BUDGET]");
+
+                float scratchMB = static_cast<float>(rtStats.scratchPeakBytes) / (1024.0f * 1024.0f);
+                ImGui::Text("Scratch peak: %.1f MB", scratchMB);
+                ImGui::Text("BLAS build: %.2f ms | TLAS build: %.2f ms",
+                            rtStats.blasBuildMs, rtStats.tlasBuildMs);
             }
 
             ImGui::Unindent(10.0f);

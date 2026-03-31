@@ -258,8 +258,10 @@
     <ClInclude Include="render\preview\PreviewRenderHandler.hpp" />
     <ClInclude Include="render\preview\PreviewViewPort.hpp" />
     <ClInclude Include="render\raytracing\AccelerationStructureManager.hpp" />
+    <ClInclude Include="render\raytracing\GPUTimestampQueryPool.hpp" />
     <ClInclude Include="render\raytracing\RTShadowDenoiser.hpp" />
     <ClInclude Include="render\raytracing\RTShadowPipeline.hpp" />
+    <ClInclude Include="render\raytracing\RTShadowProfiler.hpp" />
     <ClInclude Include="render\raytracing\ScratchBufferPool.hpp" />
     <ClInclude Include="render\shadow\PointShadowCalculator.hpp" />
     <ClInclude Include="render\shadow\ShadowGPUDataManager.hpp" />
@@ -513,8 +515,10 @@
     <ClCompile Include="render\preview\PreviewRenderHandler.cpp" />
     <ClCompile Include="render\preview\PreviewViewPort.cpp" />
     <ClCompile Include="render\raytracing\AccelerationStructureManager.cpp" />
+    <ClCompile Include="render\raytracing\GPUTimestampQueryPool.cpp" />
     <ClCompile Include="render\raytracing\RTShadowDenoiser.cpp" />
     <ClCompile Include="render\raytracing\RTShadowPipeline.cpp" />
+    <ClCompile Include="render\raytracing\RTShadowProfiler.cpp" />
     <ClCompile Include="render\shadow\PointShadowCalculator.cpp" />
     <ClCompile Include="render\shadow\ShadowGPUDataManager.cpp" />
     <ClCompile Include="render\shadow\ShadowPassPipeline.cpp" />

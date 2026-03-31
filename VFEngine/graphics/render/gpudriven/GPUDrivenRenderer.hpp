@@ -46,6 +46,7 @@
 #include "../raytracing/AccelerationStructureManager.hpp"
 #include "../raytracing/RTShadowPipeline.hpp"
 #include "../raytracing/RTShadowDenoiser.hpp"
+#include "../raytracing/RTShadowProfiler.hpp"
 #include "../svt/SVTTypes.hpp"
 #include "../svt/PhysicalTileCache.hpp"
 #include "../svt/SVTPageTable.hpp"
@@ -360,6 +361,7 @@ namespace render::gpudriven
         std::unique_ptr<raytracing::AccelerationStructureManager> accelStructManager;
         std::unique_ptr<raytracing::RTShadowPipeline> rtShadowPipeline;
         std::unique_ptr<raytracing::RTShadowDenoiser> rtShadowDenoiser;
+        std::unique_ptr<raytracing::RTShadowProfiler> rtShadowProfiler;
         bool rtShadowEnabled = true;
         gi::GISettings cachedGISettings;
         bool giProbeBuffersNeedInit = true;
@@ -427,7 +429,7 @@ namespace render::gpudriven
 
         // Split compute dispatch for async compute queue support
         // Records uploads, light occlusion, object culling, shadows, volumetric fog on graphics queue
-        void dispatchGraphicsCompute(vk::CommandBuffer cmd);
+        void dispatchGraphicsCompute(vk::CommandBuffer cmd, uint32_t imageIndex = 0);
         // Records light culling, grass compute, GI probe update on async compute queue
         void dispatchAsyncCompute(vk::CommandBuffer asyncCmd);
 
@@ -477,6 +479,7 @@ namespace render::gpudriven
         bool isRTShadowReady() const;
         raytracing::RTShadowPipeline* getRTShadowPipeline() const { return rtShadowPipeline.get(); }
         void applyRTShadowSettings(const types::RTShadowSettings& settings);
+        types::RTShadowStats getRTShadowStats() const;
 
         void setDistanceCullingEnabled(bool enabled) { culling.distanceCullingEnabled = enabled; }
         bool isDistanceCullingEnabled() const { return culling.distanceCullingEnabled; }

@@ -129,6 +129,17 @@ namespace controllers
         return stats;
     }
 
+    types::RTShadowStats OffScreenController::getRTShadowStats() const
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (!renderHandler) return {};
+
+        auto* gpuDriven = renderHandler->getGPUDrivenRenderer();
+        if (!gpuDriven) return {};
+
+        return gpuDriven->getRTShadowStats();
+    }
+
     services::GPUPipelineStatus OffScreenController::getGPUPipelineStatus() const
     {
         services::GPUPipelineStatus s;

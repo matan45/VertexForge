@@ -223,7 +223,7 @@ namespace render
     {
         updateGPUDrivenHiZ();
         if (asyncComputeActive)
-            gpuDrivenRenderer->dispatchGraphicsCompute(commandBuffer);
+            gpuDrivenRenderer->dispatchGraphicsCompute(commandBuffer, imageIndex);
         else
             gpuDrivenRenderer->dispatchCompute(commandBuffer);
 

@@ -51,6 +51,37 @@ namespace types
         float spatialPhiDepth = 0.005f;
         float spatialPhiNormal = 32.0f;
         int spatialPasses = 3;
+
+        // Adaptive budget
+        bool adaptiveBudgetEnabled = true;
+        float budgetMs = 2.0f;
+        float asMemoryBudgetMB = 256.0f;
+    };
+
+    struct RTShadowStats
+    {
+        // GPU timing (EMA-smoothed, milliseconds)
+        float rayDispatchMs = 0.0f;
+        float denoiserMs = 0.0f;
+        float totalRTShadowMs = 0.0f;
+        float blasBuildMs = 0.0f;
+        float tlasBuildMs = 0.0f;
+
+        // Acceleration structure memory
+        uint64_t blasTotalBytes = 0;
+        uint64_t tlasTotalBytes = 0;
+        uint64_t scratchPeakBytes = 0;
+        uint32_t blasCount = 0;
+        uint32_t tlasInstanceCount = 0;
+        bool asMemoryOverBudget = false;
+
+        // Adaptive budget state
+        float budgetMs = 2.0f;
+        float currentMaxRayDistance = 500.0f;
+        int currentSpatialPasses = 3;
+        bool isThrottled = false;
+        uint32_t framesOverBudget = 0;
+        uint32_t framesUnderBudget = 0;
     };
 
     struct ShadowSettings
@@ -186,6 +217,7 @@ namespace types
                 s.shadows.softShadows = false;
                 s.shadows.shadowIntensity = 0.4f;
                 s.rtShadows.enabled = false;
+                s.rtShadows.budgetMs = 1.0f;
                 s.culling.lodCrossfadeEnabled = false;
                 s.culling.globalLodBias = 2.0f;
                 s.distanceCulling.enabled = true;
@@ -206,6 +238,7 @@ namespace types
                 s.shadows.softShadows = false;
                 s.shadows.shadowIntensity = 0.5f;
                 s.rtShadows.spatialPasses = 2;
+                s.rtShadows.budgetMs = 1.5f;
                 s.culling.lodCrossfadeEnabled = false;
                 s.culling.globalLodBias = 1.0f;
                 s.distanceCulling.enabled = true;
@@ -232,6 +265,7 @@ namespace types
                 s.shadows.shadowIntensity = 0.6f;
                 s.rtShadows.spatialPasses = 4;
                 s.rtShadows.maxRayDistance = 1000.0f;
+                s.rtShadows.budgetMs = 4.0f;
                 s.culling.lodCrossfadeEnabled = true;
                 s.culling.globalLodBias = -1.0f;
                 s.distanceCulling.enabled = false;
