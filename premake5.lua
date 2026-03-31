@@ -289,6 +289,9 @@ project "Graphics"
 	  "sl.interposer.lib"
    }
 
+   -- Suppress LNK4006: __NULL_IMPORT_DESCRIPTOR collision between sl.interposer.lib and shaderc_shared.lib
+   linkoptions { "/ignore:4006" }
+
    filter "configurations:Debug"
       defines { "DEBUG" }
       symbols "On"

@@ -17,6 +17,14 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
     const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
     void* pUserData)
 {
+    // Suppress known harmless Streamline SDK conflict:
+    // Streamline injects VK_EXT_buffer_device_address which conflicts with Vulkan 1.2 core feature
+    if (pCallbackData->pMessageIdName &&
+        std::string_view(pCallbackData->pMessageIdName) == "VUID-VkDeviceCreateInfo-pNext-04748")
+    {
+        return VK_FALSE;
+    }
+
     if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT)
     {
         vfLogWarning("Validation layer warning: {}", pCallbackData->pMessage);
