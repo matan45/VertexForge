@@ -66,8 +66,14 @@ namespace render::postprocess
         PingPongTarget targetA{};
         PingPongTarget targetB{};
 
+        // Display-resolution ping-pong targets (only used for post-upscale effects)
+        PingPongTarget displayTargetA{};
+        PingPongTarget displayTargetB{};
+
         vk::DescriptorSet descriptorSetA;
         vk::DescriptorSet descriptorSetB;
+        vk::DescriptorSet displayDescriptorSetA;
+        vk::DescriptorSet displayDescriptorSetB;
         std::vector<vk::DescriptorSet> sceneDescriptorSets;
 
         SunInfo sunInfo{};

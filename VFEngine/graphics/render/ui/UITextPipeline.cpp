@@ -374,7 +374,7 @@ namespace render::ui
         renderPassInfo.renderPass = renderPass;
         renderPassInfo.framebuffer = framebuffers[imageIndex];
         renderPassInfo.renderArea.offset = vk::Offset2D{0, 0};
-        renderPassInfo.renderArea.extent = swapChain.getSwapchainExtent();
+        renderPassInfo.renderArea.extent = swapChain.getDisplayExtent();
 
         commandBuffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
 
@@ -386,8 +386,8 @@ namespace render::ui
         commandBuffer.bindIndexBuffer(bufferManager.getQuadIndexBuffer(), 0, vk::IndexType::eUint16);
 
         glm::vec2 viewportSize(
-            static_cast<float>(swapChain.getSwapchainExtent().width),
-            static_cast<float>(swapChain.getSwapchainExtent().height)
+            static_cast<float>(swapChain.getDisplayExtent().width),
+            static_cast<float>(swapChain.getDisplayExtent().height)
         );
 
         for (const auto& group : scissorGroups)
@@ -405,7 +405,7 @@ namespace render::ui
             {
                 // No scissor - full viewport
                 scissor.offset = vk::Offset2D{0, 0};
-                scissor.extent = swapChain.getSwapchainExtent();
+                scissor.extent = swapChain.getDisplayExtent();
             }
             commandBuffer.setScissor(0, 1, &scissor);
 

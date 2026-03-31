@@ -13,6 +13,7 @@
 #include "effects/UnderwaterEffect.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
+#include "../upscaling/UpscaleManager.hpp"
 #include "../../core/OffScreen.hpp"
 #include "../../core/ImageUtilities.hpp"
 #include "../../core/DeferredDeletionQueue.hpp"
@@ -251,7 +252,41 @@ namespace render::postprocess
                                                   vk::Image sourceImage, vk::ImageView sourceView)
     {
         if (!initialized)
-            return;
+            lazyInit();
+
+        auto displayExtent = swapChain.getDisplayExtent();
+        bool hasDisplayImages = !offscreenResources.displayColorImages.empty();
+        vk::Image outputImage = hasDisplayImages
+            ? offscreenResources.displayColorImages[imageIndex].colorImage
+            : offscreenResources.colorImages[imageIndex].colorImage;
+
+        // Always blit upscale output (HDR R16G16B16A16) → displayTargetA (LDR swapchain format)
+        // This handles format conversion and avoids descriptor set issues.
+        // Use eUndefined as old layout — we overwrite the entire image, and it handles first-frame too.
+        core::ImageUtilities::transitionImageLayout(commandBuffer, sourceImage,
+            vk::ImageLayout::eGeneral, vk::ImageLayout::eTransferSrcOptimal,
+            vk::ImageAspectFlagBits::eColor);
+        core::ImageUtilities::transitionImageLayout(commandBuffer, displayTargetA.image,
+            vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal,
+            vk::ImageAspectFlagBits::eColor);
+
+        vk::ImageBlit blitRegion{};
+        blitRegion.srcSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+        blitRegion.srcSubresource.layerCount = 1;
+        blitRegion.srcOffsets[1] = vk::Offset3D{static_cast<int32_t>(displayExtent.width),
+                                                 static_cast<int32_t>(displayExtent.height), 1};
+        blitRegion.dstSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+        blitRegion.dstSubresource.layerCount = 1;
+        blitRegion.dstOffsets[1] = vk::Offset3D{static_cast<int32_t>(displayExtent.width),
+                                                 static_cast<int32_t>(displayExtent.height), 1};
+
+        commandBuffer.blitImage(sourceImage, vk::ImageLayout::eTransferSrcOptimal,
+                                displayTargetA.image, vk::ImageLayout::eTransferDstOptimal,
+                                blitRegion, vk::Filter::eLinear);
+
+        core::ImageUtilities::transitionImageLayout(commandBuffer, displayTargetA.image,
+            vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
+            vk::ImageAspectFlagBits::eColor);
 
         std::vector<PostProcessEffect*> activeEffects;
         for (auto& e : effects)
@@ -260,16 +295,14 @@ namespace render::postprocess
             if (e->isPreUpscale()) continue;
             activeEffects.push_back(e.get());
         }
+
         if (activeEffects.empty())
         {
-            // No post-upscale effects: just copy upscale output to scene color
-            vk::Image sceneImage = offscreenResources.colorImages[imageIndex].colorImage;
-            auto extent = swapChain.getSwapchainExtent();
-
-            core::ImageUtilities::transitionImageLayout(commandBuffer, sourceImage,
-                vk::ImageLayout::eGeneral, vk::ImageLayout::eTransferSrcOptimal,
+            // No post-upscale effects: copy displayTargetA to output
+            core::ImageUtilities::transitionImageLayout(commandBuffer, displayTargetA.image,
+                vk::ImageLayout::eShaderReadOnlyOptimal, vk::ImageLayout::eTransferSrcOptimal,
                 vk::ImageAspectFlagBits::eColor);
-            core::ImageUtilities::transitionImageLayout(commandBuffer, sceneImage,
+            core::ImageUtilities::transitionImageLayout(commandBuffer, outputImage,
                 vk::ImageLayout::eShaderReadOnlyOptimal, vk::ImageLayout::eTransferDstOptimal,
                 vk::ImageAspectFlagBits::eColor);
 
@@ -278,50 +311,27 @@ namespace render::postprocess
             region.srcSubresource.layerCount = 1;
             region.dstSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
             region.dstSubresource.layerCount = 1;
-            region.extent.width = extent.width;
-            region.extent.height = extent.height;
+            region.extent.width = displayExtent.width;
+            region.extent.height = displayExtent.height;
             region.extent.depth = 1;
 
-            commandBuffer.copyImage(sourceImage, vk::ImageLayout::eTransferSrcOptimal,
-                                    sceneImage, vk::ImageLayout::eTransferDstOptimal, region);
+            commandBuffer.copyImage(displayTargetA.image, vk::ImageLayout::eTransferSrcOptimal,
+                                    outputImage, vk::ImageLayout::eTransferDstOptimal, region);
 
-            core::ImageUtilities::transitionImageLayout(commandBuffer, sceneImage,
+            // Transition both back to shader read for next frame
+            core::ImageUtilities::transitionImageLayout(commandBuffer, displayTargetA.image,
+                vk::ImageLayout::eTransferSrcOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
+                vk::ImageAspectFlagBits::eColor);
+            core::ImageUtilities::transitionImageLayout(commandBuffer, outputImage,
                 vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
                 vk::ImageAspectFlagBits::eColor);
             return;
         }
 
-        auto extent = swapChain.getSwapchainExtent();
-
-        // First effect reads from upscale output (need a temp descriptor for it)
-        // Copy upscale output into targetA so we can use the existing ping-pong machinery
-        core::ImageUtilities::transitionImageLayout(commandBuffer, sourceImage,
-            vk::ImageLayout::eGeneral, vk::ImageLayout::eTransferSrcOptimal,
-            vk::ImageAspectFlagBits::eColor);
-        core::ImageUtilities::transitionImageLayout(commandBuffer, targetA.image,
-            vk::ImageLayout::eShaderReadOnlyOptimal, vk::ImageLayout::eTransferDstOptimal,
-            vk::ImageAspectFlagBits::eColor);
-
-        vk::ImageCopy copyRegion{};
-        copyRegion.srcSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
-        copyRegion.srcSubresource.layerCount = 1;
-        copyRegion.dstSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
-        copyRegion.dstSubresource.layerCount = 1;
-        copyRegion.extent.width = extent.width;
-        copyRegion.extent.height = extent.height;
-        copyRegion.extent.depth = 1;
-
-        commandBuffer.copyImage(sourceImage, vk::ImageLayout::eTransferSrcOptimal,
-                                targetA.image, vk::ImageLayout::eTransferDstOptimal, copyRegion);
-
-        core::ImageUtilities::transitionImageLayout(commandBuffer, targetA.image,
-            vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
-            vk::ImageAspectFlagBits::eColor);
-
-        // Now run post-upscale effects: input starts from descriptorSetA (targetA),
-        // first output goes to targetB
-        vk::DescriptorSet currentInputDescSet = descriptorSetA;
-        PingPongTarget* currentOutput = &targetB;
+        // Run post-upscale effects using display-res ping-pong targets
+        // Input starts from displayDescriptorSetA (displayTargetA already has the blitted data)
+        vk::DescriptorSet currentInputDescSet = displayDescriptorSetA;
+        PingPongTarget* currentOutput = &displayTargetB;
         bool outputIsA = false;
 
         for (size_t i = 0; i < activeEffects.size(); ++i)
@@ -330,7 +340,7 @@ namespace render::postprocess
             rpBegin.renderPass = renderPass;
             rpBegin.framebuffer = currentOutput->framebuffer;
             rpBegin.renderArea.offset = vk::Offset2D{0, 0};
-            rpBegin.renderArea.extent = extent;
+            rpBegin.renderArea.extent = displayExtent;
 
             activeEffects[i]->preRecord(commandBuffer, currentInputDescSet);
 
@@ -343,27 +353,25 @@ namespace render::postprocess
 
             if (outputIsA)
             {
-                currentInputDescSet = descriptorSetA;
-                currentOutput = &targetB;
+                currentInputDescSet = displayDescriptorSetA;
+                currentOutput = &displayTargetB;
                 outputIsA = false;
             }
             else
             {
-                currentInputDescSet = descriptorSetB;
-                currentOutput = &targetA;
+                currentInputDescSet = displayDescriptorSetB;
+                currentOutput = &displayTargetA;
                 outputIsA = true;
             }
         }
 
-        // Copy final result to scene color image
-        PingPongTarget* lastWritten = outputIsA ? &targetB : &targetA;
+        // Copy final result to display color image
+        PingPongTarget* lastWritten = outputIsA ? &displayTargetB : &displayTargetA;
 
         core::ImageUtilities::transitionImageLayout(commandBuffer, lastWritten->image,
             vk::ImageLayout::eShaderReadOnlyOptimal, vk::ImageLayout::eTransferSrcOptimal,
             vk::ImageAspectFlagBits::eColor);
-
-        vk::Image sceneImage = offscreenResources.colorImages[imageIndex].colorImage;
-        core::ImageUtilities::transitionImageLayout(commandBuffer, sceneImage,
+        core::ImageUtilities::transitionImageLayout(commandBuffer, outputImage,
             vk::ImageLayout::eShaderReadOnlyOptimal, vk::ImageLayout::eTransferDstOptimal,
             vk::ImageAspectFlagBits::eColor);
 
@@ -372,16 +380,16 @@ namespace render::postprocess
         finalCopy.srcSubresource.layerCount = 1;
         finalCopy.dstSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
         finalCopy.dstSubresource.layerCount = 1;
-        finalCopy.extent.width = extent.width;
-        finalCopy.extent.height = extent.height;
+        finalCopy.extent.width = displayExtent.width;
+        finalCopy.extent.height = displayExtent.height;
         finalCopy.extent.depth = 1;
 
         commandBuffer.copyImage(
             lastWritten->image, vk::ImageLayout::eTransferSrcOptimal,
-            sceneImage, vk::ImageLayout::eTransferDstOptimal,
+            outputImage, vk::ImageLayout::eTransferDstOptimal,
             finalCopy);
 
-        core::ImageUtilities::transitionImageLayout(commandBuffer, sceneImage,
+        core::ImageUtilities::transitionImageLayout(commandBuffer, outputImage,
             vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
             vk::ImageAspectFlagBits::eColor);
     }
@@ -396,11 +404,15 @@ namespace render::postprocess
         createDescriptorPool();
         createDescriptorSets();
 
-        auto extent = swapChain.getSwapchainExtent();
+        auto renderExtent = swapChain.getSwapchainExtent();
+        auto displayExtent = swapChain.getDisplayExtent();
         for (auto& effect : effects)
         {
             if (!effect->isInitialized())
-                effect->init(renderPass, extent);
+            {
+                auto ext = effect->isPreUpscale() ? renderExtent : displayExtent;
+                effect->init(renderPass, ext);
+            }
         }
 
         initialized = true;
@@ -481,16 +493,17 @@ namespace render::postprocess
         auto extent = swapChain.getSwapchainExtent();
         vk::Format format = swapChain.getSwapchainImageFormat();
 
-        auto createTarget = [&](PingPongTarget& target)
+        auto createTarget = [&](PingPongTarget& target, vk::Extent2D targetExtent)
         {
             core::ImageInfoRequest req(device.getLogicalDevice(), device.getPhysicalDevice());
-            req.width = extent.width;
-            req.height = extent.height;
+            req.width = targetExtent.width;
+            req.height = targetExtent.height;
             req.format = format;
             req.tiling = vk::ImageTiling::eOptimal;
             req.usage = vk::ImageUsageFlagBits::eColorAttachment
                       | vk::ImageUsageFlagBits::eSampled
-                      | vk::ImageUsageFlagBits::eTransferSrc;
+                      | vk::ImageUsageFlagBits::eTransferSrc
+                      | vk::ImageUsageFlagBits::eTransferDst;
             req.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
 
             core::ImageUtilities::createImage(req, target.image, target.allocation, device.getMemoryManager());
@@ -500,35 +513,54 @@ namespace render::postprocess
             core::ImageUtilities::createImageView(viewReq, target.imageView);
         };
 
-        createTarget(targetA);
-        createTarget(targetB);
+        createTarget(targetA, extent);
+        createTarget(targetB, extent);
+
+        // Create display-res targets when upscaling is active
+        auto* upscaleManager = device.getUpscaleManager();
+        if (upscaleManager && upscaleManager->isActive())
+        {
+            auto displayExtent = swapChain.getDisplayExtent();
+            createTarget(displayTargetA, displayExtent);
+            createTarget(displayTargetB, displayExtent);
+        }
     }
 
     void PostProcessPipeline::createFramebuffers()
     {
         auto extent = swapChain.getSwapchainExtent();
 
-        auto createFB = [&](PingPongTarget& target)
+        auto createFB = [&](PingPongTarget& target, vk::Extent2D fbExtent)
         {
             vk::FramebufferCreateInfo fbInfo{};
             fbInfo.renderPass = renderPass;
             fbInfo.attachmentCount = 1;
             fbInfo.pAttachments = &target.imageView;
-            fbInfo.width = extent.width;
-            fbInfo.height = extent.height;
+            fbInfo.width = fbExtent.width;
+            fbInfo.height = fbExtent.height;
             fbInfo.layers = 1;
 
             target.framebuffer = device.getLogicalDevice().createFramebuffer(fbInfo);
         };
 
-        createFB(targetA);
-        createFB(targetB);
+        createFB(targetA, extent);
+        createFB(targetB, extent);
+
+        auto* upscaleManager = device.getUpscaleManager();
+        if (upscaleManager && upscaleManager->isActive())
+        {
+            auto displayExtent = swapChain.getDisplayExtent();
+            createFB(displayTargetA, displayExtent);
+            createFB(displayTargetB, displayExtent);
+        }
     }
 
     void PostProcessPipeline::createDescriptorPool()
     {
         uint32_t sceneImageCount = static_cast<uint32_t>(offscreenResources.colorImages.size());
-        uint32_t totalSets = 2 + sceneImageCount;
+        auto* upscaleManager = device.getUpscaleManager();
+        bool upscaling = upscaleManager && upscaleManager->isActive();
+        uint32_t totalSets = 2 + sceneImageCount + (upscaling ? 2 : 0);
 
         vk::DescriptorPoolSize poolSize{};
         poolSize.type = vk::DescriptorType::eCombinedImageSampler;
@@ -546,7 +578,9 @@ namespace render::postprocess
     void PostProcessPipeline::createDescriptorSets()
     {
         uint32_t sceneImageCount = static_cast<uint32_t>(offscreenResources.colorImages.size());
-        uint32_t totalSets = 2 + sceneImageCount;
+        auto* upscaleManager = device.getUpscaleManager();
+        bool upscaling = upscaleManager && upscaleManager->isActive();
+        uint32_t totalSets = 2 + sceneImageCount + (upscaling ? 2 : 0);
 
         std::vector<vk::DescriptorSetLayout> layouts(totalSets, inputDescriptorSetLayout);
 
@@ -569,6 +603,16 @@ namespace render::postprocess
 
         for (uint32_t i = 0; i < sceneImageCount; ++i)
             updateDescriptorSet(sceneDescriptorSets[i], offscreenResources.colorImages[i].colorImageView);
+
+        if (upscaling)
+        {
+            uint32_t base = 2 + sceneImageCount;
+            displayDescriptorSetA = sets[base];
+            displayDescriptorSetB = sets[base + 1];
+
+            updateDescriptorSet(displayDescriptorSetA, displayTargetA.imageView);
+            updateDescriptorSet(displayDescriptorSetB, displayTargetB.imageView);
+        }
     }
 
     void PostProcessPipeline::updateDescriptorSet(vk::DescriptorSet set, vk::ImageView imageView)
@@ -597,7 +641,8 @@ namespace render::postprocess
 
         if (initialized && !ptr->isInitialized())
         {
-            ptr->init(renderPass, swapChain.getSwapchainExtent());
+            auto ext = ptr->isPreUpscale() ? swapChain.getSwapchainExtent() : swapChain.getDisplayExtent();
+            ptr->init(renderPass, ext);
         }
     }
 
@@ -717,11 +762,17 @@ namespace render::postprocess
 
         dev.destroyFramebuffer(targetA.framebuffer);
         dev.destroyFramebuffer(targetB.framebuffer);
+        if (displayTargetA.framebuffer) dev.destroyFramebuffer(displayTargetA.framebuffer);
+        if (displayTargetB.framebuffer) dev.destroyFramebuffer(displayTargetB.framebuffer);
+        displayTargetA.framebuffer = nullptr;
+        displayTargetB.framebuffer = nullptr;
         cleanupPingPongTargets();
 
         dev.destroyDescriptorPool(descriptorPool);
         descriptorSetA = nullptr;
         descriptorSetB = nullptr;
+        displayDescriptorSetA = nullptr;
+        displayDescriptorSetB = nullptr;
         sceneDescriptorSets.clear();
 
         dev.destroyRenderPass(renderPass);
@@ -732,11 +783,15 @@ namespace render::postprocess
         createDescriptorPool();
         createDescriptorSets();
 
-        auto extent = swapChain.getSwapchainExtent();
+        auto renderExtent = swapChain.getSwapchainExtent();
+        auto displayExtent = swapChain.getDisplayExtent();
         for (auto& effect : effects)
         {
             if (effect->isInitialized())
-                effect->recreate(renderPass, extent);
+            {
+                auto ext = effect->isPreUpscale() ? renderExtent : displayExtent;
+                effect->recreate(renderPass, ext);
+            }
         }
     }
 
@@ -755,6 +810,10 @@ namespace render::postprocess
 
         dev.destroyFramebuffer(targetA.framebuffer);
         dev.destroyFramebuffer(targetB.framebuffer);
+        if (displayTargetA.framebuffer) dev.destroyFramebuffer(displayTargetA.framebuffer);
+        if (displayTargetB.framebuffer) dev.destroyFramebuffer(displayTargetB.framebuffer);
+        displayTargetA.framebuffer = nullptr;
+        displayTargetB.framebuffer = nullptr;
 
         cleanupPingPongTargets();
 
@@ -784,6 +843,8 @@ namespace render::postprocess
 
         descriptorSetA = nullptr;
         descriptorSetB = nullptr;
+        displayDescriptorSetA = nullptr;
+        displayDescriptorSetB = nullptr;
         sceneDescriptorSets.clear();
 
         initialized = false;
@@ -814,5 +875,7 @@ namespace render::postprocess
 
         destroyTarget(targetA);
         destroyTarget(targetB);
+        destroyTarget(displayTargetA);
+        destroyTarget(displayTargetB);
     }
 }

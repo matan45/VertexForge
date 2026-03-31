@@ -344,9 +344,10 @@ namespace render
                 vk::ImageViewType::e2D, 1, 1);
             core::ImageUtilities::createImageView(mvSampledView, offscreenResources.motionVectors.sampledView);
 
-            // Upscale output image (R16G16B16A16_SFLOAT — SRGB doesn't support storage)
+            // Upscale output image at display resolution (R16G16B16A16_SFLOAT — SRGB doesn't support storage)
+            auto displayExtent = swapChain.getDisplayExtent();
             core::ImageInfoRequest outputInfo(device.getLogicalDevice(), device.getPhysicalDevice(),
-                extent.width, extent.height, 1, 1,
+                displayExtent.width, displayExtent.height, 1, 1,
                 vk::Format::eR16G16B16A16Sfloat, vk::ImageTiling::eOptimal,
                 vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eSampled |
                 vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst,
@@ -363,7 +364,7 @@ namespace render
             core::ImageUtilities::createImageView(outputView, offscreenResources.upscaleOutput.imageView);
 
             offscreenResources.upscaleResourcesCreated = true;
-            vfLogInfo("Upscale resources created: {}x{}", extent.width, extent.height);
+            vfLogInfo("Upscale resources created: MV {}x{}, output {}x{}", extent.width, extent.height, displayExtent.width, displayExtent.height);
         }
 
         if (!offscreenResources.upscaleResourcesCreated)
@@ -439,7 +440,32 @@ namespace render
         inputs.jitterOffset = currentJitterOffset;
         inputs.resetAccumulation = resetAccum;
 
-        upscaleManager->evaluate(commandBuffer, taaFrameIndex, inputs);
+        // TODO: Re-enable when Streamline integration is fixed
+        // upscaleManager->evaluate(commandBuffer, taaFrameIndex, inputs);
+
+        // Fallback: blit scene color (render-res) to upscale output (display-res)
+        core::ImageUtilities::transitionImageLayout(commandBuffer, colorImage,
+            vk::ImageLayout::eShaderReadOnlyOptimal, vk::ImageLayout::eTransferSrcOptimal,
+            vk::ImageAspectFlagBits::eColor);
+
+        vk::ImageBlit sceneBlit{};
+        sceneBlit.srcSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+        sceneBlit.srcSubresource.layerCount = 1;
+        sceneBlit.srcOffsets[1] = vk::Offset3D{static_cast<int32_t>(renderRes.width),
+                                                static_cast<int32_t>(renderRes.height), 1};
+        sceneBlit.dstSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+        sceneBlit.dstSubresource.layerCount = 1;
+        sceneBlit.dstOffsets[1] = vk::Offset3D{static_cast<int32_t>(displayRes.width),
+                                                static_cast<int32_t>(displayRes.height), 1};
+
+        commandBuffer.blitImage(colorImage, vk::ImageLayout::eTransferSrcOptimal,
+                                offscreenResources.upscaleOutput.image, vk::ImageLayout::eGeneral,
+                                sceneBlit, vk::Filter::eLinear);
+
+        // Transition color back to shader read
+        core::ImageUtilities::transitionImageLayout(commandBuffer, colorImage,
+            vk::ImageLayout::eTransferSrcOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
+            vk::ImageAspectFlagBits::eColor);
 
         // Transition depth back to attachment optimal
         core::ImageUtilities::transitionImageLayout(commandBuffer,

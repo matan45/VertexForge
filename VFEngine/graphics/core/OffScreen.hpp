@@ -44,7 +44,8 @@ namespace core {
 	};
 
 	struct OffscreenResources {
-		std::vector<core::ColorImage> colorImages;
+		std::vector<core::ColorImage> colorImages;       // Scene color (render resolution)
+		std::vector<core::ColorImage> displayColorImages; // Display-res output (only when upscaling)
 		core::DepthImage depthImage;
 		core::StencilImage uiStencilImage;
 

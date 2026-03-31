@@ -237,8 +237,8 @@ namespace controllers
 
         if (cameraController)
         {
-            // Enable jitter when either TAA or upscaling is active (both need temporal jitter)
-            bool needsJitter = settings.enabled && (settings.taa.enabled || settings.upscale.enabled);
+            // Enable jitter when TAA is active (upscaling jitter re-enabled when Streamline evaluate works)
+            bool needsJitter = settings.enabled && settings.taa.enabled;
             cameraController->setTAAEnabled(needsJitter);
             auto extent = swapChain.getSwapchainExtent();
             cameraController->setViewportExtent(extent.width, extent.height);
@@ -255,21 +255,38 @@ namespace controllers
             bool wasActive = upscaleManager->isActive();
             auto prevQuality = upscaleManager->getResolutionManager().getQualityMode();
 
-            auto extent = swapChain.getSwapchainExtent();
-            upscaleManager->applySettings(settings.upscale, extent.width, extent.height);
+            // Always pass display extent so ResolutionManager computes render res correctly
+            auto displayExtent = swapChain.getDisplayExtent();
+            upscaleManager->applySettings(settings.upscale, displayExtent.width, displayExtent.height);
 
             bool isActive = upscaleManager->isActive();
             auto newQuality = upscaleManager->getResolutionManager().getQualityMode();
 
-            // NOTE: Resolution split (render at lower internal res) is not yet implemented.
-            // For now, all quality modes render at display resolution — only DLAA/temporal
-            // reconstruction is active. Quality/Performance upscaling requires a deeper
-            // refactor of framebuffer and render pass infrastructure (separate ticket).
+            bool stateChanged = wasActive != isActive;
+            bool qualityChanged = wasActive && isActive && prevQuality != newQuality;
 
-            // Mark upscale resources dirty when state changes
-            if (wasActive != isActive)
+            if (stateChanged || qualityChanged)
             {
+                if (isActive)
+                {
+                    auto renderRes = upscaleManager->getResolutionManager().getRenderResolution();
+                    swapChain.setRenderExtentOverride(renderRes);
+                }
+                else
+                {
+                    swapChain.setRenderExtentOverride({0, 0});
+                }
+
+                device.getLogicalDevice().waitIdle();
+                offScreen->recreate();
                 offScreen->setUpscaleResourcesDirty(true);
+
+                // Re-apply DLSS options after recreation so Streamline refreshes its internal state
+                if (isActive)
+                {
+                    auto freshDisplayExtent = swapChain.getDisplayExtent();
+                    upscaleManager->applySettings(settings.upscale, freshDisplayExtent.width, freshDisplayExtent.height);
+                }
             }
         }
     }

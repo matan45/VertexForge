@@ -172,7 +172,7 @@ namespace render::ui
         core::GraphicsPipelineConfig config{
             .device = device.getLogicalDevice(),
             .renderPass = renderPass,
-            .extent = swapChain.getSwapchainExtent(),
+            .extent = swapChain.getDisplayExtent(),
             .shaderStages = uiTextShader->getShaderStages(),
             .vertexBindings = {vertexBinding, instanceBinding},
             .vertexAttributes = allAttribs,
@@ -214,11 +214,13 @@ namespace render::ui
 
     void UITextPipeline::createFramebuffers()
     {
-        framebuffers.resize(offscreenResources.colorImages.size());
+        bool hasDisplay = !offscreenResources.displayColorImages.empty();
+        auto& colorSrc = hasDisplay ? offscreenResources.displayColorImages : offscreenResources.colorImages;
+        framebuffers.resize(colorSrc.size());
 
         for (uint32_t i = 0; i < framebuffers.size(); i++)
         {
-            vk::ImageView colorView = offscreenResources.colorImages[i].colorImageView;
+            vk::ImageView colorView = colorSrc[i].colorImageView;
             vk::ImageView stencilView = offscreenResources.uiStencilImage.stencilImageView;
             std::array<vk::ImageView, 2> attachments = {colorView, stencilView};
 
@@ -226,8 +228,8 @@ namespace render::ui
             framebufferInfo.renderPass = renderPass;
             framebufferInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
             framebufferInfo.pAttachments = attachments.data();
-            framebufferInfo.width = swapChain.getSwapchainExtent().width;
-            framebufferInfo.height = swapChain.getSwapchainExtent().height;
+            framebufferInfo.width = swapChain.getDisplayExtent().width;
+            framebufferInfo.height = swapChain.getDisplayExtent().height;
             framebufferInfo.layers = 1;
 
             framebuffers[i] = device.getLogicalDevice().createFramebuffer(framebufferInfo);

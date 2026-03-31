@@ -146,8 +146,8 @@ namespace imguiPass {
 		vk::RenderPassBeginInfo renderPassinfo = {};
 		renderPassinfo.renderPass = imGuiRenderPass;
 		renderPassinfo.framebuffer = imGuiFrameBuffers[imageIndex];
-		renderPassinfo.renderArea.extent.width = swapChain.getSwapchainExtent().width;
-		renderPassinfo.renderArea.extent.height = swapChain.getSwapchainExtent().height;
+		renderPassinfo.renderArea.extent.width = swapChain.getDisplayExtent().width;
+		renderPassinfo.renderArea.extent.height = swapChain.getDisplayExtent().height;
 		renderPassinfo.clearValueCount = 1;
 		renderPassinfo.pClearValues = &clearColor;
 
@@ -166,8 +166,8 @@ namespace imguiPass {
 		vk::RenderPassBeginInfo renderPassinfo = {};
 		renderPassinfo.renderPass = imGuiRenderPass;
 		renderPassinfo.framebuffer = imGuiFrameBuffers[imageIndex];
-		renderPassinfo.renderArea.extent.width = swapChain.getSwapchainExtent().width;
-		renderPassinfo.renderArea.extent.height = swapChain.getSwapchainExtent().height;
+		renderPassinfo.renderArea.extent.width = swapChain.getDisplayExtent().width;
+		renderPassinfo.renderArea.extent.height = swapChain.getDisplayExtent().height;
 		renderPassinfo.clearValueCount = 1;
 		renderPassinfo.pClearValues = &clearColor;
 
@@ -253,8 +253,8 @@ namespace imguiPass {
 			framebufferInfo.renderPass = imGuiRenderPass;
 			framebufferInfo.attachmentCount = 1;
 			framebufferInfo.pAttachments = &viewImage;
-			framebufferInfo.width = swapChain.getSwapchainExtent().width;
-			framebufferInfo.height = swapChain.getSwapchainExtent().height;
+			framebufferInfo.width = swapChain.getDisplayExtent().width;
+			framebufferInfo.height = swapChain.getDisplayExtent().height;
 			framebufferInfo.layers = 1;
 
 			imGuiFrameBuffers[i] = device.getLogicalDevice().createFramebuffer(framebufferInfo);

@@ -156,6 +156,9 @@ namespace render
         // Fence-based sync: inFlightFences[imageIndex] is waited on at the top of render()
         // when this imageIndex comes around again. No need to stall the entire queue.
 
+        auto* upscaleManager = device.getUpscaleManager();
+        if (upscaleManager && upscaleManager->isActive() && !offscreenResources.displayColorImages.empty())
+            return offscreenResources.displayColorImages[imageIndex].descriptorSet;
         return offscreenResources.colorImages[imageIndex].descriptorSet;
     }
 
@@ -185,9 +188,12 @@ namespace render
             for (auto const& resources : offscreenResources.colorImages)
             {
                 if (resources.descriptorSet)
-                {
                     ImGui_ImplVulkan_RemoveTexture(resources.descriptorSet);
-                }
+            }
+            for (auto const& resources : offscreenResources.displayColorImages)
+            {
+                if (resources.descriptorSet)
+                    ImGui_ImplVulkan_RemoveTexture(resources.descriptorSet);
             }
         }
 
@@ -205,6 +211,14 @@ namespace render
             device.getMemoryManager().free(resources.colorImageAllocation);
         }
         offscreenResources.colorImages.clear();
+
+        for (auto const& resources : offscreenResources.displayColorImages)
+        {
+            device.getLogicalDevice().destroyImageView(resources.colorImageView);
+            device.getLogicalDevice().destroyImage(resources.colorImage);
+            device.getMemoryManager().free(resources.colorImageAllocation);
+        }
+        offscreenResources.displayColorImages.clear();
 
         if (offscreenResources.depthImage.depthImageView)
         {
@@ -251,15 +265,28 @@ namespace render
             for (auto const& resources : offscreenResources.colorImages)
             {
                 if (resources.descriptorSet)
-                {
                     ImGui_ImplVulkan_RemoveTexture(resources.descriptorSet);
-                }
+            }
+            for (auto const& resources : offscreenResources.displayColorImages)
+            {
+                if (resources.descriptorSet)
+                    ImGui_ImplVulkan_RemoveTexture(resources.descriptorSet);
             }
             if (offscreenResources.upscaleOutput.descriptorSet)
             {
                 ImGui_ImplVulkan_RemoveTexture(offscreenResources.upscaleOutput.descriptorSet);
                 offscreenResources.upscaleOutput.descriptorSet = nullptr;
             }
+        }
+
+        // Re-apply render extent override for upscaling (display size may have changed on resize)
+        auto* upscaleManager = device.getUpscaleManager();
+        if (upscaleManager && upscaleManager->isActive())
+        {
+            auto& resMgr = upscaleManager->getResolutionManager();
+            auto displayExtent = swapChain.getDisplayExtent();
+            resMgr.setDisplayResolution(displayExtent.width, displayExtent.height);
+            swapChain.setRenderExtentOverride(resMgr.getRenderResolution());
         }
 
         cleanupOffscreenResources();
@@ -287,15 +314,13 @@ namespace render
         vk::Format colorFormat = swapChain.getSwapchainImageFormat();
         vk::Format depthFormat = swapChain.getSwapchainDepthStencilFormat();
 
-        // NOTE: Color/depth stay at display resolution for now.
-        // Full resolution split (render at lower internal res) requires refactoring
-        // all framebuffers and render passes — deferred to a follow-up ticket.
         uint32_t renderWidth = swapChain.getSwapchainExtent().width;
         uint32_t renderHeight = swapChain.getSwapchainExtent().height;
-        uint32_t displayWidth = renderWidth;
-        uint32_t displayHeight = renderHeight;
+        uint32_t displayWidth = swapChain.getDisplayExtent().width;
+        uint32_t displayHeight = swapChain.getDisplayExtent().height;
 
         auto* upscaleManager = device.getUpscaleManager();
+        bool upscaling = upscaleManager && upscaleManager->isActive();
 
         core::ImageInfoRequest imageColorInfo(device.getLogicalDevice(), device.getPhysicalDevice());
         imageColorInfo.width = renderWidth;
@@ -330,11 +355,11 @@ namespace render
 
         offscreenResources.depthImage = std::move(depth);
 
-        // Create UI stencil image (eS8Uint, 1 byte per pixel)
+        // Create UI stencil image (eS8Uint, 1 byte per pixel) — always at display resolution
         {
             core::ImageInfoRequest stencilInfo(device.getLogicalDevice(), device.getPhysicalDevice());
-            stencilInfo.width = swapChain.getSwapchainExtent().width;
-            stencilInfo.height = swapChain.getSwapchainExtent().height;
+            stencilInfo.width = displayWidth;
+            stencilInfo.height = displayHeight;
             stencilInfo.format = vk::Format::eS8Uint;
             stencilInfo.tiling = vk::ImageTiling::eOptimal;
             stencilInfo.usage = vk::ImageUsageFlagBits::eDepthStencilAttachment;
@@ -381,8 +406,40 @@ namespace render
             offscreenResources.colorImages.push_back(std::move(color));
         }
 
-        // Upscale resources (MV image, upscale output) are created lazily
-        // in RenderPassHandler::executeUpscale() when first needed.
+        // When upscaling, create display-resolution color images for post-upscale output and UI
+        if (upscaling)
+        {
+            core::ImageInfoRequest displayColorInfo(device.getLogicalDevice(), device.getPhysicalDevice());
+            displayColorInfo.width = displayWidth;
+            displayColorInfo.height = displayHeight;
+            displayColorInfo.format = colorFormat;
+            displayColorInfo.tiling = vk::ImageTiling::eOptimal;
+            displayColorInfo.usage = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled
+                                   | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eTransferSrc;
+            displayColorInfo.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
+
+            offscreenResources.displayColorImages.reserve(swapChain.getImageCount());
+            for (size_t i = 0; i < swapChain.getImageCount(); i++)
+            {
+                core::ColorImage displayColor;
+                core::ImageUtilities::createImage(displayColorInfo, displayColor.colorImage, displayColor.colorImageAllocation, device.getMemoryManager());
+                core::ImageViewInfoRequest displayViewReq(device.getLogicalDevice(), displayColor.colorImage);
+                displayViewReq.format = colorFormat;
+                core::ImageUtilities::createImageView(displayViewReq, displayColor.colorImageView);
+
+                vk::UniqueCommandBuffer transitionCmd = core::Utilities::beginSingleTimeCommands(
+                    device.getLogicalDevice(), commandPool->getCommandPool());
+                core::ImageUtilities::transitionImageLayout(transitionCmd.get(), displayColor.colorImage,
+                    vk::ImageLayout::eUndefined, vk::ImageLayout::eShaderReadOnlyOptimal,
+                    vk::ImageAspectFlagBits::eColor);
+                core::Utilities::endSingleTimeCommands(device, transitionCmd);
+
+                updateDescriptorSets(displayColor.descriptorSet, displayColor.colorImageView);
+                offscreenResources.displayColorImages.push_back(std::move(displayColor));
+            }
+
+            createUpscaleResources(renderWidth, renderHeight, displayWidth, displayHeight);
+        }
     }
 
     void OffScreenViewPort::updateDescriptorSets(vk::DescriptorSet& descriptorSet, const vk::ImageView& imageView) const

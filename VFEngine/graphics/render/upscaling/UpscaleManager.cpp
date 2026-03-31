@@ -308,13 +308,23 @@ namespace render::upscaling
                                                 sl::ResourceLifecycle::eOnlyValidNow, nullptr};
         }
 
-        slSetTagForFrame(*frameToken, viewport, tags, tagCount,
+        sl::Result tagResult = slSetTagForFrame(*frameToken, viewport, tags, tagCount,
                          reinterpret_cast<sl::CommandBuffer*>(static_cast<VkCommandBuffer>(cmd)));
+        if (tagResult != sl::Result::eOk)
+        {
+            vfLogError("Streamline setTag failed: {} ({})",
+                       slResultToString(tagResult), static_cast<int>(tagResult));
+        }
 
         // Evaluate
         const sl::BaseStructure* evalInputs[] = {nullptr};
-        slEvaluateFeature(feature, *frameToken, evalInputs, 0,
+        sl::Result evalResult = slEvaluateFeature(feature, *frameToken, evalInputs, 0,
                           reinterpret_cast<sl::CommandBuffer*>(static_cast<VkCommandBuffer>(cmd)));
+        if (evalResult != sl::Result::eOk)
+        {
+            vfLogError("Streamline evaluate failed: {} ({})",
+                       slResultToString(evalResult), static_cast<int>(evalResult));
+        }
 #endif
     }
 
