@@ -7,11 +7,23 @@
 #include <sl_dlss.h>
 #include <sl_consts.h>
 #include <sl_helpers_vk.h>
+#include <sl_matrix_helpers.h>
 #endif
 
 namespace render::upscaling
 {
 #ifdef VF_STREAMLINE_ENABLED
+    // GLM is column-major, Streamline is row-major — transpose during conversion
+    static sl::float4x4 toSL(const glm::mat4& m)
+    {
+        sl::float4x4 r;
+        r[0] = {m[0][0], m[1][0], m[2][0], m[3][0]};
+        r[1] = {m[0][1], m[1][1], m[2][1], m[3][1]};
+        r[2] = {m[0][2], m[1][2], m[2][2], m[3][2]};
+        r[3] = {m[0][3], m[1][3], m[2][3], m[3][3]};
+        return r;
+    }
+
     static const char* slResultToString(sl::Result r)
     {
         switch (r)
@@ -77,8 +89,11 @@ namespace render::upscaling
             }
         };
 
-        // Use manual hooking — we call slSetVulkanInfo explicitly after device creation
-        prefs.flags = sl::PreferenceFlags::eUseManualHooking;
+        // Vulkan calls are routed through sl.interposer.dll's vkGetInstanceProcAddr
+        // (set up in Device::createInstance), so Streamline automatically tracks
+        // vkCreateInstance/vkCreateDevice and all resource creation.
+        // eUseFrameBasedResourceTagging is required for slSetTagForFrame().
+        prefs.flags = sl::PreferenceFlags::eUseFrameBasedResourceTagging;
 
         sl::Result result = slInit(prefs);
         streamlineInitialized = true;
@@ -144,28 +159,10 @@ namespace render::upscaling
 #ifdef VF_STREAMLINE_ENABLED
         if (!streamlineAvailable) return false;
 
-        // In manual hooking mode, Streamline does NOT intercept Vulkan API calls,
-        // so we must explicitly provide Vulkan handles via slSetVulkanInfo.
-        sl::VulkanInfo vkInfo{};
-        vkInfo.device = static_cast<VkDevice>(device.getLogicalDevice());
-        vkInfo.instance = static_cast<VkInstance>(device.getInstance());
-        vkInfo.physicalDevice = static_cast<VkPhysicalDevice>(device.getPhysicalDevice());
-
-        const auto& queueIndices = device.getQueueFamilyIndices();
-        vkInfo.graphicsQueueFamily = queueIndices.graphicsAndComputeFamily.value();
-        vkInfo.graphicsQueueIndex = 0;
-        vkInfo.computeQueueFamily = queueIndices.graphicsAndComputeFamily.value();
-        vkInfo.computeQueueIndex = 0;
-
-        sl::Result result = slSetVulkanInfo(vkInfo);
-        if (result != sl::Result::eOk)
-        {
-            vfLogError("slSetVulkanInfo failed: {} ({})",
-                       slResultToString(result), static_cast<int>(result));
-            return false;
-        }
-
-        vfLogInfo("Streamline: Vulkan info set via slSetVulkanInfo (manual hook mode)");
+        // Vulkan calls go through sl.interposer.dll's proxy vkGetInstanceProcAddr,
+        // so Streamline already tracks the VkInstance, VkDevice, and all resources.
+        // No slSetVulkanInfo needed — the interposer handles it automatically.
+        vfLogInfo("Streamline: Vulkan device set via interposer tracking");
 
         deviceSet = true;
         instance = this;
@@ -328,7 +325,7 @@ namespace render::upscaling
         sl::Result tokenResult = slGetNewFrameToken(frameToken, &frameIndex);
         if (tokenResult != sl::Result::eOk || !frameToken) return false;
 
-        // Set constants (camera jitter, motion vector info, etc.)
+        // Set constants — all SL matrices are row-major, GLM is column-major
         sl::Constants constants{};
         constants.jitterOffset = {inputs.jitterOffset.x, inputs.jitterOffset.y};
         constants.mvecScale = {1.0f / static_cast<float>(inputs.renderExtent.width),
@@ -336,6 +333,39 @@ namespace render::upscaling
         constants.reset = inputs.resetAccumulation ? sl::Boolean::eTrue : sl::Boolean::eFalse;
         constants.depthInverted = sl::Boolean::eTrue; // Reverse-Z
         constants.cameraPinholeOffset = {0.0f, 0.0f};
+
+        // Camera matrices (must NOT contain jitter)
+        constants.cameraViewToClip = toSL(inputs.projectionMatrix);
+        constants.clipToCameraView = toSL(glm::inverse(inputs.projectionMatrix));
+
+        // Reprojection: clipToPrevClip = invProj * invView * prevView * prevProj
+        glm::mat4 clipToPrevClip = inputs.prevProjectionMatrix * inputs.prevViewMatrix
+                                 * glm::inverse(inputs.viewMatrix)
+                                 * glm::inverse(inputs.projectionMatrix);
+        constants.clipToPrevClip = toSL(clipToPrevClip);
+        constants.prevClipToClip = toSL(glm::inverse(clipToPrevClip));
+
+        // Camera vectors from view matrix (inverse view = camera-to-world)
+        glm::mat4 invView = glm::inverse(inputs.viewMatrix);
+        constants.cameraPos = {invView[3][0], invView[3][1], invView[3][2]};
+        constants.cameraRight = {invView[0][0], invView[0][1], invView[0][2]};
+        constants.cameraUp = {invView[1][0], invView[1][1], invView[1][2]};
+        constants.cameraFwd = {invView[2][0], invView[2][1], invView[2][2]};
+
+        constants.cameraNear = inputs.nearPlane;
+        constants.cameraFar = inputs.farPlane;
+        float aspectRatio = static_cast<float>(inputs.renderExtent.width)
+                          / static_cast<float>(inputs.renderExtent.height);
+        constants.cameraAspectRatio = aspectRatio;
+        constants.cameraFOV = 2.0f * std::atan(1.0f / inputs.projectionMatrix[1][1]);
+
+        constants.cameraMotionIncluded = sl::Boolean::eTrue;
+        constants.motionVectors3D = sl::Boolean::eFalse;
+        constants.motionVectorsInvalidValue = 0.0f;
+        constants.orthographicProjection = sl::Boolean::eFalse;
+        constants.motionVectorsDilated = sl::Boolean::eFalse;
+        constants.motionVectorsJittered = sl::Boolean::eFalse;
+
         slSetConstants(constants, *frameToken, viewport);
 
         // Tag resources
@@ -414,9 +444,9 @@ namespace render::upscaling
             return false;
         }
 
-        // Evaluate
-        const sl::BaseStructure* evalInputs[] = {nullptr};
-        sl::Result evalResult = slEvaluateFeature(feature, *frameToken, evalInputs, 0,
+        // Evaluate — viewport handle must be chained in inputs
+        const sl::BaseStructure* evalInputs[] = {&viewport};
+        sl::Result evalResult = slEvaluateFeature(feature, *frameToken, evalInputs, _countof(evalInputs),
                           reinterpret_cast<sl::CommandBuffer*>(static_cast<VkCommandBuffer>(cmd)));
         if (evalResult != sl::Result::eOk)
         {

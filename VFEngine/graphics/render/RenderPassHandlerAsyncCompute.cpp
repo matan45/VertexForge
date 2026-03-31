@@ -325,7 +325,8 @@ namespace render
             core::ImageInfoRequest mvInfo(device.getLogicalDevice(), device.getPhysicalDevice(),
                 extent.width, extent.height, 1, 1,
                 vk::Format::eR16G16Sfloat, vk::ImageTiling::eOptimal,
-                vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eSampled,
+                vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eSampled |
+                vk::ImageUsageFlagBits::eTransferSrc,
                 vk::MemoryPropertyFlagBits::eDeviceLocal);
             core::ImageUtilities::createImage(mvInfo,
                 offscreenResources.motionVectors.image,
@@ -439,9 +440,25 @@ namespace render
         inputs.displayExtent = displayRes;
         inputs.jitterOffset = currentJitterOffset;
         inputs.resetAccumulation = resetAccum;
+        inputs.viewMatrix = currentView;
+        inputs.projectionMatrix = currentProjection;
+        inputs.prevViewMatrix = prevView;
+        inputs.prevProjectionMatrix = prevProjection;
+        inputs.cameraPosition = currentCameraPosition;
+        inputs.nearPlane = currentNearPlane;
+        inputs.farPlane = currentFarPlane;
 
         // Try DLSS evaluate; fall back to bilinear blit if it fails
         bool evaluateOk = upscaleManager->evaluate(commandBuffer, taaFrameIndex, inputs);
+        if (evaluateOk)
+        {
+            // After DLSS evaluate, Streamline may leave the output in an unknown layout.
+            // Ensure it's in eGeneral for the post-process blit stage.
+            core::ImageUtilities::transitionImageLayout(commandBuffer,
+                offscreenResources.upscaleOutput.image,
+                vk::ImageLayout::eUndefined, vk::ImageLayout::eGeneral,
+                vk::ImageAspectFlagBits::eColor);
+        }
         if (!evaluateOk)
         {
             // Fallback: blit scene color (render-res) to upscale output (display-res)

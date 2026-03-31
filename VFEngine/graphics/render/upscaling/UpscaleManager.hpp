@@ -35,10 +35,19 @@ namespace render::upscaling
         float preExposure = 1.0f;
         bool resetAccumulation = false; // True on camera cuts / teleports
         VkFormat colorFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
-        VkFormat depthFormat = VK_FORMAT_D32_SFLOAT;
+        VkFormat depthFormat = VK_FORMAT_D32_SFLOAT_S8_UINT;
         VkFormat motionFormat = VK_FORMAT_R16G16_SFLOAT;
         VkFormat outputFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
         VkFormat reactiveFormat = VK_FORMAT_R8_UNORM;
+
+        // Camera data required by Streamline common constants
+        glm::mat4 viewMatrix{1.0f};
+        glm::mat4 projectionMatrix{1.0f};
+        glm::mat4 prevViewMatrix{1.0f};
+        glm::mat4 prevProjectionMatrix{1.0f};
+        glm::vec3 cameraPosition{0.0f};
+        float nearPlane = 0.1f;
+        float farPlane = 1000.0f;
     };
 
     /// Manages DLSS and FSR2 upscaling via NVIDIA Streamline SDK.

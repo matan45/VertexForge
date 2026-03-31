@@ -335,7 +335,7 @@ namespace render
         imageDepthInfo.height = renderHeight;
         imageDepthInfo.format = depthFormat;
         imageDepthInfo.tiling = vk::ImageTiling::eOptimal;
-        imageDepthInfo.usage = vk::ImageUsageFlagBits::eDepthStencilAttachment | vk::ImageUsageFlagBits::eSampled;
+        imageDepthInfo.usage = vk::ImageUsageFlagBits::eDepthStencilAttachment | vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferSrc;
         imageDepthInfo.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
 
         core::DepthImage depth;
@@ -488,7 +488,8 @@ namespace render
                 renderWidth, renderHeight, 1, 1,
                 vk::Format::eR16G16Sfloat,
                 vk::ImageTiling::eOptimal,
-                vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eSampled,
+                vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eSampled |
+                vk::ImageUsageFlagBits::eTransferSrc,
                 vk::MemoryPropertyFlagBits::eDeviceLocal);
 
             core::ImageUtilities::createImage(mvInfo,

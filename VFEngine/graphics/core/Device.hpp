@@ -74,6 +74,7 @@ namespace core
 
         vk::DebugUtilsMessengerEXT debugMessenger{nullptr};
         vk::detail::DispatchLoaderDynamic dldi;
+        PFN_vkGetInstanceProcAddr vulkanProcAddr = nullptr;
 
         vk::SurfaceKHR surface{nullptr};
         vk::Queue presentQueue{nullptr};

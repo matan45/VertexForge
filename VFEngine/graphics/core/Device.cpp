@@ -8,7 +8,32 @@
 #include <fstream>
 #include <unordered_set>
 
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
 VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
+
+// When Streamline is enabled, route all Vulkan calls through the interposer
+// so that Streamline can track resources for DLSS/Reflex.
+static PFN_vkGetInstanceProcAddr getVulkanProcAddr()
+{
+#ifdef VF_STREAMLINE_ENABLED
+    HMODULE slModule = GetModuleHandleW(L"sl.interposer.dll");
+    if (slModule)
+    {
+        auto proc = reinterpret_cast<PFN_vkGetInstanceProcAddr>(
+            GetProcAddress(slModule, "vkGetInstanceProcAddr"));
+        if (proc)
+        {
+            vfLogInfo("Using Streamline interposer vkGetInstanceProcAddr for Vulkan dispatch");
+            return proc;
+        }
+    }
+    vfLogWarning("sl.interposer.dll not found, falling back to native vkGetInstanceProcAddr");
+#endif
+    return vkGetInstanceProcAddr;
+}
 
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
@@ -108,8 +133,10 @@ namespace core
 
     void Device::createInstance()
     {
-        // Initialize the default dispatcher with vkGetInstanceProcAddr before any Vulkan calls
-        VULKAN_HPP_DEFAULT_DISPATCHER.init(vkGetInstanceProcAddr);
+        // Use Streamline interposer's vkGetInstanceProcAddr (if available) so that
+        // Streamline can track all Vulkan resources for DLSS/Reflex.
+        vulkanProcAddr = getVulkanProcAddr();
+        VULKAN_HPP_DEFAULT_DISPATCHER.init(vulkanProcAddr);
 
         vk::ApplicationInfo appInfo{
             "Vulkan App",
@@ -197,7 +224,7 @@ namespace core
         using enum vk::DebugUtilsMessageTypeFlagBitsEXT;
         if (!debug) return;
 
-        dldi = vk::detail::DispatchLoaderDynamic(*instance, vkGetInstanceProcAddr);
+        dldi = vk::detail::DispatchLoaderDynamic(*instance, vulkanProcAddr);
 
         vk::DebugUtilsMessengerCreateInfoEXT createInfo{};
         createInfo.messageSeverity = vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning |
