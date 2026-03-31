@@ -66,29 +66,13 @@ namespace render::upscaling
         };
 
         sl::Preferences prefs{};
-#ifdef _DEBUG
-        prefs.showConsole = true;
-        prefs.logLevel = sl::LogLevel::eVerbose;
-#else
         prefs.showConsole = false;
-        prefs.logLevel = sl::LogLevel::eDefault;
-#endif
+        prefs.logLevel = sl::LogLevel::eOff;
         prefs.featuresToLoad = featuresToLoad;
         prefs.numFeaturesToLoad = static_cast<uint32_t>(std::size(featuresToLoad));
         prefs.engine = sl::EngineType::eCustom;
         prefs.engineVersion = "1.0.0";
         prefs.renderAPI = sl::RenderAPI::eVulkan;
-        prefs.logMessageCallback = [](sl::LogType type, const char* msg)
-        {
-            switch (type)
-            {
-            case sl::LogType::eError:   vfLogError("Streamline: {}", msg); break;
-            case sl::LogType::eWarn:    vfLogWarning("Streamline: {}", msg); break;
-            case sl::LogType::eInfo:    vfLogInfo("Streamline: {}", msg); break;
-            default:                    vfLogTrace("Streamline: {}", msg); break;
-            }
-        };
-
         // Vulkan calls are routed through sl.interposer.dll's vkGetInstanceProcAddr
         // (set up in Device::createInstance), so Streamline automatically tracks
         // vkCreateInstance/vkCreateDevice and all resource creation.
@@ -182,6 +166,12 @@ namespace render::upscaling
 #ifdef VF_STREAMLINE_ENABLED
         if (streamlineInitialized && streamlineAvailable)
         {
+            // Free DLSS resources before shutdown to avoid leaked Vulkan objects
+            if (deviceSet)
+            {
+                slFreeResources(sl::kFeatureDLSS, sl::ViewportHandle{0});
+                slFreeResources(sl::kFeatureDirectSR, sl::ViewportHandle{0});
+            }
             slShutdown();
             streamlineAvailable = false;
             streamlineInitialized = false;
