@@ -49,6 +49,7 @@
 #include "impl/vegetation/VegetationBrushModeServiceImpl.hpp"
 #include "impl/meshbrush/MeshBrushModeServiceImpl.hpp"
 #include "impl/meshbrush/MeshBrushServiceImpl.hpp"
+#include "impl/weather/WeatherServiceImpl.hpp"
 #include "../adapters/terrain/TerrainRenderAdapter.hpp"
 #include "../adapters/terrain/OceanRenderAdapter.hpp"
 #include "../audio/AudioSceneUpdater.hpp"
@@ -77,6 +78,7 @@ namespace handlers
         createVegetationServices();
         createMeshBrushServices();
         createAIServices();
+        createWeatherServices();
         exportHandler = std::make_unique<handlers::ExportHandler>();
         registerAllEventHandlers();
     }
@@ -269,6 +271,11 @@ namespace handlers
         }
     }
 
+    void EditorHandler::createWeatherServices()
+    {
+        weatherService = std::make_shared<services::WeatherServiceImpl>();
+    }
+
     void EditorHandler::registerAllEventHandlers()
     {
         sceneService->registerEventHandlers();
@@ -317,6 +324,7 @@ namespace handlers
         objectStreamingService->registerEventHandlers();
         giService->registerEventHandlers();
         behaviorTreeService->registerEventHandlers();
+        weatherService->registerEventHandlers();
         saveService->registerEventHandlers(events::EventDispatcher::instance());
         configService->registerEventHandlers(events::EventDispatcher::instance());
         editorSettingsService->registerEventHandlers(events::EventDispatcher::instance());

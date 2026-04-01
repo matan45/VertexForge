@@ -11,6 +11,7 @@
 #include "../types/NavmeshTypes.hpp"
 #include "../types/AudioTypes.hpp"
 #include "../types/RenderSettings.hpp"
+#include "../weather/WeatherTypes.hpp"
 
 namespace scene
 {
@@ -192,6 +193,9 @@ namespace serialization
 
         static json serializeCloudSettings(const render::cloud::CloudSettings& settings);
         static void deserializeCloudSettings(const json& j, render::cloud::CloudSettings& settings);
+
+        static json serializeWeatherState(const weather::WeatherState& state);
+        static void deserializeWeatherState(const json& j, weather::WeatherState& state);
 
         static std::string toneMappingModeToString(postprocess::ToneMappingMode mode);
         static postprocess::ToneMappingMode stringToToneMappingMode(const std::string& str);

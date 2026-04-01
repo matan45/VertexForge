@@ -369,6 +369,7 @@ project "Utilities"
       "VFEngine/utilities/procedural/**",
       "VFEngine/utilities/imageprocessing/**",
       "VFEngine/utilities/memory/**",
+      "VFEngine/utilities/weather/**",
       "VFEngine/utilities/scene/EntityRegistry.cpp"  -- compiled by ECSRegistry DLL
    }
 
@@ -430,7 +431,7 @@ project "Services"
       -- NOTE: NO VFEngine/core/controllers - Services uses provider interfaces
    }
 
-   links { "Utilities", "Terrain", "Serialization", "World", "Window" }
+   links { "Utilities", "Terrain", "Serialization", "World", "Window", "Weather" }
 
    filter "configurations:Debug"
       defines { "DEBUG" }
@@ -658,6 +659,35 @@ project "Memory"
 
    includedirs {
       "dependencies/spdlog/include",
+      "VFEngine/utilities"
+   }
+
+   defines { "_CRT_SECURE_NO_WARNINGS" }
+
+   filter "configurations:Debug"
+      defines { "DEBUG" }
+      symbols "On"
+
+   filter "configurations:Release"
+      defines { "NDEBUG" }
+      optimize "On"
+
+
+-- Weather subsystem (extracted from Utilities)
+project "Weather"
+   kind "StaticLib"
+   language "C++"
+   cppdialect "C++20"
+   location "VFEngine/utilities"
+   targetdir "bin/%{prj.name}/%{cfg.buildcfg}/%{cfg.platform}"
+
+   files { "VFEngine/utilities/weather/**.hpp", "VFEngine/utilities/weather/**.cpp" }
+
+   includedirs {
+      "dependencies/spdlog/include",
+      "dependencies/glm",
+      "dependencies/json/single_include",
+      "dependencies/entt/single_include",
       "VFEngine/utilities"
    }
 

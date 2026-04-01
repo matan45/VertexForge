@@ -1,6 +1,7 @@
 #include "SceneSerialization.hpp"
 #include "JsonConverters.hpp"
 #include "../components/Components.hpp"
+#include "../weather/WeatherTypes.hpp"
 #include <algorithm>
 #include <cmath>
 
@@ -256,5 +257,21 @@ namespace serialization
     void SceneSerialization::deserializeCloudSettings(const json& j, render::cloud::CloudSettings& settings)
     {
         deserializeCloud(j, settings);
+    }
+
+    json SceneSerialization::serializeWeatherState(const weather::WeatherState& state)
+    {
+        json j;
+        nlohmann::json weatherJson;
+        weather::to_json(weatherJson, state);
+        j["weather"] = weatherJson;
+        return j;
+    }
+
+    void SceneSerialization::deserializeWeatherState(const json& j, weather::WeatherState& state)
+    {
+        if (!j.contains("weather") || !j["weather"].is_object())
+            return;
+        weather::from_json(j["weather"], state);
     }
 }
