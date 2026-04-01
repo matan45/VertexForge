@@ -27,7 +27,7 @@ namespace services
         bool initialConfigApplied = false;
 
         static constexpr float MAX_SPAWN_RATE = 30000.0f;
-        static constexpr float BASE_FLAKE_SIZE = 0.04f;
+        static constexpr float BASE_FLAKE_SIZE = 0.2f;
         static constexpr float BASE_FALL_SPEED = 3.0f;
         static constexpr float ACTIVATION_THRESHOLD = 0.01f;
     };

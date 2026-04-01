@@ -324,9 +324,9 @@ namespace services
 
         // Track snow accumulation over time
         if (isSnow && state.precipIntensity > 0.01f)
-            snowAccumulation = std::min(1.0f, snowAccumulation + deltaTime * state.precipIntensity * 0.005f);
+            snowAccumulation = std::min(1.0f, snowAccumulation + deltaTime * state.precipIntensity * 0.05f);
         else
-            snowAccumulation = std::max(0.0f, snowAccumulation - deltaTime * 0.002f);
+            snowAccumulation = std::max(0.0f, snowAccumulation - deltaTime * 0.02f);
 
         // Push snow accumulation to render side
         try
