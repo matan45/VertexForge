@@ -1,10 +1,12 @@
 #pragma once
 
-#include "../../providers/vfx/IVFXRuntimeProvider.hpp"
+#include "../../data/VFXTypes.hpp"
 #include "weather/WeatherTypes.hpp"
 
 namespace services
 {
+    class IVFXRuntimeProvider;
+
     class RainController
     {
     public:

@@ -1,4 +1,5 @@
 #include "RainController.hpp"
+#include "../../providers/vfx/IVFXRuntimeProvider.hpp"
 #include <glm/glm.hpp>
 #include <cmath>
 
