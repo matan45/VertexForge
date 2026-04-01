@@ -1,7 +1,10 @@
 #pragma once
 
+#pragma once
+
 #include "../../interfaces/weather/IWeatherService.hpp"
 #include "RainController.hpp"
+#include "SnowController.hpp"
 #include "weather/WeatherStateMachine.hpp"
 #include "weather/WeatherSchedule.hpp"
 #include <memory>
@@ -21,12 +24,15 @@ namespace services
     private:
         void onUpdate(float deltaTime);
         void applyWeatherToPipelines(const weather::WeatherState& state);
+        void updatePrecipitation(float deltaTime, const weather::WeatherState& state);
 
         weather::WeatherStateMachine stateMachine;
         weather::WeatherSchedule schedule;
         bool weatherEnabled = false;
         bool scheduleEnabled = false;
+        float snowAccumulation = 0.0f;
 
         std::unique_ptr<RainController> rainController;
+        std::unique_ptr<SnowController> snowController;
     };
 }

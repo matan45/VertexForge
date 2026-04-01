@@ -18,14 +18,20 @@ namespace services
     WeatherServiceImpl::WeatherServiceImpl(IVFXRuntimeProvider* vfxProvider)
     {
         rainController = std::make_unique<RainController>();
+        snowController = std::make_unique<SnowController>();
         if (vfxProvider)
+        {
             rainController->init(vfxProvider);
+            snowController->init(vfxProvider);
+        }
     }
 
     WeatherServiceImpl::~WeatherServiceImpl()
     {
         if (rainController)
             rainController->cleanup();
+        if (snowController)
+            snowController->cleanup();
     }
 
     void WeatherServiceImpl::registerEventHandlers()
@@ -135,28 +141,7 @@ namespace services
 
         const auto& currentWeather = stateMachine.getCurrentState();
         applyWeatherToPipelines(currentWeather);
-
-        // Update rain particle system
-        if (rainController)
-            rainController->update(deltaTime, currentWeather);
-
-        // Drive screen-space rain droplets via post-process settings
-        try
-        {
-            auto ppSettings = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
-            bool shouldEnableDroplets = currentWeather.precipIntensity > 0.01f;
-            if (ppSettings.rainDroplets.enabled != shouldEnableDroplets ||
-                std::abs(ppSettings.rainDroplets.intensity - currentWeather.precipIntensity) > 0.001f)
-            {
-                ppSettings.rainDroplets.enabled = shouldEnableDroplets;
-                ppSettings.rainDroplets.intensity = currentWeather.precipIntensity;
-
-                events::postprocess::ApplyPostProcessSettingsCommand ppCmd;
-                ppCmd.settings = ppSettings;
-                dispatcher.execute(ppCmd);
-            }
-        }
-        catch (...) {}
+        updatePrecipitation(deltaTime, currentWeather);
 
         // Publish notification when transition completes
         if (wasTransitioningBefore && !stateMachine.isTransitioning())
@@ -235,6 +220,52 @@ namespace services
             events::vegetation::SetGlobalGrassConfigCommand grassCmd;
             grassCmd.config = grassConfig;
             dispatcher.execute(grassCmd);
+        }
+        catch (...) {}
+    }
+
+    void WeatherServiceImpl::updatePrecipitation(float deltaTime, const weather::WeatherState& state)
+    {
+        auto& dispatcher = ::events::EventDispatcher::instance();
+        bool isRain = state.precipType == weather::PrecipitationType::Rain;
+        bool isSnow = state.precipType == weather::PrecipitationType::Snow;
+
+        // Create zero-intensity state for inactive controller
+        weather::WeatherState zeroState = state;
+        zeroState.precipIntensity = 0.0f;
+
+        // Route precipitation to the correct controller
+        if (rainController)
+            rainController->update(deltaTime, isRain ? state : zeroState);
+        if (snowController)
+            snowController->update(deltaTime, isSnow ? state : zeroState);
+
+        // Track snow accumulation over time
+        if (isSnow && state.precipIntensity > 0.01f)
+            snowAccumulation = std::min(1.0f, snowAccumulation + deltaTime * state.precipIntensity * 0.005f);
+        else
+            snowAccumulation = std::max(0.0f, snowAccumulation - deltaTime * 0.002f);
+
+        // Push snow accumulation to render side
+        try
+        {
+            events::weather::SetSnowAccumulationCommand snowCmd;
+            snowCmd.accumulation = snowAccumulation;
+            dispatcher.execute(snowCmd);
+        }
+        catch (...) {}
+
+        // Drive screen-space rain droplets only for rain
+        try
+        {
+            auto ppSettings = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
+            bool shouldEnableDroplets = isRain && state.precipIntensity > 0.01f;
+            ppSettings.rainDroplets.enabled = shouldEnableDroplets;
+            ppSettings.rainDroplets.intensity = isRain ? state.precipIntensity : 0.0f;
+
+            events::postprocess::ApplyPostProcessSettingsCommand ppCmd;
+            ppCmd.settings = ppSettings;
+            dispatcher.execute(ppCmd);
         }
         catch (...) {}
     }

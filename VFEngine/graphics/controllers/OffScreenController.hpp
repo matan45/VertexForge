@@ -270,6 +270,9 @@ namespace controllers
         void applyCloudSettings(const render::cloud::CloudSettings& settings);
         render::cloud::CloudSettings getCloudSettings() const;
 
+        // Snow accumulation
+        void setSnowAccumulation(float value);
+
         // Light streaming settings
         void setLightStreamingConfig(const render::lighting::LightStreamingConfig& config);
         render::lighting::LightStreamingConfig getLightStreamingConfig() const;

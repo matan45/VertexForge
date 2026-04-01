@@ -28,7 +28,7 @@ namespace render
     {
         if (sharedCameraUBO)
         {
-            sharedCameraUBO->update(view, projection, cameraPos, time);
+            sharedCameraUBO->update(view, projection, cameraPos, time, currentSnowAccumulation);
         }
     }
 

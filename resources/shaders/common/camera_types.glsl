@@ -1,12 +1,14 @@
 #ifndef CAMERA_TYPES_GLSL
 #define CAMERA_TYPES_GLSL
 
-// Must match CameraUBO in MeshTypes.hpp (240 bytes)
+// Must match CameraUBO in CameraTypes.hpp (256 bytes)
 struct CameraData {
     mat4 view;
     mat4 projection;
     vec3 cameraPos;
     float time;
+    float snowAccumulation;
+    float _pad1, _pad2, _pad3;
     vec4 frustumPlanes[6];
 };
 

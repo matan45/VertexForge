@@ -623,6 +623,7 @@
     <None Include="..\..\resources\shaders\common\motion_vectors.glsl" />
     <None Include="..\..\resources\shaders\common\shadow_sampling.glsl" />
     <None Include="..\..\resources\shaders\common\shadow_sampling_types.glsl" />
+    <None Include="..\..\resources\shaders\common\snow_accumulation.glsl" />
     <None Include="..\..\resources\shaders\common\svt_sampling.glsl" />
     <None Include="..\..\resources\shaders\common\svt_types.glsl" />
     <None Include="..\..\resources\shaders\common\volumetric_common.glsl" />

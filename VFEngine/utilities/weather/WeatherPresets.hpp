@@ -37,7 +37,7 @@ namespace weather
         // Light rain - moderate clouds, light precipitation
         inline constexpr WeatherState LightRain{
             .cloudCoverage = 0.75f, .cloudDensity = 0.65f, .cloudType = 0.3f,
-            .precipIntensity = 0.3f,
+            .precipType = PrecipitationType::Rain, .precipIntensity = 0.3f,
             .windSpeed = 12.0f, .windDirectionDeg = 120.0f, .gustStrength = 0.25f, .gustFrequency = 0.5f,
             .fogDensity = 0.015f, .heightFogDensity = 0.03f,
             .atmosphereTint = {0.8f, 0.82f, 0.85f}, .ambientLightMult = 0.65f
@@ -46,7 +46,7 @@ namespace weather
         // Heavy rain - dense clouds, heavy precipitation
         inline constexpr WeatherState HeavyRain{
             .cloudCoverage = 0.92f, .cloudDensity = 0.85f, .cloudType = 0.15f,
-            .precipIntensity = 0.8f,
+            .precipType = PrecipitationType::Rain, .precipIntensity = 0.8f,
             .windSpeed = 20.0f, .windDirectionDeg = 150.0f, .gustStrength = 0.5f, .gustFrequency = 0.7f,
             .fogDensity = 0.03f, .heightFogDensity = 0.05f,
             .atmosphereTint = {0.65f, 0.67f, 0.72f}, .ambientLightMult = 0.5f
@@ -55,7 +55,7 @@ namespace weather
         // Thunderstorm - maximum cloud coverage, intense rain and wind
         inline constexpr WeatherState Thunderstorm{
             .cloudCoverage = 0.98f, .cloudDensity = 0.95f, .cloudType = 0.1f,
-            .precipIntensity = 1.0f,
+            .precipType = PrecipitationType::Rain, .precipIntensity = 1.0f,
             .windSpeed = 35.0f, .windDirectionDeg = 180.0f, .gustStrength = 0.8f, .gustFrequency = 0.9f,
             .fogDensity = 0.04f, .heightFogDensity = 0.06f,
             .atmosphereTint = {0.5f, 0.5f, 0.55f}, .ambientLightMult = 0.35f
@@ -64,7 +64,7 @@ namespace weather
         // Light snow - moderate clouds, gentle snowfall
         inline constexpr WeatherState LightSnow{
             .cloudCoverage = 0.7f, .cloudDensity = 0.6f, .cloudType = 0.25f,
-            .precipIntensity = 0.25f,
+            .precipType = PrecipitationType::Snow, .precipIntensity = 0.25f,
             .windSpeed = 6.0f, .windDirectionDeg = 30.0f, .gustStrength = 0.15f, .gustFrequency = 0.3f,
             .fogDensity = 0.02f, .heightFogDensity = 0.03f,
             .atmosphereTint = {0.9f, 0.92f, 0.95f}, .ambientLightMult = 0.75f
@@ -73,7 +73,7 @@ namespace weather
         // Heavy snow - blizzard conditions
         inline constexpr WeatherState HeavySnow{
             .cloudCoverage = 0.9f, .cloudDensity = 0.8f, .cloudType = 0.15f,
-            .precipIntensity = 0.7f,
+            .precipType = PrecipitationType::Snow, .precipIntensity = 0.7f,
             .windSpeed = 25.0f, .windDirectionDeg = 0.0f, .gustStrength = 0.6f, .gustFrequency = 0.8f,
             .fogDensity = 0.06f, .heightFogDensity = 0.08f,
             .atmosphereTint = {0.85f, 0.87f, 0.92f}, .ambientLightMult = 0.55f

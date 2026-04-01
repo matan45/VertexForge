@@ -438,6 +438,10 @@ void main() {
     }
 #endif
 
+    // Snow accumulation blend
+    #include "../common/snow_accumulation.glsl"
+    applySnowAccumulation(camera.snowAccumulation, fragNormal, albedo, roughness, metallic, N);
+
     vec3 R = reflect(-V, N);
     vec3 F0 = mix(vec3(0.04), albedo, metallic);
     float NdotV = max(dot(N, V), 0.0);

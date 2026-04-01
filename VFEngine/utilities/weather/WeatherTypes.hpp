@@ -28,6 +28,13 @@ namespace weather
         EaseInOut
     };
 
+    enum class PrecipitationType : uint8_t
+    {
+        None,
+        Rain,
+        Snow
+    };
+
     struct WeatherState
     {
         // Cloud parameters
@@ -36,6 +43,7 @@ namespace weather
         float cloudType = 0.7f;         // [0,1] stratus(0) to cumulus(1)
 
         // Precipitation
+        PrecipitationType precipType = PrecipitationType::None;
         float precipIntensity = 0.0f;   // [0,1]
 
         // Wind
@@ -66,6 +74,7 @@ namespace weather
             {"cloudCoverage", s.cloudCoverage},
             {"cloudDensity", s.cloudDensity},
             {"cloudType", s.cloudType},
+            {"precipType", static_cast<uint8_t>(s.precipType)},
             {"precipIntensity", s.precipIntensity},
             {"windSpeed", s.windSpeed},
             {"windDirectionDeg", s.windDirectionDeg},
@@ -86,6 +95,8 @@ namespace weather
             s.cloudDensity = j["cloudDensity"].get<float>();
         if (j.contains("cloudType") && j["cloudType"].is_number())
             s.cloudType = j["cloudType"].get<float>();
+        if (j.contains("precipType") && j["precipType"].is_number_unsigned())
+            s.precipType = static_cast<PrecipitationType>(j["precipType"].get<uint8_t>());
         if (j.contains("precipIntensity") && j["precipIntensity"].is_number())
             s.precipIntensity = j["precipIntensity"].get<float>();
         if (j.contains("windSpeed") && j["windSpeed"].is_number())
@@ -116,6 +127,7 @@ namespace weather
         result.cloudCoverage = glm::mix(a.cloudCoverage, b.cloudCoverage, t);
         result.cloudDensity = glm::mix(a.cloudDensity, b.cloudDensity, t);
         result.cloudType = glm::mix(a.cloudType, b.cloudType, t);
+        result.precipType = (t < 0.5f) ? a.precipType : b.precipType;
         result.precipIntensity = glm::mix(a.precipIntensity, b.precipIntensity, t);
         result.windSpeed = glm::mix(a.windSpeed, b.windSpeed, t);
         result.windDirectionDeg = glm::mix(a.windDirectionDeg, b.windDirectionDeg, t);

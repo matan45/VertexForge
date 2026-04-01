@@ -4,6 +4,7 @@
 #include "../../events/render/PostProcessEvents.hpp"
 #include "../../events/render/AtmosphereEvents.hpp"
 #include "../../events/render/CloudEvents.hpp"
+#include "../../events/weather/WeatherEvents.hpp"
 #include "../../events/scene/EntityTransformEvents.hpp"
 #include "../../events/scene/ComponentPhysicsLightEvents.hpp"
 #include "scene/EntityRegistry.hpp"
@@ -340,6 +341,22 @@ namespace services
             [this](const events::cloud::GetCloudEnabledQuery&)
             {
                 return offScreenProvider ? offScreenProvider->getCloudSettings().enabled : false;
+            });
+    }
+
+    void EditorRenderServiceImpl::registerWeatherHandlers(events::EventDispatcher& dispatcher)
+    {
+        dispatcher.registerCommandHandler<events::weather::SetSnowAccumulationCommand>(
+            [this](const events::weather::SetSnowAccumulationCommand& cmd)
+            {
+                if (offScreenProvider)
+                    offScreenProvider->setSnowAccumulation(cmd.accumulation);
+            });
+
+        dispatcher.registerQueryHandler<events::weather::GetSnowAccumulationQuery>(
+            [this](const events::weather::GetSnowAccumulationQuery&)
+            {
+                return 0.0f; // Read from weather service instead
             });
     }
 }
