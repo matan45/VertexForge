@@ -315,19 +315,6 @@ namespace services
         if (snowController)
             snowController->update(deltaTime, isSnow ? state : zeroState);
 
-        // Debug: log VFX state once
-        static bool loggedOnce = false;
-        if (!loggedOnce && (isRain || isSnow) && state.precipIntensity > 0.01f)
-        {
-            bool providerOk = vfxProvider != nullptr;
-            bool providerInit = providerOk && vfxProvider->isInitialized();
-            bool rainActive = rainController && rainController->isActive();
-            bool snowActive = snowController && snowController->isActive();
-            vfLogInfo("[Weather VFX] provider={} initialized={} rainActive={} snowActive={} precipType={} intensity={}",
-                providerOk, providerInit, rainActive, snowActive, (int)state.precipType, state.precipIntensity);
-            loggedOnce = true;
-        }
-
         // Ensure VFX runtime updates in editor mode (normally only in play mode)
         if (vfxProvider && vfxProvider->isInitialized() &&
             ((rainController && rainController->isActive()) || (snowController && snowController->isActive())))
