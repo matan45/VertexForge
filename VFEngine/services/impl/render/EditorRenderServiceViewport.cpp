@@ -353,23 +353,11 @@ namespace services
                     offScreenProvider->setSnowAccumulation(cmd.accumulation);
             });
 
-        dispatcher.registerQueryHandler<events::weather::GetSnowAccumulationQuery>(
-            [this](const events::weather::GetSnowAccumulationQuery&)
-            {
-                return 0.0f;
-            });
-
         dispatcher.registerCommandHandler<events::weather::SetWetnessCommand>(
             [this](const events::weather::SetWetnessCommand& cmd)
             {
                 if (offScreenProvider)
                     offScreenProvider->setWetness(cmd.wetness);
-            });
-
-        dispatcher.registerQueryHandler<events::weather::GetWetnessQuery>(
-            [this](const events::weather::GetWetnessQuery&)
-            {
-                return 0.0f;
             });
     }
 }

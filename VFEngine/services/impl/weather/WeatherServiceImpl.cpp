@@ -119,6 +119,16 @@ namespace services
             [this](const events::weather::IsWeatherScheduleEnabledQuery&) {
                 return scheduleEnabled;
             });
+
+        dispatcher.registerQueryHandler<events::weather::GetSnowAccumulationQuery>(
+            [this](const events::weather::GetSnowAccumulationQuery&) {
+                return snowAccumulation;
+            });
+
+        dispatcher.registerQueryHandler<events::weather::GetWetnessQuery>(
+            [this](const events::weather::GetWetnessQuery&) {
+                return wetness;
+            });
     }
 
     void WeatherServiceImpl::onUpdate(float deltaTime)
