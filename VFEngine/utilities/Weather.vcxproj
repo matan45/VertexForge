@@ -91,12 +91,14 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="weather\LightningGenerator.hpp" />
     <ClInclude Include="weather\WeatherPresets.hpp" />
     <ClInclude Include="weather\WeatherSchedule.hpp" />
     <ClInclude Include="weather\WeatherStateMachine.hpp" />
     <ClInclude Include="weather\WeatherTypes.hpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="weather\LightningGenerator.cpp" />
     <ClCompile Include="weather\WeatherSchedule.cpp" />
     <ClCompile Include="weather\WeatherStateMachine.cpp" />
   </ItemGroup>

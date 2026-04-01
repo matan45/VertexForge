@@ -5,6 +5,8 @@
 #include "../../events/render/AtmosphereEvents.hpp"
 #include "../../events/render/PostProcessEvents.hpp"
 #include "../../events/vegetation/GrassEvents.hpp"
+#include "../../events/audio/AudioEvents.hpp"
+#include "../../events/scene/EntityTransformEvents.hpp"
 #include "weather/WeatherPresets.hpp"
 #include <glm/glm.hpp>
 #include <cmath>
@@ -169,6 +171,15 @@ namespace services
             cloudSettings.cloudColorTint = ws.atmosphereTint;
             cloudSettings.ambientIntensity = ws.ambientLightMult;
 
+            // Lightning flash boost on clouds
+            auto lightning = lightningGenerator.getOutput();
+            if (lightning.flashIntensity > 0.0f)
+            {
+                cloudSettings.ambientIntensity += lightning.flashIntensity * 1.6f;
+                cloudSettings.cloudColorTint = glm::mix(
+                    cloudSettings.cloudColorTint, glm::vec3(1.0f), lightning.flashIntensity * 0.5f);
+            }
+
             events::cloud::ApplyCloudSettingsCommand cloudCmd;
             cloudCmd.settings = cloudSettings;
             dispatcher.execute(cloudCmd);
@@ -181,6 +192,13 @@ namespace services
             auto atmosSettings = dispatcher.query(events::atmosphere::GetAtmosphereSettingsQuery{});
             atmosSettings.sunIrradiance *= ws.atmosphereTint;
             atmosSettings.aerialIntensity *= ws.ambientLightMult;
+
+            // Lightning white flash on atmosphere
+            auto lightningAtmos = lightningGenerator.getOutput();
+            if (lightningAtmos.flashIntensity > 0.0f)
+            {
+                atmosSettings.sunIrradiance *= (1.0f + lightningAtmos.flashIntensity * 2.0f);
+            }
 
             events::atmosphere::ApplyAtmosphereSettingsCommand atmosCmd;
             atmosCmd.settings = atmosSettings;
@@ -268,5 +286,62 @@ namespace services
             dispatcher.execute(ppCmd);
         }
         catch (...) {}
+
+        // --- Lightning & Thunder ---
+        glm::vec3 cameraPos{0.0f};
+        try
+        {
+            auto camOpt = dispatcher.query(events::scene::GetPrimaryCameraQuery{});
+            if (camOpt.has_value())
+            {
+                events::scene::GetWorldTransformQuery tq;
+                tq.entity = camOpt.value();
+                auto xformOpt = dispatcher.query(tq);
+                if (xformOpt.has_value())
+                    cameraPos = xformOpt->position;
+            }
+        }
+        catch (...) {}
+
+        lightningGenerator.update(deltaTime, state, cameraPos);
+        auto lightning = lightningGenerator.getOutput();
+
+        // Dispatch thunder audio at strike position
+        if (lightning.shouldPlayThunder)
+        {
+            static const std::string thunderPaths[] = {
+                "audio/sfx/thunder_01.ogg",
+                "audio/sfx/thunder_02.ogg",
+                "audio/sfx/thunder_03.ogg"
+            };
+
+            try
+            {
+                events::audio::PlaySound3DCommand cmd;
+                cmd.path = thunderPaths[lightning.thunderSoundIndex % 3];
+                cmd.position = lightning.thunderPosition;
+                cmd.params.is3D = true;
+                cmd.params.volume = 0.9f;
+                cmd.params.minDistance = 50.0f;
+                cmd.params.maxDistance = 6000.0f;
+                cmd.params.rolloffFactor = 0.8f;
+                cmd.params.enableDistanceFilter = true;
+                cmd.params.filterStartDistance = 500.0f;
+                cmd.params.filterMaxDistance = 5000.0f;
+                cmd.params.filterIntensity = 0.7f;
+                dispatcher.execute(cmd);
+            }
+            catch (...) {}
+
+            // Publish notification for external listeners
+            try
+            {
+                events::weather::LightningStrikeNotification notification;
+                notification.position = lightning.thunderPosition;
+                notification.intensity = 1.0f;
+                dispatcher.publish(notification);
+            }
+            catch (...) {}
+        }
     }
 }

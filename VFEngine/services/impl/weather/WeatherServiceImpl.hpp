@@ -7,6 +7,7 @@
 #include "SnowController.hpp"
 #include "weather/WeatherStateMachine.hpp"
 #include "weather/WeatherSchedule.hpp"
+#include "weather/LightningGenerator.hpp"
 #include <memory>
 
 namespace services
@@ -34,5 +35,6 @@ namespace services
 
         std::unique_ptr<RainController> rainController;
         std::unique_ptr<SnowController> snowController;
+        weather::LightningGenerator lightningGenerator;
     };
 }

@@ -110,4 +110,11 @@ namespace events::weather
         ::weather::WeatherState newState;
         std::string_view getName() const override { return "WeatherStateChanged"; }
     };
+
+    struct LightningStrikeNotification : INotification
+    {
+        glm::vec3 position{0.0f};
+        float intensity = 1.0f;
+        std::string_view getName() const override { return "LightningStrike"; }
+    };
 }
