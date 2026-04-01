@@ -33,6 +33,7 @@ namespace windows
         menuBar.setVolumetricFogConfigWindow(&volumetricFogConfigWindow);
         menuBar.setAtmosphereConfigWindow(&atmosphereConfigWindow);
         menuBar.setCloudConfigWindow(&cloudConfigWindow);
+        menuBar.setWeatherEditorWindow(&weatherEditorWindow);
         menuBar.setLightStreamingDebugWindow(&lightStreamingDebugWindow);
         menuBar.setPluginManagerWindow(&pluginManagerWindow);
         menuBar.setTaskGraphWindow(&taskGraphWindow);
@@ -183,6 +184,7 @@ namespace windows
             memoryDiagnosticsWindow.draw();
             editorPreferencesWindow.draw();
             editorSettingsWindow.draw();
+            weatherEditorWindow.draw();
         }
         ImGui::End();
 
