@@ -10,8 +10,11 @@ namespace windows
     private:
         bool visible = false;
         bool settingsLoaded = false;
+        bool audioConfigLoaded = false;
 
         weather::WeatherState currentState;
+        weather::WeatherState manualState;
+        weather::WeatherAudioConfig audioConfig;
         float snowAccumulation = 0.0f;
         float wetness = 0.0f;
         float transitionProgress = 0.0f;
@@ -30,6 +33,7 @@ namespace windows
 
     public:
         void show();
+        void notifySceneLoaded();
         void draw();
         void drawContent();
         bool isVisible() const { return visible; }

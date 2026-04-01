@@ -11,6 +11,14 @@ namespace windows
     {
         visible = true;
         settingsLoaded = false;
+        audioConfigLoaded = false;
+    }
+
+    void WeatherEditorWindow::notifySceneLoaded()
+    {
+        settingsLoaded = false;
+        audioConfigLoaded = false;
+        manualState = weather::WeatherState{};
     }
 
     void WeatherEditorWindow::loadState()
@@ -39,6 +47,7 @@ namespace windows
             events::weather::SetWeatherEnabledCommand cmd;
             cmd.enabled = enabled;
             events::EventDispatcher::instance().execute(cmd);
+            weatherEnabled = enabled;
         }
 
         if (!weatherEnabled) return;
@@ -122,7 +131,6 @@ namespace windows
         ImGui::Text("Gusts: %.0f%% strength, %.1f/s freq", currentState.gustStrength * 100.0f, currentState.gustFrequency);
         ImGui::Text("Fog Density: %.3f", currentState.fogDensity);
         ImGui::Text("Ambient Light: %.0f%%", currentState.ambientLightMult * 100.0f);
-        ImGui::Text("Tint: (%.2f, %.2f, %.2f)", currentState.atmosphereTint.x, currentState.atmosphereTint.y, currentState.atmosphereTint.z);
 
         ImGui::Unindent();
     }
@@ -141,10 +149,6 @@ namespace windows
         if (!ImGui::CollapsingHeader("Manual Override")) return;
         ImGui::Indent();
 
-        static weather::WeatherState manualState;
-        static bool initialized = false;
-        if (!initialized) { manualState = currentState; initialized = true; }
-
         if (ImGui::Button("Copy Current")) manualState = currentState;
         ImGui::Spacing();
 
@@ -152,7 +156,7 @@ namespace windows
         ImGui::SliderFloat("Cloud Density##m", &manualState.cloudDensity, 0.0f, 1.0f);
         ImGui::SliderFloat("Precip Intensity##m", &manualState.precipIntensity, 0.0f, 1.0f);
 
-        static int precipIdx = 0;
+        int precipIdx = static_cast<int>(manualState.precipType);
         const char* items[] = {"None", "Rain", "Snow"};
         if (ImGui::Combo("Precip Type##m", &precipIdx, items, 3))
             manualState.precipType = static_cast<weather::PrecipitationType>(precipIdx);
@@ -169,7 +173,6 @@ namespace windows
     void WeatherEditorWindow::drawManualButtons()
     {
         ImGui::Spacing();
-        static weather::WeatherState manualState;
 
         if (ImGui::Button("Apply Immediately"))
         {
@@ -209,13 +212,11 @@ namespace windows
         ImGui::Indent();
 
         auto& dispatcher = events::EventDispatcher::instance();
-        static weather::WeatherAudioConfig config;
-        static bool configLoaded = false;
-        if (!configLoaded)
+        if (!audioConfigLoaded)
         {
-            try { config = dispatcher.query(events::weather::GetWeatherAudioConfigQuery{}); }
+            try { audioConfig = dispatcher.query(events::weather::GetWeatherAudioConfigQuery{}); }
             catch (...) {}
-            configLoaded = true;
+            audioConfigLoaded = true;
         }
 
         auto browse = [&](const char* label, std::string& path)
@@ -239,7 +240,7 @@ namespace windows
                 {
                     path = sel;
                     events::weather::SetWeatherAudioConfigCommand cmd;
-                    cmd.config = config;
+                    cmd.config = audioConfig;
                     dispatcher.execute(cmd);
                 }
             }
@@ -250,7 +251,7 @@ namespace windows
                 {
                     path.clear();
                     events::weather::SetWeatherAudioConfigCommand cmd;
-                    cmd.config = config;
+                    cmd.config = audioConfig;
                     dispatcher.execute(cmd);
                 }
             }
@@ -258,18 +259,18 @@ namespace windows
 
         ImGui::Text("Ambient Loops");
         ImGui::Separator();
-        browse("Wind Loop", config.windLoopPath);
-        browse("Rain Loop", config.rainLoopPath);
-        browse("Snow Loop", config.snowLoopPath);
+        browse("Wind Loop", audioConfig.windLoopPath);
+        browse("Rain Loop", audioConfig.rainLoopPath);
+        browse("Snow Loop", audioConfig.snowLoopPath);
         ImGui::Spacing();
         ImGui::Text("Thunder SFX");
         ImGui::Separator();
-        browse("Thunder 1", config.thunderPaths[0]);
-        browse("Thunder 2", config.thunderPaths[1]);
-        browse("Thunder 3", config.thunderPaths[2]);
+        browse("Thunder 1", audioConfig.thunderPaths[0]);
+        browse("Thunder 2", audioConfig.thunderPaths[1]);
+        browse("Thunder 3", audioConfig.thunderPaths[2]);
         ImGui::Spacing();
         if (ImGui::Button("Reload Config"))
-            configLoaded = false;
+            audioConfigLoaded = false;
 
         ImGui::Unindent();
     }

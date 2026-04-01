@@ -95,6 +95,7 @@
     <ClInclude Include="weather\WeatherAudioController.hpp" />
     <ClInclude Include="weather\WeatherPresets.hpp" />
     <ClInclude Include="weather\WeatherSchedule.hpp" />
+    <ClInclude Include="weather\WeatherSerialization.hpp" />
     <ClInclude Include="weather\WeatherStateMachine.hpp" />
     <ClInclude Include="weather\WeatherTypes.hpp" />
     <ClInclude Include="weather\WeatherZoneEvaluator.hpp" />

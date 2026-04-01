@@ -244,10 +244,12 @@ namespace core::api
         return value::Value(arr);
     }
 
-    // Returns 15 floats: cloud(3), precip(2), wind(4), fog(2), ambientLightMult(1), atmosphereTint(3)
+    // cloud(3) + precip(2) + wind(4) + fog(2) + ambientLightMult(1) + atmosphereTint(3) = 15
+    inline constexpr int WEATHER_STATE_ARRAY_SIZE = 15;
+
     inline value::Value makeWeatherStateArray(const weather::WeatherState& s)
     {
-        auto arr = std::make_shared<value::NativeArray>(15, value::ValueType::FLOAT);
+        auto arr = std::make_shared<value::NativeArray>(WEATHER_STATE_ARRAY_SIZE, value::ValueType::FLOAT);
         arr->set(0, value::Value(s.cloudCoverage));
         arr->set(1, value::Value(s.cloudDensity));
         arr->set(2, value::Value(s.cloudType));

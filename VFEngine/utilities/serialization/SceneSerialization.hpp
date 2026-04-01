@@ -12,6 +12,7 @@
 #include "../types/AudioTypes.hpp"
 #include "../types/RenderSettings.hpp"
 #include "../weather/WeatherTypes.hpp"
+#include "../weather/WeatherSerialization.hpp"
 #include "../weather/WeatherAudioController.hpp"
 
 namespace scene

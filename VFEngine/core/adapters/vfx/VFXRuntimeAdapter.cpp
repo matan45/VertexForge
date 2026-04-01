@@ -95,6 +95,10 @@ namespace core
 
     void VFXRuntimeAdapter::applyInstanceOverrides(services::VFXInstanceId id, const services::VFXEmitterOverrides& overrides)
     {
+        // Both structs must have the same field count; update both when adding new fields
+        static_assert(sizeof(services::VFXEmitterOverrides) == sizeof(controllers::VFXEmitterOverrides),
+            "VFXEmitterOverrides service/controller size mismatch - a field was added to one but not the other");
+
         if (renderer)
         {
             controllers::VFXEmitterOverrides ctrlOverrides;

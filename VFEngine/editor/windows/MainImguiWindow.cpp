@@ -88,6 +88,7 @@ namespace windows
                 volumetricFogConfigWindow.notifySceneLoaded();
                 atmosphereConfigWindow.notifySceneLoaded();
                 cloudConfigWindow.notifySceneLoaded();
+                weatherEditorWindow.notifySceneLoaded();
                 giConfigWindow.notifySceneLoaded();
                 lightStreamingDebugWindow.notifySceneLoaded();
             });

@@ -9,7 +9,7 @@ namespace services
             .baseSize = 0.06f,
             .baseFallSpeed = 10.0f,
             .activationThreshold = 0.01f,
-            .renderMode = 1,  // StretchedBillboard
+            .renderMode = 0,  // Billboard (same as snow)
             .coneSpread = 0.0f,
             .startColor = {0.7f, 0.75f, 0.8f, 0.3f},
             .lifetime = 2.0f,
