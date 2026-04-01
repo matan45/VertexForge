@@ -49,6 +49,7 @@ namespace core
         void destroyInstance(services::VFXInstanceId id) override;
 
         // Instance control
+        void applyInstanceOverrides(services::VFXInstanceId id, const services::VFXEmitterOverrides& overrides) override;
         void setInstanceTransform(services::VFXInstanceId id, const glm::mat4& worldTransform) override;
         void playInstance(services::VFXInstanceId id) override;
         void stopInstance(services::VFXInstanceId id) override;

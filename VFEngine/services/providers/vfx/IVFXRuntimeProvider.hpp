@@ -26,6 +26,7 @@ namespace services
         virtual void destroyInstance(VFXInstanceId id) = 0;
 
         // Instance control
+        virtual void applyInstanceOverrides(VFXInstanceId id, const VFXEmitterOverrides& overrides) = 0;
         virtual void setInstanceTransform(VFXInstanceId id, const glm::mat4& worldTransform) = 0;
         virtual void playInstance(VFXInstanceId id) = 0;
         virtual void stopInstance(VFXInstanceId id) = 0;

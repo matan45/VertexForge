@@ -380,6 +380,98 @@ namespace controllers
         }
     }
 
+    void VFXSceneRenderer::applyInstanceOverrides(VFXInstanceId id, const VFXEmitterOverrides& overrides)
+    {
+        auto it = instances.find(id);
+        if (it == instances.end())
+            return;
+
+        auto& config = it->second.config;
+
+        if (overrides.spawnRate.has_value())
+            config.spawnRate = overrides.spawnRate.value();
+        if (overrides.lifetime.has_value())
+            config.lifetime = overrides.lifetime.value();
+        if (overrides.startSize.has_value())
+            config.startSize = overrides.startSize.value();
+        if (overrides.startSpeed.has_value())
+            config.startSpeed = overrides.startSpeed.value();
+        if (overrides.stretchMultiplier.has_value())
+            config.stretchMultiplier = overrides.stretchMultiplier.value();
+        if (overrides.emitDirection.has_value())
+            config.emitDirection = overrides.emitDirection.value();
+        if (overrides.startColor.has_value())
+            config.startColor = overrides.startColor.value();
+        if (overrides.renderMode.has_value())
+            config.renderMode = static_cast<render::vfx::VFXRenderMode>(overrides.renderMode.value());
+        if (overrides.softParticleDistance.has_value())
+            config.softParticleDistance = overrides.softParticleDistance.value();
+        if (overrides.lightingInfluence.has_value())
+            config.lightingInfluence = overrides.lightingInfluence.value();
+        if (overrides.collisionEnabled.has_value())
+            config.collisionEnabled = overrides.collisionEnabled.value();
+        if (overrides.collisionLifetimeLoss.has_value())
+            config.collisionLifetimeLoss = overrides.collisionLifetimeLoss.value();
+
+        if (overrides.windDirection.has_value() || overrides.windStrength.has_value())
+        {
+            bool foundWind = false;
+            for (auto& force : config.forces.forces)
+            {
+                if (auto* wind = std::get_if<::vfx::WindForceConfig>(&force))
+                {
+                    if (overrides.windDirection.has_value())
+                        wind->direction = overrides.windDirection.value();
+                    if (overrides.windStrength.has_value())
+                        wind->strength = overrides.windStrength.value();
+                    foundWind = true;
+                    break;
+                }
+            }
+            if (!foundWind)
+            {
+                ::vfx::WindForceConfig wind;
+                if (overrides.windDirection.has_value())
+                    wind.direction = overrides.windDirection.value();
+                if (overrides.windStrength.has_value())
+                    wind.strength = overrides.windStrength.value();
+                config.forces.forces.push_back(wind);
+            }
+        }
+
+        if (overrides.gravityStrength.has_value() || overrides.gravityDirection.has_value())
+        {
+            bool foundGravity = false;
+            for (auto& force : config.forces.forces)
+            {
+                if (auto* gravity = std::get_if<::vfx::GravityForceConfig>(&force))
+                {
+                    if (overrides.gravityStrength.has_value())
+                        gravity->strength = overrides.gravityStrength.value();
+                    if (overrides.gravityDirection.has_value())
+                        gravity->direction = overrides.gravityDirection.value();
+                    foundGravity = true;
+                    break;
+                }
+            }
+            if (!foundGravity)
+            {
+                ::vfx::GravityForceConfig gravity;
+                if (overrides.gravityDirection.has_value())
+                    gravity.direction = overrides.gravityDirection.value();
+                if (overrides.gravityStrength.has_value())
+                    gravity.strength = overrides.gravityStrength.value();
+                config.forces.forces.push_back(gravity);
+            }
+        }
+
+        if (overrides.shapeDimensions.has_value())
+        {
+            config.shape.type = ::vfx::ShapeType::Box;
+            config.shape.dimensions = glm::vec4(overrides.shapeDimensions.value(), 0.0f);
+        }
+    }
+
     void VFXSceneRenderer::setInstanceTransform(VFXInstanceId id, const glm::mat4& worldTransform)
     {
         auto it = instances.find(id);

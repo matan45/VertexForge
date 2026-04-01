@@ -10,6 +10,7 @@
 #include "effects/AutoExposureEffect.hpp"
 #include "effects/ColorGradingEffect.hpp"
 #include "effects/UnderwaterEffect.hpp"
+#include "effects/RainDropletsEffect.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
 #include "../upscaling/UpscaleManager.hpp"
@@ -736,6 +737,9 @@ namespace render::postprocess
 
         syncEffect(::postprocess::EffectType::Underwater, settings.underwater.enabled,
             [this]() { return std::make_unique<UnderwaterEffect>(device, *this); });
+
+        syncEffect(::postprocess::EffectType::RainDroplets, settings.rainDroplets.enabled,
+            [this]() { return std::make_unique<RainDropletsEffect>(device, *this); });
 
         updateSettings(settings);
     }

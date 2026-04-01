@@ -15,6 +15,19 @@
 
 namespace services
 {
+    WeatherServiceImpl::WeatherServiceImpl(IVFXRuntimeProvider* vfxProvider)
+    {
+        rainController = std::make_unique<RainController>();
+        if (vfxProvider)
+            rainController->init(vfxProvider);
+    }
+
+    WeatherServiceImpl::~WeatherServiceImpl()
+    {
+        if (rainController)
+            rainController->cleanup();
+    }
+
     void WeatherServiceImpl::registerEventHandlers()
     {
         auto& dispatcher = ::events::EventDispatcher::instance();
@@ -120,7 +133,30 @@ namespace services
 
         stateMachine.update(deltaTime);
 
-        applyWeatherToPipelines(stateMachine.getCurrentState());
+        const auto& currentWeather = stateMachine.getCurrentState();
+        applyWeatherToPipelines(currentWeather);
+
+        // Update rain particle system
+        if (rainController)
+            rainController->update(deltaTime, currentWeather);
+
+        // Drive screen-space rain droplets via post-process settings
+        try
+        {
+            auto ppSettings = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
+            bool shouldEnableDroplets = currentWeather.precipIntensity > 0.01f;
+            if (ppSettings.rainDroplets.enabled != shouldEnableDroplets ||
+                std::abs(ppSettings.rainDroplets.intensity - currentWeather.precipIntensity) > 0.001f)
+            {
+                ppSettings.rainDroplets.enabled = shouldEnableDroplets;
+                ppSettings.rainDroplets.intensity = currentWeather.precipIntensity;
+
+                events::postprocess::ApplyPostProcessSettingsCommand ppCmd;
+                ppCmd.settings = ppSettings;
+                dispatcher.execute(ppCmd);
+            }
+        }
+        catch (...) {}
 
         // Publish notification when transition completes
         if (wasTransitioningBefore && !stateMachine.isTransitioning())

@@ -40,6 +40,27 @@ namespace controllers
 {
     using VFXInstanceId = uint32_t;
 
+    struct VFXEmitterOverrides
+    {
+        std::optional<float> spawnRate;
+        std::optional<float> lifetime;
+        std::optional<float> startSize;
+        std::optional<float> startSpeed;
+        std::optional<float> stretchMultiplier;
+        std::optional<glm::vec3> emitDirection;
+        std::optional<glm::vec4> startColor;
+        std::optional<glm::vec3> windDirection;
+        std::optional<float> windStrength;
+        std::optional<float> gravityStrength;
+        std::optional<glm::vec3> gravityDirection;
+        std::optional<int> renderMode;
+        std::optional<float> softParticleDistance;
+        std::optional<float> lightingInfluence;
+        std::optional<bool> collisionEnabled;
+        std::optional<float> collisionLifetimeLoss;
+        std::optional<glm::vec3> shapeDimensions;
+    };
+
     struct VFXRuntimeParams
     {
         std::string vfxAssetPath;
@@ -170,6 +191,7 @@ namespace controllers
         void destroyInstance(VFXInstanceId id);
         void destroyAllInstances();
 
+        void applyInstanceOverrides(VFXInstanceId id, const VFXEmitterOverrides& overrides);
         void setInstanceTransform(VFXInstanceId id, const glm::mat4& worldTransform);
         void playInstance(VFXInstanceId id);
         void stopInstance(VFXInstanceId id);

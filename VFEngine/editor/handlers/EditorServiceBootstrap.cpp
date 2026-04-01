@@ -273,7 +273,9 @@ namespace handlers
 
     void EditorHandler::createWeatherServices()
     {
-        weatherService = std::make_shared<services::WeatherServiceImpl>();
+        weatherService = std::make_shared<services::WeatherServiceImpl>(
+            bootstrap->getVFXRuntimeProvider()
+        );
     }
 
     void EditorHandler::registerAllEventHandlers()
