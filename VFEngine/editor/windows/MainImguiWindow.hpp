@@ -36,6 +36,7 @@
 #include "debug/MemoryDiagnosticsWindow.hpp"
 #include "config/EditorPreferencesWindow.hpp"
 #include "config/EditorSettingsWindow.hpp"
+#include "config/EnvironmentWindow.hpp"
 #include "weather/WeatherEditorWindow.hpp"
 #include "EngineToolbar.hpp"
 #include "StatusBar.hpp"
@@ -91,6 +92,7 @@ namespace windows
         MemoryDiagnosticsWindow memoryDiagnosticsWindow;
         EditorPreferencesWindow editorPreferencesWindow;
         EditorSettingsWindow editorSettingsWindow;
+        EnvironmentWindow environmentWindow;
         WeatherEditorWindow weatherEditorWindow;
         EngineToolbar engineToolbar;
         StatusBar statusBar;

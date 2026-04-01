@@ -277,49 +277,54 @@ namespace windows
             isDirty = true;
     }
 
+    void AtmosphereConfigWindow::drawContent()
+    {
+        if (!settingsLoaded) loadSettings();
+
+        if (ImGui::Checkbox("Enable Atmosphere", &settings.enabled))
+            isDirty = true;
+
+        if (settings.enabled)
+        {
+            drawPlanetSection();
+            drawRayleighSection();
+            drawMieSection();
+            drawOzoneSection();
+            drawSunSection();
+            drawDayNightSection();
+            drawMoonSection();
+            drawStarsSection();
+            drawAerialSection();
+        }
+
+        ImGui::Spacing();
+        ImGui::Separator();
+
+        if (ImGui::Button("Apply##atmo"))
+            applySettings();
+        ImGui::SameLine();
+        if (ImGui::Button("Reload##atmo"))
+            loadSettings();
+        ImGui::SameLine();
+        if (ImGui::Button("Reset Defaults##atmo"))
+            resetToDefaults();
+
+        if (isDirty)
+        {
+            ImGui::SameLine();
+            ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "(Modified)");
+        }
+    }
+
     void AtmosphereConfigWindow::draw()
     {
         if (!visible) return;
-
-        if (!settingsLoaded) loadSettings();
 
         ImGui::SetNextWindowSize(ImVec2(420, 600), ImGuiCond_FirstUseEver);
 
         if (ImGui::Begin("Atmosphere Configuration", &visible))
         {
-            if (ImGui::Checkbox("Enable Atmosphere", &settings.enabled))
-                isDirty = true;
-
-            if (settings.enabled)
-            {
-                drawPlanetSection();
-                drawRayleighSection();
-                drawMieSection();
-                drawOzoneSection();
-                drawSunSection();
-                drawDayNightSection();
-                drawMoonSection();
-                drawStarsSection();
-                drawAerialSection();
-            }
-
-            ImGui::Spacing();
-            ImGui::Separator();
-
-            if (ImGui::Button("Apply"))
-                applySettings();
-            ImGui::SameLine();
-            if (ImGui::Button("Reload"))
-                loadSettings();
-            ImGui::SameLine();
-            if (ImGui::Button("Reset Defaults"))
-                resetToDefaults();
-
-            if (isDirty)
-            {
-                ImGui::SameLine();
-                ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "(Modified)");
-            }
+            drawContent();
         }
         ImGui::End();
     }

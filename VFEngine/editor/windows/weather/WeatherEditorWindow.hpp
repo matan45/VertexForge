@@ -1,6 +1,7 @@
 #pragma once
 
 #include "weather/WeatherTypes.hpp"
+#include "weather/WeatherAudioController.hpp"
 
 namespace windows
 {
@@ -22,10 +23,12 @@ namespace windows
         void drawCurrentState();
         void drawManualControls();
         void drawScheduleControls();
+        void drawAudioConfig();
 
     public:
         void show();
         void draw();
+        void drawContent();
         bool isVisible() const { return visible; }
     };
 }

@@ -130,14 +130,17 @@ namespace controllers
         instance.priority = params.priority;
         instance.cameraRelative = params.cameraRelative;
 
-        auto configOpt = vfx::VFXEmitterConfigLoader::loadFromFile(params.vfxAssetPath);
-        if (configOpt.has_value())
+        if (!params.vfxAssetPath.empty())
         {
-            instance.config = configOpt.value();
-        }
-        else
-        {
-            vfLogWarning("Failed to load VFX asset: {}, using default config", params.vfxAssetPath);
+            auto configOpt = vfx::VFXEmitterConfigLoader::loadFromFile(params.vfxAssetPath);
+            if (configOpt.has_value())
+            {
+                instance.config = configOpt.value();
+            }
+            else
+            {
+                vfLogWarning("Failed to load VFX asset: {}, using default config", params.vfxAssetPath);
+            }
         }
 
         if (gpuDrivenEnabled && gpuBufferManager)

@@ -25,6 +25,7 @@ namespace windows
         void show() { visible = true; settingsLoaded = false; }
         void notifySceneLoaded() { settingsLoaded = false; isDirty = false; }
         void draw();
+        void drawContent();
         bool isVisible() const { return visible; }
     };
 }

@@ -63,9 +63,9 @@ namespace weather
         float diff = targetVolume - windVolume;
         windVolume += std::clamp(diff, -VOLUME_RAMP_SPEED * deltaTime, VOLUME_RAMP_SPEED * deltaTime);
 
-        if (windVolume > 0.01f && windHandle == 0)
+        if (windVolume > 0.01f && windHandle == 0 && !audioConfig.windLoopPath.empty())
         {
-            startLoop(windHandle, "audio/ambient/wind_loop.ogg", 0.0f);
+            startLoop(windHandle, audioConfig.windLoopPath, 0.0f);
         }
 
         if (windHandle != 0)
@@ -88,9 +88,9 @@ namespace weather
         float diff = targetVolume - rainVolume;
         rainVolume += std::clamp(diff, -VOLUME_RAMP_SPEED * deltaTime, VOLUME_RAMP_SPEED * deltaTime);
 
-        if (rainVolume > 0.01f && rainHandle == 0)
+        if (rainVolume > 0.01f && rainHandle == 0 && !audioConfig.rainLoopPath.empty())
         {
-            startLoop(rainHandle, "audio/ambient/rain_loop.ogg", 0.0f);
+            startLoop(rainHandle, audioConfig.rainLoopPath, 0.0f);
         }
 
         if (rainHandle != 0)
@@ -114,9 +114,9 @@ namespace weather
         float diff = targetVolume - snowVolume;
         snowVolume += std::clamp(diff, -VOLUME_RAMP_SPEED * deltaTime, VOLUME_RAMP_SPEED * deltaTime);
 
-        if (snowVolume > 0.01f && snowHandle == 0)
+        if (snowVolume > 0.01f && snowHandle == 0 && !audioConfig.snowLoopPath.empty())
         {
-            startLoop(snowHandle, "audio/ambient/snow_loop.ogg", 0.0f);
+            startLoop(snowHandle, audioConfig.snowLoopPath, 0.0f);
         }
 
         if (snowHandle != 0)
@@ -130,7 +130,7 @@ namespace weather
         }
     }
 
-    void WeatherAudioController::startLoop(uint64_t& handle, const char* path, float volume)
+    void WeatherAudioController::startLoop(uint64_t& handle, const std::string& path, float volume)
     {
         try
         {

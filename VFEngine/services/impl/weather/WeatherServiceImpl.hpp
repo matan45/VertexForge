@@ -35,6 +35,12 @@ namespace services
         bool scheduleEnabled = false;
         float snowAccumulation = 0.0f;
 
+        // Base atmosphere values captured before weather modifies them
+        glm::vec3 baseSunIrradiance{0.0f};
+        float baseAerialIntensity = 0.0f;
+        bool basesAtmosCaptured = false;
+
+        IVFXRuntimeProvider* vfxProvider = nullptr;
         std::unique_ptr<RainController> rainController;
         std::unique_ptr<SnowController> snowController;
         weather::LightningGenerator lightningGenerator;

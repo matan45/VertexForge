@@ -7,6 +7,7 @@
 #include "../../events/vegetation/GrassEvents.hpp"
 #include "../../events/audio/AudioEvents.hpp"
 #include "../../events/scene/EntityTransformEvents.hpp"
+#include "../../providers/vfx/IVFXRuntimeProvider.hpp"
 #include "weather/WeatherPresets.hpp"
 #include <glm/glm.hpp>
 #include <cmath>
@@ -17,7 +18,8 @@
 
 namespace services
 {
-    WeatherServiceImpl::WeatherServiceImpl(IVFXRuntimeProvider* vfxProvider)
+    WeatherServiceImpl::WeatherServiceImpl(IVFXRuntimeProvider* vfxProv)
+        : vfxProvider(vfxProv)
     {
         rainController = std::make_unique<RainController>();
         snowController = std::make_unique<SnowController>();
@@ -86,6 +88,16 @@ namespace services
         dispatcher.registerCommandHandler<events::weather::SetWeatherEnabledCommand>(
             [this](const events::weather::SetWeatherEnabledCommand& cmd) {
                 weatherEnabled = cmd.enabled;
+            });
+
+        dispatcher.registerCommandHandler<events::weather::SetWeatherAudioConfigCommand>(
+            [this](const events::weather::SetWeatherAudioConfigCommand& cmd) {
+                audioController.setConfig(cmd.config);
+            });
+
+        dispatcher.registerQueryHandler<events::weather::GetWeatherAudioConfigQuery>(
+            [this](const events::weather::GetWeatherAudioConfigQuery&) {
+                return audioController.getConfig();
             });
 
         dispatcher.registerQueryHandler<events::weather::GetWeatherStateQuery>(
@@ -228,8 +240,15 @@ namespace services
         try
         {
             auto atmosSettings = dispatcher.query(events::atmosphere::GetAtmosphereSettingsQuery{});
-            atmosSettings.sunIrradiance *= ws.atmosphereTint;
-            atmosSettings.aerialIntensity *= ws.ambientLightMult;
+            // Capture base values once so we multiply from the original, not compounding each frame
+            if (!basesAtmosCaptured)
+            {
+                baseSunIrradiance = atmosSettings.sunIrradiance;
+                baseAerialIntensity = atmosSettings.aerialIntensity;
+                basesAtmosCaptured = true;
+            }
+            atmosSettings.sunIrradiance = baseSunIrradiance * ws.atmosphereTint;
+            atmosSettings.aerialIntensity = baseAerialIntensity * ws.ambientLightMult;
 
             // Lightning white flash on atmosphere
             auto lightningAtmos = lightningGenerator.getOutput();
@@ -296,6 +315,26 @@ namespace services
         if (snowController)
             snowController->update(deltaTime, isSnow ? state : zeroState);
 
+        // Debug: log VFX state once
+        static bool loggedOnce = false;
+        if (!loggedOnce && (isRain || isSnow) && state.precipIntensity > 0.01f)
+        {
+            bool providerOk = vfxProvider != nullptr;
+            bool providerInit = providerOk && vfxProvider->isInitialized();
+            bool rainActive = rainController && rainController->isActive();
+            bool snowActive = snowController && snowController->isActive();
+            vfLogInfo("[Weather VFX] provider={} initialized={} rainActive={} snowActive={} precipType={} intensity={}",
+                providerOk, providerInit, rainActive, snowActive, (int)state.precipType, state.precipIntensity);
+            loggedOnce = true;
+        }
+
+        // Ensure VFX runtime updates in editor mode (normally only in play mode)
+        if (vfxProvider && vfxProvider->isInitialized() &&
+            ((rainController && rainController->isActive()) || (snowController && snowController->isActive())))
+        {
+            vfxProvider->update(deltaTime);
+        }
+
         // Track snow accumulation over time
         if (isSnow && state.precipIntensity > 0.01f)
             snowAccumulation = std::min(1.0f, snowAccumulation + deltaTime * state.precipIntensity * 0.005f);
@@ -332,16 +371,15 @@ namespace services
         // Dispatch thunder audio at strike position
         if (lightning.shouldPlayThunder)
         {
-            static const std::string thunderPaths[] = {
-                "audio/sfx/thunder_01.ogg",
-                "audio/sfx/thunder_02.ogg",
-                "audio/sfx/thunder_03.ogg"
-            };
+            const auto& thunderPaths = audioController.getConfig().thunderPaths;
+            int idx = lightning.thunderSoundIndex % 3;
 
+            if (!thunderPaths[idx].empty())
+            {
             try
             {
                 events::audio::PlaySound3DCommand cmd;
-                cmd.path = thunderPaths[lightning.thunderSoundIndex % 3];
+                cmd.path = thunderPaths[idx];
                 cmd.position = lightning.thunderPosition;
                 cmd.params.is3D = true;
                 cmd.params.volume = 0.9f;
@@ -355,6 +393,7 @@ namespace services
                 dispatcher.execute(cmd);
             }
             catch (...) {}
+            } // if thunderPath not empty
 
             // Publish notification for external listeners
             try

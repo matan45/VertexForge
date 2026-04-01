@@ -49,6 +49,10 @@ namespace windows
                                          &inputActionMappingWindow, &pluginManagerWindow);
         menuBar.setEditorSettingsWindow(&editorSettingsWindow);
 
+        environmentWindow.setWindows(&atmosphereConfigWindow, &cloudConfigWindow,
+                                      &volumetricFogConfigWindow, &weatherEditorWindow);
+        menuBar.setEnvironmentWindow(&environmentWindow);
+
         subscribeToEvents();
 
         // Apply saved theme on startup
@@ -184,6 +188,7 @@ namespace windows
             memoryDiagnosticsWindow.draw();
             editorPreferencesWindow.draw();
             editorSettingsWindow.draw();
+            environmentWindow.draw();
             weatherEditorWindow.draw();
         }
         ImGui::End();

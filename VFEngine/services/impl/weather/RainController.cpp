@@ -56,6 +56,7 @@ namespace services
         params.cameraRelative = true;
 
         rainInstanceId = vfxProvider->createInstance(params);
+        vfxProvider->playInstance(rainInstanceId);
         active = true;
         initialConfigApplied = false;
     }

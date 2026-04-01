@@ -2,9 +2,18 @@
 
 #include "WeatherTypes.hpp"
 #include <cstdint>
+#include <string>
 
 namespace weather
 {
+    struct WeatherAudioConfig
+    {
+        std::string windLoopPath;
+        std::string rainLoopPath;
+        std::string snowLoopPath;
+        std::string thunderPaths[3];
+    };
+
     class WeatherAudioController
     {
     public:
@@ -12,12 +21,15 @@ namespace weather
         void cleanup();
         void update(float deltaTime, const WeatherState& state);
 
+        void setConfig(const WeatherAudioConfig& config) { audioConfig = config; }
+        const WeatherAudioConfig& getConfig() const { return audioConfig; }
+
     private:
         void updateWindAmbient(float deltaTime, const WeatherState& state);
         void updateRainAmbient(float deltaTime, const WeatherState& state);
         void updateSnowAmbient(float deltaTime, const WeatherState& state);
 
-        void startLoop(uint64_t& handle, const char* path, float volume);
+        void startLoop(uint64_t& handle, const std::string& path, float volume);
         void fadeOutLoop(uint64_t& handle);
         void setLoopVolume(uint64_t handle, float volume);
         void setLoopPitch(uint64_t handle, float pitch);
@@ -32,6 +44,8 @@ namespace weather
 
         PrecipitationType activePrecipType = PrecipitationType::None;
         bool initialized = false;
+
+        WeatherAudioConfig audioConfig;
 
         static constexpr float VOLUME_RAMP_SPEED = 1.5f;
         static constexpr float CROSSFADE_DURATION_MS = 2000.0f;

@@ -184,6 +184,7 @@ void main() {
 #include "../common/shadow_sampling_types.glsl"
 #include "../common/cluster_culling.glsl"
 #include "../common/gi_sampling.glsl"
+#include "../common/snow_accumulation.glsl"
 
 layout(location = 0) in vec3 fragWorldPos;
 layout(location = 1) in vec3 fragNormal;
@@ -439,7 +440,6 @@ void main() {
 #endif
 
     // Snow accumulation blend
-    #include "../common/snow_accumulation.glsl"
     applySnowAccumulation(camera.snowAccumulation, fragNormal, albedo, roughness, metallic, N);
 
     vec3 R = reflect(-V, N);

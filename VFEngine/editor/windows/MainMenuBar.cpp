@@ -18,6 +18,7 @@
 #include "config/AtmosphereConfigWindow.hpp"
 #include "config/CloudConfigWindow.hpp"
 #include "weather/WeatherEditorWindow.hpp"
+#include "config/EnvironmentWindow.hpp"
 #include "config/LightStreamingDebugWindow.hpp"
 #include "asset/AssetLifecycleWindow.hpp"
 #include "world/WorldSectorWindow.hpp"
@@ -273,10 +274,7 @@ namespace windows
         else if (ImGui::MenuItem("Ocean") && oceanEditorWindow) oceanEditorWindow->show();
         else if (ImGui::MenuItem("Post Process") && postProcessConfigWindow) postProcessConfigWindow->show();
         else if (ImGui::MenuItem("Navigation") && navmeshWindow) navmeshWindow->show();
-        else if (ImGui::MenuItem("Volumetric Fog") && volumetricFogConfigWindow) volumetricFogConfigWindow->show();
-        else if (ImGui::MenuItem("Atmosphere") && atmosphereConfigWindow) atmosphereConfigWindow->show();
-        else if (ImGui::MenuItem("Clouds") && cloudConfigWindow) cloudConfigWindow->show();
-        else if (ImGui::MenuItem("Weather") && weatherEditorWindow) weatherEditorWindow->show();
+        else if (ImGui::MenuItem("Environment") && environmentWindow) environmentWindow->show();
         else if (ImGui::MenuItem("Global Illumination") && giConfigWindow) giConfigWindow->show();
         ImGui::EndMenu();
     }

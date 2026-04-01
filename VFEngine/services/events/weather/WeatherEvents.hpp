@@ -2,6 +2,7 @@
 
 #include "../EventTypes.hpp"
 #include "weather/WeatherTypes.hpp"
+#include "weather/WeatherAudioController.hpp"
 #include <nlohmann/json.hpp>
 #include <string>
 
@@ -67,6 +68,17 @@ namespace events::weather
     {
         bool enabled = false;
         std::string_view getName() const override { return "SetWeatherEnabled"; }
+    };
+
+    struct SetWeatherAudioConfigCommand : ICommand<>
+    {
+        ::weather::WeatherAudioConfig config;
+        std::string_view getName() const override { return "SetWeatherAudioConfig"; }
+    };
+
+    struct GetWeatherAudioConfigQuery : IQuery<::weather::WeatherAudioConfig>
+    {
+        std::string_view getName() const override { return "GetWeatherAudioConfig"; }
     };
 
     // --- Queries ---

@@ -206,6 +206,7 @@ void main() {
 #include "../common/lighting_functions.glsl"
 #include "../common/gi_sampling.glsl"
 #include "../common/lod_crossfade.glsl"
+#include "../common/snow_accumulation.glsl"
 
 layout(location = 0) in vec3 fragWorldPos;
 layout(location = 1) in vec3 fragNormal;
@@ -481,7 +482,6 @@ void main() {
     }
 
     // Snow accumulation blend
-    #include "../common/snow_accumulation.glsl"
     applySnowAccumulation(camera.snowAccumulation, fragNormal, albedo, roughness, metallic, N);
 
     vec3 R = reflect(-V, N);

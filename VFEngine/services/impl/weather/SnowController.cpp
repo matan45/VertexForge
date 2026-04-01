@@ -56,6 +56,7 @@ namespace services
         params.cameraRelative = true;
 
         snowInstanceId = vfxProvider->createInstance(params);
+        vfxProvider->playInstance(snowInstanceId);
         active = true;
         initialConfigApplied = false;
     }

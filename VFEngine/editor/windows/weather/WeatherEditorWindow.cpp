@@ -2,6 +2,7 @@
 #include "events/EventDispatcher.hpp"
 #include "events/weather/WeatherEvents.hpp"
 #include "weather/WeatherPresets.hpp"
+#include "nfd/FileDialog.hpp"
 #include <imgui.h>
 
 namespace windows
@@ -27,47 +28,54 @@ namespace windows
         settingsLoaded = true;
     }
 
+    void WeatherEditorWindow::drawContent()
+    {
+        // Refresh state every frame for live updates
+        loadState();
+
+        // Enable toggle
+        {
+            bool enabled = weatherEnabled;
+            if (ImGui::Checkbox("Weather Enabled", &enabled))
+            {
+                events::weather::SetWeatherEnabledCommand cmd;
+                cmd.enabled = enabled;
+                events::EventDispatcher::instance().execute(cmd);
+            }
+        }
+
+        if (weatherEnabled)
+        {
+            ImGui::Spacing();
+            drawPresetButtons();
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+            drawCurrentState();
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+            drawManualControls();
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+            drawScheduleControls();
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+            drawAudioConfig();
+        }
+    }
+
     void WeatherEditorWindow::draw()
     {
         if (!visible) return;
-
-        if (!settingsLoaded) loadState();
-
-        // Refresh state every frame for live updates
-        loadState();
 
         ImGui::SetNextWindowSize(ImVec2(400, 550), ImGuiCond_FirstUseEver);
 
         if (ImGui::Begin("Weather System", &visible))
         {
-            // Enable toggle
-            {
-                bool enabled = weatherEnabled;
-                if (ImGui::Checkbox("Weather Enabled", &enabled))
-                {
-                    events::weather::SetWeatherEnabledCommand cmd;
-                    cmd.enabled = enabled;
-                    events::EventDispatcher::instance().execute(cmd);
-                }
-            }
-
-            if (weatherEnabled)
-            {
-                ImGui::Spacing();
-                drawPresetButtons();
-                ImGui::Spacing();
-                ImGui::Separator();
-                ImGui::Spacing();
-                drawCurrentState();
-                ImGui::Spacing();
-                ImGui::Separator();
-                ImGui::Spacing();
-                drawManualControls();
-                ImGui::Spacing();
-                ImGui::Separator();
-                ImGui::Spacing();
-                drawScheduleControls();
-            }
+            drawContent();
         }
         ImGui::End();
     }
@@ -235,6 +243,88 @@ namespace windows
                 events::weather::SetWeatherScheduleEnabledCommand cmd;
                 cmd.enabled = sched;
                 events::EventDispatcher::instance().execute(cmd);
+            }
+
+            ImGui::Unindent();
+        }
+    }
+
+    void WeatherEditorWindow::drawAudioConfig()
+    {
+        if (ImGui::CollapsingHeader("Audio Assets"))
+        {
+            ImGui::Indent();
+
+            auto& dispatcher = events::EventDispatcher::instance();
+            static weather::WeatherAudioConfig config;
+            static bool configLoaded = false;
+
+            if (!configLoaded)
+            {
+                try { config = dispatcher.query(events::weather::GetWeatherAudioConfigQuery{}); }
+                catch (...) {}
+                configLoaded = true;
+            }
+
+            auto browseAudio = [&](const char* label, std::string& path)
+            {
+                ImGui::Text("%s", label);
+                ImGui::SameLine(120);
+                if (!path.empty())
+                {
+                    std::string filename = path.substr(path.find_last_of("/\\") + 1);
+                    ImGui::TextColored(ImVec4(0.6f, 0.8f, 1.0f, 1.0f), "%s", filename.c_str());
+                }
+                else
+                {
+                    ImGui::TextDisabled("(none)");
+                }
+                ImGui::SameLine();
+                std::string btnId = std::string("...##") + label;
+                if (ImGui::SmallButton(btnId.c_str()))
+                {
+                    nfd::FileDialog fileDialog;
+                    std::string selected = fileDialog.openFileDialog(
+                        {{L"VF Audio (*.vfAudio)", L"*.vfAudio"}});
+                    if (!selected.empty())
+                    {
+                        path = selected;
+                        events::weather::SetWeatherAudioConfigCommand cmd;
+                        cmd.config = config;
+                        dispatcher.execute(cmd);
+                    }
+                }
+                if (!path.empty())
+                {
+                    ImGui::SameLine();
+                    std::string clearId = std::string("X##") + label;
+                    if (ImGui::SmallButton(clearId.c_str()))
+                    {
+                        path.clear();
+                        events::weather::SetWeatherAudioConfigCommand cmd;
+                        cmd.config = config;
+                        dispatcher.execute(cmd);
+                    }
+                }
+            };
+
+            ImGui::Text("Ambient Loops");
+            ImGui::Separator();
+            browseAudio("Wind Loop", config.windLoopPath);
+            browseAudio("Rain Loop", config.rainLoopPath);
+            browseAudio("Snow Loop", config.snowLoopPath);
+
+            ImGui::Spacing();
+            ImGui::Text("Thunder SFX");
+            ImGui::Separator();
+            browseAudio("Thunder 1", config.thunderPaths[0]);
+            browseAudio("Thunder 2", config.thunderPaths[1]);
+            browseAudio("Thunder 3", config.thunderPaths[2]);
+
+            ImGui::Spacing();
+            if (ImGui::Button("Reload Config"))
+            {
+                configLoaded = false;
             }
 
             ImGui::Unindent();
