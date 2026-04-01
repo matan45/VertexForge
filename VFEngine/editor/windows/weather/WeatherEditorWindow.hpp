@@ -21,10 +21,12 @@ namespace windows
 
         void loadState();
         void drawPresetButtons();
-        void drawCurrentState();
-        void drawManualControls();
+        void drawStateInfo();
+        void drawAccumulationBars();
+        void drawManualSliders();
+        void drawManualButtons();
         void drawScheduleControls();
-        void drawAudioConfig();
+        void drawAudioBrowseFields();
 
     public:
         void show();

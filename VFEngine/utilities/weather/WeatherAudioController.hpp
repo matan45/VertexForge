@@ -25,10 +25,8 @@ namespace weather
         const WeatherAudioConfig& getConfig() const { return audioConfig; }
 
     private:
-        void updateWindAmbient(float deltaTime, const WeatherState& state);
-        void updateRainAmbient(float deltaTime, const WeatherState& state);
-        void updateSnowAmbient(float deltaTime, const WeatherState& state);
-
+        void updateLoop(float deltaTime, float targetVolume,
+                        uint64_t& handle, float& volume, const std::string& path);
         void startLoop(uint64_t& handle, const std::string& path, float volume);
         void fadeOutLoop(uint64_t& handle);
         void setLoopVolume(uint64_t handle, float volume);
@@ -44,7 +42,6 @@ namespace weather
 
         PrecipitationType activePrecipType = PrecipitationType::None;
         bool initialized = false;
-
         WeatherAudioConfig audioConfig;
 
         static constexpr float VOLUME_RAMP_SPEED = 1.5f;

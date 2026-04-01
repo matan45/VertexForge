@@ -4,6 +4,7 @@
 #include <nlohmann/json.hpp>
 #include <cstdint>
 #include <string>
+#include <optional>
 
 namespace weather
 {
@@ -138,5 +139,38 @@ namespace weather
         result.atmosphereTint = glm::mix(a.atmosphereTint, b.atmosphereTint, t);
         result.ambientLightMult = glm::mix(a.ambientLightMult, b.ambientLightMult, t);
         return result;
+    }
+
+    inline std::optional<WeatherPresetId> stringToPresetId(const std::string& name)
+    {
+        if (name == "Clear")        return WeatherPresetId::Clear;
+        if (name == "Cloudy")       return WeatherPresetId::Cloudy;
+        if (name == "Overcast")     return WeatherPresetId::Overcast;
+        if (name == "LightRain")    return WeatherPresetId::LightRain;
+        if (name == "HeavyRain")    return WeatherPresetId::HeavyRain;
+        if (name == "Thunderstorm") return WeatherPresetId::Thunderstorm;
+        if (name == "LightSnow")    return WeatherPresetId::LightSnow;
+        if (name == "HeavySnow")    return WeatherPresetId::HeavySnow;
+        if (name == "Fog")          return WeatherPresetId::Fog;
+        if (name == "Sandstorm")    return WeatherPresetId::Sandstorm;
+        return std::nullopt;
+    }
+
+    inline const char* presetIdToString(WeatherPresetId id)
+    {
+        switch (id)
+        {
+        case WeatherPresetId::Clear:        return "Clear";
+        case WeatherPresetId::Cloudy:       return "Cloudy";
+        case WeatherPresetId::Overcast:     return "Overcast";
+        case WeatherPresetId::LightRain:    return "LightRain";
+        case WeatherPresetId::HeavyRain:    return "HeavyRain";
+        case WeatherPresetId::Thunderstorm: return "Thunderstorm";
+        case WeatherPresetId::LightSnow:    return "LightSnow";
+        case WeatherPresetId::HeavySnow:    return "HeavySnow";
+        case WeatherPresetId::Fog:          return "Fog";
+        case WeatherPresetId::Sandstorm:    return "Sandstorm";
+        default:                            return "Custom";
+        }
     }
 }

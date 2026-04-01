@@ -4,57 +4,57 @@
 
 namespace weather
 {
+    WeatherScheduleEntry WeatherSchedule::parseEntry(const nlohmann::json& j) const
+    {
+        WeatherScheduleEntry entry;
+        if (j.contains("preset") && j["preset"].is_number_unsigned())
+            entry.preset = static_cast<WeatherPresetId>(j["preset"].get<uint8_t>());
+        if (j.contains("weight") && j["weight"].is_number())
+            entry.weight = j["weight"].get<float>();
+        if (j.contains("minDuration") && j["minDuration"].is_number())
+            entry.minDuration = j["minDuration"].get<float>();
+        if (j.contains("maxDuration") && j["maxDuration"].is_number())
+            entry.maxDuration = j["maxDuration"].get<float>();
+        if (j.contains("transitionDuration") && j["transitionDuration"].is_number())
+            entry.transitionDuration = j["transitionDuration"].get<float>();
+        if (j.contains("easing") && j["easing"].is_number_unsigned())
+            entry.easing = static_cast<WeatherEasing>(j["easing"].get<uint8_t>());
+        return entry;
+    }
+
+    BiomeWeatherSchedule WeatherSchedule::parseBiome(const nlohmann::json& biomeJson) const
+    {
+        BiomeWeatherSchedule biome;
+        if (biomeJson.contains("biomeId") && biomeJson["biomeId"].is_string())
+            biome.biomeId = biomeJson["biomeId"].get<std::string>();
+
+        if (biomeJson.contains("buckets") && biomeJson["buckets"].is_array())
+        {
+            for (const auto& bucketJson : biomeJson["buckets"])
+            {
+                TimeOfDayBucket bucket;
+                if (bucketJson.contains("startHour") && bucketJson["startHour"].is_number())
+                    bucket.startHour = bucketJson["startHour"].get<float>();
+                if (bucketJson.contains("endHour") && bucketJson["endHour"].is_number())
+                    bucket.endHour = bucketJson["endHour"].get<float>();
+
+                if (bucketJson.contains("entries") && bucketJson["entries"].is_array())
+                    for (const auto& e : bucketJson["entries"])
+                        bucket.entries.push_back(parseEntry(e));
+
+                biome.buckets.push_back(std::move(bucket));
+            }
+        }
+        return biome;
+    }
+
     void WeatherSchedule::loadFromJson(const nlohmann::json& j)
     {
         biomes.clear();
-
-        if (!j.contains("biomes") || !j["biomes"].is_array())
-            return;
+        if (!j.contains("biomes") || !j["biomes"].is_array()) return;
 
         for (const auto& biomeJson : j["biomes"])
-        {
-            BiomeWeatherSchedule biome;
-            if (biomeJson.contains("biomeId") && biomeJson["biomeId"].is_string())
-                biome.biomeId = biomeJson["biomeId"].get<std::string>();
-
-            if (biomeJson.contains("buckets") && biomeJson["buckets"].is_array())
-            {
-                for (const auto& bucketJson : biomeJson["buckets"])
-                {
-                    TimeOfDayBucket bucket;
-                    if (bucketJson.contains("startHour") && bucketJson["startHour"].is_number())
-                        bucket.startHour = bucketJson["startHour"].get<float>();
-                    if (bucketJson.contains("endHour") && bucketJson["endHour"].is_number())
-                        bucket.endHour = bucketJson["endHour"].get<float>();
-
-                    if (bucketJson.contains("entries") && bucketJson["entries"].is_array())
-                    {
-                        for (const auto& entryJson : bucketJson["entries"])
-                        {
-                            WeatherScheduleEntry entry;
-                            if (entryJson.contains("preset") && entryJson["preset"].is_number_unsigned())
-                                entry.preset = static_cast<WeatherPresetId>(entryJson["preset"].get<uint8_t>());
-                            if (entryJson.contains("weight") && entryJson["weight"].is_number())
-                                entry.weight = entryJson["weight"].get<float>();
-                            if (entryJson.contains("minDuration") && entryJson["minDuration"].is_number())
-                                entry.minDuration = entryJson["minDuration"].get<float>();
-                            if (entryJson.contains("maxDuration") && entryJson["maxDuration"].is_number())
-                                entry.maxDuration = entryJson["maxDuration"].get<float>();
-                            if (entryJson.contains("transitionDuration") && entryJson["transitionDuration"].is_number())
-                                entry.transitionDuration = entryJson["transitionDuration"].get<float>();
-                            if (entryJson.contains("easing") && entryJson["easing"].is_number_unsigned())
-                                entry.easing = static_cast<WeatherEasing>(entryJson["easing"].get<uint8_t>());
-
-                            bucket.entries.push_back(entry);
-                        }
-                    }
-
-                    biome.buckets.push_back(std::move(bucket));
-                }
-            }
-
-            biomes.push_back(std::move(biome));
-        }
+            biomes.push_back(parseBiome(biomeJson));
     }
 
     nlohmann::json WeatherSchedule::toJson() const

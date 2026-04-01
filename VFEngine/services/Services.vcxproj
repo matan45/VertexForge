@@ -291,6 +291,7 @@
     <ClInclude Include="impl\vfx\VFXRuntimeServiceImpl.hpp" />
     <ClInclude Include="impl\volumetric\VolumetricAgentManager.hpp" />
     <ClInclude Include="impl\volumetric\VolumetricNavServiceImpl.hpp" />
+    <ClInclude Include="impl\weather\PrecipitationController.hpp" />
     <ClInclude Include="impl\weather\RainController.hpp" />
     <ClInclude Include="impl\weather\SnowController.hpp" />
     <ClInclude Include="impl\weather\WeatherServiceImpl.hpp" />
@@ -492,6 +493,7 @@
     <ClCompile Include="impl\vfx\VFXRuntimeServiceImpl.cpp" />
     <ClCompile Include="impl\volumetric\VolumetricAgentManager.cpp" />
     <ClCompile Include="impl\volumetric\VolumetricNavServiceImpl.cpp" />
+    <ClCompile Include="impl\weather\PrecipitationController.cpp" />
     <ClCompile Include="impl\weather\RainController.cpp" />
     <ClCompile Include="impl\weather\SnowController.cpp" />
     <ClCompile Include="impl\weather\WeatherServiceImpl.cpp" />

@@ -1,6 +1,8 @@
 #pragma once
 
 #include "WeatherTypes.hpp"
+#include "../components/WeatherComponents.hpp"
+#include "../components/CoreComponents.hpp"
 #include <glm/glm.hpp>
 #include <vector>
 
@@ -16,7 +18,6 @@ namespace weather
         };
 
         WeatherState evaluate(const glm::vec3& cameraPos, const WeatherState& globalState);
-
         const std::vector<ZoneTransition>& getTransitions() const { return transitions; }
 
     private:
@@ -28,7 +29,10 @@ namespace weather
             uint32_t entityId = 0;
         };
 
+        float computeSignedDistance(const glm::vec3& cameraPos,
+                                    const components::WeatherZoneComponent& zone,
+                                    const components::WorldTransformComponent& transform);
+
         std::vector<ZoneTransition> transitions;
-        std::vector<uint32_t> previouslyInsideZones;
     };
 }

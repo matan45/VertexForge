@@ -47,6 +47,8 @@ namespace weather
         std::optional<WeatherTransition> evaluate(float timeOfDay, float deltaTime);
 
     private:
+        BiomeWeatherSchedule parseBiome(const nlohmann::json& biomeJson) const;
+        WeatherScheduleEntry parseEntry(const nlohmann::json& entryJson) const;
         const BiomeWeatherSchedule* findActiveBiome() const;
         const TimeOfDayBucket* findBucket(const BiomeWeatherSchedule& biome, float timeOfDay) const;
         WeatherScheduleEntry selectWeightedRandom(const std::vector<WeatherScheduleEntry>& entries);
