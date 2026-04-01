@@ -10,6 +10,7 @@
 
 #include <glm/vec3.hpp>
 #include <glm/mat4x4.hpp>
+#include "weather/WeatherTypes.hpp"
 #include <string>
 #include <optional>
 
@@ -240,6 +241,28 @@ namespace core::api
         arr->set(0, value::Value(v.x));
         arr->set(1, value::Value(v.y));
         arr->set(2, value::Value(v.z));
+        return value::Value(arr);
+    }
+
+    // Returns 15 floats: cloud(3), precip(2), wind(4), fog(2), ambientLightMult(1), atmosphereTint(3)
+    inline value::Value makeWeatherStateArray(const weather::WeatherState& s)
+    {
+        auto arr = std::make_shared<value::NativeArray>(15, value::ValueType::FLOAT);
+        arr->set(0, value::Value(s.cloudCoverage));
+        arr->set(1, value::Value(s.cloudDensity));
+        arr->set(2, value::Value(s.cloudType));
+        arr->set(3, value::Value(static_cast<double>(static_cast<uint8_t>(s.precipType))));
+        arr->set(4, value::Value(s.precipIntensity));
+        arr->set(5, value::Value(s.windSpeed));
+        arr->set(6, value::Value(s.windDirectionDeg));
+        arr->set(7, value::Value(s.gustStrength));
+        arr->set(8, value::Value(s.gustFrequency));
+        arr->set(9, value::Value(s.fogDensity));
+        arr->set(10, value::Value(s.heightFogDensity));
+        arr->set(11, value::Value(s.ambientLightMult));
+        arr->set(12, value::Value(s.atmosphereTint.x));
+        arr->set(13, value::Value(s.atmosphereTint.y));
+        arr->set(14, value::Value(s.atmosphereTint.z));
         return value::Value(arr);
     }
 

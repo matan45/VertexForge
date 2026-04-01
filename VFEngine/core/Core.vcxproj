@@ -138,6 +138,7 @@
     <ClInclude Include="adapters\api\UIInputAPI.hpp" />
     <ClInclude Include="adapters\api\UIValueAPI.hpp" />
     <ClInclude Include="adapters\api\VFXAPI.hpp" />
+    <ClInclude Include="adapters\api\WeatherAPI.hpp" />
     <ClInclude Include="adapters\audio\AudioAdapter.hpp" />
     <ClInclude Include="adapters\navmesh\NavmeshAdapter.hpp" />
     <ClInclude Include="adapters\navmesh\TileGraph.hpp" />
@@ -169,6 +170,7 @@
     <ClInclude Include="adapters\scripting\ScriptSocketEventBridge.hpp" />
     <ClInclude Include="adapters\scripting\ScriptUIEventBridge.hpp" />
     <ClInclude Include="adapters\scripting\ScriptVFXEventBridge.hpp" />
+    <ClInclude Include="adapters\scripting\ScriptWeatherEventBridge.hpp" />
     <ClInclude Include="adapters\scripting\ScriptingAdapter.hpp" />
     <ClInclude Include="adapters\terrain\OceanRenderAdapter.hpp" />
     <ClInclude Include="adapters\terrain\TerrainBrushComputeAdapter.hpp" />
@@ -236,6 +238,7 @@
     <ClCompile Include="adapters\api\UIInputAPI.cpp" />
     <ClCompile Include="adapters\api\UIValueAPI.cpp" />
     <ClCompile Include="adapters\api\VFXAPI.cpp" />
+    <ClCompile Include="adapters\api\WeatherAPI.cpp" />
     <ClCompile Include="adapters\audio\AudioAdapter.cpp" />
     <ClCompile Include="adapters\navmesh\NavmeshAdapter.cpp" />
     <ClCompile Include="adapters\navmesh\NavmeshAdapterBuildOps.cpp" />
@@ -269,6 +272,7 @@
     <ClCompile Include="adapters\scripting\ScriptSocketEventBridge.cpp" />
     <ClCompile Include="adapters\scripting\ScriptUIEventBridge.cpp" />
     <ClCompile Include="adapters\scripting\ScriptVFXEventBridge.cpp" />
+    <ClCompile Include="adapters\scripting\ScriptWeatherEventBridge.cpp" />
     <ClCompile Include="adapters\scripting\ScriptingAdapter.cpp" />
     <ClCompile Include="adapters\scripting\ScriptingAdapterLifecycle.cpp" />
     <ClCompile Include="adapters\terrain\OceanRenderAdapter.cpp" />

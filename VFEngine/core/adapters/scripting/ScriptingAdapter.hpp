@@ -22,6 +22,7 @@ namespace core
     class ScriptNavigationEventBridge;
     class ScriptInputActionEventBridge;
     class ScriptSceneEventBridge;
+    class ScriptWeatherEventBridge;
 
     class CoroutineManager;
     class ScriptCommunicationManager;
@@ -40,6 +41,7 @@ namespace core
         std::unique_ptr<ScriptNavigationEventBridge> navigationEventBridge;
         std::unique_ptr<ScriptInputActionEventBridge> inputActionEventBridge;
         std::unique_ptr<ScriptSceneEventBridge> sceneEventBridge;
+        std::unique_ptr<ScriptWeatherEventBridge> weatherEventBridge;
         std::unique_ptr<ScriptCommunicationManager> communicationManager;
 
         std::unordered_map<uint64_t, std::string> instanceToClassName;
