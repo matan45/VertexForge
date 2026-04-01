@@ -278,7 +278,7 @@ namespace controllers
         uint32_t seed) const
     {
         render::vfx::GPUEmitterConfig gpuConfig{};
-        gpuConfig.emitDirection = glm::vec4(glm::normalize(cpuConfig.emitDirection), 0.5f);
+        gpuConfig.emitDirection = glm::vec4(glm::normalize(cpuConfig.emitDirection), cpuConfig.coneSpread);
         gpuConfig.startColor = cpuConfig.startColor;
         gpuConfig.spawnRate = cpuConfig.spawnRate;
         gpuConfig.lifetime = cpuConfig.lifetime;

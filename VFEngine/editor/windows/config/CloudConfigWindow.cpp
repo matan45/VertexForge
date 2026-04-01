@@ -114,49 +114,54 @@ namespace windows
         }
     }
 
+    void CloudConfigWindow::drawContent()
+    {
+        if (!settingsLoaded)
+            loadSettings();
+
+        if (ImGui::Checkbox("Enable Clouds", &settings.enabled))
+            isDirty = true;
+
+        if (settings.enabled)
+        {
+            drawLayerSection();
+            drawDensitySection();
+            drawNoiseSection();
+            drawWindSection();
+            drawLightingSection();
+            drawPerformanceSection();
+        }
+
+        ImGui::Separator();
+
+        if (ImGui::Button("Apply##cloud"))
+            applySettings();
+        ImGui::SameLine();
+        if (ImGui::Button("Reload##cloud"))
+            loadSettings();
+        ImGui::SameLine();
+        if (ImGui::Button("Reset Defaults##cloud"))
+        {
+            settings = render::cloud::CloudSettings{};
+            isDirty = true;
+        }
+
+        if (isDirty)
+        {
+            ImGui::SameLine();
+            ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "(Modified)");
+        }
+    }
+
     void CloudConfigWindow::draw()
     {
         if (!visible) return;
-
-        if (!settingsLoaded)
-            loadSettings();
 
         ImGui::SetNextWindowSize(ImVec2(400, 500), ImGuiCond_FirstUseEver);
 
         if (ImGui::Begin("Cloud Configuration", &visible))
         {
-            if (ImGui::Checkbox("Enable Clouds", &settings.enabled))
-                isDirty = true;
-
-            if (settings.enabled)
-            {
-                drawLayerSection();
-                drawDensitySection();
-                drawNoiseSection();
-                drawWindSection();
-                drawLightingSection();
-                drawPerformanceSection();
-            }
-
-            ImGui::Separator();
-
-            if (ImGui::Button("Apply"))
-                applySettings();
-            ImGui::SameLine();
-            if (ImGui::Button("Reload"))
-                loadSettings();
-            ImGui::SameLine();
-            if (ImGui::Button("Reset Defaults"))
-            {
-                settings = render::cloud::CloudSettings{};
-                isDirty = true;
-            }
-
-            if (isDirty)
-            {
-                ImGui::SameLine();
-                ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "(Modified)");
-            }
+            drawContent();
         }
         ImGui::End();
     }

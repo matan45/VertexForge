@@ -206,6 +206,8 @@ void main() {
 #include "../common/lighting_functions.glsl"
 #include "../common/gi_sampling.glsl"
 #include "../common/lod_crossfade.glsl"
+#include "../common/wetness.glsl"
+#include "../common/snow_accumulation.glsl"
 
 layout(location = 0) in vec3 fragWorldPos;
 layout(location = 1) in vec3 fragNormal;
@@ -479,6 +481,10 @@ void main() {
         vec3 tangentNormal = textureGrad(bindlessTextures[nonuniformEXT(normalIdx)], texCoords, texDx, texDy).rgb * 2.0 - 1.0;
         N = normalize(TBN * tangentNormal);
     }
+
+    // Weather surface effects (wetness first, then snow on top)
+    applyWetness(camera.wetness, albedo, roughness, metallic, N);
+    applySnowAccumulation(camera.snowAccumulation, fragNormal, albedo, roughness, metallic, N);
 
     vec3 R = reflect(-V, N);
     vec3 F0 = mix(vec3(0.04), albedo, metallic);

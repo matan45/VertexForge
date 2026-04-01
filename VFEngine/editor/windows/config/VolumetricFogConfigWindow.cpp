@@ -250,75 +250,62 @@ namespace windows
         }
     }
 
+    void VolumetricFogConfigWindow::drawContent()
+    {
+        if (!settingsLoaded) loadSettings();
+
+        if (ImGui::Checkbox("Enable Volumetric Fog", &settings.enabled))
+            isDirty = true;
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Froxel-based volumetric fog with light scattering.");
+
+        if (settings.enabled)
+        {
+            ImGui::Spacing();
+            const char* qualityItems[] = {"Low (80x45x64)", "Medium (160x90x128)", "High (240x135x128)"};
+            int currentQuality = static_cast<int>(settings.quality);
+            if (ImGui::Combo("Quality##vfog", &currentQuality, qualityItems, 3))
+            {
+                settings.quality = static_cast<postprocess::VolumetricQuality>(currentQuality);
+                isDirty = true;
+            }
+            ImGui::Spacing();
+            drawDensitySection();
+            drawHeightFogSection();
+            drawNoiseSection();
+            drawScatteringSection();
+            drawGeneralSection();
+        }
+
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        if (ImGui::Button("Apply##vfog", ImVec2(80, 0)))
+            applySettings();
+        ImGui::SameLine();
+        if (ImGui::Button("Reload##vfog", ImVec2(80, 0)))
+            loadSettings();
+        ImGui::SameLine();
+        if (ImGui::Button("Reset Defaults##vfog", ImVec2(100, 0)))
+            resetToDefaults();
+
+        if (isDirty)
+        {
+            ImGui::SameLine();
+            ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "(Modified)");
+        }
+    }
+
     void VolumetricFogConfigWindow::draw()
     {
-        if (!visible)
-        {
-            return;
-        }
+        if (!visible) return;
 
         ImGui::SetNextWindowSize(ImVec2(400, 500), ImGuiCond_FirstUseEver);
 
         if (ImGui::Begin("Volumetric Fog Configuration", &visible))
         {
-            if (ImGui::Checkbox("Enable Volumetric Fog", &settings.enabled))
-            {
-                isDirty = true;
-            }
-            if (ImGui::IsItemHovered())
-            {
-                ImGui::SetTooltip("Froxel-based volumetric fog with light scattering.\nRequires GPU-driven rendering to be active.");
-            }
-
-            if (settings.enabled)
-            {
-                ImGui::Spacing();
-
-                const char* qualityItems[] = {"Low (80x45x64)", "Medium (160x90x128)", "High (240x135x128)"};
-                int currentQuality = static_cast<int>(settings.quality);
-                if (ImGui::Combo("Quality##vfog", &currentQuality, qualityItems, 3))
-                {
-                    settings.quality = static_cast<postprocess::VolumetricQuality>(currentQuality);
-                    isDirty = true;
-                }
-                if (ImGui::IsItemHovered())
-                {
-                    ImGui::SetTooltip("Resolution of the 3D froxel grid.\nHigher = better quality but more GPU cost.");
-                }
-
-                ImGui::Spacing();
-
-                drawDensitySection();
-                drawHeightFogSection();
-                drawNoiseSection();
-                drawScatteringSection();
-                drawGeneralSection();
-            }
-
-            ImGui::Spacing();
-            ImGui::Separator();
-            ImGui::Spacing();
-
-            if (ImGui::Button("Apply", ImVec2(80, 0)))
-            {
-                applySettings();
-            }
-            ImGui::SameLine();
-            if (ImGui::Button("Reload", ImVec2(80, 0)))
-            {
-                loadSettings();
-            }
-            ImGui::SameLine();
-            if (ImGui::Button("Reset Defaults", ImVec2(100, 0)))
-            {
-                resetToDefaults();
-            }
-
-            if (isDirty)
-            {
-                ImGui::SameLine();
-                ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "(Modified)");
-            }
+            drawContent();
         }
         ImGui::End();
     }

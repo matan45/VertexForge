@@ -461,6 +461,18 @@ namespace core {
         return offScreen ? offScreen->getCloudSettings() : render::cloud::CloudSettings{};
     }
 
+    void OffScreenAdapter::setSnowAccumulation(float value) {
+        if (offScreen) {
+            offScreen->setSnowAccumulation(value);
+        }
+    }
+
+    void OffScreenAdapter::setWetness(float value) {
+        if (offScreen) {
+            offScreen->setWetness(value);
+        }
+    }
+
     void OffScreenAdapter::setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider) {
         if (offScreen) {
             offScreen->setVFXRuntimeProvider(provider);

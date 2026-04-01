@@ -175,6 +175,10 @@ namespace controllers
         void applyCloudSettings(const render::cloud::CloudSettings& settings);
         render::cloud::CloudSettings getCloudSettings() const;
 
+        // Weather surface effects
+        void setSnowAccumulation(float value);
+        void setWetness(float value);
+
         // GI settings
         void applyGISettings(const render::gi::GISettings& settings);
         render::gi::GISettings getGISettings() const;

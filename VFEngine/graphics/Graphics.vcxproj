@@ -250,6 +250,7 @@
     <ClInclude Include="render\postprocess\effects\DepthOfFieldEffect.hpp" />
     <ClInclude Include="render\postprocess\effects\EdgeDetectionEffect.hpp" />
     <ClInclude Include="render\postprocess\effects\FilmGrainEffect.hpp" />
+    <ClInclude Include="render\postprocess\effects\RainDropletsEffect.hpp" />
     <ClInclude Include="render\postprocess\effects\SSAOEffect.hpp" />
     <ClInclude Include="render\postprocess\effects\ToneMappingEffect.hpp" />
     <ClInclude Include="render\postprocess\effects\UnderwaterEffect.hpp" />
@@ -508,6 +509,7 @@
     <ClCompile Include="render\postprocess\effects\DepthOfFieldEffect.cpp" />
     <ClCompile Include="render\postprocess\effects\EdgeDetectionEffect.cpp" />
     <ClCompile Include="render\postprocess\effects\FilmGrainEffect.cpp" />
+    <ClCompile Include="render\postprocess\effects\RainDropletsEffect.cpp" />
     <ClCompile Include="render\postprocess\effects\SSAOEffect.cpp" />
     <ClCompile Include="render\postprocess\effects\SSAOEffectResources.cpp" />
     <ClCompile Include="render\postprocess\effects\ToneMappingEffect.cpp" />
@@ -621,9 +623,11 @@
     <None Include="..\..\resources\shaders\common\motion_vectors.glsl" />
     <None Include="..\..\resources\shaders\common\shadow_sampling.glsl" />
     <None Include="..\..\resources\shaders\common\shadow_sampling_types.glsl" />
+    <None Include="..\..\resources\shaders\common\snow_accumulation.glsl" />
     <None Include="..\..\resources\shaders\common\svt_sampling.glsl" />
     <None Include="..\..\resources\shaders\common\svt_types.glsl" />
     <None Include="..\..\resources\shaders\common\volumetric_common.glsl" />
+    <None Include="..\..\resources\shaders\common\wetness.glsl" />
     <None Include="..\..\resources\shaders\decal\decal.glsl" />
     <None Include="..\..\resources\shaders\depthprepass\frag_depth_prepass.glsl" />
     <None Include="..\..\resources\shaders\depthprepass\mesh_depth_prepass.glsl" />
@@ -675,6 +679,7 @@
     <None Include="..\..\resources\shaders\postprocess\film_grain.glsl" />
     <None Include="..\..\resources\shaders\postprocess\fullscreen_vert.glsl" />
     <None Include="..\..\resources\shaders\postprocess\motion_vectors_fullscreen.glsl" />
+    <None Include="..\..\resources\shaders\postprocess\rain_droplets.glsl" />
     <None Include="..\..\resources\shaders\postprocess\ssao.glsl" />
     <None Include="..\..\resources\shaders\postprocess\ssao_blur.glsl" />
     <None Include="..\..\resources\shaders\postprocess\ssao_composite.glsl" />

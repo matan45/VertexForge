@@ -12,6 +12,7 @@
 #include "ScriptNavigationEventBridge.hpp"
 #include "ScriptInputActionEventBridge.hpp"
 #include "ScriptSceneEventBridge.hpp"
+#include "ScriptWeatherEventBridge.hpp"
 #include "NativeAPIRegistry.hpp"
 #include "CoroutineManager.hpp"
 #include "ScriptCommunicationManager.hpp"
@@ -80,6 +81,9 @@ namespace core
             sceneEventBridge = std::make_unique<ScriptSceneEventBridge>(
                 interpreter.get(), instanceToInterfaces, instanceToObject, instanceToEntity);
 
+            weatherEventBridge = std::make_unique<ScriptWeatherEventBridge>(
+                interpreter.get(), instanceToInterfaces, instanceToObject, instanceToEntity);
+
             physicsEventBridge->subscribeAll();
             uiEventBridge->subscribeAll();
             animationEventBridge->subscribeAll();
@@ -88,6 +92,7 @@ namespace core
             navigationEventBridge->subscribeAll();
             inputActionEventBridge->subscribeAll();
             sceneEventBridge->subscribeAll();
+            weatherEventBridge->subscribeAll();
 
             initialized = true;
             return true;
@@ -105,6 +110,7 @@ namespace core
     {
         if (!initialized) return;
 
+        if (weatherEventBridge) weatherEventBridge->unsubscribeAll();
         if (sceneEventBridge) sceneEventBridge->unsubscribeAll();
         if (inputActionEventBridge) inputActionEventBridge->unsubscribeAll();
         if (navigationEventBridge) navigationEventBridge->unsubscribeAll();
@@ -316,7 +322,7 @@ namespace core
             instanceToObject[instanceId] = std::any(instance);
 
             // Cache implemented interfaces for collision/trigger/UI callbacks
-            static constexpr std::array<const char*, 15> kCheckedInterfaces = {
+            static constexpr std::array<const char*, 16> kCheckedInterfaces = {
                 "ICollisionListener", "ITriggerListener",
                 "IUIButtonListener", "IUITextInputListener", "IUICheckboxListener",
                 "IUIDropdownListener", "IUITabsListener", "IUISliderListener",
@@ -325,7 +331,8 @@ namespace core
                 "ISocketAttachmentListener",
                 "IVFXEventListener",
                 "INavigationEventListener",
-                "IInputActionListener"
+                "IInputActionListener",
+                "IWeatherEventListener"
             };
 
             std::unordered_set<std::string> interfaces;

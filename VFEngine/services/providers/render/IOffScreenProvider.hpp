@@ -304,6 +304,9 @@ namespace services {
 
         virtual void applyCloudSettings(const render::cloud::CloudSettings& settings) = 0;
         virtual render::cloud::CloudSettings getCloudSettings() const = 0;
+
+        virtual void setSnowAccumulation(float value) = 0;
+        virtual void setWetness(float value) = 0;
     };
 
 }

@@ -26,6 +26,8 @@ namespace windows
     class VolumetricFogConfigWindow;
     class AtmosphereConfigWindow;
     class CloudConfigWindow;
+    class WeatherEditorWindow;
+    class EnvironmentWindow;
     class LightStreamingDebugWindow;
     class PluginManagerWindow;
     class InputActionMappingWindow;
@@ -66,6 +68,8 @@ namespace windows
         VolumetricFogConfigWindow* volumetricFogConfigWindow = nullptr;
         AtmosphereConfigWindow* atmosphereConfigWindow = nullptr;
         CloudConfigWindow* cloudConfigWindow = nullptr;
+        WeatherEditorWindow* weatherEditorWindow = nullptr;
+        EnvironmentWindow* environmentWindow = nullptr;
         LightStreamingDebugWindow* lightStreamingDebugWindow = nullptr;
         PluginManagerWindow* pluginManagerWindow = nullptr;
         InputActionMappingWindow* inputActionMappingWindow = nullptr;
@@ -157,6 +161,16 @@ namespace windows
         void setCloudConfigWindow(CloudConfigWindow* window)
         {
             cloudConfigWindow = window;
+        }
+
+        void setWeatherEditorWindow(WeatherEditorWindow* window)
+        {
+            weatherEditorWindow = window;
+        }
+
+        void setEnvironmentWindow(EnvironmentWindow* window)
+        {
+            environmentWindow = window;
         }
 
         void setLightStreamingDebugWindow(LightStreamingDebugWindow* window)

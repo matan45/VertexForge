@@ -76,6 +76,7 @@ namespace render::raytracing
         void markTLASBuilt() { tlasBuiltThisFrame = true; }
 
         bool isValid() const { return queryPool.isValid(); }
+        void invalidateFrameSlots() { for (auto& r : frameSlotReady) r = false; }
 
     private:
         GPUTimestampQueryPool queryPool;

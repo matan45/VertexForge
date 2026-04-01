@@ -44,6 +44,7 @@
 #include "interfaces/render/IObjectStreamingService.hpp"
 #include "interfaces/render/IGIService.hpp"
 #include "interfaces/ai/IBehaviorTreeService.hpp"
+#include "interfaces/weather/IWeatherService.hpp"
 #include "impl/components/IKComponentService.hpp"
 #include "interfaces/lifecycle/IAssetLifecycleService.hpp"
 #include "interfaces/asset/IAssetDatabaseService.hpp"
@@ -144,6 +145,7 @@ namespace handlers {
 		std::shared_ptr<services::IGIService> giService;
 		std::shared_ptr<services::IBehaviorTreeService> behaviorTreeService;
 		std::unique_ptr<services::BehaviorTreePlayModeHandler> behaviorTreePlayModeHandler;
+		std::shared_ptr<services::IWeatherService> weatherService;
 
 		std::unique_ptr<handlers::ExportHandler> exportHandler;
 
@@ -179,6 +181,7 @@ namespace handlers {
 		void createVegetationServices();
 		void createMeshBrushServices();
 		void createAIServices();
+		void createWeatherServices();
 		void registerAllEventHandlers();
 		void setupEventSubscriptions();
 		void cleanupEventSubscriptions();

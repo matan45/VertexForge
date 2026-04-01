@@ -164,6 +164,8 @@ namespace render
         core::OffscreenResources& offscreenResources;
 
         std::unique_ptr<common::SharedCameraUBO> sharedCameraUBO;
+        float currentSnowAccumulation = 0.0f;
+        float currentWetness = 0.0f;
 
         bool meshPipelineInitialized = false;
         std::vector<mesh::MeshRenderData> currentMeshDrawList;
@@ -327,6 +329,9 @@ namespace render
         void updateSharedCameraUBO(const glm::mat4& view, const glm::mat4& projection,
                                    const glm::vec3& cameraPos, float time);
         vk::Buffer getSharedCameraBuffer() const;
+
+        void setSnowAccumulation(float value) { currentSnowAccumulation = value; }
+        void setWetness(float value) { currentWetness = value; }
 
         void setVisibleLightsFromBVH(const std::vector<uint32_t>& visibleLights);
         void clearVisibleLights();

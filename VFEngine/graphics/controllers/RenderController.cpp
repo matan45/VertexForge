@@ -30,7 +30,6 @@ namespace controllers {
 	void RenderController::reSize()
 	{
 		renderThread->getSynchronizer().waitUntilIdle();
-
 		device.getLogicalDevice().waitIdle();
 		swapChain.recreate(window->getWidth(), window->getHeight());
 		renderManager->recreate(window->getWidth(), window->getHeight());

@@ -16,7 +16,8 @@ namespace postprocess
         EdgeDetection,
         AutoExposure,
         ColorGrading,
-        Underwater
+        Underwater,
+        RainDroplets
     };
 
     enum class VolumetricQuality : uint8_t
@@ -189,6 +190,14 @@ namespace postprocess
         float maxFogDistance = 100.0f;
     };
 
+    struct RainDropletsSettings
+    {
+        bool enabled = false;
+        float intensity = 0.0f;      // driven by precipIntensity [0,1]
+        float dropletScale = 1.0f;
+        float trailSpeed = 2.0f;
+    };
+
     enum class UpscaleMode : uint8_t
     {
         Off = 0,
@@ -243,6 +252,7 @@ namespace postprocess
         AutoExposureSettings autoExposure;
         ColorGradingSettings colorGrading;
         UnderwaterSettings underwater;
+        RainDropletsSettings rainDroplets;
 
         static PostProcessSettings createDefault()
         {

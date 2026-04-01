@@ -1,6 +1,7 @@
 #include "SceneSerialization.hpp"
 #include "JsonConverters.hpp"
 #include "../components/Components.hpp"
+#include "../weather/WeatherTypes.hpp"
 #include <algorithm>
 #include <cmath>
 
@@ -256,5 +257,53 @@ namespace serialization
     void SceneSerialization::deserializeCloudSettings(const json& j, render::cloud::CloudSettings& settings)
     {
         deserializeCloud(j, settings);
+    }
+
+    json SceneSerialization::serializeWeatherState(const weather::WeatherState& state)
+    {
+        json j;
+        nlohmann::json weatherJson;
+        weather::to_json(weatherJson, state);
+        j["weather"] = weatherJson;
+        return j;
+    }
+
+    void SceneSerialization::deserializeWeatherState(const json& j, weather::WeatherState& state)
+    {
+        if (!j.contains("weather") || !j["weather"].is_object())
+            return;
+        weather::from_json(j["weather"], state);
+    }
+
+    json SceneSerialization::serializeWeatherAudioConfig(const weather::WeatherAudioConfig& config)
+    {
+        json j;
+        j["windLoopPath"] = config.windLoopPath;
+        j["rainLoopPath"] = config.rainLoopPath;
+        j["snowLoopPath"] = config.snowLoopPath;
+        j["thunderPaths"] = json::array({
+            config.thunderPaths[0],
+            config.thunderPaths[1],
+            config.thunderPaths[2]
+        });
+        return j;
+    }
+
+    void SceneSerialization::deserializeWeatherAudioConfig(const json& j, weather::WeatherAudioConfig& config)
+    {
+        if (j.contains("windLoopPath") && j["windLoopPath"].is_string())
+            config.windLoopPath = j["windLoopPath"].get<std::string>();
+        if (j.contains("rainLoopPath") && j["rainLoopPath"].is_string())
+            config.rainLoopPath = j["rainLoopPath"].get<std::string>();
+        if (j.contains("snowLoopPath") && j["snowLoopPath"].is_string())
+            config.snowLoopPath = j["snowLoopPath"].get<std::string>();
+        if (j.contains("thunderPaths") && j["thunderPaths"].is_array() && j["thunderPaths"].size() == 3)
+        {
+            for (int i = 0; i < 3; i++)
+            {
+                if (j["thunderPaths"][i].is_string())
+                    config.thunderPaths[i] = j["thunderPaths"][i].get<std::string>();
+            }
+        }
     }
 }

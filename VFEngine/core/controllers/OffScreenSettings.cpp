@@ -126,6 +126,16 @@ namespace controllers {
 		return offScreenController->getCloudSettings();
 	}
 
+	void OffScreen::setSnowAccumulation(float value)
+	{
+		offScreenController->setSnowAccumulation(value);
+	}
+
+	void OffScreen::setWetness(float value)
+	{
+		offScreenController->setWetness(value);
+	}
+
 	void OffScreen::applyGISettings(const render::gi::GISettings& settings)
 	{
 		offScreenController->applyGISettings(settings);

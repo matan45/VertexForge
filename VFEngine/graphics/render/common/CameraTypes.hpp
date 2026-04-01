@@ -12,15 +12,19 @@ namespace render::common
         alignas(16) glm::mat4 projection;
         alignas(16) glm::vec3 cameraPos;
         float time;
+        float snowAccumulation;
+        float wetness;
+        float _pad[2];
         alignas(16) glm::vec4 frustumPlanes[6];
     };
 
-    static_assert(sizeof(CameraUBO) == 240, "CameraUBO must be 240 bytes to match GLSL CameraData");
+    static_assert(sizeof(CameraUBO) == 256, "CameraUBO must be 256 bytes to match GLSL CameraData");
     static_assert(offsetof(CameraUBO, view) == 0, "CameraUBO::view offset mismatch");
     static_assert(offsetof(CameraUBO, projection) == 64, "CameraUBO::projection offset mismatch");
     static_assert(offsetof(CameraUBO, cameraPos) == 128, "CameraUBO::cameraPos offset mismatch");
     static_assert(offsetof(CameraUBO, time) == 140, "CameraUBO::time offset mismatch");
-    static_assert(offsetof(CameraUBO, frustumPlanes) == 144, "CameraUBO::frustumPlanes offset mismatch");
+    static_assert(offsetof(CameraUBO, snowAccumulation) == 144, "CameraUBO::snowAccumulation offset mismatch");
+    static_assert(offsetof(CameraUBO, frustumPlanes) == 160, "CameraUBO::frustumPlanes offset mismatch");
 
     struct alignas(16) GPUCameraData
     {

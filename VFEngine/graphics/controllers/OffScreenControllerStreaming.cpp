@@ -39,6 +39,22 @@ namespace controllers
         return currentCloudSettings;
     }
 
+    void OffScreenController::setSnowAccumulation(float value)
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (!renderHandler) return;
+
+        renderHandler->setSnowAccumulation(value);
+    }
+
+    void OffScreenController::setWetness(float value)
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (!renderHandler) return;
+
+        renderHandler->setWetness(value);
+    }
+
     void OffScreenController::applyGISettings(const render::gi::GISettings& settings)
     {
         auto* renderHandler = offScreen->getRenderPassHandler();

@@ -249,6 +249,7 @@ namespace services
         registerPostProcessHandlers(dispatcher);
         registerAtmosphereHandlers(dispatcher);
         registerCloudHandlers(dispatcher);
+        registerWeatherHandlers(dispatcher);
 
         meshDataChangedToken = dispatcher.subscribe<events::scene::MeshDataChangedNotification>(
             [this](const events::scene::MeshDataChangedNotification& notification)

@@ -178,6 +178,7 @@ IF EXIST ..\..\dependencies\streamline\bin\x64\NvLowLatencyVk.dll\ (xcopy /Q /E 
     <ClInclude Include="windows\config\EditorCameraWindow.hpp" />
     <ClInclude Include="windows\config\EditorPreferencesWindow.hpp" />
     <ClInclude Include="windows\config\EditorSettingsWindow.hpp" />
+    <ClInclude Include="windows\config\EnvironmentWindow.hpp" />
     <ClInclude Include="windows\config\GIConfigWindow.hpp" />
     <ClInclude Include="windows\config\InputActionMappingWindow.hpp" />
     <ClInclude Include="windows\config\LightStreamingDebugWindow.hpp" />
@@ -300,6 +301,7 @@ IF EXIST ..\..\dependencies\streamline\bin\x64\NvLowLatencyVk.dll\ (xcopy /Q /E 
     <ClInclude Include="windows\viewport\ViewPortGizmo.hpp" />
     <ClInclude Include="windows\viewport\ViewPortOverlay.hpp" />
     <ClInclude Include="windows\viewport\ViewPortPicker.hpp" />
+    <ClInclude Include="windows\weather\WeatherEditorWindow.hpp" />
     <ClInclude Include="windows\world\WorldSectorWindow.hpp" />
   </ItemGroup>
   <ItemGroup>
@@ -361,6 +363,7 @@ IF EXIST ..\..\dependencies\streamline\bin\x64\NvLowLatencyVk.dll\ (xcopy /Q /E 
     <ClCompile Include="windows\config\EditorPreferencesWindow.cpp" />
     <ClCompile Include="windows\config\EditorPreferencesWindowSections.cpp" />
     <ClCompile Include="windows\config\EditorSettingsWindow.cpp" />
+    <ClCompile Include="windows\config\EnvironmentWindow.cpp" />
     <ClCompile Include="windows\config\GIConfigWindow.cpp" />
     <ClCompile Include="windows\config\InputActionMappingWindow.cpp" />
     <ClCompile Include="windows\config\InputActionMappingWindowAxis.cpp" />
@@ -486,6 +489,7 @@ IF EXIST ..\..\dependencies\streamline\bin\x64\NvLowLatencyVk.dll\ (xcopy /Q /E 
     <ClCompile Include="windows\viewport\ViewPortGizmo.cpp" />
     <ClCompile Include="windows\viewport\ViewPortOverlay.cpp" />
     <ClCompile Include="windows\viewport\ViewPortPicker.cpp" />
+    <ClCompile Include="windows\weather\WeatherEditorWindow.cpp" />
     <ClCompile Include="windows\world\WorldSectorWindow.cpp" />
   </ItemGroup>
   <ItemGroup>

@@ -11,6 +11,9 @@
 #include "../types/NavmeshTypes.hpp"
 #include "../types/AudioTypes.hpp"
 #include "../types/RenderSettings.hpp"
+#include "../weather/WeatherTypes.hpp"
+#include "../weather/WeatherSerialization.hpp"
+#include "../weather/WeatherAudioController.hpp"
 
 namespace scene
 {
@@ -128,6 +131,9 @@ namespace serialization
         static json serializeFogVolume(const components::FogVolumeComponent& fog);
         static void deserializeFogVolume(const json& j, components::FogVolumeComponent& fog);
 
+        static json serializeWeatherZone(const components::WeatherZoneComponent& zone);
+        static void deserializeWeatherZone(const json& j, components::WeatherZoneComponent& zone);
+
         static json serializeScript(const components::ScriptComponent& script);
         static void deserializeScript(const json& j, components::ScriptComponent& script);
 
@@ -192,6 +198,12 @@ namespace serialization
 
         static json serializeCloudSettings(const render::cloud::CloudSettings& settings);
         static void deserializeCloudSettings(const json& j, render::cloud::CloudSettings& settings);
+
+        static json serializeWeatherState(const weather::WeatherState& state);
+        static void deserializeWeatherState(const json& j, weather::WeatherState& state);
+
+        static json serializeWeatherAudioConfig(const weather::WeatherAudioConfig& config);
+        static void deserializeWeatherAudioConfig(const json& j, weather::WeatherAudioConfig& config);
 
         static std::string toneMappingModeToString(postprocess::ToneMappingMode mode);
         static postprocess::ToneMappingMode stringToToneMappingMode(const std::string& str);

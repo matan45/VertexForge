@@ -36,7 +36,8 @@ namespace render::common
     }
 
     void SharedCameraUBO::update(const glm::mat4& view, const glm::mat4& projection,
-                                  const glm::vec3& cameraPos, float time)
+                                  const glm::vec3& cameraPos, float time,
+                                  float snowAccumulation, float wetness)
     {
         if (!mapped) return;
 
@@ -45,6 +46,8 @@ namespace render::common
         ubo.projection = projection;
         ubo.cameraPos = cameraPos;
         ubo.time = time;
+        ubo.snowAccumulation = snowAccumulation;
+        ubo.wetness = wetness;
         math::extractFrustumPlanes(projection * view, ubo.frustumPlanes);
 
         std::memcpy(mapped, &ubo, sizeof(CameraUBO));

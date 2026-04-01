@@ -398,7 +398,6 @@ vec2 vsmLookupPhysicalUVVol(ShadowData sd, vec2 uv, out bool valid) {
 }
 
 // Directional lights use RT shadows — no VSM sampling needed in volumetrics
-}
 
 float smoothDistanceAttenuation(float distance, float range) {
     float distRatio = distance / range;

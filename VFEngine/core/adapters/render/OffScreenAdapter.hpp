@@ -133,5 +133,8 @@ namespace core
 
         void applyCloudSettings(const render::cloud::CloudSettings& settings) override;
         render::cloud::CloudSettings getCloudSettings() const override;
+
+        void setSnowAccumulation(float value) override;
+        void setWetness(float value) override;
     };
 }

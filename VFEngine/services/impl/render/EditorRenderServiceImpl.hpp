@@ -81,5 +81,6 @@ namespace services
         void registerPostProcessHandlers(events::EventDispatcher& dispatcher);
         void registerAtmosphereHandlers(events::EventDispatcher& dispatcher);
         void registerCloudHandlers(events::EventDispatcher& dispatcher);
+        void registerWeatherHandlers(events::EventDispatcher& dispatcher);
     };
 }

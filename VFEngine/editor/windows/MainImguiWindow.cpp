@@ -33,6 +33,7 @@ namespace windows
         menuBar.setVolumetricFogConfigWindow(&volumetricFogConfigWindow);
         menuBar.setAtmosphereConfigWindow(&atmosphereConfigWindow);
         menuBar.setCloudConfigWindow(&cloudConfigWindow);
+        menuBar.setWeatherEditorWindow(&weatherEditorWindow);
         menuBar.setLightStreamingDebugWindow(&lightStreamingDebugWindow);
         menuBar.setPluginManagerWindow(&pluginManagerWindow);
         menuBar.setTaskGraphWindow(&taskGraphWindow);
@@ -47,6 +48,10 @@ namespace windows
                                          &audioMixerWindow, &renderConfigWindow,
                                          &inputActionMappingWindow, &pluginManagerWindow);
         menuBar.setEditorSettingsWindow(&editorSettingsWindow);
+
+        environmentWindow.setWindows(&atmosphereConfigWindow, &cloudConfigWindow,
+                                      &volumetricFogConfigWindow, &weatherEditorWindow);
+        menuBar.setEnvironmentWindow(&environmentWindow);
 
         subscribeToEvents();
 
@@ -83,6 +88,7 @@ namespace windows
                 volumetricFogConfigWindow.notifySceneLoaded();
                 atmosphereConfigWindow.notifySceneLoaded();
                 cloudConfigWindow.notifySceneLoaded();
+                weatherEditorWindow.notifySceneLoaded();
                 giConfigWindow.notifySceneLoaded();
                 lightStreamingDebugWindow.notifySceneLoaded();
             });
@@ -183,6 +189,8 @@ namespace windows
             memoryDiagnosticsWindow.draw();
             editorPreferencesWindow.draw();
             editorSettingsWindow.draw();
+            environmentWindow.draw();
+            weatherEditorWindow.draw();
         }
         ImGui::End();
 

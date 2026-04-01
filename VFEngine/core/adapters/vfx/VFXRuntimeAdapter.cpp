@@ -93,6 +93,37 @@ namespace core
         }
     }
 
+    void VFXRuntimeAdapter::applyInstanceOverrides(services::VFXInstanceId id, const services::VFXEmitterOverrides& overrides)
+    {
+        // Both structs must have the same field count; update both when adding new fields
+        static_assert(sizeof(services::VFXEmitterOverrides) == sizeof(controllers::VFXEmitterOverrides),
+            "VFXEmitterOverrides service/controller size mismatch - a field was added to one but not the other");
+
+        if (renderer)
+        {
+            controllers::VFXEmitterOverrides ctrlOverrides;
+            ctrlOverrides.spawnRate = overrides.spawnRate;
+            ctrlOverrides.lifetime = overrides.lifetime;
+            ctrlOverrides.startSize = overrides.startSize;
+            ctrlOverrides.startSpeed = overrides.startSpeed;
+            ctrlOverrides.stretchMultiplier = overrides.stretchMultiplier;
+            ctrlOverrides.emitDirection = overrides.emitDirection;
+            ctrlOverrides.startColor = overrides.startColor;
+            ctrlOverrides.windDirection = overrides.windDirection;
+            ctrlOverrides.windStrength = overrides.windStrength;
+            ctrlOverrides.gravityStrength = overrides.gravityStrength;
+            ctrlOverrides.gravityDirection = overrides.gravityDirection;
+            ctrlOverrides.renderMode = overrides.renderMode;
+            ctrlOverrides.softParticleDistance = overrides.softParticleDistance;
+            ctrlOverrides.lightingInfluence = overrides.lightingInfluence;
+            ctrlOverrides.collisionEnabled = overrides.collisionEnabled;
+            ctrlOverrides.collisionLifetimeLoss = overrides.collisionLifetimeLoss;
+            ctrlOverrides.shapeDimensions = overrides.shapeDimensions;
+            ctrlOverrides.coneSpread = overrides.coneSpread;
+            renderer->applyInstanceOverrides(id, ctrlOverrides);
+        }
+    }
+
     void VFXRuntimeAdapter::setInstanceTransform(services::VFXInstanceId id, const glm::mat4& worldTransform)
     {
         if (renderer)

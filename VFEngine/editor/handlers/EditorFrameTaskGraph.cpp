@@ -8,6 +8,8 @@
 #include "core/PluginManager.hpp"
 #include "../../../core/audio/AudioSceneUpdater.hpp"
 #include "time/Timer.hpp"
+#include "events/EventDispatcher.hpp"
+#include "events/weather/WeatherEvents.hpp"
 
 namespace handlers
 {
@@ -82,6 +84,13 @@ namespace handlers
             }
         });
 
+        frameTaskGraph->addTask("Weather", [this]() {
+            float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
+            events::weather::UpdateWeatherCommand cmd;
+            cmd.deltaTime = dt;
+            events::EventDispatcher::instance().execute(cmd);
+        });
+
         frameTaskGraph->addTask("WorldSector", [this]() {
             if (worldSectorService) worldSectorService->update();
         });
@@ -100,6 +109,7 @@ namespace handlers
             }
         });
 
+        frameTaskGraph->addDependency("Weather", "Scene");
         frameTaskGraph->addDependency("PhysicsKick", "Scene");
         frameTaskGraph->addDependency("PhysicsKick", "Input");
         frameTaskGraph->addDependency("PhysicsKick", "WindowState");
@@ -133,6 +143,7 @@ namespace handlers
             if (renderFn) renderFn();
         });
 
+        frameTaskGraph->addDependency("Transforms", "Weather");
         frameTaskGraph->addDependency("Transforms", "BehaviorTrees");
         frameTaskGraph->addDependency("Transforms", "VFX");
         frameTaskGraph->addDependency("Transforms", "RenderTexture");

@@ -126,6 +126,7 @@
     <ClInclude Include="components\UIComponents.hpp" />
     <ClInclude Include="components\VegetationComponents.hpp" />
     <ClInclude Include="components\VolumetricComponents.hpp" />
+    <ClInclude Include="components\WeatherComponents.hpp" />
     <ClInclude Include="config\Config.hpp" />
     <ClInclude Include="config\EditorPreferences.hpp" />
     <ClInclude Include="config\EditorPreferencesSerializer.hpp" />
