@@ -8,6 +8,8 @@
 #include "weather/WeatherStateMachine.hpp"
 #include "weather/WeatherSchedule.hpp"
 #include "weather/LightningGenerator.hpp"
+#include "weather/WeatherZoneEvaluator.hpp"
+#include "weather/WeatherAudioController.hpp"
 #include <memory>
 
 namespace services
@@ -36,5 +38,8 @@ namespace services
         std::unique_ptr<RainController> rainController;
         std::unique_ptr<SnowController> snowController;
         weather::LightningGenerator lightningGenerator;
+        weather::WeatherZoneEvaluator zoneEvaluator;
+        weather::WeatherAudioController audioController;
+        glm::vec3 cachedCameraPos{0.0f};
     };
 }

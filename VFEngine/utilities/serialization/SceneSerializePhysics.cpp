@@ -227,6 +227,52 @@ namespace serialization
         }
     }
 
+    json SceneSerialization::serializeWeatherZone(const components::WeatherZoneComponent& zone)
+    {
+        json j;
+        j["shape"] = static_cast<int>(zone.shape);
+        j["radius"] = zone.radius;
+        j["halfExtents"] = json::array({zone.halfExtents.x, zone.halfExtents.y, zone.halfExtents.z});
+        j["priority"] = zone.priority;
+        j["falloffDistance"] = zone.falloffDistance;
+        j["active"] = zone.active;
+        j["showDebugVolume"] = zone.showDebugVolume;
+
+        nlohmann::json weatherJson;
+        weather::to_json(weatherJson, zone.overrideState);
+        j["overrideState"] = weatherJson;
+
+        return j;
+    }
+
+    void SceneSerialization::deserializeWeatherZone(const json& j, components::WeatherZoneComponent& zone)
+    {
+        if (auto it = j.find("shape"); it != j.end() && it->is_number())
+            zone.shape = static_cast<components::WeatherZoneShape>(std::clamp(it->get<int>(), 0, 1));
+        if (auto it = j.find("radius"); it != j.end() && it->is_number())
+            zone.radius = it->get<float>();
+        if (j.contains("halfExtents") && j["halfExtents"].is_array() && j["halfExtents"].size() == 3)
+        {
+            zone.halfExtents.x = j["halfExtents"][0].get<float>();
+            zone.halfExtents.y = j["halfExtents"][1].get<float>();
+            zone.halfExtents.z = j["halfExtents"][2].get<float>();
+        }
+        if (auto it = j.find("priority"); it != j.end() && it->is_number())
+            zone.priority = it->get<int>();
+        if (auto it = j.find("falloffDistance"); it != j.end() && it->is_number())
+            zone.falloffDistance = it->get<float>();
+        if (auto it = j.find("active"); it != j.end() && it->is_boolean())
+            zone.active = it->get<bool>();
+        if (auto it = j.find("showDebugVolume"); it != j.end() && it->is_boolean())
+            zone.showDebugVolume = it->get<bool>();
+        if (j.contains("overrideState") && j["overrideState"].is_object())
+            weather::from_json(j["overrideState"], zone.overrideState);
+
+        // Reset runtime state
+        zone.isCameraInside = false;
+        zone.currentBlendWeight = 0.0f;
+    }
+
     json SceneSerialization::serializeScript(const components::ScriptComponent& script)
     {
         json j;

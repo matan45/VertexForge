@@ -129,6 +129,9 @@ namespace serialization
         static json serializeFogVolume(const components::FogVolumeComponent& fog);
         static void deserializeFogVolume(const json& j, components::FogVolumeComponent& fog);
 
+        static json serializeWeatherZone(const components::WeatherZoneComponent& zone);
+        static void deserializeWeatherZone(const json& j, components::WeatherZoneComponent& zone);
+
         static json serializeScript(const components::ScriptComponent& script);
         static void deserializeScript(const json& j, components::ScriptComponent& script);
 

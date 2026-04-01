@@ -688,7 +688,8 @@ project "Weather"
       "dependencies/glm",
       "dependencies/json/single_include",
       "dependencies/entt/single_include",
-      "VFEngine/utilities"
+      "VFEngine/utilities",
+      "VFEngine/services"
    }
 
    defines { "_CRT_SECURE_NO_WARNINGS" }

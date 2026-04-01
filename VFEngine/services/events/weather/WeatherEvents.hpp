@@ -117,4 +117,16 @@ namespace events::weather
         float intensity = 1.0f;
         std::string_view getName() const override { return "LightningStrike"; }
     };
+
+    struct WeatherZoneEnteredNotification : INotification
+    {
+        uint32_t entityId = 0;
+        std::string_view getName() const override { return "WeatherZoneEntered"; }
+    };
+
+    struct WeatherZoneExitedNotification : INotification
+    {
+        uint32_t entityId = 0;
+        std::string_view getName() const override { return "WeatherZoneExited"; }
+    };
 }

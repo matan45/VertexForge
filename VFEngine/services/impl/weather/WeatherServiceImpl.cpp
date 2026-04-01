@@ -26,6 +26,7 @@ namespace services
             rainController->init(vfxProvider);
             snowController->init(vfxProvider);
         }
+        audioController.init();
     }
 
     WeatherServiceImpl::~WeatherServiceImpl()
@@ -34,6 +35,7 @@ namespace services
             rainController->cleanup();
         if (snowController)
             snowController->cleanup();
+        audioController.cleanup();
     }
 
     void WeatherServiceImpl::registerEventHandlers()
@@ -141,9 +143,45 @@ namespace services
 
         stateMachine.update(deltaTime);
 
-        const auto& currentWeather = stateMachine.getCurrentState();
-        applyWeatherToPipelines(currentWeather);
-        updatePrecipitation(deltaTime, currentWeather);
+        // Query camera position (used by zones and lightning)
+        try
+        {
+            auto camOpt = dispatcher.query(events::scene::GetPrimaryCameraQuery{});
+            if (camOpt.has_value())
+            {
+                events::scene::GetWorldTransformQuery tq;
+                tq.entity = camOpt.value();
+                auto xformOpt = dispatcher.query(tq);
+                if (xformOpt.has_value())
+                    cachedCameraPos = xformOpt->position;
+            }
+        }
+        catch (...) {}
+
+        // Evaluate weather zones to get effective weather at camera position
+        const auto& globalWeather = stateMachine.getCurrentState();
+        weather::WeatherState effectiveWeather = zoneEvaluator.evaluate(cachedCameraPos, globalWeather);
+
+        // Publish zone enter/exit notifications
+        for (const auto& transition : zoneEvaluator.getTransitions())
+        {
+            if (transition.entered)
+            {
+                events::weather::WeatherZoneEnteredNotification n;
+                n.entityId = transition.entityId;
+                dispatcher.publish(n);
+            }
+            else
+            {
+                events::weather::WeatherZoneExitedNotification n;
+                n.entityId = transition.entityId;
+                dispatcher.publish(n);
+            }
+        }
+
+        applyWeatherToPipelines(effectiveWeather);
+        updatePrecipitation(deltaTime, effectiveWeather);
+        audioController.update(deltaTime, effectiveWeather);
 
         // Publish notification when transition completes
         if (wasTransitioningBefore && !stateMachine.isTransitioning())
@@ -288,22 +326,7 @@ namespace services
         catch (...) {}
 
         // --- Lightning & Thunder ---
-        glm::vec3 cameraPos{0.0f};
-        try
-        {
-            auto camOpt = dispatcher.query(events::scene::GetPrimaryCameraQuery{});
-            if (camOpt.has_value())
-            {
-                events::scene::GetWorldTransformQuery tq;
-                tq.entity = camOpt.value();
-                auto xformOpt = dispatcher.query(tq);
-                if (xformOpt.has_value())
-                    cameraPos = xformOpt->position;
-            }
-        }
-        catch (...) {}
-
-        lightningGenerator.update(deltaTime, state, cameraPos);
+        lightningGenerator.update(deltaTime, state, cachedCameraPos);
         auto lightning = lightningGenerator.getOutput();
 
         // Dispatch thunder audio at strike position

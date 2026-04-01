@@ -15,6 +15,7 @@
 #include "DecalComponents.hpp"
 #include "VolumetricComponents.hpp"
 #include "PluginComponents.hpp"
+#include "WeatherComponents.hpp"
 
 namespace components
 {
@@ -35,5 +36,6 @@ namespace components
                                                GrassComponent, MeshBrushInstanceComponent,
                                                BehaviorTreeComponent, DecalComponent, ReverbZoneComponent,
                                                FogVolumeComponent,
-                                               VolumetricNavVolumeComponent, VolumetricAgentComponent>;
+                                               VolumetricNavVolumeComponent, VolumetricAgentComponent,
+                                               WeatherZoneComponent>;
 }
