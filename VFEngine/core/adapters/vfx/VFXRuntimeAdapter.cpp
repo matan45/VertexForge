@@ -115,6 +115,7 @@ namespace core
             ctrlOverrides.collisionEnabled = overrides.collisionEnabled;
             ctrlOverrides.collisionLifetimeLoss = overrides.collisionLifetimeLoss;
             ctrlOverrides.shapeDimensions = overrides.shapeDimensions;
+            ctrlOverrides.coneSpread = overrides.coneSpread;
             renderer->applyInstanceOverrides(id, ctrlOverrides);
         }
     }

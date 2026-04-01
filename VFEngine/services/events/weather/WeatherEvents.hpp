@@ -114,6 +114,17 @@ namespace events::weather
         std::string_view getName() const override { return "GetSnowAccumulation"; }
     };
 
+    struct SetWetnessCommand : ICommand<>
+    {
+        float wetness = 0.0f;
+        std::string_view getName() const override { return "SetWetness"; }
+    };
+
+    struct GetWetnessQuery : IQuery<float>
+    {
+        std::string_view getName() const override { return "GetWetness"; }
+    };
+
     // --- Notifications ---
 
     struct WeatherStateChangedNotification : INotification

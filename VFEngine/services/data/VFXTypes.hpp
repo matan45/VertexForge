@@ -46,6 +46,7 @@ namespace services
         std::optional<bool> collisionEnabled;
         std::optional<float> collisionLifetimeLoss;
         std::optional<glm::vec3> shapeDimensions; // box half-extents
+        std::optional<float> coneSpread;          // emit direction cone angle in radians
     };
 
     struct VFXCameraParams

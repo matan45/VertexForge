@@ -206,6 +206,7 @@ void main() {
 #include "../common/lighting_functions.glsl"
 #include "../common/gi_sampling.glsl"
 #include "../common/lod_crossfade.glsl"
+#include "../common/wetness.glsl"
 #include "../common/snow_accumulation.glsl"
 
 layout(location = 0) in vec3 fragWorldPos;
@@ -481,7 +482,8 @@ void main() {
         N = normalize(TBN * tangentNormal);
     }
 
-    // Snow accumulation blend
+    // Weather surface effects (wetness first, then snow on top)
+    applyWetness(camera.wetness, albedo, roughness, metallic, N);
     applySnowAccumulation(camera.snowAccumulation, fragNormal, albedo, roughness, metallic, N);
 
     vec3 R = reflect(-V, N);

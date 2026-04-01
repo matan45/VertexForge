@@ -473,6 +473,9 @@ namespace controllers
             config.shape.type = ::vfx::ShapeType::Box;
             config.shape.dimensions = glm::vec4(overrides.shapeDimensions.value(), 0.0f);
         }
+
+        if (overrides.coneSpread.has_value())
+            config.coneSpread = overrides.coneSpread.value();
     }
 
     void VFXSceneRenderer::setInstanceTransform(VFXInstanceId id, const glm::mat4& worldTransform)

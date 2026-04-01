@@ -212,6 +212,7 @@ namespace render::vfx
         float startSpeed = 1.0f;
         glm::vec4 startColor{1.0f, 1.0f, 1.0f, 1.0f};
         glm::vec3 emitDirection{0.0f, 1.0f, 0.0f};
+        float coneSpread = 0.5f;  // radians, cone half-angle for emission direction
         std::string texturePath;
         bool looping = true;
 

@@ -184,6 +184,7 @@ void main() {
 #include "../common/shadow_sampling_types.glsl"
 #include "../common/cluster_culling.glsl"
 #include "../common/gi_sampling.glsl"
+#include "../common/wetness.glsl"
 #include "../common/snow_accumulation.glsl"
 
 layout(location = 0) in vec3 fragWorldPos;
@@ -439,7 +440,8 @@ void main() {
     }
 #endif
 
-    // Snow accumulation blend
+    // Weather surface effects (wetness first, then snow on top)
+    applyWetness(camera.wetness, albedo, roughness, metallic, N);
     applySnowAccumulation(camera.snowAccumulation, fragNormal, albedo, roughness, metallic, N);
 
     vec3 R = reflect(-V, N);

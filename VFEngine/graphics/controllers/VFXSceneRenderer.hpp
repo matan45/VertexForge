@@ -59,6 +59,7 @@ namespace controllers
         std::optional<bool> collisionEnabled;
         std::optional<float> collisionLifetimeLoss;
         std::optional<glm::vec3> shapeDimensions;
+        std::optional<float> coneSpread;
     };
 
     struct VFXRuntimeParams

@@ -374,6 +374,13 @@ layout(push_constant) uniform PushConstants {
 void main() {
     vec4 texColor = texture(particleTexture, fragTexCoord);
 
+    // Procedural circle mask: create soft circle from UV when texture is solid white
+    // This makes untextured particles round instead of square
+    vec2 centeredUV = fragTexCoord * 2.0 - 1.0;
+    float dist = dot(centeredUV, centeredUV);
+    float circleMask = 1.0 - smoothstep(0.7, 1.0, dist);
+    texColor.a *= circleMask;
+
     vec4 finalColor = texColor * fragColor;
 
     // Soft particles: fade near scene geometry

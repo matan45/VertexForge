@@ -89,7 +89,7 @@ namespace services
         // Dynamic overrides based on weather state
         overrides.spawnRate = MAX_SPAWN_RATE * state.precipIntensity;
         overrides.startSize = BASE_DROPLET_SIZE * glm::mix(0.8f, 1.5f, state.precipIntensity);
-        overrides.stretchMultiplier = glm::mix(2.0f, 5.0f, state.precipIntensity);
+        overrides.stretchMultiplier = glm::mix(4.0f, 8.0f, state.precipIntensity);
 
         // Wind deflection
         float windRad = state.windDirectionDeg * static_cast<float>(M_PI) / 180.0f;
@@ -106,8 +106,9 @@ namespace services
 
         VFXEmitterOverrides initial;
 
-        // Rain falls downward
+        // Rain falls uniformly downward (no cone spread)
         initial.emitDirection = glm::vec3(0.0f, -1.0f, 0.0f);
+        initial.coneSpread = 0.0f;
         initial.startSpeed = BASE_FALL_SPEED;
         initial.lifetime = 2.0f;
         initial.startColor = glm::vec4(0.7f, 0.75f, 0.8f, 0.3f);

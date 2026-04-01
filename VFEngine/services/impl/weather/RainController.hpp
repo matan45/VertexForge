@@ -27,7 +27,7 @@ namespace services
         bool initialConfigApplied = false;
 
         static constexpr float MAX_SPAWN_RATE = 50000.0f;
-        static constexpr float BASE_DROPLET_SIZE = 0.15f;
+        static constexpr float BASE_DROPLET_SIZE = 0.06f;
         static constexpr float BASE_FALL_SPEED = 10.0f;
         static constexpr float ACTIVATION_THRESHOLD = 0.01f;
     };

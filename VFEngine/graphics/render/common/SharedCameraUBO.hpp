@@ -33,7 +33,7 @@ namespace render::common
 
         void update(const glm::mat4& view, const glm::mat4& projection,
                     const glm::vec3& cameraPos, float time,
-                    float snowAccumulation = 0.0f);
+                    float snowAccumulation = 0.0f, float wetness = 0.0f);
 
         vk::Buffer getBuffer() const { return buffer; }
     };

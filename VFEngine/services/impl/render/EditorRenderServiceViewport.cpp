@@ -356,7 +356,20 @@ namespace services
         dispatcher.registerQueryHandler<events::weather::GetSnowAccumulationQuery>(
             [this](const events::weather::GetSnowAccumulationQuery&)
             {
-                return 0.0f; // Read from weather service instead
+                return 0.0f;
+            });
+
+        dispatcher.registerCommandHandler<events::weather::SetWetnessCommand>(
+            [this](const events::weather::SetWetnessCommand& cmd)
+            {
+                if (offScreenProvider)
+                    offScreenProvider->setWetness(cmd.wetness);
+            });
+
+        dispatcher.registerQueryHandler<events::weather::GetWetnessQuery>(
+            [this](const events::weather::GetWetnessQuery&)
+            {
+                return 0.0f;
             });
     }
 }

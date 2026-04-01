@@ -13,7 +13,8 @@ namespace render::common
         alignas(16) glm::vec3 cameraPos;
         float time;
         float snowAccumulation;
-        float _pad[3];
+        float wetness;
+        float _pad[2];
         alignas(16) glm::vec4 frustumPlanes[6];
     };
 

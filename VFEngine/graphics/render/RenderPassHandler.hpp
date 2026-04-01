@@ -165,6 +165,7 @@ namespace render
 
         std::unique_ptr<common::SharedCameraUBO> sharedCameraUBO;
         float currentSnowAccumulation = 0.0f;
+        float currentWetness = 0.0f;
 
         bool meshPipelineInitialized = false;
         std::vector<mesh::MeshRenderData> currentMeshDrawList;
@@ -330,6 +331,7 @@ namespace render
         vk::Buffer getSharedCameraBuffer() const;
 
         void setSnowAccumulation(float value) { currentSnowAccumulation = value; }
+        void setWetness(float value) { currentWetness = value; }
 
         void setVisibleLightsFromBVH(const std::vector<uint32_t>& visibleLights);
         void clearVisibleLights();

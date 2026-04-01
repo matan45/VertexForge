@@ -467,6 +467,12 @@ namespace core {
         }
     }
 
+    void OffScreenAdapter::setWetness(float value) {
+        if (offScreen) {
+            offScreen->setWetness(value);
+        }
+    }
+
     void OffScreenAdapter::setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider) {
         if (offScreen) {
             offScreen->setVFXRuntimeProvider(provider);

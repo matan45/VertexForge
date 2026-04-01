@@ -20,6 +20,7 @@ namespace windows
         {
             currentState = dispatcher.query(events::weather::GetWeatherStateQuery{});
             snowAccumulation = dispatcher.query(events::weather::GetSnowAccumulationQuery{});
+            wetness = dispatcher.query(events::weather::GetWetnessQuery{});
             transitionProgress = dispatcher.query(events::weather::GetWeatherTransitionProgressQuery{});
             weatherEnabled = dispatcher.query(events::weather::IsWeatherEnabledQuery{});
             scheduleEnabled = dispatcher.query(events::weather::IsWeatherScheduleEnabledQuery{});
@@ -167,10 +168,12 @@ namespace windows
             ImGui::Text("Tint: (%.2f, %.2f, %.2f)",
                 currentState.atmosphereTint.x, currentState.atmosphereTint.y, currentState.atmosphereTint.z);
 
-            // Snow accumulation
+            // Surface effects
             ImGui::Spacing();
             ImGui::Text("Snow Accumulation:");
             ImGui::ProgressBar(snowAccumulation, ImVec2(-1, 0));
+            ImGui::Text("Wetness:");
+            ImGui::ProgressBar(wetness, ImVec2(-1, 0));
 
             ImGui::Unindent();
         }

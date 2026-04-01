@@ -13,6 +13,7 @@ namespace windows
 
         weather::WeatherState currentState;
         float snowAccumulation = 0.0f;
+        float wetness = 0.0f;
         float transitionProgress = 0.0f;
         bool weatherEnabled = false;
         bool scheduleEnabled = false;

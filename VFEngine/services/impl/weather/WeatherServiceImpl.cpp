@@ -328,12 +328,22 @@ namespace services
         else
             snowAccumulation = std::max(0.0f, snowAccumulation - deltaTime * 0.02f);
 
-        // Push snow accumulation to render side
+        // Track wetness over time
+        if (isRain && state.precipIntensity > 0.01f)
+            wetness = std::min(1.0f, wetness + deltaTime * state.precipIntensity * 0.05f);
+        else
+            wetness = std::max(0.0f, wetness - deltaTime * 0.02f);
+
+        // Push snow accumulation and wetness to render side
         try
         {
             events::weather::SetSnowAccumulationCommand snowCmd;
             snowCmd.accumulation = snowAccumulation;
             dispatcher.execute(snowCmd);
+
+            events::weather::SetWetnessCommand wetCmd;
+            wetCmd.wetness = wetness;
+            dispatcher.execute(wetCmd);
         }
         catch (...) {}
 

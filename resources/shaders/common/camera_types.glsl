@@ -8,7 +8,8 @@ struct CameraData {
     vec3 cameraPos;
     float time;
     float snowAccumulation;
-    float _pad1, _pad2, _pad3;
+    float wetness;
+    float _pad1, _pad2;
     vec4 frustumPlanes[6];
 };
 

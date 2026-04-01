@@ -34,6 +34,7 @@ namespace services
         bool weatherEnabled = false;
         bool scheduleEnabled = false;
         float snowAccumulation = 0.0f;
+        float wetness = 0.0f;
 
         // Base atmosphere values captured before weather modifies them
         glm::vec3 baseSunIrradiance{0.0f};

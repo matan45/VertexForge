@@ -108,7 +108,7 @@ namespace services
         initial.emitDirection = glm::vec3(0.0f, -1.0f, 0.0f);
         initial.startSpeed = BASE_FALL_SPEED;
         initial.lifetime = 5.0f;
-        initial.startColor = glm::vec4(0.95f, 0.95f, 1.0f, 0.7f);
+        initial.startColor = glm::vec4(1.0f, 1.0f, 1.0f, 0.9f);
 
         // Billboard mode - snowflakes are round, not stretched
         initial.renderMode = 0;  // Billboard

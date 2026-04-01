@@ -12,6 +12,7 @@
 #include "../types/AudioTypes.hpp"
 #include "../types/RenderSettings.hpp"
 #include "../weather/WeatherTypes.hpp"
+#include "../weather/WeatherAudioController.hpp"
 
 namespace scene
 {
@@ -199,6 +200,9 @@ namespace serialization
 
         static json serializeWeatherState(const weather::WeatherState& state);
         static void deserializeWeatherState(const json& j, weather::WeatherState& state);
+
+        static json serializeWeatherAudioConfig(const weather::WeatherAudioConfig& config);
+        static void deserializeWeatherAudioConfig(const json& j, weather::WeatherAudioConfig& config);
 
         static std::string toneMappingModeToString(postprocess::ToneMappingMode mode);
         static postprocess::ToneMappingMode stringToToneMappingMode(const std::string& str);
