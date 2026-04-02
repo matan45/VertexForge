@@ -24,6 +24,9 @@ namespace windows
 
         int selectedMipLevel = 0;
 
+        // Channel view: 0=RGBA, 1=R, 2=G, 3=B, 4=A
+        int channelView = 0;
+
     public:
         explicit ImagePreviewWindow(const std::string& filePath, bool hdr = false);
         ~ImagePreviewWindow() override;

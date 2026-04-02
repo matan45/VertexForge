@@ -198,7 +198,17 @@ namespace windows
 
         void* displayDescriptor = imageHandle.getMipDescriptor(static_cast<uint32_t>(selectedMipLevel));
 
-        ImGui::Image(displayDescriptor, imageSize);
+        ImVec4 tint(1.0f, 1.0f, 1.0f, 1.0f);
+        switch (channelView)
+        {
+            case 1: tint = ImVec4(1.0f, 0.0f, 0.0f, 1.0f); break; // R
+            case 2: tint = ImVec4(0.0f, 1.0f, 0.0f, 1.0f); break; // G
+            case 3: tint = ImVec4(0.0f, 0.0f, 1.0f, 1.0f); break; // B
+            case 4: tint = ImVec4(0.0f, 0.0f, 0.0f, 1.0f); break; // A (shown via alpha)
+            default: break;
+        }
+
+        ImGui::Image(displayDescriptor, imageSize, ImVec2(0, 0), ImVec2(1, 1), tint);
     }
 
     void ImagePreviewWindow::drawInfoPanel()
@@ -273,6 +283,46 @@ namespace windows
             ImGui::Separator();
             ImGui::Spacing();
         }
+
+        if (ImGui::CollapsingHeader("Channels", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            float buttonWidth = ImGui::GetContentRegionAvail().x;
+            float btnW = (buttonWidth - ImGui::GetStyle().ItemSpacing.x * 4) / 5.0f;
+
+            auto channelButton = [&](const char* label, int channel, const ImVec4& color)
+            {
+                if (channelView == channel)
+                {
+                    ImGui::PushStyleColor(ImGuiCol_Button, color);
+                    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, color);
+                }
+                else
+                {
+                    ImVec4 dim(color.x * 0.4f, color.y * 0.4f, color.z * 0.4f, 1.0f);
+                    ImGui::PushStyleColor(ImGuiCol_Button, dim);
+                    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(color.x * 0.6f, color.y * 0.6f, color.z * 0.6f, 1.0f));
+                }
+
+                if (ImGui::Button(label, ImVec2(btnW, 0)))
+                {
+                    channelView = (channelView == channel) ? 0 : channel;
+                }
+                ImGui::PopStyleColor(2);
+            };
+
+            channelButton("RGB", 0, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
+            ImGui::SameLine();
+            channelButton("R", 1, ImVec4(0.8f, 0.2f, 0.2f, 1.0f));
+            ImGui::SameLine();
+            channelButton("G", 2, ImVec4(0.2f, 0.8f, 0.2f, 1.0f));
+            ImGui::SameLine();
+            channelButton("B", 3, ImVec4(0.2f, 0.2f, 0.8f, 1.0f));
+            ImGui::SameLine();
+            channelButton("A", 4, ImVec4(0.6f, 0.6f, 0.6f, 1.0f));
+        }
+
+        ImGui::Separator();
+        ImGui::Spacing();
 
         if (ImGui::CollapsingHeader("View", ImGuiTreeNodeFlags_DefaultOpen))
         {

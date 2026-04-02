@@ -50,24 +50,69 @@ namespace windows
         return {uv0, uv1};
     }
 
-    bool AssetGridRenderer::matchesSearchQuery(const Asset& asset, const std::string& searchQuery)
+    bool AssetGridRenderer::matchesFilter(const Asset& asset, const AssetFilter& filter)
     {
-        if (searchQuery.empty())
+        if (filter.typeFilter != AssetType::Other && asset.type != filter.typeFilter)
         {
-            return true;
+            if (!fs::is_directory(asset.path))
+                return false;
         }
 
-        std::string assetNameLower = StringUtil::toLower(asset.name);
-        std::string searchQueryLower = StringUtil::toLower(searchQuery);
+        if (!filter.searchQuery.empty())
+        {
+            std::string assetNameLower = StringUtil::toLower(asset.name);
+            std::string searchQueryLower = StringUtil::toLower(filter.searchQuery);
+            if (assetNameLower.find(searchQueryLower) == std::string::npos)
+                return false;
+        }
 
-        return assetNameLower.find(searchQueryLower) != std::string::npos;
+        return true;
     }
 
     AssetClickResult AssetGridRenderer::draw(
         const std::vector<Asset>& assets,
-        const std::string& searchQuery)
+        const AssetFilter& filter)
     {
         AssetClickResult result;
+
+        // Build filtered + sorted view
+        std::vector<const Asset*> filtered;
+        filtered.reserve(assets.size());
+        for (const auto& asset : assets)
+        {
+            if (matchesFilter(asset, filter))
+                filtered.push_back(&asset);
+        }
+
+        std::sort(filtered.begin(), filtered.end(), [&](const Asset* a, const Asset* b) {
+            // Folders always first
+            bool aDir = fs::is_directory(a->path);
+            bool bDir = fs::is_directory(b->path);
+            if (aDir != bDir) return aDir > bDir;
+
+            int cmp = 0;
+            switch (filter.sortBy)
+            {
+            case SortField::Date:
+                cmp = (a->lastModified < b->lastModified) ? -1 : (a->lastModified > b->lastModified) ? 1 : 0;
+                break;
+            case SortField::Size:
+                cmp = (a->fileSize < b->fileSize) ? -1 : (a->fileSize > b->fileSize) ? 1 : 0;
+                break;
+            case SortField::Type:
+                cmp = a->extension.compare(b->extension);
+                break;
+            case SortField::Name:
+            default:
+            {
+                std::string aLower = StringUtil::toLower(a->name);
+                std::string bLower = StringUtil::toLower(b->name);
+                cmp = aLower.compare(bLower);
+                break;
+            }
+            }
+            return filter.sortAscending ? (cmp < 0) : (cmp > 0);
+        });
 
         // Collect all selected paths for multi-selection drag
         std::vector<std::string> selectedPaths;
@@ -86,24 +131,20 @@ namespace windows
 
         ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
 
-        for (const auto& asset : assets)
+        for (const auto* asset : filtered)
         {
-            if (matchesSearchQuery(asset, searchQuery))
+            drawAssetItem(*asset, asset->isSelected, selectedPaths, result);
+
+            if (ImGui::IsItemClicked(ImGuiMouseButton_Left))
             {
-                // Use Asset.isSelected for multi-selection support
-                drawAssetItem(asset, asset.isSelected, selectedPaths, result);
+                result.wasClicked = true;
+                result.clickedPath = asset->path;
+                result.clickedType = asset->type;
 
-                if (ImGui::IsItemClicked(ImGuiMouseButton_Left))
+                if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)
+                    && (asset->type != AssetType::Other || !fs::is_directory(asset->path)))
                 {
-                    result.wasClicked = true;
-                    result.clickedPath = asset.path;
-                    result.clickedType = asset.type;
-
-                    if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)
-                        && (asset.type != AssetType::Other || !fs::is_directory(asset.path)))
-                    {
-                        result.wasDoubleClicked = true;
-                    }
+                    result.wasDoubleClicked = true;
                 }
             }
         }

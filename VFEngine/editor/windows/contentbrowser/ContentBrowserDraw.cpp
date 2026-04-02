@@ -53,7 +53,7 @@ namespace windows
                 asset.isSelected = selectedPaths.find(asset.path) != selectedPaths.end();
             }
 
-            AssetClickResult clickResult = gridRenderer->draw(assets, filter.searchQuery);
+            AssetClickResult clickResult = gridRenderer->draw(assets, filter);
             handleAssetClick(clickResult);
 
             ImGui::Columns(1);

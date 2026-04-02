@@ -37,13 +37,13 @@ namespace windows
 
         AssetClickResult draw(
             const std::vector<Asset>& assets,
-            const std::string& searchQuery
+            const AssetFilter& filter
         );
 
     private:
         void loadIconAtlas();
         static std::pair<ImVec2, ImVec2> getAtlasUV(AtlasIcon icon);
         void drawAssetItem(const Asset& asset, bool isSelected, const std::vector<std::string>& selectedPaths, AssetClickResult& result);
-        static bool matchesSearchQuery(const Asset& asset, const std::string& searchQuery);
+        static bool matchesFilter(const Asset& asset, const AssetFilter& filter);
     };
 }

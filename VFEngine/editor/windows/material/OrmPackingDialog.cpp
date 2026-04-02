@@ -215,6 +215,29 @@ namespace editor::materialeditor
         input.metallicPath = metallicPath;
         input.outputPath = outputPath;
 
+        // Decompress compressed inputs (BC7) before channel packing
+        input.decompressCallback = [](resource::TextureData& textureData) -> bool
+        {
+            if (textureData.compressionFormat != resource::TextureCompressionFormat::BC7)
+            {
+                return false;
+            }
+
+            for (auto& mip : textureData.mipData)
+            {
+                auto decompressed = types::TextureCompressor::decompressBC7(
+                    mip.data.data(), mip.width, mip.height);
+                if (decompressed.empty())
+                {
+                    return false;
+                }
+                mip.dataSize = static_cast<uint32_t>(decompressed.size());
+                mip.data = std::move(decompressed);
+            }
+            textureData.compressionFormat = resource::TextureCompressionFormat::Uncompressed;
+            return true;
+        };
+
         // Set up compression callback if compression is enabled.
         // Only quality is captured — mode is only used here to gate whether compression
         // happens at all. When enabled, ORM textures are always BC7 (LDR data).
