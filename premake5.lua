@@ -186,6 +186,7 @@ project "Import"
 	  "dependencies/v-hacd",             -- V-HACD for convex decomposition
 	  "dependencies/freetype/include",   -- FreeType headers
 	  "dependencies/ispc_texcomp",       -- ISPCTextureCompressor (BC7/BC6H)
+	  "dependencies/bcdec",              -- BC7/BC6H block decompression
 	  "dependencies/libogg/include",       -- Ogg container format (for Vorbis encoding)
 	  "dependencies/libogg/build/include", -- Ogg generated config headers
 	  "dependencies/libvorbis/include"   -- Vorbis audio compression (encoding at import)

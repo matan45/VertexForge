@@ -26,15 +26,7 @@ namespace pipeline::stages
         {
             if (context.fileType == "PNG" || context.fileType == "JPEG" || context.fileType == "BMP" || context.fileType == "TGA")
             {
-                // Check if SVT tiling is requested for large textures
-                if (context.file.config.svtEnabled)
-                {
-                    processTextureSVT(context);
-                }
-                else
-                {
-                    processTexture(context);
-                }
+                processTexture(context);
             }
             else if (context.fileType == "HDR" || context.fileType == "EXR")
             {
@@ -135,30 +127,4 @@ namespace pipeline::stages
         }
     }
 
-    void FileProcessingStage::processTextureSVT(ImportContext& context)
-    {
-        types::SVTTextureProcessor::Config svtConfig;
-        svtConfig.minSizeForSVT = context.file.config.svtMinSize;
-        svtConfig.srgb = true;
-
-        std::string outputPath = std::string(context.location) + "/" +
-                                 std::string(context.fileName) + "." + FileExtension::svt;
-
-        types::SVTProgressCallback svtProgress = nullptr;
-        if (context.progressCallback)
-        {
-            svtProgress = [&context](float progress)
-            {
-                context.progressCallback(context.fileName, context.fileIndex + 1,
-                                         context.totalFiles, progress);
-            };
-        }
-
-        if (!types::SVTTextureProcessor::convertToSVT(context.file.path, outputPath,
-                                                       svtConfig, svtProgress))
-        {
-            // If SVT conversion fails (e.g., texture too small), fall back to standard .vfImage
-            processTexture(context);
-        }
-    }
 }

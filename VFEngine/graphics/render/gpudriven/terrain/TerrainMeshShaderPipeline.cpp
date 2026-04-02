@@ -175,7 +175,6 @@ namespace render::gpudriven
 
         createEmptyDescriptorSet();
         createWeightMapDescriptor();
-        createSVTDescriptorLayout();
         createTerrainLayerBuffer();
         createTileDataBuffer();
         createStatsBuffer();
@@ -251,8 +250,6 @@ namespace render::gpudriven
         if (emptyLayout) { vkDevice.destroyDescriptorSetLayout(emptyLayout); emptyLayout = nullptr; }
         if (terrainDataPool) { vkDevice.destroyDescriptorPool(terrainDataPool); terrainDataPool = nullptr; }
         if (terrainDataLayout) { vkDevice.destroyDescriptorSetLayout(terrainDataLayout); terrainDataLayout = nullptr; }
-        if (svtPool) { vkDevice.destroyDescriptorPool(svtPool); svtPool = nullptr; }
-        if (svtLayout) { vkDevice.destroyDescriptorSetLayout(svtLayout); svtLayout = nullptr; }
     }
 
     void TerrainMeshShaderPipeline::cleanup()
@@ -309,112 +306,6 @@ namespace render::gpudriven
         std::memset(statsBufferAllocation.mappedPtr, 0, sizeof(TerrainCullingStats));
     }
 
-    void TerrainMeshShaderPipeline::createSVTDescriptorLayout()
-    {
-        vk::Device vkDevice = device.getLogicalDevice();
-
-        // Set 12 layout for SVT (8 bindings):
-        //   binding 0: page table SSBO
-        //   binding 2: SVT params UBO
-        //   binding 3-7: albedo, normal, ORM, emission, height cache sampler2DArray
-        std::array<vk::DescriptorSetLayoutBinding, 7> bindings{};
-
-        bindings[0].binding = 0;
-        bindings[0].descriptorType = vk::DescriptorType::eStorageBuffer;
-        bindings[0].descriptorCount = 1;
-        bindings[0].stageFlags = vk::ShaderStageFlagBits::eFragment;
-
-        bindings[1].binding = 2;
-        bindings[1].descriptorType = vk::DescriptorType::eUniformBuffer;
-        bindings[1].descriptorCount = 1;
-        bindings[1].stageFlags = vk::ShaderStageFlagBits::eFragment;
-
-        for (uint32_t i = 0; i < 5; ++i)
-        {
-            bindings[2 + i].binding = 3 + i;
-            bindings[2 + i].descriptorType = vk::DescriptorType::eCombinedImageSampler;
-            bindings[2 + i].descriptorCount = 1;
-            bindings[2 + i].stageFlags = vk::ShaderStageFlagBits::eFragment;
-        }
-
-        svtLayout = core::PipelineUtilities::createUpdateAfterBindLayout(vkDevice, bindings.data(), static_cast<uint32_t>(bindings.size()));
-    }
-
-    void TerrainMeshShaderPipeline::initSVTDescriptorSet(
-        vk::Buffer pageTableBuffer, vk::Buffer svtParamsBuffer,
-        const SVTCacheViews caches[5])
-    {
-        vk::Device vkDevice = device.getLogicalDevice();
-
-        if (!svtPool)
-        {
-            std::array<vk::DescriptorPoolSize, 3> poolSizes = {{
-                {vk::DescriptorType::eStorageBuffer, 1},
-                {vk::DescriptorType::eUniformBuffer, 1},
-                {vk::DescriptorType::eCombinedImageSampler, 5}
-            }};
-
-            svtPool = core::PipelineUtilities::createUpdateAfterBindPool(vkDevice, 1, poolSizes.data(), static_cast<uint32_t>(poolSizes.size()));
-
-            vk::DescriptorSetAllocateInfo allocInfo{};
-            allocInfo.descriptorPool = svtPool;
-            allocInfo.descriptorSetCount = 1;
-            allocInfo.pSetLayouts = &svtLayout;
-            svtDescriptorSet = vkDevice.allocateDescriptorSets(allocInfo)[0];
-        }
-
-        // Write descriptors
-        vk::DescriptorBufferInfo pageTableInfo{pageTableBuffer, 0, VK_WHOLE_SIZE};
-        vk::DescriptorBufferInfo paramsInfo{svtParamsBuffer, 0, VK_WHOLE_SIZE};
-        std::array<vk::DescriptorImageInfo, 5> imageInfos{};
-        for (int i = 0; i < 5; ++i)
-        {
-            imageInfos[i].sampler = caches[i].sampler;
-            imageInfos[i].imageView = caches[i].view;
-            imageInfos[i].imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-        }
-
-        std::array<vk::WriteDescriptorSet, 7> writes{};
-
-        writes[0].dstSet = svtDescriptorSet;
-        writes[0].dstBinding = 0;
-        writes[0].descriptorCount = 1;
-        writes[0].descriptorType = vk::DescriptorType::eStorageBuffer;
-        writes[0].pBufferInfo = &pageTableInfo;
-
-        writes[1].dstSet = svtDescriptorSet;
-        writes[1].dstBinding = 2;
-        writes[1].descriptorCount = 1;
-        writes[1].descriptorType = vk::DescriptorType::eUniformBuffer;
-        writes[1].pBufferInfo = &paramsInfo;
-
-        for (int i = 0; i < 5; ++i)
-        {
-            writes[2 + i].dstSet = svtDescriptorSet;
-            writes[2 + i].dstBinding = 3 + i;
-            writes[2 + i].descriptorCount = 1;
-            writes[2 + i].descriptorType = vk::DescriptorType::eCombinedImageSampler;
-            writes[2 + i].pImageInfo = &imageInfos[i];
-        }
-
-        vkDevice.updateDescriptorSets(writes, {});
-        svtEnabled = true;
-        vfLogInfo("TerrainMeshShaderPipeline: SVT descriptor set initialized (5 channels)");
-    }
-
-    void TerrainMeshShaderPipeline::updateSVTParamsBuffer(vk::Buffer svtParamsBuffer)
-    {
-        if (!svtDescriptorSet) return;
-        vk::DescriptorBufferInfo paramsInfo{svtParamsBuffer, 0, VK_WHOLE_SIZE};
-        vk::WriteDescriptorSet write{};
-        write.dstSet = svtDescriptorSet;
-        write.dstBinding = 2;
-        write.descriptorCount = 1;
-        write.descriptorType = vk::DescriptorType::eUniformBuffer;
-        write.pBufferInfo = &paramsInfo;
-        device.getLogicalDevice().updateDescriptorSets(write, {});
-    }
-
     void TerrainMeshShaderPipeline::createTerrainDataDescriptor()
     {
         vk::Device vkDevice = device.getLogicalDevice();
@@ -451,10 +342,6 @@ namespace render::gpudriven
     bool TerrainMeshShaderPipeline::loadTerrainShaders()
     {
         terrainShader = std::make_unique<core::Shader>(device);
-        if (svtEnabled)
-        {
-            terrainShader->addMacroDefinition("SVT_ENABLED");
-        }
         if (rtShadowEnabled && rtShadowMaskLayout)
         {
             terrainShader->addMacroDefinition("RT_SHADOW_ENABLED");
@@ -462,7 +349,7 @@ namespace render::gpudriven
         else if (causticEnabled && cachedCausticLayout)
         {
             terrainShader->addMacroDefinition("CAUSTICS_ENABLED");
-            terrainShader->addMacroDefinition("CAUSTIC_SET", "13");
+            terrainShader->addMacroDefinition("CAUSTIC_SET", "12");
         }
         terrainShader->readShader("../../resources/shaders/gpudriven/task_terrain.glsl");
         terrainShader->readShader("../../resources/shaders/gpudriven/mesh_terrain.glsl");
@@ -512,20 +399,21 @@ namespace render::gpudriven
         std::vector<vk::DescriptorSetLayout> setLayouts = {
             iblLayout, weightMapLayout, bindlessTextureLayout, meshletDataLayout,
             vertexDataLayout, emptyLayout, lightDataLayout, clusterGridLayout,
-            cullingOutputLayout, shadowDataLayout, shadowTextureLayout, terrainDataLayout,
-            svtLayout  // Set 12: SVT page table + params + cache textures
+            cullingOutputLayout, shadowDataLayout, shadowTextureLayout, terrainDataLayout
         };
 
-        pipelineHasSet13 = false;
+        pipelineHasSet12 = false;
         if (rtShadowEnabled && rtShadowMaskLayout)
         {
-            setLayouts.push_back(rtShadowMaskLayout); // Set 13
-            pipelineHasSet13 = true;
+            // RT shadow mask is at set 13 in the shader; insert empty placeholder at set 12
+            setLayouts.push_back(emptyLayout);         // Set 12 (placeholder)
+            setLayouts.push_back(rtShadowMaskLayout);  // Set 13
+            pipelineHasSet12 = true;
         }
         else if (causticEnabled && cachedCausticLayout)
         {
-            setLayouts.push_back(cachedCausticLayout); // Set 13
-            pipelineHasSet13 = true;
+            setLayouts.push_back(cachedCausticLayout); // Set 12
+            pipelineHasSet12 = true;
         }
 
         vk::PushConstantRange pushConstantRange{};

@@ -191,7 +191,7 @@ namespace render
         if (distortionInitialized)
         {
             distortionResources->recreate(
-                swapChain.getSwapchainImageFormat(),
+                swapChain.getSceneColorFormat(),
                 swapChain.getSwapchainDepthStencilFormat(),
                 swapChain.getSwapchainExtent(),
                 offscreenResources.depthImage.depthImageView,
@@ -250,7 +250,7 @@ namespace render
 
         distortionResources = std::make_unique<vfx::DistortionResources>(device);
         distortionResources->init(
-            swapChain.getSwapchainImageFormat(),
+            swapChain.getSceneColorFormat(),
             swapChain.getSwapchainDepthStencilFormat(),
             swapChain.getSwapchainExtent(),
             offscreenResources.depthImage.depthImageView,

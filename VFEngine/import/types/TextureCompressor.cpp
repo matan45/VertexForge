@@ -2,6 +2,8 @@
 #include "print/Log.hpp"
 
 #include <ispc_texcomp.h>
+#define BCDEC_IMPLEMENTATION
+#include <bcdec.h>
 #include <cstring>
 #include <cmath>
 #include <algorithm>
@@ -184,131 +186,59 @@ namespace types
         return compressed;
     }
 
-    // ========================================================================
-    // BC7 Mode 6 decoder (PARTIAL — editor/debug use only)
-    // Only decodes Mode 6 blocks. Modes 0-5 and 7 fall back to mid-gray.
-    // BC7 has 8 modes; ispc_texcomp can emit any of them.
-    // Do NOT use this in runtime paths — implement full spec or use a library.
-    // Currently unused (no call sites) — kept for future editor thumbnail use.
-    // ========================================================================
-
-    static uint64_t getBits128(const uint8_t block[16], int startBit, int numBits)
-    {
-        uint64_t lo, hi;
-        std::memcpy(&lo, block, 8);
-        std::memcpy(&hi, block + 8, 8);
-
-        uint64_t result = 0;
-        if (startBit < 64)
-        {
-            result = lo >> startBit;
-            if (startBit + numBits > 64)
-                result |= hi << (64 - startBit);
-        }
-        else
-        {
-            result = hi >> (startBit - 64);
-        }
-
-        uint64_t mask = (numBits >= 64) ? ~0ULL : ((1ULL << numBits) - 1);
-        return result & mask;
-    }
-
     std::vector<unsigned char> TextureCompressor::decompressBC7(
         const unsigned char* compressedData, uint32_t width, uint32_t height)
     {
-        // BC7 interpolation weights for 4-bit indices
-        static const int weights4[16] = { 0, 4, 9, 13, 17, 21, 26, 30, 34, 38, 43, 47, 51, 55, 60, 64 };
-
         uint32_t blocksX = (width + 3) / 4;
         uint32_t blocksY = (height + 3) / 4;
 
         std::vector<unsigned char> output(static_cast<size_t>(width) * height * 4);
 
+        // Decode into a temporary buffer with pitch = blocksX * 4 pixels * 4 bytes
+        uint32_t decodedRowPitch = blocksX * 4 * 4;
+        std::vector<unsigned char> decoded(static_cast<size_t>(blocksY) * 4 * decodedRowPitch);
+
         for (uint32_t by = 0; by < blocksY; ++by)
         {
             for (uint32_t bx = 0; bx < blocksX; ++bx)
             {
-                const uint8_t* block = compressedData + (by * blocksX + bx) * 16;
-
-                // Detect mode from lowest set bit
-                uint8_t modeByte = block[0];
-                int mode = -1;
-                for (int i = 0; i < 8; ++i)
-                {
-                    if (modeByte & (1 << i))
-                    {
-                        mode = i;
-                        break;
-                    }
-                }
-
-                uint8_t pixels[16][4];
-
-                if (mode == 6)
-                {
-                    // Mode 6: 7-bit RGBA endpoints, 1 p-bit per endpoint, 4-bit indices
-                    uint8_t ep0[4], ep1[4];
-                    ep0[0] = static_cast<uint8_t>(getBits128(block, 7, 7));
-                    ep1[0] = static_cast<uint8_t>(getBits128(block, 14, 7));
-                    ep0[1] = static_cast<uint8_t>(getBits128(block, 21, 7));
-                    ep1[1] = static_cast<uint8_t>(getBits128(block, 28, 7));
-                    ep0[2] = static_cast<uint8_t>(getBits128(block, 35, 7));
-                    ep1[2] = static_cast<uint8_t>(getBits128(block, 42, 7));
-                    ep0[3] = static_cast<uint8_t>(getBits128(block, 49, 7));
-                    ep1[3] = static_cast<uint8_t>(getBits128(block, 56, 7));
-                    uint8_t p0 = static_cast<uint8_t>(getBits128(block, 63, 1));
-                    uint8_t p1 = static_cast<uint8_t>(getBits128(block, 64, 1));
-
-                    // Reconstruct 8-bit endpoints
-                    int e0[4], e1[4];
-                    for (int c = 0; c < 4; ++c)
-                    {
-                        e0[c] = (ep0[c] << 1) | p0;
-                        e1[c] = (ep1[c] << 1) | p1;
-                    }
-
-                    // Read indices: anchor is 3-bit, rest are 4-bit
-                    uint8_t indices[16];
-                    indices[0] = static_cast<uint8_t>(getBits128(block, 65, 3));
-                    for (int i = 1; i < 16; ++i)
-                        indices[i] = static_cast<uint8_t>(getBits128(block, 65 + 3 + (i - 1) * 4, 4));
-
-                    // Interpolate
-                    for (int i = 0; i < 16; ++i)
-                    {
-                        int w = weights4[indices[i]];
-                        for (int c = 0; c < 4; ++c)
-                            pixels[i][c] = static_cast<uint8_t>((e0[c] * (64 - w) + e1[c] * w + 32) >> 6);
-                    }
-                }
-                else
-                {
-                    // Unsupported mode — decode as mid-gray
-                    for (int i = 0; i < 16; ++i)
-                    {
-                        pixels[i][0] = pixels[i][1] = pixels[i][2] = 128;
-                        pixels[i][3] = 255;
-                    }
-                }
-
-                // Write pixels to output (clip to actual image dimensions)
-                for (int py = 0; py < 4; ++py)
-                {
-                    uint32_t dstY = by * 4 + py;
-                    if (dstY >= height) continue;
-                    for (int px = 0; px < 4; ++px)
-                    {
-                        uint32_t dstX = bx * 4 + px;
-                        if (dstX >= width) continue;
-                        size_t dstIdx = (static_cast<size_t>(dstY) * width + dstX) * 4;
-                        std::memcpy(&output[dstIdx], pixels[py * 4 + px], 4);
-                    }
-                }
+                const void* block = compressedData + (static_cast<size_t>(by) * blocksX + bx) * BCDEC_BC7_BLOCK_SIZE;
+                void* dst = decoded.data() + static_cast<size_t>(by) * 4 * decodedRowPitch + static_cast<size_t>(bx) * 4 * 4;
+                bcdec_bc7(block, dst, static_cast<int>(decodedRowPitch));
             }
         }
 
+        // Copy decoded pixels, clipping to actual image dimensions
+        for (uint32_t y = 0; y < height; ++y)
+        {
+            std::memcpy(
+                output.data() + static_cast<size_t>(y) * width * 4,
+                decoded.data() + static_cast<size_t>(y) * decodedRowPitch,
+                static_cast<size_t>(width) * 4);
+        }
+
         return output;
+    }
+
+    bool TextureCompressor::decompressAllMips(resource::TextureData& textureData)
+    {
+        if (textureData.compressionFormat != resource::TextureCompressionFormat::BC7)
+        {
+            return false;
+        }
+
+        for (auto& mip : textureData.mipData)
+        {
+            auto decompressed = decompressBC7(mip.data.data(), mip.width, mip.height);
+            if (decompressed.empty())
+            {
+                return false;
+            }
+            mip.dataSize = static_cast<uint32_t>(decompressed.size());
+            mip.data = std::move(decompressed);
+        }
+        textureData.compressionFormat = resource::TextureCompressionFormat::Uncompressed;
+        return true;
     }
 
 }

@@ -174,8 +174,6 @@ namespace render::gpudriven
         if (frustumCullingEnabled) effectiveViewMode |= TERRAIN_CULL_FRUSTUM_BIT;
         if (meshletCullingEnabled) effectiveViewMode |= TERRAIN_CULL_BACKFACE_BIT;
         if (meshletOcclusionCullingEnabled && hiZMipLevels > 0) effectiveViewMode |= TERRAIN_CULL_OCCLUSION_BIT;
-        if (svtEnabled) effectiveViewMode |= SVT_VIEWMODE_ENABLED_BIT;
-
         pc.viewMode = effectiveViewMode;
         pc.screenWidth = screenWidth;
         pc.screenHeight = screenHeight;
@@ -211,19 +209,19 @@ namespace render::gpudriven
             iblDescriptorSet, weightMapDescriptorSet, bindlessDescriptorSet,
             terrainMeshletDescriptorSet, terrainVertexDescriptorSet, emptyDescriptorSet5,
             lightDataDescriptorSet, clusterGridDescriptorSet, cullingOutputDescriptorSet,
-            shadowDataDescriptorSet, shadowTextureDescriptorSet, terrainDataDescriptorSet,
-            svtEnabled ? svtDescriptorSet : vk::DescriptorSet{nullptr}  // Set 12: SVT (optional)
+            shadowDataDescriptorSet, shadowTextureDescriptorSet, terrainDataDescriptorSet
         };
 
-        if (pipelineHasSet13)
+        if (pipelineHasSet12)
         {
             if (rtShadowEnabled && rtShadowMaskDescriptorSet)
             {
+                currentSets.push_back(emptyDescriptorSet5); // Set 12 (placeholder)
                 currentSets.push_back(rtShadowMaskDescriptorSet); // Set 13
             }
             else if (causticEnabled && causticDescriptorSet)
             {
-                currentSets.push_back(causticDescriptorSet); // Set 13
+                currentSets.push_back(causticDescriptorSet); // Set 12
             }
         }
 

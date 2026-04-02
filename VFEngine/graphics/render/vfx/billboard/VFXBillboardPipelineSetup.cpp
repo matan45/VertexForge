@@ -14,7 +14,7 @@ namespace render::vfx
     void VFXBillboardPipeline::createRenderPass()
     {
         vk::AttachmentDescription colorAttachment{};
-        colorAttachment.format = swapChain.getSwapchainImageFormat();
+        colorAttachment.format = swapChain.getSceneColorFormat();
         colorAttachment.samples = vk::SampleCountFlagBits::e1;
         colorAttachment.loadOp = vk::AttachmentLoadOp::eClear;
         colorAttachment.storeOp = vk::AttachmentStoreOp::eStore;

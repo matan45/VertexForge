@@ -248,26 +248,6 @@ layout(std430, set = 1, binding = 1) readonly buffer TerrainLayerBuffer {
 
 layout(set = 2, binding = 0) uniform sampler2D bindlessTextures[];
 
-// ---- SVT (Sparse Virtual Texturing) descriptors ----
-#ifdef SVT_ENABLED
-#include "../common/svt_types.glsl"
-layout(std430, set = 12, binding = 0) readonly buffer SVTPageTableBuf {
-    uint svtPageTableData[];
-};
-layout(set = 12, binding = 2) uniform SVTParamsUBO {
-    SVTParams svtParams;
-};
-layout(set = 12, binding = 3) uniform sampler2DArray svtAlbedoCache;
-layout(set = 12, binding = 4) uniform sampler2DArray svtNormalCache;
-layout(set = 12, binding = 5) uniform sampler2DArray svtORMCache;
-layout(set = 12, binding = 6) uniform sampler2DArray svtEmissionCache;
-layout(set = 12, binding = 7) uniform sampler2DArray svtHeightCache;
-
-#define SVT_PAGE_TABLE_DATA svtPageTableData
-#define SVT_PARAMS svtParams
-#include "../common/svt_sampling.glsl"
-#endif
-
 layout(push_constant) uniform PushConstants {
     uint tileCount;
     uint viewMode;
@@ -390,33 +370,9 @@ void main() {
     vec3 N = normalize(fragNormal);
     vec3 V = normalize(camera.cameraPos - fragWorldPos);
 
-    // Standard layer blending (always computed — used as fallback when SVT is off or tiles missing)
 #include "../material/terrain_material_generated.glsl"
 #ifndef MAT_EMISSION_DEFINED
     vec3 mat_emission = vec3(0.0);
-#endif
-
-#ifdef SVT_ENABLED
-    // SVT override: replace material properties with virtual texture lookup
-    float svt_resolvedMip = 0.0;
-    bool svt_isResident = false;
-
-    // Bit 16 of viewMode = SVT enabled at runtime
-    if ((pc.viewMode & 0x10000u) != 0u) {
-        SVTSampleResult svtResult = sampleSVTFromWorld(fragWorldPos);
-        svt_resolvedMip = svtResult.mipLevel;
-        svt_isResident = svtResult.isResident;
-
-        if (svtResult.isResident) {
-            mat_albedo = svtResult.albedo.rgb;
-            mat_normalTS = svtResult.normal;
-            mat_metallic = svtResult.orm.b;
-            mat_roughness = svtResult.orm.g;
-            mat_ao = svtResult.orm.r;
-            mat_emission = vec3(0.0);
-        }
-        // If not resident, keep the standard layer-blended values as fallback
-    }
 #endif
     vec3 albedo = mat_albedo;
     float metallic = mat_metallic;

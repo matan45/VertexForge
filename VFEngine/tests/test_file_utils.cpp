@@ -73,7 +73,6 @@ TEST_CASE("All FileExtension constants are non-empty") {
     CHECK_FALSE(FileExtension::terrainWeights.empty());
     CHECK_FALSE(FileExtension::terrain.empty());
     CHECK_FALSE(FileExtension::water.empty());
-    CHECK_FALSE(FileExtension::svt.empty());
     CHECK_FALSE(FileExtension::assetMeta.empty());
 }
 
@@ -93,11 +92,10 @@ TEST_CASE("No duplicate FileExtension constants") {
     extensions.insert(FileExtension::terrainWeights);
     extensions.insert(FileExtension::terrain);
     extensions.insert(FileExtension::water);
-    extensions.insert(FileExtension::svt);
     extensions.insert(FileExtension::assetMeta);
 
-    // 16 constants inserted, all should be unique
-    CHECK(extensions.size() == 16);
+    // 15 constants inserted, all should be unique
+    CHECK(extensions.size() == 15);
 }
 
 } // TEST_SUITE

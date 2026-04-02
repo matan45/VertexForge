@@ -76,15 +76,16 @@ namespace render::raytracing
 
         outTimestamps.resize(queryCount);
 
-        // Use eWait to block until results are available (safe because we only
-        // read the frame that has already been waited on via fence).
+        // Non-blocking read — some queries may not have been written this frame
+        // (e.g., BLAS/TLAS build timestamps are conditional). Using eWait would
+        // deadlock on unwritten queries after resize or frames without builds.
         auto result = logicalDevice.getQueryPoolResults(
             pools[fi],
             0, queryCount,
             queryCount * sizeof(uint64_t),
             outTimestamps.data(),
             sizeof(uint64_t),
-            vk::QueryResultFlagBits::e64 | vk::QueryResultFlagBits::eWait);
+            vk::QueryResultFlagBits::e64);
 
         return result == vk::Result::eSuccess;
     }

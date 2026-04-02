@@ -254,7 +254,7 @@ namespace windows
         if (ImGui::Button("Fill All..."))
         {
             std::vector<std::pair<std::wstring, std::wstring>> fileTypes = {
-                {L"Heightmap Files (*.vfImage;*.vfSVT)", L"*.vfImage;*.vfSVT"}
+                {L"Heightmap Files (*.vfImage)", L"*.vfImage"}
             };
             std::string selectedFile = fileDialog.openFileDialog(fileTypes);
             if (!selectedFile.empty())
@@ -347,7 +347,7 @@ namespace windows
             return;
 
         std::vector<std::pair<std::wstring, std::wstring>> fileTypes = {
-            {L"Heightmap Files (*.vfImage;*.vfSVT)", L"*.vfImage;*.vfSVT"}
+            {L"Heightmap Files (*.vfImage)", L"*.vfImage"}
         };
 
         std::string selectedFile = fileDialog.openFileDialog(fileTypes);
@@ -375,7 +375,7 @@ namespace windows
     void TerrainCreationWindow::browseHeightmap()
     {
         std::vector<std::pair<std::wstring, std::wstring>> fileTypes = {
-            {L"Heightmap Files (*.vfImage;*.vfSVT)", L"*.vfImage;*.vfSVT"}
+            {L"Heightmap Files (*.vfImage)", L"*.vfImage"}
         };
 
         std::string selectedFile = fileDialog.openFileDialog(fileTypes);

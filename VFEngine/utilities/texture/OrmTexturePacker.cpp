@@ -292,6 +292,29 @@ namespace texture
         if (hasMetallic) metallicData = metallicFuture.get();
     }
 
+    static bool decompressIfNeeded(
+        std::shared_ptr<resource::TextureData>& data,
+        const std::string& label,
+        const TextureDecompressCallback& callback,
+        std::string& errorMessage)
+    {
+        if (!data || data->compressionFormat == resource::TextureCompressionFormat::Uncompressed)
+        {
+            return true;
+        }
+        if (!callback)
+        {
+            errorMessage = label + " texture is compressed. Provide a decompressCallback or re-import as Uncompressed.";
+            return false;
+        }
+        if (!callback(*data))
+        {
+            errorMessage = "Failed to decompress " + label + " texture.";
+            return false;
+        }
+        return true;
+    }
+
     static bool validateLoadedTextures(
         bool hasAo, bool hasRoughness, bool hasMetallic,
         const std::shared_ptr<resource::TextureData>& aoData,
@@ -300,21 +323,6 @@ namespace texture
         const OrmPackInput& input,
         std::string& errorMessage)
     {
-        if (hasAo && aoData && aoData->compressionFormat != resource::TextureCompressionFormat::Uncompressed)
-        {
-            errorMessage = "AO texture is compressed (BC7). Re-import as Uncompressed for ORM packing: " + input.aoPath;
-            return false;
-        }
-        if (hasRoughness && roughnessData && roughnessData->compressionFormat != resource::TextureCompressionFormat::Uncompressed)
-        {
-            errorMessage = "Roughness texture is compressed (BC7). Re-import as Uncompressed for ORM packing: " + input.roughnessPath;
-            return false;
-        }
-        if (hasMetallic && metallicData && metallicData->compressionFormat != resource::TextureCompressionFormat::Uncompressed)
-        {
-            errorMessage = "Metallic texture is compressed (BC7). Re-import as Uncompressed for ORM packing: " + input.metallicPath;
-            return false;
-        }
         if (hasAo && (!aoData || aoData->textureData().empty()))
         {
             errorMessage = "Failed to load AO texture: " + input.aoPath;
@@ -417,6 +425,19 @@ namespace texture
                      aoData, roughnessData, metallicData, progressCallback);
 
         if (progressCallback) progressCallback(0.5f);
+
+        if (hasAo && !decompressIfNeeded(aoData, "AO", input.decompressCallback, result.errorMessage))
+        {
+            return result;
+        }
+        if (hasRoughness && !decompressIfNeeded(roughnessData, "Roughness", input.decompressCallback, result.errorMessage))
+        {
+            return result;
+        }
+        if (hasMetallic && !decompressIfNeeded(metallicData, "Metallic", input.decompressCallback, result.errorMessage))
+        {
+            return result;
+        }
 
         if (!validateLoadedTextures(hasAo, hasRoughness, hasMetallic,
                                     aoData, roughnessData, metallicData,

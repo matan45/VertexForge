@@ -320,7 +320,7 @@ namespace render
         // Mesh render pass: eLoad for color (skybox/clear already wrote it), eClear for depth.
         // Same attachment formats and sample counts as the main mesh pipeline for pipeline compatibility.
         vk::AttachmentDescription colorAttachment{};
-        colorAttachment.format = swapChain.getSwapchainImageFormat();
+        colorAttachment.format = swapChain.getSceneColorFormat();
         colorAttachment.samples = vk::SampleCountFlagBits::e1;
         colorAttachment.loadOp = vk::AttachmentLoadOp::eLoad;
         colorAttachment.storeOp = vk::AttachmentStoreOp::eStore;
@@ -369,7 +369,7 @@ namespace render
         // Color-only render pass for skybox rendering (compatible with the main skybox pipeline).
         // Uses eClear since this is the first pass and we want to clear the color image.
         vk::AttachmentDescription colorAttachment{};
-        colorAttachment.format = swapChain.getSwapchainImageFormat();
+        colorAttachment.format = swapChain.getSceneColorFormat();
         colorAttachment.samples = vk::SampleCountFlagBits::e1;
         colorAttachment.loadOp = vk::AttachmentLoadOp::eClear;
         colorAttachment.storeOp = vk::AttachmentStoreOp::eStore;
@@ -464,7 +464,7 @@ namespace render
 
     void RenderTextureViewPort::createOffscreenResources()
     {
-        vk::Format colorFormat = swapChain.getSwapchainImageFormat();
+        vk::Format colorFormat = swapChain.getSceneColorFormat();
         vk::Format depthFormat = swapChain.getSwapchainDepthStencilFormat();
 
         core::ImageInfoRequest imageColorInfo(device.getLogicalDevice(), device.getPhysicalDevice());

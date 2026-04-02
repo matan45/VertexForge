@@ -25,7 +25,7 @@ namespace render::gpudriven
         // Create refraction resources before pipeline so we have the descriptor set layout
         water.refractionResources = std::make_unique<render::water::WaterRefractionResources>(device);
         water.refractionResources->init(
-            swapChain.getSwapchainImageFormat(),
+            swapChain.getSceneColorFormat(),
             swapChain.getSwapchainExtent().width,
             swapChain.getSwapchainExtent().height,
             sceneDepthView);
@@ -712,7 +712,7 @@ namespace render::gpudriven
             return;
 
         water.refractionResources->recreate(
-            swapChain.getSwapchainImageFormat(),
+            swapChain.getSceneColorFormat(),
             swapChain.getSwapchainExtent().width,
             swapChain.getSwapchainExtent().height,
             sceneDepthView);

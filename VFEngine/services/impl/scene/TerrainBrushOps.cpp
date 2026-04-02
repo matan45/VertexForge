@@ -22,7 +22,7 @@ namespace services
 {
     void TerrainService::applyBrush(const glm::vec3& worldPosition, float deltaTime, bool invert, bool isFirstApplication)
     {
-        if (saveInProgress.load(std::memory_order_acquire) || svtBakeInProgress.load(std::memory_order_acquire))
+        if (saveInProgress.load(std::memory_order_acquire))
             return;
 
         auto& dispatcher = events::EventDispatcher::instance();
@@ -132,7 +132,7 @@ namespace services
 
     void TerrainService::applyPaintBrush(const glm::vec3& worldPosition, float deltaTime, bool invert, bool isFirstApplication)
     {
-        if (saveInProgress.load(std::memory_order_acquire) || svtBakeInProgress.load(std::memory_order_acquire))
+        if (saveInProgress.load(std::memory_order_acquire))
             return;
 
         auto& dispatcher = events::EventDispatcher::instance();
@@ -243,7 +243,7 @@ namespace services
 
     void TerrainService::applyHoleBrush(const glm::vec3& worldPosition, bool erase)
     {
-        if (saveInProgress.load(std::memory_order_acquire) || svtBakeInProgress.load(std::memory_order_acquire))
+        if (saveInProgress.load(std::memory_order_acquire))
             return;
 
         auto& dispatcher = events::EventDispatcher::instance();

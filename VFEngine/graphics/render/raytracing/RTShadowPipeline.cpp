@@ -83,10 +83,10 @@ namespace render::raytracing
         initialized = false;
     }
 
-    void RTShadowPipeline::resize(uint32_t width, uint32_t height)
+    bool RTShadowPipeline::resize(uint32_t width, uint32_t height)
     {
-        if (!initialized) return;
-        if (width == maskWidth && height == maskHeight) return;
+        if (!initialized) return false;
+        if (width == maskWidth && height == maskHeight) return false;
 
         vk::Device vkDevice = device.getLogicalDevice();
         vkDevice.waitIdle();
@@ -103,6 +103,7 @@ namespace render::raytracing
         firstFrame = true;
 
         vfLogInfo("RTShadowPipeline: Resized to {}x{}", width, height);
+        return true;
     }
 
     void RTShadowPipeline::createShadowMaskImage(uint32_t w, uint32_t h)

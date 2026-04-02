@@ -35,13 +35,9 @@ namespace shaderCompiler
 
 			// TerrainMeshShaderPipeline: terrain rendering
 			// task_terrain.glsl and mesh_terrain.glsl share the same macro set
-			{"gpudriven/task_terrain.glsl",  {"SVT_ENABLED"},                              {}},
-			{"gpudriven/task_terrain.glsl",  {"CAUSTICS_ENABLED"},                          {{"CAUSTIC_SET", "13"}}},
-			{"gpudriven/task_terrain.glsl",  {"SVT_ENABLED", "CAUSTICS_ENABLED"},           {{"CAUSTIC_SET", "13"}}},
+			{"gpudriven/task_terrain.glsl",  {"CAUSTICS_ENABLED"},                          {{"CAUSTIC_SET", "12"}}},
 
-			{"gpudriven/mesh_terrain.glsl",  {"SVT_ENABLED"},                              {}},
-			{"gpudriven/mesh_terrain.glsl",  {"CAUSTICS_ENABLED"},                          {{"CAUSTIC_SET", "13"}}},
-			{"gpudriven/mesh_terrain.glsl",  {"SVT_ENABLED", "CAUSTICS_ENABLED"},           {{"CAUSTIC_SET", "13"}}},
+			{"gpudriven/mesh_terrain.glsl",  {"CAUSTICS_ENABLED"},                          {{"CAUSTIC_SET", "12"}}},
 
 			// ProbeTracePipeline: GI probe ray tracing
 			{"gi/probe_trace.glsl", {"USE_RAY_QUERY"},                          {}},

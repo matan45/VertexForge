@@ -342,7 +342,7 @@ namespace windows
         std::string basePath = exportPath;
         // Remove extension if present
         auto ext = std::filesystem::path(basePath).extension().string();
-        if (ext == ".vfImage" || ext == ".vfSVT")
+        if (ext == ".vfImage")
         {
             basePath = std::filesystem::path(basePath).replace_extension().string();
         }

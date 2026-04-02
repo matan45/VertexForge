@@ -47,12 +47,6 @@
 #include "../raytracing/RTShadowPipeline.hpp"
 #include "../raytracing/RTShadowDenoiser.hpp"
 #include "../raytracing/RTShadowProfiler.hpp"
-#include "../svt/SVTTypes.hpp"
-#include "../svt/PhysicalTileCache.hpp"
-#include "../svt/SVTPageTable.hpp"
-#include "../svt/SVTFeedbackPipeline.hpp"
-#include "../svt/SVTStreamManager.hpp"
-#include "../svt/TerrainSVTCompositor.hpp"
 #include "../material/MaterialPBRExtractor.hpp"
 #include "../../core/Texture.hpp"
 #include "../../core/VulkanMemoryManager.hpp"
@@ -149,27 +143,6 @@ namespace render::gpudriven
             TerrainStreamManager::TileDataLoader pendingTileDataLoader;
             TerrainStreamManager::TileRAMEvictor pendingTileRAMEvictor;
             TerrainStreamManager::TileLoadContextProvider pendingTileLoadContextProvider;
-        };
-
-        struct SVTState
-        {
-            std::unique_ptr<svt::PhysicalTileCache> tileCache;
-            std::unique_ptr<svt::SVTPageTable> pageTable;
-            std::unique_ptr<svt::SVTFeedbackPipeline> feedbackPipeline;
-            std::unique_ptr<svt::SVTStreamManager> streamManager;
-            std::unique_ptr<svt::TerrainSVTCompositor> compositor;
-
-            svt::SVTConfig config;
-
-            // SVT params GPU UBO
-            vk::Buffer paramsBuffer;
-            core::VulkanAllocation paramsAllocation;
-            void* paramsMapped = nullptr;
-
-            bool enabled = false;
-            bool initialized = false;
-            uint64_t frameCounter = 0;
-            std::string lastMaterialPath;
         };
 
         struct WaterState
@@ -383,7 +356,6 @@ namespace render::gpudriven
         vk::RenderPass cachedWBOITRenderPass;
 
         TerrainState terrain;
-        SVTState svt;
         WaterState water;
         VegetationState vegetation;
         BillboardState billboard;
@@ -425,7 +397,7 @@ namespace render::gpudriven
         const glm::mat4& getCachedCameraProjection() const { return cachedCamera.projection; }
         const glm::vec3& getCachedCameraPosition() const { return cachedCamera.position; }
 
-        void dispatchCompute(vk::CommandBuffer cmd);
+        void dispatchCompute(vk::CommandBuffer cmd, uint32_t imageIndex = 0);
 
         // Split compute dispatch for async compute queue support
         // Records uploads, light occlusion, object culling, shadows, volumetric fog on graphics queue
@@ -585,14 +557,6 @@ namespace render::gpudriven
 
         void invalidateTerrainLayerData() { terrain.layerDataDirty = true; }
 
-        // SVT (Sparse Virtual Texturing)
-        void initSVT(const svt::SVTConfig& config = {});
-        void cleanupSVT();
-        void setSVTEnabled(bool enabled);
-        bool isSVTEnabled() const { return svt.enabled; }
-        const svt::SVTStreamStats* getSVTStreamStats() const;
-        void updateSVTParams(const glm::vec2& terrainWorldMin, const glm::vec2& terrainWorldMax);
-
         void setTerrainRenderingEnabled(bool enabled) { terrain.renderingEnabled = enabled; }
         bool isTerrainRenderingEnabled() const { return terrain.renderingEnabled; }
         void setTerrainLODBias(float bias) { terrain.lodBias = bias; }
@@ -739,9 +703,6 @@ namespace render::gpudriven
         void updateLightCullingState(vk::CommandBuffer cmd);
         void dispatchVolumetricFog(vk::CommandBuffer cmd);
         void dispatchGIProbeUpdate(vk::CommandBuffer cmd);
-
-        void dispatchSVTFeedback(vk::CommandBuffer cmd);
-        void updateSVTStreaming();
 
         static uint64_t makeTileKey(int32_t x, int32_t z);
     };

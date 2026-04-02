@@ -31,11 +31,6 @@ namespace terrain
     struct CaveSDFData;
 }
 
-namespace render::svt
-{
-    class SVTFileWriter;
-}
-
 namespace components
 {
     struct TerrainColliderDebugData;
@@ -60,8 +55,6 @@ namespace services
         ITerrainBrushComputeProvider* brushComputeProvider = nullptr;
         IPhysicsProvider* physicsProvider = nullptr;
         std::atomic<bool> saveInProgress{false};
-        std::atomic<bool> svtBakeInProgress{false};
-
         bool distanceCullingEnabled_ = false;
         float maxTerrainDistSq_ = 0.0f;
 
@@ -100,17 +93,6 @@ namespace services
             std::atomic<bool> done{false};
         };
         std::shared_ptr<PendingTerrainCreation> pendingCreation;
-
-        struct PendingSVTBake
-        {
-            std::future<bool> future;
-            std::atomic<float> progress{0.0f};
-            std::atomic<bool> done{false};
-            std::atomic<bool> cancelled{false};
-            std::string stage;
-            std::mutex stageMutex;
-        };
-        std::shared_ptr<PendingSVTBake> pendingSVTBake;
 
     public:
         explicit TerrainService(std::shared_ptr<scene::SceneGraphSystem> sceneGraph);
@@ -177,11 +159,6 @@ namespace services
         bool streamOutTile(EntityHandle terrainEntity, int32_t tileX, int32_t tileZ);
         void commitStreamingChanges(EntityHandle terrainEntity);
         void loadAllTiles(EntityHandle terrainEntity);
-        bool bakeTerrainSVT(EntityHandle terrainEntity);
-        bool beginBakeTerrainSVTAsync(EntityHandle terrainEntity);
-        ::events::terrain::SVTBakePollResult pollBakeTerrainSVT();
-        void cancelBakeTerrainSVT();
-
         bool ensureTileLODData(terrain::TerrainTile& tile, uint8_t lodLevel);
         void releaseTileRAMData(terrain::TerrainTile& tile);
         TileLoadContextResult prepareTileLoadContext(int32_t coordX, int32_t coordZ);
@@ -248,17 +225,5 @@ namespace services
         static CaveTileColliderInfo buildCaveTileColliderInfo(const terrain::TerrainTile& tile,
                                                               std::vector<glm::vec3>& worldPositionsOut);
 
-        // SVT bake helpers
-        struct BakeLayerCPU;
-        bool loadBakeMaterial(const std::string& materialPath, std::vector<BakeLayerCPU>& layers);
-        struct BakeParams;
-        bool computeBakeParams(const components::TerrainComponent& comp, BakeParams& params);
-        void compositeAndWriteTile(const BakeParams& params,
-                                   const std::vector<BakeLayerCPU>& layers,
-                                   const std::vector<const terrain::TerrainTile*>& allTiles,
-                                   uint32_t mip, uint32_t tx, uint32_t ty,
-                                   render::svt::SVTFileWriter& albedoWriter,
-                                   render::svt::SVTFileWriter& normalWriter,
-                                   render::svt::SVTFileWriter& ormWriter);
     };
 }

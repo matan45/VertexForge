@@ -159,7 +159,7 @@ namespace render::preview
 
     void PreviewViewPort::createOffscreenResources()
     {
-        vk::Format colorFormat = swapChain.getSwapchainImageFormat();
+        vk::Format colorFormat = swapChain.getSceneColorFormat();
         vk::Format depthFormat = swapChain.getSwapchainDepthStencilFormat();
 
         core::ImageInfoRequest imageColorInfo(device.getLogicalDevice(), device.getPhysicalDevice());

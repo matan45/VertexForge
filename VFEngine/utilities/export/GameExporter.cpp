@@ -493,7 +493,7 @@ namespace gameExport
 		// Extensions that should NOT be LZ4-compressed (already compressed or need streaming)
 		static const std::unordered_set<std::string> noCompressExts = {
 			".vfimage", ".vfhdr", ".vfmesh", ".vfaudio",
-			".vfterrain", ".vfsvt"
+			".vfterrain"
 		};
 
 		auto shouldCompress = [&](const std::string& ext) -> archive::CompressionType

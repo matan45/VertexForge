@@ -242,13 +242,6 @@ namespace render::gpudriven
         auto uploadEnd = std::chrono::high_resolution_clock::now();
         terrain.uploadTileDataUs = std::chrono::duration<float, std::micro>(uploadEnd - uploadStart).count();
 
-        // SVT: use full terrain grid bounds (from TerrainComponent) for stable virtual texture mapping
-        if (svt.enabled && svt.initialized &&
-            terrainGridWorldMin != terrainGridWorldMax)
-        {
-            updateSVTParams(terrainGridWorldMin, terrainGridWorldMax);
-        }
-
         terrain.updateUs = std::chrono::duration<float, std::micro>(uploadEnd - frameStart).count();
     }
 

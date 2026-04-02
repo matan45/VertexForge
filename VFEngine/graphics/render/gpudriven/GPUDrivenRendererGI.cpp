@@ -4,6 +4,7 @@
 #include "../../core/Device.hpp"
 #include "../../core/GraphicsConstants.hpp"
 #include "types/RenderSettings.hpp"
+#include "print/Log.hpp"
 #include <algorithm>
 
 #ifdef MemoryBarrier
@@ -612,7 +613,8 @@ namespace render::gpudriven
         uint32_t h = depthPrepass->getHeight();
         if (w != 0 && h != 0)
         {
-            rtShadowPipeline->resize(w, h);
+            if (rtShadowPipeline->resize(w, h) && rtShadowProfiler)
+                rtShadowProfiler->invalidateFrameSlots();
             if (rtShadowDenoiser && rtShadowDenoiser->isInitialized())
             {
                 rtShadowDenoiser->resize(w, h);
@@ -649,18 +651,17 @@ namespace render::gpudriven
 
         const auto& camData = cameraBuffer->getData();
         bool useDenoiser = rtShadowDenoiser && rtShadowDenoiser->isInitialized();
-
         // Set runtime flag so fragment shader uses RT for directional shadows
         lightBufferManager->setRTShadowActive(useDenoiser);
 
         uint32_t fi = imageIndex % core::MAX_FRAMES_IN_FLIGHT;
-
+        
         // Readback previous frame's profiling data and evaluate adaptive budget
         if (rtShadowProfiler && rtShadowProfiler->isValid())
         {
             rtShadowProfiler->readbackAndUpdate(device.getLogicalDevice(), fi,
                                                  accelStructManager->getMemoryBudget());
-
+                                                 
             auto action = rtShadowProfiler->evaluateBudget();
             if (action.skipFrame) return;
             if (action.newMaxRayDistance.has_value())

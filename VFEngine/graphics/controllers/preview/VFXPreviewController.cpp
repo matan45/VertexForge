@@ -438,7 +438,7 @@ namespace controllers
             core::ImageInfoRequest imageInfo(device.getLogicalDevice(), device.getPhysicalDevice());
             imageInfo.width = extent.width;
             imageInfo.height = extent.height;
-            imageInfo.format = swapChain.getSwapchainImageFormat();
+            imageInfo.format = swapChain.getSceneColorFormat();
             imageInfo.tiling = vk::ImageTiling::eOptimal;
             imageInfo.usage = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled;
             imageInfo.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
@@ -447,7 +447,7 @@ namespace controllers
 
             core::ImageViewInfoRequest viewInfo(device.getLogicalDevice(),
                                                  offscreenResources.colorImages[i].colorImage);
-            viewInfo.format = swapChain.getSwapchainImageFormat();
+            viewInfo.format = swapChain.getSceneColorFormat();
             core::ImageUtilities::createImageView(viewInfo, offscreenResources.colorImages[i].colorImageView);
 
             updateDescriptorSets(offscreenResources.colorImages[i].descriptorSet,

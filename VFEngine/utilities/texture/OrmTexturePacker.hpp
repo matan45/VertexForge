@@ -17,6 +17,9 @@ namespace texture
     // Callback for compressing a TextureData in-place after ORM channel packing
     using TextureCompressCallback = std::function<void(resource::TextureData& textureData)>;
 
+    // Callback for decompressing a compressed TextureData in-place before ORM packing
+    using TextureDecompressCallback = std::function<bool(resource::TextureData& textureData)>;
+
     // Input paths for ORM packing - all optional
     // At least one texture must be provided to determine output dimensions
     struct OrmPackInput {
@@ -24,7 +27,8 @@ namespace texture
         std::string roughnessPath;  // Optional - defaults to 128 (mid roughness)
         std::string metallicPath;   // Optional - defaults to 0 (non-metallic)
         std::string outputPath;     // Required
-        TextureCompressCallback compressCallback;     // Optional - compresses output before saving
+        TextureCompressCallback compressCallback;       // Optional - compresses output before saving
+        TextureDecompressCallback decompressCallback;   // Optional - decompresses compressed inputs before packing
     };
 
     class OrmTexturePacker

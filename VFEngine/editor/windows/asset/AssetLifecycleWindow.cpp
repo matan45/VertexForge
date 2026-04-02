@@ -76,17 +76,15 @@ namespace windows
             typeCounts[static_cast<int>(resource::AssetType::Audio)] +
             typeCounts[static_cast<int>(resource::AssetType::Animation)] +
             typeCounts[static_cast<int>(resource::AssetType::Material)] +
-            typeCounts[static_cast<int>(resource::AssetType::MaterialInstance)] +
-            typeCounts[static_cast<int>(resource::AssetType::SVT)];
+            typeCounts[static_cast<int>(resource::AssetType::MaterialInstance)];
 
-        ImGui::TextDisabled("Tex:%u Mesh:%u Audio:%u Anim:%u Mat:%u SVT:%u Other:%u",
+        ImGui::TextDisabled("Tex:%u Mesh:%u Audio:%u Anim:%u Mat:%u Other:%u",
                             typeCounts[static_cast<int>(resource::AssetType::Texture)],
                             typeCounts[static_cast<int>(resource::AssetType::Mesh)],
                             typeCounts[static_cast<int>(resource::AssetType::Audio)],
                             typeCounts[static_cast<int>(resource::AssetType::Animation)],
                             typeCounts[static_cast<int>(resource::AssetType::Material)] +
                             typeCounts[static_cast<int>(resource::AssetType::MaterialInstance)],
-                            typeCounts[static_cast<int>(resource::AssetType::SVT)],
                             totalAssets - knownCount);
     }
 
@@ -99,7 +97,7 @@ namespace windows
                                      "Animator", "Material", "MaterialInstance",
                                      "PhysicsShape", "VFX", "Script", "HDR", "Font", "Skeleton",
                                      "Navmesh", "InputMapping", "Terrain", "TerrainMaterial",
-                                     "BehaviorTree", "World", "SVT"};
+                                     "BehaviorTree", "World"};
         ImGui::SetNextItemWidth(150);
         ImGui::Combo("##TypeFilter", &filterType, filterNames, IM_ARRAYSIZE(filterNames));
 

@@ -32,7 +32,7 @@ namespace render::ibl
 
         // RenderPass
         vk::AttachmentDescription colorAttachment{};
-        colorAttachment.format = swapChain.getSwapchainImageFormat();
+        colorAttachment.format = swapChain.getSceneColorFormat();
         colorAttachment.samples = vk::SampleCountFlagBits::e1;
         colorAttachment.loadOp = vk::AttachmentLoadOp::eClear;
         colorAttachment.storeOp = vk::AttachmentStoreOp::eStore;
@@ -289,7 +289,7 @@ namespace render::ibl
 
         // Recreate render pass
         vk::AttachmentDescription colorAttachment{};
-        colorAttachment.format = swapChain.getSwapchainImageFormat();
+        colorAttachment.format = swapChain.getSceneColorFormat();
         colorAttachment.samples = vk::SampleCountFlagBits::e1;
         colorAttachment.loadOp = vk::AttachmentLoadOp::eLoad;  // Preserve clear color
         colorAttachment.storeOp = vk::AttachmentStoreOp::eStore;

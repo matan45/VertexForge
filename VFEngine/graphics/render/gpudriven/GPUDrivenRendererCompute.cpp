@@ -240,9 +240,23 @@ namespace render::gpudriven
         }
     }
 
-    void GPUDrivenRenderer::dispatchCompute(vk::CommandBuffer cmd)
+    void GPUDrivenRenderer::dispatchCompute(vk::CommandBuffer cmd, uint32_t imageIndex)
     {
         if (!initialized || !enabled) return;
+
+        // Lazy-init profiler if RT shadow pipeline exists (or will be created this frame).
+        if (!rtShadowProfiler && rtShadowEnabled && accelStructManager && accelStructManager->isInitialized())
+        {
+            rtShadowProfiler = std::make_unique<raytracing::RTShadowProfiler>();
+            rtShadowProfiler->init(device);
+        }
+
+        // Reset profiler query pool before any timestamp writes (matches dispatchGraphicsCompute path).
+        if (rtShadowProfiler && rtShadowProfiler->isValid())
+        {
+            uint32_t profilerFI = imageIndex % core::MAX_FRAMES_IN_FLIGHT;
+            rtShadowProfiler->resetFrame(cmd, profilerFI);
+        }
 
         if (mergedBuffer) mergedBuffer->flushPendingTransfers();
         if (meshletBuffer) meshletBuffer->flushPendingTransfers();
@@ -298,11 +312,6 @@ namespace render::gpudriven
 
         if (vegetation.grassInitialized && vegetation.grassRenderingEnabled)
             dispatchGrassCompute(cmd, vegetation.cachedVisibleTiles);
-
-        // SVT: dispatch feedback compute (after depth prepass provides depth buffer)
-        dispatchSVTFeedback(cmd);
-        // SVT: process feedback readback and upload tiles
-        updateSVTStreaming();
 
         dispatchVolumetricFog(cmd);
         dispatchGIProbeUpdate(cmd);

@@ -243,7 +243,7 @@ namespace render
         if (asyncComputeActive)
             gpuDrivenRenderer->dispatchGraphicsCompute(commandBuffer, imageIndex);
         else
-            gpuDrivenRenderer->dispatchCompute(commandBuffer);
+            gpuDrivenRenderer->dispatchCompute(commandBuffer, imageIndex);
 
         vk::DescriptorSet iblDescriptorSet = meshPipeline->getIBLDescriptorSet(imageIndex);
 
