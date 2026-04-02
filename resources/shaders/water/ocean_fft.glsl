@@ -25,37 +25,42 @@ void main() {
 
     if (x >= pc.N || y >= pc.N) return;
 
-    uint coord = (pc.direction == 0u) ? x : y;
+    uint j = (pc.direction == 0u) ? x : y;
+    uint halfN = pc.N >> 1u;
 
-    uint halfButterfly = 1u << pc.stage;
-    uint butterflySize = halfButterfly << 1u;
+    uint stride = 1u << pc.stage;
+    uint doubleStride = stride << 1u;
 
-    uint localIdx = coord % butterflySize;
-    uint pairIdx = localIdx % halfButterfly;
+    // Stockham auto-sort: within each doubleStride group,
+    // first 'stride' outputs get sum, next 'stride' get difference
+    uint group = j / doubleStride;
+    uint jInGroup = j % doubleStride;
+    bool isTop = (jInGroup < stride);
+    uint t = isTop ? jInGroup : (jInGroup - stride);
 
-    uint groupStart = (coord / butterflySize) * butterflySize;
-    uint topCoord = groupStart + pairIdx;
-    uint botCoord = topCoord + halfButterfly;
+    // Input halves are always N/2 apart
+    uint i0 = group * stride + t;
+    uint i1 = i0 + halfN;
 
-    vec2 topVal, botVal;
+    vec2 val0, val1;
     if (pc.direction == 0u) {
-        topVal = imageLoad(inputImg, ivec2(topCoord, y)).rg;
-        botVal = imageLoad(inputImg, ivec2(botCoord, y)).rg;
+        val0 = imageLoad(inputImg, ivec2(i0, y)).rg;
+        val1 = imageLoad(inputImg, ivec2(i1, y)).rg;
     } else {
-        topVal = imageLoad(inputImg, ivec2(x, topCoord)).rg;
-        botVal = imageLoad(inputImg, ivec2(x, botCoord)).rg;
+        val0 = imageLoad(inputImg, ivec2(x, i0)).rg;
+        val1 = imageLoad(inputImg, ivec2(x, i1)).rg;
     }
 
-    // Twiddle factor for IFFT: exp(+2*pi*i * k / M)
-    float angle = 2.0 * PI * float(pairIdx) / float(butterflySize);
+    // Twiddle factor for IFFT: exp(+2*pi*i * t / doubleStride)
+    float angle = 2.0 * PI * float(t) / float(doubleStride);
     vec2 twiddle = vec2(cos(angle), sin(angle));
-    vec2 twiddled = complexMul(botVal, twiddle);
+    vec2 twiddled = complexMul(val1, twiddle);
 
     vec2 result;
-    if (localIdx < halfButterfly) {
-        result = topVal + twiddled;
+    if (isTop) {
+        result = val0 + twiddled;
     } else {
-        result = topVal - twiddled;
+        result = val0 - twiddled;
     }
 
     imageStore(outputImg, ivec2(x, y), vec4(result, 0.0, 0.0));
