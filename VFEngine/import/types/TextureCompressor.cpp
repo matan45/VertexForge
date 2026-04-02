@@ -220,4 +220,25 @@ namespace types
         return output;
     }
 
+    bool TextureCompressor::decompressAllMips(resource::TextureData& textureData)
+    {
+        if (textureData.compressionFormat != resource::TextureCompressionFormat::BC7)
+        {
+            return false;
+        }
+
+        for (auto& mip : textureData.mipData)
+        {
+            auto decompressed = decompressBC7(mip.data.data(), mip.width, mip.height);
+            if (decompressed.empty())
+            {
+                return false;
+            }
+            mip.dataSize = static_cast<uint32_t>(decompressed.size());
+            mip.data = std::move(decompressed);
+        }
+        textureData.compressionFormat = resource::TextureCompressionFormat::Uncompressed;
+        return true;
+    }
+
 }

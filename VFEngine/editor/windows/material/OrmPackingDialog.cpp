@@ -218,24 +218,7 @@ namespace editor::materialeditor
         // Decompress compressed inputs (BC7) before channel packing
         input.decompressCallback = [](resource::TextureData& textureData) -> bool
         {
-            if (textureData.compressionFormat != resource::TextureCompressionFormat::BC7)
-            {
-                return false;
-            }
-
-            for (auto& mip : textureData.mipData)
-            {
-                auto decompressed = types::TextureCompressor::decompressBC7(
-                    mip.data.data(), mip.width, mip.height);
-                if (decompressed.empty())
-                {
-                    return false;
-                }
-                mip.dataSize = static_cast<uint32_t>(decompressed.size());
-                mip.data = std::move(decompressed);
-            }
-            textureData.compressionFormat = resource::TextureCompressionFormat::Uncompressed;
-            return true;
+            return types::TextureCompressor::decompressAllMips(textureData);
         };
 
         // Set up compression callback if compression is enabled.

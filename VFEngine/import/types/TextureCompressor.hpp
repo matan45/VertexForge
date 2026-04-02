@@ -37,6 +37,10 @@ namespace types
         static std::vector<unsigned char> decompressBC7(
             const unsigned char* compressedData, uint32_t width, uint32_t height);
 
+        // Decompress all mip levels of a BC7 TextureData in-place to uncompressed RGBA8.
+        // Returns true on success.
+        static bool decompressAllMips(resource::TextureData& textureData);
+
         // Get block dimensions for a compression format
         static void getBlockDimensions(resource::TextureCompressionFormat format,
                                        uint32_t& blockX, uint32_t& blockY);
