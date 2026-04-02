@@ -42,7 +42,7 @@ namespace render::raytracing
         void init(uint32_t width, uint32_t height,
                   vk::DescriptorSetLayout tlasLayout);
         void cleanup();
-        void resize(uint32_t width, uint32_t height);
+        bool resize(uint32_t width, uint32_t height);
 
         void dispatch(vk::CommandBuffer cmd,
                       vk::ImageView depthView,
