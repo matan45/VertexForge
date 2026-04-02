@@ -216,7 +216,8 @@ namespace render::gpudriven
         {
             if (rtShadowEnabled && rtShadowMaskDescriptorSet)
             {
-                currentSets.push_back(rtShadowMaskDescriptorSet); // Set 12
+                currentSets.push_back(emptyDescriptorSet5); // Set 12 (placeholder)
+                currentSets.push_back(rtShadowMaskDescriptorSet); // Set 13
             }
             else if (causticEnabled && causticDescriptorSet)
             {

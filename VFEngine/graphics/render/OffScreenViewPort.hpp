@@ -35,6 +35,7 @@ namespace render
 
         // Async compute (non-owning, set by controller)
         core::AsyncComputeManager* asyncComputeManager = nullptr;
+        uint32_t skipAsyncComputeFrames = 0;
         bool upscaleResourcesDirty = false;
 
     public:

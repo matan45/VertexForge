@@ -405,7 +405,9 @@ namespace render::gpudriven
         pipelineHasSet12 = false;
         if (rtShadowEnabled && rtShadowMaskLayout)
         {
-            setLayouts.push_back(rtShadowMaskLayout); // Set 12
+            // RT shadow mask is at set 13 in the shader; insert empty placeholder at set 12
+            setLayouts.push_back(emptyLayout);         // Set 12 (placeholder)
+            setLayouts.push_back(rtShadowMaskLayout);  // Set 13
             pipelineHasSet12 = true;
         }
         else if (causticEnabled && cachedCausticLayout)

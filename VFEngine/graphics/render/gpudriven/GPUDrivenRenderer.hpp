@@ -397,7 +397,7 @@ namespace render::gpudriven
         const glm::mat4& getCachedCameraProjection() const { return cachedCamera.projection; }
         const glm::vec3& getCachedCameraPosition() const { return cachedCamera.position; }
 
-        void dispatchCompute(vk::CommandBuffer cmd);
+        void dispatchCompute(vk::CommandBuffer cmd, uint32_t imageIndex = 0);
 
         // Split compute dispatch for async compute queue support
         // Records uploads, light occlusion, object culling, shadows, volumetric fog on graphics queue

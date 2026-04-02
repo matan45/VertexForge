@@ -83,7 +83,13 @@ namespace render
             preRenderCallback();
         }
 
-        bool useAsyncCompute = asyncComputeManager && asyncComputeManager->isEnabled() && renderPassHandler;
+        if (skipAsyncComputeFrames > 0)
+        {
+            skipAsyncComputeFrames--;
+        }
+
+        bool useAsyncCompute = asyncComputeManager && asyncComputeManager->isEnabled()
+                               && renderPassHandler && skipAsyncComputeFrames == 0;
 
         // Set async compute state on render pass handler
         if (renderPassHandler)
@@ -258,6 +264,11 @@ namespace render
 
     void OffScreenViewPort::recreate()
     {
+        if (asyncComputeManager)
+        {
+            asyncComputeManager->waitIdle();
+        }
+
         device.getLogicalDevice().waitIdle();
 
         if (ImGui::GetCurrentContext())
@@ -293,6 +304,8 @@ namespace render
         createOffscreenResources();
 
         renderPassHandler->recreate();
+
+        skipAsyncComputeFrames = core::MAX_FRAMES_IN_FLIGHT;
     }
 
     vk::Image OffScreenViewPort::getColorImage(uint32_t index) const

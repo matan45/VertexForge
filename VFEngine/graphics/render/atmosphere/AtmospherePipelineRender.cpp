@@ -320,6 +320,8 @@ namespace render::atmosphere
             compositePipelineInfo.renderPass = compositeRenderPass;
             compositePipeline = dev.createGraphicsPipeline(nullptr, compositePipelineInfo).value;
         }
+
+        needsInitialTransition = true;
     }
 
     void AtmospherePipeline::createSkyRenderer()
