@@ -370,6 +370,16 @@ void main() {
     vec3 N = normalize(fragNormal);
     vec3 V = normalize(camera.cameraPos - fragWorldPos);
 
+    // Triplanar UV blending for cave walls/ceilings where XZ projection stretches
+    vec3 blendWeights = abs(N);
+    blendWeights = pow(blendWeights, vec3(4.0));
+    blendWeights /= (blendWeights.x + blendWeights.y + blendWeights.z);
+    float textureScale = pc.terrainTextureScale > 0.0 ? pc.terrainTextureScale : 0.1;
+    vec2 uvXZ = fragWorldPos.xz * textureScale; // Y-facing (horizontal surfaces)
+    vec2 uvXY = fragWorldPos.xy * textureScale; // Z-facing (north/south walls)
+    vec2 uvYZ = fragWorldPos.yz * textureScale; // X-facing (east/west walls)
+    vec2 triplanarWorldUV = uvXZ * blendWeights.y + uvXY * blendWeights.z + uvYZ * blendWeights.x;
+
 #include "../material/terrain_material_generated.glsl"
 #ifndef MAT_EMISSION_DEFINED
     vec3 mat_emission = vec3(0.0);

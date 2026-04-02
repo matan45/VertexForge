@@ -15,7 +15,7 @@ for (int ch = 0; ch < 8; ch++) {
     uint paletteIdx = (packedWord >> ((ch % 4) * 8u)) & 0xFFu;
     float w = sampleTileWeight(tiles[fragTileIndex].weightMapOffset, uint(tiles[fragTileIndex].aabbMin.w), uint(ch), fragTexCoord);
     if (w < 0.001) continue;
-    vec2 layerUV = fragWorldUV * terrainLayers[paletteIdx].tilingScale;
+    vec2 layerUV = triplanarWorldUV * terrainLayers[paletteIdx].tilingScale;
     uint albedoIdx = terrainLayers[paletteIdx].albedoTextureIndex;
     vec3 layerAlbedo = (albedoIdx > 0u) ? texture(bindlessTextures[nonuniformEXT(albedoIdx)], layerUV).rgb : vec3(0.5);
     uint normalIdx = terrainLayers[paletteIdx].normalTextureIndex;

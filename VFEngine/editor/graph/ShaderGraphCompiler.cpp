@@ -37,7 +37,7 @@ namespace editor::graph {
         code += "    float w = sampleTileWeight(tiles[fragTileIndex].weightMapOffset, "
                 "uint(tiles[fragTileIndex].aabbMin.w), uint(ch), fragTexCoord);\n";
         code += "    if (w < 0.001) continue;\n";
-        code += "    vec2 layerUV = fragWorldUV * terrainLayers[paletteIdx].tilingScale;\n";
+        code += "    vec2 layerUV = triplanarWorldUV * terrainLayers[paletteIdx].tilingScale;\n";
         code += "    uint albedoIdx = terrainLayers[paletteIdx].albedoTextureIndex;\n";
         code += "    vec3 layerAlbedo = (albedoIdx > 0u) ? "
                 "texture(bindlessTextures[nonuniformEXT(albedoIdx)], layerUV).rgb : vec3(0.5);\n";

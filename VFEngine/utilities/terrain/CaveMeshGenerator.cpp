@@ -6,9 +6,10 @@
 
 namespace terrain
 {
-    // Shift isosurface slightly into solid terrain so cave mesh overlaps
+    // Shift isosurface into solid terrain so cave mesh overlaps
     // the heightmap surface, sealing gaps at cave/terrain boundary.
-    static constexpr float caveIsoOffset = -0.3f;
+    // Depth testing hides the overlap (terrain is closer to camera).
+    static constexpr float caveIsoOffset = -1.0f;
 
     static constexpr int cornerOffsets[8][3] = {
         {0, 0, 0}, {1, 0, 0}, {1, 0, 1}, {0, 0, 1},
@@ -79,7 +80,7 @@ namespace terrain
 
         // Use tracked dirty region if available (set during brush application)
         // Expand by 3 voxels to ensure marching cubes covers the shifted isosurface boundary
-        constexpr uint32_t boundsMargin = 3;
+        constexpr uint32_t boundsMargin = 4;
         if (sdf.hasDirtyRegion)
         {
             mb.startX = sdf.dirtyMin.x > boundsMargin ? sdf.dirtyMin.x - boundsMargin : 0;
