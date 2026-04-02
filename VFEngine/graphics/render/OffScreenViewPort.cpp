@@ -324,7 +324,7 @@ namespace render
 
     void OffScreenViewPort::createOffscreenResources()
     {
-        vk::Format colorFormat = swapChain.getSwapchainImageFormat();
+        vk::Format colorFormat = swapChain.getSceneColorFormat();
         vk::Format depthFormat = swapChain.getSwapchainDepthStencilFormat();
 
         uint32_t renderWidth = swapChain.getSwapchainExtent().width;
@@ -493,7 +493,7 @@ namespace render
     {
         if (offscreenResources.upscaleResourcesCreated) return;
 
-        vk::Format colorFormat = swapChain.getSwapchainImageFormat();
+        vk::Format colorFormat = swapChain.getSceneColorFormat();
 
         // Motion vector image (R16G16_SFLOAT) at render resolution
         {

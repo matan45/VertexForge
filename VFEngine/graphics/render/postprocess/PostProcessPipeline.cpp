@@ -420,7 +420,7 @@ namespace render::postprocess
     void PostProcessPipeline::createRenderPass()
     {
         vk::AttachmentDescription colorAttachment{};
-        colorAttachment.format = swapChain.getSwapchainImageFormat();
+        colorAttachment.format = swapChain.getSceneColorFormat();
         colorAttachment.samples = vk::SampleCountFlagBits::e1;
         colorAttachment.loadOp = vk::AttachmentLoadOp::eDontCare;
         colorAttachment.storeOp = vk::AttachmentStoreOp::eStore;
@@ -490,7 +490,7 @@ namespace render::postprocess
     void PostProcessPipeline::createPingPongTargets()
     {
         auto extent = swapChain.getSwapchainExtent();
-        vk::Format format = swapChain.getSwapchainImageFormat();
+        vk::Format format = swapChain.getSceneColorFormat();
 
         auto createTarget = [&](PingPongTarget& target, vk::Extent2D targetExtent)
         {

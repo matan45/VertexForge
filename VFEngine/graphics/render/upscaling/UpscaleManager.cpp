@@ -303,7 +303,7 @@ namespace render::upscaling
 
             dlssOptions.outputWidth = outputWidth;
             dlssOptions.outputHeight = outputHeight;
-            dlssOptions.colorBuffersHDR = sl::Boolean::eFalse;
+            dlssOptions.colorBuffersHDR = sl::Boolean::eTrue;
 
             slDLSSSetOptions(sl::ViewportHandle{0}, dlssOptions);
         }

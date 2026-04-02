@@ -44,6 +44,7 @@ namespace core {
 
 		vk::Format getSwapchainDepthStencilFormat() const { return swapchainDepthStencilFormat; }
 		vk::Format getSwapchainImageFormat() const { return swapchainImageFormat; }
+		vk::Format getSceneColorFormat() const { return vk::Format::eR16G16B16A16Sfloat; }
 
 		/// Returns the active rendering extent. When upscaling is active, this returns
 		/// the internal render resolution. Otherwise returns the native swapchain extent.

@@ -13,7 +13,7 @@ namespace render::mesh
     void StaticMeshPipeline::createRenderPass()
     {
         vk::AttachmentDescription colorAttachment{};
-        colorAttachment.format = swapChain.getSwapchainImageFormat();
+        colorAttachment.format = swapChain.getSceneColorFormat();
         colorAttachment.samples = vk::SampleCountFlagBits::e1;
         colorAttachment.loadOp = vk::AttachmentLoadOp::eLoad;
         colorAttachment.storeOp = vk::AttachmentStoreOp::eStore;
@@ -60,7 +60,7 @@ namespace render::mesh
     void StaticMeshPipeline::createVFXRenderPass()
     {
         vk::AttachmentDescription colorAttachment{};
-        colorAttachment.format = swapChain.getSwapchainImageFormat();
+        colorAttachment.format = swapChain.getSceneColorFormat();
         colorAttachment.samples = vk::SampleCountFlagBits::e1;
         colorAttachment.loadOp = vk::AttachmentLoadOp::eLoad;
         colorAttachment.storeOp = vk::AttachmentStoreOp::eStore;
@@ -108,7 +108,7 @@ namespace render::mesh
     {
         // Color: load existing content, keep as color attachment
         vk::AttachmentDescription colorAttachment{};
-        colorAttachment.format = swapChain.getSwapchainImageFormat();
+        colorAttachment.format = swapChain.getSceneColorFormat();
         colorAttachment.samples = vk::SampleCountFlagBits::e1;
         colorAttachment.loadOp = vk::AttachmentLoadOp::eLoad;
         colorAttachment.storeOp = vk::AttachmentStoreOp::eStore;

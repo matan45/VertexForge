@@ -34,7 +34,7 @@ namespace render::upscaling
         float deltaTime = 0.016f;
         float preExposure = 1.0f;
         bool resetAccumulation = false; // True on camera cuts / teleports
-        VkFormat colorFormat = VK_FORMAT_B8G8R8A8_SRGB;
+        VkFormat colorFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
         VkFormat depthFormat = VK_FORMAT_D32_SFLOAT_S8_UINT;
         VkFormat motionFormat = VK_FORMAT_R16G16_SFLOAT;
         VkFormat outputFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
