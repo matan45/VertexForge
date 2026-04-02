@@ -24,7 +24,7 @@ namespace services
     struct OceanFFTConfigData
     {
         OceanBandConfigData bands[MAX_OCEAN_BANDS] = {
-            {256, 500.0f, 12.0f, 45.0f, 0.00005f, 1.5f, -0.1f, 4.0f, true},   // Swell
+            {128, 100.0f, 12.0f, 45.0f, 0.00005f, 1.5f, -0.1f, 4.0f, true},   // Swell
             {128, 100.0f,  8.0f, 60.0f, 0.00003f, 1.2f, -0.1f, 4.0f, true},   // Agitation
             {128,  20.0f,  4.0f, 30.0f, 0.00001f, 0.8f, -0.1f, 4.0f, true},   // Ripples
         };
@@ -43,7 +43,7 @@ namespace services
         float refractionDepthScale = 0.2f;
         float causticStrength = 1.0f;
         float causticDepthFalloff = 0.5f;
-        float shoreFoamRange = 3.0f;
+        float shoreFoamRange = 0.0f;
         float shoreFoamIntensity = 0.8f;
         float shoreBreakingStrength = 0.8f;
         float shoreWetRange = 5.0f;
@@ -85,7 +85,7 @@ namespace services
         float refractionDepthScale = 0.2f;
         float causticStrength = 1.0f;
         float causticDepthFalloff = 0.5f;
-        float shoreFoamRange = 3.0f;
+        float shoreFoamRange = 0.0f;
         float shoreFoamIntensity = 0.8f;
         float shoreBreakingStrength = 0.8f;
         float shoreWetRange = 5.0f;

@@ -70,11 +70,15 @@ void main() {
     imageStore(causticMap, ivec2(x, y), vec4(causticIntensity, 0.0, 0.0, 0.0));
 
     // Foam only on strong wave crests that are actually folding
-    float displacementMag = length(vec3(dx, dy, dz));
+    // Use unscaled displacement magnitude so foam thresholds are independent of displacementScale
+    float rawDispMag = length(vec3(dx, dy, dz)) / max(pc.displacementScale, 0.001);
     float foam = 0.0;
-    if (displacementMag > 1.0 && jacobian < pc.foamThreshold) {
-        float rawFoam = 1.0 - smoothstep(pc.foamThreshold - 0.5, pc.foamThreshold, jacobian);
-        foam = rawFoam * smoothstep(1.0, 3.0, displacementMag);
+    if (jacobian < pc.foamThreshold) {
+        // Wide smoothstep range for gradual transitions (avoids isolated pixel dots)
+        float rawFoam = 1.0 - smoothstep(pc.foamThreshold - 1.5, pc.foamThreshold, jacobian);
+        rawFoam *= smoothstep(1.0, 4.0, rawDispMag);
+        // Quadratic falloff: suppresses weak foam at isolated texels
+        foam = rawFoam * rawFoam;
     }
 
     imageStore(displacementMap, ivec2(x, y), vec4(dx, dy, dz, foam));
