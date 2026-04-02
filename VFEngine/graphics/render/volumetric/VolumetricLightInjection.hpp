@@ -8,6 +8,7 @@ namespace core
 {
     class Device;
     class Shader;
+    struct VulkanAllocation;
 }
 
 namespace render::volumetric
@@ -32,6 +33,10 @@ namespace render::volumetric
         vk::DescriptorSetLayout fogVolumeLayout;          // Set 6
         vk::DescriptorSetLayout giSamplingLayout;           // Set 7
         vk::DescriptorSetLayout ownedGiDummyLayout;         // Owned fallback if GI not available
+        vk::DescriptorPool ownedGiDummyPool;                    // Pool for dummy GI descriptor set
+        vk::DescriptorSet giDummyDescSet;                       // Dummy GI descriptor set (zeroed buffers)
+        vk::Buffer giDummyBuffer;                               // Small zeroed buffer for dummy bindings
+        std::unique_ptr<core::VulkanAllocation> giDummyAllocation; // Allocation for dummy buffer
 
         VolumetricGridDimensions dims{};
         bool initialized = false;

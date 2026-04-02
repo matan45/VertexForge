@@ -2,8 +2,11 @@
 #include "../../core/Device.hpp"
 #include "../../core/Shader.hpp"
 #include "../../core/PipelineUtilities.hpp"
+#include "../../core/BufferUtilities.hpp"
+#include "../../core/VulkanMemoryManager.hpp"
 #include "print/Log.hpp"
 #include <array>
+#include <cstring>
 
 namespace render::volumetric
 {
@@ -50,14 +53,65 @@ namespace render::volumetric
         }
         else
         {
+            auto& dev = device.getLogicalDevice();
+
+            // Create dummy layout matching GI sampling bindings
             std::array<vk::DescriptorSetLayoutBinding, 2> bindings{};
             bindings[0] = {0, vk::DescriptorType::eStorageBuffer, 1, vk::ShaderStageFlagBits::eCompute};
             bindings[1] = {1, vk::DescriptorType::eStorageBuffer, 1, vk::ShaderStageFlagBits::eCompute};
             vk::DescriptorSetLayoutCreateInfo layoutInfo{};
             layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
             layoutInfo.pBindings = bindings.data();
-            ownedGiDummyLayout = device.getLogicalDevice().createDescriptorSetLayout(layoutInfo);
+            ownedGiDummyLayout = dev.createDescriptorSetLayout(layoutInfo);
             giSamplingLayout = ownedGiDummyLayout;
+
+            // Create descriptor pool for 1 set with 2 storage buffer descriptors
+            vk::DescriptorPoolSize poolSize{vk::DescriptorType::eStorageBuffer, 2};
+            vk::DescriptorPoolCreateInfo poolInfo{};
+            poolInfo.maxSets = 1;
+            poolInfo.poolSizeCount = 1;
+            poolInfo.pPoolSizes = &poolSize;
+            ownedGiDummyPool = dev.createDescriptorPool(poolInfo);
+
+            // Allocate dummy descriptor set
+            vk::DescriptorSetAllocateInfo allocInfo{};
+            allocInfo.descriptorPool = ownedGiDummyPool;
+            allocInfo.descriptorSetCount = 1;
+            allocInfo.pSetLayouts = &ownedGiDummyLayout;
+            giDummyDescSet = dev.allocateDescriptorSets(allocInfo)[0];
+
+            // Create small zeroed buffer for both bindings (giCascadeCount will be 0)
+            constexpr vk::DeviceSize dummyBufferSize = 256;
+            giDummyAllocation = std::make_unique<core::VulkanAllocation>();
+            core::BufferInfoRequest bufReq(dev, device.getPhysicalDevice());
+            bufReq.size = dummyBufferSize;
+            bufReq.usage = vk::BufferUsageFlagBits::eStorageBuffer;
+            bufReq.properties = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
+            core::BufferUtilities::createBuffer(bufReq, giDummyBuffer, *giDummyAllocation, device.getMemoryManager());
+
+            // Zero out the buffer (ensures giCascadeCount == 0 in shader)
+            if (giDummyAllocation->mappedPtr)
+            {
+                std::memset(giDummyAllocation->mappedPtr, 0, dummyBufferSize);
+            }
+
+            // Write both bindings to point at the zeroed buffer
+            std::array<vk::DescriptorBufferInfo, 2> bufInfos = {
+                vk::DescriptorBufferInfo{giDummyBuffer, 0, dummyBufferSize},
+                vk::DescriptorBufferInfo{giDummyBuffer, 0, dummyBufferSize}
+            };
+
+            std::array<vk::WriteDescriptorSet, 2> writes{};
+            for (uint32_t i = 0; i < 2; ++i)
+            {
+                writes[i].dstSet = giDummyDescSet;
+                writes[i].dstBinding = i;
+                writes[i].dstArrayElement = 0;
+                writes[i].descriptorCount = 1;
+                writes[i].descriptorType = vk::DescriptorType::eStorageBuffer;
+                writes[i].pBufferInfo = &bufInfos[i];
+            }
+            dev.updateDescriptorSets(writes, {});
         }
 
         createPipelineLayout();
@@ -91,6 +145,19 @@ namespace render::volumetric
         {
             shader->cleanUp();
             shader.reset();
+        }
+
+        if (giDummyBuffer)
+        {
+            core::BufferUtilities::destroyBuffer(dev, giDummyBuffer, *giDummyAllocation, device.getMemoryManager());
+            giDummyAllocation.reset();
+        }
+
+        if (ownedGiDummyPool)
+        {
+            dev.destroyDescriptorPool(ownedGiDummyPool);
+            ownedGiDummyPool = nullptr;
+            giDummyDescSet = nullptr;
         }
 
         if (ownedGiDummyLayout)
@@ -198,12 +265,13 @@ namespace render::volumetric
             1, &fogVolumeDescSet,
             0, nullptr);
 
-        // Bind GI (set 7) only when available
-        if (giSamplingDescSet)
+        // Bind GI (set 7) - use dummy set with zeroed buffers when GI is not active
+        vk::DescriptorSet giSet = giSamplingDescSet ? giSamplingDescSet : giDummyDescSet;
+        if (giSet)
         {
             cmd.bindDescriptorSets(
                 vk::PipelineBindPoint::eCompute, pipelineLayout, 7,
-                1, &giSamplingDescSet,
+                1, &giSet,
                 0, nullptr);
         }
 
