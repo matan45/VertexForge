@@ -70,7 +70,7 @@ layout(push_constant) uniform PushConstants {
     float brushWorldRadius;
     float brushFalloff;
     float brushShape;
-    float _shadowLODRemoved;
+    float brushWorldY;
     uint hiZMipLevels;           // Mip levels in the Hi-Z pyramid (0 = disabled)
     float _pad3;                 // Align mat4 to 16-byte boundary
     mat4 viewProjection;         // CPU-precomputed view-projection (matches raycast invViewProjection)
@@ -263,7 +263,7 @@ layout(push_constant) uniform PushConstants {
     float brushWorldRadius;
     float brushFalloff;
     float brushShape;
-    float _shadowLODRemoved;
+    float brushWorldY;
     uint hiZMipLevels;           // Mip levels in the Hi-Z pyramid (0 = disabled)
     float _pad3;                 // Align mat4 to 16-byte boundary
     mat4 viewProjection;         // CPU-precomputed view-projection (matches raycast invViewProjection)
@@ -711,7 +711,12 @@ void main() {
             dist = length(delta) / pc.brushWorldRadius;
         }
 
-        if (dist <= 1.0) {
+        // Y proximity check: only show brush on surfaces near the hit point
+        float yDist = abs(fragWorldPos.y - pc.brushWorldY);
+        float yThreshold = pc.brushWorldRadius * 1.5;
+        bool yClose = (yDist <= yThreshold);
+
+        if (dist <= 1.0 && yClose) {
             float falloffValue;
             uint falloffType = uint(pc.brushFalloff);
 
@@ -724,12 +729,14 @@ void main() {
             color = mix(color, brushColor, falloffValue * 0.3);
         }
 
-        float edgeWidth = 0.02;
-        float edgeDist = abs(dist - 1.0);
-        if (edgeDist < edgeWidth) {
-            float edgeAlpha = 1.0 - (edgeDist / edgeWidth);
-            vec3 brushColor = vec3(0.2, 0.6, 1.0);
-            color = mix(color, brushColor, edgeAlpha * 0.8);
+        if (yClose) {
+            float edgeWidth = 0.02;
+            float edgeDist = abs(dist - 1.0);
+            if (edgeDist < edgeWidth) {
+                float edgeAlpha = 1.0 - (edgeDist / edgeWidth);
+                vec3 brushColor = vec3(0.2, 0.6, 1.0);
+                color = mix(color, brushColor, edgeAlpha * 0.8);
+            }
         }
     }
 

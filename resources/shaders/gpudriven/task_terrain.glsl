@@ -58,7 +58,7 @@ layout(push_constant) uniform PushConstants {
     float brushWorldRadius;        // 0.0 = inactive
     float brushFalloff;
     float brushShape;
-    float _shadowLODRemoved;
+    float brushWorldY;
     uint hiZMipLevels;             // Mip levels in the Hi-Z pyramid (0 = disabled)
     float _pad3;                   // Align mat4 to 16-byte boundary
     mat4 viewProjection;

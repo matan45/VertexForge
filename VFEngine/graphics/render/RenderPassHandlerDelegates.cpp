@@ -121,12 +121,11 @@ namespace render
         auto hitResult = getTerrainHitResult();
         if (hitResult.hit && brushOverlayRadius_ > 0.0f)
         {
-            glm::vec2 worldPos(hitResult.position.x, hitResult.position.z);
-            gpuDrivenRenderer->setBrushOverlay(worldPos, brushOverlayRadius_, brushOverlayFalloff_, brushOverlayShape_);
+            gpuDrivenRenderer->setBrushOverlay(hitResult.position, brushOverlayRadius_, brushOverlayFalloff_, brushOverlayShape_);
         }
         else
         {
-            gpuDrivenRenderer->setBrushOverlay(glm::vec2(0.0f), 0.0f, 0.0f, 0.0f);
+            gpuDrivenRenderer->setBrushOverlay(glm::vec3(0.0f), 0.0f, 0.0f, 0.0f);
         }
     }
 

@@ -6,6 +6,10 @@
 
 namespace terrain
 {
+    // Shift isosurface slightly into solid terrain so cave mesh overlaps
+    // the heightmap surface, sealing gaps at cave/terrain boundary.
+    static constexpr float caveIsoOffset = -0.3f;
+
     static constexpr int cornerOffsets[8][3] = {
         {0, 0, 0}, {1, 0, 0}, {1, 0, 1}, {0, 0, 1},
         {0, 1, 0}, {1, 1, 0}, {1, 1, 1}, {0, 1, 1}
@@ -57,7 +61,7 @@ namespace terrain
         if (std::abs(v0 - v1) < 1e-6f)
             return (p0 + p1) * 0.5f;
 
-        float t = std::clamp(-v0 / (v1 - v0), 0.0f, 1.0f);
+        float t = std::clamp((caveIsoOffset - v0) / (v1 - v0), 0.0f, 1.0f);
         return p0 + t * (p1 - p0);
     }
 
@@ -74,14 +78,16 @@ namespace terrain
             return mb;
 
         // Use tracked dirty region if available (set during brush application)
+        // Expand by 3 voxels to ensure marching cubes covers the shifted isosurface boundary
+        constexpr uint32_t boundsMargin = 3;
         if (sdf.hasDirtyRegion)
         {
-            mb.startX = sdf.dirtyMin.x > 1 ? sdf.dirtyMin.x - 1 : 0;
-            mb.startY = sdf.dirtyMin.y > 1 ? sdf.dirtyMin.y - 1 : 0;
-            mb.startZ = sdf.dirtyMin.z > 1 ? sdf.dirtyMin.z - 1 : 0;
-            mb.endX = std::min(sdf.dirtyMax.x + 1, sdf.config.resX - 1);
-            mb.endY = std::min(sdf.dirtyMax.y + 1, sdf.config.resY - 1);
-            mb.endZ = std::min(sdf.dirtyMax.z + 1, sdf.config.resZ - 1);
+            mb.startX = sdf.dirtyMin.x > boundsMargin ? sdf.dirtyMin.x - boundsMargin : 0;
+            mb.startY = sdf.dirtyMin.y > boundsMargin ? sdf.dirtyMin.y - boundsMargin : 0;
+            mb.startZ = sdf.dirtyMin.z > boundsMargin ? sdf.dirtyMin.z - boundsMargin : 0;
+            mb.endX = std::min(sdf.dirtyMax.x + boundsMargin, sdf.config.resX - 1);
+            mb.endY = std::min(sdf.dirtyMax.y + boundsMargin, sdf.config.resY - 1);
+            mb.endZ = std::min(sdf.dirtyMax.z + boundsMargin, sdf.config.resZ - 1);
             return mb;
         }
 
@@ -105,12 +111,12 @@ namespace terrain
 
         if (!anyModified) { mb.valid = false; return mb; }
 
-        mb.startX = mMinX > 1 ? mMinX - 1 : 0;
-        mb.startY = mMinY > 1 ? mMinY - 1 : 0;
-        mb.startZ = mMinZ > 1 ? mMinZ - 1 : 0;
-        mb.endX = std::min(mMaxX + 1, sdf.config.resX - 1);
-        mb.endY = std::min(mMaxY + 1, sdf.config.resY - 1);
-        mb.endZ = std::min(mMaxZ + 1, sdf.config.resZ - 1);
+        mb.startX = mMinX > boundsMargin ? mMinX - boundsMargin : 0;
+        mb.startY = mMinY > boundsMargin ? mMinY - boundsMargin : 0;
+        mb.startZ = mMinZ > boundsMargin ? mMinZ - boundsMargin : 0;
+        mb.endX = std::min(mMaxX + boundsMargin, sdf.config.resX - 1);
+        mb.endY = std::min(mMaxY + boundsMargin, sdf.config.resY - 1);
+        mb.endZ = std::min(mMaxZ + boundsMargin, sdf.config.resZ - 1);
         return mb;
     }
 
@@ -211,7 +217,7 @@ namespace terrain
 
                 int cubeIndex = 0;
                 for (int i = 0; i < 8; ++i)
-                    if (cornerValues[i] > 0.0f) cubeIndex |= (1 << i);
+                    if (cornerValues[i] > caveIsoOffset) cubeIndex |= (1 << i);
 
                 if (edgeTable[cubeIndex] == 0)
                     continue;
@@ -278,9 +284,12 @@ namespace terrain
 
             outMeshlet.bounds.boundingSphere = glm::vec4(
                 bounds.center[0], bounds.center[1], bounds.center[2], bounds.radius);
+            // Disable backface culling for cave meshlets — cave geometry is
+            // viewed from inside, so normal cone culling would incorrectly hide faces.
+            // cone.w >= 1.0 makes coneCullTest() always return true (visible).
             outMeshlet.bounds.cone = glm::vec4(
                 bounds.cone_axis[0], bounds.cone_axis[1], bounds.cone_axis[2],
-                bounds.cone_cutoff);
+                1.0f);
         }
     }
 

@@ -364,7 +364,7 @@ namespace render::gpudriven
         );
     }
 
-    void GPUDrivenRenderer::setBrushOverlay(const glm::vec2& worldPos, float worldRadius, float falloff, float shape)
+    void GPUDrivenRenderer::setBrushOverlay(const glm::vec3& worldPos, float worldRadius, float falloff, float shape)
     {
         if (terrain.pipeline)
         {

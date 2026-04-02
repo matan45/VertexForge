@@ -32,7 +32,7 @@ namespace render::gpudriven
         float brushWorldRadius;    // 0.0 = inactive
         float brushFalloff;        // Falloff type (0=constant, 1=linear, 2=smooth, 3=sharp)
         float brushShape;          // Shape (0=circle, 1=square)
-        float _shadowLODRemoved;   // Reserved padding (was shadowLOD)
+        float brushWorldY;         // Brush overlay Y position for cave awareness
         uint32_t hiZMipLevels;     // Mip levels in the Hi-Z pyramid (0 = disabled)
         float _pad3;               // Align mat4 to 16-byte boundary (offset 64)
         glm::mat4 viewProjection; // CPU-precomputed view-projection (matches raycast invViewProjection)
@@ -121,6 +121,7 @@ namespace render::gpudriven
         bool wireframeMode = false;
 
         glm::vec2 brushWorldPos{0.0f};
+        float brushWorldY = 0.0f;
         float brushWorldRadius = 0.0f;
         float brushFalloff = 0.0f;
         float brushShape = 0.0f;
@@ -202,9 +203,10 @@ namespace render::gpudriven
         void setMeshletOcclusionCullingEnabled(bool enabled) { meshletOcclusionCullingEnabled = enabled; }
         void setHiZMipLevels(uint32_t levels) { hiZMipLevels = levels; }
         void setTerrainMaxDrawDistSq(float distSq) { terrainMaxDrawDistSq = distSq; }
-        void setBrushOverlay(const glm::vec2& worldPos, float worldRadius, float falloff, float shape)
+        void setBrushOverlay(const glm::vec3& worldPos, float worldRadius, float falloff, float shape)
         {
-            brushWorldPos = worldPos;
+            brushWorldPos = glm::vec2(worldPos.x, worldPos.z);
+            brushWorldY = worldPos.y;
             brushWorldRadius = worldRadius;
             brushFalloff = falloff;
             brushShape = shape;
