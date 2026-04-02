@@ -2,6 +2,9 @@
 #include "imgui.h"
 #include "events/EventDispatcher.hpp"
 #include "events/render/RenderEvents.hpp"
+#include "resource/ResourceManager.hpp"
+#include "asset/AssetRef.hpp"
+#include "TextureCompressor.hpp"
 #include <glm/glm.hpp>
 #include <filesystem>
 #include <cmath>
@@ -26,6 +29,8 @@ namespace windows
             cancelCmd.instanceId = this;
             dispatcher.execute(cancelCmd);
         }
+
+        releaseChannelTexture();
 
         if (imageHandle.isValid())
         {
@@ -195,20 +200,17 @@ namespace windows
             imageSize.x = imageSize.y * imageAspect;
         }
 
-
-        void* displayDescriptor = imageHandle.getMipDescriptor(static_cast<uint32_t>(selectedMipLevel));
-
-        ImVec4 tint(1.0f, 1.0f, 1.0f, 1.0f);
-        switch (channelView)
+        void* displayDescriptor;
+        if (channelView != 0 && channelHandle.isValid())
         {
-            case 1: tint = ImVec4(1.0f, 0.0f, 0.0f, 1.0f); break; // R
-            case 2: tint = ImVec4(0.0f, 1.0f, 0.0f, 1.0f); break; // G
-            case 3: tint = ImVec4(0.0f, 0.0f, 1.0f, 1.0f); break; // B
-            case 4: tint = ImVec4(0.0f, 0.0f, 0.0f, 1.0f); break; // A (shown via alpha)
-            default: break;
+            displayDescriptor = channelHandle.imguiDescriptorSet;
+        }
+        else
+        {
+            displayDescriptor = imageHandle.getMipDescriptor(static_cast<uint32_t>(selectedMipLevel));
         }
 
-        ImGui::Image(displayDescriptor, imageSize, ImVec2(0, 0), ImVec2(1, 1), tint);
+        ImGui::Image(displayDescriptor, imageSize);
     }
 
     void ImagePreviewWindow::drawInfoPanel()
@@ -284,10 +286,11 @@ namespace windows
             ImGui::Spacing();
         }
 
-        if (ImGui::CollapsingHeader("Channels", ImGuiTreeNodeFlags_DefaultOpen))
+        if (imageHandle.isValid() && ImGui::CollapsingHeader("Channels", ImGuiTreeNodeFlags_DefaultOpen))
         {
             float buttonWidth = ImGui::GetContentRegionAvail().x;
-            float btnW = (buttonWidth - ImGui::GetStyle().ItemSpacing.x * 4) / 5.0f;
+            float spacing = ImGui::GetStyle().ItemSpacing.x;
+            float btnW = (buttonWidth - spacing * 2) / 3.0f;
 
             auto channelButton = [&](const char* label, int channel, const ImVec4& color)
             {
@@ -305,20 +308,33 @@ namespace windows
 
                 if (ImGui::Button(label, ImVec2(btnW, 0)))
                 {
-                    channelView = (channelView == channel) ? 0 : channel;
+                    int newChannel = (channelView == channel) ? 0 : channel;
+                    if (newChannel != channelView)
+                    {
+                        channelView = newChannel;
+                        if (channelView == 0)
+                        {
+                            releaseChannelTexture();
+                        }
+                        else
+                        {
+                            buildChannelTexture(channelView);
+                        }
+                    }
                 }
                 ImGui::PopStyleColor(2);
             };
 
-            channelButton("RGB", 0, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
-            ImGui::SameLine();
             channelButton("R", 1, ImVec4(0.8f, 0.2f, 0.2f, 1.0f));
             ImGui::SameLine();
             channelButton("G", 2, ImVec4(0.2f, 0.8f, 0.2f, 1.0f));
             ImGui::SameLine();
             channelButton("B", 3, ImVec4(0.2f, 0.2f, 0.8f, 1.0f));
-            ImGui::SameLine();
+
+            btnW = (buttonWidth - spacing) / 2.0f;
             channelButton("A", 4, ImVec4(0.6f, 0.6f, 0.6f, 1.0f));
+            ImGui::SameLine();
+            channelButton("RGB", 0, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
         }
 
         ImGui::Separator();
@@ -349,6 +365,84 @@ namespace windows
             {
                 zoom = 1.0f;
             }
+        }
+    }
+
+    void ImagePreviewWindow::buildChannelTexture(int channel)
+    {
+        releaseChannelTexture();
+
+        auto future = resource::ResourceManager::loadTextureAsync(asset::AssetRef::fromPath(imagePath));
+        auto textureData = future.get();
+        if (!textureData || textureData->mipData.empty())
+        {
+            return;
+        }
+
+        // Decompress if BC7
+        if (textureData->compressionFormat == resource::TextureCompressionFormat::BC7)
+        {
+            for (auto& mip : textureData->mipData)
+            {
+                auto decompressed = types::TextureCompressor::decompressBC7(
+                    mip.data.data(), mip.width, mip.height);
+                if (decompressed.empty())
+                {
+                    return;
+                }
+                mip.dataSize = static_cast<uint32_t>(decompressed.size());
+                mip.data = std::move(decompressed);
+            }
+            textureData->compressionFormat = resource::TextureCompressionFormat::Uncompressed;
+        }
+
+        // Channel index: 1=R(0), 2=G(1), 3=B(2), 4=A(3)
+        int channelIndex = channel - 1;
+
+        // Build grayscale texture: R=G=B=selected channel, A=255
+        resource::TextureData channelData;
+        channelData.width = textureData->width;
+        channelData.height = textureData->height;
+        channelData.numbersOfChannels = 4;
+        channelData.compressionFormat = resource::TextureCompressionFormat::Uncompressed;
+
+        // Only use mip 0 for the channel view
+        const auto& srcMip = textureData->mipData[0];
+        resource::MipLevelData dstMip;
+        dstMip.width = srcMip.width;
+        dstMip.height = srcMip.height;
+        dstMip.data.resize(srcMip.width * srcMip.height * 4);
+        dstMip.dataSize = static_cast<uint32_t>(dstMip.data.size());
+
+        for (uint32_t i = 0; i < srcMip.width * srcMip.height; ++i)
+        {
+            uint8_t value = srcMip.data[i * 4 + channelIndex];
+            dstMip.data[i * 4 + 0] = value;
+            dstMip.data[i * 4 + 1] = value;
+            dstMip.data[i * 4 + 2] = value;
+            dstMip.data[i * 4 + 3] = 255;
+        }
+
+        channelData.mipData.push_back(std::move(dstMip));
+        channelData.mipLevels = 1;
+
+        auto& dispatcher = events::EventDispatcher::instance();
+        events::render::LoadEditorTextureFromDataCommand cmd;
+        cmd.textureData = std::move(channelData);
+        channelHandle = dispatcher.execute(cmd);
+        activeChannelTexture = channel;
+    }
+
+    void ImagePreviewWindow::releaseChannelTexture()
+    {
+        if (channelHandle.isValid())
+        {
+            auto& dispatcher = events::EventDispatcher::instance();
+            events::render::ReleaseEditorTextureCommand releaseCmd;
+            releaseCmd.handle = channelHandle.imguiDescriptorSet;
+            dispatcher.execute(releaseCmd);
+            channelHandle = {};
+            activeChannelTexture = 0;
         }
     }
 }

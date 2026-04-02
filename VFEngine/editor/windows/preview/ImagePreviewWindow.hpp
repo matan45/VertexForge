@@ -12,20 +12,22 @@ namespace windows
         std::string imagePath;
         std::string windowTitle;
         bool isHDR = false;
-        
+
         services::EditorTextureHandle imageHandle;
-        
+
         bool isOpen = true;
         bool needsInit = true;
-        
+
         services::TextureLoadingProgress loadingProgress;
-        
+
         float zoom = 1.0f;
 
         int selectedMipLevel = 0;
 
         // Channel view: 0=RGBA, 1=R, 2=G, 3=B, 4=A
         int channelView = 0;
+        int activeChannelTexture = 0;
+        services::EditorTextureHandle channelHandle;
 
     public:
         explicit ImagePreviewWindow(const std::string& filePath, bool hdr = false);
@@ -41,5 +43,7 @@ namespace windows
         void drawImagePanel();
         void drawInfoPanel();
         void drawLoadingIndicator(float width, float height);
+        void buildChannelTexture(int channel);
+        void releaseChannelTexture();
     };
 }
