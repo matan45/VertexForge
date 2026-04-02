@@ -258,12 +258,7 @@ namespace controllers
                     eval.op = condition.op;
                     eval.threshold = condition.value;
 
-                    switch (condition.op)
-                    {
-                    default:
-                        eval.currentValue = params.getFloat(condition.parameterName);
-                        break;
-                    }
+                    eval.currentValue = params.getFloat(condition.parameterName);
                     // Use actual parameter type
                     for (const auto& paramDef : graph->parameters)
                     {

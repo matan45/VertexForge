@@ -34,8 +34,6 @@ namespace components
 
         std::string savePath;
         bool saveDirty = false;
-
-        bool svtEnabled = false;
     };
 
     struct TerrainTileComponent

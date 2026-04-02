@@ -26,12 +26,11 @@ namespace terrain
     class VF_TERRAIN_API HeightmapLoader
     {
     public:
-        // Supported formats: .vfImage, .vfSVT
+        // Supported formats: .vfImage
         static std::shared_ptr<HeightmapData> load(const std::string& filePath);
 
     private:
         static std::shared_ptr<HeightmapData> loadVFImage(const std::string& filePath);
-        static std::shared_ptr<HeightmapData> loadVFSVT(const std::string& filePath);
         static std::string getExtension(const std::string& filePath);
     };
 
@@ -48,14 +47,6 @@ namespace terrain
     // Maps world coordinates to heightmap UV based on terrain dimensions
     VF_TERRAIN_API HeightSampler createHeightSamplerFromMap(
         std::shared_ptr<const HeightmapData> heightmap,
-        const TerrainBounds& bounds
-    );
-
-    // Creates a streaming height sampler from a .vfSVT file.
-    // Only reads and decompresses tiles on demand (caches recent tiles).
-    // Returns empty sampler if file can't be opened.
-    VF_TERRAIN_API HeightSampler createStreamingHeightSamplerFromSVT(
-        const std::string& svtPath,
         const TerrainBounds& bounds
     );
 

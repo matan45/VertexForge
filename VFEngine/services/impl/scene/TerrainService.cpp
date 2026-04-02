@@ -48,7 +48,6 @@ namespace services
         dispatcher.unregisterCommandHandler<events::terrain::SetTerrainStreamingEnabledCommand>();
         dispatcher.unregisterCommandHandler<events::terrain::SetTerrainStreamingConfigCommand>();
         dispatcher.unregisterCommandHandler<events::terrain::PrepareTerrainSaveCommand>();
-        dispatcher.unregisterCommandHandler<events::terrain::SetTerrainSVTEnabledCommand>();
         dispatcher.unregisterCommandHandler<events::holeBrush::ApplyHoleBrushCommand>();
         dispatcher.unregisterCommandHandler<events::physics::AddTerrainColliderCommand>();
         dispatcher.unregisterCommandHandler<events::physics::RemoveTerrainColliderCommand>();
@@ -120,8 +119,6 @@ namespace services
         data.visibleTileCount = comp.visibleTileCount;
         data.savePath = comp.savePath;
         data.saveDirty = comp.saveDirty;
-        data.svtEnabled = comp.svtEnabled;
-
         if (registry.all_of<components::TerrainColliderComponent>(ent))
         {
             const auto& cc = registry.get<components::TerrainColliderComponent>(ent);

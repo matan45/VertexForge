@@ -389,7 +389,6 @@ namespace render
         void setTerrainLODBias(float bias);
         void setTerrainErrorThreshold(float threshold);
         void setTerrainTextureScale(float scale);
-        void setTerrainSVTEnabled(bool enabled);
 
         void setBillboardRenderingEnabled(bool enabled);
 

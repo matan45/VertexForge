@@ -201,7 +201,6 @@ namespace serialization
                 settings.errorThreshold = terrain["errorThreshold"].get<float>();
             if (terrain.contains("textureScale") && terrain["textureScale"].is_number())
                 settings.textureScale = terrain["textureScale"].get<float>();
-            // svtEnabled moved to per-terrain TerrainComponent (backward compat: ignored here)
         }
         json serializeDistanceCullingSettings(const types::DistanceCullingSettings& s)
         {

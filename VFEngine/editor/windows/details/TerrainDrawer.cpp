@@ -55,7 +55,6 @@ namespace windows::details {
             drawSaveLoad(handle, terrain);
             drawGridExpansion(handle);
             drawStreaming(handle);
-            drawSVTBake(handle, terrain);
             drawPhysics(handle, terrain);
 
             ImGui::Unindent(10.0f);
@@ -511,110 +510,6 @@ namespace windows::details {
             events::terrain::BeginTerrainLoadCommand cmd;
             cmd.path = path;
             dispatcher.execute(cmd);
-        }
-    }
-
-    void TerrainDrawer::drawSVTBake(services::EntityHandle handle, const services::TerrainData& terrain)
-    {
-        auto& dispatcher = events::EventDispatcher::instance();
-
-        ImGui::Separator();
-        ImGui::Text("Virtual Texturing (SVT)");
-
-        bool hasSavePath = !terrain.savePath.empty();
-
-        if (!hasSavePath)
-        {
-            ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f),
-                               "Save terrain first to enable SVT bake");
-        }
-
-        ImGui::BeginDisabled(!hasSavePath || isBaking);
-
-        if (ImGui::Button("Bake SVT Textures"))
-        {
-            saveStatusMessage.clear();
-            events::terrain::BeginBakeTerrainSVTCommand cmd;
-            cmd.terrainEntity = handle;
-            isBaking = events::EventDispatcher::instance().execute(cmd);
-        }
-
-        ImGui::EndDisabled();
-
-        if (isBaking)
-        {
-            auto pollResult = events::EventDispatcher::instance().query(
-                events::terrain::PollBakeTerrainSVTQuery{});
-
-            ImGui::SameLine();
-            ImGui::ProgressBar(pollResult.progress, ImVec2(150, 0));
-            ImGui::SameLine();
-            if (ImGui::Button("Cancel"))
-            {
-                events::EventDispatcher::instance().execute(
-                    events::terrain::CancelBakeTerrainSVTCommand{});
-            }
-
-            if (pollResult.completed)
-            {
-                isBaking = false;
-                saveStatusMessage = pollResult.success ? "SVT bake completed" : "SVT bake failed";
-                statusFrameCounter = pollResult.success ? 180 : 300;
-            }
-        }
-
-        if (ImGui::IsItemHovered() && hasSavePath)
-        {
-            ImGui::SetTooltip("Composites all terrain layer textures with weight maps\n"
-                              "into .vfSVT cache files for fast GPU streaming.\n\n"
-                              "Output files:\n"
-                              "  %s_svt_albedo.vfSVT\n"
-                              "  %s_svt_normal.vfSVT\n"
-                              "  %s_svt_orm.vfSVT\n\n"
-                              "These are auto-loaded when the terrain is opened.",
-                              terrain.savePath.c_str(),
-                              terrain.savePath.c_str(),
-                              terrain.savePath.c_str());
-        }
-
-        // Show SVT cache status
-        if (hasSavePath)
-        {
-            std::string basePath = terrain.savePath;
-            auto dotPos = basePath.rfind('.');
-            if (dotPos != std::string::npos)
-                basePath = basePath.substr(0, dotPos);
-
-            bool hasAlbedo = std::filesystem::exists(basePath + "_svt_albedo.vfSVT");
-            bool hasNormal = std::filesystem::exists(basePath + "_svt_normal.vfSVT");
-            bool hasORM = std::filesystem::exists(basePath + "_svt_orm.vfSVT");
-
-            if (hasAlbedo || hasNormal || hasORM)
-            {
-                ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.3f, 1.0f), "SVT Cache:");
-                if (hasAlbedo) ImGui::BulletText("Albedo");
-                if (hasNormal) ImGui::BulletText("Normal");
-                if (hasORM) ImGui::BulletText("ORM");
-
-                ImGui::Spacing();
-                bool svtOn = terrain.svtEnabled;
-                if (ImGui::Checkbox("Enable SVT", &svtOn))
-                {
-                    events::terrain::SetTerrainSVTEnabledCommand cmd;
-                    cmd.terrainEntity = handle;
-                    cmd.enabled = svtOn;
-                    dispatcher.execute(cmd);
-                }
-                if (ImGui::IsItemHovered())
-                {
-                    ImGui::SetTooltip("Stream only visible texture tiles to GPU.\n"
-                                      "Reduces VRAM usage for large terrains.");
-                }
-            }
-            else
-            {
-                ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "No SVT cache (runtime compositing)");
-            }
         }
     }
 

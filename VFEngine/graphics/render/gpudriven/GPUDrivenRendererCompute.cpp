@@ -299,11 +299,6 @@ namespace render::gpudriven
         if (vegetation.grassInitialized && vegetation.grassRenderingEnabled)
             dispatchGrassCompute(cmd, vegetation.cachedVisibleTiles);
 
-        // SVT: dispatch feedback compute (after depth prepass provides depth buffer)
-        dispatchSVTFeedback(cmd);
-        // SVT: process feedback readback and upload tiles
-        updateSVTStreaming();
-
         dispatchVolumetricFog(cmd);
         dispatchGIProbeUpdate(cmd);
 

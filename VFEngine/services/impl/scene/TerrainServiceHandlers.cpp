@@ -216,56 +216,6 @@ namespace services
                 loadAllTiles(cmd.terrainEntity);
             });
 
-        dispatcher.registerCommandHandler<events::terrain::BakeTerrainSVTCommand>(
-            [this](const events::terrain::BakeTerrainSVTCommand& cmd)
-            {
-                return bakeTerrainSVT(cmd.terrainEntity);
-            });
-
-        dispatcher.registerCommandHandler<events::terrain::BeginBakeTerrainSVTCommand>(
-            [this](const events::terrain::BeginBakeTerrainSVTCommand& cmd)
-            {
-                return beginBakeTerrainSVTAsync(cmd.terrainEntity);
-            });
-
-        dispatcher.registerQueryHandler<events::terrain::PollBakeTerrainSVTQuery>(
-            [this](const events::terrain::PollBakeTerrainSVTQuery&)
-            {
-                return pollBakeTerrainSVT();
-            });
-
-        dispatcher.registerCommandHandler<events::terrain::CancelBakeTerrainSVTCommand>(
-            [this](const events::terrain::CancelBakeTerrainSVTCommand&)
-            {
-                cancelBakeTerrainSVT();
-            });
-
-        dispatcher.registerCommandHandler<events::terrain::SetTerrainSVTEnabledCommand>(
-            [this](const events::terrain::SetTerrainSVTEnabledCommand& cmd)
-            {
-                auto& registry = scene::EntityRegistry::getRegistry();
-                entt::entity ent = internal::fromHandle(cmd.terrainEntity);
-                if (registry.valid(ent) && registry.all_of<components::TerrainComponent>(ent))
-                {
-                    registry.get<components::TerrainComponent>(ent).svtEnabled = cmd.enabled;
-                }
-
-                // GPU SVT is a single global instance — enable if any terrain wants it
-                bool anyEnabled = false;
-                auto view = registry.view<components::TerrainComponent>();
-                for (auto e : view)
-                {
-                    if (view.get<components::TerrainComponent>(e).svtEnabled)
-                    {
-                        anyEnabled = true;
-                        break;
-                    }
-                }
-
-                events::render::SetTerrainSVTEnabledCommand renderCmd;
-                renderCmd.enabled = anyEnabled;
-                events::EventDispatcher::instance().execute(renderCmd);
-            });
     }
 
     void TerrainService::registerBrushHandlers(::events::EventDispatcher& dispatcher)

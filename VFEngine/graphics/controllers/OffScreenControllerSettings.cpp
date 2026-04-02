@@ -464,12 +464,6 @@ namespace controllers
         if (rh) rh->setTerrainTextureScale(scale);
     }
 
-    void OffScreenController::setTerrainSVTEnabled(bool enabled)
-    {
-        auto* rh = offScreen->getRenderPassHandler();
-        if (rh) rh->setTerrainSVTEnabled(enabled);
-    }
-
     void OffScreenController::setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider)
     {
         auto* rh = offScreen->getRenderPassHandler();

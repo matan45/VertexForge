@@ -222,9 +222,6 @@ namespace windows
         case InputMapping:
             icon = AtlasIcon::InputMapping;
             break;
-        case SVT:
-            icon = AtlasIcon::Texture;
-            break;
         case Other:
             if (fs::is_directory(asset.path))
             {

@@ -19,7 +19,7 @@ namespace services
 
     void TerrainService::applyCaveBrush(const glm::vec3& worldPosition, float deltaTime, bool invert, bool isFirstApplication)
     {
-        if (saveInProgress.load(std::memory_order_acquire) || svtBakeInProgress.load(std::memory_order_acquire))
+        if (saveInProgress.load(std::memory_order_acquire))
             return;
 
         auto& dispatcher = events::EventDispatcher::instance();
@@ -206,7 +206,7 @@ namespace services
 
     void TerrainService::finalizeCaveBrush()
     {
-        if (saveInProgress.load(std::memory_order_acquire) || svtBakeInProgress.load(std::memory_order_acquire))
+        if (saveInProgress.load(std::memory_order_acquire))
             return;
 
         auto& dispatcher = events::EventDispatcher::instance();

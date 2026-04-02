@@ -134,12 +134,5 @@ namespace services
                 if (offScreenProvider)
                     offScreenProvider->setTerrainTextureScale(cmd.scale);
             });
-
-        dispatcher.registerCommandHandler<events::render::SetTerrainSVTEnabledCommand>(
-            [this](const events::render::SetTerrainSVTEnabledCommand& cmd)
-            {
-                if (offScreenProvider)
-                    offScreenProvider->setTerrainSVTEnabled(cmd.enabled);
-            });
     }
 }

@@ -60,22 +60,6 @@ namespace render::gpudriven
 
         updateAllPipelinesHiZ();
 
-        // Initialize SVT feedback pipeline now that depth prepass is available
-        if (svt.initialized && svt.feedbackPipeline && !svt.feedbackPipeline->isInitialized())
-        {
-            // Create a sampler for depth sampling
-            vk::SamplerCreateInfo samplerInfo{};
-            samplerInfo.magFilter = vk::Filter::eNearest;
-            samplerInfo.minFilter = vk::Filter::eNearest;
-            samplerInfo.mipmapMode = vk::SamplerMipmapMode::eNearest;
-            samplerInfo.addressModeU = vk::SamplerAddressMode::eClampToEdge;
-            samplerInfo.addressModeV = vk::SamplerAddressMode::eClampToEdge;
-            samplerInfo.addressModeW = vk::SamplerAddressMode::eClampToEdge;
-            auto depthSampler = device.getLogicalDevice().createSampler(samplerInfo);
-
-            svt.feedbackPipeline->init(svt.config, depthPrepass->getDepthImageView(), depthSampler);
-        }
-
         vfLogInfo("Depth prepass initialized with {} Hi-Z mip levels", prepassHiZMipLevels);
     }
 

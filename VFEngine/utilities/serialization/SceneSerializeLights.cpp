@@ -181,7 +181,6 @@ namespace serialization
         }
         // State flags
         j["isActive"] = terrain.isActive;
-        j["svtEnabled"] = terrain.svtEnabled;
         return j;
     }
 
@@ -233,8 +232,6 @@ namespace serialization
         // State flags (with backward-compatible defaults)
         if (auto it = j.find("isActive"); it != j.end() && it->is_boolean())
             terrain.isActive = it->get<bool>();
-        if (auto it = j.find("svtEnabled"); it != j.end() && it->is_boolean())
-            terrain.svtEnabled = it->get<bool>();
     }
 
     json SceneSerialization::serializeTerrainTile(const components::TerrainTileComponent& tile)

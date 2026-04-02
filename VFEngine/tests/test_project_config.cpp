@@ -103,7 +103,6 @@ TEST_CASE("FileExtension: constants are non-empty strings") {
     CHECK_FALSE(FileExtension::terrainWeights.empty());
     CHECK_FALSE(FileExtension::terrain.empty());
     CHECK_FALSE(FileExtension::water.empty());
-    CHECK_FALSE(FileExtension::svt.empty());
     CHECK_FALSE(FileExtension::assetMeta.empty());
 }
 

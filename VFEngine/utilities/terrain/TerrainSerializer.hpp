@@ -31,7 +31,6 @@ namespace terrain
         HAS_HOLE_MASK     = 1 << 3,
         HAS_STREAMING_CONFIG = 1 << 4,
         HAS_COMPRESSED_DATA  = 1 << 5,
-        HAS_SVT_CACHE        = 1 << 6,
         HAS_CAVE_DATA        = 1 << 7,
     };
 

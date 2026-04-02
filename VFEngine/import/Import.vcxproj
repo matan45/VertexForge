@@ -130,7 +130,6 @@ IF EXIST ..\..\bin\Import\Release\x64\Import.dll\ (xcopy /Q /E /Y /I ..\..\bin\I
     <ClInclude Include="types\MeshSerializer.hpp" />
     <ClInclude Include="types\MeshSocketWriter.hpp" />
     <ClInclude Include="types\SDFGenerator.hpp" />
-    <ClInclude Include="types\SVTTextureProcessor.hpp" />
     <ClInclude Include="types\Texture.hpp" />
     <ClInclude Include="types\TextureCompressor.hpp" />
     <ClInclude Include="types\VHACDCallback.hpp" />
@@ -157,7 +156,6 @@ IF EXIST ..\..\bin\Import\Release\x64\Import.dll\ (xcopy /Q /E /Y /I ..\..\bin\I
     <ClCompile Include="types\MeshSerializer.cpp" />
     <ClCompile Include="types\MeshSocketWriter.cpp" />
     <ClCompile Include="types\SDFGenerator.cpp" />
-    <ClCompile Include="types\SVTTextureProcessor.cpp" />
     <ClCompile Include="types\Texture.cpp" />
     <ClCompile Include="types\TextureCompressor.cpp" />
     <ClCompile Include="types\VorbisEncoder.cpp" />

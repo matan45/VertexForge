@@ -82,22 +82,16 @@ namespace render::gpudriven
         vk::DescriptorPool emptyDescriptorPool;
         vk::DescriptorSet emptyDescriptorSet5;
 
-        // SVT descriptor set (Set 12)
-        vk::DescriptorSetLayout svtLayout;
-        vk::DescriptorPool svtPool;
-        vk::DescriptorSet svtDescriptorSet;
-        bool svtEnabled = false;
-
-        // Caustic descriptor set (Set 13) - owned by WaterCausticsResources
+        // Caustic descriptor set (Set 12) - owned by WaterCausticsResources
         vk::DescriptorSetLayout cachedCausticLayout;
         vk::DescriptorSet causticDescriptorSet;
         bool causticEnabled = false;
 
-        // RT shadow mask descriptor set (Set 13, when caustics not active)
+        // RT shadow mask descriptor set (Set 12, when caustics not active)
         vk::DescriptorSetLayout rtShadowMaskLayout;
         vk::DescriptorSet rtShadowMaskDescriptorSet;
         bool rtShadowEnabled = false;
-        bool pipelineHasSet13 = false;  // True when the active pipeline layout includes set 13
+        bool pipelineHasSet12 = false;  // True when the active pipeline layout includes set 12
 
         // Weight map + layer info descriptor (Set 1)
         vk::DescriptorSetLayout weightMapLayout;
@@ -221,7 +215,7 @@ namespace render::gpudriven
             viewProjection = viewProj;
         }
 
-        // Caustic integration (Set 13)
+        // Caustic integration (Set 12)
         void setCausticEnabled(bool enabled, vk::DescriptorSetLayout layout = nullptr)
         {
             causticEnabled = enabled;
@@ -236,22 +230,6 @@ namespace render::gpudriven
         }
         vk::DescriptorSet getCausticDescriptorSet() const { return causticDescriptorSet; }
 
-        // SVT integration
-        void setSVTEnabled(bool enabled) { svtEnabled = enabled; }
-        bool isSVTEnabled() const { return svtEnabled; }
-
-        struct SVTCacheViews
-        {
-            vk::ImageView view;
-            vk::Sampler sampler;
-        };
-
-        void initSVTDescriptorSet(vk::Buffer pageTableBuffer, vk::Buffer svtParamsBuffer,
-                                   const SVTCacheViews caches[5]); // albedo, normal, ORM, emission, height
-        void updateSVTParamsBuffer(vk::Buffer svtParamsBuffer);
-        vk::DescriptorSet getSVTDescriptorSet() const { return svtDescriptorSet; }
-        vk::DescriptorSetLayout getSVTLayout() const { return svtLayout; }
-
     private:
         bool frustumCullingEnabled = true;
         bool meshletCullingEnabled = true;
@@ -260,7 +238,6 @@ namespace render::gpudriven
 
         void createEmptyDescriptorSet();
         void createWeightMapDescriptor();
-        void createSVTDescriptorLayout();
         void createTerrainLayerBuffer();
         void createTileDataBuffer();
         void createStatsBuffer();

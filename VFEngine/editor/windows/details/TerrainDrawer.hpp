@@ -18,8 +18,6 @@ namespace windows::details {
         void drawGridExpansion(services::EntityHandle handle);
         void drawStreaming(services::EntityHandle handle);
         void drawPhysics(services::EntityHandle handle, const services::TerrainData& terrain);
-        void drawSVTBake(services::EntityHandle handle, const services::TerrainData& terrain);
-
         void startSave(services::EntityHandle handle, const std::string& path);
         void startSaveAs(services::EntityHandle handle);
         void startLoad();
@@ -27,7 +25,6 @@ namespace windows::details {
 
         std::future<bool> pendingSave;
         bool isSaving = false;
-        bool isBaking = false;
         std::string saveStatusMessage;
         int statusFrameCounter = 0;
         nfd::FileDialog fileDialog;
