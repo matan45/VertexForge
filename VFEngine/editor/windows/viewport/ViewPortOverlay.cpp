@@ -218,8 +218,6 @@ namespace windows
             // Determine unified selected index
             int unifiedIdx = 0;
             if (wireframe) unifiedIdx = 12;
-            else if (shadowDebug == types::ShadowDebugMode::CascadeOverlay) unifiedIdx = 13;
-            else if (shadowDebug == types::ShadowDebugMode::TilePoolHeatmap) unifiedIdx = 14;
             else unifiedIdx = (currentViewMode < 16) ? reverseMap[currentViewMode] : 0;
 
             const char* allLabels[] = {
@@ -236,12 +234,10 @@ namespace windows
                 "Shadow Level",       // 10
                 "Shadow UV",          // 11
                 "Wireframe",          // 12
-                "Shadow Cascades",    // 13
-                "Shadow Pool Heatmap" // 14
             };
             static constexpr int VIEW_MODE_COUNT = 12;
             static constexpr int DEBUG_START = 12;
-            static constexpr int TOTAL_COUNT = 15;
+            static constexpr int TOTAL_COUNT = 13;
 
             ImGui::SetNextItemWidth(dropdownWidth);
             if (ImGui::BeginCombo("##ViewMode", allLabels[unifiedIdx]))
@@ -270,7 +266,6 @@ namespace windows
 
                 // Debug modes section
                 ImGui::Spacing();
-                ImGui::TextDisabled("Debug");
                 ImGui::Separator();
                 for (int i = DEBUG_START; i < TOTAL_COUNT; ++i)
                 {
@@ -290,13 +285,7 @@ namespace windows
                         dispatcher.execute(viewCmd);
 
                         // Apply selected debug mode
-                        switch (i)
-                        {
-                        case 12: wireCmd.show = true; dispatcher.execute(wireCmd); break;
-                        case 13: shadowCmd.mode = types::ShadowDebugMode::CascadeOverlay; dispatcher.execute(shadowCmd); break;
-                        case 14: shadowCmd.mode = types::ShadowDebugMode::TilePoolHeatmap; dispatcher.execute(shadowCmd); break;
-                        default: break;
-                        }
+                        if (i == 12) { wireCmd.show = true; dispatcher.execute(wireCmd); }
                     }
                 }
 

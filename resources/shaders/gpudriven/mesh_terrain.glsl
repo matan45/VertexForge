@@ -70,7 +70,7 @@ layout(push_constant) uniform PushConstants {
     float brushWorldRadius;
     float brushFalloff;
     float brushShape;
-    float _shadowLODRemoved;
+    float brushWorldY;
     uint hiZMipLevels;           // Mip levels in the Hi-Z pyramid (0 = disabled)
     float _pad3;                 // Align mat4 to 16-byte boundary
     mat4 viewProjection;         // CPU-precomputed view-projection (matches raycast invViewProjection)
@@ -263,7 +263,7 @@ layout(push_constant) uniform PushConstants {
     float brushWorldRadius;
     float brushFalloff;
     float brushShape;
-    float _shadowLODRemoved;
+    float brushWorldY;
     uint hiZMipLevels;           // Mip levels in the Hi-Z pyramid (0 = disabled)
     float _pad3;                 // Align mat4 to 16-byte boundary
     mat4 viewProjection;         // CPU-precomputed view-projection (matches raycast invViewProjection)
@@ -369,6 +369,16 @@ float sampleTerrainPointShadow(int shadowIndex, vec3 worldPos, vec3 worldNormal,
 void main() {
     vec3 N = normalize(fragNormal);
     vec3 V = normalize(camera.cameraPos - fragWorldPos);
+
+    // Triplanar UV blending for cave walls/ceilings where XZ projection stretches
+    vec3 blendWeights = abs(N);
+    blendWeights = pow(blendWeights, vec3(4.0));
+    blendWeights /= (blendWeights.x + blendWeights.y + blendWeights.z);
+    float textureScale = pc.terrainTextureScale > 0.0 ? pc.terrainTextureScale : 0.1;
+    vec2 uvXZ = fragWorldPos.xz * textureScale; // Y-facing (horizontal surfaces)
+    vec2 uvXY = fragWorldPos.xy * textureScale; // Z-facing (north/south walls)
+    vec2 uvYZ = fragWorldPos.yz * textureScale; // X-facing (east/west walls)
+    vec2 triplanarWorldUV = uvXZ * blendWeights.y + uvXY * blendWeights.z + uvYZ * blendWeights.x;
 
 #include "../material/terrain_material_generated.glsl"
 #ifndef MAT_EMISSION_DEFINED
@@ -711,7 +721,12 @@ void main() {
             dist = length(delta) / pc.brushWorldRadius;
         }
 
-        if (dist <= 1.0) {
+        // Y proximity check: only show brush on surfaces near the hit point
+        float yDist = abs(fragWorldPos.y - pc.brushWorldY);
+        float yThreshold = pc.brushWorldRadius * 1.5;
+        bool yClose = (yDist <= yThreshold);
+
+        if (dist <= 1.0 && yClose) {
             float falloffValue;
             uint falloffType = uint(pc.brushFalloff);
 
@@ -724,12 +739,14 @@ void main() {
             color = mix(color, brushColor, falloffValue * 0.3);
         }
 
-        float edgeWidth = 0.02;
-        float edgeDist = abs(dist - 1.0);
-        if (edgeDist < edgeWidth) {
-            float edgeAlpha = 1.0 - (edgeDist / edgeWidth);
-            vec3 brushColor = vec3(0.2, 0.6, 1.0);
-            color = mix(color, brushColor, edgeAlpha * 0.8);
+        if (yClose) {
+            float edgeWidth = 0.02;
+            float edgeDist = abs(dist - 1.0);
+            if (edgeDist < edgeWidth) {
+                float edgeAlpha = 1.0 - (edgeDist / edgeWidth);
+                vec3 brushColor = vec3(0.2, 0.6, 1.0);
+                color = mix(color, brushColor, edgeAlpha * 0.8);
+            }
         }
     }
 

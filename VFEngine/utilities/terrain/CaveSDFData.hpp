@@ -236,45 +236,6 @@ namespace terrain
             return false;
         }
 
-        // Check if a specific cube was modified by carving AND touches the original solid volume.
-        // Skips cubes entirely above the original terrain surface (all original corners positive).
-        [[nodiscard]] bool isCubeModified(uint32_t x, uint32_t y, uint32_t z) const
-        {
-            if (originalSdfGrid.empty())
-                return true; // No original data, process all
-
-            bool anyModified = false;
-            bool anyBelowSurface = false;
-
-            // Minimum depth below surface to avoid z-fighting with heightmap
-            constexpr float surfaceMargin = -0.3f;
-
-            for (int dz = 0; dz <= 1; ++dz)
-            {
-                for (int dy = 0; dy <= 1; ++dy)
-                {
-                    for (int dx = 0; dx <= 1; ++dx)
-                    {
-                        uint32_t cx = x + dx;
-                        uint32_t cy = y + dy;
-                        uint32_t cz = z + dz;
-                        if (cx >= config.resX || cy >= config.resY || cz >= config.resZ)
-                            continue;
-                        size_t idx = getIndex(cx, cy, cz);
-
-                        // Must be well below surface, not right at it
-                        if (originalSdfGrid[idx] < surfaceMargin)
-                            anyBelowSurface = true;
-
-                        if (std::abs(sdfGrid[idx] - originalSdfGrid[idx]) > 0.05f)
-                            anyModified = true;
-                    }
-                }
-            }
-
-            return anyModified && anyBelowSurface;
-        }
-
         void clear()
         {
             sdfGrid.clear();
