@@ -80,7 +80,13 @@ namespace services
             [this](const events::weather::SetWeatherBiomeCommand& cmd) { schedule.setActiveBiome(cmd.biomeId); });
 
         dispatcher.registerCommandHandler<events::weather::SetWeatherEnabledCommand>(
-            [this](const events::weather::SetWeatherEnabledCommand& cmd) { weatherEnabled = cmd.enabled; });
+            [this](const events::weather::SetWeatherEnabledCommand& cmd)
+            {
+                bool wasEnabled = weatherEnabled;
+                weatherEnabled = cmd.enabled;
+                if (wasEnabled && !cmd.enabled)
+                    cleanupEffects();
+            });
 
         dispatcher.registerCommandHandler<events::weather::SetWeatherAudioConfigCommand>(
             [this](const events::weather::SetWeatherAudioConfigCommand& cmd) { audioController.setConfig(cmd.config); });
@@ -392,5 +398,103 @@ namespace services
             dispatcher.publish(n);
         }
         catch (...) {}
+    }
+
+    void WeatherServiceImpl::cleanupEffects()
+    {
+        weather::WeatherState clearState{};
+        clearState.precipIntensity = 0.0f;
+        clearState.precipType = weather::PrecipitationType::None;
+
+        if (rainController) rainController->update(0.0f, clearState);
+        if (snowController) snowController->update(0.0f, clearState);
+
+        audioController.update(0.0f, clearState);
+
+        try
+        {
+            auto& dispatcher = ::events::EventDispatcher::instance();
+            auto settings = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
+            settings.rainDroplets.enabled = false;
+            settings.rainDroplets.intensity = 0.0f;
+            events::postprocess::ApplyPostProcessSettingsCommand cmd;
+            cmd.settings = settings;
+            dispatcher.execute(cmd);
+        }
+        catch (...) {}
+
+        if (basesAtmosCaptured)
+        {
+            try
+            {
+                auto& dispatcher = ::events::EventDispatcher::instance();
+                auto settings = dispatcher.query(events::atmosphere::GetAtmosphereSettingsQuery{});
+                settings.sunIrradiance = baseSunIrradiance;
+                settings.aerialIntensity = baseAerialIntensity;
+                events::atmosphere::ApplyAtmosphereSettingsCommand cmd;
+                cmd.settings = settings;
+                dispatcher.execute(cmd);
+            }
+            catch (...) {}
+            basesAtmosCaptured = false;
+        }
+
+        try
+        {
+            auto& dispatcher = ::events::EventDispatcher::instance();
+            auto settings = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
+            settings.volumetricFog.uniformDensity = 0.0f;
+            settings.volumetricFog.heightFogDensity = 0.0f;
+            events::postprocess::ApplyPostProcessSettingsCommand cmd;
+            cmd.settings = settings;
+            dispatcher.execute(cmd);
+        }
+        catch (...) {}
+
+        try
+        {
+            auto& dispatcher = ::events::EventDispatcher::instance();
+            auto settings = dispatcher.query(events::cloud::GetCloudSettingsQuery{});
+            settings.globalCoverage = 0.0f;
+            settings.globalDensity = 0.0f;
+            settings.windSpeed = 0.0f;
+            settings.ambientIntensity = 1.0f;
+            settings.cloudColorTint = glm::vec3(1.0f);
+            events::cloud::ApplyCloudSettingsCommand cmd;
+            cmd.settings = settings;
+            dispatcher.execute(cmd);
+        }
+        catch (...) {}
+
+        try
+        {
+            auto& dispatcher = ::events::EventDispatcher::instance();
+            auto config = dispatcher.query(events::vegetation::GetGlobalGrassConfigQuery{});
+            config.windSpeed = 0.0f;
+            config.windStrength = 0.0f;
+            config.gustStrength = 0.0f;
+            config.gustFrequency = 0.0f;
+            events::vegetation::SetGlobalGrassConfigCommand cmd;
+            cmd.config = config;
+            dispatcher.execute(cmd);
+        }
+        catch (...) {}
+
+        snowAccumulation = 0.0f;
+        wetness = 0.0f;
+
+        try
+        {
+            auto& dispatcher = ::events::EventDispatcher::instance();
+            events::weather::SetSnowAccumulationCommand snowCmd;
+            snowCmd.accumulation = 0.0f;
+            dispatcher.execute(snowCmd);
+            events::weather::SetWetnessCommand wetCmd;
+            wetCmd.wetness = 0.0f;
+            dispatcher.execute(wetCmd);
+        }
+        catch (...) {}
+
+        stateMachine.setImmediate(weather::WeatherState{});
     }
 }

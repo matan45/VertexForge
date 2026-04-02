@@ -41,6 +41,7 @@ namespace services
         void updateAccumulation(float deltaTime, const weather::WeatherState& state);
         void updateScreenEffects(const weather::WeatherState& state);
         void updateLightning(float deltaTime, const weather::WeatherState& state);
+        void cleanupEffects();
 
         weather::WeatherStateMachine stateMachine;
         weather::WeatherSchedule schedule;
