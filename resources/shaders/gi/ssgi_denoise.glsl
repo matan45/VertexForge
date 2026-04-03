@@ -25,8 +25,8 @@ float linearizeDepth(float d)
     return nearPlane * farPlane / (farPlane - d * (farPlane - nearPlane));
 }
 
-// 9-tap Gaussian weights (sigma ~= 3.0)
-const float weights[5] = float[](0.2270270270, 0.1945945946, 0.1216216216, 0.0540540541, 0.0162162162);
+// 5-tap Gaussian weights (sigma ~= 1.5)
+const float weights[3] = float[](0.40, 0.24, 0.06);
 
 void main()
 {
@@ -36,7 +36,7 @@ void main()
     vec4 result = centerColor * weights[0];
     float totalWeight = weights[0];
 
-    for (int i = 1; i <= 4; i++)
+    for (int i = 1; i <= 2; i++)
     {
         vec2 offset = direction * texelSize * float(i);
 
@@ -45,14 +45,14 @@ void main()
         vec4 samplePos = texture(ssgiTexture, uvPos);
         float depthPos = linearizeDepth(texture(depthTexture, uvPos).r);
         float depthDiffPos = abs(centerDepth - depthPos) / max(centerDepth, 0.001);
-        float wPos = weights[i] * exp(-depthDiffPos * depthDiffPos * 200.0);
+        float wPos = weights[i] * (1.0 - smoothstep(0.0, 0.05, depthDiffPos));
 
         // Negative direction
         vec2 uvNeg = texCoord - offset;
         vec4 sampleNeg = texture(ssgiTexture, uvNeg);
         float depthNeg = linearizeDepth(texture(depthTexture, uvNeg).r);
         float depthDiffNeg = abs(centerDepth - depthNeg) / max(centerDepth, 0.001);
-        float wNeg = weights[i] * exp(-depthDiffNeg * depthDiffNeg * 200.0);
+        float wNeg = weights[i] * (1.0 - smoothstep(0.0, 0.05, depthDiffNeg));
 
         result += samplePos * wPos + sampleNeg * wNeg;
         totalWeight += wPos + wNeg;
