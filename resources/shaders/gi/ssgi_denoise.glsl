@@ -45,14 +45,14 @@ void main()
         vec4 samplePos = texture(ssgiTexture, uvPos);
         float depthPos = linearizeDepth(texture(depthTexture, uvPos).r);
         float depthDiffPos = abs(centerDepth - depthPos) / max(centerDepth, 0.001);
-        float wPos = weights[i] * (1.0 - smoothstep(0.0, 0.05, depthDiffPos));
+        float wPos = weights[i] * exp(-depthDiffPos * depthDiffPos * 200.0);
 
         // Negative direction
         vec2 uvNeg = texCoord - offset;
         vec4 sampleNeg = texture(ssgiTexture, uvNeg);
         float depthNeg = linearizeDepth(texture(depthTexture, uvNeg).r);
         float depthDiffNeg = abs(centerDepth - depthNeg) / max(centerDepth, 0.001);
-        float wNeg = weights[i] * (1.0 - smoothstep(0.0, 0.05, depthDiffNeg));
+        float wNeg = weights[i] * exp(-depthDiffNeg * depthDiffNeg * 200.0);
 
         result += samplePos * wPos + sampleNeg * wNeg;
         totalWeight += wPos + wNeg;
