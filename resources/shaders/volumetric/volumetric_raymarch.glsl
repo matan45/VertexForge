@@ -48,12 +48,21 @@ void main() {
     vec3 accumulatedScattering = vec3(0.0);
     float accumulatedTransmittance = 1.0;
 
+    // Early termination threshold from cameraPosition.w
+    float earlyTermThreshold = cameraPosition.w > 0.0 ? cameraPosition.w : 0.01;
+
     for (uint z = 0; z < dims.z; ++z) {
         ivec3 coord = ivec3(pixelCoord, z);
 
         vec4 scatteringData = imageLoad(temporalOutput, coord);
         vec3 inScattered = scatteringData.rgb;
         float extinction = scatteringData.a;
+
+        // Fast path: skip expensive math for near-zero extinction (clear air)
+        if (extinction < 0.0001) {
+            imageStore(integratedVolume, coord, vec4(accumulatedScattering, accumulatedTransmittance));
+            continue;
+        }
 
         // Jittered depth boundaries to smooth out slice transitions
         float depthFront = sliceToDepth(float(z) + jitter, near, far, float(dims.z));
@@ -63,16 +72,20 @@ void main() {
         float sliceTransmittance = exp(-extinction * sliceThickness);
 
         // Analytical integration of in-scattering within the slice
-        vec3 sliceScattering;
-        if (extinction > 0.0001) {
-            sliceScattering = inScattered * (1.0 - sliceTransmittance) / extinction;
-        } else {
-            sliceScattering = inScattered * sliceThickness;
-        }
+        vec3 sliceScattering = inScattered * (1.0 - sliceTransmittance) / extinction;
 
         accumulatedScattering += accumulatedTransmittance * sliceScattering;
         accumulatedTransmittance *= sliceTransmittance;
 
         imageStore(integratedVolume, coord, vec4(accumulatedScattering, accumulatedTransmittance));
+
+        // Early termination: remaining light contribution is negligible
+        if (accumulatedTransmittance < earlyTermThreshold) {
+            for (uint zr = z + 1; zr < dims.z; ++zr) {
+                imageStore(integratedVolume, ivec3(pixelCoord, zr),
+                           vec4(accumulatedScattering, accumulatedTransmittance));
+            }
+            break;
+        }
     }
 }

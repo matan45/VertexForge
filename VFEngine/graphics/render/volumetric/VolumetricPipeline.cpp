@@ -141,7 +141,7 @@ namespace render::volumetric
             settings.temporalBlendFactor,
             static_cast<float>(frameIndex),
             settings.giInjectionIntensity);
-        params.cameraPosition = glm::vec4(cameraPos, 0.0f);
+        params.cameraPosition = glm::vec4(cameraPos, settings.earlyTerminationThreshold);
 
         elapsedTime = std::fmod(elapsedTime + 1.0f / 60.0f, 1000.0f);
         params.noiseParams = glm::vec4(

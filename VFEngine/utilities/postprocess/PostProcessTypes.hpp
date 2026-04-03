@@ -119,6 +119,9 @@ namespace postprocess
         // GI injection
         float giInjectionIntensity = 1.0f;
 
+        // Ray march early termination threshold (0.01 = skip when 99% opaque)
+        float earlyTerminationThreshold = 0.01f;
+
         // Noise/turbulence modulation
         bool noiseEnabled = false;
         float noiseScale = 0.01f;
