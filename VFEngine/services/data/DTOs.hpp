@@ -665,5 +665,14 @@ namespace services
         components::DamageType damageFilter = components::DamageType::Any;
         float fragmentMassTotal = 1.0f;
         float fragmentLifetime = 5.0f;
+
+        components::MaterialType materialType = components::MaterialType::Default;
+        asset::AssetRef onDamageVFX;
+        asset::AssetRef onDestroyVFX;
+        asset::AssetRef onDamageAudio;
+        asset::AssetRef onDestroyAudio;
+        asset::AssetRef fragmentCollisionAudio;
+        asset::AssetRef damageDecalAlbedo;
+        asset::AssetRef damageDecalNormal;
     };
 }

@@ -27,6 +27,15 @@ namespace components
         Pooled
     };
 
+    enum class MaterialType : uint8_t
+    {
+        Default = 0,
+        Wood = 1,
+        Stone = 2,
+        Metal = 3,
+        Glass = 4
+    };
+
     struct DestructibleComponent
     {
         float maxHealth = 100.0f;
@@ -38,6 +47,15 @@ namespace components
         float fragmentMassTotal = 1.0f;
         float fragmentLifetime = 10.0f;
         bool isDestroyed = false;
+
+        MaterialType materialType = MaterialType::Default;
+        asset::AssetRef onDamageVFX;
+        asset::AssetRef onDestroyVFX;
+        asset::AssetRef onDamageAudio;
+        asset::AssetRef onDestroyAudio;
+        asset::AssetRef fragmentCollisionAudio;
+        asset::AssetRef damageDecalAlbedo;
+        asset::AssetRef damageDecalNormal;
     };
 
     struct FragmentComponent
@@ -52,5 +70,8 @@ namespace components
         float fadeProgress = 0.0f;
         float distanceToCamera = 0.0f;
         uint32_t spawnFrame = 0;
+
+        MaterialType materialType = MaterialType::Default;
+        asset::AssetRef collisionAudioRef;
     };
 }

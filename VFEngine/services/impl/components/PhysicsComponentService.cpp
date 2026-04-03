@@ -987,6 +987,14 @@ namespace services
         data.damageFilter = comp.damageFilter;
         data.fragmentMassTotal = comp.fragmentMassTotal;
         data.fragmentLifetime = comp.fragmentLifetime;
+        data.materialType = comp.materialType;
+        data.onDamageVFX = comp.onDamageVFX;
+        data.onDestroyVFX = comp.onDestroyVFX;
+        data.onDamageAudio = comp.onDamageAudio;
+        data.onDestroyAudio = comp.onDestroyAudio;
+        data.fragmentCollisionAudio = comp.fragmentCollisionAudio;
+        data.damageDecalAlbedo = comp.damageDecalAlbedo;
+        data.damageDecalNormal = comp.damageDecalNormal;
         return data;
     }
 
@@ -1013,6 +1021,14 @@ namespace services
         comp.damageFilter = data.damageFilter;
         comp.fragmentMassTotal = data.fragmentMassTotal;
         comp.fragmentLifetime = data.fragmentLifetime;
+        comp.materialType = data.materialType;
+        comp.onDamageVFX = data.onDamageVFX;
+        comp.onDestroyVFX = data.onDestroyVFX;
+        comp.onDamageAudio = data.onDamageAudio;
+        comp.onDestroyAudio = data.onDestroyAudio;
+        comp.fragmentCollisionAudio = data.fragmentCollisionAudio;
+        comp.damageDecalAlbedo = data.damageDecalAlbedo;
+        comp.damageDecalNormal = data.damageDecalNormal;
         return true;
     }
 }

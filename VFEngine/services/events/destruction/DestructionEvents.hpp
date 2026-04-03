@@ -56,6 +56,9 @@ namespace events::destruction {
         services::EntityHandle entity;
         float damageAmount = 0.0f;
         float remainingHealth = 0.0f;
+        glm::vec3 impactPoint{0.0f};
+        glm::vec3 impactDirection{0.0f};
+        components::DamageType damageType = components::DamageType::Any;
 
         std::string_view getName() const override { return "DamageApplied"; }
     };

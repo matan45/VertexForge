@@ -1,5 +1,6 @@
 #include "DestructionServiceImpl.hpp"
 #include "DebrisManager.hpp"
+#include "DestructionEffectsManager.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/destruction/DestructionEvents.hpp"
 #include "../../events/scene/EntityTransformEvents.hpp"
@@ -35,6 +36,7 @@ namespace services
 
     DestructionServiceImpl::DestructionServiceImpl()
         : debrisManager(std::make_unique<DebrisManager>())
+        , effectsManager(std::make_unique<DestructionEffectsManager>())
     {
     }
 
@@ -100,12 +102,26 @@ namespace services
                 };
                 checkEntity(n.entityA, n.normal);
                 checkEntity(n.entityB, -n.normal);
+
+                // Fragment collision sounds
+                auto checkFragment = [&](EntityHandle handle)
+                {
+                    if (!isValidHandle(handle, reg)) return;
+                    scene::Entity e(fromHandle(handle));
+                    if (e.hasComponent<components::FragmentComponent>())
+                    {
+                        effectsManager->onFragmentCollision(handle, n.contactPoint, n.penetrationDepth);
+                    }
+                };
+                checkFragment(n.entityA);
+                checkFragment(n.entityB);
             });
     }
 
     void DestructionServiceImpl::update(float deltaTime)
     {
         debrisManager->update(deltaTime, ++frameNumber);
+        effectsManager->update(deltaTime);
     }
 
     void DestructionServiceImpl::applyDamage(EntityHandle entity, float amount,
@@ -148,7 +164,12 @@ namespace services
         notification.entity = entity;
         notification.damageAmount = amount;
         notification.remainingHealth = destructible.currentHealth;
+        notification.impactPoint = impactPoint;
+        notification.impactDirection = impactDir;
+        notification.damageType = type;
         ::events::EventDispatcher::instance().publish(notification);
+
+        effectsManager->onDamageApplied(entity, amount, impactPoint, impactDir, type);
 
         spdlog::debug("Destruction: entity {} took {:.1f} damage, health: {:.1f}/{}",
                      entity.id, amount, destructible.currentHealth, destructible.maxHealth);
@@ -293,6 +314,8 @@ namespace services
             req.lifetime = lifetime;
             req.sourceEntityId = entity.id;
             req.fragmentIndex = i;
+            req.materialType = destructible.materialType;
+            req.collisionAudioRef = destructible.fragmentCollisionAudio;
 
             float angle = static_cast<float>(i) * 6.283185f / static_cast<float>(fragmentCount);
             glm::vec3 spread(std::cos(angle) * 0.3f, 0.2f, std::sin(angle) * 0.3f);
@@ -303,10 +326,16 @@ namespace services
 
         debrisManager->requestSpawn(std::move(requests));
 
+        // Capture effects data before entity deletion
+        auto effectsSnapshot = effectsManager->captureSnapshot(entity);
+
         // Delete the original entity
         ::events::scene::DeleteEntityCommand deleteCmd;
         deleteCmd.entity = entity;
         dispatcher.execute(deleteCmd);
+
+        // Trigger destruction effects (entity is now deleted, using snapshot)
+        effectsManager->onDestructionTriggered(effectsSnapshot, impactPoint, impactDir);
 
         // Publish destruction notification
         ::events::destruction::DestructionTriggeredNotification notification;

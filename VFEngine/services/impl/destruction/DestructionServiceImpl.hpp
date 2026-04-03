@@ -7,6 +7,7 @@
 namespace services
 {
     class DebrisManager;
+    class DestructionEffectsManager;
 
     class DestructionServiceImpl : public IDestructionService
     {
@@ -27,6 +28,7 @@ namespace services
     private:
         ::events::SubscriptionToken collisionToken{};
         std::unique_ptr<DebrisManager> debrisManager;
+        std::unique_ptr<DestructionEffectsManager> effectsManager;
         uint32_t frameNumber = 0;
 
         void spawnFragments(EntityHandle entity,
