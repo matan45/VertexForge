@@ -1,6 +1,7 @@
 #include "EntityDetailsPanel.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/project/SceneEvents.hpp"
+#include "events/scene/ComponentPhysicsLightEvents.hpp"
 #include <imgui.h>
 
 namespace windows
@@ -106,6 +107,10 @@ namespace windows
         bool hasReverbZone = reverbZoneDrawer.draw(handle);
         bool hasFogVolume = fogVolumeDrawer.draw(handle);
 
+        events::scene::HasDestructibleComponentQuery hasDestructibleQuery;
+        hasDestructibleQuery.entity = handle;
+        bool hasDestructible = events::EventDispatcher::instance().query(hasDestructibleQuery);
+
         // Terrain components (read-only display)
         terrainDrawer.draw(handle);
         terrainTileDrawer.draw(handle);
@@ -146,7 +151,8 @@ namespace windows
                                 hasRenderTexture, hasController, hasIK, hasBehaviorTree,
                                 hasDecal, hasReverbZone, hasFogVolume, hasUIAnimation, hasUIMask,
                                 hasUIDraggable, hasUIDropTarget, hasNavInvoker,
-                                hasVolumetricNavVolume, hasVolumetricAgent});
+                                hasVolumetricNavVolume, hasVolumetricAgent,
+                                hasDestructible});
     }
 
     void EntityDetailsPanel::drawEntityName(services::EntityHandle handle, const std::string& currentName)

@@ -56,6 +56,8 @@ namespace serialization
             out["collider"] = serializeCollider(entity.getComponent<components::ColliderComponent>());
         if (entity.hasComponent<components::RigidBodyComponent>())
             out["rigidBody"] = serializeRigidBody(entity.getComponent<components::RigidBodyComponent>());
+        if (entity.hasComponent<components::DestructibleComponent>())
+            out["destructible"] = serializeDestructible(entity.getComponent<components::DestructibleComponent>());
         if (entity.hasComponent<components::PhysicsAnimationComponent>())
             out["physicsAnimation"] = serializePhysicsAnimation(entity.getComponent<components::PhysicsAnimationComponent>());
         if (entity.hasComponent<components::VFXComponent>())

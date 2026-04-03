@@ -108,6 +108,11 @@ namespace serialization
             auto& rigidBodyComp = entity.addOrReplaceComponent<components::RigidBodyComponent>();
             deserializeRigidBody(c["rigidBody"], rigidBodyComp);
         }
+        if (c.contains("destructible"))
+        {
+            auto& destructibleComp = entity.addOrReplaceComponent<components::DestructibleComponent>();
+            deserializeDestructible(c["destructible"], destructibleComp);
+        }
         if (c.contains("physicsAnimation"))
         {
             auto& physAnimComp = entity.addOrReplaceComponent<components::PhysicsAnimationComponent>();

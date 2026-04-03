@@ -52,6 +52,7 @@ namespace windows::details {
         bool hasNavInvoker = false;
         bool hasVolumetricNavVolume = false;
         bool hasVolumetricAgent = false;
+        bool hasDestructible = false;
     };
 
     class AddComponentPopup {

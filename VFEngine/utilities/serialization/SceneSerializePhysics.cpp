@@ -459,4 +459,59 @@ namespace serialization
             rigidBody.freezeRotationZ = it->get<bool>();
         }
     }
+
+    json SceneSerialization::serializeDestructible(const components::DestructibleComponent& d)
+    {
+        json j;
+        j["maxHealth"] = d.maxHealth;
+        j["destructionThreshold"] = d.destructionThreshold;
+        writeAssetRef(j, "fractureAssetRef", d.fractureAssetRef);
+        j["mode"] = static_cast<int>(d.mode);
+        j["damageFilter"] = static_cast<int>(d.damageFilter);
+        j["fragmentMassTotal"] = d.fragmentMassTotal;
+        j["fragmentLifetime"] = d.fragmentLifetime;
+        j["propagationRadius"] = d.propagationRadius;
+        j["propagationDamage"] = d.propagationDamage;
+        j["materialType"] = static_cast<int>(d.materialType);
+        writeAssetRef(j, "onDamageVFX", d.onDamageVFX);
+        writeAssetRef(j, "onDestroyVFX", d.onDestroyVFX);
+        writeAssetRef(j, "onDamageAudio", d.onDamageAudio);
+        writeAssetRef(j, "onDestroyAudio", d.onDestroyAudio);
+        writeAssetRef(j, "fragmentCollisionAudio", d.fragmentCollisionAudio);
+        writeAssetRef(j, "damageDecalAlbedo", d.damageDecalAlbedo);
+        writeAssetRef(j, "damageDecalNormal", d.damageDecalNormal);
+        return j;
+    }
+
+    void SceneSerialization::deserializeDestructible(const json& j, components::DestructibleComponent& d)
+    {
+        if (auto it = j.find("maxHealth"); it != j.end() && it->is_number())
+            d.maxHealth = it->get<float>();
+        d.currentHealth = d.maxHealth;
+        if (auto it = j.find("destructionThreshold"); it != j.end() && it->is_number())
+            d.destructionThreshold = it->get<float>();
+        d.fractureAssetRef = readAssetRef(j, "fractureAssetRef");
+        if (auto it = j.find("mode"); it != j.end() && it->is_number())
+            d.mode = static_cast<components::DestructionMode>(it->get<int>());
+        if (auto it = j.find("damageFilter"); it != j.end() && it->is_number())
+            d.damageFilter = static_cast<components::DamageType>(it->get<int>());
+        if (auto it = j.find("fragmentMassTotal"); it != j.end() && it->is_number())
+            d.fragmentMassTotal = it->get<float>();
+        if (auto it = j.find("fragmentLifetime"); it != j.end() && it->is_number())
+            d.fragmentLifetime = it->get<float>();
+        if (auto it = j.find("propagationRadius"); it != j.end() && it->is_number())
+            d.propagationRadius = it->get<float>();
+        if (auto it = j.find("propagationDamage"); it != j.end() && it->is_number())
+            d.propagationDamage = it->get<float>();
+        if (auto it = j.find("materialType"); it != j.end() && it->is_number())
+            d.materialType = static_cast<components::MaterialType>(it->get<int>());
+        d.onDamageVFX = readAssetRef(j, "onDamageVFX");
+        d.onDestroyVFX = readAssetRef(j, "onDestroyVFX");
+        d.onDamageAudio = readAssetRef(j, "onDamageAudio");
+        d.onDestroyAudio = readAssetRef(j, "onDestroyAudio");
+        d.fragmentCollisionAudio = readAssetRef(j, "fragmentCollisionAudio");
+        d.damageDecalAlbedo = readAssetRef(j, "damageDecalAlbedo");
+        d.damageDecalNormal = readAssetRef(j, "damageDecalNormal");
+        d.isDestroyed = false;
+    }
 }
