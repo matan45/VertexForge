@@ -111,7 +111,10 @@ namespace services
                     if (!e.hasComponent<components::DestructibleComponent>()) return;
                     auto& d = e.getComponent<components::DestructibleComponent>();
                     if (d.isDestroyed) return;
-                    float damage = n.penetrationDepth * 100.0f;
+                    constexpr float damagePerDepth = 100.0f;
+                    constexpr float minPenetration = 0.005f;
+                    if (n.penetrationDepth < minPenetration) return;
+                    float damage = n.penetrationDepth * damagePerDepth;
                     if (damage > d.destructionThreshold * 0.1f)
                     {
                         ::events::destruction::ApplyDamageCommand cmd;
@@ -327,6 +330,13 @@ namespace services
             ? glm::normalize(impactDir) : glm::vec3(0.0f, 1.0f, 0.0f);
         auto requests = buildSpawnRequests(destructible, transform, sourceMaterial, entity, fragmentDir, force);
         uint32_t fragmentCount = static_cast<uint32_t>(requests.size());
+
+        // Hide original entity immediately to prevent visual overlap with fragments
+        ::events::scene::SetEntityActiveCommand hideCmd;
+        hideCmd.entity = entity;
+        hideCmd.isActive = false;
+        dispatcher.execute(hideCmd);
+
         debrisManager->requestSpawn(std::move(requests));
         auto effectsSnapshot = effectsManager->captureSnapshot(entity);
         if (destructible.propagationRadius > 0.0f)

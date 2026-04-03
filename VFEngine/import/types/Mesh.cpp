@@ -493,6 +493,7 @@ namespace types
 
         // Build LOD0 mesh data from first submesh for fracture input
         ExtractedSkeleton skeleton = extractSkeleton(scene);
+        // NOTE: Only fractures the first submesh. Multi-submesh merging is a future enhancement.
         LODMeshData lod0 = convertAssimpMesh(scene->mMeshes[0], skeleton);
 
         if (lod0.vertices.size() < 4 || lod0.indices.size() < 12)

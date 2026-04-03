@@ -97,6 +97,13 @@ namespace core::api
                     if (comp)
                     {
                         comp->currentHealth = glm::clamp(extractFloat(args[1]), 0.0f, comp->maxHealth);
+
+                        // Notify listeners of health change
+                        events::destruction::DamageAppliedNotification notif;
+                        notif.entity = intToEntity(extractInt64(args[0]));
+                        notif.damageAmount = 0.0f;
+                        notif.remainingHealth = comp->currentHealth;
+                        events::EventDispatcher::instance().publish(notif);
                     }
                     return value::Value(std::monostate{});
                 });

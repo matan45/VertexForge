@@ -159,7 +159,42 @@ namespace services
 
     void DebrisManager::spawnSingleFragment(const FragmentSpawnRequest& request, uint32_t frameNumber)
     {
-        auto fragmentHandle = createFragmentEntity(request, frameNumber);
+        uint64_t assetKey = std::hash<std::string>{}(request.fractureAssetRef.resolve());
+        uint64_t pooledId = pool.acquire(assetKey);
+        EntityHandle fragmentHandle;
+
+        if (pooledId != ~0ULL)
+        {
+            fragmentHandle.id = pooledId;
+            auto& dispatcher = ::events::EventDispatcher::instance();
+
+            ::events::scene::SetTransformCommand transformCmd;
+            transformCmd.entity = fragmentHandle;
+            transformCmd.transform.position = request.position;
+            transformCmd.transform.rotation = request.rotation;
+            transformCmd.transform.scale = request.scale;
+            dispatcher.execute(transformCmd);
+
+            ::events::scene::SetEntityActiveCommand activateCmd;
+            activateCmd.entity = fragmentHandle;
+            activateCmd.isActive = true;
+            dispatcher.execute(activateCmd);
+
+            scene::Entity fragEntity(fromHandle(fragmentHandle));
+            auto& fragComp = fragEntity.getComponent<components::FragmentComponent>();
+            fragComp.sourceEntityId = request.sourceEntityId;
+            fragComp.fragmentIndex = request.fragmentIndex;
+            fragComp.lifetime = request.lifetime;
+            fragComp.elapsed = 0.0f;
+            fragComp.state = components::FragmentState::Active;
+            fragComp.sleepTime = 0.0f;
+            fragComp.fadeProgress = 0.0f;
+            fragComp.spawnFrame = frameNumber;
+        }
+        else
+        {
+            fragmentHandle = createFragmentEntity(request, frameNumber);
+        }
         if (!fragmentHandle.isValid())
         {
             return;
@@ -167,12 +202,11 @@ namespace services
 
         auto& dispatcher = ::events::EventDispatcher::instance();
 
-        // Add ECS components for collider and rigid body
         scene::Entity fragEntity(fromHandle(fragmentHandle));
 
         auto& colliderComp = fragEntity.addComponent<components::ColliderComponent>();
-        colliderComp.shape = components::ColliderShape::Box;
-        colliderComp.size = glm::vec3(0.2f);
+        colliderComp.shape = components::ColliderShape::ConvexMesh;
+        colliderComp.meshRef = request.fractureAssetRef;
         colliderComp.collisionLayer = 1;
 
         auto& rbComp = fragEntity.addComponent<components::RigidBodyComponent>();
@@ -181,7 +215,6 @@ namespace services
         rbComp.linearDamping = 0.5f;
         rbComp.angularDamping = 0.5f;
 
-        // Create the physics body via the physics service
         ::events::physics::AddRigidBodyCommand rbCmd;
         rbCmd.entity = fragmentHandle;
         rbCmd.rigidBody.type = types::RigidBodyType::Dynamic;
@@ -189,8 +222,8 @@ namespace services
         rbCmd.rigidBody.linearDamping = 0.5f;
         rbCmd.rigidBody.angularDamping = 0.5f;
         rbCmd.rigidBody.activateOnAdd = true;
-        rbCmd.collider.shape = types::ColliderShape::Box;
-        rbCmd.collider.size = glm::vec3(0.2f);
+        rbCmd.collider.shape = types::ColliderShape::ConvexMesh;
+        rbCmd.collider.meshPath = request.fractureAssetRef.resolve();
         rbCmd.collider.collisionLayer = 1;
         dispatcher.execute(rbCmd);
 
@@ -223,6 +256,11 @@ namespace services
             }
 
             ++activeCount;
+
+            auto* transform = registry.try_get<components::TransformComponent>(entity);
+            if (transform)
+                fragment.distanceToCamera = glm::length(transform->position);
+
             fragment.elapsed += deltaTime;
 
             EntityHandle handle;
@@ -361,8 +399,29 @@ namespace services
 
         for (auto entity : toRemove)
         {
-            EntityHandle handle;
-            handle.id = static_cast<uint64_t>(static_cast<uint32_t>(entity));
+            EntityHandle handle = toHandle(entity);
+
+            // Try to pool the entity for reuse
+            auto* meshComp = registry.try_get<components::MeshComponent>(entity);
+            if (meshComp && meshComp->meshRef.isValid())
+            {
+                uint64_t assetKey = std::hash<std::string>{}(meshComp->meshRef.resolve());
+
+                ::events::physics::RemoveRigidBodyCommand removeRbCmd;
+                removeRbCmd.entity = handle;
+                dispatcher.execute(removeRbCmd);
+
+                ::events::scene::SetEntityActiveCommand deactivateCmd;
+                deactivateCmd.entity = handle;
+                deactivateCmd.isActive = false;
+                dispatcher.execute(deactivateCmd);
+
+                if (pool.release(handle.id, assetKey))
+                {
+                    --activeCount;
+                    continue;
+                }
+            }
 
             ::events::scene::DeleteEntityCommand deleteCmd;
             deleteCmd.entity = handle;

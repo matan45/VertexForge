@@ -41,7 +41,7 @@ namespace types
             };
 
             return destruction::VoronoiFracture::fracture(
-                inputMesh, fractureConfig, nullptr, cancelFlag);
+                inputMesh, fractureConfig, fractureCallback, cancelFlag);
         }
 
         asset::FractureMetadata buildFractureMetadata(
