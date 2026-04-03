@@ -1,12 +1,13 @@
 #pragma once
 
 #include "../../interfaces/destruction/IDestructionService.hpp"
-#include "../../events/EventDispatcher.hpp"
-#include "../../events/physics/PhysicsEvents.hpp"
-#include <unordered_set>
+#include "../../events/EventTypes.hpp"
+#include <memory>
 
 namespace services
 {
+    class DebrisManager;
+
     class DestructionServiceImpl : public IDestructionService
     {
     public:
@@ -24,11 +25,11 @@ namespace services
         bool isDestroyed(EntityHandle entity) const override;
 
     private:
-        events::SubscriptionToken collisionToken{};
+        ::events::SubscriptionToken collisionToken{};
+        std::unique_ptr<DebrisManager> debrisManager;
+        uint32_t frameNumber = 0;
 
-        void onCollisionStart(const events::physics::CollisionStartNotification& notification);
         void spawnFragments(EntityHandle entity,
                            const glm::vec3& impactPoint, const glm::vec3& impactDir, float force);
-        void cleanupExpiredFragments(float deltaTime);
     };
 }

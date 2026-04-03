@@ -93,11 +93,13 @@
   <ItemGroup>
     <ClInclude Include="destruction\ConvexHullGenerator.hpp" />
     <ClInclude Include="destruction\DestructionTypes.hpp" />
+    <ClInclude Include="destruction\FragmentPool.hpp" />
     <ClInclude Include="destruction\MeshClipper.hpp" />
     <ClInclude Include="destruction\VoronoiFracture.hpp" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="destruction\ConvexHullGenerator.cpp" />
+    <ClCompile Include="destruction\FragmentPool.cpp" />
     <ClCompile Include="destruction\MeshClipper.cpp" />
     <ClCompile Include="destruction\VoronoiFracture.cpp" />
   </ItemGroup>

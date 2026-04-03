@@ -231,6 +231,7 @@
     <ClInclude Include="impl\components\TextComponentService.hpp" />
     <ClInclude Include="impl\components\UIComponentService.hpp" />
     <ClInclude Include="impl\components\VFXComponentService.hpp" />
+    <ClInclude Include="impl\destruction\DebrisManager.hpp" />
     <ClInclude Include="impl\destruction\DestructionServiceImpl.hpp" />
     <ClInclude Include="impl\editor\EditorKeybindingServiceImpl.hpp" />
     <ClInclude Include="impl\editor\EditorModeServiceImpl.hpp" />
@@ -418,6 +419,7 @@
     <ClCompile Include="impl\components\UIScrollLayoutOps.cpp" />
     <ClCompile Include="impl\components\UISliderProgressOps.cpp" />
     <ClCompile Include="impl\components\VFXComponentService.cpp" />
+    <ClCompile Include="impl\destruction\DebrisManager.cpp" />
     <ClCompile Include="impl\destruction\DestructionServiceImpl.cpp" />
     <ClCompile Include="impl\editor\EditorKeybindingServiceImpl.cpp" />
     <ClCompile Include="impl\editor\EditorModeServiceImpl.cpp" />
@@ -509,6 +511,9 @@
   <ItemGroup>
     <ProjectReference Include="..\utilities\Utilities.vcxproj">
       <Project>{010A8043-6D74-34BA-B6B2-E55F225C120F}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\utilities\Destruction.vcxproj">
+      <Project>{59EB8BB1-C5A0-04A7-4E95-FE7DBA49FBAA}</Project>
     </ProjectReference>
     <ProjectReference Include="..\utilities\Terrain.vcxproj">
       <Project>{7AABC339-E68A-42D5-EFA2-CDAB5B01A936}</Project>

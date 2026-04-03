@@ -433,7 +433,7 @@ project "Services"
       -- NOTE: NO VFEngine/core/controllers - Services uses provider interfaces
    }
 
-   links { "Utilities", "Terrain", "Serialization", "World", "Window", "Weather" }
+   links { "Utilities", "Destruction", "Terrain", "Serialization", "World", "Window", "Weather" }
 
    filter "configurations:Debug"
       defines { "DEBUG" }

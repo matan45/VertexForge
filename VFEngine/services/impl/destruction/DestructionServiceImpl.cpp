@@ -1,8 +1,11 @@
 #include "DestructionServiceImpl.hpp"
+#include "DebrisManager.hpp"
+#include "../../events/EventDispatcher.hpp"
 #include "../../events/destruction/DestructionEvents.hpp"
 #include "../../events/scene/EntityTransformEvents.hpp"
 #include "../../events/scene/ComponentMediaEvents.hpp"
 #include "../../events/render/MaterialEvents.hpp"
+#include "../../events/physics/PhysicsEvents.hpp"
 #include "../../interfaces/physics/IPhysicsService.hpp"
 #include "../../events/scene/ComponentPhysicsLightEvents.hpp"
 #include "../../data/DTOs.hpp"
@@ -30,55 +33,79 @@ namespace services
         }
     }
 
-    DestructionServiceImpl::DestructionServiceImpl() = default;
+    DestructionServiceImpl::DestructionServiceImpl()
+        : debrisManager(std::make_unique<DebrisManager>())
+    {
+    }
 
     DestructionServiceImpl::~DestructionServiceImpl()
     {
         if (collisionToken.isValid())
         {
-            events::EventDispatcher::instance().unsubscribe(collisionToken);
+            ::events::EventDispatcher::instance().unsubscribe(collisionToken);
         }
     }
 
     void DestructionServiceImpl::registerEventHandlers()
     {
-        auto& dispatcher = events::EventDispatcher::instance();
+        auto& dispatcher = ::events::EventDispatcher::instance();
 
-        dispatcher.registerCommandHandler<events::destruction::ApplyDamageCommand>(
-            [this](const events::destruction::ApplyDamageCommand& cmd)
+        dispatcher.registerCommandHandler<::events::destruction::ApplyDamageCommand>(
+            [this](const ::events::destruction::ApplyDamageCommand& cmd)
             {
                 applyDamage(cmd.entity, cmd.amount, cmd.damageType,
                            cmd.impactPoint, cmd.impactDirection);
             });
 
-        dispatcher.registerCommandHandler<events::destruction::TriggerDestructionCommand>(
-            [this](const events::destruction::TriggerDestructionCommand& cmd)
+        dispatcher.registerCommandHandler<::events::destruction::TriggerDestructionCommand>(
+            [this](const ::events::destruction::TriggerDestructionCommand& cmd)
             {
                 triggerDestruction(cmd.entity, cmd.impactPoint, cmd.impactDirection, cmd.force);
             });
 
-        dispatcher.registerQueryHandler<events::destruction::GetHealthQuery>(
-            [this](const events::destruction::GetHealthQuery& query)
+        dispatcher.registerQueryHandler<::events::destruction::GetHealthQuery>(
+            [this](const ::events::destruction::GetHealthQuery& query)
             {
                 return getHealth(query.entity);
             });
 
-        dispatcher.registerQueryHandler<events::destruction::IsDestroyedQuery>(
-            [this](const events::destruction::IsDestroyedQuery& query)
+        dispatcher.registerQueryHandler<::events::destruction::IsDestroyedQuery>(
+            [this](const ::events::destruction::IsDestroyedQuery& query)
             {
                 return isDestroyed(query.entity);
             });
 
-        collisionToken = dispatcher.subscribe<events::physics::CollisionStartNotification>(
-            [this](const events::physics::CollisionStartNotification& notification)
+        collisionToken = dispatcher.subscribe<::events::physics::CollisionStartNotification>(
+            [this](const ::events::physics::CollisionStartNotification& n)
             {
-                onCollisionStart(notification);
+                auto& reg = scene::EntityRegistry::getRegistry();
+                auto checkEntity = [&](EntityHandle handle, const glm::vec3& normal)
+                {
+                    if (!isValidHandle(handle, reg)) return;
+                    scene::Entity e(fromHandle(handle));
+                    if (!e.hasComponent<components::DestructibleComponent>()) return;
+                    auto& d = e.getComponent<components::DestructibleComponent>();
+                    if (d.isDestroyed) return;
+                    float damage = n.penetrationDepth * 100.0f;
+                    if (damage > d.destructionThreshold * 0.1f)
+                    {
+                        ::events::destruction::ApplyDamageCommand cmd;
+                        cmd.entity = handle;
+                        cmd.amount = damage;
+                        cmd.damageType = components::DamageType::Any;
+                        cmd.impactPoint = n.contactPoint;
+                        cmd.impactDirection = normal;
+                        ::events::EventDispatcher::instance().execute(cmd);
+                    }
+                };
+                checkEntity(n.entityA, n.normal);
+                checkEntity(n.entityB, -n.normal);
             });
     }
 
     void DestructionServiceImpl::update(float deltaTime)
     {
-        cleanupExpiredFragments(deltaTime);
+        debrisManager->update(deltaTime, ++frameNumber);
     }
 
     void DestructionServiceImpl::applyDamage(EntityHandle entity, float amount,
@@ -117,11 +144,11 @@ namespace services
         destructible.currentHealth = std::max(0.0f, destructible.currentHealth);
 
         // Publish damage notification
-        events::destruction::DamageAppliedNotification notification;
+        ::events::destruction::DamageAppliedNotification notification;
         notification.entity = entity;
         notification.damageAmount = amount;
         notification.remainingHealth = destructible.currentHealth;
-        events::EventDispatcher::instance().publish(notification);
+        ::events::EventDispatcher::instance().publish(notification);
 
         spdlog::debug("Destruction: entity {} took {:.1f} damage, health: {:.1f}/{}",
                      entity.id, amount, destructible.currentHealth, destructible.maxHealth);
@@ -197,67 +224,12 @@ namespace services
         return sceneEntity.getComponent<components::DestructibleComponent>().isDestroyed;
     }
 
-    void DestructionServiceImpl::onCollisionStart(
-        const events::physics::CollisionStartNotification& notification)
-    {
-        auto& registry = scene::EntityRegistry::getRegistry();
-
-        // Check entity A
-        if (isValidHandle(notification.entityA, registry))
-        {
-            scene::Entity entityA(fromHandle(notification.entityA));
-            if (entityA.hasComponent<components::DestructibleComponent>())
-            {
-                auto& destructible = entityA.getComponent<components::DestructibleComponent>();
-                if (!destructible.isDestroyed)
-                {
-                    // Estimate damage from penetration depth (simple model)
-                    float damage = notification.penetrationDepth * 100.0f;
-                    if (damage > destructible.destructionThreshold * 0.1f)
-                    {
-                        events::destruction::ApplyDamageCommand cmd;
-                        cmd.entity = notification.entityA;
-                        cmd.amount = damage;
-                        cmd.damageType = components::DamageType::Any;
-                        cmd.impactPoint = notification.contactPoint;
-                        cmd.impactDirection = notification.normal;
-                        events::EventDispatcher::instance().execute(cmd);
-                    }
-                }
-            }
-        }
-
-        // Check entity B
-        if (isValidHandle(notification.entityB, registry))
-        {
-            scene::Entity entityB(fromHandle(notification.entityB));
-            if (entityB.hasComponent<components::DestructibleComponent>())
-            {
-                auto& destructible = entityB.getComponent<components::DestructibleComponent>();
-                if (!destructible.isDestroyed)
-                {
-                    float damage = notification.penetrationDepth * 100.0f;
-                    if (damage > destructible.destructionThreshold * 0.1f)
-                    {
-                        events::destruction::ApplyDamageCommand cmd;
-                        cmd.entity = notification.entityB;
-                        cmd.amount = damage;
-                        cmd.damageType = components::DamageType::Any;
-                        cmd.impactPoint = notification.contactPoint;
-                        cmd.impactDirection = -notification.normal;
-                        events::EventDispatcher::instance().execute(cmd);
-                    }
-                }
-            }
-        }
-    }
-
     void DestructionServiceImpl::spawnFragments(EntityHandle entity,
                                                  const glm::vec3& impactPoint,
                                                  const glm::vec3& impactDir,
                                                  float force)
     {
-        auto& dispatcher = events::EventDispatcher::instance();
+        auto& dispatcher = ::events::EventDispatcher::instance();
         auto& registry = scene::EntityRegistry::getRegistry();
 
         if (!isValidHandle(entity, registry))
@@ -287,9 +259,6 @@ namespace services
             return;
         }
 
-        // For now, determine fragment count from the fracture mesh sub-mesh count
-        // The fracture .vfMesh stores each fragment as a separate sub-mesh
-        // We use a reasonable default until the mesh is loaded
         constexpr uint32_t maxFragments = 100;
         uint32_t fragmentCount = std::min(maxFragments, static_cast<uint32_t>(10));
 
@@ -298,134 +267,54 @@ namespace services
         float massPerFragment = totalMass / static_cast<float>(fragmentCount);
         float lifetime = destructible.fragmentLifetime;
 
-        std::vector<EntityHandle> fragmentEntities;
-        fragmentEntities.reserve(fragmentCount);
+        // Build spawn requests for DebrisManager (batched over multiple frames)
+        glm::vec3 fragmentDir = impactDir;
+        if (glm::length(fragmentDir) > 0.001f)
+        {
+            fragmentDir = glm::normalize(fragmentDir);
+        }
+        else
+        {
+            fragmentDir = glm::vec3(0.0f, 1.0f, 0.0f);
+        }
+
+        std::vector<FragmentSpawnRequest> requests;
+        requests.reserve(fragmentCount);
 
         for (uint32_t i = 0; i < fragmentCount; ++i)
         {
-            // Create fragment entity
-            events::scene::CreateEntityCommand createCmd;
-            createCmd.name = "fragment_" + std::to_string(i);
-            auto fragmentHandle = dispatcher.execute(createCmd);
+            FragmentSpawnRequest req;
+            req.position = sourcePos;
+            req.rotation = transform.rotation;
+            req.scale = transform.scale;
+            req.fractureAssetRef = fractureRef;
+            req.sourceMaterial = sourceMaterial;
+            req.mass = massPerFragment;
+            req.lifetime = lifetime;
+            req.sourceEntityId = entity.id;
+            req.fragmentIndex = i;
 
-            if (!fragmentHandle.isValid())
-            {
-                continue;
-            }
-
-            // Set transform (offset from source position)
-            events::scene::SetTransformCommand transformCmd;
-            transformCmd.entity = fragmentHandle;
-            transformCmd.transform.position = sourcePos;
-            transformCmd.transform.rotation = transform.rotation;
-            transformCmd.transform.scale = transform.scale;
-            dispatcher.execute(transformCmd);
-
-            // Set mesh component pointing to fracture asset
-            events::scene::AddMeshComponentCommand meshCmd;
-            meshCmd.entity = fragmentHandle;
-            dispatcher.execute(meshCmd);
-
-            events::scene::SetMeshDataCommand meshDataCmd;
-            meshDataCmd.entity = fragmentHandle;
-            meshDataCmd.meshData.meshRef = fractureRef;
-            dispatcher.execute(meshDataCmd);
-
-            // Copy material from source
-            events::material::SetMaterialDataCommand matCmd;
-            matCmd.entity = fragmentHandle;
-            matCmd.materialData = sourceMaterial;
-            dispatcher.execute(matCmd);
-
-            // Add fragment component for lifetime tracking
-            scene::Entity fragEntity(fromHandle(fragmentHandle));
-            auto& fragComp = fragEntity.addComponent<components::FragmentComponent>();
-            fragComp.sourceEntityId = entity.id;
-            fragComp.fragmentIndex = i;
-            fragComp.lifetime = lifetime;
-            fragComp.elapsed = 0.0f;
-
-            // Add physics: rigid body + collider
-            events::physics::AddRigidBodyCommand rbCmd;
-            rbCmd.entity = fragmentHandle;
-            rbCmd.rigidBody.type = types::RigidBodyType::Dynamic;
-            rbCmd.rigidBody.mass = massPerFragment;
-            rbCmd.rigidBody.linearDamping = 0.5f;
-            rbCmd.rigidBody.angularDamping = 0.5f;
-            rbCmd.rigidBody.activateOnAdd = true;
-            rbCmd.collider.shape = types::ColliderShape::ConvexMesh;
-            rbCmd.collider.meshPath = fractureRef.resolve();
-            rbCmd.collider.collisionLayer = 1;
-            dispatcher.execute(rbCmd);
-
-            // Apply impulse away from impact point
-            glm::vec3 fragmentDir = impactDir;
-            if (glm::length(fragmentDir) > 0.001f)
-            {
-                fragmentDir = glm::normalize(fragmentDir);
-            }
-            else
-            {
-                fragmentDir = glm::vec3(0.0f, 1.0f, 0.0f);
-            }
-
-            // Add some spread based on fragment index
             float angle = static_cast<float>(i) * 6.283185f / static_cast<float>(fragmentCount);
             glm::vec3 spread(std::cos(angle) * 0.3f, 0.2f, std::sin(angle) * 0.3f);
-            glm::vec3 impulse = (fragmentDir + spread) * force;
+            req.impulse = (fragmentDir + spread) * force;
 
-            events::physics::ApplyImpulseCommand impulseCmd;
-            impulseCmd.entity = fragmentHandle;
-            impulseCmd.impulse = impulse;
-            dispatcher.execute(impulseCmd);
-
-            fragmentEntities.push_back(fragmentHandle);
+            requests.push_back(std::move(req));
         }
 
+        debrisManager->requestSpawn(std::move(requests));
+
         // Delete the original entity
-        events::scene::DeleteEntityCommand deleteCmd;
+        ::events::scene::DeleteEntityCommand deleteCmd;
         deleteCmd.entity = entity;
         dispatcher.execute(deleteCmd);
 
         // Publish destruction notification
-        events::destruction::DestructionTriggeredNotification notification;
+        ::events::destruction::DestructionTriggeredNotification notification;
         notification.entity = entity;
         notification.impactPoint = impactPoint;
         notification.impactDirection = impactDir;
-        notification.fragmentEntities = std::move(fragmentEntities);
         dispatcher.publish(notification);
 
-        spdlog::info("Destruction: spawned {} fragments for entity {}",
-                    notification.fragmentEntities.size(), entity.id);
-    }
-
-    void DestructionServiceImpl::cleanupExpiredFragments(float deltaTime)
-    {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        auto& dispatcher = events::EventDispatcher::instance();
-
-        std::vector<entt::entity> toDelete;
-
-        auto view = registry.view<components::FragmentComponent>();
-        for (auto entity : view)
-        {
-            auto& fragment = view.get<components::FragmentComponent>(entity);
-            fragment.elapsed += deltaTime;
-
-            if (fragment.elapsed >= fragment.lifetime)
-            {
-                toDelete.push_back(entity);
-            }
-        }
-
-        for (auto entity : toDelete)
-        {
-            EntityHandle handle;
-            handle.id = static_cast<uint64_t>(static_cast<uint32_t>(entity));
-
-            events::scene::DeleteEntityCommand deleteCmd;
-            deleteCmd.entity = handle;
-            dispatcher.execute(deleteCmd);
-        }
+        spdlog::info("Destruction: queued {} fragments for entity {}", fragmentCount, entity.id);
     }
 }

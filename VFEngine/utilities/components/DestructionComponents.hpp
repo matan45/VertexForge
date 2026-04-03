@@ -19,6 +19,14 @@ namespace components
         Melee = 3
     };
 
+    enum class FragmentState : uint8_t
+    {
+        Active,
+        Sleeping,
+        FadingOut,
+        Pooled
+    };
+
     struct DestructibleComponent
     {
         float maxHealth = 100.0f;
@@ -28,7 +36,7 @@ namespace components
         DestructionMode mode = DestructionMode::OneShot;
         DamageType damageFilter = DamageType::Any;
         float fragmentMassTotal = 1.0f;
-        float fragmentLifetime = 5.0f;
+        float fragmentLifetime = 10.0f;
         bool isDestroyed = false;
     };
 
@@ -36,7 +44,13 @@ namespace components
     {
         uint64_t sourceEntityId = ~0ULL;
         uint32_t fragmentIndex = 0;
-        float lifetime = 5.0f;
+        float lifetime = 10.0f;
         float elapsed = 0.0f;
+        FragmentState state = FragmentState::Active;
+        float sleepTime = 0.0f;
+        float fadeOutDuration = 1.5f;
+        float fadeProgress = 0.0f;
+        float distanceToCamera = 0.0f;
+        uint32_t spawnFrame = 0;
     };
 }
