@@ -13,6 +13,7 @@
 #include "ScriptInputActionEventBridge.hpp"
 #include "ScriptSceneEventBridge.hpp"
 #include "ScriptWeatherEventBridge.hpp"
+#include "ScriptDestructionEventBridge.hpp"
 #include "NativeAPIRegistry.hpp"
 #include "CoroutineManager.hpp"
 #include "ScriptCommunicationManager.hpp"
@@ -83,6 +84,8 @@ namespace core
 
             weatherEventBridge = std::make_unique<ScriptWeatherEventBridge>(
                 interpreter.get(), instanceToInterfaces, instanceToObject, instanceToEntity);
+            destructionEventBridge = std::make_unique<ScriptDestructionEventBridge>(
+                interpreter.get(), instanceToInterfaces, instanceToObject, instanceToEntity);
 
             physicsEventBridge->subscribeAll();
             uiEventBridge->subscribeAll();
@@ -93,6 +96,7 @@ namespace core
             inputActionEventBridge->subscribeAll();
             sceneEventBridge->subscribeAll();
             weatherEventBridge->subscribeAll();
+            destructionEventBridge->subscribeAll();
 
             initialized = true;
             return true;
@@ -111,6 +115,7 @@ namespace core
         if (!initialized) return;
 
         if (weatherEventBridge) weatherEventBridge->unsubscribeAll();
+        if (destructionEventBridge) destructionEventBridge->unsubscribeAll();
         if (sceneEventBridge) sceneEventBridge->unsubscribeAll();
         if (inputActionEventBridge) inputActionEventBridge->unsubscribeAll();
         if (navigationEventBridge) navigationEventBridge->unsubscribeAll();

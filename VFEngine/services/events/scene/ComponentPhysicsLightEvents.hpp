@@ -532,4 +532,39 @@ namespace events::scene {
         std::string_view getName() const override { return "GetRenderSettings"; }
     };
 
+    // ============================================
+    // Destructible Component Events
+    // ============================================
+
+    struct AddDestructibleComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "AddDestructibleComponent"; }
+    };
+
+    struct RemoveDestructibleComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "RemoveDestructibleComponent"; }
+    };
+
+    struct SetDestructibleDataCommand : ICommand<bool> {
+        services::EntityHandle entity;
+        services::DestructibleComponentData data;
+
+        std::string_view getName() const override { return "SetDestructibleData"; }
+    };
+
+    struct HasDestructibleComponentQuery : IQuery<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "HasDestructibleComponent"; }
+    };
+
+    struct GetDestructibleDataQuery : IQuery<std::optional<services::DestructibleComponentData>> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "GetDestructibleData"; }
+    };
+
 }

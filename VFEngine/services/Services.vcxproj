@@ -125,6 +125,7 @@
     <ClInclude Include="events\audio\AudioEvents.hpp" />
     <ClInclude Include="events\audio\AudioSettingsEvents.hpp" />
     <ClInclude Include="events\audio\AudioSnapshotEvents.hpp" />
+    <ClInclude Include="events\destruction\DestructionEvents.hpp" />
     <ClInclude Include="events\editor\EditorKeybindingEvents.hpp" />
     <ClInclude Include="events\editor\EditorModeEvents.hpp" />
     <ClInclude Include="events\editor\EditorSettingsEvents.hpp" />
@@ -230,6 +231,11 @@
     <ClInclude Include="impl\components\TextComponentService.hpp" />
     <ClInclude Include="impl\components\UIComponentService.hpp" />
     <ClInclude Include="impl\components\VFXComponentService.hpp" />
+    <ClInclude Include="impl\destruction\DamagePropagationManager.hpp" />
+    <ClInclude Include="impl\destruction\DebrisManager.hpp" />
+    <ClInclude Include="impl\destruction\DestructionEffectsManager.hpp" />
+    <ClInclude Include="impl\destruction\DestructionHelpers.hpp" />
+    <ClInclude Include="impl\destruction\DestructionServiceImpl.hpp" />
     <ClInclude Include="impl\editor\EditorKeybindingServiceImpl.hpp" />
     <ClInclude Include="impl\editor\EditorModeServiceImpl.hpp" />
     <ClInclude Include="impl\editor\EditorSettingsService.hpp" />
@@ -301,6 +307,7 @@
     <ClInclude Include="interfaces\animation\IAnimationService.hpp" />
     <ClInclude Include="interfaces\asset\IAssetDatabaseService.hpp" />
     <ClInclude Include="interfaces\audio\IAudioService.hpp" />
+    <ClInclude Include="interfaces\destruction\IDestructionService.hpp" />
     <ClInclude Include="interfaces\editor\IEditorKeybindingService.hpp" />
     <ClInclude Include="interfaces\editor\IEditorModeService.hpp" />
     <ClInclude Include="interfaces\editor\ISculptModeService.hpp" />
@@ -415,6 +422,10 @@
     <ClCompile Include="impl\components\UIScrollLayoutOps.cpp" />
     <ClCompile Include="impl\components\UISliderProgressOps.cpp" />
     <ClCompile Include="impl\components\VFXComponentService.cpp" />
+    <ClCompile Include="impl\destruction\DamagePropagationManager.cpp" />
+    <ClCompile Include="impl\destruction\DebrisManager.cpp" />
+    <ClCompile Include="impl\destruction\DestructionEffectsManager.cpp" />
+    <ClCompile Include="impl\destruction\DestructionServiceImpl.cpp" />
     <ClCompile Include="impl\editor\EditorKeybindingServiceImpl.cpp" />
     <ClCompile Include="impl\editor\EditorModeServiceImpl.cpp" />
     <ClCompile Include="impl\editor\EditorSettingsService.cpp" />
@@ -505,6 +516,9 @@
   <ItemGroup>
     <ProjectReference Include="..\utilities\Utilities.vcxproj">
       <Project>{010A8043-6D74-34BA-B6B2-E55F225C120F}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\utilities\Destruction.vcxproj">
+      <Project>{59EB8BB1-C5A0-04A7-4E95-FE7DBA49FBAA}</Project>
     </ProjectReference>
     <ProjectReference Include="..\utilities\Terrain.vcxproj">
       <Project>{7AABC339-E68A-42D5-EFA2-CDAB5B01A936}</Project>

@@ -589,6 +589,37 @@ namespace services
             {
                 return removeControllerComponent(cmd.entity);
             });
+
+        // Destructible component handlers
+        dispatcher.registerCommandHandler<events::scene::AddDestructibleComponentCommand>(
+            [this](const events::scene::AddDestructibleComponentCommand& cmd)
+            {
+                return addDestructibleComponent(cmd.entity);
+            });
+
+        dispatcher.registerCommandHandler<events::scene::RemoveDestructibleComponentCommand>(
+            [this](const events::scene::RemoveDestructibleComponentCommand& cmd)
+            {
+                return removeDestructibleComponent(cmd.entity);
+            });
+
+        dispatcher.registerCommandHandler<events::scene::SetDestructibleDataCommand>(
+            [this](const events::scene::SetDestructibleDataCommand& cmd)
+            {
+                return setDestructibleData(cmd.entity, cmd.data);
+            });
+
+        dispatcher.registerQueryHandler<events::scene::HasDestructibleComponentQuery>(
+            [this](const events::scene::HasDestructibleComponentQuery& query)
+            {
+                return hasDestructibleComponent(query.entity);
+            });
+
+        dispatcher.registerQueryHandler<events::scene::GetDestructibleDataQuery>(
+            [this](const events::scene::GetDestructibleDataQuery& query)
+            {
+                return getDestructibleData(query.entity);
+            });
     }
 
     // ========== OFF-MESH LINK COMPONENT OPERATIONS ==========
@@ -883,5 +914,125 @@ namespace services
             return true;
         }
         return false;
+    }
+
+    // ========== DESTRUCTIBLE COMPONENT ==========
+
+    bool PhysicsComponentService::addDestructibleComponent(EntityHandle entity)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry))
+        {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (!sceneEntity.hasComponent<components::DestructibleComponent>())
+        {
+            sceneEntity.addComponent<components::DestructibleComponent>();
+            return true;
+        }
+        return false;
+    }
+
+    bool PhysicsComponentService::removeDestructibleComponent(EntityHandle entity)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry))
+        {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (sceneEntity.hasComponent<components::DestructibleComponent>())
+        {
+            sceneEntity.removeComponent<components::DestructibleComponent>();
+            return true;
+        }
+        return false;
+    }
+
+    bool PhysicsComponentService::hasDestructibleComponent(EntityHandle entity) const
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry))
+        {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        return sceneEntity.hasComponent<components::DestructibleComponent>();
+    }
+
+    std::optional<DestructibleComponentData> PhysicsComponentService::getDestructibleData(EntityHandle entity) const
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry))
+        {
+            return std::nullopt;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (!sceneEntity.hasComponent<components::DestructibleComponent>())
+        {
+            return std::nullopt;
+        }
+
+        const auto& comp = sceneEntity.getComponent<components::DestructibleComponent>();
+        DestructibleComponentData data;
+        data.maxHealth = comp.maxHealth;
+        data.destructionThreshold = comp.destructionThreshold;
+        data.fractureAssetRef = comp.fractureAssetRef;
+        data.fragmentCount = comp.fragmentCount;
+        data.mode = comp.mode;
+        data.damageFilter = comp.damageFilter;
+        data.fragmentMassTotal = comp.fragmentMassTotal;
+        data.fragmentLifetime = comp.fragmentLifetime;
+        data.propagationRadius = comp.propagationRadius;
+        data.propagationDamage = comp.propagationDamage;
+        data.onDamageVFX = comp.onDamageVFX;
+        data.onDestroyVFX = comp.onDestroyVFX;
+        data.onDamageAudio = comp.onDamageAudio;
+        data.onDestroyAudio = comp.onDestroyAudio;
+        data.fragmentCollisionAudio = comp.fragmentCollisionAudio;
+        data.damageDecalAlbedo = comp.damageDecalAlbedo;
+        data.damageDecalNormal = comp.damageDecalNormal;
+        return data;
+    }
+
+    bool PhysicsComponentService::setDestructibleData(EntityHandle entity, const DestructibleComponentData& data)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry))
+        {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (!sceneEntity.hasComponent<components::DestructibleComponent>())
+        {
+            sceneEntity.addComponent<components::DestructibleComponent>();
+        }
+
+        auto& comp = sceneEntity.getComponent<components::DestructibleComponent>();
+        comp.maxHealth = data.maxHealth;
+        comp.currentHealth = data.maxHealth;
+        comp.destructionThreshold = data.destructionThreshold;
+        comp.fractureAssetRef = data.fractureAssetRef;
+        comp.fragmentCount = data.fragmentCount;
+        comp.mode = data.mode;
+        comp.damageFilter = data.damageFilter;
+        comp.fragmentMassTotal = data.fragmentMassTotal;
+        comp.fragmentLifetime = data.fragmentLifetime;
+        comp.propagationRadius = data.propagationRadius;
+        comp.propagationDamage = data.propagationDamage;
+        comp.onDamageVFX = data.onDamageVFX;
+        comp.onDestroyVFX = data.onDestroyVFX;
+        comp.onDamageAudio = data.onDamageAudio;
+        comp.onDestroyAudio = data.onDestroyAudio;
+        comp.fragmentCollisionAudio = data.fragmentCollisionAudio;
+        comp.damageDecalAlbedo = data.damageDecalAlbedo;
+        comp.damageDecalNormal = data.damageDecalNormal;
+        return true;
     }
 }

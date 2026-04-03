@@ -19,6 +19,37 @@ namespace asset
             j["importTimestamp"] = metadata.importTimestamp;
             j["formatVersion"] = metadata.formatVersion;
 
+            if (metadata.fractureData.has_value())
+            {
+                const auto& fd = metadata.fractureData.value();
+                json fractureJson;
+                fractureJson["fragmentCount"] = fd.fragmentCount;
+                fractureJson["seedDistribution"] = fd.seedDistribution;
+                fractureJson["randomSeed"] = fd.randomSeed;
+                fractureJson["innerUVScale"] = fd.innerUVScale;
+
+                json fragmentsJson = json::array();
+                for (const auto& frag : fd.fragments)
+                {
+                    json f;
+                    f["centerOfMass"] = {frag.centerOfMass.x, frag.centerOfMass.y, frag.centerOfMass.z};
+                    f["volume"] = frag.volume;
+                    f["bboxMin"] = {frag.bboxMin.x, frag.bboxMin.y, frag.bboxMin.z};
+                    f["bboxMax"] = {frag.bboxMax.x, frag.bboxMax.y, frag.bboxMax.z};
+                    fragmentsJson.push_back(f);
+                }
+                fractureJson["fragments"] = fragmentsJson;
+
+                json connectivityJson = json::array();
+                for (const auto& [a, b, area] : fd.connectivity)
+                {
+                    connectivityJson.push_back({a, b, area});
+                }
+                fractureJson["connectivity"] = connectivityJson;
+
+                j["fractureData"] = fractureJson;
+            }
+
             std::ofstream file(metaPath);
             if (!file.is_open())
             {
@@ -62,6 +93,51 @@ namespace asset
             {
                 vfLogWarning("Invalid GUID in meta file: {}", metaPath.string());
                 return std::nullopt;
+            }
+
+            if (j.contains("fractureData"))
+            {
+                const auto& fj = j["fractureData"];
+                FractureMetadata fd;
+                fd.fragmentCount = fj.value("fragmentCount", 0u);
+                fd.seedDistribution = fj.value("seedDistribution", 0u);
+                fd.randomSeed = fj.value("randomSeed", 42u);
+                fd.innerUVScale = fj.value("innerUVScale", 1.0f);
+
+                if (fj.contains("fragments"))
+                {
+                    for (const auto& f : fj["fragments"])
+                    {
+                        FragmentPhysicsInfo info;
+                        if (f.contains("centerOfMass"))
+                        {
+                            auto& c = f["centerOfMass"];
+                            info.centerOfMass = {c[0].get<float>(), c[1].get<float>(), c[2].get<float>()};
+                        }
+                        info.volume = f.value("volume", 0.0f);
+                        if (f.contains("bboxMin"))
+                        {
+                            auto& b = f["bboxMin"];
+                            info.bboxMin = {b[0].get<float>(), b[1].get<float>(), b[2].get<float>()};
+                        }
+                        if (f.contains("bboxMax"))
+                        {
+                            auto& b = f["bboxMax"];
+                            info.bboxMax = {b[0].get<float>(), b[1].get<float>(), b[2].get<float>()};
+                        }
+                        fd.fragments.push_back(info);
+                    }
+                }
+
+                if (fj.contains("connectivity"))
+                {
+                    for (const auto& c : fj["connectivity"])
+                    {
+                        fd.connectivity.emplace_back(c[0].get<uint32_t>(), c[1].get<uint32_t>(), c[2].get<float>());
+                    }
+                }
+
+                metadata.fractureData = fd;
             }
 
             return metadata;

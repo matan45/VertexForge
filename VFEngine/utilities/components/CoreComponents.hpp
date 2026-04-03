@@ -193,6 +193,7 @@ namespace components
         bool showBoundingBox = false;
         bool applyRootMotion = false;
         float maxDrawDistance = 0.0f; // 0 = use category default from render config
+        int32_t submeshIndex = -1; // -1 = render all, >= 0 = render only this submesh
     };
 
     struct MaterialComponent

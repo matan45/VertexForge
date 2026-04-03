@@ -285,6 +285,18 @@ namespace windows::details
                 ImGui::SetTooltip("Physics body for dynamics simulation");
         }
 
+        if (!c.hasDestructible && matchesFilter("Destructible", filter))
+        {
+            if (ImGui::Selectable("  Destructible"))
+            {
+                events::scene::AddDestructibleComponentCommand cmd;
+                cmd.entity = handle;
+                dispatcher.execute(cmd);
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Makes object destructible with health, fracture, and debris");
+        }
+
         if (!c.hasPhysicsAnimation && matchesFilter("Physics Animation", filter))
         {
             if (ImGui::Selectable("  Physics Animation"))

@@ -134,7 +134,7 @@ namespace services
         info.tileZ = tile.coord.z;
         info.heightSamples = tile.heightData.data();
         info.sampleCount = tile.config.getVertexCount();
-        info.worldOrigin = tile.worldOrigin;
+        info.worldOrigin = glm::vec3(tile.worldOrigin.x, 0.0f, tile.worldOrigin.z);
         info.vertexSpacing = tile.config.getVertexSpacing();
         info.friction = friction;
         info.restitution = restitution;

@@ -124,6 +124,7 @@ IF EXIST ..\..\bin\Import\Release\x64\Import.dll\ (xcopy /Q /E /Y /I ..\..\bin\I
     <ClInclude Include="types\Font.hpp" />
     <ClInclude Include="types\FontAtlasGenerator.hpp" />
     <ClInclude Include="types\FontSerializer.hpp" />
+    <ClInclude Include="types\FractureProcessor.hpp" />
     <ClInclude Include="types\Mesh.hpp" />
     <ClInclude Include="types\MeshIKChainWriter.hpp" />
     <ClInclude Include="types\MeshLODGenerator.hpp" />
@@ -150,6 +151,7 @@ IF EXIST ..\..\bin\Import\Release\x64\Import.dll\ (xcopy /Q /E /Y /I ..\..\bin\I
     <ClCompile Include="types\Font.cpp" />
     <ClCompile Include="types\FontAtlasGenerator.cpp" />
     <ClCompile Include="types\FontSerializer.cpp" />
+    <ClCompile Include="types\FractureProcessor.cpp" />
     <ClCompile Include="types\Mesh.cpp" />
     <ClCompile Include="types\MeshIKChainWriter.cpp" />
     <ClCompile Include="types\MeshLODGenerator.cpp" />
@@ -163,6 +165,9 @@ IF EXIST ..\..\bin\Import\Release\x64\Import.dll\ (xcopy /Q /E /Y /I ..\..\bin\I
   <ItemGroup>
     <ProjectReference Include="..\utilities\Utilities.vcxproj">
       <Project>{010A8043-6D74-34BA-B6B2-E55F225C120F}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\utilities\Destruction.vcxproj">
+      <Project>{59EB8BB1-C5A0-04A7-4E95-FE7DBA49FBAA}</Project>
     </ProjectReference>
     <ProjectReference Include="..\meshoptimizer.vcxproj">
       <Project>{75046AD2-E1C4-E508-AAFF-2E86167F2AE5}</Project>

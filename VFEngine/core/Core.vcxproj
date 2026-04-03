@@ -105,6 +105,7 @@
     <ClInclude Include="adapters\api\CoroutineAPI.hpp" />
     <ClInclude Include="adapters\api\DebugDrawAPI.hpp" />
     <ClInclude Include="adapters\api\DecalAPI.hpp" />
+    <ClInclude Include="adapters\api\DestructionAPI.hpp" />
     <ClInclude Include="adapters\api\EntityAPI.hpp" />
     <ClInclude Include="adapters\api\EntityComponentAPI.hpp" />
     <ClInclude Include="adapters\api\FootIKAPI.hpp" />
@@ -163,6 +164,7 @@
     <ClInclude Include="adapters\scripting\NativeAPIRegistry.hpp" />
     <ClInclude Include="adapters\scripting\ScriptAnimationEventBridge.hpp" />
     <ClInclude Include="adapters\scripting\ScriptCommunicationManager.hpp" />
+    <ClInclude Include="adapters\scripting\ScriptDestructionEventBridge.hpp" />
     <ClInclude Include="adapters\scripting\ScriptInputActionEventBridge.hpp" />
     <ClInclude Include="adapters\scripting\ScriptNavigationEventBridge.hpp" />
     <ClInclude Include="adapters\scripting\ScriptPhysicsEventBridge.hpp" />
@@ -205,6 +207,7 @@
     <ClCompile Include="adapters\api\CoroutineAPI.cpp" />
     <ClCompile Include="adapters\api\DebugDrawAPI.cpp" />
     <ClCompile Include="adapters\api\DecalAPI.cpp" />
+    <ClCompile Include="adapters\api\DestructionAPI.cpp" />
     <ClCompile Include="adapters\api\EntityAPI.cpp" />
     <ClCompile Include="adapters\api\EntityComponentAPI.cpp" />
     <ClCompile Include="adapters\api\FootIKAPI.cpp" />
@@ -265,6 +268,7 @@
     <ClCompile Include="adapters\scripting\NativeAPIRegistry.cpp" />
     <ClCompile Include="adapters\scripting\ScriptAnimationEventBridge.cpp" />
     <ClCompile Include="adapters\scripting\ScriptCommunicationManager.cpp" />
+    <ClCompile Include="adapters\scripting\ScriptDestructionEventBridge.cpp" />
     <ClCompile Include="adapters\scripting\ScriptInputActionEventBridge.cpp" />
     <ClCompile Include="adapters\scripting\ScriptNavigationEventBridge.cpp" />
     <ClCompile Include="adapters\scripting\ScriptPhysicsEventBridge.cpp" />

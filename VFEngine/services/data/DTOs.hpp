@@ -6,6 +6,7 @@
 #include <rendertexture/RenderTextureTypes.hpp>
 #include <asset/AssetRef.hpp>
 #include <resource/AssetTypes.hpp>
+#include <components/DestructionComponents.hpp>
 #include <glm/glm.hpp>
 #include <string>
 #include <vector>
@@ -57,6 +58,7 @@ namespace services
         bool showBoundingBox = false;
         bool applyRootMotion = false;
         float maxDrawDistance = 0.0f; // 0 = use category default from render config
+        int32_t submeshIndex = -1; // -1 = all, >= 0 = only this submesh
     };
 
     struct MeshBoundingBox
@@ -653,5 +655,28 @@ namespace services
     {
         UIAnimationNodeData rootNode;
         bool autoPlay = false;
+    };
+
+    struct DestructibleComponentData
+    {
+        float maxHealth = 100.0f;
+        float destructionThreshold = 0.0f;
+        asset::AssetRef fractureAssetRef;
+        uint32_t fragmentCount = 0;
+        components::DestructionMode mode = components::DestructionMode::OneShot;
+        components::DamageType damageFilter = components::DamageType::Any;
+        float fragmentMassTotal = 1.0f;
+        float fragmentLifetime = 5.0f;
+
+        float propagationRadius = 0.0f;
+        float propagationDamage = 50.0f;
+
+        asset::AssetRef onDamageVFX;
+        asset::AssetRef onDestroyVFX;
+        asset::AssetRef onDamageAudio;
+        asset::AssetRef onDestroyAudio;
+        asset::AssetRef fragmentCollisionAudio;
+        asset::AssetRef damageDecalAlbedo;
+        asset::AssetRef damageDecalNormal;
     };
 }

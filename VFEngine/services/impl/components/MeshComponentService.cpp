@@ -31,6 +31,7 @@ namespace services {
         data.showBoundingBox = comp.showBoundingBox;
         data.applyRootMotion = comp.applyRootMotion;
         data.maxDrawDistance = comp.maxDrawDistance;
+        data.submeshIndex = comp.submeshIndex;
 
         return data;
     }
@@ -60,6 +61,7 @@ namespace services {
             comp.showBoundingBox = mesh.showBoundingBox;
             comp.applyRootMotion = mesh.applyRootMotion;
             comp.maxDrawDistance = mesh.maxDrawDistance;
+            comp.submeshIndex = mesh.submeshIndex;
         }
         else {
             auto& comp = sceneEntity.addComponent<components::MeshComponent>();
@@ -68,6 +70,7 @@ namespace services {
             comp.showBoundingBox = mesh.showBoundingBox;
             comp.applyRootMotion = mesh.applyRootMotion;
             comp.maxDrawDistance = mesh.maxDrawDistance;
+            comp.submeshIndex = mesh.submeshIndex;
         }
 
         // Sync applyRootMotion to AnimatorComponent if it exists

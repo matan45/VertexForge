@@ -81,6 +81,7 @@ namespace windows
         
         bool hasCollider = colliderDrawer.draw(handle);
         bool hasRigidBody = rigidBodyDrawer.draw(handle);
+        bool hasDestructible = destructibleDrawer.draw(handle);
         bool hasPhysicsAnimation = physicsAnimationDrawer.draw(handle);
         bool hasVFX = vfxDrawer.draw(handle);
         bool hasBillboard = billboardDrawer.draw(handle);
@@ -146,7 +147,8 @@ namespace windows
                                 hasRenderTexture, hasController, hasIK, hasBehaviorTree,
                                 hasDecal, hasReverbZone, hasFogVolume, hasUIAnimation, hasUIMask,
                                 hasUIDraggable, hasUIDropTarget, hasNavInvoker,
-                                hasVolumetricNavVolume, hasVolumetricAgent});
+                                hasVolumetricNavVolume, hasVolumetricAgent,
+                                hasDestructible});
     }
 
     void EntityDetailsPanel::drawEntityName(services::EntityHandle handle, const std::string& currentName)

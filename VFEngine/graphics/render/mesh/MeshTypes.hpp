@@ -195,6 +195,7 @@ namespace render::mesh
         int forceLODLevel = -1;
         float maxDrawDistance = 0.0f;
         bool isStatic = true;
+        int32_t submeshIndex = -1; // -1 = all, >= 0 = only this submesh
 
         // Instance batching: if non-empty, render N instances with different transforms
         struct InstanceData

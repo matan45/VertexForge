@@ -433,3 +433,6 @@ nul
 .idea/indexLayout.xml
 .idea/vcs.xml
 launcher/.idea/
+
+# Claude Code local settings
+.claude/settings.local.json

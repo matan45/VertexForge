@@ -256,6 +256,7 @@ namespace render::gpudriven
             renderData.meshPath = meshPath;
             renderData.modelMatrix = worldTransform->worldMatrix;
             renderData.maxDrawDistance = meshComp->maxDrawDistance;
+            renderData.submeshIndex = meshComp->submeshIndex;
             renderData.showBoundingBox = false;
 
             auto* materialComp = registry.try_get<components::MaterialComponent>(entry.entity);
@@ -293,6 +294,10 @@ namespace render::gpudriven
                 bool firstSubmesh = true;
                 for (uint32_t subIdx = 0; subIdx < meshInfo.submeshCount; ++subIdx)
                 {
+                    if (renderData.submeshIndex >= 0 &&
+                        subIdx != static_cast<uint32_t>(renderData.submeshIndex))
+                        continue;
+
                     const auto* subLoc = buffer.getSubmeshLocation(
                         meshPath, meshInfo.submeshes[subIdx].submeshName, subIdx);
                     if (!subLoc || !subLoc->hasRenderableLOD()) continue;

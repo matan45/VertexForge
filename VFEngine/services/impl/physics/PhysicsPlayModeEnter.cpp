@@ -172,6 +172,7 @@ namespace services
             glm::quat rotQuat = glm::quat(glm::radians(transform.rotation));
             physicsProvider->setRotation(handle, rotQuat);
             activePhysicsBodies.insert(handle);
+
         }
 
         auto colliderOnlyView = registry.view<components::ColliderComponent, components::TransformComponent>(

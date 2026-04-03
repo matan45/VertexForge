@@ -143,6 +143,9 @@ namespace serialization
         static json serializeRigidBody(const components::RigidBodyComponent& rigidBody);
         static void deserializeRigidBody(const json& j, components::RigidBodyComponent& rigidBody);
 
+        static json serializeDestructible(const components::DestructibleComponent& destructible);
+        static void deserializeDestructible(const json& j, components::DestructibleComponent& destructible);
+
         static json serializeVFX(const components::VFXComponent& vfx);
         static void deserializeVFX(const json& j, components::VFXComponent& vfx);
 
