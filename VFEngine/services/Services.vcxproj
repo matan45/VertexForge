@@ -125,6 +125,7 @@
     <ClInclude Include="events\audio\AudioEvents.hpp" />
     <ClInclude Include="events\audio\AudioSettingsEvents.hpp" />
     <ClInclude Include="events\audio\AudioSnapshotEvents.hpp" />
+    <ClInclude Include="events\destruction\DestructionEvents.hpp" />
     <ClInclude Include="events\editor\EditorKeybindingEvents.hpp" />
     <ClInclude Include="events\editor\EditorModeEvents.hpp" />
     <ClInclude Include="events\editor\EditorSettingsEvents.hpp" />
@@ -230,6 +231,7 @@
     <ClInclude Include="impl\components\TextComponentService.hpp" />
     <ClInclude Include="impl\components\UIComponentService.hpp" />
     <ClInclude Include="impl\components\VFXComponentService.hpp" />
+    <ClInclude Include="impl\destruction\DestructionServiceImpl.hpp" />
     <ClInclude Include="impl\editor\EditorKeybindingServiceImpl.hpp" />
     <ClInclude Include="impl\editor\EditorModeServiceImpl.hpp" />
     <ClInclude Include="impl\editor\EditorSettingsService.hpp" />
@@ -301,6 +303,7 @@
     <ClInclude Include="interfaces\animation\IAnimationService.hpp" />
     <ClInclude Include="interfaces\asset\IAssetDatabaseService.hpp" />
     <ClInclude Include="interfaces\audio\IAudioService.hpp" />
+    <ClInclude Include="interfaces\destruction\IDestructionService.hpp" />
     <ClInclude Include="interfaces\editor\IEditorKeybindingService.hpp" />
     <ClInclude Include="interfaces\editor\IEditorModeService.hpp" />
     <ClInclude Include="interfaces\editor\ISculptModeService.hpp" />
@@ -415,6 +418,7 @@
     <ClCompile Include="impl\components\UIScrollLayoutOps.cpp" />
     <ClCompile Include="impl\components\UISliderProgressOps.cpp" />
     <ClCompile Include="impl\components\VFXComponentService.cpp" />
+    <ClCompile Include="impl\destruction\DestructionServiceImpl.cpp" />
     <ClCompile Include="impl\editor\EditorKeybindingServiceImpl.cpp" />
     <ClCompile Include="impl\editor\EditorModeServiceImpl.cpp" />
     <ClCompile Include="impl\editor\EditorSettingsService.cpp" />

@@ -16,6 +16,7 @@
 #include "VolumetricComponents.hpp"
 #include "PluginComponents.hpp"
 #include "WeatherComponents.hpp"
+#include "DestructionComponents.hpp"
 
 namespace components
 {
@@ -37,5 +38,6 @@ namespace components
                                                BehaviorTreeComponent, DecalComponent, ReverbZoneComponent,
                                                FogVolumeComponent,
                                                VolumetricNavVolumeComponent, VolumetricAgentComponent,
-                                               WeatherZoneComponent>;
+                                               WeatherZoneComponent,
+                                               DestructibleComponent, FragmentComponent>;
 }

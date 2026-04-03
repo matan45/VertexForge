@@ -81,6 +81,13 @@ namespace services {
         // Controller Component Operations
         bool addControllerComponent(EntityHandle entity);
         bool removeControllerComponent(EntityHandle entity);
+
+        // Destructible Component Operations
+        bool addDestructibleComponent(EntityHandle entity);
+        bool removeDestructibleComponent(EntityHandle entity);
+        bool hasDestructibleComponent(EntityHandle entity) const;
+        std::optional<DestructibleComponentData> getDestructibleData(EntityHandle entity) const;
+        bool setDestructibleData(EntityHandle entity, const DestructibleComponentData& data);
     };
 
 }

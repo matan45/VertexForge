@@ -6,6 +6,7 @@
 #include <rendertexture/RenderTextureTypes.hpp>
 #include <asset/AssetRef.hpp>
 #include <resource/AssetTypes.hpp>
+#include <components/DestructionComponents.hpp>
 #include <glm/glm.hpp>
 #include <string>
 #include <vector>
@@ -653,5 +654,16 @@ namespace services
     {
         UIAnimationNodeData rootNode;
         bool autoPlay = false;
+    };
+
+    struct DestructibleComponentData
+    {
+        float maxHealth = 100.0f;
+        float destructionThreshold = 0.0f;
+        asset::AssetRef fractureAssetRef;
+        components::DestructionMode mode = components::DestructionMode::OneShot;
+        components::DamageType damageFilter = components::DamageType::Any;
+        float fragmentMassTotal = 1.0f;
+        float fragmentLifetime = 5.0f;
     };
 }

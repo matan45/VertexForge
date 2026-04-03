@@ -43,6 +43,13 @@ namespace handlers
             }
         });
 
+        frameTaskGraph->addTask("Destruction", [this]() {
+            if (editorModeService && editorModeService->isPlayMode() && !editorModeService->isPaused() && destructionService) {
+                float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
+                destructionService->update(dt);
+            }
+        });
+
         frameTaskGraph->addTask("Scripts", [this]() {
             if (editorModeService && editorModeService->isPlayMode() && !editorModeService->isPaused() && scriptingService) {
                 float dt = static_cast<float>(engineTime::Timer::getDeltaTime());

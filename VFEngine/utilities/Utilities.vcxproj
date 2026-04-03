@@ -112,6 +112,7 @@
     <ClInclude Include="components\ControllerComponents.hpp" />
     <ClInclude Include="components\CoreComponents.hpp" />
     <ClInclude Include="components\DecalComponents.hpp" />
+    <ClInclude Include="components\DestructionComponents.hpp" />
     <ClInclude Include="components\IKComponent.hpp" />
     <ClInclude Include="components\LightTextComponents.hpp" />
     <ClInclude Include="components\MediaComponents.hpp" />

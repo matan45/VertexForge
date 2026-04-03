@@ -50,6 +50,7 @@
 #include "impl/meshbrush/MeshBrushModeServiceImpl.hpp"
 #include "impl/meshbrush/MeshBrushServiceImpl.hpp"
 #include "impl/weather/WeatherServiceImpl.hpp"
+#include "impl/destruction/DestructionServiceImpl.hpp"
 #include "../adapters/terrain/TerrainRenderAdapter.hpp"
 #include "../adapters/terrain/OceanRenderAdapter.hpp"
 #include "../audio/AudioSceneUpdater.hpp"
@@ -168,6 +169,8 @@ namespace handlers
 
         if (auto* ikProvider = bootstrap->getIKProvider())
             ikComponentService = std::make_shared<services::IKComponentService>(ikProvider);
+
+        destructionService = std::make_shared<services::DestructionServiceImpl>();
     }
 
     void EditorHandler::createVFXServices()
@@ -327,6 +330,7 @@ namespace handlers
         giService->registerEventHandlers();
         behaviorTreeService->registerEventHandlers();
         weatherService->registerEventHandlers();
+        if (destructionService) destructionService->registerEventHandlers();
         saveService->registerEventHandlers(events::EventDispatcher::instance());
         configService->registerEventHandlers(events::EventDispatcher::instance());
         editorSettingsService->registerEventHandlers(events::EventDispatcher::instance());
