@@ -3,6 +3,7 @@
 #include "decal/DecalPipeline.hpp"
 #include "../core/SwapChain.hpp"
 #include "../core/Device.hpp"
+#include "../core/ImageUtilities.hpp"
 #include "../core/ThreadCommandPoolManager.hpp"
 #include "ClearColor.hpp"
 #include "IBL.hpp"
@@ -130,6 +131,101 @@ namespace render
         }
 
         executeRenderHooks(plugin::RenderPassHookPoint::PrePostProcess, commandBuffer, imageIndex);
+
+        // Copy current depth to prev-frame depth slot for async compute motion vectors
+        if (offscreenResources.prevFrameDepthCreated)
+        {
+            uint32_t currentFrame = imageIndex % core::MAX_FRAMES_IN_FLIGHT;
+            vk::ImageSubresourceRange depthRange(vk::ImageAspectFlagBits::eDepth, 0, 1, 0, 1);
+
+            // Transition main depth: attachment -> transfer src
+            {
+                vk::ImageMemoryBarrier b{};
+                b.oldLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
+                b.newLayout = vk::ImageLayout::eTransferSrcOptimal;
+                b.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                b.image = offscreenResources.depthImage.depthImage;
+                b.subresourceRange = depthRange;
+                b.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil;
+                b.srcAccessMask = vk::AccessFlagBits::eDepthStencilAttachmentWrite;
+                b.dstAccessMask = vk::AccessFlagBits::eTransferRead;
+
+                commandBuffer.pipelineBarrier(
+                    vk::PipelineStageFlagBits::eLateFragmentTests,
+                    vk::PipelineStageFlagBits::eTransfer,
+                    {}, {}, {}, b);
+            }
+
+            // Transition prev-frame depth: undefined -> transfer dst
+            {
+                vk::ImageMemoryBarrier b{};
+                b.oldLayout = vk::ImageLayout::eUndefined;
+                b.newLayout = vk::ImageLayout::eTransferDstOptimal;
+                b.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                b.image = offscreenResources.prevFrameDepth[currentFrame].image;
+                b.subresourceRange = depthRange;
+                b.srcAccessMask = {};
+                b.dstAccessMask = vk::AccessFlagBits::eTransferWrite;
+
+                commandBuffer.pipelineBarrier(
+                    vk::PipelineStageFlagBits::eTopOfPipe,
+                    vk::PipelineStageFlagBits::eTransfer,
+                    {}, {}, {}, b);
+            }
+
+            // Copy depth
+            vk::ImageCopy region{};
+            region.srcSubresource = {vk::ImageAspectFlagBits::eDepth, 0, 0, 1};
+            region.dstSubresource = {vk::ImageAspectFlagBits::eDepth, 0, 0, 1};
+            region.extent = vk::Extent3D(
+                swapChain.getSwapchainExtent().width,
+                swapChain.getSwapchainExtent().height,
+                1);
+
+            commandBuffer.copyImage(
+                offscreenResources.depthImage.depthImage, vk::ImageLayout::eTransferSrcOptimal,
+                offscreenResources.prevFrameDepth[currentFrame].image, vk::ImageLayout::eTransferDstOptimal,
+                region);
+
+            // Transition main depth back: transfer src -> attachment
+            {
+                vk::ImageMemoryBarrier b{};
+                b.oldLayout = vk::ImageLayout::eTransferSrcOptimal;
+                b.newLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
+                b.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                b.image = offscreenResources.depthImage.depthImage;
+                b.subresourceRange = depthRange;
+                b.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil;
+                b.srcAccessMask = vk::AccessFlagBits::eTransferRead;
+                b.dstAccessMask = vk::AccessFlagBits::eDepthStencilAttachmentRead | vk::AccessFlagBits::eDepthStencilAttachmentWrite;
+
+                commandBuffer.pipelineBarrier(
+                    vk::PipelineStageFlagBits::eTransfer,
+                    vk::PipelineStageFlagBits::eEarlyFragmentTests,
+                    {}, {}, {}, b);
+            }
+
+            // Transition prev-frame depth: transfer dst -> shader read (for async compute next frame)
+            {
+                vk::ImageMemoryBarrier b{};
+                b.oldLayout = vk::ImageLayout::eTransferDstOptimal;
+                b.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+                b.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                b.image = offscreenResources.prevFrameDepth[currentFrame].image;
+                b.subresourceRange = depthRange;
+                b.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
+                b.dstAccessMask = vk::AccessFlagBits::eShaderRead;
+
+                commandBuffer.pipelineBarrier(
+                    vk::PipelineStageFlagBits::eTransfer,
+                    vk::PipelineStageFlagBits::eComputeShader,
+                    {}, {}, {}, b);
+            }
+        }
 
         {
             auto* upscaleManager = device.getUpscaleManager();

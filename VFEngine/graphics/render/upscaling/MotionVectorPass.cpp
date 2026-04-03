@@ -149,7 +149,8 @@ namespace render::upscaling
                                      const glm::mat4& invViewProjection,
                                      const glm::mat4& prevViewProjection,
                                      uint32_t width, uint32_t height,
-                                     uint32_t frameIndex)
+                                     uint32_t frameIndex,
+                                     vk::ImageLayout depthLayout)
     {
         if (!initialized) return;
 
@@ -171,7 +172,7 @@ namespace render::upscaling
         vk::DescriptorImageInfo depthInfo{};
         depthInfo.sampler = depthSampler;
         depthInfo.imageView = depthView;
-        depthInfo.imageLayout = vk::ImageLayout::eDepthStencilReadOnlyOptimal;
+        depthInfo.imageLayout = depthLayout;
 
         vk::DescriptorBufferInfo bufferInfo{};
         bufferInfo.buffer = paramsBuffer.getBuffer();

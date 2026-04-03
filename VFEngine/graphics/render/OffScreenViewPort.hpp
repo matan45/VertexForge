@@ -73,6 +73,8 @@ namespace render
         void createUpscaleResources(uint32_t renderWidth, uint32_t renderHeight,
                                      uint32_t displayWidth, uint32_t displayHeight);
         void cleanupUpscaleResources();
+        void createPrevFrameDepthResources(uint32_t width, uint32_t height);
+        void cleanupPrevFrameDepthResources();
         void updateDescriptorSets(vk::DescriptorSet& descriptorSet, const vk::ImageView& imageView) const;
         void createSampler();
     };

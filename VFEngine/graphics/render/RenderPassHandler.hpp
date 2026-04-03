@@ -191,6 +191,8 @@ namespace render
         glm::mat4 unjitteredProjection{1.0f};
         glm::mat4 prevView{1.0f};
         glm::mat4 prevProjection{1.0f};
+        glm::mat4 prevPrevView{1.0f};
+        glm::mat4 prevPrevProjection{1.0f};
         glm::vec2 currentJitterOffset{0.0f};
         uint32_t taaFrameIndex = 0;
 
@@ -320,8 +322,8 @@ namespace render
         uint32_t getLastSceneSecondaryCount() const { return lastSceneSecondaryCount; }
 
         // Record all async-eligible compute work into the given command buffer
-        // (light culling, grass, GI, atmosphere, clouds, VFX, ocean FFT)
-        void recordAsyncCompute(vk::CommandBuffer asyncCmd) const;
+        // (light culling, grass, GI, atmosphere, clouds, VFX, ocean FFT, motion vectors)
+        void recordAsyncCompute(vk::CommandBuffer asyncCmd, uint32_t frameIndex) const;
 
         void setDeletionQueue(core::DeferredDeletionQueue* queue);
         void setGPUDrivenCameraData(const glm::vec3& cameraPos, float nearPlane, float farPlane, float time = 0.0f);

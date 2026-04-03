@@ -332,30 +332,45 @@ namespace render
         auto renderRes = resMgr.getRenderResolution();
         auto displayRes = resMgr.getDisplayResolution();
 
-        // Compute inverse VP and prev VP for motion vector generation
-        glm::mat4 viewProjection = currentProjection * currentView;
-        glm::mat4 invVP = glm::inverse(viewProjection);
-        glm::mat4 prevVP = prevProjection * prevView;
-
         vk::ImageAspectFlags depthStencilAspect =
             vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil;
 
-        // Transition depth to shader read for the motion vector compute pass
-        core::ImageUtilities::transitionImageLayout(commandBuffer,
-            offscreenResources.depthImage.depthImage,
-            vk::ImageLayout::eDepthStencilAttachmentOptimal,
-            vk::ImageLayout::eDepthStencilReadOnlyOptimal,
-            depthStencilAspect);
+        if (asyncComputeActive && offscreenResources.prevFrameDepthCreated
+            && motionVectorPass && motionVectorPass->isInitialized())
+        {
+            // Motion vectors were computed on async compute queue using prev-frame depth.
+            // The timeline semaphore ensures the write is complete before this point.
+            // Transition depth to shader read for the upscaler (depth is still needed as input).
+            core::ImageUtilities::transitionImageLayout(commandBuffer,
+                offscreenResources.depthImage.depthImage,
+                vk::ImageLayout::eDepthStencilAttachmentOptimal,
+                vk::ImageLayout::eDepthStencilReadOnlyOptimal,
+                depthStencilAspect);
+        }
+        else
+        {
+            // Fallback: dispatch motion vectors on graphics queue (original path)
+            glm::mat4 viewProjection = currentProjection * currentView;
+            glm::mat4 invVP = glm::inverse(viewProjection);
+            glm::mat4 prevVP = prevProjection * prevView;
 
-        // Dispatch motion vector compute pass
-        motionVectorPass->dispatch(commandBuffer,
-            offscreenResources.depthImage.depthImageView,
-            offscreenResources.depthImage.depthImage,
-            offscreenResources.motionVectors.imageView,
-            offscreenResources.motionVectors.image,
-            invVP, prevVP,
-            renderRes.width, renderRes.height,
-            taaFrameIndex);
+            // Transition depth to shader read for the motion vector compute pass
+            core::ImageUtilities::transitionImageLayout(commandBuffer,
+                offscreenResources.depthImage.depthImage,
+                vk::ImageLayout::eDepthStencilAttachmentOptimal,
+                vk::ImageLayout::eDepthStencilReadOnlyOptimal,
+                depthStencilAspect);
+
+            // Dispatch motion vector compute pass
+            motionVectorPass->dispatch(commandBuffer,
+                offscreenResources.depthImage.depthImageView,
+                offscreenResources.depthImage.depthImage,
+                offscreenResources.motionVectors.imageView,
+                offscreenResources.motionVectors.image,
+                invVP, prevVP,
+                renderRes.width, renderRes.height,
+                taaFrameIndex);
+        }
 
         // Transition upscale output to general for write
         core::ImageUtilities::transitionImageLayout(commandBuffer,
@@ -593,7 +608,7 @@ namespace render
         }
     }
 
-    void RenderPassHandler::recordAsyncCompute(vk::CommandBuffer asyncCmd) const
+    void RenderPassHandler::recordAsyncCompute(vk::CommandBuffer asyncCmd, uint32_t frameIndex) const
     {
         if (gpuDrivenRendererInitialized && gpuDrivenRenderer->isEnabled())
             gpuDrivenRenderer->dispatchAsyncCompute(asyncCmd);
@@ -637,5 +652,35 @@ namespace render
 
         if (vfxRuntimeProvider)
             vfxRuntimeProvider->recordComputeCommands(asyncCmd);
+
+        // Async compute motion vectors using previous-frame depth
+        if (offscreenResources.prevFrameDepthCreated && offscreenResources.upscaleResourcesCreated)
+        {
+            auto* upscaleManager = device.getUpscaleManager();
+            if (upscaleManager && upscaleManager->isActive() && motionVectorPass && motionVectorPass->isInitialized())
+            {
+                auto& resMgr = upscaleManager->getResolutionManager();
+                auto renderRes = resMgr.getRenderResolution();
+
+                // Read depth from the same flight slot (written by frame N-2, guaranteed complete
+                // by the in-flight fence). Using current-frame VP matrices with stale depth
+                // produces approximate motion vectors — camera motion dominates and DLSS/FSR2
+                // have built-in robustness to handle slight inaccuracy.
+                auto& prevDepth = offscreenResources.prevFrameDepth[frameIndex];
+
+                glm::mat4 invVP = glm::inverse(currentProjection * currentView);
+                glm::mat4 prevVP = prevProjection * prevView;
+
+                motionVectorPass->dispatch(asyncCmd,
+                    prevDepth.imageView,
+                    prevDepth.image,
+                    offscreenResources.motionVectors.imageView,
+                    offscreenResources.motionVectors.image,
+                    invVP, prevVP,
+                    renderRes.width, renderRes.height,
+                    taaFrameIndex,
+                    vk::ImageLayout::eShaderReadOnlyOptimal);
+            }
+        }
     }
 }

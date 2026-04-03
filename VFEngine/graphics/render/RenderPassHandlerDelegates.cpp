@@ -454,6 +454,8 @@ namespace render
 
     void RenderPassHandler::setDebugCameraMatrices(const glm::mat4& view, const glm::mat4& projection)
     {
+        prevPrevView = prevView;
+        prevPrevProjection = prevProjection;
         prevView = currentView;
         prevProjection = currentProjection;
         currentView = view;

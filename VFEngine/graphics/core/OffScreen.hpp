@@ -2,6 +2,8 @@
 #define VULKAN_HPP_DISPATCH_LOADER_DYNAMIC 1
 #include <vulkan/vulkan.hpp>
 #include "VulkanMemoryManager.hpp"
+#include "GraphicsConstants.hpp"
+#include <array>
 
 namespace core {
 	struct ColorImage {
@@ -43,6 +45,12 @@ namespace core {
 		vk::DescriptorSet descriptorSet;
 	};
 
+	struct PrevFrameDepthImage {
+		vk::Image image;
+		VulkanAllocation allocation;
+		vk::ImageView imageView;    // Depth-only sampled view
+	};
+
 	struct OffscreenResources {
 		std::vector<core::ColorImage> colorImages;       // Scene color (render resolution)
 		std::vector<core::ColorImage> displayColorImages; // Display-res output (only when upscaling)
@@ -54,5 +62,9 @@ namespace core {
 		ReactiveMaskImage reactiveMask;
 		UpscaleOutputImage upscaleOutput;
 		bool upscaleResourcesCreated = false;
+
+		// Previous-frame depth copies for async compute motion vectors
+		std::array<PrevFrameDepthImage, MAX_FRAMES_IN_FLIGHT> prevFrameDepth;
+		bool prevFrameDepthCreated = false;
 	};
 }
