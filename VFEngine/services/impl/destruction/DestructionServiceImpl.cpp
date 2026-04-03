@@ -1,6 +1,7 @@
 #include "DestructionServiceImpl.hpp"
 #include "DebrisManager.hpp"
 #include "DestructionEffectsManager.hpp"
+#include "DamagePropagationManager.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/destruction/DestructionEvents.hpp"
 #include "../../events/scene/EntityTransformEvents.hpp"
@@ -37,6 +38,7 @@ namespace services
     DestructionServiceImpl::DestructionServiceImpl()
         : debrisManager(std::make_unique<DebrisManager>())
         , effectsManager(std::make_unique<DestructionEffectsManager>())
+        , propagationManager(std::make_unique<DamagePropagationManager>())
     {
     }
 
@@ -56,7 +58,21 @@ namespace services
             [this](const ::events::destruction::ApplyDamageCommand& cmd)
             {
                 applyDamage(cmd.entity, cmd.amount, cmd.damageType,
-                           cmd.impactPoint, cmd.impactDirection);
+                           cmd.impactPoint, cmd.impactDirection, cmd.propagationDepth);
+            });
+
+        dispatcher.registerCommandHandler<::events::destruction::ExplosionDamageCommand>(
+            [this](const ::events::destruction::ExplosionDamageCommand& cmd)
+            {
+                ExplosionRequest req;
+                req.center = cmd.center;
+                req.radius = cmd.radius;
+                req.damage = cmd.damage;
+                req.force = cmd.force;
+                req.damageType = cmd.damageType;
+                req.upwardBias = cmd.upwardBias;
+                req.depth = cmd.propagationDepth;
+                propagationManager->queueExplosion(req);
             });
 
         dispatcher.registerCommandHandler<::events::destruction::TriggerDestructionCommand>(
@@ -122,12 +138,14 @@ namespace services
     {
         debrisManager->update(deltaTime, ++frameNumber);
         effectsManager->update(deltaTime);
+        propagationManager->update();
     }
 
     void DestructionServiceImpl::applyDamage(EntityHandle entity, float amount,
                                               components::DamageType type,
                                               const glm::vec3& impactPoint,
-                                              const glm::vec3& impactDir)
+                                              const glm::vec3& impactDir,
+                                              uint32_t propagationDepth)
     {
         auto& registry = scene::EntityRegistry::getRegistry();
         if (!isValidHandle(entity, registry))
@@ -177,14 +195,15 @@ namespace services
         // Check if destruction threshold reached
         if (destructible.currentHealth <= destructible.destructionThreshold)
         {
-            triggerDestruction(entity, impactPoint, impactDir, amount);
+            triggerDestruction(entity, impactPoint, impactDir, amount, propagationDepth);
         }
     }
 
     void DestructionServiceImpl::triggerDestruction(EntityHandle entity,
                                                      const glm::vec3& impactPoint,
                                                      const glm::vec3& impactDir,
-                                                     float force)
+                                                     float force,
+                                                     uint32_t propagationDepth)
     {
         auto& registry = scene::EntityRegistry::getRegistry();
         if (!isValidHandle(entity, registry))
@@ -208,7 +227,7 @@ namespace services
 
         spdlog::info("Destruction: triggering destruction for entity {}", entity.id);
 
-        spawnFragments(entity, impactPoint, impactDir, force);
+        spawnFragments(entity, impactPoint, impactDir, force, propagationDepth);
     }
 
     float DestructionServiceImpl::getHealth(EntityHandle entity) const
@@ -248,7 +267,8 @@ namespace services
     void DestructionServiceImpl::spawnFragments(EntityHandle entity,
                                                  const glm::vec3& impactPoint,
                                                  const glm::vec3& impactDir,
-                                                 float force)
+                                                 float force,
+                                                 uint32_t propagationDepth)
     {
         auto& dispatcher = ::events::EventDispatcher::instance();
         auto& registry = scene::EntityRegistry::getRegistry();
@@ -328,6 +348,19 @@ namespace services
 
         // Capture effects data before entity deletion
         auto effectsSnapshot = effectsManager->captureSnapshot(entity);
+
+        // Queue damage propagation to nearby destructibles
+        if (destructible.propagationRadius > 0.0f)
+        {
+            PropagationRequest propReq;
+            propReq.epicenter = sourcePos;
+            propReq.radius = destructible.propagationRadius;
+            propReq.baseDamage = destructible.propagationDamage;
+            propReq.damageType = components::DamageType::Explosive;
+            propReq.impactDirection = impactDir;
+            propReq.depth = propagationDepth;
+            propagationManager->queuePropagation(propReq);
+        }
 
         // Delete the original entity
         ::events::scene::DeleteEntityCommand deleteCmd;

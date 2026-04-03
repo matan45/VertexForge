@@ -666,6 +666,9 @@ namespace services
         float fragmentMassTotal = 1.0f;
         float fragmentLifetime = 5.0f;
 
+        float propagationRadius = 0.0f;
+        float propagationDamage = 50.0f;
+
         components::MaterialType materialType = components::MaterialType::Default;
         asset::AssetRef onDamageVFX;
         asset::AssetRef onDestroyVFX;

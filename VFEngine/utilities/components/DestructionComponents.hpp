@@ -48,6 +48,9 @@ namespace components
         float fragmentLifetime = 10.0f;
         bool isDestroyed = false;
 
+        float propagationRadius = 0.0f;
+        float propagationDamage = 50.0f;
+
         MaterialType materialType = MaterialType::Default;
         asset::AssetRef onDamageVFX;
         asset::AssetRef onDestroyVFX;

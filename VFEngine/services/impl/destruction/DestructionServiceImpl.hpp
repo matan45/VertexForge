@@ -8,6 +8,7 @@ namespace services
 {
     class DebrisManager;
     class DestructionEffectsManager;
+    class DamagePropagationManager;
 
     class DestructionServiceImpl : public IDestructionService
     {
@@ -19,9 +20,11 @@ namespace services
         void update(float deltaTime) override;
 
         void applyDamage(EntityHandle entity, float amount, components::DamageType type,
-                         const glm::vec3& impactPoint, const glm::vec3& impactDir) override;
+                         const glm::vec3& impactPoint, const glm::vec3& impactDir,
+                         uint32_t propagationDepth = 0) override;
         void triggerDestruction(EntityHandle entity,
-                                const glm::vec3& impactPoint, const glm::vec3& impactDir, float force) override;
+                                const glm::vec3& impactPoint, const glm::vec3& impactDir, float force,
+                                uint32_t propagationDepth = 0) override;
         float getHealth(EntityHandle entity) const override;
         bool isDestroyed(EntityHandle entity) const override;
 
@@ -29,9 +32,11 @@ namespace services
         ::events::SubscriptionToken collisionToken{};
         std::unique_ptr<DebrisManager> debrisManager;
         std::unique_ptr<DestructionEffectsManager> effectsManager;
+        std::unique_ptr<DamagePropagationManager> propagationManager;
         uint32_t frameNumber = 0;
 
         void spawnFragments(EntityHandle entity,
-                           const glm::vec3& impactPoint, const glm::vec3& impactDir, float force);
+                           const glm::vec3& impactPoint, const glm::vec3& impactDir, float force,
+                           uint32_t propagationDepth = 0);
     };
 }

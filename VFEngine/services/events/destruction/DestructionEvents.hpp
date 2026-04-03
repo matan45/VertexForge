@@ -19,6 +19,7 @@ namespace events::destruction {
         components::DamageType damageType = components::DamageType::Any;
         glm::vec3 impactPoint{0.0f};
         glm::vec3 impactDirection{0.0f};
+        uint32_t propagationDepth = 0;
 
         std::string_view getName() const override { return "ApplyDamage"; }
     };
@@ -30,6 +31,18 @@ namespace events::destruction {
         float force = 10.0f;
 
         std::string_view getName() const override { return "TriggerDestruction"; }
+    };
+
+    struct ExplosionDamageCommand : ::events::ICommand<void> {
+        glm::vec3 center{0.0f};
+        float radius = 5.0f;
+        float damage = 100.0f;
+        float force = 20.0f;
+        components::DamageType damageType = components::DamageType::Explosive;
+        float upwardBias = 0.3f;
+        uint32_t propagationDepth = 0;
+
+        std::string_view getName() const override { return "ExplosionDamage"; }
     };
 
     // ============================================
@@ -78,5 +91,14 @@ namespace events::destruction {
         uint32_t fragmentIndex = 0;
 
         std::string_view getName() const override { return "FragmentDetached"; }
+    };
+
+    struct ExplosionOccurredNotification : ::events::INotification {
+        glm::vec3 center{0.0f};
+        float radius = 0.0f;
+        float damage = 0.0f;
+        float force = 0.0f;
+
+        std::string_view getName() const override { return "ExplosionOccurred"; }
     };
 }

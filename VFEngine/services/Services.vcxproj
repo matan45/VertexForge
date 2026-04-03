@@ -231,6 +231,7 @@
     <ClInclude Include="impl\components\TextComponentService.hpp" />
     <ClInclude Include="impl\components\UIComponentService.hpp" />
     <ClInclude Include="impl\components\VFXComponentService.hpp" />
+    <ClInclude Include="impl\destruction\DamagePropagationManager.hpp" />
     <ClInclude Include="impl\destruction\DebrisManager.hpp" />
     <ClInclude Include="impl\destruction\DestructionEffectsManager.hpp" />
     <ClInclude Include="impl\destruction\DestructionServiceImpl.hpp" />
@@ -420,6 +421,7 @@
     <ClCompile Include="impl\components\UIScrollLayoutOps.cpp" />
     <ClCompile Include="impl\components\UISliderProgressOps.cpp" />
     <ClCompile Include="impl\components\VFXComponentService.cpp" />
+    <ClCompile Include="impl\destruction\DamagePropagationManager.cpp" />
     <ClCompile Include="impl\destruction\DebrisManager.cpp" />
     <ClCompile Include="impl\destruction\DestructionEffectsManager.cpp" />
     <ClCompile Include="impl\destruction\DestructionServiceImpl.cpp" />

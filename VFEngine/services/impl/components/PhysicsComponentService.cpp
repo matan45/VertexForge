@@ -987,6 +987,8 @@ namespace services
         data.damageFilter = comp.damageFilter;
         data.fragmentMassTotal = comp.fragmentMassTotal;
         data.fragmentLifetime = comp.fragmentLifetime;
+        data.propagationRadius = comp.propagationRadius;
+        data.propagationDamage = comp.propagationDamage;
         data.materialType = comp.materialType;
         data.onDamageVFX = comp.onDamageVFX;
         data.onDestroyVFX = comp.onDestroyVFX;
@@ -1021,6 +1023,8 @@ namespace services
         comp.damageFilter = data.damageFilter;
         comp.fragmentMassTotal = data.fragmentMassTotal;
         comp.fragmentLifetime = data.fragmentLifetime;
+        comp.propagationRadius = data.propagationRadius;
+        comp.propagationDamage = data.propagationDamage;
         comp.materialType = data.materialType;
         comp.onDamageVFX = data.onDamageVFX;
         comp.onDestroyVFX = data.onDestroyVFX;
