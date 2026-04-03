@@ -1,5 +1,6 @@
 #include "AsyncTextureLoader.hpp"
 #include "resource/TextureResource.hpp"
+#include "resource/ResourceManager.hpp"
 #include "../../core/controllers/EditorTextureController.hpp"
 #include "../../core/controllers/texture/EditorTexture.hpp"
 #include "print/Log.hpp"
@@ -7,7 +8,7 @@
 
 namespace loaders
 {
-    void AsyncTextureLoader::startLoad(void* instanceId, const std::string& texturePath, bool isHDR)
+    void AsyncTextureLoader::startLoad(void* instanceId, const std::string& texturePath, bool isHDR, const resource::LoadHint& hint)
     {
         std::lock_guard<std::mutex> lock(mutex);
 
@@ -26,8 +27,15 @@ namespace loaders
         pending->statusMessage = isHDR ? "Loading HDR texture..." : "Loading texture...";
         pending->progress = PROGRESS_LOADING_STARTED;
 
-        // Start async file I/O
-        pending->cpuDataFuture = std::async(std::launch::async, [texturePath, isHDR]() -> TextureDataVariant {
+        // Start async file I/O through the priority-aware ResourceManager
+        auto cancellation = pending->cancellation;
+        pending->cpuDataFuture = std::async(std::launch::async,
+            [texturePath, isHDR, hint, cancel = cancellation]() -> TextureDataVariant {
+            if (cancel && cancel->isCancelled())
+            {
+                if (isHDR) return resource::HDRData{};
+                return resource::TextureData{};
+            }
             if (isHDR)
             {
                 return resource::TextureResource::loadHDR(texturePath);
@@ -52,7 +60,7 @@ namespace loaders
             return;
         }
 
-        it->second->cancelled.store(true);
+        it->second->cancellation->cancel();
         it->second->state = services::LoadingState::Cancelled;
         it->second->statusMessage = "Cancelled";
 
@@ -73,7 +81,7 @@ namespace loaders
 
         for (auto& [id, pending] : pendingLoads)
         {
-            if (pending->cancelled.load())
+            if (pending->cancellation->isCancelled())
             {
                 // Check if future is ready so we can safely erase
                 // (erasing with running future would block in destructor)
@@ -160,7 +168,7 @@ namespace loaders
             return false;
         }
 
-        if (pending->cancelled.load())
+        if (pending->cancellation->isCancelled())
         {
             if (gpuUploadReadyInstance == instanceId)
             {
@@ -214,7 +222,7 @@ namespace loaders
         pending = it->second.get();
 
         // Check if cancelled during GPU upload
-        if (pending->cancelled.load())
+        if (pending->cancellation->isCancelled())
         {
             if (gpuUploadReadyInstance == instanceId)
             {
