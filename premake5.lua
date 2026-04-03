@@ -194,7 +194,7 @@ project "Import"
 
    defines { "_CRT_SECURE_NO_WARNINGS", "VF_IMPORT_BUILD_DLL", "MESHOPTIMIZER_API=__declspec(dllimport)" }
 
-   links { "Utilities", "meshoptimizer", "ispc_texcomp" }
+   links { "Utilities", "Destruction", "meshoptimizer", "ispc_texcomp" }
 
    -- Debug configuration
    filter "configurations:Debug"
@@ -371,6 +371,7 @@ project "Utilities"
       "VFEngine/utilities/imageprocessing/**",
       "VFEngine/utilities/memory/**",
       "VFEngine/utilities/weather/**",
+      "VFEngine/utilities/destruction/**",
       "VFEngine/utilities/scene/EntityRegistry.cpp"  -- compiled by ECSRegistry DLL
    }
 
@@ -691,6 +692,34 @@ project "Weather"
       "dependencies/entt/single_include",
       "VFEngine/utilities",
       "VFEngine/services"
+   }
+
+   defines { "_CRT_SECURE_NO_WARNINGS" }
+
+   filter "configurations:Debug"
+      defines { "DEBUG" }
+      symbols "On"
+
+   filter "configurations:Release"
+      defines { "NDEBUG" }
+      optimize "On"
+
+
+-- Destruction subsystem (extracted from Utilities)
+project "Destruction"
+   kind "StaticLib"
+   language "C++"
+   cppdialect "C++20"
+   location "VFEngine/utilities"
+   targetdir "bin/%{prj.name}/%{cfg.buildcfg}/%{cfg.platform}"
+
+   files { "VFEngine/utilities/destruction/**.hpp", "VFEngine/utilities/destruction/**.cpp" }
+
+   includedirs {
+      "dependencies/spdlog/include",
+      "dependencies/glm",
+      "dependencies/v-hacd",
+      "VFEngine/utilities"
    }
 
    defines { "_CRT_SECURE_NO_WARNINGS" }
@@ -1145,7 +1174,7 @@ project "Tests"
    }
 
    links {
-      "Utilities", "Memory", "Terrain", "World", "Serialization",
+      "Utilities", "Memory", "Destruction", "Terrain", "World", "Serialization",
       "Animation", "ECSRegistry", "Services",
       "Graphics", "Window", "VFX", "imgui", "ispc_texcomp", "GLFW", "GameExport",
       "spdLog", "meshoptimizer", "enkiTS", "lz4", "recast",
@@ -1170,7 +1199,9 @@ project "Tests"
          "{COPY} ../../bin/World/Debug/x64/World.dll ../../bin/Tests/Debug/x64/",
          "{COPY} ../../bin/Animation/Debug/x64/Animation.dll ../../bin/Tests/Debug/x64/",
          "{COPY} ../../bin/meshoptimizer/Debug/x64/meshoptimizer.dll ../../bin/Tests/Debug/x64/",
-         "{COPY} ../../bin/GameExport/Debug/x64/GameExport.dll ../../bin/Tests/Debug/x64/"
+         "{COPY} ../../bin/GameExport/Debug/x64/GameExport.dll ../../bin/Tests/Debug/x64/",
+         "{COPY} " .. vulkanLibPath .. "/Bin/shaderc_shared.dll ../../bin/Tests/Debug/x64/",
+         "{COPY} ../../dependencies/streamline/bin/x64/development/sl.interposer.dll ../../bin/Tests/Debug/x64/"
       }
 
    filter "configurations:Release"
@@ -1183,7 +1214,9 @@ project "Tests"
          "{COPY} ../../bin/World/Release/x64/World.dll ../../bin/Tests/Release/x64/",
          "{COPY} ../../bin/Animation/Release/x64/Animation.dll ../../bin/Tests/Release/x64/",
          "{COPY} ../../bin/meshoptimizer/Release/x64/meshoptimizer.dll ../../bin/Tests/Release/x64/",
-         "{COPY} ../../bin/GameExport/Release/x64/GameExport.dll ../../bin/Tests/Release/x64/"
+         "{COPY} ../../bin/GameExport/Release/x64/GameExport.dll ../../bin/Tests/Release/x64/",
+         "{COPY} " .. vulkanLibPath .. "/Bin/shaderc_shared.dll ../../bin/Tests/Release/x64/",
+         "{COPY} ../../dependencies/streamline/bin/x64/sl.interposer.dll ../../bin/Tests/Release/x64/"
       }
 
    filter {}  -- reset filters before next group

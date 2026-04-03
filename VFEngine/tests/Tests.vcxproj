@@ -79,7 +79,8 @@ IF EXIST ..\..\bin\Serialization\Debug\x64\Serialization.dll\ (xcopy /Q /E /Y /I
 IF EXIST ..\..\bin\World\Debug\x64\World.dll\ (xcopy /Q /E /Y /I ..\..\bin\World\Debug\x64\World.dll ..\..\bin\Tests\Debug\x64 &gt; nul) ELSE (xcopy /Q /Y /I ..\..\bin\World\Debug\x64\World.dll ..\..\bin\Tests\Debug\x64 &gt; nul)
 IF EXIST ..\..\bin\Animation\Debug\x64\Animation.dll\ (xcopy /Q /E /Y /I ..\..\bin\Animation\Debug\x64\Animation.dll ..\..\bin\Tests\Debug\x64 &gt; nul) ELSE (xcopy /Q /Y /I ..\..\bin\Animation\Debug\x64\Animation.dll ..\..\bin\Tests\Debug\x64 &gt; nul)
 IF EXIST ..\..\bin\meshoptimizer\Debug\x64\meshoptimizer.dll\ (xcopy /Q /E /Y /I ..\..\bin\meshoptimizer\Debug\x64\meshoptimizer.dll ..\..\bin\Tests\Debug\x64 &gt; nul) ELSE (xcopy /Q /Y /I ..\..\bin\meshoptimizer\Debug\x64\meshoptimizer.dll ..\..\bin\Tests\Debug\x64 &gt; nul)
-IF EXIST ..\..\bin\GameExport\Debug\x64\GameExport.dll\ (xcopy /Q /E /Y /I ..\..\bin\GameExport\Debug\x64\GameExport.dll ..\..\bin\Tests\Debug\x64 &gt; nul) ELSE (xcopy /Q /Y /I ..\..\bin\GameExport\Debug\x64\GameExport.dll ..\..\bin\Tests\Debug\x64 &gt; nul)</Command>
+IF EXIST ..\..\bin\GameExport\Debug\x64\GameExport.dll\ (xcopy /Q /E /Y /I ..\..\bin\GameExport\Debug\x64\GameExport.dll ..\..\bin\Tests\Debug\x64 &gt; nul) ELSE (xcopy /Q /Y /I ..\..\bin\GameExport\Debug\x64\GameExport.dll ..\..\bin\Tests\Debug\x64 &gt; nul)
+IF EXIST C:\VulkanSDK\1.4.341.1\Bin\shaderc_shared.dll\ (xcopy /Q /E /Y /I C:\VulkanSDK\1.4.341.1\Bin\shaderc_shared.dll ..\..\bin\Tests\Debug\x64 &gt; nul) ELSE (xcopy /Q /Y /I C:\VulkanSDK\1.4.341.1\Bin\shaderc_shared.dll ..\..\bin\Tests\Debug\x64 &gt; nul)</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -111,7 +112,8 @@ IF EXIST ..\..\bin\Serialization\Release\x64\Serialization.dll\ (xcopy /Q /E /Y 
 IF EXIST ..\..\bin\World\Release\x64\World.dll\ (xcopy /Q /E /Y /I ..\..\bin\World\Release\x64\World.dll ..\..\bin\Tests\Release\x64 &gt; nul) ELSE (xcopy /Q /Y /I ..\..\bin\World\Release\x64\World.dll ..\..\bin\Tests\Release\x64 &gt; nul)
 IF EXIST ..\..\bin\Animation\Release\x64\Animation.dll\ (xcopy /Q /E /Y /I ..\..\bin\Animation\Release\x64\Animation.dll ..\..\bin\Tests\Release\x64 &gt; nul) ELSE (xcopy /Q /Y /I ..\..\bin\Animation\Release\x64\Animation.dll ..\..\bin\Tests\Release\x64 &gt; nul)
 IF EXIST ..\..\bin\meshoptimizer\Release\x64\meshoptimizer.dll\ (xcopy /Q /E /Y /I ..\..\bin\meshoptimizer\Release\x64\meshoptimizer.dll ..\..\bin\Tests\Release\x64 &gt; nul) ELSE (xcopy /Q /Y /I ..\..\bin\meshoptimizer\Release\x64\meshoptimizer.dll ..\..\bin\Tests\Release\x64 &gt; nul)
-IF EXIST ..\..\bin\GameExport\Release\x64\GameExport.dll\ (xcopy /Q /E /Y /I ..\..\bin\GameExport\Release\x64\GameExport.dll ..\..\bin\Tests\Release\x64 &gt; nul) ELSE (xcopy /Q /Y /I ..\..\bin\GameExport\Release\x64\GameExport.dll ..\..\bin\Tests\Release\x64 &gt; nul)</Command>
+IF EXIST ..\..\bin\GameExport\Release\x64\GameExport.dll\ (xcopy /Q /E /Y /I ..\..\bin\GameExport\Release\x64\GameExport.dll ..\..\bin\Tests\Release\x64 &gt; nul) ELSE (xcopy /Q /Y /I ..\..\bin\GameExport\Release\x64\GameExport.dll ..\..\bin\Tests\Release\x64 &gt; nul)
+IF EXIST C:\VulkanSDK\1.4.341.1\Bin\shaderc_shared.dll\ (xcopy /Q /E /Y /I C:\VulkanSDK\1.4.341.1\Bin\shaderc_shared.dll ..\..\bin\Tests\Release\x64 &gt; nul) ELSE (xcopy /Q /Y /I C:\VulkanSDK\1.4.341.1\Bin\shaderc_shared.dll ..\..\bin\Tests\Release\x64 &gt; nul)</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
@@ -144,6 +146,7 @@ IF EXIST ..\..\bin\GameExport\Release\x64\GameExport.dll\ (xcopy /Q /E /Y /I ..\
     <ClCompile Include="test_vegetation_billboards.cpp" />
     <ClCompile Include="test_vertex_quantization.cpp" />
     <ClCompile Include="test_vfx.cpp" />
+    <ClCompile Include="test_voronoi_fracture.cpp" />
     <ClCompile Include="test_world_streaming.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -152,6 +155,9 @@ IF EXIST ..\..\bin\GameExport\Release\x64\GameExport.dll\ (xcopy /Q /E /Y /I ..\
     </ProjectReference>
     <ProjectReference Include="..\utilities\Memory.vcxproj">
       <Project>{BE94DDC2-AA36-0899-93F1-1BED7F328FE9}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\utilities\Destruction.vcxproj">
+      <Project>{59EB8BB1-C5A0-04A7-4E95-FE7DBA49FBAA}</Project>
     </ProjectReference>
     <ProjectReference Include="..\utilities\Terrain.vcxproj">
       <Project>{7AABC339-E68A-42D5-EFA2-CDAB5B01A936}</Project>
