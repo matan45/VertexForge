@@ -508,6 +508,27 @@ namespace core::api
                 });
             });
 
+        interpreter->registerNativeFunction("_native_postprocess_ssao_getQuality",
+            [&dispatcher](const std::vector<value::Value>&) -> value::Value
+            {
+                auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
+                return value::Value(static_cast<int64_t>(s.ssao.quality));
+            });
+
+        interpreter->registerNativeFunction("_native_postprocess_ssao_setQuality",
+            [&dispatcher](const std::vector<value::Value>& args) -> value::Value
+            {
+                return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
+                {
+                    int64_t q = extractInt64(args[0], "PostProcess.ssao.setQuality");
+                    if (q >= 0 && q <= 3)
+                    {
+                        s.ssao.quality = static_cast<postprocess::SSAOQuality>(q);
+                        s.ssao.kernelSize = postprocess::ssaoSamplesFromQuality(s.ssao.quality);
+                    }
+                });
+            });
+
         interpreter->registerNativeFunction("_native_postprocess_ssao_getPower",
             [&dispatcher](const std::vector<value::Value>&) -> value::Value
             {

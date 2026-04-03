@@ -3,6 +3,7 @@
 #include "decal/DecalPipeline.hpp"
 #include "../core/SwapChain.hpp"
 #include "../core/Device.hpp"
+#include "../core/ImageUtilities.hpp"
 #include "../core/ThreadCommandPoolManager.hpp"
 #include "ClearColor.hpp"
 #include "IBL.hpp"
@@ -130,6 +131,98 @@ namespace render
         }
 
         executeRenderHooks(plugin::RenderPassHookPoint::PrePostProcess, commandBuffer, imageIndex);
+
+        // Copy current depth to prev-frame depth slot for async compute motion vectors.
+        // Uses synchronization2 barriers for consistency with the rest of the codebase.
+        if (offscreenResources.prevFrameDepthCreated)
+        {
+            uint32_t currentFrame = imageIndex % core::MAX_FRAMES_IN_FLIGHT;
+            vk::ImageSubresourceRange depthStencilRange(
+                vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil, 0, 1, 0, 1);
+            vk::ImageSubresourceRange depthOnlyRange(
+                vk::ImageAspectFlagBits::eDepth, 0, 1, 0, 1);
+
+            // Pre-copy: transition main depth (attachment->transferSrc) and
+            // prev-frame depth (undefined->transferDst) in a single barrier call
+            {
+                std::array<vk::ImageMemoryBarrier2, 2> preCopyBarriers{};
+
+                preCopyBarriers[0].srcStageMask = vk::PipelineStageFlagBits2::eLateFragmentTests;
+                preCopyBarriers[0].srcAccessMask = vk::AccessFlagBits2::eDepthStencilAttachmentWrite;
+                preCopyBarriers[0].dstStageMask = vk::PipelineStageFlagBits2::eCopy;
+                preCopyBarriers[0].dstAccessMask = vk::AccessFlagBits2::eTransferRead;
+                preCopyBarriers[0].oldLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
+                preCopyBarriers[0].newLayout = vk::ImageLayout::eTransferSrcOptimal;
+                preCopyBarriers[0].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                preCopyBarriers[0].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                preCopyBarriers[0].image = offscreenResources.depthImage.depthImage;
+                preCopyBarriers[0].subresourceRange = depthStencilRange;
+
+                preCopyBarriers[1].srcStageMask = vk::PipelineStageFlagBits2::eNone;
+                preCopyBarriers[1].srcAccessMask = vk::AccessFlagBits2::eNone;
+                preCopyBarriers[1].dstStageMask = vk::PipelineStageFlagBits2::eCopy;
+                preCopyBarriers[1].dstAccessMask = vk::AccessFlagBits2::eTransferWrite;
+                preCopyBarriers[1].oldLayout = vk::ImageLayout::eUndefined;
+                preCopyBarriers[1].newLayout = vk::ImageLayout::eTransferDstOptimal;
+                preCopyBarriers[1].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                preCopyBarriers[1].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                preCopyBarriers[1].image = offscreenResources.prevFrameDepth[currentFrame].image;
+                preCopyBarriers[1].subresourceRange = depthOnlyRange;
+
+                vk::DependencyInfo depInfo{};
+                depInfo.imageMemoryBarrierCount = static_cast<uint32_t>(preCopyBarriers.size());
+                depInfo.pImageMemoryBarriers = preCopyBarriers.data();
+                commandBuffer.pipelineBarrier2KHR(depInfo);
+            }
+
+            // Copy depth
+            vk::ImageCopy region{};
+            region.srcSubresource = {vk::ImageAspectFlagBits::eDepth, 0, 0, 1};
+            region.dstSubresource = {vk::ImageAspectFlagBits::eDepth, 0, 0, 1};
+            region.extent = vk::Extent3D(
+                swapChain.getSwapchainExtent().width,
+                swapChain.getSwapchainExtent().height,
+                1);
+
+            commandBuffer.copyImage(
+                offscreenResources.depthImage.depthImage, vk::ImageLayout::eTransferSrcOptimal,
+                offscreenResources.prevFrameDepth[currentFrame].image, vk::ImageLayout::eTransferDstOptimal,
+                region);
+
+            // Post-copy: transition main depth back (transferSrc->attachment) and
+            // prev-frame depth to shader read (for async compute next frame)
+            {
+                std::array<vk::ImageMemoryBarrier2, 2> postCopyBarriers{};
+
+                postCopyBarriers[0].srcStageMask = vk::PipelineStageFlagBits2::eCopy;
+                postCopyBarriers[0].srcAccessMask = vk::AccessFlagBits2::eTransferRead;
+                postCopyBarriers[0].dstStageMask = vk::PipelineStageFlagBits2::eEarlyFragmentTests;
+                postCopyBarriers[0].dstAccessMask = vk::AccessFlagBits2::eDepthStencilAttachmentRead |
+                                                    vk::AccessFlagBits2::eDepthStencilAttachmentWrite;
+                postCopyBarriers[0].oldLayout = vk::ImageLayout::eTransferSrcOptimal;
+                postCopyBarriers[0].newLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
+                postCopyBarriers[0].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                postCopyBarriers[0].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                postCopyBarriers[0].image = offscreenResources.depthImage.depthImage;
+                postCopyBarriers[0].subresourceRange = depthStencilRange;
+
+                postCopyBarriers[1].srcStageMask = vk::PipelineStageFlagBits2::eCopy;
+                postCopyBarriers[1].srcAccessMask = vk::AccessFlagBits2::eTransferWrite;
+                postCopyBarriers[1].dstStageMask = vk::PipelineStageFlagBits2::eComputeShader;
+                postCopyBarriers[1].dstAccessMask = vk::AccessFlagBits2::eShaderRead;
+                postCopyBarriers[1].oldLayout = vk::ImageLayout::eTransferDstOptimal;
+                postCopyBarriers[1].newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+                postCopyBarriers[1].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                postCopyBarriers[1].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                postCopyBarriers[1].image = offscreenResources.prevFrameDepth[currentFrame].image;
+                postCopyBarriers[1].subresourceRange = depthOnlyRange;
+
+                vk::DependencyInfo depInfo{};
+                depInfo.imageMemoryBarrierCount = static_cast<uint32_t>(postCopyBarriers.size());
+                depInfo.pImageMemoryBarriers = postCopyBarriers.data();
+                commandBuffer.pipelineBarrier2KHR(depInfo);
+            }
+        }
 
         {
             auto* upscaleManager = device.getUpscaleManager();

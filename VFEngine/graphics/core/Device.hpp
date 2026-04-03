@@ -101,12 +101,13 @@ namespace core
         mutable std::mutex transferQueueMutex;
 
         const std::array<const char*, 1> validationLayers = {"VK_LAYER_KHRONOS_validation"};
-        const std::array<const char*, 5> deviceExtensions = {
+        const std::array<const char*, 6> deviceExtensions = {
             VK_KHR_SWAPCHAIN_EXTENSION_NAME,
             VK_EXT_MESH_SHADER_EXTENSION_NAME,
             VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME,
             VK_KHR_RAY_QUERY_EXTENSION_NAME,
-            VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME
+            VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
+            VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME
         };
 
         // Private functions for setup and initialization

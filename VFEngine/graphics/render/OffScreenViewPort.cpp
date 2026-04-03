@@ -102,7 +102,7 @@ namespace render
         if (useAsyncCompute)
         {
             vk::CommandBuffer asyncCmd = asyncComputeManager->beginFrame(currentFrame);
-            renderPassHandler->recordAsyncCompute(asyncCmd);
+            renderPassHandler->recordAsyncCompute(asyncCmd, currentFrame);
             asyncComputeManager->submitComputeWork(currentFrame);
         }
 
@@ -496,19 +496,55 @@ namespace render
         vk::Format colorFormat = swapChain.getSceneColorFormat();
 
         // Motion vector image (R16G16_SFLOAT) at render resolution
+        // Use concurrent sharing when async compute uses a dedicated queue family
         {
-            core::ImageInfoRequest mvInfo(device.getLogicalDevice(), device.getPhysicalDevice(),
-                renderWidth, renderHeight, 1, 1,
-                vk::Format::eR16G16Sfloat,
-                vk::ImageTiling::eOptimal,
-                vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eSampled |
-                vk::ImageUsageFlagBits::eTransferSrc,
-                vk::MemoryPropertyFlagBits::eDeviceLocal);
+            const auto& queueIndices = device.getQueueFamilyIndices();
+            bool needsConcurrent = queueIndices.hasDedicatedComputeFamily();
+            std::array<uint32_t, 2> families = {
+                queueIndices.graphicsAndComputeFamily.value_or(0),
+                queueIndices.asyncComputeFamily.value_or(0)
+            };
 
-            core::ImageUtilities::createImage(mvInfo,
+            vk::ImageCreateInfo mvImageInfo{};
+            mvImageInfo.imageType = vk::ImageType::e2D;
+            mvImageInfo.extent = vk::Extent3D(renderWidth, renderHeight, 1);
+            mvImageInfo.mipLevels = 1;
+            mvImageInfo.arrayLayers = 1;
+            mvImageInfo.format = vk::Format::eR16G16Sfloat;
+            mvImageInfo.tiling = vk::ImageTiling::eOptimal;
+            mvImageInfo.initialLayout = vk::ImageLayout::eUndefined;
+            mvImageInfo.usage = vk::ImageUsageFlagBits::eStorage |
+                                vk::ImageUsageFlagBits::eSampled |
+                                vk::ImageUsageFlagBits::eTransferSrc;
+            mvImageInfo.samples = vk::SampleCountFlagBits::e1;
+
+            if (needsConcurrent)
+            {
+                mvImageInfo.sharingMode = vk::SharingMode::eConcurrent;
+                mvImageInfo.queueFamilyIndexCount = 2;
+                mvImageInfo.pQueueFamilyIndices = families.data();
+            }
+            else
+            {
+                mvImageInfo.sharingMode = vk::SharingMode::eExclusive;
+            }
+
+            offscreenResources.motionVectors.image =
+                device.getLogicalDevice().createImage(mvImageInfo);
+
+            vk::MemoryRequirements memReq =
+                device.getLogicalDevice().getImageMemoryRequirements(
+                    offscreenResources.motionVectors.image);
+
+            offscreenResources.motionVectors.allocation =
+                device.getMemoryManager().allocate(memReq,
+                    vk::MemoryPropertyFlagBits::eDeviceLocal, false,
+                    core::GpuResourceType::Image);
+
+            device.getLogicalDevice().bindImageMemory(
                 offscreenResources.motionVectors.image,
-                offscreenResources.motionVectors.allocation,
-                device.getMemoryManager());
+                offscreenResources.motionVectors.allocation.memory,
+                offscreenResources.motionVectors.allocation.offset);
 
             // Storage view (for compute write)
             core::ImageViewInfoRequest storageView(device.getLogicalDevice(),
@@ -556,6 +592,9 @@ namespace render
         }
 
         offscreenResources.upscaleResourcesCreated = true;
+
+        // Create previous-frame depth copies for async compute motion vectors
+        createPrevFrameDepthResources(renderWidth, renderHeight);
     }
 
     void OffScreenViewPort::cleanupUpscaleResources()
@@ -586,7 +625,94 @@ namespace render
             device.getMemoryManager().free(offscreenResources.upscaleOutput.allocation);
         offscreenResources.upscaleOutput = {};
 
+        cleanupPrevFrameDepthResources();
+
         offscreenResources.upscaleResourcesCreated = false;
+    }
+
+    void OffScreenViewPort::createPrevFrameDepthResources(uint32_t width, uint32_t height)
+    {
+        if (offscreenResources.prevFrameDepthCreated) return;
+
+        vk::Format depthFormat = swapChain.getSwapchainDepthStencilFormat();
+        const auto& queueIndices = device.getQueueFamilyIndices();
+        bool needsConcurrent = queueIndices.hasDedicatedComputeFamily();
+
+        std::array<uint32_t, 2> families = {
+            queueIndices.graphicsAndComputeFamily.value_or(0),
+            queueIndices.asyncComputeFamily.value_or(0)
+        };
+
+        for (uint32_t i = 0; i < core::MAX_FRAMES_IN_FLIGHT; ++i)
+        {
+            vk::ImageCreateInfo imageInfo{};
+            imageInfo.imageType = vk::ImageType::e2D;
+            imageInfo.extent = vk::Extent3D(width, height, 1);
+            imageInfo.mipLevels = 1;
+            imageInfo.arrayLayers = 1;
+            imageInfo.format = depthFormat;
+            imageInfo.tiling = vk::ImageTiling::eOptimal;
+            imageInfo.initialLayout = vk::ImageLayout::eUndefined;
+            imageInfo.usage = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled;
+            imageInfo.samples = vk::SampleCountFlagBits::e1;
+
+            if (needsConcurrent)
+            {
+                imageInfo.sharingMode = vk::SharingMode::eConcurrent;
+                imageInfo.queueFamilyIndexCount = 2;
+                imageInfo.pQueueFamilyIndices = families.data();
+            }
+            else
+            {
+                imageInfo.sharingMode = vk::SharingMode::eExclusive;
+            }
+
+            offscreenResources.prevFrameDepth[i].image =
+                device.getLogicalDevice().createImage(imageInfo);
+
+            vk::MemoryRequirements memReq =
+                device.getLogicalDevice().getImageMemoryRequirements(
+                    offscreenResources.prevFrameDepth[i].image);
+
+            offscreenResources.prevFrameDepth[i].allocation =
+                device.getMemoryManager().allocate(memReq,
+                    vk::MemoryPropertyFlagBits::eDeviceLocal, false,
+                    core::GpuResourceType::Image);
+
+            device.getLogicalDevice().bindImageMemory(
+                offscreenResources.prevFrameDepth[i].image,
+                offscreenResources.prevFrameDepth[i].allocation.memory,
+                offscreenResources.prevFrameDepth[i].allocation.offset);
+
+            core::ImageViewInfoRequest viewReq(device.getLogicalDevice(),
+                offscreenResources.prevFrameDepth[i].image,
+                depthFormat, vk::ImageAspectFlagBits::eDepth,
+                vk::ImageViewType::e2D, 1, 1);
+            core::ImageUtilities::createImageView(viewReq,
+                offscreenResources.prevFrameDepth[i].imageView);
+        }
+
+        offscreenResources.prevFrameDepthCreated = true;
+    }
+
+    void OffScreenViewPort::cleanupPrevFrameDepthResources()
+    {
+        if (!offscreenResources.prevFrameDepthCreated) return;
+
+        vk::Device vkDevice = device.getLogicalDevice();
+
+        for (uint32_t i = 0; i < core::MAX_FRAMES_IN_FLIGHT; ++i)
+        {
+            if (offscreenResources.prevFrameDepth[i].imageView)
+                vkDevice.destroyImageView(offscreenResources.prevFrameDepth[i].imageView);
+            if (offscreenResources.prevFrameDepth[i].image)
+                vkDevice.destroyImage(offscreenResources.prevFrameDepth[i].image);
+            if (offscreenResources.prevFrameDepth[i].allocation)
+                device.getMemoryManager().free(offscreenResources.prevFrameDepth[i].allocation);
+            offscreenResources.prevFrameDepth[i] = {};
+        }
+
+        offscreenResources.prevFrameDepthCreated = false;
     }
 
     void OffScreenViewPort::setRaycastCursorUV(const glm::vec2& uv)

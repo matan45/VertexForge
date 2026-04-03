@@ -144,13 +144,28 @@ namespace windows
                     ImGui::SetTooltip("AO darkening strength.\nHigher = darker ambient occlusion.");
                 }
 
+                {
+                    static const char* qualityNames[] = { "Low (16)", "Medium (32)", "High (48)", "Ultra (64)" };
+                    int currentQuality = static_cast<int>(settings.ssao.quality);
+                    if (ImGui::Combo("Quality##ssao", &currentQuality, qualityNames, IM_ARRAYSIZE(qualityNames)))
+                    {
+                        settings.ssao.quality = static_cast<::postprocess::SSAOQuality>(currentQuality);
+                        settings.ssao.kernelSize = ::postprocess::ssaoSamplesFromQuality(settings.ssao.quality);
+                        isDirty = true;
+                    }
+                    if (ImGui::IsItemHovered())
+                    {
+                        ImGui::SetTooltip("SSAO quality preset.\nControls the number of hemisphere samples.");
+                    }
+                }
+
                 if (ImGui::SliderInt("Kernel Size##ssao", &settings.ssao.kernelSize, 8, 64))
                 {
                     isDirty = true;
                 }
                 if (ImGui::IsItemHovered())
                 {
-                    ImGui::SetTooltip("Number of hemisphere samples.\nMore = better quality but slower.");
+                    ImGui::SetTooltip("Number of hemisphere samples.\nMore = better quality but slower.\nManual override of the quality preset.");
                 }
 
                 if (ImGui::DragFloat("Power##ssao", &settings.ssao.power, 0.01f, 0.5f, 5.0f, "%.2f"))

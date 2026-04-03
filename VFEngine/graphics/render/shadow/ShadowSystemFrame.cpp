@@ -167,6 +167,11 @@ namespace render::shadow
 
             // Compute distance-based shadow priority for streaming
             float dist = glm::length(glm::vec3(wm[3]) - lastCameraPosition);
+
+            // Distance culling: skip shadows for lights beyond max shadow distance
+            if (dist > data.settings.maxShadowDistance)
+                continue;
+
             data.shadowPriority = 1.0f / (1.0f + dist * 0.01f);
             if (data.isStatic) data.shadowPriority += 0.3f;
 

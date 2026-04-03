@@ -32,19 +32,22 @@ namespace render::gpudriven
             storage->uploadToGPU(cmd);
             giProbeBuffersNeedInit = false;
 
-            vk::MemoryBarrier initBarrier{vk::AccessFlagBits::eTransferWrite,
-                vk::AccessFlagBits::eShaderRead | vk::AccessFlagBits::eShaderWrite};
-            cmd.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eComputeShader,
-                                vk::DependencyFlags{}, 1, &initBarrier, 0, nullptr, 0, nullptr);
+            vk::MemoryBarrier2 initBarrier{};
+            initBarrier.srcStageMask = vk::PipelineStageFlagBits2::eTransfer;
+            initBarrier.srcAccessMask = vk::AccessFlagBits2::eTransferWrite;
+            initBarrier.dstStageMask = vk::PipelineStageFlagBits2::eComputeShader;
+            initBarrier.dstAccessMask = vk::AccessFlagBits2::eShaderRead | vk::AccessFlagBits2::eShaderWrite;
+            vk::DependencyInfo depInfo{};
+            depInfo.memoryBarrierCount = 1;
+            depInfo.pMemoryBarriers = &initBarrier;
+            cmd.pipelineBarrier2KHR(depInfo);
         }
 
         auto batches = giCascadeManager->getProbeUpdateBatches();
         if (!storage || batches.empty()) return;
 
-        vk::MemoryBarrier giBarrier{vk::AccessFlagBits::eShaderWrite,
-            vk::AccessFlagBits::eShaderRead | vk::AccessFlagBits::eShaderWrite};
-        cmd.pipelineBarrier(vk::PipelineStageFlagBits::eComputeShader, vk::PipelineStageFlagBits::eComputeShader,
-                            vk::DependencyFlags{}, 1, &giBarrier, 0, nullptr, 0, nullptr);
+        // No compute-to-compute barrier needed: batches update disjoint probe regions
+        // with no cross-batch dependencies.
 
         for (const auto& batch : batches)
         {
@@ -66,9 +69,15 @@ namespace render::gpudriven
                                        giCascadeManager->getCascadeInfoDescSet(), push, tlasSet, lightSet);
         }
 
-        vk::MemoryBarrier computeBarrier{vk::AccessFlagBits::eShaderWrite, vk::AccessFlagBits::eTransferRead};
-        cmd.pipelineBarrier(vk::PipelineStageFlagBits::eComputeShader, vk::PipelineStageFlagBits::eTransfer,
-                            vk::DependencyFlags{}, 1, &computeBarrier, 0, nullptr, 0, nullptr);
+        vk::MemoryBarrier2 computeBarrier{};
+        computeBarrier.srcStageMask = vk::PipelineStageFlagBits2::eComputeShader;
+        computeBarrier.srcAccessMask = vk::AccessFlagBits2::eShaderWrite;
+        computeBarrier.dstStageMask = vk::PipelineStageFlagBits2::eTransfer;
+        computeBarrier.dstAccessMask = vk::AccessFlagBits2::eTransferRead;
+        vk::DependencyInfo computeDepInfo{};
+        computeDepInfo.memoryBarrierCount = 1;
+        computeDepInfo.pMemoryBarriers = &computeBarrier;
+        cmd.pipelineBarrier2KHR(computeDepInfo);
 
         storage->swapBuffers();
 
@@ -98,10 +107,15 @@ namespace render::gpudriven
                                static_cast<uint32_t>(copyRegions.size()), copyRegions.data());
         }
 
-        vk::MemoryBarrier copyBarrier{vk::AccessFlagBits::eTransferWrite, vk::AccessFlagBits::eShaderRead};
-        cmd.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer,
-                            vk::PipelineStageFlagBits::eFragmentShader | vk::PipelineStageFlagBits::eComputeShader,
-                            vk::DependencyFlags{}, 1, &copyBarrier, 0, nullptr, 0, nullptr);
+        vk::MemoryBarrier2 copyBarrier{};
+        copyBarrier.srcStageMask = vk::PipelineStageFlagBits2::eTransfer;
+        copyBarrier.srcAccessMask = vk::AccessFlagBits2::eTransferWrite;
+        copyBarrier.dstStageMask = vk::PipelineStageFlagBits2::eFragmentShader | vk::PipelineStageFlagBits2::eComputeShader;
+        copyBarrier.dstAccessMask = vk::AccessFlagBits2::eShaderRead;
+        vk::DependencyInfo copyDepInfo{};
+        copyDepInfo.memoryBarrierCount = 1;
+        copyDepInfo.pMemoryBarriers = &copyBarrier;
+        cmd.pipelineBarrier2KHR(copyDepInfo);
 
         auto samplingSet = storage->getSamplingDescSet();
         if (meshShaderPipeline) meshShaderPipeline->updateGIProbeDescriptor(samplingSet);

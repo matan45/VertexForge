@@ -556,6 +556,15 @@ public class PostProcess {
         _native_postprocess_ssao_setKernelSize(value);
     }
 
+    // Quality preset (0=Low, 1=Medium, 2=High, 3=Ultra)
+    public static function getSSAOQuality(): int {
+        return _native_postprocess_ssao_getQuality();
+    }
+
+    public static function setSSAOQuality(int value): void {
+        _native_postprocess_ssao_setQuality(value);
+    }
+
     // Contrast power curve (0.5 - 5.0)
     public static function getSSAOPower(): float {
         return _native_postprocess_ssao_getPower();

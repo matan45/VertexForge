@@ -114,6 +114,9 @@ namespace render::gpudriven
     {
         if (!shadowSystem || !shadowSystem->isShadowsEnabled()) return;
 
+        // Early exit: skip entire shadow pipeline when no active shadow views exist
+        if (shadowSystem->getActiveShadowViewCount() == 0) return;
+
         shadowSystem->uploadToGPU(cmd);
 
         shadow::ShadowPassParams shadowParams{};

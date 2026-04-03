@@ -42,7 +42,8 @@ namespace render::upscaling
                       const glm::mat4& invViewProjection,
                       const glm::mat4& prevViewProjection,
                       uint32_t width, uint32_t height,
-                      uint32_t frameIndex);
+                      uint32_t frameIndex,
+                      vk::ImageLayout depthLayout = vk::ImageLayout::eDepthStencilReadOnlyOptimal);
 
         bool isInitialized() const { return initialized; }
 

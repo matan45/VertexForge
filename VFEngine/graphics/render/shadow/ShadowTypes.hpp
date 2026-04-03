@@ -90,6 +90,7 @@ namespace render::shadow
         float farPlane = 100.0f;
 
         float lightSize = 1.0f;
+        float maxShadowDistance = 200.0f;
 
         bool enabled = true;
         bool castShadows = true;

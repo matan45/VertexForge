@@ -119,6 +119,9 @@ namespace postprocess
         // GI injection
         float giInjectionIntensity = 1.0f;
 
+        // Ray march early termination threshold (0.01 = skip when 99% opaque)
+        float earlyTerminationThreshold = 0.01f;
+
         // Noise/turbulence modulation
         bool noiseEnabled = false;
         float noiseScale = 0.01f;
@@ -127,9 +130,30 @@ namespace postprocess
         int noiseOctaves = 3;
     };
 
+    enum class SSAOQuality : uint8_t
+    {
+        Low = 0,    // 16 samples
+        Medium,     // 32 samples
+        High,       // 48 samples
+        Ultra       // 64 samples
+    };
+
+    inline int ssaoSamplesFromQuality(SSAOQuality quality)
+    {
+        switch (quality)
+        {
+        case SSAOQuality::Low:    return 16;
+        case SSAOQuality::Medium: return 32;
+        case SSAOQuality::High:   return 48;
+        case SSAOQuality::Ultra:  return 64;
+        default:                  return 32;
+        }
+    }
+
     struct SSAOSettings
     {
         bool enabled = false;
+        SSAOQuality quality = SSAOQuality::Medium;
         float radius = 0.5f;
         float bias = 0.025f;
         float intensity = 1.0f;

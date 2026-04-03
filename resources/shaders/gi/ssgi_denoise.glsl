@@ -25,8 +25,8 @@ float linearizeDepth(float d)
     return nearPlane * farPlane / (farPlane - d * (farPlane - nearPlane));
 }
 
-// 9-tap Gaussian weights (sigma ~= 3.0)
-const float weights[5] = float[](0.2270270270, 0.1945945946, 0.1216216216, 0.0540540541, 0.0162162162);
+// 5-tap Gaussian weights (sigma ~= 1.5)
+const float weights[3] = float[](0.40, 0.24, 0.06);
 
 void main()
 {
@@ -36,7 +36,7 @@ void main()
     vec4 result = centerColor * weights[0];
     float totalWeight = weights[0];
 
-    for (int i = 1; i <= 4; i++)
+    for (int i = 1; i <= 2; i++)
     {
         vec2 offset = direction * texelSize * float(i);
 
