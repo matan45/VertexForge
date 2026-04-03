@@ -75,6 +75,66 @@ namespace render::gpudriven
         auto extent = swapChain.getSwapchainExtent();
         depthPrepass->beginPass(cmd);
 
+        // Render opaque scene meshes first (buildings, walls occlude terrain behind them)
+        if (initialized && enabled && stats.totalObjects > 0 &&
+            meshShaderPipeline && batchManager && bindlessTextures && boneMatrixManager)
+        {
+            depthPrepassPipeline->bindScenePipeline(cmd);
+
+            auto scenePipelineLayout = depthPrepassPipeline->getScenePipelineLayout();
+
+            cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
+                                   scenePipelineLayout, 0, iblDescriptorSet, {});
+
+            cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
+                                   scenePipelineLayout, 1,
+                                   meshShaderPipeline->getPerDrawDataDescriptorSet(), {});
+
+            cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
+                                   scenePipelineLayout, 2,
+                                   bindlessTextures->getDescriptorSet(), {});
+
+            std::array<vk::DescriptorSet, 2> meshletVertexSets = {
+                meshShaderPipeline->getMeshletDataDescriptorSet(),
+                meshShaderPipeline->getVertexDataDescriptorSet()
+            };
+            cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
+                                   scenePipelineLayout, 3, meshletVertexSets, {});
+
+            cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
+                                   scenePipelineLayout, 5,
+                                   boneMatrixManager->getDescriptorSet(), {});
+
+            uint32_t batchCount = batchManager->getBatchCount();
+            uint32_t commandsPerSection = batchManager->getCommandsPerSection();
+
+            for (uint32_t shaderGroup = 0; shaderGroup <= 2; ++shaderGroup)
+            {
+                for (uint32_t batch = 0; batch < batchCount; ++batch)
+                {
+                    vk::DeviceSize cmdOffset = batchManager->getDrawCommandOffset(batch, shaderGroup);
+                    vk::DeviceSize countOffset = batchManager->getDrawCountOffset(batch, shaderGroup);
+
+                    occlusion::DepthPrepassPushConstants scenePC{};
+                    scenePC.baseDrawIndex = batchManager->getSectionIndex(batch, shaderGroup) * commandsPerSection;
+                    scenePC.viewMode = MESHLET_CULL_FRUSTUM_BIT;
+                    scenePC.screenWidth = static_cast<float>(extent.width);
+                    scenePC.screenHeight = static_cast<float>(extent.height);
+
+                    depthPrepassPipeline->pushSceneConstants(cmd, scenePC);
+
+                    cmd.drawMeshTasksIndirectCountEXT(
+                        batchManager->getCombinedDrawCommandBuffer(),
+                        cmdOffset,
+                        batchManager->getCombinedDrawCountBuffer(),
+                        countOffset,
+                        commandsPerSection,
+                        sizeof(MeshTasksIndirectCommand));
+                }
+            }
+        }
+
+        // Render terrain tiles
         if (terrain.pipeline && terrain.pipeline->getCurrentTileCount() > 0 && terrain.renderingEnabled)
         {
             auto meshletDescSet = terrain.pipeline->getTerrainMeshletDescriptorSet();
@@ -89,10 +149,10 @@ namespace render::gpudriven
                                        depthPrepassPipeline->getTerrainPipelineLayout(),
                                        0, iblDescriptorSet, {});
 
-                std::array<vk::DescriptorSet, 2> meshletVertexSets = {meshletDescSet, vertexDescSet};
+                std::array<vk::DescriptorSet, 2> terrainMeshletVertexSets = {meshletDescSet, vertexDescSet};
                 cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
                                        depthPrepassPipeline->getTerrainPipelineLayout(),
-                                       3, meshletVertexSets, {});
+                                       3, terrainMeshletVertexSets, {});
 
                 cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
                                        depthPrepassPipeline->getTerrainPipelineLayout(),
