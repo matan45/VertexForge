@@ -8,10 +8,10 @@
 
 namespace loaders
 {
-    void AsyncMeshLoader::startLoad(const std::string& meshPath, const resource::LoadHint& hint)
+    void AsyncMeshLoader::startLoad(const std::string& meshPath)
     {
         std::lock_guard lock(mutex);
-
+        
         if (pendingLoads.find(meshPath) != pendingLoads.end())
         {
             vfLogDebug("Mesh already being loaded: {}", meshPath);
@@ -23,9 +23,8 @@ namespace loaders
         pending->state = services::LoadingState::Loading;
         pending->progress = 0.0f;
         pending->statusMessage = "Loading mesh from disk...";
-
-        pending->cpuDataFuture = resource::ResourceManager::loadMeshAsync(
-            asset::AssetRef::fromPath(meshPath), hint, pending->cancellation);
+        
+        pending->cpuDataFuture = resource::ResourceManager::loadMeshAsync(asset::AssetRef::fromPath(meshPath));
 
         pendingLoads[meshPath] = std::move(pending);
 
@@ -39,7 +38,7 @@ namespace loaders
         auto it = pendingLoads.find(meshPath);
         if (it != pendingLoads.end())
         {
-            it->second->cancellation->cancel();
+            it->second->cancelled = true;
             it->second->state = services::LoadingState::Cancelled;
             it->second->statusMessage = "Cancelled";
             vfLogDebug("Cancelled mesh load: {}", meshPath);
@@ -54,7 +53,7 @@ namespace loaders
 
         for (auto& [path, pending] : pendingLoads)
         {
-            if (pending->cancellation->isCancelled())
+            if (pending->cancelled)
             {
                 continue;
             }
@@ -127,7 +126,7 @@ namespace loaders
 
         PendingMeshLoad* pending = it->second.get();
 
-        if (pending->cancellation->isCancelled())
+        if (pending->cancelled)
         {
             result.errorMessage = "Load was cancelled";
             pending->state = services::LoadingState::Cancelled;
@@ -166,7 +165,7 @@ namespace loaders
         pending = it->second.get();
 
         // Check if cancelled during GPU upload
-        if (pending->cancellation->isCancelled())
+        if (pending->cancelled)
         {
             result.errorMessage = "Load was cancelled during GPU upload";
             pending->state = services::LoadingState::Cancelled;

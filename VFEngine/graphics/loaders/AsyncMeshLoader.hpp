@@ -1,8 +1,6 @@
 #pragma once
 #include "../../services/data/AsyncLoadingTypes.hpp"
 #include "resource/Types.hpp"
-#include "resource/ResourceLoadTypes.hpp"
-#include "resource/CancellationToken.hpp"
 #include "math/Frustum.hpp"
 #include <memory>
 #include <string>
@@ -30,7 +28,7 @@ namespace loaders
             float progress = 0.0f;
             std::string statusMessage = "Queued...";
             std::string errorMessage;
-            resource::CancellationToken::Ptr cancellation = resource::CancellationToken::create();
+            std::atomic<bool> cancelled{false};
         };
 
     private:
@@ -53,7 +51,7 @@ namespace loaders
         AsyncMeshLoader(const AsyncMeshLoader&) = delete;
         AsyncMeshLoader& operator=(const AsyncMeshLoader&) = delete;
 
-        void startLoad(const std::string& meshPath, const resource::LoadHint& hint = {});
+        void startLoad(const std::string& meshPath);
 
         void cancelLoad(const std::string& meshPath);
 

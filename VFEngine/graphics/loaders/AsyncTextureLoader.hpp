@@ -1,8 +1,6 @@
 #pragma once
 #include "../../services/data/AsyncLoadingTypes.hpp"
 #include "resource/Types.hpp"
-#include "resource/ResourceLoadTypes.hpp"
-#include "resource/CancellationToken.hpp"
 #include <memory>
 #include <string>
 #include <future>
@@ -40,7 +38,7 @@ namespace loaders
             float progress = 0.0f;
             std::string statusMessage = "Queued...";
             std::string errorMessage;
-            resource::CancellationToken::Ptr cancellation = resource::CancellationToken::create();
+            std::atomic<bool> cancelled{false};
 
             // Result after GPU upload
             std::unique_ptr<dto::EditorTexture> texture;
@@ -65,7 +63,7 @@ namespace loaders
         AsyncTextureLoader(const AsyncTextureLoader&) = delete;
         AsyncTextureLoader& operator=(const AsyncTextureLoader&) = delete;
 
-        void startLoad(void* instanceId, const std::string& texturePath, bool isHDR, const resource::LoadHint& hint = {});
+        void startLoad(void* instanceId, const std::string& texturePath, bool isHDR);
         void cancelLoad(void* instanceId);
         bool update();
 

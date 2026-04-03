@@ -4,7 +4,6 @@
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
 #include "world/WorldSectorSerialization.hpp"
-#include "resource/ResourceLoadScheduler.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/world/WorldSectorEvents.hpp"
 #include "../../events/render/DebugDrawEvents.hpp"
@@ -51,9 +50,6 @@ namespace services
             }
             for (const auto& [id, src] : streamingSources)
                 sources.push_back(src);
-
-            // Update resource load scheduler with current camera position for priority re-computation
-            resource::ResourceLoadScheduler::instance().update(sources[0].position);
 
             streamer.update(sources, sectorManager, streamingActions);
 

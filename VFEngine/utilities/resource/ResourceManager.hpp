@@ -20,9 +20,6 @@ namespace fs = std::filesystem;
 #include "ShaderResource.hpp"
 #include "MeshStreamHandle.hpp"
 #include "AssetLifecycleManager.hpp"
-#include "ResourceLoadTypes.hpp"
-#include "CancellationToken.hpp"
-#include "ResourceLoadScheduler.hpp"
 
 namespace resource {
 	template <typename Key, typename T, typename Hash = std::hash<Key>>
@@ -64,12 +61,12 @@ namespace resource {
 		static FileType readHeaderFile(const fs::path& filePath);
 
 		// Asset-based loading (GUID-keyed)
-		static std::future<std::shared_ptr<TextureData>> loadTextureAsync(const asset::AssetRef& ref, const LoadHint& hint = {}, CancellationToken::Ptr cancellation = nullptr);
-		static std::future<std::shared_ptr<HDRData>> loadHDRAsync(const asset::AssetRef& ref, const LoadHint& hint = {}, CancellationToken::Ptr cancellation = nullptr);
-		static std::future<std::shared_ptr<AudioData>> loadAudioAsync(const asset::AssetRef& ref, const LoadHint& hint = {}, CancellationToken::Ptr cancellation = nullptr);
-		static std::future<std::shared_ptr<MeshesData>> loadMeshAsync(const asset::AssetRef& ref, const LoadHint& hint = {}, CancellationToken::Ptr cancellation = nullptr);
-		static std::future<std::shared_ptr<FontData>> loadFontAsync(const asset::AssetRef& ref, const LoadHint& hint = {}, CancellationToken::Ptr cancellation = nullptr);
-		static std::future<std::shared_ptr<AnimationData>> loadAnimationAsync(const asset::AssetRef& ref, const LoadHint& hint = {}, CancellationToken::Ptr cancellation = nullptr);
+		static std::future<std::shared_ptr<TextureData>> loadTextureAsync(const asset::AssetRef& ref);
+		static std::future<std::shared_ptr<HDRData>> loadHDRAsync(const asset::AssetRef& ref);
+		static std::future<std::shared_ptr<AudioData>> loadAudioAsync(const asset::AssetRef& ref);
+		static std::future<std::shared_ptr<MeshesData>> loadMeshAsync(const asset::AssetRef& ref);
+		static std::future<std::shared_ptr<FontData>> loadFontAsync(const asset::AssetRef& ref);
+		static std::future<std::shared_ptr<AnimationData>> loadAnimationAsync(const asset::AssetRef& ref);
 
 		// Shader loading (path-based, internal engine resources)
 		static std::future<std::shared_ptr<std::vector<ShaderModel>>> loadShaderAsync(std::string_view path);
@@ -101,9 +98,7 @@ namespace resource {
 			PendingLoadMap<asset::AssetGUID, T, asset::AssetGUID::Hash>& pendingLoads,
 			LoaderFunc loader,
 			AssetType assetType = AssetType::COUNT,
-			MemoryEstimator memEstimator = nullptr,
-			const LoadHint& hint = {},
-			CancellationToken::Ptr cancellation = nullptr);
+			MemoryEstimator memEstimator = nullptr);
 
 		template <typename T>
 		static std::future<T> make_ready_future(T value) {
@@ -118,8 +113,7 @@ namespace resource {
 		const asset::AssetRef& ref,
 		std::unordered_map<asset::AssetGUID, std::weak_ptr<T>, asset::AssetGUID::Hash>& cache,
 		PendingLoadMap<asset::AssetGUID, T, asset::AssetGUID::Hash>& pendingLoads,
-		LoaderFunc loader, AssetType assetType, MemoryEstimator memEstimator,
-		const LoadHint& hint, CancellationToken::Ptr cancellation)
+		LoaderFunc loader, AssetType assetType, MemoryEstimator memEstimator)
 	{
 		auto guid = ref.getGUID();
 		if (!guid.isValid()) {
@@ -153,39 +147,15 @@ namespace resource {
 			return make_ready_future(std::shared_ptr<T>(nullptr));
 		}
 
-		if (!cancellation)
-			cancellation = CancellationToken::create();
-
-		// Create a shared promise/future pair for the result
-		auto sharedPromise = std::make_shared<std::promise<std::shared_ptr<T>>>();
-		auto resultFuture = sharedPromise->get_future();
-
-		// Register a shared_future in pendingLoads for deduplication
-		auto sharedResultPromise = std::make_shared<std::promise<std::shared_ptr<T>>>();
-		std::shared_future<std::shared_ptr<T>> sharedFuture = sharedResultPromise->get_future().share();
-		{
-			std::scoped_lock lock(cacheMutex);
-			pendingLoads[guid] = sharedFuture;
-		}
-
 		pendingAsyncOps.fetch_add(1, std::memory_order_relaxed);
-
-		// Package the I/O work as a LoadRequest for the scheduler
-		LoadRequest request;
-		request.guid = guid;
-		request.hint = hint;
-		request.cancellation = cancellation;
-		request.computedPriority = ResourceLoadScheduler::computePriority(hint, {0.0f, 0.0f, 0.0f});
-		request.executeLoad = [path = std::move(path), guid, loader, &cache, &pendingLoads,
-			assetType, memEstimator, sharedPromise, sharedResultPromise, cancel = cancellation]() mutable {
+		std::shared_future<std::shared_ptr<T>> sharedFuture = std::async(std::launch::async,
+			[path = std::move(path), guid, loader, &cache, &pendingLoads, assetType, memEstimator]() -> std::shared_ptr<T> {
 			struct AsyncGuard { ~AsyncGuard() { pendingAsyncOps.fetch_sub(1, std::memory_order_release); } } guard;
 			try {
-				if (shuttingDown.load(std::memory_order_acquire) || (cancel && cancel->isCancelled())) {
+				if (shuttingDown.load(std::memory_order_acquire)) {
 					std::scoped_lock lock(cacheMutex);
 					pendingLoads.erase(guid);
-					sharedResultPromise->set_value(nullptr);
-					sharedPromise->set_value(nullptr);
-					return;
+					return nullptr;
 				}
 
 				auto resource = std::make_shared<T>(loader(path));
@@ -205,26 +175,37 @@ namespace resource {
 					}
 				}
 
-				sharedResultPromise->set_value(resource);
-				sharedPromise->set_value(resource);
+				return resource;
 			}
 			catch (const std::exception& e) {
 				std::scoped_lock lock(cacheMutex);
 				pendingLoads.erase(guid);
 				vfLogError("Exception loading resource '{}': {}", path, e.what());
-				sharedResultPromise->set_value(nullptr);
-				sharedPromise->set_value(nullptr);
+				return nullptr;
 			}
 			catch (...) {
 				std::scoped_lock lock(cacheMutex);
 				pendingLoads.erase(guid);
 				vfLogError("Unknown exception loading resource: {}", path);
-				sharedResultPromise->set_value(nullptr);
-				sharedPromise->set_value(nullptr);
+				return nullptr;
 			}
-		};
+			}).share();
 
-		ResourceLoadScheduler::instance().submit(std::move(request));
+		{
+			std::scoped_lock lock(cacheMutex);
+			pendingLoads[guid] = sharedFuture;
+		}
+
+		std::promise<std::shared_ptr<T>> promise;
+		auto resultFuture = promise.get_future();
+
+		std::thread([sf = std::move(sharedFuture), p = std::move(promise)]() mutable {
+			try {
+				p.set_value(sf.get());
+			} catch (...) {
+				p.set_exception(std::current_exception());
+			}
+		}).detach();
 
 		return resultFuture;
 	}
