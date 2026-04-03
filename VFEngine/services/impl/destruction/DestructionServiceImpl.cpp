@@ -3,6 +3,7 @@
 #include "../../events/scene/EntityTransformEvents.hpp"
 #include "../../events/scene/ComponentMediaEvents.hpp"
 #include "../../events/render/MaterialEvents.hpp"
+#include "../../interfaces/physics/IPhysicsService.hpp"
 #include "../../events/scene/ComponentPhysicsLightEvents.hpp"
 #include "../../data/DTOs.hpp"
 #include <scene/Entity.hpp>
@@ -33,7 +34,7 @@ namespace services
 
     DestructionServiceImpl::~DestructionServiceImpl()
     {
-        if (collisionToken != 0)
+        if (collisionToken.isValid())
         {
             events::EventDispatcher::instance().unsubscribe(collisionToken);
         }
@@ -280,7 +281,7 @@ namespace services
 
         // Get the fracture asset reference
         const auto& fractureRef = destructible.fractureAssetRef;
-        if (fractureRef.guid.empty())
+        if (!fractureRef.isValid())
         {
             spdlog::warn("Destruction: entity {} has no fracture asset reference", entity.id);
             return;
@@ -331,7 +332,7 @@ namespace services
             dispatcher.execute(meshDataCmd);
 
             // Copy material from source
-            events::render::SetMaterialDataCommand matCmd;
+            events::material::SetMaterialDataCommand matCmd;
             matCmd.entity = fragmentHandle;
             matCmd.materialData = sourceMaterial;
             dispatcher.execute(matCmd);
@@ -353,7 +354,7 @@ namespace services
             rbCmd.rigidBody.angularDamping = 0.5f;
             rbCmd.rigidBody.activateOnAdd = true;
             rbCmd.collider.shape = types::ColliderShape::ConvexMesh;
-            rbCmd.collider.meshPath = fractureRef.path;
+            rbCmd.collider.meshPath = fractureRef.resolve();
             rbCmd.collider.collisionLayer = 1;
             dispatcher.execute(rbCmd);
 
