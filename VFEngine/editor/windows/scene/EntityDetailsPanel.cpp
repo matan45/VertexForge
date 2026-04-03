@@ -1,7 +1,6 @@
 #include "EntityDetailsPanel.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/project/SceneEvents.hpp"
-#include "events/scene/ComponentPhysicsLightEvents.hpp"
 #include <imgui.h>
 
 namespace windows
@@ -82,6 +81,7 @@ namespace windows
         
         bool hasCollider = colliderDrawer.draw(handle);
         bool hasRigidBody = rigidBodyDrawer.draw(handle);
+        bool hasDestructible = destructibleDrawer.draw(handle);
         bool hasPhysicsAnimation = physicsAnimationDrawer.draw(handle);
         bool hasVFX = vfxDrawer.draw(handle);
         bool hasBillboard = billboardDrawer.draw(handle);
@@ -106,10 +106,6 @@ namespace windows
         bool hasDecal = decalDrawer.draw(handle);
         bool hasReverbZone = reverbZoneDrawer.draw(handle);
         bool hasFogVolume = fogVolumeDrawer.draw(handle);
-
-        events::scene::HasDestructibleComponentQuery hasDestructibleQuery;
-        hasDestructibleQuery.entity = handle;
-        bool hasDestructible = events::EventDispatcher::instance().query(hasDestructibleQuery);
 
         // Terrain components (read-only display)
         terrainDrawer.draw(handle);

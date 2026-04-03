@@ -276,7 +276,6 @@ namespace services
             req.lifetime = destructible.fragmentLifetime;
             req.sourceEntityId = entity.id;
             req.fragmentIndex = i;
-            req.materialType = destructible.materialType;
             req.collisionAudioRef = destructible.fragmentCollisionAudio;
             req.impulse = computeFragmentImpulse(fragmentDir, i, fragmentCount, force);
             requests.push_back(std::move(req));

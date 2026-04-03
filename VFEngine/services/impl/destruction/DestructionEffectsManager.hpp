@@ -18,7 +18,6 @@ namespace services
     struct DestructionEffectsSnapshot
     {
         glm::vec3 position{0.0f};
-        components::MaterialType materialType = components::MaterialType::Default;
         float fragmentMassTotal = 1.0f;
         asset::AssetRef onDestroyVFX;
         asset::AssetRef onDestroyAudio;

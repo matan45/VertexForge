@@ -472,7 +472,6 @@ namespace serialization
         j["fragmentLifetime"] = d.fragmentLifetime;
         j["propagationRadius"] = d.propagationRadius;
         j["propagationDamage"] = d.propagationDamage;
-        j["materialType"] = static_cast<int>(d.materialType);
         writeAssetRef(j, "onDamageVFX", d.onDamageVFX);
         writeAssetRef(j, "onDestroyVFX", d.onDestroyVFX);
         writeAssetRef(j, "onDamageAudio", d.onDamageAudio);
@@ -503,8 +502,6 @@ namespace serialization
             d.propagationRadius = it->get<float>();
         if (auto it = j.find("propagationDamage"); it != j.end() && it->is_number())
             d.propagationDamage = it->get<float>();
-        if (auto it = j.find("materialType"); it != j.end() && it->is_number())
-            d.materialType = static_cast<components::MaterialType>(it->get<int>());
         d.onDamageVFX = readAssetRef(j, "onDamageVFX");
         d.onDestroyVFX = readAssetRef(j, "onDestroyVFX");
         d.onDamageAudio = readAssetRef(j, "onDamageAudio");

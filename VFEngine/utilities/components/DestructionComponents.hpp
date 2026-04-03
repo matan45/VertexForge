@@ -27,15 +27,6 @@ namespace components
         Pooled
     };
 
-    enum class MaterialType : uint8_t
-    {
-        Default = 0,
-        Wood = 1,
-        Stone = 2,
-        Metal = 3,
-        Glass = 4
-    };
-
     struct DestructibleComponent
     {
         float maxHealth = 100.0f;
@@ -51,7 +42,6 @@ namespace components
         float propagationRadius = 0.0f;
         float propagationDamage = 50.0f;
 
-        MaterialType materialType = MaterialType::Default;
         asset::AssetRef onDamageVFX;
         asset::AssetRef onDestroyVFX;
         asset::AssetRef onDamageAudio;
@@ -74,7 +64,6 @@ namespace components
         float distanceToCamera = 0.0f;
         uint32_t spawnFrame = 0;
 
-        MaterialType materialType = MaterialType::Default;
         asset::AssetRef collisionAudioRef;
     };
 }

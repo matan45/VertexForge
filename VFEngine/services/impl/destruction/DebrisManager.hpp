@@ -33,7 +33,6 @@ namespace services
         glm::vec3 impulse{0.0f};
         uint64_t sourceEntityId = ~0ULL;
         uint32_t fragmentIndex = 0;
-        components::MaterialType materialType = components::MaterialType::Default;
         asset::AssetRef collisionAudioRef;
     };
 

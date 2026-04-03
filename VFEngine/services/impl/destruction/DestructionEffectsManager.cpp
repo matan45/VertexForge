@@ -83,7 +83,6 @@ namespace services
         if (sceneEntity.hasComponent<components::DestructibleComponent>())
         {
             const auto& d = sceneEntity.getComponent<components::DestructibleComponent>();
-            snapshot.materialType = d.materialType;
             snapshot.fragmentMassTotal = d.fragmentMassTotal;
             snapshot.onDestroyVFX = d.onDestroyVFX;
             snapshot.onDestroyAudio = d.onDestroyAudio;

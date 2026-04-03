@@ -151,7 +151,6 @@ namespace services
         fragComp.fadeOutDuration = config.fadeOutDuration;
         fragComp.fadeProgress = 0.0f;
         fragComp.spawnFrame = frameNumber;
-        fragComp.materialType = request.materialType;
         fragComp.collisionAudioRef = request.collisionAudioRef;
 
         return fragmentHandle;

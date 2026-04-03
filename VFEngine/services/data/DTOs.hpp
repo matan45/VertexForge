@@ -669,7 +669,6 @@ namespace services
         float propagationRadius = 0.0f;
         float propagationDamage = 50.0f;
 
-        components::MaterialType materialType = components::MaterialType::Default;
         asset::AssetRef onDamageVFX;
         asset::AssetRef onDestroyVFX;
         asset::AssetRef onDamageAudio;
