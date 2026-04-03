@@ -33,6 +33,7 @@ namespace services
 
     private:
         ::events::SubscriptionToken collisionToken{};
+        ::events::SubscriptionToken modeChangedToken{};
         std::unique_ptr<DebrisManager> debrisManager;
         std::unique_ptr<DestructionEffectsManager> effectsManager;
         std::unique_ptr<DamagePropagationManager> propagationManager;

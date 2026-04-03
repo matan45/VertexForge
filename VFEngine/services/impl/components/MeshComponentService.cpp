@@ -31,6 +31,7 @@ namespace services {
         data.showBoundingBox = comp.showBoundingBox;
         data.applyRootMotion = comp.applyRootMotion;
         data.maxDrawDistance = comp.maxDrawDistance;
+        data.submeshIndex = comp.submeshIndex;
 
         return data;
     }

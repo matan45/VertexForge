@@ -10,6 +10,8 @@
 #include "../../events/physics/PhysicsEvents.hpp"
 #include "../../interfaces/physics/IPhysicsService.hpp"
 #include "../../events/scene/ComponentPhysicsLightEvents.hpp"
+#include "../../events/editor/EditorModeEvents.hpp"
+#include "../../data/EditorMode.hpp"
 #include "../../data/DTOs.hpp"
 #include <scene/Entity.hpp>
 #include <scene/EntityRegistry.hpp>
@@ -32,10 +34,11 @@ namespace services
 
     DestructionServiceImpl::~DestructionServiceImpl()
     {
+        auto& dispatcher = ::events::EventDispatcher::instance();
         if (collisionToken.isValid())
-        {
-            ::events::EventDispatcher::instance().unsubscribe(collisionToken);
-        }
+            dispatcher.unsubscribe(collisionToken);
+        if (modeChangedToken.isValid())
+            dispatcher.unsubscribe(modeChangedToken);
     }
 
     void DestructionServiceImpl::registerEventHandlers()
@@ -82,6 +85,17 @@ namespace services
             });
 
         registerCollisionHandler();
+
+        modeChangedToken = dispatcher.subscribe<::events::editor::EditorModeChangedNotification>(
+            [this](const ::events::editor::EditorModeChangedNotification& n)
+            {
+                if (n.currentMode == services::EditorMode::Edit)
+                {
+                    debrisManager->reset();
+                    propagationManager->reset();
+                    frameNumber = 0;
+                }
+            });
     }
 
     void DestructionServiceImpl::registerCollisionHandler()
