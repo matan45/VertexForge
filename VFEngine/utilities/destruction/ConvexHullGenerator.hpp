@@ -22,5 +22,10 @@ namespace destruction
         static void generateBatch(
             std::vector<FragmentData>& fragments,
             const FragmentHullConfig& config = {});
+
+    private:
+        static void extractHull(
+            resource::ConvexHull& result,
+            void* vhacdInterface);
     };
 }

@@ -45,35 +45,43 @@ namespace destruction
 
         if (success && vhacd->GetNConvexHulls() > 0)
         {
-            VHACD::IVHACD::ConvexHull hull;
-            vhacd->GetConvexHull(0, hull);
-
-            result.vertices.reserve(hull.m_points.size());
-            for (const auto& p : hull.m_points)
-            {
-                result.vertices.emplace_back(
-                    static_cast<float>(p.mX),
-                    static_cast<float>(p.mY),
-                    static_cast<float>(p.mZ));
-            }
-
-            result.indices.reserve(hull.m_triangles.size() * 3);
-            for (const auto& tri : hull.m_triangles)
-            {
-                result.indices.push_back(tri.mI0);
-                result.indices.push_back(tri.mI1);
-                result.indices.push_back(tri.mI2);
-            }
-
-            result.center = glm::vec3(
-                static_cast<float>(hull.m_center.GetX()),
-                static_cast<float>(hull.m_center.GetY()),
-                static_cast<float>(hull.m_center.GetZ()));
-            result.volume = static_cast<float>(hull.m_volume);
+            extractHull(result, vhacd);
         }
 
         vhacd->Release();
         return result;
+    }
+
+    void ConvexHullGenerator::extractHull(
+        resource::ConvexHull& result,
+        void* vhacdInterface)
+    {
+        auto* vhacd = static_cast<VHACD::IVHACD*>(vhacdInterface);
+        VHACD::IVHACD::ConvexHull hull;
+        vhacd->GetConvexHull(0, hull);
+
+        result.vertices.reserve(hull.m_points.size());
+        for (const auto& p : hull.m_points)
+        {
+            result.vertices.emplace_back(
+                static_cast<float>(p.mX),
+                static_cast<float>(p.mY),
+                static_cast<float>(p.mZ));
+        }
+
+        result.indices.reserve(hull.m_triangles.size() * 3);
+        for (const auto& tri : hull.m_triangles)
+        {
+            result.indices.push_back(tri.mI0);
+            result.indices.push_back(tri.mI1);
+            result.indices.push_back(tri.mI2);
+        }
+
+        result.center = glm::vec3(
+            static_cast<float>(hull.m_center.GetX()),
+            static_cast<float>(hull.m_center.GetY()),
+            static_cast<float>(hull.m_center.GetZ()));
+        result.volume = static_cast<float>(hull.m_volume);
     }
 
     void ConvexHullGenerator::generateBatch(

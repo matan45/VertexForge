@@ -10,23 +10,12 @@
 #include <scene/EntityRegistry.hpp>
 #include <components/Components.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include "DestructionHelpers.hpp"
 #include <algorithm>
 
 namespace services
 {
-    namespace
-    {
-        entt::entity fromHandle(EntityHandle handle)
-        {
-            return static_cast<entt::entity>(static_cast<uint32_t>(handle.id));
-        }
-
-        bool isValidHandle(EntityHandle handle, entt::registry& registry)
-        {
-            if (!handle.isValid()) return false;
-            return registry.valid(fromHandle(handle));
-        }
-    }
+    using namespace services::destruction_internal;
 
     DestructionEffectsManager::DestructionEffectsManager(DestructionEffectsConfig config)
         : config(config)

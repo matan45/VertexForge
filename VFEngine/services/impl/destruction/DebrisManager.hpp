@@ -5,6 +5,7 @@
 #include <destruction/FragmentPool.hpp>
 #include <asset/AssetRef.hpp>
 #include <glm/glm.hpp>
+#include <entt/entt.hpp>
 #include <vector>
 #include <deque>
 #include <cstdint>
@@ -57,5 +58,14 @@ namespace services
         void enforceBudget();
         void updateFadeOuts(float deltaTime);
         void spawnSingleFragment(const FragmentSpawnRequest& request, uint32_t frameNumber);
+        EntityHandle createFragmentEntity(const FragmentSpawnRequest& request, uint32_t frameNumber);
+
+        struct EvictionCandidate
+        {
+            entt::entity entity;
+            float distanceToCamera;
+            uint32_t spawnFrame;
+        };
+        std::vector<EvictionCandidate> collectEvictionCandidates() const;
     };
 }

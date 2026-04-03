@@ -14,26 +14,13 @@
 #include <scene/Entity.hpp>
 #include <scene/EntityRegistry.hpp>
 #include <components/Components.hpp>
-#include <spdlog/spdlog.h>
+#include "DestructionHelpers.hpp"
+#include <print/Log.hpp>
 #include <algorithm>
 
 namespace services
 {
-    namespace
-    {
-        // Convert EntityHandle to entt::entity
-        entt::entity fromHandle(EntityHandle handle)
-        {
-            return static_cast<entt::entity>(static_cast<uint32_t>(handle.id));
-        }
-
-        bool isValidHandle(EntityHandle handle, entt::registry& registry)
-        {
-            if (!handle.isValid()) return false;
-            auto entity = fromHandle(handle);
-            return registry.valid(entity);
-        }
-    }
+    using namespace services::destruction_internal;
 
     DestructionServiceImpl::DestructionServiceImpl()
         : debrisManager(std::make_unique<DebrisManager>())
@@ -93,7 +80,12 @@ namespace services
                 return isDestroyed(query.entity);
             });
 
-        collisionToken = dispatcher.subscribe<::events::physics::CollisionStartNotification>(
+        registerCollisionHandler();
+    }
+
+    void DestructionServiceImpl::registerCollisionHandler()
+    {
+        collisionToken = ::events::EventDispatcher::instance().subscribe<::events::physics::CollisionStartNotification>(
             [this](const ::events::physics::CollisionStartNotification& n)
             {
                 auto& reg = scene::EntityRegistry::getRegistry();
@@ -119,15 +111,12 @@ namespace services
                 checkEntity(n.entityA, n.normal);
                 checkEntity(n.entityB, -n.normal);
 
-                // Fragment collision sounds
                 auto checkFragment = [&](EntityHandle handle)
                 {
                     if (!isValidHandle(handle, reg)) return;
                     scene::Entity e(fromHandle(handle));
                     if (e.hasComponent<components::FragmentComponent>())
-                    {
                         effectsManager->onFragmentCollision(handle, n.contactPoint, n.penetrationDepth);
-                    }
                 };
                 checkFragment(n.entityA);
                 checkFragment(n.entityB);
@@ -148,30 +137,17 @@ namespace services
                                               uint32_t propagationDepth)
     {
         auto& registry = scene::EntityRegistry::getRegistry();
-        if (!isValidHandle(entity, registry))
-        {
-            return;
-        }
+        if (!isValidHandle(entity, registry)) return;
 
         scene::Entity sceneEntity(fromHandle(entity));
-        if (!sceneEntity.hasComponent<components::DestructibleComponent>())
-        {
-            return;
-        }
+        if (!sceneEntity.hasComponent<components::DestructibleComponent>()) return;
 
         auto& destructible = sceneEntity.getComponent<components::DestructibleComponent>();
+        if (destructible.isDestroyed) return;
 
-        if (destructible.isDestroyed)
-        {
-            return;
-        }
-
-        // Check damage type filter
         if (destructible.damageFilter != components::DamageType::Any &&
             destructible.damageFilter != type)
-        {
             return;
-        }
 
         // Apply damage
         destructible.currentHealth -= amount;
@@ -189,7 +165,7 @@ namespace services
 
         effectsManager->onDamageApplied(entity, amount, impactPoint, impactDir, type);
 
-        spdlog::debug("Destruction: entity {} took {:.1f} damage, health: {:.1f}/{}",
+        vfLogDebug("Destruction: entity {} took {:.1f} damage, health: {:.1f}/{}",
                      entity.id, amount, destructible.currentHealth, destructible.maxHealth);
 
         // Check if destruction threshold reached
@@ -225,7 +201,7 @@ namespace services
 
         destructible.isDestroyed = true;
 
-        spdlog::info("Destruction: triggering destruction for entity {}", entity.id);
+        vfLogInfo("Destruction: triggering destruction for entity {}", entity.id);
 
         spawnFragments(entity, impactPoint, impactDir, force, propagationDepth);
     }
@@ -264,25 +240,64 @@ namespace services
         return sceneEntity.getComponent<components::DestructibleComponent>().isDestroyed;
     }
 
-    void DestructionServiceImpl::spawnFragments(EntityHandle entity,
-                                                 const glm::vec3& impactPoint,
-                                                 const glm::vec3& impactDir,
-                                                 float force,
-                                                 uint32_t propagationDepth)
+    glm::vec3 DestructionServiceImpl::computeFragmentImpulse(const glm::vec3& impactDir,
+                                                               uint32_t fragmentIndex,
+                                                               uint32_t fragmentCount,
+                                                               float force)
+    {
+        float angle = static_cast<float>(fragmentIndex) * 6.283185f / static_cast<float>(fragmentCount);
+        glm::vec3 spread(std::cos(angle) * 0.3f, 0.2f, std::sin(angle) * 0.3f);
+        return (impactDir + spread) * force;
+    }
+
+    std::vector<FragmentSpawnRequest> DestructionServiceImpl::buildSpawnRequests(
+        const components::DestructibleComponent& destructible,
+        const components::TransformComponent& transform,
+        const MaterialData& sourceMaterial,
+        EntityHandle entity,
+        const glm::vec3& fragmentDir, float force) const
+    {
+        constexpr uint32_t maxFragments = 100;
+        uint32_t fragmentCount = std::min(maxFragments, static_cast<uint32_t>(10));
+        float massPerFragment = destructible.fragmentMassTotal / static_cast<float>(fragmentCount);
+
+        std::vector<FragmentSpawnRequest> requests;
+        requests.reserve(fragmentCount);
+
+        for (uint32_t i = 0; i < fragmentCount; ++i)
+        {
+            FragmentSpawnRequest req;
+            req.position = transform.position;
+            req.rotation = transform.rotation;
+            req.scale = transform.scale;
+            req.fractureAssetRef = destructible.fractureAssetRef;
+            req.sourceMaterial = sourceMaterial;
+            req.mass = massPerFragment;
+            req.lifetime = destructible.fragmentLifetime;
+            req.sourceEntityId = entity.id;
+            req.fragmentIndex = i;
+            req.materialType = destructible.materialType;
+            req.collisionAudioRef = destructible.fragmentCollisionAudio;
+            req.impulse = computeFragmentImpulse(fragmentDir, i, fragmentCount, force);
+            requests.push_back(std::move(req));
+        }
+        return requests;
+    }
+
+    void DestructionServiceImpl::spawnFragments(EntityHandle entity, const glm::vec3& impactPoint,
+                                                 const glm::vec3& impactDir, float force, uint32_t propagationDepth)
     {
         auto& dispatcher = ::events::EventDispatcher::instance();
-        auto& registry = scene::EntityRegistry::getRegistry();
-
-        if (!isValidHandle(entity, registry))
-        {
-            return;
-        }
+        if (!isValidHandle(entity, scene::EntityRegistry::getRegistry())) return;
 
         scene::Entity sourceEntity(fromHandle(entity));
         const auto& destructible = sourceEntity.getComponent<components::DestructibleComponent>();
         const auto& transform = sourceEntity.getComponent<components::TransformComponent>();
-
-        // Get material from source entity (if present)
+        if (!destructible.fractureAssetRef.isValid())
+        {
+            vfLogWarning("Destruction: entity {} has no fracture asset reference", entity.id);
+            return;
+        }
         MaterialData sourceMaterial;
         if (sourceEntity.hasComponent<components::MaterialComponent>())
         {
@@ -291,69 +306,16 @@ namespace services
             sourceMaterial.subMeshMaterials = mat.subMeshMaterials;
             sourceMaterial.parameterOverrides = mat.parameterOverrides;
         }
-
-        // Get the fracture asset reference
-        const auto& fractureRef = destructible.fractureAssetRef;
-        if (!fractureRef.isValid())
-        {
-            spdlog::warn("Destruction: entity {} has no fracture asset reference", entity.id);
-            return;
-        }
-
-        constexpr uint32_t maxFragments = 100;
-        uint32_t fragmentCount = std::min(maxFragments, static_cast<uint32_t>(10));
-
-        glm::vec3 sourcePos = transform.position;
-        float totalMass = destructible.fragmentMassTotal;
-        float massPerFragment = totalMass / static_cast<float>(fragmentCount);
-        float lifetime = destructible.fragmentLifetime;
-
-        // Build spawn requests for DebrisManager (batched over multiple frames)
-        glm::vec3 fragmentDir = impactDir;
-        if (glm::length(fragmentDir) > 0.001f)
-        {
-            fragmentDir = glm::normalize(fragmentDir);
-        }
-        else
-        {
-            fragmentDir = glm::vec3(0.0f, 1.0f, 0.0f);
-        }
-
-        std::vector<FragmentSpawnRequest> requests;
-        requests.reserve(fragmentCount);
-
-        for (uint32_t i = 0; i < fragmentCount; ++i)
-        {
-            FragmentSpawnRequest req;
-            req.position = sourcePos;
-            req.rotation = transform.rotation;
-            req.scale = transform.scale;
-            req.fractureAssetRef = fractureRef;
-            req.sourceMaterial = sourceMaterial;
-            req.mass = massPerFragment;
-            req.lifetime = lifetime;
-            req.sourceEntityId = entity.id;
-            req.fragmentIndex = i;
-            req.materialType = destructible.materialType;
-            req.collisionAudioRef = destructible.fragmentCollisionAudio;
-
-            float angle = static_cast<float>(i) * 6.283185f / static_cast<float>(fragmentCount);
-            glm::vec3 spread(std::cos(angle) * 0.3f, 0.2f, std::sin(angle) * 0.3f);
-            req.impulse = (fragmentDir + spread) * force;
-
-            requests.push_back(std::move(req));
-        }
-
+        glm::vec3 fragmentDir = glm::length(impactDir) > 0.001f
+            ? glm::normalize(impactDir) : glm::vec3(0.0f, 1.0f, 0.0f);
+        auto requests = buildSpawnRequests(destructible, transform, sourceMaterial, entity, fragmentDir, force);
+        uint32_t fragmentCount = static_cast<uint32_t>(requests.size());
         debrisManager->requestSpawn(std::move(requests));
-
-        // Capture effects data before entity deletion
         auto effectsSnapshot = effectsManager->captureSnapshot(entity);
-
-        // Queue damage propagation to nearby destructibles
         if (destructible.propagationRadius > 0.0f)
         {
             PropagationRequest propReq;
-            propReq.epicenter = sourcePos;
+            propReq.epicenter = transform.position;
             propReq.radius = destructible.propagationRadius;
             propReq.baseDamage = destructible.propagationDamage;
             propReq.damageType = components::DamageType::Explosive;
@@ -361,22 +323,15 @@ namespace services
             propReq.depth = propagationDepth;
             propagationManager->queuePropagation(propReq);
         }
-
-        // Delete the original entity
         ::events::scene::DeleteEntityCommand deleteCmd;
         deleteCmd.entity = entity;
         dispatcher.execute(deleteCmd);
-
-        // Trigger destruction effects (entity is now deleted, using snapshot)
         effectsManager->onDestructionTriggered(effectsSnapshot, impactPoint, impactDir);
-
-        // Publish destruction notification
         ::events::destruction::DestructionTriggeredNotification notification;
         notification.entity = entity;
         notification.impactPoint = impactPoint;
         notification.impactDirection = impactDir;
         dispatcher.publish(notification);
-
-        spdlog::info("Destruction: queued {} fragments for entity {}", fragmentCount, entity.id);
+        vfLogInfo("Destruction: queued {} fragments for entity {}", fragmentCount, entity.id);
     }
 }

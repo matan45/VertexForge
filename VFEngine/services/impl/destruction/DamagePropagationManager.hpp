@@ -51,9 +51,7 @@ namespace services
         std::deque<PropagationRequest> propagationQueue;
         std::deque<ExplosionRequest> explosionQueue;
 
-        void applyRadialDamage(const glm::vec3& epicenter, float radius, float baseDamage,
-                               components::DamageType damageType, const glm::vec3& impactDir,
-                               uint32_t depth);
+        void applyRadialDamage(const PropagationRequest& request);
         void applyExplosionForces(const glm::vec3& center, float radius, float force,
                                   float upwardBias);
     };

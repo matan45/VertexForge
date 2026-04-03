@@ -35,7 +35,15 @@
       "WebFetch(domain:raw.githubusercontent.com)",
       "Bash(grep:*)",
       "mcp__mcp-atlassian__jira_update_issue",
-      "mcp__claude_ai_Atlassian__createJiraIssue"
+      "mcp__claude_ai_Atlassian__createJiraIssue",
+      "mcp__mcp-atlassian__jira_batch_create_issues",
+      "mcp__mcp-atlassian__jira_link_to_epic",
+      "Bash(xargs -I {} basename {})",
+      "Bash(where dumpbin:*)",
+      "Read(//c/Program Files/Microsoft Visual Studio/**)",
+      "Bash(\"/c/Program Files/Microsoft Visual Studio/18/Insiders/VC/Tools/MSVC/14.50.35717/bin/Hostx64/x64/dumpbin.exe\" /dependents C:/matan/VertexForge/bin/Tests/Debug/x64/Tests.exe)",
+      "Bash(ls /c/matan/VertexForge/VFEngine/services/*.vcxproj)",
+      "Bash(ls /c/matan/VertexForge/VFEngine/utilities/*.vcxproj)"
     ],
     "deny": [],
     "ask": []

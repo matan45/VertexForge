@@ -234,6 +234,7 @@
     <ClInclude Include="impl\destruction\DamagePropagationManager.hpp" />
     <ClInclude Include="impl\destruction\DebrisManager.hpp" />
     <ClInclude Include="impl\destruction\DestructionEffectsManager.hpp" />
+    <ClInclude Include="impl\destruction\DestructionHelpers.hpp" />
     <ClInclude Include="impl\destruction\DestructionServiceImpl.hpp" />
     <ClInclude Include="impl\editor\EditorKeybindingServiceImpl.hpp" />
     <ClInclude Include="impl\editor\EditorModeServiceImpl.hpp" />

@@ -5,24 +5,13 @@
 #include <scene/EntityRegistry.hpp>
 #include <scene/Entity.hpp>
 #include <components/Components.hpp>
-#include <spdlog/spdlog.h>
+#include "DestructionHelpers.hpp"
+#include <print/Log.hpp>
 #include <algorithm>
 
 namespace services
 {
-    namespace
-    {
-        entt::entity fromHandle(EntityHandle handle)
-        {
-            return static_cast<entt::entity>(static_cast<uint32_t>(handle.id));
-        }
-
-        bool isValidHandle(EntityHandle handle, entt::registry& registry)
-        {
-            if (!handle.isValid()) return false;
-            return registry.valid(fromHandle(handle));
-        }
-    }
+    using namespace services::destruction_internal;
 
     DamagePropagationManager::DamagePropagationManager(PropagationConfig config)
         : config(config)
@@ -59,8 +48,7 @@ namespace services
             auto req = std::move(propagationQueue.front());
             propagationQueue.pop_front();
 
-            applyRadialDamage(req.epicenter, req.radius, req.baseDamage,
-                             req.damageType, req.impactDirection, req.depth);
+            applyRadialDamage(req);
             ++processed;
         }
 
@@ -69,8 +57,14 @@ namespace services
             auto req = std::move(explosionQueue.front());
             explosionQueue.pop_front();
 
-            applyRadialDamage(req.center, req.radius, req.damage,
-                             req.damageType, glm::vec3(0.0f, 1.0f, 0.0f), req.depth);
+            PropagationRequest propReq;
+            propReq.epicenter = req.center;
+            propReq.radius = req.radius;
+            propReq.baseDamage = req.damage;
+            propReq.damageType = req.damageType;
+            propReq.impactDirection = glm::vec3(0.0f, 1.0f, 0.0f);
+            propReq.depth = req.depth;
+            applyRadialDamage(propReq);
             applyExplosionForces(req.center, req.radius, req.force, req.upwardBias);
 
             // Publish explosion notification
@@ -91,13 +85,9 @@ namespace services
         explosionQueue.clear();
     }
 
-    void DamagePropagationManager::applyRadialDamage(const glm::vec3& epicenter, float radius,
-                                                      float baseDamage,
-                                                      components::DamageType damageType,
-                                                      const glm::vec3& impactDir,
-                                                      uint32_t depth)
+    void DamagePropagationManager::applyRadialDamage(const PropagationRequest& request)
     {
-        if (depth + 1 > config.maxPropagationDepth)
+        if (request.depth + 1 > config.maxPropagationDepth)
         {
             return;
         }
@@ -115,23 +105,21 @@ namespace services
             }
 
             const auto& transform = view.get<components::TransformComponent>(entity);
-            float dist = glm::distance(transform.position, epicenter);
+            float dist = glm::distance(transform.position, request.epicenter);
 
-            if (dist > radius || dist < 0.001f)
+            if (dist > request.radius || dist < 0.001f)
             {
                 continue;
             }
 
-            // Linear falloff
-            float falloff = 1.0f - (dist / radius);
-            float actualDamage = baseDamage * falloff;
-
+            float falloff = 1.0f - (dist / request.radius);
+            float actualDamage = request.baseDamage * falloff;
             if (actualDamage < 0.1f)
             {
                 continue;
             }
 
-            glm::vec3 direction = glm::normalize(transform.position - epicenter);
+            glm::vec3 direction = glm::normalize(transform.position - request.epicenter);
 
             EntityHandle handle;
             handle.id = static_cast<uint64_t>(static_cast<uint32_t>(entity));
@@ -139,15 +127,16 @@ namespace services
             ::events::destruction::ApplyDamageCommand cmd;
             cmd.entity = handle;
             cmd.amount = actualDamage;
-            cmd.damageType = damageType;
+            cmd.damageType = request.damageType;
             cmd.impactPoint = transform.position;
             cmd.impactDirection = direction;
-            cmd.propagationDepth = depth + 1;
+            cmd.propagationDepth = request.depth + 1;
             dispatcher.execute(cmd);
         }
 
-        spdlog::debug("Propagation: radial damage at ({:.1f},{:.1f},{:.1f}) radius={:.1f} depth={}",
-                     epicenter.x, epicenter.y, epicenter.z, radius, depth);
+        vfLogDebug("Propagation: radial damage at ({:.1f},{:.1f},{:.1f}) radius={:.1f} depth={}",
+                     request.epicenter.x, request.epicenter.y, request.epicenter.z,
+                     request.radius, request.depth);
     }
 
     void DamagePropagationManager::applyExplosionForces(const glm::vec3& center, float radius,

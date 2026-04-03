@@ -8,18 +8,16 @@
 #include <scene/EntityRegistry.hpp>
 #include <scene/Entity.hpp>
 #include <components/Components.hpp>
-#include <spdlog/spdlog.h>
+#include "DestructionHelpers.hpp"
+#include <print/Log.hpp>
 #include <algorithm>
 
 namespace services
 {
+    using namespace services::destruction_internal;
+
     namespace
     {
-        entt::entity fromHandle(EntityHandle handle)
-        {
-            return static_cast<entt::entity>(static_cast<uint32_t>(handle.id));
-        }
-
         uint64_t assetKeyFromRef(const asset::AssetRef& ref)
         {
             return std::hash<uint64_t>{}(ref.getGUID().getValue());
@@ -108,21 +106,19 @@ namespace services
         }
     }
 
-    void DebrisManager::spawnSingleFragment(const FragmentSpawnRequest& request, uint32_t frameNumber)
+    EntityHandle DebrisManager::createFragmentEntity(const FragmentSpawnRequest& request, uint32_t frameNumber)
     {
         auto& dispatcher = ::events::EventDispatcher::instance();
 
-        // Create entity
         ::events::scene::CreateEntityCommand createCmd;
         createCmd.name = "fragment_" + std::to_string(request.fragmentIndex);
         auto fragmentHandle = dispatcher.execute(createCmd);
 
         if (!fragmentHandle.isValid())
         {
-            return;
+            return fragmentHandle;
         }
 
-        // Set transform
         ::events::scene::SetTransformCommand transformCmd;
         transformCmd.entity = fragmentHandle;
         transformCmd.transform.position = request.position;
@@ -130,7 +126,6 @@ namespace services
         transformCmd.transform.scale = request.scale;
         dispatcher.execute(transformCmd);
 
-        // Set mesh
         ::events::scene::AddMeshComponentCommand meshCmd;
         meshCmd.entity = fragmentHandle;
         dispatcher.execute(meshCmd);
@@ -140,13 +135,11 @@ namespace services
         meshDataCmd.meshData.meshRef = request.fractureAssetRef;
         dispatcher.execute(meshDataCmd);
 
-        // Set material
         ::events::material::SetMaterialDataCommand matCmd;
         matCmd.entity = fragmentHandle;
         matCmd.materialData = request.sourceMaterial;
         dispatcher.execute(matCmd);
 
-        // Add fragment component
         scene::Entity fragEntity(fromHandle(fragmentHandle));
         auto& fragComp = fragEntity.addComponent<components::FragmentComponent>();
         fragComp.sourceEntityId = request.sourceEntityId;
@@ -161,7 +154,19 @@ namespace services
         fragComp.materialType = request.materialType;
         fragComp.collisionAudioRef = request.collisionAudioRef;
 
-        // Add physics
+        return fragmentHandle;
+    }
+
+    void DebrisManager::spawnSingleFragment(const FragmentSpawnRequest& request, uint32_t frameNumber)
+    {
+        auto fragmentHandle = createFragmentEntity(request, frameNumber);
+        if (!fragmentHandle.isValid())
+        {
+            return;
+        }
+
+        auto& dispatcher = ::events::EventDispatcher::instance();
+
         ::events::physics::AddRigidBodyCommand rbCmd;
         rbCmd.entity = fragmentHandle;
         rbCmd.rigidBody.type = types::RigidBodyType::Dynamic;
@@ -174,7 +179,6 @@ namespace services
         rbCmd.collider.collisionLayer = 1;
         dispatcher.execute(rbCmd);
 
-        // Apply impulse
         if (glm::length(request.impulse) > 0.001f)
         {
             ::events::physics::ApplyImpulseCommand impulseCmd;
@@ -235,24 +239,9 @@ namespace services
         }
     }
 
-    void DebrisManager::enforceBudget()
+    std::vector<DebrisManager::EvictionCandidate> DebrisManager::collectEvictionCandidates() const
     {
-        if (activeCount <= config.maxActiveFragments)
-        {
-            return;
-        }
-
         auto& registry = scene::EntityRegistry::getRegistry();
-        auto& dispatcher = ::events::EventDispatcher::instance();
-
-        // Collect sleeping fragments for eviction
-        struct EvictionCandidate
-        {
-            entt::entity entity;
-            float distanceToCamera;
-            uint32_t spawnFrame;
-        };
-
         std::vector<EvictionCandidate> candidates;
 
         auto view = registry.view<components::FragmentComponent>();
@@ -274,6 +263,20 @@ namespace services
                 return a.spawnFrame < b.spawnFrame;
             });
 
+        return candidates;
+    }
+
+    void DebrisManager::enforceBudget()
+    {
+        if (activeCount <= config.maxActiveFragments)
+        {
+            return;
+        }
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto& dispatcher = ::events::EventDispatcher::instance();
+        auto candidates = collectEvictionCandidates();
+
         uint32_t excess = activeCount - config.maxActiveFragments;
         uint32_t removed = 0;
 
@@ -281,12 +284,10 @@ namespace services
         {
             if (removed >= excess) break;
 
-            // Force into fade-out or instant delete if way over budget
             auto& fragment = registry.get<components::FragmentComponent>(candidate.entity);
 
             if (excess > config.maxActiveFragments / 10)
             {
-                // Over 10% budget: instant delete
                 EntityHandle handle;
                 handle.id = static_cast<uint64_t>(static_cast<uint32_t>(candidate.entity));
 
@@ -343,17 +344,11 @@ namespace services
             dispatcher.execute(transformCmd);
         }
 
-        // Remove fully faded fragments
         for (auto entity : toRemove)
         {
             EntityHandle handle;
             handle.id = static_cast<uint64_t>(static_cast<uint32_t>(entity));
 
-            // Try to pool
-            auto& fragment = registry.get<components::FragmentComponent>(entity);
-            uint64_t assetKey = 0; // simplified — could derive from mesh component
-
-            // Delete for now (pooling requires deactivation logic)
             ::events::scene::DeleteEntityCommand deleteCmd;
             deleteCmd.entity = handle;
             dispatcher.execute(deleteCmd);

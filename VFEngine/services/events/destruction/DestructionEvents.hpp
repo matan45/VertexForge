@@ -9,6 +9,15 @@
 
 namespace events::destruction {
 
+    struct DamageParams
+    {
+        float amount = 0.0f;
+        components::DamageType damageType = components::DamageType::Any;
+        glm::vec3 impactPoint{0.0f};
+        glm::vec3 impactDirection{0.0f};
+        uint32_t propagationDepth = 0;
+    };
+
     // ============================================
     // Commands
     // ============================================
