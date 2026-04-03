@@ -2,6 +2,8 @@
 #include "Mesh.hpp"
 #include "MeshLODGenerator.hpp"
 #include "MeshSerializer.hpp"
+#include "FractureProcessor.hpp"
+#include "asset/AssetMetadataSerializer.hpp"
 #include "config/Config.hpp"
 #include "resource/EndianUtils.hpp"
 #include "resource/VertexQuantization.hpp"
@@ -374,6 +376,11 @@ namespace types
 
         saveToFileStreamingWithLOD(location, fileName, scene, file.config, progressCallback);
 
+        if (file.config.meshConfig.fractureConfig.generateFractureData)
+        {
+            generateAndSaveFracturedMesh(location, fileName, scene, file.config, progressCallback);
+        }
+
         if (progressCallback) progressCallback(1.0f);
     }
 
@@ -464,5 +471,121 @@ namespace types
 
         outFile.close();
         vfLogDebug("Mesh with LOD, meshlets and skeleton reference saved to: {}", newFileLocation.string());
+    }
+
+    void Mesh::generateAndSaveFracturedMesh(std::string_view location, std::string_view fileName,
+                                             const aiScene* scene, const importConfig::ImportConfig& config,
+                                             MeshProgressCallback progressCallback) const
+    {
+        if (!scene || scene->mNumMeshes == 0)
+        {
+            return;
+        }
+
+        vfLogInfo("Generating fracture data for mesh: {}", fileName);
+
+        // Build LOD0 mesh data from first submesh for fracture input
+        ExtractedSkeleton skeleton = extractSkeleton(scene);
+        LODMeshData lod0 = convertAssimpMesh(scene->mMeshes[0], skeleton);
+
+        resource::MeshData inputMesh;
+        inputMesh.name = std::string(fileName);
+        resource::LODLevel lodLevel;
+        lodLevel.vertices = std::move(lod0.vertices);
+        lodLevel.indices = std::move(lod0.indices);
+        inputMesh.lodLevels.push_back(std::move(lodLevel));
+
+        // Run fracture processor
+        auto fractureResult = FractureProcessor::process(
+            inputMesh,
+            config.meshConfig.fractureConfig,
+            [&](float progress, std::string_view stage)
+            {
+                if (progressCallback)
+                {
+                    progressCallback(0.85f + progress * 0.1f);
+                }
+            });
+
+        if (!fractureResult.success)
+        {
+            vfLogWarning("Fracture generation failed for {}: {}", fileName, fractureResult.errorMessage);
+            return;
+        }
+
+        // Write fractured mesh file
+        std::filesystem::path fracturedPath = std::filesystem::path(location) /
+            (std::string(fileName) + "_fractured." + FileExtension::mesh);
+
+        std::ofstream outFile(fracturedPath, std::ios::binary);
+        if (!outFile.is_open())
+        {
+            vfLogError("Failed to open fractured mesh file for writing: {}", fracturedPath.string());
+            return;
+        }
+
+        MeshSerializer serializer;
+        MeshLODGenerator lodGen;
+
+        // Write header
+        uint32_t numFragments = static_cast<uint32_t>(fractureResult.fragmentMeshes.meshes.size());
+        writeFileHeader(outFile, numFragments);
+
+        // Write each fragment as a submesh
+        for (uint32_t i = 0; i < numFragments; ++i)
+        {
+            const auto& fragMesh = fractureResult.fragmentMeshes.meshes[i];
+            if (fragMesh.lodLevels.empty() || fragMesh.lodLevels[0].vertices.empty())
+            {
+                continue;
+            }
+
+            // Write submesh name header
+            std::string fragName = fragMesh.name.empty() ? "fragment_" + std::to_string(i) : fragMesh.name;
+            uint32_t nameLen = static_cast<uint32_t>(fragName.size());
+            resource::endian::writeLE<uint32_t>(outFile, nameLen);
+            outFile.write(fragName.data(), nameLen);
+
+            // Convert to LODMeshData for LOD generation
+            LODMeshData fragLod0;
+            fragLod0.vertices = fragMesh.lodLevels[0].vertices;
+            fragLod0.indices = fragMesh.lodLevels[0].indices;
+
+            // Generate LOD levels
+            auto lodLevels = lodGen.generateLODLevels(fragLod0);
+
+            // Write compressed LOD data
+            for (uint32_t lod = 0; lod < resource::LOD_LEVEL_COUNT; ++lod)
+            {
+                serializer.writeLODLevelCompressed(outFile, lodLevels[lod]);
+            }
+
+            // Build and write meshlets for all LODs as array
+            std::array<MeshletBuildResult, resource::LOD_LEVEL_COUNT> meshletResults;
+            for (uint32_t lod = 0; lod < resource::LOD_LEVEL_COUNT; ++lod)
+            {
+                meshletResults[lod] = lodGen.buildMeshletsForLOD(lodLevels[lod]);
+            }
+            serializer.writeMeshletData(outFile, meshletResults);
+
+            // Write per-fragment convex hull as decomposition data
+            resource::ConvexDecompositionData convexData;
+            serializer.writeConvexDecompositionData(outFile, convexData);
+        }
+
+        // Write empty skeleton (fragments don't have skinning)
+        ExtractedSkeleton emptySkeleton;
+        serializer.writeSkeletonData(outFile, emptySkeleton);
+
+        outFile.close();
+
+        // Write .vfmeta with fracture metadata
+        asset::AssetMetadata meta;
+        meta.type = resource::AssetType::Mesh;
+        meta.fractureData = fractureResult.metadata;
+        auto metaPath = asset::AssetMetadataSerializer::getMetaPath(fracturedPath);
+        asset::AssetMetadataSerializer::save(meta, metaPath);
+
+        vfLogInfo("Fractured mesh saved: {} ({} fragments)", fracturedPath.string(), numFragments);
     }
 }

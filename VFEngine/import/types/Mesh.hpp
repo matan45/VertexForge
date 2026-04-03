@@ -53,6 +53,10 @@ namespace types
                                         const aiScene* scene, const importConfig::ImportConfig& config,
                                         MeshProgressCallback progressCallback) const;
 
+        void generateAndSaveFracturedMesh(std::string_view location, std::string_view fileName,
+                                          const aiScene* scene, const importConfig::ImportConfig& config,
+                                          MeshProgressCallback progressCallback) const;
+
         ExtractedSkeleton extractSkeleton(const aiScene* scene) const;
         LODMeshData convertAssimpMesh(const aiMesh* assimpMesh, const ExtractedSkeleton& skeleton) const;
     };

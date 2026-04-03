@@ -63,6 +63,24 @@ namespace importConfig
         Custom     // User-defined parameters
     };
 
+    enum class FractureSeedDistribution : uint8_t
+    {
+        Uniform,
+        Clustered
+    };
+
+    struct FractureImportConfig
+    {
+        bool generateFractureData = false;
+        uint32_t fragmentCount = 10;
+        FractureSeedDistribution seedDistribution = FractureSeedDistribution::Uniform;
+        uint32_t randomSeed = 42;
+        float innerUVScale = 1.0f;
+        bool generateConvexHulls = true;
+        uint32_t clusterCount = 3;
+        float clusterRadius = 0.2f;
+    };
+
     // Mesh-specific import settings for V-HACD convex decomposition
     struct MeshImportConfig
     {
@@ -76,6 +94,8 @@ namespace importConfig
         float minVolumePercentError = 1.0f;
         uint32_t maxRecursionDepth = 10;
         bool shrinkWrap = true;  // Snap hull vertices to original mesh surface
+
+        FractureImportConfig fractureConfig;
     };
 
     // Audio compression quality for Vorbis encoding
