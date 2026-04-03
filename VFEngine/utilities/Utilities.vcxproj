@@ -183,12 +183,15 @@
     <ClInclude Include="resource\AudioResource.hpp" />
     <ClInclude Include="resource\BC7Decoder.hpp" />
     <ClInclude Include="resource\BC7Encoder.hpp" />
+    <ClInclude Include="resource\CancellationToken.hpp" />
     <ClInclude Include="resource\ConvexHullTypes.hpp" />
     <ClInclude Include="resource\EndianUtils.hpp" />
     <ClInclude Include="resource\FontResource.hpp" />
     <ClInclude Include="resource\MeshStreamHandle.hpp" />
     <ClInclude Include="resource\MeshletTypes.hpp" />
     <ClInclude Include="resource\PathResolver.hpp" />
+    <ClInclude Include="resource\ResourceLoadScheduler.hpp" />
+    <ClInclude Include="resource\ResourceLoadTypes.hpp" />
     <ClInclude Include="resource\ResourceManager.hpp" />
     <ClInclude Include="resource\ShaderBinaryFormat.hpp" />
     <ClInclude Include="resource\ShaderResource.hpp" />
@@ -283,6 +286,7 @@
     <ClCompile Include="resource\MeshStreamHandleParse.cpp" />
     <ClCompile Include="resource\MeshStreamHandleRead.cpp" />
     <ClCompile Include="resource\PathResolver.cpp" />
+    <ClCompile Include="resource\ResourceLoadScheduler.cpp" />
     <ClCompile Include="resource\ResourceManager.cpp" />
     <ClCompile Include="resource\ShaderResource.cpp" />
     <ClCompile Include="resource\TextureResource.cpp" />

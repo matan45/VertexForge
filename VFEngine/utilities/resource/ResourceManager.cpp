@@ -1,4 +1,5 @@
 #include "ResourceManager.hpp"
+#include "ResourceLoadScheduler.hpp"
 #include "../print/Log.hpp"
 #include "TextureResource.hpp"
 #include "AudioResource.hpp"
@@ -157,7 +158,7 @@ namespace resource
         return headerType;
     }
 
-    std::future<std::shared_ptr<TextureData>> ResourceManager::loadTextureAsync(const asset::AssetRef& ref)
+    std::future<std::shared_ptr<TextureData>> ResourceManager::loadTextureAsync(const asset::AssetRef& ref, const LoadHint& hint, CancellationToken::Ptr cancellation)
     {
         return loadResourceAsync<TextureData>(
             ref,
@@ -171,10 +172,11 @@ namespace resource
                     total += mip.data.size();
                 }
                 return total;
-            });
+            },
+            hint, std::move(cancellation));
     }
 
-    std::future<std::shared_ptr<HDRData>> ResourceManager::loadHDRAsync(const asset::AssetRef& ref)
+    std::future<std::shared_ptr<HDRData>> ResourceManager::loadHDRAsync(const asset::AssetRef& ref, const LoadHint& hint, CancellationToken::Ptr cancellation)
     {
         return loadResourceAsync<HDRData>(
             ref,
@@ -184,10 +186,11 @@ namespace resource
             AssetType::HDR,
             [](const HDRData& hdr) -> size_t {
                 return hdr.getDataSize();
-            });
+            },
+            hint, std::move(cancellation));
     }
 
-    std::future<std::shared_ptr<AudioData>> ResourceManager::loadAudioAsync(const asset::AssetRef& ref)
+    std::future<std::shared_ptr<AudioData>> ResourceManager::loadAudioAsync(const asset::AssetRef& ref, const LoadHint& hint, CancellationToken::Ptr cancellation)
     {
         return loadResourceAsync<AudioData>(
             ref,
@@ -197,10 +200,11 @@ namespace resource
             AssetType::Audio,
             [](const AudioData& audio) -> size_t {
                 return audio.data.size() * sizeof(short);
-            });
+            },
+            hint, std::move(cancellation));
     }
 
-    std::future<std::shared_ptr<MeshesData>> ResourceManager::loadMeshAsync(const asset::AssetRef& ref)
+    std::future<std::shared_ptr<MeshesData>> ResourceManager::loadMeshAsync(const asset::AssetRef& ref, const LoadHint& hint, CancellationToken::Ptr cancellation)
     {
         return loadResourceAsync<MeshesData>(
             ref,
@@ -219,7 +223,8 @@ namespace resource
                     }
                 }
                 return total;
-            });
+            },
+            hint, std::move(cancellation));
     }
 
     std::future<std::shared_ptr<std::vector<ShaderModel>>> ResourceManager::loadShaderAsync(std::string_view path)
@@ -273,24 +278,28 @@ namespace resource
         return std::async(std::launch::deferred, [sf = std::move(sharedFuture)]() mutable { return sf.get(); });
     }
 
-    std::future<std::shared_ptr<FontData>> ResourceManager::loadFontAsync(const asset::AssetRef& ref)
+    std::future<std::shared_ptr<FontData>> ResourceManager::loadFontAsync(const asset::AssetRef& ref, const LoadHint& hint, CancellationToken::Ptr cancellation)
     {
         return loadResourceAsync<FontData>(
             ref,
             fontCache,
             pendingFontLoads,
             [](const std::string& p) { return FontResource::loadFont(p); },
-            AssetType::Font);
+            AssetType::Font,
+            nullptr,
+            hint, std::move(cancellation));
     }
 
-    std::future<std::shared_ptr<AnimationData>> ResourceManager::loadAnimationAsync(const asset::AssetRef& ref)
+    std::future<std::shared_ptr<AnimationData>> ResourceManager::loadAnimationAsync(const asset::AssetRef& ref, const LoadHint& hint, CancellationToken::Ptr cancellation)
     {
         return loadResourceAsync<AnimationData>(
             ref,
             animationCache,
             pendingAnimationLoads,
             [](const std::string& p) { return AnimationResource::loadAnimation(p); },
-            AssetType::Animation);
+            AssetType::Animation,
+            nullptr,
+            hint, std::move(cancellation));
     }
 
     void ResourceManager::init()
@@ -298,12 +307,14 @@ namespace resource
         running = true;
         shuttingDown = false;
         pendingAsyncOps = 0;
+        ResourceLoadScheduler::instance().init();
         cleanupThread = std::jthread(&ResourceManager::periodicCleanup);
     }
 
     void ResourceManager::cleanUp()
     {
         shuttingDown.store(true, std::memory_order_release);
+        ResourceLoadScheduler::instance().shutdown();
 
         // Wait for in-flight async operations to complete (with timeout)
         constexpr int maxWaitMs = 5000;

@@ -165,6 +165,7 @@
     <ClInclude Include="events\render\RenderEvents.hpp" />
     <ClInclude Include="events\render\RenderHookEvents.hpp" />
     <ClInclude Include="events\render\RenderTextureEvents.hpp" />
+    <ClInclude Include="events\resource\ResourceSchedulerEvents.hpp" />
     <ClInclude Include="events\save\ConfigEvents.hpp" />
     <ClInclude Include="events\save\SaveEvents.hpp" />
     <ClInclude Include="events\scene\ComponentMediaEvents.hpp" />
