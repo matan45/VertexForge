@@ -167,6 +167,21 @@ namespace services
 
         auto& dispatcher = ::events::EventDispatcher::instance();
 
+        // Add ECS components for collider and rigid body
+        scene::Entity fragEntity(fromHandle(fragmentHandle));
+
+        auto& colliderComp = fragEntity.addComponent<components::ColliderComponent>();
+        colliderComp.shape = components::ColliderShape::Box;
+        colliderComp.size = glm::vec3(0.2f);
+        colliderComp.collisionLayer = 1;
+
+        auto& rbComp = fragEntity.addComponent<components::RigidBodyComponent>();
+        rbComp.type = components::RigidBodyType::Dynamic;
+        rbComp.mass = request.mass;
+        rbComp.linearDamping = 0.5f;
+        rbComp.angularDamping = 0.5f;
+
+        // Create the physics body via the physics service
         ::events::physics::AddRigidBodyCommand rbCmd;
         rbCmd.entity = fragmentHandle;
         rbCmd.rigidBody.type = types::RigidBodyType::Dynamic;
@@ -174,8 +189,8 @@ namespace services
         rbCmd.rigidBody.linearDamping = 0.5f;
         rbCmd.rigidBody.angularDamping = 0.5f;
         rbCmd.rigidBody.activateOnAdd = true;
-        rbCmd.collider.shape = types::ColliderShape::ConvexMesh;
-        rbCmd.collider.meshPath = request.fractureAssetRef.resolve();
+        rbCmd.collider.shape = types::ColliderShape::Box;
+        rbCmd.collider.size = glm::vec3(0.2f);
         rbCmd.collider.collisionLayer = 1;
         dispatcher.execute(rbCmd);
 
