@@ -378,7 +378,14 @@ namespace types
 
         if (file.config.meshConfig.fractureConfig.generateFractureData)
         {
-            generateAndSaveFracturedMesh(location, fileName, scene, file.config, progressCallback);
+            try
+            {
+                generateAndSaveFracturedMesh(location, fileName, scene, file.config, progressCallback);
+            }
+            catch (const std::exception& e)
+            {
+                vfLogError("Fracture generation crashed for {}: {}", fileName, e.what());
+            }
         }
 
         if (progressCallback) progressCallback(1.0f);
@@ -488,11 +495,16 @@ namespace types
         ExtractedSkeleton skeleton = extractSkeleton(scene);
         LODMeshData lod0 = convertAssimpMesh(scene->mMeshes[0], skeleton);
 
+        if (lod0.vertices.size() < 4 || lod0.indices.size() < 12)
+        {
+            return;
+        }
+
         resource::MeshData inputMesh;
         inputMesh.name = std::string(fileName);
         resource::LODLevel lodLevel;
-        lodLevel.vertices = std::move(lod0.vertices);
-        lodLevel.indices = std::move(lod0.indices);
+        lodLevel.vertices = lod0.vertices;
+        lodLevel.indices = lod0.indices;
         inputMesh.lodLevels.push_back(std::move(lodLevel));
 
         // Run fracture processor
@@ -535,16 +547,21 @@ namespace types
         for (uint32_t i = 0; i < numFragments; ++i)
         {
             const auto& fragMesh = fractureResult.fragmentMeshes.meshes[i];
-            if (fragMesh.lodLevels.empty() || fragMesh.lodLevels[0].vertices.empty())
+            if (fragMesh.lodLevels.empty() || fragMesh.lodLevels[0].vertices.size() < 3 ||
+                fragMesh.lodLevels[0].indices.size() < 3)
             {
                 continue;
             }
 
-            // Write submesh name header
+            // Write submesh header (name + LOD count)
             std::string fragName = fragMesh.name.empty() ? "fragment_" + std::to_string(i) : fragMesh.name;
             uint32_t nameLen = static_cast<uint32_t>(fragName.size());
             resource::endian::writeLE<uint32_t>(outFile, nameLen);
-            outFile.write(fragName.data(), nameLen);
+            if (nameLen > 0)
+            {
+                outFile.write(fragName.data(), nameLen);
+            }
+            resource::endian::writeLE<uint32_t>(outFile, resource::LOD_LEVEL_COUNT);
 
             // Convert to LODMeshData for LOD generation
             LODMeshData fragLod0;

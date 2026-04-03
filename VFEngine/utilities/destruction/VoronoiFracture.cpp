@@ -205,7 +205,8 @@ namespace destruction
         std::vector<uint32_t>& currentIndices,
         std::vector<PlaneClipInfo>& clipInfos,
         const std::vector<glm::vec3>& seeds,
-        uint32_t cellIndex)
+        uint32_t cellIndex,
+        float innerUVScale)
     {
         const glm::vec3& cellSeed = seeds[cellIndex];
 
@@ -237,11 +238,15 @@ namespace destruction
                 break;
             }
 
-            if (!clipResult.cutEdges.empty())
-                clipInfos.push_back({plane, std::move(clipResult.cutEdges), j});
-
+            // Cap the cut face NOW while vertex indices are still valid
             currentVertices = std::move(clipResult.vertices);
             currentIndices = std::move(clipResult.indices);
+
+            if (!clipResult.cutEdges.empty())
+            {
+                capCutFace(currentVertices, currentIndices,
+                           clipResult.cutEdges, plane, innerUVScale);
+            }
         }
     }
 
@@ -259,14 +264,10 @@ namespace destruction
         std::vector<uint32_t> currentIndices = indices;
         std::vector<PlaneClipInfo> clipInfos;
 
-        clipMeshToVoronoiCell(currentVertices, currentIndices, clipInfos, seeds, cellIndex);
+        clipMeshToVoronoiCell(currentVertices, currentIndices, clipInfos, seeds, cellIndex, config.innerUVScale);
 
         if (currentVertices.empty() || currentIndices.size() < 3)
             return fragment;
-
-        for (const auto& clipInfo : clipInfos)
-            capCutFace(currentVertices, currentIndices,
-                       clipInfo.cutEdges, clipInfo.plane, config.innerUVScale);
 
         resource::LODLevel lod0;
         lod0.vertices = std::move(currentVertices);
@@ -392,13 +393,17 @@ namespace destruction
             uint32_t current = startVertex;
             uint32_t prev = UINT32_MAX;
 
-            while (true)
+            uint32_t maxSteps = static_cast<uint32_t>(adjacency.size()) + 1;
+            uint32_t steps = 0;
+            while (steps++ < maxSteps)
             {
                 if (visited.count(current) && !loop.empty()) break;
                 visited.insert(current);
                 loop.push_back(current);
 
-                const auto& neighbors = adjacency[current];
+                auto it = adjacency.find(current);
+                if (it == adjacency.end()) break;
+                const auto& neighbors = it->second;
                 uint32_t next = UINT32_MAX;
                 for (uint32_t n : neighbors)
                     if (n != prev) { next = n; break; }

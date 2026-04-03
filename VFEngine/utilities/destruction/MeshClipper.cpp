@@ -15,7 +15,9 @@ namespace destruction
     {
         resource::Vertex result;
         result.position = glm::mix(a.position, b.position, t);
-        result.normal = glm::normalize(glm::mix(a.normal, b.normal, t));
+        glm::vec3 mixedNormal = glm::mix(a.normal, b.normal, t);
+        float len = glm::length(mixedNormal);
+        result.normal = (len > 1e-7f) ? mixedNormal / len : a.normal;
         result.texCoords = glm::mix(a.texCoords, b.texCoords, t);
         result.boneIndices = a.boneIndices;
         result.boneWeights = glm::mix(a.boneWeights, b.boneWeights, t);
@@ -99,9 +101,11 @@ namespace destruction
         ClipContext& ctx,
         const std::vector<uint32_t>& indices)
     {
+        size_t vertCount = ctx.vertices.size();
         for (size_t i = 0; i + 2 < indices.size(); i += 3)
         {
             uint32_t i0 = indices[i], i1 = indices[i + 1], i2 = indices[i + 2];
+            if (i0 >= vertCount || i1 >= vertCount || i2 >= vertCount) continue;
             bool p0 = ctx.distances[i0] > -EPSILON;
             bool p1 = ctx.distances[i1] > -EPSILON;
             bool p2 = ctx.distances[i2] > -EPSILON;

@@ -84,7 +84,8 @@ namespace destruction
             std::vector<uint32_t>& currentIndices,
             std::vector<PlaneClipInfo>& clipInfos,
             const std::vector<glm::vec3>& seeds,
-            uint32_t cellIndex);
+            uint32_t cellIndex,
+            float innerUVScale);
 
         static std::vector<std::vector<uint32_t>> buildEdgeLoops(
             const std::vector<std::pair<uint32_t, uint32_t>>& cutEdges);

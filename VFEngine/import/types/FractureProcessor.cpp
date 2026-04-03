@@ -41,7 +41,7 @@ namespace types
             };
 
             return destruction::VoronoiFracture::fracture(
-                inputMesh, fractureConfig, fractureCallback, cancelFlag);
+                inputMesh, fractureConfig, nullptr, cancelFlag);
         }
 
         asset::FractureMetadata buildFractureMetadata(
@@ -121,7 +121,7 @@ namespace types
 
             destruction::FragmentHullConfig hullConfig;
             hullConfig.maxVerticesPerHull = 32;
-            hullConfig.resolution = 50000;
+            hullConfig.resolution = 10000;
             destruction::ConvexHullGenerator::generateBatch(fractureResult.fragments, hullConfig);
         }
 
