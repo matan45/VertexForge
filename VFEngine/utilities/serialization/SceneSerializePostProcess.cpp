@@ -116,6 +116,7 @@ namespace serialization
         {
             return {
                 {"enabled", s.enabled},
+                {"quality", static_cast<int>(s.quality)},
                 {"radius", s.radius},
                 {"bias", s.bias},
                 {"intensity", s.intensity},
@@ -374,6 +375,11 @@ namespace serialization
             const auto& ao = j["ssao"];
             if (ao.contains("enabled") && ao["enabled"].is_boolean())
                 s.enabled = ao["enabled"].get<bool>();
+            if (ao.contains("quality") && ao["quality"].is_number_integer())
+            {
+                int q = std::clamp(ao["quality"].get<int>(), 0, 3);
+                s.quality = static_cast<postprocess::SSAOQuality>(q);
+            }
             if (ao.contains("radius") && ao["radius"].is_number())
                 s.radius = std::clamp(ao["radius"].get<float>(), 0.1f, 5.0f);
             if (ao.contains("bias") && ao["bias"].is_number())

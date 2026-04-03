@@ -94,7 +94,12 @@ void main()
     float bias = ssao.params.y;
 
     float occlusion = 0.0;
-    int samples = min(ssao.kernelSize, 64);
+    int baseSamples = min(ssao.kernelSize, 64);
+
+    // Distance-based sample reduction: fewer samples for distant pixels where SSAO detail is less visible
+    float linearDepth = linearizeDepth(depth);
+    float distanceFactor = clamp(linearDepth / ssao.farPlane, 0.0, 1.0);
+    int samples = max(8, int(float(baseSamples) * (1.0 - distanceFactor * 0.5)));
 
     for (int i = 0; i < samples; ++i)
     {
