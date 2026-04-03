@@ -133,6 +133,7 @@ namespace services
         ::events::scene::SetMeshDataCommand meshDataCmd;
         meshDataCmd.entity = fragmentHandle;
         meshDataCmd.meshData.meshRef = request.fractureAssetRef;
+        meshDataCmd.meshData.submeshIndex = static_cast<int32_t>(request.fragmentIndex);
         dispatcher.execute(meshDataCmd);
 
         ::events::material::SetMaterialDataCommand matCmd;

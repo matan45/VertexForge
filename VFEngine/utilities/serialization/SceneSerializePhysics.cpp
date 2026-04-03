@@ -466,6 +466,7 @@ namespace serialization
         j["maxHealth"] = d.maxHealth;
         j["destructionThreshold"] = d.destructionThreshold;
         writeAssetRef(j, "fractureAssetRef", d.fractureAssetRef);
+        j["fragmentCount"] = d.fragmentCount;
         j["mode"] = static_cast<int>(d.mode);
         j["damageFilter"] = static_cast<int>(d.damageFilter);
         j["fragmentMassTotal"] = d.fragmentMassTotal;
@@ -490,6 +491,8 @@ namespace serialization
         if (auto it = j.find("destructionThreshold"); it != j.end() && it->is_number())
             d.destructionThreshold = it->get<float>();
         d.fractureAssetRef = readAssetRef(j, "fractureAssetRef");
+        if (auto it = j.find("fragmentCount"); it != j.end() && it->is_number())
+            d.fragmentCount = it->get<uint32_t>();
         if (auto it = j.find("mode"); it != j.end() && it->is_number())
             d.mode = static_cast<components::DestructionMode>(it->get<int>());
         if (auto it = j.find("damageFilter"); it != j.end() && it->is_number())

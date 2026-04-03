@@ -309,6 +309,10 @@ namespace render::gpudriven
 
             for (uint32_t subIdx = 0; subIdx < meshInfo.submeshCount; ++subIdx)
             {
+                if (meshRender.submeshIndex >= 0 &&
+                    subIdx != static_cast<uint32_t>(meshRender.submeshIndex))
+                    continue;
+
                 const auto& submeshLoc = allSubmeshLocations[meshInfo.firstSubmeshIndex + subIdx];
                 if (!submeshLoc.hasRenderableLOD()) continue;
 

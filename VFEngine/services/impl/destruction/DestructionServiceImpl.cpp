@@ -14,6 +14,7 @@
 #include <scene/Entity.hpp>
 #include <scene/EntityRegistry.hpp>
 #include <components/Components.hpp>
+#include <asset/AssetRef.hpp>
 #include "DestructionHelpers.hpp"
 #include <print/Log.hpp>
 #include <algorithm>
@@ -146,6 +147,7 @@ namespace services
         if (destructible.isDestroyed) return;
 
         if (destructible.damageFilter != components::DamageType::Any &&
+            type != components::DamageType::Any &&
             destructible.damageFilter != type)
             return;
 
@@ -258,7 +260,9 @@ namespace services
         const glm::vec3& fragmentDir, float force) const
     {
         constexpr uint32_t maxFragments = 100;
-        uint32_t fragmentCount = std::min(maxFragments, static_cast<uint32_t>(10));
+        uint32_t fragmentCount = destructible.fragmentCount > 0
+            ? std::min(maxFragments, destructible.fragmentCount)
+            : 1;
         float massPerFragment = destructible.fragmentMassTotal / static_cast<float>(fragmentCount);
 
         std::vector<FragmentSpawnRequest> requests;
@@ -322,6 +326,11 @@ namespace services
             propReq.depth = propagationDepth;
             propagationManager->queuePropagation(propReq);
         }
+        // Remove physics body before deleting entity
+        ::events::physics::RemoveRigidBodyCommand removeRbCmd;
+        removeRbCmd.entity = entity;
+        dispatcher.execute(removeRbCmd);
+
         ::events::scene::DeleteEntityCommand deleteCmd;
         deleteCmd.entity = entity;
         dispatcher.execute(deleteCmd);

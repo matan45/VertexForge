@@ -983,6 +983,7 @@ namespace services
         data.maxHealth = comp.maxHealth;
         data.destructionThreshold = comp.destructionThreshold;
         data.fractureAssetRef = comp.fractureAssetRef;
+        data.fragmentCount = comp.fragmentCount;
         data.mode = comp.mode;
         data.damageFilter = comp.damageFilter;
         data.fragmentMassTotal = comp.fragmentMassTotal;
@@ -1018,6 +1019,7 @@ namespace services
         comp.currentHealth = data.maxHealth;
         comp.destructionThreshold = data.destructionThreshold;
         comp.fractureAssetRef = data.fractureAssetRef;
+        comp.fragmentCount = data.fragmentCount;
         comp.mode = data.mode;
         comp.damageFilter = data.damageFilter;
         comp.fragmentMassTotal = data.fragmentMassTotal;

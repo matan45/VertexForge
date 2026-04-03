@@ -33,6 +33,7 @@ namespace components
         float currentHealth = 100.0f;
         float destructionThreshold = 0.0f;
         asset::AssetRef fractureAssetRef;
+        uint32_t fragmentCount = 0;
         DestructionMode mode = DestructionMode::OneShot;
         DamageType damageFilter = DamageType::Any;
         float fragmentMassTotal = 1.0f;

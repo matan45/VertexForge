@@ -3,6 +3,7 @@
 
 #include <TaskScheduler.h>
 #include <algorithm>
+#include <atomic>
 #include <thread>
 #include <mutex>
 #include <vector>
@@ -13,6 +14,7 @@ namespace threading {
 		enki::TaskScheduler scheduler;
 		std::mutex pendingMutex;
 		std::vector<std::unique_ptr<enki::TaskSet>> pendingTasks;
+		std::atomic<bool> initialized{false};
 
 		void collectCompleted()
 		{
@@ -45,6 +47,7 @@ namespace threading {
 		config.numTaskThreadsToCreate = threadCount;
 		config.numExternalTaskThreads = maxExternalThreads;
 		pImpl->scheduler.Initialize(config);
+		pImpl->initialized.store(true, std::memory_order_release);
 		vfLogInfo("JobSystem initialized with {} threads, {} external slots",
 			pImpl->scheduler.GetNumTaskThreads(), maxExternalThreads);
 	}
@@ -115,6 +118,11 @@ namespace threading {
 
 	void JobSystem::submitTask(std::function<void()> func, JobPriority priority)
 	{
+		if (!pImpl->initialized.load(std::memory_order_acquire)) {
+			func();
+			return;
+		}
+
 		if (pImpl->scheduler.GetThreadNum() == enki::NO_THREAD_NUM) {
 			if (!pImpl->scheduler.RegisterExternalTaskThread()) {
 				vfLogError("[JobSystem] Failed to register external thread - all {} external slots exhausted. "

@@ -134,6 +134,7 @@ namespace controllers::offscreen
             rd.albedo = glm::vec4(1.0f); rd.metallic = 0.0f; rd.roughness = 0.5f; rd.ao = 1.0f; rd.emission = 0.0f;
             rd.showBoundingBox = (!ctx.playModeActive && ctx.showDebugRendering) ? meshComp.showBoundingBox : false;
             rd.maxDrawDistance = meshComp.maxDrawDistance;
+            rd.submeshIndex = meshComp.submeshIndex;
 
             if (registry.all_of<components::TransformComponent>(entity))
                 rd.isStatic = registry.get<components::TransformComponent>(entity).isStatic;

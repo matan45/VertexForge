@@ -58,6 +58,7 @@ namespace services
         bool showBoundingBox = false;
         bool applyRootMotion = false;
         float maxDrawDistance = 0.0f; // 0 = use category default from render config
+        int32_t submeshIndex = -1; // -1 = all, >= 0 = only this submesh
     };
 
     struct MeshBoundingBox
@@ -661,6 +662,7 @@ namespace services
         float maxHealth = 100.0f;
         float destructionThreshold = 0.0f;
         asset::AssetRef fractureAssetRef;
+        uint32_t fragmentCount = 0;
         components::DestructionMode mode = components::DestructionMode::OneShot;
         components::DamageType damageFilter = components::DamageType::Any;
         float fragmentMassTotal = 1.0f;

@@ -2,7 +2,9 @@
 #include "events/EventDispatcher.hpp"
 #include "events/scene/ComponentPhysicsLightEvents.hpp"
 #include "asset/AssetRef.hpp"
+#include "asset/AssetMetadataSerializer.hpp"
 #include "nfd/FileDialog.hpp"
+#include <filesystem>
 #include <imgui.h>
 
 namespace windows::details
@@ -168,7 +170,31 @@ namespace windows::details
         ImGui::Separator();
 
         NfdFilter meshFilters = {{L"VF Mesh (*.vfMesh)", L"*.vfMesh"}};
-        changed |= drawAssetField("Fracture Mesh", "fractureRef", data.fractureAssetRef, meshFilters);
+        bool fractureRefChanged = drawAssetField("Fracture Mesh", "fractureRef", data.fractureAssetRef, meshFilters);
+        if (fractureRefChanged)
+        {
+            // Auto-detect fragment count from .vfmeta
+            if (data.fractureAssetRef.isValid())
+            {
+                std::string meshPath = data.fractureAssetRef.resolve();
+                auto metaPath = std::filesystem::path(meshPath).string() + ".vfmeta";
+                auto meta = asset::AssetMetadataSerializer::load(metaPath);
+                if (meta && meta->fractureData)
+                    data.fragmentCount = meta->fractureData->fragmentCount;
+            }
+            else
+            {
+                data.fragmentCount = 0;
+            }
+        }
+        changed |= fractureRefChanged;
+
+        int fragCount = static_cast<int>(data.fragmentCount);
+        if (ImGui::InputInt("Fragment Count", &fragCount, 1, 5))
+        {
+            data.fragmentCount = static_cast<uint32_t>(std::max(0, fragCount));
+            changed = true;
+        }
 
         if (ImGui::DragFloat("Fragment Mass", &data.fragmentMassTotal, 0.1f, 0.1f, 100.0f))
             changed = true;
