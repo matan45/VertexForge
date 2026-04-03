@@ -170,7 +170,7 @@ namespace render::billboard
         atlasTexture.reset();
 
         atlasTexture = std::make_unique<core::Texture>(device);
-        atlasTexture->loadTextureFromFile(atlasPath, vk::Format::eR8G8B8A8Unorm, false);
+        atlasTexture->loadTextureFromFile(atlasPath, vk::Format::eR8G8B8A8Srgb, false);
 
         atlasLoaded = true;
         const auto& imgData = atlasTexture->getImageData();
