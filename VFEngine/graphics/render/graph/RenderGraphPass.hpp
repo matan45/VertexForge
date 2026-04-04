@@ -34,11 +34,17 @@ namespace render::graph
     public:
         PassBuilder(RenderGraph& graph, PassNode& node);
 
-        // Read a resource produced by a previous pass
+        // Read a resource produced by a previous pass (graph inserts barrier)
         void read(ResourceHandle handle, ResourceUsage usage);
 
-        // Write to a resource (bumps version on the resource)
+        // Write to a resource (graph inserts barrier, bumps version)
         ResourceHandle write(ResourceHandle handle, ResourceUsage usage);
+
+        // Declare that an opaque pass leaves a resource in a specific layout.
+        // The graph updates its tracker but does NOT insert a barrier.
+        // Use this for passes that manage their own barriers internally.
+        void opaqueRead(ResourceHandle handle, ResourceUsage usage);
+        ResourceHandle opaqueWrite(ResourceHandle handle, ResourceUsage usage);
 
         // Create a new transient resource and write to it
         ResourceHandle create(const ImageResourceDesc& desc, ResourceUsage usage);

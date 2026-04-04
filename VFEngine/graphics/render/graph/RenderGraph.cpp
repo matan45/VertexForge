@@ -23,6 +23,7 @@ namespace render::graph
         access.handle = handle;
         access.usage = usage;
         access.isWrite = false;
+        access.dependsOnPass = graph.getResourceNode(handle.index).writerPass;
         node.resourceAccesses.push_back(access);
     }
 
@@ -59,6 +60,37 @@ namespace render::graph
         node.resourceAccesses.push_back(access);
 
         return handle;
+    }
+
+    void PassBuilder::opaqueRead(ResourceHandle handle, ResourceUsage usage)
+    {
+        ResourceAccessInfo access{};
+        access.handle = handle;
+        access.usage = usage;
+        access.isWrite = false;
+        access.opaque = true;
+        access.dependsOnPass = graph.getResourceNode(handle.index).writerPass;
+        node.resourceAccesses.push_back(access);
+    }
+
+    ResourceHandle PassBuilder::opaqueWrite(ResourceHandle handle, ResourceUsage usage)
+    {
+        auto& resource = graph.getResourceNode(handle.index);
+        resource.currentVersion++;
+        resource.writerPass = node.index;
+
+        ResourceHandle newHandle{};
+        newHandle.index = handle.index;
+        newHandle.version = resource.currentVersion;
+
+        ResourceAccessInfo access{};
+        access.handle = newHandle;
+        access.usage = usage;
+        access.isWrite = true;
+        access.opaque = true;
+        node.resourceAccesses.push_back(access);
+
+        return newHandle;
     }
 
     void PassBuilder::setType(PassType type) { node.type = type; }
@@ -218,11 +250,10 @@ namespace render::graph
             {
                 if (!access.isWrite && access.handle.isValid())
                 {
-                    // This pass reads a resource. Find the writer pass.
-                    auto& resource = resources[access.handle.index];
-                    if (resource.writerPass != UINT32_MAX && resource.writerPass != pass.index)
+                    // Use the writer pass captured at declaration time, not the current writer
+                    if (access.dependsOnPass != UINT32_MAX && access.dependsOnPass != pass.index)
                     {
-                        dependencies[pass.index].push_back(resource.writerPass);
+                        dependencies[pass.index].push_back(access.dependsOnPass);
                     }
                 }
             }
@@ -397,18 +428,28 @@ namespace render::graph
                 auto& resource = resources[access.handle.index];
                 auto mapping = getUsageMapping(access.usage);
 
-                auto barrier = tracker->transition(
-                    access.handle.index,
-                    mapping.stage,
-                    mapping.access,
-                    mapping.layout,
-                    access.isWrite,
-                    resource.physicalImage,
-                    resource.desc.aspectMask);
-
-                if (barrier.has_value())
+                if (access.opaque)
                 {
-                    barrierBatcher->add(passIdx, barrier.value());
+                    // Opaque access: update tracker state without inserting a barrier.
+                    // The pass manages its own barriers internally.
+                    tracker->forceState(access.handle.index, mapping.layout,
+                                        mapping.stage, mapping.access, access.isWrite);
+                }
+                else
+                {
+                    auto barrier = tracker->transition(
+                        access.handle.index,
+                        mapping.stage,
+                        mapping.access,
+                        mapping.layout,
+                        access.isWrite,
+                        resource.physicalImage,
+                        resource.desc.aspectMask);
+
+                    if (barrier.has_value())
+                    {
+                        barrierBatcher->add(passIdx, barrier.value());
+                    }
                 }
             }
         }

@@ -31,6 +31,10 @@ namespace render::graph
             vk::Image image,
             vk::ImageAspectFlags aspectMask);
 
+        // Force the tracked state without emitting a barrier (for opaque passes)
+        void forceState(uint32_t resourceIndex, vk::ImageLayout layout,
+                        vk::PipelineStageFlags2 stage, vk::AccessFlags2 access, bool isWrite);
+
         void reset();
 
         const ResourceState* getState(uint32_t resourceIndex) const;

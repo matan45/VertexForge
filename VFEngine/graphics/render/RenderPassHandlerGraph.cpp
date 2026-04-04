@@ -28,10 +28,12 @@ namespace render
         colorDesc.aspectMask = vk::ImageAspectFlagBits::eColor;
         colorDesc.debugName = "SceneColor";
 
+        // Scene color starts in eShaderReadOnlyOptimal (from previous frame's final pass,
+        // or from offscreen resource initialization on first frame)
         sceneColorHandle = frameGraph->importImage(
             offscreenResources.colorImages[imageIndex].colorImage,
             offscreenResources.colorImages[imageIndex].colorImageView,
-            vk::ImageLayout::eUndefined,
+            vk::ImageLayout::eShaderReadOnlyOptimal,
             colorDesc);
 
         graph::ImageResourceDesc depthDesc{};
@@ -42,32 +44,42 @@ namespace render
         depthDesc.aspectMask = vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil;
         depthDesc.debugName = "Depth";
 
+        // Depth starts in eDepthStencilAttachmentOptimal (from previous frame or initialization)
         depthHandle = frameGraph->importImage(
             offscreenResources.depthImage.depthImage,
             offscreenResources.depthImage.depthImageView,
-            vk::ImageLayout::eUndefined,
+            vk::ImageLayout::eDepthStencilAttachmentOptimal,
             depthDesc);
     }
 
     void RenderPassHandler::buildFrameGraph(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex)
     {
         // =====================================================================
-        // All opaque passes use setSideEffect() only — NO resource declarations.
-        // They manage their own internal barriers and layout transitions.
-        // Only executeGraphManaged() passes declare read/write on graph resources.
+        // Layout tracking convention:
+        //   opaqueWrite/opaqueRead — pass manages its own barriers, graph just
+        //                            tracks the final layout for downstream passes.
+        //   read/write             — graph inserts barriers (for executeGraphManaged passes).
+        //
+        // Most passes leave scene color in eShaderReadOnlyOptimal
+        // and depth in eDepthStencilAttachmentOptimal.
         // =====================================================================
 
-        // --- Scene core passes (all opaque) ---
+        // --- Scene core passes (opaque, self-managed barriers) ---
 
+        // ClearColor: finalLayout color=eShaderReadOnlyOptimal, depth=eDepthStencilAttachmentOptimal
         {
             auto builder = frameGraph->addPass("ClearColor",
                 [this](vk::CommandBuffer cmd, uint32_t idx) {
                     clearColor->recordCommandBuffer(cmd, idx);
                 });
+            sceneColorHandle = builder.opaqueWrite(sceneColorHandle, graph::ResourceUsage::ShaderRead);
+            depthHandle = builder.opaqueWrite(depthHandle, graph::ResourceUsage::DepthAttachmentWrite);
             builder.setSegment(graph::HookSegment::Scene);
             builder.setSideEffect();
         }
 
+        // Atmosphere Sky: initialLayout=eColorAttachmentOptimal (handled by render pass),
+        //                 finalLayout=eShaderReadOnlyOptimal
         if (atmospherePipeline && atmospherePipeline->isEnabled())
         {
             atmospherePipeline->setCameraData(currentView, currentProjection,
@@ -88,6 +100,7 @@ namespace render
                         atmospherePipeline->dispatchCompute(cmd);
                     atmospherePipeline->renderSky(cmd, idx);
                 });
+            sceneColorHandle = builder.opaqueWrite(sceneColorHandle, graph::ResourceUsage::ShaderRead);
             builder.setSegment(graph::HookSegment::Scene);
             builder.setSideEffect();
         }
@@ -97,10 +110,12 @@ namespace render
                 [this](vk::CommandBuffer cmd, uint32_t idx) {
                     iblRenderer->recordCommandBuffer(cmd, idx);
                 });
+            sceneColorHandle = builder.opaqueWrite(sceneColorHandle, graph::ResourceUsage::ShaderRead);
             builder.setSegment(graph::HookSegment::Scene);
             builder.setSideEffect();
         }
 
+        // Clouds: initialLayout=eColorAttachmentOptimal, finalLayout=eShaderReadOnlyOptimal
         if (cloudPipeline && cloudPipeline->isEnabled())
         {
             cloudPipeline->setCameraData(currentView, currentProjection,
@@ -126,19 +141,24 @@ namespace render
                         cloudPipeline->dispatchCompute(cmd);
                     cloudPipeline->renderComposite(cmd, idx);
                 });
+            sceneColorHandle = builder.opaqueWrite(sceneColorHandle, graph::ResourceUsage::ShaderRead);
             builder.setSegment(graph::HookSegment::Scene);
             builder.setSideEffect();
         }
 
+        // SceneMeshes: finalLayout color=eShaderReadOnlyOptimal, depth=eDepthStencilAttachmentOptimal
         {
             auto builder = frameGraph->addPass("SceneMeshes",
                 [this](vk::CommandBuffer cmd, uint32_t idx) {
                     drawSceneMeshes(cmd, idx);
                 });
+            sceneColorHandle = builder.opaqueWrite(sceneColorHandle, graph::ResourceUsage::ShaderRead);
+            depthHandle = builder.opaqueWrite(depthHandle, graph::ResourceUsage::DepthAttachmentWrite);
             builder.setSegment(graph::HookSegment::Scene);
             builder.setSideEffect();
         }
 
+        // Hook: PostScene
         if (!renderHooks.empty())
         {
             auto builder = frameGraph->addPass("Hook_PostScene",
@@ -149,59 +169,82 @@ namespace render
             builder.setSideEffect();
         }
 
-        // --- Opaque post-scene passes ---
+        // --- Post-scene opaque passes ---
 
+        // Distortion: finalLayout color=eShaderReadOnlyOptimal, depth=eDepthStencilAttachmentOptimal
         {
             auto builder = frameGraph->addPass("Distortion",
                 [this](vk::CommandBuffer cmd, uint32_t idx) {
                     executeDistortionPass(cmd, idx);
                 });
+            builder.opaqueRead(sceneColorHandle, graph::ResourceUsage::ShaderRead);
+            sceneColorHandle = builder.opaqueWrite(sceneColorHandle, graph::ResourceUsage::ShaderRead);
             builder.setSegment(graph::HookSegment::PostScene);
             builder.setSideEffect();
         }
 
+        // Overlays: finalLayout color=eShaderReadOnlyOptimal, depth=eDepthStencilAttachmentOptimal
         {
             auto builder = frameGraph->addPass("Overlays",
                 [this](vk::CommandBuffer cmd, uint32_t idx) {
                     drawOverlays(cmd, idx);
                 });
+            sceneColorHandle = builder.opaqueWrite(sceneColorHandle, graph::ResourceUsage::ShaderRead);
             builder.setSegment(graph::HookSegment::PostScene);
             builder.setSideEffect();
         }
 
+        // Occlusion: finalLayout depth=eDepthStencilAttachmentOptimal
         {
             auto builder = frameGraph->addPass("OcclusionPasses",
                 [this](vk::CommandBuffer cmd, uint32_t /*idx*/) {
                     executeOcclusionPasses(cmd);
                 });
+            depthHandle = builder.opaqueWrite(depthHandle, graph::ResourceUsage::DepthAttachmentWrite);
             builder.setSegment(graph::HookSegment::PostScene);
             builder.setSideEffect();
         }
 
+        // AtmosphereComposite: finalLayout color=eShaderReadOnlyOptimal
         if (atmospherePipeline && atmospherePipeline->isEnabled())
         {
             auto builder = frameGraph->addPass("AtmosphereComposite",
                 [this](vk::CommandBuffer cmd, uint32_t idx) {
                     atmospherePipeline->renderComposite(cmd, idx);
                 });
+            sceneColorHandle = builder.opaqueWrite(sceneColorHandle, graph::ResourceUsage::ShaderRead);
             builder.setSegment(graph::HookSegment::PostScene);
             builder.setSideEffect();
         }
 
-        // --- Graph-managed passes (declare resources, graph inserts barriers) ---
+        // --- Graph-managed passes (graph inserts barriers) ---
 
+        // VolumetricFogComposite: reads depth (needs DepthAttachmentRead transition),
+        //                         writes scene color (needs ColorAttachmentOptimal transition).
+        //                         executeGraphManaged() has no internal barriers.
+        //                         Render pass finalLayout: color=eShaderReadOnlyOptimal
         if (volumetricFogComposite && volumetricFogComposite->isInitialized())
         {
             volumetricFogComposite->setCameraData(currentNearPlane, currentFarPlane);
 
             auto builder = frameGraph->addPass("VolumetricFogComposite",
                 [this](vk::CommandBuffer cmd, uint32_t idx) {
-                    volumetricFogComposite->execute(cmd, idx);
+                    volumetricFogComposite->executeGraphManaged(cmd, idx);
                 });
+            builder.read(depthHandle, graph::ResourceUsage::DepthAttachmentRead);
+            // Graph transitions scene color to eColorAttachmentOptimal (render pass initialLayout).
+            // Render pass finalLayout transitions it back to eShaderReadOnlyOptimal.
+            builder.write(sceneColorHandle, graph::ResourceUsage::ColorAttachmentWrite);
+            // Update tracker to reflect render pass finalLayout
+            sceneColorHandle = builder.opaqueWrite(sceneColorHandle, graph::ResourceUsage::ShaderRead);
             builder.setSegment(graph::HookSegment::PostScene);
             builder.setSideEffect();
         }
 
+        // SSGI: reads depth (needs DepthAttachmentRead), reads scene color (ShaderRead),
+        //       writes scene color (ColorAttachmentWrite via composite sub-pass).
+        //       executeGraphManaged() has no depth/scene-color barriers.
+        //       Render pass finalLayout: color=eShaderReadOnlyOptimal
         if (ssgiPipeline && ssgiPipeline->isInitialized())
         {
             ssgiPipeline->setCameraData(currentView, currentProjection,
@@ -211,12 +254,30 @@ namespace render
 
             auto builder = frameGraph->addPass("SSGI",
                 [this](vk::CommandBuffer cmd, uint32_t idx) {
-                    ssgiPipeline->execute(cmd, idx);
+                    ssgiPipeline->executeGraphManaged(cmd, idx);
                 });
+            // Graph manages depth transition (attachment → read-only)
+            builder.read(depthHandle, graph::ResourceUsage::DepthAttachmentRead);
+            // Scene color transitions are internal (trace reads as ShaderRead,
+            // composite writes as ColorAttachment — handled inside executeGraphManaged)
+            // Composite render pass finalLayout = eShaderReadOnlyOptimal
+            sceneColorHandle = builder.opaqueWrite(sceneColorHandle, graph::ResourceUsage::ShaderRead);
             builder.setSegment(graph::HookSegment::PostScene);
             builder.setSideEffect();
         }
 
+        // Restore depth to eDepthStencilAttachmentOptimal if graph-managed passes left it
+        // in eDepthStencilReadOnlyOptimal (needed by DepthCopy's internal barriers)
+        if ((volumetricFogComposite && volumetricFogComposite->isInitialized()) ||
+            (ssgiPipeline && ssgiPipeline->isInitialized()))
+        {
+            auto builder = frameGraph->addPass("DepthRestore",
+                [](vk::CommandBuffer, uint32_t) { /* no-op, barrier does the work */ });
+            depthHandle = builder.write(depthHandle, graph::ResourceUsage::DepthAttachmentWrite);
+            builder.setSegment(graph::HookSegment::PostScene);
+        }
+
+        // Hook: PrePostProcess
         if (!renderHooks.empty())
         {
             auto builder = frameGraph->addPass("Hook_PrePostProcess",
@@ -234,8 +295,7 @@ namespace render
             uint32_t currentFrame = imageIndex % core::MAX_FRAMES_IN_FLIGHT;
 
             auto builder = frameGraph->addPass("DepthCopy",
-                [this, currentFrame, imageIndex](vk::CommandBuffer cmd, uint32_t /*idx*/) {
-                    // This block uses its own pipelineBarrier2KHR calls from drawLegacy
+                [this, currentFrame](vk::CommandBuffer cmd, uint32_t /*idx*/) {
                     vk::ImageSubresourceRange depthStencilRange(
                         vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil, 0, 1, 0, 1);
                     vk::ImageSubresourceRange depthOnlyRange(
@@ -313,6 +373,8 @@ namespace render
                         cmd.pipelineBarrier2KHR(depInfo);
                     }
                 });
+            // Depth ends at eDepthStencilAttachmentOptimal after post-copy barrier
+            depthHandle = builder.opaqueWrite(depthHandle, graph::ResourceUsage::DepthAttachmentWrite);
             builder.setSegment(graph::HookSegment::PostScene);
             builder.setSideEffect();
         }
@@ -330,6 +392,9 @@ namespace render
                         executeUpscale(cmd, idx);
                         executePostUpscalePostProcess(cmd, idx);
                     });
+                builder.opaqueRead(sceneColorHandle, graph::ResourceUsage::ShaderRead);
+                builder.opaqueRead(depthHandle, graph::ResourceUsage::DepthAttachmentRead);
+                sceneColorHandle = builder.opaqueWrite(sceneColorHandle, graph::ResourceUsage::ShaderRead);
                 builder.setSegment(graph::HookSegment::PostProcess);
                 builder.setSideEffect();
             }
@@ -339,11 +404,14 @@ namespace render
                     [this](vk::CommandBuffer cmd, uint32_t idx) {
                         executePostProcess(cmd, idx);
                     });
+                builder.opaqueRead(sceneColorHandle, graph::ResourceUsage::ShaderRead);
+                sceneColorHandle = builder.opaqueWrite(sceneColorHandle, graph::ResourceUsage::ShaderRead);
                 builder.setSegment(graph::HookSegment::PostProcess);
                 builder.setSideEffect();
             }
         }
 
+        // Hook: PostPostProcess
         if (!renderHooks.empty())
         {
             auto builder = frameGraph->addPass("Hook_PostPostProcess",
@@ -354,15 +422,18 @@ namespace render
             builder.setSideEffect();
         }
 
+        // UI overlays
         {
             auto builder = frameGraph->addPass("UIOverlays",
                 [this](vk::CommandBuffer cmd, uint32_t idx) {
                     drawUIOverlays(cmd, idx);
                 });
+            sceneColorHandle = builder.opaqueWrite(sceneColorHandle, graph::ResourceUsage::ShaderRead);
             builder.setSegment(graph::HookSegment::UI);
             builder.setSideEffect();
         }
 
+        // Hook: Overlay
         if (!renderHooks.empty())
         {
             auto builder = frameGraph->addPass("Hook_Overlay",

@@ -321,8 +321,14 @@ namespace render::gi
             commandBuffer.endRenderPass();
         }
 
-        // Pass 4: Composite (scene color already in ColorAttachmentOptimal via graph barrier)
+        // Pass 4: Composite — transition scene color for the composite render pass
         {
+            vk::Image sceneColor = offscreenResources.colorImages[imageIndex].colorImage;
+            core::ImageUtilities::transitionImageLayout(commandBuffer, sceneColor,
+                vk::ImageLayout::eShaderReadOnlyOptimal,
+                vk::ImageLayout::eColorAttachmentOptimal,
+                vk::ImageAspectFlagBits::eColor);
+
             CompositePushConstants compositePush{};
             compositePush.intensity = ssgiIntensity;
             compositePush.halfResolution = ssgiHalfResolution ? 1u : 0u;

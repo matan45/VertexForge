@@ -86,6 +86,16 @@ namespace render::graph
         return barrier;
     }
 
+    void ResourceTracker::forceState(uint32_t resourceIndex, vk::ImageLayout layout,
+                                      vk::PipelineStageFlags2 stage, vk::AccessFlags2 access, bool isWrite)
+    {
+        auto& state = states[resourceIndex];
+        state.layout = layout;
+        state.lastStage = stage;
+        state.lastAccess = access;
+        state.wasWritten = isWrite;
+    }
+
     void ResourceTracker::reset()
     {
         states.clear();

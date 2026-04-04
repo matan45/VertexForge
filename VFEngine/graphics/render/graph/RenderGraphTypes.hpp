@@ -134,6 +134,8 @@ namespace render::graph
         ResourceHandle handle;
         ResourceUsage usage;
         bool isWrite = false;
+        bool opaque = false; // If true, graph updates tracker state but doesn't insert a barrier
+        uint32_t dependsOnPass = UINT32_MAX; // For reads: which pass wrote the version we're reading
     };
 
     // Represents a resource in the graph (virtual or imported)
