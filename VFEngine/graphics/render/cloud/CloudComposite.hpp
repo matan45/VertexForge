@@ -35,9 +35,6 @@ namespace render::cloud
         vk::ImageView depthOnlyImageView;
         vk::ImageAspectFlags depthAspectMask;
 
-        vk::RenderPass renderPass;
-        std::vector<vk::Framebuffer> framebuffers;
-
         vk::DescriptorSetLayout dsLayout;
         vk::DescriptorPool dsPool;
         vk::DescriptorSet descriptorSet;

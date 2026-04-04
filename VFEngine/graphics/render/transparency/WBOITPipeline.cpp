@@ -4,6 +4,7 @@
 #include "../../core/OffScreen.hpp"
 #include "../../core/Shader.hpp"
 #include "../../core/ImageUtilities.hpp"
+#include "../../core/DynamicRenderingHelpers.hpp"
 #include "print/Log.hpp"
 
 namespace render::transparency
@@ -23,10 +24,6 @@ namespace render::transparency
     {
         createSampler();
         createRenderTargets();
-        createWBOITRenderPass();
-        createWBOITFramebuffers();
-        createCompositeRenderPass();
-        createCompositeFramebuffers();
         createCompositeDescriptorResources();
         createCompositePipeline();
         if (!compositePipeline)
@@ -64,30 +61,6 @@ namespace render::transparency
             compositeDescriptorSetLayout = nullptr;
         }
 
-        for (auto& fb : compositeFramebuffers)
-        {
-            if (fb) vkDevice.destroyFramebuffer(fb);
-        }
-        compositeFramebuffers.clear();
-
-        if (compositeRenderPass)
-        {
-            vkDevice.destroyRenderPass(compositeRenderPass);
-            compositeRenderPass = nullptr;
-        }
-
-        for (auto& fb : wboitFramebuffers)
-        {
-            if (fb) vkDevice.destroyFramebuffer(fb);
-        }
-        wboitFramebuffers.clear();
-
-        if (wboitRenderPass)
-        {
-            vkDevice.destroyRenderPass(wboitRenderPass);
-            wboitRenderPass = nullptr;
-        }
-
         cleanupRenderTargets();
 
         if (linearSampler)
@@ -103,18 +76,6 @@ namespace render::transparency
     {
         vk::Device vkDevice = device.getLogicalDevice();
 
-        for (auto& fb : compositeFramebuffers)
-        {
-            if (fb) vkDevice.destroyFramebuffer(fb);
-        }
-        compositeFramebuffers.clear();
-
-        for (auto& fb : wboitFramebuffers)
-        {
-            if (fb) vkDevice.destroyFramebuffer(fb);
-        }
-        wboitFramebuffers.clear();
-
         if (compositePipeline)
         {
             vkDevice.destroyPipeline(compositePipeline);
@@ -128,8 +89,6 @@ namespace render::transparency
 
         cleanupRenderTargets();
         createRenderTargets();
-        createWBOITFramebuffers();
-        createCompositeFramebuffers();
 
         std::array<vk::DescriptorImageInfo, 2> imageInfos{};
         imageInfos[0].imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
@@ -201,139 +160,6 @@ namespace render::transparency
         if (revealageImageView) { vkDevice.destroyImageView(revealageImageView); revealageImageView = nullptr; }
         if (revealageImage) { vkDevice.destroyImage(revealageImage); revealageImage = nullptr; }
         if (revealageAllocation) { device.getMemoryManager().free(revealageAllocation); revealageAllocation = {}; }
-    }
-
-    void WBOITPipeline::createWBOITRenderPass()
-    {
-        vk::AttachmentDescription accumAttachment{};
-        accumAttachment.format = vk::Format::eR16G16B16A16Sfloat;
-        accumAttachment.samples = vk::SampleCountFlagBits::e1;
-        accumAttachment.loadOp = vk::AttachmentLoadOp::eClear;
-        accumAttachment.storeOp = vk::AttachmentStoreOp::eStore;
-        accumAttachment.stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
-        accumAttachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
-        accumAttachment.initialLayout = vk::ImageLayout::eUndefined;
-        accumAttachment.finalLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-
-        vk::AttachmentDescription revealageAttachment{};
-        revealageAttachment.format = vk::Format::eR8Unorm;
-        revealageAttachment.samples = vk::SampleCountFlagBits::e1;
-        revealageAttachment.loadOp = vk::AttachmentLoadOp::eClear;
-        revealageAttachment.storeOp = vk::AttachmentStoreOp::eStore;
-        revealageAttachment.stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
-        revealageAttachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
-        revealageAttachment.initialLayout = vk::ImageLayout::eUndefined;
-        revealageAttachment.finalLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-
-        vk::AttachmentDescription depthAttachment{};
-        depthAttachment.format = swapChain.getSwapchainDepthStencilFormat();
-        depthAttachment.samples = vk::SampleCountFlagBits::e1;
-        depthAttachment.loadOp = vk::AttachmentLoadOp::eLoad;
-        depthAttachment.storeOp = vk::AttachmentStoreOp::eStore;
-        depthAttachment.stencilLoadOp = vk::AttachmentLoadOp::eLoad;
-        depthAttachment.stencilStoreOp = vk::AttachmentStoreOp::eStore;
-        depthAttachment.initialLayout = vk::ImageLayout::eDepthStencilReadOnlyOptimal;
-        depthAttachment.finalLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
-
-        vk::AttachmentReference accumRef{0, vk::ImageLayout::eColorAttachmentOptimal};
-        vk::AttachmentReference revealageRef{1, vk::ImageLayout::eColorAttachmentOptimal};
-        vk::AttachmentReference depthRef{2, vk::ImageLayout::eDepthStencilReadOnlyOptimal};
-
-        std::array<vk::AttachmentReference, 2> colorRefs = {accumRef, revealageRef};
-
-        vk::SubpassDescription subpass{};
-        subpass.pipelineBindPoint = vk::PipelineBindPoint::eGraphics;
-        subpass.colorAttachmentCount = static_cast<uint32_t>(colorRefs.size());
-        subpass.pColorAttachments = colorRefs.data();
-        subpass.pDepthStencilAttachment = &depthRef;
-
-        std::array<vk::AttachmentDescription, 3> attachments = {
-            accumAttachment, revealageAttachment, depthAttachment
-        };
-
-        vk::RenderPassCreateInfo rpInfo{};
-        rpInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
-        rpInfo.pAttachments = attachments.data();
-        rpInfo.subpassCount = 1;
-        rpInfo.pSubpasses = &subpass;
-
-        wboitRenderPass = device.getLogicalDevice().createRenderPass(rpInfo);
-    }
-
-    void WBOITPipeline::createWBOITFramebuffers()
-    {
-        auto extent = swapChain.getSwapchainExtent();
-        uint32_t imageCount = swapChain.getImageCount();
-        wboitFramebuffers.resize(imageCount);
-
-        for (uint32_t i = 0; i < imageCount; ++i)
-        {
-            std::array<vk::ImageView, 3> attachments = {
-                accumImageView,
-                revealageImageView,
-                offscreenResources.depthImage.depthImageView
-            };
-
-            vk::FramebufferCreateInfo fbInfo{};
-            fbInfo.renderPass = wboitRenderPass;
-            fbInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
-            fbInfo.pAttachments = attachments.data();
-            fbInfo.width = extent.width;
-            fbInfo.height = extent.height;
-            fbInfo.layers = 1;
-
-            wboitFramebuffers[i] = device.getLogicalDevice().createFramebuffer(fbInfo);
-        }
-    }
-
-    void WBOITPipeline::createCompositeRenderPass()
-    {
-        vk::AttachmentDescription colorAttachment{};
-        colorAttachment.format = swapChain.getSceneColorFormat();
-        colorAttachment.samples = vk::SampleCountFlagBits::e1;
-        colorAttachment.loadOp = vk::AttachmentLoadOp::eLoad;
-        colorAttachment.storeOp = vk::AttachmentStoreOp::eStore;
-        colorAttachment.stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
-        colorAttachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
-        colorAttachment.initialLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-        colorAttachment.finalLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-
-        vk::AttachmentReference colorRef{0, vk::ImageLayout::eColorAttachmentOptimal};
-
-        vk::SubpassDescription subpass{};
-        subpass.pipelineBindPoint = vk::PipelineBindPoint::eGraphics;
-        subpass.colorAttachmentCount = 1;
-        subpass.pColorAttachments = &colorRef;
-
-        vk::RenderPassCreateInfo rpInfo{};
-        rpInfo.attachmentCount = 1;
-        rpInfo.pAttachments = &colorAttachment;
-        rpInfo.subpassCount = 1;
-        rpInfo.pSubpasses = &subpass;
-
-        compositeRenderPass = device.getLogicalDevice().createRenderPass(rpInfo);
-    }
-
-    void WBOITPipeline::createCompositeFramebuffers()
-    {
-        auto extent = swapChain.getSwapchainExtent();
-        uint32_t imageCount = swapChain.getImageCount();
-        compositeFramebuffers.resize(imageCount);
-
-        for (uint32_t i = 0; i < imageCount; ++i)
-        {
-            vk::ImageView colorView = offscreenResources.colorImages[i].colorImageView;
-
-            vk::FramebufferCreateInfo fbInfo{};
-            fbInfo.renderPass = compositeRenderPass;
-            fbInfo.attachmentCount = 1;
-            fbInfo.pAttachments = &colorView;
-            fbInfo.width = extent.width;
-            fbInfo.height = extent.height;
-            fbInfo.layers = 1;
-
-            compositeFramebuffers[i] = device.getLogicalDevice().createFramebuffer(fbInfo);
-        }
     }
 
     void WBOITPipeline::createSampler()
@@ -482,8 +308,14 @@ namespace render::transparency
         pipelineInfo.pDepthStencilState = &depthStencil;
         pipelineInfo.pColorBlendState = &colorBlending;
         pipelineInfo.layout = compositePipelineLayout;
-        pipelineInfo.renderPass = compositeRenderPass;
+        pipelineInfo.renderPass = nullptr;
         pipelineInfo.subpass = 0;
+
+        vk::Format colorFormat = swapChain.getSceneColorFormat();
+        vk::PipelineRenderingCreateInfo renderingInfo{};
+        renderingInfo.colorAttachmentCount = 1;
+        renderingInfo.pColorAttachmentFormats = &colorFormat;
+        pipelineInfo.pNext = &renderingInfo;
 
         auto result = vkDevice.createGraphicsPipeline(nullptr, pipelineInfo);
         if (result.result != vk::Result::eSuccess)
@@ -520,19 +352,26 @@ namespace render::transparency
 
         auto extent = swapChain.getSwapchainExtent();
 
-        std::array<vk::ClearValue, 3> clearValues{};
-        clearValues[0].color = vk::ClearColorValue(std::array<float, 4>{0.0f, 0.0f, 0.0f, 0.0f});
-        clearValues[1].color = vk::ClearColorValue(std::array<float, 4>{1.0f, 0.0f, 0.0f, 0.0f});
-        clearValues[2].depthStencil = vk::ClearDepthStencilValue{1.0f, 0};
+        // Transition accum/revealage to color attachment optimal
+        core::ImageUtilities::transitionImageLayout(cmd, accumImage,
+            vk::ImageLayout::eUndefined, vk::ImageLayout::eColorAttachmentOptimal,
+            vk::ImageAspectFlagBits::eColor);
+        core::ImageUtilities::transitionImageLayout(cmd, revealageImage,
+            vk::ImageLayout::eUndefined, vk::ImageLayout::eColorAttachmentOptimal,
+            vk::ImageAspectFlagBits::eColor);
 
-        vk::RenderPassBeginInfo rpBegin{};
-        rpBegin.renderPass = wboitRenderPass;
-        rpBegin.framebuffer = wboitFramebuffers[imageIndex];
-        rpBegin.renderArea.extent = extent;
-        rpBegin.clearValueCount = static_cast<uint32_t>(clearValues.size());
-        rpBegin.pClearValues = clearValues.data();
+        auto accumAttach = core::colorClear(accumImageView,
+            vk::ClearColorValue(std::array<float, 4>{0.0f, 0.0f, 0.0f, 0.0f}));
+        auto revealageAttach = core::colorClear(revealageImageView,
+            vk::ClearColorValue(std::array<float, 4>{1.0f, 0.0f, 0.0f, 0.0f}));
+        auto depthAttach = core::depthReadOnly(offscreenResources.depthImage.depthImageView);
 
-        cmd.beginRenderPass(rpBegin, vk::SubpassContents::eInline);
+        core::DynamicRenderingInfo info{};
+        info.extent = extent;
+        info.colorAttachments = {accumAttach, revealageAttach};
+        info.depthAttachment = depthAttach;
+
+        core::beginDynamicRendering(cmd, info);
 
         vk::Viewport viewport{0.0f, 0.0f, static_cast<float>(extent.width),
                               static_cast<float>(extent.height), 0.0f, 1.0f};
@@ -543,12 +382,19 @@ namespace render::transparency
 
     void WBOITPipeline::endWBOITPass(const vk::CommandBuffer& cmd)
     {
-        cmd.endRenderPass();
+        core::endDynamicRendering(cmd);
 
-        // The render pass finalLayout already transitioned depth back to eDepthStencilAttachmentOptimal.
-        // This same-layout barrier ensures memory availability for subsequent depth-writing passes (VFX, etc.).
+        // Transition accum/revealage to shader read for composite pass
+        core::ImageUtilities::transitionImageLayout(cmd, accumImage,
+            vk::ImageLayout::eColorAttachmentOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
+            vk::ImageAspectFlagBits::eColor);
+        core::ImageUtilities::transitionImageLayout(cmd, revealageImage,
+            vk::ImageLayout::eColorAttachmentOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
+            vk::ImageAspectFlagBits::eColor);
+
+        // Ensure depth is available for subsequent depth-writing passes (VFX, etc.)
         vk::ImageMemoryBarrier depthBarrier{};
-        depthBarrier.oldLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
+        depthBarrier.oldLayout = vk::ImageLayout::eDepthStencilReadOnlyOptimal;
         depthBarrier.newLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
         depthBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         depthBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
@@ -573,18 +419,33 @@ namespace render::transparency
     {
         auto extent = swapChain.getSwapchainExtent();
 
-        vk::RenderPassBeginInfo rpBegin{};
-        rpBegin.renderPass = compositeRenderPass;
-        rpBegin.framebuffer = compositeFramebuffers[imageIndex];
-        rpBegin.renderArea.extent = extent;
+        // Transition scene color to color attachment for compositing
+        core::ImageUtilities::transitionImageLayout(cmd,
+            offscreenResources.colorImages[imageIndex].colorImage,
+            vk::ImageLayout::eShaderReadOnlyOptimal,
+            vk::ImageLayout::eColorAttachmentOptimal,
+            vk::ImageAspectFlagBits::eColor);
 
-        cmd.beginRenderPass(rpBegin, vk::SubpassContents::eInline);
+        auto colorAttach = core::colorLoad(offscreenResources.colorImages[imageIndex].colorImageView);
+
+        core::DynamicRenderingInfo info{};
+        info.extent = extent;
+        info.colorAttachments = {colorAttach};
+
+        core::beginDynamicRendering(cmd, info);
 
         cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, compositePipeline);
         cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
                                compositePipelineLayout, 0, compositeDescriptorSet, {});
         cmd.draw(3, 1, 0, 0);
 
-        cmd.endRenderPass();
+        core::endDynamicRendering(cmd);
+
+        // Transition scene color back to shader read
+        core::ImageUtilities::transitionImageLayout(cmd,
+            offscreenResources.colorImages[imageIndex].colorImage,
+            vk::ImageLayout::eColorAttachmentOptimal,
+            vk::ImageLayout::eShaderReadOnlyOptimal,
+            vk::ImageAspectFlagBits::eColor);
     }
 }

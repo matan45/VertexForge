@@ -6,6 +6,7 @@
 #include "../../core/Texture.hpp"
 #include "../../core/BufferUtilities.hpp"
 #include "../../core/ImageUtilities.hpp"
+#include "../../core/DynamicRenderingHelpers.hpp"
 #include "resource/Types.hpp"
 #include "print/Log.hpp"
 #include <algorithm>
@@ -30,8 +31,6 @@ namespace render::decal
         createSamplers();
         createCubeGeometry();
         createBuffers();
-        createRenderPass();
-        createFramebuffers();
         createFallbackTexture();
         createDescriptorResources();
         createPipeline();
@@ -59,10 +58,6 @@ namespace render::decal
         if (textureDescriptorPool) { vkDevice.destroyDescriptorPool(textureDescriptorPool); textureDescriptorPool = nullptr; }
         if (textureDescriptorSetLayout) { vkDevice.destroyDescriptorSetLayout(textureDescriptorSetLayout); textureDescriptorSetLayout = nullptr; }
 
-        for (auto& fb : decalFramebuffers) vkDevice.destroyFramebuffer(fb);
-        decalFramebuffers.clear();
-
-        if (decalRenderPass) { vkDevice.destroyRenderPass(decalRenderPass); decalRenderPass = nullptr; }
         if (depthSampler) { vkDevice.destroySampler(depthSampler); depthSampler = nullptr; }
         if (textureSampler) { vkDevice.destroySampler(textureSampler); textureSampler = nullptr; }
 
@@ -84,74 +79,11 @@ namespace render::decal
         if (!initialized) return;
 
         vk::Device vkDevice = device.getLogicalDevice();
-        for (auto& fb : decalFramebuffers) vkDevice.destroyFramebuffer(fb);
-        decalFramebuffers.clear();
         if (pipeline) { vkDevice.destroyPipeline(pipeline); pipeline = nullptr; }
         if (pipelineLayout) { vkDevice.destroyPipelineLayout(pipelineLayout); pipelineLayout = nullptr; }
 
-        createFramebuffers();
         createPipeline();
         updateGlobalDescriptorSet();
-    }
-
-    void DecalPipeline::createRenderPass()
-    {
-        vk::AttachmentDescription colorAttachment{};
-        colorAttachment.format = swapChain.getSceneColorFormat();
-        colorAttachment.samples = vk::SampleCountFlagBits::e1;
-        colorAttachment.loadOp = vk::AttachmentLoadOp::eLoad;
-        colorAttachment.storeOp = vk::AttachmentStoreOp::eStore;
-        colorAttachment.stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
-        colorAttachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
-        colorAttachment.initialLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-        colorAttachment.finalLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-
-        vk::AttachmentReference colorRef{0, vk::ImageLayout::eColorAttachmentOptimal};
-
-        vk::SubpassDescription subpass{};
-        subpass.pipelineBindPoint = vk::PipelineBindPoint::eGraphics;
-        subpass.colorAttachmentCount = 1;
-        subpass.pColorAttachments = &colorRef;
-
-        vk::SubpassDependency dependency{};
-        dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
-        dependency.dstSubpass = 0;
-        dependency.srcStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
-        dependency.dstStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
-        dependency.srcAccessMask = vk::AccessFlagBits::eColorAttachmentWrite;
-        dependency.dstAccessMask = vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite;
-
-        vk::RenderPassCreateInfo rpInfo{};
-        rpInfo.attachmentCount = 1;
-        rpInfo.pAttachments = &colorAttachment;
-        rpInfo.subpassCount = 1;
-        rpInfo.pSubpasses = &subpass;
-        rpInfo.dependencyCount = 1;
-        rpInfo.pDependencies = &dependency;
-
-        decalRenderPass = device.getLogicalDevice().createRenderPass(rpInfo);
-    }
-
-    void DecalPipeline::createFramebuffers()
-    {
-        auto extent = swapChain.getSwapchainExtent();
-        uint32_t imageCount = swapChain.getImageCount();
-        decalFramebuffers.resize(imageCount);
-
-        for (uint32_t i = 0; i < imageCount; ++i)
-        {
-            vk::ImageView attachments[] = { offscreenResources.colorImages[i].colorImageView };
-
-            vk::FramebufferCreateInfo fbInfo{};
-            fbInfo.renderPass = decalRenderPass;
-            fbInfo.attachmentCount = 1;
-            fbInfo.pAttachments = attachments;
-            fbInfo.width = extent.width;
-            fbInfo.height = extent.height;
-            fbInfo.layers = 1;
-
-            decalFramebuffers[i] = device.getLogicalDevice().createFramebuffer(fbInfo);
-        }
     }
 
     void DecalPipeline::createSamplers()
@@ -343,8 +275,14 @@ namespace render::decal
         pipelineInfo.pColorBlendState = &colorBlending;
         pipelineInfo.pDynamicState = &dynamicStateInfo;
         pipelineInfo.layout = pipelineLayout;
-        pipelineInfo.renderPass = decalRenderPass;
+        pipelineInfo.renderPass = nullptr;
         pipelineInfo.subpass = 0;
+
+        vk::Format colorFormat = swapChain.getSceneColorFormat();
+        vk::PipelineRenderingCreateInfo renderingInfo{};
+        renderingInfo.colorAttachmentCount = 1;
+        renderingInfo.pColorAttachmentFormats = &colorFormat;
+        pipelineInfo.pNext = &renderingInfo;
 
         auto result = vkDevice.createGraphicsPipeline(nullptr, pipelineInfo);
         if (result.result != vk::Result::eSuccess)

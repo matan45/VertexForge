@@ -15,7 +15,7 @@
 namespace render::gpudriven
 {
     void GPUDrivenRenderer::initTerrainSubsystems(vk::DescriptorSetLayout iblDescriptorSetLayout,
-                                                    vk::RenderPass renderPass)
+                                                    const std::vector<vk::Format>& colorFormats, vk::Format depthFormat)
     {
         terrain.meshBuffer = std::make_unique<TerrainMeshBuffer>(device);
         terrain.meshBuffer->init();
@@ -50,7 +50,7 @@ namespace render::gpudriven
             lightCullingPipeline->getDescriptorSetLayout(),
             shadowSystem->getShadowDataLayout(),
             shadowSystem->getShadowTextureLayout(),
-            renderPass
+            colorFormats, depthFormat
         );
 
         shadowSystem->initTerrainShadowPass(

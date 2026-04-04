@@ -15,21 +15,21 @@ namespace render::mesh
 
     ClusterDebugRenderer::~ClusterDebugRenderer() = default;
 
-    void ClusterDebugRenderer::init(vk::RenderPass renderPass)
+    void ClusterDebugRenderer::init(vk::Format colorFormat, vk::Format depthFormat)
     {
         loadShader();
         createDescriptorSetLayout();
-        createPipeline(renderPass);
+        createPipeline(colorFormat, depthFormat);
         createBuffers();
         createDescriptorPool();
         createDescriptorSet();
         initialized = true;
     }
 
-    void ClusterDebugRenderer::recreate(vk::RenderPass renderPass)
+    void ClusterDebugRenderer::recreate(vk::Format colorFormat, vk::Format depthFormat)
     {
         destroyPipelineAndLayout(wireframePipeline, wireframePipelineLayout);
-        createPipeline(renderPass);
+        createPipeline(colorFormat, depthFormat);
     }
 
     void ClusterDebugRenderer::cleanUp()
@@ -93,7 +93,7 @@ namespace render::mesh
         descriptorSetLayout = device.getLogicalDevice().createDescriptorSetLayout(layoutInfo);
     }
 
-    void ClusterDebugRenderer::createPipeline(vk::RenderPass renderPass)
+    void ClusterDebugRenderer::createPipeline(vk::Format colorFormat, vk::Format depthFormat)
     {
         vk::PushConstantRange pushConstantRange{};
         pushConstantRange.stageFlags = vk::ShaderStageFlagBits::eVertex;
@@ -195,7 +195,13 @@ namespace render::mesh
         dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
         dynamicState.pDynamicStates = dynamicStates.data();
 
+        vk::PipelineRenderingCreateInfo renderingInfo{};
+        renderingInfo.colorAttachmentCount = 1;
+        renderingInfo.pColorAttachmentFormats = &colorFormat;
+        renderingInfo.depthAttachmentFormat = depthFormat;
+
         vk::GraphicsPipelineCreateInfo pipelineInfo{};
+        pipelineInfo.pNext = &renderingInfo;
         pipelineInfo.stageCount = static_cast<uint32_t>(wireframeShader->getShaderStages().size());
         pipelineInfo.pStages = wireframeShader->getShaderStages().data();
         pipelineInfo.pVertexInputState = &vertexInputInfo;
@@ -207,7 +213,7 @@ namespace render::mesh
         pipelineInfo.pColorBlendState = &colorBlending;
         pipelineInfo.pDynamicState = &dynamicState;
         pipelineInfo.layout = wireframePipelineLayout;
-        pipelineInfo.renderPass = renderPass;
+        pipelineInfo.renderPass = nullptr;
         pipelineInfo.subpass = 0;
 
         auto result = device.getLogicalDevice().createGraphicsPipeline(nullptr, pipelineInfo);

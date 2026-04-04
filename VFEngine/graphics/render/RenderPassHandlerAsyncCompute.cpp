@@ -588,7 +588,8 @@ namespace render
             auto extent = swapChain.getSwapchainExtent();
             ctx.viewportWidth    = extent.width;
             ctx.viewportHeight   = extent.height;
-            ctx.renderPass       = meshPipelineInitialized ? meshPipeline->getRenderPass() : vk::RenderPass{};
+            ctx.colorFormat      = swapChain.getSceneColorFormat();
+            ctx.depthFormat      = swapChain.getSwapchainDepthStencilFormat();
             ctx.device           = device.getLogicalDevice();
             ctx.viewMatrix       = currentView;
             ctx.projectionMatrix = currentProjection;

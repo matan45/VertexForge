@@ -4,6 +4,7 @@
 #include "SwapChain.hpp"
 #include "CommandPool.hpp"
 #include "DeferredDeletionQueue.hpp"
+#include "DynamicRenderingHelpers.hpp"
 #include "print/Log.hpp"
 #include "../window/Window.hpp"
 #include "../imguiPass/ImguiRender.hpp"
@@ -30,11 +31,6 @@ namespace core {
 		{
 			imguiRender = std::make_unique<imguiPass::ImguiRender>(device, swapChain, *commandPool, window);
 			imguiRender->init();
-		}
-		else
-		{
-			createPresentPass();
-			createPresentFrameBuffers();
 		}
 
 		deletionQueue = std::make_unique<DeferredDeletionQueue>(device);
@@ -166,16 +162,6 @@ namespace core {
 		{
 			imguiRender->recreate();
 		}
-		else
-		{
-			for (auto fb : presentFrameBuffers)
-			{
-				device.getLogicalDevice().destroyFramebuffer(fb);
-			}
-			device.getLogicalDevice().destroyRenderPass(presentRenderPass);
-			createPresentPass();
-			createPresentFrameBuffers();
-		}
 
 		// Notify listeners (e.g., OffScreenViewPort for Hi-Z recreation)
 		if (onResizeCallback) {
@@ -198,10 +184,6 @@ namespace core {
 		if (imguiEnabled)
 		{
 			imguiRender->cleanUp();
-		}
-		else
-		{
-			cleanUpPresentPass();
 		}
 
 		for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
@@ -300,78 +282,49 @@ namespace core {
 		}
 		else
 		{
-			// Fallback: clear swapchain image to magenta (debug: blit source not set)
-			vk::ClearValue clearColor = { std::array<float, 4>{1.0f, 0.0f, 1.0f, 1.0f} };
-
-			vk::RenderPassBeginInfo renderPassInfo{};
-			renderPassInfo.renderPass = presentRenderPass;
-			renderPassInfo.framebuffer = presentFrameBuffers[imageIdx];
-			renderPassInfo.renderArea.extent = swapChain.getSwapchainExtent();
-			renderPassInfo.clearValueCount = 1;
-			renderPassInfo.pClearValues = &clearColor;
-
-			commandBuffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
-			commandBuffer.endRenderPass();
+			drawPresentClear(commandBuffer, imageIdx);
 		}
 	}
 
-	void RenderManager::createPresentPass()
+	void RenderManager::drawPresentClear(const vk::CommandBuffer& commandBuffer, uint32_t imageIdx) const
 	{
-		vk::AttachmentDescription colorAttachment{};
-		colorAttachment.format = swapChain.getSwapchainImageFormat();
-		colorAttachment.samples = vk::SampleCountFlagBits::e1;
-		colorAttachment.loadOp = vk::AttachmentLoadOp::eClear;
-		colorAttachment.storeOp = vk::AttachmentStoreOp::eStore;
-		colorAttachment.stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
-		colorAttachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
-		colorAttachment.initialLayout = vk::ImageLayout::eUndefined;
-		colorAttachment.finalLayout = vk::ImageLayout::ePresentSrcKHR;
+		// Fallback: clear swapchain image to magenta via dynamic rendering (debug: blit source not set)
+		auto extent = swapChain.getSwapchainExtent();
 
-		vk::AttachmentReference colorAttachmentRef{};
-		colorAttachmentRef.attachment = 0;
-		colorAttachmentRef.layout = vk::ImageLayout::eColorAttachmentOptimal;
+		// Transition swapchain image: Undefined -> ColorAttachmentOptimal
+		vk::ImageMemoryBarrier barrier{};
+		barrier.oldLayout = vk::ImageLayout::eUndefined;
+		barrier.newLayout = vk::ImageLayout::eColorAttachmentOptimal;
+		barrier.srcAccessMask = {};
+		barrier.dstAccessMask = vk::AccessFlagBits::eColorAttachmentWrite;
+		barrier.image = swapChain.getSwapchainImage(imageIdx);
+		barrier.subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};
 
-		vk::SubpassDescription subpass{};
-		subpass.pipelineBindPoint = vk::PipelineBindPoint::eGraphics;
-		subpass.colorAttachmentCount = 1;
-		subpass.pColorAttachments = &colorAttachmentRef;
+		commandBuffer.pipelineBarrier(
+			vk::PipelineStageFlagBits::eTopOfPipe,
+			vk::PipelineStageFlagBits::eColorAttachmentOutput,
+			{}, {}, {}, barrier);
 
-		vk::RenderPassCreateInfo renderPassCreateInfo{};
-		renderPassCreateInfo.attachmentCount = 1;
-		renderPassCreateInfo.pAttachments = &colorAttachment;
-		renderPassCreateInfo.subpassCount = 1;
-		renderPassCreateInfo.pSubpasses = &subpass;
+		auto colorAttach = core::colorClear(swapChain.getSwapchainImageView(imageIdx),
+			vk::ClearColorValue{std::array<float, 4>{1.0f, 0.0f, 1.0f, 1.0f}});
 
-		presentRenderPass = device.getLogicalDevice().createRenderPass(renderPassCreateInfo);
-	}
+		core::DynamicRenderingInfo dynInfo{};
+		dynInfo.extent = extent;
+		dynInfo.colorAttachments = {colorAttach};
 
-	void RenderManager::createPresentFrameBuffers()
-	{
-		presentFrameBuffers.resize(swapChain.getImageCount());
+		core::beginDynamicRendering(commandBuffer, dynInfo);
+		core::endDynamicRendering(commandBuffer);
 
-		for (uint32_t i = 0; i < presentFrameBuffers.size(); i++)
-		{
-			vk::ImageView viewImage = swapChain.getSwapchainImageView(i);
+		// Transition swapchain image: ColorAttachmentOptimal -> PresentSrcKHR
+		barrier.oldLayout = vk::ImageLayout::eColorAttachmentOptimal;
+		barrier.newLayout = vk::ImageLayout::ePresentSrcKHR;
+		barrier.srcAccessMask = vk::AccessFlagBits::eColorAttachmentWrite;
+		barrier.dstAccessMask = {};
 
-			vk::FramebufferCreateInfo framebufferInfo{};
-			framebufferInfo.renderPass = presentRenderPass;
-			framebufferInfo.attachmentCount = 1;
-			framebufferInfo.pAttachments = &viewImage;
-			framebufferInfo.width = swapChain.getSwapchainExtent().width;
-			framebufferInfo.height = swapChain.getSwapchainExtent().height;
-			framebufferInfo.layers = 1;
-
-			presentFrameBuffers[i] = device.getLogicalDevice().createFramebuffer(framebufferInfo);
-		}
-	}
-
-	void RenderManager::cleanUpPresentPass() const
-	{
-		for (auto fb : presentFrameBuffers)
-		{
-			device.getLogicalDevice().destroyFramebuffer(fb);
-		}
-		device.getLogicalDevice().destroyRenderPass(presentRenderPass);
+		commandBuffer.pipelineBarrier(
+			vk::PipelineStageFlagBits::eColorAttachmentOutput,
+			vk::PipelineStageFlagBits::eBottomOfPipe,
+			{}, {}, {}, barrier);
 	}
 
 	void RenderManager::present(uint32_t imgIndex)

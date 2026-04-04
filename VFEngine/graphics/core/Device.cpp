@@ -395,6 +395,7 @@ namespace core
 
         vk::PhysicalDeviceVulkan13Features vulkan13Features{};
         vulkan13Features.synchronization2 = VK_TRUE; // Required for pipelineBarrier2KHR (render graph + depth copy)
+        vulkan13Features.dynamicRendering = VK_TRUE; // Required for vkCmdBeginRendering (render graph migration)
         vulkan13Features.shaderDemoteToHelperInvocation = VK_TRUE;
         vulkan13Features.maintenance4 = VK_TRUE; // Required for mesh shader LocalSizeId
         vulkan13Features.pNext = &vulkan12Features;

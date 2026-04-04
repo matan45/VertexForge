@@ -59,9 +59,6 @@ namespace render::mesh
 
         std::shared_ptr<core::Shader> meshShader;
 
-        vk::RenderPass renderPass;
-        vk::RenderPass vfxRenderPass;
-        vk::RenderPass waterContinueRenderPass;
         vk::Pipeline graphicsPipeline;
         vk::PipelineLayout pipelineLayout;
 
@@ -73,8 +70,6 @@ namespace render::mesh
         vk::DescriptorPool textureDescriptorPool;
         vk::DescriptorSet textureDescriptorSet;
         bool textureDescriptorsInitialized = false;
-
-        std::vector<vk::Framebuffer> framebuffers;
 
         std::unique_ptr<MeshGPUCache> meshCache;
         std::unique_ptr<MaterialTextureCache> textureCache;
@@ -113,9 +108,6 @@ namespace render::mesh
 
         void cleanUpForReinit();
 
-        vk::RenderPass getRenderPass() const { return renderPass; }
-        vk::RenderPass getVFXRenderPass() const { return vfxRenderPass; }
-
         vk::DescriptorSetLayout getIBLDescriptorSetLayout() const { return descriptorSetLayout; }
         vk::DescriptorSet getIBLDescriptorSet(uint32_t /*imageIndex*/) const { return descriptorSet; }
         MaterialTextureCache& getMaterialTextureCache() { return *textureCache; }
@@ -127,7 +119,8 @@ namespace render::mesh
         void beginWaterContinuePass(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
         void endRenderPass(const vk::CommandBuffer& commandBuffer) const;
 
-        vk::Framebuffer getFramebuffer(uint32_t imageIndex) const { return framebuffers[imageIndex]; }
+        // TODO: Follow-up needed - callers using framebuffer for secondary command buffers need migration
+        vk::Framebuffer getFramebuffer(uint32_t /*imageIndex*/) const { return nullptr; }
 
         void injectMaterialForPreview(const std::string& materialPath,
                                       std::shared_ptr<material::MaterialData> materialData);
@@ -179,9 +172,6 @@ namespace render::mesh
         void unloadAllMeshes();
 
         void loadShaders();
-        void createRenderPass();
-        void createVFXRenderPass();
-        void createWaterContinueRenderPass();
         void createDescriptorSetLayout();
         void createDescriptorPool();
         void createDescriptorSet(const ibl::ImageData& irradianceMap,
@@ -190,7 +180,6 @@ namespace render::mesh
         void createCameraUBO();
         void createPipelineLayout();
         void createGraphicsPipeline();
-        void createFramebuffers();
 
         void createTextureDescriptorSetLayout();
         void createTextureDescriptorPool();

@@ -53,9 +53,6 @@ namespace render::mesh
                                   const ibl::ImageData& brdfLUT)
     {
         loadShaders();
-        createRenderPass();
-        createVFXRenderPass();
-        createWaterContinueRenderPass();
         createDescriptorSetLayout();
         createTextureDescriptorSetLayout();
         createDescriptorPool();
@@ -64,18 +61,15 @@ namespace render::mesh
         createDescriptorSet(irradianceMap, prefilterMap, brdfLUT);
         createPipelineLayout();
         createGraphicsPipeline();
-        materialShaderCache->init(renderPass, pipelineLayout, swapChain.getSwapchainExtent());
+        materialShaderCache->init(pipelineLayout, swapChain.getSwapchainExtent(),
+                                  swapChain.getSceneColorFormat(), swapChain.getSwapchainDepthStencilFormat());
         initializeDefaultTextureDescriptors();
-        createFramebuffers();
         registerMaterialChangeCallback();
     }
 
     void StaticMeshPipeline::initWithDefaults()
     {
         loadShaders();
-        createRenderPass();
-        createVFXRenderPass();
-        createWaterContinueRenderPass();
         createDescriptorSetLayout();
         createTextureDescriptorSetLayout();
         createDescriptorPool();
@@ -90,9 +84,9 @@ namespace render::mesh
                             defaultIBLFactory->getBrdfLUT());
         createPipelineLayout();
         createGraphicsPipeline();
-        materialShaderCache->init(renderPass, pipelineLayout, swapChain.getSwapchainExtent());
+        materialShaderCache->init(pipelineLayout, swapChain.getSwapchainExtent(),
+                                  swapChain.getSceneColorFormat(), swapChain.getSwapchainDepthStencilFormat());
         initializeDefaultTextureDescriptors();
-        createFramebuffers();
         usingDefaultTextures = true;
         registerMaterialChangeCallback();
     }
@@ -105,22 +99,9 @@ namespace render::mesh
 
     void StaticMeshPipeline::recreate()
     {
-        for (auto& framebuffer : framebuffers)
-        {
-            device.getLogicalDevice().destroyFramebuffer(framebuffer);
-        }
-        device.getLogicalDevice().destroyRenderPass(renderPass);
-        if (vfxRenderPass)
-            device.getLogicalDevice().destroyRenderPass(vfxRenderPass);
-        if (waterContinueRenderPass)
-            device.getLogicalDevice().destroyRenderPass(waterContinueRenderPass);
         device.getLogicalDevice().destroyPipeline(graphicsPipeline);
 
-        createRenderPass();
-        createVFXRenderPass();
-        createWaterContinueRenderPass();
         createGraphicsPipeline();
-        createFramebuffers();
     }
 
     void StaticMeshPipeline::updateCameraUBO(const glm::mat4& view, const glm::mat4& projection,
@@ -146,12 +127,6 @@ namespace render::mesh
 
     void StaticMeshPipeline::cleanUpForReinit()
     {
-        for (auto& framebuffer : framebuffers)
-        {
-            device.getLogicalDevice().destroyFramebuffer(framebuffer);
-        }
-        framebuffers.clear();
-
         if (cameraUBO && !externalCameraBuffer)
         {
             device.getLogicalDevice().destroyBuffer(cameraUBO);
@@ -160,12 +135,6 @@ namespace render::mesh
             cameraUBOAllocation = {};
         }
 
-        if (renderPass)
-            device.getLogicalDevice().destroyRenderPass(renderPass);
-        if (vfxRenderPass)
-            device.getLogicalDevice().destroyRenderPass(vfxRenderPass);
-        if (waterContinueRenderPass)
-            device.getLogicalDevice().destroyRenderPass(waterContinueRenderPass);
         if (graphicsPipeline)
             device.getLogicalDevice().destroyPipeline(graphicsPipeline);
         if (pipelineLayout)
@@ -199,7 +168,6 @@ namespace render::mesh
         }
         textureDescriptorsInitialized = false;
 
-        renderPass = nullptr;
         graphicsPipeline = nullptr;
         pipelineLayout = nullptr;
         descriptorSet = nullptr;

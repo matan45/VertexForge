@@ -42,14 +42,6 @@ namespace render::vfx
                 return;
             }
 
-            createRenderPass();
-            if (!renderPass)
-            {
-                vfLogError("VFXRibbonPreviewPipeline: Failed to create render pass");
-                cleanUp();
-                return;
-            }
-
             createDescriptorSetLayout();
             if (!descriptorSetLayout)
             {
@@ -86,8 +78,6 @@ namespace render::vfx
                 return;
             }
 
-            createFramebuffers();
-
             initialized = true;
         }
         catch (const vk::SystemError& e)
@@ -110,28 +100,15 @@ namespace render::vfx
 
     void VFXRibbonPreviewPipeline::recreate()
     {
-        for (auto& framebuffer : framebuffers)
-        {
-            device.getLogicalDevice().destroyFramebuffer(framebuffer);
-        }
-        device.getLogicalDevice().destroyRenderPass(renderPass);
         device.getLogicalDevice().destroyPipeline(graphicsPipeline);
         device.getLogicalDevice().destroyPipelineLayout(pipelineLayout);
 
-        createRenderPass();
         createPipeline();
-        createFramebuffers();
     }
 
     void VFXRibbonPreviewPipeline::cleanUp()
     {
         auto& dev = device.getLogicalDevice();
-
-        for (auto& framebuffer : framebuffers)
-        {
-            dev.destroyFramebuffer(framebuffer);
-        }
-        framebuffers.clear();
 
         if (graphicsPipeline) { dev.destroyPipeline(graphicsPipeline); graphicsPipeline = nullptr; }
         if (pipelineLayout) { dev.destroyPipelineLayout(pipelineLayout); pipelineLayout = nullptr; }
@@ -147,8 +124,6 @@ namespace render::vfx
             descriptorPool = nullptr;
         }
         if (descriptorSetLayout) { dev.destroyDescriptorSetLayout(descriptorSetLayout); descriptorSetLayout = nullptr; }
-
-        if (renderPass) { dev.destroyRenderPass(renderPass); renderPass = nullptr; }
 
         cameraUBOMapped = nullptr;
         core::BufferUtilities::destroyBuffer(dev, cameraUBO, cameraUBOAllocation, device.getMemoryManager());
@@ -179,66 +154,6 @@ namespace render::vfx
 
         currentInstanceCount = 0;
         initialized = false;
-    }
-
-    void VFXRibbonPreviewPipeline::createRenderPass()
-    {
-        vk::AttachmentDescription colorAttachment{};
-        colorAttachment.format = swapChain.getSceneColorFormat();
-        colorAttachment.samples = vk::SampleCountFlagBits::e1;
-        colorAttachment.loadOp = vk::AttachmentLoadOp::eClear;
-        colorAttachment.storeOp = vk::AttachmentStoreOp::eStore;
-        colorAttachment.stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
-        colorAttachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
-        colorAttachment.initialLayout = vk::ImageLayout::eUndefined;
-        colorAttachment.finalLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-
-        vk::AttachmentReference colorAttachmentRef{};
-        colorAttachmentRef.attachment = 0;
-        colorAttachmentRef.layout = vk::ImageLayout::eColorAttachmentOptimal;
-
-        vk::AttachmentDescription depthAttachment{};
-        depthAttachment.format = swapChain.getSwapchainDepthStencilFormat();
-        depthAttachment.samples = vk::SampleCountFlagBits::e1;
-        depthAttachment.loadOp = vk::AttachmentLoadOp::eClear;
-        depthAttachment.storeOp = vk::AttachmentStoreOp::eDontCare;
-        depthAttachment.stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
-        depthAttachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
-        depthAttachment.initialLayout = vk::ImageLayout::eUndefined;
-        depthAttachment.finalLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
-
-        vk::AttachmentReference depthAttachmentRef{};
-        depthAttachmentRef.attachment = 1;
-        depthAttachmentRef.layout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
-
-        vk::SubpassDescription subpass{};
-        subpass.pipelineBindPoint = vk::PipelineBindPoint::eGraphics;
-        subpass.colorAttachmentCount = 1;
-        subpass.pColorAttachments = &colorAttachmentRef;
-        subpass.pDepthStencilAttachment = &depthAttachmentRef;
-
-        std::array<vk::AttachmentDescription, 2> attachments = {colorAttachment, depthAttachment};
-
-        vk::SubpassDependency dependency{};
-        dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
-        dependency.dstSubpass = 0;
-        dependency.srcStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput |
-                                  vk::PipelineStageFlagBits::eEarlyFragmentTests;
-        dependency.srcAccessMask = vk::AccessFlags{};
-        dependency.dstStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput |
-                                  vk::PipelineStageFlagBits::eEarlyFragmentTests;
-        dependency.dstAccessMask = vk::AccessFlagBits::eColorAttachmentWrite |
-                                   vk::AccessFlagBits::eDepthStencilAttachmentWrite;
-
-        vk::RenderPassCreateInfo renderPassInfo{};
-        renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
-        renderPassInfo.pAttachments = attachments.data();
-        renderPassInfo.subpassCount = 1;
-        renderPassInfo.pSubpasses = &subpass;
-        renderPassInfo.dependencyCount = 1;
-        renderPassInfo.pDependencies = &dependency;
-
-        renderPass = device.getLogicalDevice().createRenderPass(renderPassInfo);
     }
 
     void VFXRibbonPreviewPipeline::createDescriptorSetLayout()
@@ -307,8 +222,10 @@ namespace render::vfx
 
         core::GraphicsPipelineConfig config{
             .device = device.getLogicalDevice(),
-            .renderPass = renderPass,
+            .renderPass = nullptr,
             .extent = swapChain.getSwapchainExtent(),
+            .colorAttachmentFormats = {swapChain.getSceneColorFormat()},
+            .depthAttachmentFormat = swapChain.getSwapchainDepthStencilFormat(),
             .shaderStages = ribbonShader->getShaderStages(),
             .vertexBindings = {vertexBinding, instanceBinding},
             .vertexAttributes = std::move(allAttribs),
@@ -325,28 +242,6 @@ namespace render::vfx
         auto result = core::PipelineUtilities::createGraphicsPipeline(config);
         graphicsPipeline = result.pipeline;
         pipelineLayout = result.pipelineLayout;
-    }
-
-    void VFXRibbonPreviewPipeline::createFramebuffers()
-    {
-        framebuffers.resize(offscreenResources.colorImages.size());
-        vk::ImageView depth = offscreenResources.depthImage.depthImageView;
-
-        for (uint32_t i = 0; i < framebuffers.size(); i++)
-        {
-            vk::ImageView colorView = offscreenResources.colorImages[i].colorImageView;
-            std::array<vk::ImageView, 2> attachments = {colorView, depth};
-
-            vk::FramebufferCreateInfo framebufferInfo{};
-            framebufferInfo.renderPass = renderPass;
-            framebufferInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
-            framebufferInfo.pAttachments = attachments.data();
-            framebufferInfo.width = swapChain.getSwapchainExtent().width;
-            framebufferInfo.height = swapChain.getSwapchainExtent().height;
-            framebufferInfo.layers = 1;
-
-            framebuffers[i] = device.getLogicalDevice().createFramebuffer(framebufferInfo);
-        }
     }
 
     void VFXRibbonPreviewPipeline::createBuffers()

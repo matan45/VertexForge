@@ -38,8 +38,7 @@ namespace render::volumetric
         core::OffscreenResources& offscreenResources;
         VolumetricPipeline* volumetricPipeline = nullptr;
 
-        vk::RenderPass renderPass;
-        std::vector<vk::Framebuffer> framebuffers;
+        // Render pass and framebuffers removed — uses dynamic rendering
 
         std::shared_ptr<core::Shader> shader;
         vk::Pipeline pipeline;
@@ -84,8 +83,6 @@ namespace render::volumetric
         [[nodiscard]] bool isInitialized() const { return initialized; }
 
     private:
-        void createRenderPass();
-        void createFramebuffers();
         void createSampler();
         void createDepthImageView();
         void createParamsBuffer();
@@ -96,7 +93,6 @@ namespace render::volumetric
         void createPipeline();
 
         void updateParamsBuffer();
-        void cleanupFramebuffers();
         void cleanupPipeline();
     };
 }

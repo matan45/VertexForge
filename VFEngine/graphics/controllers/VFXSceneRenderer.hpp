@@ -179,8 +179,8 @@ namespace controllers
         explicit VFXSceneRenderer(core::Device& device, core::SwapChain& swapChain);
         ~VFXSceneRenderer();
 
-        void init(vk::RenderPass sceneRenderPass);
-        void recreate(vk::RenderPass sceneRenderPass);
+        void init(vk::Format colorFormat, vk::Format depthFormat);
+        void recreate(vk::Format colorFormat, vk::Format depthFormat);
         void cleanUp();
 
         bool isInitialized() const { return initialized; }
@@ -223,8 +223,8 @@ namespace controllers
         void recordDrawCommands(vk::CommandBuffer cmd);
 
         bool hasDistortionEmitters() const;
-        void initDistortion(vk::RenderPass distortionRenderPass);
-        void recreateDistortion(vk::RenderPass distortionRenderPass);
+        void initDistortion(vk::Format colorFormat, vk::Format depthFormat);
+        void recreateDistortion(vk::Format colorFormat, vk::Format depthFormat);
         void recordDistortionDrawCommands(vk::CommandBuffer cmd);
 
         size_t getInstanceCount() const { return instances.size(); }
@@ -271,7 +271,7 @@ namespace controllers
         void updateCPU(float deltaTime);
         void recordCPUDrawCommands(vk::CommandBuffer cmd);
 
-        bool initGPUMode(vk::RenderPass renderPass);
+        bool initGPUMode(vk::Format colorFormat, vk::Format depthFormat);
         void cleanupGPUMode();
         void updateGPU(float deltaTime);
         void recordGPUDrawCommands(vk::CommandBuffer cmd);

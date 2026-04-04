@@ -29,14 +29,11 @@ namespace render::vfx
 
         std::shared_ptr<core::Shader> vfxShader;
 
-        vk::RenderPass renderPass;
         vk::Pipeline graphicsPipeline;
         vk::PipelineLayout pipelineLayout;
         vk::DescriptorSetLayout descriptorSetLayout;
         vk::DescriptorPool descriptorPool;
         vk::DescriptorSet descriptorSet;
-
-        std::vector<vk::Framebuffer> framebuffers;
 
         vk::Buffer quadVertexBuffer;
         core::VulkanAllocation quadVertexBufferAllocation;
@@ -84,12 +81,10 @@ namespace render::vfx
 
     private:
         void loadShader();
-        void createRenderPass();
         void createDescriptorSetLayout();
         void createDescriptorPool();
         void createDescriptorSet();
         void createPipeline();
-        void createFramebuffers();
         void createBuffers();
         void createDefaultTexture();
         void createSampler();

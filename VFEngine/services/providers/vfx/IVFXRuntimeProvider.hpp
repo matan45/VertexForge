@@ -16,9 +16,9 @@ namespace services
         virtual ~IVFXRuntimeProvider() = default;
 
         // System lifecycle (call once)
-        virtual void init(vk::RenderPass sceneRenderPass) = 0;
+        virtual void init(vk::Format colorFormat, vk::Format depthFormat) = 0;
         virtual void cleanUp() = 0;
-        virtual void recreate(vk::RenderPass sceneRenderPass) = 0;
+        virtual void recreate(vk::Format colorFormat, vk::Format depthFormat) = 0;
         virtual bool isInitialized() const = 0;
 
         // Instance management
@@ -48,8 +48,8 @@ namespace services
         // Distortion pass support
         virtual bool hasDistortionEmitters() const = 0;
         virtual void recordDistortionDrawCommands(const vk::CommandBuffer& cmd) = 0;
-        virtual void initDistortion(vk::RenderPass distortionRenderPass) = 0;
-        virtual void recreateDistortion(vk::RenderPass distortionRenderPass) = 0;
+        virtual void initDistortion(vk::Format colorFormat, vk::Format depthFormat) = 0;
+        virtual void recreateDistortion(vk::Format colorFormat, vk::Format depthFormat) = 0;
 
         virtual size_t getInstanceCount() const = 0;
 

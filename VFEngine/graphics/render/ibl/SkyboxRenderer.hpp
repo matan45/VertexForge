@@ -21,9 +21,7 @@ namespace render::ibl
         core::OffscreenResources& offscreenResources;
 
         std::shared_ptr<core::Shader> skyboxShader;
-        vk::RenderPass renderPass;
         vk::Pipeline graphicsPipeline;
-        std::vector<vk::Framebuffer> framebuffers;
         vk::Buffer vertexBuffer;
         core::VulkanAllocation vertexBufferAllocation;
         vk::Buffer uniformBuffer;

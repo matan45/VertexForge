@@ -21,13 +21,15 @@ namespace render::mesh
         cleanUp();
     }
 
-    void MaterialShaderCache::init(vk::RenderPass renderPass,
-                                   vk::PipelineLayout pipelineLayout,
-                                   vk::Extent2D swapchainExtent)
+    void MaterialShaderCache::init(vk::PipelineLayout pipelineLayout,
+                                   vk::Extent2D swapchainExtent,
+                                   vk::Format colorFormat,
+                                   vk::Format depthFormat)
     {
-        this->renderPass = renderPass;
         this->pipelineLayout = pipelineLayout;
         this->swapchainExtent = swapchainExtent;
+        this->colorFormat = colorFormat;
+        this->depthFormat = depthFormat;
         initialized = true;
     }
 
@@ -131,7 +133,7 @@ namespace render::mesh
         {
             core::GraphicsPipelineConfig config{
                 .device = device.getLogicalDevice(),
-                .renderPass = renderPass,
+                .renderPass = nullptr,
                 .extent = swapchainExtent,
                 .shaderStages = data.shader->getShaderStages(),
                 .vertexBindings = {bindingDescription},
@@ -140,7 +142,9 @@ namespace render::mesh
                 .cullMode = vk::CullModeFlagBits::eBack,
                 .depthTestEnable = true,
                 .depthWriteEnable = true,
-                .depthCompareOp = vk::CompareOp::eLess
+                .depthCompareOp = vk::CompareOp::eLess,
+                .colorAttachmentFormats = { colorFormat },
+                .depthAttachmentFormat = depthFormat,
             };
 
             auto opaqueResult = core::PipelineUtilities::createGraphicsPipeline(config);

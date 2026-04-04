@@ -44,9 +44,6 @@ namespace render::decal
 
         bool initialized = false;
 
-        vk::RenderPass decalRenderPass;
-        std::vector<vk::Framebuffer> decalFramebuffers;
-
         vk::Pipeline pipeline;
         vk::PipelineLayout pipelineLayout;
 
@@ -116,8 +113,6 @@ namespace render::decal
         bool isInitialized() const { return initialized; }
 
     private:
-        void createRenderPass();
-        void createFramebuffers();
         void createSamplers();
         void createDescriptorResources();
         void createPipeline();

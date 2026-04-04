@@ -117,8 +117,10 @@ namespace render::vfx
         // Additive blending for distortion vectors: srcColor=One, dstColor=One
         core::GraphicsPipelineConfig config{
             .device = device.getLogicalDevice(),
-            .renderPass = externalRenderPass,
+            .renderPass = nullptr,
             .extent = swapChain.getSwapchainExtent(),
+            .colorAttachmentFormats = {colorFormat},
+            .depthAttachmentFormat = depthFormat,
             .shaderStages = distortionShader->getShaderStages(),
             .vertexBindings = {vertexBinding},
             .vertexAttributes = {vertexAttribs.begin(), vertexAttribs.end()},

@@ -10,54 +10,6 @@
 
 namespace render::ui
 {
-    void UITextPipeline::createRenderPass()
-    {
-        vk::AttachmentDescription colorAttachment{};
-        colorAttachment.format = swapChain.getSceneColorFormat();
-        colorAttachment.samples = vk::SampleCountFlagBits::e1;
-        colorAttachment.loadOp = vk::AttachmentLoadOp::eLoad;
-        colorAttachment.storeOp = vk::AttachmentStoreOp::eStore;
-        colorAttachment.stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
-        colorAttachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
-        colorAttachment.initialLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-        colorAttachment.finalLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-
-        // Load stencil from image pass (eLoad), don't need to store
-        vk::AttachmentDescription stencilAttachment{};
-        stencilAttachment.format = vk::Format::eS8Uint;
-        stencilAttachment.samples = vk::SampleCountFlagBits::e1;
-        stencilAttachment.loadOp = vk::AttachmentLoadOp::eDontCare;
-        stencilAttachment.storeOp = vk::AttachmentStoreOp::eDontCare;
-        stencilAttachment.stencilLoadOp = vk::AttachmentLoadOp::eLoad;
-        stencilAttachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
-        stencilAttachment.initialLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
-        stencilAttachment.finalLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
-
-        vk::AttachmentReference colorAttachmentRef{};
-        colorAttachmentRef.attachment = 0;
-        colorAttachmentRef.layout = vk::ImageLayout::eColorAttachmentOptimal;
-
-        vk::AttachmentReference stencilAttachmentRef{};
-        stencilAttachmentRef.attachment = 1;
-        stencilAttachmentRef.layout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
-
-        vk::SubpassDescription subpass{};
-        subpass.pipelineBindPoint = vk::PipelineBindPoint::eGraphics;
-        subpass.colorAttachmentCount = 1;
-        subpass.pColorAttachments = &colorAttachmentRef;
-        subpass.pDepthStencilAttachment = &stencilAttachmentRef;
-
-        std::array<vk::AttachmentDescription, 2> attachments = {colorAttachment, stencilAttachment};
-
-        vk::RenderPassCreateInfo renderPassInfo{};
-        renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
-        renderPassInfo.pAttachments = attachments.data();
-        renderPassInfo.subpassCount = 1;
-        renderPassInfo.pSubpasses = &subpass;
-
-        renderPass = device.getLogicalDevice().createRenderPass(renderPassInfo);
-    }
-
     void UITextPipeline::createDescriptorSetLayout()
     {
         std::vector<vk::DescriptorSetLayoutBinding> bindings(1);

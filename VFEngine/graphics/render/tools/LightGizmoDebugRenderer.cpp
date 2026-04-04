@@ -15,20 +15,20 @@ namespace render::mesh
 
     LightGizmoDebugRenderer::~LightGizmoDebugRenderer() = default;
 
-    void LightGizmoDebugRenderer::init(vk::RenderPass renderPass)
+    void LightGizmoDebugRenderer::init(vk::Format colorFormat, vk::Format depthFormat)
     {
         loadShader();
-        createPipeline(renderPass);
+        createPipeline(colorFormat, depthFormat);
         createSphereBuffers();
         createConeBuffers();
         createArrowBuffers();
         initialized = true;
     }
 
-    void LightGizmoDebugRenderer::recreate(vk::RenderPass renderPass)
+    void LightGizmoDebugRenderer::recreate(vk::Format colorFormat, vk::Format depthFormat)
     {
         destroyPipelineAndLayout(wireframePipeline, wireframePipelineLayout);
-        createPipeline(renderPass);
+        createPipeline(colorFormat, depthFormat);
     }
 
     void LightGizmoDebugRenderer::cleanUp()
@@ -57,12 +57,14 @@ namespace render::mesh
         wireframeShader->readShader("../../resources/shaders/tools/sphere_wireframe.glsl");
     }
 
-    void LightGizmoDebugRenderer::createPipeline(vk::RenderPass renderPass)
+    void LightGizmoDebugRenderer::createPipeline(vk::Format colorFormat, vk::Format depthFormat)
     {
         core::WireframePipelineConfig config{
             .device = device.getLogicalDevice(),
-            .renderPass = renderPass,
+            .renderPass = nullptr,
             .extent = swapChain.getSwapchainExtent(),
+            .colorAttachmentFormats = {colorFormat},
+            .depthAttachmentFormat = depthFormat,
             .pushConstantSize = sizeof(LightGizmoPushConstants),
             .shaderStages = wireframeShader->getShaderStages()
         };

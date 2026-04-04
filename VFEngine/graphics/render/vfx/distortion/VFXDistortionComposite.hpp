@@ -21,14 +21,13 @@ namespace render::vfx
         VFXDistortionComposite(const VFXDistortionComposite&) = delete;
         VFXDistortionComposite& operator=(const VFXDistortionComposite&) = delete;
 
-        void init(vk::RenderPass renderPass, vk::DescriptorSetLayout compositeDescLayout);
-        void recreate(vk::RenderPass renderPass, vk::DescriptorSetLayout compositeDescLayout);
+        void init(vk::Format colorFormat, vk::DescriptorSetLayout compositeDescLayout);
+        void recreate(vk::Format colorFormat, vk::DescriptorSetLayout compositeDescLayout);
         void cleanup();
         bool isInitialized() const { return initialized; }
 
-        void record(vk::CommandBuffer cmd, vk::RenderPass renderPass,
-                    vk::Framebuffer framebuffer, vk::Extent2D extent,
-                    vk::DescriptorSet compositeDescSet) const;
+        void record(vk::CommandBuffer cmd, vk::ImageView colorImageView,
+                    vk::Extent2D extent, vk::DescriptorSet compositeDescSet) const;
 
     private:
         core::Device& device;
@@ -41,6 +40,6 @@ namespace render::vfx
         bool initialized = false;
 
         void loadShader();
-        void createPipeline(vk::RenderPass renderPass, vk::DescriptorSetLayout compositeDescLayout);
+        void createPipeline(vk::Format colorFormat, vk::DescriptorSetLayout compositeDescLayout);
     };
 }

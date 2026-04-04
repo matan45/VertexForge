@@ -6,7 +6,7 @@
 namespace render::gpudriven
 {
     void GPUDrivenRenderer::initBillboardSubsystems(vk::DescriptorSetLayout iblDescriptorSetLayout,
-                                                      vk::RenderPass renderPass)
+                                                      const std::vector<vk::Format>& colorFormats, vk::Format depthFormat)
     {
         billboard.bufferManager = std::make_unique<BillboardBufferManager>();
         billboard.bufferManager->init(device);
@@ -19,7 +19,7 @@ namespace render::gpudriven
             device,
             vk::DescriptorSetLayout{},  // Camera layout created internally
             bindlessTextures->getDescriptorSetLayout(),
-            renderPass
+            colorFormats, depthFormat
         );
 
         if (billboard.meshShaderPipeline->isInitialized())

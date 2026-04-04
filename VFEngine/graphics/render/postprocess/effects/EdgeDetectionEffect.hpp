@@ -40,10 +40,7 @@ namespace render::postprocess
         vk::Image intermediateImage;
         core::VulkanAllocation intermediateAllocation;
         vk::ImageView intermediateImageView;
-        vk::Framebuffer intermediateFramebuffer;
-
         vk::ImageView depthOnlyImageView;
-        vk::RenderPass edgeRenderPass;
 
         std::shared_ptr<core::Shader> edgeShader;
         std::shared_ptr<core::Shader> compositeShader;
@@ -76,9 +73,9 @@ namespace render::postprocess
                             core::OffscreenResources& offscreenResources,
                             PostProcessPipeline& pipeline);
 
-        void init(vk::RenderPass renderPass, vk::Extent2D extent) override;
+        void init(vk::Format colorFormat, vk::Extent2D extent) override;
         void cleanup() override;
-        void recreate(vk::RenderPass renderPass, vk::Extent2D extent) override;
+        void recreate(vk::Format colorFormat, vk::Extent2D extent) override;
 
         void preRecord(const vk::CommandBuffer& commandBuffer,
                        vk::DescriptorSet inputDescriptorSet) override;
@@ -94,7 +91,6 @@ namespace render::postprocess
 
     private:
         void createSampler();
-        void createEdgeRenderPass();
         void createIntermediateImage();
         void createDepthImageView();
         void createDescriptorSetLayouts();
@@ -102,7 +98,7 @@ namespace render::postprocess
         void createDescriptorSets();
         void loadShaders();
         void createEdgePipeline();
-        void createCompositePipeline(vk::RenderPass externalRenderPass);
+        void createCompositePipeline(vk::Format colorFormat);
 
         void cleanupIntermediateImage();
         void cleanupPipelines();

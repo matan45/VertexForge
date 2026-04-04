@@ -4,6 +4,7 @@
 #include "../../core/Shader.hpp"
 #include "../../core/OffScreen.hpp"
 #include "../../core/ImageUtilities.hpp"
+#include "../../core/DynamicRenderingHelpers.hpp"
 
 // Windows defines MemoryBarrier as a macro - undefine it to use vk::MemoryBarrier
 #ifdef MemoryBarrier
@@ -61,57 +62,6 @@ namespace render::cloud
             info.addressModeW = vk::SamplerAddressMode::eClampToEdge;
             info.anisotropyEnable = VK_FALSE;
             sampler = dev.createSampler(info);
-        }
-
-        // --- Render pass ---
-        {
-            vk::AttachmentDescription colorAttachment{};
-            colorAttachment.format = swapChain.getSceneColorFormat();
-            colorAttachment.samples = vk::SampleCountFlagBits::e1;
-            colorAttachment.loadOp = vk::AttachmentLoadOp::eLoad;
-            colorAttachment.storeOp = vk::AttachmentStoreOp::eStore;
-            colorAttachment.stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
-            colorAttachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
-            colorAttachment.initialLayout = vk::ImageLayout::eColorAttachmentOptimal;
-            colorAttachment.finalLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-
-            vk::AttachmentReference colorRef{0, vk::ImageLayout::eColorAttachmentOptimal};
-            vk::SubpassDescription subpass{};
-            subpass.pipelineBindPoint = vk::PipelineBindPoint::eGraphics;
-            subpass.colorAttachmentCount = 1;
-            subpass.pColorAttachments = &colorRef;
-
-            vk::SubpassDependency dep{};
-            dep.srcSubpass = VK_SUBPASS_EXTERNAL;
-            dep.dstSubpass = 0;
-            dep.srcStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
-            dep.srcAccessMask = vk::AccessFlagBits::eColorAttachmentWrite;
-            dep.dstStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
-            dep.dstAccessMask = vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite;
-
-            vk::RenderPassCreateInfo rpInfo{};
-            rpInfo.attachmentCount = 1; rpInfo.pAttachments = &colorAttachment;
-            rpInfo.subpassCount = 1; rpInfo.pSubpasses = &subpass;
-            rpInfo.dependencyCount = 1; rpInfo.pDependencies = &dep;
-
-            renderPass = dev.createRenderPass(rpInfo);
-        }
-
-        // --- Framebuffers ---
-        {
-            uint32_t imageCount = static_cast<uint32_t>(offscreenResources.colorImages.size());
-            framebuffers.resize(imageCount);
-            for (uint32_t i = 0; i < imageCount; ++i)
-            {
-                vk::FramebufferCreateInfo fbInfo{};
-                fbInfo.renderPass = renderPass;
-                fbInfo.attachmentCount = 1;
-                fbInfo.pAttachments = &offscreenResources.colorImages[i].colorImageView;
-                fbInfo.width = extent.width;
-                fbInfo.height = extent.height;
-                fbInfo.layers = 1;
-                framebuffers[i] = dev.createFramebuffer(fbInfo);
-            }
         }
 
         // --- Descriptor set layout: cloud (0), depth (1) ---
@@ -227,7 +177,14 @@ namespace render::cloud
             pipelineInfo.pDepthStencilState = &depthStencil;
             pipelineInfo.pColorBlendState = &blending;
             pipelineInfo.layout = pipelineLayout;
-            pipelineInfo.renderPass = renderPass;
+            pipelineInfo.renderPass = nullptr;
+
+            vk::Format colorFormat = swapChain.getSceneColorFormat();
+            vk::PipelineRenderingCreateInfo renderingInfo{};
+            renderingInfo.colorAttachmentCount = 1;
+            renderingInfo.pColorAttachmentFormats = &colorFormat;
+            pipelineInfo.pNext = &renderingInfo;
+
             graphicsPipeline = dev.createGraphicsPipeline(nullptr, pipelineInfo).value;
         }
 
@@ -244,16 +201,6 @@ namespace render::cloud
         // Destroy pipeline
         if (graphicsPipeline) { dev.destroyPipeline(graphicsPipeline); graphicsPipeline = nullptr; }
         if (pipelineLayout) { dev.destroyPipelineLayout(pipelineLayout); pipelineLayout = nullptr; }
-
-        // Destroy framebuffers
-        for (auto& fb : framebuffers)
-        {
-            if (fb) { dev.destroyFramebuffer(fb); fb = nullptr; }
-        }
-        framebuffers.clear();
-
-        // Destroy render pass
-        if (renderPass) { dev.destroyRenderPass(renderPass); renderPass = nullptr; }
 
         // Destroy depth-only view
         if (depthOnlyImageView) { dev.destroyImageView(depthOnlyImageView); depthOnlyImageView = nullptr; }
@@ -278,75 +225,14 @@ namespace render::cloud
         auto& dev = device.getLogicalDevice();
         vk::Extent2D extent = swapChain.getSwapchainExtent();
 
-        // Destroy pipeline (not layout — it doesn't depend on swapchain)
+        // Destroy pipeline (not layout -- it doesn't depend on swapchain)
         if (graphicsPipeline) { dev.destroyPipeline(graphicsPipeline); graphicsPipeline = nullptr; }
-
-        // Destroy framebuffers
-        for (auto& fb : framebuffers)
-        {
-            if (fb) { dev.destroyFramebuffer(fb); fb = nullptr; }
-        }
-        framebuffers.clear();
 
         // Destroy depth-only view
         if (depthOnlyImageView) { dev.destroyImageView(depthOnlyImageView); depthOnlyImageView = nullptr; }
 
         // Rebuild descriptor pool
         if (dsPool) { dev.destroyDescriptorPool(dsPool); dsPool = nullptr; }
-
-        // Destroy render pass
-        if (renderPass) { dev.destroyRenderPass(renderPass); renderPass = nullptr; }
-
-        // --- Recreate render pass ---
-        {
-            vk::AttachmentDescription colorAttachment{};
-            colorAttachment.format = swapChain.getSceneColorFormat();
-            colorAttachment.samples = vk::SampleCountFlagBits::e1;
-            colorAttachment.loadOp = vk::AttachmentLoadOp::eLoad;
-            colorAttachment.storeOp = vk::AttachmentStoreOp::eStore;
-            colorAttachment.stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
-            colorAttachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
-            colorAttachment.initialLayout = vk::ImageLayout::eColorAttachmentOptimal;
-            colorAttachment.finalLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-
-            vk::AttachmentReference colorRef{0, vk::ImageLayout::eColorAttachmentOptimal};
-            vk::SubpassDescription subpass{};
-            subpass.pipelineBindPoint = vk::PipelineBindPoint::eGraphics;
-            subpass.colorAttachmentCount = 1;
-            subpass.pColorAttachments = &colorRef;
-
-            vk::SubpassDependency dep{};
-            dep.srcSubpass = VK_SUBPASS_EXTERNAL;
-            dep.dstSubpass = 0;
-            dep.srcStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
-            dep.srcAccessMask = vk::AccessFlagBits::eColorAttachmentWrite;
-            dep.dstStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
-            dep.dstAccessMask = vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite;
-
-            vk::RenderPassCreateInfo rpInfo{};
-            rpInfo.attachmentCount = 1; rpInfo.pAttachments = &colorAttachment;
-            rpInfo.subpassCount = 1; rpInfo.pSubpasses = &subpass;
-            rpInfo.dependencyCount = 1; rpInfo.pDependencies = &dep;
-
-            renderPass = dev.createRenderPass(rpInfo);
-        }
-
-        // --- Recreate framebuffers ---
-        {
-            uint32_t imageCount = static_cast<uint32_t>(offscreenResources.colorImages.size());
-            framebuffers.resize(imageCount);
-            for (uint32_t i = 0; i < imageCount; ++i)
-            {
-                vk::FramebufferCreateInfo fbInfo{};
-                fbInfo.renderPass = renderPass;
-                fbInfo.attachmentCount = 1;
-                fbInfo.pAttachments = &offscreenResources.colorImages[i].colorImageView;
-                fbInfo.width = extent.width;
-                fbInfo.height = extent.height;
-                fbInfo.layers = 1;
-                framebuffers[i] = dev.createFramebuffer(fbInfo);
-            }
-        }
 
         // --- Recreate depth-only view ---
         {
@@ -435,7 +321,14 @@ namespace render::cloud
             pipelineInfo.pDepthStencilState = &depthStencil;
             pipelineInfo.pColorBlendState = &blending;
             pipelineInfo.layout = pipelineLayout;
-            pipelineInfo.renderPass = renderPass;
+            pipelineInfo.renderPass = nullptr;
+
+            vk::Format colorFormat = swapChain.getSceneColorFormat();
+            vk::PipelineRenderingCreateInfo renderingInfo{};
+            renderingInfo.colorAttachmentCount = 1;
+            renderingInfo.pColorAttachmentFormats = &colorFormat;
+            pipelineInfo.pNext = &renderingInfo;
+
             graphicsPipeline = dev.createGraphicsPipeline(nullptr, pipelineInfo).value;
         }
     }
@@ -460,18 +353,23 @@ namespace render::cloud
             vk::ImageLayout::eDepthStencilReadOnlyOptimal,
             depthAspectMask);
 
-        vk::RenderPassBeginInfo rpBegin{};
-        rpBegin.renderPass = renderPass;
-        rpBegin.framebuffer = framebuffers[imageIndex];
-        rpBegin.renderArea.offset = vk::Offset2D{0, 0};
-        rpBegin.renderArea.extent = extent;
+        auto colorAttach = core::colorLoad(offscreenResources.colorImages[imageIndex].colorImageView);
 
-        cmd.beginRenderPass(rpBegin, vk::SubpassContents::eInline);
+        core::DynamicRenderingInfo info{};
+        info.extent = extent;
+        info.colorAttachments = {colorAttach};
+
+        core::beginDynamicRendering(cmd, info);
         cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
         cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 0, descriptorSet, nullptr);
         cmd.pushConstants<CloudCompositePushConstants>(pipelineLayout, vk::ShaderStageFlagBits::eFragment, 0, pushConstants);
         cmd.draw(3, 1, 0, 0);
-        cmd.endRenderPass();
+        core::endDynamicRendering(cmd);
+
+        // Transition scene color back to ShaderReadOnlyOptimal
+        core::ImageUtilities::transitionImageLayout(cmd, sceneColor,
+            vk::ImageLayout::eColorAttachmentOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
+            vk::ImageAspectFlagBits::eColor);
 
         // Transition depth back
         core::ImageUtilities::transitionImageLayout(cmd,

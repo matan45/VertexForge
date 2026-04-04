@@ -71,9 +71,9 @@ namespace render::postprocess
     public:
         explicit ColorGradingEffect(core::Device& device);
 
-        void init(vk::RenderPass renderPass, vk::Extent2D extent) override;
+        void init(vk::Format colorFormat, vk::Extent2D extent) override;
         void cleanup() override;
-        void recreate(vk::RenderPass renderPass, vk::Extent2D extent) override;
+        void recreate(vk::Format colorFormat, vk::Extent2D extent) override;
 
         void preRecord(const vk::CommandBuffer& commandBuffer,
                        vk::DescriptorSet inputDescriptorSet) override;
@@ -90,7 +90,7 @@ namespace render::postprocess
     private:
         void loadShader();
         void createDescriptorSetLayouts();
-        void createPipeline(vk::RenderPass renderPass, vk::Extent2D extent);
+        void createPipeline(vk::Format colorFormat, vk::Extent2D extent);
         void createLUTSampler();
         void createUBO();
         void createDescriptorPool();

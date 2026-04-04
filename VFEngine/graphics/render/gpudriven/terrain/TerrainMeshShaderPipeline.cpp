@@ -161,7 +161,7 @@ namespace render::gpudriven
                                           vk::DescriptorSetLayout cullingOutputLayout,
                                           vk::DescriptorSetLayout shadowDataLayout,
                                           vk::DescriptorSetLayout shadowTextureLayout,
-                                          vk::RenderPass renderPass)
+                                          const std::vector<vk::Format>& colorFormats, vk::Format depthFormat)
     {
         cachedIBLLayout = iblLayout;
         cachedBindlessLayout = bindlessTextureLayout;
@@ -182,7 +182,7 @@ namespace render::gpudriven
         createTerrainGraphicsPipeline(iblLayout, bindlessTextureLayout, meshletDataLayout,
                                       vertexDataLayout, lightDataLayout,
                                       clusterGridLayout, cullingOutputLayout,
-                                      shadowDataLayout, shadowTextureLayout, renderPass);
+                                      shadowDataLayout, shadowTextureLayout, colorFormats, depthFormat);
 
         initialized = true;
     }
@@ -196,7 +196,7 @@ namespace render::gpudriven
                                               vk::DescriptorSetLayout cullingOutputLayout,
                                               vk::DescriptorSetLayout shadowDataLayout,
                                               vk::DescriptorSetLayout shadowTextureLayout,
-                                              vk::RenderPass renderPass)
+                                              const std::vector<vk::Format>& colorFormats, vk::Format depthFormat)
     {
         if (!initialized) return;
 
@@ -234,7 +234,7 @@ namespace render::gpudriven
                                       meshletDataLayout, vertexDataLayout,
                                       lightDataLayout, clusterGridLayout,
                                       cullingOutputLayout, shadowDataLayout,
-                                      shadowTextureLayout, renderPass);
+                                      shadowTextureLayout, colorFormats, depthFormat);
 
         vfLogInfo("TerrainMeshShaderPipeline: Recreated pipeline with updated viewport");
     }
@@ -390,7 +390,7 @@ namespace render::gpudriven
         vk::DescriptorSetLayout cullingOutputLayout,
         vk::DescriptorSetLayout shadowDataLayout,
         vk::DescriptorSetLayout shadowTextureLayout,
-        vk::RenderPass renderPass)
+        const std::vector<vk::Format>& colorFormats, vk::Format depthFormat)
     {
         if (!loadTerrainShaders()) return;
 
@@ -433,8 +433,10 @@ namespace render::gpudriven
 
         core::MeshShaderPipelineConfig config{
             .device = vkDevice,
-            .renderPass = renderPass,
+            .renderPass = nullptr,
             .extent = swapChain.getSwapchainExtent(),
+            .colorAttachmentFormats = colorFormats,
+            .depthAttachmentFormat = depthFormat,
             .shaderStages = terrainShader->getShaderStages(),
             .existingPipelineLayout = pipelineLayout,
             .cullMode = vk::CullModeFlagBits::eBack,

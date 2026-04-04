@@ -11,7 +11,7 @@
 namespace render::gpudriven
 {
     void GPUDrivenRenderer::initWaterSubsystems(vk::DescriptorSetLayout iblDescriptorSetLayout,
-                                                  vk::RenderPass renderPass,
+                                                  const std::vector<vk::Format>& colorFormats, vk::Format depthFormat,
                                                   vk::ImageView sceneDepthView)
     {
         water.meshBuffer = std::make_unique<render::water::WaterMeshBuffer>();
@@ -47,7 +47,7 @@ namespace render::gpudriven
             shadowSystem->getShadowTextureLayout(),
             oceanLayout,
             refractionLayout,
-            renderPass
+            colorFormats, depthFormat
         });
 
     }
@@ -345,7 +345,7 @@ namespace render::gpudriven
                                            lightCullingPipeline->getDescriptorSetLayout(),
                                            shadowSystem->getShadowDataLayout(),
                                            shadowSystem->getShadowTextureLayout(),
-                                           cachedRenderPass);
+                                           cachedColorFormats, cachedDepthFormat);
                 terrain.pipeline->updateCausticDescriptor(causticDescSet);
             }
         }
@@ -579,7 +579,7 @@ namespace render::gpudriven
                                        lightCullingPipeline->getDescriptorSetLayout(),
                                        shadowSystem->getShadowDataLayout(),
                                        shadowSystem->getShadowTextureLayout(),
-                                       cachedRenderPass);
+                                       cachedColorFormats, cachedDepthFormat);
         }
 
         // Recreate water pipeline with dummy ocean layout

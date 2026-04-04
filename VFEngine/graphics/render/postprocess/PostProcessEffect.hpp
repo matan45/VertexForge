@@ -15,9 +15,9 @@ namespace render::postprocess
     public:
         virtual ~PostProcessEffect() = default;
 
-        virtual void init(vk::RenderPass renderPass, vk::Extent2D extent) = 0;
+        virtual void init(vk::Format colorFormat, vk::Extent2D extent) = 0;
         virtual void cleanup() = 0;
-        virtual void recreate(vk::RenderPass renderPass, vk::Extent2D extent) = 0;
+        virtual void recreate(vk::Format colorFormat, vk::Extent2D extent) = 0;
 
         virtual void preRecord(const vk::CommandBuffer& commandBuffer,
                                vk::DescriptorSet inputDescriptorSet) {}

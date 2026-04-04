@@ -5,6 +5,7 @@
 #include "../../core/SwapChain.hpp"
 #include "../../core/Shader.hpp"
 #include "../../core/OffScreen.hpp"
+#include "../../core/DynamicRenderingHelpers.hpp"
 #include "text/TextLayout.hpp"
 #include "resource/Types.hpp"
 #include <algorithm>
@@ -29,7 +30,6 @@ namespace render::ui
     void UITextPipeline::init()
     {
         loadShader();
-        createRenderPass();
         createDescriptorSetLayout();
         createDescriptorPool();
 
@@ -37,7 +37,6 @@ namespace render::ui
 
         createDefaultDescriptorSet();
         createPipeline();
-        createFramebuffers();
 
         initialized = true;
     }
@@ -50,29 +49,16 @@ namespace render::ui
 
     void UITextPipeline::recreate()
     {
-        for (auto& framebuffer : framebuffers)
-        {
-            device.getLogicalDevice().destroyFramebuffer(framebuffer);
-        }
-        device.getLogicalDevice().destroyRenderPass(renderPass);
         device.getLogicalDevice().destroyPipeline(graphicsPipeline);
         if (pipelineStencilTest) device.getLogicalDevice().destroyPipeline(pipelineStencilTest);
         device.getLogicalDevice().destroyPipelineLayout(pipelineLayout);
 
-        createRenderPass();
         createPipeline();
-        createFramebuffers();
     }
 
     void UITextPipeline::cleanUp()
     {
         auto& dev = device.getLogicalDevice();
-
-        for (auto& framebuffer : framebuffers)
-        {
-            dev.destroyFramebuffer(framebuffer);
-        }
-        framebuffers.clear();
 
         if (graphicsPipeline) dev.destroyPipeline(graphicsPipeline);
         if (pipelineStencilTest) dev.destroyPipeline(pipelineStencilTest);
@@ -88,9 +74,6 @@ namespace render::ui
             descriptorPool = nullptr;
         }
         if (descriptorSetLayout) dev.destroyDescriptorSetLayout(descriptorSetLayout);
-
-        if (renderPass)
-            dev.destroyRenderPass(renderPass);
 
         bufferManager.cleanUp();
 
@@ -370,13 +353,18 @@ namespace render::ui
             return;
         }
 
-        vk::RenderPassBeginInfo renderPassInfo{};
-        renderPassInfo.renderPass = renderPass;
-        renderPassInfo.framebuffer = framebuffers[imageIndex];
-        renderPassInfo.renderArea.offset = vk::Offset2D{0, 0};
-        renderPassInfo.renderArea.extent = swapChain.getDisplayExtent();
+        bool hasDisplay = !offscreenResources.displayColorImages.empty();
+        auto& colorSrc = hasDisplay ? offscreenResources.displayColorImages : offscreenResources.colorImages;
 
-        commandBuffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
+        auto colorAttach = core::colorLoad(colorSrc[imageIndex].colorImageView);
+        auto stencilAttach = core::stencilLoad(offscreenResources.uiStencilImage.stencilImageView);
+
+        core::DynamicRenderingInfo info{};
+        info.extent = swapChain.getDisplayExtent();
+        info.colorAttachments = {colorAttach};
+        info.stencilAttachment = stencilAttach;
+
+        core::beginDynamicRendering(commandBuffer, info);
 
         vk::Pipeline currentPipeline = nullptr;
 
@@ -449,6 +437,6 @@ namespace render::ui
             }
         }
 
-        commandBuffer.endRenderPass();
+        core::endDynamicRendering(commandBuffer);
     }
 }

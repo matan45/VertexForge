@@ -20,7 +20,7 @@ namespace render::postprocess
         enabled = false;
     }
 
-    void FilmGrainEffect::init(vk::RenderPass renderPass, vk::Extent2D extent)
+    void FilmGrainEffect::init(vk::Format colorFormat, vk::Extent2D extent)
     {
         loadShader();
         createDescriptorSetLayout();
@@ -59,7 +59,7 @@ namespace render::postprocess
         initialized = false;
     }
 
-    void FilmGrainEffect::recreate(vk::RenderPass renderPass, vk::Extent2D extent)
+    void FilmGrainEffect::recreate(vk::Format colorFormat, vk::Extent2D extent)
     {
         auto& dev = device.getLogicalDevice();
 
@@ -129,11 +129,12 @@ namespace render::postprocess
         inputDescriptorSetLayout = device.getLogicalDevice().createDescriptorSetLayout(layoutInfo);
     }
 
-    void FilmGrainEffect::createPipeline(vk::RenderPass renderPass, vk::Extent2D extent)
+    void FilmGrainEffect::createPipeline(vk::Format colorFormat, vk::Extent2D extent)
     {
         core::GraphicsPipelineConfig config{};
         config.device = device.getLogicalDevice();
-        config.renderPass = renderPass;
+        config.renderPass = nullptr;
+        config.colorAttachmentFormats = {colorFormat};
         config.extent = extent;
         config.shaderStages = shader->getShaderStages();
         config.descriptorSetLayouts = {inputDescriptorSetLayout};

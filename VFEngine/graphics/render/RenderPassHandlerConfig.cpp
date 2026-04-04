@@ -129,9 +129,9 @@ namespace render
         meshPipeline->initWithDefaults();
 
         if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
-            gpuDrivenRenderer->updateRenderPass(meshPipeline->getRenderPass(), meshPipeline->getIBLDescriptorSetLayout());
+            gpuDrivenRenderer->updateRenderPass(swapChain.getSceneColorFormat(), swapChain.getSwapchainDepthStencilFormat(), meshPipeline->getIBLDescriptorSetLayout());
         if (vfxRuntimeProvider && vfxRuntimeProvider->isInitialized())
-            vfxRuntimeProvider->recreate(meshPipeline->getRenderPass());
+            vfxRuntimeProvider->recreate(swapChain.getSceneColorFormat(), swapChain.getSwapchainDepthStencilFormat());
     }
 
     void RenderPassHandler::reinitMeshPipelineWithIBL()
@@ -147,9 +147,9 @@ namespace render
         meshPipeline->init(irradiance, prefilter, brdfLUT);
 
         if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
-            gpuDrivenRenderer->updateRenderPass(meshPipeline->getRenderPass(), meshPipeline->getIBLDescriptorSetLayout());
+            gpuDrivenRenderer->updateRenderPass(swapChain.getSceneColorFormat(), swapChain.getSwapchainDepthStencilFormat(), meshPipeline->getIBLDescriptorSetLayout());
         if (vfxRuntimeProvider && vfxRuntimeProvider->isInitialized())
-            vfxRuntimeProvider->recreate(meshPipeline->getRenderPass());
+            vfxRuntimeProvider->recreate(swapChain.getSceneColorFormat(), swapChain.getSwapchainDepthStencilFormat());
     }
 
     void RenderPassHandler::resetVolumetricFogComposite() { if (volumetricFogComposite) { volumetricFogComposite->cleanup(); volumetricFogComposite.reset(); } }

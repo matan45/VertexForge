@@ -16,19 +16,19 @@ namespace render::mesh
 
     AudioSphereDebugRenderer::~AudioSphereDebugRenderer() = default;
 
-    void AudioSphereDebugRenderer::init(vk::RenderPass renderPass)
+    void AudioSphereDebugRenderer::init(vk::Format colorFormat, vk::Format depthFormat)
     {
         loadShader();
-        createPipeline(renderPass);
+        createPipeline(colorFormat, depthFormat);
         createBuffers();
         createConeBuffers();
         initialized = true;
     }
 
-    void AudioSphereDebugRenderer::recreate(vk::RenderPass renderPass)
+    void AudioSphereDebugRenderer::recreate(vk::Format colorFormat, vk::Format depthFormat)
     {
         destroyPipelineAndLayout(wireframePipeline, wireframePipelineLayout);
-        createPipeline(renderPass);
+        createPipeline(colorFormat, depthFormat);
     }
 
     void AudioSphereDebugRenderer::cleanUp()
@@ -55,12 +55,14 @@ namespace render::mesh
         wireframeShader->readShader("../../resources/shaders/tools/sphere_wireframe.glsl");
     }
 
-    void AudioSphereDebugRenderer::createPipeline(vk::RenderPass renderPass)
+    void AudioSphereDebugRenderer::createPipeline(vk::Format colorFormat, vk::Format depthFormat)
     {
         core::WireframePipelineConfig config{
             .device = device.getLogicalDevice(),
-            .renderPass = renderPass,
+            .renderPass = nullptr,
             .extent = swapChain.getSwapchainExtent(),
+            .colorAttachmentFormats = {colorFormat},
+            .depthAttachmentFormat = depthFormat,
             .pushConstantSize = sizeof(AudioSpherePushConstants),
             .shaderStages = wireframeShader->getShaderStages()
         };

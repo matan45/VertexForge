@@ -29,7 +29,8 @@ namespace render::vfx
 
         std::shared_ptr<core::Shader> gpuShader;
 
-        vk::RenderPass externalRenderPass;
+        vk::Format colorFormat = vk::Format::eUndefined;
+        vk::Format depthFormat = vk::Format::eUndefined;
         vk::Pipeline graphicsPipeline;
         vk::PipelineLayout pipelineLayout;
         vk::DescriptorSetLayout descriptorSetLayout;
@@ -101,8 +102,8 @@ namespace render::vfx
         VFXRibbonGPUPipeline(const VFXRibbonGPUPipeline&) = delete;
         VFXRibbonGPUPipeline& operator=(const VFXRibbonGPUPipeline&) = delete;
 
-        void init(vk::RenderPass renderPass);
-        void recreate(vk::RenderPass renderPass);
+        void init(vk::Format colorFormat, vk::Format depthFormat);
+        void recreate(vk::Format colorFormat, vk::Format depthFormat);
         void cleanup();
         bool isInitialized() const { return initialized; }
 

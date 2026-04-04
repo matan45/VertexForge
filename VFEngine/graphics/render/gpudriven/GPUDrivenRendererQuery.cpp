@@ -184,7 +184,7 @@ namespace render::gpudriven
                                        lightCullingPipeline->getDescriptorSetLayout(),
                                        shadowSystem->getShadowDataLayout(),
                                        shadowSystem->getShadowTextureLayout(),
-                                       cachedRenderPass);
+                                       cachedColorFormats, cachedDepthFormat);
         }
 
         // Recreate water pipeline

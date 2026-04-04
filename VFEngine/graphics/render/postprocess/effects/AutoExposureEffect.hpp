@@ -82,9 +82,9 @@ namespace render::postprocess
                            core::OffscreenResources& offscreenResources,
                            PostProcessPipeline& pipeline);
 
-        void init(vk::RenderPass renderPass, vk::Extent2D extent) override;
+        void init(vk::Format colorFormat, vk::Extent2D extent) override;
         void cleanup() override;
-        void recreate(vk::RenderPass renderPass, vk::Extent2D extent) override;
+        void recreate(vk::Format colorFormat, vk::Extent2D extent) override;
 
         void preRecord(const vk::CommandBuffer& commandBuffer,
                        vk::DescriptorSet inputDescriptorSet) override;
@@ -108,7 +108,7 @@ namespace render::postprocess
         void loadShaders();
         void createHistogramPipeline();
         void createReducePipeline();
-        void createPassthroughPipeline(vk::RenderPass renderPass, vk::Extent2D extent);
+        void createPassthroughPipeline(vk::Format colorFormat, vk::Extent2D extent);
         void updateHistogramDescriptorSet(vk::ImageView sceneImageView);
         void updateReduceDescriptorSet();
         void cleanupBuffers();

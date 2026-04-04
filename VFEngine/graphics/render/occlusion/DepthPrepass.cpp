@@ -2,6 +2,7 @@
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
 #include "../../core/ImageUtilities.hpp"
+#include "../../core/DynamicRenderingHelpers.hpp"
 #include "print/Log.hpp"
 
 namespace render::occlusion
@@ -22,21 +23,19 @@ namespace render::occlusion
         height = h;
 
         createImages();
-        createRenderPass();
-        createFramebuffer();
 
         initialized = true;
-        vfLogInfo("Depth prepass initialized: {}x{} (with normal output)", width, height);
+        vfLogInfo("Depth prepass initialized: {}x{} (with normal output, dynamic rendering)", width, height);
     }
 
     void DepthPrepass::createImages()
     {
-        // Depth image (unchanged)
+        // Depth image
         core::ImageInfoRequest depthRequest(
             device.getLogicalDevice(),
             device.getPhysicalDevice(),
             width, height, 1, 1,
-            vk::Format::eD32Sfloat,
+            DEPTH_FORMAT,
             vk::ImageTiling::eOptimal,
             vk::ImageUsageFlagBits::eDepthStencilAttachment | vk::ImageUsageFlagBits::eSampled,
             vk::MemoryPropertyFlagBits::eDeviceLocal
@@ -45,7 +44,7 @@ namespace render::occlusion
 
         core::ImageViewInfoRequest depthViewRequest(
             device.getLogicalDevice(), depthImage,
-            vk::Format::eD32Sfloat, vk::ImageAspectFlagBits::eDepth,
+            DEPTH_FORMAT, vk::ImageAspectFlagBits::eDepth,
             vk::ImageViewType::e2D, 1, 1
         );
         core::ImageUtilities::createImageView(depthViewRequest, depthImageView);
@@ -55,7 +54,7 @@ namespace render::occlusion
             device.getLogicalDevice(),
             device.getPhysicalDevice(),
             width, height, 1, 1,
-            vk::Format::eR16G16B16A16Sfloat,
+            NORMAL_FORMAT,
             vk::ImageTiling::eOptimal,
             vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled,
             vk::MemoryPropertyFlagBits::eDeviceLocal
@@ -64,7 +63,7 @@ namespace render::occlusion
 
         core::ImageViewInfoRequest normalViewRequest(
             device.getLogicalDevice(), normalImage,
-            vk::Format::eR16G16B16A16Sfloat, vk::ImageAspectFlagBits::eColor,
+            NORMAL_FORMAT, vk::ImageAspectFlagBits::eColor,
             vk::ImageViewType::e2D, 1, 1
         );
         core::ImageUtilities::createImageView(normalViewRequest, normalImageView);
@@ -129,100 +128,15 @@ namespace render::occlusion
         device.getLogicalDevice().destroyCommandPool(tempPool);
     }
 
-    void DepthPrepass::createRenderPass()
-    {
-        // Attachment 0: Depth
-        vk::AttachmentDescription depthAttachment{};
-        depthAttachment.format = vk::Format::eD32Sfloat;
-        depthAttachment.samples = vk::SampleCountFlagBits::e1;
-        depthAttachment.loadOp = vk::AttachmentLoadOp::eClear;
-        depthAttachment.storeOp = vk::AttachmentStoreOp::eStore;
-        depthAttachment.stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
-        depthAttachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
-        depthAttachment.initialLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
-        depthAttachment.finalLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
-
-        // Attachment 1: World-space normals
-        vk::AttachmentDescription normalAttachment{};
-        normalAttachment.format = vk::Format::eR16G16B16A16Sfloat;
-        normalAttachment.samples = vk::SampleCountFlagBits::e1;
-        normalAttachment.loadOp = vk::AttachmentLoadOp::eClear;
-        normalAttachment.storeOp = vk::AttachmentStoreOp::eStore;
-        normalAttachment.stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
-        normalAttachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
-        normalAttachment.initialLayout = vk::ImageLayout::eColorAttachmentOptimal;
-        normalAttachment.finalLayout = vk::ImageLayout::eColorAttachmentOptimal;
-
-        std::array<vk::AttachmentDescription, 2> attachments = {depthAttachment, normalAttachment};
-
-        vk::AttachmentReference depthRef{};
-        depthRef.attachment = 0;
-        depthRef.layout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
-
-        vk::AttachmentReference normalRef{};
-        normalRef.attachment = 1;
-        normalRef.layout = vk::ImageLayout::eColorAttachmentOptimal;
-
-        vk::SubpassDescription subpass{};
-        subpass.pipelineBindPoint = vk::PipelineBindPoint::eGraphics;
-        subpass.colorAttachmentCount = 1;
-        subpass.pColorAttachments = &normalRef;
-        subpass.pDepthStencilAttachment = &depthRef;
-
-        vk::SubpassDependency dependency{};
-        dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
-        dependency.dstSubpass = 0;
-        dependency.srcStageMask = vk::PipelineStageFlagBits::eLateFragmentTests |
-                                  vk::PipelineStageFlagBits::eColorAttachmentOutput;
-        dependency.dstStageMask = vk::PipelineStageFlagBits::eEarlyFragmentTests |
-                                  vk::PipelineStageFlagBits::eColorAttachmentOutput;
-        dependency.srcAccessMask = vk::AccessFlagBits::eDepthStencilAttachmentWrite |
-                                   vk::AccessFlagBits::eColorAttachmentWrite;
-        dependency.dstAccessMask = vk::AccessFlagBits::eDepthStencilAttachmentRead |
-                                   vk::AccessFlagBits::eDepthStencilAttachmentWrite |
-                                   vk::AccessFlagBits::eColorAttachmentWrite;
-
-        vk::RenderPassCreateInfo renderPassInfo{};
-        renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
-        renderPassInfo.pAttachments = attachments.data();
-        renderPassInfo.subpassCount = 1;
-        renderPassInfo.pSubpasses = &subpass;
-        renderPassInfo.dependencyCount = 1;
-        renderPassInfo.pDependencies = &dependency;
-
-        renderPass = device.getLogicalDevice().createRenderPass(renderPassInfo);
-    }
-
-    void DepthPrepass::createFramebuffer()
-    {
-        std::array<vk::ImageView, 2> attachments = {depthImageView, normalImageView};
-
-        vk::FramebufferCreateInfo fbInfo{};
-        fbInfo.renderPass = renderPass;
-        fbInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
-        fbInfo.pAttachments = attachments.data();
-        fbInfo.width = width;
-        fbInfo.height = height;
-        fbInfo.layers = 1;
-
-        framebuffer = device.getLogicalDevice().createFramebuffer(fbInfo);
-    }
-
     void DepthPrepass::beginPass(vk::CommandBuffer cmd) const
     {
-        std::array<vk::ClearValue, 2> clearValues{};
-        clearValues[0].depthStencil = vk::ClearDepthStencilValue{1.0f, 0};
-        clearValues[1].color = vk::ClearColorValue{std::array<float, 4>{0.0f, 0.0f, 0.0f, 0.0f}};
+        core::DynamicRenderingInfo info{};
+        info.extent = vk::Extent2D{width, height};
+        info.colorAttachments = {core::colorClear(normalImageView)};
+        info.depthAttachment = core::depthClear(depthImageView, 1.0f, 0);
+        info.hasDepth = true;
 
-        vk::RenderPassBeginInfo rpInfo{};
-        rpInfo.renderPass = renderPass;
-        rpInfo.framebuffer = framebuffer;
-        rpInfo.renderArea.offset = vk::Offset2D{0, 0};
-        rpInfo.renderArea.extent = vk::Extent2D{width, height};
-        rpInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
-        rpInfo.pClearValues = clearValues.data();
-
-        cmd.beginRenderPass(rpInfo, vk::SubpassContents::eInline);
+        core::beginDynamicRendering(cmd, info);
 
         vk::Viewport viewport{0.0f, 0.0f,
             static_cast<float>(width), static_cast<float>(height),
@@ -235,7 +149,7 @@ namespace render::occlusion
 
     void DepthPrepass::endPass(vk::CommandBuffer cmd) const
     {
-        cmd.endRenderPass();
+        core::endDynamicRendering(cmd);
     }
 
     void DepthPrepass::cleanup()
@@ -243,9 +157,6 @@ namespace render::occlusion
         if (!initialized) return;
 
         device.getLogicalDevice().waitIdle();
-
-        device.getLogicalDevice().destroyFramebuffer(framebuffer);
-        device.getLogicalDevice().destroyRenderPass(renderPass);
 
         device.getLogicalDevice().destroyImageView(depthImageView);
         device.getLogicalDevice().destroyImage(depthImage);

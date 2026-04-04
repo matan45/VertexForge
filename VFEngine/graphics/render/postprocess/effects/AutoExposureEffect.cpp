@@ -51,7 +51,7 @@ namespace render::postprocess
         enabled = true;
     }
 
-    void AutoExposureEffect::init(vk::RenderPass renderPass, vk::Extent2D extent)
+    void AutoExposureEffect::init(vk::Format colorFormat, vk::Extent2D extent)
     {
         currentExtent = extent;
         createSampler();
@@ -62,7 +62,7 @@ namespace render::postprocess
         createDescriptorSets();
         createHistogramPipeline();
         createReducePipeline();
-        createPassthroughPipeline(renderPass, extent);
+        createPassthroughPipeline(colorFormat, extent);
 
         ExposureData initialData{1.0f, 1.0f, 0.18f, 0.0f};
         for (auto& ef : exposureFrames)
@@ -131,7 +131,7 @@ namespace render::postprocess
         initialized = false;
     }
 
-    void AutoExposureEffect::recreate(vk::RenderPass renderPass, vk::Extent2D extent)
+    void AutoExposureEffect::recreate(vk::Format colorFormat, vk::Extent2D extent)
     {
         currentExtent = extent;
         lastSceneImageView = nullptr;
@@ -148,7 +148,7 @@ namespace render::postprocess
         createDescriptorSets();
         createHistogramPipeline();
         createReducePipeline();
-        createPassthroughPipeline(renderPass, extent);
+        createPassthroughPipeline(colorFormat, extent);
     }
 
     void AutoExposureEffect::preRecord(const vk::CommandBuffer& commandBuffer,
@@ -538,11 +538,12 @@ namespace render::postprocess
         reducePipeline = core::PipelineUtilities::createComputePipeline(dev, pipelineInfo);
     }
 
-    void AutoExposureEffect::createPassthroughPipeline(vk::RenderPass renderPass, vk::Extent2D extent)
+    void AutoExposureEffect::createPassthroughPipeline(vk::Format colorFormat, vk::Extent2D extent)
     {
         core::GraphicsPipelineConfig config{};
         config.device = device.getLogicalDevice();
-        config.renderPass = renderPass;
+        config.renderPass = nullptr;
+        config.colorAttachmentFormats = {colorFormat};
         config.extent = extent;
         config.shaderStages = passthroughShader->getShaderStages();
         config.descriptorSetLayouts = {passthroughDescriptorSetLayout};

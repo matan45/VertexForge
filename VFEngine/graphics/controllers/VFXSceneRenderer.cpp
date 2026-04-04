@@ -28,7 +28,7 @@ namespace controllers
         cleanUp();
     }
 
-    void VFXSceneRenderer::init(vk::RenderPass sceneRenderPass)
+    void VFXSceneRenderer::init(vk::Format colorFormat, vk::Format depthFormat)
     {
         if (initialized)
         {
@@ -36,11 +36,11 @@ namespace controllers
         }
 
         cpuPipeline = std::make_unique<render::vfx::VFXScenePipeline>(device, swapChain);
-        cpuPipeline->init(sceneRenderPass);
+        cpuPipeline->init(colorFormat, depthFormat);
 
         if (gpuDrivenEnabled)
         {
-            if (!initGPUMode(sceneRenderPass))
+            if (!initGPUMode(colorFormat, depthFormat))
             {
                 vfLogWarning("GPU-driven VFX initialization failed, falling back to CPU mode");
                 gpuDrivenEnabled = false;
@@ -51,7 +51,7 @@ namespace controllers
         vfLogInfo("VFX Scene Renderer initialized (GPU mode: {})", gpuDrivenEnabled ? "enabled" : "disabled");
     }
 
-    void VFXSceneRenderer::recreate(vk::RenderPass sceneRenderPass)
+    void VFXSceneRenderer::recreate(vk::Format colorFormat, vk::Format depthFormat)
     {
         if (!initialized)
         {
@@ -60,22 +60,22 @@ namespace controllers
 
         if (cpuPipeline)
         {
-            cpuPipeline->recreate(sceneRenderPass);
+            cpuPipeline->recreate(colorFormat, depthFormat);
         }
 
         if (gpuRenderPipeline)
         {
-            gpuRenderPipeline->recreate(sceneRenderPass);
+            gpuRenderPipeline->recreate(colorFormat, depthFormat);
         }
 
         if (gpuMeshPipeline)
         {
-            gpuMeshPipeline->recreate(sceneRenderPass);
+            gpuMeshPipeline->recreate(colorFormat, depthFormat);
         }
 
         if (gpuRibbonPipeline)
         {
-            gpuRibbonPipeline->recreate(sceneRenderPass);
+            gpuRibbonPipeline->recreate(colorFormat, depthFormat);
         }
     }
 

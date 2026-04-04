@@ -89,8 +89,8 @@ namespace render::mesh
         explicit ShadowDebugRenderer(core::Device& device, core::SwapChain& swapChain);
         ~ShadowDebugRenderer();
 
-        void init(vk::RenderPass renderPass);
-        void recreate(vk::RenderPass renderPass);
+        void init(vk::Format colorFormat, vk::Format depthFormat);
+        void recreate(vk::Format colorFormat, vk::Format depthFormat);
         void cleanUp();
         void cleanUpShader();
 
@@ -101,7 +101,7 @@ namespace render::mesh
 
     private:
         void loadShaders();
-        void createPipelines(vk::RenderPass renderPass);
+        void createPipelines(vk::Format colorFormat, vk::Format depthFormat);
         void createFrustumBuffers();
         void createSphereBuffers();
 

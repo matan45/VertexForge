@@ -132,6 +132,7 @@
     <ClInclude Include="core\CommandPool.hpp" />
     <ClInclude Include="core\DeferredDeletionQueue.hpp" />
     <ClInclude Include="core\Device.hpp" />
+    <ClInclude Include="core\DynamicRenderingHelpers.hpp" />
     <ClInclude Include="core\FrameSynchronizer.hpp" />
     <ClInclude Include="core\GraphicsConstants.hpp" />
     <ClInclude Include="core\ImageUtilities.hpp" />

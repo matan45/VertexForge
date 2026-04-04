@@ -59,7 +59,7 @@ namespace render::gpudriven
     }
 
     void GPUDrivenRenderer::initVegetationSubsystems(vk::DescriptorSetLayout iblDescriptorSetLayout,
-                                                      vk::RenderPass renderPass)
+                                                      const std::vector<vk::Format>& colorFormats, vk::Format depthFormat)
     {
         vegetation.windSystem = std::make_unique<vegetation::WindSystem>();
         vegetation.windSystem->init(device);
@@ -86,7 +86,7 @@ namespace render::gpudriven
             vegetation.windSystem->getDescriptorSetLayout(),
             lightLayout,
             bindlessLayout,
-            renderPass
+            colorFormats, depthFormat
         );
 
         // Bind the shared camera buffer so grass reads correct camera data
@@ -96,7 +96,8 @@ namespace render::gpudriven
         }
 
         vegetation.grassInitialized = true;
-        vegetation.cachedRenderPass = renderPass;
+        vegetation.cachedColorFormats = colorFormats;
+        vegetation.cachedDepthFormat = depthFormat;
 
         vfLogInfo("GPUDrivenRenderer: Vegetation subsystems initialized");
     }

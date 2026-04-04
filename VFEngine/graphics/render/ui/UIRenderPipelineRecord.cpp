@@ -4,6 +4,7 @@
 #include "../../core/Shader.hpp"
 #include "../../core/Texture.hpp"
 #include "../../core/OffScreen.hpp"
+#include "../../core/DynamicRenderingHelpers.hpp"
 #include "resource/Types.hpp"
 #include "print/Log.hpp"
 #include <filesystem>
@@ -177,19 +178,18 @@ namespace render::ui
     {
         if (!initialized || totalInstanceCount == 0) return;
 
-        vk::ClearValue stencilClear{};
-        stencilClear.depthStencil = vk::ClearDepthStencilValue{0.0f, 0};
-        std::array<vk::ClearValue, 2> clearValues = {{vk::ClearValue{}, stencilClear}};
+        bool hasDisplay = !offscreenResources.displayColorImages.empty();
+        auto& colorSrc = hasDisplay ? offscreenResources.displayColorImages : offscreenResources.colorImages;
 
-        vk::RenderPassBeginInfo renderPassInfo{};
-        renderPassInfo.renderPass = renderPass;
-        renderPassInfo.framebuffer = framebuffers[imageIndex];
-        renderPassInfo.renderArea.offset = vk::Offset2D{0, 0};
-        renderPassInfo.renderArea.extent = swapChain.getDisplayExtent();
-        renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
-        renderPassInfo.pClearValues = clearValues.data();
+        auto colorAttach = core::colorLoad(colorSrc[imageIndex].colorImageView);
+        auto stencilAttach = core::stencilClear(offscreenResources.uiStencilImage.stencilImageView, 0);
 
-        commandBuffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
+        core::DynamicRenderingInfo info{};
+        info.extent = swapChain.getDisplayExtent();
+        info.colorAttachments = {colorAttach};
+        info.stencilAttachment = stencilAttach;
+
+        core::beginDynamicRendering(commandBuffer, info);
 
         vk::Pipeline currentPipeline = nullptr;
 
@@ -261,6 +261,6 @@ namespace render::ui
             }
         }
 
-        commandBuffer.endRenderPass();
+        core::endDynamicRendering(commandBuffer);
     }
 }

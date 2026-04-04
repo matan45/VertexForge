@@ -4,6 +4,7 @@
 #include "../../core/Shader.hpp"
 #include "../../core/OffScreen.hpp"
 #include "../../core/BufferUtilities.hpp"
+#include "../../core/DynamicRenderingHelpers.hpp"
 #include "print/Log.hpp"
 
 namespace render::ibl
@@ -18,45 +19,8 @@ namespace render::ibl
 
     void SkyboxRenderer::init(const ImageData& irradianceCube)
     {
-        // Clean up any existing resources if recreate() was called before init()
-        if (renderPass)
-        {
-            for (auto framebuffer : framebuffers)
-            {
-                device.getLogicalDevice().destroyFramebuffer(framebuffer);
-            }
-            framebuffers.clear();
-            device.getLogicalDevice().destroyRenderPass(renderPass);
-            renderPass = nullptr;
-        }
-
-        // RenderPass
-        vk::AttachmentDescription colorAttachment{};
-        colorAttachment.format = swapChain.getSceneColorFormat();
-        colorAttachment.samples = vk::SampleCountFlagBits::e1;
-        colorAttachment.loadOp = vk::AttachmentLoadOp::eClear;
-        colorAttachment.storeOp = vk::AttachmentStoreOp::eStore;
-        colorAttachment.stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
-        colorAttachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
-        colorAttachment.initialLayout = vk::ImageLayout::eUndefined;
-        colorAttachment.finalLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-
-        vk::AttachmentReference colorAttachmentRef{};
-        colorAttachmentRef.attachment = 0;
-        colorAttachmentRef.layout = vk::ImageLayout::eColorAttachmentOptimal;
-
-        vk::SubpassDescription subpass{};
-        subpass.pipelineBindPoint = vk::PipelineBindPoint::eGraphics;
-        subpass.colorAttachmentCount = 1;
-        subpass.pColorAttachments = &colorAttachmentRef;
-
-        vk::RenderPassCreateInfo renderPassInfo{};
-        renderPassInfo.attachmentCount = 1;
-        renderPassInfo.pAttachments = &colorAttachment;
-        renderPassInfo.subpassCount = 1;
-        renderPassInfo.pSubpasses = &subpass;
-
-        renderPass = device.getLogicalDevice().createRenderPass(renderPassInfo);
+        // Dynamic rendering format for pipeline creation
+        vk::Format colorFormat = swapChain.getSceneColorFormat();
 
         // VertexBuffer
         std::vector<vk::VertexInputBindingDescription> vertexInputBindingDescriptiones;
@@ -243,95 +207,22 @@ namespace render::ibl
         pipelineInfo.pColorBlendState = &colorBlending;
         pipelineInfo.pDynamicState = &dynamicState;
         pipelineInfo.layout = pipelineLayout;
-        pipelineInfo.renderPass = renderPass;
-        pipelineInfo.subpass = 0;
+        pipelineInfo.renderPass = nullptr;
+
+        vk::PipelineRenderingCreateInfo pipelineRenderingInfo{};
+        pipelineRenderingInfo.colorAttachmentCount = 1;
+        pipelineRenderingInfo.pColorAttachmentFormats = &colorFormat;
+        pipelineInfo.pNext = &pipelineRenderingInfo;
 
         graphicsPipeline = device.getLogicalDevice().createGraphicsPipeline(nullptr, pipelineInfo).value;
-
-        // FrameBuffers
-        framebuffers.resize(offscreenResources.colorImages.size());
-
-        for (uint32_t i = 0; i < framebuffers.size(); i++)
-        {
-            vk::ImageView viewImage = offscreenResources.colorImages[i].colorImageView;
-
-            vk::FramebufferCreateInfo framebufferInfo{};
-            framebufferInfo.renderPass = renderPass;
-            framebufferInfo.attachmentCount = 1;
-            framebufferInfo.pAttachments = &viewImage;
-            framebufferInfo.width = swapChain.getSwapchainExtent().width;
-            framebufferInfo.height = swapChain.getSwapchainExtent().height;
-            framebufferInfo.layers = 1;
-
-            framebuffers[i] = device.getLogicalDevice().createFramebuffer(framebufferInfo);
-        }
 
         initialized = true;
     }
 
     void SkyboxRenderer::recreate()
     {
-        // Skip recreate if init() hasn't been called yet - resources will be created by init() later
-        if (!initialized)
-        {
-            return;
-        }
-
-        // Destroy old framebuffers
-        for (auto const& frame : framebuffers)
-        {
-            device.getLogicalDevice().destroyFramebuffer(frame);
-        }
-        framebuffers.clear();
-
-        // Destroy and recreate render pass
-        device.getLogicalDevice().destroyRenderPass(renderPass);
-
-        // Recreate render pass
-        vk::AttachmentDescription colorAttachment{};
-        colorAttachment.format = swapChain.getSceneColorFormat();
-        colorAttachment.samples = vk::SampleCountFlagBits::e1;
-        colorAttachment.loadOp = vk::AttachmentLoadOp::eLoad;  // Preserve clear color
-        colorAttachment.storeOp = vk::AttachmentStoreOp::eStore;
-        colorAttachment.stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
-        colorAttachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
-        colorAttachment.initialLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-        colorAttachment.finalLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-
-        vk::AttachmentReference colorAttachmentRef{};
-        colorAttachmentRef.attachment = 0;
-        colorAttachmentRef.layout = vk::ImageLayout::eColorAttachmentOptimal;
-
-        vk::SubpassDescription subpass{};
-        subpass.pipelineBindPoint = vk::PipelineBindPoint::eGraphics;
-        subpass.colorAttachmentCount = 1;
-        subpass.pColorAttachments = &colorAttachmentRef;
-
-        vk::RenderPassCreateInfo renderPassInfo{};
-        renderPassInfo.attachmentCount = 1;
-        renderPassInfo.pAttachments = &colorAttachment;
-        renderPassInfo.subpassCount = 1;
-        renderPassInfo.pSubpasses = &subpass;
-
-        renderPass = device.getLogicalDevice().createRenderPass(renderPassInfo);
-
-        // Recreate framebuffers
-        framebuffers.resize(offscreenResources.colorImages.size());
-
-        for (uint32_t i = 0; i < framebuffers.size(); i++)
-        {
-            vk::ImageView viewImage = offscreenResources.colorImages[i].colorImageView;
-
-            vk::FramebufferCreateInfo framebufferInfo{};
-            framebufferInfo.renderPass = renderPass;
-            framebufferInfo.attachmentCount = 1;
-            framebufferInfo.pAttachments = &viewImage;
-            framebufferInfo.width = swapChain.getSwapchainExtent().width;
-            framebufferInfo.height = swapChain.getSwapchainExtent().height;
-            framebufferInfo.layers = 1;
-
-            framebuffers[i] = device.getLogicalDevice().createFramebuffer(framebufferInfo);
-        }
+        // With dynamic rendering, no render pass or framebuffers to recreate.
+        // Pipeline is format-compatible and uses dynamic viewport/scissor.
     }
 
     void SkyboxRenderer::recordCommandBuffer(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const
@@ -339,20 +230,16 @@ namespace render::ibl
         if (isDisplay)
         {
             updateUniformBuffer(viewMatrix, projectionMatrix);
-            vk::RenderPassBeginInfo renderPassInfo{};
-            renderPassInfo.renderPass = renderPass;
-            renderPassInfo.framebuffer = framebuffers[imageIndex];
-            renderPassInfo.renderArea.offset.x = 0;
-            renderPassInfo.renderArea.offset.y = 0;
-            renderPassInfo.renderArea.extent = swapChain.getSwapchainExtent();
 
-            std::array<vk::ClearValue, 1> clearValues{};
-            clearValues[0].color = vk::ClearColorValue(std::array<float, 4>{0.0f, 0.0f, 0.0f, 1.0f});
-            renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
-            renderPassInfo.pClearValues = clearValues.data();
+            vk::ImageView colorView = offscreenResources.colorImages[imageIndex].colorImageView;
 
-            // Begin render pass
-            commandBuffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
+            core::DynamicRenderingInfo renderingInfo{};
+            renderingInfo.extent = swapChain.getSwapchainExtent();
+            renderingInfo.colorAttachments = {
+                core::colorClear(colorView, vk::ClearColorValue{std::array<float, 4>{0.0f, 0.0f, 0.0f, 1.0f}})
+            };
+
+            core::beginDynamicRendering(commandBuffer, renderingInfo);
 
             // Bind the graphics pipeline
             commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
@@ -381,8 +268,7 @@ namespace render::ibl
             commandBuffer.bindVertexBuffers(0, vertexBuffer, offsets);
             commandBuffer.draw(static_cast<uint32_t>(skyboxVertices.size()), 1, 0, 0);
 
-            // End render pass
-            commandBuffer.endRenderPass();
+            core::endDynamicRendering(commandBuffer);
         }
     }
 
@@ -394,18 +280,13 @@ namespace render::ibl
 
         updateUniformBuffer(target.view, target.projection);
 
-        vk::RenderPassBeginInfo renderPassInfo{};
-        renderPassInfo.renderPass = target.renderPass;
-        renderPassInfo.framebuffer = target.framebuffer;
-        renderPassInfo.renderArea.offset = vk::Offset2D{0, 0};
-        renderPassInfo.renderArea.extent = vk::Extent2D{target.width, target.height};
+        core::DynamicRenderingInfo renderingInfo{};
+        renderingInfo.extent = vk::Extent2D{target.width, target.height};
+        renderingInfo.colorAttachments = {
+            core::colorClear(target.colorImageView, vk::ClearColorValue{std::array{target.clearColor.r, target.clearColor.g, target.clearColor.b, target.clearColor.a}})
+        };
 
-        std::array<vk::ClearValue, 1> clearValues{};
-        clearValues[0].color = vk::ClearColorValue(std::array{target.clearColor.r, target.clearColor.g, target.clearColor.b, target.clearColor.a});
-        renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
-        renderPassInfo.pClearValues = clearValues.data();
-
-        commandBuffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
+        core::beginDynamicRendering(commandBuffer, renderingInfo);
 
         commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
 
@@ -424,7 +305,7 @@ namespace render::ibl
         commandBuffer.bindVertexBuffers(0, vertexBuffer, offsets);
         commandBuffer.draw(static_cast<uint32_t>(skyboxVertices.size()), 1, 0, 0);
 
-        commandBuffer.endRenderPass();
+        core::endDynamicRendering(commandBuffer);
     }
 
     void SkyboxRenderer::updateUniformBuffer(const glm::mat4& viewMatrix, const glm::mat4& projectionMatrix) const
@@ -447,12 +328,6 @@ namespace render::ibl
             return;
         }
 
-        for (auto const& frame : framebuffers)
-        {
-            device.getLogicalDevice().destroyFramebuffer(frame);
-        }
-        framebuffers.clear();
-
         device.getLogicalDevice().destroyBuffer(vertexBuffer);
         device.getMemoryManager().free(vertexBufferAllocation); vertexBufferAllocation = {};
         vertexBuffer = nullptr;
@@ -460,9 +335,6 @@ namespace render::ibl
         device.getLogicalDevice().destroyBuffer(uniformBuffer);
         device.getMemoryManager().free(uniformBufferAllocation); uniformBufferAllocation = {};
         uniformBuffer = nullptr;
-
-        device.getLogicalDevice().destroyRenderPass(renderPass);
-        renderPass = nullptr;
 
         device.getLogicalDevice().destroyPipeline(graphicsPipeline);
         graphicsPipeline = nullptr;

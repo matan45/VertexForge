@@ -40,7 +40,7 @@ namespace render::postprocess
         enabled = false;
     }
 
-    void ColorGradingEffect::init(vk::RenderPass renderPass, vk::Extent2D extent)
+    void ColorGradingEffect::init(vk::Format colorFormat, vk::Extent2D extent)
     {
         loadShader();
         createDescriptorSetLayouts();
@@ -113,7 +113,7 @@ namespace render::postprocess
         initialized = false;
     }
 
-    void ColorGradingEffect::recreate(vk::RenderPass renderPass, vk::Extent2D extent)
+    void ColorGradingEffect::recreate(vk::Format colorFormat, vk::Extent2D extent)
     {
         auto& dev = device.getLogicalDevice();
 
@@ -271,11 +271,12 @@ namespace render::postprocess
         }
     }
 
-    void ColorGradingEffect::createPipeline(vk::RenderPass renderPass, vk::Extent2D extent)
+    void ColorGradingEffect::createPipeline(vk::Format colorFormat, vk::Extent2D extent)
     {
         core::GraphicsPipelineConfig config{};
         config.device = device.getLogicalDevice();
-        config.renderPass = renderPass;
+        config.renderPass = nullptr;
+        config.colorAttachmentFormats = {colorFormat};
         config.extent = extent;
         config.shaderStages = shader->getShaderStages();
         config.descriptorSetLayouts = {inputDescriptorSetLayout, lutDescriptorSetLayout};

@@ -155,10 +155,10 @@ namespace render::gpudriven
                 giUpdatePipeline = std::make_unique<gi::ProbeUpdatePipeline>(device);
                 giUpdatePipeline->init(storage->getProbeDataLayout(), storage->getCascadeInfoLayout());
 
-                if (cachedRenderPass)
+                if (!cachedColorFormats.empty())
                 {
                     giDebugRenderer = std::make_unique<gi::GIDebugRenderer>(device);
-                    giDebugRenderer->init(cachedRenderPass, storage->getProbeDataLayout(), storage->getCascadeInfoLayout());
+                    giDebugRenderer->init(cachedColorFormats[0], cachedDepthFormat, storage->getProbeDataLayout(), storage->getCascadeInfoLayout());
                 }
 
                 if (meshShaderPipeline && shadowSystem)
@@ -615,7 +615,7 @@ namespace render::gpudriven
                         lightCullingPipeline->getDescriptorSetLayout(),
                         shadowSystem->getShadowDataLayout(),
                         shadowSystem->getShadowTextureLayout(),
-                        cachedRenderPass);
+                        cachedColorFormats, cachedDepthFormat);
                 }
             }
         }

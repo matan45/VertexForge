@@ -6,6 +6,8 @@
 #include "../core/Device.hpp"
 #include "../core/SwapChain.hpp"
 #include "../core/CommandPool.hpp"
+#include "../core/DynamicRenderingHelpers.hpp"
+#include "../core/ImageUtilities.hpp"
 #include "../window/Window.hpp"
 #include "../core/Utilities.hpp"
 #include "print/Log.hpp"
@@ -25,10 +27,8 @@ namespace imguiPass {
 		ImGui::StyleColorsDark();
 
 		createDescriptorPool();
-		createRenderPass();
-		createFrameBuffers();
 
-		// Setup Platform/Renderer back ends
+		// Setup Platform/Renderer back ends with dynamic rendering
 		ImGui_ImplGlfw_InitForVulkan(window->getWindowPtr(), true);
 		ImGui_ImplVulkan_InitInfo initInfo{};
 		initInfo.ApiVersion = VK_API_VERSION_1_3;
@@ -42,8 +42,16 @@ namespace imguiPass {
 		initInfo.MinImageCount = swapChain.getImageCount();
 		initInfo.ImageCount = swapChain.getImageCount();
 		initInfo.Allocator = VK_NULL_HANDLE;
-		initInfo.PipelineInfoMain.RenderPass = imGuiRenderPass;
+		initInfo.UseDynamicRendering = true;
+
+		VkFormat swapFormat = static_cast<VkFormat>(swapChain.getSwapchainImageFormat());
+		VkPipelineRenderingCreateInfoKHR pipelineRendering{};
+		pipelineRendering.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO_KHR;
+		pipelineRendering.colorAttachmentCount = 1;
+		pipelineRendering.pColorAttachmentFormats = &swapFormat;
+		initInfo.PipelineInfoMain.PipelineRenderingCreateInfo = pipelineRendering;
 		initInfo.PipelineInfoMain.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
+
 		ImGui_ImplVulkan_Init(&initInfo);
 
 		ImGuiIO& io = ImGui::GetIO();
@@ -52,7 +60,7 @@ namespace imguiPass {
 
 		// Load a custom font
 		io.Fonts->AddFontFromFileTTF("../../resources/editor/Roboto-Regular.ttf", 18.0f);
-		
+
 		// Font Awesome icon font configuration
 		const ImWchar icons_ranges[] = { ICON_MIN_FA, ICON_MAX_FA, 0 }; // Icon range
 
@@ -72,26 +80,12 @@ namespace imguiPass {
 		ImGui_ImplGlfw_Shutdown();
 		ImGui::DestroyContext();
 
-		for (auto framebuffer : imGuiFrameBuffers) {
-			device.getLogicalDevice().destroyFramebuffer(framebuffer);
-		}
-
-		// Destroy the graphics pipeline, pipeline layout, and render pass
-		device.getLogicalDevice().destroyRenderPass(imGuiRenderPass);
 		device.getLogicalDevice().destroyDescriptorPool(imGuiDescriptorPool);
 	}
 
 	void ImguiRender::recreate()
 	{
-		for (auto framebuffer : imGuiFrameBuffers) {
-			device.getLogicalDevice().destroyFramebuffer(framebuffer);
-		}
-
-		// Destroy the graphics pipeline, pipeline layout, and render pass
-		device.getLogicalDevice().destroyRenderPass(imGuiRenderPass);
-
-		createRenderPass();
-		createFrameBuffers();
+		// Nothing to recreate - dynamic rendering uses swapchain image views directly
 	}
 
 	void ImguiRender::render(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const
@@ -139,20 +133,40 @@ namespace imguiPass {
 
 	void ImguiRender::renderEmpty(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const
 	{
+		// Transition swapchain image: Undefined -> ColorAttachmentOptimal
+		vk::ImageMemoryBarrier barrier{};
+		barrier.oldLayout = vk::ImageLayout::eUndefined;
+		barrier.newLayout = vk::ImageLayout::eColorAttachmentOptimal;
+		barrier.srcAccessMask = {};
+		barrier.dstAccessMask = vk::AccessFlagBits::eColorAttachmentWrite;
+		barrier.image = swapChain.getSwapchainImage(imageIndex);
+		barrier.subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};
 
-		// Record an empty render pass to transition swapchain image to present layout
-		vk::ClearValue clearColor = { std::array<float, 4>{0.0f, 0.0f, 0.0f, 1.0f} };
+		commandBuffer.pipelineBarrier(
+			vk::PipelineStageFlagBits::eTopOfPipe,
+			vk::PipelineStageFlagBits::eColorAttachmentOutput,
+			{}, {}, {}, barrier);
 
-		vk::RenderPassBeginInfo renderPassinfo = {};
-		renderPassinfo.renderPass = imGuiRenderPass;
-		renderPassinfo.framebuffer = imGuiFrameBuffers[imageIndex];
-		renderPassinfo.renderArea.extent.width = swapChain.getDisplayExtent().width;
-		renderPassinfo.renderArea.extent.height = swapChain.getDisplayExtent().height;
-		renderPassinfo.clearValueCount = 1;
-		renderPassinfo.pClearValues = &clearColor;
+		auto colorAttach = core::colorClear(swapChain.getSwapchainImageView(imageIndex),
+			vk::ClearColorValue{std::array<float, 4>{0.0f, 0.0f, 0.0f, 1.0f}});
 
-		commandBuffer.beginRenderPass(renderPassinfo, vk::SubpassContents::eInline);
-		commandBuffer.endRenderPass();
+		core::DynamicRenderingInfo dynInfo{};
+		dynInfo.extent = swapChain.getDisplayExtent();
+		dynInfo.colorAttachments = {colorAttach};
+
+		core::beginDynamicRendering(commandBuffer, dynInfo);
+		core::endDynamicRendering(commandBuffer);
+
+		// Transition swapchain image: ColorAttachmentOptimal -> PresentSrcKHR
+		barrier.oldLayout = vk::ImageLayout::eColorAttachmentOptimal;
+		barrier.newLayout = vk::ImageLayout::ePresentSrcKHR;
+		barrier.srcAccessMask = vk::AccessFlagBits::eColorAttachmentWrite;
+		barrier.dstAccessMask = {};
+
+		commandBuffer.pipelineBarrier(
+			vk::PipelineStageFlagBits::eColorAttachmentOutput,
+			vk::PipelineStageFlagBits::eBottomOfPipe,
+			{}, {}, {}, barrier);
 	}
 
 	void ImguiRender::renderFromSnapshot(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex,
@@ -161,53 +175,45 @@ namespace imguiPass {
 		if (!snapshotDrawData)
 			return;
 
-		vk::ClearValue clearColor = { std::array<float, 4>{0.0f, 0.0f, 0.0f, 0.0f} };
+		// Transition swapchain image: Undefined -> ColorAttachmentOptimal
+		vk::ImageMemoryBarrier barrier{};
+		barrier.oldLayout = vk::ImageLayout::eUndefined;
+		barrier.newLayout = vk::ImageLayout::eColorAttachmentOptimal;
+		barrier.srcAccessMask = {};
+		barrier.dstAccessMask = vk::AccessFlagBits::eColorAttachmentWrite;
+		barrier.image = swapChain.getSwapchainImage(imageIndex);
+		barrier.subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};
 
-		vk::RenderPassBeginInfo renderPassinfo = {};
-		renderPassinfo.renderPass = imGuiRenderPass;
-		renderPassinfo.framebuffer = imGuiFrameBuffers[imageIndex];
-		renderPassinfo.renderArea.extent.width = swapChain.getDisplayExtent().width;
-		renderPassinfo.renderArea.extent.height = swapChain.getDisplayExtent().height;
-		renderPassinfo.clearValueCount = 1;
-		renderPassinfo.pClearValues = &clearColor;
+		commandBuffer.pipelineBarrier(
+			vk::PipelineStageFlagBits::eTopOfPipe,
+			vk::PipelineStageFlagBits::eColorAttachmentOutput,
+			{}, {}, {}, barrier);
 
-		commandBuffer.beginRenderPass(renderPassinfo, vk::SubpassContents::eInline);
+		auto colorAttach = core::colorClear(swapChain.getSwapchainImageView(imageIndex),
+			vk::ClearColorValue{std::array<float, 4>{0.0f, 0.0f, 0.0f, 0.0f}});
+
+		core::DynamicRenderingInfo dynInfo{};
+		dynInfo.extent = swapChain.getDisplayExtent();
+		dynInfo.colorAttachments = {colorAttach};
+
+		core::beginDynamicRendering(commandBuffer, dynInfo);
 
 		ImGui_ImplVulkan_RenderDrawData(snapshotDrawData, commandBuffer);
 
-		commandBuffer.endRenderPass();
+		core::endDynamicRendering(commandBuffer);
+
+		// Transition swapchain image: ColorAttachmentOptimal -> PresentSrcKHR
+		barrier.oldLayout = vk::ImageLayout::eColorAttachmentOptimal;
+		barrier.newLayout = vk::ImageLayout::ePresentSrcKHR;
+		barrier.srcAccessMask = vk::AccessFlagBits::eColorAttachmentWrite;
+		barrier.dstAccessMask = {};
+
+		commandBuffer.pipelineBarrier(
+			vk::PipelineStageFlagBits::eColorAttachmentOutput,
+			vk::PipelineStageFlagBits::eBottomOfPipe,
+			{}, {}, {}, barrier);
 	}
 
-
-	void ImguiRender::createRenderPass()
-	{
-		vk::AttachmentDescription colorAttachment{};
-		colorAttachment.format = swapChain.getSwapchainImageFormat();
-		colorAttachment.samples = vk::SampleCountFlagBits::e1;
-		colorAttachment.loadOp = vk::AttachmentLoadOp::eClear;
-		colorAttachment.storeOp = vk::AttachmentStoreOp::eStore;
-		colorAttachment.stencilLoadOp = vk::AttachmentLoadOp::eClear;
-		colorAttachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
-		colorAttachment.initialLayout = vk::ImageLayout::eUndefined;
-		colorAttachment.finalLayout = vk::ImageLayout::ePresentSrcKHR;
-
-		vk::AttachmentReference colorAttachmentRef{};
-		colorAttachmentRef.attachment = 0;
-		colorAttachmentRef.layout = vk::ImageLayout::eColorAttachmentOptimal;
-
-		vk::SubpassDescription subpass{};
-		subpass.pipelineBindPoint = vk::PipelineBindPoint::eGraphics;
-		subpass.colorAttachmentCount = 1;
-		subpass.pColorAttachments = &colorAttachmentRef;
-
-		vk::RenderPassCreateInfo renderPassInfo{};
-		renderPassInfo.attachmentCount = 1;
-		renderPassInfo.pAttachments = &colorAttachment;
-		renderPassInfo.subpassCount = 1;
-		renderPassInfo.pSubpasses = &subpass;
-
-		imGuiRenderPass = device.getLogicalDevice().createRenderPass(renderPassInfo);
-	}
 
 	void ImguiRender::createDescriptorPool()
 	{
@@ -239,25 +245,6 @@ namespace imguiPass {
 		catch (vk::SystemError& err)
 		{
 			vfLogError("failed to create DescriptorPool {}", err.what());
-		}
-	}
-
-	void ImguiRender::createFrameBuffers()
-	{
-		imGuiFrameBuffers.resize(swapChain.getImageCount());
-
-		for (uint32_t i = 0; i < imGuiFrameBuffers.size(); i++) {
-			vk::ImageView viewImage = swapChain.getSwapchainImageView(i);
-
-			vk::FramebufferCreateInfo framebufferInfo{};
-			framebufferInfo.renderPass = imGuiRenderPass;
-			framebufferInfo.attachmentCount = 1;
-			framebufferInfo.pAttachments = &viewImage;
-			framebufferInfo.width = swapChain.getDisplayExtent().width;
-			framebufferInfo.height = swapChain.getDisplayExtent().height;
-			framebufferInfo.layers = 1;
-
-			imGuiFrameBuffers[i] = device.getLogicalDevice().createFramebuffer(framebufferInfo);
 		}
 	}
 

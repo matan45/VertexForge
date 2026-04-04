@@ -17,20 +17,20 @@ namespace render::mesh
 
     UICanvasImageRenderer::~UICanvasImageRenderer() = default;
 
-    void UICanvasImageRenderer::init(vk::RenderPass renderPass)
+    void UICanvasImageRenderer::init(vk::Format colorFormat, vk::Format depthFormat)
     {
         loadShader();
         createDescriptorSetLayout();
         createDescriptorPool();
-        createPipeline(renderPass);
+        createPipeline(colorFormat, depthFormat);
         createBuffers();
         initialized = true;
     }
 
-    void UICanvasImageRenderer::recreate(vk::RenderPass renderPass)
+    void UICanvasImageRenderer::recreate(vk::Format colorFormat, vk::Format depthFormat)
     {
         destroyPipelineAndLayout(graphicsPipeline, pipelineLayout);
-        createPipeline(renderPass);
+        createPipeline(colorFormat, depthFormat);
     }
 
     void UICanvasImageRenderer::cleanUp()
@@ -101,7 +101,7 @@ namespace render::mesh
         descriptorPool = device.getLogicalDevice().createDescriptorPool(poolInfo);
     }
 
-    void UICanvasImageRenderer::createPipeline(vk::RenderPass renderPass)
+    void UICanvasImageRenderer::createPipeline(vk::Format colorFormat, vk::Format depthFormat)
     {
         // Vertex binding: position (vec2) + texcoord (vec2)
         vk::VertexInputBindingDescription bindingDesc{};
@@ -122,8 +122,10 @@ namespace render::mesh
 
         core::GraphicsPipelineConfig config{
             .device = device.getLogicalDevice(),
-            .renderPass = renderPass,
+            .renderPass = nullptr,
             .extent = swapChain.getSwapchainExtent(),
+            .colorAttachmentFormats = {colorFormat},
+            .depthAttachmentFormat = depthFormat,
             .shaderStages = shader->getShaderStages(),
             .vertexBindings = {bindingDesc},
             .vertexAttributes = std::move(attribDescs),

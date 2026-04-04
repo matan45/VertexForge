@@ -30,11 +30,6 @@ namespace render::transparency
         core::VulkanAllocation revealageAllocation;
         vk::ImageView revealageImageView;
 
-        vk::RenderPass wboitRenderPass;
-        std::vector<vk::Framebuffer> wboitFramebuffers;
-
-        vk::RenderPass compositeRenderPass;
-        std::vector<vk::Framebuffer> compositeFramebuffers;
         vk::Pipeline compositePipeline;
         vk::PipelineLayout compositePipelineLayout;
 
@@ -57,15 +52,10 @@ namespace render::transparency
         void endWBOITPass(const vk::CommandBuffer& cmd);
         void composite(const vk::CommandBuffer& cmd, uint32_t imageIndex);
 
-        vk::RenderPass getWBOITRenderPass() const { return wboitRenderPass; }
         bool isInitialized() const { return initialized; }
 
     private:
         void createRenderTargets();
-        void createWBOITRenderPass();
-        void createWBOITFramebuffers();
-        void createCompositeRenderPass();
-        void createCompositeFramebuffers();
         void createSampler();
         void createCompositeDescriptorResources();
         void createCompositePipeline();

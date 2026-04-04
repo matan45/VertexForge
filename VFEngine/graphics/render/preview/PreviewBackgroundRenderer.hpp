@@ -29,8 +29,6 @@ namespace render::preview
         std::shared_ptr<core::Shader> shader;
         vk::Pipeline pipeline;
         vk::PipelineLayout pipelineLayout;
-        vk::RenderPass renderPass;
-        std::vector<vk::Framebuffer> framebuffers;
 
         bool initialized = false;
 
@@ -51,8 +49,6 @@ namespace render::preview
 
     private:
         void loadShader();
-        void createRenderPass();
-        void createFramebuffers();
         void createPipeline();
     };
 }

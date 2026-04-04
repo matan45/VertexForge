@@ -14,17 +14,17 @@ namespace render::mesh
 
     NavmeshDebugRenderer::~NavmeshDebugRenderer() = default;
 
-    void NavmeshDebugRenderer::init(vk::RenderPass renderPass)
+    void NavmeshDebugRenderer::init(vk::Format colorFormat, vk::Format depthFormat)
     {
         loadShader();
-        createPipeline(renderPass);
+        createPipeline(colorFormat, depthFormat);
         initialized = true;
     }
 
-    void NavmeshDebugRenderer::recreate(vk::RenderPass renderPass)
+    void NavmeshDebugRenderer::recreate(vk::Format colorFormat, vk::Format depthFormat)
     {
         destroyPipelineAndLayout(wireframePipeline, wireframePipelineLayout);
-        createPipeline(renderPass);
+        createPipeline(colorFormat, depthFormat);
     }
 
     void NavmeshDebugRenderer::cleanUp()
@@ -48,7 +48,7 @@ namespace render::mesh
         wireframeShader->readShader("../../resources/shaders/tools/sphere_wireframe.glsl");
     }
 
-    void NavmeshDebugRenderer::createPipeline(vk::RenderPass renderPass)
+    void NavmeshDebugRenderer::createPipeline(vk::Format colorFormat, vk::Format depthFormat)
     {
         vk::VertexInputBindingDescription binding{};
         binding.binding = 0;
@@ -63,7 +63,9 @@ namespace render::mesh
 
         core::GraphicsPipelineConfig config{};
         config.device = device.getLogicalDevice();
-        config.renderPass = renderPass;
+        config.renderPass = nullptr;
+        config.colorAttachmentFormats = {colorFormat};
+        config.depthAttachmentFormat = depthFormat;
         config.extent = swapChain.getSwapchainExtent();
         config.shaderStages = wireframeShader->getShaderStages();
         config.vertexBindings = {binding};

@@ -52,11 +52,9 @@ namespace render
 {
     void RenderPassHandler::draw(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex)
     {
-        frameGraph->reset();
-        importFrameResources(imageIndex);
-        buildFrameGraph(commandBuffer, imageIndex);
-        frameGraph->compile();
-        frameGraph->execute(commandBuffer, imageIndex);
+        // TODO: Switch to render graph path after dynamic rendering migration (VK_KHR_dynamic_rendering).
+        // The graph can't manage layout transitions until VkRenderPass objects are removed.
+        drawLegacy(commandBuffer, imageIndex);
     }
 
     void RenderPassHandler::drawLegacy(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex)
@@ -412,15 +410,18 @@ namespace render
         auto sceneRecordStart = std::chrono::high_resolution_clock::now();
         sceneThreadPoolManager->resetFrame(imageIndex);
 
-        vk::RenderPass rp = meshPipeline->getRenderPass();
-        vk::Framebuffer fb = meshPipeline->getFramebuffer(imageIndex);
         auto extent = swapChain.getSwapchainExtent();
+        vk::Format colorFormat = swapChain.getSceneColorFormat();
+        vk::Format depthFormat = swapChain.getSwapchainDepthStencilFormat();
 
         auto setupSecondary = [&](vk::CommandBuffer sec) {
+            vk::CommandBufferInheritanceRenderingInfo inheritRendering{};
+            inheritRendering.colorAttachmentCount = 1;
+            inheritRendering.pColorAttachmentFormats = &colorFormat;
+            inheritRendering.depthAttachmentFormat = depthFormat;
+
             vk::CommandBufferInheritanceInfo inheritance{};
-            inheritance.renderPass = rp;
-            inheritance.subpass = 0;
-            inheritance.framebuffer = fb;
+            inheritance.pNext = &inheritRendering;
 
             vk::CommandBufferBeginInfo beginInfo{};
             beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit |
@@ -696,8 +697,7 @@ namespace render
 
         // 3. Composite pass: apply distortion to scene color
         distortionComposite->record(commandBuffer,
-            distortionResources->getCompositeRenderPass(),
-            distortionResources->getCompositeFramebuffer(imageIndex),
+            offscreenResources.colorImages[imageIndex].colorImageView,
             extent,
             distortionResources->getCompositeDescriptorSet());
     }

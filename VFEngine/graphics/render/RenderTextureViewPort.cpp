@@ -5,6 +5,7 @@
 #include "../core/ImageUtilities.hpp"
 #include "../core/Utilities.hpp"
 #include "../core/RenderManager.hpp"
+#include "../core/DynamicRenderingHelpers.hpp"
 #include "RenderPassHandler.hpp"
 #include "IBL.hpp"
 #include "mesh/StaticMeshPipeline.hpp"
@@ -36,11 +37,7 @@ namespace render
         height = h;
 
         createSampler();
-        createRenderPass();
-        createSkyboxRenderPass();
         createOffscreenResources();
-        createFramebuffers();
-        createSkyboxFramebuffers();
 
         vk::FenceCreateInfo fenceInfo{vk::FenceCreateFlagBits::eSignaled};
         inFlightFences.resize(swapChain.getImageCount());
@@ -73,12 +70,8 @@ namespace render
             }
         }
 
-        cleanupSkyboxFramebuffers();
-        cleanupFramebuffers();
         cleanupOffscreenResources();
         createOffscreenResources();
-        createFramebuffers();
-        createSkyboxFramebuffers();
     }
 
     vk::DescriptorSet RenderTextureViewPort::render(
@@ -138,13 +131,11 @@ namespace render
 
         // Phase 1: Skybox / clear pass (color-only, eClear)
         // Renders the IBL skybox if available, otherwise just clears the color image.
-        // This uses a color-only render pass compatible with the main skybox pipeline.
         auto* ibl = mainPassHandler->getIBL();
         if (ibl && ibl->isInitialized())
         {
             ibl->renderSkyboxToTarget(commandBuffer, {
-                .renderPass = skyboxRenderPass,
-                .framebuffer = skyboxFramebuffers[imageIndex],
+                .colorImageView = offscreenResources.colorImages[imageIndex].colorImageView,
                 .width = width,
                 .height = height,
                 .view = view,
@@ -154,38 +145,29 @@ namespace render
         }
         else
         {
-            // No IBL — just clear the color image
-            vk::RenderPassBeginInfo clearPassInfo{};
-            clearPassInfo.renderPass = skyboxRenderPass;
-            clearPassInfo.framebuffer = skyboxFramebuffers[imageIndex];
-            clearPassInfo.renderArea.offset = vk::Offset2D{0, 0};
-            clearPassInfo.renderArea.extent = vk::Extent2D{width, height};
+            // No IBL — just clear the color image via dynamic rendering
+            auto colorAttach = core::colorClear(
+                offscreenResources.colorImages[imageIndex].colorImageView,
+                vk::ClearColorValue{std::array{clearColor.r, clearColor.g, clearColor.b, clearColor.a}});
 
-            vk::ClearValue clearVal;
-            clearVal.color = vk::ClearColorValue{
-                std::array{clearColor.r, clearColor.g, clearColor.b, clearColor.a}};
-            clearPassInfo.clearValueCount = 1;
-            clearPassInfo.pClearValues = &clearVal;
+            core::DynamicRenderingInfo clearInfo{};
+            clearInfo.extent = vk::Extent2D{width, height};
+            clearInfo.colorAttachments = {colorAttach};
 
-            commandBuffer.beginRenderPass(clearPassInfo, vk::SubpassContents::eInline);
-            commandBuffer.endRenderPass();
+            core::beginDynamicRendering(commandBuffer, clearInfo);
+            core::endDynamicRendering(commandBuffer);
         }
 
         // Phase 2: Mesh render pass (eLoad color from skybox/clear, eClear depth)
-        vk::RenderPassBeginInfo renderPassInfo{};
-        renderPassInfo.renderPass = compatibleRenderPass;
-        renderPassInfo.framebuffer = framebuffers[imageIndex];
-        renderPassInfo.renderArea.offset = vk::Offset2D{0, 0};
-        renderPassInfo.renderArea.extent = vk::Extent2D{width, height};
+        auto colorAttach = core::colorLoad(offscreenResources.colorImages[imageIndex].colorImageView);
+        auto depthAttach = core::depthClear(offscreenResources.depthImage.depthImageView, 1.0f, 0);
 
-        std::array<vk::ClearValue, 2> clearValues{};
-        clearValues[0].color = vk::ClearColorValue{
-            std::array{clearColor.r, clearColor.g, clearColor.b, clearColor.a}};
-        clearValues[1].depthStencil = vk::ClearDepthStencilValue{1.0f, 0};
-        renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
-        renderPassInfo.pClearValues = clearValues.data();
+        core::DynamicRenderingInfo dynInfo{};
+        dynInfo.extent = vk::Extent2D{width, height};
+        dynInfo.colorAttachments = {colorAttach};
+        dynInfo.depthAttachment = depthAttach;
 
-        commandBuffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
+        core::beginDynamicRendering(commandBuffer, dynInfo);
 
         vk::Viewport viewport{0.0f, 0.0f,
                                static_cast<float>(width), static_cast<float>(height),
@@ -216,7 +198,7 @@ namespace render
             gpuRenderer->renderWaterDraw(commandBuffer, iblDescriptorSet);
         }
 
-        commandBuffer.endRenderPass();
+        core::endDynamicRendering(commandBuffer);
 
         commandBuffer.end();
 
@@ -281,21 +263,6 @@ namespace render
 
         device.getLogicalDevice().destroySampler(sampler);
 
-        cleanupSkyboxFramebuffers();
-        cleanupFramebuffers();
-
-        if (skyboxRenderPass)
-        {
-            device.getLogicalDevice().destroyRenderPass(skyboxRenderPass);
-            skyboxRenderPass = nullptr;
-        }
-
-        if (compatibleRenderPass)
-        {
-            device.getLogicalDevice().destroyRenderPass(compatibleRenderPass);
-            compatibleRenderPass = nullptr;
-        }
-
         cleanupOffscreenResources();
 
         initialized = false;
@@ -313,153 +280,6 @@ namespace render
         if (lastRenderedImageIndex < offscreenResources.colorImages.size())
             return offscreenResources.colorImages[lastRenderedImageIndex].colorImage;
         return {};
-    }
-
-    void RenderTextureViewPort::createRenderPass()
-    {
-        // Mesh render pass: eLoad for color (skybox/clear already wrote it), eClear for depth.
-        // Same attachment formats and sample counts as the main mesh pipeline for pipeline compatibility.
-        vk::AttachmentDescription colorAttachment{};
-        colorAttachment.format = swapChain.getSceneColorFormat();
-        colorAttachment.samples = vk::SampleCountFlagBits::e1;
-        colorAttachment.loadOp = vk::AttachmentLoadOp::eLoad;
-        colorAttachment.storeOp = vk::AttachmentStoreOp::eStore;
-        colorAttachment.stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
-        colorAttachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
-        colorAttachment.initialLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-        colorAttachment.finalLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-
-        vk::AttachmentReference colorAttachmentRef{};
-        colorAttachmentRef.attachment = 0;
-        colorAttachmentRef.layout = vk::ImageLayout::eColorAttachmentOptimal;
-
-        vk::AttachmentDescription depthAttachment{};
-        depthAttachment.format = swapChain.getSwapchainDepthStencilFormat();
-        depthAttachment.samples = vk::SampleCountFlagBits::e1;
-        depthAttachment.loadOp = vk::AttachmentLoadOp::eClear;
-        depthAttachment.storeOp = vk::AttachmentStoreOp::eStore;
-        depthAttachment.stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
-        depthAttachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
-        depthAttachment.initialLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
-        depthAttachment.finalLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
-
-        vk::AttachmentReference depthAttachmentRef{};
-        depthAttachmentRef.attachment = 1;
-        depthAttachmentRef.layout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
-
-        vk::SubpassDescription subpass{};
-        subpass.pipelineBindPoint = vk::PipelineBindPoint::eGraphics;
-        subpass.colorAttachmentCount = 1;
-        subpass.pColorAttachments = &colorAttachmentRef;
-        subpass.pDepthStencilAttachment = &depthAttachmentRef;
-
-        std::array<vk::AttachmentDescription, 2> attachments = {colorAttachment, depthAttachment};
-
-        vk::RenderPassCreateInfo renderPassInfo{};
-        renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
-        renderPassInfo.pAttachments = attachments.data();
-        renderPassInfo.subpassCount = 1;
-        renderPassInfo.pSubpasses = &subpass;
-
-        compatibleRenderPass = device.getLogicalDevice().createRenderPass(renderPassInfo);
-    }
-
-    void RenderTextureViewPort::createSkyboxRenderPass()
-    {
-        // Color-only render pass for skybox rendering (compatible with the main skybox pipeline).
-        // Uses eClear since this is the first pass and we want to clear the color image.
-        vk::AttachmentDescription colorAttachment{};
-        colorAttachment.format = swapChain.getSceneColorFormat();
-        colorAttachment.samples = vk::SampleCountFlagBits::e1;
-        colorAttachment.loadOp = vk::AttachmentLoadOp::eClear;
-        colorAttachment.storeOp = vk::AttachmentStoreOp::eStore;
-        colorAttachment.stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
-        colorAttachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
-        colorAttachment.initialLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-        colorAttachment.finalLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-
-        vk::AttachmentReference colorAttachmentRef{};
-        colorAttachmentRef.attachment = 0;
-        colorAttachmentRef.layout = vk::ImageLayout::eColorAttachmentOptimal;
-
-        vk::SubpassDescription subpass{};
-        subpass.pipelineBindPoint = vk::PipelineBindPoint::eGraphics;
-        subpass.colorAttachmentCount = 1;
-        subpass.pColorAttachments = &colorAttachmentRef;
-
-        vk::RenderPassCreateInfo renderPassInfo{};
-        renderPassInfo.attachmentCount = 1;
-        renderPassInfo.pAttachments = &colorAttachment;
-        renderPassInfo.subpassCount = 1;
-        renderPassInfo.pSubpasses = &subpass;
-
-        skyboxRenderPass = device.getLogicalDevice().createRenderPass(renderPassInfo);
-    }
-
-    void RenderTextureViewPort::createSkyboxFramebuffers()
-    {
-        skyboxFramebuffers.resize(offscreenResources.colorImages.size());
-
-        for (uint32_t i = 0; i < skyboxFramebuffers.size(); i++)
-        {
-            vk::ImageView colorView = offscreenResources.colorImages[i].colorImageView;
-
-            vk::FramebufferCreateInfo framebufferInfo{};
-            framebufferInfo.renderPass = skyboxRenderPass;
-            framebufferInfo.attachmentCount = 1;
-            framebufferInfo.pAttachments = &colorView;
-            framebufferInfo.width = width;
-            framebufferInfo.height = height;
-            framebufferInfo.layers = 1;
-
-            skyboxFramebuffers[i] = device.getLogicalDevice().createFramebuffer(framebufferInfo);
-        }
-    }
-
-    void RenderTextureViewPort::cleanupSkyboxFramebuffers()
-    {
-        for (auto& fb : skyboxFramebuffers)
-        {
-            if (fb)
-            {
-                device.getLogicalDevice().destroyFramebuffer(fb);
-            }
-        }
-        skyboxFramebuffers.clear();
-    }
-
-    void RenderTextureViewPort::createFramebuffers()
-    {
-        framebuffers.resize(offscreenResources.colorImages.size());
-        vk::ImageView depth = offscreenResources.depthImage.depthImageView;
-
-        for (uint32_t i = 0; i < framebuffers.size(); i++)
-        {
-            vk::ImageView colorView = offscreenResources.colorImages[i].colorImageView;
-            std::array<vk::ImageView, 2> attachments = {colorView, depth};
-
-            vk::FramebufferCreateInfo framebufferInfo{};
-            framebufferInfo.renderPass = compatibleRenderPass;
-            framebufferInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
-            framebufferInfo.pAttachments = attachments.data();
-            framebufferInfo.width = width;
-            framebufferInfo.height = height;
-            framebufferInfo.layers = 1;
-
-            framebuffers[i] = device.getLogicalDevice().createFramebuffer(framebufferInfo);
-        }
-    }
-
-    void RenderTextureViewPort::cleanupFramebuffers()
-    {
-        for (auto& fb : framebuffers)
-        {
-            if (fb)
-            {
-                device.getLogicalDevice().destroyFramebuffer(fb);
-            }
-        }
-        framebuffers.clear();
     }
 
     void RenderTextureViewPort::createOffscreenResources()

@@ -8,6 +8,7 @@
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
 #include "../../core/OffScreen.hpp"
+#include "../../core/DynamicRenderingHelpers.hpp"
 #include "material/MaterialTypes.hpp"
 #include "math/Frustum.hpp"
 #include <algorithm>
@@ -310,7 +311,7 @@ namespace render::mesh
                                   [this](const std::string& meshId) { return getMesh(meshId); });
         }
 
-        commandBuffer.endRenderPass();
+        endRenderPass(commandBuffer);
     }
 
     void StaticMeshPipeline::renderMeshList(const vk::CommandBuffer& commandBuffer,
@@ -449,36 +450,36 @@ namespace render::mesh
 
     void StaticMeshPipeline::beginRenderPass(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const
     {
-        vk::RenderPassBeginInfo renderPassInfo{};
-        renderPassInfo.renderPass = renderPass;
-        renderPassInfo.framebuffer = framebuffers[imageIndex];
-        renderPassInfo.renderArea.offset = vk::Offset2D{0, 0};
-        renderPassInfo.renderArea.extent = swapChain.getSwapchainExtent();
+        vk::ImageView colorView = offscreenResources.colorImages[imageIndex].colorImageView;
+        vk::ImageView depthView = offscreenResources.depthImage.depthImageView;
 
-        std::array<vk::ClearValue, 2> clearValues{};
-        clearValues[0].color = vk::ClearColorValue{std::array{0.0f, 0.0f, 0.0f, 1.0f}};
-        clearValues[1].depthStencil = vk::ClearDepthStencilValue{1.0f, 0};
-        renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
-        renderPassInfo.pClearValues = clearValues.data();
+        core::DynamicRenderingInfo info{};
+        info.extent = swapChain.getSwapchainExtent();
+        info.colorAttachments = { core::colorLoad(colorView) };
+        info.depthAttachment = core::depthClear(depthView);
 
-        commandBuffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
+        core::beginDynamicRendering(commandBuffer, info);
     }
 
     void StaticMeshPipeline::beginRenderPassForSecondary(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const
     {
-        vk::RenderPassBeginInfo renderPassInfo{};
-        renderPassInfo.renderPass = renderPass;
-        renderPassInfo.framebuffer = framebuffers[imageIndex];
-        renderPassInfo.renderArea.offset = vk::Offset2D{0, 0};
-        renderPassInfo.renderArea.extent = swapChain.getSwapchainExtent();
+        // Dynamic rendering with secondary command buffers uses VK_RENDERING_CONTENTS_SECONDARY_COMMAND_BUFFERS_BIT
+        vk::ImageView colorView = offscreenResources.colorImages[imageIndex].colorImageView;
+        vk::ImageView depthView = offscreenResources.depthImage.depthImageView;
 
-        std::array<vk::ClearValue, 2> clearValues{};
-        clearValues[0].color = vk::ClearColorValue{std::array{0.0f, 0.0f, 0.0f, 1.0f}};
-        clearValues[1].depthStencil = vk::ClearDepthStencilValue{1.0f, 0};
-        renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
-        renderPassInfo.pClearValues = clearValues.data();
+        auto colorAttach = core::colorLoad(colorView);
+        auto depthAttach = core::depthClear(depthView);
 
-        commandBuffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eSecondaryCommandBuffers);
+        vk::RenderingInfo renderingInfo{};
+        renderingInfo.renderArea.offset = vk::Offset2D{0, 0};
+        renderingInfo.renderArea.extent = swapChain.getSwapchainExtent();
+        renderingInfo.layerCount = 1;
+        renderingInfo.colorAttachmentCount = 1;
+        renderingInfo.pColorAttachments = &colorAttach;
+        renderingInfo.pDepthAttachment = &depthAttach;
+        renderingInfo.flags = vk::RenderingFlagBits::eContentsSecondaryCommandBuffers;
+
+        commandBuffer.beginRendering(renderingInfo);
     }
 
     void StaticMeshPipeline::beginVFXRenderPass(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const
@@ -505,34 +506,32 @@ namespace render::mesh
             vk::PipelineStageFlagBits::eEarlyFragmentTests | vk::PipelineStageFlagBits::eFragmentShader,
             {}, {}, {}, depthBarrier);
 
-        vk::RenderPassBeginInfo renderPassInfo{};
-        renderPassInfo.renderPass = vfxRenderPass;
-        renderPassInfo.framebuffer = framebuffers[imageIndex];
-        renderPassInfo.renderArea.offset = vk::Offset2D{0, 0};
-        renderPassInfo.renderArea.extent = swapChain.getSwapchainExtent();
+        vk::ImageView colorView = offscreenResources.colorImages[imageIndex].colorImageView;
+        vk::ImageView depthView = offscreenResources.depthImage.depthImageView;
 
-        renderPassInfo.clearValueCount = 0;
-        renderPassInfo.pClearValues = nullptr;
+        core::DynamicRenderingInfo info{};
+        info.extent = swapChain.getSwapchainExtent();
+        info.colorAttachments = { core::colorLoad(colorView) };
+        info.depthAttachment = core::depthReadOnly(depthView);
 
-        commandBuffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
+        core::beginDynamicRendering(commandBuffer, info);
     }
 
     void StaticMeshPipeline::beginWaterContinuePass(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const
     {
-        vk::RenderPassBeginInfo renderPassInfo{};
-        renderPassInfo.renderPass = waterContinueRenderPass;
-        renderPassInfo.framebuffer = framebuffers[imageIndex];
-        renderPassInfo.renderArea.offset = vk::Offset2D{0, 0};
-        renderPassInfo.renderArea.extent = swapChain.getSwapchainExtent();
+        vk::ImageView colorView = offscreenResources.colorImages[imageIndex].colorImageView;
+        vk::ImageView depthView = offscreenResources.depthImage.depthImageView;
 
-        renderPassInfo.clearValueCount = 0;
-        renderPassInfo.pClearValues = nullptr;
+        core::DynamicRenderingInfo info{};
+        info.extent = swapChain.getSwapchainExtent();
+        info.colorAttachments = { core::colorLoad(colorView) };
+        info.depthAttachment = core::depthLoad(depthView);
 
-        commandBuffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
+        core::beginDynamicRendering(commandBuffer, info);
     }
 
     void StaticMeshPipeline::endRenderPass(const vk::CommandBuffer& commandBuffer) const
     {
-        commandBuffer.endRenderPass();
+        core::endDynamicRendering(commandBuffer);
     }
 }

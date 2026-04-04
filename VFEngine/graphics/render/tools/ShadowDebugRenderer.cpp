@@ -15,20 +15,20 @@ namespace render::mesh
 
     ShadowDebugRenderer::~ShadowDebugRenderer() = default;
 
-    void ShadowDebugRenderer::init(vk::RenderPass renderPass)
+    void ShadowDebugRenderer::init(vk::Format colorFormat, vk::Format depthFormat)
     {
         loadShaders();
-        createPipelines(renderPass);
+        createPipelines(colorFormat, depthFormat);
         createFrustumBuffers();
         createSphereBuffers();
         initialized = true;
     }
 
-    void ShadowDebugRenderer::recreate(vk::RenderPass renderPass)
+    void ShadowDebugRenderer::recreate(vk::Format colorFormat, vk::Format depthFormat)
     {
         destroyPipelineAndLayout(frustumPipeline, frustumPipelineLayout);
         destroyPipelineAndLayout(spherePipeline, spherePipelineLayout);
-        createPipelines(renderPass);
+        createPipelines(colorFormat, depthFormat);
     }
 
     void ShadowDebugRenderer::cleanUp()
@@ -65,13 +65,15 @@ namespace render::mesh
         sphereShader->readShader("../../resources/shaders/tools/sphere_wireframe.glsl");
     }
 
-    void ShadowDebugRenderer::createPipelines(vk::RenderPass renderPass)
+    void ShadowDebugRenderer::createPipelines(vk::Format colorFormat, vk::Format depthFormat)
     {
         {
             core::WireframePipelineConfig config{
                 .device = device.getLogicalDevice(),
-                .renderPass = renderPass,
+                .renderPass = nullptr,
                 .extent = swapChain.getSwapchainExtent(),
+                .colorAttachmentFormats = {colorFormat},
+                .depthAttachmentFormat = depthFormat,
                 .pushConstantSize = sizeof(ShadowDebugPushConstants),
                 .shaderStages = frustumShader->getShaderStages()
             };
@@ -90,8 +92,10 @@ namespace render::mesh
 
             core::WireframePipelineConfig config{
                 .device = device.getLogicalDevice(),
-                .renderPass = renderPass,
+                .renderPass = nullptr,
                 .extent = swapChain.getSwapchainExtent(),
+                .colorAttachmentFormats = {colorFormat},
+                .depthAttachmentFormat = depthFormat,
                 .pushConstantSize = sizeof(SpherePushConstants),
                 .shaderStages = sphereShader->getShaderStages()
             };

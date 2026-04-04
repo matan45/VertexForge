@@ -23,8 +23,6 @@ namespace render::preview
 
         std::unique_ptr<mesh::GridRenderer> gridRenderer;
 
-        vk::RenderPass renderPass;
-        std::vector<vk::Framebuffer> framebuffers;
         bool initialized = false;
 
     public:
@@ -44,7 +42,5 @@ namespace render::preview
         bool isInitialized() const { return initialized; }
 
     private:
-        void createRenderPass();
-        void createFramebuffers();
     };
 }

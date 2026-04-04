@@ -45,18 +45,8 @@ namespace render::gi
         std::array<vk::ImageView, 2> ssgiHistoryImageViews{};
         uint32_t currentHistoryIdx = 0;
 
-        // Render passes (one per internal pass)
-        vk::RenderPass traceRenderPass;
-        vk::RenderPass temporalRenderPass;
-        vk::RenderPass denoiseRenderPass;
-        vk::RenderPass compositeRenderPass;
-
-        // Framebuffers
-        vk::Framebuffer traceFramebuffer;
-        std::array<vk::Framebuffer, 2> temporalFramebuffers{};
-        vk::Framebuffer denoiseHorizFramebuffer;
-        vk::Framebuffer denoiseFramebuffer;
-        std::vector<vk::Framebuffer> compositeFramebuffers;
+        // Color format for pipeline creation (dynamic rendering)
+        vk::Format compositeColorFormat = vk::Format::eUndefined;
 
         // Shaders
         std::shared_ptr<core::Shader> traceShader;
@@ -185,16 +175,6 @@ namespace render::gi
         void createIntermediateImages();
         void createParamsBuffer();
 
-        void createTraceRenderPass();
-        void createTemporalRenderPass();
-        void createDenoiseRenderPass();
-        void createCompositeRenderPass();
-
-        void createTraceFramebuffer();
-        void createTemporalFramebuffer();
-        void createDenoiseFramebuffer();
-        void createCompositeFramebuffers();
-
         void createDescriptorSetLayouts();
         void createDescriptorPool();
         void createDescriptorSets();
@@ -210,15 +190,13 @@ namespace render::gi
         void updateParamsBuffer();
 
         void cleanupIntermediateImages();
-        void cleanupFramebuffers();
         void cleanupPipelines();
-        void cleanupRenderPasses();
 
         void createImageAndView(vk::Image& image, core::VulkanAllocation& alloc,
                                 vk::ImageView& view, vk::Extent2D extent, vk::Format format);
         void destroyImageAndView(vk::Image& image, core::VulkanAllocation& alloc, vk::ImageView& view);
 
-        vk::Pipeline createFullscreenPipeline(vk::PipelineLayout layout, vk::RenderPass rp,
+        vk::Pipeline createFullscreenPipeline(vk::PipelineLayout layout, vk::Format colorFormat,
                                                vk::Extent2D extent,
                                                const std::shared_ptr<core::Shader>& shdr,
                                                bool additiveBlend = false);

@@ -25,11 +25,6 @@ namespace render::shadow
         vk::Sampler comparisonSampler;
         vk::Sampler depthSampler;
 
-        vk::RenderPass renderPass;          // eClear
-        vk::RenderPass renderPassLoad;      // eLoad (preserves existing depth)
-        vk::Framebuffer framebuffer;
-        vk::Framebuffer framebufferLoad;
-
         std::vector<uint32_t> freeTiles;
 
         vk::Format depthFormat = vk::Format::eD32Sfloat;
@@ -56,10 +51,6 @@ namespace render::shadow
         [[nodiscard]] vk::ImageView getPoolImageView() const { return poolImageView; }
         [[nodiscard]] vk::Sampler getComparisonSampler() const { return comparisonSampler; }
         [[nodiscard]] vk::Sampler getDepthSampler() const { return depthSampler; }
-        [[nodiscard]] vk::RenderPass getRenderPass() const { return renderPass; }
-        [[nodiscard]] vk::RenderPass getRenderPassLoad() const { return renderPassLoad; }
-        [[nodiscard]] vk::Framebuffer getFramebuffer() const { return framebuffer; }
-        [[nodiscard]] vk::Framebuffer getFramebufferLoad() const { return framebufferLoad; }
         [[nodiscard]] vk::Format getDepthFormat() const { return depthFormat; }
 
         [[nodiscard]] uint32_t getFreeTileCount() const { return static_cast<uint32_t>(freeTiles.size()); }
@@ -75,8 +66,5 @@ namespace render::shadow
     private:
         void createPoolImage();
         void createSamplers();
-        void createRenderPasses();
-        vk::RenderPass createSingleRenderPass(vk::AttachmentLoadOp loadOp);
-        void createFramebuffers();
     };
 }

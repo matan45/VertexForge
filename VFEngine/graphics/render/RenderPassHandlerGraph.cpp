@@ -217,34 +217,22 @@ namespace render
             builder.setSideEffect();
         }
 
-        // --- Graph-managed passes (graph inserts barriers) ---
+        // --- VolumetricFog, SSGI (opaque — own barriers) ---
 
-        // VolumetricFogComposite: reads depth (needs DepthAttachmentRead transition),
-        //                         writes scene color (needs ColorAttachmentOptimal transition).
-        //                         executeGraphManaged() has no internal barriers.
-        //                         Render pass finalLayout: color=eShaderReadOnlyOptimal
         if (volumetricFogComposite && volumetricFogComposite->isInitialized())
         {
             volumetricFogComposite->setCameraData(currentNearPlane, currentFarPlane);
 
             auto builder = frameGraph->addPass("VolumetricFogComposite",
                 [this](vk::CommandBuffer cmd, uint32_t idx) {
-                    volumetricFogComposite->executeGraphManaged(cmd, idx);
+                    volumetricFogComposite->execute(cmd, idx);
                 });
-            builder.read(depthHandle, graph::ResourceUsage::DepthAttachmentRead);
-            // Graph transitions scene color to eColorAttachmentOptimal (render pass initialLayout).
-            // Render pass finalLayout transitions it back to eShaderReadOnlyOptimal.
-            builder.write(sceneColorHandle, graph::ResourceUsage::ColorAttachmentWrite);
-            // Update tracker to reflect render pass finalLayout
             sceneColorHandle = builder.opaqueWrite(sceneColorHandle, graph::ResourceUsage::ShaderRead);
+            depthHandle = builder.opaqueWrite(depthHandle, graph::ResourceUsage::DepthAttachmentWrite);
             builder.setSegment(graph::HookSegment::PostScene);
             builder.setSideEffect();
         }
 
-        // SSGI: reads depth (needs DepthAttachmentRead), reads scene color (ShaderRead),
-        //       writes scene color (ColorAttachmentWrite via composite sub-pass).
-        //       executeGraphManaged() has no depth/scene-color barriers.
-        //       Render pass finalLayout: color=eShaderReadOnlyOptimal
         if (ssgiPipeline && ssgiPipeline->isInitialized())
         {
             ssgiPipeline->setCameraData(currentView, currentProjection,
@@ -254,27 +242,12 @@ namespace render
 
             auto builder = frameGraph->addPass("SSGI",
                 [this](vk::CommandBuffer cmd, uint32_t idx) {
-                    ssgiPipeline->executeGraphManaged(cmd, idx);
+                    ssgiPipeline->execute(cmd, idx);
                 });
-            // Graph manages depth transition (attachment → read-only)
-            builder.read(depthHandle, graph::ResourceUsage::DepthAttachmentRead);
-            // Scene color transitions are internal (trace reads as ShaderRead,
-            // composite writes as ColorAttachment — handled inside executeGraphManaged)
-            // Composite render pass finalLayout = eShaderReadOnlyOptimal
             sceneColorHandle = builder.opaqueWrite(sceneColorHandle, graph::ResourceUsage::ShaderRead);
+            depthHandle = builder.opaqueWrite(depthHandle, graph::ResourceUsage::DepthAttachmentWrite);
             builder.setSegment(graph::HookSegment::PostScene);
             builder.setSideEffect();
-        }
-
-        // Restore depth to eDepthStencilAttachmentOptimal if graph-managed passes left it
-        // in eDepthStencilReadOnlyOptimal (needed by DepthCopy's internal barriers)
-        if ((volumetricFogComposite && volumetricFogComposite->isInitialized()) ||
-            (ssgiPipeline && ssgiPipeline->isInitialized()))
-        {
-            auto builder = frameGraph->addPass("DepthRestore",
-                [](vk::CommandBuffer, uint32_t) { /* no-op, barrier does the work */ });
-            depthHandle = builder.write(depthHandle, graph::ResourceUsage::DepthAttachmentWrite);
-            builder.setSegment(graph::HookSegment::PostScene);
         }
 
         // Hook: PrePostProcess

@@ -7,6 +7,7 @@
 #include "../../../core/ImageUtilities.hpp"
 #include "../../../core/BufferUtilities.hpp"
 #include "../../../core/PipelineUtilities.hpp"
+#include "../../../core/DynamicRenderingHelpers.hpp"
 #include <cstring>
 #include <cmath>
 
@@ -30,12 +31,11 @@ namespace render::postprocess
         }
     }
 
-    void DepthOfFieldEffect::init(vk::RenderPass renderPass, vk::Extent2D extent)
+    void DepthOfFieldEffect::init(vk::Format colorFormat, vk::Extent2D extent)
     {
         currentExtent = extent;
 
         createSampler();
-        createBlurRenderPass();
         createBlurImage();
         createDepthImageView();
         createDoFBuffer();
@@ -44,7 +44,7 @@ namespace render::postprocess
         createDescriptorSets();
         loadShaders();
         createBlurPipeline();
-        createCompositePipeline(renderPass);
+        createCompositePipeline(colorFormat);
 
         initialized = true;
     }
@@ -80,12 +80,6 @@ namespace render::postprocess
             compositeDescriptorSetLayout = nullptr;
         }
 
-        if (blurRenderPass)
-        {
-            dev.destroyRenderPass(blurRenderPass);
-            blurRenderPass = nullptr;
-        }
-
         if (dofBuffer)
         {
             dofBufferMapped = nullptr;
@@ -113,7 +107,7 @@ namespace render::postprocess
         initialized = false;
     }
 
-    void DepthOfFieldEffect::recreate(vk::RenderPass renderPass, vk::Extent2D extent)
+    void DepthOfFieldEffect::recreate(vk::Format colorFormat, vk::Extent2D extent)
     {
         currentExtent = extent;
         auto& dev = device.getLogicalDevice();
@@ -133,19 +127,12 @@ namespace render::postprocess
             descriptorPool = nullptr;
         }
 
-        if (blurRenderPass)
-        {
-            dev.destroyRenderPass(blurRenderPass);
-            blurRenderPass = nullptr;
-        }
-
-        createBlurRenderPass();
         createBlurImage();
         createDepthImageView();
         createDescriptorPool();
         createDescriptorSets();
         createBlurPipeline();
-        createCompositePipeline(renderPass);
+        createCompositePipeline(colorFormat);
     }
 
     void DepthOfFieldEffect::preRecord(const vk::CommandBuffer& commandBuffer,
@@ -159,13 +146,13 @@ namespace render::postprocess
             vk::ImageLayout::eDepthStencilReadOnlyOptimal,
             depthAspectMask);
 
-        vk::RenderPassBeginInfo rpBegin{};
-        rpBegin.renderPass = blurRenderPass;
-        rpBegin.framebuffer = blurFramebuffer;
-        rpBegin.renderArea.offset = vk::Offset2D{0, 0};
-        rpBegin.renderArea.extent = currentExtent;
+        auto colorAttach = core::colorDontCare(blurImageView);
 
-        commandBuffer.beginRenderPass(rpBegin, vk::SubpassContents::eInline);
+        core::DynamicRenderingInfo dynInfo{};
+        dynInfo.extent = currentExtent;
+        dynInfo.colorAttachments = {colorAttach};
+
+        core::beginDynamicRendering(commandBuffer, dynInfo);
 
         commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, blurPipeline);
 
@@ -176,7 +163,12 @@ namespace render::postprocess
                                           blurSets.data(), 0, nullptr);
 
         commandBuffer.draw(3, 1, 0, 0);
-        commandBuffer.endRenderPass();
+        core::endDynamicRendering(commandBuffer);
+
+        // Transition blur image to shader read for composite pass
+        core::ImageUtilities::transitionImageLayout(commandBuffer, blurImage,
+            vk::ImageLayout::eColorAttachmentOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
+            vk::ImageAspectFlagBits::eColor);
 
         core::ImageUtilities::transitionImageLayout(commandBuffer,
             offscreenResources.depthImage.depthImage,
@@ -227,46 +219,6 @@ namespace render::postprocess
         sampler = device.getLogicalDevice().createSampler(samplerInfo);
     }
 
-    void DepthOfFieldEffect::createBlurRenderPass()
-    {
-        vk::AttachmentDescription colorAttachment{};
-        colorAttachment.format = vk::Format::eR8G8B8A8Unorm;
-        colorAttachment.samples = vk::SampleCountFlagBits::e1;
-        colorAttachment.loadOp = vk::AttachmentLoadOp::eDontCare;
-        colorAttachment.storeOp = vk::AttachmentStoreOp::eStore;
-        colorAttachment.stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
-        colorAttachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
-        colorAttachment.initialLayout = vk::ImageLayout::eUndefined;
-        colorAttachment.finalLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-
-        vk::AttachmentReference colorRef{};
-        colorRef.attachment = 0;
-        colorRef.layout = vk::ImageLayout::eColorAttachmentOptimal;
-
-        vk::SubpassDescription subpass{};
-        subpass.pipelineBindPoint = vk::PipelineBindPoint::eGraphics;
-        subpass.colorAttachmentCount = 1;
-        subpass.pColorAttachments = &colorRef;
-
-        vk::SubpassDependency dependency{};
-        dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
-        dependency.dstSubpass = 0;
-        dependency.srcStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
-        dependency.srcAccessMask = vk::AccessFlagBits::eColorAttachmentWrite;
-        dependency.dstStageMask = vk::PipelineStageFlagBits::eFragmentShader;
-        dependency.dstAccessMask = vk::AccessFlagBits::eShaderRead;
-
-        vk::RenderPassCreateInfo rpInfo{};
-        rpInfo.attachmentCount = 1;
-        rpInfo.pAttachments = &colorAttachment;
-        rpInfo.subpassCount = 1;
-        rpInfo.pSubpasses = &subpass;
-        rpInfo.dependencyCount = 1;
-        rpInfo.pDependencies = &dependency;
-
-        blurRenderPass = device.getLogicalDevice().createRenderPass(rpInfo);
-    }
-
     void DepthOfFieldEffect::createBlurImage()
     {
         auto& dev = device.getLogicalDevice();
@@ -285,16 +237,6 @@ namespace render::postprocess
         core::ImageViewInfoRequest viewReq(dev, blurImage);
         viewReq.format = vk::Format::eR8G8B8A8Unorm;
         core::ImageUtilities::createImageView(viewReq, blurImageView);
-
-        vk::FramebufferCreateInfo fbInfo{};
-        fbInfo.renderPass = blurRenderPass;
-        fbInfo.attachmentCount = 1;
-        fbInfo.pAttachments = &blurImageView;
-        fbInfo.width = currentExtent.width;
-        fbInfo.height = currentExtent.height;
-        fbInfo.layers = 1;
-
-        blurFramebuffer = dev.createFramebuffer(fbInfo);
     }
 
     void DepthOfFieldEffect::createDepthImageView()
@@ -529,13 +471,19 @@ namespace render::postprocess
         pipelineInfo.pDepthStencilState = &depthStencil;
         pipelineInfo.pColorBlendState = &colorBlending;
         pipelineInfo.layout = blurPipelineLayout;
-        pipelineInfo.renderPass = blurRenderPass;
+        pipelineInfo.renderPass = nullptr;
         pipelineInfo.subpass = 0;
+
+        vk::Format blurFormat = vk::Format::eR8G8B8A8Unorm;
+        vk::PipelineRenderingCreateInfo renderingInfo{};
+        renderingInfo.colorAttachmentCount = 1;
+        renderingInfo.pColorAttachmentFormats = &blurFormat;
+        pipelineInfo.pNext = &renderingInfo;
 
         blurPipeline = dev.createGraphicsPipeline(nullptr, pipelineInfo).value;
     }
 
-    void DepthOfFieldEffect::createCompositePipeline(vk::RenderPass externalRenderPass)
+    void DepthOfFieldEffect::createCompositePipeline(vk::Format colorFormat)
     {
         std::array<vk::DescriptorSetLayout, 2> setLayouts = {
             compositeDescriptorSetLayout, compositeDescriptorSetLayout
@@ -543,7 +491,8 @@ namespace render::postprocess
 
         core::GraphicsPipelineConfig config{};
         config.device = device.getLogicalDevice();
-        config.renderPass = externalRenderPass;
+        config.renderPass = nullptr;
+        config.colorAttachmentFormats = {colorFormat};
         config.extent = currentExtent;
         config.shaderStages = compositeShader->getShaderStages();
         config.descriptorSetLayouts = {setLayouts.begin(), setLayouts.end()};
@@ -560,12 +509,6 @@ namespace render::postprocess
     void DepthOfFieldEffect::cleanupBlurImage()
     {
         auto& dev = device.getLogicalDevice();
-
-        if (blurFramebuffer)
-        {
-            dev.destroyFramebuffer(blurFramebuffer);
-            blurFramebuffer = nullptr;
-        }
 
         if (blurImageView)
         {

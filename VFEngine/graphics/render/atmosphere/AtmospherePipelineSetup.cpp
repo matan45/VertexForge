@@ -5,6 +5,7 @@
 #include "../../core/OffScreen.hpp"
 #include "../../core/ImageUtilities.hpp"
 #include "../../core/PipelineUtilities.hpp"
+#include "../../core/DynamicRenderingHelpers.hpp"
 
 namespace render::atmosphere
 {
@@ -283,85 +284,10 @@ namespace render::atmosphere
         depthOnlyImageView = device.getLogicalDevice().createImageView(viewInfo);
     }
 
-    void AtmospherePipeline::createSkyRenderPass()
-    {
-        vk::AttachmentDescription colorAttachment{};
-        colorAttachment.format = swapChain.getSceneColorFormat();
-        colorAttachment.samples = vk::SampleCountFlagBits::e1;
-        colorAttachment.loadOp = vk::AttachmentLoadOp::eLoad;
-        colorAttachment.storeOp = vk::AttachmentStoreOp::eStore;
-        colorAttachment.stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
-        colorAttachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
-        colorAttachment.initialLayout = vk::ImageLayout::eColorAttachmentOptimal;
-        colorAttachment.finalLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-
-        vk::AttachmentReference colorRef{0, vk::ImageLayout::eColorAttachmentOptimal};
-        vk::SubpassDescription subpass{};
-        subpass.pipelineBindPoint = vk::PipelineBindPoint::eGraphics;
-        subpass.colorAttachmentCount = 1;
-        subpass.pColorAttachments = &colorRef;
-
-        vk::SubpassDependency dep{};
-        dep.srcSubpass = VK_SUBPASS_EXTERNAL;
-        dep.dstSubpass = 0;
-        dep.srcStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
-        dep.srcAccessMask = vk::AccessFlagBits::eColorAttachmentWrite;
-        dep.dstStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
-        dep.dstAccessMask = vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite;
-
-        vk::RenderPassCreateInfo rpInfo{};
-        rpInfo.attachmentCount = 1; rpInfo.pAttachments = &colorAttachment;
-        rpInfo.subpassCount = 1; rpInfo.pSubpasses = &subpass;
-        rpInfo.dependencyCount = 1; rpInfo.pDependencies = &dep;
-
-        skyRenderPass = device.getLogicalDevice().createRenderPass(rpInfo);
-    }
-
-    void AtmospherePipeline::createSkyFramebuffers()
-    {
-        uint32_t imageCount = static_cast<uint32_t>(offscreenResources.colorImages.size());
-        skyFramebuffers.resize(imageCount);
-        for (uint32_t i = 0; i < imageCount; ++i)
-        {
-            vk::FramebufferCreateInfo fbInfo{};
-            fbInfo.renderPass = skyRenderPass;
-            fbInfo.attachmentCount = 1;
-            fbInfo.pAttachments = &offscreenResources.colorImages[i].colorImageView;
-            fbInfo.width = currentExtent.width;
-            fbInfo.height = currentExtent.height;
-            fbInfo.layers = 1;
-            skyFramebuffers[i] = device.getLogicalDevice().createFramebuffer(fbInfo);
-        }
-    }
-
-    void AtmospherePipeline::createCompositeRenderPass()
-    {
-        compositeRenderPass = skyRenderPass;
-    }
-
-    void AtmospherePipeline::createCompositeFramebuffers()
-    {
-        uint32_t imageCount = static_cast<uint32_t>(offscreenResources.colorImages.size());
-        compositeFramebuffers.resize(imageCount);
-        for (uint32_t i = 0; i < imageCount; ++i)
-        {
-            vk::FramebufferCreateInfo fbInfo{};
-            fbInfo.renderPass = compositeRenderPass;
-            fbInfo.attachmentCount = 1;
-            fbInfo.pAttachments = &offscreenResources.colorImages[i].colorImageView;
-            fbInfo.width = currentExtent.width;
-            fbInfo.height = currentExtent.height;
-            fbInfo.layers = 1;
-            compositeFramebuffers[i] = device.getLogicalDevice().createFramebuffer(fbInfo);
-        }
-    }
-
     void AtmospherePipeline::createComposite()
     {
         auto& dev = device.getLogicalDevice();
 
-        createCompositeRenderPass();
-        createCompositeFramebuffers();
         createDepthOnlyView();
 
         std::array<vk::DescriptorSetLayoutBinding, 3> bindings{};
@@ -454,7 +380,14 @@ namespace render::atmosphere
         pipelineInfo.pDepthStencilState = &depthStencilState;
         pipelineInfo.pColorBlendState = &blending;
         pipelineInfo.layout = compositePipelineLayout;
-        pipelineInfo.renderPass = compositeRenderPass;
+        pipelineInfo.renderPass = nullptr;
+
+        vk::Format colorFormat = swapChain.getSceneColorFormat();
+        vk::PipelineRenderingCreateInfo renderingInfo{};
+        renderingInfo.colorAttachmentCount = 1;
+        renderingInfo.pColorAttachmentFormats = &colorFormat;
+        pipelineInfo.pNext = &renderingInfo;
+
         compositePipeline = dev.createGraphicsPipeline(nullptr, pipelineInfo).value;
     }
 }

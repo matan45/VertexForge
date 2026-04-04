@@ -18,9 +18,10 @@ namespace render::vfx
         cleanup();
     }
 
-    void VFXDistortionPipeline::init(vk::RenderPass renderPass)
+    void VFXDistortionPipeline::init(vk::Format colorFmt, vk::Format depthFmt)
     {
-        externalRenderPass = renderPass;
+        colorFormat = colorFmt;
+        depthFormat = depthFmt;
         loadShader();
         createDescriptorSetLayout();
         createDescriptorPool();
@@ -33,10 +34,10 @@ namespace render::vfx
         initialized = true;
     }
 
-    void VFXDistortionPipeline::recreate(vk::RenderPass renderPass)
+    void VFXDistortionPipeline::recreate(vk::Format colorFmt, vk::Format depthFmt)
     {
         cleanup();
-        init(renderPass);
+        init(colorFmt, depthFmt);
     }
 
     void VFXDistortionPipeline::cleanup()

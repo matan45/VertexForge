@@ -223,7 +223,8 @@ namespace render::gpudriven
             void* instanceStagingMapped = nullptr;
             uint32_t instanceStagingCapacity = 0;
 
-            vk::RenderPass cachedRenderPass;
+            std::vector<vk::Format> cachedColorFormats;
+            vk::Format cachedDepthFormat = vk::Format::eUndefined;
 
             // Track which terrain tiles have vegetation registered
             std::unordered_set<uint64_t> registeredTileKeys;
@@ -352,8 +353,11 @@ namespace render::gpudriven
         GPUDrivenStats stats{};
 
         vk::DescriptorSetLayout cachedIBLLayout;
-        vk::RenderPass cachedRenderPass;
-        vk::RenderPass cachedWBOITRenderPass;
+        // Dynamic rendering formats (Vulkan 1.3) - replaces cached render passes
+        std::vector<vk::Format> cachedColorFormats;
+        vk::Format cachedDepthFormat = vk::Format::eUndefined;
+        std::vector<vk::Format> cachedWBOITColorFormats;
+        vk::Format cachedWBOITDepthFormat = vk::Format::eUndefined;
 
         TerrainState terrain;
         WaterState water;
@@ -372,7 +376,8 @@ namespace render::gpudriven
         GPUDrivenRenderer(const GPUDrivenRenderer&) = delete;
         GPUDrivenRenderer& operator=(const GPUDrivenRenderer&) = delete;
 
-        void init(vk::DescriptorSetLayout iblDescriptorSetLayout, vk::RenderPass renderPass,
+        void init(vk::DescriptorSetLayout iblDescriptorSetLayout,
+                 const std::vector<vk::Format>& colorFormats, vk::Format depthFormat,
                  vk::ImageView sceneDepthView = nullptr);
 
         void cleanup();
@@ -416,7 +421,7 @@ namespace render::gpudriven
 
         void renderGIDebug(vk::CommandBuffer cmd, const glm::mat4& viewProjection);
 
-        void initWBOITPipeline(vk::RenderPass wboitRenderPass);
+        void initWBOITPipeline(const std::vector<vk::Format>& wboitColorFormats, vk::Format wboitDepthFormat);
         bool isWBOITReady() const { return wboitMeshShaderPipeline != nullptr && wboitMeshShaderPipeline->getPipeline(); }
         bool hasTransparentObjects() const { return mergedBuffer && mergedBuffer->getTransparentObjectCount() > 0; }
 
@@ -478,7 +483,8 @@ namespace render::gpudriven
 
         uint32_t getHiZMipLevels() const { return hiZMipLevels; }
 
-        void updateRenderPass(vk::RenderPass newRenderPass, vk::DescriptorSetLayout newIBLLayout = nullptr);
+        void updateFormats(const std::vector<vk::Format>& colorFormats, vk::Format depthFormat,
+                          vk::DescriptorSetLayout newIBLLayout = nullptr);
 
         uint32_t getMergedVertexCount() const;
         uint32_t getMergedIndexCount() const;
@@ -591,7 +597,8 @@ namespace render::gpudriven
         float getOceanHeightAt(const glm::vec2& worldXZ) const;
 
         // Vegetation rendering
-        void initVegetationSubsystems(vk::DescriptorSetLayout iblDescriptorSetLayout, vk::RenderPass renderPass);
+        void initVegetationSubsystems(vk::DescriptorSetLayout iblDescriptorSetLayout,
+                                     const std::vector<vk::Format>& colorFormats, vk::Format depthFormat);
         void renderGrassDraw(vk::CommandBuffer cmd,
                              uint32_t screenWidth = 0, uint32_t screenHeight = 0);
         void updateWind(float deltaTime, const ::vegetation::WindConfig& config);
@@ -690,10 +697,13 @@ namespace render::gpudriven
         void updateAllPipelinesHiZ();
         std::pair<vk::ImageView, vk::Sampler> getHiZViewSampler() const;
 
-        void initBillboardSubsystems(vk::DescriptorSetLayout iblDescriptorSetLayout, vk::RenderPass renderPass);
-        void initTerrainSubsystems(vk::DescriptorSetLayout iblDescriptorSetLayout, vk::RenderPass renderPass);
+        void initBillboardSubsystems(vk::DescriptorSetLayout iblDescriptorSetLayout,
+                                    const std::vector<vk::Format>& colorFormats, vk::Format depthFormat);
+        void initTerrainSubsystems(vk::DescriptorSetLayout iblDescriptorSetLayout,
+                                   const std::vector<vk::Format>& colorFormats, vk::Format depthFormat);
         void createGrassBuffers(uint32_t maxInstances);
-        void initWaterSubsystems(vk::DescriptorSetLayout iblDescriptorSetLayout, vk::RenderPass renderPass,
+        void initWaterSubsystems(vk::DescriptorSetLayout iblDescriptorSetLayout,
+                                 const std::vector<vk::Format>& colorFormats, vk::Format depthFormat,
                                  vk::ImageView sceneDepthView);
         void createMultiBandOceanDescriptor();
         void updateMultiBandOceanDescriptor();

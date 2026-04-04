@@ -312,7 +312,7 @@ namespace render
             return;
         }
 
-        debugRenderer->init(meshPipeline->getRenderPass());
+        debugRenderer->init(swapChain.getSceneColorFormat(), swapChain.getSwapchainDepthStencilFormat());
         debugRendererInitialized = true;
     }
 

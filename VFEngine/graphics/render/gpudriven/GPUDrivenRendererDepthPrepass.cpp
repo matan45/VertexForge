@@ -47,7 +47,7 @@ namespace render::gpudriven
 
         depthPrepassPipeline = std::make_unique<occlusion::DepthPrepassPipeline>(device, swapChain);
         occlusion::DepthPrepassInitInfo info{
-            .renderPass = depthPrepass->getRenderPass(),
+            .depthFormat = swapChain.getSwapchainDepthStencilFormat(),
             .cameraLayout = cachedIBLLayout,
             .perDrawLayout = meshShaderPipeline->getPerDrawDataLayout(),
             .bindlessTextureLayout = bindlessTextures ? bindlessTextures->getDescriptorSetLayout() : meshShaderPipeline->getMeshletDataLayout(),

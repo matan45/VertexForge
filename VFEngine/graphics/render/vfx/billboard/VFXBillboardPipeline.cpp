@@ -20,7 +20,6 @@ namespace render::vfx
     void VFXBillboardPipeline::init()
     {
         loadShader();
-        createRenderPass();
         createDescriptorSetLayout();
         createDescriptorPool();
         createBuffers();
@@ -28,7 +27,6 @@ namespace render::vfx
         createSampler();
         createDescriptorSet();
         createPipeline();
-        createFramebuffers();
 
         initialized = true;
     }
@@ -41,28 +39,15 @@ namespace render::vfx
 
     void VFXBillboardPipeline::recreate()
     {
-        for (auto& framebuffer : framebuffers)
-        {
-            device.getLogicalDevice().destroyFramebuffer(framebuffer);
-        }
-        device.getLogicalDevice().destroyRenderPass(renderPass);
         device.getLogicalDevice().destroyPipeline(graphicsPipeline);
         device.getLogicalDevice().destroyPipelineLayout(pipelineLayout);
 
-        createRenderPass();
         createPipeline();
-        createFramebuffers();
     }
 
     void VFXBillboardPipeline::cleanUp()
     {
         auto& dev = device.getLogicalDevice();
-
-        for (auto& framebuffer : framebuffers)
-        {
-            dev.destroyFramebuffer(framebuffer);
-        }
-        framebuffers.clear();
 
         if (graphicsPipeline) { dev.destroyPipeline(graphicsPipeline); graphicsPipeline = nullptr; }
         if (pipelineLayout) { dev.destroyPipelineLayout(pipelineLayout); pipelineLayout = nullptr; }
@@ -78,8 +63,6 @@ namespace render::vfx
             descriptorPool = nullptr;
         }
         if (descriptorSetLayout) { dev.destroyDescriptorSetLayout(descriptorSetLayout); descriptorSetLayout = nullptr; }
-
-        if (renderPass) { dev.destroyRenderPass(renderPass); renderPass = nullptr; }
 
         core::BufferUtilities::destroyBuffer(dev, cameraUBO, cameraUBOAllocation, device.getMemoryManager());
         core::BufferUtilities::destroyBuffer(dev, quadVertexBuffer, quadVertexBufferAllocation, device.getMemoryManager());

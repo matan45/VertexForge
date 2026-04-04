@@ -144,7 +144,7 @@ namespace render::gpudriven
                   vk::DescriptorSetLayout cullingOutputLayout,
                   vk::DescriptorSetLayout shadowDataLayout,
                   vk::DescriptorSetLayout shadowTextureLayout,
-                  vk::RenderPass renderPass);
+                  const std::vector<vk::Format>& colorFormats, vk::Format depthFormat);
 
         void cleanup();
         void recreate(vk::DescriptorSetLayout iblLayout,
@@ -156,7 +156,7 @@ namespace render::gpudriven
                       vk::DescriptorSetLayout cullingOutputLayout,
                       vk::DescriptorSetLayout shadowDataLayout,
                       vk::DescriptorSetLayout shadowTextureLayout,
-                      vk::RenderPass renderPass);
+                      const std::vector<vk::Format>& colorFormats, vk::Format depthFormat);
 
         void setWireframeMode(bool enabled) { wireframeMode = enabled; }
 
@@ -253,7 +253,7 @@ namespace render::gpudriven
                                            vk::DescriptorSetLayout cullingOutputLayout,
                                            vk::DescriptorSetLayout shadowDataLayout,
                                            vk::DescriptorSetLayout shadowTextureLayout,
-                                           vk::RenderPass renderPass);
+                                           const std::vector<vk::Format>& colorFormats, vk::Format depthFormat);
         bool loadTerrainShaders();
         void cleanupDescriptorResources();
         bool validateDescriptorsForDispatch() const;

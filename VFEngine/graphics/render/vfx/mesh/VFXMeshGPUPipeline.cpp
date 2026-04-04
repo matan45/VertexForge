@@ -27,14 +27,15 @@ namespace render::vfx
         cleanup();
     }
 
-    void VFXMeshGPUPipeline::init(vk::RenderPass renderPass)
+    void VFXMeshGPUPipeline::init(vk::Format colorFmt, vk::Format depthFmt)
     {
         if (initialized)
         {
             return;
         }
 
-        externalRenderPass = renderPass;
+        colorFormat = colorFmt;
+        depthFormat = depthFmt;
 
         try
         {
@@ -95,14 +96,15 @@ namespace render::vfx
         }
     }
 
-    void VFXMeshGPUPipeline::recreate(vk::RenderPass renderPass)
+    void VFXMeshGPUPipeline::recreate(vk::Format colorFmt, vk::Format depthFmt)
     {
         if (!initialized)
         {
             return;
         }
 
-        externalRenderPass = renderPass;
+        colorFormat = colorFmt;
+        depthFormat = depthFmt;
 
         auto vkDevice = device.getLogicalDevice();
         vkDevice.destroyPipeline(graphicsPipeline);
@@ -322,8 +324,10 @@ namespace render::vfx
 
         core::GraphicsPipelineConfig config{
             .device = device.getLogicalDevice(),
-            .renderPass = externalRenderPass,
+            .renderPass = nullptr,
             .extent = swapChain.getSwapchainExtent(),
+            .colorAttachmentFormats = {colorFormat},
+            .depthAttachmentFormat = depthFormat,
             .shaderStages = gpuShader->getShaderStages(),
             .vertexBindings = {vertexBinding},
             .vertexAttributes = {vertexAttribs.begin(), vertexAttribs.end()},

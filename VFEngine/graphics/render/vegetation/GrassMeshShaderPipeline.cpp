@@ -18,7 +18,7 @@ namespace render::vegetation
                                         vk::DescriptorSetLayout windLayout,
                                         vk::DescriptorSetLayout lightLayout,
                                         vk::DescriptorSetLayout bindlessLayout,
-                                        vk::RenderPass renderPass)
+                                        const std::vector<vk::Format>& colorFormats, vk::Format depthFormat)
     {
         if (initialized) return;
 
@@ -26,7 +26,7 @@ namespace render::vegetation
 
         createGrassDataDescriptor();
         createCameraDescriptor();
-        createGrassPipeline(windLayout, lightLayout, bindlessLayout, renderPass);
+        createGrassPipeline(windLayout, lightLayout, bindlessLayout, colorFormats, depthFormat);
 
         if (graphicsPipeline)
         {
@@ -94,7 +94,7 @@ namespace render::vegetation
     void GrassMeshShaderPipeline::recreate(vk::DescriptorSetLayout windLayout,
                                             vk::DescriptorSetLayout lightLayout,
                                             vk::DescriptorSetLayout bindlessLayout,
-                                            vk::RenderPass renderPass)
+                                            const std::vector<vk::Format>& colorFormats, vk::Format depthFormat)
     {
         if (!initialized || !devicePtr) return;
 
@@ -119,7 +119,7 @@ namespace render::vegetation
             pipelineLayout = nullptr;
         }
 
-        createGrassPipeline(windLayout, lightLayout, bindlessLayout, renderPass);
+        createGrassPipeline(windLayout, lightLayout, bindlessLayout, colorFormats, depthFormat);
 
         vfLogInfo("GrassMeshShaderPipeline: Recreated pipeline");
     }
@@ -333,7 +333,7 @@ namespace render::vegetation
     void GrassMeshShaderPipeline::createGrassPipeline(vk::DescriptorSetLayout windLayout,
                                                        vk::DescriptorSetLayout lightLayout,
                                                        vk::DescriptorSetLayout bindlessLayout,
-                                                       vk::RenderPass renderPass)
+                                                       const std::vector<vk::Format>& colorFormats, vk::Format depthFormat)
     {
         if (!loadGrassShaders()) return;
 
@@ -341,8 +341,10 @@ namespace render::vegetation
 
         core::MeshShaderPipelineConfig config{};
         config.device = devicePtr->getLogicalDevice();
-        config.renderPass = renderPass;
+        config.renderPass = nullptr;
         config.extent = vk::Extent2D{1, 1};
+        config.colorAttachmentFormats = colorFormats;
+        config.depthAttachmentFormat = depthFormat;
         config.shaderStages = grassShader->getShaderStages();
         config.existingPipelineLayout = pipelineLayout;
         config.cullMode = vk::CullModeFlagBits::eNone;

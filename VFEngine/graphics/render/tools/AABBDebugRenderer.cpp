@@ -14,18 +14,18 @@ namespace render::mesh
 
     AABBDebugRenderer::~AABBDebugRenderer() = default;
 
-    void AABBDebugRenderer::init(vk::RenderPass renderPass)
+    void AABBDebugRenderer::init(vk::Format colorFormat, vk::Format depthFormat)
     {
         loadShader();
-        createPipeline(renderPass);
+        createPipeline(colorFormat, depthFormat);
         createBuffers();
         initialized = true;
     }
 
-    void AABBDebugRenderer::recreate(vk::RenderPass renderPass)
+    void AABBDebugRenderer::recreate(vk::Format colorFormat, vk::Format depthFormat)
     {
         destroyPipelineAndLayout(wireframePipeline, wireframePipelineLayout);
-        createPipeline(renderPass);
+        createPipeline(colorFormat, depthFormat);
     }
 
     void AABBDebugRenderer::cleanUp()
@@ -50,12 +50,14 @@ namespace render::mesh
         wireframeShader->readShader("../../resources/shaders/tools/aabbWireframe.glsl");
     }
 
-    void AABBDebugRenderer::createPipeline(vk::RenderPass renderPass)
+    void AABBDebugRenderer::createPipeline(vk::Format colorFormat, vk::Format depthFormat)
     {
         core::WireframePipelineConfig config{
             .device = device.getLogicalDevice(),
-            .renderPass = renderPass,
+            .renderPass = nullptr,
             .extent = swapChain.getSwapchainExtent(),
+            .colorAttachmentFormats = {colorFormat},
+            .depthAttachmentFormat = depthFormat,
             .pushConstantSize = sizeof(AABBPushConstants),
             .shaderStages = wireframeShader->getShaderStages()
         };

@@ -2,7 +2,9 @@
 #include "../../mesh/MeshGPUCache.hpp"
 #include "../../../core/Device.hpp"
 #include "../../../core/SwapChain.hpp"
+#include "../../../core/OffScreen.hpp"
 #include "../../../core/Texture.hpp"
+#include "../../../core/DynamicRenderingHelpers.hpp"
 #include "print/Log.hpp"
 #include <filesystem>
 
@@ -148,19 +150,18 @@ namespace render::vfx
             return;
         }
 
-        std::array<vk::ClearValue, 2> clearValues{};
-        clearValues[0].color = vk::ClearColorValue{std::array<float, 4>{0.1f, 0.1f, 0.1f, 1.0f}};
-        clearValues[1].depthStencil = vk::ClearDepthStencilValue{1.0f, 0};
+        auto colorAttach = core::colorClear(
+            offscreenResources.colorImages[imageIndex].colorImageView,
+            vk::ClearColorValue(std::array<float, 4>{0.1f, 0.1f, 0.1f, 1.0f}));
+        auto depthAttach = core::depthClear(
+            offscreenResources.depthImage.depthImageView, 1.0f, 0);
 
-        vk::RenderPassBeginInfo renderPassInfo{};
-        renderPassInfo.renderPass = renderPass;
-        renderPassInfo.framebuffer = framebuffers[imageIndex];
-        renderPassInfo.renderArea.offset = vk::Offset2D{0, 0};
-        renderPassInfo.renderArea.extent = swapChain.getSwapchainExtent();
-        renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
-        renderPassInfo.pClearValues = clearValues.data();
+        core::DynamicRenderingInfo dynInfo{};
+        dynInfo.extent = swapChain.getSwapchainExtent();
+        dynInfo.colorAttachments = {colorAttach};
+        dynInfo.depthAttachment = depthAttach;
 
-        commandBuffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
+        core::beginDynamicRendering(commandBuffer, dynInfo);
 
         if (currentInstanceCount > 0 && meshIndexCount > 0 && meshVertexBuffer && meshIndexBuffer)
         {
@@ -182,6 +183,6 @@ namespace render::vfx
             commandBuffer.drawIndexed(meshIndexCount, currentInstanceCount, 0, 0, 0);
         }
 
-        commandBuffer.endRenderPass();
+        core::endDynamicRendering(commandBuffer);
     }
 }

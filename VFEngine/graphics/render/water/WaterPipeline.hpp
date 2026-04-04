@@ -4,6 +4,7 @@
 #include "../../core/VulkanMemoryManager.hpp"
 #include <vulkan/vulkan.hpp>
 #include <memory>
+#include <vector>
 
 namespace core
 {
@@ -27,7 +28,9 @@ namespace render::water
         vk::DescriptorSetLayout shadowTextureLayout;
         vk::DescriptorSetLayout oceanTextureLayout; // Optional: from OceanFFT
         vk::DescriptorSetLayout refractionLayout;  // Optional: from WaterRefractionResources
-        vk::RenderPass renderPass;
+        // Dynamic rendering formats (Vulkan 1.3)
+        std::vector<vk::Format> colorAttachmentFormats;
+        vk::Format depthAttachmentFormat = vk::Format::eUndefined;
     };
 
     struct WaterRenderDescriptors

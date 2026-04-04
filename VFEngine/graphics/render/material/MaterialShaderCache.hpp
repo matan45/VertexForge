@@ -33,19 +33,21 @@ namespace render::mesh
     private:
         std::string lastCompilationError;
         core::Device& device;
-        vk::RenderPass renderPass;
         vk::PipelineLayout pipelineLayout;
         vk::Extent2D swapchainExtent;
+        vk::Format colorFormat = vk::Format::eUndefined;
+        vk::Format depthFormat = vk::Format::eUndefined;
         bool initialized = false;
         std::unordered_map<std::string, MaterialPipelineData> cache;
-        
+
     public:
         explicit MaterialShaderCache(core::Device& device);
         ~MaterialShaderCache();
-        
-        void init(vk::RenderPass renderPass,
-                  vk::PipelineLayout pipelineLayout,
-                  vk::Extent2D swapchainExtent);
+
+        void init(vk::PipelineLayout pipelineLayout,
+                  vk::Extent2D swapchainExtent,
+                  vk::Format colorFormat,
+                  vk::Format depthFormat);
         
         const MaterialPipelineData* getOrCreatePipeline(const std::string& materialPath,
                                                         const material::MaterialData& materialData);

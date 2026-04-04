@@ -18,9 +18,6 @@ namespace render
         core::Device& device;
         core::SwapChain& swapChain;
 
-        vk::RenderPass renderPass;
-        std::vector<vk::Framebuffer> framebuffers;
-
         core::OffscreenResources& offscreenResources;
 
         glm::vec4 clearColorValue{0.0f, 0.0f, 0.0f, 1.0f};
@@ -38,9 +35,5 @@ namespace render
         void setClearColor(const glm::vec4& color) { clearColorValue = color; }
 
         void recordCommandBuffer(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
-
-    private:
-        void createFrameBuffers();
-        void createRenderPass();
     };
 }

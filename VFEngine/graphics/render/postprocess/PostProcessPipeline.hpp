@@ -46,7 +46,6 @@ namespace render::postprocess
         vk::Image image;
         core::VulkanAllocation allocation;
         vk::ImageView imageView;
-        vk::Framebuffer framebuffer;
     };
 
     class PostProcessPipeline
@@ -58,7 +57,7 @@ namespace render::postprocess
 
         bool initialized = false;
 
-        vk::RenderPass renderPass;
+        vk::Format sceneColorFormat = vk::Format::eUndefined;
         vk::Sampler linearSampler;
         vk::DescriptorSetLayout inputDescriptorSetLayout;
         vk::DescriptorPool descriptorPool;
@@ -89,7 +88,6 @@ namespace render::postprocess
         ~PostProcessPipeline();
 
         void execute(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex);
-        void executeGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex);
 
         /// Execute only pre-upscale effects (at render resolution).
         void executePreUpscale(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex);
@@ -98,8 +96,6 @@ namespace render::postprocess
         /// sourceImage/sourceView: the upscaled image to use as initial input.
         void executePostUpscale(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex,
                                 vk::Image sourceImage, vk::ImageView sourceView);
-        void executePostUpscaleGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex,
-                                            vk::Image sourceImage, vk::ImageView sourceView);
 
         void recreate();
         void cleanup();
@@ -119,18 +115,16 @@ namespace render::postprocess
         bool hasEnabledEffects() const;
         bool isInitialized() const { return initialized; }
 
-        vk::RenderPass getRenderPass() const { return renderPass; }
+        vk::Format getColorFormat() const { return sceneColorFormat; }
         vk::DescriptorSetLayout getInputDescriptorSetLayout() const { return inputDescriptorSetLayout; }
         vk::Sampler getLinearSampler() const { return linearSampler; }
 
     private:
         void lazyInit();
-        void createRenderPass();
         void createSampler();
         void createDescriptorSetLayout();
         void createDescriptorPool();
         void createPingPongTargets();
-        void createFramebuffers();
         void createDescriptorSets();
         void updateDescriptorSet(vk::DescriptorSet set, vk::ImageView imageView);
 

@@ -78,14 +78,14 @@ namespace render::vegetation
                   vk::DescriptorSetLayout windLayout,
                   vk::DescriptorSetLayout lightLayout,
                   vk::DescriptorSetLayout bindlessLayout,
-                  vk::RenderPass renderPass);
+                  const std::vector<vk::Format>& colorFormats, vk::Format depthFormat);
 
         void cleanup();
 
         void recreate(vk::DescriptorSetLayout windLayout,
                       vk::DescriptorSetLayout lightLayout,
                       vk::DescriptorSetLayout bindlessLayout,
-                      vk::RenderPass renderPass);
+                      const std::vector<vk::Format>& colorFormats, vk::Format depthFormat);
 
         void updateGrassDataDescriptors(vk::Buffer grassInstanceBuffer,
                                          vk::Buffer grassCountBuffer);
@@ -109,7 +109,7 @@ namespace render::vegetation
         void createGrassPipeline(vk::DescriptorSetLayout windLayout,
                                   vk::DescriptorSetLayout lightLayout,
                                   vk::DescriptorSetLayout bindlessLayout,
-                                  vk::RenderPass renderPass);
+                                  const std::vector<vk::Format>& colorFormats, vk::Format depthFormat);
         void bindDescriptorSets(vk::CommandBuffer cmd);
         bool loadGrassShaders();
     };

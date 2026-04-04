@@ -45,7 +45,6 @@ namespace render::mesh
 
         std::shared_ptr<core::Shader> skinnedMeshShader;
 
-        vk::RenderPass renderPass;
         vk::Pipeline graphicsPipeline;
         vk::PipelineLayout pipelineLayout;
 
@@ -61,7 +60,6 @@ namespace render::mesh
         vk::DescriptorPool boneDescriptorPool;
         vk::DescriptorSet boneDescriptorSet;
 
-        std::vector<vk::Framebuffer> framebuffers;
 
         glm::vec4 clearColorValue{0.06f, 0.06f, 0.06f, 1.0f};
 
@@ -109,7 +107,6 @@ namespace render::mesh
 
     private:
         void loadShaders();
-        void createRenderPass();
         void createDescriptorSetLayouts();
         void createDescriptorPools();
         void createDescriptorSets();
@@ -117,7 +114,6 @@ namespace render::mesh
         void createBoneSSBO();
         void createPipelineLayout();
         void createGraphicsPipeline();
-        void createFramebuffers();
 
         void createMeshGPUBuffers(const resource::MeshesData& meshData);
         void destroyMeshGPUBuffers();

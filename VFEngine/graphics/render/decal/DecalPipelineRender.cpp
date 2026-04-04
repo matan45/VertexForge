@@ -4,6 +4,8 @@
 #include "../../core/OffScreen.hpp"
 #include "../../core/Texture.hpp"
 #include "../../core/BufferUtilities.hpp"
+#include "../../core/ImageUtilities.hpp"
+#include "../../core/DynamicRenderingHelpers.hpp"
 #include "print/Log.hpp"
 #include <algorithm>
 
@@ -295,12 +297,19 @@ namespace render::decal
 
         auto extent = swapChain.getSwapchainExtent();
 
-        vk::RenderPassBeginInfo rpBegin{};
-        rpBegin.renderPass = decalRenderPass;
-        rpBegin.framebuffer = decalFramebuffers[imageIndex];
-        rpBegin.renderArea.extent = extent;
+        // Transition scene color to color attachment
+        vk::Image sceneColor = offscreenResources.colorImages[imageIndex].colorImage;
+        core::ImageUtilities::transitionImageLayout(cmd, sceneColor,
+            vk::ImageLayout::eShaderReadOnlyOptimal, vk::ImageLayout::eColorAttachmentOptimal,
+            vk::ImageAspectFlagBits::eColor);
 
-        cmd.beginRenderPass(rpBegin, vk::SubpassContents::eInline);
+        auto colorAttach = core::colorLoad(offscreenResources.colorImages[imageIndex].colorImageView);
+
+        core::DynamicRenderingInfo info{};
+        info.extent = extent;
+        info.colorAttachments = {colorAttach};
+
+        core::beginDynamicRendering(cmd, info);
 
         vk::Viewport viewport{0.0f, 0.0f, static_cast<float>(extent.width),
                               static_cast<float>(extent.height), 0.0f, 1.0f};
@@ -331,7 +340,13 @@ namespace render::decal
             cmd.drawIndexed(cubeIndexCount, 1, 0, 0, 0);
         }
 
-        cmd.endRenderPass();
+        core::endDynamicRendering(cmd);
+
+        // Transition scene color back to ShaderReadOnlyOptimal
+        core::ImageUtilities::transitionImageLayout(cmd, sceneColor,
+            vk::ImageLayout::eColorAttachmentOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
+            vk::ImageAspectFlagBits::eColor);
+
         transitionDepthToAttachment(cmd);
     }
 }

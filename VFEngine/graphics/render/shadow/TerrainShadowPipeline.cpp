@@ -19,7 +19,7 @@ namespace render::shadow
     void TerrainShadowPipeline::init(vk::DescriptorSetLayout terrainDataLayout,
                                       vk::DescriptorSetLayout meshletDataLayout,
                                       vk::DescriptorSetLayout vertexDataLayout,
-                                      vk::RenderPass shadowRenderPass)
+                                      vk::Format shadowDepthFormat)
     {
         if (initialized)
         {
@@ -29,8 +29,9 @@ namespace render::shadow
         cachedTerrainDataLayout = terrainDataLayout;
         cachedMeshletDataLayout = meshletDataLayout;
         cachedVertexDataLayout = vertexDataLayout;
+        depthFormat = shadowDepthFormat;
 
-        createTerrainShadowPipeline(shadowRenderPass);
+        createTerrainShadowPipeline();
 
         initialized = true;
     }
@@ -64,7 +65,7 @@ namespace render::shadow
         initialized = false;
     }
 
-    void TerrainShadowPipeline::createTerrainShadowPipeline(vk::RenderPass shadowRenderPass)
+    void TerrainShadowPipeline::createTerrainShadowPipeline()
     {
         vk::Device vkDevice = device.getLogicalDevice();
 
@@ -161,7 +162,13 @@ namespace render::shadow
         colorBlending.attachmentCount = 0;
         colorBlending.pAttachments = nullptr;
 
+        // Dynamic rendering: depth-only, no color attachments
+        vk::PipelineRenderingCreateInfo renderingInfo{};
+        renderingInfo.colorAttachmentCount = 0;
+        renderingInfo.depthAttachmentFormat = depthFormat;
+
         vk::GraphicsPipelineCreateInfo pipelineInfo{};
+        pipelineInfo.pNext = &renderingInfo;
         pipelineInfo.stageCount = static_cast<uint32_t>(stages.size());
         pipelineInfo.pStages = stages.data();
         pipelineInfo.pVertexInputState = nullptr;
@@ -173,7 +180,7 @@ namespace render::shadow
         pipelineInfo.pColorBlendState = &colorBlending;
         pipelineInfo.pDynamicState = &dynamicState;
         pipelineInfo.layout = terrainShadowPipelineLayout;
-        pipelineInfo.renderPass = shadowRenderPass;
+        pipelineInfo.renderPass = nullptr;
         pipelineInfo.subpass = 0;
 
         auto result = vkDevice.createGraphicsPipeline(nullptr, pipelineInfo);
