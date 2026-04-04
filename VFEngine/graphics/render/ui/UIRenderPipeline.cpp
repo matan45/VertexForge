@@ -148,6 +148,7 @@ namespace render::ui
         allAttribs.insert(allAttribs.end(), instanceAttribs.begin(), instanceAttribs.end());
 
         core::GraphicsPipelineConfig config{
+            .device = device.getLogicalDevice(),
             .extent = swapChain.getDisplayExtent(), .colorAttachmentFormats = {swapChain.getSceneColorFormat()},
             .stencilAttachmentFormat = vk::Format::eS8Uint,
             .shaderStages = uiShader->getShaderStages(),
