@@ -76,6 +76,7 @@ namespace render::volumetric
         void recreate();
 
         void execute(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex);
+        void executeGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex);
 
         void setCameraData(float nearPlane, float farPlane) { cachedNear = nearPlane; cachedFar = farPlane; }
         void setIntensity(float intensity) { currentIntensity = intensity; }

@@ -410,6 +410,7 @@
     <ClCompile Include="render\RenderPassHandlerConfig.cpp" />
     <ClCompile Include="render\RenderPassHandlerDelegates.cpp" />
     <ClCompile Include="render\RenderPassHandlerDraw.cpp" />
+    <ClCompile Include="render\RenderPassHandlerGraph.cpp" />
     <ClCompile Include="render\RenderPassHandlerPipelines.cpp" />
     <ClCompile Include="render\RenderTextureViewPort.cpp" />
     <ClCompile Include="render\atmosphere\AtmospherePipeline.cpp" />

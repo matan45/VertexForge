@@ -393,6 +393,219 @@ namespace render::postprocess
             vk::ImageAspectFlagBits::eColor);
     }
 
+    void PostProcessPipeline::executeGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex)
+    {
+        if (!hasEnabledEffects())
+            return;
+
+        if (!initialized)
+            lazyInit();
+
+        std::vector<PostProcessEffect*> activeEffects;
+        for (auto& e : effects)
+        {
+            if (e->isEnabled() && e->isInitialized())
+                activeEffects.push_back(e.get());
+        }
+        if (activeEffects.empty())
+            return;
+
+        auto extent = swapChain.getSwapchainExtent();
+
+        vk::DescriptorSet currentInputDescSet = sceneDescriptorSets[imageIndex];
+        PingPongTarget* currentOutput = &targetA;
+        bool outputIsA = true;
+
+        autoExposureOverride.reset();
+
+        for (size_t i = 0; i < activeEffects.size(); ++i)
+        {
+            vk::RenderPassBeginInfo rpBegin{};
+            rpBegin.renderPass = renderPass;
+            rpBegin.framebuffer = currentOutput->framebuffer;
+            rpBegin.renderArea.offset = vk::Offset2D{0, 0};
+            rpBegin.renderArea.extent = extent;
+
+            activeEffects[i]->preRecord(commandBuffer, currentInputDescSet);
+
+            if (activeEffects[i]->getType() == ::postprocess::EffectType::AutoExposure)
+            {
+                autoExposureOverride = static_cast<AutoExposureEffect*>(activeEffects[i])->getComputedExposure();
+            }
+
+            if (activeEffects[i]->getType() == ::postprocess::EffectType::ToneMapping && autoExposureOverride.has_value())
+            {
+                static_cast<ToneMappingEffect*>(activeEffects[i])->setExposureOverride(autoExposureOverride.value());
+            }
+
+            commandBuffer.beginRenderPass(rpBegin, vk::SubpassContents::eInline);
+            activeEffects[i]->record(commandBuffer, currentInputDescSet);
+            commandBuffer.endRenderPass();
+
+            if (outputIsA)
+            {
+                currentInputDescSet = descriptorSetA;
+                currentOutput = &targetB;
+                outputIsA = false;
+            }
+            else
+            {
+                currentInputDescSet = descriptorSetB;
+                currentOutput = &targetA;
+                outputIsA = true;
+            }
+        }
+
+        // Copy result back to scene color — internal ping-pong barriers only
+        PingPongTarget* lastWritten = outputIsA ? &targetB : &targetA;
+
+        core::ImageUtilities::transitionImageLayout(commandBuffer, lastWritten->image,
+            vk::ImageLayout::eShaderReadOnlyOptimal, vk::ImageLayout::eTransferSrcOptimal,
+            vk::ImageAspectFlagBits::eColor);
+
+        vk::Image sceneImage = offscreenResources.colorImages[imageIndex].colorImage;
+        // Scene color transition to TransferDst is handled by the render graph
+
+        vk::ImageCopy region{};
+        region.srcSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+        region.srcSubresource.layerCount = 1;
+        region.dstSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+        region.dstSubresource.layerCount = 1;
+        region.extent.width = extent.width;
+        region.extent.height = extent.height;
+        region.extent.depth = 1;
+
+        commandBuffer.copyImage(
+            lastWritten->image, vk::ImageLayout::eTransferSrcOptimal,
+            sceneImage, vk::ImageLayout::eTransferDstOptimal,
+            region);
+
+        // Scene color transition back to ShaderReadOnly is handled by the render graph
+    }
+
+    void PostProcessPipeline::executePostUpscaleGraphManaged(const vk::CommandBuffer& commandBuffer,
+                                                              uint32_t imageIndex,
+                                                              vk::Image sourceImage, vk::ImageView sourceView)
+    {
+        if (!initialized)
+            lazyInit();
+
+        auto displayExtent = swapChain.getDisplayExtent();
+        bool hasDisplayImages = !offscreenResources.displayColorImages.empty();
+        vk::Image outputImage = hasDisplayImages
+            ? offscreenResources.displayColorImages[imageIndex].colorImage
+            : offscreenResources.colorImages[imageIndex].colorImage;
+
+        // Source image transition handled by render graph
+        core::ImageUtilities::transitionImageLayout(commandBuffer, displayTargetA.image,
+            vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal,
+            vk::ImageAspectFlagBits::eColor);
+
+        vk::ImageBlit blitRegion{};
+        blitRegion.srcSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+        blitRegion.srcSubresource.layerCount = 1;
+        blitRegion.srcOffsets[1] = vk::Offset3D{static_cast<int32_t>(displayExtent.width),
+                                                 static_cast<int32_t>(displayExtent.height), 1};
+        blitRegion.dstSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+        blitRegion.dstSubresource.layerCount = 1;
+        blitRegion.dstOffsets[1] = vk::Offset3D{static_cast<int32_t>(displayExtent.width),
+                                                 static_cast<int32_t>(displayExtent.height), 1};
+
+        commandBuffer.blitImage(sourceImage, vk::ImageLayout::eTransferSrcOptimal,
+                                displayTargetA.image, vk::ImageLayout::eTransferDstOptimal,
+                                blitRegion, vk::Filter::eLinear);
+
+        core::ImageUtilities::transitionImageLayout(commandBuffer, displayTargetA.image,
+            vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
+            vk::ImageAspectFlagBits::eColor);
+
+        std::vector<PostProcessEffect*> activeEffects;
+        for (auto& e : effects)
+        {
+            if (!e->isEnabled() || !e->isInitialized()) continue;
+            if (e->isPreUpscale()) continue;
+            activeEffects.push_back(e.get());
+        }
+
+        if (activeEffects.empty())
+        {
+            core::ImageUtilities::transitionImageLayout(commandBuffer, displayTargetA.image,
+                vk::ImageLayout::eShaderReadOnlyOptimal, vk::ImageLayout::eTransferSrcOptimal,
+                vk::ImageAspectFlagBits::eColor);
+
+            vk::ImageCopy region{};
+            region.srcSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+            region.srcSubresource.layerCount = 1;
+            region.dstSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+            region.dstSubresource.layerCount = 1;
+            region.extent.width = displayExtent.width;
+            region.extent.height = displayExtent.height;
+            region.extent.depth = 1;
+
+            commandBuffer.copyImage(displayTargetA.image, vk::ImageLayout::eTransferSrcOptimal,
+                                    outputImage, vk::ImageLayout::eTransferDstOptimal, region);
+            // Output image transition handled by render graph
+            return;
+        }
+
+        vk::DescriptorSet currentInputDescSet = displayDescriptorSetA;
+        PingPongTarget* currentOutput = &displayTargetB;
+        bool outputIsA = false;
+
+        for (size_t i = 0; i < activeEffects.size(); ++i)
+        {
+            vk::RenderPassBeginInfo rpBegin{};
+            rpBegin.renderPass = renderPass;
+            rpBegin.framebuffer = currentOutput->framebuffer;
+            rpBegin.renderArea.offset = vk::Offset2D{0, 0};
+            rpBegin.renderArea.extent = displayExtent;
+
+            activeEffects[i]->preRecord(commandBuffer, currentInputDescSet);
+
+            if (activeEffects[i]->getType() == ::postprocess::EffectType::ToneMapping && autoExposureOverride.has_value())
+                static_cast<ToneMappingEffect*>(activeEffects[i])->setExposureOverride(autoExposureOverride.value());
+
+            commandBuffer.beginRenderPass(rpBegin, vk::SubpassContents::eInline);
+            activeEffects[i]->record(commandBuffer, currentInputDescSet);
+            commandBuffer.endRenderPass();
+
+            if (outputIsA)
+            {
+                currentInputDescSet = displayDescriptorSetA;
+                currentOutput = &displayTargetB;
+                outputIsA = false;
+            }
+            else
+            {
+                currentInputDescSet = displayDescriptorSetB;
+                currentOutput = &displayTargetA;
+                outputIsA = true;
+            }
+        }
+
+        PingPongTarget* lastWritten = outputIsA ? &displayTargetB : &displayTargetA;
+
+        core::ImageUtilities::transitionImageLayout(commandBuffer, lastWritten->image,
+            vk::ImageLayout::eShaderReadOnlyOptimal, vk::ImageLayout::eTransferSrcOptimal,
+            vk::ImageAspectFlagBits::eColor);
+
+        vk::ImageCopy finalCopy{};
+        finalCopy.srcSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+        finalCopy.srcSubresource.layerCount = 1;
+        finalCopy.dstSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+        finalCopy.dstSubresource.layerCount = 1;
+        finalCopy.extent.width = displayExtent.width;
+        finalCopy.extent.height = displayExtent.height;
+        finalCopy.extent.depth = 1;
+
+        commandBuffer.copyImage(
+            lastWritten->image, vk::ImageLayout::eTransferSrcOptimal,
+            outputImage, vk::ImageLayout::eTransferDstOptimal,
+            finalCopy);
+
+        // Output image transition handled by render graph
+    }
+
     void PostProcessPipeline::lazyInit()
     {
         createSampler();

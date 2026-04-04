@@ -38,7 +38,8 @@ namespace render::graph
         TransferDst,
         Present,
         StorageRead,
-        StorageWrite
+        StorageWrite,
+        SampledComputeRead
     };
 
     // Maps ResourceUsage to Vulkan synchronization2 types
@@ -93,6 +94,10 @@ namespace render::graph
             return {vk::PipelineStageFlagBits2::eComputeShader,
                     vk::AccessFlagBits2::eShaderStorageWrite,
                     vk::ImageLayout::eGeneral};
+        case ResourceUsage::SampledComputeRead:
+            return {vk::PipelineStageFlagBits2::eComputeShader,
+                    vk::AccessFlagBits2::eShaderSampledRead,
+                    vk::ImageLayout::eShaderReadOnlyOptimal};
         }
         return {};
     }

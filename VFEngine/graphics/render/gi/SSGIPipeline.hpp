@@ -169,6 +169,7 @@ namespace render::gi
         void recreate();
 
         void execute(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex);
+        void executeGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex);
 
         void setCameraData(const glm::mat4& view, const glm::mat4& projection,
                            const glm::vec3& cameraPosition,

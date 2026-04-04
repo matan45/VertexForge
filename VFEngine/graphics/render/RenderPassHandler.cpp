@@ -1,4 +1,6 @@
 #include "RenderPassHandler.hpp"
+#include "graph/RenderGraph.hpp"
+#include "graph/RenderGraphProfiler.hpp"
 #include "upscaling/MotionVectorPass.hpp"
 #include "../core/Device.hpp"
 #include "../core/SwapChain.hpp"
@@ -45,6 +47,8 @@ namespace render
         , gpuDrivenRenderer{std::make_unique<gpudriven::GPUDrivenRenderer>(device, swapChain)}
         , terrainRaycastPipeline{std::make_unique<gpudriven::TerrainRaycastPipeline>(device)}
         , postProcessPipeline{std::make_unique<postprocess::PostProcessPipeline>(device, swapChain, offscreenResources)}
+        , frameGraph{std::make_unique<graph::RenderGraph>(device)}
+        , graphProfiler{std::make_unique<graph::RenderGraphProfiler>()}
     {
     }
 
@@ -237,6 +241,8 @@ namespace render
             distortionResources->cleanup();
             distortionInitialized = false;
         }
+        if (graphProfiler && graphProfiler->isEnabled())
+            graphProfiler->cleanup(device.getLogicalDevice());
         if (postProcessPipeline) postProcessPipeline->cleanup();
         meshPipeline->cleanUp();
         if (sharedCameraUBO) sharedCameraUBO->cleanup();

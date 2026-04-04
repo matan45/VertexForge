@@ -89,6 +89,7 @@ namespace render::postprocess
         ~PostProcessPipeline();
 
         void execute(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex);
+        void executeGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex);
 
         /// Execute only pre-upscale effects (at render resolution).
         void executePreUpscale(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex);
@@ -97,6 +98,8 @@ namespace render::postprocess
         /// sourceImage/sourceView: the upscaled image to use as initial input.
         void executePostUpscale(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex,
                                 vk::Image sourceImage, vk::ImageView sourceView);
+        void executePostUpscaleGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex,
+                                            vk::Image sourceImage, vk::ImageView sourceView);
 
         void recreate();
         void cleanup();

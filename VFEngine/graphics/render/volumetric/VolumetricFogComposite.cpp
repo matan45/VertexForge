@@ -182,6 +182,31 @@ namespace render::volumetric
         // Scene color is now in eShaderReadOnlyOptimal (render pass finalLayout)
     }
 
+    void VolumetricFogComposite::executeGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex)
+    {
+        if (!initialized || !volumetricPipeline || !volumetricPipeline->isEnabled())
+            return;
+
+        updateParamsBuffer();
+
+        // Scene color and depth transitions handled by render graph
+
+        vk::RenderPassBeginInfo rpBegin{};
+        rpBegin.renderPass = renderPass;
+        rpBegin.framebuffer = framebuffers[imageIndex];
+        rpBegin.renderArea.offset = vk::Offset2D{0, 0};
+        rpBegin.renderArea.extent = currentExtent;
+
+        commandBuffer.beginRenderPass(rpBegin, vk::SubpassContents::eInline);
+
+        commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline);
+        commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
+                                          pipelineLayout, 0, descriptorSet, nullptr);
+        commandBuffer.draw(3, 1, 0, 0);
+
+        commandBuffer.endRenderPass();
+    }
+
     void VolumetricFogComposite::createRenderPass()
     {
         vk::AttachmentDescription colorAttachment{};

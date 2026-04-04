@@ -1,4 +1,5 @@
 #include "RenderPassHandler.hpp"
+#include "graph/RenderGraph.hpp"
 #include "print/Log.hpp"
 #include "decal/DecalPipeline.hpp"
 #include "../core/SwapChain.hpp"
@@ -50,6 +51,15 @@ namespace
 namespace render
 {
     void RenderPassHandler::draw(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex)
+    {
+        frameGraph->reset();
+        importFrameResources(imageIndex);
+        buildFrameGraph(commandBuffer, imageIndex);
+        frameGraph->compile();
+        frameGraph->execute(commandBuffer, imageIndex);
+    }
+
+    void RenderPassHandler::drawLegacy(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex)
     {
         clearColor->recordCommandBuffer(commandBuffer, imageIndex);
 
