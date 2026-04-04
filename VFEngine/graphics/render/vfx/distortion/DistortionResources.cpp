@@ -223,9 +223,9 @@ namespace render::vfx
                             vk::PipelineStageFlagBits::eTransfer,
                             {}, {}, {}, toTransferDst);
 
-        // 2. Transition source: ShaderReadOnly -> TransferSrc
+        // 2. Transition source: ColorAttachmentOptimal -> TransferSrc
         vk::ImageMemoryBarrier srcToTransfer{};
-        srcToTransfer.oldLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+        srcToTransfer.oldLayout = vk::ImageLayout::eColorAttachmentOptimal;
         srcToTransfer.newLayout = vk::ImageLayout::eTransferSrcOptimal;
         srcToTransfer.image = srcColorImage;
         srcToTransfer.subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};
@@ -256,10 +256,10 @@ namespace render::vfx
                             vk::PipelineStageFlagBits::eFragmentShader,
                             {}, {}, {}, toShaderRead);
 
-        // 5. Transition source: TransferSrc -> ShaderReadOnly (for subsequent passes)
+        // 5. Transition source: TransferSrc -> ColorAttachmentOptimal (graph expects this layout)
         vk::ImageMemoryBarrier srcBack{};
         srcBack.oldLayout = vk::ImageLayout::eTransferSrcOptimal;
-        srcBack.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+        srcBack.newLayout = vk::ImageLayout::eColorAttachmentOptimal;
         srcBack.image = srcColorImage;
         srcBack.subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};
         srcBack.srcAccessMask = vk::AccessFlagBits::eTransferRead;

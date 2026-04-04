@@ -3,6 +3,7 @@
 #include "graph/RenderGraphProfiler.hpp"
 #include "../core/SwapChain.hpp"
 #include "../core/Device.hpp"
+#include "print/Log.hpp"
 #include "postprocess/PostProcessPipeline.hpp"
 #include "gi/SSGIPipeline.hpp"
 #include "volumetric/VolumetricFogComposite.hpp"
@@ -69,6 +70,7 @@ namespace render
         {
             auto builder = frameGraph->addPass("ClearColor",
                 [this](vk::CommandBuffer cmd, uint32_t idx) {
+                    vfLogInfo("[Graph] Executing: ClearColor");
                     clearColor->recordCommandBufferGraphManaged(cmd, idx);
                 });
             sceneColorHandle = builder.write(sceneColorHandle, graph::ResourceUsage::ColorAttachmentWrite);
@@ -94,6 +96,7 @@ namespace render
 
             auto builder = frameGraph->addPass("Atmosphere",
                 [this, asyncCompute = asyncComputeActive](vk::CommandBuffer cmd, uint32_t idx) {
+                    vfLogInfo("[Graph] Executing: Atmosphere");
                     if (!asyncCompute)
                         atmospherePipeline->dispatchCompute(cmd);
                     atmospherePipeline->renderSkyGraphManaged(cmd, idx);
@@ -106,6 +109,7 @@ namespace render
         {
             auto builder = frameGraph->addPass("IBL",
                 [this](vk::CommandBuffer cmd, uint32_t idx) {
+                    vfLogInfo("[Graph] Executing: IBL");
                     iblRenderer->recordCommandBufferGraphManaged(cmd, idx);
                 });
             sceneColorHandle = builder.write(sceneColorHandle, graph::ResourceUsage::ColorAttachmentWrite);
@@ -149,6 +153,7 @@ namespace render
         {
             auto builder = frameGraph->addPass("SceneMeshes",
                 [this](vk::CommandBuffer cmd, uint32_t idx) {
+                    vfLogInfo("[Graph] Executing: SceneMeshes");
                     drawSceneMeshesGraphManaged(cmd, idx);
                 });
             sceneColorHandle = builder.write(sceneColorHandle, graph::ResourceUsage::ColorAttachmentWrite);

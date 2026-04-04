@@ -181,16 +181,33 @@ namespace render::graph
             profiler->beginFrame(cmd, imageIndex);
         }
 
+        static uint32_t frameCounter = 0;
+        bool logThisFrame = (frameCounter++ % 300 == 0); // Log every 300 frames
+
+        if (logThisFrame)
+        {
+            vfLogInfo("[RenderGraph] Execute: {} passes, {} sorted, barriers={} flushes={}",
+                passes.size(), sortedOrder.size(),
+                barrierBatcher->getTotalBarrierCount(), barrierBatcher->getTotalFlushCount());
+        }
+
         for (uint32_t i = 0; i < sortedOrder.size(); ++i)
         {
             uint32_t passIdx = sortedOrder[i];
             auto& pass = passes[passIdx];
 
             if (pass.culled)
+            {
+                if (logThisFrame)
+                    vfLogInfo("[RenderGraph]   [{}] {} — CULLED", i, pass.name);
                 continue;
+            }
 
             // Flush barriers for this pass
             barrierBatcher->flush(cmd, passIdx);
+
+            if (logThisFrame)
+                vfLogInfo("[RenderGraph]   [{}] {} (passIdx={})", i, pass.name, passIdx);
 
             // Profiling
             if (profiler && profiler->isEnabled())
