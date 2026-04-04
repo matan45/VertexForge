@@ -95,7 +95,6 @@ namespace render::shadow
         // Begin dynamic rendering with secondary command buffer execution
         core::DynamicRenderingInfo info{};
         info.extent = vk::Extent2D{vsm::PHYSICAL_POOL_DIM, vsm::PHYSICAL_POOL_DIM};
-        info.hasDepth = true;
 
         if (clearDepth)
             info.depthAttachment = core::depthClear(ctx.tilePool->getPoolImageView(), 1.0f, 0);
@@ -109,7 +108,7 @@ namespace render::shadow
         renderingInfo.layerCount = 1;
         renderingInfo.colorAttachmentCount = 0;
         renderingInfo.pColorAttachments = nullptr;
-        renderingInfo.pDepthAttachment = &info.depthAttachment;
+        renderingInfo.pDepthAttachment = &info.depthAttachment.value();
         renderingInfo.flags = vk::RenderingFlagBits::eContentsSecondaryCommandBuffers;
 
         args.primaryCmd.beginRendering(renderingInfo);
@@ -127,7 +126,6 @@ namespace render::shadow
 
         core::DynamicRenderingInfo info{};
         info.extent = vk::Extent2D{vsm::PHYSICAL_POOL_DIM, vsm::PHYSICAL_POOL_DIM};
-        info.hasDepth = true;
         info.depthAttachment = core::depthLoad(ctx.tilePool->getPoolImageView());
 
         // Use eContentsSecondaryCommandBuffers for parallel recording
@@ -137,7 +135,7 @@ namespace render::shadow
         renderingInfo.layerCount = 1;
         renderingInfo.colorAttachmentCount = 0;
         renderingInfo.pColorAttachments = nullptr;
-        renderingInfo.pDepthAttachment = &info.depthAttachment;
+        renderingInfo.pDepthAttachment = &info.depthAttachment.value();
         renderingInfo.flags = vk::RenderingFlagBits::eContentsSecondaryCommandBuffers;
 
         args.primaryCmd.beginRendering(renderingInfo);

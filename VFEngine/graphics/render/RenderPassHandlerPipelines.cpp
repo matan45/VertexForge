@@ -1,4 +1,5 @@
 #include "RenderPassHandler.hpp"
+#include "../core/SwapChain.hpp"
 #include "DebugRenderer.hpp"
 #include "mesh/StaticMeshPipeline.hpp"
 #include "mesh/MeshTypes.hpp"

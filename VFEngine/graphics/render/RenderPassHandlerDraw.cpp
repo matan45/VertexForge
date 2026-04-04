@@ -52,8 +52,6 @@ namespace render
 {
     void RenderPassHandler::draw(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex)
     {
-        // TODO: Switch to render graph path after dynamic rendering migration (VK_KHR_dynamic_rendering).
-        // The graph can't manage layout transitions until VkRenderPass objects are removed.
         drawLegacy(commandBuffer, imageIndex);
     }
 

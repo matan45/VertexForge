@@ -4,7 +4,6 @@
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
 #include "../../core/Shader.hpp"
-#include "../../core/OffScreen.hpp"
 #include "../../core/PipelineUtilities.hpp"
 #include "print/Log.hpp"
 
@@ -123,8 +122,10 @@ namespace render::ui
 
         core::GraphicsPipelineConfig config{
             .device = device.getLogicalDevice(),
-            .renderPass = renderPass,
+            .renderPass = nullptr,
             .extent = swapChain.getDisplayExtent(),
+            .colorAttachmentFormats = { swapChain.getSceneColorFormat() },
+            .stencilAttachmentFormat = vk::Format::eS8Uint,
             .shaderStages = uiTextShader->getShaderStages(),
             .vertexBindings = {vertexBinding, instanceBinding},
             .vertexAttributes = allAttribs,
@@ -162,29 +163,5 @@ namespace render::ui
 
         auto stencilResult = core::PipelineUtilities::createGraphicsPipeline(stencilConfig);
         pipelineStencilTest = stencilResult.pipeline;
-    }
-
-    void UITextPipeline::createFramebuffers()
-    {
-        bool hasDisplay = !offscreenResources.displayColorImages.empty();
-        auto& colorSrc = hasDisplay ? offscreenResources.displayColorImages : offscreenResources.colorImages;
-        framebuffers.resize(colorSrc.size());
-
-        for (uint32_t i = 0; i < framebuffers.size(); i++)
-        {
-            vk::ImageView colorView = colorSrc[i].colorImageView;
-            vk::ImageView stencilView = offscreenResources.uiStencilImage.stencilImageView;
-            std::array<vk::ImageView, 2> attachments = {colorView, stencilView};
-
-            vk::FramebufferCreateInfo framebufferInfo{};
-            framebufferInfo.renderPass = renderPass;
-            framebufferInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
-            framebufferInfo.pAttachments = attachments.data();
-            framebufferInfo.width = swapChain.getDisplayExtent().width;
-            framebufferInfo.height = swapChain.getDisplayExtent().height;
-            framebufferInfo.layers = 1;
-
-            framebuffers[i] = device.getLogicalDevice().createFramebuffer(framebufferInfo);
-        }
     }
 }

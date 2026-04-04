@@ -2,6 +2,7 @@
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
 #include "../../core/DynamicRenderingHelpers.hpp"
+#include "../../core/OffScreen.hpp"
 #include "../../core/BufferUtilities.hpp"
 #include "resource/MeshStreamHandle.hpp"
 #include "print/Log.hpp"

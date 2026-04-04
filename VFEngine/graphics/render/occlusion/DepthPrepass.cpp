@@ -132,9 +132,8 @@ namespace render::occlusion
     {
         core::DynamicRenderingInfo info{};
         info.extent = vk::Extent2D{width, height};
-        info.colorAttachments = {core::colorClear(normalImageView)};
+        info.colorAttachments = {core::colorClear(normalImageView, vk::ClearColorValue(std::array<float,4>{0.0f, 0.0f, 0.0f, 0.0f}))};
         info.depthAttachment = core::depthClear(depthImageView, 1.0f, 0);
-        info.hasDepth = true;
 
         core::beginDynamicRendering(cmd, info);
 

@@ -27,8 +27,6 @@ namespace render
 
     void ClearColor::recordCommandBuffer(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const
     {
-        // Transition scene color to ColorAttachmentOptimal for dynamic rendering.
-        // TODO: Remove when render graph manages this transition.
         core::ImageUtilities::transitionImageLayout(commandBuffer,
             offscreenResources.colorImages[imageIndex].colorImage,
             vk::ImageLayout::eShaderReadOnlyOptimal,
@@ -51,8 +49,6 @@ namespace render
         core::beginDynamicRendering(commandBuffer, info);
         core::endDynamicRendering(commandBuffer);
 
-        // Transition scene color back to ShaderReadOnlyOptimal for the next pass.
-        // TODO: Remove when render graph manages this transition.
         core::ImageUtilities::transitionImageLayout(commandBuffer,
             offscreenResources.colorImages[imageIndex].colorImage,
             vk::ImageLayout::eColorAttachmentOptimal,

@@ -44,7 +44,7 @@ namespace render::postprocess
     {
         loadShader();
         createDescriptorSetLayouts();
-        createPipeline(renderPass, extent);
+        createPipeline(colorFormat, extent);
         createLUTSampler();
         createUBO();
         generateIdentityLUT(32);
@@ -129,7 +129,7 @@ namespace render::postprocess
             pipelineLayout = nullptr;
         }
 
-        createPipeline(renderPass, extent);
+        createPipeline(colorFormat, extent);
     }
 
     void ColorGradingEffect::record(const vk::CommandBuffer& commandBuffer,

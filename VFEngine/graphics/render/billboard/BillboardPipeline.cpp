@@ -188,6 +188,8 @@ namespace render::billboard
             .device = device.getLogicalDevice(),
             .renderPass = nullptr,
             .extent = swapChain.getSwapchainExtent(),
+            .colorAttachmentFormats = { swapChain.getSceneColorFormat() },
+            .depthAttachmentFormat = swapChain.getSwapchainDepthStencilFormat(),
             .shaderStages = billboardShader->getShaderStages(),
             .vertexBindings = {vertexBinding, instanceBinding},
             .vertexAttributes = std::move(allAttribs),
@@ -199,8 +201,6 @@ namespace render::billboard
             .depthTestEnable = true,
             .depthWriteEnable = false,
             .blendEnable = true,
-            .colorAttachmentFormats = { swapChain.getSceneColorFormat() },
-            .depthAttachmentFormat = swapChain.getSwapchainDepthStencilFormat(),
         };
 
         auto result = core::PipelineUtilities::createGraphicsPipeline(config);
@@ -404,10 +404,9 @@ namespace render::billboard
         vk::ImageView depthView = offscreenResources.depthImage.depthImageView;
 
         core::DynamicRenderingInfo info{};
-        info.renderArea = swapChain.getSwapchainExtent();
+        info.extent = swapChain.getSwapchainExtent();
         info.colorAttachments = { core::colorLoad(colorView) };
         info.depthAttachment = core::depthLoad(depthView);
-        info.hasDepth = true;
 
         core::beginDynamicRendering(commandBuffer, info);
 

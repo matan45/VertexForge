@@ -119,9 +119,6 @@ namespace render::mesh
         void beginWaterContinuePass(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
         void endRenderPass(const vk::CommandBuffer& commandBuffer) const;
 
-        // TODO: Follow-up needed - callers using framebuffer for secondary command buffers need migration
-        vk::Framebuffer getFramebuffer(uint32_t /*imageIndex*/) const { return nullptr; }
-
         void injectMaterialForPreview(const std::string& materialPath,
                                       std::shared_ptr<material::MaterialData> materialData);
 

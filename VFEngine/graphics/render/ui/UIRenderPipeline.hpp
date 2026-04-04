@@ -2,6 +2,7 @@
 
 #include "UIRenderTypes.hpp"
 #include "UIRenderBufferManager.hpp"
+#include "../../core/Texture.hpp"
 #include <memory>
 #include <vector>
 #include <string>

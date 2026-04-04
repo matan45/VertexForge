@@ -36,7 +36,7 @@ namespace render::postprocess
     {
         loadShader();
         createDescriptorSetLayout();
-        createPipeline(renderPass, extent);
+        createPipeline(colorFormat, extent);
         initialized = true;
     }
 
@@ -87,7 +87,7 @@ namespace render::postprocess
             pipelineLayout = nullptr;
         }
 
-        createPipeline(renderPass, extent);
+        createPipeline(colorFormat, extent);
     }
 
     void UnderwaterEffect::record(const vk::CommandBuffer& commandBuffer,

@@ -135,6 +135,8 @@ namespace render::mesh
                 .device = device.getLogicalDevice(),
                 .renderPass = nullptr,
                 .extent = swapchainExtent,
+                .colorAttachmentFormats = { colorFormat },
+                .depthAttachmentFormat = depthFormat,
                 .shaderStages = data.shader->getShaderStages(),
                 .vertexBindings = {bindingDescription},
                 .vertexAttributes = {attributeDescriptions.begin(), attributeDescriptions.end()},
@@ -143,8 +145,6 @@ namespace render::mesh
                 .depthTestEnable = true,
                 .depthWriteEnable = true,
                 .depthCompareOp = vk::CompareOp::eLess,
-                .colorAttachmentFormats = { colorFormat },
-                .depthAttachmentFormat = depthFormat,
             };
 
             auto opaqueResult = core::PipelineUtilities::createGraphicsPipeline(config);

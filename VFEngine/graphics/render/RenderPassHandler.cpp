@@ -130,7 +130,7 @@ namespace render
         if (gpuDrivenRendererInitialized || !meshPipelineInitialized) return;
 
         gpuDrivenRenderer->init(meshPipeline->getIBLDescriptorSetLayout(),
-                               swapChain.getSceneColorFormat(), swapChain.getSwapchainDepthStencilFormat(),
+                               {swapChain.getSceneColorFormat()}, swapChain.getSwapchainDepthStencilFormat(),
                                offscreenResources.depthImage.depthImageView);
 
         auto& texCache = meshPipeline->getMaterialTextureCache();
@@ -172,7 +172,7 @@ namespace render
             if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
             {
                 gpuDrivenRenderer->recreateRefractionResources(offscreenResources.depthImage.depthImageView);
-                gpuDrivenRenderer->updateRenderPass(swapChain.getSceneColorFormat(), swapChain.getSwapchainDepthStencilFormat());
+                gpuDrivenRenderer->updateFormats({swapChain.getSceneColorFormat()}, swapChain.getSwapchainDepthStencilFormat());
             }
             if (vfxRuntimeProvider && vfxRuntimeProvider->isInitialized())
                 vfxRuntimeProvider->recreate(swapChain.getSceneColorFormat(), swapChain.getSwapchainDepthStencilFormat());

@@ -149,7 +149,8 @@ namespace render::gpudriven
                 .shadowTextureLayout = shadowSystem->getShadowTextureLayout(),
                 .giProbeDataLayout = giLayout,
                 .causticLayout = causticLayout,
-                .renderPass = cachedRenderPass
+                .colorAttachmentFormats = cachedColorFormats,
+                .depthAttachmentFormat = cachedDepthFormat
             };
 
             meshShaderPipeline->recreate(pipelineInfo);
@@ -161,11 +162,12 @@ namespace render::gpudriven
                 transparentMeshShaderPipeline->recreate(pipelineInfo);
             }
 
-            if (wboitMeshShaderPipeline && cachedWBOITRenderPass)
+            if (wboitMeshShaderPipeline && !cachedWBOITColorFormats.empty())
             {
                 wboitMeshShaderPipeline->setWireframeMode(enabled);
                 pipelineInfo.transparentMode = false;
-                pipelineInfo.renderPass = cachedWBOITRenderPass;
+                pipelineInfo.colorAttachmentFormats = cachedWBOITColorFormats;
+                pipelineInfo.depthAttachmentFormat = cachedWBOITDepthFormat;
                 pipelineInfo.wboitMode = true;
                 wboitMeshShaderPipeline->recreate(pipelineInfo);
             }
@@ -209,7 +211,8 @@ namespace render::gpudriven
                 shadowSystem->getShadowTextureLayout(),
                 oceanLayout,
                 refractionLayout,
-                cachedRenderPass
+                cachedColorFormats,
+                cachedDepthFormat
             });
         }
     }

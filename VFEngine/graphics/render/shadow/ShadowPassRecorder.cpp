@@ -49,7 +49,6 @@ namespace render::shadow
     {
         core::DynamicRenderingInfo info{};
         info.extent = vk::Extent2D{vsm::PHYSICAL_POOL_DIM, vsm::PHYSICAL_POOL_DIM};
-        info.hasDepth = true;
 
         if (clearDepth)
             info.depthAttachment = core::depthClear(tilePool->getPoolImageView(), 1.0f, 0);

@@ -62,6 +62,27 @@ namespace core
         return info;
     }
 
+    inline vk::RenderingAttachmentInfo stencilClear(vk::ImageView view, uint32_t clearStencil = 0)
+    {
+        vk::RenderingAttachmentInfo info{};
+        info.imageView = view;
+        info.imageLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
+        info.loadOp = vk::AttachmentLoadOp::eClear;
+        info.storeOp = vk::AttachmentStoreOp::eStore;
+        info.clearValue.depthStencil = vk::ClearDepthStencilValue{0.0f, clearStencil};
+        return info;
+    }
+
+    inline vk::RenderingAttachmentInfo stencilLoad(vk::ImageView view)
+    {
+        vk::RenderingAttachmentInfo info{};
+        info.imageView = view;
+        info.imageLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
+        info.loadOp = vk::AttachmentLoadOp::eLoad;
+        info.storeOp = vk::AttachmentStoreOp::eStore;
+        return info;
+    }
+
     inline vk::RenderingAttachmentInfo depthReadOnly(vk::ImageView view)
     {
         vk::RenderingAttachmentInfo info{};

@@ -129,7 +129,7 @@ namespace render
         meshPipeline->initWithDefaults();
 
         if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
-            gpuDrivenRenderer->updateRenderPass(swapChain.getSceneColorFormat(), swapChain.getSwapchainDepthStencilFormat(), meshPipeline->getIBLDescriptorSetLayout());
+            gpuDrivenRenderer->updateFormats({swapChain.getSceneColorFormat()}, swapChain.getSwapchainDepthStencilFormat(), meshPipeline->getIBLDescriptorSetLayout());
         if (vfxRuntimeProvider && vfxRuntimeProvider->isInitialized())
             vfxRuntimeProvider->recreate(swapChain.getSceneColorFormat(), swapChain.getSwapchainDepthStencilFormat());
     }
@@ -147,7 +147,7 @@ namespace render
         meshPipeline->init(irradiance, prefilter, brdfLUT);
 
         if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
-            gpuDrivenRenderer->updateRenderPass(swapChain.getSceneColorFormat(), swapChain.getSwapchainDepthStencilFormat(), meshPipeline->getIBLDescriptorSetLayout());
+            gpuDrivenRenderer->updateFormats({swapChain.getSceneColorFormat()}, swapChain.getSwapchainDepthStencilFormat(), meshPipeline->getIBLDescriptorSetLayout());
         if (vfxRuntimeProvider && vfxRuntimeProvider->isInitialized())
             vfxRuntimeProvider->recreate(swapChain.getSceneColorFormat(), swapChain.getSwapchainDepthStencilFormat());
     }

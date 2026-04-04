@@ -20,7 +20,7 @@ namespace render::postprocess
     {
         loadShader();
         createDescriptorSetLayout();
-        createPipeline(renderPass, extent);
+        createPipeline(colorFormat, extent);
         initialized = true;
     }
 
@@ -71,7 +71,7 @@ namespace render::postprocess
             pipelineLayout = nullptr;
         }
 
-        createPipeline(renderPass, extent);
+        createPipeline(colorFormat, extent);
     }
 
     void ChromaticAberrationEffect::record(const vk::CommandBuffer& commandBuffer,
