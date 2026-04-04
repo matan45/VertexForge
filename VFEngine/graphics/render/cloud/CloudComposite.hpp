@@ -57,6 +57,9 @@ namespace render::cloud
         void render(const vk::CommandBuffer& cmd, uint32_t imageIndex,
                     const CloudCompositePushConstants& pushConstants);
 
+        void renderCompositeGraphManaged(const vk::CommandBuffer& cmd, uint32_t imageIndex,
+                                         const CloudCompositePushConstants& pushConstants);
+
         [[nodiscard]] bool isInitialized() const { return initialized; }
     };
 }

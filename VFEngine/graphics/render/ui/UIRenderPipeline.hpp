@@ -88,6 +88,7 @@ namespace render::ui
         void clearExternalTextures();
 
         void recordCommandBuffer(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
+        void recordCommandBufferGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
 
         bool isInitialized() const { return initialized; }
 

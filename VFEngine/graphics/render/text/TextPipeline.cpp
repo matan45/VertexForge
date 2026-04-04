@@ -346,4 +346,61 @@ namespace render::text
             vk::ImageLayout::eShaderReadOnlyOptimal,
             vk::ImageAspectFlagBits::eColor);
     }
+
+    void TextPipeline::recordCommandBufferGraphManaged(const vk::CommandBuffer& commandBuffer,
+                                            uint32_t imageIndex) const
+    {
+        if (!initialized || totalInstanceCount == 0)
+        {
+            return;
+        }
+
+        auto colorAttach = core::colorLoad(offscreenResources.colorImages[imageIndex].colorImageView);
+        auto depthAttach = core::depthLoad(offscreenResources.depthImage.depthImageView);
+
+        core::DynamicRenderingInfo info{};
+        info.extent = swapChain.getSwapchainExtent();
+        info.colorAttachments = {colorAttach};
+        info.depthAttachment = depthAttach;
+
+        core::beginDynamicRendering(commandBuffer, info);
+
+        commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
+
+        vk::Buffer vertexBuffers[] = {bufferManager.getQuadVertexBuffer(), bufferManager.getInstanceBuffer()};
+        vk::DeviceSize offsets[] = {0, 0};
+        commandBuffer.bindVertexBuffers(0, 2, vertexBuffers, offsets);
+        commandBuffer.bindIndexBuffer(bufferManager.getQuadIndexBuffer(), 0, vk::IndexType::eUint16);
+
+        glm::vec2 viewportSize(
+            static_cast<float>(swapChain.getSwapchainExtent().width),
+            static_cast<float>(swapChain.getSwapchainExtent().height)
+        );
+
+        for (const auto& batch : fontBatches)
+        {
+            auto it = fontDescriptorSets.find(batch.fontPath);
+            vk::DescriptorSet descSet = (it != fontDescriptorSets.end())
+                ? it->second : defaultDescriptorSet;
+
+            // Determine glyphMode from cached font data
+            const CachedFont* cached = fontCache.getFont(batch.fontPath);
+            uint32_t glyphMode = (cached && cached->isColorFont) ? 1u : 0u;
+
+            TextPushConstants pushConstants{};
+            pushConstants.viewportSize = viewportSize;
+            pushConstants.glyphMode = glyphMode;
+
+            commandBuffer.pushConstants(pipelineLayout,
+                                         vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
+                                         0, sizeof(TextPushConstants), &pushConstants);
+
+            commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout,
+                                              0, descSet, nullptr);
+
+            commandBuffer.drawIndexed(6, batch.instanceCount, 0, 0, batch.firstInstance);
+        }
+
+        core::endDynamicRendering(commandBuffer);
+    }
 }

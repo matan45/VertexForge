@@ -286,4 +286,18 @@ namespace render::cloud
 
         cloudComposite->render(cmd, imageIndex, pc);
     }
+
+    void CloudPipeline::renderCompositeGraphManaged(const vk::CommandBuffer& cmd, uint32_t imageIndex)
+    {
+        if (!initialized || !enabled)
+            return;
+
+        CloudCompositePushConstants pc{};
+        pc.nearPlane = cachedNear;
+        pc.farPlane = cachedFar;
+        pc.cloudMinAlt = settings.cloudMinAltitude;
+        pc.cloudMaxAlt = settings.cloudMaxAltitude;
+
+        cloudComposite->renderCompositeGraphManaged(cmd, imageIndex, pc);
+    }
 }

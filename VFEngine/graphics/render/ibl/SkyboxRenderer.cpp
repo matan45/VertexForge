@@ -283,6 +283,53 @@ namespace render::ibl
         }
     }
 
+    void SkyboxRenderer::renderSkyGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const
+    {
+        if (isDisplay)
+        {
+            updateUniformBuffer(viewMatrix, projectionMatrix);
+
+            vk::ImageView colorView = offscreenResources.colorImages[imageIndex].colorImageView;
+
+            core::DynamicRenderingInfo renderingInfo{};
+            renderingInfo.extent = swapChain.getSwapchainExtent();
+            renderingInfo.colorAttachments = {
+                core::colorLoad(colorView)
+            };
+
+            core::beginDynamicRendering(commandBuffer, renderingInfo);
+
+            // Bind the graphics pipeline
+            commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
+
+            // Set dynamic viewport and scissor to current swapchain extent
+            vk::Viewport viewport;
+            viewport.x = 0.0f;
+            viewport.y = 0.0f;
+            viewport.width = static_cast<float>(swapChain.getSwapchainExtent().width);
+            viewport.height = static_cast<float>(swapChain.getSwapchainExtent().height);
+            viewport.minDepth = 0.0f;
+            viewport.maxDepth = 1.0f;
+            commandBuffer.setViewport(0, 1, &viewport);
+
+            vk::Rect2D scissor;
+            scissor.offset = vk::Offset2D(0, 0);
+            scissor.extent = swapChain.getSwapchainExtent();
+            commandBuffer.setScissor(0, 1, &scissor);
+
+            commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 0,
+                descriptorSet,
+                {});
+
+            // Bind vertex buffer
+            vk::DeviceSize offsets[] = {0};
+            commandBuffer.bindVertexBuffers(0, vertexBuffer, offsets);
+            commandBuffer.draw(static_cast<uint32_t>(skyboxVertices.size()), 1, 0, 0);
+
+            core::endDynamicRendering(commandBuffer);
+        }
+    }
+
     void SkyboxRenderer::renderToTarget(const vk::CommandBuffer& commandBuffer,
                                          const SkyboxTargetParams& target) const
     {

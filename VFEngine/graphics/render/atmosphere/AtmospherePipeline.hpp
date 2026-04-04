@@ -170,6 +170,10 @@ namespace render::atmosphere
         // Apply aerial perspective composite
         void renderComposite(const vk::CommandBuffer& cmd, uint32_t imageIndex);
 
+        // Graph-managed variants (no layout transitions on scene color/depth)
+        void renderSkyGraphManaged(const vk::CommandBuffer& cmd, uint32_t imageIndex);
+        void renderCompositeGraphManaged(const vk::CommandBuffer& cmd, uint32_t imageIndex);
+
         void setEnabled(bool value) { enabled = value; }
         [[nodiscard]] bool isEnabled() const { return enabled && initialized; }
         [[nodiscard]] bool isInitialized() const { return initialized; }

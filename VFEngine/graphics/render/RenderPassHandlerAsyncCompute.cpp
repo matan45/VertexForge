@@ -458,6 +458,127 @@ namespace render
             depthStencilAspect);
     }
 
+    void RenderPassHandler::executeUpscaleGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex)
+    {
+        auto* upscaleManager = device.getUpscaleManager();
+        if (!upscaleManager || !upscaleManager->isActive())
+            return;
+
+        if (!offscreenResources.upscaleResourcesCreated)
+            return;
+
+        if (!motionVectorPass)
+        {
+            motionVectorPass = std::make_unique<upscaling::MotionVectorPass>(device);
+            motionVectorPass->init();
+        }
+
+        auto& resMgr = upscaleManager->getResolutionManager();
+        auto renderRes = resMgr.getRenderResolution();
+        auto displayRes = resMgr.getDisplayResolution();
+
+        // Depth transition handled by render graph (already in DepthStencilReadOnlyOptimal)
+
+        if (asyncComputeActive && offscreenResources.prevFrameDepthCreated
+            && motionVectorPass && motionVectorPass->isInitialized())
+        {
+            // Motion vectors computed on async compute queue — no depth transition needed
+        }
+        else
+        {
+            // Fallback: dispatch motion vectors on graphics queue
+            glm::mat4 viewProjection = currentProjection * currentView;
+            glm::mat4 invVP = glm::inverse(viewProjection);
+            glm::mat4 prevVP = prevProjection * prevView;
+
+            // Depth already in DepthStencilReadOnlyOptimal via graph
+
+            motionVectorPass->dispatch(commandBuffer,
+                offscreenResources.depthImage.depthImageView,
+                offscreenResources.depthImage.depthImage,
+                offscreenResources.motionVectors.imageView,
+                offscreenResources.motionVectors.image,
+                invVP, prevVP,
+                renderRes.width, renderRes.height,
+                taaFrameIndex);
+        }
+
+        // Transition upscale output to general for write (internal resource)
+        core::ImageUtilities::transitionImageLayout(commandBuffer,
+            offscreenResources.upscaleOutput.image,
+            vk::ImageLayout::eUndefined, vk::ImageLayout::eGeneral,
+            vk::ImageAspectFlagBits::eColor);
+
+        bool resetAccum = upscaleFirstFrame;
+        if (!upscaleFirstFrame)
+        {
+            glm::vec3 prevPos = glm::vec3(glm::inverse(prevView)[3]);
+            float dist = glm::length(currentCameraPosition - prevPos);
+            if (dist > 10.0f)
+                resetAccum = true;
+        }
+        upscaleFirstFrame = false;
+
+        vk::Image colorImage = offscreenResources.colorImages[imageIndex].colorImage;
+
+        render::upscaling::UpscaleInputs inputs{};
+        inputs.colorInput = colorImage;
+        inputs.colorView = offscreenResources.colorImages[imageIndex].colorImageView;
+        inputs.depthInput = offscreenResources.depthImage.depthImage;
+        inputs.depthView = offscreenResources.depthImage.depthImageView;
+        inputs.motionVectors = offscreenResources.motionVectors.image;
+        inputs.motionView = offscreenResources.motionVectors.sampledView;
+        inputs.output = offscreenResources.upscaleOutput.image;
+        inputs.outputView = offscreenResources.upscaleOutput.imageView;
+        inputs.renderExtent = renderRes;
+        inputs.displayExtent = displayRes;
+        inputs.jitterOffset = currentJitterOffset;
+        inputs.resetAccumulation = resetAccum;
+        inputs.viewMatrix = currentView;
+        inputs.projectionMatrix = currentProjection;
+        inputs.prevViewMatrix = prevView;
+        inputs.prevProjectionMatrix = prevProjection;
+        inputs.cameraPosition = currentCameraPosition;
+        inputs.nearPlane = currentNearPlane;
+        inputs.farPlane = currentFarPlane;
+
+        bool evaluateOk = upscaleManager->evaluate(commandBuffer, taaFrameIndex, inputs);
+        if (evaluateOk)
+        {
+            core::ImageUtilities::transitionImageLayout(commandBuffer,
+                offscreenResources.upscaleOutput.image,
+                vk::ImageLayout::eUndefined, vk::ImageLayout::eGeneral,
+                vk::ImageAspectFlagBits::eColor);
+        }
+        if (!evaluateOk)
+        {
+            // Fallback blit (internal intermediate transitions on scene color)
+            core::ImageUtilities::transitionImageLayout(commandBuffer, colorImage,
+                vk::ImageLayout::eShaderReadOnlyOptimal, vk::ImageLayout::eTransferSrcOptimal,
+                vk::ImageAspectFlagBits::eColor);
+
+            vk::ImageBlit sceneBlit{};
+            sceneBlit.srcSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+            sceneBlit.srcSubresource.layerCount = 1;
+            sceneBlit.srcOffsets[1] = vk::Offset3D{static_cast<int32_t>(renderRes.width),
+                                                    static_cast<int32_t>(renderRes.height), 1};
+            sceneBlit.dstSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+            sceneBlit.dstSubresource.layerCount = 1;
+            sceneBlit.dstOffsets[1] = vk::Offset3D{static_cast<int32_t>(displayRes.width),
+                                                    static_cast<int32_t>(displayRes.height), 1};
+
+            commandBuffer.blitImage(colorImage, vk::ImageLayout::eTransferSrcOptimal,
+                                    offscreenResources.upscaleOutput.image, vk::ImageLayout::eGeneral,
+                                    sceneBlit, vk::Filter::eLinear);
+
+            core::ImageUtilities::transitionImageLayout(commandBuffer, colorImage,
+                vk::ImageLayout::eTransferSrcOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
+                vk::ImageAspectFlagBits::eColor);
+        }
+
+        // Depth final state handled by render graph — no restoration needed
+    }
+
     void RenderPassHandler::executePreUpscalePostProcess(const vk::CommandBuffer& commandBuffer,
                                                           uint32_t imageIndex) const
     {

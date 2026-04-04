@@ -116,8 +116,24 @@ namespace render::mesh
         // Begin render pass with secondary command buffer support for parallel recording
         void beginRenderPassForSecondary(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
         void beginVFXRenderPass(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
+        void beginTransparencyPass(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
         void beginWaterContinuePass(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
         void endRenderPass(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
+
+        // Graph-managed variants — identical to originals but without scene color image transitions
+        // (the render graph handles layout transitions externally)
+        void recordCommandBufferGraphManaged(const vk::CommandBuffer& commandBuffer,
+                                          uint32_t imageIndex,
+                                          const std::vector<MeshRenderData>& meshDrawList,
+                                          const math::Frustum* frustum,
+                                          render::DebugRenderer* debugRenderer,
+                                          const glm::mat4& debugView,
+                                          const glm::mat4& debugProjection) const;
+        void beginRenderPassGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
+        void beginRenderPassForSecondaryGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
+        void beginVFXRenderPassGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
+        void beginWaterContinuePassGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
+        void endRenderPassGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
 
         void injectMaterialForPreview(const std::string& materialPath,
                                       std::shared_ptr<material::MaterialData> materialData);

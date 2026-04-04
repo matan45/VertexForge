@@ -485,4 +485,92 @@ namespace render::billboard
             vk::ImageLayout::eShaderReadOnlyOptimal,
             vk::ImageAspectFlagBits::eColor);
     }
+
+    void BillboardPipeline::recordCommandBufferGraphManaged(const vk::CommandBuffer& commandBuffer,
+                                                 uint32_t imageIndex) const
+    {
+        uint32_t totalInstances = atlasInstanceCount;
+        for (const auto& batch : customBatches)
+        {
+            totalInstances += batch.instanceCount;
+        }
+
+        if (!initialized || totalInstances == 0)
+        {
+            return;
+        }
+
+        vk::ImageView colorView = offscreenResources.colorImages[imageIndex].colorImageView;
+        vk::ImageView depthView = offscreenResources.depthImage.depthImageView;
+
+        core::DynamicRenderingInfo info{};
+        info.extent = swapChain.getSwapchainExtent();
+        info.colorAttachments = { core::colorLoad(colorView) };
+        info.depthAttachment = core::depthLoad(depthView);
+
+        core::beginDynamicRendering(commandBuffer, info);
+
+        commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
+
+        vk::Buffer vertexBuffers[] = {bufferManager.getQuadVertexBuffer(), bufferManager.getInstanceBuffer()};
+        vk::DeviceSize offsets[] = {0, 0};
+        commandBuffer.bindVertexBuffers(0, 2, vertexBuffers, offsets);
+        commandBuffer.bindIndexBuffer(bufferManager.getQuadIndexBuffer(), 0, vk::IndexType::eUint16);
+
+        glm::vec2 viewportSize(
+            static_cast<float>(swapChain.getSwapchainExtent().width),
+            static_cast<float>(swapChain.getSwapchainExtent().height)
+        );
+
+        if (atlasInstanceCount > 0)
+        {
+            commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout,
+                                              0, atlasDescriptorSet, nullptr);
+
+            BillboardPushConstants pushConstants{};
+            pushConstants.viewportSize = viewportSize;
+            pushConstants.atlasGridSize = static_cast<float>(AtlasConfig::GRID_SIZE);
+
+            commandBuffer.pushConstants(pipelineLayout, vk::ShaderStageFlagBits::eVertex,
+                                         0, sizeof(BillboardPushConstants), &pushConstants);
+
+            commandBuffer.drawIndexed(6, atlasInstanceCount, 0, 0, 0);
+        }
+
+        for (const auto& batch : customBatches)
+        {
+            vk::DescriptorSet texDescSet;
+            auto it = customTextureCache.find(batch.texturePath);
+            if (it != customTextureCache.end())
+            {
+                texDescSet = it->second.descriptorSet;
+            }
+            else
+            {
+                auto extIt = externalTextureCache.find(batch.texturePath);
+                if (extIt != externalTextureCache.end())
+                {
+                    texDescSet = extIt->second;
+                }
+                else
+                {
+                    continue;
+                }
+            }
+
+            commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout,
+                                              0, texDescSet, nullptr);
+
+            BillboardPushConstants pushConstants{};
+            pushConstants.viewportSize = viewportSize;
+            pushConstants.atlasGridSize = batch.atlasGridSize;
+
+            commandBuffer.pushConstants(pipelineLayout, vk::ShaderStageFlagBits::eVertex,
+                                         0, sizeof(BillboardPushConstants), &pushConstants);
+
+            commandBuffer.drawIndexed(6, batch.instanceCount, 0, 0, batch.firstInstance);
+        }
+
+        core::endDynamicRendering(commandBuffer);
+    }
 }

@@ -452,4 +452,99 @@ namespace render::ui
             vk::ImageLayout::eShaderReadOnlyOptimal,
             vk::ImageAspectFlagBits::eColor);
     }
+
+    void UITextPipeline::recordCommandBufferGraphManaged(const vk::CommandBuffer& commandBuffer,
+                                                          uint32_t imageIndex) const
+    {
+        if (!initialized || totalInstanceCount == 0)
+        {
+            return;
+        }
+
+        bool hasDisplay = !offscreenResources.displayColorImages.empty();
+        auto& colorSrc = hasDisplay ? offscreenResources.displayColorImages : offscreenResources.colorImages;
+
+        auto colorAttach = core::colorLoad(colorSrc[imageIndex].colorImageView);
+        auto stencilAttach = core::stencilLoad(offscreenResources.uiStencilImage.stencilImageView);
+
+        core::DynamicRenderingInfo info{};
+        info.extent = swapChain.getDisplayExtent();
+        info.colorAttachments = {colorAttach};
+        info.stencilAttachment = stencilAttach;
+
+        core::beginDynamicRendering(commandBuffer, info);
+
+        vk::Pipeline currentPipeline = nullptr;
+
+        vk::Buffer vertexBuffers[] = {bufferManager.getQuadVertexBuffer(), bufferManager.getInstanceBuffer()};
+        vk::DeviceSize offsets[] = {0, 0};
+        commandBuffer.bindVertexBuffers(0, 2, vertexBuffers, offsets);
+        commandBuffer.bindIndexBuffer(bufferManager.getQuadIndexBuffer(), 0, vk::IndexType::eUint16);
+
+        glm::vec2 viewportSize(
+            static_cast<float>(swapChain.getDisplayExtent().width),
+            static_cast<float>(swapChain.getDisplayExtent().height)
+        );
+
+        for (const auto& group : scissorGroups)
+        {
+            // Set scissor for this group
+            vk::Rect2D scissor{};
+            if (group.scissorRect.z > 0.0f && group.scissorRect.w > 0.0f)
+            {
+                scissor.offset.x = static_cast<int32_t>(group.scissorRect.x);
+                scissor.offset.y = static_cast<int32_t>(group.scissorRect.y);
+                scissor.extent.width = static_cast<uint32_t>(group.scissorRect.z);
+                scissor.extent.height = static_cast<uint32_t>(group.scissorRect.w);
+            }
+            else
+            {
+                // No scissor - full viewport
+                scissor.offset = vk::Offset2D{0, 0};
+                scissor.extent = swapChain.getDisplayExtent();
+            }
+            commandBuffer.setScissor(0, 1, &scissor);
+
+            for (const auto& batch : group.batches)
+            {
+                // Select pipeline: stencil test if stencilOp == Test, otherwise normal
+                vk::Pipeline targetPipeline = (batch.stencilOp == UIStencilOp::Test)
+                    ? pipelineStencilTest : graphicsPipeline;
+
+                if (targetPipeline != currentPipeline)
+                {
+                    commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, targetPipeline);
+                    currentPipeline = targetPipeline;
+                }
+
+                if (batch.stencilOp == UIStencilOp::Test)
+                {
+                    commandBuffer.setStencilReference(vk::StencilFaceFlagBits::eFrontAndBack, batch.stencilRef);
+                }
+
+                auto it = fontDescriptorSets.find(batch.fontPath);
+                vk::DescriptorSet descSet = (it != fontDescriptorSets.end())
+                    ? it->second : defaultDescriptorSet;
+
+                // Determine glyphMode from cached font data
+                const render::text::CachedFont* cached = fontCache.getFont(batch.fontPath);
+                uint32_t glyphMode = (cached && cached->isColorFont) ? 1u : 0u;
+
+                UITextPushConstants pushConstants{};
+                pushConstants.viewportSize = viewportSize;
+                pushConstants.glyphMode = glyphMode;
+
+                commandBuffer.pushConstants(pipelineLayout,
+                                             vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
+                                             0, sizeof(UITextPushConstants), &pushConstants);
+
+                commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout,
+                                                  0, descSet, nullptr);
+
+                commandBuffer.drawIndexed(6, batch.instanceCount, 0, 0, batch.firstInstance);
+            }
+        }
+
+        core::endDynamicRendering(commandBuffer);
+    }
 }

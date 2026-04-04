@@ -376,4 +376,25 @@ namespace render::cloud
             vk::ImageLayout::eDepthStencilAttachmentOptimal,
             depthAspectMask);
     }
+
+    void CloudComposite::renderCompositeGraphManaged(const vk::CommandBuffer& cmd, uint32_t imageIndex,
+                                                     const CloudCompositePushConstants& pushConstants)
+    {
+        if (!initialized) return;
+
+        vk::Extent2D extent = swapChain.getSwapchainExtent();
+
+        auto colorAttach = core::colorLoad(offscreenResources.colorImages[imageIndex].colorImageView);
+
+        core::DynamicRenderingInfo info{};
+        info.extent = extent;
+        info.colorAttachments = {colorAttach};
+
+        core::beginDynamicRendering(cmd, info);
+        cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
+        cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 0, descriptorSet, nullptr);
+        cmd.pushConstants<CloudCompositePushConstants>(pipelineLayout, vk::ShaderStageFlagBits::eFragment, 0, pushConstants);
+        cmd.draw(3, 1, 0, 0);
+        core::endDynamicRendering(cmd);
+    }
 }

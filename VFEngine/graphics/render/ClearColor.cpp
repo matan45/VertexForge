@@ -61,4 +61,23 @@ namespace render
             vk::ImageLayout::eShaderReadOnlyOptimal,
             vk::ImageAspectFlagBits::eColor);
     }
+
+    void ClearColor::recordCommandBufferGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const
+    {
+        auto colorAttach = core::colorClear(
+            offscreenResources.colorImages[imageIndex].colorImageView,
+            vk::ClearColorValue(std::array<float, 4>{
+                clearColorValue.r, clearColorValue.g, clearColorValue.b, clearColorValue.a}));
+
+        auto depthAttach = core::depthClear(
+            offscreenResources.depthImage.depthImageView, 1.0f, 0);
+
+        core::DynamicRenderingInfo info{};
+        info.extent = swapChain.getSwapchainExtent();
+        info.colorAttachments = {colorAttach};
+        info.depthAttachment = depthAttach;
+
+        core::beginDynamicRendering(commandBuffer, info);
+        core::endDynamicRendering(commandBuffer);
+    }
 }

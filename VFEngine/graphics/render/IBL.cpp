@@ -33,6 +33,11 @@ namespace render
         skyboxRenderer->recordCommandBuffer(commandBuffer, imageIndex);
     }
 
+    void IBL::recordCommandBufferGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const
+    {
+        skyboxRenderer->renderSkyGraphManaged(commandBuffer, imageIndex);
+    }
+
     void IBL::renderSkyboxToTarget(const vk::CommandBuffer& commandBuffer,
                                     const ibl::SkyboxTargetParams& target) const
     {

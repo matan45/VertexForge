@@ -79,6 +79,7 @@ namespace render::ui
         void setUITextDrawList(const std::vector<UITextRenderData>& labels);
 
         void recordCommandBuffer(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
+        void recordCommandBufferGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
 
         bool isInitialized() const { return initialized; }
 

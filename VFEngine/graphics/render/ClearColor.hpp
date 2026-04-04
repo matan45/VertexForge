@@ -35,5 +35,6 @@ namespace render
         void setClearColor(const glm::vec4& color) { clearColorValue = color; }
 
         void recordCommandBuffer(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
+        void recordCommandBufferGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
     };
 }

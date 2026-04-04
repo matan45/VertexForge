@@ -108,6 +108,7 @@ namespace render::decal
                            float nearPlane, float farPlane);
 
         void render(const vk::CommandBuffer& cmd, uint32_t imageIndex);
+        void renderGraphManaged(const vk::CommandBuffer& cmd, uint32_t imageIndex);
 
         bool hasDecals() const { return !currentDecals.empty(); }
         bool isInitialized() const { return initialized; }

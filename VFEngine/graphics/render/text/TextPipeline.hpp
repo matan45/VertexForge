@@ -70,6 +70,7 @@ namespace render::text
         void setTextDrawList(const std::vector<TextRenderData>& textEntities);
 
         void recordCommandBuffer(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
+        void recordCommandBufferGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
 
         bool isInitialized() const { return initialized; }
 

@@ -447,7 +447,6 @@ namespace render
         void draw(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex);
 
     private:
-        void drawLegacy(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex);
         void initGPUDrivenRenderer();
         void updateGPUDrivenHiZ() const;
         bool materialRequiresCustomShader(const std::string& materialPath) const;
@@ -480,6 +479,20 @@ namespace render
         void executePostUpscalePostProcess(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
         void updateSunScreenPosition() const;
         void drawUIOverlays(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
+
+        // Graph-managed dispatch variants (call *GraphManaged sub-pipeline methods)
+        void drawSceneMeshesGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
+        void drawGPUDrivenMeshPassGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex,
+                                               DebugRenderer* debugRendererPtr, bool hasCustomShaderMeshes, bool hasVFX) const;
+        void recordParallelScenePassGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex,
+                                                 vk::DescriptorSet iblDescriptorSet, DebugRenderer* debugRendererPtr,
+                                                 bool hasCustomShaderMeshes, bool wboitActive) const;
+        void recordInlineScenePassGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex,
+                                               vk::DescriptorSet iblDescriptorSet, DebugRenderer* debugRendererPtr,
+                                               bool hasCustomShaderMeshes, bool wboitActive) const;
+        void drawOverlaysGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
+        void drawUIOverlaysGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
+        void executeUpscaleGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex);
 
         void executeRenderHooks(plugin::RenderPassHookPoint hookPoint,
                                 const vk::CommandBuffer& commandBuffer,

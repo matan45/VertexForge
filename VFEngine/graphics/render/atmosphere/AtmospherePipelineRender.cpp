@@ -147,6 +147,50 @@ namespace render::atmosphere
             depthAspectMask);
     }
 
+    void AtmospherePipeline::renderSkyGraphManaged(const vk::CommandBuffer& cmd, uint32_t imageIndex)
+    {
+        if (!initialized || !enabled) return;
+
+        auto colorAttach = core::colorLoad(offscreenResources.colorImages[imageIndex].colorImageView);
+
+        core::DynamicRenderingInfo info{};
+        info.extent = currentExtent;
+        info.colorAttachments = {colorAttach};
+
+        core::beginDynamicRendering(cmd, info);
+        cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, skyRendererPipeline);
+        cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, skyRendererPipelineLayout, 0, skyRendererDS, nullptr);
+        cmd.draw(3, 1, 0, 0);
+        core::endDynamicRendering(cmd);
+    }
+
+    void AtmospherePipeline::renderCompositeGraphManaged(const vk::CommandBuffer& cmd, uint32_t imageIndex)
+    {
+        if (!initialized || !enabled) return;
+
+        if (compositeParamsMapped)
+        {
+            AtmosphereCompositeParams params{};
+            params.nearPlane = cachedNear;
+            params.farPlane = cachedFar;
+            params.aerialMaxDist = settings.aerialMaxDist;
+            params.intensity = settings.aerialIntensity;
+            std::memcpy(compositeParamsMapped, &params, sizeof(params));
+        }
+
+        auto colorAttach = core::colorLoad(offscreenResources.colorImages[imageIndex].colorImageView);
+
+        core::DynamicRenderingInfo info{};
+        info.extent = currentExtent;
+        info.colorAttachments = {colorAttach};
+
+        core::beginDynamicRendering(cmd, info);
+        cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, compositePipeline);
+        cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, compositePipelineLayout, 0, compositeDS, nullptr);
+        cmd.draw(3, 1, 0, 0);
+        core::endDynamicRendering(cmd);
+    }
+
     void AtmospherePipeline::recreate()
     {
         if (!initialized) return;
