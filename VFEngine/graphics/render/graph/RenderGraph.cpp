@@ -30,6 +30,10 @@ namespace render::graph
     ResourceHandle PassBuilder::write(ResourceHandle handle, ResourceUsage usage)
     {
         auto& resource = graph.getResourceNode(handle.index);
+
+        // Capture previous writer BEFORE overwriting — needed for dependency edges
+        uint32_t previousWriter = resource.writerPass;
+
         resource.currentVersion++;
         resource.writerPass = node.index;
 
@@ -41,6 +45,7 @@ namespace render::graph
         access.handle = newHandle;
         access.usage = usage;
         access.isWrite = true;
+        access.dependsOnPass = previousWriter;
         node.resourceAccesses.push_back(access);
 
         return newHandle;
@@ -181,33 +186,16 @@ namespace render::graph
             profiler->beginFrame(cmd, imageIndex);
         }
 
-        static uint32_t frameCounter = 0;
-        bool logThisFrame = (frameCounter++ % 300 == 0); // Log every 300 frames
-
-        if (logThisFrame)
-        {
-            vfLogInfo("[RenderGraph] Execute: {} passes, {} sorted, barriers={} flushes={}",
-                passes.size(), sortedOrder.size(),
-                barrierBatcher->getTotalBarrierCount(), barrierBatcher->getTotalFlushCount());
-        }
-
         for (uint32_t i = 0; i < sortedOrder.size(); ++i)
         {
             uint32_t passIdx = sortedOrder[i];
             auto& pass = passes[passIdx];
 
             if (pass.culled)
-            {
-                if (logThisFrame)
-                    vfLogInfo("[RenderGraph]   [{}] {} — CULLED", i, pass.name);
                 continue;
-            }
 
             // Flush barriers for this pass
             barrierBatcher->flush(cmd, passIdx);
-
-            if (logThisFrame)
-                vfLogInfo("[RenderGraph]   [{}] {} (passIdx={})", i, pass.name, passIdx);
 
             // Profiling
             if (profiler && profiler->isEnabled())
@@ -265,9 +253,10 @@ namespace render::graph
         {
             for (const auto& access : pass.resourceAccesses)
             {
-                if (!access.isWrite && access.handle.isValid())
+                if (access.handle.isValid())
                 {
-                    // Use the writer pass captured at declaration time, not the current writer
+                    // Both reads AND writes depend on the previous writer of this resource version.
+                    // write() captures dependsOnPass = the pass that produced the version being consumed.
                     if (access.dependsOnPass != UINT32_MAX && access.dependsOnPass != pass.index)
                     {
                         dependencies[pass.index].push_back(access.dependsOnPass);

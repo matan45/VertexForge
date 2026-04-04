@@ -604,15 +604,10 @@ namespace render
         bool needsMeshPass = meshPipelineInitialized && (!currentMeshDrawList.empty() || hasCustomShaderMeshes
             || hasDebugItems || hasVFX || hasTerrainToRender || hasWaterToRender);
 
-        vfLogInfo("[SceneMeshes] meshPipelineInit={} meshDrawList={} customShader={} debug={} vfx={} terrain={} water={} needsMeshPass={}",
-            meshPipelineInitialized, currentMeshDrawList.size(), hasCustomShaderMeshes,
-            hasDebugItems, hasVFX, hasTerrainToRender, hasWaterToRender, needsMeshPass);
-
         updateGPUDrivenSceneData();
 
         if (!needsMeshPass)
         {
-            vfLogInfo("[SceneMeshes] EARLY RETURN - no mesh pass needed");
             if (decalRenderingEnabled && decalPipeline && decalPipeline->isInitialized() && decalPipeline->hasDecals())
             {
                 decalPipeline->setCameraData(currentView, currentProjection, currentNearPlane, currentFarPlane);
@@ -628,18 +623,12 @@ namespace render
 
         bool hasMeshesToRender = !currentMeshDrawList.empty();
 
-        vfLogInfo("[SceneMeshes] hasMeshes={} gpuDrivenInit={} gpuDrivenEnabled={}",
-            hasMeshesToRender, gpuDrivenRendererInitialized,
-            gpuDrivenRendererInitialized && gpuDrivenRenderer ? gpuDrivenRenderer->isEnabled() : false);
-
         if ((hasMeshesToRender || hasTerrainToRender || hasWaterToRender) && gpuDrivenRendererInitialized && gpuDrivenRenderer->isEnabled())
         {
-            vfLogInfo("[SceneMeshes] -> GPU-driven path");
             drawGPUDrivenMeshPassGraphManaged(commandBuffer, imageIndex, debugRendererPtr, hasCustomShaderMeshes, hasVFX);
         }
         else if (!currentMeshDrawList.empty() || hasCustomShaderMeshes || hasDebugItems)
         {
-            vfLogInfo("[SceneMeshes] -> Legacy mesh path");
             meshPipeline->recordCommandBufferGraphManaged(commandBuffer, imageIndex, combinedMeshDrawList, currentFrustum,
                                               debugRendererPtr, currentView, currentProjection);
             if (hasVFX)
@@ -667,10 +656,6 @@ namespace render
                                                                DebugRenderer* debugRendererPtr, bool hasCustomShaderMeshes,
                                                                bool hasVFX) const
     {
-        vfLogInfo("[GPUDriven] Starting GPU-driven mesh pass (asyncCompute={}, meshletOcclusion={}, rtShadow={}, objects={})",
-            asyncComputeActive, gpuDrivenRenderer->isMeshletOcclusionCullingEnabled(),
-            gpuDrivenRenderer->isRTShadowReady(), gpuDrivenRenderer->getStats().totalObjects);
-
         updateGPUDrivenHiZ();
         if (asyncComputeActive)
             gpuDrivenRenderer->dispatchGraphicsCompute(commandBuffer, imageIndex);
@@ -681,7 +666,6 @@ namespace render
 
         if (gpuDrivenRenderer->isMeshletOcclusionCullingEnabled())
         {
-            vfLogInfo("[GPUDriven] Running depth prepass + HiZ");
             gpuDrivenRenderer->renderDepthPrepass(commandBuffer, iblDescriptorSet);
             gpuDrivenRenderer->generatePrepassHiZ(commandBuffer);
         }
