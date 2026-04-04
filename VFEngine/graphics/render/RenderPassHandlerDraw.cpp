@@ -41,11 +41,11 @@ namespace
                                 services::IVFXRuntimeProvider* vfxProvider, uint32_t imageIndex)
     {
         meshPipeline->beginRenderPass(commandBuffer, imageIndex);
-        meshPipeline->endRenderPass(commandBuffer);
+        meshPipeline->endRenderPass(commandBuffer, imageIndex);
 
         meshPipeline->beginVFXRenderPass(commandBuffer, imageIndex);
         vfxProvider->recordDrawCommands(commandBuffer);
-        meshPipeline->endRenderPass(commandBuffer);
+        meshPipeline->endRenderPass(commandBuffer, imageIndex);
     }
 }
 
@@ -401,7 +401,7 @@ namespace render
         {
             meshPipeline->beginVFXRenderPass(commandBuffer, imageIndex);
             vfxRuntimeProvider->recordDrawCommands(commandBuffer);
-            meshPipeline->endRenderPass(commandBuffer);
+            meshPipeline->endRenderPass(commandBuffer, imageIndex);
         }
     }
 
@@ -533,7 +533,7 @@ namespace render
         if (hasWater)
         {
             // Break render pass for refraction copy
-            meshPipeline->endRenderPass(commandBuffer);
+            meshPipeline->endRenderPass(commandBuffer, imageIndex);
 
             auto extent = swapChain.getSwapchainExtent();
             gpuDrivenRenderer->copySceneColorForRefraction(
@@ -573,7 +573,7 @@ namespace render
         lastSceneRecordingUs = std::chrono::duration<float, std::micro>(sceneRecordEnd - sceneRecordStart).count();
         lastSceneSecondaryCount = static_cast<uint32_t>(secondaries.size());
 
-        meshPipeline->endRenderPass(commandBuffer);
+        meshPipeline->endRenderPass(commandBuffer, imageIndex);
     }
 
     void RenderPassHandler::recordInlineScenePass(
@@ -610,7 +610,7 @@ namespace render
         if (hasWater)
         {
             // End main render pass to copy scene color for refraction
-            meshPipeline->endRenderPass(commandBuffer);
+            meshPipeline->endRenderPass(commandBuffer, imageIndex);
 
             // Copy scene color to refraction texture
             gpuDrivenRenderer->copySceneColorForRefraction(
@@ -650,7 +650,7 @@ namespace render
                                      });
         }
 
-        meshPipeline->endRenderPass(commandBuffer);
+        meshPipeline->endRenderPass(commandBuffer, imageIndex);
     }
 
     void RenderPassHandler::executeDistortionPass(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex)

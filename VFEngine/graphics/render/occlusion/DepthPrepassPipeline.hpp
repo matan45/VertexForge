@@ -30,6 +30,7 @@ namespace render::occlusion
 
     struct DepthPrepassInitInfo
     {
+        std::vector<vk::Format> colorFormats;
         vk::Format depthFormat = vk::Format::eD32SfloatS8Uint;
         vk::DescriptorSetLayout cameraLayout;
         vk::DescriptorSetLayout perDrawLayout;
@@ -84,7 +85,8 @@ namespace render::occlusion
         };
 
         PipelineCreateResult createDepthOnlyPipeline(
-            core::Shader& shader, vk::Format depthFormat,
+            core::Shader& shader,
+            const std::vector<vk::Format>& colorFormats, vk::Format depthFormat,
             const std::vector<vk::DescriptorSetLayout>& layouts,
             uint32_t pushConstantSize);
 

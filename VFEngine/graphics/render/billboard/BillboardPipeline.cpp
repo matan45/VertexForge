@@ -6,6 +6,7 @@
 #include "../../core/OffScreen.hpp"
 #include "../../core/PipelineUtilities.hpp"
 #include "../../core/DynamicRenderingHelpers.hpp"
+#include "../../core/ImageUtilities.hpp"
 #include "print/Log.hpp"
 #include <filesystem>
 #include <algorithm>
@@ -399,6 +400,12 @@ namespace render::billboard
             return;
         }
 
+        core::ImageUtilities::transitionImageLayout(commandBuffer,
+            offscreenResources.colorImages[imageIndex].colorImage,
+            vk::ImageLayout::eShaderReadOnlyOptimal,
+            vk::ImageLayout::eColorAttachmentOptimal,
+            vk::ImageAspectFlagBits::eColor);
+
         vk::ImageView colorView = offscreenResources.colorImages[imageIndex].colorImageView;
         vk::ImageView depthView = offscreenResources.depthImage.depthImageView;
 
@@ -471,5 +478,11 @@ namespace render::billboard
         }
 
         core::endDynamicRendering(commandBuffer);
+
+        core::ImageUtilities::transitionImageLayout(commandBuffer,
+            offscreenResources.colorImages[imageIndex].colorImage,
+            vk::ImageLayout::eColorAttachmentOptimal,
+            vk::ImageLayout::eShaderReadOnlyOptimal,
+            vk::ImageAspectFlagBits::eColor);
     }
 }

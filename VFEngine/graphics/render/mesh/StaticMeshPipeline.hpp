@@ -117,7 +117,7 @@ namespace render::mesh
         void beginRenderPassForSecondary(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
         void beginVFXRenderPass(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
         void beginWaterContinuePass(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
-        void endRenderPass(const vk::CommandBuffer& commandBuffer) const;
+        void endRenderPass(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
 
         void injectMaterialForPreview(const std::string& materialPath,
                                       std::shared_ptr<material::MaterialData> materialData);

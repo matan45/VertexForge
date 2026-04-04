@@ -5,6 +5,7 @@
 #include "../../core/Texture.hpp"
 #include "../../core/OffScreen.hpp"
 #include "../../core/DynamicRenderingHelpers.hpp"
+#include "../../core/ImageUtilities.hpp"
 #include "resource/Types.hpp"
 #include "print/Log.hpp"
 #include <filesystem>
@@ -181,6 +182,12 @@ namespace render::ui
         bool hasDisplay = !offscreenResources.displayColorImages.empty();
         auto& colorSrc = hasDisplay ? offscreenResources.displayColorImages : offscreenResources.colorImages;
 
+        core::ImageUtilities::transitionImageLayout(commandBuffer,
+            colorSrc[imageIndex].colorImage,
+            vk::ImageLayout::eShaderReadOnlyOptimal,
+            vk::ImageLayout::eColorAttachmentOptimal,
+            vk::ImageAspectFlagBits::eColor);
+
         auto colorAttach = core::colorLoad(colorSrc[imageIndex].colorImageView);
         auto stencilAttach = core::stencilClear(offscreenResources.uiStencilImage.stencilImageView, 0);
 
@@ -262,5 +269,11 @@ namespace render::ui
         }
 
         core::endDynamicRendering(commandBuffer);
+
+        core::ImageUtilities::transitionImageLayout(commandBuffer,
+            colorSrc[imageIndex].colorImage,
+            vk::ImageLayout::eColorAttachmentOptimal,
+            vk::ImageLayout::eShaderReadOnlyOptimal,
+            vk::ImageAspectFlagBits::eColor);
     }
 }

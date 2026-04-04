@@ -9,6 +9,7 @@
 #include "../../core/SwapChain.hpp"
 #include "../../core/OffScreen.hpp"
 #include "../../core/DynamicRenderingHelpers.hpp"
+#include "../../core/ImageUtilities.hpp"
 #include "material/MaterialTypes.hpp"
 #include "math/Frustum.hpp"
 #include <algorithm>
@@ -311,7 +312,7 @@ namespace render::mesh
                                   [this](const std::string& meshId) { return getMesh(meshId); });
         }
 
-        endRenderPass(commandBuffer);
+        endRenderPass(commandBuffer, imageIndex);
     }
 
     void StaticMeshPipeline::renderMeshList(const vk::CommandBuffer& commandBuffer,
@@ -450,6 +451,12 @@ namespace render::mesh
 
     void StaticMeshPipeline::beginRenderPass(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const
     {
+        core::ImageUtilities::transitionImageLayout(commandBuffer,
+            offscreenResources.colorImages[imageIndex].colorImage,
+            vk::ImageLayout::eShaderReadOnlyOptimal,
+            vk::ImageLayout::eColorAttachmentOptimal,
+            vk::ImageAspectFlagBits::eColor);
+
         vk::ImageView colorView = offscreenResources.colorImages[imageIndex].colorImageView;
         vk::ImageView depthView = offscreenResources.depthImage.depthImageView;
 
@@ -463,6 +470,12 @@ namespace render::mesh
 
     void StaticMeshPipeline::beginRenderPassForSecondary(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const
     {
+        core::ImageUtilities::transitionImageLayout(commandBuffer,
+            offscreenResources.colorImages[imageIndex].colorImage,
+            vk::ImageLayout::eShaderReadOnlyOptimal,
+            vk::ImageLayout::eColorAttachmentOptimal,
+            vk::ImageAspectFlagBits::eColor);
+
         // Dynamic rendering with secondary command buffers uses VK_RENDERING_CONTENTS_SECONDARY_COMMAND_BUFFERS_BIT
         vk::ImageView colorView = offscreenResources.colorImages[imageIndex].colorImageView;
         vk::ImageView depthView = offscreenResources.depthImage.depthImageView;
@@ -506,6 +519,12 @@ namespace render::mesh
             vk::PipelineStageFlagBits::eEarlyFragmentTests | vk::PipelineStageFlagBits::eFragmentShader,
             {}, {}, {}, depthBarrier);
 
+        core::ImageUtilities::transitionImageLayout(commandBuffer,
+            offscreenResources.colorImages[imageIndex].colorImage,
+            vk::ImageLayout::eShaderReadOnlyOptimal,
+            vk::ImageLayout::eColorAttachmentOptimal,
+            vk::ImageAspectFlagBits::eColor);
+
         vk::ImageView colorView = offscreenResources.colorImages[imageIndex].colorImageView;
         vk::ImageView depthView = offscreenResources.depthImage.depthImageView;
 
@@ -519,6 +538,12 @@ namespace render::mesh
 
     void StaticMeshPipeline::beginWaterContinuePass(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const
     {
+        core::ImageUtilities::transitionImageLayout(commandBuffer,
+            offscreenResources.colorImages[imageIndex].colorImage,
+            vk::ImageLayout::eShaderReadOnlyOptimal,
+            vk::ImageLayout::eColorAttachmentOptimal,
+            vk::ImageAspectFlagBits::eColor);
+
         vk::ImageView colorView = offscreenResources.colorImages[imageIndex].colorImageView;
         vk::ImageView depthView = offscreenResources.depthImage.depthImageView;
 
@@ -530,8 +555,14 @@ namespace render::mesh
         core::beginDynamicRendering(commandBuffer, info);
     }
 
-    void StaticMeshPipeline::endRenderPass(const vk::CommandBuffer& commandBuffer) const
+    void StaticMeshPipeline::endRenderPass(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const
     {
         core::endDynamicRendering(commandBuffer);
+
+        core::ImageUtilities::transitionImageLayout(commandBuffer,
+            offscreenResources.colorImages[imageIndex].colorImage,
+            vk::ImageLayout::eColorAttachmentOptimal,
+            vk::ImageLayout::eShaderReadOnlyOptimal,
+            vk::ImageAspectFlagBits::eColor);
     }
 }

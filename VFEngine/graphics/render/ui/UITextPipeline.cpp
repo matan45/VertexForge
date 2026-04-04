@@ -6,6 +6,7 @@
 #include "../../core/Shader.hpp"
 #include "../../core/OffScreen.hpp"
 #include "../../core/DynamicRenderingHelpers.hpp"
+#include "../../core/ImageUtilities.hpp"
 #include "text/TextLayout.hpp"
 #include "resource/Types.hpp"
 #include <algorithm>
@@ -356,6 +357,12 @@ namespace render::ui
         bool hasDisplay = !offscreenResources.displayColorImages.empty();
         auto& colorSrc = hasDisplay ? offscreenResources.displayColorImages : offscreenResources.colorImages;
 
+        core::ImageUtilities::transitionImageLayout(commandBuffer,
+            colorSrc[imageIndex].colorImage,
+            vk::ImageLayout::eShaderReadOnlyOptimal,
+            vk::ImageLayout::eColorAttachmentOptimal,
+            vk::ImageAspectFlagBits::eColor);
+
         auto colorAttach = core::colorLoad(colorSrc[imageIndex].colorImageView);
         auto stencilAttach = core::stencilLoad(offscreenResources.uiStencilImage.stencilImageView);
 
@@ -438,5 +445,11 @@ namespace render::ui
         }
 
         core::endDynamicRendering(commandBuffer);
+
+        core::ImageUtilities::transitionImageLayout(commandBuffer,
+            colorSrc[imageIndex].colorImage,
+            vk::ImageLayout::eColorAttachmentOptimal,
+            vk::ImageLayout::eShaderReadOnlyOptimal,
+            vk::ImageAspectFlagBits::eColor);
     }
 }

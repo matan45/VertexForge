@@ -4,6 +4,7 @@
 #include "../../core/Shader.hpp"
 #include "../../core/OffScreen.hpp"
 #include "../../core/DynamicRenderingHelpers.hpp"
+#include "../../core/ImageUtilities.hpp"
 #include "text/TextLayout.hpp"
 #include "resource/Types.hpp"
 #include <algorithm>
@@ -285,6 +286,12 @@ namespace render::text
             return;
         }
 
+        core::ImageUtilities::transitionImageLayout(commandBuffer,
+            offscreenResources.colorImages[imageIndex].colorImage,
+            vk::ImageLayout::eShaderReadOnlyOptimal,
+            vk::ImageLayout::eColorAttachmentOptimal,
+            vk::ImageAspectFlagBits::eColor);
+
         auto colorAttach = core::colorLoad(offscreenResources.colorImages[imageIndex].colorImageView);
         auto depthAttach = core::depthLoad(offscreenResources.depthImage.depthImageView);
 
@@ -332,5 +339,11 @@ namespace render::text
         }
 
         core::endDynamicRendering(commandBuffer);
+
+        core::ImageUtilities::transitionImageLayout(commandBuffer,
+            offscreenResources.colorImages[imageIndex].colorImage,
+            vk::ImageLayout::eColorAttachmentOptimal,
+            vk::ImageLayout::eShaderReadOnlyOptimal,
+            vk::ImageAspectFlagBits::eColor);
     }
 }

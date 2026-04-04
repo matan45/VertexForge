@@ -66,7 +66,7 @@ namespace render
 
         // --- Scene core passes (opaque, self-managed barriers) ---
 
-        // ClearColor: finalLayout color=eShaderReadOnlyOptimal, depth=eDepthStencilAttachmentOptimal
+        // ClearColor: opaque, manages own transitions (eUndefined→eColorAttachment→eShaderReadOnly)
         {
             auto builder = frameGraph->addPass("ClearColor",
                 [this](vk::CommandBuffer cmd, uint32_t idx) {
@@ -100,6 +100,7 @@ namespace render
                         atmospherePipeline->dispatchCompute(cmd);
                     atmospherePipeline->renderSky(cmd, idx);
                 });
+            builder.opaqueRead(sceneColorHandle, graph::ResourceUsage::ShaderRead);
             sceneColorHandle = builder.opaqueWrite(sceneColorHandle, graph::ResourceUsage::ShaderRead);
             builder.setSegment(graph::HookSegment::Scene);
             builder.setSideEffect();
@@ -110,6 +111,7 @@ namespace render
                 [this](vk::CommandBuffer cmd, uint32_t idx) {
                     iblRenderer->recordCommandBuffer(cmd, idx);
                 });
+            builder.opaqueRead(sceneColorHandle, graph::ResourceUsage::ShaderRead);
             sceneColorHandle = builder.opaqueWrite(sceneColorHandle, graph::ResourceUsage::ShaderRead);
             builder.setSegment(graph::HookSegment::Scene);
             builder.setSideEffect();
@@ -141,6 +143,7 @@ namespace render
                         cloudPipeline->dispatchCompute(cmd);
                     cloudPipeline->renderComposite(cmd, idx);
                 });
+            builder.opaqueRead(sceneColorHandle, graph::ResourceUsage::ShaderRead);
             sceneColorHandle = builder.opaqueWrite(sceneColorHandle, graph::ResourceUsage::ShaderRead);
             builder.setSegment(graph::HookSegment::Scene);
             builder.setSideEffect();
@@ -152,6 +155,7 @@ namespace render
                 [this](vk::CommandBuffer cmd, uint32_t idx) {
                     drawSceneMeshes(cmd, idx);
                 });
+            builder.opaqueRead(sceneColorHandle, graph::ResourceUsage::ShaderRead);
             sceneColorHandle = builder.opaqueWrite(sceneColorHandle, graph::ResourceUsage::ShaderRead);
             depthHandle = builder.opaqueWrite(depthHandle, graph::ResourceUsage::DepthAttachmentWrite);
             builder.setSegment(graph::HookSegment::Scene);
@@ -189,6 +193,7 @@ namespace render
                 [this](vk::CommandBuffer cmd, uint32_t idx) {
                     drawOverlays(cmd, idx);
                 });
+            builder.opaqueRead(sceneColorHandle, graph::ResourceUsage::ShaderRead);
             sceneColorHandle = builder.opaqueWrite(sceneColorHandle, graph::ResourceUsage::ShaderRead);
             builder.setSegment(graph::HookSegment::PostScene);
             builder.setSideEffect();
@@ -200,6 +205,7 @@ namespace render
                 [this](vk::CommandBuffer cmd, uint32_t /*idx*/) {
                     executeOcclusionPasses(cmd);
                 });
+            builder.opaqueRead(depthHandle, graph::ResourceUsage::DepthAttachmentRead);
             depthHandle = builder.opaqueWrite(depthHandle, graph::ResourceUsage::DepthAttachmentWrite);
             builder.setSegment(graph::HookSegment::PostScene);
             builder.setSideEffect();
@@ -212,6 +218,7 @@ namespace render
                 [this](vk::CommandBuffer cmd, uint32_t idx) {
                     atmospherePipeline->renderComposite(cmd, idx);
                 });
+            builder.opaqueRead(sceneColorHandle, graph::ResourceUsage::ShaderRead);
             sceneColorHandle = builder.opaqueWrite(sceneColorHandle, graph::ResourceUsage::ShaderRead);
             builder.setSegment(graph::HookSegment::PostScene);
             builder.setSideEffect();
@@ -227,6 +234,8 @@ namespace render
                 [this](vk::CommandBuffer cmd, uint32_t idx) {
                     volumetricFogComposite->execute(cmd, idx);
                 });
+            builder.opaqueRead(sceneColorHandle, graph::ResourceUsage::ShaderRead);
+            builder.opaqueRead(depthHandle, graph::ResourceUsage::DepthAttachmentRead);
             sceneColorHandle = builder.opaqueWrite(sceneColorHandle, graph::ResourceUsage::ShaderRead);
             depthHandle = builder.opaqueWrite(depthHandle, graph::ResourceUsage::DepthAttachmentWrite);
             builder.setSegment(graph::HookSegment::PostScene);
@@ -244,6 +253,8 @@ namespace render
                 [this](vk::CommandBuffer cmd, uint32_t idx) {
                     ssgiPipeline->execute(cmd, idx);
                 });
+            builder.opaqueRead(sceneColorHandle, graph::ResourceUsage::ShaderRead);
+            builder.opaqueRead(depthHandle, graph::ResourceUsage::DepthAttachmentRead);
             sceneColorHandle = builder.opaqueWrite(sceneColorHandle, graph::ResourceUsage::ShaderRead);
             depthHandle = builder.opaqueWrite(depthHandle, graph::ResourceUsage::DepthAttachmentWrite);
             builder.setSegment(graph::HookSegment::PostScene);
@@ -347,6 +358,7 @@ namespace render
                     }
                 });
             // Depth ends at eDepthStencilAttachmentOptimal after post-copy barrier
+            builder.opaqueRead(depthHandle, graph::ResourceUsage::DepthAttachmentRead);
             depthHandle = builder.opaqueWrite(depthHandle, graph::ResourceUsage::DepthAttachmentWrite);
             builder.setSegment(graph::HookSegment::PostScene);
             builder.setSideEffect();
@@ -401,6 +413,7 @@ namespace render
                 [this](vk::CommandBuffer cmd, uint32_t idx) {
                     drawUIOverlays(cmd, idx);
                 });
+            builder.opaqueRead(sceneColorHandle, graph::ResourceUsage::ShaderRead);
             sceneColorHandle = builder.opaqueWrite(sceneColorHandle, graph::ResourceUsage::ShaderRead);
             builder.setSegment(graph::HookSegment::UI);
             builder.setSideEffect();

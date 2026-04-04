@@ -4,6 +4,7 @@
 #include "../../core/Shader.hpp"
 #include "../../core/OffScreen.hpp"
 #include "../../core/BufferUtilities.hpp"
+#include "../../core/ImageUtilities.hpp"
 #include "../../core/DynamicRenderingHelpers.hpp"
 #include "print/Log.hpp"
 
@@ -230,12 +231,18 @@ namespace render::ibl
         {
             updateUniformBuffer(viewMatrix, projectionMatrix);
 
+            vk::Image colorImage = offscreenResources.colorImages[imageIndex].colorImage;
             vk::ImageView colorView = offscreenResources.colorImages[imageIndex].colorImageView;
+
+            core::ImageUtilities::transitionImageLayout(commandBuffer, colorImage,
+                vk::ImageLayout::eShaderReadOnlyOptimal,
+                vk::ImageLayout::eColorAttachmentOptimal,
+                vk::ImageAspectFlagBits::eColor);
 
             core::DynamicRenderingInfo renderingInfo{};
             renderingInfo.extent = swapChain.getSwapchainExtent();
             renderingInfo.colorAttachments = {
-                core::colorClear(colorView, vk::ClearColorValue{std::array<float, 4>{0.0f, 0.0f, 0.0f, 1.0f}})
+                core::colorLoad(colorView)
             };
 
             core::beginDynamicRendering(commandBuffer, renderingInfo);
@@ -268,6 +275,11 @@ namespace render::ibl
             commandBuffer.draw(static_cast<uint32_t>(skyboxVertices.size()), 1, 0, 0);
 
             core::endDynamicRendering(commandBuffer);
+
+            core::ImageUtilities::transitionImageLayout(commandBuffer, colorImage,
+                vk::ImageLayout::eColorAttachmentOptimal,
+                vk::ImageLayout::eShaderReadOnlyOptimal,
+                vk::ImageAspectFlagBits::eColor);
         }
     }
 
