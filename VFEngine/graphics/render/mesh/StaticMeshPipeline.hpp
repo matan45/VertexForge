@@ -132,6 +132,7 @@ namespace render::mesh
         void beginRenderPassGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
         void beginRenderPassForSecondaryGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
         void beginVFXRenderPassGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
+        void restoreDepthAfterVFX(const vk::CommandBuffer& commandBuffer) const;
         void beginWaterContinuePassGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
         void endRenderPassGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
 
