@@ -249,7 +249,6 @@ namespace render::ibl
         pipelineInfo.pMultisampleState = &multisampling;
         pipelineInfo.pColorBlendState = &colorBlending;
         pipelineInfo.layout = pipelineLayout;
-        pipelineInfo.renderPass = nullptr;
         pipelineInfo.pDynamicState = &dynamicState;
 
         vk::PipelineRenderingCreateInfo pipelineRenderingInfo{};

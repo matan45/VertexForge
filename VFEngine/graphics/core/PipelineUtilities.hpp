@@ -8,10 +8,7 @@ namespace core
 	struct WireframePipelineConfig
 	{
 		vk::Device device;
-		vk::RenderPass renderPass; // nullptr for dynamic rendering
 		vk::Extent2D extent;
-
-		// Dynamic rendering formats (used when renderPass is nullptr)
 		std::vector<vk::Format> colorAttachmentFormats;
 		vk::Format depthAttachmentFormat = vk::Format::eUndefined;
 		vk::Format stencilAttachmentFormat = vk::Format::eUndefined;
@@ -29,10 +26,7 @@ namespace core
 	struct GraphicsPipelineConfig
 	{
 		vk::Device device;
-		vk::RenderPass renderPass; // nullptr for dynamic rendering
 		vk::Extent2D extent;
-
-		// Dynamic rendering formats (used when renderPass is nullptr)
 		std::vector<vk::Format> colorAttachmentFormats;
 		vk::Format depthAttachmentFormat = vk::Format::eUndefined;
 		vk::Format stencilAttachmentFormat = vk::Format::eUndefined;
@@ -86,10 +80,7 @@ namespace core
 	struct MeshShaderPipelineConfig
 	{
 		vk::Device device;
-		vk::RenderPass renderPass; // nullptr for dynamic rendering
 		vk::Extent2D extent;
-
-		// Dynamic rendering formats (used when renderPass is nullptr)
 		std::vector<vk::Format> colorAttachmentFormats;
 		vk::Format depthAttachmentFormat = vk::Format::eUndefined;
 		vk::Format stencilAttachmentFormat = vk::Format::eUndefined;

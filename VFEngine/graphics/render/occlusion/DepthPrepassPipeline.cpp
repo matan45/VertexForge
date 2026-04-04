@@ -55,7 +55,6 @@ namespace render::occlusion
 
         core::MeshShaderPipelineConfig config{
             .device = vkDevice,
-            .renderPass = nullptr,
             .extent = swapChain.getSwapchainExtent(),
             .colorAttachmentFormats = {},
             .depthAttachmentFormat = depthFormat,

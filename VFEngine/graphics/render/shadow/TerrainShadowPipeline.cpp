@@ -180,7 +180,6 @@ namespace render::shadow
         pipelineInfo.pColorBlendState = &colorBlending;
         pipelineInfo.pDynamicState = &dynamicState;
         pipelineInfo.layout = terrainShadowPipelineLayout;
-        pipelineInfo.renderPass = nullptr;
         pipelineInfo.subpass = 0;
 
         auto result = vkDevice.createGraphicsPipeline(nullptr, pipelineInfo);

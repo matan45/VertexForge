@@ -122,7 +122,6 @@ namespace render::ui
 
         core::GraphicsPipelineConfig config{
             .device = device.getLogicalDevice(),
-            .renderPass = nullptr,
             .extent = swapChain.getDisplayExtent(),
             .colorAttachmentFormats = { swapChain.getSceneColorFormat() },
             .stencilAttachmentFormat = vk::Format::eS8Uint,

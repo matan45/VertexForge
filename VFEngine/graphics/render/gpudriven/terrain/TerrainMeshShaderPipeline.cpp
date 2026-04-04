@@ -433,7 +433,6 @@ namespace render::gpudriven
 
         core::MeshShaderPipelineConfig config{
             .device = vkDevice,
-            .renderPass = nullptr,
             .extent = swapChain.getSwapchainExtent(),
             .colorAttachmentFormats = colorFormats,
             .depthAttachmentFormat = depthFormat,

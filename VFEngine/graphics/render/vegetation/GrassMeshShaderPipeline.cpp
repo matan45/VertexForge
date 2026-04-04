@@ -341,7 +341,6 @@ namespace render::vegetation
 
         core::MeshShaderPipelineConfig config{};
         config.device = devicePtr->getLogicalDevice();
-        config.renderPass = nullptr;
         config.extent = vk::Extent2D{1, 1};
         config.colorAttachmentFormats = colorFormats;
         config.depthAttachmentFormat = depthFormat;

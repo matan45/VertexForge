@@ -468,7 +468,6 @@ namespace render::gi
         pipelineInfo.pDepthStencilState = &depthStencil;
         pipelineInfo.pColorBlendState = &colorBlending;
         pipelineInfo.layout = layout;
-        pipelineInfo.renderPass = nullptr;
         pipelineInfo.subpass = 0;
 
         // Dynamic rendering: specify color format via pNext

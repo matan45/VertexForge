@@ -133,7 +133,6 @@ namespace render::mesh
         {
             core::GraphicsPipelineConfig config{
                 .device = device.getLogicalDevice(),
-                .renderPass = nullptr,
                 .extent = swapchainExtent,
                 .colorAttachmentFormats = { colorFormat },
                 .depthAttachmentFormat = depthFormat,

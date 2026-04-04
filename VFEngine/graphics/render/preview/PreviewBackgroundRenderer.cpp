@@ -121,7 +121,6 @@ namespace render::preview
         pipelineInfo.pColorBlendState = &colorBlending;
         pipelineInfo.pDepthStencilState = &depthStencil;
         pipelineInfo.layout = pipelineLayout;
-        pipelineInfo.renderPass = nullptr;
 
         vk::Format colorFormat = swapChain.getSceneColorFormat();
         vk::PipelineRenderingCreateInfo pipelineRenderingInfo{};

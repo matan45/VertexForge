@@ -207,7 +207,6 @@ namespace render::ibl
         pipelineInfo.pColorBlendState = &colorBlending;
         pipelineInfo.pDynamicState = &dynamicState;
         pipelineInfo.layout = pipelineLayout;
-        pipelineInfo.renderPass = nullptr;
 
         vk::PipelineRenderingCreateInfo pipelineRenderingInfo{};
         pipelineRenderingInfo.colorAttachmentCount = 1;

@@ -29,18 +29,15 @@ namespace render::vfx
 
         void copySceneColor(vk::CommandBuffer cmd, vk::Image srcColorImage, uint32_t width, uint32_t height);
 
-        [[nodiscard]] vk::RenderPass getDistortionVectorRenderPass() const { return distortionVectorRenderPass; }
-        [[nodiscard]] vk::RenderPass getCompositeRenderPass() const { return compositeRenderPass; }
-        [[nodiscard]] vk::Framebuffer getDistortionVectorFramebuffer() const { return distortionVectorFramebuffer; }
         // Composite descriptor layout and set are owned by this class but passed to
         // VFXDistortionComposite for pipeline creation and draw-time binding.
         [[nodiscard]] vk::DescriptorSetLayout getCompositeDescriptorSetLayout() const { return compositeDescriptorSetLayout; }
         [[nodiscard]] vk::DescriptorSet getCompositeDescriptorSet() const { return compositeDescriptorSet; }
+        [[nodiscard]] vk::ImageView getDistortionView() const { return distortionView; }
+        [[nodiscard]] vk::ImageView getSceneDepthView() const { return depthView; }
+        [[nodiscard]] vk::Image getDistortionImage() const { return distortionImage; }
         [[nodiscard]] vk::Extent2D getExtent() const { return extent; }
         [[nodiscard]] bool isInitialized() const { return initialized; }
-
-        // Get per-swapchain-image composite framebuffer
-        [[nodiscard]] vk::Framebuffer getCompositeFramebuffer(uint32_t imageIndex) const;
 
     private:
         core::Device& device;
@@ -57,13 +54,8 @@ namespace render::vfx
 
         vk::Sampler linearSampler;
 
-        // Render passes
-        vk::RenderPass distortionVectorRenderPass;
-        vk::RenderPass compositeRenderPass;
-
-        // Framebuffers
-        vk::Framebuffer distortionVectorFramebuffer;
-        std::vector<vk::Framebuffer> compositeFramebuffers;
+        // Stored depth view for dynamic rendering
+        vk::ImageView depthView;
 
         // Descriptors for composite pass
         vk::DescriptorSetLayout compositeDescriptorSetLayout;
@@ -76,10 +68,6 @@ namespace render::vfx
         void createDistortionImage(uint32_t width, uint32_t height);
         void createSceneColorCopyImage(vk::Format format, uint32_t width, uint32_t height);
         void createSampler();
-        void createDistortionVectorRenderPass(vk::Format depthFormat);
-        void createCompositeRenderPass(vk::Format colorFormat);
-        void createDistortionVectorFramebuffer(vk::ImageView depthView);
-        void createCompositeFramebuffers(const core::OffscreenResources& offscreen);
         void createCompositeDescriptorLayout();
         void createCompositeDescriptorPool();
         void allocateCompositeDescriptorSet();

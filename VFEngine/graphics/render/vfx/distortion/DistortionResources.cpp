@@ -22,14 +22,11 @@ namespace render::vfx
                                     const core::OffscreenResources& offscreen)
     {
         extent = swapExtent;
+        depthView = sceneDepthView;
 
         createDistortionImage(swapExtent.width, swapExtent.height);
         createSceneColorCopyImage(colorFormat, swapExtent.width, swapExtent.height);
         createSampler();
-        createDistortionVectorRenderPass(depthFormat);
-        createCompositeRenderPass(colorFormat);
-        createDistortionVectorFramebuffer(sceneDepthView);
-        createCompositeFramebuffers(offscreen);
         createCompositeDescriptorLayout();
         createCompositeDescriptorPool();
         allocateCompositeDescriptorSet();
@@ -50,19 +47,8 @@ namespace render::vfx
     {
         vk::Device vkDevice = device.getLogicalDevice();
 
-        for (auto fb : compositeFramebuffers)
-        {
-            if (fb) vkDevice.destroyFramebuffer(fb);
-        }
-        compositeFramebuffers.clear();
-
-        if (distortionVectorFramebuffer) { vkDevice.destroyFramebuffer(distortionVectorFramebuffer); distortionVectorFramebuffer = nullptr; }
-
         if (compositeDescriptorPool) { vkDevice.destroyDescriptorPool(compositeDescriptorPool); compositeDescriptorPool = nullptr; }
         if (compositeDescriptorSetLayout) { vkDevice.destroyDescriptorSetLayout(compositeDescriptorSetLayout); compositeDescriptorSetLayout = nullptr; }
-
-        if (distortionVectorRenderPass) { vkDevice.destroyRenderPass(distortionVectorRenderPass); distortionVectorRenderPass = nullptr; }
-        if (compositeRenderPass) { vkDevice.destroyRenderPass(compositeRenderPass); compositeRenderPass = nullptr; }
 
         if (linearSampler) { vkDevice.destroySampler(linearSampler); linearSampler = nullptr; }
 
@@ -74,6 +60,7 @@ namespace render::vfx
         if (sceneColorCopyImage) { vkDevice.destroyImage(sceneColorCopyImage); sceneColorCopyImage = nullptr; }
         if (sceneColorCopyAllocation) { device.getMemoryManager().free(sceneColorCopyAllocation); sceneColorCopyAllocation = {}; }
 
+        depthView = nullptr;
         initialized = false;
     }
 
@@ -126,137 +113,6 @@ namespace render::vfx
         info.mipmapMode = vk::SamplerMipmapMode::eLinear;
 
         linearSampler = device.getLogicalDevice().createSampler(info);
-    }
-
-    void DistortionResources::createDistortionVectorRenderPass(vk::Format depthFormat)
-    {
-        // Color: R16G16_SFLOAT distortion buffer - clear to (0,0) each frame
-        vk::AttachmentDescription colorAttachment{};
-        colorAttachment.format = vk::Format::eR16G16Sfloat;
-        colorAttachment.samples = vk::SampleCountFlagBits::e1;
-        colorAttachment.loadOp = vk::AttachmentLoadOp::eClear;
-        colorAttachment.storeOp = vk::AttachmentStoreOp::eStore;
-        colorAttachment.stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
-        colorAttachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
-        colorAttachment.initialLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-        colorAttachment.finalLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-
-        vk::AttachmentReference colorRef{};
-        colorRef.attachment = 0;
-        colorRef.layout = vk::ImageLayout::eColorAttachmentOptimal;
-
-        // Depth: read-only (same as VFX render pass)
-        vk::AttachmentDescription depthAttachment{};
-        depthAttachment.format = depthFormat;
-        depthAttachment.samples = vk::SampleCountFlagBits::e1;
-        depthAttachment.loadOp = vk::AttachmentLoadOp::eLoad;
-        depthAttachment.storeOp = vk::AttachmentStoreOp::eDontCare;
-        depthAttachment.stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
-        depthAttachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
-        depthAttachment.initialLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
-        depthAttachment.finalLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
-
-        vk::AttachmentReference depthRef{};
-        depthRef.attachment = 1;
-        depthRef.layout = vk::ImageLayout::eDepthStencilReadOnlyOptimal;
-
-        vk::SubpassDescription subpass{};
-        subpass.pipelineBindPoint = vk::PipelineBindPoint::eGraphics;
-        subpass.colorAttachmentCount = 1;
-        subpass.pColorAttachments = &colorRef;
-        subpass.pDepthStencilAttachment = &depthRef;
-
-        std::array<vk::AttachmentDescription, 2> attachments = {colorAttachment, depthAttachment};
-
-        vk::RenderPassCreateInfo rpInfo{};
-        rpInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
-        rpInfo.pAttachments = attachments.data();
-        rpInfo.subpassCount = 1;
-        rpInfo.pSubpasses = &subpass;
-
-        distortionVectorRenderPass = device.getLogicalDevice().createRenderPass(rpInfo);
-    }
-
-    void DistortionResources::createCompositeRenderPass(vk::Format colorFormat)
-    {
-        // Renders fullscreen quad into main scene color attachment
-        vk::AttachmentDescription colorAttachment{};
-        colorAttachment.format = colorFormat;
-        colorAttachment.samples = vk::SampleCountFlagBits::e1;
-        colorAttachment.loadOp = vk::AttachmentLoadOp::eLoad;
-        colorAttachment.storeOp = vk::AttachmentStoreOp::eStore;
-        colorAttachment.stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
-        colorAttachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
-        colorAttachment.initialLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-        colorAttachment.finalLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-
-        vk::AttachmentReference colorRef{};
-        colorRef.attachment = 0;
-        colorRef.layout = vk::ImageLayout::eColorAttachmentOptimal;
-
-        vk::SubpassDescription subpass{};
-        subpass.pipelineBindPoint = vk::PipelineBindPoint::eGraphics;
-        subpass.colorAttachmentCount = 1;
-        subpass.pColorAttachments = &colorRef;
-
-        vk::SubpassDependency dependency{};
-        dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
-        dependency.dstSubpass = 0;
-        dependency.srcStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
-        dependency.srcAccessMask = vk::AccessFlagBits::eColorAttachmentWrite;
-        dependency.dstStageMask = vk::PipelineStageFlagBits::eFragmentShader;
-        dependency.dstAccessMask = vk::AccessFlagBits::eShaderRead;
-
-        vk::RenderPassCreateInfo rpInfo{};
-        rpInfo.attachmentCount = 1;
-        rpInfo.pAttachments = &colorAttachment;
-        rpInfo.subpassCount = 1;
-        rpInfo.pSubpasses = &subpass;
-        rpInfo.dependencyCount = 1;
-        rpInfo.pDependencies = &dependency;
-
-        compositeRenderPass = device.getLogicalDevice().createRenderPass(rpInfo);
-    }
-
-    void DistortionResources::createDistortionVectorFramebuffer(vk::ImageView depthView)
-    {
-        std::array<vk::ImageView, 2> attachments = {distortionView, depthView};
-
-        vk::FramebufferCreateInfo fbInfo{};
-        fbInfo.renderPass = distortionVectorRenderPass;
-        fbInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
-        fbInfo.pAttachments = attachments.data();
-        fbInfo.width = extent.width;
-        fbInfo.height = extent.height;
-        fbInfo.layers = 1;
-
-        distortionVectorFramebuffer = device.getLogicalDevice().createFramebuffer(fbInfo);
-    }
-
-    void DistortionResources::createCompositeFramebuffers(const core::OffscreenResources& offscreen)
-    {
-        auto& colorImages = offscreen.colorImages;
-        compositeFramebuffers.resize(colorImages.size());
-
-        for (size_t i = 0; i < colorImages.size(); ++i)
-        {
-            vk::ImageView attachment = colorImages[i].colorImageView;
-
-            vk::FramebufferCreateInfo fbInfo{};
-            fbInfo.renderPass = compositeRenderPass;
-            fbInfo.attachmentCount = 1;
-            fbInfo.pAttachments = &attachment;
-            fbInfo.width = extent.width;
-            fbInfo.height = extent.height;
-            fbInfo.layers = 1;
-
-            compositeFramebuffers[i] = device.getLogicalDevice().createFramebuffer(fbInfo);
-        }
-    }
-
-    vk::Framebuffer DistortionResources::getCompositeFramebuffer(uint32_t imageIndex) const
-    {
-        return compositeFramebuffers[imageIndex];
     }
 
     void DistortionResources::createCompositeDescriptorLayout()

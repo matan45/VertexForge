@@ -30,6 +30,7 @@
 #include "../../services/providers/vegetation/IGrassRenderProvider.hpp"
 #include "vfx/distortion/DistortionResources.hpp"
 #include "vfx/distortion/VFXDistortionComposite.hpp"
+#include "../core/DynamicRenderingHelpers.hpp"
 #include "threading/JobSystem.hpp"
 #include <chrono>
 
@@ -52,7 +53,11 @@ namespace render
 {
     void RenderPassHandler::draw(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex)
     {
-        drawLegacy(commandBuffer, imageIndex);
+        frameGraph->reset();
+        importFrameResources(imageIndex);
+        buildFrameGraph(commandBuffer, imageIndex);
+        frameGraph->compile();
+        frameGraph->execute(commandBuffer, imageIndex);
     }
 
     void RenderPassHandler::drawLegacy(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex)
@@ -668,19 +673,30 @@ namespace render
             extent.width, extent.height);
 
         // 2. Distortion vector pass (clear + render distortion emitters into R16G16 buffer)
-        // Only color attachment (index 0) is cleared; depth uses eLoad
-        vk::ClearValue colorClear{};
-        colorClear.color = vk::ClearColorValue{std::array<float, 4>{0.0f, 0.0f, 0.0f, 0.0f}};
+        // Transition distortion image: ShaderReadOnly -> ColorAttachmentOptimal
+        {
+            vk::ImageMemoryBarrier toColorAttach{};
+            toColorAttach.oldLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+            toColorAttach.newLayout = vk::ImageLayout::eColorAttachmentOptimal;
+            toColorAttach.image = distortionResources->getDistortionImage();
+            toColorAttach.subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};
+            toColorAttach.srcAccessMask = vk::AccessFlagBits::eShaderRead;
+            toColorAttach.dstAccessMask = vk::AccessFlagBits::eColorAttachmentWrite;
+            commandBuffer.pipelineBarrier(vk::PipelineStageFlagBits::eFragmentShader,
+                                          vk::PipelineStageFlagBits::eColorAttachmentOutput,
+                                          {}, {}, {}, toColorAttach);
+        }
 
-        vk::RenderPassBeginInfo rpBegin{};
-        rpBegin.renderPass = distortionResources->getDistortionVectorRenderPass();
-        rpBegin.framebuffer = distortionResources->getDistortionVectorFramebuffer();
-        rpBegin.renderArea.offset = vk::Offset2D{0, 0};
-        rpBegin.renderArea.extent = extent;
-        rpBegin.clearValueCount = 1;
-        rpBegin.pClearValues = &colorClear;
+        auto colorAttach = core::colorClear(distortionResources->getDistortionView(),
+            vk::ClearColorValue{std::array<float, 4>{0.0f, 0.0f, 0.0f, 0.0f}});
+        auto depthAttach = core::depthReadOnly(distortionResources->getSceneDepthView());
 
-        commandBuffer.beginRenderPass(rpBegin, vk::SubpassContents::eInline);
+        core::DynamicRenderingInfo dynInfo{};
+        dynInfo.extent = extent;
+        dynInfo.colorAttachments = {colorAttach};
+        dynInfo.depthAttachment = depthAttach;
+
+        core::beginDynamicRendering(commandBuffer, dynInfo);
 
         vk::Viewport viewport{0.0f, 0.0f,
             static_cast<float>(extent.width), static_cast<float>(extent.height),
@@ -691,7 +707,21 @@ namespace render
 
         vfxRuntimeProvider->recordDistortionDrawCommands(commandBuffer);
 
-        commandBuffer.endRenderPass();
+        core::endDynamicRendering(commandBuffer);
+
+        // Transition distortion image back: ColorAttachmentOptimal -> ShaderReadOnlyOptimal
+        {
+            vk::ImageMemoryBarrier toShaderRead{};
+            toShaderRead.oldLayout = vk::ImageLayout::eColorAttachmentOptimal;
+            toShaderRead.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+            toShaderRead.image = distortionResources->getDistortionImage();
+            toShaderRead.subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};
+            toShaderRead.srcAccessMask = vk::AccessFlagBits::eColorAttachmentWrite;
+            toShaderRead.dstAccessMask = vk::AccessFlagBits::eShaderRead;
+            commandBuffer.pipelineBarrier(vk::PipelineStageFlagBits::eColorAttachmentOutput,
+                                          vk::PipelineStageFlagBits::eFragmentShader,
+                                          {}, {}, {}, toShaderRead);
+        }
 
         // 3. Composite pass: apply distortion to scene color
         distortionComposite->record(commandBuffer,

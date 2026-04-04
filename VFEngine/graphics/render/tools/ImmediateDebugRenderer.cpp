@@ -67,7 +67,6 @@ namespace render::mesh
 
         core::GraphicsPipelineConfig config{};
         config.device = device.getLogicalDevice();
-        config.renderPass = nullptr;
         config.colorAttachmentFormats = {colorFormat};
         config.depthAttachmentFormat = depthFormat;
         config.extent = swapChain.getSwapchainExtent();

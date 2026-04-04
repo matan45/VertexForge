@@ -213,7 +213,6 @@ namespace render::mesh
         pipelineInfo.pColorBlendState = &colorBlending;
         pipelineInfo.pDynamicState = &dynamicState;
         pipelineInfo.layout = wireframePipelineLayout;
-        pipelineInfo.renderPass = nullptr;
         pipelineInfo.subpass = 0;
 
         auto result = device.getLogicalDevice().createGraphicsPipeline(nullptr, pipelineInfo);

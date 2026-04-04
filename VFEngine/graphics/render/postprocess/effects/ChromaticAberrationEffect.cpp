@@ -122,7 +122,6 @@ namespace render::postprocess
     {
         core::GraphicsPipelineConfig config{};
         config.device = device.getLogicalDevice();
-        config.renderPass = nullptr;
         config.colorAttachmentFormats = {colorFormat};
         config.extent = extent;
         config.shaderStages = shader->getShaderStages();

@@ -186,7 +186,6 @@ namespace render::billboard
 
         core::GraphicsPipelineConfig config{
             .device = device.getLogicalDevice(),
-            .renderPass = nullptr,
             .extent = swapChain.getSwapchainExtent(),
             .colorAttachmentFormats = { swapChain.getSceneColorFormat() },
             .depthAttachmentFormat = swapChain.getSwapchainDepthStencilFormat(),

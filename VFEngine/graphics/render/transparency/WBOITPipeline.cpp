@@ -308,7 +308,6 @@ namespace render::transparency
         pipelineInfo.pDepthStencilState = &depthStencil;
         pipelineInfo.pColorBlendState = &colorBlending;
         pipelineInfo.layout = compositePipelineLayout;
-        pipelineInfo.renderPass = nullptr;
         pipelineInfo.subpass = 0;
 
         vk::Format colorFormat = swapChain.getSceneColorFormat();

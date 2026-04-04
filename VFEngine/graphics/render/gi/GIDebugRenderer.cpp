@@ -161,7 +161,6 @@ namespace render::gi
         pipelineInfo.pDepthStencilState = &depthStencil;
         pipelineInfo.pDynamicState = &dynamicState;
         pipelineInfo.layout = probeDebugPipelineLayout;
-        pipelineInfo.renderPass = nullptr;
 
         auto result = vkDevice.createGraphicsPipeline(nullptr, pipelineInfo);
         probeDebugPipeline = result.value;

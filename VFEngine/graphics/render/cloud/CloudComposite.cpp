@@ -177,7 +177,6 @@ namespace render::cloud
             pipelineInfo.pDepthStencilState = &depthStencil;
             pipelineInfo.pColorBlendState = &blending;
             pipelineInfo.layout = pipelineLayout;
-            pipelineInfo.renderPass = nullptr;
 
             vk::Format colorFormat = swapChain.getSceneColorFormat();
             vk::PipelineRenderingCreateInfo renderingInfo{};
@@ -321,7 +320,6 @@ namespace render::cloud
             pipelineInfo.pDepthStencilState = &depthStencil;
             pipelineInfo.pColorBlendState = &blending;
             pipelineInfo.layout = pipelineLayout;
-            pipelineInfo.renderPass = nullptr;
 
             vk::Format colorFormat = swapChain.getSceneColorFormat();
             vk::PipelineRenderingCreateInfo renderingInfo{};

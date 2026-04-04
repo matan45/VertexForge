@@ -117,7 +117,6 @@ namespace render::vfx
 
         core::GraphicsPipelineConfig config{
             .device = device.getLogicalDevice(),
-            .renderPass = nullptr,
             .extent = swapChain.getSwapchainExtent(),
             .colorAttachmentFormats = {swapChain.getSceneColorFormat()},
             .depthAttachmentFormat = swapChain.getSwapchainDepthStencilFormat(),

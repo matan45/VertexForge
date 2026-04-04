@@ -301,7 +301,6 @@ namespace render::gpudriven
 
         core::MeshShaderPipelineConfig config{};
         config.device = vkDevice;
-        config.renderPass = nullptr;
         config.extent = vk::Extent2D{1, 1};
         config.colorAttachmentFormats = colorFormats;
         config.depthAttachmentFormat = depthFormat;

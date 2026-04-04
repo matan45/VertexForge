@@ -59,7 +59,6 @@ namespace render::vfx
         // Fullscreen triangle: no vertex inputs
         core::GraphicsPipelineConfig config{
             .device = device.getLogicalDevice(),
-            .renderPass = nullptr,
             .extent = swapChain.getSwapchainExtent(),
             .colorAttachmentFormats = {colorFormat},
             .shaderStages = compositeShader->getShaderStages(),

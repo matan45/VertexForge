@@ -423,7 +423,6 @@ namespace render::volumetric
         pipelineInfo.pDepthStencilState = &depthStencil;
         pipelineInfo.pColorBlendState = &colorBlending;
         pipelineInfo.layout = pipelineLayout;
-        pipelineInfo.renderPass = nullptr;
         pipelineInfo.subpass = 0;
 
         // Dynamic rendering: specify color format via pNext

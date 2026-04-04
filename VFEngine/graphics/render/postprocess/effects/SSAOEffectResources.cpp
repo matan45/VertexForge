@@ -338,7 +338,6 @@ namespace render::postprocess
         pipelineInfo.pDepthStencilState = &depthStencil;
         pipelineInfo.pColorBlendState = &colorBlending;
         pipelineInfo.layout = ssaoPipelineLayout;
-        pipelineInfo.renderPass = nullptr;
         pipelineInfo.subpass = 0;
 
         vk::Format ssaoFormat = vk::Format::eR8Unorm;
@@ -421,7 +420,6 @@ namespace render::postprocess
         pipelineInfo.pDepthStencilState = &depthStencil;
         pipelineInfo.pColorBlendState = &colorBlending;
         pipelineInfo.layout = blurPipelineLayout;
-        pipelineInfo.renderPass = nullptr;
         pipelineInfo.subpass = 0;
 
         vk::Format blurFormat = vk::Format::eR8Unorm;
@@ -441,7 +439,6 @@ namespace render::postprocess
 
         core::GraphicsPipelineConfig config{};
         config.device = device.getLogicalDevice();
-        config.renderPass = nullptr;
         config.colorAttachmentFormats = {colorFormat};
         config.extent = currentExtent;
         config.shaderStages = compositeShader->getShaderStages();

@@ -629,7 +629,6 @@ namespace render::water
 
         core::GraphicsPipelineConfig config{
             .device = device.getLogicalDevice(),
-            .renderPass = nullptr,
             .extent = swapChain.getSwapchainExtent(),
             .colorAttachmentFormats = layoutConfig.colorAttachmentFormats,
             .depthAttachmentFormat = layoutConfig.depthAttachmentFormat,

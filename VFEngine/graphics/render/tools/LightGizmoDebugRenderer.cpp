@@ -61,7 +61,6 @@ namespace render::mesh
     {
         core::WireframePipelineConfig config{
             .device = device.getLogicalDevice(),
-            .renderPass = nullptr,
             .extent = swapChain.getSwapchainExtent(),
             .colorAttachmentFormats = {colorFormat},
             .depthAttachmentFormat = depthFormat,

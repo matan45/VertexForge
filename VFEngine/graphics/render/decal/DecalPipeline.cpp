@@ -275,7 +275,6 @@ namespace render::decal
         pipelineInfo.pColorBlendState = &colorBlending;
         pipelineInfo.pDynamicState = &dynamicStateInfo;
         pipelineInfo.layout = pipelineLayout;
-        pipelineInfo.renderPass = nullptr;
         pipelineInfo.subpass = 0;
 
         vk::Format colorFormat = swapChain.getSceneColorFormat();

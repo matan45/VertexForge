@@ -380,7 +380,6 @@ namespace render::atmosphere
         pipelineInfo.pDepthStencilState = &depthStencilState;
         pipelineInfo.pColorBlendState = &blending;
         pipelineInfo.layout = compositePipelineLayout;
-        pipelineInfo.renderPass = nullptr;
 
         vk::Format colorFormat = swapChain.getSceneColorFormat();
         vk::PipelineRenderingCreateInfo renderingInfo{};

@@ -264,7 +264,6 @@ namespace render::atmosphere
             skyPipelineInfo.pDepthStencilState = &depthStencil;
             skyPipelineInfo.pColorBlendState = &skyBlending;
             skyPipelineInfo.layout = skyRendererPipelineLayout;
-            skyPipelineInfo.renderPass = nullptr;
 
             vk::Format skyColorFormat = swapChain.getSceneColorFormat();
             vk::PipelineRenderingCreateInfo skyRenderingInfo{};
@@ -323,7 +322,6 @@ namespace render::atmosphere
             compositePipelineInfo.pDepthStencilState = &depthStencil;
             compositePipelineInfo.pColorBlendState = &compositeBlending;
             compositePipelineInfo.layout = compositePipelineLayout;
-            compositePipelineInfo.renderPass = nullptr;
 
             vk::Format compositeColorFormat = swapChain.getSceneColorFormat();
             vk::PipelineRenderingCreateInfo compositeRenderingInfo{};
@@ -425,7 +423,6 @@ namespace render::atmosphere
         pipelineInfo.pDepthStencilState = &depthStencil;
         pipelineInfo.pColorBlendState = &blending;
         pipelineInfo.layout = skyRendererPipelineLayout;
-        pipelineInfo.renderPass = nullptr;
 
         vk::Format colorFormat = swapChain.getSceneColorFormat();
         vk::PipelineRenderingCreateInfo renderingInfo{};
