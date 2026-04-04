@@ -45,11 +45,13 @@ namespace render
         depthDesc.aspectMask = vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil;
         depthDesc.debugName = "Depth";
 
-        // Depth starts in eDepthStencilAttachmentOptimal (from previous frame or initialization)
+        // Depth imported as eUndefined — ClearColor always clears, so previous
+        // contents are discarded. Avoids cross-frame layout mismatch when
+        // depth-reading passes (SSGI, VolumetricFog) leave depth at ReadOnly.
         depthHandle = frameGraph->importImage(
             offscreenResources.depthImage.depthImage,
             offscreenResources.depthImage.depthImageView,
-            vk::ImageLayout::eDepthStencilAttachmentOptimal,
+            vk::ImageLayout::eUndefined,
             depthDesc);
     }
 
@@ -141,6 +143,7 @@ namespace render
                 });
             sceneColorHandle = builder.write(sceneColorHandle, graph::ResourceUsage::ColorAttachmentWrite);
             builder.read(depthHandle, graph::ResourceUsage::DepthAttachmentRead);
+            depthHandle = builder.write(depthHandle, graph::ResourceUsage::DepthAttachmentRead);
             builder.setSegment(graph::HookSegment::Scene);
             builder.setSideEffect();
         }
@@ -212,6 +215,7 @@ namespace render
                 });
             sceneColorHandle = builder.write(sceneColorHandle, graph::ResourceUsage::ColorAttachmentWrite);
             builder.read(depthHandle, graph::ResourceUsage::DepthAttachmentRead);
+            depthHandle = builder.write(depthHandle, graph::ResourceUsage::DepthAttachmentRead);
             builder.setSegment(graph::HookSegment::PostScene);
             builder.setSideEffect();
         }
@@ -227,6 +231,7 @@ namespace render
                 });
             sceneColorHandle = builder.write(sceneColorHandle, graph::ResourceUsage::ColorAttachmentWrite);
             builder.read(depthHandle, graph::ResourceUsage::DepthAttachmentRead);
+            depthHandle = builder.write(depthHandle, graph::ResourceUsage::DepthAttachmentRead);
             builder.setSegment(graph::HookSegment::PostScene);
             builder.setSideEffect();
         }
@@ -245,6 +250,7 @@ namespace render
                 });
             sceneColorHandle = builder.write(sceneColorHandle, graph::ResourceUsage::ColorAttachmentWrite);
             builder.read(depthHandle, graph::ResourceUsage::DepthAttachmentRead);
+            depthHandle = builder.write(depthHandle, graph::ResourceUsage::DepthAttachmentRead);
             builder.setSegment(graph::HookSegment::PostScene);
             builder.setSideEffect();
         }
@@ -270,27 +276,36 @@ namespace render
                 [this, currentFrame](vk::CommandBuffer cmd, uint32_t /*idx*/) {
                     vk::ImageSubresourceRange depthStencilRange(
                         vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil, 0, 1, 0, 1);
-                    vk::ImageSubresourceRange depthOnlyRange(
-                        vk::ImageAspectFlagBits::eDepth, 0, 1, 0, 1);
 
-                    // Pre-copy: only prevFrameDepth needs a barrier (untracked resource).
-                    // Scene depth is already in TransferSrcOptimal via graph barrier.
+                    // Pre-copy: transition scene depth to TransferSrc and prevFrameDepth to TransferDst.
+                    // Graph ensures depth is at DepthAttachmentOptimal before this pass.
                     {
-                        vk::ImageMemoryBarrier2 prevDepthBarrier{};
-                        prevDepthBarrier.srcStageMask = vk::PipelineStageFlagBits2::eNone;
-                        prevDepthBarrier.srcAccessMask = vk::AccessFlagBits2::eNone;
-                        prevDepthBarrier.dstStageMask = vk::PipelineStageFlagBits2::eCopy;
-                        prevDepthBarrier.dstAccessMask = vk::AccessFlagBits2::eTransferWrite;
-                        prevDepthBarrier.oldLayout = vk::ImageLayout::eUndefined;
-                        prevDepthBarrier.newLayout = vk::ImageLayout::eTransferDstOptimal;
-                        prevDepthBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-                        prevDepthBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-                        prevDepthBarrier.image = offscreenResources.prevFrameDepth[currentFrame].image;
-                        prevDepthBarrier.subresourceRange = depthOnlyRange;
+                        std::array<vk::ImageMemoryBarrier2, 2> preCopyBarriers{};
+                        preCopyBarriers[0].srcStageMask = vk::PipelineStageFlagBits2::eLateFragmentTests;
+                        preCopyBarriers[0].srcAccessMask = vk::AccessFlagBits2::eDepthStencilAttachmentWrite;
+                        preCopyBarriers[0].dstStageMask = vk::PipelineStageFlagBits2::eCopy;
+                        preCopyBarriers[0].dstAccessMask = vk::AccessFlagBits2::eTransferRead;
+                        preCopyBarriers[0].oldLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
+                        preCopyBarriers[0].newLayout = vk::ImageLayout::eTransferSrcOptimal;
+                        preCopyBarriers[0].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                        preCopyBarriers[0].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                        preCopyBarriers[0].image = offscreenResources.depthImage.depthImage;
+                        preCopyBarriers[0].subresourceRange = depthStencilRange;
+
+                        preCopyBarriers[1].srcStageMask = vk::PipelineStageFlagBits2::eNone;
+                        preCopyBarriers[1].srcAccessMask = vk::AccessFlagBits2::eNone;
+                        preCopyBarriers[1].dstStageMask = vk::PipelineStageFlagBits2::eCopy;
+                        preCopyBarriers[1].dstAccessMask = vk::AccessFlagBits2::eTransferWrite;
+                        preCopyBarriers[1].oldLayout = vk::ImageLayout::eUndefined;
+                        preCopyBarriers[1].newLayout = vk::ImageLayout::eTransferDstOptimal;
+                        preCopyBarriers[1].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                        preCopyBarriers[1].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                        preCopyBarriers[1].image = offscreenResources.prevFrameDepth[currentFrame].image;
+                        preCopyBarriers[1].subresourceRange = depthStencilRange;
 
                         vk::DependencyInfo depInfo{};
-                        depInfo.imageMemoryBarrierCount = 1;
-                        depInfo.pImageMemoryBarriers = &prevDepthBarrier;
+                        depInfo.imageMemoryBarrierCount = static_cast<uint32_t>(preCopyBarriers.size());
+                        depInfo.pImageMemoryBarriers = preCopyBarriers.data();
                         cmd.pipelineBarrier2KHR(depInfo);
                     }
 
@@ -330,7 +345,7 @@ namespace render
                         postCopyBarriers[1].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
                         postCopyBarriers[1].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
                         postCopyBarriers[1].image = offscreenResources.prevFrameDepth[currentFrame].image;
-                        postCopyBarriers[1].subresourceRange = depthOnlyRange;
+                        postCopyBarriers[1].subresourceRange = depthStencilRange;
 
                         vk::DependencyInfo depInfo{};
                         depInfo.imageMemoryBarrierCount = static_cast<uint32_t>(postCopyBarriers.size());
@@ -338,7 +353,6 @@ namespace render
                         cmd.pipelineBarrier2KHR(depInfo);
                     }
                 });
-            builder.read(depthHandle, graph::ResourceUsage::TransferSrc);
             depthHandle = builder.write(depthHandle, graph::ResourceUsage::DepthAttachmentWrite);
             builder.setSegment(graph::HookSegment::PostScene);
             builder.setSideEffect();

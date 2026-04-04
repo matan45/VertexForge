@@ -3,6 +3,7 @@
 #include "../../core/SwapChain.hpp"
 #include "../../core/CommandPool.hpp"
 #include "../../core/ImageUtilities.hpp"
+#include "../../core/Utilities.hpp"
 #include "../../core/RenderManager.hpp"
 #include "../../core/VulkanContext.hpp"
 #include "../../render/vfx/billboard/VFXBillboardPipeline.hpp"
@@ -401,6 +402,19 @@ namespace controllers
         commandBuffer.reset();
 
         commandBuffer.begin(vk::CommandBufferBeginInfo{});
+
+        core::ImageUtilities::transitionImageLayout(commandBuffer,
+            offscreenResources.colorImages[imageIndex].colorImage,
+            vk::ImageLayout::eUndefined,
+            vk::ImageLayout::eColorAttachmentOptimal,
+            vk::ImageAspectFlagBits::eColor);
+
+        core::ImageUtilities::transitionImageLayout(commandBuffer,
+            offscreenResources.depthImage.depthImage,
+            vk::ImageLayout::eUndefined,
+            vk::ImageLayout::eDepthStencilAttachmentOptimal,
+            vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil);
+
         if (useRibbonPipeline)
         {
             ribbonPipeline->recordCommandBuffer(commandBuffer, imageIndex);
@@ -413,6 +427,13 @@ namespace controllers
         {
             pipeline->recordCommandBuffer(commandBuffer, imageIndex);
         }
+
+        core::ImageUtilities::transitionImageLayout(commandBuffer,
+            offscreenResources.colorImages[imageIndex].colorImage,
+            vk::ImageLayout::eColorAttachmentOptimal,
+            vk::ImageLayout::eShaderReadOnlyOptimal,
+            vk::ImageAspectFlagBits::eColor);
+
         commandBuffer.end();
 
         vk::SubmitInfo submitInfo(
@@ -469,6 +490,14 @@ namespace controllers
         depthViewInfo.format = swapChain.getSwapchainDepthStencilFormat();
         depthViewInfo.aspectFlags = vk::ImageAspectFlagBits::eDepth;
         core::ImageUtilities::createImageView(depthViewInfo, offscreenResources.depthImage.depthImageView);
+
+        vk::UniqueCommandBuffer transitionDepthImage = core::Utilities::beginSingleTimeCommands(
+            device.getLogicalDevice(), commandPool->getCommandPool());
+        core::ImageUtilities::transitionImageLayout(transitionDepthImage.get(), offscreenResources.depthImage.depthImage,
+                                                    vk::ImageLayout::eUndefined,
+                                                    vk::ImageLayout::eDepthStencilAttachmentOptimal,
+                                                    vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil);
+        core::Utilities::endSingleTimeCommands(device, transitionDepthImage);
     }
 
     void VFXPreviewController::cleanupOffscreenResources()

@@ -421,7 +421,25 @@ namespace controllers
         commandBuffer.reset();
         commandBuffer.begin(vk::CommandBufferBeginInfo{});
 
+        core::ImageUtilities::transitionImageLayout(commandBuffer,
+            offscreenResources->colorImages[imageIndex].colorImage,
+            vk::ImageLayout::eUndefined,
+            vk::ImageLayout::eColorAttachmentOptimal,
+            vk::ImageAspectFlagBits::eColor);
+
+        core::ImageUtilities::transitionImageLayout(commandBuffer,
+            offscreenResources->depthImage.depthImage,
+            vk::ImageLayout::eUndefined,
+            vk::ImageLayout::eDepthStencilAttachmentOptimal,
+            vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil);
+
         skinnedPipeline->recordCommandBuffer(commandBuffer, imageIndex, renderData);
+
+        core::ImageUtilities::transitionImageLayout(commandBuffer,
+            offscreenResources->colorImages[imageIndex].colorImage,
+            vk::ImageLayout::eColorAttachmentOptimal,
+            vk::ImageLayout::eShaderReadOnlyOptimal,
+            vk::ImageAspectFlagBits::eColor);
 
         commandBuffer.end();
 

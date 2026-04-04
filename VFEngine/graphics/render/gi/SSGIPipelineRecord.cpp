@@ -226,7 +226,14 @@ namespace render::gi
 
         updateParamsBuffer();
 
-        // Depth transition handled by render graph
+        // Graph provides color in ColorAttachmentOptimal, depth in DepthReadOnly.
+        // Transition color to ShaderReadOnly for trace sampling, restore before composite.
+        // Depth is already at ReadOnly from graph — no transition needed.
+        vk::Image sceneColor = offscreenResources.colorImages[imageIndex].colorImage;
+        core::ImageUtilities::transitionImageLayout(commandBuffer, sceneColor,
+            vk::ImageLayout::eColorAttachmentOptimal,
+            vk::ImageLayout::eShaderReadOnlyOptimal,
+            vk::ImageAspectFlagBits::eColor);
 
         // Transition ssgiRaw to ColorAttachmentOptimal
         core::ImageUtilities::transitionImageLayout(commandBuffer,
@@ -375,7 +382,12 @@ namespace render::gi
             ssgiDenoisedImage, vk::ImageLayout::eColorAttachmentOptimal,
             vk::ImageLayout::eShaderReadOnlyOptimal, vk::ImageAspectFlagBits::eColor);
 
-        // Pass 4: Composite (scene color transition handled by render graph)
+        // Pass 4: Composite — restore scene color and depth for rendering
+        core::ImageUtilities::transitionImageLayout(commandBuffer, sceneColor,
+            vk::ImageLayout::eShaderReadOnlyOptimal,
+            vk::ImageLayout::eColorAttachmentOptimal,
+            vk::ImageAspectFlagBits::eColor);
+
         {
             auto colorAttach = core::colorLoad(offscreenResources.colorImages[imageIndex].colorImageView);
 
