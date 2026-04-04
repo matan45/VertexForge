@@ -211,6 +211,13 @@
     <ClInclude Include="render\gpudriven\terrain\TerrainMeshShaderPipeline.hpp" />
     <ClInclude Include="render\gpudriven\terrain\TerrainRaycastPipeline.hpp" />
     <ClInclude Include="render\gpudriven\terrain\TerrainStreamManager.hpp" />
+    <ClInclude Include="render\graph\BarrierBatcher.hpp" />
+    <ClInclude Include="render\graph\RenderGraph.hpp" />
+    <ClInclude Include="render\graph\RenderGraphPass.hpp" />
+    <ClInclude Include="render\graph\RenderGraphProfiler.hpp" />
+    <ClInclude Include="render\graph\RenderGraphTypes.hpp" />
+    <ClInclude Include="render\graph\ResourceTracker.hpp" />
+    <ClInclude Include="render\graph\TransientResourcePool.hpp" />
     <ClInclude Include="render\ibl\BRDFLUTGenerator.hpp" />
     <ClInclude Include="render\ibl\DefaultIBLTextureFactory.hpp" />
     <ClInclude Include="render\ibl\EnvironmentCubemapGenerator.hpp" />
@@ -464,6 +471,11 @@
     <ClCompile Include="render\gpudriven\terrain\TerrainMeshShaderPipelineDispatch.cpp" />
     <ClCompile Include="render\gpudriven\terrain\TerrainRaycastPipeline.cpp" />
     <ClCompile Include="render\gpudriven\terrain\TerrainStreamManager.cpp" />
+    <ClCompile Include="render\graph\BarrierBatcher.cpp" />
+    <ClCompile Include="render\graph\RenderGraph.cpp" />
+    <ClCompile Include="render\graph\RenderGraphProfiler.cpp" />
+    <ClCompile Include="render\graph\ResourceTracker.cpp" />
+    <ClCompile Include="render\graph\TransientResourcePool.cpp" />
     <ClCompile Include="render\ibl\BRDFLUTGenerator.cpp" />
     <ClCompile Include="render\ibl\DefaultIBLTextureFactory.cpp" />
     <ClCompile Include="render\ibl\EnvironmentCubemapGenerator.cpp" />
