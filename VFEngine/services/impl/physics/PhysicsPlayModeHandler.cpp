@@ -2,6 +2,7 @@
 #include "PhysicsPlayModeHandler.hpp"
 #include "../scene/OceanService.hpp"
 #include "../../events/editor/EditorModeEvents.hpp"
+#include "../../events/physics/PhysicsEvents.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
@@ -32,6 +33,21 @@ namespace services
             {
                 onEditorModeChanged(notification.previousMode, notification.currentMode);
             });
+
+        rigidBodyAddedToken = dispatcher.subscribe<::events::physics::RigidBodyAddedNotification>(
+            [this](const ::events::physics::RigidBodyAddedNotification& notification)
+            {
+                if (physicsActive)
+                {
+                    activePhysicsBodies.insert(notification.entity);
+                }
+            });
+
+        rigidBodyRemovedToken = dispatcher.subscribe<::events::physics::RigidBodyRemovedNotification>(
+            [this](const ::events::physics::RigidBodyRemovedNotification& notification)
+            {
+                activePhysicsBodies.erase(notification.entity);
+            });
     }
 
     void PhysicsPlayModeHandler::unsubscribeFromEvents()
@@ -42,6 +58,16 @@ namespace services
         {
             dispatcher.unsubscribe(editorModeChangedToken);
             editorModeChangedToken = {};
+        }
+        if (rigidBodyAddedToken.isValid())
+        {
+            dispatcher.unsubscribe(rigidBodyAddedToken);
+            rigidBodyAddedToken = {};
+        }
+        if (rigidBodyRemovedToken.isValid())
+        {
+            dispatcher.unsubscribe(rigidBodyRemovedToken);
+            rigidBodyRemovedToken = {};
         }
     }
 
@@ -149,6 +175,7 @@ namespace services
 
             syncStandardPhysicsEntity(handle);
         }
+
     }
 
     void PhysicsPlayModeHandler::syncRootMotionEntity(EntityHandle handle)

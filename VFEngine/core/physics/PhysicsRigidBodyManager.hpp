@@ -42,6 +42,7 @@ namespace core::physics
         bool isTrigger = false;
         uint8_t collisionLayer = 1;
         std::string meshPath;
+        int32_t submeshIndex = -1;
     };
 
     struct RaycastResult

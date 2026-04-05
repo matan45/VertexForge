@@ -359,6 +359,7 @@ namespace serialization
         j["collisionLayer"] = collider.collisionLayer;
         j["friction"] = collider.friction;
         j["restitution"] = collider.restitution;
+        j["submeshIndex"] = collider.submeshIndex;
         return j;
     }
 
@@ -397,6 +398,10 @@ namespace serialization
         if (auto it = j.find("restitution"); it != j.end() && it->is_number())
         {
             collider.restitution = it->get<float>();
+        }
+        if (auto it = j.find("submeshIndex"); it != j.end() && it->is_number_integer())
+        {
+            collider.submeshIndex = it->get<int32_t>();
         }
     }
 

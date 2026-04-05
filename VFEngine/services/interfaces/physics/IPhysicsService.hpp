@@ -30,6 +30,7 @@ namespace services {
         uint8_t collisionLayer = 1;
         glm::vec3 offset{ 0.0f };
         std::string meshPath;
+        int32_t submeshIndex = -1;
     };
     
     struct RaycastHit {

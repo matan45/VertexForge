@@ -83,6 +83,7 @@ namespace services
         data.height = comp.height;
         data.offset = comp.offset;
         data.meshRef = comp.meshRef;
+        data.submeshIndex = comp.submeshIndex;
         data.isTrigger = comp.isTrigger;
         data.collisionLayer = comp.collisionLayer;
         data.friction = comp.friction;
@@ -110,6 +111,7 @@ namespace services
         comp.height = colliderData.height;
         comp.offset = colliderData.offset;
         comp.meshRef = colliderData.meshRef;
+        comp.submeshIndex = colliderData.submeshIndex;
         comp.isTrigger = colliderData.isTrigger;
         comp.collisionLayer = colliderData.collisionLayer;
         comp.friction = colliderData.friction;

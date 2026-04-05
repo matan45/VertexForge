@@ -24,7 +24,7 @@ namespace core::physics
         static JPH::Ref<JPH::Shape> createConvexMeshShape(const ColliderCreateInfo& info);
         static JPH::Ref<JPH::Shape> createTriangleMeshShape(const ColliderCreateInfo& info);
 
-        static std::string makeCacheKey(const std::string& meshPath, ColliderShape shape);
+        static std::string makeCacheKey(const std::string& meshPath, ColliderShape shape, int32_t submeshIndex = -1);
 
         inline static std::unordered_map<std::string, JPH::Ref<JPH::Shape>> shapeCache;
         inline static std::mutex shapeCacheMutex;

@@ -181,6 +181,19 @@ namespace windows::details
             {
                 ImGui::TextColored(ImVec4(0.6f, 0.8f, 1.0f, 1.0f), "Uses mesh from Mesh Component");
 
+                int submeshIdx = colliderData.submeshIndex;
+                if (ImGui::InputInt("Submesh Index##Collider", &submeshIdx))
+                {
+                    if (submeshIdx < -1)
+                        submeshIdx = -1;
+                    colliderData.submeshIndex = submeshIdx;
+                    changed = true;
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("-1 = use all submeshes\n>= 0 = use convex hull from specific submesh");
+                }
+
                 if (colliderData.shape == types::ColliderShape::TriangleMesh)
                 {
                     ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "Triangle meshes are static only");

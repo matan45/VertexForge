@@ -56,6 +56,10 @@ namespace serialization
         {
             j["maxDrawDistance"] = mesh.maxDrawDistance;
         }
+        if (mesh.submeshIndex >= 0)
+        {
+            j["submeshIndex"] = mesh.submeshIndex;
+        }
         return j;
     }
 
@@ -123,6 +127,10 @@ namespace serialization
         if (auto it = j.find("maxDrawDistance"); it != j.end() && it->is_number())
         {
             mesh.maxDrawDistance = it->get<float>();
+        }
+        if (auto it = j.find("submeshIndex"); it != j.end() && it->is_number_integer())
+        {
+            mesh.submeshIndex = it->get<int32_t>();
         }
     }
 

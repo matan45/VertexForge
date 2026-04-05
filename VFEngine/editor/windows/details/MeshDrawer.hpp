@@ -18,5 +18,6 @@ namespace windows::details
         void drawRootMotionCheckbox(services::EntityHandle handle, const services::MeshData& currentData);
         void drawBoundingBoxCheckbox(services::EntityHandle handle, const services::MeshData& currentData);
         void drawMaxDrawDistance(services::EntityHandle handle, const services::MeshData& currentData);
+        void drawSubmeshIndex(services::EntityHandle handle, const services::MeshData& currentData);
     };
 }

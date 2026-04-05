@@ -168,6 +168,16 @@ namespace events::physics {
         std::string_view getName() const override { return "IsBodySleeping"; }
     };
 
+    struct RigidBodyAddedNotification : ::events::INotification {
+        services::EntityHandle entity;
+        std::string_view getName() const override { return "RigidBodyAdded"; }
+    };
+
+    struct RigidBodyRemovedNotification : ::events::INotification {
+        services::EntityHandle entity;
+        std::string_view getName() const override { return "RigidBodyRemoved"; }
+    };
+
     struct CollisionStartNotification : ::events::INotification {
         services::EntityHandle entityA;
         services::EntityHandle entityB;

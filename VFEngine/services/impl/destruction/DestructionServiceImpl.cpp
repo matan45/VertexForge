@@ -20,6 +20,7 @@
 #include "DestructionHelpers.hpp"
 #include <print/Log.hpp>
 #include <algorithm>
+#include <asset/AssetMetadataSerializer.hpp>
 
 namespace services
 {
@@ -285,10 +286,30 @@ namespace services
         std::vector<FragmentSpawnRequest> requests;
         requests.reserve(fragmentCount);
 
+        // Load per-fragment center-of-mass offsets from .meta file
+        std::vector<glm::vec3> fragmentOffsets(fragmentCount, glm::vec3(0.0f));
+        {
+            std::string meshPath = destructible.fractureAssetRef.resolve();
+            auto metaPath = asset::AssetMetadataSerializer::getMetaPath(meshPath);
+            auto meta = asset::AssetMetadataSerializer::load(metaPath);
+            if (meta && meta->fractureData.has_value())
+            {
+                const auto& frags = meta->fractureData->fragments;
+                for (uint32_t i = 0; i < fragmentCount && i < frags.size(); ++i)
+                {
+                    fragmentOffsets[i] = frags[i].centerOfMass;
+                }
+            }
+        }
+
+        glm::mat4 parentMatrix = transform.getMatrix();
+
         for (uint32_t i = 0; i < fragmentCount; ++i)
         {
+            glm::vec3 worldPos = glm::vec3(parentMatrix * glm::vec4(fragmentOffsets[i], 1.0f));
+
             FragmentSpawnRequest req;
-            req.position = transform.position;
+            req.position = worldPos;
             req.rotation = transform.rotation;
             req.scale = transform.scale;
             req.fractureAssetRef = destructible.fractureAssetRef;

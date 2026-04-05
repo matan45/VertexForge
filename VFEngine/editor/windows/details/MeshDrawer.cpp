@@ -60,6 +60,7 @@ namespace windows::details
 
             drawBoundingBoxCheckbox(handle, *meshOpt);
             drawMaxDrawDistance(handle, *meshOpt);
+            drawSubmeshIndex(handle, *meshOpt);
 
             ImGui::Unindent(10.0f);
         }
@@ -142,6 +143,7 @@ namespace windows::details
             cmd.meshData.showBoundingBox = currentData.showBoundingBox;
             cmd.meshData.applyRootMotion = currentData.applyRootMotion;
             cmd.meshData.maxDrawDistance = currentData.maxDrawDistance;
+            cmd.meshData.submeshIndex = currentData.submeshIndex;
             dispatcher.execute(cmd);
         }
         else
@@ -190,6 +192,7 @@ namespace windows::details
                     cmd.meshData.showBoundingBox = currentData.showBoundingBox;
                     cmd.meshData.applyRootMotion = currentData.applyRootMotion;
                     cmd.meshData.maxDrawDistance = currentData.maxDrawDistance;
+                    cmd.meshData.submeshIndex = currentData.submeshIndex;
                     dispatcher.execute(cmd);
                 }
                 else
@@ -212,6 +215,7 @@ namespace windows::details
                 cmd.meshData.showBoundingBox = currentData.showBoundingBox;
                 cmd.meshData.applyRootMotion = false;  // Reset when clearing animator
                 cmd.meshData.maxDrawDistance = currentData.maxDrawDistance;
+                cmd.meshData.submeshIndex = currentData.submeshIndex;
                 dispatcher.execute(cmd);
             }
         }
@@ -230,6 +234,7 @@ namespace windows::details
             cmd.meshData.showBoundingBox = currentData.showBoundingBox;
             cmd.meshData.applyRootMotion = applyRootMotion;
             cmd.meshData.maxDrawDistance = currentData.maxDrawDistance;
+            cmd.meshData.submeshIndex = currentData.submeshIndex;
             dispatcher.execute(cmd);
         }
     }
@@ -247,6 +252,7 @@ namespace windows::details
             cmd.meshData.showBoundingBox = showBoundingBox;
             cmd.meshData.applyRootMotion = currentData.applyRootMotion;
             cmd.meshData.maxDrawDistance = currentData.maxDrawDistance;
+            cmd.meshData.submeshIndex = currentData.submeshIndex;
             dispatcher.execute(cmd);
         }
     }
@@ -264,11 +270,33 @@ namespace windows::details
             cmd.meshData.showBoundingBox = currentData.showBoundingBox;
             cmd.meshData.applyRootMotion = currentData.applyRootMotion;
             cmd.meshData.maxDrawDistance = maxDrawDist;
+            cmd.meshData.submeshIndex = currentData.submeshIndex;
             dispatcher.execute(cmd);
         }
         if (ImGui::IsItemHovered())
         {
             ImGui::SetTooltip("Override draw distance for this entity.\n0 = use category default from Render Config.");
+        }
+    }
+
+    void MeshDrawer::drawSubmeshIndex(services::EntityHandle handle, const services::MeshData& currentData)
+    {
+        int submeshIndex = currentData.submeshIndex;
+        if (ImGui::InputInt("Submesh Index", &submeshIndex))
+        {
+            if (submeshIndex < -1)
+                submeshIndex = -1;
+
+            auto& dispatcher = events::EventDispatcher::instance();
+            events::scene::SetMeshDataCommand cmd;
+            cmd.entity = handle;
+            cmd.meshData = currentData;
+            cmd.meshData.submeshIndex = submeshIndex;
+            dispatcher.execute(cmd);
+        }
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip("-1 = render all submeshes\n>= 0 = render only the specified submesh");
         }
     }
 }

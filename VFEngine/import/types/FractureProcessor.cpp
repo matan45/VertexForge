@@ -128,7 +128,27 @@ namespace types
         if (progressCallback)
             progressCallback(0.85f, "Building metadata");
 
+        // Build metadata BEFORE re-centering (centerOfMass is in original space)
         result.metadata = buildFractureMetadata(fractureResult, config);
+
+        // Extract and re-center convex hull data per fragment
+        for (const auto& frag : fractureResult.fragments)
+        {
+            resource::ConvexDecompositionData convexData;
+            if (!frag.colliderHull.vertices.empty())
+            {
+                convexData.hasDecomposition = true;
+                resource::ConvexHull hull = frag.colliderHull;
+                // Re-center hull vertices around fragment's centerOfMass
+                for (auto& v : hull.vertices)
+                    v -= frag.centerOfMass;
+                hull.center -= frag.centerOfMass;
+                convexData.hulls.push_back(std::move(hull));
+            }
+            result.fragmentConvexHulls.push_back(std::move(convexData));
+        }
+
+        // toMeshesData re-centers mesh vertices around centerOfMass
         result.fragmentMeshes = destruction::VoronoiFracture::toMeshesData(fractureResult);
         result.success = true;
 
