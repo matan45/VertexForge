@@ -6,6 +6,7 @@
 #include <sl.h>
 #include <sl_dlss.h>
 #include <sl_dlss_g.h>
+#include <sl_dlss_d.h>
 #include <sl_reflex.h>
 #include <sl_consts.h>
 #include <sl_helpers_vk.h>
@@ -63,7 +64,8 @@ namespace render::upscaling
 
         sl::Feature featuresToLoad[] = {
             sl::kFeatureDLSS,
-             sl::kFeatureDLSS_G,
+            sl::kFeatureDLSS_G,
+            sl::kFeatureDLSS_RR,
             sl::kFeatureDirectSR,
             sl::kFeatureReflex
         };
@@ -173,6 +175,7 @@ namespace render::upscaling
             if (deviceSet)
             {
                 slFreeResources(sl::kFeatureDLSS_G, sl::ViewportHandle{0});
+                slFreeResources(sl::kFeatureDLSS_RR, sl::ViewportHandle{0});
                 slFreeResources(sl::kFeatureDLSS, sl::ViewportHandle{0});
                 slFreeResources(sl::kFeatureDirectSR, sl::ViewportHandle{0});
             }
@@ -218,6 +221,11 @@ namespace render::upscaling
         dlssGSupported = (dlssGResult == sl::Result::eOk);
         vfLogInfo("Streamline DLSS-G (Frame Gen) support query: {} ({})",
                   slResultToString(dlssGResult), static_cast<int>(dlssGResult));
+
+        sl::Result dlssDResult = slIsFeatureSupported(sl::kFeatureDLSS_RR, adapterInfo);
+        dlssDSupported = (dlssDResult == sl::Result::eOk);
+        vfLogInfo("Streamline DLSS-D (Ray Reconstruction) support query: {} ({})",
+                  slResultToString(dlssDResult), static_cast<int>(dlssDResult));
 
         sl::Result directSRResult = slIsFeatureSupported(sl::kFeatureDirectSR, adapterInfo);
         directSRSupported = (directSRResult == sl::Result::eOk);
@@ -339,9 +347,13 @@ namespace render::upscaling
 #ifdef VF_STREAMLINE_ENABLED
         if (!deviceSet || activeMode == ::postprocess::UpscaleMode::Off) return false;
 
-        sl::Feature feature = (activeMode == ::postprocess::UpscaleMode::DLSS)
-            ? sl::kFeatureDLSS
-            : sl::kFeatureDirectSR;
+        sl::Feature feature;
+        if (rayReconstructionActive)
+            feature = sl::kFeatureDLSS_RR;
+        else if (activeMode == ::postprocess::UpscaleMode::DLSS)
+            feature = sl::kFeatureDLSS;
+        else
+            feature = sl::kFeatureDirectSR;
 
         sl::ViewportHandle viewport{0};
 
@@ -395,8 +407,8 @@ namespace render::upscaling
 
         slSetConstants(constants, *frameToken, viewport);
 
-        // Tag resources
-        sl::ResourceTag tags[7]{};
+        // Tag resources (up to 10: color, hudless, depth, mvec, output, reactive, exposure, noisy shadow, normals+roughness)
+        sl::ResourceTag tags[10]{};
         uint32_t tagCount = 0;
 
         sl::Resource colorRes{sl::ResourceType::eTex2d, inputs.colorInput,
@@ -476,6 +488,40 @@ namespace render::upscaling
                                                 sl::ResourceLifecycle::eValidUntilEvaluate, nullptr};
         }
 
+        // Ray Reconstruction: tag noisy shadow and normal+roughness when DLSS-D is active
+        sl::Resource noisyShadowRes{};
+        sl::Resource normalRoughnessRes{};
+        if (rayReconstructionActive)
+        {
+            if (inputs.noisyShadowImage)
+            {
+                noisyShadowRes = sl::Resource{sl::ResourceType::eTex2d, inputs.noisyShadowImage,
+                                               nullptr, static_cast<VkImageView>(inputs.noisyShadowView),
+                                               VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+                noisyShadowRes.width = inputs.renderExtent.width;
+                noisyShadowRes.height = inputs.renderExtent.height;
+                noisyShadowRes.nativeFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
+                noisyShadowRes.mipLevels = 1;
+                noisyShadowRes.arrayLayers = 1;
+                tags[tagCount++] = sl::ResourceTag{&noisyShadowRes, sl::kBufferTypeDiffuseHitNoisy,
+                                                    sl::ResourceLifecycle::eValidUntilEvaluate, nullptr};
+            }
+
+            if (inputs.normalRoughnessImage)
+            {
+                normalRoughnessRes = sl::Resource{sl::ResourceType::eTex2d, inputs.normalRoughnessImage,
+                                                    nullptr, static_cast<VkImageView>(inputs.normalRoughnessView),
+                                                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+                normalRoughnessRes.width = inputs.renderExtent.width;
+                normalRoughnessRes.height = inputs.renderExtent.height;
+                normalRoughnessRes.nativeFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
+                normalRoughnessRes.mipLevels = 1;
+                normalRoughnessRes.arrayLayers = 1;
+                tags[tagCount++] = sl::ResourceTag{&normalRoughnessRes, sl::kBufferTypeNormalRoughness,
+                                                    sl::ResourceLifecycle::eValidUntilEvaluate, nullptr};
+            }
+        }
+
         sl::Result tagResult = slSetTagForFrame(*frameToken, viewport, tags, tagCount,
                          reinterpret_cast<sl::CommandBuffer*>(static_cast<VkCommandBuffer>(cmd)));
         if (tagResult != sl::Result::eOk)
@@ -545,6 +591,36 @@ namespace render::upscaling
         slReflexSetOptions(options);
         reflexEnabled = false;
         vfLogInfo("Streamline Reflex: disabled");
+#endif
+    }
+
+    void UpscaleManager::applyRayReconstructionSettings(bool enabled,
+                                                         uint32_t outputWidth, uint32_t outputHeight)
+    {
+#ifdef VF_STREAMLINE_ENABLED
+        if (!deviceSet || !dlssDSupported)
+        {
+            if (enabled)
+                vfLogWarning("DLSS Ray Reconstruction not supported on this GPU");
+            rayReconstructionActive = false;
+            return;
+        }
+
+        sl::DLSSDOptions options{};
+        options.mode = enabled ? sl::DLSSMode::eBalanced : sl::DLSSMode::eOff;
+        options.outputWidth = outputWidth;
+        options.outputHeight = outputHeight;
+        options.colorBuffersHDR = sl::Boolean::eTrue;
+        options.normalRoughnessMode = sl::DLSSDNormalRoughnessMode::ePacked;
+
+        sl::Result result = slDLSSDSetOptions(sl::ViewportHandle{0}, options);
+        rayReconstructionActive = (result == sl::Result::eOk && enabled);
+
+        vfLogInfo("DLSS Ray Reconstruction: {} ({})",
+                  rayReconstructionActive ? "active" : (enabled ? "failed" : "disabled"),
+                  slResultToString(result));
+#else
+        rayReconstructionActive = false;
 #endif
     }
 

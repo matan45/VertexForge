@@ -455,6 +455,7 @@ namespace render::gpudriven
         void dispatchRTShadow(vk::CommandBuffer cmd, uint32_t imageIndex);
         bool isRTShadowReady() const;
         raytracing::RTShadowPipeline* getRTShadowPipeline() const { return rtShadowPipeline.get(); }
+        occlusion::DepthPrepass* getDepthPrepass() const { return depthPrepass.get(); }
         void applyRTShadowSettings(const types::RTShadowSettings& settings);
         types::RTShadowStats getRTShadowStats() const;
 

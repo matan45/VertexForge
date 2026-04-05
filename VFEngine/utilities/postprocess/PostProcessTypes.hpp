@@ -244,6 +244,7 @@ namespace postprocess
         bool enabled = false;
         UpscaleMode mode = UpscaleMode::DLSS;
         UpscaleQuality quality = UpscaleQuality::Quality;
+        bool rayReconstruction = false;
 
         static float getScaleFactor(UpscaleQuality q)
         {

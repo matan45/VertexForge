@@ -114,7 +114,7 @@ namespace render::raytracing
         core::ImageInfoRequest request(
             device.getLogicalDevice(), device.getPhysicalDevice(),
             w, h, 1, 1,
-            vk::Format::eR8Unorm,
+            vk::Format::eR16G16B16A16Sfloat,
             vk::ImageTiling::eOptimal,
             vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eSampled |
             vk::ImageUsageFlagBits::eTransferDst,
@@ -125,7 +125,7 @@ namespace render::raytracing
         // Storage view (for compute write)
         core::ImageViewInfoRequest storageViewReq(
             device.getLogicalDevice(), shadowMaskImage,
-            vk::Format::eR8Unorm, vk::ImageAspectFlagBits::eColor,
+            vk::Format::eR16G16B16A16Sfloat, vk::ImageAspectFlagBits::eColor,
             vk::ImageViewType::e2D, 1, 1
         );
         core::ImageUtilities::createImageView(storageViewReq, shadowMaskStorageView);
@@ -133,7 +133,7 @@ namespace render::raytracing
         // Sampled view (for fragment read) - same format, separate view
         core::ImageViewInfoRequest sampledViewReq(
             device.getLogicalDevice(), shadowMaskImage,
-            vk::Format::eR8Unorm, vk::ImageAspectFlagBits::eColor,
+            vk::Format::eR16G16B16A16Sfloat, vk::ImageAspectFlagBits::eColor,
             vk::ImageViewType::e2D, 1, 1
         );
         core::ImageUtilities::createImageView(sampledViewReq, shadowMaskSampledView);

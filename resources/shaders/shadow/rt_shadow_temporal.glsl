@@ -4,7 +4,7 @@
 layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 
 // Set 0: All bindings
-layout(set = 0, binding = 0, r8)   uniform readonly  image2D rawShadow;
+layout(set = 0, binding = 0, rgba16f) uniform readonly image2D rawShadow;
 layout(set = 0, binding = 1, r16f) uniform readonly  image2D historyRead;
 layout(set = 0, binding = 2, r16f) uniform writeonly image2D historyWrite;
 layout(set = 0, binding = 3) uniform sampler2D depthBuffer;
