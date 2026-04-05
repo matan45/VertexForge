@@ -281,12 +281,32 @@ namespace controllers
                 offScreen->recreate();
                 offScreen->setUpscaleResourcesDirty(true);
 
+                // Reset temporal accumulation on next upscale frame
+                if (auto* rh = offScreen->getRenderPassHandler())
+                    rh->resetUpscaleFirstFrame();
+
                 // Re-apply DLSS options after recreation so Streamline refreshes its internal state
                 if (isActive)
                 {
                     auto freshDisplayExtent = swapChain.getDisplayExtent();
                     upscaleManager->applySettings(settings.upscale, freshDisplayExtent.width, freshDisplayExtent.height);
                 }
+            }
+
+            // Apply Frame Generation settings (requires DLSS SR to be active)
+            if (settings.frameGen.enabled && upscaleManager->isActive())
+            {
+                auto dispExtent = swapChain.getDisplayExtent();
+                auto renRes = upscaleManager->getResolutionManager().getRenderResolution();
+                upscaleManager->applyFrameGenSettings(settings.frameGen,
+                    swapChain.getImageCount(),
+                    dispExtent.width, dispExtent.height,
+                    renRes.width, renRes.height);
+            }
+            else if (!settings.frameGen.enabled && upscaleManager->isFrameGenActive())
+            {
+                postprocess::FrameGenSettings offSettings{};
+                upscaleManager->applyFrameGenSettings(offSettings, 0, 0, 0, 0, 0);
             }
         }
     }

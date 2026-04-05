@@ -35,6 +35,7 @@ namespace render::gpudriven
         vk::Format depthAttachmentFormat = vk::Format::eUndefined;
         bool transparentMode = false;
         bool wboitMode = false;
+        bool motionVectorsEnabled = false;
     };
 
     struct MeshShaderPushConstants

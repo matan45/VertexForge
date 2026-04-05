@@ -48,7 +48,11 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
     if (pCallbackData->pMessageIdName)
     {
         std::string_view vuid(pCallbackData->pMessageIdName);
-        if (vuid == "VUID-VkDeviceCreateInfo-pNext-04748" ||
+        // Streamline DLSS-G fake-swapchain-buffer format/usage mismatches (SRGB vs UNORM, STORAGE_IMAGE)
+        if (vuid == "VUID-VkImageViewCreateInfo-usage-02275" ||
+            vuid == "VUID-VkImageViewCreateInfo-image-01762" ||
+            // Streamline injects VK_EXT_buffer_device_address which conflicts with Vulkan 1.2 core
+            vuid == "VUID-VkDeviceCreateInfo-pNext-04748" ||
             vuid == "VUID-vkCmdBindDescriptorSets-pDescriptorSets-parameter" ||
             vuid == "VUID-vkCmdBindDescriptorSets-pDescriptorSets-06563" ||
             vuid == "VUID-vkCmdDrawIndexed-None-08600" ||
@@ -66,6 +70,8 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
         std::string_view msg(pCallbackData->pMessage);
         if (msg.find("Couldn't find VkDescriptorSet Object") != std::string_view::npos ||
             msg.find("sl.tag.") != std::string_view::npos ||
+            msg.find("sl.dlssg.fake-swapchain-buffer") != std::string_view::npos ||
+            msg.find("SL_present_semaphore") != std::string_view::npos ||
             msg.find("Object Tracking") != std::string_view::npos)
         {
             return VK_FALSE;
@@ -384,6 +390,7 @@ namespace core
         vulkan12Features.descriptorBindingVariableDescriptorCount = VK_TRUE;
         vulkan12Features.descriptorBindingSampledImageUpdateAfterBind = VK_TRUE;
         vulkan12Features.descriptorBindingStorageBufferUpdateAfterBind = VK_TRUE;
+        vulkan12Features.descriptorBindingStorageImageUpdateAfterBind = VK_TRUE;
         vulkan12Features.descriptorBindingUniformBufferUpdateAfterBind = VK_TRUE;
         // Required for acceleration structures.
         // Note: Streamline injects VK_EXT_buffer_device_address which technically conflicts

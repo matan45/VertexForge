@@ -10,6 +10,7 @@
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
 #include "../../core/RenderManager.hpp"
+#include "../upscaling/UpscaleManager.hpp"
 #include "material/MaterialInstanceTypes.hpp"
 #include "material/MaterialManager.hpp"
 #include "print/Log.hpp"
@@ -131,6 +132,10 @@ namespace render::gpudriven
                 }
             }
 
+            bool mvEnabled = false;
+            if (auto* um = device.getUpscaleManager())
+                mvEnabled = um->isActive();
+
             MeshPipelineInitInfo pipelineInfo{
                 .iblLayout = iblDescriptorSetLayout,
                 .bindlessTextureLayout = bindlessTextures->getDescriptorSetLayout(),
@@ -141,7 +146,8 @@ namespace render::gpudriven
                 .shadowDataLayout = shadowSystem->getShadowDataLayout(),
                 .shadowTextureLayout = shadowSystem->getShadowTextureLayout(),
                 .colorAttachmentFormats = colorFormats,
-                .depthAttachmentFormat = depthFormat
+                .depthAttachmentFormat = depthFormat,
+                .motionVectorsEnabled = mvEnabled
             };
 
             meshShaderPipeline = std::make_unique<MeshShaderPipeline>(device, swapChain);
@@ -408,6 +414,10 @@ namespace render::gpudriven
             if (water.causticsResources && water.causticsResources->isInitialized())
                 causticLayout = water.causticsResources->getDescriptorSetLayout();
 
+            bool mvEnabled = false;
+            if (auto* um = device.getUpscaleManager())
+                mvEnabled = um->isActive();
+
             MeshPipelineInitInfo pipelineInfo{
                 .iblLayout = cachedIBLLayout,
                 .bindlessTextureLayout = bindlessTextures->getDescriptorSetLayout(),
@@ -420,7 +430,8 @@ namespace render::gpudriven
                 .giProbeDataLayout = giLayout,
                 .causticLayout = causticLayout,
                 .colorAttachmentFormats = cachedColorFormats,
-                .depthAttachmentFormat = cachedDepthFormat
+                .depthAttachmentFormat = cachedDepthFormat,
+                .motionVectorsEnabled = mvEnabled
             };
 
             meshShaderPipeline->recreate(pipelineInfo);

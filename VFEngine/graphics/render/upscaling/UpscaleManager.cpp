@@ -5,6 +5,8 @@
 #ifdef VF_STREAMLINE_ENABLED
 #include <sl.h>
 #include <sl_dlss.h>
+#include <sl_dlss_g.h>
+#include <sl_reflex.h>
 #include <sl_consts.h>
 #include <sl_helpers_vk.h>
 #include <sl_matrix_helpers.h>
@@ -61,6 +63,7 @@ namespace render::upscaling
 
         sl::Feature featuresToLoad[] = {
             sl::kFeatureDLSS,
+             sl::kFeatureDLSS_G,
             sl::kFeatureDirectSR,
             sl::kFeatureReflex
         };
@@ -169,9 +172,12 @@ namespace render::upscaling
             // Free DLSS resources before shutdown to avoid leaked Vulkan objects
             if (deviceSet)
             {
+                slFreeResources(sl::kFeatureDLSS_G, sl::ViewportHandle{0});
                 slFreeResources(sl::kFeatureDLSS, sl::ViewportHandle{0});
                 slFreeResources(sl::kFeatureDirectSR, sl::ViewportHandle{0});
             }
+            if (reflexEnabled)
+                disableReflex();
             slShutdown();
             streamlineAvailable = false;
             streamlineInitialized = false;
@@ -187,8 +193,10 @@ namespace render::upscaling
 #ifdef VF_STREAMLINE_ENABLED
         if (deviceSet)
         {
+            slFreeResources(sl::kFeatureDLSS_G, sl::ViewportHandle{0});
             slFreeResources(sl::kFeatureDLSS, sl::ViewportHandle{0});
             slFreeResources(sl::kFeatureDirectSR, sl::ViewportHandle{0});
+            frameGenActive = false;
             vfLogInfo("Streamline: freed feature resources for resolution change");
         }
 #endif
@@ -205,6 +213,11 @@ namespace render::upscaling
         dlssSupported = (dlssResult == sl::Result::eOk);
         vfLogInfo("Streamline DLSS support query: {} ({})",
                   slResultToString(dlssResult), static_cast<int>(dlssResult));
+
+        sl::Result dlssGResult = slIsFeatureSupported(sl::kFeatureDLSS_G, adapterInfo);
+        dlssGSupported = (dlssGResult == sl::Result::eOk);
+        vfLogInfo("Streamline DLSS-G (Frame Gen) support query: {} ({})",
+                  slResultToString(dlssGResult), static_cast<int>(dlssGResult));
 
         sl::Result directSRResult = slIsFeatureSupported(sl::kFeatureDirectSR, adapterInfo);
         directSRSupported = (directSRResult == sl::Result::eOk);
@@ -304,6 +317,16 @@ namespace render::upscaling
             dlssOptions.outputWidth = outputWidth;
             dlssOptions.outputHeight = outputHeight;
             dlssOptions.colorBuffersHDR = sl::Boolean::eTrue;
+            dlssOptions.useAutoExposure = sl::Boolean::eTrue;
+
+            // Force transformer-based (DLTSS) presets for all quality modes.
+            // Without this, Blackwell GPUs auto-select DLUnified (encoder/decoder)
+            // for Performance/UltraPerf which requires denoiser inputs we don't provide.
+            dlssOptions.dlaaPreset = sl::DLSSPreset::ePresetK;
+            dlssOptions.qualityPreset = sl::DLSSPreset::ePresetK;
+            dlssOptions.balancedPreset = sl::DLSSPreset::ePresetK;
+            dlssOptions.performancePreset = sl::DLSSPreset::ePresetK;
+            dlssOptions.ultraPerformancePreset = sl::DLSSPreset::ePresetK;
 
             slDLSSSetOptions(sl::ViewportHandle{0}, dlssOptions);
         }
@@ -333,10 +356,9 @@ namespace render::upscaling
         // Set constants — all SL matrices are row-major, GLM is column-major
         sl::Constants constants{};
         constants.jitterOffset = {inputs.jitterOffset.x, inputs.jitterOffset.y};
-        constants.mvecScale = {1.0f / static_cast<float>(inputs.renderExtent.width),
-                               1.0f / static_cast<float>(inputs.renderExtent.height)};
+        constants.mvecScale = {0.5f, 0.5f};
         constants.reset = inputs.resetAccumulation ? sl::Boolean::eTrue : sl::Boolean::eFalse;
-        constants.depthInverted = sl::Boolean::eTrue; // Reverse-Z
+        constants.depthInverted = sl::Boolean::eFalse; // Standard Z (near=0, far=1)
         constants.cameraPinholeOffset = {0.0f, 0.0f};
 
         // Camera matrices (must NOT contain jitter)
@@ -374,7 +396,7 @@ namespace render::upscaling
         slSetConstants(constants, *frameToken, viewport);
 
         // Tag resources
-        sl::ResourceTag tags[5]{};
+        sl::ResourceTag tags[7]{};
         uint32_t tagCount = 0;
 
         sl::Resource colorRes{sl::ResourceType::eTex2d, inputs.colorInput,
@@ -386,18 +408,22 @@ namespace render::upscaling
         colorRes.mipLevels = 1;
         colorRes.arrayLayers = 1;
         tags[tagCount++] = sl::ResourceTag{&colorRes, sl::kBufferTypeScalingInputColor,
-                                            sl::ResourceLifecycle::eOnlyValidNow, nullptr};
+                                            sl::ResourceLifecycle::eValidUntilEvaluate, nullptr};
+
+        // HUDLessColor — same as color input since UI is composited after upscaling
+        tags[tagCount++] = sl::ResourceTag{&colorRes, sl::kBufferTypeHUDLessColor,
+                                            sl::ResourceLifecycle::eValidUntilEvaluate, nullptr};
 
         sl::Resource depthRes{sl::ResourceType::eTex2d, inputs.depthInput,
                               nullptr, static_cast<VkImageView>(inputs.depthView),
-                              VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+                              VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL};
         depthRes.width = inputs.renderExtent.width;
         depthRes.height = inputs.renderExtent.height;
         depthRes.nativeFormat = static_cast<uint32_t>(inputs.depthFormat);
         depthRes.mipLevels = 1;
         depthRes.arrayLayers = 1;
         tags[tagCount++] = sl::ResourceTag{&depthRes, sl::kBufferTypeDepth,
-                                            sl::ResourceLifecycle::eOnlyValidNow, nullptr};
+                                            sl::ResourceLifecycle::eValidUntilEvaluate, nullptr};
 
         sl::Resource mvecRes{sl::ResourceType::eTex2d, inputs.motionVectors,
                              nullptr, static_cast<VkImageView>(inputs.motionView),
@@ -408,7 +434,7 @@ namespace render::upscaling
         mvecRes.mipLevels = 1;
         mvecRes.arrayLayers = 1;
         tags[tagCount++] = sl::ResourceTag{&mvecRes, sl::kBufferTypeMotionVectors,
-                                            sl::ResourceLifecycle::eOnlyValidNow, nullptr};
+                                            sl::ResourceLifecycle::eValidUntilEvaluate, nullptr};
 
         sl::Resource outputRes{sl::ResourceType::eTex2d, inputs.output,
                                nullptr, static_cast<VkImageView>(inputs.outputView),
@@ -419,7 +445,7 @@ namespace render::upscaling
         outputRes.mipLevels = 1;
         outputRes.arrayLayers = 1;
         tags[tagCount++] = sl::ResourceTag{&outputRes, sl::kBufferTypeScalingOutputColor,
-                                            sl::ResourceLifecycle::eOnlyValidNow, nullptr};
+                                            sl::ResourceLifecycle::eValidUntilEvaluate, nullptr};
 
         if (inputs.reactiveMask)
         {
@@ -432,7 +458,22 @@ namespace render::upscaling
             reactiveRes.mipLevels = 1;
             reactiveRes.arrayLayers = 1;
             tags[tagCount++] = sl::ResourceTag{&reactiveRes, sl::kBufferTypeTransparencyHint,
-                                                sl::ResourceLifecycle::eOnlyValidNow, nullptr};
+                                                sl::ResourceLifecycle::eValidUntilEvaluate, nullptr};
+        }
+
+        sl::Resource exposureRes{};
+        if (inputs.exposureImage)
+        {
+            exposureRes = sl::Resource{sl::ResourceType::eTex2d, inputs.exposureImage,
+                                       nullptr, static_cast<VkImageView>(inputs.exposureView),
+                                       VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+            exposureRes.width = 1;
+            exposureRes.height = 1;
+            exposureRes.nativeFormat = VK_FORMAT_R32_SFLOAT;
+            exposureRes.mipLevels = 1;
+            exposureRes.arrayLayers = 1;
+            tags[tagCount++] = sl::ResourceTag{&exposureRes, sl::kBufferTypeExposure,
+                                                sl::ResourceLifecycle::eValidUntilEvaluate, nullptr};
         }
 
         sl::Result tagResult = slSetTagForFrame(*frameToken, viewport, tags, tagCount,
@@ -474,5 +515,84 @@ namespace render::upscaling
     {
         // The next evaluate() call will pass resetAccumulation = true
         // which is handled via sl::Constants::reset in evaluate()
+    }
+
+    void UpscaleManager::enableReflex()
+    {
+#ifdef VF_STREAMLINE_ENABLED
+        if (!streamlineAvailable || !deviceSet) return;
+
+        sl::ReflexOptions options{};
+        options.mode = sl::ReflexMode::eLowLatency;
+        options.frameLimitUs = 0;
+        options.useMarkersToOptimize = false;
+
+        sl::Result result = slReflexSetOptions(options);
+        reflexEnabled = (result == sl::Result::eOk);
+        vfLogInfo("Streamline Reflex: {} ({})",
+                  reflexEnabled ? "enabled" : "failed",
+                  slResultToString(result));
+#endif
+    }
+
+    void UpscaleManager::disableReflex()
+    {
+#ifdef VF_STREAMLINE_ENABLED
+        if (!streamlineAvailable) return;
+
+        sl::ReflexOptions options{};
+        options.mode = sl::ReflexMode::eOff;
+        slReflexSetOptions(options);
+        reflexEnabled = false;
+        vfLogInfo("Streamline Reflex: disabled");
+#endif
+    }
+
+    void UpscaleManager::applyFrameGenSettings(const ::postprocess::FrameGenSettings& settings,
+                                                uint32_t backBufferCount,
+                                                uint32_t displayWidth, uint32_t displayHeight,
+                                                uint32_t renderWidth, uint32_t renderHeight)
+    {
+#ifdef VF_STREAMLINE_ENABLED
+        if (!deviceSet || !dlssGSupported)
+        {
+            if (settings.enabled)
+                vfLogWarning("DLSS Frame Generation not supported on this GPU");
+            frameGenActive = false;
+            return;
+        }
+
+        if (settings.enabled && !reflexEnabled)
+            enableReflex();
+
+        sl::DLSSGOptions options{};
+        options.mode = settings.enabled ? sl::DLSSGMode::eOn : sl::DLSSGMode::eOff;
+        options.numFramesToGenerate = settings.numFramesToGenerate;
+        options.numBackBuffers = backBufferCount;
+        options.colorWidth = displayWidth;
+        options.colorHeight = displayHeight;
+        options.mvecDepthWidth = renderWidth;
+        options.mvecDepthHeight = renderHeight;
+
+        sl::Result result = slDLSSGSetOptions(sl::ViewportHandle{0}, options);
+        frameGenActive = (result == sl::Result::eOk && settings.enabled);
+
+        if (settings.enabled)
+        {
+            vfLogInfo("DLSS Frame Generation: {} ({}), {}x frames",
+                      frameGenActive ? "active" : "failed",
+                      slResultToString(result),
+                      settings.numFramesToGenerate + 1);
+        }
+        else
+        {
+            frameGenActive = false;
+            if (reflexEnabled && !isActive())
+                disableReflex();
+            vfLogInfo("DLSS Frame Generation: disabled");
+        }
+#else
+        frameGenActive = false;
+#endif
     }
 }

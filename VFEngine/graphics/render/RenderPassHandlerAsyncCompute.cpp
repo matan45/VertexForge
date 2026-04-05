@@ -334,7 +334,7 @@ namespace render
         if (asyncComputeActive && offscreenResources.prevFrameDepthCreated
             && motionVectorPass && motionVectorPass->isInitialized())
         {
-            // Motion vectors computed on async compute queue — no depth transition needed
+            // Motion vectors already computed on async compute queue — ready for upscaler
         }
         else
         {
@@ -371,6 +371,34 @@ namespace render
         }
         upscaleFirstFrame = false;
 
+        // Write auto-exposure value to the 1x1 exposure texture for Streamline
+        float exposureValue = 1.0f;
+        if (postProcessPipeline)
+        {
+            auto exp = postProcessPipeline->getComputedExposure();
+            if (exp.has_value())
+                exposureValue = exp.value();
+        }
+
+        if (offscreenResources.exposureImage.image)
+        {
+            core::ImageUtilities::transitionImageLayout(commandBuffer,
+                offscreenResources.exposureImage.image,
+                vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal,
+                vk::ImageAspectFlagBits::eColor);
+
+            vk::ClearColorValue clearValue;
+            clearValue.setFloat32({exposureValue, 0.0f, 0.0f, 0.0f});
+            vk::ImageSubresourceRange range(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1);
+            commandBuffer.clearColorImage(offscreenResources.exposureImage.image,
+                vk::ImageLayout::eTransferDstOptimal, clearValue, range);
+
+            core::ImageUtilities::transitionImageLayout(commandBuffer,
+                offscreenResources.exposureImage.image,
+                vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
+                vk::ImageAspectFlagBits::eColor);
+        }
+
         vk::Image colorImage = offscreenResources.colorImages[imageIndex].colorImage;
 
         render::upscaling::UpscaleInputs inputs{};
@@ -380,11 +408,14 @@ namespace render
         inputs.depthView = offscreenResources.depthImage.depthImageView;
         inputs.motionVectors = offscreenResources.motionVectors.image;
         inputs.motionView = offscreenResources.motionVectors.sampledView;
+        inputs.exposureImage = offscreenResources.exposureImage.image;
+        inputs.exposureView = offscreenResources.exposureImage.imageView;
         inputs.output = offscreenResources.upscaleOutput.image;
         inputs.outputView = offscreenResources.upscaleOutput.imageView;
         inputs.renderExtent = renderRes;
         inputs.displayExtent = displayRes;
         inputs.jitterOffset = currentJitterOffset;
+        inputs.preExposure = exposureValue;
         inputs.resetAccumulation = resetAccum;
         inputs.viewMatrix = currentView;
         inputs.projectionMatrix = currentProjection;

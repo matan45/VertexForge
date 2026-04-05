@@ -26,6 +26,8 @@ namespace render::upscaling
         vk::ImageView motionView;
         vk::Image reactiveMask;       // Transparency/particle mask (R8_UNORM)
         vk::ImageView reactiveView;
+        vk::Image exposureImage;      // 1x1 R32_SFLOAT exposure value
+        vk::ImageView exposureView;
         vk::Image output;             // Upscaled output at display resolution
         vk::ImageView outputView;
         vk::Extent2D renderExtent;
@@ -77,6 +79,18 @@ namespace render::upscaling
         /// Check feature availability (call after setVulkanDevice).
         bool isDLSSSupported() const { return dlssSupported; }
         bool isDirectSRSupported() const { return directSRSupported; }
+        bool isDLSSGSupported() const { return dlssGSupported; }
+
+        /// Frame Generation (DLSS 3.x)
+        void applyFrameGenSettings(const ::postprocess::FrameGenSettings& settings,
+                                   uint32_t backBufferCount,
+                                   uint32_t displayWidth, uint32_t displayHeight,
+                                   uint32_t renderWidth, uint32_t renderHeight);
+        bool isFrameGenActive() const { return frameGenActive; }
+
+        /// Reflex (required for Frame Gen)
+        void enableReflex();
+        void disableReflex();
 
         /// Determine the active upscale mode based on settings and hardware.
         ::postprocess::UpscaleMode resolveActiveMode(::postprocess::UpscaleMode requested) const;
@@ -99,12 +113,14 @@ namespace render::upscaling
         bool isActive() const { return activeMode != ::postprocess::UpscaleMode::Off; }
         ::postprocess::UpscaleMode getActiveMode() const { return activeMode; }
 
+
         /// Query Streamline's required Vulkan extensions (call after initStreamline, before device creation)
         static std::vector<const char*> getRequiredInstanceExtensions();
         static std::vector<const char*> getRequiredDeviceExtensions();
 
         static bool isStreamlineAvailable() { return streamlineAvailable; }
         static bool isDLSSAvailable() { return instance && instance->dlssSupported; }
+        static bool isDLSSGAvailable() { return instance && instance->dlssGSupported; }
         static bool isDirectSRAvailable() { return instance && instance->directSRSupported; }
         static const UpscaleManager* getInstance() { return instance; }
 
@@ -113,8 +129,11 @@ namespace render::upscaling
 
         ::postprocess::UpscaleMode activeMode = ::postprocess::UpscaleMode::Off;
         bool dlssSupported = false;
+        bool dlssGSupported = false;
         bool directSRSupported = false;
         bool deviceSet = false;
+        bool frameGenActive = false;
+        bool reflexEnabled = false;
 
         static inline bool streamlineAvailable = false;
         static inline bool streamlineInitialized = false;

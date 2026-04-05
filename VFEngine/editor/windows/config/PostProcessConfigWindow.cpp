@@ -223,7 +223,7 @@ namespace windows
             {
                 ImGui::Spacing();
 
-                const char* qualityNames[] = {"Native (DLAA)", "Quality (1.5x)", "Balanced (1.7x)"};
+                const char* qualityNames[] = {"Native (DLAA)", "Quality (1.5x)", "Balanced (1.7x)", "Performance (2.0x)", "Ultra Performance (3.0x)"};
                 int currentQuality = static_cast<int>(settings.upscale.quality);
                 if (ImGui::Combo("Quality", &currentQuality, qualityNames, IM_ARRAYSIZE(qualityNames)))
                 {
@@ -252,6 +252,40 @@ namespace windows
                 {
                     ImGui::TextColored(ImVec4(0.9f, 0.8f, 0.1f, 1.0f),
                         "Streamline SDK not available. Build Streamline first.");
+                }
+
+                // Frame Generation (DLSS 3) — inside upscale section
+                if (settings.upscale.enabled)
+                {
+                    ImGui::Spacing();
+                    ImGui::SeparatorText("Frame Generation (DLSS 3)");
+
+                    bool canEnableFrameGen = status.dlssGSupported;
+                    if (!canEnableFrameGen) ImGui::BeginDisabled();
+                    if (ImGui::Checkbox("Enable Frame Generation", &settings.frameGen.enabled))
+                        isDirty = true;
+                    if (!canEnableFrameGen)
+                    {
+                        ImGui::EndDisabled();
+                        ImGui::TextColored(ImVec4(0.9f, 0.3f, 0.3f, 1.0f),
+                            "Frame Generation not supported (requires RTX 40xx+).");
+                        settings.frameGen.enabled = false;
+                    }
+
+                    if (settings.frameGen.enabled)
+                    {
+                        const char* multiplierNames[] = {"2x (1 generated)", "3x (2 generated)", "4x (3 generated)"};
+                        int currentMultiplier = static_cast<int>(settings.frameGen.numFramesToGenerate) - 1;
+                        if (currentMultiplier < 0) currentMultiplier = 0;
+                        if (ImGui::Combo("Frame Multiplier", &currentMultiplier, multiplierNames, IM_ARRAYSIZE(multiplierNames)))
+                        {
+                            settings.frameGen.numFramesToGenerate = static_cast<uint32_t>(currentMultiplier + 1);
+                            isDirty = true;
+                        }
+
+                        ImGui::Text("DLSS-G: %s", status.dlssGSupported ? "Supported" : "Not Supported");
+                        ImGui::Text("Frame Gen: %s", status.frameGenActive ? "Active" : "Off");
+                    }
                 }
             }
 

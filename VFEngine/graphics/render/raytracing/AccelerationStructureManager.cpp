@@ -1,6 +1,7 @@
 #include "AccelerationStructureManager.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/BufferUtilities.hpp"
+#include "../../core/RenderManager.hpp"
 #include "../gpudriven/scene/MergedMeshBuffer.hpp"
 #include "print/Log.hpp"
 
@@ -58,12 +59,7 @@ namespace render::raytracing
         vk::Device vkDevice = device.getLogicalDevice();
         vkDevice.waitIdle();
 
-        // Flush deferred deletions immediately (GPU is idle)
-        for (auto& deferred : deferredBLASDeletions)
-        {
-            destroyBLASEntryImmediate(deferred.entry);
-        }
-        deferredBLASDeletions.clear();
+        // GPU is idle — deferred deletion queue will be flushed by RenderManager
 
         // Destroy all mesh BLAS entries
         for (auto& [key, entry] : blasCache)
@@ -125,7 +121,40 @@ namespace render::raytracing
 
     void AccelerationStructureManager::destroyBLASEntry(BLASEntry& entry)
     {
-        deferredBLASDeletions.push_back({entry, core::MAX_FRAMES_IN_FLIGHT});
+        if (!entry.blas && !entry.buffer) return;
+
+        // Decrement budget synchronously (safe — budget is an estimate, not GPU-critical)
+        if (entry.buffer)
+        {
+            memoryBudget.blasTotalBytes -= entry.size;
+            memoryBudget.blasCount--;
+        }
+
+        auto* dq = deletionQueue;
+        if (!dq)
+        {
+            dq = core::RenderManager::getGlobalDeletionQueue();
+            if (!dq)
+                vfLogWarning("AccelerationStructureManager: No deletion queue available, using immediate destroy");
+        }
+
+        if (dq)
+        {
+            vk::AccelerationStructureKHR blas = entry.blas;
+            vk::Buffer buffer = entry.buffer;
+            core::VulkanAllocation allocation = entry.allocation;
+            core::VulkanMemoryManager* memMgr = &device.getMemoryManager();
+
+            dq->queueCustom([blas, buffer, allocation, memMgr](vk::Device dev) mutable {
+                if (blas) dev.destroyAccelerationStructureKHR(blas);
+                if (buffer) core::BufferUtilities::destroyBuffer(dev, buffer, allocation, *memMgr);
+            });
+        }
+        else
+        {
+            destroyBLASEntryImmediate(entry);
+        }
+
         entry.blas = nullptr;
         entry.buffer = nullptr;
         entry.allocation = {};
@@ -147,20 +176,23 @@ namespace render::raytracing
         }
     }
 
-    void AccelerationStructureManager::flushDeferredDeletions()
+    void AccelerationStructureManager::deferTLASDestruction(vk::AccelerationStructureKHR oldTlas,
+                                                             vk::Buffer oldBuffer, core::VulkanAllocation oldAlloc)
     {
-        auto it = deferredBLASDeletions.begin();
-        while (it != deferredBLASDeletions.end())
+        auto* dq = deletionQueue ? deletionQueue : core::RenderManager::getGlobalDeletionQueue();
+        if (dq)
         {
-            if (--it->frameCountdown == 0)
-            {
-                destroyBLASEntryImmediate(it->entry);
-                it = deferredBLASDeletions.erase(it);
-            }
-            else
-            {
-                ++it;
-            }
+            core::VulkanMemoryManager* memMgr = &device.getMemoryManager();
+            dq->queueCustom([oldTlas, oldBuffer, oldAlloc, memMgr](vk::Device dev) mutable {
+                if (oldTlas) dev.destroyAccelerationStructureKHR(oldTlas);
+                if (oldBuffer) core::BufferUtilities::destroyBuffer(dev, oldBuffer, oldAlloc, *memMgr);
+            });
+        }
+        else
+        {
+            vk::Device vkDevice = device.getLogicalDevice();
+            if (oldTlas) vkDevice.destroyAccelerationStructureKHR(oldTlas);
+            if (oldBuffer) core::BufferUtilities::destroyBuffer(vkDevice, oldBuffer, oldAlloc, device.getMemoryManager());
         }
     }
 
@@ -425,7 +457,7 @@ namespace render::raytracing
     {
         if (!initialized || objectCount == 0 || blasCache.empty()) return;
 
-        flushDeferredDeletions();
+        // Deferred deletions handled by DeferredDeletionQueue
 
         vk::Device vkDevice = device.getLogicalDevice();
 
@@ -539,11 +571,10 @@ namespace render::raytracing
         if (!canUpdate)
         {
             if (tlas)
-            {
-                vkDevice.destroyAccelerationStructureKHR(tlas);
-                tlas = nullptr;
-            }
-            core::BufferUtilities::destroyBuffer(vkDevice, tlasBuffer, tlasAllocation, device.getMemoryManager());
+                deferTLASDestruction(tlas, tlasBuffer, tlasAllocation);
+            tlas = nullptr;
+            tlasBuffer = nullptr;
+            tlasAllocation = {};
 
             {
                 core::BufferInfoRequest request(vkDevice, device.getPhysicalDevice());
@@ -609,7 +640,25 @@ namespace render::raytracing
         if (instanceBuffer && instanceBufferCapacity >= requiredSize) return;
 
         vk::Device vkDevice = device.getLogicalDevice();
-        core::BufferUtilities::destroyBuffer(vkDevice, instanceBuffer, instanceAllocation, device.getMemoryManager());
+        if (instanceBuffer)
+        {
+            auto* dq = deletionQueue ? deletionQueue : core::RenderManager::getGlobalDeletionQueue();
+            if (dq)
+            {
+                vk::Buffer oldBuf = instanceBuffer;
+                core::VulkanAllocation oldAlloc = instanceAllocation;
+                core::VulkanMemoryManager* memMgr = &device.getMemoryManager();
+                dq->queueCustom([oldBuf, oldAlloc, memMgr](vk::Device dev) mutable {
+                    core::BufferUtilities::destroyBuffer(dev, oldBuf, oldAlloc, *memMgr);
+                });
+            }
+            else
+            {
+                core::BufferUtilities::destroyBuffer(vkDevice, instanceBuffer, instanceAllocation, device.getMemoryManager());
+            }
+            instanceBuffer = nullptr;
+            instanceAllocation = {};
+        }
 
         // Allocate with some headroom to avoid frequent reallocations
         vk::DeviceSize allocSize = std::max(requiredSize, static_cast<vk::DeviceSize>(requiredSize * 1.5));
@@ -630,7 +679,25 @@ namespace render::raytracing
         if (staging.buffer && staging.capacity >= requiredSize) return;
 
         vk::Device vkDevice = device.getLogicalDevice();
-        core::BufferUtilities::destroyBuffer(vkDevice, staging.buffer, staging.allocation, device.getMemoryManager());
+        if (staging.buffer)
+        {
+            auto* dq = deletionQueue ? deletionQueue : core::RenderManager::getGlobalDeletionQueue();
+            if (dq)
+            {
+                vk::Buffer oldBuf = staging.buffer;
+                core::VulkanAllocation oldAlloc = staging.allocation;
+                core::VulkanMemoryManager* memMgr = &device.getMemoryManager();
+                dq->queueCustom([oldBuf, oldAlloc, memMgr](vk::Device dev) mutable {
+                    core::BufferUtilities::destroyBuffer(dev, oldBuf, oldAlloc, *memMgr);
+                });
+                staging.buffer = nullptr;
+                staging.allocation = {};
+            }
+            else
+            {
+                core::BufferUtilities::destroyBuffer(vkDevice, staging.buffer, staging.allocation, device.getMemoryManager());
+            }
+        }
 
         vk::DeviceSize allocSize = std::max(requiredSize, static_cast<vk::DeviceSize>(requiredSize * 1.5));
 
@@ -648,7 +715,25 @@ namespace render::raytracing
         if (tlasScratchBuffer && tlasScratchSize >= requiredSize) return;
 
         vk::Device vkDevice = device.getLogicalDevice();
-        core::BufferUtilities::destroyBuffer(vkDevice, tlasScratchBuffer, tlasScratchAllocation, device.getMemoryManager());
+        if (tlasScratchBuffer)
+        {
+            auto* dq = deletionQueue ? deletionQueue : core::RenderManager::getGlobalDeletionQueue();
+            if (dq)
+            {
+                vk::Buffer oldBuf = tlasScratchBuffer;
+                core::VulkanAllocation oldAlloc = tlasScratchAllocation;
+                core::VulkanMemoryManager* memMgr = &device.getMemoryManager();
+                dq->queueCustom([oldBuf, oldAlloc, memMgr](vk::Device dev) mutable {
+                    core::BufferUtilities::destroyBuffer(dev, oldBuf, oldAlloc, *memMgr);
+                });
+                tlasScratchBuffer = nullptr;
+                tlasScratchAllocation = {};
+            }
+            else
+            {
+                core::BufferUtilities::destroyBuffer(vkDevice, tlasScratchBuffer, tlasScratchAllocation, device.getMemoryManager());
+            }
+        }
 
         core::BufferInfoRequest request(vkDevice, device.getPhysicalDevice());
         request.size = requiredSize;
@@ -896,7 +981,7 @@ namespace render::raytracing
         if (!initialized || (objectCount == 0 && terrainTileCount == 0)) return;
         if (blasCache.empty() && terrainBlasCache.empty()) return;
 
-        flushDeferredDeletions();
+        // Deferred deletions handled by DeferredDeletionQueue
 
         vk::Device vkDevice = device.getLogicalDevice();
 
@@ -1028,11 +1113,10 @@ namespace render::raytracing
         if (!canUpdate)
         {
             if (tlas)
-            {
-                vkDevice.destroyAccelerationStructureKHR(tlas);
-                tlas = nullptr;
-            }
-            core::BufferUtilities::destroyBuffer(vkDevice, tlasBuffer, tlasAllocation, device.getMemoryManager());
+                deferTLASDestruction(tlas, tlasBuffer, tlasAllocation);
+            tlas = nullptr;
+            tlasBuffer = nullptr;
+            tlasAllocation = {};
 
             {
                 core::BufferInfoRequest request(vkDevice, device.getPhysicalDevice());

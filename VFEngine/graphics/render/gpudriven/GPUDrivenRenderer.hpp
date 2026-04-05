@@ -500,6 +500,7 @@ namespace render::gpudriven
         uint64_t getTotalMemoryUsage() const;
 
         lighting::GPULightBufferManager* getLightBufferManager() const { return lightBufferManager.get(); }
+        GPUDrivenCameraBuffer* getCameraBuffer() const { return cameraBuffer.get(); }
         lighting::ClusterGridManager* getClusterGridManager() const { return clusterGridManager.get(); }
         lighting::LightCullingPipeline* getLightCullingPipeline() const { return lightCullingPipeline.get(); }
         shadow::ShadowSystem* getShadowSystem() const { return shadowSystem.get(); }

@@ -2,6 +2,7 @@
 
 #include "ScratchBufferPool.hpp"
 #include "../../core/VulkanMemoryManager.hpp"
+#include "../../core/DeferredDeletionQueue.hpp"
 #include "../../core/GraphicsConstants.hpp"
 #include "../gpudriven/GPUDrivenTypes.hpp"
 #include <vulkan/vulkan.hpp>
@@ -57,6 +58,7 @@ namespace render::raytracing
 
         void init();
         void cleanup();
+        void setDeletionQueue(core::DeferredDeletionQueue* queue) { deletionQueue = queue; }
 
         void notifyMeshReady(const std::string& meshPath,
                              const std::string& submeshName,
@@ -175,7 +177,8 @@ namespace render::raytracing
 
         void destroyBLASEntry(BLASEntry& entry);
         void destroyBLASEntryImmediate(BLASEntry& entry);
-        void flushDeferredDeletions();
+        void deferTLASDestruction(vk::AccelerationStructureKHR oldTlas,
+                                  vk::Buffer oldBuffer, core::VulkanAllocation oldAlloc);
         void createDescriptorLayout();
         void createDescriptorPool();
         void allocateDescriptorSet();
@@ -185,11 +188,6 @@ namespace render::raytracing
         void ensureTlasScratch(vk::DeviceSize requiredSize);
         void insertTLASCrossFrameBarrier(vk::CommandBuffer cmd);
 
-        struct DeferredBLASDeletion
-        {
-            BLASEntry entry;
-            uint32_t frameCountdown;
-        };
-        std::vector<DeferredBLASDeletion> deferredBLASDeletions;
+        core::DeferredDeletionQueue* deletionQueue = nullptr;
     };
 }

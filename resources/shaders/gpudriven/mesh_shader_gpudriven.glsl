@@ -208,6 +208,9 @@ void main() {
 #include "../common/lod_crossfade.glsl"
 #include "../common/wetness.glsl"
 #include "../common/snow_accumulation.glsl"
+#ifdef MOTION_VECTORS_ENABLED
+#include "../common/motion_vectors.glsl"
+#endif
 
 layout(location = 0) in vec3 fragWorldPos;
 layout(location = 1) in vec3 fragNormal;
@@ -222,6 +225,8 @@ layout(location = 8) in flat vec4 fragInstanceIBL;
 layout(location = 0) out vec4 outColor;
 #ifdef WBOIT_ENABLED
 layout(location = 1) out float outRevealage;
+#elif defined(MOTION_VECTORS_ENABLED)
+layout(location = 1) out vec2 outMotionVector;
 #endif
 
 layout(set = 0, binding = 0) uniform CameraUBO {
@@ -777,5 +782,9 @@ void main() {
     } else {
         outColor = vec4(color * alpha, alpha);
     }
+#ifdef MOTION_VECTORS_ENABLED
+    mat4 currentVP = camera.projection * camera.view;
+    outMotionVector = computeStaticMotionVector(fragWorldPos, currentVP, pc.prevViewProjection);
+#endif
 #endif
 }

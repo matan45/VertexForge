@@ -259,12 +259,19 @@ namespace postprocess
         }
     };
 
+    struct FrameGenSettings
+    {
+        bool enabled = false;
+        uint32_t numFramesToGenerate = 1; // 1 = 2x FPS, 2 = 3x, 3 = 4x (Blackwell only)
+    };
+
     struct PostProcessSettings
     {
         bool enabled = false;
 
         ToneMappingSettings toneMapping;
         UpscaleSettings upscale;
+        FrameGenSettings frameGen;
         BloomSettings bloom;
         VignetteSettings vignette;
         ChromaticAberrationSettings chromaticAberration;
