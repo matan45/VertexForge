@@ -50,9 +50,6 @@ namespace core
             status.renderHeight = res.getRenderHeight();
             status.displayWidth = res.getDisplayWidth();
             status.displayHeight = res.getDisplayHeight();
-            status.jitterX = mgr->getLastJitterX();
-            status.jitterY = mgr->getLastJitterY();
-            status.taaFrameIndex = mgr->getLastTAAFrame();
         }
         return status;
     }

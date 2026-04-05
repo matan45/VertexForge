@@ -598,7 +598,8 @@ namespace render
                 vk::Format::eR32Sfloat,
                 vk::ImageTiling::eOptimal,
                 vk::ImageUsageFlagBits::eSampled |
-                vk::ImageUsageFlagBits::eTransferDst,
+                vk::ImageUsageFlagBits::eTransferDst |
+                vk::ImageUsageFlagBits::eTransferSrc,
                 vk::MemoryPropertyFlagBits::eDeviceLocal);
 
             core::ImageUtilities::createImage(expInfo,

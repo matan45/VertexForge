@@ -101,15 +101,6 @@ namespace render::upscaling
         bool isActive() const { return activeMode != ::postprocess::UpscaleMode::Off; }
         ::postprocess::UpscaleMode getActiveMode() const { return activeMode; }
 
-        void setDebugMotionVectors(bool enabled) { debugMotionVectors = enabled; }
-        void setDebugJitter(bool enabled) { debugJitter = enabled; }
-        bool isDebugMotionVectors() const { return debugMotionVectors; }
-        bool isDebugJitter() const { return debugJitter; }
-
-        void setCurrentJitter(float x, float y, uint32_t frame) { lastJitterX = x; lastJitterY = y; lastTAAFrame = frame; }
-        float getLastJitterX() const { return lastJitterX; }
-        float getLastJitterY() const { return lastJitterY; }
-        uint32_t getLastTAAFrame() const { return lastTAAFrame; }
 
         /// Query Streamline's required Vulkan extensions (call after initStreamline, before device creation)
         static std::vector<const char*> getRequiredInstanceExtensions();
@@ -127,11 +118,6 @@ namespace render::upscaling
         bool dlssSupported = false;
         bool directSRSupported = false;
         bool deviceSet = false;
-        bool debugMotionVectors = false;
-        bool debugJitter = false;
-        float lastJitterX = 0.0f;
-        float lastJitterY = 0.0f;
-        uint32_t lastTAAFrame = 0;
 
         static inline bool streamlineAvailable = false;
         static inline bool streamlineInitialized = false;

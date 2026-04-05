@@ -254,52 +254,6 @@ namespace windows
                         "Streamline SDK not available. Build Streamline first.");
                 }
 
-                ImGui::Spacing();
-                ImGui::SeparatorText("Debug");
-
-                if (ImGui::Checkbox("Visualize Motion Vectors", &settings.upscale.debugMotionVectors))
-                    isDirty = true;
-
-                if (ImGui::Checkbox("Visualize Jitter", &settings.upscale.debugJitter))
-                    isDirty = true;
-
-                if (settings.upscale.debugJitter && status.activeMode != postprocess::UpscaleMode::Off)
-                {
-                    ImGui::Spacing();
-                    ImGui::Text("Jitter: (%.3f, %.3f)  Frame: %u",
-                                status.jitterX, status.jitterY, status.taaFrameIndex);
-
-                    // Draw Halton(2,3) sequence plot
-                    ImVec2 plotPos = ImGui::GetCursorScreenPos();
-                    float plotSize = 120.0f;
-                    ImDrawList* drawList = ImGui::GetWindowDrawList();
-                    drawList->AddRectFilled(plotPos, ImVec2(plotPos.x + plotSize, plotPos.y + plotSize),
-                                            IM_COL32(30, 30, 30, 200));
-                    drawList->AddRect(plotPos, ImVec2(plotPos.x + plotSize, plotPos.y + plotSize),
-                                      IM_COL32(80, 80, 80, 255));
-
-                    // Plot 16 Halton(2,3) samples
-                    for (int i = 0; i < 16; ++i)
-                    {
-                        // Halton(2,3) inline — matches JitterSequence::halton23
-                        float h2 = 0.0f, h3 = 0.0f;
-                        { int idx = i + 1; float f = 0.5f; while (idx > 0) { h2 += f * (idx % 2); idx /= 2; f *= 0.5f; } }
-                        { int idx = i + 1; float f = 1.0f / 3.0f; while (idx > 0) { h3 += f * (idx % 3); idx /= 3; f /= 3.0f; } }
-                        float px = plotPos.x + h2 * plotSize;
-                        float py = plotPos.y + h3 * plotSize;
-                        bool isCurrent = (status.taaFrameIndex % 16) == static_cast<uint32_t>(i);
-                        if (isCurrent)
-                        {
-                            drawList->AddCircleFilled(ImVec2(px, py), 5.0f, IM_COL32(255, 80, 80, 255));
-                        }
-                        else
-                        {
-                            drawList->AddCircleFilled(ImVec2(px, py), 3.0f, IM_COL32(100, 200, 100, 200));
-                        }
-                    }
-
-                    ImGui::Dummy(ImVec2(plotSize, plotSize));
-                }
             }
 
             ImGui::Unindent(10.0f);

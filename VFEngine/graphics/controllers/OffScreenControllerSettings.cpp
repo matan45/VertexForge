@@ -258,8 +258,6 @@ namespace controllers
             // Always pass display extent so ResolutionManager computes render res correctly
             auto displayExtent = swapChain.getDisplayExtent();
             upscaleManager->applySettings(settings.upscale, displayExtent.width, displayExtent.height);
-            upscaleManager->setDebugMotionVectors(settings.upscale.debugMotionVectors);
-            upscaleManager->setDebugJitter(settings.upscale.debugJitter);
 
             bool isActive = upscaleManager->isActive();
             auto newQuality = upscaleManager->getResolutionManager().getQualityMode();

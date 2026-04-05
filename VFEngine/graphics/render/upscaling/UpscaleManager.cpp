@@ -66,8 +66,8 @@ namespace render::upscaling
         };
 
         sl::Preferences prefs{};
-        prefs.showConsole = true;
-        prefs.logLevel = sl::LogLevel::eVerbose;
+        prefs.showConsole = false;
+        prefs.logLevel = sl::LogLevel::eOff;
         prefs.featuresToLoad = featuresToLoad;
         prefs.numFeaturesToLoad = static_cast<uint32_t>(std::size(featuresToLoad));
         prefs.engine = sl::EngineType::eCustom;
@@ -304,6 +304,16 @@ namespace render::upscaling
             dlssOptions.outputWidth = outputWidth;
             dlssOptions.outputHeight = outputHeight;
             dlssOptions.colorBuffersHDR = sl::Boolean::eTrue;
+            dlssOptions.useAutoExposure = sl::Boolean::eTrue;
+
+            // Force transformer-based (DLTSS) presets for all quality modes.
+            // Without this, Blackwell GPUs auto-select DLUnified (encoder/decoder)
+            // for Performance/UltraPerf which requires denoiser inputs we don't provide.
+            dlssOptions.dlaaPreset = sl::DLSSPreset::ePresetK;
+            dlssOptions.qualityPreset = sl::DLSSPreset::ePresetK;
+            dlssOptions.balancedPreset = sl::DLSSPreset::ePresetK;
+            dlssOptions.performancePreset = sl::DLSSPreset::ePresetK;
+            dlssOptions.ultraPerformancePreset = sl::DLSSPreset::ePresetK;
 
             slDLSSSetOptions(sl::ViewportHandle{0}, dlssOptions);
         }
@@ -333,8 +343,7 @@ namespace render::upscaling
         // Set constants — all SL matrices are row-major, GLM is column-major
         sl::Constants constants{};
         constants.jitterOffset = {inputs.jitterOffset.x, inputs.jitterOffset.y};
-        constants.mvecScale = {static_cast<float>(inputs.renderExtent.width) / 2.0f,
-                               static_cast<float>(inputs.renderExtent.height) / 2.0f};
+        constants.mvecScale = {0.5f, 0.5f};
         constants.reset = inputs.resetAccumulation ? sl::Boolean::eTrue : sl::Boolean::eFalse;
         constants.depthInverted = sl::Boolean::eFalse; // Standard Z (near=0, far=1)
         constants.cameraPinholeOffset = {0.0f, 0.0f};
@@ -386,22 +395,22 @@ namespace render::upscaling
         colorRes.mipLevels = 1;
         colorRes.arrayLayers = 1;
         tags[tagCount++] = sl::ResourceTag{&colorRes, sl::kBufferTypeScalingInputColor,
-                                            sl::ResourceLifecycle::eOnlyValidNow, nullptr};
+                                            sl::ResourceLifecycle::eValidUntilEvaluate, nullptr};
 
         // HUDLessColor — same as color input since UI is composited after upscaling
         tags[tagCount++] = sl::ResourceTag{&colorRes, sl::kBufferTypeHUDLessColor,
-                                            sl::ResourceLifecycle::eOnlyValidNow, nullptr};
+                                            sl::ResourceLifecycle::eValidUntilEvaluate, nullptr};
 
         sl::Resource depthRes{sl::ResourceType::eTex2d, inputs.depthInput,
                               nullptr, static_cast<VkImageView>(inputs.depthView),
-                              VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+                              VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL};
         depthRes.width = inputs.renderExtent.width;
         depthRes.height = inputs.renderExtent.height;
         depthRes.nativeFormat = static_cast<uint32_t>(inputs.depthFormat);
         depthRes.mipLevels = 1;
         depthRes.arrayLayers = 1;
         tags[tagCount++] = sl::ResourceTag{&depthRes, sl::kBufferTypeDepth,
-                                            sl::ResourceLifecycle::eOnlyValidNow, nullptr};
+                                            sl::ResourceLifecycle::eValidUntilEvaluate, nullptr};
 
         sl::Resource mvecRes{sl::ResourceType::eTex2d, inputs.motionVectors,
                              nullptr, static_cast<VkImageView>(inputs.motionView),
@@ -412,7 +421,7 @@ namespace render::upscaling
         mvecRes.mipLevels = 1;
         mvecRes.arrayLayers = 1;
         tags[tagCount++] = sl::ResourceTag{&mvecRes, sl::kBufferTypeMotionVectors,
-                                            sl::ResourceLifecycle::eOnlyValidNow, nullptr};
+                                            sl::ResourceLifecycle::eValidUntilEvaluate, nullptr};
 
         sl::Resource outputRes{sl::ResourceType::eTex2d, inputs.output,
                                nullptr, static_cast<VkImageView>(inputs.outputView),
@@ -423,7 +432,7 @@ namespace render::upscaling
         outputRes.mipLevels = 1;
         outputRes.arrayLayers = 1;
         tags[tagCount++] = sl::ResourceTag{&outputRes, sl::kBufferTypeScalingOutputColor,
-                                            sl::ResourceLifecycle::eOnlyValidNow, nullptr};
+                                            sl::ResourceLifecycle::eValidUntilEvaluate, nullptr};
 
         if (inputs.reactiveMask)
         {
@@ -436,7 +445,7 @@ namespace render::upscaling
             reactiveRes.mipLevels = 1;
             reactiveRes.arrayLayers = 1;
             tags[tagCount++] = sl::ResourceTag{&reactiveRes, sl::kBufferTypeTransparencyHint,
-                                                sl::ResourceLifecycle::eOnlyValidNow, nullptr};
+                                                sl::ResourceLifecycle::eValidUntilEvaluate, nullptr};
         }
 
         sl::Resource exposureRes{};
@@ -451,7 +460,7 @@ namespace render::upscaling
             exposureRes.mipLevels = 1;
             exposureRes.arrayLayers = 1;
             tags[tagCount++] = sl::ResourceTag{&exposureRes, sl::kBufferTypeExposure,
-                                                sl::ResourceLifecycle::eOnlyValidNow, nullptr};
+                                                sl::ResourceLifecycle::eValidUntilEvaluate, nullptr};
         }
 
         sl::Result tagResult = slSetTagForFrame(*frameToken, viewport, tags, tagCount,

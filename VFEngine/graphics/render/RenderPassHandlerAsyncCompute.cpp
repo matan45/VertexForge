@@ -415,7 +415,6 @@ namespace render
         inputs.renderExtent = renderRes;
         inputs.displayExtent = displayRes;
         inputs.jitterOffset = currentJitterOffset;
-        upscaleManager->setCurrentJitter(currentJitterOffset.x, currentJitterOffset.y, taaFrameIndex);
         inputs.preExposure = exposureValue;
         inputs.resetAccumulation = resetAccum;
         inputs.viewMatrix = currentView;
@@ -425,38 +424,6 @@ namespace render
         inputs.cameraPosition = currentCameraPosition;
         inputs.nearPlane = currentNearPlane;
         inputs.farPlane = currentFarPlane;
-
-        // Debug: motion vector visualization — blit MV image to output instead of upscaling
-        if (upscaleManager->isDebugMotionVectors())
-        {
-            core::ImageUtilities::transitionImageLayout(commandBuffer,
-                offscreenResources.motionVectors.image,
-                vk::ImageLayout::eShaderReadOnlyOptimal, vk::ImageLayout::eTransferSrcOptimal,
-                vk::ImageAspectFlagBits::eColor);
-
-            vk::ImageBlit mvBlit{};
-            mvBlit.srcSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
-            mvBlit.srcSubresource.layerCount = 1;
-            mvBlit.srcOffsets[1] = vk::Offset3D{static_cast<int32_t>(renderRes.width),
-                                                  static_cast<int32_t>(renderRes.height), 1};
-            mvBlit.dstSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
-            mvBlit.dstSubresource.layerCount = 1;
-            mvBlit.dstOffsets[1] = vk::Offset3D{static_cast<int32_t>(displayRes.width),
-                                                  static_cast<int32_t>(displayRes.height), 1};
-
-            commandBuffer.blitImage(offscreenResources.motionVectors.image,
-                                    vk::ImageLayout::eTransferSrcOptimal,
-                                    offscreenResources.upscaleOutput.image,
-                                    vk::ImageLayout::eGeneral,
-                                    mvBlit, vk::Filter::eNearest);
-
-            core::ImageUtilities::transitionImageLayout(commandBuffer,
-                offscreenResources.motionVectors.image,
-                vk::ImageLayout::eTransferSrcOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
-                vk::ImageAspectFlagBits::eColor);
-        }
-        else
-        {
 
         bool evaluateOk = upscaleManager->evaluate(commandBuffer, taaFrameIndex, inputs);
         if (evaluateOk)
@@ -491,8 +458,6 @@ namespace render
                 vk::ImageLayout::eTransferSrcOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
                 vk::ImageAspectFlagBits::eColor);
         }
-
-        } // end else (non-debug path)
 
         // Depth final state handled by render graph — no restoration needed
     }
