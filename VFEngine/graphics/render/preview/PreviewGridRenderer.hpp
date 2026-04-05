@@ -31,7 +31,6 @@ namespace render::preview
         ~PreviewGridRenderer();
 
         void init();
-        void recreate();
         void cleanUp();
         void cleanUpShader();
 

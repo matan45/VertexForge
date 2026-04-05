@@ -136,16 +136,6 @@ namespace render::preview
 
     void PreviewRenderHandler::recreate()
     {
-        if (backgroundInitialized)
-        {
-            backgroundRenderer->recreate();
-        }
-
-        if (gridInitialized)
-        {
-            previewGrid->recreate();
-        }
-
         if (meshPipelineInitialized)
         {
             meshPipeline->recreate();

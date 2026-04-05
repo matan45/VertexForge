@@ -38,7 +38,6 @@ namespace render::preview
         ~PreviewBackgroundRenderer();
 
         void init();
-        void recreate();
         void cleanUp();
         void cleanUpShader();
 

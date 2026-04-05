@@ -23,12 +23,6 @@ namespace render::preview
         initialized = true;
     }
 
-    void PreviewGridRenderer::recreate()
-    {
-        // With dynamic rendering, no render pass or framebuffers to recreate.
-        // GridRenderer pipeline uses dynamic rendering formats.
-    }
-
     void PreviewGridRenderer::cleanUp()
     {
         if (!initialized) return;
