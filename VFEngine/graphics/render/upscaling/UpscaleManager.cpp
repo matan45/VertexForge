@@ -63,7 +63,7 @@ namespace render::upscaling
 
         sl::Feature featuresToLoad[] = {
             sl::kFeatureDLSS,
-            // sl::kFeatureDLSS_G, // Disabled: auto-hooks swapchain with UNORM format, conflicts with SRGB image views
+             sl::kFeatureDLSS_G,
             sl::kFeatureDirectSR,
             sl::kFeatureReflex
         };

@@ -48,7 +48,9 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
     if (pCallbackData->pMessageIdName)
     {
         std::string_view vuid(pCallbackData->pMessageIdName);
-        if (vuid == "VUID-VkDeviceCreateInfo-pNext-04748" ||
+        if (vuid == "VUID-VkImageViewCreateInfo-usage-02275" ||
+            vuid == "VUID-VkImageViewCreateInfo-image-01762" ||
+            vuid == "VUID-VkDeviceCreateInfo-pNext-04748" ||
             vuid == "VUID-vkCmdBindDescriptorSets-pDescriptorSets-parameter" ||
             vuid == "VUID-vkCmdBindDescriptorSets-pDescriptorSets-06563" ||
             vuid == "VUID-vkCmdDrawIndexed-None-08600" ||
