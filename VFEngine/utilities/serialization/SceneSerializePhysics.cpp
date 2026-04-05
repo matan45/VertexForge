@@ -485,6 +485,8 @@ namespace serialization
         writeAssetRef(j, "fragmentCollisionAudio", d.fragmentCollisionAudio);
         writeAssetRef(j, "damageDecalAlbedo", d.damageDecalAlbedo);
         writeAssetRef(j, "damageDecalNormal", d.damageDecalNormal);
+        if (d.decalHalfExtents != 0.3f)
+            j["decalHalfExtents"] = d.decalHalfExtents;
         return j;
     }
 
@@ -517,6 +519,8 @@ namespace serialization
         d.fragmentCollisionAudio = readAssetRef(j, "fragmentCollisionAudio");
         d.damageDecalAlbedo = readAssetRef(j, "damageDecalAlbedo");
         d.damageDecalNormal = readAssetRef(j, "damageDecalNormal");
+        if (auto it = j.find("decalHalfExtents"); it != j.end() && it->is_number())
+            d.decalHalfExtents = it->get<float>();
         d.isDestroyed = false;
     }
 }

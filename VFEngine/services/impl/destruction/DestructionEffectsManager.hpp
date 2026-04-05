@@ -3,8 +3,10 @@
 #include "../../data/EntityHandle.hpp"
 #include <components/DestructionComponents.hpp>
 #include <asset/AssetRef.hpp>
+#include "../../data/VFXTypes.hpp"
 #include <glm/glm.hpp>
 #include <cstdint>
+#include <vector>
 
 namespace services
 {
@@ -13,6 +15,8 @@ namespace services
         uint32_t maxFragmentCollisionSoundsPerSecond = 5;
         float volumeScaleMassFactor = 0.1f;
         float decalHalfExtents = 0.3f;
+        float decalLifetime = 15.0f;
+        float vfxLifetime = 5.0f;
     };
 
     struct DestructionEffectsSnapshot
@@ -42,14 +46,32 @@ namespace services
 
         void update(float deltaTime);
 
+        void reset();
+
     private:
         DestructionEffectsConfig config;
         float collisionSoundTimer = 0.0f;
         uint32_t collisionSoundsThisSecond = 0;
 
+        struct TimedEntity
+        {
+            EntityHandle entity;
+            float remaining;
+        };
+
+        struct TimedVFX
+        {
+            VFXInstanceId instanceId = 0;
+            float remaining;
+        };
+
+        std::vector<TimedEntity> timedDecals;
+        std::vector<TimedVFX> timedVFXInstances;
+
         void spawnVFX(const asset::AssetRef& vfxRef, const glm::vec3& position);
         void playSound3D(const asset::AssetRef& audioRef, const glm::vec3& position, float volume);
         void spawnDamageDecal(const asset::AssetRef& albedo, const asset::AssetRef& normal,
-                              const glm::vec3& impactPoint, const glm::vec3& impactDir);
+                              const glm::vec3& impactPoint, const glm::vec3& impactDir,
+                              float halfExtents = 0.3f);
     };
 }

@@ -999,6 +999,7 @@ namespace services
         data.fragmentCollisionAudio = comp.fragmentCollisionAudio;
         data.damageDecalAlbedo = comp.damageDecalAlbedo;
         data.damageDecalNormal = comp.damageDecalNormal;
+        data.decalHalfExtents = comp.decalHalfExtents;
         return data;
     }
 
@@ -1035,6 +1036,7 @@ namespace services
         comp.fragmentCollisionAudio = data.fragmentCollisionAudio;
         comp.damageDecalAlbedo = data.damageDecalAlbedo;
         comp.damageDecalNormal = data.damageDecalNormal;
+        comp.decalHalfExtents = data.decalHalfExtents;
         return true;
     }
 }

@@ -93,6 +93,7 @@ namespace services
                 if (n.currentMode == services::EditorMode::Edit)
                 {
                     debrisManager->reset();
+                    effectsManager->reset();
                     propagationManager->reset();
                     frameNumber = 0;
                 }

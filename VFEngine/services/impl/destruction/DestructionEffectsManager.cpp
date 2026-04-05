@@ -59,7 +59,7 @@ namespace services
         if (destructible.damageDecalAlbedo.isValid())
         {
             spawnDamageDecal(destructible.damageDecalAlbedo, destructible.damageDecalNormal,
-                            impactPoint, impactDir);
+                            impactPoint, impactDir, destructible.decalHalfExtents);
         }
     }
 
@@ -151,6 +151,66 @@ namespace services
             collisionSoundTimer -= 1.0f;
             collisionSoundsThisSecond = 0;
         }
+
+        auto& dispatcher = ::events::EventDispatcher::instance();
+
+        // Clean up expired decals
+        for (auto it = timedDecals.begin(); it != timedDecals.end();)
+        {
+            it->remaining -= deltaTime;
+            if (it->remaining <= 0.0f)
+            {
+                ::events::scene::DeleteEntityCommand deleteCmd;
+                deleteCmd.entity = it->entity;
+                dispatcher.execute(deleteCmd);
+                it = timedDecals.erase(it);
+            }
+            else
+            {
+                ++it;
+            }
+        }
+
+        // Clean up expired VFX instances
+        for (auto it = timedVFXInstances.begin(); it != timedVFXInstances.end();)
+        {
+            it->remaining -= deltaTime;
+            if (it->remaining <= 0.0f)
+            {
+                ::services::events::vfxruntime::DestroyVFXInstanceCommand destroyCmd;
+                destroyCmd.instanceId = it->instanceId;
+                dispatcher.execute(destroyCmd);
+                it = timedVFXInstances.erase(it);
+            }
+            else
+            {
+                ++it;
+            }
+        }
+    }
+
+    void DestructionEffectsManager::reset()
+    {
+        auto& dispatcher = ::events::EventDispatcher::instance();
+
+        for (const auto& decal : timedDecals)
+        {
+            ::events::scene::DeleteEntityCommand deleteCmd;
+            deleteCmd.entity = decal.entity;
+            dispatcher.execute(deleteCmd);
+        }
+        timedDecals.clear();
+
+        for (const auto& vfx : timedVFXInstances)
+        {
+            ::services::events::vfxruntime::DestroyVFXInstanceCommand destroyCmd;
+            destroyCmd.instanceId = vfx.instanceId;
+            dispatcher.execute(destroyCmd);
+        }
+        timedVFXInstances.clear();
+
+        collisionSoundTimer = 0.0f;
+        collisionSoundsThisSecond = 0;
     }
 
     void DestructionEffectsManager::spawnVFX(const asset::AssetRef& vfxRef,
@@ -169,6 +229,8 @@ namespace services
         ::services::events::vfxruntime::PlayVFXInstanceCommand playCmd;
         playCmd.instanceId = instanceId;
         dispatcher.execute(playCmd);
+
+        timedVFXInstances.push_back({instanceId, config.vfxLifetime});
     }
 
     void DestructionEffectsManager::playSound3D(const asset::AssetRef& audioRef,
@@ -191,7 +253,8 @@ namespace services
     void DestructionEffectsManager::spawnDamageDecal(const asset::AssetRef& albedo,
                                                       const asset::AssetRef& normal,
                                                       const glm::vec3& impactPoint,
-                                                      const glm::vec3& impactDir)
+                                                      const glm::vec3& impactDir,
+                                                      float halfExtents)
     {
         auto& dispatcher = ::events::EventDispatcher::instance();
 
@@ -221,7 +284,9 @@ namespace services
         setCmd.entity = decalEntity;
         setCmd.decalData.albedoTextureRef = albedo;
         setCmd.decalData.normalTextureRef = normal;
-        setCmd.decalData.halfExtents = glm::vec3(config.decalHalfExtents, config.decalHalfExtents, 0.05f);
+        setCmd.decalData.halfExtents = glm::vec3(halfExtents, halfExtents, 0.05f);
         dispatcher.execute(setCmd);
+
+        timedDecals.push_back({decalEntity, config.decalLifetime});
     }
 }

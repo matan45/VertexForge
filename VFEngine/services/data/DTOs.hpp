@@ -679,5 +679,6 @@ namespace services
         asset::AssetRef fragmentCollisionAudio;
         asset::AssetRef damageDecalAlbedo;
         asset::AssetRef damageDecalNormal;
+        float decalHalfExtents = 0.3f;
     };
 }
