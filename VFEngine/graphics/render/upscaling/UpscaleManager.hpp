@@ -42,12 +42,6 @@ namespace render::upscaling
         VkFormat outputFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
         VkFormat reactiveFormat = VK_FORMAT_R8_UNORM;
 
-        // Ray Reconstruction inputs (optional, used when DLSS-D is active)
-        vk::Image noisyShadowImage;     // RGBA16F noisy shadow radiance + hit distance
-        vk::ImageView noisyShadowView;
-        vk::Image normalRoughnessImage; // RGBA16F normals (xyz) + roughness (w)
-        vk::ImageView normalRoughnessView;
-
         // Camera data required by Streamline common constants
         glm::mat4 viewMatrix{1.0f};
         glm::mat4 projectionMatrix{1.0f};
@@ -86,7 +80,6 @@ namespace render::upscaling
         bool isDLSSSupported() const { return dlssSupported; }
         bool isDirectSRSupported() const { return directSRSupported; }
         bool isDLSSGSupported() const { return dlssGSupported; }
-        bool isDLSSDSupported() const { return dlssDSupported; }
 
         /// Frame Generation (DLSS 3.x)
         void applyFrameGenSettings(const ::postprocess::FrameGenSettings& settings,
@@ -94,10 +87,6 @@ namespace render::upscaling
                                    uint32_t displayWidth, uint32_t displayHeight,
                                    uint32_t renderWidth, uint32_t renderHeight);
         bool isFrameGenActive() const { return frameGenActive; }
-
-        /// Ray Reconstruction (DLSS 3.5 / DLSS-D)
-        void applyRayReconstructionSettings(bool enabled, uint32_t outputWidth, uint32_t outputHeight);
-        bool isRayReconstructionActive() const { return rayReconstructionActive; }
 
         /// Reflex (required for Frame Gen)
         void enableReflex();
@@ -132,7 +121,6 @@ namespace render::upscaling
         static bool isStreamlineAvailable() { return streamlineAvailable; }
         static bool isDLSSAvailable() { return instance && instance->dlssSupported; }
         static bool isDLSSGAvailable() { return instance && instance->dlssGSupported; }
-        static bool isDLSSDAvailable() { return instance && instance->dlssDSupported; }
         static bool isDirectSRAvailable() { return instance && instance->directSRSupported; }
         static const UpscaleManager* getInstance() { return instance; }
 
@@ -142,11 +130,9 @@ namespace render::upscaling
         ::postprocess::UpscaleMode activeMode = ::postprocess::UpscaleMode::Off;
         bool dlssSupported = false;
         bool dlssGSupported = false;
-        bool dlssDSupported = false;
         bool directSRSupported = false;
         bool deviceSet = false;
         bool frameGenActive = false;
-        bool rayReconstructionActive = false;
         bool reflexEnabled = false;
 
         static inline bool streamlineAvailable = false;

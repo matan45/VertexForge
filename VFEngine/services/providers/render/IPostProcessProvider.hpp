@@ -15,9 +15,7 @@ namespace services
         uint32_t displayWidth = 0;
         uint32_t displayHeight = 0;
         bool dlssGSupported = false;
-        bool dlssDSupported = false;
         bool frameGenActive = false;
-        bool rayReconstructionActive = false;
     };
 
     class IPostProcessProvider

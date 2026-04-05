@@ -259,12 +259,6 @@ namespace controllers
             auto displayExtent = swapChain.getDisplayExtent();
             upscaleManager->applySettings(settings.upscale, displayExtent.width, displayExtent.height);
 
-            // Apply Ray Reconstruction settings
-            if (settings.upscale.enabled && settings.upscale.rayReconstruction)
-                upscaleManager->applyRayReconstructionSettings(true, displayExtent.width, displayExtent.height);
-            else if (upscaleManager->isRayReconstructionActive())
-                upscaleManager->applyRayReconstructionSettings(false, 0, 0);
-
             bool isActive = upscaleManager->isActive();
             auto newQuality = upscaleManager->getResolutionManager().getQualityMode();
 

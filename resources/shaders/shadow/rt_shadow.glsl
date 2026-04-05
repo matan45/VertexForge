@@ -17,8 +17,8 @@ layout(std140, set = 1, binding = 2) uniform RTShadowParams {
     vec4 cameraPosition;    // xyz = camera pos, w = far plane
 };
 
-// Set 2: Output — RGBA16F: RGB = shadow radiance, A = normalized hit distance
-layout(set = 2, binding = 0, rgba16f) uniform image2D shadowMask;
+// Set 2: Output
+layout(set = 2, binding = 0, r8) uniform image2D shadowMask;
 
 // Push constants
 layout(push_constant) uniform PushConstants {
@@ -72,13 +72,9 @@ void main() {
     while (rayQueryProceedEXT(rq)) {}
 
     float shadow = 1.0; // fully lit
-    float hitDistance = tMax; // miss = max distance
     if (rayQueryGetIntersectionTypeEXT(rq, true) == gl_RayQueryCommittedIntersectionTriangleEXT) {
         shadow = 0.0; // occluded
-        hitDistance = rayQueryGetIntersectionTEXT(rq, true);
     }
 
-    // RGB = shadow radiance (1=lit, 0=shadowed), A = normalized hit distance
-    float normalizedHitDist = hitDistance / tMax;
-    imageStore(shadowMask, pixel, vec4(shadow, shadow, shadow, normalizedHitDist));
+    imageStore(shadowMask, pixel, vec4(shadow));
 }

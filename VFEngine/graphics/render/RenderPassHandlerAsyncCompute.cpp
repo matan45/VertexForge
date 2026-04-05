@@ -12,8 +12,6 @@
 #include "ui/UIRenderPipeline.hpp"
 #include "ui/UITextPipeline.hpp"
 #include "occlusion/CameraOcclusionManager.hpp"
-#include "occlusion/DepthPrepass.hpp"
-#include "raytracing/RTShadowPipeline.hpp"
 #include "gpudriven/GPUDrivenRenderer.hpp"
 #include "gpudriven/terrain/TerrainRaycastPipeline.hpp"
 #include "postprocess/PostProcessPipeline.hpp"
@@ -426,26 +424,6 @@ namespace render
         inputs.cameraPosition = currentCameraPosition;
         inputs.nearPlane = currentNearPlane;
         inputs.farPlane = currentFarPlane;
-
-        // Pass RT shadow and normal data for Ray Reconstruction (DLSS-D)
-        if (upscaleManager->isRayReconstructionActive() && gpuDrivenRendererInitialized && gpuDrivenRenderer)
-        {
-            if (gpuDrivenRenderer->isRTShadowReady())
-            {
-                auto* rtShadow = gpuDrivenRenderer->getRTShadowPipeline();
-                if (rtShadow)
-                {
-                    inputs.noisyShadowImage = rtShadow->getShadowMaskImage();
-                    inputs.noisyShadowView = rtShadow->getShadowMaskImageView();
-                }
-            }
-            auto* depthPrepass = gpuDrivenRenderer->getDepthPrepass();
-            if (depthPrepass && depthPrepass->isInitialized())
-            {
-                inputs.normalRoughnessImage = depthPrepass->getNormalImage();
-                inputs.normalRoughnessView = depthPrepass->getNormalImageView();
-            }
-        }
 
         bool evaluateOk = upscaleManager->evaluate(commandBuffer, taaFrameIndex, inputs);
         if (evaluateOk)

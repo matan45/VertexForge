@@ -51,9 +51,7 @@ namespace core
             status.displayWidth = res.getDisplayWidth();
             status.displayHeight = res.getDisplayHeight();
             status.dlssGSupported = mgr->isDLSSGSupported();
-            status.dlssDSupported = mgr->isDLSSDSupported();
             status.frameGenActive = mgr->isFrameGenActive();
-            status.rayReconstructionActive = mgr->isRayReconstructionActive();
         }
         return status;
     }

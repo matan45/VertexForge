@@ -254,23 +254,6 @@ namespace windows
                         "Streamline SDK not available. Build Streamline first.");
                 }
 
-                if (settings.upscale.enabled)
-                {
-                    ImGui::Spacing();
-                    ImGui::SeparatorText("Ray Reconstruction (DLSS 3.5)");
-
-                    if (ImGui::Checkbox("Enable Ray Reconstruction", &settings.upscale.rayReconstruction))
-                        isDirty = true;
-
-                    ImGui::Text("DLSS-D: %s", status.dlssDSupported ? "Supported" : "Not Supported");
-                    ImGui::Text("Ray Reconstruction: %s", status.rayReconstructionActive ? "Active" : "Off");
-
-                    if (settings.upscale.rayReconstruction && !status.dlssDSupported)
-                    {
-                        ImGui::TextColored(ImVec4(0.9f, 0.3f, 0.3f, 1.0f),
-                            "Ray Reconstruction not supported on this GPU.");
-                    }
-                }
             }
 
             ImGui::Unindent(10.0f);
