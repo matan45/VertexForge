@@ -136,9 +136,6 @@ namespace render::preview
 
     void PreviewRenderHandler::recreate()
     {
-        iblRenderer->recreate();
-        clearColor->recreate();
-
         if (backgroundInitialized)
         {
             backgroundRenderer->recreate();

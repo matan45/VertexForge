@@ -60,7 +60,6 @@ namespace render
                                   const ibl::SkyboxTargetParams& target) const;
 
         void init(std::string_view path);
-        void recreate();
         void remove();
         void cleanUp();
 

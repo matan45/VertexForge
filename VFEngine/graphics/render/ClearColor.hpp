@@ -28,7 +28,6 @@ namespace render
         ~ClearColor() = default;
 
         void init();
-        void recreate();
         void cleanUp() const;
 
         const glm::vec4& getClearColor() const { return clearColorValue; }

@@ -43,7 +43,6 @@ namespace render::ibl
         ~SkyboxRenderer() = default;
 
         void init(const ImageData& irradianceCube);
-        void recreate();
         void cleanUp();
         void cleanUpShader();
 

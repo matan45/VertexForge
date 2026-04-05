@@ -63,11 +63,6 @@ namespace render
         iblInitialized = true;
     }
 
-    void IBL::recreate()
-    {
-        skyboxRenderer->recreate();
-    }
-
     void IBL::remove()
     {
         if (iblInitialized)

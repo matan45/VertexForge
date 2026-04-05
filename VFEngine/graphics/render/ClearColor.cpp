@@ -17,10 +17,6 @@ namespace render
     {
     }
 
-    void ClearColor::recreate()
-    {
-    }
-
     void ClearColor::cleanUp() const
     {
     }

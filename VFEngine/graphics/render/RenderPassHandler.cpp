@@ -163,9 +163,6 @@ namespace render
 
     void RenderPassHandler::recreate()
     {
-        iblRenderer->recreate();
-        clearColor->recreate();
-
         if (meshPipelineInitialized)
         {
             meshPipeline->recreate();
