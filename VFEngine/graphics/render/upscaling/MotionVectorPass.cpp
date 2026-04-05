@@ -81,9 +81,21 @@ namespace render::upscaling
         bindings[1] = {1, vk::DescriptorType::eUniformBuffer, 1, vk::ShaderStageFlagBits::eCompute};
         bindings[2] = {2, vk::DescriptorType::eStorageImage, 1, vk::ShaderStageFlagBits::eCompute};
 
+        // Allow updating descriptors while bound to a pending command buffer
+        std::array<vk::DescriptorBindingFlags, 3> bindingFlags{};
+        bindingFlags[0] = vk::DescriptorBindingFlagBits::eUpdateAfterBind;
+        bindingFlags[1] = vk::DescriptorBindingFlagBits::eUpdateAfterBind;
+        bindingFlags[2] = vk::DescriptorBindingFlagBits::eUpdateAfterBind;
+
+        vk::DescriptorSetLayoutBindingFlagsCreateInfo flagsInfo{};
+        flagsInfo.bindingCount = static_cast<uint32_t>(bindingFlags.size());
+        flagsInfo.pBindingFlags = bindingFlags.data();
+
         vk::DescriptorSetLayoutCreateInfo layoutInfo{};
+        layoutInfo.flags = vk::DescriptorSetLayoutCreateFlagBits::eUpdateAfterBindPool;
         layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
         layoutInfo.pBindings = bindings.data();
+        layoutInfo.pNext = &flagsInfo;
         descriptorSetLayout = vkDevice.createDescriptorSetLayout(layoutInfo);
     }
 
@@ -97,6 +109,7 @@ namespace render::upscaling
         poolSizes[2] = {vk::DescriptorType::eStorageImage, core::MAX_FRAMES_IN_FLIGHT};
 
         vk::DescriptorPoolCreateInfo poolInfo{};
+        poolInfo.flags = vk::DescriptorPoolCreateFlagBits::eUpdateAfterBind;
         poolInfo.maxSets = core::MAX_FRAMES_IN_FLIGHT;
         poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
         poolInfo.pPoolSizes = poolSizes.data();

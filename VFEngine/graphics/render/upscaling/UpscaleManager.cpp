@@ -520,7 +520,7 @@ namespace render::upscaling
     void UpscaleManager::enableReflex()
     {
 #ifdef VF_STREAMLINE_ENABLED
-        if (!streamlineAvailable) return;
+        if (!streamlineAvailable || !deviceSet) return;
 
         sl::ReflexOptions options{};
         options.mode = sl::ReflexMode::eLowLatency;

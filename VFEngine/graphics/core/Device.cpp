@@ -48,8 +48,10 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
     if (pCallbackData->pMessageIdName)
     {
         std::string_view vuid(pCallbackData->pMessageIdName);
+        // Streamline DLSS-G fake-swapchain-buffer format/usage mismatches (SRGB vs UNORM, STORAGE_IMAGE)
         if (vuid == "VUID-VkImageViewCreateInfo-usage-02275" ||
             vuid == "VUID-VkImageViewCreateInfo-image-01762" ||
+            // Streamline injects VK_EXT_buffer_device_address which conflicts with Vulkan 1.2 core
             vuid == "VUID-VkDeviceCreateInfo-pNext-04748" ||
             vuid == "VUID-vkCmdBindDescriptorSets-pDescriptorSets-parameter" ||
             vuid == "VUID-vkCmdBindDescriptorSets-pDescriptorSets-06563" ||
@@ -388,6 +390,7 @@ namespace core
         vulkan12Features.descriptorBindingVariableDescriptorCount = VK_TRUE;
         vulkan12Features.descriptorBindingSampledImageUpdateAfterBind = VK_TRUE;
         vulkan12Features.descriptorBindingStorageBufferUpdateAfterBind = VK_TRUE;
+        vulkan12Features.descriptorBindingStorageImageUpdateAfterBind = VK_TRUE;
         vulkan12Features.descriptorBindingUniformBufferUpdateAfterBind = VK_TRUE;
         // Required for acceleration structures.
         // Note: Streamline injects VK_EXT_buffer_device_address which technically conflicts

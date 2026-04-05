@@ -123,20 +123,31 @@ namespace render::raytracing
     {
         if (!entry.blas && !entry.buffer) return;
 
-        auto* dq = deletionQueue ? deletionQueue : core::RenderManager::getGlobalDeletionQueue();
+        // Decrement budget synchronously (safe — budget is an estimate, not GPU-critical)
+        if (entry.buffer)
+        {
+            memoryBudget.blasTotalBytes -= entry.size;
+            memoryBudget.blasCount--;
+        }
+
+        auto* dq = deletionQueue;
+        if (!dq)
+        {
+            dq = core::RenderManager::getGlobalDeletionQueue();
+            if (!dq)
+                vfLogWarning("AccelerationStructureManager: No deletion queue available, using immediate destroy");
+        }
+
         if (dq)
         {
             vk::AccelerationStructureKHR blas = entry.blas;
             vk::Buffer buffer = entry.buffer;
             core::VulkanAllocation allocation = entry.allocation;
-            vk::DeviceSize size = entry.size;
-            auto& memMgr = device.getMemoryManager();
+            core::VulkanMemoryManager* memMgr = &device.getMemoryManager();
 
-            dq->queueCustom([blas, buffer, allocation, size, &memMgr, this](vk::Device dev) mutable {
+            dq->queueCustom([blas, buffer, allocation, memMgr](vk::Device dev) mutable {
                 if (blas) dev.destroyAccelerationStructureKHR(blas);
-                if (buffer) core::BufferUtilities::destroyBuffer(dev, buffer, allocation, memMgr);
-                memoryBudget.blasTotalBytes -= size;
-                memoryBudget.blasCount--;
+                if (buffer) core::BufferUtilities::destroyBuffer(dev, buffer, allocation, *memMgr);
             });
         }
         else
@@ -171,10 +182,10 @@ namespace render::raytracing
         auto* dq = deletionQueue ? deletionQueue : core::RenderManager::getGlobalDeletionQueue();
         if (dq)
         {
-            auto& memMgr = device.getMemoryManager();
-            dq->queueCustom([oldTlas, oldBuffer, oldAlloc, &memMgr](vk::Device dev) mutable {
+            core::VulkanMemoryManager* memMgr = &device.getMemoryManager();
+            dq->queueCustom([oldTlas, oldBuffer, oldAlloc, memMgr](vk::Device dev) mutable {
                 if (oldTlas) dev.destroyAccelerationStructureKHR(oldTlas);
-                if (oldBuffer) core::BufferUtilities::destroyBuffer(dev, oldBuffer, oldAlloc, memMgr);
+                if (oldBuffer) core::BufferUtilities::destroyBuffer(dev, oldBuffer, oldAlloc, *memMgr);
             });
         }
         else
@@ -636,9 +647,9 @@ namespace render::raytracing
             {
                 vk::Buffer oldBuf = instanceBuffer;
                 core::VulkanAllocation oldAlloc = instanceAllocation;
-                auto& memMgr = device.getMemoryManager();
-                dq->queueCustom([oldBuf, oldAlloc, &memMgr](vk::Device dev) mutable {
-                    core::BufferUtilities::destroyBuffer(dev, oldBuf, oldAlloc, memMgr);
+                core::VulkanMemoryManager* memMgr = &device.getMemoryManager();
+                dq->queueCustom([oldBuf, oldAlloc, memMgr](vk::Device dev) mutable {
+                    core::BufferUtilities::destroyBuffer(dev, oldBuf, oldAlloc, *memMgr);
                 });
             }
             else
@@ -675,9 +686,9 @@ namespace render::raytracing
             {
                 vk::Buffer oldBuf = staging.buffer;
                 core::VulkanAllocation oldAlloc = staging.allocation;
-                auto& memMgr = device.getMemoryManager();
-                dq->queueCustom([oldBuf, oldAlloc, &memMgr](vk::Device dev) mutable {
-                    core::BufferUtilities::destroyBuffer(dev, oldBuf, oldAlloc, memMgr);
+                core::VulkanMemoryManager* memMgr = &device.getMemoryManager();
+                dq->queueCustom([oldBuf, oldAlloc, memMgr](vk::Device dev) mutable {
+                    core::BufferUtilities::destroyBuffer(dev, oldBuf, oldAlloc, *memMgr);
                 });
                 staging.buffer = nullptr;
                 staging.allocation = {};
@@ -711,9 +722,9 @@ namespace render::raytracing
             {
                 vk::Buffer oldBuf = tlasScratchBuffer;
                 core::VulkanAllocation oldAlloc = tlasScratchAllocation;
-                auto& memMgr = device.getMemoryManager();
-                dq->queueCustom([oldBuf, oldAlloc, &memMgr](vk::Device dev) mutable {
-                    core::BufferUtilities::destroyBuffer(dev, oldBuf, oldAlloc, memMgr);
+                core::VulkanMemoryManager* memMgr = &device.getMemoryManager();
+                dq->queueCustom([oldBuf, oldAlloc, memMgr](vk::Device dev) mutable {
+                    core::BufferUtilities::destroyBuffer(dev, oldBuf, oldAlloc, *memMgr);
                 });
                 tlasScratchBuffer = nullptr;
                 tlasScratchAllocation = {};
