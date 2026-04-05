@@ -29,15 +29,9 @@ namespace render
     {
         core::ImageUtilities::transitionImageLayout(commandBuffer,
             offscreenResources.colorImages[imageIndex].colorImage,
-            vk::ImageLayout::eUndefined,
+            vk::ImageLayout::eShaderReadOnlyOptimal,
             vk::ImageLayout::eColorAttachmentOptimal,
             vk::ImageAspectFlagBits::eColor);
-
-        core::ImageUtilities::transitionImageLayout(commandBuffer,
-            offscreenResources.depthImage.depthImage,
-            vk::ImageLayout::eUndefined,
-            vk::ImageLayout::eDepthStencilAttachmentOptimal,
-            vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil);
 
         auto colorAttach = core::colorClear(
             offscreenResources.colorImages[imageIndex].colorImageView,

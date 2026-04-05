@@ -2,6 +2,7 @@
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
 #include "../../core/DynamicRenderingHelpers.hpp"
+#include "../../core/ImageUtilities.hpp"
 
 namespace render::preview
 {
@@ -48,8 +49,14 @@ namespace render::preview
     {
         if (!initialized || !visible) return;
 
+        vk::Image colorImage = offscreenResources.colorImages[imageIndex].colorImage;
         vk::ImageView colorView = offscreenResources.colorImages[imageIndex].colorImageView;
         vk::ImageView depthView = offscreenResources.depthImage.depthImageView;
+
+        core::ImageUtilities::transitionImageLayout(commandBuffer, colorImage,
+            vk::ImageLayout::eShaderReadOnlyOptimal,
+            vk::ImageLayout::eColorAttachmentOptimal,
+            vk::ImageAspectFlagBits::eColor);
 
         core::DynamicRenderingInfo renderingInfo{};
         renderingInfo.extent = swapChain.getSwapchainExtent();
@@ -59,5 +66,10 @@ namespace render::preview
         core::beginDynamicRendering(commandBuffer, renderingInfo);
         gridRenderer->render(commandBuffer, view, projection);
         core::endDynamicRendering(commandBuffer);
+
+        core::ImageUtilities::transitionImageLayout(commandBuffer, colorImage,
+            vk::ImageLayout::eColorAttachmentOptimal,
+            vk::ImageLayout::eShaderReadOnlyOptimal,
+            vk::ImageAspectFlagBits::eColor);
     }
 }

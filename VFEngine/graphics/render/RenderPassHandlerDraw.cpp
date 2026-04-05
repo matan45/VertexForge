@@ -219,6 +219,7 @@ namespace render
                 meshPipeline->beginVFXRenderPassGraphManaged(commandBuffer, imageIndex);
                 vfxRuntimeProvider->recordDrawCommands(commandBuffer);
                 meshPipeline->endRenderPassGraphManaged(commandBuffer, imageIndex);
+                meshPipeline->restoreDepthAfterVFX(commandBuffer);
             }
         }
         else if (hasVFX)
@@ -229,6 +230,7 @@ namespace render
             meshPipeline->beginVFXRenderPassGraphManaged(commandBuffer, imageIndex);
             vfxRuntimeProvider->recordDrawCommands(commandBuffer);
             meshPipeline->endRenderPassGraphManaged(commandBuffer, imageIndex);
+            meshPipeline->restoreDepthAfterVFX(commandBuffer);
         }
     }
 
@@ -291,6 +293,7 @@ namespace render
             meshPipeline->beginVFXRenderPassGraphManaged(commandBuffer, imageIndex);
             vfxRuntimeProvider->recordDrawCommands(commandBuffer);
             meshPipeline->endRenderPassGraphManaged(commandBuffer, imageIndex);
+            meshPipeline->restoreDepthAfterVFX(commandBuffer);
         }
     }
 

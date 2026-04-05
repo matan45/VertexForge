@@ -3,6 +3,7 @@
 #include "../../core/SwapChain.hpp"
 #include "../../core/Shader.hpp"
 #include "../../core/DynamicRenderingHelpers.hpp"
+#include "../../core/ImageUtilities.hpp"
 
 namespace render::preview
 {
@@ -137,7 +138,13 @@ namespace render::preview
     {
         if (!initialized) return;
 
+        vk::Image colorImage = offscreenResources.colorImages[imageIndex].colorImage;
         vk::ImageView colorView = offscreenResources.colorImages[imageIndex].colorImageView;
+
+        core::ImageUtilities::transitionImageLayout(commandBuffer, colorImage,
+            vk::ImageLayout::eShaderReadOnlyOptimal,
+            vk::ImageLayout::eColorAttachmentOptimal,
+            vk::ImageAspectFlagBits::eColor);
 
         core::DynamicRenderingInfo renderingInfo{};
         renderingInfo.extent = swapChain.getSwapchainExtent();
@@ -157,5 +164,10 @@ namespace render::preview
         commandBuffer.draw(3, 1, 0, 0); // Fullscreen triangle
 
         core::endDynamicRendering(commandBuffer);
+
+        core::ImageUtilities::transitionImageLayout(commandBuffer, colorImage,
+            vk::ImageLayout::eColorAttachmentOptimal,
+            vk::ImageLayout::eShaderReadOnlyOptimal,
+            vk::ImageAspectFlagBits::eColor);
     }
 }
