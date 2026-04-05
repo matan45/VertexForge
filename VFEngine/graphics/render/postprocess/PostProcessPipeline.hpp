@@ -114,6 +114,7 @@ namespace render::postprocess
 
         bool hasEnabledEffects() const;
         bool isInitialized() const { return initialized; }
+        std::optional<float> getComputedExposure() const { return autoExposureOverride; }
 
         vk::Format getColorFormat() const { return sceneColorFormat; }
         vk::DescriptorSetLayout getInputDescriptorSetLayout() const { return inputDescriptorSetLayout; }

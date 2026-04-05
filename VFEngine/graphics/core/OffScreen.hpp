@@ -51,6 +51,12 @@ namespace core {
 		vk::ImageView imageView;    // Depth-only sampled view
 	};
 
+	struct ExposureImage {
+		vk::Image image;
+		VulkanAllocation allocation;
+		vk::ImageView imageView;    // 1x1 R32_SFLOAT for Streamline exposure tag
+	};
+
 	struct OffscreenResources {
 		std::vector<core::ColorImage> colorImages;       // Scene color (render resolution)
 		std::vector<core::ColorImage> displayColorImages; // Display-res output (only when upscaling)
@@ -61,6 +67,7 @@ namespace core {
 		MotionVectorImage motionVectors;
 		ReactiveMaskImage reactiveMask;
 		UpscaleOutputImage upscaleOutput;
+		ExposureImage exposureImage;
 		bool upscaleResourcesCreated = false;
 
 		// Previous-frame depth copies for async compute motion vectors

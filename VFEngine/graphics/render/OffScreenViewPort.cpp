@@ -591,6 +591,28 @@ namespace render
                                  offscreenResources.upscaleOutput.imageView);
         }
 
+        // 1x1 exposure texture for Streamline exposure tag
+        {
+            core::ImageInfoRequest expInfo(device.getLogicalDevice(), device.getPhysicalDevice(),
+                1, 1, 1, 1,
+                vk::Format::eR32Sfloat,
+                vk::ImageTiling::eOptimal,
+                vk::ImageUsageFlagBits::eSampled |
+                vk::ImageUsageFlagBits::eTransferDst,
+                vk::MemoryPropertyFlagBits::eDeviceLocal);
+
+            core::ImageUtilities::createImage(expInfo,
+                offscreenResources.exposureImage.image,
+                offscreenResources.exposureImage.allocation,
+                device.getMemoryManager());
+
+            core::ImageViewInfoRequest expView(device.getLogicalDevice(),
+                offscreenResources.exposureImage.image,
+                vk::Format::eR32Sfloat, vk::ImageAspectFlagBits::eColor,
+                vk::ImageViewType::e2D, 1, 1);
+            core::ImageUtilities::createImageView(expView, offscreenResources.exposureImage.imageView);
+        }
+
         offscreenResources.upscaleResourcesCreated = true;
 
         // Create previous-frame depth copies for async compute motion vectors
@@ -624,6 +646,15 @@ namespace render
         if (offscreenResources.upscaleOutput.allocation)
             device.getMemoryManager().free(offscreenResources.upscaleOutput.allocation);
         offscreenResources.upscaleOutput = {};
+
+        // Exposure image
+        if (offscreenResources.exposureImage.imageView)
+            vkDevice.destroyImageView(offscreenResources.exposureImage.imageView);
+        if (offscreenResources.exposureImage.image)
+            vkDevice.destroyImage(offscreenResources.exposureImage.image);
+        if (offscreenResources.exposureImage.allocation)
+            device.getMemoryManager().free(offscreenResources.exposureImage.allocation);
+        offscreenResources.exposureImage = {};
 
         cleanupPrevFrameDepthResources();
 

@@ -419,6 +419,9 @@ namespace render
                      vk::Format depthFormat);
 
         postprocess::PostProcessPipeline* getPostProcessPipeline() const { return postProcessPipeline.get(); }
+        const glm::mat4& getPrevView() const { return prevView; }
+        const glm::mat4& getPrevProjection() const { return prevProjection; }
+        void resetUpscaleFirstFrame() { upscaleFirstFrame = true; }
 
         plugin::RenderHookHandle registerRenderHook(plugin::RenderPassHookPoint hookPoint,
                                                      plugin::RenderHookCallback callback);

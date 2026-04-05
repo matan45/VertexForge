@@ -115,6 +115,8 @@ namespace render::gpudriven
                 pushConstants.screenWidth = dispatchWidth;
                 pushConstants.screenHeight = dispatchHeight;
                 pushConstants.hiZMipLevels = prepassHiZMipLevels;
+                if (cameraBuffer)
+                    pushConstants.prevViewProjection = cameraBuffer->getPrevViewProjection();
 
                 cmd.pushConstants(
                     layout,

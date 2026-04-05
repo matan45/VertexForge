@@ -67,6 +67,7 @@ namespace render::gpudriven
 
         vk::Buffer getBuffer() const { return buffer; }
         const GPUCameraData& getData() const { return data; }
+        const glm::mat4& getPrevViewProjection() const { return storedPrevViewProjection; }
 
     private:
         static void extractFrustumPlanes(const glm::mat4& viewProjection, glm::vec4 planes[6]);

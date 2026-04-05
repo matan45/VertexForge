@@ -66,8 +66,8 @@ namespace render::upscaling
         };
 
         sl::Preferences prefs{};
-        prefs.showConsole = false;
-        prefs.logLevel = sl::LogLevel::eOff;
+        prefs.showConsole = true;
+        prefs.logLevel = sl::LogLevel::eVerbose;
         prefs.featuresToLoad = featuresToLoad;
         prefs.numFeaturesToLoad = static_cast<uint32_t>(std::size(featuresToLoad));
         prefs.engine = sl::EngineType::eCustom;
@@ -333,10 +333,10 @@ namespace render::upscaling
         // Set constants — all SL matrices are row-major, GLM is column-major
         sl::Constants constants{};
         constants.jitterOffset = {inputs.jitterOffset.x, inputs.jitterOffset.y};
-        constants.mvecScale = {1.0f / static_cast<float>(inputs.renderExtent.width),
-                               1.0f / static_cast<float>(inputs.renderExtent.height)};
+        constants.mvecScale = {static_cast<float>(inputs.renderExtent.width) / 2.0f,
+                               static_cast<float>(inputs.renderExtent.height) / 2.0f};
         constants.reset = inputs.resetAccumulation ? sl::Boolean::eTrue : sl::Boolean::eFalse;
-        constants.depthInverted = sl::Boolean::eTrue; // Reverse-Z
+        constants.depthInverted = sl::Boolean::eFalse; // Standard Z (near=0, far=1)
         constants.cameraPinholeOffset = {0.0f, 0.0f};
 
         // Camera matrices (must NOT contain jitter)
@@ -374,7 +374,7 @@ namespace render::upscaling
         slSetConstants(constants, *frameToken, viewport);
 
         // Tag resources
-        sl::ResourceTag tags[5]{};
+        sl::ResourceTag tags[7]{};
         uint32_t tagCount = 0;
 
         sl::Resource colorRes{sl::ResourceType::eTex2d, inputs.colorInput,
@@ -386,6 +386,10 @@ namespace render::upscaling
         colorRes.mipLevels = 1;
         colorRes.arrayLayers = 1;
         tags[tagCount++] = sl::ResourceTag{&colorRes, sl::kBufferTypeScalingInputColor,
+                                            sl::ResourceLifecycle::eOnlyValidNow, nullptr};
+
+        // HUDLessColor — same as color input since UI is composited after upscaling
+        tags[tagCount++] = sl::ResourceTag{&colorRes, sl::kBufferTypeHUDLessColor,
                                             sl::ResourceLifecycle::eOnlyValidNow, nullptr};
 
         sl::Resource depthRes{sl::ResourceType::eTex2d, inputs.depthInput,
@@ -432,6 +436,21 @@ namespace render::upscaling
             reactiveRes.mipLevels = 1;
             reactiveRes.arrayLayers = 1;
             tags[tagCount++] = sl::ResourceTag{&reactiveRes, sl::kBufferTypeTransparencyHint,
+                                                sl::ResourceLifecycle::eOnlyValidNow, nullptr};
+        }
+
+        sl::Resource exposureRes{};
+        if (inputs.exposureImage)
+        {
+            exposureRes = sl::Resource{sl::ResourceType::eTex2d, inputs.exposureImage,
+                                       nullptr, static_cast<VkImageView>(inputs.exposureView),
+                                       VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+            exposureRes.width = 1;
+            exposureRes.height = 1;
+            exposureRes.nativeFormat = VK_FORMAT_R32_SFLOAT;
+            exposureRes.mipLevels = 1;
+            exposureRes.arrayLayers = 1;
+            tags[tagCount++] = sl::ResourceTag{&exposureRes, sl::kBufferTypeExposure,
                                                 sl::ResourceLifecycle::eOnlyValidNow, nullptr};
         }
 

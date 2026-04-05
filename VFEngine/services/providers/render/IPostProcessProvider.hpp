@@ -14,6 +14,9 @@ namespace services
         uint32_t renderHeight = 0;
         uint32_t displayWidth = 0;
         uint32_t displayHeight = 0;
+        float jitterX = 0.0f;
+        float jitterY = 0.0f;
+        uint32_t taaFrameIndex = 0;
     };
 
     class IPostProcessProvider

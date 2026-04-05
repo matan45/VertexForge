@@ -625,6 +625,7 @@
     <None Include="..\..\resources\shaders\common\snow_accumulation.glsl" />
     <None Include="..\..\resources\shaders\common\volumetric_common.glsl" />
     <None Include="..\..\resources\shaders\common\wetness.glsl" />
+    <None Include="..\..\resources\shaders\debug\motion_vector_viz.glsl" />
     <None Include="..\..\resources\shaders\decal\decal.glsl" />
     <None Include="..\..\resources\shaders\depthprepass\frag_depth_prepass.glsl" />
     <None Include="..\..\resources\shaders\depthprepass\mesh_depth_prepass.glsl" />

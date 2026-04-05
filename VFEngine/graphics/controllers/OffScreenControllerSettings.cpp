@@ -258,6 +258,8 @@ namespace controllers
             // Always pass display extent so ResolutionManager computes render res correctly
             auto displayExtent = swapChain.getDisplayExtent();
             upscaleManager->applySettings(settings.upscale, displayExtent.width, displayExtent.height);
+            upscaleManager->setDebugMotionVectors(settings.upscale.debugMotionVectors);
+            upscaleManager->setDebugJitter(settings.upscale.debugJitter);
 
             bool isActive = upscaleManager->isActive();
             auto newQuality = upscaleManager->getResolutionManager().getQualityMode();
@@ -280,6 +282,10 @@ namespace controllers
                 device.getLogicalDevice().waitIdle();
                 offScreen->recreate();
                 offScreen->setUpscaleResourcesDirty(true);
+
+                // Reset temporal accumulation on next upscale frame
+                if (auto* rh = offScreen->getRenderPassHandler())
+                    rh->resetUpscaleFirstFrame();
 
                 // Re-apply DLSS options after recreation so Streamline refreshes its internal state
                 if (isActive)

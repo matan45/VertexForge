@@ -620,6 +620,7 @@ namespace render::mesh
         core::DynamicRenderingInfo info{};
         info.extent = swapChain.getSwapchainExtent();
         info.colorAttachments = { core::colorLoad(colorView) };
+
         info.depthAttachment = core::depthClear(depthView);
 
         core::beginDynamicRendering(commandBuffer, info);
@@ -633,12 +634,16 @@ namespace render::mesh
         auto colorAttach = core::colorLoad(colorView);
         auto depthAttach = core::depthClear(depthView);
 
+        std::vector<vk::RenderingAttachmentInfo> colorAttachments = { colorAttach };
+
+        // MRT motion vectors disabled for now — using fullscreen compute motion vector pass instead
+
         vk::RenderingInfo renderingInfo{};
         renderingInfo.renderArea.offset = vk::Offset2D{0, 0};
         renderingInfo.renderArea.extent = swapChain.getSwapchainExtent();
         renderingInfo.layerCount = 1;
-        renderingInfo.colorAttachmentCount = 1;
-        renderingInfo.pColorAttachments = &colorAttach;
+        renderingInfo.colorAttachmentCount = static_cast<uint32_t>(colorAttachments.size());
+        renderingInfo.pColorAttachments = colorAttachments.data();
         renderingInfo.pDepthAttachment = &depthAttach;
         renderingInfo.flags = vk::RenderingFlagBits::eContentsSecondaryCommandBuffers;
 
