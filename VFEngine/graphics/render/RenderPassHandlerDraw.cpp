@@ -79,6 +79,13 @@ namespace render
                                           {}, {}, {}, toColorAttach);
         }
 
+        // Transition scene depth: AttachmentOptimal -> ReadOnlyOptimal for depth sampling
+        core::ImageUtilities::transitionImageLayout(commandBuffer,
+            offscreenResources.depthImage.depthImage,
+            vk::ImageLayout::eDepthStencilAttachmentOptimal,
+            vk::ImageLayout::eDepthStencilReadOnlyOptimal,
+            vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil);
+
         auto colorAttach = core::colorClear(distortionResources->getDistortionView(),
             vk::ClearColorValue{std::array<float, 4>{0.0f, 0.0f, 0.0f, 0.0f}});
         auto depthAttach = core::depthReadOnly(distortionResources->getSceneDepthView());
@@ -100,6 +107,13 @@ namespace render
         vfxRuntimeProvider->recordDistortionDrawCommands(commandBuffer);
 
         core::endDynamicRendering(commandBuffer);
+
+        // Restore scene depth: ReadOnlyOptimal -> AttachmentOptimal
+        core::ImageUtilities::transitionImageLayout(commandBuffer,
+            offscreenResources.depthImage.depthImage,
+            vk::ImageLayout::eDepthStencilReadOnlyOptimal,
+            vk::ImageLayout::eDepthStencilAttachmentOptimal,
+            vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil);
 
         // Transition distortion image back: ColorAttachmentOptimal -> ShaderReadOnlyOptimal
         {

@@ -497,27 +497,11 @@ namespace render::mesh
 
     void StaticMeshPipeline::beginVFXRenderPass(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const
     {
-        // Transition depth from attachment-optimal to read-only for VFX sampling
-        vk::ImageMemoryBarrier depthBarrier{};
-        depthBarrier.oldLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
-        depthBarrier.newLayout = vk::ImageLayout::eDepthStencilReadOnlyOptimal;
-        depthBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        depthBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        depthBarrier.image = offscreenResources.depthImage.depthImage;
-        depthBarrier.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eDepth
-            | vk::ImageAspectFlagBits::eStencil;
-        depthBarrier.subresourceRange.baseMipLevel = 0;
-        depthBarrier.subresourceRange.levelCount = 1;
-        depthBarrier.subresourceRange.baseArrayLayer = 0;
-        depthBarrier.subresourceRange.layerCount = 1;
-        depthBarrier.srcAccessMask = vk::AccessFlagBits::eDepthStencilAttachmentWrite;
-        depthBarrier.dstAccessMask = vk::AccessFlagBits::eDepthStencilAttachmentRead
-            | vk::AccessFlagBits::eShaderRead;
-
-        commandBuffer.pipelineBarrier(
-            vk::PipelineStageFlagBits::eLateFragmentTests,
-            vk::PipelineStageFlagBits::eEarlyFragmentTests | vk::PipelineStageFlagBits::eFragmentShader,
-            {}, {}, {}, depthBarrier);
+        core::ImageUtilities::transitionImageLayout(commandBuffer,
+            offscreenResources.depthImage.depthImage,
+            vk::ImageLayout::eDepthStencilAttachmentOptimal,
+            vk::ImageLayout::eDepthStencilReadOnlyOptimal,
+            vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil);
 
         core::ImageUtilities::transitionImageLayout(commandBuffer,
             offscreenResources.colorImages[imageIndex].colorImage,
@@ -663,27 +647,11 @@ namespace render::mesh
 
     void StaticMeshPipeline::beginVFXRenderPassGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const
     {
-        // Depth transition is an internal intermediate — VFX needs to sample depth as read-only
-        vk::ImageMemoryBarrier depthBarrier{};
-        depthBarrier.oldLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
-        depthBarrier.newLayout = vk::ImageLayout::eDepthStencilReadOnlyOptimal;
-        depthBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        depthBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        depthBarrier.image = offscreenResources.depthImage.depthImage;
-        depthBarrier.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eDepth
-            | vk::ImageAspectFlagBits::eStencil;
-        depthBarrier.subresourceRange.baseMipLevel = 0;
-        depthBarrier.subresourceRange.levelCount = 1;
-        depthBarrier.subresourceRange.baseArrayLayer = 0;
-        depthBarrier.subresourceRange.layerCount = 1;
-        depthBarrier.srcAccessMask = vk::AccessFlagBits::eDepthStencilAttachmentWrite;
-        depthBarrier.dstAccessMask = vk::AccessFlagBits::eDepthStencilAttachmentRead
-            | vk::AccessFlagBits::eShaderRead;
-
-        commandBuffer.pipelineBarrier(
-            vk::PipelineStageFlagBits::eLateFragmentTests,
-            vk::PipelineStageFlagBits::eEarlyFragmentTests | vk::PipelineStageFlagBits::eFragmentShader,
-            {}, {}, {}, depthBarrier);
+        core::ImageUtilities::transitionImageLayout(commandBuffer,
+            offscreenResources.depthImage.depthImage,
+            vk::ImageLayout::eDepthStencilAttachmentOptimal,
+            vk::ImageLayout::eDepthStencilReadOnlyOptimal,
+            vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil);
 
         vk::ImageView colorView = offscreenResources.colorImages[imageIndex].colorImageView;
         vk::ImageView depthView = offscreenResources.depthImage.depthImageView;
@@ -698,26 +666,11 @@ namespace render::mesh
 
     void StaticMeshPipeline::restoreDepthAfterVFX(const vk::CommandBuffer& commandBuffer) const
     {
-        vk::ImageMemoryBarrier depthBarrier{};
-        depthBarrier.oldLayout = vk::ImageLayout::eDepthStencilReadOnlyOptimal;
-        depthBarrier.newLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
-        depthBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        depthBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        depthBarrier.image = offscreenResources.depthImage.depthImage;
-        depthBarrier.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eDepth
-            | vk::ImageAspectFlagBits::eStencil;
-        depthBarrier.subresourceRange.baseMipLevel = 0;
-        depthBarrier.subresourceRange.levelCount = 1;
-        depthBarrier.subresourceRange.baseArrayLayer = 0;
-        depthBarrier.subresourceRange.layerCount = 1;
-        depthBarrier.srcAccessMask = vk::AccessFlagBits::eDepthStencilAttachmentRead
-            | vk::AccessFlagBits::eShaderRead;
-        depthBarrier.dstAccessMask = vk::AccessFlagBits::eDepthStencilAttachmentWrite;
-
-        commandBuffer.pipelineBarrier(
-            vk::PipelineStageFlagBits::eEarlyFragmentTests | vk::PipelineStageFlagBits::eFragmentShader,
-            vk::PipelineStageFlagBits::eLateFragmentTests,
-            {}, {}, {}, depthBarrier);
+        core::ImageUtilities::transitionImageLayout(commandBuffer,
+            offscreenResources.depthImage.depthImage,
+            vk::ImageLayout::eDepthStencilReadOnlyOptimal,
+            vk::ImageLayout::eDepthStencilAttachmentOptimal,
+            vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil);
     }
 
     void StaticMeshPipeline::beginWaterContinuePassGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const

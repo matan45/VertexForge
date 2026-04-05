@@ -69,7 +69,7 @@ namespace core
         info.imageLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
         info.loadOp = vk::AttachmentLoadOp::eClear;
         info.storeOp = vk::AttachmentStoreOp::eStore;
-        info.clearValue.depthStencil = vk::ClearDepthStencilValue{0.0f, clearStencil};
+        info.clearValue.depthStencil = vk::ClearDepthStencilValue{1.0f, clearStencil};
         return info;
     }
 
@@ -91,6 +91,44 @@ namespace core
         info.loadOp = vk::AttachmentLoadOp::eLoad;
         info.storeOp = vk::AttachmentStoreOp::eNone;
         return info;
+    }
+
+    // --- Swapchain layout transitions (synchronization2) ---
+
+    inline void transitionSwapchainForRendering(vk::CommandBuffer cmd, vk::Image swapchainImage)
+    {
+        vk::ImageMemoryBarrier2 barrier{};
+        barrier.srcStageMask = vk::PipelineStageFlagBits2::eTopOfPipe;
+        barrier.srcAccessMask = {};
+        barrier.dstStageMask = vk::PipelineStageFlagBits2::eColorAttachmentOutput;
+        barrier.dstAccessMask = vk::AccessFlagBits2::eColorAttachmentWrite;
+        barrier.oldLayout = vk::ImageLayout::eUndefined;
+        barrier.newLayout = vk::ImageLayout::eColorAttachmentOptimal;
+        barrier.image = swapchainImage;
+        barrier.subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};
+
+        vk::DependencyInfo depInfo{};
+        depInfo.imageMemoryBarrierCount = 1;
+        depInfo.pImageMemoryBarriers = &barrier;
+        cmd.pipelineBarrier2KHR(depInfo);
+    }
+
+    inline void transitionSwapchainForPresent(vk::CommandBuffer cmd, vk::Image swapchainImage)
+    {
+        vk::ImageMemoryBarrier2 barrier{};
+        barrier.srcStageMask = vk::PipelineStageFlagBits2::eColorAttachmentOutput;
+        barrier.srcAccessMask = vk::AccessFlagBits2::eColorAttachmentWrite;
+        barrier.dstStageMask = vk::PipelineStageFlagBits2::eBottomOfPipe;
+        barrier.dstAccessMask = {};
+        barrier.oldLayout = vk::ImageLayout::eColorAttachmentOptimal;
+        barrier.newLayout = vk::ImageLayout::ePresentSrcKHR;
+        barrier.image = swapchainImage;
+        barrier.subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};
+
+        vk::DependencyInfo depInfo{};
+        depInfo.imageMemoryBarrierCount = 1;
+        depInfo.pImageMemoryBarriers = &barrier;
+        cmd.pipelineBarrier2KHR(depInfo);
     }
 
     // --- Dynamic rendering begin/end ---

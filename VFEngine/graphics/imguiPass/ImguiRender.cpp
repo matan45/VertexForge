@@ -7,7 +7,6 @@
 #include "../core/SwapChain.hpp"
 #include "../core/CommandPool.hpp"
 #include "../core/DynamicRenderingHelpers.hpp"
-#include "../core/ImageUtilities.hpp"
 #include "../window/Window.hpp"
 #include "../core/Utilities.hpp"
 #include "print/Log.hpp"
@@ -133,19 +132,9 @@ namespace imguiPass {
 
 	void ImguiRender::renderEmpty(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const
 	{
-		// Transition swapchain image: Undefined -> ColorAttachmentOptimal
-		vk::ImageMemoryBarrier barrier{};
-		barrier.oldLayout = vk::ImageLayout::eUndefined;
-		barrier.newLayout = vk::ImageLayout::eColorAttachmentOptimal;
-		barrier.srcAccessMask = {};
-		barrier.dstAccessMask = vk::AccessFlagBits::eColorAttachmentWrite;
-		barrier.image = swapChain.getSwapchainImage(imageIndex);
-		barrier.subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};
+		vk::Image swapchainImage = swapChain.getSwapchainImage(imageIndex);
 
-		commandBuffer.pipelineBarrier(
-			vk::PipelineStageFlagBits::eTopOfPipe,
-			vk::PipelineStageFlagBits::eColorAttachmentOutput,
-			{}, {}, {}, barrier);
+		core::transitionSwapchainForRendering(commandBuffer, swapchainImage);
 
 		auto colorAttach = core::colorClear(swapChain.getSwapchainImageView(imageIndex),
 			vk::ClearColorValue{std::array<float, 4>{0.0f, 0.0f, 0.0f, 1.0f}});
@@ -157,16 +146,7 @@ namespace imguiPass {
 		core::beginDynamicRendering(commandBuffer, dynInfo);
 		core::endDynamicRendering(commandBuffer);
 
-		// Transition swapchain image: ColorAttachmentOptimal -> PresentSrcKHR
-		barrier.oldLayout = vk::ImageLayout::eColorAttachmentOptimal;
-		barrier.newLayout = vk::ImageLayout::ePresentSrcKHR;
-		barrier.srcAccessMask = vk::AccessFlagBits::eColorAttachmentWrite;
-		barrier.dstAccessMask = {};
-
-		commandBuffer.pipelineBarrier(
-			vk::PipelineStageFlagBits::eColorAttachmentOutput,
-			vk::PipelineStageFlagBits::eBottomOfPipe,
-			{}, {}, {}, barrier);
+		core::transitionSwapchainForPresent(commandBuffer, swapchainImage);
 	}
 
 	void ImguiRender::renderFromSnapshot(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex,
@@ -175,19 +155,9 @@ namespace imguiPass {
 		if (!snapshotDrawData)
 			return;
 
-		// Transition swapchain image: Undefined -> ColorAttachmentOptimal
-		vk::ImageMemoryBarrier barrier{};
-		barrier.oldLayout = vk::ImageLayout::eUndefined;
-		barrier.newLayout = vk::ImageLayout::eColorAttachmentOptimal;
-		barrier.srcAccessMask = {};
-		barrier.dstAccessMask = vk::AccessFlagBits::eColorAttachmentWrite;
-		barrier.image = swapChain.getSwapchainImage(imageIndex);
-		barrier.subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};
+		vk::Image swapchainImage = swapChain.getSwapchainImage(imageIndex);
 
-		commandBuffer.pipelineBarrier(
-			vk::PipelineStageFlagBits::eTopOfPipe,
-			vk::PipelineStageFlagBits::eColorAttachmentOutput,
-			{}, {}, {}, barrier);
+		core::transitionSwapchainForRendering(commandBuffer, swapchainImage);
 
 		auto colorAttach = core::colorClear(swapChain.getSwapchainImageView(imageIndex),
 			vk::ClearColorValue{std::array<float, 4>{0.0f, 0.0f, 0.0f, 0.0f}});
@@ -202,16 +172,7 @@ namespace imguiPass {
 
 		core::endDynamicRendering(commandBuffer);
 
-		// Transition swapchain image: ColorAttachmentOptimal -> PresentSrcKHR
-		barrier.oldLayout = vk::ImageLayout::eColorAttachmentOptimal;
-		barrier.newLayout = vk::ImageLayout::ePresentSrcKHR;
-		barrier.srcAccessMask = vk::AccessFlagBits::eColorAttachmentWrite;
-		barrier.dstAccessMask = {};
-
-		commandBuffer.pipelineBarrier(
-			vk::PipelineStageFlagBits::eColorAttachmentOutput,
-			vk::PipelineStageFlagBits::eBottomOfPipe,
-			{}, {}, {}, barrier);
+		core::transitionSwapchainForPresent(commandBuffer, swapchainImage);
 	}
 
 

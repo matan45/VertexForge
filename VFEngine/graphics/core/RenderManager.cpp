@@ -225,28 +225,32 @@ namespace core {
 			auto extent = swapChain.getSwapchainExtent();
 
 			// Transition offscreen image: ShaderReadOnly -> TransferSrc
-			vk::ImageMemoryBarrier srcBarrier{};
+			vk::ImageMemoryBarrier2 srcBarrier{};
+			srcBarrier.srcStageMask = vk::PipelineStageFlagBits2::eFragmentShader | vk::PipelineStageFlagBits2::eColorAttachmentOutput;
+			srcBarrier.srcAccessMask = vk::AccessFlagBits2::eShaderRead;
+			srcBarrier.dstStageMask = vk::PipelineStageFlagBits2::eTransfer;
+			srcBarrier.dstAccessMask = vk::AccessFlagBits2::eTransferRead;
 			srcBarrier.oldLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
 			srcBarrier.newLayout = vk::ImageLayout::eTransferSrcOptimal;
-			srcBarrier.srcAccessMask = vk::AccessFlagBits::eShaderRead;
-			srcBarrier.dstAccessMask = vk::AccessFlagBits::eTransferRead;
 			srcBarrier.image = srcImage;
 			srcBarrier.subresourceRange = { vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 };
 
 			// Transition swapchain image: Undefined -> TransferDst
-			vk::ImageMemoryBarrier dstBarrier{};
+			vk::ImageMemoryBarrier2 dstBarrier{};
+			dstBarrier.srcStageMask = vk::PipelineStageFlagBits2::eTopOfPipe;
+			dstBarrier.srcAccessMask = {};
+			dstBarrier.dstStageMask = vk::PipelineStageFlagBits2::eTransfer;
+			dstBarrier.dstAccessMask = vk::AccessFlagBits2::eTransferWrite;
 			dstBarrier.oldLayout = vk::ImageLayout::eUndefined;
 			dstBarrier.newLayout = vk::ImageLayout::eTransferDstOptimal;
-			dstBarrier.srcAccessMask = {};
-			dstBarrier.dstAccessMask = vk::AccessFlagBits::eTransferWrite;
 			dstBarrier.image = dstImage;
 			dstBarrier.subresourceRange = { vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 };
 
-			std::array<vk::ImageMemoryBarrier, 2> toTransferBarriers = { srcBarrier, dstBarrier };
-			commandBuffer.pipelineBarrier(
-				vk::PipelineStageFlagBits::eFragmentShader | vk::PipelineStageFlagBits::eColorAttachmentOutput,
-				vk::PipelineStageFlagBits::eTransfer,
-				{}, {}, {}, toTransferBarriers);
+			std::array<vk::ImageMemoryBarrier2, 2> toTransferBarriers = { srcBarrier, dstBarrier };
+			vk::DependencyInfo preBlit{};
+			preBlit.imageMemoryBarrierCount = static_cast<uint32_t>(toTransferBarriers.size());
+			preBlit.pImageMemoryBarriers = toTransferBarriers.data();
+			commandBuffer.pipelineBarrier2KHR(preBlit);
 
 			// Blit
 			vk::ImageBlit blitRegion{};
@@ -263,22 +267,26 @@ namespace core {
 				1, &blitRegion, vk::Filter::eLinear);
 
 			// Transition offscreen image back: TransferSrc -> ShaderReadOnly
+			srcBarrier.srcStageMask = vk::PipelineStageFlagBits2::eTransfer;
+			srcBarrier.srcAccessMask = vk::AccessFlagBits2::eTransferRead;
+			srcBarrier.dstStageMask = vk::PipelineStageFlagBits2::eFragmentShader;
+			srcBarrier.dstAccessMask = vk::AccessFlagBits2::eShaderRead;
 			srcBarrier.oldLayout = vk::ImageLayout::eTransferSrcOptimal;
 			srcBarrier.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-			srcBarrier.srcAccessMask = vk::AccessFlagBits::eTransferRead;
-			srcBarrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
 
 			// Transition swapchain image: TransferDst -> PresentSrc
+			dstBarrier.srcStageMask = vk::PipelineStageFlagBits2::eTransfer;
+			dstBarrier.srcAccessMask = vk::AccessFlagBits2::eTransferWrite;
+			dstBarrier.dstStageMask = vk::PipelineStageFlagBits2::eBottomOfPipe;
+			dstBarrier.dstAccessMask = {};
 			dstBarrier.oldLayout = vk::ImageLayout::eTransferDstOptimal;
 			dstBarrier.newLayout = vk::ImageLayout::ePresentSrcKHR;
-			dstBarrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
-			dstBarrier.dstAccessMask = {};
 
-			std::array<vk::ImageMemoryBarrier, 2> toPresentBarriers = { srcBarrier, dstBarrier };
-			commandBuffer.pipelineBarrier(
-				vk::PipelineStageFlagBits::eTransfer,
-				vk::PipelineStageFlagBits::eFragmentShader | vk::PipelineStageFlagBits::eBottomOfPipe,
-				{}, {}, {}, toPresentBarriers);
+			std::array<vk::ImageMemoryBarrier2, 2> toPresentBarriers = { srcBarrier, dstBarrier };
+			vk::DependencyInfo postBlit{};
+			postBlit.imageMemoryBarrierCount = static_cast<uint32_t>(toPresentBarriers.size());
+			postBlit.pImageMemoryBarriers = toPresentBarriers.data();
+			commandBuffer.pipelineBarrier2KHR(postBlit);
 		}
 		else
 		{
@@ -289,42 +297,21 @@ namespace core {
 	void RenderManager::drawPresentClear(const vk::CommandBuffer& commandBuffer, uint32_t imageIdx) const
 	{
 		// Fallback: clear swapchain image to magenta via dynamic rendering (debug: blit source not set)
-		auto extent = swapChain.getSwapchainExtent();
+		vk::Image swapchainImage = swapChain.getSwapchainImage(imageIdx);
 
-		// Transition swapchain image: Undefined -> ColorAttachmentOptimal
-		vk::ImageMemoryBarrier barrier{};
-		barrier.oldLayout = vk::ImageLayout::eUndefined;
-		barrier.newLayout = vk::ImageLayout::eColorAttachmentOptimal;
-		barrier.srcAccessMask = {};
-		barrier.dstAccessMask = vk::AccessFlagBits::eColorAttachmentWrite;
-		barrier.image = swapChain.getSwapchainImage(imageIdx);
-		barrier.subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};
+		transitionSwapchainForRendering(commandBuffer, swapchainImage);
 
-		commandBuffer.pipelineBarrier(
-			vk::PipelineStageFlagBits::eTopOfPipe,
-			vk::PipelineStageFlagBits::eColorAttachmentOutput,
-			{}, {}, {}, barrier);
-
-		auto colorAttach = core::colorClear(swapChain.getSwapchainImageView(imageIdx),
+		auto colorAttach = colorClear(swapChain.getSwapchainImageView(imageIdx),
 			vk::ClearColorValue{std::array<float, 4>{1.0f, 0.0f, 1.0f, 1.0f}});
 
-		core::DynamicRenderingInfo dynInfo{};
-		dynInfo.extent = extent;
+		DynamicRenderingInfo dynInfo{};
+		dynInfo.extent = swapChain.getSwapchainExtent();
 		dynInfo.colorAttachments = {colorAttach};
 
-		core::beginDynamicRendering(commandBuffer, dynInfo);
-		core::endDynamicRendering(commandBuffer);
+		beginDynamicRendering(commandBuffer, dynInfo);
+		endDynamicRendering(commandBuffer);
 
-		// Transition swapchain image: ColorAttachmentOptimal -> PresentSrcKHR
-		barrier.oldLayout = vk::ImageLayout::eColorAttachmentOptimal;
-		barrier.newLayout = vk::ImageLayout::ePresentSrcKHR;
-		barrier.srcAccessMask = vk::AccessFlagBits::eColorAttachmentWrite;
-		barrier.dstAccessMask = {};
-
-		commandBuffer.pipelineBarrier(
-			vk::PipelineStageFlagBits::eColorAttachmentOutput,
-			vk::PipelineStageFlagBits::eBottomOfPipe,
-			{}, {}, {}, barrier);
+		transitionSwapchainForPresent(commandBuffer, swapchainImage);
 	}
 
 	void RenderManager::present(uint32_t imgIndex)
