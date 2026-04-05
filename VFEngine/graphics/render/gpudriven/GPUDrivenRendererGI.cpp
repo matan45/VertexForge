@@ -2,6 +2,7 @@
 #include "../occlusion/DepthPrepass.hpp"
 #include "../../core/SwapChain.hpp"
 #include "../../core/Device.hpp"
+#include "../../core/RenderManager.hpp"
 #include "../../core/GraphicsConstants.hpp"
 #include "types/RenderSettings.hpp"
 #include "print/Log.hpp"
@@ -481,6 +482,8 @@ namespace render::gpudriven
 
         accelStructManager = std::make_unique<raytracing::AccelerationStructureManager>(device);
         accelStructManager->init();
+        if (core::RenderManager::getGlobalDeletionQueue())
+            accelStructManager->setDeletionQueue(core::RenderManager::getGlobalDeletionQueue());
 
         if (!accelStructManager->isInitialized())
         {
