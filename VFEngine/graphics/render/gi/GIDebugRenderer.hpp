@@ -36,7 +36,7 @@ namespace render::gi
         GIDebugRenderer(const GIDebugRenderer&) = delete;
         GIDebugRenderer& operator=(const GIDebugRenderer&) = delete;
 
-        void init(vk::RenderPass renderPass,
+        void init(vk::Format colorFormat, vk::Format depthFormat,
                   vk::DescriptorSetLayout probeDataLayout,
                   vk::DescriptorSetLayout cascadeInfoLayout);
         void cleanup();
@@ -61,6 +61,6 @@ namespace render::gi
         void loadShaders();
         void createPipelineLayout(vk::DescriptorSetLayout probeDataLayout,
                                   vk::DescriptorSetLayout cascadeInfoLayout);
-        void createPipeline(vk::RenderPass renderPass);
+        void createPipeline(vk::Format colorFormat, vk::Format depthFormat);
     };
 }

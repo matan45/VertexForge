@@ -57,12 +57,6 @@ namespace render::atmosphere
         cleanupGraphicsPipelines();
         cleanupComputePipelines();
 
-        cleanupSkyFramebuffers();
-        cleanupCompositeFramebuffers();
-
-        compositeRenderPass = nullptr;
-        if (skyRenderPass) { dev.destroyRenderPass(skyRenderPass); skyRenderPass = nullptr; }
-
         destroyImage(transmittanceImage, transmittanceAllocation, transmittanceView);
         destroyImage(multiScatterImage, multiScatterAllocation, multiScatterView);
         destroyImage(skyViewImage, skyViewAllocation, skyViewView);
@@ -216,26 +210,6 @@ namespace render::atmosphere
         if (view) { dev.destroyImageView(view); view = nullptr; }
         if (image) { dev.destroyImage(image); image = nullptr; }
         if (allocation.isValid()) { device.getMemoryManager().free(allocation); allocation = {}; }
-    }
-
-    void AtmospherePipeline::cleanupSkyFramebuffers()
-    {
-        auto& dev = device.getLogicalDevice();
-        for (auto& fb : skyFramebuffers)
-        {
-            if (fb) { dev.destroyFramebuffer(fb); fb = nullptr; }
-        }
-        skyFramebuffers.clear();
-    }
-
-    void AtmospherePipeline::cleanupCompositeFramebuffers()
-    {
-        auto& dev = device.getLogicalDevice();
-        for (auto& fb : compositeFramebuffers)
-        {
-            if (fb) { dev.destroyFramebuffer(fb); fb = nullptr; }
-        }
-        compositeFramebuffers.clear();
     }
 
     void AtmospherePipeline::cleanupComputePipelines()

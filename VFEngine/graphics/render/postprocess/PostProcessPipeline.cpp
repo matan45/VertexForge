@@ -18,6 +18,7 @@
 #include "../../core/ImageUtilities.hpp"
 #include "../../core/DeferredDeletionQueue.hpp"
 #include "../../core/RenderManager.hpp"
+#include "../../core/DynamicRenderingHelpers.hpp"
 #include <algorithm>
 
 namespace render::postprocess
@@ -91,12 +92,6 @@ namespace render::postprocess
 
         for (size_t i = 0; i < activeEffects.size(); ++i)
         {
-            vk::RenderPassBeginInfo rpBegin{};
-            rpBegin.renderPass = renderPass;
-            rpBegin.framebuffer = currentOutput->framebuffer;
-            rpBegin.renderArea.offset = vk::Offset2D{0, 0};
-            rpBegin.renderArea.extent = extent;
-
             activeEffects[i]->preRecord(commandBuffer, currentInputDescSet);
 
             if (activeEffects[i]->getType() == ::postprocess::EffectType::AutoExposure)
@@ -109,9 +104,22 @@ namespace render::postprocess
                 static_cast<ToneMappingEffect*>(activeEffects[i])->setExposureOverride(autoExposureOverride.value());
             }
 
-            commandBuffer.beginRenderPass(rpBegin, vk::SubpassContents::eInline);
+            core::ImageUtilities::transitionImageLayout(commandBuffer, currentOutput->image,
+                vk::ImageLayout::eUndefined, vk::ImageLayout::eColorAttachmentOptimal,
+                vk::ImageAspectFlagBits::eColor);
+
+            core::DynamicRenderingInfo dynInfo{};
+            dynInfo.extent = extent;
+            dynInfo.colorAttachments = {core::colorDontCare(currentOutput->imageView)};
+            core::beginDynamicRendering(commandBuffer, dynInfo);
+
             activeEffects[i]->record(commandBuffer, currentInputDescSet);
-            commandBuffer.endRenderPass();
+
+            core::endDynamicRendering(commandBuffer);
+
+            core::ImageUtilities::transitionImageLayout(commandBuffer, currentOutput->image,
+                vk::ImageLayout::eColorAttachmentOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
+                vk::ImageAspectFlagBits::eColor);
 
             if (outputIsA)
             {
@@ -186,20 +194,27 @@ namespace render::postprocess
 
         for (size_t i = 0; i < activeEffects.size(); ++i)
         {
-            vk::RenderPassBeginInfo rpBegin{};
-            rpBegin.renderPass = renderPass;
-            rpBegin.framebuffer = currentOutput->framebuffer;
-            rpBegin.renderArea.offset = vk::Offset2D{0, 0};
-            rpBegin.renderArea.extent = extent;
-
             activeEffects[i]->preRecord(commandBuffer, currentInputDescSet);
 
             if (activeEffects[i]->getType() == ::postprocess::EffectType::AutoExposure)
                 autoExposureOverride = static_cast<AutoExposureEffect*>(activeEffects[i])->getComputedExposure();
 
-            commandBuffer.beginRenderPass(rpBegin, vk::SubpassContents::eInline);
+            core::ImageUtilities::transitionImageLayout(commandBuffer, currentOutput->image,
+                vk::ImageLayout::eUndefined, vk::ImageLayout::eColorAttachmentOptimal,
+                vk::ImageAspectFlagBits::eColor);
+
+            core::DynamicRenderingInfo dynInfo{};
+            dynInfo.extent = extent;
+            dynInfo.colorAttachments = {core::colorDontCare(currentOutput->imageView)};
+            core::beginDynamicRendering(commandBuffer, dynInfo);
+
             activeEffects[i]->record(commandBuffer, currentInputDescSet);
-            commandBuffer.endRenderPass();
+
+            core::endDynamicRendering(commandBuffer);
+
+            core::ImageUtilities::transitionImageLayout(commandBuffer, currentOutput->image,
+                vk::ImageLayout::eColorAttachmentOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
+                vk::ImageAspectFlagBits::eColor);
 
             if (outputIsA)
             {
@@ -335,20 +350,27 @@ namespace render::postprocess
 
         for (size_t i = 0; i < activeEffects.size(); ++i)
         {
-            vk::RenderPassBeginInfo rpBegin{};
-            rpBegin.renderPass = renderPass;
-            rpBegin.framebuffer = currentOutput->framebuffer;
-            rpBegin.renderArea.offset = vk::Offset2D{0, 0};
-            rpBegin.renderArea.extent = displayExtent;
-
             activeEffects[i]->preRecord(commandBuffer, currentInputDescSet);
 
             if (activeEffects[i]->getType() == ::postprocess::EffectType::ToneMapping && autoExposureOverride.has_value())
                 static_cast<ToneMappingEffect*>(activeEffects[i])->setExposureOverride(autoExposureOverride.value());
 
-            commandBuffer.beginRenderPass(rpBegin, vk::SubpassContents::eInline);
+            core::ImageUtilities::transitionImageLayout(commandBuffer, currentOutput->image,
+                vk::ImageLayout::eUndefined, vk::ImageLayout::eColorAttachmentOptimal,
+                vk::ImageAspectFlagBits::eColor);
+
+            core::DynamicRenderingInfo dynInfo{};
+            dynInfo.extent = displayExtent;
+            dynInfo.colorAttachments = {core::colorDontCare(currentOutput->imageView)};
+            core::beginDynamicRendering(commandBuffer, dynInfo);
+
             activeEffects[i]->record(commandBuffer, currentInputDescSet);
-            commandBuffer.endRenderPass();
+
+            core::endDynamicRendering(commandBuffer);
+
+            core::ImageUtilities::transitionImageLayout(commandBuffer, currentOutput->image,
+                vk::ImageLayout::eColorAttachmentOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
+                vk::ImageAspectFlagBits::eColor);
 
             if (outputIsA)
             {
@@ -395,11 +417,11 @@ namespace render::postprocess
 
     void PostProcessPipeline::lazyInit()
     {
+        sceneColorFormat = swapChain.getSceneColorFormat();
+
         createSampler();
-        createRenderPass();
         createDescriptorSetLayout();
         createPingPongTargets();
-        createFramebuffers();
         createDescriptorPool();
         createDescriptorSets();
 
@@ -410,51 +432,11 @@ namespace render::postprocess
             if (!effect->isInitialized())
             {
                 auto ext = effect->isPreUpscale() ? renderExtent : displayExtent;
-                effect->init(renderPass, ext);
+                effect->init(sceneColorFormat, ext);
             }
         }
 
         initialized = true;
-    }
-
-    void PostProcessPipeline::createRenderPass()
-    {
-        vk::AttachmentDescription colorAttachment{};
-        colorAttachment.format = swapChain.getSceneColorFormat();
-        colorAttachment.samples = vk::SampleCountFlagBits::e1;
-        colorAttachment.loadOp = vk::AttachmentLoadOp::eDontCare;
-        colorAttachment.storeOp = vk::AttachmentStoreOp::eStore;
-        colorAttachment.stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
-        colorAttachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
-        colorAttachment.initialLayout = vk::ImageLayout::eUndefined;
-        colorAttachment.finalLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-
-        vk::AttachmentReference colorRef{};
-        colorRef.attachment = 0;
-        colorRef.layout = vk::ImageLayout::eColorAttachmentOptimal;
-
-        vk::SubpassDescription subpass{};
-        subpass.pipelineBindPoint = vk::PipelineBindPoint::eGraphics;
-        subpass.colorAttachmentCount = 1;
-        subpass.pColorAttachments = &colorRef;
-
-        vk::SubpassDependency dependency{};
-        dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
-        dependency.dstSubpass = 0;
-        dependency.srcStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
-        dependency.srcAccessMask = vk::AccessFlagBits::eColorAttachmentWrite;
-        dependency.dstStageMask = vk::PipelineStageFlagBits::eFragmentShader;
-        dependency.dstAccessMask = vk::AccessFlagBits::eShaderRead;
-
-        vk::RenderPassCreateInfo rpInfo{};
-        rpInfo.attachmentCount = 1;
-        rpInfo.pAttachments = &colorAttachment;
-        rpInfo.subpassCount = 1;
-        rpInfo.pSubpasses = &subpass;
-        rpInfo.dependencyCount = 1;
-        rpInfo.pDependencies = &dependency;
-
-        renderPass = device.getLogicalDevice().createRenderPass(rpInfo);
     }
 
     void PostProcessPipeline::createSampler()
@@ -522,35 +504,6 @@ namespace render::postprocess
             auto displayExtent = swapChain.getDisplayExtent();
             createTarget(displayTargetA, displayExtent);
             createTarget(displayTargetB, displayExtent);
-        }
-    }
-
-    void PostProcessPipeline::createFramebuffers()
-    {
-        auto extent = swapChain.getSwapchainExtent();
-
-        auto createFB = [&](PingPongTarget& target, vk::Extent2D fbExtent)
-        {
-            vk::FramebufferCreateInfo fbInfo{};
-            fbInfo.renderPass = renderPass;
-            fbInfo.attachmentCount = 1;
-            fbInfo.pAttachments = &target.imageView;
-            fbInfo.width = fbExtent.width;
-            fbInfo.height = fbExtent.height;
-            fbInfo.layers = 1;
-
-            target.framebuffer = device.getLogicalDevice().createFramebuffer(fbInfo);
-        };
-
-        createFB(targetA, extent);
-        createFB(targetB, extent);
-
-        auto* upscaleManager = device.getUpscaleManager();
-        if (upscaleManager && upscaleManager->isActive())
-        {
-            auto displayExtent = swapChain.getDisplayExtent();
-            createFB(displayTargetA, displayExtent);
-            createFB(displayTargetB, displayExtent);
         }
     }
 
@@ -641,7 +594,7 @@ namespace render::postprocess
         if (initialized && !ptr->isInitialized())
         {
             auto ext = ptr->isPreUpscale() ? swapChain.getSwapchainExtent() : swapChain.getDisplayExtent();
-            ptr->init(renderPass, ext);
+            ptr->init(sceneColorFormat, ext);
         }
     }
 
@@ -757,12 +710,6 @@ namespace render::postprocess
 
         auto& dev = device.getLogicalDevice();
 
-        dev.destroyFramebuffer(targetA.framebuffer);
-        dev.destroyFramebuffer(targetB.framebuffer);
-        if (displayTargetA.framebuffer) dev.destroyFramebuffer(displayTargetA.framebuffer);
-        if (displayTargetB.framebuffer) dev.destroyFramebuffer(displayTargetB.framebuffer);
-        displayTargetA.framebuffer = nullptr;
-        displayTargetB.framebuffer = nullptr;
         cleanupPingPongTargets();
 
         dev.destroyDescriptorPool(descriptorPool);
@@ -772,11 +719,9 @@ namespace render::postprocess
         displayDescriptorSetB = nullptr;
         sceneDescriptorSets.clear();
 
-        dev.destroyRenderPass(renderPass);
+        sceneColorFormat = swapChain.getSceneColorFormat();
 
-        createRenderPass();
         createPingPongTargets();
-        createFramebuffers();
         createDescriptorPool();
         createDescriptorSets();
 
@@ -787,7 +732,7 @@ namespace render::postprocess
             if (effect->isInitialized())
             {
                 auto ext = effect->isPreUpscale() ? renderExtent : displayExtent;
-                effect->recreate(renderPass, ext);
+                effect->recreate(sceneColorFormat, ext);
             }
         }
     }
@@ -805,13 +750,6 @@ namespace render::postprocess
                 effect->cleanup();
         }
 
-        dev.destroyFramebuffer(targetA.framebuffer);
-        dev.destroyFramebuffer(targetB.framebuffer);
-        if (displayTargetA.framebuffer) dev.destroyFramebuffer(displayTargetA.framebuffer);
-        if (displayTargetB.framebuffer) dev.destroyFramebuffer(displayTargetB.framebuffer);
-        displayTargetA.framebuffer = nullptr;
-        displayTargetB.framebuffer = nullptr;
-
         cleanupPingPongTargets();
 
         if (descriptorPool)
@@ -824,12 +762,6 @@ namespace render::postprocess
         {
             dev.destroyDescriptorSetLayout(inputDescriptorSetLayout);
             inputDescriptorSetLayout = nullptr;
-        }
-
-        if (renderPass)
-        {
-            dev.destroyRenderPass(renderPass);
-            renderPass = nullptr;
         }
 
         if (linearSampler)

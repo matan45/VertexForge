@@ -2,6 +2,8 @@
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
 #include "../../core/Shader.hpp"
+#include "../../core/DynamicRenderingHelpers.hpp"
+#include "../../core/ImageUtilities.hpp"
 
 namespace render::preview
 {
@@ -18,36 +20,22 @@ namespace render::preview
     void PreviewBackgroundRenderer::init()
     {
         loadShader();
-        createRenderPass();
-        createFramebuffers();
         createPipeline();
         initialized = true;
     }
 
     void PreviewBackgroundRenderer::recreate()
     {
-        for (auto fb : framebuffers)
-            device.getLogicalDevice().destroyFramebuffer(fb);
-        device.getLogicalDevice().destroyPipeline(pipeline);
-        device.getLogicalDevice().destroyPipelineLayout(pipelineLayout);
-        device.getLogicalDevice().destroyRenderPass(renderPass);
-
-        createRenderPass();
-        createFramebuffers();
-        createPipeline();
+        // With dynamic rendering, no render pass or framebuffers to recreate.
+        // Pipeline uses dynamic rendering formats and is format-compatible.
     }
 
     void PreviewBackgroundRenderer::cleanUp()
     {
         if (!initialized) return;
 
-        for (auto fb : framebuffers)
-            device.getLogicalDevice().destroyFramebuffer(fb);
-        framebuffers.clear();
-
         device.getLogicalDevice().destroyPipeline(pipeline);
         device.getLogicalDevice().destroyPipelineLayout(pipelineLayout);
-        device.getLogicalDevice().destroyRenderPass(renderPass);
 
         initialized = false;
     }
@@ -62,53 +50,6 @@ namespace render::preview
     {
         shader = std::make_shared<core::Shader>(device);
         shader->readShader("../../resources/shaders/preview/gradient_background.glsl");
-    }
-
-    void PreviewBackgroundRenderer::createRenderPass()
-    {
-        vk::AttachmentDescription colorAttachment{};
-        colorAttachment.format = swapChain.getSceneColorFormat();
-        colorAttachment.samples = vk::SampleCountFlagBits::e1;
-        colorAttachment.loadOp = vk::AttachmentLoadOp::eLoad;
-        colorAttachment.storeOp = vk::AttachmentStoreOp::eStore;
-        colorAttachment.stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
-        colorAttachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
-        colorAttachment.initialLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-        colorAttachment.finalLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-
-        vk::AttachmentReference colorAttachmentRef{};
-        colorAttachmentRef.attachment = 0;
-        colorAttachmentRef.layout = vk::ImageLayout::eColorAttachmentOptimal;
-
-        vk::SubpassDescription subpass{};
-        subpass.pipelineBindPoint = vk::PipelineBindPoint::eGraphics;
-        subpass.colorAttachmentCount = 1;
-        subpass.pColorAttachments = &colorAttachmentRef;
-
-        vk::RenderPassCreateInfo rpInfo{};
-        rpInfo.attachmentCount = 1;
-        rpInfo.pAttachments = &colorAttachment;
-        rpInfo.subpassCount = 1;
-        rpInfo.pSubpasses = &subpass;
-
-        renderPass = device.getLogicalDevice().createRenderPass(rpInfo);
-    }
-
-    void PreviewBackgroundRenderer::createFramebuffers()
-    {
-        framebuffers.resize(offscreenResources.colorImages.size());
-        for (uint32_t i = 0; i < framebuffers.size(); ++i)
-        {
-            vk::ImageView view = offscreenResources.colorImages[i].colorImageView;
-            vk::FramebufferCreateInfo fbInfo{};
-            fbInfo.renderPass = renderPass;
-            fbInfo.attachmentCount = 1;
-            fbInfo.pAttachments = &view;
-            fbInfo.width = swapChain.getSwapchainExtent().width;
-            fbInfo.height = swapChain.getSwapchainExtent().height;
-            fbInfo.layers = 1;
-            framebuffers[i] = device.getLogicalDevice().createFramebuffer(fbInfo);
-        }
     }
 
     void PreviewBackgroundRenderer::createPipeline()
@@ -181,7 +122,12 @@ namespace render::preview
         pipelineInfo.pColorBlendState = &colorBlending;
         pipelineInfo.pDepthStencilState = &depthStencil;
         pipelineInfo.layout = pipelineLayout;
-        pipelineInfo.renderPass = renderPass;
+
+        vk::Format colorFormat = swapChain.getSceneColorFormat();
+        vk::PipelineRenderingCreateInfo pipelineRenderingInfo{};
+        pipelineRenderingInfo.colorAttachmentCount = 1;
+        pipelineRenderingInfo.pColorAttachmentFormats = &colorFormat;
+        pipelineInfo.pNext = &pipelineRenderingInfo;
 
         auto result = device.getLogicalDevice().createGraphicsPipeline(nullptr, pipelineInfo);
         pipeline = result.value;
@@ -192,12 +138,19 @@ namespace render::preview
     {
         if (!initialized) return;
 
-        vk::RenderPassBeginInfo rpBegin{};
-        rpBegin.renderPass = renderPass;
-        rpBegin.framebuffer = framebuffers[imageIndex];
-        rpBegin.renderArea.extent = swapChain.getSwapchainExtent();
+        vk::Image colorImage = offscreenResources.colorImages[imageIndex].colorImage;
+        vk::ImageView colorView = offscreenResources.colorImages[imageIndex].colorImageView;
 
-        commandBuffer.beginRenderPass(rpBegin, vk::SubpassContents::eInline);
+        core::ImageUtilities::transitionImageLayout(commandBuffer, colorImage,
+            vk::ImageLayout::eShaderReadOnlyOptimal,
+            vk::ImageLayout::eColorAttachmentOptimal,
+            vk::ImageAspectFlagBits::eColor);
+
+        core::DynamicRenderingInfo renderingInfo{};
+        renderingInfo.extent = swapChain.getSwapchainExtent();
+        renderingInfo.colorAttachments = {core::colorLoad(colorView)};
+
+        core::beginDynamicRendering(commandBuffer, renderingInfo);
 
         commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline);
 
@@ -210,6 +163,11 @@ namespace render::preview
 
         commandBuffer.draw(3, 1, 0, 0); // Fullscreen triangle
 
-        commandBuffer.endRenderPass();
+        core::endDynamicRendering(commandBuffer);
+
+        core::ImageUtilities::transitionImageLayout(commandBuffer, colorImage,
+            vk::ImageLayout::eColorAttachmentOptimal,
+            vk::ImageLayout::eShaderReadOnlyOptimal,
+            vk::ImageAspectFlagBits::eColor);
     }
 }

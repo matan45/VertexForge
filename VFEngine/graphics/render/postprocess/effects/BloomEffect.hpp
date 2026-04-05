@@ -16,7 +16,6 @@ namespace render::postprocess
     struct BloomMipLevel
     {
         vk::ImageView imageView;
-        vk::Framebuffer framebuffer;
         vk::DescriptorSet descriptorSet;
         uint32_t width;
         uint32_t height;
@@ -31,9 +30,6 @@ namespace render::postprocess
         core::VulkanAllocation bloomAllocation;
         std::vector<BloomMipLevel> mipLevels;
         uint32_t mipCount = 0;
-
-        vk::RenderPass downsampleRenderPass;
-        vk::RenderPass upsampleRenderPass;
 
         std::shared_ptr<core::Shader> downsampleShader;
         std::shared_ptr<core::Shader> upsampleShader;
@@ -60,9 +56,9 @@ namespace render::postprocess
     public:
         explicit BloomEffect(core::Device& device);
 
-        void init(vk::RenderPass renderPass, vk::Extent2D extent) override;
+        void init(vk::Format colorFormat, vk::Extent2D extent) override;
         void cleanup() override;
-        void recreate(vk::RenderPass renderPass, vk::Extent2D extent) override;
+        void recreate(vk::Format colorFormat, vk::Extent2D extent) override;
 
         void preRecord(const vk::CommandBuffer& commandBuffer,
                        vk::DescriptorSet inputDescriptorSet) override;
@@ -77,14 +73,13 @@ namespace render::postprocess
 
     private:
         void createSampler();
-        void createRenderPasses();
         void createDescriptorSetLayout();
         void createMipChain();
         void createDescriptorPool();
         void createDescriptorSets();
         void loadShaders();
         void createBloomPipelines();
-        void createCompositePipeline(vk::RenderPass externalRenderPass);
+        void createCompositePipeline(vk::Format colorFormat);
 
         void cleanupMipChain();
         void cleanupPipelines();

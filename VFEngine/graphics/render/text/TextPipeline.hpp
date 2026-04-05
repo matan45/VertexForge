@@ -36,13 +36,10 @@ namespace render::text
 
         std::shared_ptr<core::Shader> textShader;
 
-        vk::RenderPass renderPass;
         vk::Pipeline graphicsPipeline;
         vk::PipelineLayout pipelineLayout;
         vk::DescriptorSetLayout descriptorSetLayout;
         vk::DescriptorPool descriptorPool;
-
-        std::vector<vk::Framebuffer> framebuffers;
 
         TextBufferManager bufferManager;
         TextFontCache fontCache;
@@ -73,6 +70,7 @@ namespace render::text
         void setTextDrawList(const std::vector<TextRenderData>& textEntities);
 
         void recordCommandBuffer(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
+        void recordCommandBufferGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
 
         bool isInitialized() const { return initialized; }
 
@@ -80,12 +78,10 @@ namespace render::text
 
     private:
         void loadShader();
-        void createRenderPass();
         void createDescriptorSetLayout();
         void createDescriptorPool();
         void createDefaultDescriptorSet();
         void createPipeline();
-        void createFramebuffers();
 
         void updateDescriptorSet(vk::DescriptorSet dstSet, vk::ImageView imageView, vk::Sampler sampler);
         vk::DescriptorSet getOrCreateFontDescriptorSet(const std::string& fontPath);

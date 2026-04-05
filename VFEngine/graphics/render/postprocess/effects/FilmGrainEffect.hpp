@@ -26,9 +26,9 @@ namespace render::postprocess
     public:
         explicit FilmGrainEffect(core::Device& device);
 
-        void init(vk::RenderPass renderPass, vk::Extent2D extent) override;
+        void init(vk::Format colorFormat, vk::Extent2D extent) override;
         void cleanup() override;
-        void recreate(vk::RenderPass renderPass, vk::Extent2D extent) override;
+        void recreate(vk::Format colorFormat, vk::Extent2D extent) override;
 
         void record(const vk::CommandBuffer& commandBuffer,
                     vk::DescriptorSet inputDescriptorSet) override;
@@ -42,6 +42,6 @@ namespace render::postprocess
     private:
         void loadShader();
         void createDescriptorSetLayout();
-        void createPipeline(vk::RenderPass renderPass, vk::Extent2D extent);
+        void createPipeline(vk::Format colorFormat, vk::Extent2D extent);
     };
 }

@@ -92,8 +92,6 @@ namespace render::atmosphere
         std::shared_ptr<core::Shader> aerialShader;
 
         // --- Sky Renderer (fullscreen graphics pass) ---
-        vk::RenderPass skyRenderPass;
-        std::vector<vk::Framebuffer> skyFramebuffers;
         vk::DescriptorSetLayout skyRendererDSLayout;
         vk::DescriptorPool skyRendererDSPool;
         vk::DescriptorSet skyRendererDS;
@@ -102,8 +100,6 @@ namespace render::atmosphere
         std::shared_ptr<core::Shader> skyRendererShader;
 
         // --- Aerial Perspective Composite (fullscreen graphics pass) ---
-        vk::RenderPass compositeRenderPass;
-        std::vector<vk::Framebuffer> compositeFramebuffers;
         vk::ImageView depthOnlyImageView;
         vk::DescriptorSetLayout compositeDSLayout;
         vk::DescriptorPool compositeDSPool;
@@ -174,6 +170,10 @@ namespace render::atmosphere
         // Apply aerial perspective composite
         void renderComposite(const vk::CommandBuffer& cmd, uint32_t imageIndex);
 
+        // Graph-managed variants (no layout transitions on scene color/depth)
+        void renderSkyGraphManaged(const vk::CommandBuffer& cmd, uint32_t imageIndex);
+        void renderCompositeGraphManaged(const vk::CommandBuffer& cmd, uint32_t imageIndex);
+
         void setEnabled(bool value) { enabled = value; }
         [[nodiscard]] bool isEnabled() const { return enabled && initialized; }
         [[nodiscard]] bool isInitialized() const { return initialized; }
@@ -205,13 +205,7 @@ namespace render::atmosphere
         void createComposite();
 
         void createDepthOnlyView();
-        void createSkyRenderPass();
-        void createSkyFramebuffers();
-        void createCompositeRenderPass();
-        void createCompositeFramebuffers();
 
-        void cleanupSkyFramebuffers();
-        void cleanupCompositeFramebuffers();
         void cleanupComputePipelines();
         void cleanupGraphicsPipelines();
     };

@@ -310,18 +310,15 @@ namespace render
         postProcessPipeline->execute(commandBuffer, imageIndex);
     }
 
-    void RenderPassHandler::executeUpscale(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex)
+    void RenderPassHandler::executeUpscaleGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex)
     {
         auto* upscaleManager = device.getUpscaleManager();
         if (!upscaleManager || !upscaleManager->isActive())
             return;
 
-        // Upscale resources are created by OffScreenViewPort::createUpscaleResources()
-        // during recreate(). If not ready yet (first frame before recreate), skip.
         if (!offscreenResources.upscaleResourcesCreated)
             return;
 
-        // Lazy-init motion vector pass
         if (!motionVectorPass)
         {
             motionVectorPass = std::make_unique<upscaling::MotionVectorPass>(device);
@@ -332,36 +329,22 @@ namespace render
         auto renderRes = resMgr.getRenderResolution();
         auto displayRes = resMgr.getDisplayResolution();
 
-        vk::ImageAspectFlags depthStencilAspect =
-            vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil;
+        // Depth transition handled by render graph (already in DepthStencilReadOnlyOptimal)
 
         if (asyncComputeActive && offscreenResources.prevFrameDepthCreated
             && motionVectorPass && motionVectorPass->isInitialized())
         {
-            // Motion vectors were computed on async compute queue using prev-frame depth.
-            // The timeline semaphore ensures the write is complete before this point.
-            // Transition depth to shader read for the upscaler (depth is still needed as input).
-            core::ImageUtilities::transitionImageLayout(commandBuffer,
-                offscreenResources.depthImage.depthImage,
-                vk::ImageLayout::eDepthStencilAttachmentOptimal,
-                vk::ImageLayout::eDepthStencilReadOnlyOptimal,
-                depthStencilAspect);
+            // Motion vectors computed on async compute queue — no depth transition needed
         }
         else
         {
-            // Fallback: dispatch motion vectors on graphics queue (original path)
+            // Fallback: dispatch motion vectors on graphics queue
             glm::mat4 viewProjection = currentProjection * currentView;
             glm::mat4 invVP = glm::inverse(viewProjection);
             glm::mat4 prevVP = prevProjection * prevView;
 
-            // Transition depth to shader read for the motion vector compute pass
-            core::ImageUtilities::transitionImageLayout(commandBuffer,
-                offscreenResources.depthImage.depthImage,
-                vk::ImageLayout::eDepthStencilAttachmentOptimal,
-                vk::ImageLayout::eDepthStencilReadOnlyOptimal,
-                depthStencilAspect);
+            // Depth already in DepthStencilReadOnlyOptimal via graph
 
-            // Dispatch motion vector compute pass
             motionVectorPass->dispatch(commandBuffer,
                 offscreenResources.depthImage.depthImageView,
                 offscreenResources.depthImage.depthImage,
@@ -372,24 +355,22 @@ namespace render
                 taaFrameIndex);
         }
 
-        // Transition upscale output to general for write
+        // Transition upscale output to general for write (internal resource)
         core::ImageUtilities::transitionImageLayout(commandBuffer,
             offscreenResources.upscaleOutput.image,
             vk::ImageLayout::eUndefined, vk::ImageLayout::eGeneral,
             vk::ImageAspectFlagBits::eColor);
 
-        // Camera cut detection: reset accumulation on large camera jumps or first frame
         bool resetAccum = upscaleFirstFrame;
         if (!upscaleFirstFrame)
         {
             glm::vec3 prevPos = glm::vec3(glm::inverse(prevView)[3]);
             float dist = glm::length(currentCameraPosition - prevPos);
-            if (dist > 10.0f) // threshold for teleport detection
+            if (dist > 10.0f)
                 resetAccum = true;
         }
         upscaleFirstFrame = false;
 
-        // Build upscale inputs
         vk::Image colorImage = offscreenResources.colorImages[imageIndex].colorImage;
 
         render::upscaling::UpscaleInputs inputs{};
@@ -413,12 +394,9 @@ namespace render
         inputs.nearPlane = currentNearPlane;
         inputs.farPlane = currentFarPlane;
 
-        // Try DLSS evaluate; fall back to bilinear blit if it fails
         bool evaluateOk = upscaleManager->evaluate(commandBuffer, taaFrameIndex, inputs);
         if (evaluateOk)
         {
-            // After DLSS evaluate, Streamline may leave the output in an unknown layout.
-            // Ensure it's in eGeneral for the post-process blit stage.
             core::ImageUtilities::transitionImageLayout(commandBuffer,
                 offscreenResources.upscaleOutput.image,
                 vk::ImageLayout::eUndefined, vk::ImageLayout::eGeneral,
@@ -426,7 +404,7 @@ namespace render
         }
         if (!evaluateOk)
         {
-            // Fallback: blit scene color (render-res) to upscale output (display-res)
+            // Fallback blit (internal intermediate transitions on scene color)
             core::ImageUtilities::transitionImageLayout(commandBuffer, colorImage,
                 vk::ImageLayout::eShaderReadOnlyOptimal, vk::ImageLayout::eTransferSrcOptimal,
                 vk::ImageAspectFlagBits::eColor);
@@ -450,12 +428,7 @@ namespace render
                 vk::ImageAspectFlagBits::eColor);
         }
 
-        // Transition depth back to attachment optimal
-        core::ImageUtilities::transitionImageLayout(commandBuffer,
-            offscreenResources.depthImage.depthImage,
-            vk::ImageLayout::eDepthStencilReadOnlyOptimal,
-            vk::ImageLayout::eDepthStencilAttachmentOptimal,
-            depthStencilAspect);
+        // Depth final state handled by render graph — no restoration needed
     }
 
     void RenderPassHandler::executePreUpscalePostProcess(const vk::CommandBuffer& commandBuffer,
@@ -542,15 +515,6 @@ namespace render
         }
     }
 
-    void RenderPassHandler::drawUIOverlays(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const
-    {
-        if (uiPipelineInitialized && !currentUIImageDrawList.empty())
-            uiPipeline->recordCommandBuffer(commandBuffer, imageIndex);
-
-        if (uiTextPipelineInitialized && !currentUITextDrawList.empty())
-            uiTextPipeline->recordCommandBuffer(commandBuffer, imageIndex);
-    }
-
     plugin::RenderHookHandle RenderPassHandler::registerRenderHook(
         plugin::RenderPassHookPoint hookPoint,
         plugin::RenderHookCallback callback)
@@ -588,7 +552,8 @@ namespace render
             auto extent = swapChain.getSwapchainExtent();
             ctx.viewportWidth    = extent.width;
             ctx.viewportHeight   = extent.height;
-            ctx.renderPass       = meshPipelineInitialized ? meshPipeline->getRenderPass() : vk::RenderPass{};
+            ctx.colorFormat      = swapChain.getSceneColorFormat();
+            ctx.depthFormat      = swapChain.getSwapchainDepthStencilFormat();
             ctx.device           = device.getLogicalDevice();
             ctx.viewMatrix       = currentView;
             ctx.projectionMatrix = currentProjection;

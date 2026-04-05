@@ -4,6 +4,7 @@
 #include "../../core/Shader.hpp"
 #include "../../core/OffScreen.hpp"
 #include "../../core/ImageUtilities.hpp"
+#include "../../core/DynamicRenderingHelpers.hpp"
 #include <cstring>
 
 #ifdef MemoryBarrier
@@ -81,17 +82,21 @@ namespace render::atmosphere
             vk::ImageLayout::eShaderReadOnlyOptimal, vk::ImageLayout::eColorAttachmentOptimal,
             vk::ImageAspectFlagBits::eColor);
 
-        vk::RenderPassBeginInfo rpBegin{};
-        rpBegin.renderPass = skyRenderPass;
-        rpBegin.framebuffer = skyFramebuffers[imageIndex];
-        rpBegin.renderArea.offset = vk::Offset2D{0, 0};
-        rpBegin.renderArea.extent = currentExtent;
+        auto colorAttach = core::colorLoad(offscreenResources.colorImages[imageIndex].colorImageView);
 
-        cmd.beginRenderPass(rpBegin, vk::SubpassContents::eInline);
+        core::DynamicRenderingInfo info{};
+        info.extent = currentExtent;
+        info.colorAttachments = {colorAttach};
+
+        core::beginDynamicRendering(cmd, info);
         cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, skyRendererPipeline);
         cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, skyRendererPipelineLayout, 0, skyRendererDS, nullptr);
         cmd.draw(3, 1, 0, 0);
-        cmd.endRenderPass();
+        core::endDynamicRendering(cmd);
+
+        core::ImageUtilities::transitionImageLayout(cmd, sceneColor,
+            vk::ImageLayout::eColorAttachmentOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
+            vk::ImageAspectFlagBits::eColor);
     }
 
     void AtmospherePipeline::renderComposite(const vk::CommandBuffer& cmd, uint32_t imageIndex)
@@ -119,23 +124,71 @@ namespace render::atmosphere
             vk::ImageLayout::eDepthStencilReadOnlyOptimal,
             depthAspectMask);
 
-        vk::RenderPassBeginInfo rpBegin{};
-        rpBegin.renderPass = compositeRenderPass;
-        rpBegin.framebuffer = compositeFramebuffers[imageIndex];
-        rpBegin.renderArea.offset = vk::Offset2D{0, 0};
-        rpBegin.renderArea.extent = currentExtent;
+        auto colorAttach = core::colorLoad(offscreenResources.colorImages[imageIndex].colorImageView);
 
-        cmd.beginRenderPass(rpBegin, vk::SubpassContents::eInline);
+        core::DynamicRenderingInfo info{};
+        info.extent = currentExtent;
+        info.colorAttachments = {colorAttach};
+
+        core::beginDynamicRendering(cmd, info);
         cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, compositePipeline);
         cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, compositePipelineLayout, 0, compositeDS, nullptr);
         cmd.draw(3, 1, 0, 0);
-        cmd.endRenderPass();
+        core::endDynamicRendering(cmd);
+
+        core::ImageUtilities::transitionImageLayout(cmd, sceneColor,
+            vk::ImageLayout::eColorAttachmentOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
+            vk::ImageAspectFlagBits::eColor);
 
         core::ImageUtilities::transitionImageLayout(cmd,
             offscreenResources.depthImage.depthImage,
             vk::ImageLayout::eDepthStencilReadOnlyOptimal,
             vk::ImageLayout::eDepthStencilAttachmentOptimal,
             depthAspectMask);
+    }
+
+    void AtmospherePipeline::renderSkyGraphManaged(const vk::CommandBuffer& cmd, uint32_t imageIndex)
+    {
+        if (!initialized || !enabled) return;
+
+        auto colorAttach = core::colorLoad(offscreenResources.colorImages[imageIndex].colorImageView);
+
+        core::DynamicRenderingInfo info{};
+        info.extent = currentExtent;
+        info.colorAttachments = {colorAttach};
+
+        core::beginDynamicRendering(cmd, info);
+        cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, skyRendererPipeline);
+        cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, skyRendererPipelineLayout, 0, skyRendererDS, nullptr);
+        cmd.draw(3, 1, 0, 0);
+        core::endDynamicRendering(cmd);
+    }
+
+    void AtmospherePipeline::renderCompositeGraphManaged(const vk::CommandBuffer& cmd, uint32_t imageIndex)
+    {
+        if (!initialized || !enabled) return;
+
+        if (compositeParamsMapped)
+        {
+            AtmosphereCompositeParams params{};
+            params.nearPlane = cachedNear;
+            params.farPlane = cachedFar;
+            params.aerialMaxDist = settings.aerialMaxDist;
+            params.intensity = settings.aerialIntensity;
+            std::memcpy(compositeParamsMapped, &params, sizeof(params));
+        }
+
+        auto colorAttach = core::colorLoad(offscreenResources.colorImages[imageIndex].colorImageView);
+
+        core::DynamicRenderingInfo info{};
+        info.extent = currentExtent;
+        info.colorAttachments = {colorAttach};
+
+        core::beginDynamicRendering(cmd, info);
+        cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, compositePipeline);
+        cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, compositePipelineLayout, 0, compositeDS, nullptr);
+        cmd.draw(3, 1, 0, 0);
+        core::endDynamicRendering(cmd);
     }
 
     void AtmospherePipeline::recreate()
@@ -148,21 +201,11 @@ namespace render::atmosphere
         if (skyRendererPipeline) { dev.destroyPipeline(skyRendererPipeline); skyRendererPipeline = nullptr; }
         if (compositePipeline) { dev.destroyPipeline(compositePipeline); compositePipeline = nullptr; }
 
-        cleanupSkyFramebuffers();
-        cleanupCompositeFramebuffers();
-
         if (depthOnlyImageView) { dev.destroyImageView(depthOnlyImageView); depthOnlyImageView = nullptr; }
 
         if (skyRendererDSPool) { dev.destroyDescriptorPool(skyRendererDSPool); skyRendererDSPool = nullptr; }
         if (compositeDSPool) { dev.destroyDescriptorPool(compositeDSPool); compositeDSPool = nullptr; }
 
-        compositeRenderPass = nullptr;
-        if (skyRenderPass) { dev.destroyRenderPass(skyRenderPass); skyRenderPass = nullptr; }
-
-        createSkyRenderPass();
-        createSkyFramebuffers();
-        createCompositeRenderPass();
-        createCompositeFramebuffers();
         createDepthOnlyView();
 
         // Recreate sky renderer descriptor set and pipeline
@@ -265,7 +308,13 @@ namespace render::atmosphere
             skyPipelineInfo.pDepthStencilState = &depthStencil;
             skyPipelineInfo.pColorBlendState = &skyBlending;
             skyPipelineInfo.layout = skyRendererPipelineLayout;
-            skyPipelineInfo.renderPass = skyRenderPass;
+
+            vk::Format skyColorFormat = swapChain.getSceneColorFormat();
+            vk::PipelineRenderingCreateInfo skyRenderingInfo{};
+            skyRenderingInfo.colorAttachmentCount = 1;
+            skyRenderingInfo.pColorAttachmentFormats = &skyColorFormat;
+            skyPipelineInfo.pNext = &skyRenderingInfo;
+
             skyRendererPipeline = dev.createGraphicsPipeline(nullptr, skyPipelineInfo).value;
         }
 
@@ -317,7 +366,13 @@ namespace render::atmosphere
             compositePipelineInfo.pDepthStencilState = &depthStencil;
             compositePipelineInfo.pColorBlendState = &compositeBlending;
             compositePipelineInfo.layout = compositePipelineLayout;
-            compositePipelineInfo.renderPass = compositeRenderPass;
+
+            vk::Format compositeColorFormat = swapChain.getSceneColorFormat();
+            vk::PipelineRenderingCreateInfo compositeRenderingInfo{};
+            compositeRenderingInfo.colorAttachmentCount = 1;
+            compositeRenderingInfo.pColorAttachmentFormats = &compositeColorFormat;
+            compositePipelineInfo.pNext = &compositeRenderingInfo;
+
             compositePipeline = dev.createGraphicsPipeline(nullptr, compositePipelineInfo).value;
         }
 
@@ -327,9 +382,6 @@ namespace render::atmosphere
     void AtmospherePipeline::createSkyRenderer()
     {
         auto& dev = device.getLogicalDevice();
-
-        createSkyRenderPass();
-        createSkyFramebuffers();
 
         std::array<vk::DescriptorSetLayoutBinding, 3> bindings{};
         bindings[0] = {0, vk::DescriptorType::eCombinedImageSampler, 1, vk::ShaderStageFlagBits::eFragment};
@@ -415,7 +467,13 @@ namespace render::atmosphere
         pipelineInfo.pDepthStencilState = &depthStencil;
         pipelineInfo.pColorBlendState = &blending;
         pipelineInfo.layout = skyRendererPipelineLayout;
-        pipelineInfo.renderPass = skyRenderPass;
+
+        vk::Format colorFormat = swapChain.getSceneColorFormat();
+        vk::PipelineRenderingCreateInfo renderingInfo{};
+        renderingInfo.colorAttachmentCount = 1;
+        renderingInfo.pColorAttachmentFormats = &colorFormat;
+        pipelineInfo.pNext = &renderingInfo;
+
         skyRendererPipeline = dev.createGraphicsPipeline(nullptr, pipelineInfo).value;
     }
 }

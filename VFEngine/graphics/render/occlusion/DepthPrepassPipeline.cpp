@@ -26,7 +26,8 @@ namespace render::occlusion
     }
 
     DepthPrepassPipeline::PipelineCreateResult DepthPrepassPipeline::createDepthOnlyPipeline(
-        core::Shader& shader, vk::RenderPass renderPass,
+        core::Shader& shader,
+        const std::vector<vk::Format>& colorFormats, vk::Format depthFormat,
         const std::vector<vk::DescriptorSetLayout>& layouts,
         uint32_t pushConstantSize)
     {
@@ -55,8 +56,9 @@ namespace render::occlusion
 
         core::MeshShaderPipelineConfig config{
             .device = vkDevice,
-            .renderPass = renderPass,
             .extent = swapChain.getSwapchainExtent(),
+            .colorAttachmentFormats = colorFormats,
+            .depthAttachmentFormat = depthFormat,
             .shaderStages = stages,
             .existingPipelineLayout = pipelineLayout,
             .cullMode = vk::CullModeFlagBits::eBack,
@@ -91,7 +93,7 @@ namespace render::occlusion
             info.meshletDataLayout, info.vertexDataLayout, info.boneMatrixLayout
         };
 
-        auto result = createDepthOnlyPipeline(*sceneShader, info.renderPass, layouts,
+        auto result = createDepthOnlyPipeline(*sceneShader, info.colorFormats, info.depthFormat, layouts,
                                                sizeof(DepthPrepassPushConstants));
         scenePipeline = result.pipeline;
         scenePipelineLayout = result.layout;
@@ -121,7 +123,7 @@ namespace render::occlusion
         layouts[4] = info.vertexDataLayout;
         layouts[11] = info.terrainDataLayout;
 
-        auto result = createDepthOnlyPipeline(*terrainShader, info.renderPass, layouts,
+        auto result = createDepthOnlyPipeline(*terrainShader, info.colorFormats, info.depthFormat, layouts,
                                                sizeof(TerrainDepthPrepassPushConstants));
         terrainPipeline = result.pipeline;
         terrainPipelineLayout = result.layout;

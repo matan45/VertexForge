@@ -46,8 +46,7 @@ namespace render::ibl
 
     struct SkyboxTargetParams
     {
-        vk::RenderPass renderPass;
-        vk::Framebuffer framebuffer;
+        vk::ImageView colorImageView;
         uint32_t width;
         uint32_t height;
         glm::mat4 view;
@@ -60,7 +59,6 @@ namespace render::ibl
         vk::Image image;
         vk::ImageView view;
         core::VulkanAllocation allocation;
-        vk::Framebuffer framebuffer;
     };
 
     struct QuadVertex

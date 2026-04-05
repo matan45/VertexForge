@@ -27,7 +27,8 @@ namespace render::gpudriven
         cleanup();
     }
 
-    void GPUDrivenRenderer::init(vk::DescriptorSetLayout iblDescriptorSetLayout, vk::RenderPass renderPass,
+    void GPUDrivenRenderer::init(vk::DescriptorSetLayout iblDescriptorSetLayout,
+                                  const std::vector<vk::Format>& colorFormats, vk::Format depthFormat,
                                   vk::ImageView sceneDepthView)
     {
         if (initialized)
@@ -36,7 +37,8 @@ namespace render::gpudriven
         }
 
         cachedIBLLayout = iblDescriptorSetLayout;
-        cachedRenderPass = renderPass;
+        cachedColorFormats = colorFormats;
+        cachedDepthFormat = depthFormat;
 
         mergedBuffer = std::make_unique<MergedMeshBuffer>(device);
         mergedBuffer->init();
@@ -138,7 +140,8 @@ namespace render::gpudriven
                 .cullingOutputLayout = lightCullingPipeline->getDescriptorSetLayout(),
                 .shadowDataLayout = shadowSystem->getShadowDataLayout(),
                 .shadowTextureLayout = shadowSystem->getShadowTextureLayout(),
-                .renderPass = renderPass
+                .colorAttachmentFormats = colorFormats,
+                .depthAttachmentFormat = depthFormat
             };
 
             meshShaderPipeline = std::make_unique<MeshShaderPipeline>(device, swapChain);
@@ -160,10 +163,10 @@ namespace render::gpudriven
                 meshStreamManager->setMeshletBuffer(meshletBuffer.get());
             }
 
-            initTerrainSubsystems(iblDescriptorSetLayout, renderPass);
-            initWaterSubsystems(iblDescriptorSetLayout, renderPass, sceneDepthView);
-            initVegetationSubsystems(iblDescriptorSetLayout, renderPass);
-            initBillboardSubsystems(iblDescriptorSetLayout, renderPass);
+            initTerrainSubsystems(iblDescriptorSetLayout, colorFormats, depthFormat);
+            initWaterSubsystems(iblDescriptorSetLayout, colorFormats, depthFormat, sceneDepthView);
+            initVegetationSubsystems(iblDescriptorSetLayout, colorFormats, depthFormat);
+            initBillboardSubsystems(iblDescriptorSetLayout, colorFormats, depthFormat);
         }
         else
         {
@@ -195,11 +198,12 @@ namespace render::gpudriven
         initialized = true;
     }
 
-    void GPUDrivenRenderer::initWBOITPipeline(vk::RenderPass wboitRenderPass)
+    void GPUDrivenRenderer::initWBOITPipeline(const std::vector<vk::Format>& wboitColorFormats, vk::Format wboitDepthFormat)
     {
-        if (!initialized || !meshShaderSupported || !wboitRenderPass) return;
+        if (!initialized || !meshShaderSupported || wboitColorFormats.empty()) return;
 
-        cachedWBOITRenderPass = wboitRenderPass;
+        cachedWBOITColorFormats = wboitColorFormats;
+        cachedWBOITDepthFormat = wboitDepthFormat;
 
         vk::DescriptorSetLayout giLayout{};
         if (giCascadeManager)
@@ -225,7 +229,8 @@ namespace render::gpudriven
             .shadowTextureLayout = shadowSystem->getShadowTextureLayout(),
             .giProbeDataLayout = giLayout,
             .causticLayout = wboitCausticLayout,
-            .renderPass = wboitRenderPass,
+            .colorAttachmentFormats = wboitColorFormats,
+            .depthAttachmentFormat = wboitDepthFormat,
             .wboitMode = true
         });
 
@@ -338,18 +343,20 @@ namespace render::gpudriven
         initialized = false;
     }
 
-    void GPUDrivenRenderer::updateRenderPass(vk::RenderPass newRenderPass, vk::DescriptorSetLayout newIBLLayout)
+    void GPUDrivenRenderer::updateFormats(const std::vector<vk::Format>& colorFormats, vk::Format depthFormat,
+                                          vk::DescriptorSetLayout newIBLLayout)
     {
         if (!initialized) return;
 
-        bool renderPassChanged = (cachedRenderPass != newRenderPass);
+        bool formatsChanged = (cachedColorFormats != colorFormats) || (cachedDepthFormat != depthFormat);
         bool iblLayoutChanged = (newIBLLayout && cachedIBLLayout != newIBLLayout);
 
-        if (!renderPassChanged && !iblLayoutChanged) return;
+        if (!formatsChanged && !iblLayoutChanged) return;
 
-        vfLogInfo("GPUDrivenRenderer: Updating render pass/IBL layout, recreating pipelines");
+        vfLogInfo("GPUDrivenRenderer: Updating formats/IBL layout, recreating pipelines");
 
-        cachedRenderPass = newRenderPass;
+        cachedColorFormats = colorFormats;
+        cachedDepthFormat = depthFormat;
         if (newIBLLayout)
         {
             cachedIBLLayout = newIBLLayout;
@@ -412,7 +419,8 @@ namespace render::gpudriven
                 .shadowTextureLayout = shadowSystem->getShadowTextureLayout(),
                 .giProbeDataLayout = giLayout,
                 .causticLayout = causticLayout,
-                .renderPass = cachedRenderPass
+                .colorAttachmentFormats = cachedColorFormats,
+                .depthAttachmentFormat = cachedDepthFormat
             };
 
             meshShaderPipeline->recreate(pipelineInfo);
@@ -438,9 +446,10 @@ namespace render::gpudriven
                     transparentMeshShaderPipeline->updateCausticDescriptor(water.causticsResources->getDescriptorSet());
             }
 
-            if (wboitMeshShaderPipeline && cachedWBOITRenderPass)
+            if (wboitMeshShaderPipeline && !cachedWBOITColorFormats.empty())
             {
-                pipelineInfo.renderPass = cachedWBOITRenderPass;
+                pipelineInfo.colorAttachmentFormats = cachedWBOITColorFormats;
+                pipelineInfo.depthAttachmentFormat = cachedWBOITDepthFormat;
                 pipelineInfo.wboitMode = true;
                 wboitMeshShaderPipeline->recreate(pipelineInfo);
                 if (giLayout && giCascadeManager)
@@ -463,7 +472,7 @@ namespace render::gpudriven
                                           lightCullingPipeline->getDescriptorSetLayout(),
                                           shadowSystem->getShadowDataLayout(),
                                           shadowSystem->getShadowTextureLayout(),
-                                          cachedRenderPass);
+                                          cachedColorFormats, cachedDepthFormat);
             }
 
             if (water.pipeline)
@@ -485,7 +494,7 @@ namespace render::gpudriven
                     shadowSystem->getShadowTextureLayout(),
                     oceanLayout,
                     refractionLayout,
-                    cachedRenderPass
+                    cachedColorFormats, cachedDepthFormat
                 });
             }
 
@@ -495,7 +504,7 @@ namespace render::gpudriven
                     vegetation.windSystem ? vegetation.windSystem->getDescriptorSetLayout() : vk::DescriptorSetLayout{},
                     lightBufferManager ? lightBufferManager->getDescriptorSetLayout() : vk::DescriptorSetLayout{},
                     bindlessTextures ? bindlessTextures->getDescriptorSetLayout() : vk::DescriptorSetLayout{},
-                    cachedRenderPass);
+                    cachedColorFormats, cachedDepthFormat);
             }
         }
         else

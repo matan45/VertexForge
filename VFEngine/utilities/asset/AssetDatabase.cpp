@@ -416,6 +416,8 @@ namespace asset
 
             lock.unlock();
 
+            lastSearchRoot = normalizePath(searchRoot);
+
             uint32_t count = 0;
             std::error_code ec;
             for (const auto& entry : fs::recursive_directory_iterator(
@@ -452,6 +454,65 @@ namespace asset
             vfLogError("Failed to rebuild asset database from meta files: {}", e.what());
             return false;
         }
+    }
+
+    std::optional<std::string> AssetDatabase::tryResolveByMetaScan(const AssetGUID& guid)
+    {
+        // Collect directories to search: lastSearchRoot + directories of all registered assets
+        std::unordered_set<std::string> searchDirs;
+
+        if (!lastSearchRoot.empty())
+        {
+            searchDirs.insert(lastSearchRoot);
+        }
+
+        {
+            std::shared_lock lock(dbMutex);
+            for (const auto& [_, entry] : guidToEntry)
+            {
+                fs::path dir = fs::path(entry.path).parent_path();
+                if (!dir.empty())
+                {
+                    searchDirs.insert(dir.string());
+                }
+            }
+        }
+
+        if (searchDirs.empty())
+            return std::nullopt;
+
+        try
+        {
+            for (const auto& dir : searchDirs)
+            {
+                std::error_code ec;
+                for (const auto& fileEntry : fs::directory_iterator(
+                         dir, fs::directory_options::skip_permission_denied, ec))
+                {
+                    if (ec) { ec.clear(); continue; }
+                    if (!fileEntry.is_regular_file()) continue;
+                    if (fileEntry.path().extension().string() != ".vfmeta") continue;
+
+                    auto metadata = AssetMetadataSerializer::load(fileEntry.path());
+                    if (!metadata || metadata->guid != guid) continue;
+
+                    fs::path assetPath = fileEntry.path().parent_path() / fileEntry.path().stem();
+                    std::string pathStr = assetPath.string();
+
+                    registerAssetWithGUID(metadata->guid, pathStr,
+                                          metadata->type, metadata->importSourcePath);
+
+                    vfLogInfo("Resolved missing asset by meta scan: {} -> {}", guid.toString(), pathStr);
+                    return normalizePath(pathStr);
+                }
+            }
+        }
+        catch (const std::exception& e)
+        {
+            vfLogWarning("Meta scan fallback failed: {}", e.what());
+        }
+
+        return std::nullopt;
     }
 
     void AssetDatabase::clear()

@@ -136,13 +136,16 @@ namespace core
 		pipelineInfo.pDepthStencilState = &depthStencil;
 		pipelineInfo.pColorBlendState = &colorBlending;
 		pipelineInfo.layout = uniqueLayout.get();
-		pipelineInfo.renderPass = config.renderPass;
-		pipelineInfo.subpass = 0;
 
-		// RAII: Use unique handle for automatic cleanup on failure
+		vk::PipelineRenderingCreateInfo pipelineRendering{};
+		pipelineRendering.colorAttachmentCount = static_cast<uint32_t>(config.colorAttachmentFormats.size());
+		pipelineRendering.pColorAttachmentFormats = config.colorAttachmentFormats.empty() ? nullptr : config.colorAttachmentFormats.data();
+		pipelineRendering.depthAttachmentFormat = config.depthAttachmentFormat;
+		pipelineRendering.stencilAttachmentFormat = config.stencilAttachmentFormat;
+		pipelineInfo.pNext = &pipelineRendering;
+
 		vk::UniquePipeline uniquePipeline = config.device.createGraphicsPipelineUnique(globalPipelineCache, pipelineInfo).value;
 
-		// Success: release ownership to result (caller manages lifetime)
 		result.pipelineLayout = uniqueLayout.release();
 		result.pipeline = uniquePipeline.release();
 
@@ -280,12 +283,16 @@ namespace core
 		pipelineInfo.pColorBlendState = &colorBlending;
 		pipelineInfo.pDynamicState = config.dynamicStates.empty() ? nullptr : &dynamicStateInfo;
 		pipelineInfo.layout = result.pipelineLayout;
-		pipelineInfo.renderPass = config.renderPass;
-		pipelineInfo.subpass = 0;
-		
+
+		vk::PipelineRenderingCreateInfo pipelineRendering{};
+		pipelineRendering.colorAttachmentCount = static_cast<uint32_t>(config.colorAttachmentFormats.size());
+		pipelineRendering.pColorAttachmentFormats = config.colorAttachmentFormats.empty() ? nullptr : config.colorAttachmentFormats.data();
+		pipelineRendering.depthAttachmentFormat = config.depthAttachmentFormat;
+		pipelineRendering.stencilAttachmentFormat = config.stencilAttachmentFormat;
+		pipelineInfo.pNext = &pipelineRendering;
+
 		vk::UniquePipeline uniquePipeline = config.device.createGraphicsPipelineUnique(globalPipelineCache, pipelineInfo).value;
 
-		// Success: release ownership to result (caller manages lifetime)
 		if (uniqueLayout)
 		{
 			uniqueLayout.release();
@@ -424,15 +431,19 @@ namespace core
 		pipelineInfo.pColorBlendState = &colorBlending;
 		pipelineInfo.pDynamicState = config.dynamicStates.empty() ? nullptr : &dynamicStateInfo;
 		pipelineInfo.layout = result.pipelineLayout;
-		pipelineInfo.renderPass = config.renderPass;
-		pipelineInfo.subpass = 0;
+
+		vk::PipelineRenderingCreateInfo pipelineRendering{};
+		pipelineRendering.colorAttachmentCount = static_cast<uint32_t>(config.colorAttachmentFormats.size());
+		pipelineRendering.pColorAttachmentFormats = config.colorAttachmentFormats.empty() ? nullptr : config.colorAttachmentFormats.data();
+		pipelineRendering.depthAttachmentFormat = config.depthAttachmentFormat;
+		pipelineRendering.stencilAttachmentFormat = config.stencilAttachmentFormat;
+		pipelineInfo.pNext = &pipelineRendering;
 
 		vk::UniquePipeline uniquePipeline = config.device.createGraphicsPipelineUnique(globalPipelineCache, pipelineInfo).value;
 
-		// Success: release ownership to result (caller manages lifetime)
 		if (uniqueLayout)
 		{
-			uniqueLayout.release(); 
+			uniqueLayout.release();
 		}
 		result.pipeline = uniquePipeline.release();
 

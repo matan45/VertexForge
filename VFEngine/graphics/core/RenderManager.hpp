@@ -42,9 +42,7 @@ namespace core {
 		mutable ResizeCallback onResizeCallback;
 		BlitSourceProvider blitSourceProvider;
 
-		// Minimal present pass (used when ImGui is disabled and no blit source)
-		vk::RenderPass presentRenderPass;
-		std::vector<vk::Framebuffer> presentFrameBuffers;
+		// (removed: presentRenderPass + presentFrameBuffers — now uses dynamic rendering)
 
 		// Per-frame synchronization objects (indexed by currentFrame)
 		std::vector<vk::Semaphore> imageAvailableSemaphores;
@@ -61,9 +59,7 @@ namespace core {
 		std::atomic<bool> skipNextImguiRender{false};
 		inline static DeferredDeletionQueue* globalDeletionQueue;
 
-		void createPresentPass();
-		void createPresentFrameBuffers();
-		void cleanUpPresentPass() const;
+		void drawPresentClear(const vk::CommandBuffer& commandBuffer, uint32_t imageIdx) const;
 
 	public:
 		explicit RenderManager(Device& device, SwapChain& swapChain, const window::Window* window, bool imguiEnabled = true);

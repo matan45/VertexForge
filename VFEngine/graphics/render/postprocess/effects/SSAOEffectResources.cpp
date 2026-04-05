@@ -26,60 +26,12 @@ namespace render::postprocess
         sampler = device.getLogicalDevice().createSampler(samplerInfo);
     }
 
-    void SSAOEffect::createRenderPasses()
-    {
-        auto& dev = device.getLogicalDevice();
-
-        auto createR8RenderPass = [&](vk::RenderPass& rp) {
-            vk::AttachmentDescription colorAttachment{};
-            colorAttachment.format = vk::Format::eR8Unorm;
-            colorAttachment.samples = vk::SampleCountFlagBits::e1;
-            colorAttachment.loadOp = vk::AttachmentLoadOp::eDontCare;
-            colorAttachment.storeOp = vk::AttachmentStoreOp::eStore;
-            colorAttachment.stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
-            colorAttachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
-            colorAttachment.initialLayout = vk::ImageLayout::eUndefined;
-            colorAttachment.finalLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-
-            vk::AttachmentReference colorRef{};
-            colorRef.attachment = 0;
-            colorRef.layout = vk::ImageLayout::eColorAttachmentOptimal;
-
-            vk::SubpassDescription subpass{};
-            subpass.pipelineBindPoint = vk::PipelineBindPoint::eGraphics;
-            subpass.colorAttachmentCount = 1;
-            subpass.pColorAttachments = &colorRef;
-
-            vk::SubpassDependency dependency{};
-            dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
-            dependency.dstSubpass = 0;
-            dependency.srcStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
-            dependency.srcAccessMask = vk::AccessFlagBits::eColorAttachmentWrite;
-            dependency.dstStageMask = vk::PipelineStageFlagBits::eFragmentShader;
-            dependency.dstAccessMask = vk::AccessFlagBits::eShaderRead;
-
-            vk::RenderPassCreateInfo rpInfo{};
-            rpInfo.attachmentCount = 1;
-            rpInfo.pAttachments = &colorAttachment;
-            rpInfo.subpassCount = 1;
-            rpInfo.pSubpasses = &subpass;
-            rpInfo.dependencyCount = 1;
-            rpInfo.pDependencies = &dependency;
-
-            rp = dev.createRenderPass(rpInfo);
-        };
-
-        createR8RenderPass(ssaoRenderPass);
-        createR8RenderPass(blurRenderPass);
-    }
-
     void SSAOEffect::createImages()
     {
         auto& dev = device.getLogicalDevice();
 
         auto createR8Image = [&](vk::Image& img, core::VulkanAllocation& alloc,
-                                  vk::ImageView& view, vk::Framebuffer& fb,
-                                  vk::RenderPass rp) {
+                                  vk::ImageView& view) {
             core::ImageInfoRequest req(dev, device.getPhysicalDevice());
             req.width = currentExtent.width;
             req.height = currentExtent.height;
@@ -94,22 +46,10 @@ namespace render::postprocess
             core::ImageViewInfoRequest viewReq(dev, img);
             viewReq.format = vk::Format::eR8Unorm;
             core::ImageUtilities::createImageView(viewReq, view);
-
-            vk::FramebufferCreateInfo fbInfo{};
-            fbInfo.renderPass = rp;
-            fbInfo.attachmentCount = 1;
-            fbInfo.pAttachments = &view;
-            fbInfo.width = currentExtent.width;
-            fbInfo.height = currentExtent.height;
-            fbInfo.layers = 1;
-
-            fb = dev.createFramebuffer(fbInfo);
         };
 
-        createR8Image(ssaoRawImage, ssaoRawAllocation, ssaoRawImageView,
-                       ssaoRawFramebuffer, ssaoRenderPass);
-        createR8Image(ssaoBlurredImage, ssaoBlurredAllocation, ssaoBlurredImageView,
-                       ssaoBlurredFramebuffer, blurRenderPass);
+        createR8Image(ssaoRawImage, ssaoRawAllocation, ssaoRawImageView);
+        createR8Image(ssaoBlurredImage, ssaoBlurredAllocation, ssaoBlurredImageView);
     }
 
     void SSAOEffect::createDepthImageView()
@@ -398,8 +338,13 @@ namespace render::postprocess
         pipelineInfo.pDepthStencilState = &depthStencil;
         pipelineInfo.pColorBlendState = &colorBlending;
         pipelineInfo.layout = ssaoPipelineLayout;
-        pipelineInfo.renderPass = ssaoRenderPass;
         pipelineInfo.subpass = 0;
+
+        vk::Format ssaoFormat = vk::Format::eR8Unorm;
+        vk::PipelineRenderingCreateInfo renderingInfo{};
+        renderingInfo.colorAttachmentCount = 1;
+        renderingInfo.pColorAttachmentFormats = &ssaoFormat;
+        pipelineInfo.pNext = &renderingInfo;
 
         ssaoPipeline = dev.createGraphicsPipeline(nullptr, pipelineInfo).value;
     }
@@ -475,13 +420,18 @@ namespace render::postprocess
         pipelineInfo.pDepthStencilState = &depthStencil;
         pipelineInfo.pColorBlendState = &colorBlending;
         pipelineInfo.layout = blurPipelineLayout;
-        pipelineInfo.renderPass = blurRenderPass;
         pipelineInfo.subpass = 0;
+
+        vk::Format blurFormat = vk::Format::eR8Unorm;
+        vk::PipelineRenderingCreateInfo blurRenderingInfo{};
+        blurRenderingInfo.colorAttachmentCount = 1;
+        blurRenderingInfo.pColorAttachmentFormats = &blurFormat;
+        pipelineInfo.pNext = &blurRenderingInfo;
 
         blurPipeline = dev.createGraphicsPipeline(nullptr, pipelineInfo).value;
     }
 
-    void SSAOEffect::createCompositePipeline(vk::RenderPass externalRenderPass)
+    void SSAOEffect::createCompositePipeline(vk::Format colorFormat)
     {
         std::array<vk::DescriptorSetLayout, 2> setLayouts = {
             pipeline.getInputDescriptorSetLayout(), compositeDescriptorSetLayout
@@ -489,7 +439,7 @@ namespace render::postprocess
 
         core::GraphicsPipelineConfig config{};
         config.device = device.getLogicalDevice();
-        config.renderPass = externalRenderPass;
+        config.colorAttachmentFormats = {colorFormat};
         config.extent = currentExtent;
         config.shaderStages = compositeShader->getShaderStages();
         config.descriptorSetLayouts = {setLayouts.begin(), setLayouts.end()};
@@ -509,16 +459,15 @@ namespace render::postprocess
     {
         auto& dev = device.getLogicalDevice();
 
-        auto destroyImage = [&](vk::Framebuffer& fb, vk::ImageView& iv,
+        auto destroyImage = [&](vk::ImageView& iv,
                                  vk::Image& img, core::VulkanAllocation& alloc) {
-            if (fb) { dev.destroyFramebuffer(fb); fb = nullptr; }
             if (iv) { dev.destroyImageView(iv); iv = nullptr; }
             if (img) { dev.destroyImage(img); img = nullptr; }
             if (alloc.isValid()) { device.getMemoryManager().free(alloc); alloc = {}; }
         };
 
-        destroyImage(ssaoRawFramebuffer, ssaoRawImageView, ssaoRawImage, ssaoRawAllocation);
-        destroyImage(ssaoBlurredFramebuffer, ssaoBlurredImageView, ssaoBlurredImage, ssaoBlurredAllocation);
+        destroyImage(ssaoRawImageView, ssaoRawImage, ssaoRawAllocation);
+        destroyImage(ssaoBlurredImageView, ssaoBlurredImage, ssaoBlurredAllocation);
     }
 
     void SSAOEffect::cleanupPipelines()

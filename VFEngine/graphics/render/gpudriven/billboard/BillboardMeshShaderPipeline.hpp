@@ -43,13 +43,13 @@ namespace render::gpudriven
         void init(core::Device& device,
                   vk::DescriptorSetLayout cameraLayout,
                   vk::DescriptorSetLayout bindlessTextureLayout,
-                  vk::RenderPass renderPass);
+                  const std::vector<vk::Format>& colorFormats, vk::Format depthFormat);
 
         void cleanup();
 
         void recreate(vk::DescriptorSetLayout cameraLayout,
                       vk::DescriptorSetLayout bindlessTextureLayout,
-                      vk::RenderPass renderPass);
+                      const std::vector<vk::Format>& colorFormats, vk::Format depthFormat);
 
         void updateInstanceDescriptors(vk::Buffer instanceBuffer, vk::Buffer countBuffer);
 
@@ -67,7 +67,7 @@ namespace render::gpudriven
         void createOwnedDescriptors();
         void createPipeline(vk::DescriptorSetLayout cameraLayout,
                             vk::DescriptorSetLayout bindlessTextureLayout,
-                            vk::RenderPass renderPass);
+                            const std::vector<vk::Format>& colorFormats, vk::Format depthFormat);
         bool loadShaders();
     };
 }

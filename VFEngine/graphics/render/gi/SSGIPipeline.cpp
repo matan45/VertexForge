@@ -41,16 +41,6 @@ namespace render::gi
         createIntermediateImages();
         createParamsBuffer();
 
-        createTraceRenderPass();
-        createTemporalRenderPass();
-        createDenoiseRenderPass();
-        createCompositeRenderPass();
-
-        createTraceFramebuffer();
-        createTemporalFramebuffer();
-        createDenoiseFramebuffer();
-        createCompositeFramebuffers();
-
         createDescriptorSetLayouts();
         createDescriptorPool();
         createDescriptorSets();
@@ -74,9 +64,7 @@ namespace render::gi
         auto& dev = device.getLogicalDevice();
 
         cleanupPipelines();
-        cleanupFramebuffers();
         cleanupIntermediateImages();
-        cleanupRenderPasses();
 
         if (depthOnlyImageView)
         {
@@ -146,9 +134,7 @@ namespace render::gi
             : currentExtent;
 
         cleanupPipelines();
-        cleanupFramebuffers();
         cleanupIntermediateImages();
-        cleanupRenderPasses();
 
         if (depthOnlyImageView)
         {
@@ -164,16 +150,6 @@ namespace render::gi
 
         createDepthImageView();
         createIntermediateImages();
-
-        createTraceRenderPass();
-        createTemporalRenderPass();
-        createDenoiseRenderPass();
-        createCompositeRenderPass();
-
-        createTraceFramebuffer();
-        createTemporalFramebuffer();
-        createDenoiseFramebuffer();
-        createCompositeFramebuffers();
 
         createDescriptorPool();
         createDescriptorSets();
@@ -343,24 +319,6 @@ namespace render::gi
         }
     }
 
-    void SSGIPipeline::cleanupFramebuffers()
-    {
-        auto& dev = device.getLogicalDevice();
-
-        auto destroyFb = [&](vk::Framebuffer& fb)
-        {
-            if (fb) { dev.destroyFramebuffer(fb); fb = nullptr; }
-        };
-
-        destroyFb(traceFramebuffer);
-        for (auto& fb : temporalFramebuffers) destroyFb(fb);
-        destroyFb(denoiseHorizFramebuffer);
-        destroyFb(denoiseFramebuffer);
-
-        for (auto& fb : compositeFramebuffers) destroyFb(fb);
-        compositeFramebuffers.clear();
-    }
-
     void SSGIPipeline::cleanupPipelines()
     {
         auto& dev = device.getLogicalDevice();
@@ -377,18 +335,4 @@ namespace render::gi
         destroyPipe(compositePipeline, compositePipelineLayout);
     }
 
-    void SSGIPipeline::cleanupRenderPasses()
-    {
-        auto& dev = device.getLogicalDevice();
-
-        auto destroyRP = [&](vk::RenderPass& rp)
-        {
-            if (rp) { dev.destroyRenderPass(rp); rp = nullptr; }
-        };
-
-        destroyRP(traceRenderPass);
-        destroyRP(temporalRenderPass);
-        destroyRP(denoiseRenderPass);
-        destroyRP(compositeRenderPass);
-    }
 }

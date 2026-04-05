@@ -117,9 +117,11 @@ namespace render::shadow
         bool validatePrerequisites(const ShadowPassContext& ctx,
                                    ShadowPassPrerequisites& out) const;
 
-        void beginTileRenderPass(vk::CommandBuffer cmd,
-                                 VSMPhysicalTilePool* tilePool,
-                                 bool useLoadPass);
+        void beginDynamicShadowPass(vk::CommandBuffer cmd,
+                                    VSMPhysicalTilePool* tilePool,
+                                    bool clearDepth);
+
+        void endDynamicShadowPass(vk::CommandBuffer cmd);
 
         void bindShadowPipelineAndSets(vk::CommandBuffer cmd,
                                        const ShadowPassContext& ctx);
@@ -131,7 +133,7 @@ namespace render::shadow
         void recordTileCommands(vk::CommandBuffer cmd,
                                 const PageRenderEntry& page,
                                 const ShadowPassContext& ctx,
-                                bool useLoadPass);
+                                bool clearTile);
 
         static void clearTileDepth(vk::CommandBuffer cmd,
                                    const vk::Rect2D& scissor);
@@ -142,7 +144,7 @@ namespace render::shadow
         void recordStaticPhase(vk::CommandBuffer cmd,
                                const ShadowPassContext& ctx,
                                const ShadowPassPrerequisites& prereq,
-                               bool useLoadPass);
+                               bool clearDepth);
 
         void recordDynamicPhase(vk::CommandBuffer cmd,
                                 const ShadowPassContext& ctx,
@@ -167,30 +169,21 @@ namespace render::shadow
             uint32_t frameIndex;
         };
 
-        struct ParallelRenderPassInfo
-        {
-            vk::RenderPass renderPass;
-            vk::Framebuffer framebuffer;
-            bool useLoadPass;
-        };
-
         void recordSecondaryTileCommands(
             const ParallelDispatchArgs& args,
             const std::vector<PageRenderEntry>& pages,
-            const ParallelRenderPassInfo& rpInfo,
+            bool clearTiles,
             std::vector<vk::CommandBuffer>& secondaryBuffers,
             std::vector<bool>& threadUsed);
 
         void dispatchPagesParallel(
             const ParallelDispatchArgs& args,
             const std::vector<PageRenderEntry>& pages,
-            vk::RenderPass renderPass,
-            vk::Framebuffer framebuffer,
-            bool useLoadPass);
+            bool clearTiles);
 
         void recordStaticPhaseParallel(
             const ParallelDispatchArgs& args,
-            bool useLoadPass);
+            bool clearDepth);
 
         void recordDynamicPhaseParallel(
             const ParallelDispatchArgs& args);

@@ -4,6 +4,8 @@
 #include "../../core/OffScreen.hpp"
 #include "../../core/Texture.hpp"
 #include "../../core/BufferUtilities.hpp"
+#include "../../core/ImageUtilities.hpp"
+#include "../../core/DynamicRenderingHelpers.hpp"
 #include "print/Log.hpp"
 #include <algorithm>
 
@@ -295,12 +297,19 @@ namespace render::decal
 
         auto extent = swapChain.getSwapchainExtent();
 
-        vk::RenderPassBeginInfo rpBegin{};
-        rpBegin.renderPass = decalRenderPass;
-        rpBegin.framebuffer = decalFramebuffers[imageIndex];
-        rpBegin.renderArea.extent = extent;
+        // Transition scene color to color attachment
+        vk::Image sceneColor = offscreenResources.colorImages[imageIndex].colorImage;
+        core::ImageUtilities::transitionImageLayout(cmd, sceneColor,
+            vk::ImageLayout::eShaderReadOnlyOptimal, vk::ImageLayout::eColorAttachmentOptimal,
+            vk::ImageAspectFlagBits::eColor);
 
-        cmd.beginRenderPass(rpBegin, vk::SubpassContents::eInline);
+        auto colorAttach = core::colorLoad(offscreenResources.colorImages[imageIndex].colorImageView);
+
+        core::DynamicRenderingInfo info{};
+        info.extent = extent;
+        info.colorAttachments = {colorAttach};
+
+        core::beginDynamicRendering(cmd, info);
 
         vk::Viewport viewport{0.0f, 0.0f, static_cast<float>(extent.width),
                               static_cast<float>(extent.height), 0.0f, 1.0f};
@@ -331,7 +340,65 @@ namespace render::decal
             cmd.drawIndexed(cubeIndexCount, 1, 0, 0, 0);
         }
 
-        cmd.endRenderPass();
+        core::endDynamicRendering(cmd);
+
+        // Transition scene color back to ShaderReadOnlyOptimal
+        core::ImageUtilities::transitionImageLayout(cmd, sceneColor,
+            vk::ImageLayout::eColorAttachmentOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
+            vk::ImageAspectFlagBits::eColor);
+
+        transitionDepthToAttachment(cmd);
+    }
+
+    void DecalPipeline::renderGraphManaged(const vk::CommandBuffer& cmd, uint32_t imageIndex)
+    {
+        if (!initialized || currentDecals.empty() || !pipeline) return;
+
+        uploadDecalData();
+        uploadCameraUBO();
+        transitionDepthToReadOnly(cmd);
+
+        auto extent = swapChain.getSwapchainExtent();
+
+        auto colorAttach = core::colorLoad(offscreenResources.colorImages[imageIndex].colorImageView);
+
+        core::DynamicRenderingInfo info{};
+        info.extent = extent;
+        info.colorAttachments = {colorAttach};
+
+        core::beginDynamicRendering(cmd, info);
+
+        vk::Viewport viewport{0.0f, 0.0f, static_cast<float>(extent.width),
+                              static_cast<float>(extent.height), 0.0f, 1.0f};
+        cmd.setViewport(0, viewport);
+        vk::Rect2D scissor{{0, 0}, extent};
+        cmd.setScissor(0, scissor);
+
+        cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline);
+        cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 0, globalDescriptorSet, {});
+
+        vk::DeviceSize offset = 0;
+        cmd.bindVertexBuffers(0, cubeVertexBuffer, offset);
+        cmd.bindIndexBuffer(cubeIndexBuffer, 0, vk::IndexType::eUint32);
+
+        uint32_t count = std::min(static_cast<uint32_t>(currentDecals.size()), maxDecals);
+        for (uint32_t i = 0; i < count; ++i)
+        {
+            vk::DescriptorSet texDescSet = getOrCreateDecalTextureSet(
+                currentDecals[i].albedoTexture, currentDecals[i].normalTexture, currentDecals[i].ormTexture);
+            cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 1, texDescSet, {});
+
+            DecalPushConstants pc{};
+            pc.decalWorldMatrix = currentDecals[i].worldMatrix;
+            pc.decalIndex = i;
+            cmd.pushConstants(pipelineLayout, vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
+                              0, sizeof(DecalPushConstants), &pc);
+
+            cmd.drawIndexed(cubeIndexCount, 1, 0, 0, 0);
+        }
+
+        core::endDynamicRendering(cmd);
+
         transitionDepthToAttachment(cmd);
     }
 }

@@ -54,6 +54,7 @@ namespace render
         ~IBL();
 
         void recordCommandBuffer(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
+        void recordCommandBufferGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
 
         void renderSkyboxToTarget(const vk::CommandBuffer& commandBuffer,
                                   const ibl::SkyboxTargetParams& target) const;

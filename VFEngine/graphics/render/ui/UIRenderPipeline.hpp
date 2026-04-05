@@ -2,6 +2,7 @@
 
 #include "UIRenderTypes.hpp"
 #include "UIRenderBufferManager.hpp"
+#include "../../core/Texture.hpp"
 #include <memory>
 #include <vector>
 #include <string>
@@ -12,7 +13,6 @@ namespace core
     class Device;
     class SwapChain;
     class Shader;
-    class Texture;
     struct OffscreenResources;
 }
 
@@ -46,7 +46,6 @@ namespace render::ui
 
         std::shared_ptr<core::Shader> uiShader;
 
-        vk::RenderPass renderPass;
         vk::Pipeline pipelineNormal;
         vk::Pipeline pipelineStencilIncNoColor;
         vk::Pipeline pipelineStencilIncColor;
@@ -56,8 +55,6 @@ namespace render::ui
         vk::DescriptorSetLayout descriptorSetLayout;
         vk::DescriptorPool descriptorPool;
         vk::DescriptorSet defaultDescriptorSet;
-
-        std::vector<vk::Framebuffer> framebuffers;
 
         UIRenderBufferManager bufferManager;
 
@@ -91,17 +88,16 @@ namespace render::ui
         void clearExternalTextures();
 
         void recordCommandBuffer(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
+        void recordCommandBufferGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
 
         bool isInitialized() const { return initialized; }
 
     private:
         void loadShader();
-        void createRenderPass();
         void createDescriptorSetLayout();
         void createDescriptorPool();
         void createDefaultDescriptorSet();
         void createPipeline();
-        void createFramebuffers();
 
         void updateDescriptorSet(vk::DescriptorSet dstSet, vk::ImageView imageView, vk::Sampler sampler);
         bool loadTexture(const std::string& texturePath);

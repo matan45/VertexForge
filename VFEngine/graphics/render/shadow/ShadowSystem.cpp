@@ -135,12 +135,6 @@ namespace render::shadow
         shadowPassPipeline = std::make_unique<ShadowPassPipeline>(device);
         shadowPassPipeline->init(perDrawLayout, meshletDataLayout, vertexDataLayout, boneMatrixLayout,
                                  tilePool->getDepthFormat());
-
-        shadowPassPipeline->createFramebuffer(
-            tilePool->getPoolImageView(),
-            vsm::PHYSICAL_POOL_DIM,
-            vsm::PHYSICAL_POOL_DIM
-        );
     }
 
     void ShadowSystem::updateCameraDescriptor(vk::Buffer cameraBuffer, vk::DeviceSize bufferSize)
@@ -183,7 +177,7 @@ namespace render::shadow
 
         terrainShadowPipeline = std::make_unique<TerrainShadowPipeline>(device);
         terrainShadowPipeline->init(terrainDataLayout, terrainMeshletLayout, terrainVertexLayout,
-                                     tilePool->getRenderPass());
+                                     tilePool->getDepthFormat());
     }
 
     bool ShadowSystem::registerLight(uint32_t entityId, ShadowMapType type, const ShadowSettings& settings)

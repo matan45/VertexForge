@@ -16,11 +16,11 @@ namespace render::postprocess
         enabled = false;
     }
 
-    void ChromaticAberrationEffect::init(vk::RenderPass renderPass, vk::Extent2D extent)
+    void ChromaticAberrationEffect::init(vk::Format colorFormat, vk::Extent2D extent)
     {
         loadShader();
         createDescriptorSetLayout();
-        createPipeline(renderPass, extent);
+        createPipeline(colorFormat, extent);
         initialized = true;
     }
 
@@ -55,7 +55,7 @@ namespace render::postprocess
         initialized = false;
     }
 
-    void ChromaticAberrationEffect::recreate(vk::RenderPass renderPass, vk::Extent2D extent)
+    void ChromaticAberrationEffect::recreate(vk::Format colorFormat, vk::Extent2D extent)
     {
         auto& dev = device.getLogicalDevice();
 
@@ -71,7 +71,7 @@ namespace render::postprocess
             pipelineLayout = nullptr;
         }
 
-        createPipeline(renderPass, extent);
+        createPipeline(colorFormat, extent);
     }
 
     void ChromaticAberrationEffect::record(const vk::CommandBuffer& commandBuffer,
@@ -118,11 +118,11 @@ namespace render::postprocess
         inputDescriptorSetLayout = device.getLogicalDevice().createDescriptorSetLayout(layoutInfo);
     }
 
-    void ChromaticAberrationEffect::createPipeline(vk::RenderPass renderPass, vk::Extent2D extent)
+    void ChromaticAberrationEffect::createPipeline(vk::Format colorFormat, vk::Extent2D extent)
     {
         core::GraphicsPipelineConfig config{};
         config.device = device.getLogicalDevice();
-        config.renderPass = renderPass;
+        config.colorAttachmentFormats = {colorFormat};
         config.extent = extent;
         config.shaderStages = shader->getShaderStages();
         config.descriptorSetLayouts = {inputDescriptorSetLayout};

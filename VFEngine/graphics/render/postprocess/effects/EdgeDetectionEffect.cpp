@@ -6,6 +6,7 @@
 #include "../../../core/OffScreen.hpp"
 #include "../../../core/ImageUtilities.hpp"
 #include "../../../core/PipelineUtilities.hpp"
+#include "../../../core/DynamicRenderingHelpers.hpp"
 
 namespace render::postprocess
 {
@@ -27,12 +28,11 @@ namespace render::postprocess
         }
     }
 
-    void EdgeDetectionEffect::init(vk::RenderPass renderPass, vk::Extent2D extent)
+    void EdgeDetectionEffect::init(vk::Format colorFormat, vk::Extent2D extent)
     {
         currentExtent = extent;
 
         createSampler();
-        createEdgeRenderPass();
         createIntermediateImage();
         createDepthImageView();
         createDescriptorSetLayouts();
@@ -40,7 +40,7 @@ namespace render::postprocess
         createDescriptorSets();
         loadShaders();
         createEdgePipeline();
-        createCompositePipeline(renderPass);
+        createCompositePipeline(colorFormat);
 
         initialized = true;
     }
@@ -76,12 +76,6 @@ namespace render::postprocess
             compositeDescriptorSetLayout = nullptr;
         }
 
-        if (edgeRenderPass)
-        {
-            dev.destroyRenderPass(edgeRenderPass);
-            edgeRenderPass = nullptr;
-        }
-
         if (sampler)
         {
             dev.destroySampler(sampler);
@@ -94,7 +88,7 @@ namespace render::postprocess
         initialized = false;
     }
 
-    void EdgeDetectionEffect::recreate(vk::RenderPass renderPass, vk::Extent2D extent)
+    void EdgeDetectionEffect::recreate(vk::Format colorFormat, vk::Extent2D extent)
     {
         currentExtent = extent;
         auto& dev = device.getLogicalDevice();
@@ -114,19 +108,12 @@ namespace render::postprocess
             descriptorPool = nullptr;
         }
 
-        if (edgeRenderPass)
-        {
-            dev.destroyRenderPass(edgeRenderPass);
-            edgeRenderPass = nullptr;
-        }
-
-        createEdgeRenderPass();
         createIntermediateImage();
         createDepthImageView();
         createDescriptorPool();
         createDescriptorSets();
         createEdgePipeline();
-        createCompositePipeline(renderPass);
+        createCompositePipeline(colorFormat);
     }
 
     void EdgeDetectionEffect::preRecord(const vk::CommandBuffer& commandBuffer,
@@ -138,13 +125,13 @@ namespace render::postprocess
             vk::ImageLayout::eDepthStencilReadOnlyOptimal,
             depthAspectMask);
 
-        vk::RenderPassBeginInfo rpBegin{};
-        rpBegin.renderPass = edgeRenderPass;
-        rpBegin.framebuffer = intermediateFramebuffer;
-        rpBegin.renderArea.offset = vk::Offset2D{0, 0};
-        rpBegin.renderArea.extent = currentExtent;
+        auto colorAttach = core::colorDontCare(intermediateImageView);
 
-        commandBuffer.beginRenderPass(rpBegin, vk::SubpassContents::eInline);
+        core::DynamicRenderingInfo dynInfo{};
+        dynInfo.extent = currentExtent;
+        dynInfo.colorAttachments = {colorAttach};
+
+        core::beginDynamicRendering(commandBuffer, dynInfo);
 
         commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, edgePipeline);
 
@@ -170,7 +157,12 @@ namespace render::postprocess
                                      0, sizeof(EdgeDetectionPushConstants), &pc);
 
         commandBuffer.draw(3, 1, 0, 0);
-        commandBuffer.endRenderPass();
+        core::endDynamicRendering(commandBuffer);
+
+        // Transition intermediate image to shader read for composite pass
+        core::ImageUtilities::transitionImageLayout(commandBuffer, intermediateImage,
+            vk::ImageLayout::eColorAttachmentOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
+            vk::ImageAspectFlagBits::eColor);
 
         core::ImageUtilities::transitionImageLayout(commandBuffer,
             offscreenResources.depthImage.depthImage,
@@ -220,46 +212,6 @@ namespace render::postprocess
         sampler = device.getLogicalDevice().createSampler(samplerInfo);
     }
 
-    void EdgeDetectionEffect::createEdgeRenderPass()
-    {
-        vk::AttachmentDescription colorAttachment{};
-        colorAttachment.format = vk::Format::eR8G8B8A8Unorm;
-        colorAttachment.samples = vk::SampleCountFlagBits::e1;
-        colorAttachment.loadOp = vk::AttachmentLoadOp::eDontCare;
-        colorAttachment.storeOp = vk::AttachmentStoreOp::eStore;
-        colorAttachment.stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
-        colorAttachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
-        colorAttachment.initialLayout = vk::ImageLayout::eUndefined;
-        colorAttachment.finalLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-
-        vk::AttachmentReference colorRef{};
-        colorRef.attachment = 0;
-        colorRef.layout = vk::ImageLayout::eColorAttachmentOptimal;
-
-        vk::SubpassDescription subpass{};
-        subpass.pipelineBindPoint = vk::PipelineBindPoint::eGraphics;
-        subpass.colorAttachmentCount = 1;
-        subpass.pColorAttachments = &colorRef;
-
-        vk::SubpassDependency dependency{};
-        dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
-        dependency.dstSubpass = 0;
-        dependency.srcStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
-        dependency.srcAccessMask = vk::AccessFlagBits::eColorAttachmentWrite;
-        dependency.dstStageMask = vk::PipelineStageFlagBits::eFragmentShader;
-        dependency.dstAccessMask = vk::AccessFlagBits::eShaderRead;
-
-        vk::RenderPassCreateInfo rpInfo{};
-        rpInfo.attachmentCount = 1;
-        rpInfo.pAttachments = &colorAttachment;
-        rpInfo.subpassCount = 1;
-        rpInfo.pSubpasses = &subpass;
-        rpInfo.dependencyCount = 1;
-        rpInfo.pDependencies = &dependency;
-
-        edgeRenderPass = device.getLogicalDevice().createRenderPass(rpInfo);
-    }
-
     void EdgeDetectionEffect::createIntermediateImage()
     {
         auto& dev = device.getLogicalDevice();
@@ -278,16 +230,6 @@ namespace render::postprocess
         core::ImageViewInfoRequest viewReq(dev, intermediateImage);
         viewReq.format = vk::Format::eR8G8B8A8Unorm;
         core::ImageUtilities::createImageView(viewReq, intermediateImageView);
-
-        vk::FramebufferCreateInfo fbInfo{};
-        fbInfo.renderPass = edgeRenderPass;
-        fbInfo.attachmentCount = 1;
-        fbInfo.pAttachments = &intermediateImageView;
-        fbInfo.width = currentExtent.width;
-        fbInfo.height = currentExtent.height;
-        fbInfo.layers = 1;
-
-        intermediateFramebuffer = dev.createFramebuffer(fbInfo);
     }
 
     void EdgeDetectionEffect::createDepthImageView()
@@ -496,13 +438,18 @@ namespace render::postprocess
         pipelineInfo.pDepthStencilState = &depthStencil;
         pipelineInfo.pColorBlendState = &colorBlending;
         pipelineInfo.layout = edgePipelineLayout;
-        pipelineInfo.renderPass = edgeRenderPass;
         pipelineInfo.subpass = 0;
+
+        vk::Format edgeFormat = vk::Format::eR8G8B8A8Unorm;
+        vk::PipelineRenderingCreateInfo renderingInfo{};
+        renderingInfo.colorAttachmentCount = 1;
+        renderingInfo.pColorAttachmentFormats = &edgeFormat;
+        pipelineInfo.pNext = &renderingInfo;
 
         edgePipeline = dev.createGraphicsPipeline(nullptr, pipelineInfo).value;
     }
 
-    void EdgeDetectionEffect::createCompositePipeline(vk::RenderPass externalRenderPass)
+    void EdgeDetectionEffect::createCompositePipeline(vk::Format colorFormat)
     {
         std::array<vk::DescriptorSetLayout, 2> setLayouts = {
             pipeline.getInputDescriptorSetLayout(), compositeDescriptorSetLayout
@@ -510,7 +457,7 @@ namespace render::postprocess
 
         core::GraphicsPipelineConfig config{};
         config.device = device.getLogicalDevice();
-        config.renderPass = externalRenderPass;
+        config.colorAttachmentFormats = {colorFormat};
         config.extent = currentExtent;
         config.shaderStages = compositeShader->getShaderStages();
         config.descriptorSetLayouts = {setLayouts.begin(), setLayouts.end()};
@@ -528,7 +475,6 @@ namespace render::postprocess
     {
         auto& dev = device.getLogicalDevice();
 
-        if (intermediateFramebuffer) { dev.destroyFramebuffer(intermediateFramebuffer); intermediateFramebuffer = nullptr; }
         if (intermediateImageView) { dev.destroyImageView(intermediateImageView); intermediateImageView = nullptr; }
         if (intermediateImage) { dev.destroyImage(intermediateImage); intermediateImage = nullptr; }
         if (intermediateAllocation.isValid()) { device.getMemoryManager().free(intermediateAllocation); intermediateAllocation = {}; }

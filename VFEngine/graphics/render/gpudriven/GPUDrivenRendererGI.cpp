@@ -155,10 +155,10 @@ namespace render::gpudriven
                 giUpdatePipeline = std::make_unique<gi::ProbeUpdatePipeline>(device);
                 giUpdatePipeline->init(storage->getProbeDataLayout(), storage->getCascadeInfoLayout());
 
-                if (cachedRenderPass)
+                if (!cachedColorFormats.empty())
                 {
                     giDebugRenderer = std::make_unique<gi::GIDebugRenderer>(device);
-                    giDebugRenderer->init(cachedRenderPass, storage->getProbeDataLayout(), storage->getCascadeInfoLayout());
+                    giDebugRenderer->init(cachedColorFormats[0], cachedDepthFormat, storage->getProbeDataLayout(), storage->getCascadeInfoLayout());
                 }
 
                 if (meshShaderPipeline && shadowSystem)
@@ -178,7 +178,8 @@ namespace render::gpudriven
                         .shadowTextureLayout = shadowSystem->getShadowTextureLayout(),
                         .giProbeDataLayout = storage->getSamplingLayout(),
                         .causticLayout = causticLayout,
-                        .renderPass = cachedRenderPass
+                        .colorAttachmentFormats = cachedColorFormats,
+                        .depthAttachmentFormat = cachedDepthFormat
                     };
 
                     meshShaderPipeline->recreate(pipelineInfo);
@@ -196,9 +197,10 @@ namespace render::gpudriven
                         pipelineInfo.transparentMode = false;
                     }
 
-                    if (wboitMeshShaderPipeline && cachedWBOITRenderPass)
+                    if (wboitMeshShaderPipeline && !cachedWBOITColorFormats.empty())
                     {
-                        pipelineInfo.renderPass = cachedWBOITRenderPass;
+                        pipelineInfo.colorAttachmentFormats = cachedWBOITColorFormats;
+                        pipelineInfo.depthAttachmentFormat = cachedWBOITDepthFormat;
                         pipelineInfo.wboitMode = true;
                         wboitMeshShaderPipeline->recreate(pipelineInfo);
                         wboitMeshShaderPipeline->updateGIProbeDescriptor(storage->getSamplingDescSet());
@@ -242,7 +244,7 @@ namespace render::gpudriven
             cleanupGI();
             initGI(settings);
 
-            if (!giCascadeManager && meshShaderPipeline && shadowSystem && cachedRenderPass)
+            if (!giCascadeManager && meshShaderPipeline && shadowSystem && !cachedColorFormats.empty())
             {
                 vk::DescriptorSetLayout causticLayout{};
                 if (water.causticsResources && water.causticsResources->isInitialized())
@@ -259,7 +261,8 @@ namespace render::gpudriven
                     .shadowTextureLayout = shadowSystem->getShadowTextureLayout(),
                     .giProbeDataLayout = nullptr,
                     .causticLayout = causticLayout,
-                    .renderPass = cachedRenderPass
+                    .colorAttachmentFormats = cachedColorFormats,
+                    .depthAttachmentFormat = cachedDepthFormat
                 };
                 meshShaderPipeline->recreate(pipelineInfo);
                 if (causticLayout)
@@ -272,9 +275,10 @@ namespace render::gpudriven
                         transparentMeshShaderPipeline->updateCausticDescriptor(water.causticsResources->getDescriptorSet());
                     pipelineInfo.transparentMode = false;
                 }
-                if (wboitMeshShaderPipeline && cachedWBOITRenderPass)
+                if (wboitMeshShaderPipeline && !cachedWBOITColorFormats.empty())
                 {
-                    pipelineInfo.renderPass = cachedWBOITRenderPass;
+                    pipelineInfo.colorAttachmentFormats = cachedWBOITColorFormats;
+                    pipelineInfo.depthAttachmentFormat = cachedWBOITDepthFormat;
                     pipelineInfo.wboitMode = true;
                     wboitMeshShaderPipeline->recreate(pipelineInfo);
                     if (causticLayout)
@@ -566,7 +570,8 @@ namespace render::gpudriven
                     .giProbeDataLayout = giLayout,
                     .causticLayout = causticLayout,
                     .rtShadowMaskLayout = rtMaskLayout,
-                    .renderPass = cachedRenderPass
+                    .colorAttachmentFormats = cachedColorFormats,
+                    .depthAttachmentFormat = cachedDepthFormat
                 };
 
                 meshShaderPipeline->recreate(pipelineInfo);
@@ -588,9 +593,10 @@ namespace render::gpudriven
                     pipelineInfo.transparentMode = false;
                 }
 
-                if (wboitMeshShaderPipeline && cachedWBOITRenderPass)
+                if (wboitMeshShaderPipeline && !cachedWBOITColorFormats.empty())
                 {
-                    pipelineInfo.renderPass = cachedWBOITRenderPass;
+                    pipelineInfo.colorAttachmentFormats = cachedWBOITColorFormats;
+                    pipelineInfo.depthAttachmentFormat = cachedWBOITDepthFormat;
                     pipelineInfo.wboitMode = true;
                     wboitMeshShaderPipeline->recreate(pipelineInfo);
                     wboitMeshShaderPipeline->updateRTShadowMaskDescriptor(rtMaskDescSet);
@@ -615,7 +621,7 @@ namespace render::gpudriven
                         lightCullingPipeline->getDescriptorSetLayout(),
                         shadowSystem->getShadowDataLayout(),
                         shadowSystem->getShadowTextureLayout(),
-                        cachedRenderPass);
+                        cachedColorFormats, cachedDepthFormat);
                 }
             }
         }

@@ -3,6 +3,7 @@
 #include "../../../core/SwapChain.hpp"
 #include "../../../core/Shader.hpp"
 #include "../../../core/PipelineUtilities.hpp"
+#include "../../../core/DynamicRenderingHelpers.hpp"
 #include "print/Log.hpp"
 
 namespace render::vfx
@@ -17,17 +18,17 @@ namespace render::vfx
         cleanup();
     }
 
-    void VFXDistortionComposite::init(vk::RenderPass renderPass, vk::DescriptorSetLayout compositeDescLayout)
+    void VFXDistortionComposite::init(vk::Format colorFormat, vk::DescriptorSetLayout compositeDescLayout)
     {
         loadShader();
-        createPipeline(renderPass, compositeDescLayout);
+        createPipeline(colorFormat, compositeDescLayout);
         initialized = true;
     }
 
-    void VFXDistortionComposite::recreate(vk::RenderPass renderPass, vk::DescriptorSetLayout compositeDescLayout)
+    void VFXDistortionComposite::recreate(vk::Format colorFormat, vk::DescriptorSetLayout compositeDescLayout)
     {
         cleanup();
-        init(renderPass, compositeDescLayout);
+        init(colorFormat, compositeDescLayout);
     }
 
     void VFXDistortionComposite::cleanup()
@@ -53,13 +54,13 @@ namespace render::vfx
         }
     }
 
-    void VFXDistortionComposite::createPipeline(vk::RenderPass renderPass, vk::DescriptorSetLayout compositeDescLayout)
+    void VFXDistortionComposite::createPipeline(vk::Format colorFormat, vk::DescriptorSetLayout compositeDescLayout)
     {
         // Fullscreen triangle: no vertex inputs
         core::GraphicsPipelineConfig config{
             .device = device.getLogicalDevice(),
-            .renderPass = renderPass,
             .extent = swapChain.getSwapchainExtent(),
+            .colorAttachmentFormats = {colorFormat},
             .shaderStages = compositeShader->getShaderStages(),
             .topology = vk::PrimitiveTopology::eTriangleList,
             .descriptorSetLayouts = {compositeDescLayout},
@@ -77,20 +78,19 @@ namespace render::vfx
 
     void VFXDistortionComposite::record(
         vk::CommandBuffer cmd,
-        vk::RenderPass renderPass,
-        vk::Framebuffer framebuffer,
+        vk::ImageView colorImageView,
         vk::Extent2D extent,
         vk::DescriptorSet compositeDescSet) const
     {
         if (!initialized) return;
 
-        vk::RenderPassBeginInfo rpBegin{};
-        rpBegin.renderPass = renderPass;
-        rpBegin.framebuffer = framebuffer;
-        rpBegin.renderArea.offset = vk::Offset2D{0, 0};
-        rpBegin.renderArea.extent = extent;
+        auto colorAttach = core::colorLoad(colorImageView);
 
-        cmd.beginRenderPass(rpBegin, vk::SubpassContents::eInline);
+        core::DynamicRenderingInfo dynInfo{};
+        dynInfo.extent = extent;
+        dynInfo.colorAttachments = {colorAttach};
+
+        core::beginDynamicRendering(cmd, dynInfo);
 
         cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline);
 
@@ -107,6 +107,6 @@ namespace render::vfx
         // Fullscreen triangle: 3 vertices, no vertex buffer
         cmd.draw(3, 1, 0, 0);
 
-        cmd.endRenderPass();
+        core::endDynamicRendering(cmd);
     }
 }

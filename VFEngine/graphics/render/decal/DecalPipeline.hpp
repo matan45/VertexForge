@@ -44,9 +44,6 @@ namespace render::decal
 
         bool initialized = false;
 
-        vk::RenderPass decalRenderPass;
-        std::vector<vk::Framebuffer> decalFramebuffers;
-
         vk::Pipeline pipeline;
         vk::PipelineLayout pipelineLayout;
 
@@ -111,13 +108,12 @@ namespace render::decal
                            float nearPlane, float farPlane);
 
         void render(const vk::CommandBuffer& cmd, uint32_t imageIndex);
+        void renderGraphManaged(const vk::CommandBuffer& cmd, uint32_t imageIndex);
 
         bool hasDecals() const { return !currentDecals.empty(); }
         bool isInitialized() const { return initialized; }
 
     private:
-        void createRenderPass();
-        void createFramebuffers();
         void createSamplers();
         void createDescriptorResources();
         void createPipeline();

@@ -5,6 +5,7 @@
 #include "../../core/ImageUtilities.hpp"
 #include "../../core/Utilities.hpp"
 #include "../../core/VulkanMemoryManager.hpp"
+#include "../../core/DynamicRenderingHelpers.hpp"
 #include "print/Log.hpp"
 
 namespace render::ibl
@@ -53,53 +54,8 @@ namespace render::ibl
 
         prefilterImage.sampler = device.getLogicalDevice().createSampler(samplerInfo);
 
-        // RenderPass
-        vk::AttachmentDescription colorAttachment{};
-        colorAttachment.format = vk::Format::eR16G16B16A16Sfloat;
-        colorAttachment.samples = vk::SampleCountFlagBits::e1;
-        colorAttachment.loadOp = vk::AttachmentLoadOp::eClear;
-        colorAttachment.storeOp = vk::AttachmentStoreOp::eStore;
-        colorAttachment.initialLayout = vk::ImageLayout::eUndefined;
-        colorAttachment.finalLayout = vk::ImageLayout::eColorAttachmentOptimal;
-
-        vk::AttachmentReference colorAttachmentRef{};
-        colorAttachmentRef.attachment = 0;
-        colorAttachmentRef.layout = vk::ImageLayout::eColorAttachmentOptimal;
-
-        vk::SubpassDescription subpass{};
-        subpass.pipelineBindPoint = vk::PipelineBindPoint::eGraphics;
-        subpass.colorAttachmentCount = 1;
-        subpass.pColorAttachments = &colorAttachmentRef;
-
-        // Use subpass dependencies for layout transitions
-        std::array<vk::SubpassDependency, 2> dependencies;
-        dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
-        dependencies[0].dstSubpass = 0;
-        dependencies[0].srcStageMask = vk::PipelineStageFlagBits::eBottomOfPipe;
-        dependencies[0].dstStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
-        dependencies[0].srcAccessMask = vk::AccessFlagBits::eMemoryRead;
-        dependencies[0].dstAccessMask = vk::AccessFlagBits::eColorAttachmentRead |
-            vk::AccessFlagBits::eColorAttachmentWrite;
-        dependencies[0].dependencyFlags = vk::DependencyFlagBits::eByRegion;
-
-        dependencies[1].srcSubpass = 0;
-        dependencies[1].dstSubpass = VK_SUBPASS_EXTERNAL;
-        dependencies[1].srcStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
-        dependencies[1].dstStageMask = vk::PipelineStageFlagBits::eBottomOfPipe;
-        dependencies[1].srcAccessMask = vk::AccessFlagBits::eColorAttachmentRead |
-            vk::AccessFlagBits::eColorAttachmentWrite;
-        dependencies[1].dstAccessMask = vk::AccessFlagBits::eMemoryRead;
-        dependencies[1].dependencyFlags = vk::DependencyFlagBits::eByRegion;
-
-        vk::RenderPassCreateInfo renderPassInfo{};
-        renderPassInfo.attachmentCount = 1;
-        renderPassInfo.pAttachments = &colorAttachment;
-        renderPassInfo.subpassCount = 1;
-        renderPassInfo.pSubpasses = &subpass;
-        renderPassInfo.dependencyCount = 2;
-        renderPassInfo.pDependencies = dependencies.data();
-
-        vk::RenderPass renderPass = device.getLogicalDevice().createRenderPass(renderPassInfo);
+        // Dynamic rendering format for pipeline creation
+        vk::Format colorFormat = vk::Format::eR16G16B16A16Sfloat;
 
         // VertexBuffer
         vk::VertexInputBindingDescription vertexInputBindingDescription;
@@ -293,9 +249,12 @@ namespace render::ibl
         pipelineInfo.pMultisampleState = &multisampling;
         pipelineInfo.pColorBlendState = &colorBlending;
         pipelineInfo.layout = pipelineLayout;
-        pipelineInfo.renderPass = renderPass;
-        pipelineInfo.subpass = 0;
         pipelineInfo.pDynamicState = &dynamicState;
+
+        vk::PipelineRenderingCreateInfo pipelineRenderingInfo{};
+        pipelineRenderingInfo.colorAttachmentCount = 1;
+        pipelineRenderingInfo.pColorAttachmentFormats = &colorFormat;
+        pipelineInfo.pNext = &pipelineRenderingInfo;
 
         vk::Pipeline graphicsPipeline = device.getLogicalDevice().createGraphicsPipeline(nullptr, pipelineInfo).value;
 
@@ -312,16 +271,6 @@ namespace render::ibl
         core::ImageViewInfoRequest imageViewRequest(device.getLogicalDevice(), imageHelper.image);
         imageViewRequest.format = vk::Format::eR16G16B16A16Sfloat;
         core::ImageUtilities::createImageView(imageViewRequest, imageHelper.view);
-
-        vk::FramebufferCreateInfo framebufferInfo{};
-        framebufferInfo.renderPass = renderPass;
-        framebufferInfo.attachmentCount = 1;
-        framebufferInfo.pAttachments = &imageHelper.view;
-        framebufferInfo.width = CUBE_MAP_SIZE;
-        framebufferInfo.height = CUBE_MAP_SIZE;
-        framebufferInfo.layers = 1;
-
-        imageHelper.framebuffer = device.getLogicalDevice().createFramebuffer(framebufferInfo);
 
         // ImageTransition
         vk::UniqueCommandBuffer commandBufferInitHelperImageTransition = core::Utilities::beginSingleTimeCommands(
@@ -345,15 +294,6 @@ namespace render::ibl
         core::Utilities::endSingleTimeCommands(device, commandBufferInitCubeImage);
 
         // Draw
-        vk::ClearValue clearColor{std::array<float, 4>{0.0f, 0.0f, 0.0f, 1.0f}};
-
-        vk::RenderPassBeginInfo renderPassBeginInfo{};
-        renderPassBeginInfo.renderPass = renderPass;
-        renderPassBeginInfo.framebuffer = imageHelper.framebuffer;
-        renderPassBeginInfo.renderArea = vk::Rect2D({0, 0}, {CUBE_MAP_SIZE, CUBE_MAP_SIZE});
-        renderPassBeginInfo.clearValueCount = 1;
-        renderPassBeginInfo.pClearValues = &clearColor;
-
         float roughness = 0;
         for (uint32_t m = 0; m < mipLevels; m++)
         {
@@ -376,8 +316,14 @@ namespace render::ibl
                 faceCommandBuffer.get().pushConstants(pipelineLayout, vk::ShaderStageFlagBits::eFragment, 0,
                     sizeof(float), &roughness);
 
-                // Begin render pass and render to the specific cube face
-                faceCommandBuffer.get().beginRenderPass(renderPassBeginInfo, vk::SubpassContents::eInline);
+                // Begin dynamic rendering
+                core::DynamicRenderingInfo renderingInfo{};
+                renderingInfo.extent = vk::Extent2D{CUBE_MAP_SIZE, CUBE_MAP_SIZE};
+                renderingInfo.colorAttachments = {
+                    core::colorClear(imageHelper.view, vk::ClearColorValue{std::array<float, 4>{0.0f, 0.0f, 0.0f, 1.0f}})
+                };
+
+                core::beginDynamicRendering(faceCommandBuffer.get(), renderingInfo);
 
                 // Bind pipeline, descriptor sets, and draw commands
                 faceCommandBuffer.get().bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
@@ -390,7 +336,7 @@ namespace render::ibl
                 faceCommandBuffer.get().bindVertexBuffers(0, cubeVertexBuffer, offsets);
                 faceCommandBuffer.get().draw(static_cast<uint32_t>(cubeVertices.size()), 1, 0, 0);
 
-                faceCommandBuffer.get().endRenderPass();
+                core::endDynamicRendering(faceCommandBuffer.get());
 
                 // Ensure synchronization between rendering and copying by transitioning the image layout
                 core::ImageUtilities::transitionImageLayout(faceCommandBuffer.get(), imageHelper.image,
@@ -456,12 +402,10 @@ namespace render::ibl
 
         core::BufferUtilities::destroyBuffer(device.getLogicalDevice(), uboUniformBuffer, uboUniformBufferAllocation, device.getMemoryManager());
 
-        device.getLogicalDevice().destroyFramebuffer(imageHelper.framebuffer);
         device.getMemoryManager().free(imageHelper.allocation);
         device.getLogicalDevice().destroyImageView(imageHelper.view);
         device.getLogicalDevice().destroyImage(imageHelper.image);
 
-        device.getLogicalDevice().destroyRenderPass(renderPass);
         device.getLogicalDevice().destroyDescriptorPool(descriptorPool);
         device.getLogicalDevice().destroyDescriptorSetLayout(descriptorSetLayout);
         device.getLogicalDevice().destroyPipeline(graphicsPipeline);

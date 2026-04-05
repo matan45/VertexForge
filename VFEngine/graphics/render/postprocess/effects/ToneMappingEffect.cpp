@@ -21,11 +21,11 @@ namespace render::postprocess
         enabled = true;
     }
 
-    void ToneMappingEffect::init(vk::RenderPass renderPass, vk::Extent2D extent)
+    void ToneMappingEffect::init(vk::Format colorFormat, vk::Extent2D extent)
     {
         loadShader();
         createDescriptorSetLayout();
-        createPipeline(renderPass, extent);
+        createPipeline(colorFormat, extent);
         initialized = true;
     }
 
@@ -60,7 +60,7 @@ namespace render::postprocess
         initialized = false;
     }
 
-    void ToneMappingEffect::recreate(vk::RenderPass renderPass, vk::Extent2D extent)
+    void ToneMappingEffect::recreate(vk::Format colorFormat, vk::Extent2D extent)
     {
         auto& dev = device.getLogicalDevice();
 
@@ -76,7 +76,7 @@ namespace render::postprocess
             pipelineLayout = nullptr;
         }
 
-        createPipeline(renderPass, extent);
+        createPipeline(colorFormat, extent);
     }
 
     void ToneMappingEffect::record(const vk::CommandBuffer& commandBuffer,
@@ -133,11 +133,11 @@ namespace render::postprocess
         inputDescriptorSetLayout = device.getLogicalDevice().createDescriptorSetLayout(layoutInfo);
     }
 
-    void ToneMappingEffect::createPipeline(vk::RenderPass renderPass, vk::Extent2D extent)
+    void ToneMappingEffect::createPipeline(vk::Format colorFormat, vk::Extent2D extent)
     {
         core::GraphicsPipelineConfig config{};
         config.device = device.getLogicalDevice();
-        config.renderPass = renderPass;
+        config.colorAttachmentFormats = {colorFormat};
         config.extent = extent;
         config.shaderStages = shader->getShaderStages();
         config.descriptorSetLayouts = {inputDescriptorSetLayout};

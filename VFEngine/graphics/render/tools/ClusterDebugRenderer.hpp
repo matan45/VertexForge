@@ -63,8 +63,8 @@ namespace render::mesh
         explicit ClusterDebugRenderer(core::Device& device, core::SwapChain& swapChain);
         ~ClusterDebugRenderer();
 
-        void init(vk::RenderPass renderPass);
-        void recreate(vk::RenderPass renderPass);
+        void init(vk::Format colorFormat, vk::Format depthFormat);
+        void recreate(vk::Format colorFormat, vk::Format depthFormat);
         void cleanUp();
         void cleanUpShader();
 
@@ -79,7 +79,7 @@ namespace render::mesh
     private:
         void loadShader();
         void createDescriptorSetLayout();
-        void createPipeline(vk::RenderPass renderPass);
+        void createPipeline(vk::Format colorFormat, vk::Format depthFormat);
         void createBuffers();
         void createDescriptorPool();
         void createDescriptorSet();

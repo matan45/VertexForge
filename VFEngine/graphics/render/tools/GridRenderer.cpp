@@ -14,18 +14,18 @@ namespace render::mesh
 
     GridRenderer::~GridRenderer() = default;
 
-    void GridRenderer::init(vk::RenderPass renderPass)
+    void GridRenderer::init(vk::Format colorFormat, vk::Format depthFormat)
     {
         loadShader();
-        createPipeline(renderPass);
+        createPipeline(colorFormat, depthFormat);
         createBuffers();
         initialized = true;
     }
 
-    void GridRenderer::recreate(vk::RenderPass renderPass)
+    void GridRenderer::recreate(vk::Format colorFormat, vk::Format depthFormat)
     {
         destroyPipelineAndLayout(gridPipeline, gridPipelineLayout);
-        createPipeline(renderPass);
+        createPipeline(colorFormat, depthFormat);
     }
 
     void GridRenderer::cleanUp()
@@ -50,12 +50,13 @@ namespace render::mesh
         gridShader->readShader("../../resources/shaders/tools/gridOverlay.glsl");
     }
 
-    void GridRenderer::createPipeline(vk::RenderPass renderPass)
+    void GridRenderer::createPipeline(vk::Format colorFormat, vk::Format depthFormat)
     {
         core::WireframePipelineConfig config{
             .device = device.getLogicalDevice(),
-            .renderPass = renderPass,
             .extent = swapChain.getSwapchainExtent(),
+            .colorAttachmentFormats = {colorFormat},
+            .depthAttachmentFormat = depthFormat,
             .pushConstantSize = sizeof(GridPushConstants),
             .shaderStages = gridShader->getShaderStages(),
             .enableBlending = true

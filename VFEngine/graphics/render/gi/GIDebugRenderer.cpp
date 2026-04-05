@@ -15,7 +15,7 @@ namespace render::gi
         cleanup();
     }
 
-    void GIDebugRenderer::init(vk::RenderPass renderPass,
+    void GIDebugRenderer::init(vk::Format colorFormat, vk::Format depthFormat,
                                 vk::DescriptorSetLayout probeDataLayout,
                                 vk::DescriptorSetLayout cascadeInfoLayout)
     {
@@ -26,7 +26,7 @@ namespace render::gi
 
         loadShaders();
         createPipelineLayout(probeDataLayout, cascadeInfoLayout);
-        createPipeline(renderPass);
+        createPipeline(colorFormat, depthFormat);
 
         initialized = true;
         vfLogInfo("GIDebugRenderer: Initialized");
@@ -93,7 +93,7 @@ namespace render::gi
         probeDebugPipelineLayout = vkDevice.createPipelineLayout(layoutInfo);
     }
 
-    void GIDebugRenderer::createPipeline(vk::RenderPass renderPass)
+    void GIDebugRenderer::createPipeline(vk::Format colorFormat, vk::Format depthFormat)
     {
         vk::Device vkDevice = device.getLogicalDevice();
 
@@ -143,7 +143,13 @@ namespace render::gi
         depthStencil.depthWriteEnable = VK_FALSE;
         depthStencil.depthCompareOp = vk::CompareOp::eLess;
 
+        vk::PipelineRenderingCreateInfo renderingInfo{};
+        renderingInfo.colorAttachmentCount = 1;
+        renderingInfo.pColorAttachmentFormats = &colorFormat;
+        renderingInfo.depthAttachmentFormat = depthFormat;
+
         vk::GraphicsPipelineCreateInfo pipelineInfo{};
+        pipelineInfo.pNext = &renderingInfo;
         pipelineInfo.stageCount = static_cast<uint32_t>(stages.size());
         pipelineInfo.pStages = stages.data();
         pipelineInfo.pVertexInputState = &vertexInput;
@@ -155,7 +161,6 @@ namespace render::gi
         pipelineInfo.pDepthStencilState = &depthStencil;
         pipelineInfo.pDynamicState = &dynamicState;
         pipelineInfo.layout = probeDebugPipelineLayout;
-        pipelineInfo.renderPass = renderPass;
 
         auto result = vkDevice.createGraphicsPipeline(nullptr, pipelineInfo);
         probeDebugPipeline = result.value;

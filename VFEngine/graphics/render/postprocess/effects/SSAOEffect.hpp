@@ -41,17 +41,11 @@ namespace render::postprocess
         vk::Image ssaoRawImage;
         core::VulkanAllocation ssaoRawAllocation;
         vk::ImageView ssaoRawImageView;
-        vk::Framebuffer ssaoRawFramebuffer;
-
         vk::Image ssaoBlurredImage;
         core::VulkanAllocation ssaoBlurredAllocation;
         vk::ImageView ssaoBlurredImageView;
-        vk::Framebuffer ssaoBlurredFramebuffer;
 
         vk::ImageView depthOnlyImageView;
-
-        vk::RenderPass ssaoRenderPass;
-        vk::RenderPass blurRenderPass;
 
         std::shared_ptr<core::Shader> ssaoShader;
         std::shared_ptr<core::Shader> blurShader;
@@ -95,9 +89,9 @@ namespace render::postprocess
                    core::OffscreenResources& offscreenResources,
                    PostProcessPipeline& pipeline);
 
-        void init(vk::RenderPass renderPass, vk::Extent2D extent) override;
+        void init(vk::Format colorFormat, vk::Extent2D extent) override;
         void cleanup() override;
-        void recreate(vk::RenderPass renderPass, vk::Extent2D extent) override;
+        void recreate(vk::Format colorFormat, vk::Extent2D extent) override;
 
         void preRecord(const vk::CommandBuffer& commandBuffer,
                        vk::DescriptorSet inputDescriptorSet) override;
@@ -112,7 +106,6 @@ namespace render::postprocess
 
     private:
         void createSampler();
-        void createRenderPasses();
         void createImages();
         void createDepthImageView();
         void createParamsBuffer();
@@ -122,7 +115,7 @@ namespace render::postprocess
         void loadShaders();
         void createSSAOPipeline();
         void createBlurPipeline();
-        void createCompositePipeline(vk::RenderPass externalRenderPass);
+        void createCompositePipeline(vk::Format colorFormat);
 
         void cleanupImages();
         void cleanupPipelines();

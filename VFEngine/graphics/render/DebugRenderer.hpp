@@ -88,8 +88,8 @@ namespace render
         explicit DebugRenderer(core::Device& device, core::SwapChain& swapChain);
         ~DebugRenderer();
 
-        void init(vk::RenderPass renderPass);
-        void recreate(vk::RenderPass renderPass);
+        void init(vk::Format colorFormat, vk::Format depthFormat);
+        void recreate(vk::Format colorFormat, vk::Format depthFormat);
         void cleanUp();
         void cleanUpShaders();
 

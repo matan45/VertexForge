@@ -38,14 +38,11 @@ namespace render::billboard
 
         std::shared_ptr<core::Shader> billboardShader;
 
-        vk::RenderPass renderPass;
         vk::Pipeline graphicsPipeline;
         vk::PipelineLayout pipelineLayout;
         vk::DescriptorSetLayout descriptorSetLayout;
         vk::DescriptorPool descriptorPool;
         vk::DescriptorSet atlasDescriptorSet;
-
-        std::vector<vk::Framebuffer> framebuffers;
 
         BillboardBufferManager bufferManager;
         BillboardAtlasManager atlasManager;
@@ -91,6 +88,7 @@ namespace render::billboard
         void clearExternalTextures();
 
         void recordCommandBuffer(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
+        void recordCommandBufferGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
 
         bool isInitialized() const { return initialized; }
 
@@ -99,12 +97,10 @@ namespace render::billboard
 
     private:
         void loadShader();
-        void createRenderPass();
         void createDescriptorSetLayout();
         void createDescriptorPool();
         void createDescriptorSet();
         void createPipeline();
-        void createFramebuffers();
 
         void updateDescriptorSet(vk::DescriptorSet dstSet, vk::ImageView imageView, vk::Sampler sampler);
         bool loadCustomTexture(const std::string& texturePath);

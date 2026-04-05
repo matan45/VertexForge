@@ -10,7 +10,8 @@ namespace plugin {
         uint32_t          imageIndex;
         uint32_t          viewportWidth;
         uint32_t          viewportHeight;
-        vk::RenderPass    renderPass;
+        vk::Format        colorFormat;
+        vk::Format        depthFormat;
         vk::Device        device;
         glm::mat4         viewMatrix;
         glm::mat4         projectionMatrix;

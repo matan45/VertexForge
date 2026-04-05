@@ -33,37 +33,37 @@ namespace render
 
     DebugRenderer::~DebugRenderer() = default;
 
-    void DebugRenderer::init(vk::RenderPass renderPass)
+    void DebugRenderer::init(vk::Format colorFormat, vk::Format depthFormat)
     {
-        aabbRenderer->init(renderPass);
-        frustumRenderer->init(renderPass);
-        audioSphereRenderer->init(renderPass);
-        gridRenderer->init(renderPass);
-        physicsDebugRenderer->init(renderPass);
-        lightGizmoRenderer->init(renderPass);
-        clusterDebugRenderer->init(renderPass);
-        shadowDebugRenderer->init(renderPass);
-        uiCanvasRenderer->init(renderPass);
-        uiCanvasImageRenderer->init(renderPass);
-        navmeshDebugRenderer->init(renderPass);
-        immediateDebugRenderer->init(renderPass);
+        aabbRenderer->init(colorFormat, depthFormat);
+        frustumRenderer->init(colorFormat, depthFormat);
+        audioSphereRenderer->init(colorFormat, depthFormat);
+        gridRenderer->init(colorFormat, depthFormat);
+        physicsDebugRenderer->init(colorFormat, depthFormat);
+        lightGizmoRenderer->init(colorFormat, depthFormat);
+        clusterDebugRenderer->init(colorFormat, depthFormat);
+        shadowDebugRenderer->init(colorFormat, depthFormat);
+        uiCanvasRenderer->init(colorFormat, depthFormat);
+        uiCanvasImageRenderer->init(colorFormat, depthFormat);
+        navmeshDebugRenderer->init(colorFormat, depthFormat);
+        immediateDebugRenderer->init(colorFormat, depthFormat);
         initialized = true;
     }
 
-    void DebugRenderer::recreate(vk::RenderPass renderPass)
+    void DebugRenderer::recreate(vk::Format colorFormat, vk::Format depthFormat)
     {
-        aabbRenderer->recreate(renderPass);
-        frustumRenderer->recreate(renderPass);
-        audioSphereRenderer->recreate(renderPass);
-        gridRenderer->recreate(renderPass);
-        physicsDebugRenderer->recreate(renderPass);
-        lightGizmoRenderer->recreate(renderPass);
-        clusterDebugRenderer->recreate(renderPass);
-        shadowDebugRenderer->recreate(renderPass);
-        uiCanvasRenderer->recreate(renderPass);
-        uiCanvasImageRenderer->recreate(renderPass);
-        navmeshDebugRenderer->recreate(renderPass);
-        immediateDebugRenderer->recreate(renderPass);
+        aabbRenderer->recreate(colorFormat, depthFormat);
+        frustumRenderer->recreate(colorFormat, depthFormat);
+        audioSphereRenderer->recreate(colorFormat, depthFormat);
+        gridRenderer->recreate(colorFormat, depthFormat);
+        physicsDebugRenderer->recreate(colorFormat, depthFormat);
+        lightGizmoRenderer->recreate(colorFormat, depthFormat);
+        clusterDebugRenderer->recreate(colorFormat, depthFormat);
+        shadowDebugRenderer->recreate(colorFormat, depthFormat);
+        uiCanvasRenderer->recreate(colorFormat, depthFormat);
+        uiCanvasImageRenderer->recreate(colorFormat, depthFormat);
+        navmeshDebugRenderer->recreate(colorFormat, depthFormat);
+        immediateDebugRenderer->recreate(colorFormat, depthFormat);
     }
 
     void DebugRenderer::cleanUp()

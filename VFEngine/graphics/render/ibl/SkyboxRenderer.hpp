@@ -21,9 +21,7 @@ namespace render::ibl
         core::OffscreenResources& offscreenResources;
 
         std::shared_ptr<core::Shader> skyboxShader;
-        vk::RenderPass renderPass;
         vk::Pipeline graphicsPipeline;
-        std::vector<vk::Framebuffer> framebuffers;
         vk::Buffer vertexBuffer;
         core::VulkanAllocation vertexBufferAllocation;
         vk::Buffer uniformBuffer;
@@ -50,7 +48,8 @@ namespace render::ibl
         void cleanUpShader();
 
         void recordCommandBuffer(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
-        
+        void renderSkyGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
+
         void renderToTarget(const vk::CommandBuffer& commandBuffer,
                             const SkyboxTargetParams& target) const;
 

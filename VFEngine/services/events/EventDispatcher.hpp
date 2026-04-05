@@ -65,50 +65,54 @@ namespace events {
         mutable std::shared_mutex mutex;
     };
 
+    // Lock strategy: lookup under lock, release lock, then invoke.
+    // This avoids recursive locking when handlers call back into the dispatcher
+    // (e.g. execute -> handler -> publish -> handler -> execute).
+
     template<typename TCommand>
     typename TCommand::ResultType EventDispatcher::execute(const TCommand& command) {
-        std::shared_lock lock(mutex);
-
-        auto it = commandHandlers.find(std::type_index(typeid(TCommand)));
-        if (it == commandHandlers.end()) {
-            throw std::runtime_error(std::string("No handler registered for command: ") + std::string(command.getName()));
+        std::function<typename TCommand::ResultType(const TCommand&)> handler;
+        {
+            std::shared_lock lock(mutex);
+            auto it = commandHandlers.find(std::type_index(typeid(TCommand)));
+            if (it == commandHandlers.end()) {
+                throw std::runtime_error(std::string("No handler registered for command: ") + std::string(command.getName()));
+            }
+            using HandlerType = std::function<typename TCommand::ResultType(const TCommand&)>;
+            handler = std::any_cast<const HandlerType&>(it->second);
         }
-
-        using HandlerType = std::function<typename TCommand::ResultType(const TCommand&)>;
-        const auto& handler = std::any_cast<const HandlerType&>(it->second);
         return handler(command);
     }
 
     template<typename TQuery>
     typename TQuery::ResultType EventDispatcher::query(const TQuery& queryObj) {
-        std::shared_lock lock(mutex);
-
-        auto it = queryHandlers.find(std::type_index(typeid(TQuery)));
-        if (it == queryHandlers.end()) {
-            throw std::runtime_error(std::string("No handler registered for query: ") + std::string(queryObj.getName()));
+        std::function<typename TQuery::ResultType(const TQuery&)> handler;
+        {
+            std::shared_lock lock(mutex);
+            auto it = queryHandlers.find(std::type_index(typeid(TQuery)));
+            if (it == queryHandlers.end()) {
+                throw std::runtime_error(std::string("No handler registered for query: ") + std::string(queryObj.getName()));
+            }
+            using HandlerType = std::function<typename TQuery::ResultType(const TQuery&)>;
+            handler = std::any_cast<const HandlerType&>(it->second);
         }
-
-        using HandlerType = std::function<typename TQuery::ResultType(const TQuery&)>;
-        const auto& handler = std::any_cast<const HandlerType&>(it->second);
         return handler(queryObj);
     }
 
-    // Thread safety: publish() and unsubscribe() are safe when called from the same
-    // thread (all current usage). The shared_lock prevents concurrent modification
-    // from subscribe/unregister on other threads. Subscriber lambdas that capture
-    // 'this' are safe as long as the owning object calls unsubscribe() before
-    // destruction, which is guaranteed by ScopedSubscription and panel destructors.
     template<typename TNotification>
     void EventDispatcher::publish(const TNotification& notification) {
-        std::shared_lock lock(mutex);
-
-        auto it = notificationSubscribers.find(std::type_index(typeid(TNotification)));
-        if (it == notificationSubscribers.end()) {
-            return;
+        std::vector<SubscriberEntry> subscribers;
+        {
+            std::shared_lock lock(mutex);
+            auto it = notificationSubscribers.find(std::type_index(typeid(TNotification)));
+            if (it == notificationSubscribers.end()) {
+                return;
+            }
+            subscribers = it->second;
         }
 
         using HandlerType = std::function<void(const TNotification&)>;
-        for (const auto& entry : it->second) {
+        for (const auto& entry : subscribers) {
             try {
                 const auto& handler = std::any_cast<const HandlerType&>(entry.handler);
                 handler(notification);

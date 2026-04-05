@@ -3,6 +3,7 @@
 #include "../../../core/VulkanMemoryManager.hpp"
 #include <vulkan/vulkan.hpp>
 #include <memory>
+#include <vector>
 
 namespace core
 {
@@ -29,7 +30,9 @@ namespace render::gpudriven
         vk::DescriptorSetLayout giProbeDataLayout;
         vk::DescriptorSetLayout causticLayout;
         vk::DescriptorSetLayout rtShadowMaskLayout;
-        vk::RenderPass renderPass;
+        // Dynamic rendering formats (Vulkan 1.3)
+        std::vector<vk::Format> colorAttachmentFormats;
+        vk::Format depthAttachmentFormat = vk::Format::eUndefined;
         bool transparentMode = false;
         bool wboitMode = false;
     };

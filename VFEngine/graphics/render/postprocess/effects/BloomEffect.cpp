@@ -3,6 +3,7 @@
 #include "../../../core/Shader.hpp"
 #include "../../../core/ImageUtilities.hpp"
 #include "../../../core/PipelineUtilities.hpp"
+#include "../../../core/DynamicRenderingHelpers.hpp"
 #include <algorithm>
 #include <cmath>
 
@@ -32,19 +33,18 @@ namespace render::postprocess
         enabled = false;
     }
 
-    void BloomEffect::init(vk::RenderPass renderPass, vk::Extent2D extent)
+    void BloomEffect::init(vk::Format colorFormat, vk::Extent2D extent)
     {
         currentExtent = extent;
 
         createSampler();
-        createRenderPasses();
         createDescriptorSetLayout();
         createMipChain();
         createDescriptorPool();
         createDescriptorSets();
         loadShaders();
         createBloomPipelines();
-        createCompositePipeline(renderPass);
+        createCompositePipeline(colorFormat);
 
         initialized = true;
     }
@@ -66,18 +66,6 @@ namespace render::postprocess
         {
             dev.destroyDescriptorSetLayout(descriptorSetLayout);
             descriptorSetLayout = nullptr;
-        }
-
-        if (downsampleRenderPass)
-        {
-            dev.destroyRenderPass(downsampleRenderPass);
-            downsampleRenderPass = nullptr;
-        }
-
-        if (upsampleRenderPass)
-        {
-            dev.destroyRenderPass(upsampleRenderPass);
-            upsampleRenderPass = nullptr;
         }
 
         if (bloomSampler)
@@ -107,7 +95,7 @@ namespace render::postprocess
         initialized = false;
     }
 
-    void BloomEffect::recreate(vk::RenderPass renderPass, vk::Extent2D extent)
+    void BloomEffect::recreate(vk::Format colorFormat, vk::Extent2D extent)
     {
         currentExtent = extent;
         auto& dev = device.getLogicalDevice();
@@ -121,24 +109,11 @@ namespace render::postprocess
             descriptorPool = nullptr;
         }
 
-        if (downsampleRenderPass)
-        {
-            dev.destroyRenderPass(downsampleRenderPass);
-            downsampleRenderPass = nullptr;
-        }
-
-        if (upsampleRenderPass)
-        {
-            dev.destroyRenderPass(upsampleRenderPass);
-            upsampleRenderPass = nullptr;
-        }
-
-        createRenderPasses();
         createMipChain();
         createDescriptorPool();
         createDescriptorSets();
         createBloomPipelines();
-        createCompositePipeline(renderPass);
+        createCompositePipeline(colorFormat);
     }
 
     void BloomEffect::preRecord(const vk::CommandBuffer& commandBuffer,
@@ -152,18 +127,66 @@ namespace render::postprocess
         if (activeMips == 0)
             return;
 
+        auto transitionMip = [&](vk::Image image, uint32_t mipLevel,
+                                  vk::ImageLayout oldLayout, vk::ImageLayout newLayout)
+        {
+            vk::ImageMemoryBarrier barrier{};
+            barrier.oldLayout = oldLayout;
+            barrier.newLayout = newLayout;
+            barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            barrier.image = image;
+            barrier.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
+            barrier.subresourceRange.baseMipLevel = mipLevel;
+            barrier.subresourceRange.levelCount = 1;
+            barrier.subresourceRange.baseArrayLayer = 0;
+            barrier.subresourceRange.layerCount = 1;
+
+            vk::PipelineStageFlags srcStage;
+            vk::PipelineStageFlags dstStage;
+
+            if (oldLayout == vk::ImageLayout::eUndefined && newLayout == vk::ImageLayout::eColorAttachmentOptimal)
+            {
+                barrier.srcAccessMask = {};
+                barrier.dstAccessMask = vk::AccessFlagBits::eColorAttachmentWrite;
+                srcStage = vk::PipelineStageFlagBits::eTopOfPipe;
+                dstStage = vk::PipelineStageFlagBits::eColorAttachmentOutput;
+            }
+            else if (oldLayout == vk::ImageLayout::eColorAttachmentOptimal && newLayout == vk::ImageLayout::eShaderReadOnlyOptimal)
+            {
+                barrier.srcAccessMask = vk::AccessFlagBits::eColorAttachmentWrite;
+                barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
+                srcStage = vk::PipelineStageFlagBits::eColorAttachmentOutput;
+                dstStage = vk::PipelineStageFlagBits::eFragmentShader;
+            }
+            else if (oldLayout == vk::ImageLayout::eShaderReadOnlyOptimal && newLayout == vk::ImageLayout::eColorAttachmentOptimal)
+            {
+                barrier.srcAccessMask = vk::AccessFlagBits::eShaderRead;
+                barrier.dstAccessMask = vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite;
+                srcStage = vk::PipelineStageFlagBits::eFragmentShader;
+                dstStage = vk::PipelineStageFlagBits::eColorAttachmentOutput;
+            }
+            else
+            {
+                srcStage = vk::PipelineStageFlagBits::eAllCommands;
+                dstStage = vk::PipelineStageFlagBits::eAllCommands;
+            }
+
+            commandBuffer.pipelineBarrier(srcStage, dstStage, {}, nullptr, nullptr, barrier);
+        };
+
         // === Phase 1: Downsample ===
         for (uint32_t i = 0; i < activeMips; ++i)
         {
             auto& mip = mipLevels[i];
+            vk::Extent2D mipExtent{mip.width, mip.height};
 
-            vk::RenderPassBeginInfo rpBegin{};
-            rpBegin.renderPass = downsampleRenderPass;
-            rpBegin.framebuffer = mip.framebuffer;
-            rpBegin.renderArea.offset = vk::Offset2D{0, 0};
-            rpBegin.renderArea.extent = vk::Extent2D{mip.width, mip.height};
+            transitionMip(bloomImage, i, vk::ImageLayout::eUndefined, vk::ImageLayout::eColorAttachmentOptimal);
 
-            commandBuffer.beginRenderPass(rpBegin, vk::SubpassContents::eInline);
+            core::DynamicRenderingInfo dynInfo{};
+            dynInfo.extent = mipExtent;
+            dynInfo.colorAttachments = {core::colorDontCare(mip.imageView)};
+            core::beginDynamicRendering(commandBuffer, dynInfo);
 
             commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, downsamplePipeline);
 
@@ -178,7 +201,7 @@ namespace render::postprocess
 
             vk::Rect2D scissor{};
             scissor.offset = vk::Offset2D{0, 0};
-            scissor.extent = vk::Extent2D{mip.width, mip.height};
+            scissor.extent = mipExtent;
             commandBuffer.setScissor(0, scissor);
 
             // First pass reads scene, subsequent read previous mip
@@ -201,7 +224,10 @@ namespace render::postprocess
                                          0, sizeof(BloomDownsamplePC), &pc);
 
             commandBuffer.draw(3, 1, 0, 0);
-            commandBuffer.endRenderPass();
+
+            core::endDynamicRendering(commandBuffer);
+
+            transitionMip(bloomImage, i, vk::ImageLayout::eColorAttachmentOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
         }
 
         // === Phase 2: Upsample (with additive blend) ===
@@ -209,14 +235,14 @@ namespace render::postprocess
         for (int32_t i = static_cast<int32_t>(activeMips) - 2; i >= 0; --i)
         {
             auto& mip = mipLevels[i];
+            vk::Extent2D mipExtent{mip.width, mip.height};
 
-            vk::RenderPassBeginInfo rpBegin{};
-            rpBegin.renderPass = upsampleRenderPass;
-            rpBegin.framebuffer = mip.framebuffer;
-            rpBegin.renderArea.offset = vk::Offset2D{0, 0};
-            rpBegin.renderArea.extent = vk::Extent2D{mip.width, mip.height};
+            transitionMip(bloomImage, i, vk::ImageLayout::eShaderReadOnlyOptimal, vk::ImageLayout::eColorAttachmentOptimal);
 
-            commandBuffer.beginRenderPass(rpBegin, vk::SubpassContents::eInline);
+            core::DynamicRenderingInfo dynInfo{};
+            dynInfo.extent = mipExtent;
+            dynInfo.colorAttachments = {core::colorLoad(mip.imageView)};
+            core::beginDynamicRendering(commandBuffer, dynInfo);
 
             commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, upsamplePipeline);
 
@@ -231,7 +257,7 @@ namespace render::postprocess
 
             vk::Rect2D scissor{};
             scissor.offset = vk::Offset2D{0, 0};
-            scissor.extent = vk::Extent2D{mip.width, mip.height};
+            scissor.extent = mipExtent;
             commandBuffer.setScissor(0, scissor);
 
             // Read from the smaller mip (i+1)
@@ -246,7 +272,10 @@ namespace render::postprocess
                                          0, sizeof(BloomUpsamplePC), &pc);
 
             commandBuffer.draw(3, 1, 0, 0);
-            commandBuffer.endRenderPass();
+
+            core::endDynamicRendering(commandBuffer);
+
+            transitionMip(bloomImage, i, vk::ImageLayout::eColorAttachmentOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
         }
     }
 
@@ -300,91 +329,6 @@ namespace render::postprocess
         samplerInfo.unnormalizedCoordinates = VK_FALSE;
 
         bloomSampler = device.getLogicalDevice().createSampler(samplerInfo);
-    }
-
-    void BloomEffect::createRenderPasses()
-    {
-        auto& dev = device.getLogicalDevice();
-
-        // Downsample render pass: loadOp = DontCare (we overwrite entirely)
-        {
-            vk::AttachmentDescription colorAttachment{};
-            colorAttachment.format = vk::Format::eR8G8B8A8Unorm;
-            colorAttachment.samples = vk::SampleCountFlagBits::e1;
-            colorAttachment.loadOp = vk::AttachmentLoadOp::eDontCare;
-            colorAttachment.storeOp = vk::AttachmentStoreOp::eStore;
-            colorAttachment.stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
-            colorAttachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
-            colorAttachment.initialLayout = vk::ImageLayout::eUndefined;
-            colorAttachment.finalLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-
-            vk::AttachmentReference colorRef{};
-            colorRef.attachment = 0;
-            colorRef.layout = vk::ImageLayout::eColorAttachmentOptimal;
-
-            vk::SubpassDescription subpass{};
-            subpass.pipelineBindPoint = vk::PipelineBindPoint::eGraphics;
-            subpass.colorAttachmentCount = 1;
-            subpass.pColorAttachments = &colorRef;
-
-            vk::SubpassDependency dependency{};
-            dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
-            dependency.dstSubpass = 0;
-            dependency.srcStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
-            dependency.srcAccessMask = vk::AccessFlagBits::eColorAttachmentWrite;
-            dependency.dstStageMask = vk::PipelineStageFlagBits::eFragmentShader;
-            dependency.dstAccessMask = vk::AccessFlagBits::eShaderRead;
-
-            vk::RenderPassCreateInfo rpInfo{};
-            rpInfo.attachmentCount = 1;
-            rpInfo.pAttachments = &colorAttachment;
-            rpInfo.subpassCount = 1;
-            rpInfo.pSubpasses = &subpass;
-            rpInfo.dependencyCount = 1;
-            rpInfo.pDependencies = &dependency;
-
-            downsampleRenderPass = dev.createRenderPass(rpInfo);
-        }
-
-        // Upsample render pass: loadOp = Load (preserve downsample content for additive blend)
-        {
-            vk::AttachmentDescription colorAttachment{};
-            colorAttachment.format = vk::Format::eR8G8B8A8Unorm;
-            colorAttachment.samples = vk::SampleCountFlagBits::e1;
-            colorAttachment.loadOp = vk::AttachmentLoadOp::eLoad;
-            colorAttachment.storeOp = vk::AttachmentStoreOp::eStore;
-            colorAttachment.stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
-            colorAttachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
-            colorAttachment.initialLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-            colorAttachment.finalLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-
-            vk::AttachmentReference colorRef{};
-            colorRef.attachment = 0;
-            colorRef.layout = vk::ImageLayout::eColorAttachmentOptimal;
-
-            vk::SubpassDescription subpass{};
-            subpass.pipelineBindPoint = vk::PipelineBindPoint::eGraphics;
-            subpass.colorAttachmentCount = 1;
-            subpass.pColorAttachments = &colorRef;
-
-            vk::SubpassDependency dependency{};
-            dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
-            dependency.dstSubpass = 0;
-            dependency.srcStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
-            dependency.srcAccessMask = vk::AccessFlagBits::eColorAttachmentWrite;
-            dependency.dstStageMask = vk::PipelineStageFlagBits::eFragmentShader;
-            dependency.dstAccessMask = vk::AccessFlagBits::eShaderRead;
-
-            vk::RenderPassCreateInfo rpInfo{};
-            rpInfo.attachmentCount = 1;
-            rpInfo.pAttachments = &colorAttachment;
-            rpInfo.subpassCount = 1;
-            rpInfo.pSubpasses = &subpass;
-            rpInfo.dependencyCount = 1;
-            rpInfo.pDependencies = &dependency;
-
-            upsampleRenderPass = dev.createRenderPass(rpInfo);
-        }
     }
 
     void BloomEffect::createDescriptorSetLayout()
@@ -446,16 +390,6 @@ namespace render::postprocess
             viewInfo.subresourceRange.layerCount = 1;
 
             mipLevels[i].imageView = dev.createImageView(viewInfo);
-
-            vk::FramebufferCreateInfo fbInfo{};
-            fbInfo.renderPass = downsampleRenderPass;
-            fbInfo.attachmentCount = 1;
-            fbInfo.pAttachments = &mipLevels[i].imageView;
-            fbInfo.width = mipW;
-            fbInfo.height = mipH;
-            fbInfo.layers = 1;
-
-            mipLevels[i].framebuffer = dev.createFramebuffer(fbInfo);
 
             mipW = std::max(1u, mipW / 2);
             mipH = std::max(1u, mipH / 2);
@@ -601,8 +535,13 @@ namespace render::postprocess
             pipelineInfo.pColorBlendState = &colorBlending;
             pipelineInfo.pDynamicState = &dynamicState;
             pipelineInfo.layout = bloomPipelineLayout;
-            pipelineInfo.renderPass = downsampleRenderPass;
             pipelineInfo.subpass = 0;
+
+            vk::PipelineRenderingCreateInfo pipelineRendering{};
+            vk::Format bloomFormat = vk::Format::eR8G8B8A8Unorm;
+            pipelineRendering.colorAttachmentCount = 1;
+            pipelineRendering.pColorAttachmentFormats = &bloomFormat;
+            pipelineInfo.pNext = &pipelineRendering;
 
             downsamplePipeline = dev.createGraphicsPipeline(nullptr, pipelineInfo).value;
         }
@@ -640,14 +579,19 @@ namespace render::postprocess
             pipelineInfo.pColorBlendState = &colorBlending;
             pipelineInfo.pDynamicState = &dynamicState;
             pipelineInfo.layout = bloomPipelineLayout;
-            pipelineInfo.renderPass = upsampleRenderPass;
             pipelineInfo.subpass = 0;
+
+            vk::PipelineRenderingCreateInfo pipelineRendering{};
+            vk::Format bloomFormat = vk::Format::eR8G8B8A8Unorm;
+            pipelineRendering.colorAttachmentCount = 1;
+            pipelineRendering.pColorAttachmentFormats = &bloomFormat;
+            pipelineInfo.pNext = &pipelineRendering;
 
             upsamplePipeline = dev.createGraphicsPipeline(nullptr, pipelineInfo).value;
         }
     }
 
-    void BloomEffect::createCompositePipeline(vk::RenderPass externalRenderPass)
+    void BloomEffect::createCompositePipeline(vk::Format colorFormat)
     {
         std::array<vk::DescriptorSetLayout, 2> setLayouts = {
             descriptorSetLayout, descriptorSetLayout
@@ -655,7 +599,7 @@ namespace render::postprocess
 
         core::GraphicsPipelineConfig config{};
         config.device = device.getLogicalDevice();
-        config.renderPass = externalRenderPass;
+        config.colorAttachmentFormats = {colorFormat};
         config.extent = currentExtent;
         config.shaderStages = compositeShader->getShaderStages();
         config.descriptorSetLayouts = {setLayouts.begin(), setLayouts.end()};
@@ -677,8 +621,6 @@ namespace render::postprocess
 
         for (auto& mip : mipLevels)
         {
-            if (mip.framebuffer)
-                dev.destroyFramebuffer(mip.framebuffer);
             if (mip.imageView)
                 dev.destroyImageView(mip.imageView);
         }

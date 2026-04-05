@@ -15,18 +15,18 @@ namespace render::mesh
 
     UICanvasDebugRenderer::~UICanvasDebugRenderer() = default;
 
-    void UICanvasDebugRenderer::init(vk::RenderPass renderPass)
+    void UICanvasDebugRenderer::init(vk::Format colorFormat, vk::Format depthFormat)
     {
         loadShader();
-        createPipeline(renderPass);
+        createPipeline(colorFormat, depthFormat);
         createBuffers();
         initialized = true;
     }
 
-    void UICanvasDebugRenderer::recreate(vk::RenderPass renderPass)
+    void UICanvasDebugRenderer::recreate(vk::Format colorFormat, vk::Format depthFormat)
     {
         destroyPipelineAndLayout(wireframePipeline, wireframePipelineLayout);
-        createPipeline(renderPass);
+        createPipeline(colorFormat, depthFormat);
     }
 
     void UICanvasDebugRenderer::cleanUp()
@@ -51,12 +51,13 @@ namespace render::mesh
         wireframeShader->readShader("../../resources/shaders/tools/wireframe.glsl");
     }
 
-    void UICanvasDebugRenderer::createPipeline(vk::RenderPass renderPass)
+    void UICanvasDebugRenderer::createPipeline(vk::Format colorFormat, vk::Format depthFormat)
     {
         core::WireframePipelineConfig config{
             .device = device.getLogicalDevice(),
-            .renderPass = renderPass,
             .extent = swapChain.getSwapchainExtent(),
+            .colorAttachmentFormats = {colorFormat},
+            .depthAttachmentFormat = depthFormat,
             .pushConstantSize = sizeof(FrustumPushConstants),
             .shaderStages = wireframeShader->getShaderStages()
         };

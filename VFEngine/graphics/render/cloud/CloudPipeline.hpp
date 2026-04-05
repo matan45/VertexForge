@@ -94,6 +94,7 @@ namespace render::cloud
 
         // Render composite (fullscreen graphics pass)
         void renderComposite(const vk::CommandBuffer& cmd, uint32_t imageIndex);
+        void renderCompositeGraphManaged(const vk::CommandBuffer& cmd, uint32_t imageIndex);
 
         void setEnabled(bool value) { enabled = value; }
         [[nodiscard]] bool isEnabled() const { return enabled && initialized; }

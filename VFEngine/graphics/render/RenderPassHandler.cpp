@@ -1,4 +1,6 @@
 #include "RenderPassHandler.hpp"
+#include "graph/RenderGraph.hpp"
+#include "graph/RenderGraphProfiler.hpp"
 #include "upscaling/MotionVectorPass.hpp"
 #include "../core/Device.hpp"
 #include "../core/SwapChain.hpp"
@@ -45,6 +47,8 @@ namespace render
         , gpuDrivenRenderer{std::make_unique<gpudriven::GPUDrivenRenderer>(device, swapChain)}
         , terrainRaycastPipeline{std::make_unique<gpudriven::TerrainRaycastPipeline>(device)}
         , postProcessPipeline{std::make_unique<postprocess::PostProcessPipeline>(device, swapChain, offscreenResources)}
+        , frameGraph{std::make_unique<graph::RenderGraph>(device)}
+        , graphProfiler{std::make_unique<graph::RenderGraphProfiler>()}
     {
     }
 
@@ -117,7 +121,7 @@ namespace render
                     vfxLightingInitialized = true;
                 }
             }
-            vfxRuntimeProvider->init(meshPipeline->getRenderPass());
+            vfxRuntimeProvider->init(swapChain.getSceneColorFormat(), swapChain.getSwapchainDepthStencilFormat());
         }
     }
 
@@ -125,7 +129,8 @@ namespace render
     {
         if (gpuDrivenRendererInitialized || !meshPipelineInitialized) return;
 
-        gpuDrivenRenderer->init(meshPipeline->getIBLDescriptorSetLayout(), meshPipeline->getRenderPass(),
+        gpuDrivenRenderer->init(meshPipeline->getIBLDescriptorSetLayout(),
+                               {swapChain.getSceneColorFormat()}, swapChain.getSwapchainDepthStencilFormat(),
                                offscreenResources.depthImage.depthImageView);
 
         auto& texCache = meshPipeline->getMaterialTextureCache();
@@ -139,7 +144,9 @@ namespace render
 
         wboitPipeline = std::make_unique<transparency::WBOITPipeline>(device, swapChain, offscreenResources);
         wboitPipeline->init();
-        gpuDrivenRenderer->initWBOITPipeline(wboitPipeline->getWBOITRenderPass());
+        gpuDrivenRenderer->initWBOITPipeline(
+            {vk::Format::eR16G16B16A16Sfloat, vk::Format::eR8Unorm},
+            swapChain.getSwapchainDepthStencilFormat());
 
         decalPipeline = std::make_unique<decal::DecalPipeline>(device, swapChain, offscreenResources);
         decalPipeline->init();
@@ -147,7 +154,7 @@ namespace render
 
     void RenderPassHandler::recreateOverlayPipelines()
     {
-        if (debugRendererInitialized) debugRenderer->recreate(meshPipeline->getRenderPass());
+        if (debugRendererInitialized) debugRenderer->recreate(swapChain.getSceneColorFormat(), swapChain.getSwapchainDepthStencilFormat());
         if (billboardPipelineInitialized) billboardPipeline->recreate();
         if (textPipelineInitialized) textPipeline->recreate();
         if (uiPipelineInitialized) uiPipeline->recreate();
@@ -165,10 +172,10 @@ namespace render
             if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
             {
                 gpuDrivenRenderer->recreateRefractionResources(offscreenResources.depthImage.depthImageView);
-                gpuDrivenRenderer->updateRenderPass(meshPipeline->getRenderPass());
+                gpuDrivenRenderer->updateFormats({swapChain.getSceneColorFormat()}, swapChain.getSwapchainDepthStencilFormat());
             }
             if (vfxRuntimeProvider && vfxRuntimeProvider->isInitialized())
-                vfxRuntimeProvider->recreate(meshPipeline->getRenderPass());
+                vfxRuntimeProvider->recreate(swapChain.getSceneColorFormat(), swapChain.getSwapchainDepthStencilFormat());
         }
 
         recreateOverlayPipelines();
@@ -196,10 +203,10 @@ namespace render
                 swapChain.getSwapchainExtent(),
                 offscreenResources.depthImage.depthImageView,
                 offscreenResources);
-            distortionComposite->recreate(distortionResources->getCompositeRenderPass(),
+            distortionComposite->recreate(swapChain.getSceneColorFormat(),
                                            distortionResources->getCompositeDescriptorSetLayout());
             if (vfxRuntimeProvider && vfxRuntimeProvider->isInitialized())
-                vfxRuntimeProvider->recreateDistortion(distortionResources->getDistortionVectorRenderPass());
+                vfxRuntimeProvider->recreateDistortion(vk::Format::eR16G16Sfloat, swapChain.getSwapchainDepthStencilFormat());
         }
         if (postProcessPipeline && postProcessPipeline->isInitialized()) postProcessPipeline->recreate();
     }
@@ -237,6 +244,8 @@ namespace render
             distortionResources->cleanup();
             distortionInitialized = false;
         }
+        if (graphProfiler && graphProfiler->isEnabled())
+            graphProfiler->cleanup(device.getLogicalDevice());
         if (postProcessPipeline) postProcessPipeline->cleanup();
         meshPipeline->cleanUp();
         if (sharedCameraUBO) sharedCameraUBO->cleanup();
@@ -257,11 +266,11 @@ namespace render
             offscreenResources);
 
         distortionComposite = std::make_unique<vfx::VFXDistortionComposite>(device, swapChain);
-        distortionComposite->init(distortionResources->getCompositeRenderPass(),
+        distortionComposite->init(swapChain.getSceneColorFormat(),
                                    distortionResources->getCompositeDescriptorSetLayout());
 
         if (vfxRuntimeProvider && vfxRuntimeProvider->isInitialized())
-            vfxRuntimeProvider->initDistortion(distortionResources->getDistortionVectorRenderPass());
+            vfxRuntimeProvider->initDistortion(vk::Format::eR16G16Sfloat, swapChain.getSwapchainDepthStencilFormat());
 
         distortionInitialized = true;
     }

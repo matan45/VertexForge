@@ -26,8 +26,6 @@ namespace imguiPass {
 		const window::Window* window;
 
 		vk::DescriptorPool imGuiDescriptorPool;
-		vk::RenderPass imGuiRenderPass;
-		std::vector<vk::Framebuffer> imGuiFrameBuffers;
 
 		// Double-buffered draw data snapshots for lock-free main/render thread handoff
 		ImDrawDataSnapshot snapshots[2];
@@ -59,9 +57,7 @@ namespace imguiPass {
 
 	private:
 		
-		void createRenderPass();
 		void createDescriptorPool();
-		void createFrameBuffers();
 
 	};
 }

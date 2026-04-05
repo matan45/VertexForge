@@ -24,7 +24,6 @@ namespace render::mesh
     void SkinnedMeshPipeline::init()
     {
         loadShaders();
-        createRenderPass();
         createDescriptorSetLayouts();
         createDescriptorPools();
         createCameraUBO();
@@ -36,7 +35,6 @@ namespace render::mesh
         createDescriptorSets();
         createPipelineLayout();
         createGraphicsPipeline();
-        createFramebuffers();
         usingDefaultTextures = true;
     }
 
@@ -60,15 +58,6 @@ namespace render::mesh
         destroyMeshGPUBuffers();
         loadedMesh.reset();
 
-        for (auto& framebuffer : framebuffers)
-        {
-            if (framebuffer)
-            {
-                logicalDevice.destroyFramebuffer(framebuffer);
-            }
-        }
-        framebuffers.clear();
-
         if (graphicsPipeline)
         {
             logicalDevice.destroyPipeline(graphicsPipeline);
@@ -78,11 +67,6 @@ namespace render::mesh
         {
             logicalDevice.destroyPipelineLayout(pipelineLayout);
             pipelineLayout = nullptr;
-        }
-        if (renderPass)
-        {
-            logicalDevice.destroyRenderPass(renderPass);
-            renderPass = nullptr;
         }
 
         if (cameraUBO && !externalCameraBuffer)

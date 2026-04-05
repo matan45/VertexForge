@@ -8,8 +8,10 @@ namespace core
 	struct WireframePipelineConfig
 	{
 		vk::Device device;
-		vk::RenderPass renderPass;
 		vk::Extent2D extent;
+		std::vector<vk::Format> colorAttachmentFormats;
+		vk::Format depthAttachmentFormat = vk::Format::eUndefined;
+		vk::Format stencilAttachmentFormat = vk::Format::eUndefined;
 		uint32_t pushConstantSize;
 		std::vector<vk::PipelineShaderStageCreateInfo> shaderStages;
 		bool enableBlending = false;
@@ -24,8 +26,10 @@ namespace core
 	struct GraphicsPipelineConfig
 	{
 		vk::Device device;
-		vk::RenderPass renderPass;
 		vk::Extent2D extent;
+		std::vector<vk::Format> colorAttachmentFormats;
+		vk::Format depthAttachmentFormat = vk::Format::eUndefined;
+		vk::Format stencilAttachmentFormat = vk::Format::eUndefined;
 		std::vector<vk::PipelineShaderStageCreateInfo> shaderStages;
 		
 		std::vector<vk::VertexInputBindingDescription> vertexBindings;
@@ -76,8 +80,10 @@ namespace core
 	struct MeshShaderPipelineConfig
 	{
 		vk::Device device;
-		vk::RenderPass renderPass;
 		vk::Extent2D extent;
+		std::vector<vk::Format> colorAttachmentFormats;
+		vk::Format depthAttachmentFormat = vk::Format::eUndefined;
+		vk::Format stencilAttachmentFormat = vk::Format::eUndefined;
 		std::vector<vk::PipelineShaderStageCreateInfo> shaderStages;
 		
 		vk::PipelineLayout existingPipelineLayout = nullptr;

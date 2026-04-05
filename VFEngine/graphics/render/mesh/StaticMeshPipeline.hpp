@@ -59,9 +59,6 @@ namespace render::mesh
 
         std::shared_ptr<core::Shader> meshShader;
 
-        vk::RenderPass renderPass;
-        vk::RenderPass vfxRenderPass;
-        vk::RenderPass waterContinueRenderPass;
         vk::Pipeline graphicsPipeline;
         vk::PipelineLayout pipelineLayout;
 
@@ -73,8 +70,6 @@ namespace render::mesh
         vk::DescriptorPool textureDescriptorPool;
         vk::DescriptorSet textureDescriptorSet;
         bool textureDescriptorsInitialized = false;
-
-        std::vector<vk::Framebuffer> framebuffers;
 
         std::unique_ptr<MeshGPUCache> meshCache;
         std::unique_ptr<MaterialTextureCache> textureCache;
@@ -113,9 +108,6 @@ namespace render::mesh
 
         void cleanUpForReinit();
 
-        vk::RenderPass getRenderPass() const { return renderPass; }
-        vk::RenderPass getVFXRenderPass() const { return vfxRenderPass; }
-
         vk::DescriptorSetLayout getIBLDescriptorSetLayout() const { return descriptorSetLayout; }
         vk::DescriptorSet getIBLDescriptorSet(uint32_t /*imageIndex*/) const { return descriptorSet; }
         MaterialTextureCache& getMaterialTextureCache() { return *textureCache; }
@@ -124,10 +116,25 @@ namespace render::mesh
         // Begin render pass with secondary command buffer support for parallel recording
         void beginRenderPassForSecondary(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
         void beginVFXRenderPass(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
+        void beginTransparencyPass(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
         void beginWaterContinuePass(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
-        void endRenderPass(const vk::CommandBuffer& commandBuffer) const;
+        void endRenderPass(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
 
-        vk::Framebuffer getFramebuffer(uint32_t imageIndex) const { return framebuffers[imageIndex]; }
+        // Graph-managed variants — identical to originals but without scene color image transitions
+        // (the render graph handles layout transitions externally)
+        void recordCommandBufferGraphManaged(const vk::CommandBuffer& commandBuffer,
+                                          uint32_t imageIndex,
+                                          const std::vector<MeshRenderData>& meshDrawList,
+                                          const math::Frustum* frustum,
+                                          render::DebugRenderer* debugRenderer,
+                                          const glm::mat4& debugView,
+                                          const glm::mat4& debugProjection) const;
+        void beginRenderPassGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
+        void beginRenderPassForSecondaryGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
+        void beginVFXRenderPassGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
+        void restoreDepthAfterVFX(const vk::CommandBuffer& commandBuffer) const;
+        void beginWaterContinuePassGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
+        void endRenderPassGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
 
         void injectMaterialForPreview(const std::string& materialPath,
                                       std::shared_ptr<material::MaterialData> materialData);
@@ -179,9 +186,6 @@ namespace render::mesh
         void unloadAllMeshes();
 
         void loadShaders();
-        void createRenderPass();
-        void createVFXRenderPass();
-        void createWaterContinueRenderPass();
         void createDescriptorSetLayout();
         void createDescriptorPool();
         void createDescriptorSet(const ibl::ImageData& irradianceMap,
@@ -190,7 +194,6 @@ namespace render::mesh
         void createCameraUBO();
         void createPipelineLayout();
         void createGraphicsPipeline();
-        void createFramebuffers();
 
         void createTextureDescriptorSetLayout();
         void createTextureDescriptorPool();

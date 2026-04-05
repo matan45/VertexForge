@@ -27,7 +27,8 @@ namespace render::vfx
 
         std::shared_ptr<core::Shader> vfxShader;
 
-        vk::RenderPass externalRenderPass;
+        vk::Format colorFormat = vk::Format::eUndefined;
+        vk::Format depthFormat = vk::Format::eUndefined;
         vk::Pipeline graphicsPipeline;
         vk::PipelineLayout pipelineLayout;
         vk::DescriptorSetLayout descriptorSetLayout;
@@ -60,8 +61,8 @@ namespace render::vfx
         explicit VFXScenePipeline(core::Device& device, core::SwapChain& swapChain);
         ~VFXScenePipeline();
 
-        void init(vk::RenderPass renderPass);
-        void recreate(vk::RenderPass renderPass);
+        void init(vk::Format colorFormat, vk::Format depthFormat);
+        void recreate(vk::Format colorFormat, vk::Format depthFormat);
         void cleanUp();
 
         void updateCameraUBO(const glm::mat4& view, const glm::mat4& projection,

@@ -4,60 +4,11 @@
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
 #include "../../core/Shader.hpp"
-#include "../../core/OffScreen.hpp"
 #include "../../core/PipelineUtilities.hpp"
 #include "print/Log.hpp"
 
 namespace render::ui
 {
-    void UITextPipeline::createRenderPass()
-    {
-        vk::AttachmentDescription colorAttachment{};
-        colorAttachment.format = swapChain.getSceneColorFormat();
-        colorAttachment.samples = vk::SampleCountFlagBits::e1;
-        colorAttachment.loadOp = vk::AttachmentLoadOp::eLoad;
-        colorAttachment.storeOp = vk::AttachmentStoreOp::eStore;
-        colorAttachment.stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
-        colorAttachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
-        colorAttachment.initialLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-        colorAttachment.finalLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-
-        // Load stencil from image pass (eLoad), don't need to store
-        vk::AttachmentDescription stencilAttachment{};
-        stencilAttachment.format = vk::Format::eS8Uint;
-        stencilAttachment.samples = vk::SampleCountFlagBits::e1;
-        stencilAttachment.loadOp = vk::AttachmentLoadOp::eDontCare;
-        stencilAttachment.storeOp = vk::AttachmentStoreOp::eDontCare;
-        stencilAttachment.stencilLoadOp = vk::AttachmentLoadOp::eLoad;
-        stencilAttachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
-        stencilAttachment.initialLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
-        stencilAttachment.finalLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
-
-        vk::AttachmentReference colorAttachmentRef{};
-        colorAttachmentRef.attachment = 0;
-        colorAttachmentRef.layout = vk::ImageLayout::eColorAttachmentOptimal;
-
-        vk::AttachmentReference stencilAttachmentRef{};
-        stencilAttachmentRef.attachment = 1;
-        stencilAttachmentRef.layout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
-
-        vk::SubpassDescription subpass{};
-        subpass.pipelineBindPoint = vk::PipelineBindPoint::eGraphics;
-        subpass.colorAttachmentCount = 1;
-        subpass.pColorAttachments = &colorAttachmentRef;
-        subpass.pDepthStencilAttachment = &stencilAttachmentRef;
-
-        std::array<vk::AttachmentDescription, 2> attachments = {colorAttachment, stencilAttachment};
-
-        vk::RenderPassCreateInfo renderPassInfo{};
-        renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
-        renderPassInfo.pAttachments = attachments.data();
-        renderPassInfo.subpassCount = 1;
-        renderPassInfo.pSubpasses = &subpass;
-
-        renderPass = device.getLogicalDevice().createRenderPass(renderPassInfo);
-    }
-
     void UITextPipeline::createDescriptorSetLayout()
     {
         std::vector<vk::DescriptorSetLayoutBinding> bindings(1);
@@ -171,8 +122,9 @@ namespace render::ui
 
         core::GraphicsPipelineConfig config{
             .device = device.getLogicalDevice(),
-            .renderPass = renderPass,
             .extent = swapChain.getDisplayExtent(),
+            .colorAttachmentFormats = { swapChain.getSceneColorFormat() },
+            .stencilAttachmentFormat = vk::Format::eS8Uint,
             .shaderStages = uiTextShader->getShaderStages(),
             .vertexBindings = {vertexBinding, instanceBinding},
             .vertexAttributes = allAttribs,
@@ -210,29 +162,5 @@ namespace render::ui
 
         auto stencilResult = core::PipelineUtilities::createGraphicsPipeline(stencilConfig);
         pipelineStencilTest = stencilResult.pipeline;
-    }
-
-    void UITextPipeline::createFramebuffers()
-    {
-        bool hasDisplay = !offscreenResources.displayColorImages.empty();
-        auto& colorSrc = hasDisplay ? offscreenResources.displayColorImages : offscreenResources.colorImages;
-        framebuffers.resize(colorSrc.size());
-
-        for (uint32_t i = 0; i < framebuffers.size(); i++)
-        {
-            vk::ImageView colorView = colorSrc[i].colorImageView;
-            vk::ImageView stencilView = offscreenResources.uiStencilImage.stencilImageView;
-            std::array<vk::ImageView, 2> attachments = {colorView, stencilView};
-
-            vk::FramebufferCreateInfo framebufferInfo{};
-            framebufferInfo.renderPass = renderPass;
-            framebufferInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
-            framebufferInfo.pAttachments = attachments.data();
-            framebufferInfo.width = swapChain.getDisplayExtent().width;
-            framebufferInfo.height = swapChain.getDisplayExtent().height;
-            framebufferInfo.layers = 1;
-
-            framebuffers[i] = device.getLogicalDevice().createFramebuffer(framebufferInfo);
-        }
     }
 }

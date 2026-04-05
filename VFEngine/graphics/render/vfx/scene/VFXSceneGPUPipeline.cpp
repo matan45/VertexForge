@@ -19,14 +19,15 @@ namespace render::vfx
         cleanup();
     }
 
-    void VFXSceneGPUPipeline::init(vk::RenderPass renderPass)
+    void VFXSceneGPUPipeline::init(vk::Format colorFmt, vk::Format depthFmt)
     {
         if (initialized)
         {
             return;
         }
 
-        externalRenderPass = renderPass;
+        colorFormat = colorFmt;
+        depthFormat = depthFmt;
 
         try
         {
@@ -87,14 +88,15 @@ namespace render::vfx
         }
     }
 
-    void VFXSceneGPUPipeline::recreate(vk::RenderPass renderPass)
+    void VFXSceneGPUPipeline::recreate(vk::Format colorFmt, vk::Format depthFmt)
     {
         if (!initialized)
         {
             return;
         }
 
-        externalRenderPass = renderPass;
+        colorFormat = colorFmt;
+        depthFormat = depthFmt;
 
         auto vkDevice = device.getLogicalDevice();
         vkDevice.destroyPipeline(graphicsPipeline);

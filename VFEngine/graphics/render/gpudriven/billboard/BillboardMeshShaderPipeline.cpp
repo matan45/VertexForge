@@ -17,14 +17,14 @@ namespace render::gpudriven
     void BillboardMeshShaderPipeline::init(core::Device& device,
                                             vk::DescriptorSetLayout /*cameraLayout - unused, we create our own*/,
                                             vk::DescriptorSetLayout bindlessTextureLayout,
-                                            vk::RenderPass renderPass)
+                                            const std::vector<vk::Format>& colorFormats, vk::Format depthFormat)
     {
         if (initialized) return;
 
         devicePtr = &device;
 
         createOwnedDescriptors();
-        createPipeline(cameraLayout, bindlessTextureLayout, renderPass);
+        createPipeline(cameraLayout, bindlessTextureLayout, colorFormats, depthFormat);
 
         if (graphicsPipeline)
         {
@@ -97,7 +97,7 @@ namespace render::gpudriven
 
     void BillboardMeshShaderPipeline::recreate(vk::DescriptorSetLayout /*cameraLayoutParam*/,
                                                 vk::DescriptorSetLayout bindlessTextureLayout,
-                                                vk::RenderPass renderPass)
+                                                const std::vector<vk::Format>& colorFormats, vk::Format depthFormat)
     {
         if (!initialized || !devicePtr) return;
 
@@ -128,7 +128,7 @@ namespace render::gpudriven
             pipelineLayout = nullptr;
         }
 
-        createPipeline(cameraLayout, bindlessTextureLayout, renderPass);
+        createPipeline(cameraLayout, bindlessTextureLayout, colorFormats, depthFormat);
 
         vfLogInfo("BillboardMeshShaderPipeline: Recreated pipeline");
     }
@@ -274,7 +274,7 @@ namespace render::gpudriven
 
     void BillboardMeshShaderPipeline::createPipeline(vk::DescriptorSetLayout camLayout,
                                                        vk::DescriptorSetLayout bindlessTextureLayout,
-                                                       vk::RenderPass renderPass)
+                                                       const std::vector<vk::Format>& colorFormats, vk::Format depthFormat)
     {
         if (!loadShaders()) return;
 
@@ -301,8 +301,9 @@ namespace render::gpudriven
 
         core::MeshShaderPipelineConfig config{};
         config.device = vkDevice;
-        config.renderPass = renderPass;
         config.extent = vk::Extent2D{1, 1};
+        config.colorAttachmentFormats = colorFormats;
+        config.depthAttachmentFormat = depthFormat;
         config.shaderStages = allStages;
         config.existingPipelineLayout = pipelineLayout;
         config.cullMode = vk::CullModeFlagBits::eNone;

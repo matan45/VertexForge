@@ -582,8 +582,9 @@ namespace render::gpudriven
 
         core::MeshShaderPipelineConfig config{
             .device = vkDevice,
-            .renderPass = info.renderPass,
             .extent = swapChain.getSwapchainExtent(),
+            .colorAttachmentFormats = info.colorAttachmentFormats,
+            .depthAttachmentFormat = info.depthAttachmentFormat,
             .shaderStages = stages,
             .existingPipelineLayout = pipelineLayout,
             .cullMode = isTransparent ? vk::CullModeFlagBits::eNone : vk::CullModeFlagBits::eBack,
@@ -595,7 +596,7 @@ namespace render::gpudriven
             .srcColorBlendFactor = vk::BlendFactor::eOne,
             .dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha,
             .srcAlphaBlendFactor = vk::BlendFactor::eOne,
-            .dstAlphaBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha
+            .dstAlphaBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha,
         };
         config.dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor };
 

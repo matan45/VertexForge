@@ -40,10 +40,7 @@ namespace render::postprocess
         vk::Image blurImage;
         core::VulkanAllocation blurAllocation;
         vk::ImageView blurImageView;
-        vk::Framebuffer blurFramebuffer;
-
         vk::ImageView depthOnlyImageView;
-        vk::RenderPass blurRenderPass;
 
         std::shared_ptr<core::Shader> blurShader;
         std::shared_ptr<core::Shader> compositeShader;
@@ -86,9 +83,9 @@ namespace render::postprocess
                            core::OffscreenResources& offscreenResources,
                            PostProcessPipeline& pipeline);
 
-        void init(vk::RenderPass renderPass, vk::Extent2D extent) override;
+        void init(vk::Format colorFormat, vk::Extent2D extent) override;
         void cleanup() override;
-        void recreate(vk::RenderPass renderPass, vk::Extent2D extent) override;
+        void recreate(vk::Format colorFormat, vk::Extent2D extent) override;
 
         void preRecord(const vk::CommandBuffer& commandBuffer,
                        vk::DescriptorSet inputDescriptorSet) override;
@@ -103,7 +100,6 @@ namespace render::postprocess
 
     private:
         void createSampler();
-        void createBlurRenderPass();
         void createBlurImage();
         void createDepthImageView();
         void createDoFBuffer();
@@ -112,7 +108,7 @@ namespace render::postprocess
         void createDescriptorSets();
         void loadShaders();
         void createBlurPipeline();
-        void createCompositePipeline(vk::RenderPass externalRenderPass);
+        void createCompositePipeline(vk::Format colorFormat);
 
         void cleanupBlurImage();
         void cleanupPipelines();

@@ -1,4 +1,5 @@
 #include "RenderPassHandler.hpp"
+#include "graph/RenderGraph.hpp"
 #include "print/Log.hpp"
 #include "decal/DecalPipeline.hpp"
 #include "../core/SwapChain.hpp"
@@ -29,226 +30,133 @@
 #include "../../services/providers/vegetation/IGrassRenderProvider.hpp"
 #include "vfx/distortion/DistortionResources.hpp"
 #include "vfx/distortion/VFXDistortionComposite.hpp"
+#include "../core/DynamicRenderingHelpers.hpp"
 #include "threading/JobSystem.hpp"
 #include <chrono>
-
-namespace
-{
-    void recordVFXAfterMeshPass(const vk::CommandBuffer& commandBuffer,
-                                render::mesh::StaticMeshPipeline* meshPipeline,
-                                services::IVFXRuntimeProvider* vfxProvider, uint32_t imageIndex)
-    {
-        meshPipeline->beginRenderPass(commandBuffer, imageIndex);
-        meshPipeline->endRenderPass(commandBuffer);
-
-        meshPipeline->beginVFXRenderPass(commandBuffer, imageIndex);
-        vfxProvider->recordDrawCommands(commandBuffer);
-        meshPipeline->endRenderPass(commandBuffer);
-    }
-}
 
 namespace render
 {
     void RenderPassHandler::draw(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex)
     {
-        clearColor->recordCommandBuffer(commandBuffer, imageIndex);
-
-        if (atmospherePipeline && atmospherePipeline->isEnabled())
-        {
-            atmospherePipeline->setCameraData(currentView, currentProjection,
-                                               currentCameraPosition,
-                                               currentNearPlane, currentFarPlane,
-                                               currentTime);
-
-            if (gpuDrivenRendererInitialized)
-            {
-                auto* lbm = gpuDrivenRenderer->getLightBufferManager();
-                auto sunDir = lbm->getFirstDirectionalLightDirection();
-                if (sunDir)
-                    atmospherePipeline->setSunDirection(*sunDir);
-            }
-
-            if (!asyncComputeActive)
-                atmospherePipeline->dispatchCompute(commandBuffer);
-            atmospherePipeline->renderSky(commandBuffer, imageIndex);
-        }
-        else
-        {
-            iblRenderer->recordCommandBuffer(commandBuffer, imageIndex);
-        }
-
-        if (cloudPipeline && cloudPipeline->isEnabled())
-        {
-            cloudPipeline->setCameraData(currentView, currentProjection,
-                                          currentCameraPosition,
-                                          currentNearPlane, currentFarPlane,
-                                          currentTime);
-
-            if (gpuDrivenRendererInitialized)
-            {
-                auto* lbm = gpuDrivenRenderer->getLightBufferManager();
-                auto sunDir = lbm->getFirstDirectionalLightDirection();
-                if (sunDir)
-                    cloudPipeline->setSunDirection(*sunDir);
-            }
-
-            if (atmospherePipeline && atmospherePipeline->isInitialized())
-            {
-                auto atmosSettings = atmospherePipeline->getSettings();
-                cloudPipeline->setSunIrradiance(atmosSettings.sunIrradiance);
-            }
-
-            if (!asyncComputeActive)
-                cloudPipeline->dispatchCompute(commandBuffer);
-            cloudPipeline->renderComposite(commandBuffer, imageIndex);
-        }
-
-        drawSceneMeshes(commandBuffer, imageIndex);
-
-        executeRenderHooks(plugin::RenderPassHookPoint::PostScene, commandBuffer, imageIndex);
-
-        executeDistortionPass(commandBuffer, imageIndex);
-
-        drawOverlays(commandBuffer, imageIndex);
-        executeOcclusionPasses(commandBuffer);
-
-        if (atmospherePipeline && atmospherePipeline->isEnabled())
-            atmospherePipeline->renderComposite(commandBuffer, imageIndex);
-
-        if (volumetricFogComposite && volumetricFogComposite->isInitialized())
-        {
-            volumetricFogComposite->setCameraData(currentNearPlane, currentFarPlane);
-            volumetricFogComposite->execute(commandBuffer, imageIndex);
-        }
-
-        if (ssgiPipeline && ssgiPipeline->isInitialized())
-        {
-            ssgiPipeline->setCameraData(currentView, currentProjection,
-                                         currentCameraPosition,
-                                         currentNearPlane, currentFarPlane,
-                                         taaFrameIndex);
-            ssgiPipeline->execute(commandBuffer, imageIndex);
-        }
-
-        executeRenderHooks(plugin::RenderPassHookPoint::PrePostProcess, commandBuffer, imageIndex);
-
-        // Copy current depth to prev-frame depth slot for async compute motion vectors.
-        // Uses synchronization2 barriers for consistency with the rest of the codebase.
-        if (offscreenResources.prevFrameDepthCreated)
-        {
-            uint32_t currentFrame = imageIndex % core::MAX_FRAMES_IN_FLIGHT;
-            vk::ImageSubresourceRange depthStencilRange(
-                vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil, 0, 1, 0, 1);
-            vk::ImageSubresourceRange depthOnlyRange(
-                vk::ImageAspectFlagBits::eDepth, 0, 1, 0, 1);
-
-            // Pre-copy: transition main depth (attachment->transferSrc) and
-            // prev-frame depth (undefined->transferDst) in a single barrier call
-            {
-                std::array<vk::ImageMemoryBarrier2, 2> preCopyBarriers{};
-
-                preCopyBarriers[0].srcStageMask = vk::PipelineStageFlagBits2::eLateFragmentTests;
-                preCopyBarriers[0].srcAccessMask = vk::AccessFlagBits2::eDepthStencilAttachmentWrite;
-                preCopyBarriers[0].dstStageMask = vk::PipelineStageFlagBits2::eCopy;
-                preCopyBarriers[0].dstAccessMask = vk::AccessFlagBits2::eTransferRead;
-                preCopyBarriers[0].oldLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
-                preCopyBarriers[0].newLayout = vk::ImageLayout::eTransferSrcOptimal;
-                preCopyBarriers[0].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-                preCopyBarriers[0].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-                preCopyBarriers[0].image = offscreenResources.depthImage.depthImage;
-                preCopyBarriers[0].subresourceRange = depthStencilRange;
-
-                preCopyBarriers[1].srcStageMask = vk::PipelineStageFlagBits2::eNone;
-                preCopyBarriers[1].srcAccessMask = vk::AccessFlagBits2::eNone;
-                preCopyBarriers[1].dstStageMask = vk::PipelineStageFlagBits2::eCopy;
-                preCopyBarriers[1].dstAccessMask = vk::AccessFlagBits2::eTransferWrite;
-                preCopyBarriers[1].oldLayout = vk::ImageLayout::eUndefined;
-                preCopyBarriers[1].newLayout = vk::ImageLayout::eTransferDstOptimal;
-                preCopyBarriers[1].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-                preCopyBarriers[1].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-                preCopyBarriers[1].image = offscreenResources.prevFrameDepth[currentFrame].image;
-                preCopyBarriers[1].subresourceRange = depthOnlyRange;
-
-                vk::DependencyInfo depInfo{};
-                depInfo.imageMemoryBarrierCount = static_cast<uint32_t>(preCopyBarriers.size());
-                depInfo.pImageMemoryBarriers = preCopyBarriers.data();
-                commandBuffer.pipelineBarrier2KHR(depInfo);
-            }
-
-            // Copy depth
-            vk::ImageCopy region{};
-            region.srcSubresource = {vk::ImageAspectFlagBits::eDepth, 0, 0, 1};
-            region.dstSubresource = {vk::ImageAspectFlagBits::eDepth, 0, 0, 1};
-            region.extent = vk::Extent3D(
-                swapChain.getSwapchainExtent().width,
-                swapChain.getSwapchainExtent().height,
-                1);
-
-            commandBuffer.copyImage(
-                offscreenResources.depthImage.depthImage, vk::ImageLayout::eTransferSrcOptimal,
-                offscreenResources.prevFrameDepth[currentFrame].image, vk::ImageLayout::eTransferDstOptimal,
-                region);
-
-            // Post-copy: transition main depth back (transferSrc->attachment) and
-            // prev-frame depth to shader read (for async compute next frame)
-            {
-                std::array<vk::ImageMemoryBarrier2, 2> postCopyBarriers{};
-
-                postCopyBarriers[0].srcStageMask = vk::PipelineStageFlagBits2::eCopy;
-                postCopyBarriers[0].srcAccessMask = vk::AccessFlagBits2::eTransferRead;
-                postCopyBarriers[0].dstStageMask = vk::PipelineStageFlagBits2::eEarlyFragmentTests;
-                postCopyBarriers[0].dstAccessMask = vk::AccessFlagBits2::eDepthStencilAttachmentRead |
-                                                    vk::AccessFlagBits2::eDepthStencilAttachmentWrite;
-                postCopyBarriers[0].oldLayout = vk::ImageLayout::eTransferSrcOptimal;
-                postCopyBarriers[0].newLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
-                postCopyBarriers[0].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-                postCopyBarriers[0].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-                postCopyBarriers[0].image = offscreenResources.depthImage.depthImage;
-                postCopyBarriers[0].subresourceRange = depthStencilRange;
-
-                postCopyBarriers[1].srcStageMask = vk::PipelineStageFlagBits2::eCopy;
-                postCopyBarriers[1].srcAccessMask = vk::AccessFlagBits2::eTransferWrite;
-                postCopyBarriers[1].dstStageMask = vk::PipelineStageFlagBits2::eComputeShader;
-                postCopyBarriers[1].dstAccessMask = vk::AccessFlagBits2::eShaderRead;
-                postCopyBarriers[1].oldLayout = vk::ImageLayout::eTransferDstOptimal;
-                postCopyBarriers[1].newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-                postCopyBarriers[1].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-                postCopyBarriers[1].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-                postCopyBarriers[1].image = offscreenResources.prevFrameDepth[currentFrame].image;
-                postCopyBarriers[1].subresourceRange = depthOnlyRange;
-
-                vk::DependencyInfo depInfo{};
-                depInfo.imageMemoryBarrierCount = static_cast<uint32_t>(postCopyBarriers.size());
-                depInfo.pImageMemoryBarriers = postCopyBarriers.data();
-                commandBuffer.pipelineBarrier2KHR(depInfo);
-            }
-        }
-
-        {
-            auto* upscaleManager = device.getUpscaleManager();
-            bool upscalingActive = upscaleManager && upscaleManager->isActive();
-
-            if (upscalingActive)
-            {
-                // Feed raw HDR scene color directly to DLSS (no pre-upscale post-process).
-                // DLSS expects jittered HDR input. All post-process runs after at display resolution.
-                executeUpscale(commandBuffer, imageIndex);
-                executePostUpscalePostProcess(commandBuffer, imageIndex);
-            }
-            else
-            {
-                executePostProcess(commandBuffer, imageIndex);
-            }
-        }
-
-        executeRenderHooks(plugin::RenderPassHookPoint::PostPostProcess, commandBuffer, imageIndex);
-
-        drawUIOverlays(commandBuffer, imageIndex);
-
-        executeRenderHooks(plugin::RenderPassHookPoint::Overlay, commandBuffer, imageIndex);
+        frameGraph->reset();
+        importFrameResources(imageIndex);
+        buildFrameGraph(commandBuffer, imageIndex);
+        frameGraph->compile();
+        frameGraph->execute(commandBuffer, imageIndex);
     }
 
-    void RenderPassHandler::drawSceneMeshes(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const
+    void RenderPassHandler::executeDistortionPass(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex)
+    {
+        if (!vfxRuntimeProvider || !vfxRuntimeProvider->isInitialized() || !vfxRuntimeProvider->hasDistortionEmitters())
+            return;
+
+        // Lazy init: create distortion resources on first use
+        if (!distortionInitialized)
+            initDistortionPass();
+
+        if (!distortionInitialized || !distortionResources || !distortionResources->isInitialized())
+            return;
+
+        auto extent = distortionResources->getExtent();
+
+        // 1. Copy scene color before distortion
+        distortionResources->copySceneColor(commandBuffer,
+            offscreenResources.colorImages[imageIndex].colorImage,
+            extent.width, extent.height);
+
+        // 2. Distortion vector pass (clear + render distortion emitters into R16G16 buffer)
+        // Transition distortion image: ShaderReadOnly -> ColorAttachmentOptimal
+        {
+            vk::ImageMemoryBarrier toColorAttach{};
+            toColorAttach.oldLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+            toColorAttach.newLayout = vk::ImageLayout::eColorAttachmentOptimal;
+            toColorAttach.image = distortionResources->getDistortionImage();
+            toColorAttach.subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};
+            toColorAttach.srcAccessMask = vk::AccessFlagBits::eShaderRead;
+            toColorAttach.dstAccessMask = vk::AccessFlagBits::eColorAttachmentWrite;
+            commandBuffer.pipelineBarrier(vk::PipelineStageFlagBits::eFragmentShader,
+                                          vk::PipelineStageFlagBits::eColorAttachmentOutput,
+                                          {}, {}, {}, toColorAttach);
+        }
+
+        // Transition scene depth: AttachmentOptimal -> ReadOnlyOptimal for depth sampling
+        core::ImageUtilities::transitionImageLayout(commandBuffer,
+            offscreenResources.depthImage.depthImage,
+            vk::ImageLayout::eDepthStencilAttachmentOptimal,
+            vk::ImageLayout::eDepthStencilReadOnlyOptimal,
+            vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil);
+
+        auto colorAttach = core::colorClear(distortionResources->getDistortionView(),
+            vk::ClearColorValue{std::array<float, 4>{0.0f, 0.0f, 0.0f, 0.0f}});
+        auto depthAttach = core::depthReadOnly(distortionResources->getSceneDepthView());
+
+        core::DynamicRenderingInfo dynInfo{};
+        dynInfo.extent = extent;
+        dynInfo.colorAttachments = {colorAttach};
+        dynInfo.depthAttachment = depthAttach;
+
+        core::beginDynamicRendering(commandBuffer, dynInfo);
+
+        vk::Viewport viewport{0.0f, 0.0f,
+            static_cast<float>(extent.width), static_cast<float>(extent.height),
+            0.0f, 1.0f};
+        commandBuffer.setViewport(0, viewport);
+        vk::Rect2D scissor{{0, 0}, extent};
+        commandBuffer.setScissor(0, scissor);
+
+        vfxRuntimeProvider->recordDistortionDrawCommands(commandBuffer);
+
+        core::endDynamicRendering(commandBuffer);
+
+        // Restore scene depth: ReadOnlyOptimal -> AttachmentOptimal
+        core::ImageUtilities::transitionImageLayout(commandBuffer,
+            offscreenResources.depthImage.depthImage,
+            vk::ImageLayout::eDepthStencilReadOnlyOptimal,
+            vk::ImageLayout::eDepthStencilAttachmentOptimal,
+            vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil);
+
+        // Transition distortion image back: ColorAttachmentOptimal -> ShaderReadOnlyOptimal
+        {
+            vk::ImageMemoryBarrier toShaderRead{};
+            toShaderRead.oldLayout = vk::ImageLayout::eColorAttachmentOptimal;
+            toShaderRead.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+            toShaderRead.image = distortionResources->getDistortionImage();
+            toShaderRead.subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};
+            toShaderRead.srcAccessMask = vk::AccessFlagBits::eColorAttachmentWrite;
+            toShaderRead.dstAccessMask = vk::AccessFlagBits::eShaderRead;
+            commandBuffer.pipelineBarrier(vk::PipelineStageFlagBits::eColorAttachmentOutput,
+                                          vk::PipelineStageFlagBits::eFragmentShader,
+                                          {}, {}, {}, toShaderRead);
+        }
+
+        // 3. Composite pass: apply distortion to scene color
+        distortionComposite->record(commandBuffer,
+            offscreenResources.colorImages[imageIndex].colorImageView,
+            extent,
+            distortionResources->getCompositeDescriptorSet());
+    }
+
+    // ======================== Graph-managed dispatch variants ========================
+
+    void RenderPassHandler::drawOverlaysGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const
+    {
+        if (billboardPipelineInitialized && !currentBillboardDrawList.empty())
+            billboardPipeline->recordCommandBufferGraphManaged(commandBuffer, imageIndex);
+
+        if (textPipelineInitialized && !currentTextDrawList.empty())
+            textPipeline->recordCommandBufferGraphManaged(commandBuffer, imageIndex);
+    }
+
+    void RenderPassHandler::drawUIOverlaysGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const
+    {
+        if (uiPipelineInitialized && !currentUIImageDrawList.empty())
+            uiPipeline->recordCommandBufferGraphManaged(commandBuffer, imageIndex);
+
+        if (uiTextPipelineInitialized && !currentUITextDrawList.empty())
+            uiTextPipeline->recordCommandBufferGraphManaged(commandBuffer, imageIndex);
+    }
+
+    void RenderPassHandler::drawSceneMeshesGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const
     {
         bool hasDebugItems = debugRendererInitialized && debugRenderer->hasItemsToRender();
         bool hasVFX = vfxRuntimeProvider && vfxRuntimeProvider->isInitialized()
@@ -299,7 +207,7 @@ namespace render
             if (decalRenderingEnabled && decalPipeline && decalPipeline->isInitialized() && decalPipeline->hasDecals())
             {
                 decalPipeline->setCameraData(currentView, currentProjection, currentNearPlane, currentFarPlane);
-                decalPipeline->render(commandBuffer, imageIndex);
+                decalPipeline->renderGraphManaged(commandBuffer, imageIndex);
             }
             return;
         }
@@ -311,26 +219,38 @@ namespace render
 
         bool hasMeshesToRender = !currentMeshDrawList.empty();
 
-        if ((hasMeshesToRender || hasTerrainToRender || hasWaterToRender) && gpuDrivenRendererInitialized && gpuDrivenRenderer->isEnabled())
+        if ((hasMeshesToRender || hasTerrainToRender || hasWaterToRender)
+            && gpuDrivenRendererInitialized && gpuDrivenRenderer->isEnabled())
         {
-            drawGPUDrivenMeshPass(commandBuffer, imageIndex, debugRendererPtr, hasCustomShaderMeshes, hasVFX);
+            drawGPUDrivenMeshPassGraphManaged(commandBuffer, imageIndex, debugRendererPtr, hasCustomShaderMeshes, hasVFX);
         }
         else if (!currentMeshDrawList.empty() || hasCustomShaderMeshes || hasDebugItems)
         {
-            meshPipeline->recordCommandBuffer(commandBuffer, imageIndex, combinedMeshDrawList, currentFrustum,
+            meshPipeline->recordCommandBufferGraphManaged(commandBuffer, imageIndex, combinedMeshDrawList, currentFrustum,
                                               debugRendererPtr, currentView, currentProjection);
             if (hasVFX)
-                recordVFXAfterMeshPass(commandBuffer, meshPipeline.get(), vfxRuntimeProvider, imageIndex);
+            {
+                meshPipeline->beginVFXRenderPassGraphManaged(commandBuffer, imageIndex);
+                vfxRuntimeProvider->recordDrawCommands(commandBuffer);
+                meshPipeline->endRenderPassGraphManaged(commandBuffer, imageIndex);
+                meshPipeline->restoreDepthAfterVFX(commandBuffer);
+            }
         }
         else if (hasVFX)
         {
-            recordVFXAfterMeshPass(commandBuffer, meshPipeline.get(), vfxRuntimeProvider, imageIndex);
+            meshPipeline->beginRenderPassGraphManaged(commandBuffer, imageIndex);
+            meshPipeline->endRenderPassGraphManaged(commandBuffer, imageIndex);
+
+            meshPipeline->beginVFXRenderPassGraphManaged(commandBuffer, imageIndex);
+            vfxRuntimeProvider->recordDrawCommands(commandBuffer);
+            meshPipeline->endRenderPassGraphManaged(commandBuffer, imageIndex);
+            meshPipeline->restoreDepthAfterVFX(commandBuffer);
         }
     }
 
-    void RenderPassHandler::drawGPUDrivenMeshPass(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex,
-                                                   DebugRenderer* debugRendererPtr, bool hasCustomShaderMeshes,
-                                                   bool hasVFX) const
+    void RenderPassHandler::drawGPUDrivenMeshPassGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex,
+                                                               DebugRenderer* debugRendererPtr, bool hasCustomShaderMeshes,
+                                                               bool hasVFX) const
     {
         updateGPUDrivenHiZ();
         if (asyncComputeActive)
@@ -340,18 +260,14 @@ namespace render
 
         vk::DescriptorSet iblDescriptorSet = meshPipeline->getIBLDescriptorSet(imageIndex);
 
-        // Depth prepass for meshlet-level Hi-Z occlusion culling
         if (gpuDrivenRenderer->isMeshletOcclusionCullingEnabled())
         {
             gpuDrivenRenderer->renderDepthPrepass(commandBuffer, iblDescriptorSet);
             gpuDrivenRenderer->generatePrepassHiZ(commandBuffer);
         }
 
-        // RT shadow dispatch (after depth+normal prepass, before forward pass)
         if (gpuDrivenRenderer->isRTShadowReady())
-        {
             gpuDrivenRenderer->dispatchRTShadow(commandBuffer, imageIndex);
-        }
 
         if (oceanFFTInitialized)
         {
@@ -366,16 +282,16 @@ namespace render
                            && gpuDrivenRenderer->isWBOITReady();
 
         if (useParallel)
-            recordParallelScenePass(commandBuffer, imageIndex, iblDescriptorSet,
-                                    debugRendererPtr, hasCustomShaderMeshes, wboitActive);
+            recordParallelScenePassGraphManaged(commandBuffer, imageIndex, iblDescriptorSet,
+                                                debugRendererPtr, hasCustomShaderMeshes, wboitActive);
         else
-            recordInlineScenePass(commandBuffer, imageIndex, iblDescriptorSet,
-                                  debugRendererPtr, hasCustomShaderMeshes, wboitActive);
+            recordInlineScenePassGraphManaged(commandBuffer, imageIndex, iblDescriptorSet,
+                                              debugRendererPtr, hasCustomShaderMeshes, wboitActive);
 
         if (decalRenderingEnabled && decalPipeline && decalPipeline->isInitialized() && decalPipeline->hasDecals())
         {
             decalPipeline->setCameraData(currentView, currentProjection, currentNearPlane, currentFarPlane);
-            decalPipeline->render(commandBuffer, imageIndex);
+            decalPipeline->renderGraphManaged(commandBuffer, imageIndex);
         }
 
         if (wboitActive && gpuDrivenRenderer->hasTransparentObjects())
@@ -388,13 +304,14 @@ namespace render
 
         if (hasVFX)
         {
-            meshPipeline->beginVFXRenderPass(commandBuffer, imageIndex);
+            meshPipeline->beginVFXRenderPassGraphManaged(commandBuffer, imageIndex);
             vfxRuntimeProvider->recordDrawCommands(commandBuffer);
-            meshPipeline->endRenderPass(commandBuffer);
+            meshPipeline->endRenderPassGraphManaged(commandBuffer, imageIndex);
+            meshPipeline->restoreDepthAfterVFX(commandBuffer);
         }
     }
 
-    void RenderPassHandler::recordParallelScenePass(
+    void RenderPassHandler::recordParallelScenePassGraphManaged(
         const vk::CommandBuffer& commandBuffer, uint32_t imageIndex,
         vk::DescriptorSet iblDescriptorSet, DebugRenderer* debugRendererPtr,
         bool hasCustomShaderMeshes, bool wboitActive) const
@@ -402,15 +319,18 @@ namespace render
         auto sceneRecordStart = std::chrono::high_resolution_clock::now();
         sceneThreadPoolManager->resetFrame(imageIndex);
 
-        vk::RenderPass rp = meshPipeline->getRenderPass();
-        vk::Framebuffer fb = meshPipeline->getFramebuffer(imageIndex);
         auto extent = swapChain.getSwapchainExtent();
+        vk::Format colorFormat = swapChain.getSceneColorFormat();
+        vk::Format depthFormat = swapChain.getSwapchainDepthStencilFormat();
 
         auto setupSecondary = [&](vk::CommandBuffer sec) {
+            vk::CommandBufferInheritanceRenderingInfo inheritRendering{};
+            inheritRendering.colorAttachmentCount = 1;
+            inheritRendering.pColorAttachmentFormats = &colorFormat;
+            inheritRendering.depthAttachmentFormat = depthFormat;
+
             vk::CommandBufferInheritanceInfo inheritance{};
-            inheritance.renderPass = rp;
-            inheritance.subpass = 0;
-            inheritance.framebuffer = fb;
+            inheritance.pNext = &inheritRendering;
 
             vk::CommandBufferBeginInfo beginInfo{};
             beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit |
@@ -468,8 +388,6 @@ namespace render
             }, threading::JobPriority::HIGH);
         }
 
-        // When water is present: billboards/overlays drawn inline after render pass break
-        // When no water: original secondary command buffer approach
         std::future<void> waterFuture;
         if (!hasWater && hasBillboards)
         {
@@ -501,7 +419,7 @@ namespace render
             overlayCmd.end();
         }
 
-        meshPipeline->beginRenderPassForSecondary(commandBuffer, imageIndex);
+        meshPipeline->beginRenderPassForSecondaryGraphManaged(commandBuffer, imageIndex);
 
         std::vector<vk::CommandBuffer> secondaries;
         secondaries.reserve(5);
@@ -518,8 +436,7 @@ namespace render
 
         if (hasWater)
         {
-            // Break render pass for refraction copy
-            meshPipeline->endRenderPass(commandBuffer);
+            meshPipeline->endRenderPassGraphManaged(commandBuffer, imageIndex);
 
             auto extent = swapChain.getSwapchainExtent();
             gpuDrivenRenderer->copySceneColorForRefraction(
@@ -527,8 +444,7 @@ namespace render
                 offscreenResources.colorImages[imageIndex].colorImage,
                 extent.width, extent.height);
 
-            // Water continue pass (inline)
-            meshPipeline->beginWaterContinuePass(commandBuffer, imageIndex);
+            meshPipeline->beginWaterContinuePassGraphManaged(commandBuffer, imageIndex);
 
             vk::Viewport viewport{0.0f, 0.0f,
                                    static_cast<float>(extent.width),
@@ -559,15 +475,15 @@ namespace render
         lastSceneRecordingUs = std::chrono::duration<float, std::micro>(sceneRecordEnd - sceneRecordStart).count();
         lastSceneSecondaryCount = static_cast<uint32_t>(secondaries.size());
 
-        meshPipeline->endRenderPass(commandBuffer);
+        meshPipeline->endRenderPassGraphManaged(commandBuffer, imageIndex);
     }
 
-    void RenderPassHandler::recordInlineScenePass(
+    void RenderPassHandler::recordInlineScenePassGraphManaged(
         const vk::CommandBuffer& commandBuffer, uint32_t imageIndex,
         vk::DescriptorSet iblDescriptorSet, DebugRenderer* debugRendererPtr,
         bool hasCustomShaderMeshes, bool wboitActive) const
     {
-        meshPipeline->beginRenderPass(commandBuffer, imageIndex);
+        meshPipeline->beginRenderPassGraphManaged(commandBuffer, imageIndex);
 
         auto extent = swapChain.getSwapchainExtent();
         vk::Viewport viewport{0.0f, 0.0f,
@@ -595,17 +511,14 @@ namespace render
 
         if (hasWater)
         {
-            // End main render pass to copy scene color for refraction
-            meshPipeline->endRenderPass(commandBuffer);
+            meshPipeline->endRenderPassGraphManaged(commandBuffer, imageIndex);
 
-            // Copy scene color to refraction texture
             gpuDrivenRenderer->copySceneColorForRefraction(
                 commandBuffer,
                 offscreenResources.colorImages[imageIndex].colorImage,
                 extent.width, extent.height);
 
-            // Restart render pass with load ops (preserves color + depth)
-            meshPipeline->beginWaterContinuePass(commandBuffer, imageIndex);
+            meshPipeline->beginWaterContinuePassGraphManaged(commandBuffer, imageIndex);
 
             auto waterExtent = swapChain.getSwapchainExtent();
             vk::Viewport waterViewport{0.0f, 0.0f,
@@ -636,68 +549,6 @@ namespace render
                                      });
         }
 
-        meshPipeline->endRenderPass(commandBuffer);
-    }
-
-    void RenderPassHandler::executeDistortionPass(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex)
-    {
-        if (!vfxRuntimeProvider || !vfxRuntimeProvider->isInitialized() || !vfxRuntimeProvider->hasDistortionEmitters())
-            return;
-
-        // Lazy init: create distortion resources on first use
-        if (!distortionInitialized)
-            initDistortionPass();
-
-        if (!distortionInitialized || !distortionResources || !distortionResources->isInitialized())
-            return;
-
-        auto extent = distortionResources->getExtent();
-
-        // 1. Copy scene color before distortion
-        distortionResources->copySceneColor(commandBuffer,
-            offscreenResources.colorImages[imageIndex].colorImage,
-            extent.width, extent.height);
-
-        // 2. Distortion vector pass (clear + render distortion emitters into R16G16 buffer)
-        // Only color attachment (index 0) is cleared; depth uses eLoad
-        vk::ClearValue colorClear{};
-        colorClear.color = vk::ClearColorValue{std::array<float, 4>{0.0f, 0.0f, 0.0f, 0.0f}};
-
-        vk::RenderPassBeginInfo rpBegin{};
-        rpBegin.renderPass = distortionResources->getDistortionVectorRenderPass();
-        rpBegin.framebuffer = distortionResources->getDistortionVectorFramebuffer();
-        rpBegin.renderArea.offset = vk::Offset2D{0, 0};
-        rpBegin.renderArea.extent = extent;
-        rpBegin.clearValueCount = 1;
-        rpBegin.pClearValues = &colorClear;
-
-        commandBuffer.beginRenderPass(rpBegin, vk::SubpassContents::eInline);
-
-        vk::Viewport viewport{0.0f, 0.0f,
-            static_cast<float>(extent.width), static_cast<float>(extent.height),
-            0.0f, 1.0f};
-        commandBuffer.setViewport(0, viewport);
-        vk::Rect2D scissor{{0, 0}, extent};
-        commandBuffer.setScissor(0, scissor);
-
-        vfxRuntimeProvider->recordDistortionDrawCommands(commandBuffer);
-
-        commandBuffer.endRenderPass();
-
-        // 3. Composite pass: apply distortion to scene color
-        distortionComposite->record(commandBuffer,
-            distortionResources->getCompositeRenderPass(),
-            distortionResources->getCompositeFramebuffer(imageIndex),
-            extent,
-            distortionResources->getCompositeDescriptorSet());
-    }
-
-    void RenderPassHandler::drawOverlays(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const
-    {
-        if (billboardPipelineInitialized && !currentBillboardDrawList.empty())
-            billboardPipeline->recordCommandBuffer(commandBuffer, imageIndex);
-
-        if (textPipelineInitialized && !currentTextDrawList.empty())
-            textPipeline->recordCommandBuffer(commandBuffer, imageIndex);
+        meshPipeline->endRenderPassGraphManaged(commandBuffer, imageIndex);
     }
 }

@@ -74,8 +74,8 @@ namespace render::mesh
         explicit UICanvasImageRenderer(core::Device& device, core::SwapChain& swapChain);
         ~UICanvasImageRenderer();
 
-        void init(vk::RenderPass renderPass);
-        void recreate(vk::RenderPass renderPass);
+        void init(vk::Format colorFormat, vk::Format depthFormat);
+        void recreate(vk::Format colorFormat, vk::Format depthFormat);
         void cleanUp();
         void cleanUpShader();
 
@@ -88,7 +88,7 @@ namespace render::mesh
         void loadShader();
         void createDescriptorSetLayout();
         void createDescriptorPool();
-        void createPipeline(vk::RenderPass renderPass);
+        void createPipeline(vk::Format colorFormat, vk::Format depthFormat);
         void createBuffers();
         bool loadTexture(const std::string& texturePath);
         void updateDescriptorSet(vk::DescriptorSet dstSet, vk::ImageView imageView, vk::Sampler sampler);

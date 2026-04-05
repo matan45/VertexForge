@@ -187,9 +187,9 @@ namespace render::water
                             vk::PipelineStageFlagBits::eTransfer,
                             {}, {}, {}, toTransferDst);
 
-        // 2. Transition source: ShaderReadOnly (after render pass end) -> TransferSrc
+        // 2. Transition source: ColorAttachmentOptimal -> TransferSrc
         vk::ImageMemoryBarrier srcToTransfer{};
-        srcToTransfer.oldLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+        srcToTransfer.oldLayout = vk::ImageLayout::eColorAttachmentOptimal;
         srcToTransfer.newLayout = vk::ImageLayout::eTransferSrcOptimal;
         srcToTransfer.image = srcColorImage;
         srcToTransfer.subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};

@@ -5,6 +5,7 @@
 #include "../../core/Shader.hpp"
 #include "../../core/OffScreen.hpp"
 #include "../../core/ImageUtilities.hpp"
+#include "../../core/DynamicRenderingHelpers.hpp"
 #include "../../core/BufferUtilities.hpp"
 #include <cstring>
 
@@ -35,8 +36,6 @@ namespace render::volumetric
         currentExtent = swapChain.getSwapchainExtent();
 
         createSampler();
-        createRenderPass();
-        createFramebuffers();
         createDepthImageView();
         createParamsBuffer();
         createDescriptorSetLayout();
@@ -56,7 +55,6 @@ namespace render::volumetric
         auto& dev = device.getLogicalDevice();
 
         cleanupPipeline();
-        cleanupFramebuffers();
 
         if (depthOnlyImageView)
         {
@@ -74,12 +72,6 @@ namespace render::volumetric
         {
             dev.destroyDescriptorSetLayout(descriptorSetLayout);
             descriptorSetLayout = nullptr;
-        }
-
-        if (renderPass)
-        {
-            dev.destroyRenderPass(renderPass);
-            renderPass = nullptr;
         }
 
         if (paramsBuffer)
@@ -112,7 +104,6 @@ namespace render::volumetric
         currentExtent = swapChain.getSwapchainExtent();
 
         cleanupPipeline();
-        cleanupFramebuffers();
 
         if (depthOnlyImageView)
         {
@@ -125,15 +116,6 @@ namespace render::volumetric
             dev.destroyDescriptorPool(descriptorPool);
             descriptorPool = nullptr;
         }
-
-        if (renderPass)
-        {
-            dev.destroyRenderPass(renderPass);
-            renderPass = nullptr;
-        }
-
-        createRenderPass();
-        createFramebuffers();
         createDepthImageView();
         createDescriptorPool();
         createDescriptorSet();
@@ -158,88 +140,57 @@ namespace render::volumetric
             vk::ImageLayout::eDepthStencilReadOnlyOptimal,
             depthAspectMask);
 
-        vk::RenderPassBeginInfo rpBegin{};
-        rpBegin.renderPass = renderPass;
-        rpBegin.framebuffer = framebuffers[imageIndex];
-        rpBegin.renderArea.offset = vk::Offset2D{0, 0};
-        rpBegin.renderArea.extent = currentExtent;
+        auto colorAttach = core::colorLoad(offscreenResources.colorImages[imageIndex].colorImageView);
 
-        commandBuffer.beginRenderPass(rpBegin, vk::SubpassContents::eInline);
+        core::DynamicRenderingInfo info{};
+        info.extent = currentExtent;
+        info.colorAttachments = {colorAttach};
+
+        core::beginDynamicRendering(commandBuffer, info);
 
         commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline);
         commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
                                           pipelineLayout, 0, descriptorSet, nullptr);
         commandBuffer.draw(3, 1, 0, 0);
 
-        commandBuffer.endRenderPass();
+        core::endDynamicRendering(commandBuffer);
+
+        // Transition scene color back to ShaderReadOnlyOptimal
+        core::ImageUtilities::transitionImageLayout(commandBuffer, sceneColor,
+            vk::ImageLayout::eColorAttachmentOptimal,
+            vk::ImageLayout::eShaderReadOnlyOptimal,
+            vk::ImageAspectFlagBits::eColor);
 
         core::ImageUtilities::transitionImageLayout(commandBuffer,
             offscreenResources.depthImage.depthImage,
             vk::ImageLayout::eDepthStencilReadOnlyOptimal,
             vk::ImageLayout::eDepthStencilAttachmentOptimal,
             depthAspectMask);
-
-        // Scene color is now in eShaderReadOnlyOptimal (render pass finalLayout)
     }
 
-    void VolumetricFogComposite::createRenderPass()
+    void VolumetricFogComposite::executeGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex)
     {
-        vk::AttachmentDescription colorAttachment{};
-        colorAttachment.format = swapChain.getSceneColorFormat();
-        colorAttachment.samples = vk::SampleCountFlagBits::e1;
-        colorAttachment.loadOp = vk::AttachmentLoadOp::eLoad;
-        colorAttachment.storeOp = vk::AttachmentStoreOp::eStore;
-        colorAttachment.stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
-        colorAttachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
-        colorAttachment.initialLayout = vk::ImageLayout::eColorAttachmentOptimal;
-        colorAttachment.finalLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+        if (!initialized || !volumetricPipeline || !volumetricPipeline->isEnabled())
+            return;
 
-        vk::AttachmentReference colorRef{};
-        colorRef.attachment = 0;
-        colorRef.layout = vk::ImageLayout::eColorAttachmentOptimal;
+        updateParamsBuffer();
 
-        vk::SubpassDescription subpass{};
-        subpass.pipelineBindPoint = vk::PipelineBindPoint::eGraphics;
-        subpass.colorAttachmentCount = 1;
-        subpass.pColorAttachments = &colorRef;
+        // Scene color and depth transitions handled by render graph
 
-        vk::SubpassDependency dependency{};
-        dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
-        dependency.dstSubpass = 0;
-        dependency.srcStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
-        dependency.srcAccessMask = vk::AccessFlagBits::eColorAttachmentWrite;
-        dependency.dstStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
-        dependency.dstAccessMask = vk::AccessFlagBits::eColorAttachmentRead
-                                 | vk::AccessFlagBits::eColorAttachmentWrite;
+        auto colorAttach = core::colorLoad(offscreenResources.colorImages[imageIndex].colorImageView);
 
-        vk::RenderPassCreateInfo rpInfo{};
-        rpInfo.attachmentCount = 1;
-        rpInfo.pAttachments = &colorAttachment;
-        rpInfo.subpassCount = 1;
-        rpInfo.pSubpasses = &subpass;
-        rpInfo.dependencyCount = 1;
-        rpInfo.pDependencies = &dependency;
+        core::DynamicRenderingInfo info{};
+        info.extent = currentExtent;
+        info.colorAttachments = {colorAttach};
 
-        renderPass = device.getLogicalDevice().createRenderPass(rpInfo);
-    }
+        core::beginDynamicRendering(commandBuffer, info);
 
-    void VolumetricFogComposite::createFramebuffers()
-    {
-        uint32_t imageCount = static_cast<uint32_t>(offscreenResources.colorImages.size());
-        framebuffers.resize(imageCount);
+        commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline);
+        commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
+                                          pipelineLayout, 0, descriptorSet, nullptr);
+        commandBuffer.draw(3, 1, 0, 0);
 
-        for (uint32_t i = 0; i < imageCount; ++i)
-        {
-            vk::FramebufferCreateInfo fbInfo{};
-            fbInfo.renderPass = renderPass;
-            fbInfo.attachmentCount = 1;
-            fbInfo.pAttachments = &offscreenResources.colorImages[i].colorImageView;
-            fbInfo.width = currentExtent.width;
-            fbInfo.height = currentExtent.height;
-            fbInfo.layers = 1;
-
-            framebuffers[i] = device.getLogicalDevice().createFramebuffer(fbInfo);
-        }
+        core::endDynamicRendering(commandBuffer);
     }
 
     void VolumetricFogComposite::createSampler()
@@ -472,8 +423,14 @@ namespace render::volumetric
         pipelineInfo.pDepthStencilState = &depthStencil;
         pipelineInfo.pColorBlendState = &colorBlending;
         pipelineInfo.layout = pipelineLayout;
-        pipelineInfo.renderPass = renderPass;
         pipelineInfo.subpass = 0;
+
+        // Dynamic rendering: specify color format via pNext
+        vk::Format colorFormat = swapChain.getSceneColorFormat();
+        vk::PipelineRenderingCreateInfo renderingInfo{};
+        renderingInfo.colorAttachmentCount = 1;
+        renderingInfo.pColorAttachmentFormats = &colorFormat;
+        pipelineInfo.pNext = &renderingInfo;
 
         pipeline = dev.createGraphicsPipeline(nullptr, pipelineInfo).value;
     }
@@ -494,20 +451,6 @@ namespace render::volumetric
         params.gridDepth = dims.depth;
 
         std::memcpy(paramsBufferMapped, &params, sizeof(VolumetricCompositeParams));
-    }
-
-    void VolumetricFogComposite::cleanupFramebuffers()
-    {
-        auto& dev = device.getLogicalDevice();
-        for (auto& fb : framebuffers)
-        {
-            if (fb)
-            {
-                dev.destroyFramebuffer(fb);
-                fb = nullptr;
-            }
-        }
-        framebuffers.clear();
     }
 
     void VolumetricFogComposite::cleanupPipeline()

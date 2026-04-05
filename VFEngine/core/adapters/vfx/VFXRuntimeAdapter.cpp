@@ -30,7 +30,7 @@ namespace core
         }
     }
 
-    void VFXRuntimeAdapter::init(vk::RenderPass sceneRenderPass)
+    void VFXRuntimeAdapter::init(vk::Format colorFormat, vk::Format depthFormat)
     {
         if (!renderer)
         {
@@ -42,7 +42,7 @@ namespace core
         {
             renderer->setLightingLayouts(pendingLightBufferLayout, pendingClusterGridLayout, pendingClusterLightGridLayout);
         }
-        renderer->init(sceneRenderPass);
+        renderer->init(colorFormat, depthFormat);
     }
 
     void VFXRuntimeAdapter::cleanUp()
@@ -53,11 +53,11 @@ namespace core
         }
     }
 
-    void VFXRuntimeAdapter::recreate(vk::RenderPass sceneRenderPass)
+    void VFXRuntimeAdapter::recreate(vk::Format colorFormat, vk::Format depthFormat)
     {
         if (renderer)
         {
-            renderer->recreate(sceneRenderPass);
+            renderer->recreate(colorFormat, depthFormat);
         }
     }
 
@@ -216,16 +216,16 @@ namespace core
         }
     }
 
-    void VFXRuntimeAdapter::initDistortion(vk::RenderPass distortionRenderPass)
+    void VFXRuntimeAdapter::initDistortion(vk::Format colorFormat, vk::Format depthFormat)
     {
         if (renderer)
-            renderer->initDistortion(distortionRenderPass);
+            renderer->initDistortion(colorFormat, depthFormat);
     }
 
-    void VFXRuntimeAdapter::recreateDistortion(vk::RenderPass distortionRenderPass)
+    void VFXRuntimeAdapter::recreateDistortion(vk::Format colorFormat, vk::Format depthFormat)
     {
         if (renderer)
-            renderer->recreateDistortion(distortionRenderPass);
+            renderer->recreateDistortion(colorFormat, depthFormat);
     }
 
     size_t VFXRuntimeAdapter::getInstanceCount() const

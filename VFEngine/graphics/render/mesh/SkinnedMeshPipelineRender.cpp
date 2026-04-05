@@ -1,6 +1,8 @@
 #include "SkinnedMeshPipeline.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
+#include "../../core/DynamicRenderingHelpers.hpp"
+#include "../../core/OffScreen.hpp"
 #include "../../core/BufferUtilities.hpp"
 #include "resource/MeshStreamHandle.hpp"
 #include "print/Log.hpp"
@@ -312,21 +314,19 @@ namespace render::mesh
             return;
         }
 
-        vk::RenderPassBeginInfo renderPassInfo{};
-        renderPassInfo.renderPass = renderPass;
-        renderPassInfo.framebuffer = framebuffers[imageIndex];
-        renderPassInfo.renderArea.offset = vk::Offset2D(0, 0);
-        renderPassInfo.renderArea.extent = swapChain.getSwapchainExtent();
+        auto colorAttach = core::colorClear(
+            offscreenResources.colorImages[imageIndex].colorImageView,
+            vk::ClearColorValue(std::array<float, 4>{
+                clearColorValue.r, clearColorValue.g, clearColorValue.b, clearColorValue.a}));
+        auto depthAttach = core::depthClear(
+            offscreenResources.depthImage.depthImageView, 1.0f, 0);
 
-        std::array<vk::ClearValue, 2> clearValues{};
-        clearValues[0].color = vk::ClearColorValue(std::array<float, 4>{
-            clearColorValue.r, clearColorValue.g, clearColorValue.b, clearColorValue.a});
-        clearValues[1].depthStencil = vk::ClearDepthStencilValue(1.0f, 0);
+        core::DynamicRenderingInfo dynInfo{};
+        dynInfo.extent = swapChain.getSwapchainExtent();
+        dynInfo.colorAttachments = {colorAttach};
+        dynInfo.depthAttachment = depthAttach;
 
-        renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
-        renderPassInfo.pClearValues = clearValues.data();
-
-        commandBuffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
+        core::beginDynamicRendering(commandBuffer, dynInfo);
 
         commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
 
@@ -364,6 +364,6 @@ namespace render::mesh
             commandBuffer.drawIndexed(lod.indexCount, 1, 0, 0, 0);
         }
 
-        commandBuffer.endRenderPass();
+        core::endDynamicRendering(commandBuffer);
     }
 }

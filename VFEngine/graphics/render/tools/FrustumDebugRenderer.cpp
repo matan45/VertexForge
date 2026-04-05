@@ -14,18 +14,18 @@ namespace render::mesh
 
     FrustumDebugRenderer::~FrustumDebugRenderer() = default;
 
-    void FrustumDebugRenderer::init(vk::RenderPass renderPass)
+    void FrustumDebugRenderer::init(vk::Format colorFormat, vk::Format depthFormat)
     {
         loadShader();
-        createPipeline(renderPass);
+        createPipeline(colorFormat, depthFormat);
         createBuffers();
         initialized = true;
     }
 
-    void FrustumDebugRenderer::recreate(vk::RenderPass renderPass)
+    void FrustumDebugRenderer::recreate(vk::Format colorFormat, vk::Format depthFormat)
     {
         destroyPipelineAndLayout(wireframePipeline, wireframePipelineLayout);
-        createPipeline(renderPass);
+        createPipeline(colorFormat, depthFormat);
     }
 
     void FrustumDebugRenderer::cleanUp()
@@ -50,12 +50,13 @@ namespace render::mesh
         wireframeShader->readShader("../../resources/shaders/tools/wireframe.glsl");
     }
 
-    void FrustumDebugRenderer::createPipeline(vk::RenderPass renderPass)
+    void FrustumDebugRenderer::createPipeline(vk::Format colorFormat, vk::Format depthFormat)
     {
         core::WireframePipelineConfig config{
             .device = device.getLogicalDevice(),
-            .renderPass = renderPass,
             .extent = swapChain.getSwapchainExtent(),
+            .colorAttachmentFormats = {colorFormat},
+            .depthAttachmentFormat = depthFormat,
             .pushConstantSize = sizeof(FrustumPushConstants),
             .shaderStages = wireframeShader->getShaderStages()
         };

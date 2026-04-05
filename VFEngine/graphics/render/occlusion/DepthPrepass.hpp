@@ -25,12 +25,12 @@ namespace render::occlusion
         core::VulkanAllocation normalAllocation;
         vk::ImageView normalImageView;
 
-        vk::RenderPass renderPass;
-        vk::Framebuffer framebuffer;
-
         uint32_t width = 0;
         uint32_t height = 0;
         bool initialized = false;
+
+        static constexpr vk::Format DEPTH_FORMAT = vk::Format::eD32Sfloat;
+        static constexpr vk::Format NORMAL_FORMAT = vk::Format::eR16G16B16A16Sfloat;
 
     public:
         explicit DepthPrepass(core::Device& device, core::SwapChain& swapChain);
@@ -49,15 +49,15 @@ namespace render::occlusion
         vk::ImageView getDepthImageView() const { return depthImageView; }
         vk::Image getNormalImage() const { return normalImage; }
         vk::ImageView getNormalImageView() const { return normalImageView; }
-        vk::RenderPass getRenderPass() const { return renderPass; }
         uint32_t getWidth() const { return width; }
         uint32_t getHeight() const { return height; }
         bool isInitialized() const { return initialized; }
 
+        static constexpr vk::Format getDepthFormat() { return DEPTH_FORMAT; }
+        static constexpr vk::Format getNormalFormat() { return NORMAL_FORMAT; }
+
     private:
         void createImages();
         void transitionInitialLayouts();
-        void createRenderPass();
-        void createFramebuffer();
     };
 }

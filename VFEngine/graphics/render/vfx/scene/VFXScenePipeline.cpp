@@ -22,9 +22,10 @@ namespace render::vfx
 
     VFXScenePipeline::~VFXScenePipeline() = default;
 
-    void VFXScenePipeline::init(vk::RenderPass renderPass)
+    void VFXScenePipeline::init(vk::Format colorFmt, vk::Format depthFmt)
     {
-        externalRenderPass = renderPass;
+        colorFormat = colorFmt;
+        depthFormat = depthFmt;
 
         loadShader();
         createDescriptorSetLayout();
@@ -44,9 +45,10 @@ namespace render::vfx
         vfxShader->readShader("../../resources/shaders/vfx/vfx_billboard.glsl");
     }
 
-    void VFXScenePipeline::recreate(vk::RenderPass renderPass)
+    void VFXScenePipeline::recreate(vk::Format colorFmt, vk::Format depthFmt)
     {
-        externalRenderPass = renderPass;
+        colorFormat = colorFmt;
+        depthFormat = depthFmt;
 
         device.getLogicalDevice().destroyPipeline(graphicsPipeline);
         device.getLogicalDevice().destroyPipelineLayout(pipelineLayout);
@@ -206,8 +208,9 @@ namespace render::vfx
 
         core::GraphicsPipelineConfig config{
             .device = device.getLogicalDevice(),
-            .renderPass = externalRenderPass,
             .extent = swapChain.getSwapchainExtent(),
+            .colorAttachmentFormats = {colorFormat},
+            .depthAttachmentFormat = depthFormat,
             .shaderStages = vfxShader->getShaderStages(),
             .vertexBindings = {vertexBinding, instanceBinding},
             .vertexAttributes = std::move(allAttribs),

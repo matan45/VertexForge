@@ -11,7 +11,7 @@
 namespace render::gpudriven
 {
     void GPUDrivenRenderer::initWaterSubsystems(vk::DescriptorSetLayout iblDescriptorSetLayout,
-                                                  vk::RenderPass renderPass,
+                                                  const std::vector<vk::Format>& colorFormats, vk::Format depthFormat,
                                                   vk::ImageView sceneDepthView)
     {
         water.meshBuffer = std::make_unique<render::water::WaterMeshBuffer>();
@@ -47,7 +47,7 @@ namespace render::gpudriven
             shadowSystem->getShadowTextureLayout(),
             oceanLayout,
             refractionLayout,
-            renderPass
+            colorFormats, depthFormat
         });
 
     }
@@ -263,7 +263,8 @@ namespace render::gpudriven
                 shadowSystem->getShadowTextureLayout(),
                 water.multiBandOceanLayout,
                 refractionLayout,
-                cachedRenderPass
+                cachedColorFormats,
+                cachedDepthFormat
             });
         }
 
@@ -294,7 +295,8 @@ namespace render::gpudriven
                     .shadowTextureLayout = shadowSystem->getShadowTextureLayout(),
                     .giProbeDataLayout = giLayout,
                     .causticLayout = causticLayout,
-                    .renderPass = cachedRenderPass
+                    .colorAttachmentFormats = cachedColorFormats,
+                    .depthAttachmentFormat = cachedDepthFormat
                 };
 
                 meshShaderPipeline->recreate(pipelineInfo);
@@ -318,9 +320,10 @@ namespace render::gpudriven
                     pipelineInfo.transparentMode = false;
                 }
 
-                if (wboitMeshShaderPipeline && cachedWBOITRenderPass)
+                if (wboitMeshShaderPipeline && !cachedWBOITColorFormats.empty())
                 {
-                    pipelineInfo.renderPass = cachedWBOITRenderPass;
+                    pipelineInfo.colorAttachmentFormats = cachedWBOITColorFormats;
+                    pipelineInfo.depthAttachmentFormat = cachedWBOITDepthFormat;
                     pipelineInfo.wboitMode = true;
                     wboitMeshShaderPipeline->recreate(pipelineInfo);
                     wboitMeshShaderPipeline->updateCausticDescriptor(causticDescSet);
@@ -345,7 +348,7 @@ namespace render::gpudriven
                                            lightCullingPipeline->getDescriptorSetLayout(),
                                            shadowSystem->getShadowDataLayout(),
                                            shadowSystem->getShadowTextureLayout(),
-                                           cachedRenderPass);
+                                           cachedColorFormats, cachedDepthFormat);
                 terrain.pipeline->updateCausticDescriptor(causticDescSet);
             }
         }
@@ -532,7 +535,8 @@ namespace render::gpudriven
                 .shadowTextureLayout = shadowSystem->getShadowTextureLayout(),
                 .giProbeDataLayout = giLayout,
                 .causticLayout = nullptr,
-                .renderPass = cachedRenderPass
+                .colorAttachmentFormats = cachedColorFormats,
+                .depthAttachmentFormat = cachedDepthFormat
             };
 
             meshShaderPipeline->recreate(pipelineInfo);
@@ -554,9 +558,10 @@ namespace render::gpudriven
                 pipelineInfo.transparentMode = false;
             }
 
-            if (wboitMeshShaderPipeline && cachedWBOITRenderPass)
+            if (wboitMeshShaderPipeline && !cachedWBOITColorFormats.empty())
             {
-                pipelineInfo.renderPass = cachedWBOITRenderPass;
+                pipelineInfo.colorAttachmentFormats = cachedWBOITColorFormats;
+                pipelineInfo.depthAttachmentFormat = cachedWBOITDepthFormat;
                 pipelineInfo.wboitMode = true;
                 wboitMeshShaderPipeline->recreate(pipelineInfo);
                 if (giLayout && giCascadeManager)
@@ -579,7 +584,7 @@ namespace render::gpudriven
                                        lightCullingPipeline->getDescriptorSetLayout(),
                                        shadowSystem->getShadowDataLayout(),
                                        shadowSystem->getShadowTextureLayout(),
-                                       cachedRenderPass);
+                                       cachedColorFormats, cachedDepthFormat);
         }
 
         // Recreate water pipeline with dummy ocean layout
@@ -598,7 +603,8 @@ namespace render::gpudriven
                 shadowSystem->getShadowTextureLayout(),
                 vk::DescriptorSetLayout{},
                 refractionLayout,
-                cachedRenderPass
+                cachedColorFormats,
+                cachedDepthFormat
             });
         }
     }

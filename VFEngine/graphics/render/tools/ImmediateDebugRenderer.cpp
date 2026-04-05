@@ -14,17 +14,17 @@ namespace render::mesh
 
     ImmediateDebugRenderer::~ImmediateDebugRenderer() = default;
 
-    void ImmediateDebugRenderer::init(vk::RenderPass renderPass)
+    void ImmediateDebugRenderer::init(vk::Format colorFormat, vk::Format depthFormat)
     {
         loadShader();
-        createPipeline(renderPass);
+        createPipeline(colorFormat, depthFormat);
         initialized = true;
     }
 
-    void ImmediateDebugRenderer::recreate(vk::RenderPass renderPass)
+    void ImmediateDebugRenderer::recreate(vk::Format colorFormat, vk::Format depthFormat)
     {
         destroyPipelineAndLayout(pipeline, pipelineLayout);
-        createPipeline(renderPass);
+        createPipeline(colorFormat, depthFormat);
     }
 
     void ImmediateDebugRenderer::cleanUp()
@@ -48,7 +48,7 @@ namespace render::mesh
         shader->readShader("../../resources/shaders/tools/immediate_debug.glsl");
     }
 
-    void ImmediateDebugRenderer::createPipeline(vk::RenderPass renderPass)
+    void ImmediateDebugRenderer::createPipeline(vk::Format colorFormat, vk::Format depthFormat)
     {
         vk::VertexInputBindingDescription binding{};
         binding.binding = 0;
@@ -67,7 +67,8 @@ namespace render::mesh
 
         core::GraphicsPipelineConfig config{};
         config.device = device.getLogicalDevice();
-        config.renderPass = renderPass;
+        config.colorAttachmentFormats = {colorFormat};
+        config.depthAttachmentFormat = depthFormat;
         config.extent = swapChain.getSwapchainExtent();
         config.shaderStages = shader->getShaderStages();
         config.vertexBindings = {binding};

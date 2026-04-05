@@ -629,8 +629,9 @@ namespace render::water
 
         core::GraphicsPipelineConfig config{
             .device = device.getLogicalDevice(),
-            .renderPass = layoutConfig.renderPass,
             .extent = swapChain.getSwapchainExtent(),
+            .colorAttachmentFormats = layoutConfig.colorAttachmentFormats,
+            .depthAttachmentFormat = layoutConfig.depthAttachmentFormat,
             .shaderStages = waterShader->getShaderStages(),
             .vertexBindings = {vertexBinding},
             .vertexAttributes = std::move(vertexAttributes),

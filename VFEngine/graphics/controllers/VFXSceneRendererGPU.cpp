@@ -21,7 +21,7 @@
 
 namespace controllers
 {
-    bool VFXSceneRenderer::initGPUMode(vk::RenderPass renderPass)
+    bool VFXSceneRenderer::initGPUMode(vk::Format colorFormat, vk::Format depthFormat)
     {
         try
         {
@@ -43,7 +43,7 @@ namespace controllers
             gpuRenderPipeline = std::make_unique<render::vfx::VFXSceneGPUPipeline>(device, swapChain);
             if (hasLightingLayouts)
                 gpuRenderPipeline->setLightingLayouts(cachedLightBufferLayout, cachedClusterGridLayout, cachedClusterLightGridLayout);
-            gpuRenderPipeline->init(renderPass);
+            gpuRenderPipeline->init(colorFormat, depthFormat);
             if (!gpuRenderPipeline->isInitialized())
             {
                 vfLogError("Failed to initialize GPU VFX render pipeline");
@@ -55,7 +55,7 @@ namespace controllers
             gpuMeshPipeline = std::make_unique<render::vfx::VFXMeshGPUPipeline>(device, swapChain, *gpuMeshCache);
             if (hasLightingLayouts)
                 gpuMeshPipeline->setLightingLayouts(cachedLightBufferLayout, cachedClusterGridLayout, cachedClusterLightGridLayout);
-            gpuMeshPipeline->init(renderPass);
+            gpuMeshPipeline->init(colorFormat, depthFormat);
             if (!gpuMeshPipeline->isInitialized())
             {
                 vfLogError("Failed to initialize GPU VFX mesh pipeline");
@@ -64,7 +64,7 @@ namespace controllers
             gpuMeshPipeline->setDeletionQueue(core::RenderManager::getGlobalDeletionQueue());
 
             gpuRibbonPipeline = std::make_unique<render::vfx::VFXRibbonGPUPipeline>(device, swapChain);
-            gpuRibbonPipeline->init(renderPass);
+            gpuRibbonPipeline->init(colorFormat, depthFormat);
             if (!gpuRibbonPipeline->isInitialized())
             {
                 vfLogError("Failed to initialize GPU VFX ribbon pipeline");
@@ -234,13 +234,13 @@ namespace controllers
         }
     }
 
-    void VFXSceneRenderer::initDistortion(vk::RenderPass distortionRenderPass)
+    void VFXSceneRenderer::initDistortion(vk::Format colorFormat, vk::Format depthFormat)
     {
         if (!gpuBufferManager || gpuDistortionPipeline)
             return;
 
         gpuDistortionPipeline = std::make_unique<render::vfx::VFXDistortionPipeline>(device, swapChain);
-        gpuDistortionPipeline->init(distortionRenderPass);
+        gpuDistortionPipeline->init(colorFormat, depthFormat);
         gpuDistortionPipeline->setDeletionQueue(core::RenderManager::getGlobalDeletionQueue());
 
         gpuDistortionPipeline->updateParticleBuffer(
@@ -261,14 +261,14 @@ namespace controllers
         }
     }
 
-    void VFXSceneRenderer::recreateDistortion(vk::RenderPass distortionRenderPass)
+    void VFXSceneRenderer::recreateDistortion(vk::Format colorFormat, vk::Format depthFormat)
     {
         if (gpuDistortionPipeline)
         {
             gpuDistortionPipeline->cleanup();
             gpuDistortionPipeline.reset();
         }
-        initDistortion(distortionRenderPass);
+        initDistortion(colorFormat, depthFormat);
     }
 
     render::vfx::GPUEmitterConfig VFXSceneRenderer::toGPUConfig(

@@ -5,6 +5,7 @@
 #include "../../core/ImageUtilities.hpp"
 #include "../../core/Utilities.hpp"
 #include "../../core/VulkanMemoryManager.hpp"
+#include "../../core/DynamicRenderingHelpers.hpp"
 #include "resource/TextureResource.hpp"
 #include "resource/PathResolver.hpp"
 #include "print/Log.hpp"
@@ -111,42 +112,8 @@ namespace render::ibl
 
         brdfLUTImage.sampler = device.getLogicalDevice().createSampler(samplerInfo);
 
-        vk::AttachmentDescription colorAttachment;
-        colorAttachment.format = vk::Format::eR16G16Sfloat;
-        colorAttachment.samples = vk::SampleCountFlagBits::e1;
-        colorAttachment.loadOp = vk::AttachmentLoadOp::eClear;
-        colorAttachment.storeOp = vk::AttachmentStoreOp::eStore;
-        colorAttachment.stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
-        colorAttachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
-        colorAttachment.initialLayout = vk::ImageLayout::eUndefined;
-        colorAttachment.finalLayout = vk::ImageLayout::eColorAttachmentOptimal;
-
-        vk::AttachmentReference colorAttachmentRef;
-        colorAttachmentRef.attachment = 0;
-        colorAttachmentRef.layout = vk::ImageLayout::eColorAttachmentOptimal;
-
-        vk::SubpassDescription subPass;
-        subPass.pipelineBindPoint = vk::PipelineBindPoint::eGraphics;
-        subPass.colorAttachmentCount = 1;
-        subPass.pColorAttachments = &colorAttachmentRef;
-
-        vk::SubpassDependency dependency;
-        dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
-        dependency.dstSubpass = 0;
-        dependency.srcStageMask = vk::PipelineStageFlagBits::eTransfer;
-        dependency.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
-        dependency.dstStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
-        dependency.dstAccessMask = vk::AccessFlagBits::eColorAttachmentWrite;
-
-        vk::RenderPassCreateInfo renderPassInfo;
-        renderPassInfo.attachmentCount = 1;
-        renderPassInfo.pAttachments = &colorAttachment;
-        renderPassInfo.subpassCount = 1;
-        renderPassInfo.pSubpasses = &subPass;
-        renderPassInfo.dependencyCount = 1;
-        renderPassInfo.pDependencies = &dependency;
-
-        vk::RenderPass renderPass = device.getLogicalDevice().createRenderPass(renderPassInfo);
+        // Dynamic rendering format for pipeline creation
+        vk::Format colorFormat = vk::Format::eR16G16Sfloat;
 
         vk::VertexInputBindingDescription vertexInputBindingDescription;
         vertexInputBindingDescription.binding = 0;
@@ -238,39 +205,39 @@ namespace render::ibl
         pipelineInfo.pMultisampleState = &multisampling;
         pipelineInfo.pColorBlendState = &colorBlending;
         pipelineInfo.layout = pipelineLayout;
-        pipelineInfo.renderPass = renderPass;
-        pipelineInfo.subpass = 0;
+
+        vk::PipelineRenderingCreateInfo pipelineRenderingInfo{};
+        pipelineRenderingInfo.colorAttachmentCount = 1;
+        pipelineRenderingInfo.pColorAttachmentFormats = &colorFormat;
+        pipelineInfo.pNext = &pipelineRenderingInfo;
 
         vk::Pipeline graphicsPipeline = device.getLogicalDevice().createGraphicsPipeline(nullptr, pipelineInfo).value;
-
-        vk::FramebufferCreateInfo framebufferInfo = {};
-        framebufferInfo.renderPass = renderPass;
-        framebufferInfo.attachmentCount = 1;
-        framebufferInfo.pAttachments = &brdfLUTImage.imageView;
-        framebufferInfo.width = CUBE_MAP_SIZE;
-        framebufferInfo.height = CUBE_MAP_SIZE;
-        framebufferInfo.layers = 1;
-
-        vk::Framebuffer framebuffer = device.getLogicalDevice().createFramebuffer(framebufferInfo);
 
         vk::UniqueCommandBuffer commandBuffer = core::Utilities::beginSingleTimeCommands(
             device.getLogicalDevice(), commandPool);
 
-        vk::ClearValue clearColor{std::array<float, 4>{0.0f, 0.0f, 0.0f, 1.0f}};
-        vk::RenderPassBeginInfo renderPassBeginInfo = {};
-        renderPassBeginInfo.renderPass = renderPass;
-        renderPassBeginInfo.framebuffer = framebuffer;
-        renderPassBeginInfo.renderArea = vk::Rect2D({0, 0}, {CUBE_MAP_SIZE, CUBE_MAP_SIZE});
-        renderPassBeginInfo.clearValueCount = 1;
-        renderPassBeginInfo.pClearValues = &clearColor;
+        // Transition image to color attachment layout before rendering
+        core::ImageUtilities::transitionImageLayout(
+            commandBuffer.get(),
+            brdfLUTImage.image,
+            vk::ImageLayout::eUndefined,
+            vk::ImageLayout::eColorAttachmentOptimal,
+            vk::ImageAspectFlagBits::eColor
+        );
 
-        commandBuffer->beginRenderPass(renderPassBeginInfo, vk::SubpassContents::eInline);
+        core::DynamicRenderingInfo renderingInfo{};
+        renderingInfo.extent = vk::Extent2D{CUBE_MAP_SIZE, CUBE_MAP_SIZE};
+        renderingInfo.colorAttachments = {
+            core::colorClear(brdfLUTImage.imageView, vk::ClearColorValue{std::array<float, 4>{0.0f, 0.0f, 0.0f, 1.0f}})
+        };
+
+        core::beginDynamicRendering(commandBuffer.get(), renderingInfo);
         commandBuffer->bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
 
         vk::DeviceSize offsets[] = {0};
         commandBuffer->bindVertexBuffers(0, quadVertexBuffer, offsets);
         commandBuffer->draw(6, 1, 0, 0);
-        commandBuffer->endRenderPass();
+        core::endDynamicRendering(commandBuffer.get());
 
         vk::Fence renderFence = device.getLogicalDevice().createFence({});
         core::Utilities::endSingleTimeCommands(device, commandBuffer, renderFence);
@@ -292,12 +259,10 @@ namespace render::ibl
         );
         core::Utilities::endSingleTimeCommands(device, transitionCommandBuffer);
 
-        device.getLogicalDevice().destroyFramebuffer(framebuffer);
         device.getLogicalDevice().destroyFence(renderFence);
 
         core::BufferUtilities::destroyBuffer(device.getLogicalDevice(), quadVertexBuffer, quadVertexBufferAllocation, device.getMemoryManager());
 
-        device.getLogicalDevice().destroyRenderPass(renderPass);
         device.getLogicalDevice().destroyPipeline(graphicsPipeline);
         device.getLogicalDevice().destroyPipelineLayout(pipelineLayout);
     }

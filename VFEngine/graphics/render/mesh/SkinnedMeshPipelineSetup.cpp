@@ -9,53 +9,6 @@
 
 namespace render::mesh
 {
-    void SkinnedMeshPipeline::createRenderPass()
-    {
-        vk::AttachmentDescription colorAttachment{};
-        colorAttachment.format = swapChain.getSceneColorFormat();
-        colorAttachment.samples = vk::SampleCountFlagBits::e1;
-        colorAttachment.loadOp = vk::AttachmentLoadOp::eClear;
-        colorAttachment.storeOp = vk::AttachmentStoreOp::eStore;
-        colorAttachment.stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
-        colorAttachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
-        colorAttachment.initialLayout = vk::ImageLayout::eUndefined;
-        colorAttachment.finalLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-
-        vk::AttachmentReference colorAttachmentRef{};
-        colorAttachmentRef.attachment = 0;
-        colorAttachmentRef.layout = vk::ImageLayout::eColorAttachmentOptimal;
-
-        vk::AttachmentDescription depthAttachment{};
-        depthAttachment.format = swapChain.getSwapchainDepthStencilFormat();
-        depthAttachment.samples = vk::SampleCountFlagBits::e1;
-        depthAttachment.loadOp = vk::AttachmentLoadOp::eClear;
-        depthAttachment.storeOp = vk::AttachmentStoreOp::eDontCare;
-        depthAttachment.stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
-        depthAttachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
-        depthAttachment.initialLayout = vk::ImageLayout::eUndefined;
-        depthAttachment.finalLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
-
-        vk::AttachmentReference depthAttachmentRef{};
-        depthAttachmentRef.attachment = 1;
-        depthAttachmentRef.layout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
-
-        vk::SubpassDescription subpass{};
-        subpass.pipelineBindPoint = vk::PipelineBindPoint::eGraphics;
-        subpass.colorAttachmentCount = 1;
-        subpass.pColorAttachments = &colorAttachmentRef;
-        subpass.pDepthStencilAttachment = &depthAttachmentRef;
-
-        std::array<vk::AttachmentDescription, 2> attachments = {colorAttachment, depthAttachment};
-
-        vk::RenderPassCreateInfo renderPassInfo{};
-        renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
-        renderPassInfo.pAttachments = attachments.data();
-        renderPassInfo.subpassCount = 1;
-        renderPassInfo.pSubpasses = &subpass;
-
-        renderPass = device.getLogicalDevice().createRenderPass(renderPassInfo);
-    }
-
     void SkinnedMeshPipeline::createDescriptorSetLayouts()
     {
         {
@@ -419,31 +372,16 @@ namespace render::mesh
         pipelineInfo.pDepthStencilState = &depthStencil;
         pipelineInfo.pColorBlendState = &colorBlending;
         pipelineInfo.layout = pipelineLayout;
-        pipelineInfo.renderPass = renderPass;
         pipelineInfo.subpass = 0;
 
+        vk::Format colorFormat = swapChain.getSceneColorFormat();
+        vk::Format depthFormat = swapChain.getSwapchainDepthStencilFormat();
+        vk::PipelineRenderingCreateInfo renderingInfo{};
+        renderingInfo.colorAttachmentCount = 1;
+        renderingInfo.pColorAttachmentFormats = &colorFormat;
+        renderingInfo.depthAttachmentFormat = depthFormat;
+        pipelineInfo.pNext = &renderingInfo;
+
         graphicsPipeline = device.getLogicalDevice().createGraphicsPipeline(nullptr, pipelineInfo).value;
-    }
-
-    void SkinnedMeshPipeline::createFramebuffers()
-    {
-        framebuffers.resize(offscreenResources.colorImages.size());
-        vk::ImageView depth = offscreenResources.depthImage.depthImageView;
-
-        for (uint32_t i = 0; i < framebuffers.size(); i++)
-        {
-            vk::ImageView colorView = offscreenResources.colorImages[i].colorImageView;
-            std::array<vk::ImageView, 2> attachments = {colorView, depth};
-
-            vk::FramebufferCreateInfo framebufferInfo{};
-            framebufferInfo.renderPass = renderPass;
-            framebufferInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
-            framebufferInfo.pAttachments = attachments.data();
-            framebufferInfo.width = swapChain.getSwapchainExtent().width;
-            framebufferInfo.height = swapChain.getSwapchainExtent().height;
-            framebufferInfo.layers = 1;
-
-            framebuffers[i] = device.getLogicalDevice().createFramebuffer(framebufferInfo);
-        }
     }
 }

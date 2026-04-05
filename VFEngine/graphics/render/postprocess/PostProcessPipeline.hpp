@@ -46,7 +46,6 @@ namespace render::postprocess
         vk::Image image;
         core::VulkanAllocation allocation;
         vk::ImageView imageView;
-        vk::Framebuffer framebuffer;
     };
 
     class PostProcessPipeline
@@ -58,7 +57,7 @@ namespace render::postprocess
 
         bool initialized = false;
 
-        vk::RenderPass renderPass;
+        vk::Format sceneColorFormat = vk::Format::eUndefined;
         vk::Sampler linearSampler;
         vk::DescriptorSetLayout inputDescriptorSetLayout;
         vk::DescriptorPool descriptorPool;
@@ -116,18 +115,16 @@ namespace render::postprocess
         bool hasEnabledEffects() const;
         bool isInitialized() const { return initialized; }
 
-        vk::RenderPass getRenderPass() const { return renderPass; }
+        vk::Format getColorFormat() const { return sceneColorFormat; }
         vk::DescriptorSetLayout getInputDescriptorSetLayout() const { return inputDescriptorSetLayout; }
         vk::Sampler getLinearSampler() const { return linearSampler; }
 
     private:
         void lazyInit();
-        void createRenderPass();
         void createSampler();
         void createDescriptorSetLayout();
         void createDescriptorPool();
         void createPingPongTargets();
-        void createFramebuffers();
         void createDescriptorSets();
         void updateDescriptorSet(vk::DescriptorSet set, vk::ImageView imageView);
 

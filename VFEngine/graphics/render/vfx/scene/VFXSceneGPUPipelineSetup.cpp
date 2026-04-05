@@ -147,8 +147,9 @@ namespace render::vfx
 
         core::GraphicsPipelineConfig config{
             .device = device.getLogicalDevice(),
-            .renderPass = externalRenderPass,
             .extent = swapChain.getSwapchainExtent(),
+            .colorAttachmentFormats = {colorFormat},
+            .depthAttachmentFormat = depthFormat,
             .shaderStages = gpuShader->getShaderStages(),
             .vertexBindings = {vertexBinding},
             .vertexAttributes = {vertexAttribs.begin(), vertexAttribs.end()},

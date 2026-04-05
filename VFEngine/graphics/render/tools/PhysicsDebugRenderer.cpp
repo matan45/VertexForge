@@ -37,13 +37,13 @@ namespace render::mesh
 
     PhysicsDebugRenderer::~PhysicsDebugRenderer() = default;
 
-    void PhysicsDebugRenderer::init(vk::RenderPass renderPass)
+    void PhysicsDebugRenderer::init(vk::Format colorFormat, vk::Format depthFormat)
     {
         // Note: BufferUtilities and vulkan-hpp throw exceptions on allocation failure.
         // If any step fails, the exception propagates and initialized remains false.
         // The render() method has null checks for each buffer as additional safety.
         loadShader();
-        createPipeline(renderPass);
+        createPipeline(colorFormat, depthFormat);
         createBuffers();
 
         if (!wireframePipeline || !wireframePipelineLayout)
@@ -58,10 +58,10 @@ namespace render::mesh
         initialized = true;
     }
 
-    void PhysicsDebugRenderer::recreate(vk::RenderPass renderPass)
+    void PhysicsDebugRenderer::recreate(vk::Format colorFormat, vk::Format depthFormat)
     {
         destroyPipelineAndLayout(wireframePipeline, wireframePipelineLayout);
-        createPipeline(renderPass);
+        createPipeline(colorFormat, depthFormat);
     }
 
     void PhysicsDebugRenderer::cleanUp()
@@ -136,12 +136,13 @@ namespace render::mesh
         wireframeShader->readShader("../../resources/shaders/tools/sphere_wireframe.glsl");
     }
 
-    void PhysicsDebugRenderer::createPipeline(vk::RenderPass renderPass)
+    void PhysicsDebugRenderer::createPipeline(vk::Format colorFormat, vk::Format depthFormat)
     {
         core::WireframePipelineConfig config{
             .device = device.getLogicalDevice(),
-            .renderPass = renderPass,
             .extent = swapChain.getSwapchainExtent(),
+            .colorAttachmentFormats = {colorFormat},
+            .depthAttachmentFormat = depthFormat,
             .pushConstantSize = sizeof(PhysicsDebugPushConstants),
             .shaderStages = wireframeShader->getShaderStages()
         };

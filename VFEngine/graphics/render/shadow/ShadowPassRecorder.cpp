@@ -4,6 +4,7 @@
 #include "TerrainShadowPipeline.hpp"
 #include "../gpudriven/GPUDrivenTypes.hpp"
 #include "../../core/Device.hpp"
+#include "../../core/DynamicRenderingHelpers.hpp"
 #include <chrono>
 
 namespace render::shadow
@@ -43,32 +44,23 @@ namespace render::shadow
         return true;
     }
 
-    void ShadowPassRecorder::beginTileRenderPass(
-        vk::CommandBuffer cmd, VSMPhysicalTilePool* tilePool, bool useLoadPass)
+    void ShadowPassRecorder::beginDynamicShadowPass(
+        vk::CommandBuffer cmd, VSMPhysicalTilePool* tilePool, bool clearDepth)
     {
-        vk::ClearValue clearValue{};
-        clearValue.depthStencil = vk::ClearDepthStencilValue{1.0f, 0};
+        core::DynamicRenderingInfo info{};
+        info.extent = vk::Extent2D{vsm::PHYSICAL_POOL_DIM, vsm::PHYSICAL_POOL_DIM};
 
-        vk::RenderPassBeginInfo renderPassInfo{};
-        if (useLoadPass)
-        {
-            renderPassInfo.renderPass = tilePool->getRenderPassLoad();
-            renderPassInfo.framebuffer = tilePool->getFramebufferLoad();
-            renderPassInfo.clearValueCount = 0;
-            renderPassInfo.pClearValues = nullptr;
-        }
+        if (clearDepth)
+            info.depthAttachment = core::depthClear(tilePool->getPoolImageView(), 1.0f, 0);
         else
-        {
-            renderPassInfo.renderPass = tilePool->getRenderPass();
-            renderPassInfo.framebuffer = tilePool->getFramebuffer();
-            renderPassInfo.clearValueCount = 1;
-            renderPassInfo.pClearValues = &clearValue;
-        }
-        renderPassInfo.renderArea.offset = vk::Offset2D{0, 0};
-        renderPassInfo.renderArea.extent = vk::Extent2D{
-            vsm::PHYSICAL_POOL_DIM, vsm::PHYSICAL_POOL_DIM};
+            info.depthAttachment = core::depthLoad(tilePool->getPoolImageView());
 
-        cmd.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
+        core::beginDynamicRendering(cmd, info);
+    }
+
+    void ShadowPassRecorder::endDynamicShadowPass(vk::CommandBuffer cmd)
+    {
+        core::endDynamicRendering(cmd);
     }
 
     void ShadowPassRecorder::bindShadowPipelineAndSets(
@@ -257,7 +249,7 @@ namespace render::shadow
 
     void ShadowPassRecorder::recordTileCommands(
         vk::CommandBuffer cmd, const PageRenderEntry& page,
-        const ShadowPassContext& ctx, bool useLoadPass)
+        const ShadowPassContext& ctx, bool clearTile)
     {
         vk::Viewport viewport = ctx.tilePool->getTileViewport(page.physicalTileIndex);
         cmd.setViewport(0, 1, &viewport);
@@ -265,7 +257,7 @@ namespace render::shadow
         vk::Rect2D scissor = ctx.tilePool->getTileScissor(page.physicalTileIndex);
         cmd.setScissor(0, 1, &scissor);
 
-        if (useLoadPass)
+        if (clearTile)
             clearTileDepth(cmd, scissor);
 
         cmd.setDepthBias(page.depthBias, 0.0f, page.slopeBias);
@@ -283,25 +275,26 @@ namespace render::shadow
 
     void ShadowPassRecorder::recordStaticPhase(
         vk::CommandBuffer cmd, const ShadowPassContext& ctx,
-        const ShadowPassPrerequisites& prereq, bool useLoadPass)
+        const ShadowPassPrerequisites& prereq, bool clearDepth)
     {
         bool hasLegacyOrStaticPages = !ctx.pageRenderList.empty() ||
                                       !ctx.staticPageRenderList.empty();
         if (!hasLegacyOrStaticPages)
             return;
 
-        beginTileRenderPass(cmd, ctx.tilePool, useLoadPass);
+        beginDynamicShadowPass(cmd, ctx.tilePool, clearDepth);
 
         if (prereq.hasMeshBatches)
             bindShadowPipelineAndSets(cmd, ctx);
 
+        bool loadPass = !clearDepth;
         for (const auto& page : ctx.pageRenderList)
-            recordTileCommands(cmd, page, ctx, useLoadPass);
+            recordTileCommands(cmd, page, ctx, loadPass);
 
         for (const auto& page : ctx.staticPageRenderList)
-            recordTileCommands(cmd, page, ctx, useLoadPass);
+            recordTileCommands(cmd, page, ctx, loadPass);
 
-        cmd.endRenderPass();
+        endDynamicShadowPass(cmd);
     }
 
     void ShadowPassRecorder::recordDynamicPhase(
@@ -311,7 +304,7 @@ namespace render::shadow
         if (ctx.dynamicPageRenderList.empty())
             return;
 
-        beginTileRenderPass(cmd, ctx.tilePool, true);
+        beginDynamicShadowPass(cmd, ctx.tilePool, false);
 
         if (prereq.hasMeshBatches)
             bindShadowPipelineAndSets(cmd, ctx);
@@ -319,7 +312,7 @@ namespace render::shadow
         for (const auto& page : ctx.dynamicPageRenderList)
             recordTileCommands(cmd, page, ctx, true);
 
-        cmd.endRenderPass();
+        endDynamicShadowPass(cmd);
     }
 
     void ShadowPassRecorder::recordShadowPass(
@@ -337,9 +330,9 @@ namespace render::shadow
         if (prereq.hasPageViews)
         {
             transitionPoolToDepthAttachment(cmd, ctx.tilePool, ctx.poolFirstUse);
-            bool useLoadPass = !ctx.poolFirstUse;
+            bool clearDepth = ctx.poolFirstUse;
 
-            recordStaticPhase(cmd, ctx, prereq, useLoadPass);
+            recordStaticPhase(cmd, ctx, prereq, clearDepth);
 
             if (!ctx.tileCopyList.empty())
                 executeTileCopies(cmd, ctx.tilePool, ctx.tileCopyList);

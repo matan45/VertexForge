@@ -2,6 +2,9 @@
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
 #include "../../core/Shader.hpp"
+#include "../../core/OffScreen.hpp"
+#include "../../core/DynamicRenderingHelpers.hpp"
+#include "../../core/ImageUtilities.hpp"
 #include "text/TextLayout.hpp"
 #include "resource/Types.hpp"
 #include <algorithm>
@@ -23,7 +26,6 @@ namespace render::text
     void TextPipeline::init()
     {
         loadShader();
-        createRenderPass();
         createDescriptorSetLayout();
         createDescriptorPool();
 
@@ -32,7 +34,6 @@ namespace render::text
 
         createDefaultDescriptorSet();
         createPipeline();
-        createFramebuffers();
 
         initialized = true;
     }
@@ -45,28 +46,15 @@ namespace render::text
 
     void TextPipeline::recreate()
     {
-        for (auto& framebuffer : framebuffers)
-        {
-            device.getLogicalDevice().destroyFramebuffer(framebuffer);
-        }
-        device.getLogicalDevice().destroyRenderPass(renderPass);
         device.getLogicalDevice().destroyPipeline(graphicsPipeline);
         device.getLogicalDevice().destroyPipelineLayout(pipelineLayout);
 
-        createRenderPass();
         createPipeline();
-        createFramebuffers();
     }
 
     void TextPipeline::cleanUp()
     {
         auto& dev = device.getLogicalDevice();
-
-        for (auto& framebuffer : framebuffers)
-        {
-            dev.destroyFramebuffer(framebuffer);
-        }
-        framebuffers.clear();
 
         if (graphicsPipeline) dev.destroyPipeline(graphicsPipeline);
         if (pipelineLayout) dev.destroyPipelineLayout(pipelineLayout);
@@ -81,9 +69,6 @@ namespace render::text
             descriptorPool = nullptr;
         }
         if (descriptorSetLayout) dev.destroyDescriptorSetLayout(descriptorSetLayout);
-
-        if (renderPass)
-            dev.destroyRenderPass(renderPass);
 
         bufferManager.cleanUp();
         fontCache.cleanUp();
@@ -301,13 +286,21 @@ namespace render::text
             return;
         }
 
-        vk::RenderPassBeginInfo renderPassInfo{};
-        renderPassInfo.renderPass = renderPass;
-        renderPassInfo.framebuffer = framebuffers[imageIndex];
-        renderPassInfo.renderArea.offset = vk::Offset2D{0, 0};
-        renderPassInfo.renderArea.extent = swapChain.getSwapchainExtent();
+        core::ImageUtilities::transitionImageLayout(commandBuffer,
+            offscreenResources.colorImages[imageIndex].colorImage,
+            vk::ImageLayout::eShaderReadOnlyOptimal,
+            vk::ImageLayout::eColorAttachmentOptimal,
+            vk::ImageAspectFlagBits::eColor);
 
-        commandBuffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
+        auto colorAttach = core::colorLoad(offscreenResources.colorImages[imageIndex].colorImageView);
+        auto depthAttach = core::depthLoad(offscreenResources.depthImage.depthImageView);
+
+        core::DynamicRenderingInfo info{};
+        info.extent = swapChain.getSwapchainExtent();
+        info.colorAttachments = {colorAttach};
+        info.depthAttachment = depthAttach;
+
+        core::beginDynamicRendering(commandBuffer, info);
 
         commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
 
@@ -345,6 +338,69 @@ namespace render::text
             commandBuffer.drawIndexed(6, batch.instanceCount, 0, 0, batch.firstInstance);
         }
 
-        commandBuffer.endRenderPass();
+        core::endDynamicRendering(commandBuffer);
+
+        core::ImageUtilities::transitionImageLayout(commandBuffer,
+            offscreenResources.colorImages[imageIndex].colorImage,
+            vk::ImageLayout::eColorAttachmentOptimal,
+            vk::ImageLayout::eShaderReadOnlyOptimal,
+            vk::ImageAspectFlagBits::eColor);
+    }
+
+    void TextPipeline::recordCommandBufferGraphManaged(const vk::CommandBuffer& commandBuffer,
+                                            uint32_t imageIndex) const
+    {
+        if (!initialized || totalInstanceCount == 0)
+        {
+            return;
+        }
+
+        auto colorAttach = core::colorLoad(offscreenResources.colorImages[imageIndex].colorImageView);
+        auto depthAttach = core::depthLoad(offscreenResources.depthImage.depthImageView);
+
+        core::DynamicRenderingInfo info{};
+        info.extent = swapChain.getSwapchainExtent();
+        info.colorAttachments = {colorAttach};
+        info.depthAttachment = depthAttach;
+
+        core::beginDynamicRendering(commandBuffer, info);
+
+        commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
+
+        vk::Buffer vertexBuffers[] = {bufferManager.getQuadVertexBuffer(), bufferManager.getInstanceBuffer()};
+        vk::DeviceSize offsets[] = {0, 0};
+        commandBuffer.bindVertexBuffers(0, 2, vertexBuffers, offsets);
+        commandBuffer.bindIndexBuffer(bufferManager.getQuadIndexBuffer(), 0, vk::IndexType::eUint16);
+
+        glm::vec2 viewportSize(
+            static_cast<float>(swapChain.getSwapchainExtent().width),
+            static_cast<float>(swapChain.getSwapchainExtent().height)
+        );
+
+        for (const auto& batch : fontBatches)
+        {
+            auto it = fontDescriptorSets.find(batch.fontPath);
+            vk::DescriptorSet descSet = (it != fontDescriptorSets.end())
+                ? it->second : defaultDescriptorSet;
+
+            // Determine glyphMode from cached font data
+            const CachedFont* cached = fontCache.getFont(batch.fontPath);
+            uint32_t glyphMode = (cached && cached->isColorFont) ? 1u : 0u;
+
+            TextPushConstants pushConstants{};
+            pushConstants.viewportSize = viewportSize;
+            pushConstants.glyphMode = glyphMode;
+
+            commandBuffer.pushConstants(pipelineLayout,
+                                         vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
+                                         0, sizeof(TextPushConstants), &pushConstants);
+
+            commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout,
+                                              0, descSet, nullptr);
+
+            commandBuffer.drawIndexed(6, batch.instanceCount, 0, 0, batch.firstInstance);
+        }
+
+        core::endDynamicRendering(commandBuffer);
     }
 }

@@ -6,6 +6,7 @@
 #include "../../../core/OffScreen.hpp"
 #include "../../../core/ImageUtilities.hpp"
 #include "../../../core/BufferUtilities.hpp"
+#include "../../../core/DynamicRenderingHelpers.hpp"
 
 namespace render::postprocess
 {
@@ -27,12 +28,11 @@ namespace render::postprocess
         }
     }
 
-    void SSAOEffect::init(vk::RenderPass renderPass, vk::Extent2D extent)
+    void SSAOEffect::init(vk::Format colorFormat, vk::Extent2D extent)
     {
         currentExtent = extent;
 
         createSampler();
-        createRenderPasses();
         createImages();
         createDepthImageView();
         createParamsBuffer();
@@ -42,7 +42,7 @@ namespace render::postprocess
         loadShaders();
         createSSAOPipeline();
         createBlurPipeline();
-        createCompositePipeline(renderPass);
+        createCompositePipeline(colorFormat);
 
         initialized = true;
     }
@@ -84,18 +84,6 @@ namespace render::postprocess
             compositeDescriptorSetLayout = nullptr;
         }
 
-        if (ssaoRenderPass)
-        {
-            dev.destroyRenderPass(ssaoRenderPass);
-            ssaoRenderPass = nullptr;
-        }
-
-        if (blurRenderPass)
-        {
-            dev.destroyRenderPass(blurRenderPass);
-            blurRenderPass = nullptr;
-        }
-
         if (paramsBuffer)
         {
             paramsBufferMapped = nullptr;
@@ -115,7 +103,7 @@ namespace render::postprocess
         initialized = false;
     }
 
-    void SSAOEffect::recreate(vk::RenderPass renderPass, vk::Extent2D extent)
+    void SSAOEffect::recreate(vk::Format colorFormat, vk::Extent2D extent)
     {
         currentExtent = extent;
         auto& dev = device.getLogicalDevice();
@@ -135,26 +123,13 @@ namespace render::postprocess
             descriptorPool = nullptr;
         }
 
-        if (ssaoRenderPass)
-        {
-            dev.destroyRenderPass(ssaoRenderPass);
-            ssaoRenderPass = nullptr;
-        }
-
-        if (blurRenderPass)
-        {
-            dev.destroyRenderPass(blurRenderPass);
-            blurRenderPass = nullptr;
-        }
-
-        createRenderPasses();
         createImages();
         createDepthImageView();
         createDescriptorPool();
         createDescriptorSets();
         createSSAOPipeline();
         createBlurPipeline();
-        createCompositePipeline(renderPass);
+        createCompositePipeline(colorFormat);
     }
 
     void SSAOEffect::preRecord(const vk::CommandBuffer& commandBuffer,
@@ -170,13 +145,13 @@ namespace render::postprocess
 
         // Pass 1: SSAO calculation
         {
-            vk::RenderPassBeginInfo rpBegin{};
-            rpBegin.renderPass = ssaoRenderPass;
-            rpBegin.framebuffer = ssaoRawFramebuffer;
-            rpBegin.renderArea.offset = vk::Offset2D{0, 0};
-            rpBegin.renderArea.extent = currentExtent;
+            auto colorAttach = core::colorDontCare(ssaoRawImageView);
 
-            commandBuffer.beginRenderPass(rpBegin, vk::SubpassContents::eInline);
+            core::DynamicRenderingInfo dynInfo{};
+            dynInfo.extent = currentExtent;
+            dynInfo.colorAttachments = {colorAttach};
+
+            core::beginDynamicRendering(commandBuffer, dynInfo);
 
             commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, ssaoPipeline);
 
@@ -187,18 +162,23 @@ namespace render::postprocess
                                               sets.data(), 0, nullptr);
 
             commandBuffer.draw(3, 1, 0, 0);
-            commandBuffer.endRenderPass();
+            core::endDynamicRendering(commandBuffer);
+
+            // Transition SSAO raw to shader read for blur pass
+            core::ImageUtilities::transitionImageLayout(commandBuffer, ssaoRawImage,
+                vk::ImageLayout::eColorAttachmentOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
+                vk::ImageAspectFlagBits::eColor);
         }
 
         // Pass 2: Bilateral blur
         {
-            vk::RenderPassBeginInfo rpBegin{};
-            rpBegin.renderPass = blurRenderPass;
-            rpBegin.framebuffer = ssaoBlurredFramebuffer;
-            rpBegin.renderArea.offset = vk::Offset2D{0, 0};
-            rpBegin.renderArea.extent = currentExtent;
+            auto colorAttach = core::colorDontCare(ssaoBlurredImageView);
 
-            commandBuffer.beginRenderPass(rpBegin, vk::SubpassContents::eInline);
+            core::DynamicRenderingInfo dynInfo{};
+            dynInfo.extent = currentExtent;
+            dynInfo.colorAttachments = {colorAttach};
+
+            core::beginDynamicRendering(commandBuffer, dynInfo);
 
             commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, blurPipeline);
 
@@ -215,7 +195,12 @@ namespace render::postprocess
                                          0, sizeof(BlurPushConstants), &blurPC);
 
             commandBuffer.draw(3, 1, 0, 0);
-            commandBuffer.endRenderPass();
+            core::endDynamicRendering(commandBuffer);
+
+            // Transition blurred SSAO to shader read for composite pass
+            core::ImageUtilities::transitionImageLayout(commandBuffer, ssaoBlurredImage,
+                vk::ImageLayout::eColorAttachmentOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
+                vk::ImageAspectFlagBits::eColor);
         }
 
         core::ImageUtilities::transitionImageLayout(commandBuffer,

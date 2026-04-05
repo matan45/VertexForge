@@ -393,7 +393,7 @@ namespace render::gi
     }
 
     vk::Pipeline SSGIPipeline::createFullscreenPipeline(vk::PipelineLayout layout,
-                                                         vk::RenderPass rp,
+                                                         vk::Format colorFormat,
                                                          vk::Extent2D extent,
                                                          const std::shared_ptr<core::Shader>& shdr,
                                                          bool additiveBlend)
@@ -468,8 +468,13 @@ namespace render::gi
         pipelineInfo.pDepthStencilState = &depthStencil;
         pipelineInfo.pColorBlendState = &colorBlending;
         pipelineInfo.layout = layout;
-        pipelineInfo.renderPass = rp;
         pipelineInfo.subpass = 0;
+
+        // Dynamic rendering: specify color format via pNext
+        vk::PipelineRenderingCreateInfo renderingInfo{};
+        renderingInfo.colorAttachmentCount = 1;
+        renderingInfo.pColorAttachmentFormats = &colorFormat;
+        pipelineInfo.pNext = &renderingInfo;
 
         return device.getLogicalDevice().createGraphicsPipeline(nullptr, pipelineInfo).value;
     }

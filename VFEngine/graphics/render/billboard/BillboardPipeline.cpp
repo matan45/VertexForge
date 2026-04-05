@@ -5,6 +5,8 @@
 #include "../../core/Texture.hpp"
 #include "../../core/OffScreen.hpp"
 #include "../../core/PipelineUtilities.hpp"
+#include "../../core/DynamicRenderingHelpers.hpp"
+#include "../../core/ImageUtilities.hpp"
 #include "print/Log.hpp"
 #include <filesystem>
 #include <algorithm>
@@ -27,7 +29,6 @@ namespace render::billboard
     void BillboardPipeline::init()
     {
         loadShader();
-        createRenderPass();
         createDescriptorSetLayout();
         createDescriptorPool();
 
@@ -36,7 +37,6 @@ namespace render::billboard
 
         createDescriptorSet();
         createPipeline();
-        createFramebuffers();
 
         initialized = true;
     }
@@ -49,28 +49,15 @@ namespace render::billboard
 
     void BillboardPipeline::recreate()
     {
-        for (auto& framebuffer : framebuffers)
-        {
-            device.getLogicalDevice().destroyFramebuffer(framebuffer);
-        }
-        device.getLogicalDevice().destroyRenderPass(renderPass);
         device.getLogicalDevice().destroyPipeline(graphicsPipeline);
         device.getLogicalDevice().destroyPipelineLayout(pipelineLayout);
 
-        createRenderPass();
         createPipeline();
-        createFramebuffers();
     }
 
     void BillboardPipeline::cleanUp()
     {
         auto& dev = device.getLogicalDevice();
-
-        for (auto& framebuffer : framebuffers)
-        {
-            dev.destroyFramebuffer(framebuffer);
-        }
-        framebuffers.clear();
 
         if (graphicsPipeline) dev.destroyPipeline(graphicsPipeline);
         if (pipelineLayout) dev.destroyPipelineLayout(pipelineLayout);
@@ -87,9 +74,6 @@ namespace render::billboard
         }
         if (descriptorSetLayout) dev.destroyDescriptorSetLayout(descriptorSetLayout);
 
-        if (renderPass)
-            dev.destroyRenderPass(renderPass);
-
         bufferManager.cleanUp();
         atlasManager.cleanUp();
 
@@ -100,53 +84,6 @@ namespace render::billboard
         }
 
         initialized = false;
-    }
-
-    void BillboardPipeline::createRenderPass()
-    {
-        vk::AttachmentDescription colorAttachment{};
-        colorAttachment.format = swapChain.getSceneColorFormat();
-        colorAttachment.samples = vk::SampleCountFlagBits::e1;
-        colorAttachment.loadOp = vk::AttachmentLoadOp::eLoad;
-        colorAttachment.storeOp = vk::AttachmentStoreOp::eStore;
-        colorAttachment.stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
-        colorAttachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
-        colorAttachment.initialLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-        colorAttachment.finalLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-
-        vk::AttachmentReference colorAttachmentRef{};
-        colorAttachmentRef.attachment = 0;
-        colorAttachmentRef.layout = vk::ImageLayout::eColorAttachmentOptimal;
-
-        vk::AttachmentDescription depthAttachment{};
-        depthAttachment.format = swapChain.getSwapchainDepthStencilFormat();
-        depthAttachment.samples = vk::SampleCountFlagBits::e1;
-        depthAttachment.loadOp = vk::AttachmentLoadOp::eLoad;
-        depthAttachment.storeOp = vk::AttachmentStoreOp::eStore;
-        depthAttachment.stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
-        depthAttachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
-        depthAttachment.initialLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
-        depthAttachment.finalLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
-
-        vk::AttachmentReference depthAttachmentRef{};
-        depthAttachmentRef.attachment = 1;
-        depthAttachmentRef.layout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
-
-        vk::SubpassDescription subpass{};
-        subpass.pipelineBindPoint = vk::PipelineBindPoint::eGraphics;
-        subpass.colorAttachmentCount = 1;
-        subpass.pColorAttachments = &colorAttachmentRef;
-        subpass.pDepthStencilAttachment = &depthAttachmentRef;
-
-        std::array<vk::AttachmentDescription, 2> attachments = {colorAttachment, depthAttachment};
-
-        vk::RenderPassCreateInfo renderPassInfo{};
-        renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
-        renderPassInfo.pAttachments = attachments.data();
-        renderPassInfo.subpassCount = 1;
-        renderPassInfo.pSubpasses = &subpass;
-
-        renderPass = device.getLogicalDevice().createRenderPass(renderPassInfo);
     }
 
     void BillboardPipeline::createDescriptorSetLayout()
@@ -250,8 +187,9 @@ namespace render::billboard
 
         core::GraphicsPipelineConfig config{
             .device = device.getLogicalDevice(),
-            .renderPass = renderPass,
             .extent = swapChain.getSwapchainExtent(),
+            .colorAttachmentFormats = { swapChain.getSceneColorFormat() },
+            .depthAttachmentFormat = swapChain.getSwapchainDepthStencilFormat(),
             .shaderStages = billboardShader->getShaderStages(),
             .vertexBindings = {vertexBinding, instanceBinding},
             .vertexAttributes = std::move(allAttribs),
@@ -262,34 +200,12 @@ namespace render::billboard
             .cullMode = vk::CullModeFlagBits::eNone,
             .depthTestEnable = true,
             .depthWriteEnable = false,
-            .blendEnable = true
+            .blendEnable = true,
         };
 
         auto result = core::PipelineUtilities::createGraphicsPipeline(config);
         graphicsPipeline = result.pipeline;
         pipelineLayout = result.pipelineLayout;
-    }
-
-    void BillboardPipeline::createFramebuffers()
-    {
-        framebuffers.resize(offscreenResources.colorImages.size());
-        vk::ImageView depth = offscreenResources.depthImage.depthImageView;
-
-        for (uint32_t i = 0; i < framebuffers.size(); i++)
-        {
-            vk::ImageView colorView = offscreenResources.colorImages[i].colorImageView;
-            std::array<vk::ImageView, 2> attachments = {colorView, depth};
-
-            vk::FramebufferCreateInfo framebufferInfo{};
-            framebufferInfo.renderPass = renderPass;
-            framebufferInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
-            framebufferInfo.pAttachments = attachments.data();
-            framebufferInfo.width = swapChain.getSwapchainExtent().width;
-            framebufferInfo.height = swapChain.getSwapchainExtent().height;
-            framebufferInfo.layers = 1;
-
-            framebuffers[i] = device.getLogicalDevice().createFramebuffer(framebufferInfo);
-        }
     }
 
     bool BillboardPipeline::loadAtlas(const std::string& atlasPath)
@@ -484,13 +400,21 @@ namespace render::billboard
             return;
         }
 
-        vk::RenderPassBeginInfo renderPassInfo{};
-        renderPassInfo.renderPass = renderPass;
-        renderPassInfo.framebuffer = framebuffers[imageIndex];
-        renderPassInfo.renderArea.offset = vk::Offset2D{0, 0};
-        renderPassInfo.renderArea.extent = swapChain.getSwapchainExtent();
+        core::ImageUtilities::transitionImageLayout(commandBuffer,
+            offscreenResources.colorImages[imageIndex].colorImage,
+            vk::ImageLayout::eShaderReadOnlyOptimal,
+            vk::ImageLayout::eColorAttachmentOptimal,
+            vk::ImageAspectFlagBits::eColor);
 
-        commandBuffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
+        vk::ImageView colorView = offscreenResources.colorImages[imageIndex].colorImageView;
+        vk::ImageView depthView = offscreenResources.depthImage.depthImageView;
+
+        core::DynamicRenderingInfo info{};
+        info.extent = swapChain.getSwapchainExtent();
+        info.colorAttachments = { core::colorLoad(colorView) };
+        info.depthAttachment = core::depthLoad(depthView);
+
+        core::beginDynamicRendering(commandBuffer, info);
 
         commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
 
@@ -553,6 +477,100 @@ namespace render::billboard
             commandBuffer.drawIndexed(6, batch.instanceCount, 0, 0, batch.firstInstance);
         }
 
-        commandBuffer.endRenderPass();
+        core::endDynamicRendering(commandBuffer);
+
+        core::ImageUtilities::transitionImageLayout(commandBuffer,
+            offscreenResources.colorImages[imageIndex].colorImage,
+            vk::ImageLayout::eColorAttachmentOptimal,
+            vk::ImageLayout::eShaderReadOnlyOptimal,
+            vk::ImageAspectFlagBits::eColor);
+    }
+
+    void BillboardPipeline::recordCommandBufferGraphManaged(const vk::CommandBuffer& commandBuffer,
+                                                 uint32_t imageIndex) const
+    {
+        uint32_t totalInstances = atlasInstanceCount;
+        for (const auto& batch : customBatches)
+        {
+            totalInstances += batch.instanceCount;
+        }
+
+        if (!initialized || totalInstances == 0)
+        {
+            return;
+        }
+
+        vk::ImageView colorView = offscreenResources.colorImages[imageIndex].colorImageView;
+        vk::ImageView depthView = offscreenResources.depthImage.depthImageView;
+
+        core::DynamicRenderingInfo info{};
+        info.extent = swapChain.getSwapchainExtent();
+        info.colorAttachments = { core::colorLoad(colorView) };
+        info.depthAttachment = core::depthLoad(depthView);
+
+        core::beginDynamicRendering(commandBuffer, info);
+
+        commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
+
+        vk::Buffer vertexBuffers[] = {bufferManager.getQuadVertexBuffer(), bufferManager.getInstanceBuffer()};
+        vk::DeviceSize offsets[] = {0, 0};
+        commandBuffer.bindVertexBuffers(0, 2, vertexBuffers, offsets);
+        commandBuffer.bindIndexBuffer(bufferManager.getQuadIndexBuffer(), 0, vk::IndexType::eUint16);
+
+        glm::vec2 viewportSize(
+            static_cast<float>(swapChain.getSwapchainExtent().width),
+            static_cast<float>(swapChain.getSwapchainExtent().height)
+        );
+
+        if (atlasInstanceCount > 0)
+        {
+            commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout,
+                                              0, atlasDescriptorSet, nullptr);
+
+            BillboardPushConstants pushConstants{};
+            pushConstants.viewportSize = viewportSize;
+            pushConstants.atlasGridSize = static_cast<float>(AtlasConfig::GRID_SIZE);
+
+            commandBuffer.pushConstants(pipelineLayout, vk::ShaderStageFlagBits::eVertex,
+                                         0, sizeof(BillboardPushConstants), &pushConstants);
+
+            commandBuffer.drawIndexed(6, atlasInstanceCount, 0, 0, 0);
+        }
+
+        for (const auto& batch : customBatches)
+        {
+            vk::DescriptorSet texDescSet;
+            auto it = customTextureCache.find(batch.texturePath);
+            if (it != customTextureCache.end())
+            {
+                texDescSet = it->second.descriptorSet;
+            }
+            else
+            {
+                auto extIt = externalTextureCache.find(batch.texturePath);
+                if (extIt != externalTextureCache.end())
+                {
+                    texDescSet = extIt->second;
+                }
+                else
+                {
+                    continue;
+                }
+            }
+
+            commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout,
+                                              0, texDescSet, nullptr);
+
+            BillboardPushConstants pushConstants{};
+            pushConstants.viewportSize = viewportSize;
+            pushConstants.atlasGridSize = batch.atlasGridSize;
+
+            commandBuffer.pushConstants(pipelineLayout, vk::ShaderStageFlagBits::eVertex,
+                                         0, sizeof(BillboardPushConstants), &pushConstants);
+
+            commandBuffer.drawIndexed(6, batch.instanceCount, 0, 0, batch.firstInstance);
+        }
+
+        core::endDynamicRendering(commandBuffer);
     }
 }

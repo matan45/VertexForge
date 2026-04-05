@@ -33,6 +33,7 @@ namespace render::shadow
         vk::DescriptorSetLayout cachedMeshletDataLayout;
         vk::DescriptorSetLayout cachedVertexDataLayout;
 
+        vk::Format depthFormat = vk::Format::eD32Sfloat;
         bool initialized = false;
 
     public:
@@ -45,7 +46,7 @@ namespace render::shadow
         void init(vk::DescriptorSetLayout terrainDataLayout,
                   vk::DescriptorSetLayout meshletDataLayout,
                   vk::DescriptorSetLayout vertexDataLayout,
-                  vk::RenderPass shadowRenderPass);
+                  vk::Format shadowDepthFormat);
 
         void cleanup();
 
@@ -61,6 +62,6 @@ namespace render::shadow
         [[nodiscard]] bool isInitialized() const { return initialized; }
 
     private:
-        void createTerrainShadowPipeline(vk::RenderPass shadowRenderPass);
+        void createTerrainShadowPipeline();
     };
 }

@@ -39,9 +39,9 @@ namespace core
         ~VFXRuntimeAdapter() noexcept override;
 
         // System lifecycle
-        void init(vk::RenderPass sceneRenderPass) override;
+        void init(vk::Format colorFormat, vk::Format depthFormat) override;
         void cleanUp() override;
-        void recreate(vk::RenderPass sceneRenderPass) override;
+        void recreate(vk::Format colorFormat, vk::Format depthFormat) override;
         bool isInitialized() const override;
 
         // Instance management
@@ -70,8 +70,8 @@ namespace core
         // Distortion pass
         bool hasDistortionEmitters() const override;
         void recordDistortionDrawCommands(const vk::CommandBuffer& cmd) override;
-        void initDistortion(vk::RenderPass distortionRenderPass) override;
-        void recreateDistortion(vk::RenderPass distortionRenderPass) override;
+        void initDistortion(vk::Format colorFormat, vk::Format depthFormat) override;
+        void recreateDistortion(vk::Format colorFormat, vk::Format depthFormat) override;
 
         size_t getInstanceCount() const override;
 
