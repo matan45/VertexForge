@@ -191,7 +191,7 @@ namespace windows::details
                 }
                 if (ImGui::IsItemHovered())
                 {
-                    ImGui::SetTooltip("-1 = use all submeshes\n>= 0 = use convex hull from specific submesh");
+                    ImGui::SetTooltip("-1 = use all submeshes\n>= 0 = use specific submesh");
                 }
 
                 if (colliderData.shape == types::ColliderShape::TriangleMesh)

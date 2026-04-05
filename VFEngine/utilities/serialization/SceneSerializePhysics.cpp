@@ -485,8 +485,7 @@ namespace serialization
         writeAssetRef(j, "fragmentCollisionAudio", d.fragmentCollisionAudio);
         writeAssetRef(j, "damageDecalAlbedo", d.damageDecalAlbedo);
         writeAssetRef(j, "damageDecalNormal", d.damageDecalNormal);
-        if (d.decalHalfExtents != 0.3f)
-            j["decalHalfExtents"] = d.decalHalfExtents;
+        j["decalHalfExtents"] = d.decalHalfExtents;
         return j;
     }
 

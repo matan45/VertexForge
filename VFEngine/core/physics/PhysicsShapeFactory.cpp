@@ -100,7 +100,7 @@ namespace core::physics
 
     JPH::Ref<JPH::Shape> PhysicsShapeFactory::createConvexMeshShape(const ColliderCreateInfo& info)
     {
-        vfLogDebug("PhysicsShapeFactory: createConvexMeshShape meshPath={}, submeshIndex={}",
+        vfLogTrace("PhysicsShapeFactory: createConvexMeshShape meshPath={}, submeshIndex={}",
                    info.meshPath, info.submeshIndex);
 
         if (info.meshPath.empty())
@@ -153,7 +153,7 @@ namespace core::physics
                 auto result = compoundSettings.Create();
                 if (!result.HasError())
                 {
-                    vfLogDebug("Created ConvexMesh compound collider with {} hulls from: {}",
+                    vfLogTrace("Created ConvexMesh compound collider with {} hulls from: {}",
                                compoundSettings.mSubShapes.size(), info.meshPath);
                     {
                         std::lock_guard lock(shapeCacheMutex);
@@ -191,7 +191,7 @@ namespace core::physics
             return makeBoxFallback(info.halfExtents);
         }
 
-        vfLogDebug("Created ConvexMesh collider with {} vertices from: {}",
+        vfLogTrace("Created ConvexMesh collider with {} vertices from: {}",
                    meshData->vertices.size(), info.meshPath);
         {
             std::lock_guard lock(shapeCacheMutex);

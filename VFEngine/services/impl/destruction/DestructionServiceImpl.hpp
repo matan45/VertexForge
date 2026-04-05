@@ -4,8 +4,10 @@
 #include "../../events/EventTypes.hpp"
 #include "DebrisManager.hpp"
 #include <components/CoreComponents.hpp>
+#include <asset/AssetMetadata.hpp>
 #include <memory>
 #include <vector>
+#include <unordered_map>
 
 namespace services
 {
@@ -49,9 +51,11 @@ namespace services
             const components::TransformComponent& transform,
             const MaterialData& sourceMaterial,
             EntityHandle entity,
-            const glm::vec3& fragmentDir, float force) const;
+            const glm::vec3& fragmentDir, float force);
         static glm::vec3 computeFragmentImpulse(const glm::vec3& impactDir,
                                                   uint32_t fragmentIndex, uint32_t fragmentCount,
                                                   float force);
+
+        std::unordered_map<std::string, std::vector<glm::vec3>> fragmentOffsetCache;
     };
 }

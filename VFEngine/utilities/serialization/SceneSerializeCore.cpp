@@ -56,10 +56,7 @@ namespace serialization
         {
             j["maxDrawDistance"] = mesh.maxDrawDistance;
         }
-        if (mesh.submeshIndex >= 0)
-        {
-            j["submeshIndex"] = mesh.submeshIndex;
-        }
+        j["submeshIndex"] = mesh.submeshIndex;
         return j;
     }
 
