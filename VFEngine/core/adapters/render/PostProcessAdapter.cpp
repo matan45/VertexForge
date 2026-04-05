@@ -50,6 +50,8 @@ namespace core
             status.renderHeight = res.getRenderHeight();
             status.displayWidth = res.getDisplayWidth();
             status.displayHeight = res.getDisplayHeight();
+            status.dlssGSupported = mgr->isDLSSGSupported();
+            status.frameGenActive = mgr->isFrameGenActive();
         }
         return status;
     }

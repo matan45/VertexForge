@@ -66,6 +66,8 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
         std::string_view msg(pCallbackData->pMessage);
         if (msg.find("Couldn't find VkDescriptorSet Object") != std::string_view::npos ||
             msg.find("sl.tag.") != std::string_view::npos ||
+            msg.find("sl.dlssg.fake-swapchain-buffer") != std::string_view::npos ||
+            msg.find("SL_present_semaphore") != std::string_view::npos ||
             msg.find("Object Tracking") != std::string_view::npos)
         {
             return VK_FALSE;

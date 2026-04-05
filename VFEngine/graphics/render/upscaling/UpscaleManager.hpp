@@ -79,6 +79,18 @@ namespace render::upscaling
         /// Check feature availability (call after setVulkanDevice).
         bool isDLSSSupported() const { return dlssSupported; }
         bool isDirectSRSupported() const { return directSRSupported; }
+        bool isDLSSGSupported() const { return dlssGSupported; }
+
+        /// Frame Generation (DLSS 3.x)
+        void applyFrameGenSettings(const ::postprocess::FrameGenSettings& settings,
+                                   uint32_t backBufferCount,
+                                   uint32_t displayWidth, uint32_t displayHeight,
+                                   uint32_t renderWidth, uint32_t renderHeight);
+        bool isFrameGenActive() const { return frameGenActive; }
+
+        /// Reflex (required for Frame Gen)
+        void enableReflex();
+        void disableReflex();
 
         /// Determine the active upscale mode based on settings and hardware.
         ::postprocess::UpscaleMode resolveActiveMode(::postprocess::UpscaleMode requested) const;
@@ -108,6 +120,7 @@ namespace render::upscaling
 
         static bool isStreamlineAvailable() { return streamlineAvailable; }
         static bool isDLSSAvailable() { return instance && instance->dlssSupported; }
+        static bool isDLSSGAvailable() { return instance && instance->dlssGSupported; }
         static bool isDirectSRAvailable() { return instance && instance->directSRSupported; }
         static const UpscaleManager* getInstance() { return instance; }
 
@@ -116,8 +129,11 @@ namespace render::upscaling
 
         ::postprocess::UpscaleMode activeMode = ::postprocess::UpscaleMode::Off;
         bool dlssSupported = false;
+        bool dlssGSupported = false;
         bool directSRSupported = false;
         bool deviceSet = false;
+        bool frameGenActive = false;
+        bool reflexEnabled = false;
 
         static inline bool streamlineAvailable = false;
         static inline bool streamlineInitialized = false;

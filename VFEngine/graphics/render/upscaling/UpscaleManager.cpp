@@ -5,6 +5,8 @@
 #ifdef VF_STREAMLINE_ENABLED
 #include <sl.h>
 #include <sl_dlss.h>
+#include <sl_dlss_g.h>
+#include <sl_reflex.h>
 #include <sl_consts.h>
 #include <sl_helpers_vk.h>
 #include <sl_matrix_helpers.h>
@@ -61,6 +63,7 @@ namespace render::upscaling
 
         sl::Feature featuresToLoad[] = {
             sl::kFeatureDLSS,
+            // sl::kFeatureDLSS_G, // Disabled: auto-hooks swapchain with UNORM format, conflicts with SRGB image views
             sl::kFeatureDirectSR,
             sl::kFeatureReflex
         };
@@ -169,9 +172,12 @@ namespace render::upscaling
             // Free DLSS resources before shutdown to avoid leaked Vulkan objects
             if (deviceSet)
             {
+                slFreeResources(sl::kFeatureDLSS_G, sl::ViewportHandle{0});
                 slFreeResources(sl::kFeatureDLSS, sl::ViewportHandle{0});
                 slFreeResources(sl::kFeatureDirectSR, sl::ViewportHandle{0});
             }
+            if (reflexEnabled)
+                disableReflex();
             slShutdown();
             streamlineAvailable = false;
             streamlineInitialized = false;
@@ -187,8 +193,10 @@ namespace render::upscaling
 #ifdef VF_STREAMLINE_ENABLED
         if (deviceSet)
         {
+            slFreeResources(sl::kFeatureDLSS_G, sl::ViewportHandle{0});
             slFreeResources(sl::kFeatureDLSS, sl::ViewportHandle{0});
             slFreeResources(sl::kFeatureDirectSR, sl::ViewportHandle{0});
+            frameGenActive = false;
             vfLogInfo("Streamline: freed feature resources for resolution change");
         }
 #endif
@@ -205,6 +213,11 @@ namespace render::upscaling
         dlssSupported = (dlssResult == sl::Result::eOk);
         vfLogInfo("Streamline DLSS support query: {} ({})",
                   slResultToString(dlssResult), static_cast<int>(dlssResult));
+
+        sl::Result dlssGResult = slIsFeatureSupported(sl::kFeatureDLSS_G, adapterInfo);
+        dlssGSupported = (dlssGResult == sl::Result::eOk);
+        vfLogInfo("Streamline DLSS-G (Frame Gen) support query: {} ({})",
+                  slResultToString(dlssGResult), static_cast<int>(dlssGResult));
 
         sl::Result directSRResult = slIsFeatureSupported(sl::kFeatureDirectSR, adapterInfo);
         directSRSupported = (directSRResult == sl::Result::eOk);
@@ -502,5 +515,84 @@ namespace render::upscaling
     {
         // The next evaluate() call will pass resetAccumulation = true
         // which is handled via sl::Constants::reset in evaluate()
+    }
+
+    void UpscaleManager::enableReflex()
+    {
+#ifdef VF_STREAMLINE_ENABLED
+        if (!streamlineAvailable) return;
+
+        sl::ReflexOptions options{};
+        options.mode = sl::ReflexMode::eLowLatency;
+        options.frameLimitUs = 0;
+        options.useMarkersToOptimize = false;
+
+        sl::Result result = slReflexSetOptions(options);
+        reflexEnabled = (result == sl::Result::eOk);
+        vfLogInfo("Streamline Reflex: {} ({})",
+                  reflexEnabled ? "enabled" : "failed",
+                  slResultToString(result));
+#endif
+    }
+
+    void UpscaleManager::disableReflex()
+    {
+#ifdef VF_STREAMLINE_ENABLED
+        if (!streamlineAvailable) return;
+
+        sl::ReflexOptions options{};
+        options.mode = sl::ReflexMode::eOff;
+        slReflexSetOptions(options);
+        reflexEnabled = false;
+        vfLogInfo("Streamline Reflex: disabled");
+#endif
+    }
+
+    void UpscaleManager::applyFrameGenSettings(const ::postprocess::FrameGenSettings& settings,
+                                                uint32_t backBufferCount,
+                                                uint32_t displayWidth, uint32_t displayHeight,
+                                                uint32_t renderWidth, uint32_t renderHeight)
+    {
+#ifdef VF_STREAMLINE_ENABLED
+        if (!deviceSet || !dlssGSupported)
+        {
+            if (settings.enabled)
+                vfLogWarning("DLSS Frame Generation not supported on this GPU");
+            frameGenActive = false;
+            return;
+        }
+
+        if (settings.enabled && !reflexEnabled)
+            enableReflex();
+
+        sl::DLSSGOptions options{};
+        options.mode = settings.enabled ? sl::DLSSGMode::eOn : sl::DLSSGMode::eOff;
+        options.numFramesToGenerate = settings.numFramesToGenerate;
+        options.numBackBuffers = backBufferCount;
+        options.colorWidth = displayWidth;
+        options.colorHeight = displayHeight;
+        options.mvecDepthWidth = renderWidth;
+        options.mvecDepthHeight = renderHeight;
+
+        sl::Result result = slDLSSGSetOptions(sl::ViewportHandle{0}, options);
+        frameGenActive = (result == sl::Result::eOk && settings.enabled);
+
+        if (settings.enabled)
+        {
+            vfLogInfo("DLSS Frame Generation: {} ({}), {}x frames",
+                      frameGenActive ? "active" : "failed",
+                      slResultToString(result),
+                      settings.numFramesToGenerate + 1);
+        }
+        else
+        {
+            frameGenActive = false;
+            if (reflexEnabled && !isActive())
+                disableReflex();
+            vfLogInfo("DLSS Frame Generation: disabled");
+        }
+#else
+        frameGenActive = false;
+#endif
     }
 }

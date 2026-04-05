@@ -71,11 +71,6 @@ layout(push_constant) uniform PushConstants {
     uint viewMode;
     float screenWidth;
     float screenHeight;
-    uint hiZMipLevels;
-    uint _pad0;
-    uint _pad1;
-    uint _pad2;
-    mat4 prevViewProjection;
 } pc;
 
 shared vec3 sharedPositions[MESHLET_MAX_VERTICES];
@@ -253,11 +248,6 @@ layout(push_constant) uniform PushConstants {
     uint viewMode;
     float screenWidth;
     float screenHeight;
-    uint hiZMipLevels;
-    uint _pad0;
-    uint _pad1;
-    uint _pad2;
-    mat4 prevViewProjection;
 } pc;
 
 // Light structs provided by lighting_functions.glsl include

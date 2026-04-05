@@ -260,6 +260,54 @@ namespace windows
         }
     }
 
+    void PostProcessConfigWindow::drawFrameGenSection()
+    {
+        if (ImGui::CollapsingHeader("Frame Generation (DLSS 3)"))
+        {
+            ImGui::Indent(10.0f);
+
+            auto& dispatcher = events::EventDispatcher::instance();
+            auto status = dispatcher.query(events::postprocess::GetUpscaleStatusQuery{});
+
+            if (ImGui::Checkbox("Enable Frame Generation", &settings.frameGen.enabled))
+                isDirty = true;
+
+            if (settings.frameGen.enabled)
+            {
+                if (!settings.upscale.enabled)
+                {
+                    ImGui::TextColored(ImVec4(0.9f, 0.8f, 0.1f, 1.0f),
+                        "Frame Generation requires DLSS upscaling to be active.");
+                }
+
+                ImGui::Spacing();
+
+                const char* multiplierNames[] = {"2x (1 generated)", "3x (2 generated)", "4x (3 generated)"};
+                int currentMultiplier = static_cast<int>(settings.frameGen.numFramesToGenerate) - 1;
+                if (currentMultiplier < 0) currentMultiplier = 0;
+                if (ImGui::Combo("Frame Multiplier", &currentMultiplier, multiplierNames, IM_ARRAYSIZE(multiplierNames)))
+                {
+                    settings.frameGen.numFramesToGenerate = static_cast<uint32_t>(currentMultiplier + 1);
+                    isDirty = true;
+                }
+
+                ImGui::Spacing();
+                ImGui::SeparatorText("Status");
+
+                ImGui::Text("DLSS-G: %s", status.dlssGSupported ? "Supported" : "Not Supported");
+                ImGui::Text("Frame Gen: %s", status.frameGenActive ? "Active" : "Off");
+
+                if (settings.frameGen.enabled && !status.dlssGSupported)
+                {
+                    ImGui::TextColored(ImVec4(0.9f, 0.3f, 0.3f, 1.0f),
+                        "Frame Generation not supported (requires RTX 40xx+).");
+                }
+            }
+
+            ImGui::Unindent(10.0f);
+        }
+    }
+
     void PostProcessConfigWindow::drawBloomSection()
     {
         if (ImGui::CollapsingHeader("Bloom", ImGuiTreeNodeFlags_DefaultOpen))
@@ -442,6 +490,7 @@ namespace windows
 
             drawToneMappingSection();
             drawUpscaleSection();
+            drawFrameGenSection();
             drawBloomSection();
             drawVignetteSection();
             drawChromaticAberrationSection();

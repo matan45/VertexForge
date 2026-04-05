@@ -292,6 +292,22 @@ namespace controllers
                     upscaleManager->applySettings(settings.upscale, freshDisplayExtent.width, freshDisplayExtent.height);
                 }
             }
+
+            // Apply Frame Generation settings (requires DLSS SR to be active)
+            if (settings.frameGen.enabled && upscaleManager->isActive())
+            {
+                auto dispExtent = swapChain.getDisplayExtent();
+                auto renRes = upscaleManager->getResolutionManager().getRenderResolution();
+                upscaleManager->applyFrameGenSettings(settings.frameGen,
+                    swapChain.getImageCount(),
+                    dispExtent.width, dispExtent.height,
+                    renRes.width, renRes.height);
+            }
+            else if (!settings.frameGen.enabled && upscaleManager->isFrameGenActive())
+            {
+                postprocess::FrameGenSettings offSettings{};
+                upscaleManager->applyFrameGenSettings(offSettings, 0, 0, 0, 0, 0);
+            }
         }
     }
 

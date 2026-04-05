@@ -90,6 +90,8 @@ project "Editor"
          "{COPY} ../../dependencies/streamline/bin/x64/development/sl.pcl.dll ../../bin/Editor/Debug/x64/",
          "{COPY} ../../dependencies/streamline/bin/x64/development/sl.dlss.dll ../../bin/Editor/Debug/x64/",
          "{COPY} ../../dependencies/streamline/bin/x64/development/nvngx_dlss.dll ../../bin/Editor/Debug/x64/",
+         "{COPY} ../../dependencies/streamline/bin/x64/development/sl.dlss_g.dll ../../bin/Editor/Debug/x64/",
+         "{COPY} ../../dependencies/streamline/bin/x64/development/nvngx_dlssg.dll ../../bin/Editor/Debug/x64/",
          "{COPY} ../../dependencies/streamline/bin/x64/development/sl.directsr.dll ../../bin/Editor/Debug/x64/",
          "{COPY} ../../dependencies/streamline/bin/x64/development/sl.reflex.dll ../../bin/Editor/Debug/x64/",
          "{COPY} ../../dependencies/streamline/bin/x64/development/NvLowLatencyVk.dll ../../bin/Editor/Debug/x64/"
@@ -109,6 +111,8 @@ project "Editor"
          "{COPY} ../../dependencies/streamline/bin/x64/sl.pcl.dll ../../bin/Editor/Release/x64/",
          "{COPY} ../../dependencies/streamline/bin/x64/sl.dlss.dll ../../bin/Editor/Release/x64/",
          "{COPY} ../../dependencies/streamline/bin/x64/nvngx_dlss.dll ../../bin/Editor/Release/x64/",
+         "{COPY} ../../dependencies/streamline/bin/x64/sl.dlss_g.dll ../../bin/Editor/Release/x64/",
+         "{COPY} ../../dependencies/streamline/bin/x64/nvngx_dlssg.dll ../../bin/Editor/Release/x64/",
          "{COPY} ../../dependencies/streamline/bin/x64/sl.directsr.dll ../../bin/Editor/Release/x64/",
          "{COPY} ../../dependencies/streamline/bin/x64/sl.reflex.dll ../../bin/Editor/Release/x64/",
          "{COPY} ../../dependencies/streamline/bin/x64/NvLowLatencyVk.dll ../../bin/Editor/Release/x64/"

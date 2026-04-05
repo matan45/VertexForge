@@ -2,7 +2,6 @@
 
 #include "../../../core/VulkanMemoryManager.hpp"
 #include <vulkan/vulkan.hpp>
-#include <glm/glm.hpp>
 #include <memory>
 #include <vector>
 
@@ -46,10 +45,6 @@ namespace render::gpudriven
         float screenWidth;
         float screenHeight;
         uint32_t hiZMipLevels;
-        uint32_t _pad0;
-        uint32_t _pad1;
-        uint32_t _pad2;
-        glm::mat4 prevViewProjection; // For per-vertex motion vectors (offset 32, 64 bytes)
     };
 
     // viewMode bit packing: bits 0-7 = viewMode, bit 8 = frustum culling, bit 9 = backface culling, bit 11 = occlusion culling

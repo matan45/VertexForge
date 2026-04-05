@@ -53,10 +53,6 @@ layout(push_constant) uniform PushConstants {
     float screenWidth;
     float screenHeight;
     uint hiZMipLevels;
-    uint _pad0;
-    uint _pad1;
-    uint _pad2;
-    mat4 prevViewProjection;
 } pc;
 
 const uint MESHLET_CULL_FRUSTUM_BIT = 0x100u;
