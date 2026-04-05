@@ -137,10 +137,13 @@ namespace core {
 		present(acquiredImageIndex);
 
 		// Process deferred deletions for resources that are now safe to destroy
+		// Use monotonic frame counter (not wrapping currentFrame) so FRAMES_BEFORE_DELETE works correctly
 		if (deletionQueue)
 		{
-			deletionQueue->processDeletions(currentFrame);
+			deletionQueue->processDeletions(globalFrameCounter);
 		}
+		if (globalFrameCounter < UINT32_MAX)
+			globalFrameCounter++;
 
 		// Reclaim GPU memory blocks that are now completely empty
 		device.getMemoryManager().reclaimEmptyBlocks();

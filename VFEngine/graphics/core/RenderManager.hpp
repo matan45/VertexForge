@@ -55,6 +55,7 @@ namespace core {
 		std::vector<vk::Fence> imagesInFlight;
 
 		uint32_t currentFrame = 0;
+		uint32_t globalFrameCounter = 0;
 		inline static std::atomic<uint32_t> imageIndex{0};
 		std::atomic<bool> skipNextImguiRender{false};
 		inline static DeferredDeletionQueue* globalDeletionQueue;

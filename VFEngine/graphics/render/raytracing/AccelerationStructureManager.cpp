@@ -629,7 +629,25 @@ namespace render::raytracing
         if (instanceBuffer && instanceBufferCapacity >= requiredSize) return;
 
         vk::Device vkDevice = device.getLogicalDevice();
-        core::BufferUtilities::destroyBuffer(vkDevice, instanceBuffer, instanceAllocation, device.getMemoryManager());
+        if (instanceBuffer)
+        {
+            auto* dq = deletionQueue ? deletionQueue : core::RenderManager::getGlobalDeletionQueue();
+            if (dq)
+            {
+                vk::Buffer oldBuf = instanceBuffer;
+                core::VulkanAllocation oldAlloc = instanceAllocation;
+                auto& memMgr = device.getMemoryManager();
+                dq->queueCustom([oldBuf, oldAlloc, &memMgr](vk::Device dev) mutable {
+                    core::BufferUtilities::destroyBuffer(dev, oldBuf, oldAlloc, memMgr);
+                });
+            }
+            else
+            {
+                core::BufferUtilities::destroyBuffer(vkDevice, instanceBuffer, instanceAllocation, device.getMemoryManager());
+            }
+            instanceBuffer = nullptr;
+            instanceAllocation = {};
+        }
 
         // Allocate with some headroom to avoid frequent reallocations
         vk::DeviceSize allocSize = std::max(requiredSize, static_cast<vk::DeviceSize>(requiredSize * 1.5));
@@ -650,7 +668,25 @@ namespace render::raytracing
         if (staging.buffer && staging.capacity >= requiredSize) return;
 
         vk::Device vkDevice = device.getLogicalDevice();
-        core::BufferUtilities::destroyBuffer(vkDevice, staging.buffer, staging.allocation, device.getMemoryManager());
+        if (staging.buffer)
+        {
+            auto* dq = deletionQueue ? deletionQueue : core::RenderManager::getGlobalDeletionQueue();
+            if (dq)
+            {
+                vk::Buffer oldBuf = staging.buffer;
+                core::VulkanAllocation oldAlloc = staging.allocation;
+                auto& memMgr = device.getMemoryManager();
+                dq->queueCustom([oldBuf, oldAlloc, &memMgr](vk::Device dev) mutable {
+                    core::BufferUtilities::destroyBuffer(dev, oldBuf, oldAlloc, memMgr);
+                });
+                staging.buffer = nullptr;
+                staging.allocation = {};
+            }
+            else
+            {
+                core::BufferUtilities::destroyBuffer(vkDevice, staging.buffer, staging.allocation, device.getMemoryManager());
+            }
+        }
 
         vk::DeviceSize allocSize = std::max(requiredSize, static_cast<vk::DeviceSize>(requiredSize * 1.5));
 
@@ -668,7 +704,25 @@ namespace render::raytracing
         if (tlasScratchBuffer && tlasScratchSize >= requiredSize) return;
 
         vk::Device vkDevice = device.getLogicalDevice();
-        core::BufferUtilities::destroyBuffer(vkDevice, tlasScratchBuffer, tlasScratchAllocation, device.getMemoryManager());
+        if (tlasScratchBuffer)
+        {
+            auto* dq = deletionQueue ? deletionQueue : core::RenderManager::getGlobalDeletionQueue();
+            if (dq)
+            {
+                vk::Buffer oldBuf = tlasScratchBuffer;
+                core::VulkanAllocation oldAlloc = tlasScratchAllocation;
+                auto& memMgr = device.getMemoryManager();
+                dq->queueCustom([oldBuf, oldAlloc, &memMgr](vk::Device dev) mutable {
+                    core::BufferUtilities::destroyBuffer(dev, oldBuf, oldAlloc, memMgr);
+                });
+                tlasScratchBuffer = nullptr;
+                tlasScratchAllocation = {};
+            }
+            else
+            {
+                core::BufferUtilities::destroyBuffer(vkDevice, tlasScratchBuffer, tlasScratchAllocation, device.getMemoryManager());
+            }
+        }
 
         core::BufferInfoRequest request(vkDevice, device.getPhysicalDevice());
         request.size = requiredSize;
