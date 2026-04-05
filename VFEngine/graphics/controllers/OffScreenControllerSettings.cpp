@@ -293,8 +293,10 @@ namespace controllers
                 }
             }
 
-            // Apply Frame Generation settings (requires DLSS SR to be active)
-            if (settings.frameGen.enabled && upscaleManager->isActive())
+            // Apply Frame Generation settings (requires DLSS SR specifically, not DirectSR)
+            bool dlssSRActive = upscaleManager->isActive() &&
+                                upscaleManager->getActiveMode() == postprocess::UpscaleMode::DLSS;
+            if (settings.frameGen.enabled && dlssSRActive)
             {
                 auto dispExtent = swapChain.getDisplayExtent();
                 auto renRes = upscaleManager->getResolutionManager().getRenderResolution();

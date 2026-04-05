@@ -48,7 +48,8 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
     if (pCallbackData->pMessageIdName)
     {
         std::string_view vuid(pCallbackData->pMessageIdName);
-        // Streamline DLSS-G fake-swapchain-buffer format/usage mismatches (SRGB vs UNORM, STORAGE_IMAGE)
+        // Streamline DLSS-G fake-swapchain-buffer: creates UNORM images but engine uses SRGB views,
+        // and adds STORAGE_IMAGE usage which SRGB doesn't support. Only triggered by sl.dlssg objects.
         if (vuid == "VUID-VkImageViewCreateInfo-usage-02275" ||
             vuid == "VUID-VkImageViewCreateInfo-image-01762" ||
             // Streamline injects VK_EXT_buffer_device_address which conflicts with Vulkan 1.2 core

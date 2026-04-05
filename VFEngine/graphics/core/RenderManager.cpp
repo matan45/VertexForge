@@ -142,8 +142,7 @@ namespace core {
 		{
 			deletionQueue->processDeletions(globalFrameCounter);
 		}
-		if (globalFrameCounter < UINT32_MAX)
-			globalFrameCounter++;
+		globalFrameCounter++;
 
 		// Reclaim GPU memory blocks that are now completely empty
 		device.getMemoryManager().reclaimEmptyBlocks();

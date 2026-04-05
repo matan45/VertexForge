@@ -269,7 +269,6 @@ namespace windows
                         ImGui::EndDisabled();
                         ImGui::TextColored(ImVec4(0.9f, 0.3f, 0.3f, 1.0f),
                             "Frame Generation not supported (requires RTX 40xx+).");
-                        settings.frameGen.enabled = false;
                     }
 
                     if (settings.frameGen.enabled)

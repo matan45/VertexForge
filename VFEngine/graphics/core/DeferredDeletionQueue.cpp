@@ -101,7 +101,7 @@ namespace core
         });
     }
 
-    void DeferredDeletionQueue::processDeletions(uint32_t currentFrame)
+    void DeferredDeletionQueue::processDeletions(uint64_t currentFrame)
     {
         // Swap pending deletions out under lock, then process without holding lock
         std::vector<PendingDeletion> localDeletions;
@@ -114,7 +114,7 @@ namespace core
         std::vector<PendingDeletion> kept;
         for (auto& pending : localDeletions)
         {
-            uint32_t framesPassed = currentFrame - pending.frameQueued;
+            uint64_t framesPassed = currentFrame - pending.frameQueued;
 
             if (framesPassed >= FRAMES_BEFORE_DELETE)
             {

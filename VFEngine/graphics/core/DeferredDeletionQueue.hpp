@@ -32,7 +32,7 @@ namespace core
         void queueDescriptorPool(vk::DescriptorPool pool);
         void queueCustom(std::function<void(vk::Device)> deletionFunc);
 
-        void processDeletions(uint32_t currentFrame);
+        void processDeletions(uint64_t currentFrame);
         void flush();
 
         [[nodiscard]] bool hasPendingDeletions() const { std::lock_guard lock(mutex); return !pendingDeletions.empty(); }
@@ -40,7 +40,7 @@ namespace core
 
     private:
         Device& device;
-        uint32_t lastFrameNumber = 0;
+        uint64_t lastFrameNumber = 0;
 
         struct BufferDeletion
         {
@@ -95,7 +95,7 @@ namespace core
         struct PendingDeletion
         {
             DeletionData data;
-            uint32_t frameQueued;
+            uint64_t frameQueued;
         };
 
         mutable std::mutex mutex;

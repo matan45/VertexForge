@@ -567,7 +567,7 @@ namespace render::upscaling
 
         sl::DLSSGOptions options{};
         options.mode = settings.enabled ? sl::DLSSGMode::eOn : sl::DLSSGMode::eOff;
-        options.numFramesToGenerate = settings.numFramesToGenerate;
+        options.numFramesToGenerate = std::clamp(settings.numFramesToGenerate, 1u, 3u);
         options.numBackBuffers = backBufferCount;
         options.colorWidth = displayWidth;
         options.colorHeight = displayHeight;
@@ -583,10 +583,12 @@ namespace render::upscaling
                       frameGenActive ? "active" : "failed",
                       slResultToString(result),
                       settings.numFramesToGenerate + 1);
+            // Disable Reflex if Frame Gen activation failed
+            if (!frameGenActive && reflexEnabled)
+                disableReflex();
         }
         else
         {
-            frameGenActive = false;
             if (reflexEnabled && !isActive())
                 disableReflex();
             vfLogInfo("DLSS Frame Generation: disabled");
