@@ -111,6 +111,7 @@ namespace services
             colData.isTrigger = collider.isTrigger;
             colData.offset = collider.offset;
             colData.collisionLayer = collider.collisionLayer;
+            colData.submeshIndex = collider.submeshIndex;
             return colData;
         }
     }

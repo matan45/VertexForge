@@ -232,6 +232,10 @@ namespace windows::details
         ImGui::Text("Decals");
         changed |= drawAssetField("Albedo", "decalAlbedo", data.damageDecalAlbedo, texFilters);
         changed |= drawAssetField("Normal", "decalNormal", data.damageDecalNormal, texFilters);
+        if (ImGui::DragFloat("Decal Size", &data.decalHalfExtents, 0.01f, 0.05f, 5.0f, "%.2f"))
+            changed = true;
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Half-extents of the damage decal projection");
 
         ImGui::TreePop();
         return changed;

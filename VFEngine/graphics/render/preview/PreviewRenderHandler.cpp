@@ -136,19 +136,6 @@ namespace render::preview
 
     void PreviewRenderHandler::recreate()
     {
-        iblRenderer->recreate();
-        clearColor->recreate();
-
-        if (backgroundInitialized)
-        {
-            backgroundRenderer->recreate();
-        }
-
-        if (gridInitialized)
-        {
-            previewGrid->recreate();
-        }
-
         if (meshPipelineInitialized)
         {
             meshPipeline->recreate();

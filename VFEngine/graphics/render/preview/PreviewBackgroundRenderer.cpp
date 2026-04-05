@@ -24,12 +24,6 @@ namespace render::preview
         initialized = true;
     }
 
-    void PreviewBackgroundRenderer::recreate()
-    {
-        // With dynamic rendering, no render pass or framebuffers to recreate.
-        // Pipeline uses dynamic rendering formats and is format-compatible.
-    }
-
     void PreviewBackgroundRenderer::cleanUp()
     {
         if (!initialized) return;

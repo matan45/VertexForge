@@ -19,6 +19,8 @@ namespace services
         OceanService* oceanService = nullptr;
         std::function<void(float)> scriptFixedUpdateCallback;
         ::events::SubscriptionToken editorModeChangedToken;
+        ::events::SubscriptionToken rigidBodyAddedToken;
+        ::events::SubscriptionToken rigidBodyRemovedToken;
         std::unordered_set<EntityHandle, EntityHandle::Hash> activePhysicsBodies;
         bool physicsActive = false;
 

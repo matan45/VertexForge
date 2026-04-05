@@ -359,6 +359,7 @@ namespace serialization
         j["collisionLayer"] = collider.collisionLayer;
         j["friction"] = collider.friction;
         j["restitution"] = collider.restitution;
+        j["submeshIndex"] = collider.submeshIndex;
         return j;
     }
 
@@ -397,6 +398,10 @@ namespace serialization
         if (auto it = j.find("restitution"); it != j.end() && it->is_number())
         {
             collider.restitution = it->get<float>();
+        }
+        if (auto it = j.find("submeshIndex"); it != j.end() && it->is_number_integer())
+        {
+            collider.submeshIndex = it->get<int32_t>();
         }
     }
 
@@ -480,6 +485,7 @@ namespace serialization
         writeAssetRef(j, "fragmentCollisionAudio", d.fragmentCollisionAudio);
         writeAssetRef(j, "damageDecalAlbedo", d.damageDecalAlbedo);
         writeAssetRef(j, "damageDecalNormal", d.damageDecalNormal);
+        j["decalHalfExtents"] = d.decalHalfExtents;
         return j;
     }
 
@@ -512,6 +518,8 @@ namespace serialization
         d.fragmentCollisionAudio = readAssetRef(j, "fragmentCollisionAudio");
         d.damageDecalAlbedo = readAssetRef(j, "damageDecalAlbedo");
         d.damageDecalNormal = readAssetRef(j, "damageDecalNormal");
+        if (auto it = j.find("decalHalfExtents"); it != j.end() && it->is_number())
+            d.decalHalfExtents = it->get<float>();
         d.isDestroyed = false;
     }
 }

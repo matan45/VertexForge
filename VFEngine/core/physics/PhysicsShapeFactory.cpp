@@ -77,9 +77,9 @@ namespace core::physics
         }
     }
 
-    std::string PhysicsShapeFactory::makeCacheKey(const std::string& meshPath, ColliderShape shape)
+    std::string PhysicsShapeFactory::makeCacheKey(const std::string& meshPath, ColliderShape shape, int32_t submeshIndex)
     {
-        return meshPath + "#" + std::to_string(static_cast<int>(shape));
+        return meshPath + "#" + std::to_string(static_cast<int>(shape)) + "@" + std::to_string(submeshIndex);
     }
 
     void PhysicsShapeFactory::clearCache()
@@ -100,6 +100,9 @@ namespace core::physics
 
     JPH::Ref<JPH::Shape> PhysicsShapeFactory::createConvexMeshShape(const ColliderCreateInfo& info)
     {
+        vfLogTrace("PhysicsShapeFactory: createConvexMeshShape meshPath={}, submeshIndex={}",
+                   info.meshPath, info.submeshIndex);
+
         if (info.meshPath.empty())
         {
             vfLogWarning("ConvexMesh collider has no mesh path, using box fallback");
@@ -108,7 +111,7 @@ namespace core::physics
 
         {
             std::lock_guard lock(shapeCacheMutex);
-            std::string key = makeCacheKey(info.meshPath, info.shape);
+            std::string key = makeCacheKey(info.meshPath, info.shape, info.submeshIndex);
             auto it = shapeCache.find(key);
             if (it != shapeCache.end())
             {
@@ -116,7 +119,9 @@ namespace core::physics
             }
         }
 
-        auto decomposition = PhysicsMeshLoader::loadConvexDecomposition(info.meshPath);
+        auto decomposition = (info.submeshIndex >= 0)
+            ? PhysicsMeshLoader::loadConvexDecomposition(info.meshPath, static_cast<uint32_t>(info.submeshIndex))
+            : PhysicsMeshLoader::loadConvexDecomposition(info.meshPath);
         if (decomposition && !decomposition->hulls.empty())
         {
             JPH::StaticCompoundShapeSettings compoundSettings;
@@ -148,18 +153,20 @@ namespace core::physics
                 auto result = compoundSettings.Create();
                 if (!result.HasError())
                 {
-                    vfLogDebug("Created ConvexMesh compound collider with {} hulls from: {}",
+                    vfLogTrace("Created ConvexMesh compound collider with {} hulls from: {}",
                                compoundSettings.mSubShapes.size(), info.meshPath);
                     {
                         std::lock_guard lock(shapeCacheMutex);
-                        shapeCache[makeCacheKey(info.meshPath, info.shape)] = result.Get();
+                        shapeCache[makeCacheKey(info.meshPath, info.shape, info.submeshIndex)] = result.Get();
                     }
                     return result.Get();
                 }
             }
         }
 
-        auto meshData = PhysicsMeshLoader::loadAllSubmeshes(info.meshPath, 2);
+        auto meshData = (info.submeshIndex >= 0)
+            ? PhysicsMeshLoader::loadFromFile(info.meshPath, 2, static_cast<uint32_t>(info.submeshIndex))
+            : PhysicsMeshLoader::loadAllSubmeshes(info.meshPath, 2);
         if (!meshData || meshData->vertices.empty())
         {
             vfLogWarning("ConvexMesh collider failed to load mesh: {}, using box fallback", info.meshPath);
@@ -184,11 +191,11 @@ namespace core::physics
             return makeBoxFallback(info.halfExtents);
         }
 
-        vfLogDebug("Created ConvexMesh collider with {} vertices from: {}",
+        vfLogTrace("Created ConvexMesh collider with {} vertices from: {}",
                    meshData->vertices.size(), info.meshPath);
         {
             std::lock_guard lock(shapeCacheMutex);
-            shapeCache[makeCacheKey(info.meshPath, info.shape)] = result.Get();
+            shapeCache[makeCacheKey(info.meshPath, info.shape, info.submeshIndex)] = result.Get();
         }
         return result.Get();
     }
@@ -203,7 +210,7 @@ namespace core::physics
 
         {
             std::lock_guard lock(shapeCacheMutex);
-            std::string key = makeCacheKey(info.meshPath, info.shape);
+            std::string key = makeCacheKey(info.meshPath, info.shape, info.submeshIndex);
             auto it = shapeCache.find(key);
             if (it != shapeCache.end())
             {
@@ -211,7 +218,9 @@ namespace core::physics
             }
         }
 
-        auto meshData = PhysicsMeshLoader::loadAllSubmeshes(info.meshPath, 2);
+        auto meshData = (info.submeshIndex >= 0)
+            ? PhysicsMeshLoader::loadFromFile(info.meshPath, 2, static_cast<uint32_t>(info.submeshIndex))
+            : PhysicsMeshLoader::loadAllSubmeshes(info.meshPath, 2);
         if (!meshData || meshData->vertices.empty() || meshData->indices.empty())
         {
             vfLogWarning("TriangleMesh collider failed to load mesh: {}, using box fallback", info.meshPath);
@@ -248,7 +257,7 @@ namespace core::physics
                    triangles.size(), info.meshPath);
         {
             std::lock_guard lock(shapeCacheMutex);
-            shapeCache[makeCacheKey(info.meshPath, info.shape)] = result.Get();
+            shapeCache[makeCacheKey(info.meshPath, info.shape, info.submeshIndex)] = result.Get();
         }
         return result.Get();
     }

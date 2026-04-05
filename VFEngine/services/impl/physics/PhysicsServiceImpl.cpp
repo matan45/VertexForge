@@ -2,6 +2,7 @@
 #include "../../events/physics/PhysicsEvents.hpp"
 #include "../../events/physics/PhysicsSettingsEvents.hpp"
 #include "../../events/EventDispatcher.hpp"
+#include "print/Log.hpp"
 #include <algorithm>
 #include <cassert>
 
@@ -26,12 +27,22 @@ namespace services {
 
         dispatcher.registerCommandHandler<events::physics::AddRigidBodyCommand>(
             [this](const auto& cmd) {
-                physicsProvider->addRigidBody(cmd.entity, cmd.rigidBody, cmd.collider);
+                try {
+                    physicsProvider->addRigidBody(cmd.entity, cmd.rigidBody, cmd.collider);
+                    events::physics::RigidBodyAddedNotification notification;
+                    notification.entity = cmd.entity;
+                    ::events::EventDispatcher::instance().publish(notification);
+                } catch (const std::exception& e) {
+                    vfLogError("Failed to add rigid body for entity {}: {}", cmd.entity.id, e.what());
+                }
             });
 
         dispatcher.registerCommandHandler<events::physics::RemoveRigidBodyCommand>(
             [this](const auto& cmd) {
                 removeRigidBody(cmd.entity);
+                events::physics::RigidBodyRemovedNotification notification;
+                notification.entity = cmd.entity;
+                ::events::EventDispatcher::instance().publish(notification);
             });
 
         dispatcher.registerCommandHandler<events::physics::AddColliderCommand>(

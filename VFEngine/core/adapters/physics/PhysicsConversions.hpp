@@ -101,6 +101,7 @@ namespace core
         info.offset = data.offset;
         info.isTrigger = data.isTrigger;
         info.collisionLayer = data.collisionLayer;
+        info.submeshIndex = data.submeshIndex;
 
         return info;
     }

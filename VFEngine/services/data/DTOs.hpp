@@ -232,6 +232,7 @@ namespace services
         float height = 2.0f;
         glm::vec3 offset{0.0f};
         asset::AssetRef meshRef;
+        int32_t submeshIndex = -1;
         bool isTrigger = false;
         uint8_t collisionLayer = 1;
         float friction = 0.5f;
@@ -678,5 +679,6 @@ namespace services
         asset::AssetRef fragmentCollisionAudio;
         asset::AssetRef damageDecalAlbedo;
         asset::AssetRef damageDecalNormal;
+        float decalHalfExtents = 0.3f;
     };
 }

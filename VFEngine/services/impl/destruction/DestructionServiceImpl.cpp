@@ -20,6 +20,7 @@
 #include "DestructionHelpers.hpp"
 #include <print/Log.hpp>
 #include <algorithm>
+#include <asset/AssetMetadataSerializer.hpp>
 
 namespace services
 {
@@ -92,7 +93,9 @@ namespace services
                 if (n.currentMode == services::EditorMode::Edit)
                 {
                     debrisManager->reset();
+                    effectsManager->reset();
                     propagationManager->reset();
+                    fragmentOffsetCache.clear();
                     frameNumber = 0;
                 }
             });
@@ -274,7 +277,7 @@ namespace services
         const components::TransformComponent& transform,
         const MaterialData& sourceMaterial,
         EntityHandle entity,
-        const glm::vec3& fragmentDir, float force) const
+        const glm::vec3& fragmentDir, float force)
     {
         constexpr uint32_t maxFragments = 100;
         uint32_t fragmentCount = destructible.fragmentCount > 0
@@ -285,10 +288,38 @@ namespace services
         std::vector<FragmentSpawnRequest> requests;
         requests.reserve(fragmentCount);
 
+        // Load per-fragment center-of-mass offsets from .meta file (cached)
+        std::string meshPath = destructible.fractureAssetRef.resolve();
+        auto cacheIt = fragmentOffsetCache.find(meshPath);
+        if (cacheIt == fragmentOffsetCache.end())
+        {
+            std::vector<glm::vec3> offsets;
+            auto metaPath = asset::AssetMetadataSerializer::getMetaPath(meshPath);
+            auto meta = asset::AssetMetadataSerializer::load(metaPath);
+            if (meta && meta->fractureData.has_value())
+            {
+                const auto& frags = meta->fractureData->fragments;
+                offsets.reserve(frags.size());
+                for (const auto& f : frags)
+                    offsets.push_back(f.centerOfMass);
+            }
+            cacheIt = fragmentOffsetCache.emplace(meshPath, std::move(offsets)).first;
+        }
+        const auto& cachedOffsets = cacheIt->second;
+        std::vector<glm::vec3> fragmentOffsets(fragmentCount, glm::vec3(0.0f));
+        for (uint32_t i = 0; i < fragmentCount && i < cachedOffsets.size(); ++i)
+        {
+            fragmentOffsets[i] = cachedOffsets[i];
+        }
+
+        glm::mat4 parentMatrix = transform.getMatrix();
+
         for (uint32_t i = 0; i < fragmentCount; ++i)
         {
+            glm::vec3 worldPos = glm::vec3(parentMatrix * glm::vec4(fragmentOffsets[i], 1.0f));
+
             FragmentSpawnRequest req;
-            req.position = transform.position;
+            req.position = worldPos;
             req.rotation = transform.rotation;
             req.scale = transform.scale;
             req.fractureAssetRef = destructible.fractureAssetRef;

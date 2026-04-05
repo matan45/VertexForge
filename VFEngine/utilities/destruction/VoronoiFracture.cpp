@@ -99,7 +99,21 @@ namespace destruction
         meshesData.hasSkinning = false;
 
         for (const auto& fragment : result.fragments)
-            meshesData.meshes.push_back(fragment.mesh);
+        {
+            resource::MeshData mesh = fragment.mesh;
+
+            // Re-center vertices around centerOfMass so each fragment
+            // has its origin at its own center (like Unity/Unreal)
+            for (auto& lod : mesh.lodLevels)
+            {
+                for (auto& vertex : lod.vertices)
+                {
+                    vertex.position -= fragment.centerOfMass;
+                }
+            }
+
+            meshesData.meshes.push_back(std::move(mesh));
+        }
 
         return meshesData;
     }

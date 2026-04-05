@@ -5,6 +5,7 @@
 #include "events/scene/EntityTransformEvents.hpp"
 #include <IconsFontAwesome6.h>
 #include <imgui.h>
+#include <imgui_internal.h>
 
 namespace windows
 {
@@ -159,6 +160,36 @@ namespace windows
 
                 ImGui::EndPopup();
             }
+
+            // Drop target on empty space - reparent entity to root
+            if (!hierarchy.entities.empty())
+            {
+                auto rootHandle = hierarchy.entities[0].handle;
+
+                ImVec2 windowPos = ImGui::GetWindowPos();
+                ImVec2 regionMin = ImGui::GetWindowContentRegionMin();
+                ImVec2 regionMax = ImGui::GetWindowContentRegionMax();
+                ImRect emptySpaceRect(
+                    ImVec2(windowPos.x + regionMin.x, windowPos.y + regionMin.y),
+                    ImVec2(windowPos.x + regionMax.x, windowPos.y + regionMax.y)
+                );
+
+                if (ImGui::BeginDragDropTargetCustom(emptySpaceRect, ImGui::GetID("SceneGraphRootDrop")))
+                {
+                    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("DND_SCENE_ENTITY"))
+                    {
+                        services::EntityHandle draggedHandle = *(services::EntityHandle*)payload->Data;
+                        if (draggedHandle.id != rootHandle.id)
+                        {
+                            events::scene::ReparentEntityCommand cmd;
+                            cmd.entity = draggedHandle;
+                            cmd.newParent = rootHandle;
+                            dispatcher.execute(cmd);
+                        }
+                    }
+                    ImGui::EndDragDropTarget();
+                }
+            }
         }
         ImGui::End();
     }
@@ -220,6 +251,17 @@ namespace windows
             }
         }
 
+        // Drag-drop must be right after TreeNodeEx (before SameLine buttons)
+        bool isLocked = lockedEntities.count(handle.id) > 0;
+        if (!isLocked && ImGui::BeginDragDropSource())
+        {
+            ImGui::SetDragDropPayload("DND_SCENE_ENTITY", &handle, sizeof(services::EntityHandle));
+            ImGui::Text("Move %s", entityName.c_str());
+            ImGui::EndDragDropSource();
+        }
+
+        dragDropEntity(handle);
+
         // Visibility toggle (eye icon)
         ImGui::SameLine(ImGui::GetContentRegionAvail().x + ImGui::GetCursorPosX() - 40.0f);
         bool isHidden = hiddenEntities.count(handle.id) > 0;
@@ -240,7 +282,6 @@ namespace windows
 
         // Lock toggle
         ImGui::SameLine();
-        bool isLocked = lockedEntities.count(handle.id) > 0;
         ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
         if (ImGui::SmallButton(isLocked ? ICON_FA_LOCK : ICON_FA_LOCK_OPEN))
         {
@@ -250,15 +291,6 @@ namespace windows
                 lockedEntities.insert(handle.id);
         }
         ImGui::PopStyleColor();
-
-        if (!isLocked && ImGui::BeginDragDropSource())
-        {
-            ImGui::SetDragDropPayload("DND_SCENE_ENTITY", &handle, sizeof(services::EntityHandle));
-            ImGui::Text("Move %s", entityName.c_str());
-            ImGui::EndDragDropSource();
-        }
-
-        dragDropEntity(handle);
 
         if (nodeOpen)
         {

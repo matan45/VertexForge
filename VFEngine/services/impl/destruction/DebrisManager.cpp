@@ -119,6 +119,11 @@ namespace services
             return fragmentHandle;
         }
 
+        ::events::scene::SetEntityStaticCommand staticCmd;
+        staticCmd.entity = fragmentHandle;
+        staticCmd.isStatic = false;
+        dispatcher.execute(staticCmd);
+
         ::events::scene::SetTransformCommand transformCmd;
         transformCmd.entity = fragmentHandle;
         transformCmd.transform.position = request.position;
@@ -207,6 +212,7 @@ namespace services
         auto& colliderComp = fragEntity.addComponent<components::ColliderComponent>();
         colliderComp.shape = components::ColliderShape::ConvexMesh;
         colliderComp.meshRef = request.fractureAssetRef;
+        colliderComp.submeshIndex = static_cast<int32_t>(request.fragmentIndex);
         colliderComp.collisionLayer = 1;
 
         auto& rbComp = fragEntity.addComponent<components::RigidBodyComponent>();
@@ -224,8 +230,20 @@ namespace services
         rbCmd.rigidBody.activateOnAdd = true;
         rbCmd.collider.shape = types::ColliderShape::ConvexMesh;
         rbCmd.collider.meshPath = request.fractureAssetRef.resolve();
+        rbCmd.collider.submeshIndex = static_cast<int32_t>(request.fragmentIndex);
         rbCmd.collider.collisionLayer = 1;
         dispatcher.execute(rbCmd);
+
+        // Sync physics body position/rotation with entity transform
+        ::events::physics::SetPhysicsPositionCommand posCmd;
+        posCmd.entity = fragmentHandle;
+        posCmd.position = request.position;
+        dispatcher.execute(posCmd);
+
+        ::events::physics::SetPhysicsRotationCommand rotCmd;
+        rotCmd.entity = fragmentHandle;
+        rotCmd.rotation = glm::quat(glm::radians(request.rotation));
+        dispatcher.execute(rotCmd);
 
         if (glm::length(request.impulse) > 0.001f)
         {

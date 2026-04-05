@@ -568,7 +568,9 @@ namespace types
                 meshletResults[lod] = lodGen.buildMeshletsForLOD(lodLevels[lod]);
             serializer.writeMeshletData(outFile, meshletResults);
 
-            resource::ConvexDecompositionData convexData;
+            const auto& convexData = (i < fractureResult.fragmentConvexHulls.size())
+                ? fractureResult.fragmentConvexHulls[i]
+                : resource::ConvexDecompositionData{};
             serializer.writeConvexDecompositionData(outFile, convexData);
         }
 

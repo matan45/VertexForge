@@ -136,6 +136,7 @@ namespace services
                         cmd.collider.isTrigger = collider.isTrigger;
                         cmd.collider.offset = collider.offset;
                         cmd.collider.collisionLayer = collider.collisionLayer;
+                        cmd.collider.submeshIndex = collider.submeshIndex;
                         if (collider.meshRef.isValid())
                             cmd.collider.meshPath = collider.meshRef.resolve();
                         else if (!meshPath.empty())
@@ -169,6 +170,7 @@ namespace services
                     cmd.collider.isTrigger = collider.isTrigger;
                     cmd.collider.offset = collider.offset;
                     cmd.collider.collisionLayer = collider.collisionLayer;
+                    cmd.collider.submeshIndex = collider.submeshIndex;
                     if (collider.meshRef.isValid())
                         cmd.collider.meshPath = collider.meshRef.resolve();
                     else if (!meshPath.empty())

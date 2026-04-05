@@ -63,6 +63,8 @@ namespace core {
 
 	void RenderManager::render()
 	{
+		if (window->isWindowMinimized()) return;
+
 		vk::Result result = device.getLogicalDevice().waitForFences(
 			1, &inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
 		if (result != vk::Result::eSuccess) {

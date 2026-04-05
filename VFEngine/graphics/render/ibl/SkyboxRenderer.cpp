@@ -219,12 +219,6 @@ namespace render::ibl
         initialized = true;
     }
 
-    void SkyboxRenderer::recreate()
-    {
-        // With dynamic rendering, no render pass or framebuffers to recreate.
-        // Pipeline is format-compatible and uses dynamic viewport/scissor.
-    }
-
     void SkyboxRenderer::recordCommandBuffer(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const
     {
         if (isDisplay)

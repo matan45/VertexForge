@@ -1,6 +1,7 @@
 #pragma once
 
 #include <resource/Types.hpp>
+#include <resource/ConvexHullTypes.hpp>
 #include <config/Config.hpp>
 #include <asset/AssetMetadata.hpp>
 #include <functional>
@@ -20,6 +21,7 @@ namespace types
             bool success = false;
             std::string errorMessage;
             resource::MeshesData fragmentMeshes;
+            std::vector<resource::ConvexDecompositionData> fragmentConvexHulls;
             asset::FractureMetadata metadata;
         };
 
