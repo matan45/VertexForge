@@ -66,6 +66,12 @@ namespace asset
         }
 
         auto pathOpt = AssetDatabase::instance().getPath(guid);
+        if (!pathOpt)
+        {
+            // Fallback: scan .vfmeta files for this GUID
+            pathOpt = AssetDatabase::instance().tryResolveByMetaScan(guid);
+        }
+
         if (pathOpt)
         {
             cachedPath = *pathOpt;

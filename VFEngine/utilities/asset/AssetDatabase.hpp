@@ -59,12 +59,16 @@ namespace asset
         bool loadIndex(const std::string& projectRoot);
         bool rebuildFromMetaFiles(const std::string& searchRoot);
 
+        // Fallback: scan .vfmeta files for a GUID not in the database
+        std::optional<std::string> tryResolveByMetaScan(const AssetGUID& guid);
+
         void clear();
 
     private:
         AssetDatabase() = default;
 
         std::string normalizePath(const std::string& path) const;
+        std::string lastSearchRoot;
 
         std::unordered_map<AssetGUID, AssetDatabaseEntry, AssetGUID::Hash> guidToEntry;
         std::unordered_map<std::string, AssetGUID> pathToGuid;
