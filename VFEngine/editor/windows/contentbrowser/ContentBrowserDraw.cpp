@@ -109,9 +109,13 @@ namespace windows
 
     void ContentBrowser::handleDragDrop()
     {
-        ImVec2 dropZoneStart = ImGui::GetCursorScreenPos();
-        ImVec2 contentSize = ImGui::GetWindowSize();
-        ImRect dropRect(dropZoneStart, ImVec2(dropZoneStart.x + contentSize.x, dropZoneStart.y + contentSize.y));
+        ImVec2 windowPos = ImGui::GetWindowPos();
+        ImVec2 regionMin = ImGui::GetWindowContentRegionMin();
+        ImVec2 regionMax = ImGui::GetWindowContentRegionMax();
+        ImRect dropRect(
+            ImVec2(windowPos.x + regionMin.x, windowPos.y + regionMin.y),
+            ImVec2(windowPos.x + regionMax.x, windowPos.y + regionMax.y)
+        );
 
         if (ImGui::BeginDragDropTargetCustom(dropRect, ImGui::GetID("ContentFolderDropZone")))
         {
