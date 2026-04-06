@@ -5,6 +5,7 @@
 #include "../render/upscaling/UpscaleManager.hpp"
 
 #include <cassert>
+#include <cstring>
 #include <fstream>
 #include <unordered_set>
 
@@ -103,7 +104,7 @@ namespace core
 
     Device::~Device() = default;
 
-    void Device::init()
+    void Device::init(bool enablePipelineCache)
     {
         // Initialize Streamline SDK BEFORE Vulkan calls so it can intercept
         // vkCreateInstance/vkCreateDevice for DLSS/Reflex setup.
@@ -116,7 +117,10 @@ namespace core
         queryMeshShaderCapabilities();
         queryRayQueryCapabilities();
         createStagingCommandPool();
-        createPipelineCache();
+        if (enablePipelineCache)
+        {
+            createPipelineCache();
+        }
 
         memoryManager = std::make_unique<VulkanMemoryManager>(*this);
 
@@ -570,6 +574,31 @@ namespace core
         file.seekg(0);
         file.read(reinterpret_cast<char*>(cacheData.data()), fileSize);
         file.close();
+
+        // Validate pipeline cache header before passing to driver.
+        // Stale caches (wrong driver version, Debug/Release mismatch) can crash
+        // instead of being gracefully rejected on some drivers.
+        constexpr size_t kHeaderSize = 32; // VkPipelineCacheHeaderVersionOne
+        if (cacheData.size() < kHeaderSize)
+        {
+            vfLogWarning("Pipeline cache file too small ({} bytes), deleting", cacheData.size());
+            std::filesystem::remove(pipelineCachePath);
+            return;
+        }
+
+        uint32_t headerVendorID = 0;
+        uint32_t headerDeviceID = 0;
+        std::memcpy(&headerVendorID, cacheData.data() + 8, sizeof(uint32_t));
+        std::memcpy(&headerDeviceID, cacheData.data() + 12, sizeof(uint32_t));
+
+        auto props = physicalDevice.getProperties();
+        if (headerVendorID != props.vendorID || headerDeviceID != props.deviceID ||
+            std::memcmp(cacheData.data() + 16, props.pipelineCacheUUID.data(), VK_UUID_SIZE) != 0)
+        {
+            vfLogWarning("Pipeline cache is stale (vendor/device/UUID mismatch), deleting");
+            std::filesystem::remove(pipelineCachePath);
+            return;
+        }
 
         vk::PipelineCacheCreateInfo cacheInfo{};
         cacheInfo.initialDataSize = cacheData.size();

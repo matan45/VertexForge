@@ -7,9 +7,9 @@
 namespace controllers
 {
 
-	void Graphics::createContext(window::Window* glfwWindow)
+	void Graphics::createContext(window::Window* glfwWindow, bool enablePipelineCache)
 	{
-		core::VulkanContext::init(glfwWindow);
+		core::VulkanContext::init(glfwWindow, enablePipelineCache);
 	}
 
 	void Graphics::destroyContext()

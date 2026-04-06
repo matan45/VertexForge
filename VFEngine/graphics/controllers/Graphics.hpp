@@ -11,7 +11,7 @@ namespace controllers {
 		
 	public:
 
-		static void createContext(window::Window* glfwWindow);
+		static void createContext(window::Window* glfwWindow, bool enablePipelineCache = false);
 		static void destroyContext();
 
 	private:
