@@ -57,6 +57,8 @@ namespace windows
                     stampRotation = params.stampRotation;
                     stampScale = params.stampScale;
                     talusAngle = params.talusAngle;
+                    terraceStepHeight = params.terraceStepHeight;
+                    terraceSharpness = params.terraceSharpness;
 
                     auto type = d.query(events::brush::GetBrushTypeQuery{});
                     selectedBrushType = static_cast<int>(type);
@@ -79,6 +81,8 @@ namespace windows
                 stampRotation = n.params.stampRotation;
                 stampScale = n.params.stampScale;
                 talusAngle = n.params.talusAngle;
+                terraceStepHeight = n.params.terraceStepHeight;
+                terraceSharpness = n.params.terraceSharpness;
             });
 
         stampImageToken = dispatcher.subscribe<events::brush::StampImageChangedNotification>(
@@ -113,16 +117,16 @@ namespace windows
         ImGui::Text("Brush Type");
         ImGui::Separator();
 
-        const char* brushLabels[] = {"Raise", "Lower", "Smooth", "Flatten", "Noise", "Stamp", "Erosion"};
+        const char* brushLabels[] = {"Raise", "Lower", "Smooth", "Flatten", "Noise", "Stamp", "Erosion", "Terrace"};
         bool typeChanged = false;
 
-        for (int i = 0; i < 7; ++i)
+        for (int i = 0; i < 8; ++i)
         {
             if (ImGui::RadioButton(brushLabels[i], &selectedBrushType, i))
             {
                 typeChanged = true;
             }
-            if (i < 6)
+            if (i < 7)
             {
                 ImGui::SameLine();
             }
@@ -257,6 +261,28 @@ namespace windows
                 dispatcher.execute(cmd);
             }
             ImGui::TextDisabled("Lower angle = more erosion");
+        }
+
+        // Terrace brush controls
+        if (selectedBrushType == 7)
+        {
+            ImGui::Spacing();
+            ImGui::Text("Terrace Settings");
+            ImGui::Separator();
+
+            if (ImGui::SliderFloat("Step Height", &terraceStepHeight, 0.5f, 20.0f, "%.1f"))
+            {
+                events::brush::SetTerraceStepHeightCommand cmd;
+                cmd.stepHeight = terraceStepHeight;
+                dispatcher.execute(cmd);
+            }
+
+            if (ImGui::SliderFloat("Sharpness", &terraceSharpness, 0.0f, 1.0f, "%.2f"))
+            {
+                events::brush::SetTerraceSharpnessCommand cmd;
+                cmd.sharpness = terraceSharpness;
+                dispatcher.execute(cmd);
+            }
         }
 
         ImGui::Spacing();

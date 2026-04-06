@@ -142,6 +142,20 @@ namespace services
                 publishParamsChanged();
             });
 
+        dispatcher.registerCommandHandler<events::brush::SetTerraceStepHeightCommand>(
+            [this](const events::brush::SetTerraceStepHeightCommand& cmd)
+            {
+                currentParams.terraceStepHeight = cmd.stepHeight;
+                publishParamsChanged();
+            });
+
+        dispatcher.registerCommandHandler<events::brush::SetTerraceSharpnessCommand>(
+            [this](const events::brush::SetTerraceSharpnessCommand& cmd)
+            {
+                currentParams.terraceSharpness = cmd.sharpness;
+                publishParamsChanged();
+            });
+
         dispatcher.registerQueryHandler<events::brush::GetStampDataQuery>(
             [this](const events::brush::GetStampDataQuery&)
             {

@@ -129,6 +129,8 @@ namespace services
             gpuParams.stampRotation = brushParams.stampRotation;
             gpuParams.stampScale = brushParams.stampScale;
             gpuParams.talusAngle = brushParams.talusAngle;
+            gpuParams.terraceStepHeight = brushParams.terraceStepHeight;
+            gpuParams.terraceSharpness = brushParams.terraceSharpness;
             if (stampData && stampData->isValid())
             {
                 gpuParams.stampWidth = stampData->width;

@@ -188,7 +188,9 @@ namespace controllers
         constants.stampRotation = params.stampRotation;
         constants.stampScale = params.stampScale;
         constants.talusAngle = params.talusAngle;
-        constants._padErosion = 0.0f;
+        constants.terraceStepHeight = params.terraceStepHeight;
+        constants.terraceSharpness = params.terraceSharpness;
+        constants._padTerrace = 0.0f;
 
         return brushComputePipeline->applyBrush(heightData, constants);
     }

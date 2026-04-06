@@ -15,7 +15,8 @@ namespace terrain
         Flatten = 3,
         Noise = 4,
         Stamp = 5,
-        Erosion = 6
+        Erosion = 6,
+        Terrace = 7
     };
 
     enum class BrushFalloff : uint8_t
@@ -41,6 +42,8 @@ namespace terrain
         float stampScale = 1.0f;
         bool stampSubtract = false;
         float talusAngle = 45.0f;
+        float terraceStepHeight = 2.0f;
+        float terraceSharpness = 0.5f;
         std::string stampImagePath;
 
         void validate()
@@ -71,5 +74,7 @@ namespace terrain
         uint32_t stampWidth = 0;
         uint32_t stampHeight = 0;
         float talusAngle = 45.0f;
+        float terraceStepHeight = 2.0f;
+        float terraceSharpness = 0.5f;
     };
 }

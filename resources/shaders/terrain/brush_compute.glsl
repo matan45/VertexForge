@@ -28,7 +28,7 @@ layout(push_constant) uniform PushConstants
     uint verticesPerSide;
     uint falloffType;
     uint shapeType;
-    uint brushType;     // 0=Raise, 1=Lower, 2=Smooth, 3=Flatten, 4=Noise, 5=Stamp, 6=Erosion
+    uint brushType;     // 0=Raise, 1=Lower, 2=Smooth, 3=Flatten, 4=Noise, 5=Stamp, 6=Erosion, 7=Terrace
     float deltaTime;
     float targetHeight;
     float minHeight;
@@ -39,7 +39,9 @@ layout(push_constant) uniform PushConstants
     float stampRotation;
     float stampScale;
     float talusAngle;
-    float _padErosion;
+    float terraceStepHeight;
+    float terraceSharpness;
+    float _padTerrace;
 } pc;
 
 float applyFalloff(float t, uint type)
@@ -273,6 +275,18 @@ void main()
                     // Normal: erode down toward the stable height
                     newHeight = mix(currentHeight, min(currentHeight, avgTarget), erosionFactor);
                 }
+            }
+            break;
+        }
+
+        case 7: // Terrace
+        {
+            if (pc.terraceStepHeight > 0.0)
+            {
+                float terraceHeight = round(currentHeight / pc.terraceStepHeight) * pc.terraceStepHeight;
+                float terraceFactor = pc.terraceSharpness * influence * pc.brushStrength * pc.deltaTime;
+                terraceFactor = clamp(terraceFactor, 0.0, 1.0);
+                newHeight = mix(currentHeight, terraceHeight, terraceFactor);
             }
             break;
         }

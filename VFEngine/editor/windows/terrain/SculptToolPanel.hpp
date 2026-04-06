@@ -26,6 +26,10 @@ namespace windows
         // Erosion brush state
         float talusAngle = 45.0f;
 
+        // Terrace brush state
+        float terraceStepHeight = 2.0f;
+        float terraceSharpness = 0.5f;
+
         events::SubscriptionToken sculptModeToken;
         events::SubscriptionToken brushTypeToken;
         events::SubscriptionToken brushParamsToken;

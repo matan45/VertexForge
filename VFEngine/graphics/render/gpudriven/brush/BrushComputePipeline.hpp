@@ -36,9 +36,11 @@ namespace render::gpudriven
         float stampRotation;    // radians
         float stampScale;
         float talusAngle;       // degrees, for erosion brush
-        float _padErosion;
+        float terraceStepHeight;
+        float terraceSharpness;
+        float _padTerrace;
     };
-    static_assert(sizeof(BrushComputePushConstants) == 88, "BrushComputePushConstants must be 88 bytes");
+    static_assert(sizeof(BrushComputePushConstants) == 96, "BrushComputePushConstants must be 96 bytes");
 
     class BrushComputePipeline
     {

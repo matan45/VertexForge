@@ -132,6 +132,20 @@ namespace events::brush
         std::string_view getName() const override { return "SetTalusAngle"; }
     };
 
+    struct SetTerraceStepHeightCommand : ICommand<>
+    {
+        float stepHeight = 2.0f;
+
+        std::string_view getName() const override { return "SetTerraceStepHeight"; }
+    };
+
+    struct SetTerraceSharpnessCommand : ICommand<>
+    {
+        float sharpness = 0.5f;
+
+        std::string_view getName() const override { return "SetTerraceSharpness"; }
+    };
+
     struct StampImageChangedNotification : INotification
     {
         std::string filePath;
