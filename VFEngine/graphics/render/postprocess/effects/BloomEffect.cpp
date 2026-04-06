@@ -176,12 +176,16 @@ namespace render::postprocess
         };
 
         // === Phase 1: Downsample ===
+        vk::ImageLayout downsampleOldLayout = mipLayoutsInitialized
+            ? vk::ImageLayout::eShaderReadOnlyOptimal
+            : vk::ImageLayout::eUndefined;
+
         for (uint32_t i = 0; i < activeMips; ++i)
         {
             auto& mip = mipLevels[i];
             vk::Extent2D mipExtent{mip.width, mip.height};
 
-            transitionMip(bloomImage, i, vk::ImageLayout::eUndefined, vk::ImageLayout::eColorAttachmentOptimal);
+            transitionMip(bloomImage, i, downsampleOldLayout, vk::ImageLayout::eColorAttachmentOptimal);
 
             core::DynamicRenderingInfo dynInfo{};
             dynInfo.extent = mipExtent;
@@ -277,6 +281,8 @@ namespace render::postprocess
 
             transitionMip(bloomImage, i, vk::ImageLayout::eColorAttachmentOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
         }
+
+        mipLayoutsInitialized = true;
     }
 
     void BloomEffect::record(const vk::CommandBuffer& commandBuffer,
@@ -638,6 +644,7 @@ namespace render::postprocess
         }
 
         mipCount = 0;
+        mipLayoutsInitialized = false;
     }
 
     void BloomEffect::cleanupPipelines()

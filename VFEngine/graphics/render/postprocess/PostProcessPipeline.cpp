@@ -105,8 +105,9 @@ namespace render::postprocess
             }
 
             core::ImageUtilities::transitionImageLayout(commandBuffer, currentOutput->image,
-                vk::ImageLayout::eUndefined, vk::ImageLayout::eColorAttachmentOptimal,
+                currentOutput->currentLayout, vk::ImageLayout::eColorAttachmentOptimal,
                 vk::ImageAspectFlagBits::eColor);
+            currentOutput->currentLayout = vk::ImageLayout::eColorAttachmentOptimal;
 
             core::DynamicRenderingInfo dynInfo{};
             dynInfo.extent = extent;
@@ -120,6 +121,7 @@ namespace render::postprocess
             core::ImageUtilities::transitionImageLayout(commandBuffer, currentOutput->image,
                 vk::ImageLayout::eColorAttachmentOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
                 vk::ImageAspectFlagBits::eColor);
+            currentOutput->currentLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
 
             if (outputIsA)
             {
@@ -140,6 +142,7 @@ namespace render::postprocess
         core::ImageUtilities::transitionImageLayout(commandBuffer, lastWritten->image,
             vk::ImageLayout::eShaderReadOnlyOptimal, vk::ImageLayout::eTransferSrcOptimal,
             vk::ImageAspectFlagBits::eColor);
+        lastWritten->currentLayout = vk::ImageLayout::eTransferSrcOptimal;
 
         vk::Image sceneImage = offscreenResources.colorImages[imageIndex].colorImage;
         core::ImageUtilities::transitionImageLayout(commandBuffer, sceneImage,
@@ -200,8 +203,9 @@ namespace render::postprocess
                 autoExposureOverride = static_cast<AutoExposureEffect*>(activeEffects[i])->getComputedExposure();
 
             core::ImageUtilities::transitionImageLayout(commandBuffer, currentOutput->image,
-                vk::ImageLayout::eUndefined, vk::ImageLayout::eColorAttachmentOptimal,
+                currentOutput->currentLayout, vk::ImageLayout::eColorAttachmentOptimal,
                 vk::ImageAspectFlagBits::eColor);
+            currentOutput->currentLayout = vk::ImageLayout::eColorAttachmentOptimal;
 
             core::DynamicRenderingInfo dynInfo{};
             dynInfo.extent = extent;
@@ -215,6 +219,7 @@ namespace render::postprocess
             core::ImageUtilities::transitionImageLayout(commandBuffer, currentOutput->image,
                 vk::ImageLayout::eColorAttachmentOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
                 vk::ImageAspectFlagBits::eColor);
+            currentOutput->currentLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
 
             if (outputIsA)
             {
@@ -236,6 +241,7 @@ namespace render::postprocess
         core::ImageUtilities::transitionImageLayout(commandBuffer, lastWritten->image,
             vk::ImageLayout::eShaderReadOnlyOptimal, vk::ImageLayout::eTransferSrcOptimal,
             vk::ImageAspectFlagBits::eColor);
+        lastWritten->currentLayout = vk::ImageLayout::eTransferSrcOptimal;
 
         vk::Image sceneImage = offscreenResources.colorImages[imageIndex].colorImage;
         core::ImageUtilities::transitionImageLayout(commandBuffer, sceneImage,
@@ -281,7 +287,7 @@ namespace render::postprocess
             vk::ImageLayout::eGeneral, vk::ImageLayout::eTransferSrcOptimal,
             vk::ImageAspectFlagBits::eColor);
         core::ImageUtilities::transitionImageLayout(commandBuffer, displayTargetA.image,
-            vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal,
+            displayTargetA.currentLayout, vk::ImageLayout::eTransferDstOptimal,
             vk::ImageAspectFlagBits::eColor);
 
         vk::ImageBlit blitRegion{};
@@ -301,6 +307,7 @@ namespace render::postprocess
         core::ImageUtilities::transitionImageLayout(commandBuffer, displayTargetA.image,
             vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
             vk::ImageAspectFlagBits::eColor);
+        displayTargetA.currentLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
 
         std::vector<PostProcessEffect*> activeEffects;
         for (auto& e : effects)
@@ -336,6 +343,7 @@ namespace render::postprocess
             core::ImageUtilities::transitionImageLayout(commandBuffer, displayTargetA.image,
                 vk::ImageLayout::eTransferSrcOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
                 vk::ImageAspectFlagBits::eColor);
+            displayTargetA.currentLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
             core::ImageUtilities::transitionImageLayout(commandBuffer, outputImage,
                 vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
                 vk::ImageAspectFlagBits::eColor);
@@ -356,8 +364,9 @@ namespace render::postprocess
                 static_cast<ToneMappingEffect*>(activeEffects[i])->setExposureOverride(autoExposureOverride.value());
 
             core::ImageUtilities::transitionImageLayout(commandBuffer, currentOutput->image,
-                vk::ImageLayout::eUndefined, vk::ImageLayout::eColorAttachmentOptimal,
+                currentOutput->currentLayout, vk::ImageLayout::eColorAttachmentOptimal,
                 vk::ImageAspectFlagBits::eColor);
+            currentOutput->currentLayout = vk::ImageLayout::eColorAttachmentOptimal;
 
             core::DynamicRenderingInfo dynInfo{};
             dynInfo.extent = displayExtent;
@@ -371,6 +380,7 @@ namespace render::postprocess
             core::ImageUtilities::transitionImageLayout(commandBuffer, currentOutput->image,
                 vk::ImageLayout::eColorAttachmentOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
                 vk::ImageAspectFlagBits::eColor);
+            currentOutput->currentLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
 
             if (outputIsA)
             {
@@ -392,6 +402,7 @@ namespace render::postprocess
         core::ImageUtilities::transitionImageLayout(commandBuffer, lastWritten->image,
             vk::ImageLayout::eShaderReadOnlyOptimal, vk::ImageLayout::eTransferSrcOptimal,
             vk::ImageAspectFlagBits::eColor);
+        lastWritten->currentLayout = vk::ImageLayout::eTransferSrcOptimal;
         core::ImageUtilities::transitionImageLayout(commandBuffer, outputImage,
             vk::ImageLayout::eShaderReadOnlyOptimal, vk::ImageLayout::eTransferDstOptimal,
             vk::ImageAspectFlagBits::eColor);
@@ -618,6 +629,9 @@ namespace render::postprocess
                 }
                 else if ((*it)->isInitialized())
                 {
+                    // No deferred deletion queue — must wait for GPU to finish
+                    // before destroying resources still referenced by in-flight command buffers
+                    device.getLogicalDevice().waitIdle();
                     (*it)->cleanup();
                 }
                 it = effects.erase(it);
