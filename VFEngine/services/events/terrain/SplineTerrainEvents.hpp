@@ -99,7 +99,15 @@ namespace events::splineTerrain
         std::string_view getName() const override { return "SplineParamsChanged"; }
     };
 
-    // Internal: sent by SplineService to TerrainService for height modification
+    // Internal: sent by SplineService to TerrainService for terrain modification
+    struct ApplySplinePaintCommand : ICommand<bool>
+    {
+        std::vector<glm::vec3> splineSamples;
+        ::terrain::SplineParams params;
+
+        std::string_view getName() const override { return "ApplySplinePaint"; }
+    };
+
     struct ApplySplineDeformCommand : ICommand<bool>
     {
         std::vector<glm::vec3> splineSamples; // sampled curve points

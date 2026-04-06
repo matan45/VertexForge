@@ -22,6 +22,8 @@
 #include "../../events/terrain/SplineTerrainEvents.hpp"
 #include "terrain/BrushSampler.hpp"
 #include "terrain/TerrainTile.hpp"
+#include "terrain/WeightBrushApplicator.hpp"
+#include "terrain/PaintBrushTypes.hpp"
 
 namespace services
 {
@@ -455,6 +457,149 @@ namespace services
                 }
 
                 syncBrushBoundaryHeights(grid.get(), modifiedTiles);
+            });
+
+        dispatcher.registerQueryHandler<events::splineTerrain::ApplySplinePaintCommand>(
+            [this](const events::splineTerrain::ApplySplinePaintCommand& cmd) -> bool
+            {
+                if (terrainGrids.empty() || cmd.splineSamples.size() < 2)
+                    return false;
+
+                auto& grid = terrainGrids.begin()->second;
+                float worldTileSize = 32.0f;
+                const auto& allTiles = grid->getAllTiles();
+                if (!allTiles.empty())
+                    worldTileSize = allTiles[0]->config.worldTileSize;
+
+                float totalHalfWidth = cmd.params.corridorWidth + cmd.params.falloffWidth;
+                float halfCorridor = cmd.params.corridorWidth;
+
+                // Find all affected tiles
+                std::unordered_map<terrain::TileCoord, bool, terrain::TileCoordHash> affectedSet;
+                for (size_t i = 0; i + 1 < cmd.splineSamples.size(); ++i)
+                {
+                    glm::vec2 s(cmd.splineSamples[i].x, cmd.splineSamples[i].z);
+                    glm::vec2 e(cmd.splineSamples[i + 1].x, cmd.splineSamples[i + 1].z);
+                    auto tiles = terrain::BrushSampler::getAffectedTilesForSegment(s, e, totalHalfWidth, worldTileSize);
+                    for (const auto& c : tiles)
+                        affectedSet[c] = true;
+                }
+
+                auto cacheIt = fileCaches.find(terrainGrids.begin()->first);
+                auto fileCache = (cacheIt != fileCaches.end()) ? cacheIt->second : nullptr;
+                bool anyModified = false;
+
+                for (const auto& [coord, _] : affectedSet)
+                {
+                    terrain::TerrainTile* tile = grid->getTile(coord);
+                    if (!tile) continue;
+
+                    if (!tile->hasWeightMap())
+                        continue;
+
+                    if (fileCache && !tile->hasHeightData())
+                        fileCache->ensureHeightsLoaded(*tile);
+                    if (fileCache)
+                        fileCache->markDirty(coord);
+
+                    uint32_t resolution = tile->weightMap.resolution;
+                    float vertSpacing = tile->config.worldTileSize / static_cast<float>(resolution - 1);
+                    glm::vec2 tileOrigin(
+                        static_cast<float>(tile->coord.x) * tile->config.worldTileSize,
+                        static_cast<float>(tile->coord.z) * tile->config.worldTileSize);
+
+                    // Find or assign channel for the paint layer
+                    uint8_t targetChannel = 0xFF;
+                    for (uint8_t ch = 0; ch < 8; ++ch)
+                    {
+                        if (tile->weightMap.layerIndices[ch] == static_cast<uint8_t>(cmd.params.paintLayer))
+                        {
+                            targetChannel = ch;
+                            break;
+                        }
+                    }
+                    if (targetChannel == 0xFF)
+                    {
+                        // Find empty channel
+                        for (uint8_t ch = 1; ch < 8; ++ch)
+                        {
+                            bool inUse = false;
+                            for (uint32_t i = 0; i < resolution * resolution; ++i)
+                            {
+                                if (tile->weightMap.getWeight(ch, i % resolution, i / resolution) > 0.001f)
+                                {
+                                    inUse = true;
+                                    break;
+                                }
+                            }
+                            if (!inUse)
+                            {
+                                tile->weightMap.layerIndices[ch] = static_cast<uint8_t>(cmd.params.paintLayer);
+                                targetChannel = ch;
+                                break;
+                            }
+                        }
+                        if (targetChannel == 0xFF)
+                            continue; // No free channel
+                    }
+
+                    bool tileModified = false;
+
+                    for (uint32_t z = 0; z < resolution; ++z)
+                    {
+                        for (uint32_t x = 0; x < resolution; ++x)
+                        {
+                            glm::vec2 texelPos = tileOrigin + glm::vec2(static_cast<float>(x), static_cast<float>(z)) * vertSpacing;
+
+                            // Find closest point on spline
+                            float minPerpDist = std::numeric_limits<float>::max();
+
+                            for (size_t i = 0; i + 1 < cmd.splineSamples.size(); ++i)
+                            {
+                                glm::vec2 segStart(cmd.splineSamples[i].x, cmd.splineSamples[i].z);
+                                glm::vec2 segEnd(cmd.splineSamples[i + 1].x, cmd.splineSamples[i + 1].z);
+                                glm::vec2 segDir = segEnd - segStart;
+                                float segLen = glm::length(segDir);
+                                if (segLen < 0.001f) continue;
+
+                                float t = glm::dot(texelPos - segStart, segDir / segLen) / segLen;
+                                t = glm::clamp(t, 0.0f, 1.0f);
+
+                                glm::vec2 closest = segStart + segDir * t;
+                                float perpDist = glm::length(texelPos - closest);
+
+                                if (perpDist < minPerpDist)
+                                    minPerpDist = perpDist;
+                            }
+
+                            if (minPerpDist > totalHalfWidth)
+                                continue;
+
+                            float blend = 1.0f;
+                            if (minPerpDist > halfCorridor && cmd.params.falloffWidth > 0.0f)
+                            {
+                                float falloffT = (minPerpDist - halfCorridor) / cmd.params.falloffWidth;
+                                blend = 1.0f - falloffT * falloffT * (3.0f - 2.0f * falloffT);
+                            }
+
+                            // Paint the target channel
+                            float current = tile->weightMap.getWeight(targetChannel, x, z);
+                            float newVal = glm::mix(current, 1.0f, blend);
+                            tile->weightMap.setWeight(targetChannel, x, z, newVal);
+                            tile->weightMap.normalizeAt(x, z);
+                            tileModified = true;
+                        }
+                    }
+
+                    if (tileModified)
+                    {
+                        tile->weightMapDirty = true;
+                        tile->weightMapGPUDirty = true;
+                        anyModified = true;
+                    }
+                }
+
+                return anyModified;
             });
     }
 

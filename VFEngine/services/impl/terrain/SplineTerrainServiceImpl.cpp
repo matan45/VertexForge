@@ -127,31 +127,46 @@ namespace services
         if (samples.size() < 2)
             return;
 
-        // Capture original heights before deformation
-        float totalHalfWidth = currentParams.corridorWidth + currentParams.falloffWidth;
-        events::splineTerrain::GetSplineOriginalHeightsQuery heightQuery;
-        heightQuery.splineSamples = samples;
-        heightQuery.totalHalfWidth = totalHalfWidth;
-        auto originalHeights = dispatcher.query(heightQuery);
+        bool success = false;
 
-        // Apply deformation
-        events::splineTerrain::ApplySplineDeformCommand deformCmd;
-        deformCmd.splineSamples = samples;
-        deformCmd.params = currentParams;
-        deformCmd.splineId = nextSplineId;
-        bool success = dispatcher.query(deformCmd);
+        if (currentParams.mode == terrain::SplineMode::Paint)
+        {
+            // Paint mode: paint material layer along spline
+            events::splineTerrain::ApplySplinePaintCommand paintCmd;
+            paintCmd.splineSamples = samples;
+            paintCmd.params = currentParams;
+            success = dispatcher.query(paintCmd);
+        }
+        else
+        {
+            // Sculpt mode: deform terrain height
+            float totalHalfWidth = currentParams.corridorWidth + currentParams.falloffWidth;
+            events::splineTerrain::GetSplineOriginalHeightsQuery heightQuery;
+            heightQuery.splineSamples = samples;
+            heightQuery.totalHalfWidth = totalHalfWidth;
+            auto originalHeights = dispatcher.query(heightQuery);
+
+            events::splineTerrain::ApplySplineDeformCommand deformCmd;
+            deformCmd.splineSamples = samples;
+            deformCmd.params = currentParams;
+            deformCmd.splineId = nextSplineId;
+            success = dispatcher.query(deformCmd);
+
+            if (success)
+            {
+                terrain::SplineData spline;
+                spline.id = nextSplineId++;
+                spline.controlPoints = activePoints;
+                spline.params = currentParams;
+                spline.originalHeights = std::move(originalHeights);
+                appliedSplines.push_back(std::move(spline));
+            }
+        }
 
         if (success)
         {
-            terrain::SplineData spline;
-            spline.id = nextSplineId++;
-            spline.controlPoints = activePoints;
-            spline.params = currentParams;
-            spline.originalHeights = std::move(originalHeights);
-            appliedSplines.push_back(std::move(spline));
-
             events::splineTerrain::SplineAppliedNotification n;
-            n.splineId = spline.id;
+            n.splineId = nextSplineId - 1;
             dispatcher.publish(n);
         }
 

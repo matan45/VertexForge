@@ -4,6 +4,7 @@
 #include "events/render/DebugDrawEvents.hpp"
 #include <imgui.h>
 #include <glm/glm.hpp>
+#include <algorithm>
 
 namespace windows
 {
@@ -34,9 +35,11 @@ namespace windows
                 {
                     auto params = events::EventDispatcher::instance().query(
                         events::splineTerrain::GetSplineParamsQuery{});
+                    splineMode = static_cast<int>(params.mode);
                     corridorWidth = params.corridorWidth;
                     falloffWidth = params.falloffWidth;
                     embankmentHeight = params.embankmentHeight;
+                    paintLayer = static_cast<int>(params.paintLayer);
 
                     pointCount = events::EventDispatcher::instance().query(
                         events::splineTerrain::GetActiveSplinePointCountQuery{});
@@ -52,9 +55,11 @@ namespace windows
         paramsToken = dispatcher.subscribe<events::splineTerrain::SplineParamsChangedNotification>(
             [this](const events::splineTerrain::SplineParamsChangedNotification& n)
             {
+                splineMode = static_cast<int>(n.params.mode);
                 corridorWidth = n.params.corridorWidth;
                 falloffWidth = n.params.falloffWidth;
                 embankmentHeight = n.params.embankmentHeight;
+                paintLayer = static_cast<int>(n.params.paintLayer);
             });
 
         subscribed = true;
@@ -77,10 +82,18 @@ namespace windows
 
         auto& dispatcher = events::EventDispatcher::instance();
 
-        ImGui::Text("Spline Parameters");
+        ImGui::Text("Mode");
         ImGui::Separator();
 
+        const char* modeLabels[] = {"Sculpt", "Paint"};
         bool paramsChanged = false;
+
+        if (ImGui::Combo("Spline Mode", &splineMode, modeLabels, 2))
+            paramsChanged = true;
+
+        ImGui::Spacing();
+        ImGui::Text("Spline Parameters");
+        ImGui::Separator();
 
         if (ImGui::SliderFloat("Corridor Width", &corridorWidth, 1.0f, 50.0f, "%.1f"))
             paramsChanged = true;
@@ -88,15 +101,28 @@ namespace windows
         if (ImGui::SliderFloat("Edge Falloff", &falloffWidth, 0.0f, 20.0f, "%.1f"))
             paramsChanged = true;
 
-        if (ImGui::SliderFloat("Embankment", &embankmentHeight, -5.0f, 10.0f, "%.1f"))
-            paramsChanged = true;
+        if (splineMode == 0)
+        {
+            if (ImGui::SliderFloat("Embankment", &embankmentHeight, -5.0f, 10.0f, "%.1f"))
+                paramsChanged = true;
+        }
+        else
+        {
+            if (ImGui::InputInt("Paint Layer", &paintLayer))
+            {
+                paintLayer = std::max(0, std::min(paintLayer, 7));
+                paramsChanged = true;
+            }
+        }
 
         if (paramsChanged)
         {
             events::splineTerrain::SetSplineParamsCommand cmd;
+            cmd.params.mode = static_cast<terrain::SplineMode>(splineMode);
             cmd.params.corridorWidth = corridorWidth;
             cmd.params.falloffWidth = falloffWidth;
             cmd.params.embankmentHeight = embankmentHeight;
+            cmd.params.paintLayer = static_cast<uint32_t>(paintLayer);
             dispatcher.execute(cmd);
         }
 
