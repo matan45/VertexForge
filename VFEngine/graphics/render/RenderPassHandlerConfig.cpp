@@ -185,13 +185,24 @@ namespace render
         ssrPipeline->init();
     }
 
-    void RenderPassHandler::resetSSR() { if (ssrPipeline) { ssrPipeline->cleanup(); ssrPipeline.reset(); } }
+    void RenderPassHandler::resetSSR()
+    {
+        if (ssrPipeline)
+        {
+            device.getLogicalDevice().waitIdle();
+            ssrPipeline->cleanup();
+            ssrPipeline.reset();
+        }
+    }
 
     void RenderPassHandler::applySSRSettings(const ::postprocess::SSRSettings& settings)
     {
         if (settings.enabled) initSSR();
         if (ssrPipeline)
         {
+            bool halfResChanged = ssrPipeline->isInitialized() &&
+                                  ssrPipeline->isHalfResolution() != settings.halfResolution;
+
             ssr::SSRSettings ssrSettings{};
             ssrSettings.enabled = settings.enabled;
             ssrSettings.maxDistance = settings.maxDistance;
@@ -202,6 +213,12 @@ namespace render
             ssrSettings.maxSteps = settings.maxSteps;
             ssrSettings.halfResolution = settings.halfResolution;
             ssrPipeline->updateSettings(ssrSettings);
+
+            if (halfResChanged)
+            {
+                device.getLogicalDevice().waitIdle();
+                ssrPipeline->recreate();
+            }
         }
     }
 

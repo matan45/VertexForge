@@ -130,8 +130,9 @@ namespace render::ssr
         // Cached camera data
         glm::mat4 cachedView{1.0f};
         glm::mat4 cachedProjection{1.0f};
-        glm::mat4 cachedPrevView{1.0f};
-        glm::mat4 cachedPrevProjection{1.0f};
+        glm::mat4 cachedInverseView{1.0f};
+        glm::mat4 cachedInverseProjection{1.0f};
+        glm::mat4 cachedPrevViewProjection{1.0f};
         glm::vec3 cachedCameraPosition{0.0f};
         float cachedNear = 0.1f;
         float cachedFar = 1000.0f;
@@ -178,8 +179,16 @@ namespace render::ssr
         void setNormalRoughnessResources(vk::ImageView normalRoughnessView, vk::Image normalRoughnessImg);
 
         [[nodiscard]] bool isInitialized() const { return initialized; }
+        [[nodiscard]] bool isHalfResolution() const { return ssrHalfResolution; }
 
     private:
+        // Shared recording logic for passes 1-4 (trace, temporal, denoise H+V, composite).
+        // Both execute() and executeGraphManaged() delegate here after handling their
+        // respective depth / normalRoughness layout bookkeeping.
+        // Expects scene color in ShaderReadOnlyOptimal on entry.
+        // Leaves scene color in ColorAttachmentOptimal on exit (after composite).
+        void recordPasses(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex);
+
         void createSampler();
         void createDepthImageView();
         void createIntermediateImages();

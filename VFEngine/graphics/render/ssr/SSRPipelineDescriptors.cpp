@@ -140,16 +140,28 @@ namespace render::ssr
     {
         uint32_t imageCount = static_cast<uint32_t>(offscreenResources.colorImages.size());
 
+        // Sampler count breakdown:
+        //   traceSet0: imageCount (scene color per swap image)
+        //   traceSet1: 3 (depth + hiZ + normalRoughness)
+        //   temporalSet0: 1 (ssrRaw)
+        //   temporalSet1 x2: 2*2=4 (history + depth)
+        //   denoiseHorizSet0 x2: 2*2=4 (history + depth)
+        //   denoiseSet0: 2 (denoiseHoriz + depth)
+        //   compositeSet0: 2 (denoised + depth)
+        // Total: imageCount + 16
+        // UBO count: traceSet1 + temporalSet1 x2 = 3
         std::array<vk::DescriptorPoolSize, 2> poolSizes{};
         poolSizes[0].type = vk::DescriptorType::eCombinedImageSampler;
-        poolSizes[0].descriptorCount = imageCount + 20; // extra for hiZ + normalRoughness
+        poolSizes[0].descriptorCount = imageCount + 16;
 
         poolSizes[1].type = vk::DescriptorType::eUniformBuffer;
-        poolSizes[1].descriptorCount = 4;
+        poolSizes[1].descriptorCount = 3;
 
+        // Sets: imageCount (traceSet0) + 1 (traceSet1) + 1 (temporalSet0) + 2 (temporalSet1)
+        //       + 2 (denoiseHoriz) + 1 (denoiseSet0) + 1 (compositeSet0) = imageCount + 8
         vk::DescriptorPoolCreateInfo poolInfo{};
         poolInfo.flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet;
-        poolInfo.maxSets = imageCount + 10;
+        poolInfo.maxSets = imageCount + 8;
         poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
         poolInfo.pPoolSizes = poolSizes.data();
 

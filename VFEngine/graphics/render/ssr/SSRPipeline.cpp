@@ -148,6 +148,7 @@ namespace render::ssr
             descriptorPool = nullptr;
         }
 
+        // Descriptor set layouts are resolution-independent — no need to recreate them.
         createDepthImageView();
         createIntermediateImages();
 
@@ -167,11 +168,12 @@ namespace render::ssr
                                      const glm::vec3& cameraPosition,
                                      float nearPlane, float farPlane, uint32_t frameIndex)
     {
-        cachedPrevView = cachedView;
-        cachedPrevProjection = cachedProjection;
+        cachedPrevViewProjection = cachedProjection * cachedView;
 
         cachedView = view;
         cachedProjection = projection;
+        cachedInverseView = glm::inverse(view);
+        cachedInverseProjection = glm::inverse(projection);
         cachedCameraPosition = cameraPosition;
         cachedNear = nearPlane;
         cachedFar = farPlane;
@@ -302,10 +304,10 @@ namespace render::ssr
 
         SSRParamsUBO params{};
         params.projection = cachedProjection;
-        params.inverseProjection = glm::inverse(cachedProjection);
+        params.inverseProjection = cachedInverseProjection;
         params.view = cachedView;
-        params.inverseView = glm::inverse(cachedView);
-        params.prevViewProjection = cachedPrevProjection * cachedPrevView;
+        params.inverseView = cachedInverseView;
+        params.prevViewProjection = cachedPrevViewProjection;
         params.params = glm::vec4(ssrMaxDistance, ssrIntensity, ssrRoughnessThreshold, ssrEdgeFadeStart);
         params.resolution = glm::vec2(static_cast<float>(traceExtent.width),
                                        static_cast<float>(traceExtent.height));

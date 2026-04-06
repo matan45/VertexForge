@@ -251,7 +251,6 @@ namespace render
                 });
             sceneColorHandle = builder.write(sceneColorHandle, graph::ResourceUsage::ColorAttachmentWrite);
             builder.read(depthHandle, graph::ResourceUsage::DepthAttachmentRead);
-            depthHandle = builder.write(depthHandle, graph::ResourceUsage::DepthAttachmentRead);
             builder.setSegment(graph::HookSegment::PostScene);
             builder.setSideEffect();
         }
