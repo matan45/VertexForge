@@ -238,6 +238,18 @@ namespace services
                 applyHoleBrush(cmd.worldPosition, cmd.erase);
             });
 
+        dispatcher.registerCommandHandler<events::brush::ResetRampCommand>(
+            [this](const events::brush::ResetRampCommand&)
+            {
+                rampStartCaptured = false;
+            });
+
+        dispatcher.registerQueryHandler<events::brush::IsRampStartCapturedQuery>(
+            [this](const events::brush::IsRampStartCapturedQuery&)
+            {
+                return rampStartCaptured;
+            });
+
         dispatcher.subscribe<events::brush::StampImageChangedNotification>(
             [this](const events::brush::StampImageChangedNotification& n)
             {

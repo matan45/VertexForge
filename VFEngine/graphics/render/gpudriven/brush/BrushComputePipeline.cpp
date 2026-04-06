@@ -325,62 +325,17 @@ namespace render::gpudriven
         // Destroy old stamp buffer
         core::BufferUtilities::destroyBuffer(vkDevice, stampBuffer, stampAllocation, device.getMemoryManager());
 
-        // Create device-local stamp buffer
+        // Use host-visible buffer to avoid queue submit (prevents threading errors)
         core::BufferInfoRequest stampRequest(
             vkDevice,
             device.getPhysicalDevice(),
             dataSize,
-            vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst,
-            vk::MemoryPropertyFlagBits::eDeviceLocal
+            vk::BufferUsageFlagBits::eStorageBuffer,
+            vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
         );
         core::BufferUtilities::createBuffer(stampRequest, stampBuffer, stampAllocation, device.getMemoryManager());
 
-        // Create staging buffer for upload
-        vk::Buffer stagingBuffer;
-        core::VulkanAllocation stagingAlloc;
-        core::BufferInfoRequest stagingRequest(
-            vkDevice,
-            device.getPhysicalDevice(),
-            dataSize,
-            vk::BufferUsageFlagBits::eTransferSrc,
-            vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
-        );
-        core::BufferUtilities::createBuffer(stagingRequest, stagingBuffer, stagingAlloc, device.getMemoryManager());
-
-        // Copy data to staging
-        std::memcpy(stagingAlloc.mappedPtr, heights.data(), dataSize);
-
-        // Transfer staging -> device-local
-        vk::CommandBufferAllocateInfo allocInfo{};
-        allocInfo.commandPool = computeCommandPool;
-        allocInfo.level = vk::CommandBufferLevel::ePrimary;
-        allocInfo.commandBufferCount = 1;
-
-        auto cmdBuffers = vkDevice.allocateCommandBuffers(allocInfo);
-        vk::CommandBuffer cmd = cmdBuffers[0];
-
-        vk::CommandBufferBeginInfo beginInfo{};
-        beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
-        cmd.begin(beginInfo);
-
-        vk::BufferCopy copyRegion{0, 0, dataSize};
-        cmd.copyBuffer(stagingBuffer, stampBuffer, copyRegion);
-
-        cmd.end();
-
-        vk::SubmitInfo submitInfo{};
-        submitInfo.commandBufferCount = 1;
-        submitInfo.pCommandBuffers = &cmd;
-
-        vk::Fence fence = vkDevice.createFence({});
-        device.submitGraphics(submitInfo, fence);
-        auto waitResult = vkDevice.waitForFences(fence, VK_TRUE, UINT64_MAX);
-        (void)waitResult;
-        vkDevice.destroyFence(fence);
-        vkDevice.freeCommandBuffers(computeCommandPool, cmd);
-
-        // Destroy staging
-        core::BufferUtilities::destroyBuffer(vkDevice, stagingBuffer, stagingAlloc, device.getMemoryManager());
+        std::memcpy(stampAllocation.mappedPtr, heights.data(), dataSize);
 
         // Update descriptor set binding 2
         vk::DescriptorBufferInfo stampInfo{};

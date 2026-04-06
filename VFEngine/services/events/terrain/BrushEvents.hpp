@@ -160,6 +160,16 @@ namespace events::brush
         std::string_view getName() const override { return "SetRampFalloff"; }
     };
 
+    struct ResetRampCommand : ICommand<>
+    {
+        std::string_view getName() const override { return "ResetRamp"; }
+    };
+
+    struct IsRampStartCapturedQuery : IQuery<bool>
+    {
+        std::string_view getName() const override { return "IsRampStartCaptured"; }
+    };
+
     struct StampImageChangedNotification : INotification
     {
         std::string filePath;

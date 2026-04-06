@@ -310,7 +310,21 @@ namespace windows
                 dispatcher.execute(cmd);
             }
 
-            ImGui::TextDisabled("Click start, then click end");
+            bool startCaptured = dispatcher.query(events::brush::IsRampStartCapturedQuery{});
+
+            if (startCaptured)
+            {
+                ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "Start point set - click end point");
+                if (ImGui::Button("Reset Start Point"))
+                {
+                    events::brush::ResetRampCommand cmd;
+                    dispatcher.execute(cmd);
+                }
+            }
+            else
+            {
+                ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "Click to set start point");
+            }
         }
 
         ImGui::Spacing();
