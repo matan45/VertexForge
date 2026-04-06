@@ -21,4 +21,9 @@ namespace core
     {
         offScreen.setStampData(heights, width, height);
     }
+
+    void TerrainBrushComputeAdapter::clearStampData()
+    {
+        offScreen.clearStampData();
+    }
 }

@@ -310,7 +310,7 @@ namespace render::gpudriven
     {
         vk::Device vkDevice = device.getLogicalDevice();
 
-        std::array<vk::DescriptorSetLayoutBinding, 2> bindings{};
+        std::array<vk::DescriptorSetLayoutBinding, 3> bindings{};
         bindings[0].binding = 0;
         bindings[0].descriptorType = vk::DescriptorType::eStorageBuffer;
         bindings[0].descriptorCount = 1;
@@ -321,11 +321,17 @@ namespace render::gpudriven
         bindings[1].descriptorCount = 1;
         bindings[1].stageFlags = vk::ShaderStageFlagBits::eTaskEXT;
 
+        // Binding 2: Stamp overlay heightmap (readonly, fragment only)
+        bindings[2].binding = 2;
+        bindings[2].descriptorType = vk::DescriptorType::eStorageBuffer;
+        bindings[2].descriptorCount = 1;
+        bindings[2].stageFlags = vk::ShaderStageFlagBits::eFragment;
+
         terrainDataLayout = core::PipelineUtilities::createUpdateAfterBindLayout(vkDevice, bindings.data(), static_cast<uint32_t>(bindings.size()));
 
         vk::DescriptorPoolSize poolSize{};
         poolSize.type = vk::DescriptorType::eStorageBuffer;
-        poolSize.descriptorCount = 2;
+        poolSize.descriptorCount = 3;
 
         terrainDataPool = core::PipelineUtilities::createUpdateAfterBindPool(vkDevice, 1, &poolSize, 1);
 
@@ -337,6 +343,9 @@ namespace render::gpudriven
         terrainDataDescriptorSet = sets[0];
 
         writeTerrainDataDescriptors(vkDevice, terrainDataDescriptorSet, tileDataBuffer, statsBuffer);
+
+        // Bind dummy stamp buffer (binding 2) - use stats buffer as placeholder
+        writeStorageBufferDescriptor(vkDevice, terrainDataDescriptorSet, 2, statsBuffer, sizeof(float));
     }
 
     bool TerrainMeshShaderPipeline::loadTerrainShaders()

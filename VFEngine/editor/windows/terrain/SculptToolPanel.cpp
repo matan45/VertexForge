@@ -159,12 +159,15 @@ namespace windows
             dispatcher.execute(cmd);
         }
 
-        const char* shapeLabels[] = {"Circle", "Square"};
-        if (ImGui::Combo("Shape", &shapeIndex, shapeLabels, 2))
+        if (selectedBrushType != 5)
         {
-            events::brush::SetBrushShapeCommand cmd;
-            cmd.shape = static_cast<terrain::BrushShape>(shapeIndex);
-            dispatcher.execute(cmd);
+            const char* shapeLabels[] = {"Circle", "Square"};
+            if (ImGui::Combo("Shape", &shapeIndex, shapeLabels, 2))
+            {
+                events::brush::SetBrushShapeCommand cmd;
+                cmd.shape = static_cast<terrain::BrushShape>(shapeIndex);
+                dispatcher.execute(cmd);
+            }
         }
 
         // Stamp brush controls
@@ -184,6 +187,16 @@ namespace windows
                 ImGui::TextDisabled("No stamp loaded");
             }
 
+            if (stampLoaded)
+            {
+                ImGui::SameLine();
+                if (ImGui::Button("Clear"))
+                {
+                    events::brush::ClearStampImageCommand cmd;
+                    dispatcher.execute(cmd);
+                }
+            }
+
             if (ImGui::Button("Load Stamp Image"))
             {
                 nfd::FileDialog fileDialog;
@@ -201,6 +214,14 @@ namespace windows
                     cmd.filePath = selectedPath;
                     dispatcher.execute(cmd);
                 }
+            }
+
+            const char* modeLabels[] = {"Add", "Subtract"};
+            if (ImGui::Combo("Mode", &stampMode, modeLabels, 2))
+            {
+                events::brush::SetStampModeCommand cmd;
+                cmd.subtract = (stampMode == 1);
+                dispatcher.execute(cmd);
             }
 
             float rotationDeg = glm::degrees(stampRotation);

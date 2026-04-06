@@ -20,6 +20,7 @@ namespace windows
         std::string stampImagePath;
         float stampRotation = 0.0f;
         float stampScale = 1.0f;
+        int stampMode = 0; // 0=Add, 1=Subtract
         bool stampLoaded = false;
 
         events::SubscriptionToken sculptModeToken;

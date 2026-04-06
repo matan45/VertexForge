@@ -64,6 +64,10 @@ namespace services
             flattenTargetCaptured = false;
         }
 
+        // Stamp is a one-shot operation per click
+        if (brushType == terrain::BrushType::Stamp && !isFirstApplication)
+            return;
+
         glm::vec2 brushCenter(worldPosition.x, worldPosition.z);
         float worldTileSize = 32.0f;
         const auto& allTiles = grid->getAllTiles();
@@ -119,7 +123,9 @@ namespace services
             gpuParams.targetHeight = flattenTargetHeight;
             gpuParams.minHeight = tile->config.minHeight;
             gpuParams.maxHeight = tile->config.maxHeight;
-            gpuParams.invert = invert;
+            gpuParams.invert = (brushType == terrain::BrushType::Stamp)
+                ? (invert != brushParams.stampSubtract)  // XOR: Shift toggles the UI mode
+                : invert;
             gpuParams.stampRotation = brushParams.stampRotation;
             gpuParams.stampScale = brushParams.stampScale;
             if (stampData && stampData->isValid())

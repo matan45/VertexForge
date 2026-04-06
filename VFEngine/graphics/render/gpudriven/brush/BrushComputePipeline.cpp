@@ -402,6 +402,13 @@ namespace render::gpudriven
         hasStampData = true;
     }
 
+    void BrushComputePipeline::clearStampData()
+    {
+        stampWidth = 0;
+        stampHeight = 0;
+        hasStampData = false;
+    }
+
     bool BrushComputePipeline::applyBrush(std::vector<float>& heightData,
                                           const BrushComputePushConstants& constants)
     {

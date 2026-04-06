@@ -38,6 +38,7 @@ namespace terrain
         BrushShape shape = BrushShape::Circle;
         float stampRotation = 0.0f;
         float stampScale = 1.0f;
+        bool stampSubtract = false;
         std::string stampImagePath;
 
         void validate()

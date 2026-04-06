@@ -20,5 +20,7 @@ namespace services
         virtual void setStampData(
             const std::vector<float>& heights,
             uint32_t width, uint32_t height) = 0;
+
+        virtual void clearStampData() = 0;
     };
 }

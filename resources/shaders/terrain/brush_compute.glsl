@@ -86,7 +86,12 @@ void main()
     vec2 delta = worldPos - pc.brushCenter;
 
     float dist;
-    if (pc.shapeType == 0)
+    if (pc.brushType == 5)
+    {
+        // Stamp: always use square bounds so the full image is visible
+        dist = max(abs(delta.x), abs(delta.y)) / pc.brushRadius;
+    }
+    else if (pc.shapeType == 0)
     {
         dist = length(delta) / pc.brushRadius;
     }
@@ -213,8 +218,9 @@ void main()
 
             float stampValue = mix(mix(h00, h10, fracX), mix(h01, h11, fracX), fracZ);
 
+            // One-shot application: stampValue [0,1] scaled to world height
             float direction = (pc.invertFlag != 0) ? -1.0 : 1.0;
-            newHeight += direction * stampValue * influence * pc.brushStrength * pc.stampScale * pc.deltaTime;
+            newHeight += direction * stampValue * influence * pc.stampScale;
             break;
         }
     }

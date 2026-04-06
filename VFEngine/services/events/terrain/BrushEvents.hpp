@@ -92,6 +92,11 @@ namespace events::brush
         std::string_view getName() const override { return "BrushApplied"; }
     };
 
+    struct ClearStampImageCommand : ICommand<>
+    {
+        std::string_view getName() const override { return "ClearStampImage"; }
+    };
+
     struct SetStampImageCommand : ICommand<>
     {
         std::string filePath;
@@ -111,6 +116,13 @@ namespace events::brush
         float scale = 1.0f;
 
         std::string_view getName() const override { return "SetStampScale"; }
+    };
+
+    struct SetStampModeCommand : ICommand<>
+    {
+        bool subtract = false;
+
+        std::string_view getName() const override { return "SetStampMode"; }
     };
 
     struct StampImageChangedNotification : INotification

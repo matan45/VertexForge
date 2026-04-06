@@ -23,8 +23,8 @@ namespace core
         return offScreen.getTerrainHitResult();
     }
 
-    void TerrainRaycastAdapter::setBrushOverlayParams(float radius, float falloff, float shape)
+    void TerrainRaycastAdapter::setBrushOverlayParams(float radius, float falloff, float shape, float stampRotation)
     {
-        offScreen.setBrushOverlayParams(radius, falloff, shape);
+        offScreen.setBrushOverlayParams(radius, falloff, shape, stampRotation);
     }
 }

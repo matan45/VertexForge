@@ -237,6 +237,28 @@ namespace services
             {
                 applyHoleBrush(cmd.worldPosition, cmd.erase);
             });
+
+        dispatcher.subscribe<events::brush::StampImageChangedNotification>(
+            [this](const events::brush::StampImageChangedNotification& n)
+            {
+                if (!brushComputeProvider)
+                    return;
+
+                if (n.loaded)
+                {
+                    auto stampData = events::EventDispatcher::instance().query(
+                        events::brush::GetStampDataQuery{});
+                    if (stampData && stampData->isValid())
+                    {
+                        brushComputeProvider->setStampData(
+                            stampData->heights, stampData->width, stampData->height);
+                    }
+                }
+                else
+                {
+                    brushComputeProvider->clearStampData();
+                }
+            });
     }
 
     void TerrainService::registerVegetationBrushHandlers(::events::EventDispatcher& dispatcher)

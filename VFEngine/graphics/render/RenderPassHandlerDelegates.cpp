@@ -104,11 +104,12 @@ namespace render
         return {};
     }
 
-    void RenderPassHandler::setBrushOverlayParams(float radius, float falloff, float shape)
+    void RenderPassHandler::setBrushOverlayParams(float radius, float falloff, float shape, float stampRotation)
     {
         brushOverlayRadius_ = radius;
         brushOverlayFalloff_ = falloff;
         brushOverlayShape_ = shape;
+        brushOverlayStampRotation_ = stampRotation;
     }
 
     void RenderPassHandler::updateBrushOverlayFromHitResult()
@@ -121,11 +122,27 @@ namespace render
         auto hitResult = getTerrainHitResult();
         if (hitResult.hit && brushOverlayRadius_ > 0.0f)
         {
-            gpuDrivenRenderer->setBrushOverlay(hitResult.position, brushOverlayRadius_, brushOverlayFalloff_, brushOverlayShape_);
+            gpuDrivenRenderer->setBrushOverlay(hitResult.position, brushOverlayRadius_, brushOverlayFalloff_, brushOverlayShape_, brushOverlayStampRotation_);
         }
         else
         {
-            gpuDrivenRenderer->setBrushOverlay(glm::vec3(0.0f), 0.0f, 0.0f, 0.0f);
+            gpuDrivenRenderer->setBrushOverlay(glm::vec3(0.0f), 0.0f, 0.0f, 0.0f, 0.0f);
+        }
+    }
+
+    void RenderPassHandler::setStampOverlay(vk::Buffer buffer, uint32_t width, uint32_t height, float rotation)
+    {
+        if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
+        {
+            gpuDrivenRenderer->setStampOverlay(buffer, width, height, rotation);
+        }
+    }
+
+    void RenderPassHandler::clearStampOverlay()
+    {
+        if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
+        {
+            gpuDrivenRenderer->clearStampOverlay();
         }
     }
 

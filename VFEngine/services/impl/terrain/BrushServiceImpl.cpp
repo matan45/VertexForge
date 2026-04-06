@@ -79,6 +79,24 @@ namespace services
                 return getBrushType();
             });
 
+        dispatcher.registerCommandHandler<events::brush::ClearStampImageCommand>(
+            [this](const events::brush::ClearStampImageCommand&)
+            {
+                stampData = nullptr;
+                stampImagePath.clear();
+                stampRotation = 0.0f;
+                stampScale = 1.0f;
+                currentParams.stampImagePath.clear();
+                currentParams.stampRotation = 0.0f;
+                currentParams.stampScale = 1.0f;
+                publishParamsChanged();
+
+                events::brush::StampImageChangedNotification notification;
+                notification.filePath = "";
+                notification.loaded = false;
+                events::EventDispatcher::instance().publish(notification);
+            });
+
         dispatcher.registerCommandHandler<events::brush::SetStampImageCommand>(
             [this](const events::brush::SetStampImageCommand& cmd)
             {
@@ -107,6 +125,13 @@ namespace services
             {
                 stampScale = cmd.scale;
                 currentParams.stampScale = cmd.scale;
+                publishParamsChanged();
+            });
+
+        dispatcher.registerCommandHandler<events::brush::SetStampModeCommand>(
+            [this](const events::brush::SetStampModeCommand& cmd)
+            {
+                currentParams.stampSubtract = cmd.subtract;
                 publishParamsChanged();
             });
 

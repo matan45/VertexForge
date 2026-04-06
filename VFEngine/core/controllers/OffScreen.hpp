@@ -212,7 +212,7 @@ namespace controllers
         void clearRaycastCursor();
         terrain::TerrainHitResult getTerrainHitResult() const;
 
-        void setBrushOverlayParams(float radius, float falloff, float shape);
+        void setBrushOverlayParams(float radius, float falloff, float shape, float stampRotation = 0.0f);
 
         bool applyBrushGPU(
             std::vector<float>& heightData,
@@ -221,6 +221,7 @@ namespace controllers
         void setStampData(
             const std::vector<float>& heights,
             uint32_t width, uint32_t height);
+        void clearStampData();
 
         render::RenderPassHandler* getRenderPassHandler() const;
 

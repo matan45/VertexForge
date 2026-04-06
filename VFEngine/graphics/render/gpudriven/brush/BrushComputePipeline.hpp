@@ -99,6 +99,13 @@ namespace render::gpudriven
         void setStampData(const std::vector<float>& heights,
                           uint32_t width, uint32_t height);
 
+        void clearStampData();
+
+        vk::Buffer getStampBuffer() const { return stampBuffer; }
+        uint32_t getStampWidth() const { return stampWidth; }
+        uint32_t getStampHeight() const { return stampHeight; }
+        bool getHasStampData() const { return hasStampData; }
+
     private:
         void createDescriptorSetLayout();
         void createPipelineLayout();

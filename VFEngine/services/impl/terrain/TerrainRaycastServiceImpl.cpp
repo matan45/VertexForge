@@ -114,7 +114,8 @@ namespace services
                         provider->setBrushOverlayParams(
                             brushParams.radius,
                             static_cast<float>(brushParams.falloff),
-                            static_cast<float>(brushParams.shape));
+                            static_cast<float>(brushParams.shape),
+                            brushParams.stampRotation);
                     }
                 }
                 else
@@ -136,7 +137,8 @@ namespace services
                     provider->setBrushOverlayParams(
                         n.params.radius,
                         static_cast<float>(n.params.falloff),
-                        static_cast<float>(n.params.shape));
+                        static_cast<float>(n.params.shape),
+                        n.params.stampRotation);
                 }
             });
 
