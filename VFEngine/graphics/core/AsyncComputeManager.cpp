@@ -1,6 +1,7 @@
 #include "AsyncComputeManager.hpp"
 #include "Device.hpp"
 #include "print/Log.hpp"
+#include <mutex>
 
 namespace core
 {
@@ -175,8 +176,18 @@ namespace core
         submitInfo.signalSemaphoreCount = static_cast<uint32_t>(signalSemaphores.size());
         submitInfo.pSignalSemaphores = signalSemaphores.data();
 
-        // Submit with per-frame fence — beginFrame waits on this before resetting the buffer
-        device.getAsyncComputeQueue().submit(submitInfo, frame.fence);
+        // Submit with per-frame fence — beginFrame waits on this before resetting the buffer.
+        // Lock graphics queue mutex when async compute shares the same queue family,
+        // as concurrent VkQueue operations on queues from the same family require external sync.
+        if (!device.getQueueFamilyIndices().hasDedicatedComputeFamily())
+        {
+            std::lock_guard lock(device.getGraphicsQueueMutex());
+            device.getAsyncComputeQueue().submit(submitInfo, frame.fence);
+        }
+        else
+        {
+            device.getAsyncComputeQueue().submit(submitInfo, frame.fence);
+        }
     }
 
     void AsyncComputeManager::waitIdle()
