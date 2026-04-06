@@ -426,6 +426,15 @@ namespace behaviortree
             return executor->executeEnvironmentQuery(ownerEntity, queryName, resultKey, blackboard, state.isFirstTick);
         }
 
+        case BTNodeType::LineOfSight:
+        {
+            if (!executor) return BTNodeStatus::Failure;
+            std::string targetKey = getNodeProperty<std::string>(node, "targetKey", std::string("target"));
+            float maxDistance = getNodeProperty<float>(node, "maxDistance", 50.0f);
+            float eyeOffset = getNodeProperty<float>(node, "eyeOffset", 1.6f);
+            return executor->executeLineOfSight(ownerEntity, targetKey, maxDistance, eyeOffset, blackboard);
+        }
+
         default:
             return BTNodeStatus::Failure;
         }

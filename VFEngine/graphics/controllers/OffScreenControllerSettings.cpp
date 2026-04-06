@@ -311,6 +311,16 @@ namespace controllers
                 upscaleManager->applyFrameGenSettings(offSettings, 0, 0, 0, 0, 0);
             }
         }
+
+        // SSR
+        if (settings.ssr.enabled)
+        {
+            renderHandler->applySSRSettings(settings.ssr);
+        }
+        else
+        {
+            renderHandler->resetSSR();
+        }
     }
 
     postprocess::PostProcessSettings OffScreenController::getPostProcessSettings() const

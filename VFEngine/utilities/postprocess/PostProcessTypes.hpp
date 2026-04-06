@@ -222,6 +222,18 @@ namespace postprocess
         float trailSpeed = 2.0f;
     };
 
+    struct SSRSettings
+    {
+        bool enabled = false;
+        float maxDistance = 100.0f;
+        float intensity = 1.0f;
+        float roughnessThreshold = 0.6f;
+        float edgeFadeStart = 0.8f;
+        float temporalBlend = 0.1f;
+        uint32_t maxSteps = 64;
+        bool halfResolution = true;
+    };
+
     enum class UpscaleMode : uint8_t
     {
         Off = 0,
@@ -284,6 +296,7 @@ namespace postprocess
         ColorGradingSettings colorGrading;
         UnderwaterSettings underwater;
         RainDropletsSettings rainDroplets;
+        SSRSettings ssr;
 
         static PostProcessSettings createDefault()
         {

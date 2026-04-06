@@ -5,6 +5,7 @@
 #include "../core/Device.hpp"
 #include "postprocess/PostProcessPipeline.hpp"
 #include "gi/SSGIPipeline.hpp"
+#include "ssr/SSRPipeline.hpp"
 #include "volumetric/VolumetricFogComposite.hpp"
 #include "atmosphere/AtmospherePipeline.hpp"
 #include "cloud/CloudPipeline.hpp"
@@ -228,6 +229,25 @@ namespace render
             auto builder = frameGraph->addPass("VolumetricFogComposite",
                 [this](vk::CommandBuffer cmd, uint32_t idx) {
                     volumetricFogComposite->executeGraphManaged(cmd, idx);
+                });
+            sceneColorHandle = builder.write(sceneColorHandle, graph::ResourceUsage::ColorAttachmentWrite);
+            builder.read(depthHandle, graph::ResourceUsage::DepthAttachmentRead);
+            depthHandle = builder.write(depthHandle, graph::ResourceUsage::DepthAttachmentRead);
+            builder.setSegment(graph::HookSegment::PostScene);
+            builder.setSideEffect();
+        }
+
+        // SSR
+        if (ssrPipeline && ssrPipeline->isInitialized())
+        {
+            ssrPipeline->setCameraData(currentView, currentProjection,
+                                        currentCameraPosition,
+                                        currentNearPlane, currentFarPlane,
+                                        taaFrameIndex);
+
+            auto builder = frameGraph->addPass("SSR",
+                [this](vk::CommandBuffer cmd, uint32_t idx) {
+                    ssrPipeline->executeGraphManaged(cmd, idx);
                 });
             sceneColorHandle = builder.write(sceneColorHandle, graph::ResourceUsage::ColorAttachmentWrite);
             builder.read(depthHandle, graph::ResourceUsage::DepthAttachmentRead);

@@ -285,6 +285,8 @@
     <ClInclude Include="render\shadow\VSMPageTable.hpp" />
     <ClInclude Include="render\shadow\VSMPhysicalTilePool.hpp" />
     <ClInclude Include="render\shadow\VSMTypes.hpp" />
+    <ClInclude Include="render\ssr\SSRPipeline.hpp" />
+    <ClInclude Include="render\ssr\SSRTypes.hpp" />
     <ClInclude Include="render\text\TextBufferManager.hpp" />
     <ClInclude Include="render\text\TextFontCache.hpp" />
     <ClInclude Include="render\text\TextPipeline.hpp" />
@@ -542,6 +544,10 @@
     <ClCompile Include="render\shadow\VSMFeedbackPipeline.cpp" />
     <ClCompile Include="render\shadow\VSMPageTable.cpp" />
     <ClCompile Include="render\shadow\VSMPhysicalTilePool.cpp" />
+    <ClCompile Include="render\ssr\SSRPipeline.cpp" />
+    <ClCompile Include="render\ssr\SSRPipelineDescriptors.cpp" />
+    <ClCompile Include="render\ssr\SSRPipelineRecord.cpp" />
+    <ClCompile Include="render\ssr\SSRPipelineSetup.cpp" />
     <ClCompile Include="render\text\TextBufferManager.cpp" />
     <ClCompile Include="render\text\TextFontCache.cpp" />
     <ClCompile Include="render\text\TextPipeline.cpp" />
@@ -616,6 +622,7 @@
     <None Include="..\..\resources\shaders\common\gpu_instance_types.glsl" />
     <None Include="..\..\resources\shaders\common\gpu_types.glsl" />
     <None Include="..\..\resources\shaders\common\hiz_occlusion.glsl" />
+    <None Include="..\..\resources\shaders\common\hiz_ray_march.glsl" />
     <None Include="..\..\resources\shaders\common\ibl_functions.glsl" />
     <None Include="..\..\resources\shaders\common\lighting_functions.glsl" />
     <None Include="..\..\resources\shaders\common\lod_crossfade.glsl" />
@@ -691,6 +698,10 @@
     <None Include="..\..\resources\shaders\shadow\shadow.glsl" />
     <None Include="..\..\resources\shaders\shadow\shadow_terrain.glsl" />
     <None Include="..\..\resources\shaders\shadow\vsm_feedback.glsl" />
+    <None Include="..\..\resources\shaders\ssr\ssr_composite.glsl" />
+    <None Include="..\..\resources\shaders\ssr\ssr_denoise.glsl" />
+    <None Include="..\..\resources\shaders\ssr\ssr_temporal.glsl" />
+    <None Include="..\..\resources\shaders\ssr\ssr_trace.glsl" />
     <None Include="..\..\resources\shaders\terrain\brush_compute.glsl" />
     <None Include="..\..\resources\shaders\terrain\brush_influence.glsl" />
     <None Include="..\..\resources\shaders\terrain\terrain_depth_sample.glsl" />

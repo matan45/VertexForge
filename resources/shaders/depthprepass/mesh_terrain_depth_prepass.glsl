@@ -56,8 +56,9 @@ layout(push_constant) uniform PushConstants {
 
 const uint VERTEX_STRIDE = 16; // 64 bytes / 4 bytes per float
 
-// Output world-space normal to color attachment
+// Output world-space normal and roughness to color attachment
 layout(location = 0) out vec3 outWorldNormal[];
+layout(location = 1) out float outRoughness[];
 
 void main() {
     uint meshletSlot = gl_WorkGroupID.x;
@@ -95,6 +96,7 @@ void main() {
         vec4 worldPos = modelMatrix * vec4(pos, 1.0);
         gl_MeshVerticesEXT[i].gl_Position = viewProjection * worldPos;
         outWorldNormal[i] = normalize(normalMatrix * normal);
+        outRoughness[i] = 0.8; // Default terrain roughness
     }
 
     for (uint i = gl_LocalInvocationID.x; i < primitiveCount; i += 32) {

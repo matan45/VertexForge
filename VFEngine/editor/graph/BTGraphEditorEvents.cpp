@@ -175,6 +175,7 @@ namespace editor::graph
                 if (ImGui::MenuItem("Set Blackboard Value")) createNode(BTNodeType::SetBlackboardValue, newNodePosition);
                 if (ImGui::MenuItem("Check Blackboard Value")) createNode(BTNodeType::CheckBlackboardValue, newNodePosition);
                 if (ImGui::MenuItem("Script Task")) createNode(BTNodeType::ScriptTask, newNodePosition);
+                if (ImGui::MenuItem("Line Of Sight")) createNode(BTNodeType::LineOfSight, newNodePosition);
                 ImGui::EndMenu();
             }
 
@@ -229,6 +230,11 @@ namespace editor::graph
             node.properties["key"] = std::string("");
             node.properties["compareOp"] = std::string("==");
             node.properties["compareValue"] = 0.0f;
+            break;
+        case BTNodeType::LineOfSight:
+            node.properties["targetKey"] = std::string("target");
+            node.properties["maxDistance"] = 50.0f;
+            node.properties["eyeOffset"] = 1.6f;
             break;
         default:
             break;

@@ -66,6 +66,12 @@ namespace core
             behaviortree::Blackboard& blackboard,
             bool isFirstTick) override;
 
+        behaviortree::BTNodeStatus executeLineOfSight(services::EntityHandle entity,
+                                                       const std::string& targetKey,
+                                                       float maxDistance,
+                                                       float eyeOffset,
+                                                       behaviortree::Blackboard& blackboard) override;
+
     private:
         struct RuntimeInstance
         {

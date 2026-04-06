@@ -45,6 +45,12 @@ namespace behaviortree
             const std::string& resultKey,
             Blackboard& blackboard,
             bool isFirstTick) = 0;
+
+        virtual BTNodeStatus executeLineOfSight(services::EntityHandle entity,
+                                                 const std::string& targetKey,
+                                                 float maxDistance,
+                                                 float eyeOffset,
+                                                 Blackboard& blackboard) = 0;
     };
 
     class BehaviorTreeRuntime

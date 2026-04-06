@@ -19,6 +19,7 @@
 #include "postprocess/PostProcessPipeline.hpp"
 #include "volumetric/VolumetricFogComposite.hpp"
 #include "gi/SSGIPipeline.hpp"
+#include "ssr/SSRPipeline.hpp"
 #include "transparency/WBOITPipeline.hpp"
 #include "decal/DecalPipeline.hpp"
 #include "volumetric/VolumetricPipeline.hpp"
@@ -188,6 +189,7 @@ namespace render
             terrainRaycastPipeline->updateDepthImageView(offscreenResources.depthImage.depthImageView);
         if (volumetricFogComposite && volumetricFogComposite->isInitialized()) volumetricFogComposite->recreate();
         if (ssgiPipeline && ssgiPipeline->isInitialized()) ssgiPipeline->recreate();
+        if (ssrPipeline && ssrPipeline->isInitialized()) ssrPipeline->recreate();
         if (atmospherePipeline && atmospherePipeline->isInitialized()) atmospherePipeline->recreate();
         if (cloudPipeline && cloudPipeline->isInitialized()) cloudPipeline->recreate();
         if (wboitPipeline && wboitPipeline->isInitialized()) wboitPipeline->recreate();
@@ -233,6 +235,7 @@ namespace render
         cleanUpPipelines();
         if (volumetricFogComposite) volumetricFogComposite->cleanup();
         if (ssgiPipeline) ssgiPipeline->cleanup();
+        if (ssrPipeline) ssrPipeline->cleanup();
         if (atmospherePipeline) atmospherePipeline->cleanup();
         if (cloudPipeline) cloudPipeline->cleanup();
         if (distortionInitialized)

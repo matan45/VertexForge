@@ -185,6 +185,18 @@ namespace editor::graph
                 ImGui::Text("Set: %s", std::get<std::string>(keyIt->second).c_str());
             break;
         }
+        case BTNodeType::LineOfSight:
+        {
+            auto keyIt = node.properties.find("targetKey");
+            if (keyIt != node.properties.end() && std::holds_alternative<std::string>(keyIt->second))
+                ImGui::Text("Target: %s", std::get<std::string>(keyIt->second).c_str());
+            float dist = 50.0f;
+            auto distIt = node.properties.find("maxDistance");
+            if (distIt != node.properties.end() && std::holds_alternative<float>(distIt->second))
+                dist = std::get<float>(distIt->second);
+            ImGui::Text("Range: %.0fm", dist);
+            break;
+        }
         default:
             break;
         }

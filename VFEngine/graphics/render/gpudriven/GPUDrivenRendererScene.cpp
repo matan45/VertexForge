@@ -1,5 +1,6 @@
 #include "GPUDrivenRenderer.hpp"
 #include "../occlusion/HiZBuffer.hpp"
+#include "../occlusion/DepthPrepass.hpp"
 #include "../mesh/MeshTypes.hpp"
 #include "../mesh/MeshStreamManager.hpp"
 #include "../material/MaterialTextureCache.hpp"
@@ -518,6 +519,20 @@ namespace render::gpudriven
         if (bindlessTextures && bindlessTextures->hasDefaultTexture())
             return {bindlessTextures->getDefaultImageView(), bindlessTextures->getDefaultSampler()};
         return {nullptr, nullptr};
+    }
+
+    std::pair<vk::ImageView, vk::Sampler> GPUDrivenRenderer::getPrepassHiZViewSampler() const
+    {
+        if (prepassHiZ && prepassHiZ->isInitialized())
+            return {prepassHiZ->getHiZImageView(), prepassHiZ->getHiZSampler()};
+        return {nullptr, nullptr};
+    }
+
+    vk::ImageView GPUDrivenRenderer::getPrepassNormalImageView() const
+    {
+        if (depthPrepass && depthPrepass->isInitialized())
+            return depthPrepass->getNormalImageView();
+        return nullptr;
     }
 
     void GPUDrivenRenderer::updatePipelineDescriptors()
