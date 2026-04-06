@@ -12,6 +12,7 @@
 #include "../../events/terrain/CaveBrushEvents.hpp"
 #include "../../events/vegetation/VegetationBrushEvents.hpp"
 #include "../../events/meshbrush/MeshBrushEvents.hpp"
+#include "../../events/terrain/SplineTerrainEvents.hpp"
 
 namespace services
 {
@@ -64,6 +65,9 @@ namespace services
 
         if (meshBrushParamsToken.isValid())
             dispatcher.unsubscribe(meshBrushParamsToken);
+
+        if (splineModeToken.isValid())
+            dispatcher.unsubscribe(splineModeToken);
     }
 
     void TerrainRaycastServiceImpl::registerEventHandlers()
@@ -73,7 +77,7 @@ namespace services
         dispatcher.registerCommandHandler<events::terrainRaycast::SetCursorPositionCommand>(
             [this](const events::terrainRaycast::SetCursorPositionCommand& cmd)
             {
-                if ((!sculptModeActive && !paintModeActive && !holeModeActive && !caveModeActive && !vegBrushModeActive && !meshBrushModeActive) || !provider)
+                if ((!sculptModeActive && !paintModeActive && !holeModeActive && !caveModeActive && !vegBrushModeActive && !meshBrushModeActive && !splineModeActive) || !provider)
                 {
                     return;
                 }
@@ -324,6 +328,29 @@ namespace services
                         n.params.radius,
                         static_cast<float>(n.params.falloff),
                         0.0f);
+                }
+            });
+
+        splineModeToken = dispatcher.subscribe<events::splineTerrain::SplineModeChangedNotification>(
+            [this](const events::splineTerrain::SplineModeChangedNotification& n)
+            {
+                if (n.isActive)
+                {
+                    splineModeActive = true;
+                    if (provider)
+                    {
+                        // Small cursor circle for click-to-place
+                        provider->setBrushOverlayParams(1.0f, 2.0f, 0.0f);
+                    }
+                }
+                else
+                {
+                    splineModeActive = false;
+                    if (provider)
+                    {
+                        provider->clearRaycastCursor();
+                        provider->setBrushOverlayParams(0.0f, 0.0f, 0.0f);
+                    }
                 }
             });
     }

@@ -6,6 +6,7 @@
 #include "events/editor/SculptModeEvents.hpp"
 #include "events/terrain/TerrainRaycastEvents.hpp"
 #include "events/terrain/BrushEvents.hpp"
+#include "events/terrain/SplineTerrainEvents.hpp"
 #include "events/terrain/PaintModeEvents.hpp"
 #include "events/terrain/PaintBrushEvents.hpp"
 #include "events/terrain/HoleModeEvents.hpp"
@@ -97,6 +98,7 @@ namespace windows
             handleCaveBrush();
             handleVegetationBrush();
             handleMeshBrush();
+            handleSplineTool();
         }
         ImGui::End();
     }
@@ -336,7 +338,9 @@ namespace windows
         bool vegActive = dispatcher.query(events::vegetationBrush::IsVegetationBrushModeActiveQuery{});
         bool meshBrushActive = dispatcher.query(events::meshBrush::IsMeshBrushModeActiveQuery{});
 
-        bool anyActive = sculptActive || paintActive || holeActive || caveActive || vegActive || meshBrushActive;
+        bool splineActive = dispatcher.query(events::splineTerrain::IsSplineModeActiveQuery{});
+
+        bool anyActive = sculptActive || paintActive || holeActive || caveActive || vegActive || meshBrushActive || splineActive;
 
         if (!anyActive || !ImGui::IsWindowHovered())
         {
@@ -353,6 +357,7 @@ namespace windows
         else if (caveActive) sendCursorUV(viewportPos, viewportSize);
         else if (vegActive) updateVegetationCursorUV(viewportPos, viewportSize);
         else if (meshBrushActive) updateMeshBrushCursorUV(viewportPos, viewportSize);
+        else if (splineActive) sendCursorUV(viewportPos, viewportSize);
     }
 
     void ViewPort::sendCursorUV(glm::vec2 viewportPos, glm::vec2 viewportSize)
@@ -535,6 +540,26 @@ namespace windows
             }
         } else {
             meshBrushDragging = false;
+        }
+    }
+
+    void ViewPort::handleSplineTool()
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+        if (!dispatcher.query(events::splineTerrain::IsSplineModeActiveQuery{}) || !ImGui::IsWindowHovered())
+        {
+            return;
+        }
+
+        if (ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+        {
+            auto hitResult = dispatcher.query(events::terrainRaycast::GetTerrainHitQuery{});
+            if (hitResult.hit)
+            {
+                events::splineTerrain::AddSplinePointCommand cmd;
+                cmd.worldPosition = hitResult.position;
+                dispatcher.execute(cmd);
+            }
         }
     }
 

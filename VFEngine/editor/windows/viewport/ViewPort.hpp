@@ -63,5 +63,6 @@ namespace windows
         void handleVegetationBrush();
         void updateMeshBrushCursorUV(glm::vec2 viewportPos, glm::vec2 viewportSize);
         void handleMeshBrush();
+        void handleSplineTool();
     };
 }

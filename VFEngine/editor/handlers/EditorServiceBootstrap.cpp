@@ -65,6 +65,7 @@
 #include "impl/save/ConfigService.hpp"
 #include "impl/editor/EditorSettingsService.hpp"
 #include "impl/editor/EditorKeybindingServiceImpl.hpp"
+#include "impl/terrain/SplineTerrainServiceImpl.hpp"
 
 namespace handlers
 {
@@ -207,6 +208,7 @@ namespace handlers
         caveBrushService = std::make_shared<services::CaveBrushServiceImpl>();
         terrainRaycastService = std::make_shared<services::TerrainRaycastServiceImpl>(
             bootstrap->getTerrainRaycastProvider());
+        splineTerrainService = std::make_shared<services::SplineTerrainServiceImpl>();
     }
 
     void EditorHandler::createOceanServices()
@@ -335,6 +337,7 @@ namespace handlers
         configService->registerEventHandlers(events::EventDispatcher::instance());
         editorSettingsService->registerEventHandlers(events::EventDispatcher::instance());
         editorKeybindingService->registerEventHandlers();
+        splineTerrainService->registerEventHandlers();
 
         events::render::LoadBillboardAtlasCommand atlasCmd;
         atlasCmd.atlasPath = resource::PathResolver::resolveEnginePath("../../resources/editor/billboardAtlas.vfImage");

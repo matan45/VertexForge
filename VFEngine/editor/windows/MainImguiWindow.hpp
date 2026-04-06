@@ -18,6 +18,7 @@
 #include "vfx/VFXDebugWindow.hpp"
 #include "animation/AnimationDebugWindow.hpp"
 #include "terrain/SculptToolPanel.hpp"
+#include "terrain/SplineToolPanel.hpp"
 #include "terrain/PaintToolPanel.hpp"
 #include "terrain/HoleToolPanel.hpp"
 #include "terrain/CaveToolPanel.hpp"
@@ -74,6 +75,7 @@ namespace windows
         VFXDebugWindow vfxDebugWindow;
         AnimationDebugWindow animationDebugWindow;
         SculptToolPanel sculptToolPanel;
+        SplineToolPanel splineToolPanel;
         PaintToolPanel paintToolPanel;
         HoleToolPanel holeToolPanel;
         CaveToolPanel caveToolPanel;

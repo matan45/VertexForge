@@ -117,6 +117,7 @@ IF EXIST ..\..\bin\Terrain\Release\x64\Terrain.dll\ (xcopy /Q /E /Y /I ..\..\bin
     <ClInclude Include="terrain\HoleBrushApplicator.hpp" />
     <ClInclude Include="terrain\HoleBrushTypes.hpp" />
     <ClInclude Include="terrain\PaintBrushTypes.hpp" />
+    <ClInclude Include="terrain\SplineTypes.hpp" />
     <ClInclude Include="terrain\TerrainCompression.hpp" />
     <ClInclude Include="terrain\TerrainExport.hpp" />
     <ClInclude Include="terrain\TerrainFileCache.hpp" />
