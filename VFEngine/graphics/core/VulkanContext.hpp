@@ -17,7 +17,7 @@ namespace core {
 		inline static std::unique_ptr<SwapChain> swapChain;
 		inline static const window::Window* window;
 	public:
-		static void init(const window::Window* windowGlfw);
+		static void init(const window::Window* windowGlfw, bool enablePipelineCache = false);
 		static void cleanup();
 
 		static std::unique_ptr<Device>& getDevice() {

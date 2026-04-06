@@ -130,7 +130,7 @@ namespace core
         explicit Device(const window::Window* window);
         ~Device();
 
-        void init();
+        void init(bool enablePipelineCache = false);
         void cleanUp();
 
         const vk::SurfaceKHR& getSurface() const { return surface; }

@@ -24,7 +24,7 @@ namespace core {
 		resource::ResourceManager::init();
 		controllers::WindowController::init(imguiEnabled);
 		mainWindow = controllers::WindowController::getWindow();
-		controllers::Graphics::createContext(mainWindow);
+		controllers::Graphics::createContext(mainWindow, !imguiEnabled);
 		renderController = std::make_unique<controllers::RenderController>(imguiEnabled);
 	}
 

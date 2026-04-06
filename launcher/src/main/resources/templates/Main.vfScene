@@ -1,5 +1,12 @@
 {
   "audioSettings": {
+    "buses": [],
+    "distanceFilter": {
+      "defaultIntensity": 1.0,
+      "defaultMaxDistance": 100.0,
+      "defaultStartDistance": 10.0,
+      "enabled": true
+    },
     "distanceModel": {
       "defaultRolloffFactor": 1.0,
       "model": "inverseDistanceClamped"
@@ -8,7 +15,8 @@
       "dopplerFactor": 1.0,
       "masterVolume": 1.0,
       "speedOfSound": 343.29998779296875
-    }
+    },
+    "mixSnapshots": []
   },
   "physicsSettings": {
     "collisionLayers": [
@@ -80,12 +88,103 @@
     }
   },
   "renderSettings": {
+    "animationLOD": {
+      "lod0Distance": 25.0,
+      "lod0Interval": 1,
+      "lod1Distance": 75.0,
+      "lod1Interval": 2,
+      "lod2Distance": 150.0,
+      "lod2Interval": 6,
+      "lod3Distance": 300.0,
+      "maxStreamingInitPerFrame": 4
+    },
+    "atmosphere": {
+      "aerialIntensity": 1.0,
+      "aerialMaxDist": 100000.0,
+      "atmosphereRadius": 6460000.0,
+      "cycleSpeed": 1.0,
+      "dayNightEnabled": false,
+      "enabled": false,
+      "groundAlbedo": [
+        0.30000001192092896,
+        0.30000001192092896,
+        0.30000001192092896
+      ],
+      "mieAbsorption": 4.399999852466863e-06,
+      "mieAnisotropy": 0.800000011920929,
+      "mieDensityExpScale": -0.0008333333535119891,
+      "mieScattering": 3.9960000322025735e-06,
+      "moonAngularRadius": 0.008999999612569809,
+      "moonAzimuth": 180.0,
+      "moonBrightness": 0.029999999329447746,
+      "moonElevation": -45.0,
+      "moonPhaseOffset": 0.0,
+      "nightSkyBrightness": 0.0020000000949949026,
+      "ozoneAbsorption": [
+        6.500000040432496e-07,
+        1.8810000028679497e-06,
+        8.500000348021786e-08
+      ],
+      "ozoneCenterAlt": 25000.0,
+      "ozoneWidth": 15000.0,
+      "planetRadius": 6360000.0,
+      "rayleighDensityExpScale": -0.0001250000059371814,
+      "rayleighScattering": [
+        5.802000032417709e-06,
+        1.3558000318880659e-05,
+        3.310000101919286e-05
+      ],
+      "starBrightness": 1.5,
+      "starDensity": 0.006000000052154064,
+      "starTwinkleSpeed": 1.0,
+      "sunAngularRadius": 0.009349999949336052,
+      "sunAzimuth": 0.0,
+      "sunElevation": 45.0,
+      "sunIrradiance": [
+        1.4739999771118164,
+        1.8503999710083008,
+        1.9119800329208374
+      ],
+      "timeOfDay": 12.0
+    },
+    "cloud": {
+      "ambientIntensity": 0.44999998807907104,
+      "cloudColorTint": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "cloudMaxAltitude": 4000.0,
+      "cloudMinAltitude": 1500.0,
+      "cloudType": 0.699999988079071,
+      "curlStrength": 0.30000001192092896,
+      "detailScale": 0.003000000026077032,
+      "enabled": false,
+      "erosionStrength": 0.44999998807907104,
+      "globalCoverage": 0.44999998807907104,
+      "globalDensity": 0.5,
+      "lightAbsorption": 0.75,
+      "lightMarchSteps": 6,
+      "maxMarchSteps": 96,
+      "multiScatterBoost": 0.30000001192092896,
+      "phaseBackward": -0.30000001192092896,
+      "phaseBlend": 0.5,
+      "phaseForward": 0.800000011920929,
+      "shapeScale": 0.0003000000142492354,
+      "silverLiningIntensity": 0.5,
+      "silverLiningSpread": 5.0,
+      "temporalBlendFactor": 0.800000011920929,
+      "windDirectionDeg": 45.0,
+      "windSpeed": 25.0
+    },
     "culling": {
       "frustumCullingEnabled": true,
       "globalLodBias": 0.0,
+      "lodCrossfadeEnabled": true,
       "lodSelectionEnabled": true,
       "meshletBackfaceCullingEnabled": true,
       "meshletFrustumCullingEnabled": true,
+      "meshletOcclusionCullingEnabled": true,
       "occlusionCullingEnabled": true,
       "terrainFrustumCullingEnabled": true,
       "terrainMeshletCullingEnabled": true
@@ -101,7 +200,40 @@
       "vfxDistance": 300.0,
       "waterDistance": 2000.0
     },
+    "gi": {
+      "cascadeMultiplier": 2.0,
+      "enabled": false,
+      "farFieldCascadeCount": 2,
+      "farFieldEnabled": false,
+      "farFieldMaxDistance": 500.0,
+      "farFieldProbeSpacing": 32.0,
+      "farFieldRaysPerUpdate": 32,
+      "farFieldUpdateRate": 0.10000000149011612,
+      "maxProbeDistance": 200.0,
+      "probeRaysPerUpdate": 64,
+      "probeSpacing": 2.0,
+      "probeUpdateRate": 0.25,
+      "quality": 0,
+      "ssgiEnabled": false,
+      "ssgiHalfResolution": true,
+      "ssgiIntensity": 0.5,
+      "ssgiMaxDistance": 100.0,
+      "ssgiRadius": 2.0,
+      "ssgiSampleCount": 8,
+      "ssgiTemporalBlend": 0.10000000149011612,
+      "temporalBlendFactor": 0.949999988079071
+    },
     "postProcess": {
+      "autoExposure": {
+        "adaptSpeedDown": 1.0,
+        "adaptSpeedUp": 3.0,
+        "enabled": false,
+        "exposureCompensation": 0.0,
+        "highPercentile": 0.8999999761581421,
+        "lowPercentile": 0.10000000149011612,
+        "maxExposure": 10.0,
+        "minExposure": 0.10000000149011612
+      },
       "bloom": {
         "enabled": false,
         "intensity": 0.5,
@@ -112,6 +244,25 @@
       "chromaticAberration": {
         "enabled": false,
         "intensity": 0.004999999888241291
+      },
+      "colorGrading": {
+        "colorTemperature": 6500.0,
+        "colorTint": 0.0,
+        "enabled": false,
+        "gainB": 1.0,
+        "gainG": 1.0,
+        "gainR": 1.0,
+        "gammaB": 1.0,
+        "gammaG": 1.0,
+        "gammaR": 1.0,
+        "liftB": 0.0,
+        "liftG": 0.0,
+        "liftR": 0.0,
+        "lutBlendFactor": 0.0,
+        "lutIntensity": 1.0,
+        "primaryLutPath": "",
+        "saturation": 1.0,
+        "secondaryLutPath": ""
       },
       "depthOfField": {
         "enabled": false,
@@ -142,18 +293,13 @@
         "intensity": 0.10000000149011612,
         "size": 1.600000023841858
       },
-      "fxaa": {
-        "edgeThreshold": 0.125,
-        "edgeThresholdMin": 0.031199999153614044,
-        "enabled": false,
-        "quality": "medium"
-      },
       "ssao": {
         "bias": 0.02500000037252903,
         "enabled": false,
         "intensity": 1.0,
         "kernelSize": 32,
         "power": 2.0,
+        "quality": 1,
         "radius": 0.5
       },
       "toneMapping": {
@@ -164,6 +310,25 @@
         "mode": "aces",
         "shoulder": 0.0,
         "toe": 0.0
+      },
+      "underwater": {
+        "absorptionB": 0.019999999552965164,
+        "absorptionG": 0.07999999821186066,
+        "absorptionR": 0.44999998807907104,
+        "causticScale": 50.0,
+        "causticSpeed": 0.30000001192092896,
+        "causticStrength": 0.5,
+        "chromaticStrength": 0.003000000026077032,
+        "enabled": false,
+        "fogColor": [
+          0.0,
+          0.15000000596046448,
+          0.30000001192092896
+        ],
+        "fogDensity": 0.15000000596046448,
+        "maxFogDistance": 100.0,
+        "meniscusDistortion": 0.029999999329447746,
+        "meniscusWidth": 0.019999999552965164
       },
       "vignette": {
         "enabled": false,
@@ -181,38 +346,60 @@
           0.8500000238418579,
           0.8999999761581421
         ],
+        "giInjectionIntensity": 1.0,
         "heightFogDensity": 0.05000000074505806,
         "heightFogFalloff": 0.10000000149011612,
         "heightFogOffset": 0.0,
         "intensity": 1.0,
         "maxDistance": 500.0,
+        "noiseEnabled": false,
+        "noiseIntensity": 0.5,
+        "noiseOctaves": 3,
+        "noiseScale": 0.009999999776482582,
+        "noiseSpeed": 0.05000000074505806,
         "quality": "medium",
         "scatteringCoefficient": 0.5,
         "temporalBlendFactor": 0.8999999761581421,
         "uniformDensity": 0.019999999552965164
       }
     },
+    "rtShadows": {
+      "depthThreshold": 0.009999999776482582,
+      "enabled": true,
+      "maxRayDistance": 500.0,
+      "normalBias": 0.05000000074505806,
+      "normalThreshold": 0.8999999761581421,
+      "rayTMin": 0.009999999776482582,
+      "spatialPasses": 3,
+      "spatialPhiDepth": 0.004999999888241291,
+      "spatialPhiNormal": 32.0,
+      "temporalBlend": 0.8999999761581421
+    },
     "shadows": {
-      "cascadeCount": 4,
-      "cascadeSplitMode": "practical",
       "enabled": true,
       "normalBias": 0.019999999552965164,
-      "pcfKernelSize": "x3",
+      "pointResolution": 512,
       "quality": "high",
       "shadowBias": 0.004999999888241291,
       "shadowIntensity": 0.5,
       "slopeBias": 1.5,
-      "softShadowsEnabled": true
+      "softShadows": true,
+      "spotResolution": 1024
     },
     "terrain": {
       "enabled": true,
       "errorThreshold": 2.0,
       "lodBias": 1.0,
-      "shadowLOD": 2,
       "textureScale": 0.10000000149011612
     },
     "transparency": {
       "wboitEnabled": true
+    },
+    "vfxLOD": {
+      "lod0Distance": 50.0,
+      "lod1Distance": 100.0,
+      "lod2Distance": 200.0,
+      "transitionZone": 10.0
     }
   },
   "root": {
@@ -221,6 +408,7 @@
     "isActive": true,
     "name": "Root",
     "transform": {
+      "isStatic": true,
       "position": [
         0.0,
         0.0,
@@ -237,7 +425,7 @@
         1.0
       ]
     },
-    "uuid": 15536976818760133102
+    "uuid": 12897697530608323519
   },
-  "version": "1.1"
+  "version": "1.0"
 }
