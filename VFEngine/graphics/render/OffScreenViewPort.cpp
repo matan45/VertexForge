@@ -762,8 +762,18 @@ namespace render
         return renderPassHandler->getTerrainHitResult();
     }
 
-    void OffScreenViewPort::setBrushOverlayParams(float radius, float falloff, float shape)
+    void OffScreenViewPort::setBrushOverlayParams(float radius, float falloff, float shape, float stampRotation)
     {
-        renderPassHandler->setBrushOverlayParams(radius, falloff, shape);
+        renderPassHandler->setBrushOverlayParams(radius, falloff, shape, stampRotation);
+    }
+
+    void OffScreenViewPort::setStampOverlay(vk::Buffer buffer, uint32_t width, uint32_t height, float rotation)
+    {
+        renderPassHandler->setStampOverlay(buffer, width, height, rotation);
+    }
+
+    void OffScreenViewPort::clearStampOverlay()
+    {
+        renderPassHandler->clearStampOverlay();
     }
 }

@@ -25,14 +25,22 @@ namespace render::gpudriven
         uint32_t verticesPerSide;
         uint32_t falloffType;
         uint32_t shapeType;
-        uint32_t brushType;     // 0=Raise, 1=Lower, 2=Smooth, 3=Flatten, 4=Noise
+        uint32_t brushType;     // 0=Raise, 1=Lower, 2=Smooth, 3=Flatten, 4=Noise, 5=Stamp
         float deltaTime;
         float targetHeight;
         float minHeight;
         float maxHeight;
         uint32_t invertFlag;    // 0 or 1
+        uint32_t stampWidth;
+        uint32_t stampHeight;
+        float stampRotation;    // radians
+        float stampScale;
+        float talusAngle;       // degrees, for erosion brush
+        float terraceStepHeight;
+        float terraceSharpness;
+        float _padTerrace;
     };
-    static_assert(sizeof(BrushComputePushConstants) == 64, "BrushComputePushConstants must be 64 bytes");
+    static_assert(sizeof(BrushComputePushConstants) == 96, "BrushComputePushConstants must be 96 bytes");
 
     class BrushComputePipeline
     {
@@ -59,6 +67,13 @@ namespace render::gpudriven
         vk::Buffer stagingReadbackBuffer;
         core::VulkanAllocation stagingReadbackAllocation;
 
+        // Stamp heightmap SSBO
+        vk::Buffer stampBuffer;
+        core::VulkanAllocation stampAllocation;
+        uint32_t stampWidth = 0;
+        uint32_t stampHeight = 0;
+        bool hasStampData = false;
+
         // Command pool for synchronous compute dispatches
         vk::CommandPool computeCommandPool;
 
@@ -83,6 +98,17 @@ namespace render::gpudriven
         // Returns true on success, heightData is modified in-place.
         bool applyBrush(std::vector<float>& heightData,
                         const BrushComputePushConstants& constants);
+
+        // Upload stamp heightmap data for stamp brush
+        void setStampData(const std::vector<float>& heights,
+                          uint32_t width, uint32_t height);
+
+        void clearStampData();
+
+        vk::Buffer getStampBuffer() const { return stampBuffer; }
+        uint32_t getStampWidth() const { return stampWidth; }
+        uint32_t getStampHeight() const { return stampHeight; }
+        bool getHasStampData() const { return hasStampData; }
 
     private:
         void createDescriptorSetLayout();

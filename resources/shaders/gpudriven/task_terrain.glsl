@@ -62,6 +62,11 @@ layout(push_constant) uniform PushConstants {
     uint hiZMipLevels;             // Mip levels in the Hi-Z pyramid (0 = disabled)
     float _pad3;                   // Align mat4 to 16-byte boundary
     mat4 viewProjection;
+    // Stamp overlay
+    uint stampWidth;
+    uint stampHeight;
+    float stampRotation;
+    float _padStamp;
 } pc;
 
 const uint TERRAIN_CULL_FRUSTUM_BIT = 0x100u;

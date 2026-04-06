@@ -40,6 +40,7 @@
 #include "events/editor/EditorModeEvents.hpp"
 #include "events/scripting/ScriptingEvents.hpp"
 #include "events/editor/SculptModeEvents.hpp"
+#include "events/terrain/SplineTerrainEvents.hpp"
 #include "events/project/ExportEvents.hpp"
 #include "events/scene/ScenePersistenceEvents.hpp"
 #include <imgui.h>

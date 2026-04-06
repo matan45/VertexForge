@@ -13,6 +13,11 @@ layout(std430, set = 0, binding = 1) writeonly buffer HeightmapOut
     float heightsOut[];
 };
 
+layout(std430, set = 0, binding = 2) readonly buffer StampData
+{
+    float stampHeights[];
+};
+
 layout(push_constant) uniform PushConstants
 {
     vec2 brushCenter;
@@ -23,12 +28,20 @@ layout(push_constant) uniform PushConstants
     uint verticesPerSide;
     uint falloffType;
     uint shapeType;
-    uint brushType;     // 0=Raise, 1=Lower, 2=Smooth, 3=Flatten, 4=Noise
+    uint brushType;     // 0=Raise, 1=Lower, 2=Smooth, 3=Flatten, 4=Noise, 5=Stamp, 6=Erosion, 7=Terrace
     float deltaTime;
     float targetHeight;
     float minHeight;
     float maxHeight;
     uint invertFlag;    // 0 or 1
+    uint stampWidth;
+    uint stampHeight;
+    float stampRotation;
+    float stampScale;
+    float talusAngle;
+    float terraceStepHeight;
+    float terraceSharpness;
+    float _padTerrace;
 } pc;
 
 float applyFalloff(float t, uint type)
@@ -77,7 +90,12 @@ void main()
     vec2 delta = worldPos - pc.brushCenter;
 
     float dist;
-    if (pc.shapeType == 0)
+    if (pc.brushType == 5)
+    {
+        // Stamp: always use square bounds so the full image is visible
+        dist = max(abs(delta.x), abs(delta.y)) / pc.brushRadius;
+    }
+    else if (pc.shapeType == 0)
     {
         dist = length(delta) / pc.brushRadius;
     }
@@ -160,6 +178,121 @@ void main()
             newHeight += direction * noiseVal * influence * pc.brushStrength * pc.deltaTime;
             break;
         }
+
+        case 5: // Stamp
+        {
+            if (pc.stampWidth == 0 || pc.stampHeight == 0)
+            {
+                break;
+            }
+
+            // Compute offset from brush center in world space
+            vec2 offset = worldPos - pc.brushCenter;
+
+            // Apply rotation (rotate offset into stamp-local space)
+            float cosR = cos(pc.stampRotation);
+            float sinR = sin(pc.stampRotation);
+            vec2 rotatedOffset = vec2(
+                offset.x * cosR + offset.y * sinR,
+                -offset.x * sinR + offset.y * cosR
+            );
+
+            // Map to stamp UV [0, 1]
+            vec2 stampUV = rotatedOffset / pc.brushRadius + 0.5;
+
+            if (stampUV.x < 0.0 || stampUV.x > 1.0 || stampUV.y < 0.0 || stampUV.y > 1.0)
+            {
+                break;
+            }
+
+            // Bilinear sample the stamp SSBO
+            float fx = stampUV.x * float(pc.stampWidth - 1);
+            float fz = stampUV.y * float(pc.stampHeight - 1);
+            uint sx0 = uint(fx);
+            uint sz0 = uint(fz);
+            uint sx1 = min(sx0 + 1, pc.stampWidth - 1);
+            uint sz1 = min(sz0 + 1, pc.stampHeight - 1);
+            float fracX = fx - float(sx0);
+            float fracZ = fz - float(sz0);
+
+            float h00 = stampHeights[sz0 * pc.stampWidth + sx0];
+            float h10 = stampHeights[sz0 * pc.stampWidth + sx1];
+            float h01 = stampHeights[sz1 * pc.stampWidth + sx0];
+            float h11 = stampHeights[sz1 * pc.stampWidth + sx1];
+
+            float stampValue = mix(mix(h00, h10, fracX), mix(h01, h11, fracX), fracZ);
+
+            // One-shot application: stampValue [0,1] scaled to world height
+            float direction = (pc.invertFlag != 0) ? -1.0 : 1.0;
+            newHeight += direction * stampValue * influence * pc.stampScale;
+            break;
+        }
+
+        case 6: // Erosion (thermal)
+        {
+            float talusThreshold = tan(radians(pc.talusAngle)) * pc.vertexSpacing;
+            float targetSum = 0.0;
+            float violationCount = 0.0;
+
+            for (int dz = -1; dz <= 1; ++dz)
+            {
+                for (int dx = -1; dx <= 1; ++dx)
+                {
+                    if (dx == 0 && dz == 0) continue;
+
+                    int nx = int(x) + dx;
+                    int nz = int(z) + dz;
+
+                    if (nx >= 0 && nx < int(pc.verticesPerSide) &&
+                        nz >= 0 && nz < int(pc.verticesPerSide))
+                    {
+                        float neighborHeight = heightsIn[uint(nz) * pc.verticesPerSide + uint(nx)];
+                        float diff = currentHeight - neighborHeight;
+
+                        if (diff > talusThreshold)
+                        {
+                            // Target: the max height that satisfies the talus constraint
+                            targetSum += neighborHeight + talusThreshold;
+                            violationCount += 1.0;
+                        }
+                    }
+                }
+            }
+
+            if (violationCount > 0.0)
+            {
+                float avgTarget = targetSum / violationCount;
+                float erosionFactor = influence * pc.brushStrength * pc.deltaTime;
+                erosionFactor = clamp(erosionFactor, 0.0, 1.0);
+
+                if (pc.invertFlag != 0)
+                {
+                    // Invert: build up (raise vertices that are too low relative to neighbors)
+                    newHeight = mix(currentHeight, max(currentHeight, avgTarget), erosionFactor);
+                }
+                else
+                {
+                    // Normal: erode down toward the stable height
+                    newHeight = mix(currentHeight, min(currentHeight, avgTarget), erosionFactor);
+                }
+            }
+            break;
+        }
+
+        case 7: // Terrace
+        {
+            if (pc.terraceStepHeight > 0.0)
+            {
+                float terraceHeight = round(currentHeight / pc.terraceStepHeight) * pc.terraceStepHeight;
+                float terraceFactor = pc.terraceSharpness * influence * pc.brushStrength * pc.deltaTime;
+                terraceFactor = clamp(terraceFactor, 0.0, 1.0);
+                newHeight = mix(currentHeight, terraceHeight, terraceFactor);
+            }
+            break;
+        }
+
+        case 8: // Ramp (handled CPU-side, no GPU dispatch)
+            break;
     }
 
     heightsOut[idx] = clamp(newHeight, pc.minHeight, pc.maxHeight);

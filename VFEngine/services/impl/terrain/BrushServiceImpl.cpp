@@ -79,6 +79,103 @@ namespace services
                 return getBrushType();
             });
 
+        dispatcher.registerCommandHandler<events::brush::ClearStampImageCommand>(
+            [this](const events::brush::ClearStampImageCommand&)
+            {
+                stampData = nullptr;
+                stampImagePath.clear();
+                stampRotation = 0.0f;
+                stampScale = 1.0f;
+                currentParams.stampImagePath.clear();
+                currentParams.stampRotation = 0.0f;
+                currentParams.stampScale = 1.0f;
+                publishParamsChanged();
+
+                events::brush::StampImageChangedNotification notification;
+                notification.filePath = "";
+                notification.loaded = false;
+                events::EventDispatcher::instance().publish(notification);
+            });
+
+        dispatcher.registerCommandHandler<events::brush::SetStampImageCommand>(
+            [this](const events::brush::SetStampImageCommand& cmd)
+            {
+                stampImagePath = cmd.filePath;
+                stampData = terrain::HeightmapLoader::load(cmd.filePath);
+
+                currentParams.stampImagePath = cmd.filePath;
+                publishParamsChanged();
+
+                events::brush::StampImageChangedNotification notification;
+                notification.filePath = cmd.filePath;
+                notification.loaded = (stampData != nullptr && stampData->isValid());
+                events::EventDispatcher::instance().publish(notification);
+            });
+
+        dispatcher.registerCommandHandler<events::brush::SetStampRotationCommand>(
+            [this](const events::brush::SetStampRotationCommand& cmd)
+            {
+                stampRotation = cmd.rotation;
+                currentParams.stampRotation = cmd.rotation;
+                publishParamsChanged();
+            });
+
+        dispatcher.registerCommandHandler<events::brush::SetStampScaleCommand>(
+            [this](const events::brush::SetStampScaleCommand& cmd)
+            {
+                stampScale = cmd.scale;
+                currentParams.stampScale = cmd.scale;
+                publishParamsChanged();
+            });
+
+        dispatcher.registerCommandHandler<events::brush::SetStampModeCommand>(
+            [this](const events::brush::SetStampModeCommand& cmd)
+            {
+                currentParams.stampSubtract = cmd.subtract;
+                publishParamsChanged();
+            });
+
+        dispatcher.registerCommandHandler<events::brush::SetTalusAngleCommand>(
+            [this](const events::brush::SetTalusAngleCommand& cmd)
+            {
+                currentParams.talusAngle = cmd.angle;
+                publishParamsChanged();
+            });
+
+        dispatcher.registerCommandHandler<events::brush::SetTerraceStepHeightCommand>(
+            [this](const events::brush::SetTerraceStepHeightCommand& cmd)
+            {
+                currentParams.terraceStepHeight = cmd.stepHeight;
+                publishParamsChanged();
+            });
+
+        dispatcher.registerCommandHandler<events::brush::SetTerraceSharpnessCommand>(
+            [this](const events::brush::SetTerraceSharpnessCommand& cmd)
+            {
+                currentParams.terraceSharpness = cmd.sharpness;
+                publishParamsChanged();
+            });
+
+        dispatcher.registerCommandHandler<events::brush::SetRampWidthCommand>(
+            [this](const events::brush::SetRampWidthCommand& cmd)
+            {
+                currentParams.rampWidth = cmd.width;
+                publishParamsChanged();
+            });
+
+        dispatcher.registerCommandHandler<events::brush::SetRampFalloffCommand>(
+            [this](const events::brush::SetRampFalloffCommand& cmd)
+            {
+                currentParams.rampFalloff = cmd.falloff;
+                publishParamsChanged();
+            });
+
+        dispatcher.registerQueryHandler<events::brush::GetStampDataQuery>(
+            [this](const events::brush::GetStampDataQuery&)
+            {
+                return stampData;
+            });
+
         sculptModeToken = dispatcher.subscribe<events::sculpt::SculptModeChangedNotification>(
             [this](const events::sculpt::SculptModeChangedNotification& n)
             {

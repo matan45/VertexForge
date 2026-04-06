@@ -232,6 +232,7 @@ namespace render
         float brushOverlayRadius_ = 0.0f;
         float brushOverlayFalloff_ = 0.0f;
         float brushOverlayShape_ = 0.0f;
+        float brushOverlayStampRotation_ = 0.0f;
 
         struct RegisteredRenderHook {
             plugin::RenderHookHandle handle;
@@ -357,8 +358,10 @@ namespace render
         void clearRaycastCursor();
         terrain::TerrainHitResult getTerrainHitResult() const;
 
-        void setBrushOverlayParams(float radius, float falloff, float shape);
+        void setBrushOverlayParams(float radius, float falloff, float shape, float stampRotation = 0.0f);
         void updateBrushOverlayFromHitResult();
+        void setStampOverlay(vk::Buffer buffer, uint32_t width, uint32_t height, float rotation);
+        void clearStampOverlay();
 
         void setVFXRuntimeProvider(services::IVFXRuntimeProvider* provider);
 

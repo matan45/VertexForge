@@ -153,9 +153,9 @@ namespace controllers
         return offScreen->getTerrainHitResult();
     }
 
-    void OffScreenController::setBrushOverlayParams(float radius, float falloff, float shape)
+    void OffScreenController::setBrushOverlayParams(float radius, float falloff, float shape, float stampRotation)
     {
-        offScreen->setBrushOverlayParams(radius, falloff, shape);
+        offScreen->setBrushOverlayParams(radius, falloff, shape, stampRotation);
     }
 
     bool OffScreenController::applyBrushGPU(
@@ -183,7 +183,54 @@ namespace controllers
         constants.minHeight = params.minHeight;
         constants.maxHeight = params.maxHeight;
         constants.invertFlag = params.invert ? 1u : 0u;
+        constants.stampWidth = params.stampWidth;
+        constants.stampHeight = params.stampHeight;
+        constants.stampRotation = params.stampRotation;
+        constants.stampScale = params.stampScale;
+        constants.talusAngle = params.talusAngle;
+        constants.terraceStepHeight = params.terraceStepHeight;
+        constants.terraceSharpness = params.terraceSharpness;
+        constants._padTerrace = 0.0f;
 
         return brushComputePipeline->applyBrush(heightData, constants);
+    }
+
+    void OffScreenController::setStampData(
+        const std::vector<float>& heights,
+        uint32_t width, uint32_t height)
+    {
+        if (!brushComputePipeline)
+        {
+            brushComputePipeline = std::make_unique<render::gpudriven::BrushComputePipeline>(device);
+            brushComputePipeline->init();
+        }
+
+        brushComputePipeline->setStampData(heights, width, height);
+
+        // Forward stamp buffer to terrain overlay rendering
+        offScreen->setStampOverlay(
+            brushComputePipeline->getStampBuffer(),
+            brushComputePipeline->getStampWidth(),
+            brushComputePipeline->getStampHeight(),
+            0.0f); // rotation is set via push constants at render time
+    }
+
+    void OffScreenController::clearStampData()
+    {
+        if (brushComputePipeline)
+        {
+            brushComputePipeline->clearStampData();
+        }
+        offScreen->clearStampOverlay();
+    }
+
+    void OffScreenController::setStampOverlay(vk::Buffer buffer, uint32_t width, uint32_t height, float rotation)
+    {
+        offScreen->setStampOverlay(buffer, width, height, rotation);
+    }
+
+    void OffScreenController::clearStampOverlay()
+    {
+        offScreen->clearStampOverlay();
     }
 }

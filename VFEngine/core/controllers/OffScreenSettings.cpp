@@ -63,9 +63,9 @@ namespace controllers {
 		return offScreenController->getTerrainHitResult();
 	}
 
-	void OffScreen::setBrushOverlayParams(float radius, float falloff, float shape)
+	void OffScreen::setBrushOverlayParams(float radius, float falloff, float shape, float stampRotation)
 	{
-		offScreenController->setBrushOverlayParams(radius, falloff, shape);
+		offScreenController->setBrushOverlayParams(radius, falloff, shape, stampRotation);
 	}
 
 	bool OffScreen::applyBrushGPU(
@@ -73,6 +73,18 @@ namespace controllers {
 		const terrain::BrushGPUParams& params)
 	{
 		return offScreenController->applyBrushGPU(heightData, params);
+	}
+
+	void OffScreen::setStampData(
+		const std::vector<float>& heights,
+		uint32_t width, uint32_t height)
+	{
+		offScreenController->setStampData(heights, width, height);
+	}
+
+	void OffScreen::clearStampData()
+	{
+		offScreenController->clearStampData();
 	}
 
 	render::RenderPassHandler* OffScreen::getRenderPassHandler() const

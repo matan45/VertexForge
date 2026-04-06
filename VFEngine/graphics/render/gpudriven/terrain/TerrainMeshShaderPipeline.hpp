@@ -36,6 +36,11 @@ namespace render::gpudriven
         uint32_t hiZMipLevels;     // Mip levels in the Hi-Z pyramid (0 = disabled)
         float _pad3;               // Align mat4 to 16-byte boundary (offset 64)
         glm::mat4 viewProjection; // CPU-precomputed view-projection (matches raycast invViewProjection)
+        // Stamp overlay (after mat4, offset 128)
+        uint32_t stampWidth;
+        uint32_t stampHeight;
+        float stampRotation;     // radians
+        float _padStamp;
     };
 
     // Terrain culling bits (same as regular mesh shader bits)
@@ -128,6 +133,15 @@ namespace render::gpudriven
         float terrainMaxDrawDistSq = 0.0f;
         glm::mat4 viewProjection{1.0f};
 
+        // Stamp overlay
+        vk::Buffer stampDummyBuffer;
+        core::VulkanAllocation stampDummyAllocation;
+        vk::Buffer stampOverlayBuffer;
+        uint32_t stampOverlayWidth = 0;
+        uint32_t stampOverlayHeight = 0;
+        float stampOverlayRotation = 0.0f;
+        bool stampOverlayDirty = false;
+
     public:
         explicit TerrainMeshShaderPipeline(core::Device& device, core::SwapChain& swapChain);
         ~TerrainMeshShaderPipeline();
@@ -210,6 +224,29 @@ namespace render::gpudriven
             brushWorldRadius = worldRadius;
             brushFalloff = falloff;
             brushShape = shape;
+        }
+
+        void setStampOverlay(vk::Buffer buffer, uint32_t width, uint32_t height, float rotation)
+        {
+            stampOverlayBuffer = buffer;
+            stampOverlayWidth = width;
+            stampOverlayHeight = height;
+            stampOverlayRotation = rotation;
+            stampOverlayDirty = true;
+        }
+
+        void clearStampOverlay()
+        {
+            stampOverlayBuffer = nullptr;
+            stampOverlayWidth = 0;
+            stampOverlayHeight = 0;
+            stampOverlayRotation = 0.0f;
+            stampOverlayDirty = true;
+        }
+
+        void setStampRotation(float rotation)
+        {
+            stampOverlayRotation = rotation;
         }
 
         void setViewProjection(const glm::mat4& viewProj)

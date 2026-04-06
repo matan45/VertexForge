@@ -185,6 +185,7 @@
     <ClInclude Include="events\terrain\OceanEvents.hpp" />
     <ClInclude Include="events\terrain\PaintBrushEvents.hpp" />
     <ClInclude Include="events\terrain\PaintModeEvents.hpp" />
+    <ClInclude Include="events\terrain\SplineTerrainEvents.hpp" />
     <ClInclude Include="events\terrain\TerrainEvents.hpp" />
     <ClInclude Include="events\terrain\TerrainRaycastEvents.hpp" />
     <ClInclude Include="events\threading\TaskGraphEvents.hpp" />
@@ -289,6 +290,7 @@
     <ClInclude Include="impl\terrain\HoleModeServiceImpl.hpp" />
     <ClInclude Include="impl\terrain\PaintBrushServiceImpl.hpp" />
     <ClInclude Include="impl\terrain\PaintModeServiceImpl.hpp" />
+    <ClInclude Include="impl\terrain\SplineTerrainServiceImpl.hpp" />
     <ClInclude Include="impl\terrain\TerrainRaycastServiceImpl.hpp" />
     <ClInclude Include="impl\threading\FrameTaskGraph.hpp" />
     <ClInclude Include="impl\vegetation\GrassServiceImpl.hpp" />
@@ -346,6 +348,7 @@
     <ClInclude Include="interfaces\terrain\IOceanService.hpp" />
     <ClInclude Include="interfaces\terrain\IPaintBrushService.hpp" />
     <ClInclude Include="interfaces\terrain\IPaintModeService.hpp" />
+    <ClInclude Include="interfaces\terrain\ISplineTerrainService.hpp" />
     <ClInclude Include="interfaces\terrain\ITerrainRaycastService.hpp" />
     <ClInclude Include="interfaces\terrain\ITerrainService.hpp" />
     <ClInclude Include="interfaces\vegetation\IGrassService.hpp" />
@@ -496,6 +499,7 @@
     <ClCompile Include="impl\terrain\HoleModeServiceImpl.cpp" />
     <ClCompile Include="impl\terrain\PaintBrushServiceImpl.cpp" />
     <ClCompile Include="impl\terrain\PaintModeServiceImpl.cpp" />
+    <ClCompile Include="impl\terrain\SplineTerrainServiceImpl.cpp" />
     <ClCompile Include="impl\terrain\TerrainRaycastServiceImpl.cpp" />
     <ClCompile Include="impl\threading\FrameTaskGraph.cpp" />
     <ClCompile Include="impl\vegetation\GrassServiceImpl.cpp" />

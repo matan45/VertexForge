@@ -16,6 +16,7 @@ namespace services
         bool caveModeActive = false;
         bool vegBrushModeActive = false;
         bool meshBrushModeActive = false;
+        bool splineModeActive = false;
         ::events::SubscriptionToken sculptModeToken;
         ::events::SubscriptionToken paintModeToken;
         ::events::SubscriptionToken holeModeToken;
@@ -28,6 +29,7 @@ namespace services
         ::events::SubscriptionToken vegBrushParamsToken;
         ::events::SubscriptionToken meshBrushModeToken;
         ::events::SubscriptionToken meshBrushParamsToken;
+        ::events::SubscriptionToken splineModeToken;
 
     public:
         explicit TerrainRaycastServiceImpl(ITerrainRaycastProvider* provider);

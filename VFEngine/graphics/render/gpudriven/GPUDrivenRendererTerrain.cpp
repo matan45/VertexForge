@@ -364,11 +364,28 @@ namespace render::gpudriven
         );
     }
 
-    void GPUDrivenRenderer::setBrushOverlay(const glm::vec3& worldPos, float worldRadius, float falloff, float shape)
+    void GPUDrivenRenderer::setBrushOverlay(const glm::vec3& worldPos, float worldRadius, float falloff, float shape, float stampRotation)
     {
         if (terrain.pipeline)
         {
             terrain.pipeline->setBrushOverlay(worldPos, worldRadius, falloff, shape);
+            terrain.pipeline->setStampRotation(stampRotation);
+        }
+    }
+
+    void GPUDrivenRenderer::setStampOverlay(vk::Buffer buffer, uint32_t width, uint32_t height, float rotation)
+    {
+        if (terrain.pipeline)
+        {
+            terrain.pipeline->setStampOverlay(buffer, width, height, rotation);
+        }
+    }
+
+    void GPUDrivenRenderer::clearStampOverlay()
+    {
+        if (terrain.pipeline)
+        {
+            terrain.pipeline->clearStampOverlay();
         }
     }
 

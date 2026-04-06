@@ -659,7 +659,9 @@ namespace render::gpudriven
         bool isBillboardRenderingEnabled() const { return billboard.renderingEnabled; }
         const BillboardRenderStats& getBillboardStats() const { return billboard.stats; }
 
-        void setBrushOverlay(const glm::vec3& worldPos, float worldRadius, float falloff, float shape);
+        void setBrushOverlay(const glm::vec3& worldPos, float worldRadius, float falloff, float shape, float stampRotation = 0.0f);
+        void setStampOverlay(vk::Buffer buffer, uint32_t width, uint32_t height, float rotation);
+        void clearStampOverlay();
 
         void setTileDataLoader(TerrainStreamManager::TileDataLoader loader);
         void releaseMeshAsset(const std::string& meshPath);

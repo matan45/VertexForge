@@ -189,6 +189,10 @@ namespace render::gpudriven
         pc.hiZMipLevels = hiZMipLevels;
         pc._pad3 = 0.0f;
         pc.viewProjection = viewProjection;
+        pc.stampWidth = stampOverlayWidth;
+        pc.stampHeight = stampOverlayHeight;
+        pc.stampRotation = stampOverlayRotation;
+        pc._padStamp = 0.0f;
         return pc;
     }
 
@@ -202,6 +206,24 @@ namespace render::gpudriven
     {
         if (!initialized || !graphicsPipeline || currentTileCount == 0) return;
         if (!validateDescriptorsForDispatch()) return;
+
+        // Update stamp overlay descriptor if changed
+        if (stampOverlayDirty)
+        {
+            vk::Device vkDevice = device.getLogicalDevice();
+            if (stampOverlayBuffer)
+            {
+                vk::DescriptorBufferInfo stampInfo{stampOverlayBuffer, 0, VK_WHOLE_SIZE};
+                vk::WriteDescriptorSet stampWrite{};
+                stampWrite.dstSet = terrainDataDescriptorSet;
+                stampWrite.dstBinding = 2;
+                stampWrite.descriptorCount = 1;
+                stampWrite.descriptorType = vk::DescriptorType::eStorageBuffer;
+                stampWrite.pBufferInfo = &stampInfo;
+                vkDevice.updateDescriptorSets({stampWrite}, {});
+            }
+            stampOverlayDirty = false;
+        }
 
         cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
 

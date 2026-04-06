@@ -6,6 +6,7 @@
 #include "events/terrain/PaintModeEvents.hpp"
 #include "events/terrain/HoleModeEvents.hpp"
 #include "events/terrain/CaveModeEvents.hpp"
+#include "events/terrain/SplineTerrainEvents.hpp"
 #include "events/vegetation/VegetationBrushEvents.hpp"
 #include "events/meshbrush/MeshBrushEvents.hpp"
 #include "events/project/SceneEvents.hpp"
@@ -96,7 +97,8 @@ namespace windows
                 bool isCaveMode = dispatcher.query(events::cave::IsCaveModeActiveQuery{});
                 bool isVegBrushMode = dispatcher.query(events::vegetationBrush::IsVegetationBrushModeActiveQuery{});
                 bool isMeshBrushMode = dispatcher.query(events::meshBrush::IsMeshBrushModeActiveQuery{});
-                ImGui::BeginDisabled(isSculptMode || isPaintMode || isHoleMode || isCaveMode || isVegBrushMode || isMeshBrushMode);
+                bool isSplineMode = dispatcher.query(events::splineTerrain::IsSplineModeActiveQuery{});
+                ImGui::BeginDisabled(isSculptMode || isPaintMode || isHoleMode || isCaveMode || isVegBrushMode || isMeshBrushMode || isSplineMode);
 
                 if (iconButton(ViewportIcon::Rotate, gizmo.getOperation() == GizmoOperation::Rotate, "Rotate tool"))
                 {
@@ -179,6 +181,17 @@ namespace windows
                 {
                     events::meshBrush::SetMeshBrushModeActiveCommand cmd;
                     cmd.active = !isMeshBrushMode;
+                    dispatcher.execute(cmd);
+                }
+                ImGui::EndDisabled();
+
+                ImGui::SameLine();
+
+                ImGui::BeginDisabled(!isSplineMode && !canUseTerrain);
+                if (iconButton(ViewportIcon::Spline, isSplineMode, isSplineMode ? "Exit Spline Tool" : "Enter Spline Tool"))
+                {
+                    events::splineTerrain::SetSplineModeActiveCommand cmd;
+                    cmd.active = !isSplineMode;
                     dispatcher.execute(cmd);
                 }
                 ImGui::EndDisabled();

@@ -74,6 +74,11 @@ layout(push_constant) uniform PushConstants {
     uint hiZMipLevels;           // Mip levels in the Hi-Z pyramid (0 = disabled)
     float _pad3;                 // Align mat4 to 16-byte boundary
     mat4 viewProjection;         // CPU-precomputed view-projection (matches raycast invViewProjection)
+    // Stamp overlay
+    uint stampWidth;
+    uint stampHeight;
+    float stampRotation;
+    float _padStamp;
 } pc;
 
 shared vec3 sharedPositions[MESHLET_MAX_VERTICES];
@@ -209,6 +214,10 @@ layout(std430, set = 11, binding = 0) readonly buffer TerrainTileBuffer {
     TerrainTileGPUData tiles[];
 };
 
+layout(std430, set = 11, binding = 2) readonly buffer StampOverlayData {
+    float stampHeights[];
+};
+
 layout(std430, set = 1, binding = 0) readonly buffer WeightMapBuffer {
     uint weightMapData[];
 };
@@ -267,6 +276,11 @@ layout(push_constant) uniform PushConstants {
     uint hiZMipLevels;           // Mip levels in the Hi-Z pyramid (0 = disabled)
     float _pad3;                 // Align mat4 to 16-byte boundary
     mat4 viewProjection;         // CPU-precomputed view-projection (matches raycast invViewProjection)
+    // Stamp overlay
+    uint stampWidth;
+    uint stampHeight;
+    float stampRotation;
+    float _padStamp;
 } pc;
 
 layout(std430, set = 6, binding = 0) readonly buffer DirectionalLightBuffer {
@@ -715,7 +729,12 @@ void main() {
         uint shapeType = uint(pc.brushShape);
 
         float dist;
-        if (shapeType == 1u) {
+        bool isStampMode = (pc.stampWidth > 0 && pc.stampHeight > 0);
+
+        if (isStampMode) {
+            // Stamp: always square bounds
+            dist = max(abs(delta.x), abs(delta.y)) / pc.brushWorldRadius;
+        } else if (shapeType == 1u) {
             dist = max(abs(delta.x), abs(delta.y)) / pc.brushWorldRadius;
         } else {
             dist = length(delta) / pc.brushWorldRadius;
@@ -735,8 +754,41 @@ void main() {
             else if (falloffType == 2u) { falloffValue = 1.0 - dist*dist*(3.0-2.0*dist); }
             else { falloffValue = pow(1.0 - dist, 3.0); }
 
-            vec3 brushColor = vec3(0.2, 0.6, 1.0);
-            color = mix(color, brushColor, falloffValue * 0.3);
+            if (isStampMode) {
+                // Sample stamp image for overlay shape
+                float cosR = cos(pc.stampRotation);
+                float sinR = sin(pc.stampRotation);
+                vec2 rotatedDelta = vec2(
+                    delta.x * cosR + delta.y * sinR,
+                    -delta.x * sinR + delta.y * cosR
+                );
+                vec2 stampUV = rotatedDelta / pc.brushWorldRadius + 0.5;
+
+                if (stampUV.x >= 0.0 && stampUV.x <= 1.0 && stampUV.y >= 0.0 && stampUV.y <= 1.0) {
+                    // Bilinear sample
+                    float fx = stampUV.x * float(pc.stampWidth - 1);
+                    float fz = stampUV.y * float(pc.stampHeight - 1);
+                    uint sx0 = uint(fx);
+                    uint sz0 = uint(fz);
+                    uint sx1 = min(sx0 + 1, pc.stampWidth - 1);
+                    uint sz1 = min(sz0 + 1, pc.stampHeight - 1);
+                    float fracX = fx - float(sx0);
+                    float fracZ = fz - float(sz0);
+
+                    float h00 = stampHeights[sz0 * pc.stampWidth + sx0];
+                    float h10 = stampHeights[sz0 * pc.stampWidth + sx1];
+                    float h01 = stampHeights[sz1 * pc.stampWidth + sx0];
+                    float h11 = stampHeights[sz1 * pc.stampWidth + sx1];
+
+                    float stampValue = mix(mix(h00, h10, fracX), mix(h01, h11, fracX), fracZ);
+
+                    vec3 brushColor = vec3(0.2, 0.6, 1.0);
+                    color = mix(color, brushColor, stampValue * falloffValue * 0.5);
+                }
+            } else {
+                vec3 brushColor = vec3(0.2, 0.6, 1.0);
+                color = mix(color, brushColor, falloffValue * 0.3);
+            }
         }
 
         if (yClose) {

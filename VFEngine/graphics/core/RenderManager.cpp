@@ -330,7 +330,13 @@ namespace core {
 		presentInfo.pSwapchains = swapChains.data();
 		presentInfo.pImageIndices = &imgIndex;
 
-		vk::Result result = device.getPresentQueue().presentKHR(&presentInfo);
+		// Lock graphics queue mutex: presentQueue may be the same physical queue as
+		// graphicsAndComputeQueue, and brush compute submits from the main thread
+		vk::Result result;
+		{
+			std::lock_guard lock(device.getGraphicsQueueMutex());
+			result = device.getPresentQueue().presentKHR(&presentInfo);
+		}
 
 		if (result == vk::Result::eErrorOutOfDateKHR || result == vk::Result::eSuboptimalKHR) {
 			recreate(window->getHeight(), window->getWidth());

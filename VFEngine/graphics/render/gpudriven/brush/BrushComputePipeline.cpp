@@ -33,6 +33,30 @@ namespace render::gpudriven
         allocateDescriptorSet();
         createCommandPool();
 
+        // Allocate dummy stamp buffer so binding 2 is always valid
+        core::BufferInfoRequest dummyRequest(
+            device.getLogicalDevice(),
+            device.getPhysicalDevice(),
+            sizeof(float),
+            vk::BufferUsageFlagBits::eStorageBuffer,
+            vk::MemoryPropertyFlagBits::eDeviceLocal
+        );
+        core::BufferUtilities::createBuffer(dummyRequest, stampBuffer, stampAllocation, device.getMemoryManager());
+
+        vk::DescriptorBufferInfo stampInfo{};
+        stampInfo.buffer = stampBuffer;
+        stampInfo.offset = 0;
+        stampInfo.range = sizeof(float);
+
+        vk::WriteDescriptorSet stampWrite{};
+        stampWrite.dstSet = descriptorSet;
+        stampWrite.dstBinding = 2;
+        stampWrite.descriptorCount = 1;
+        stampWrite.descriptorType = vk::DescriptorType::eStorageBuffer;
+        stampWrite.pBufferInfo = &stampInfo;
+
+        device.getLogicalDevice().updateDescriptorSets({stampWrite}, {});
+
         initialized = true;
     }
 
@@ -77,6 +101,9 @@ namespace render::gpudriven
 
         destroyHeightBuffers();
 
+        core::BufferUtilities::destroyBuffer(vkDevice, stampBuffer, stampAllocation, device.getMemoryManager());
+        hasStampData = false;
+
         shader.reset();
 
         initialized = false;
@@ -86,7 +113,7 @@ namespace render::gpudriven
     {
         vk::Device vkDevice = device.getLogicalDevice();
 
-        std::array<vk::DescriptorSetLayoutBinding, 2> bindings{};
+        std::array<vk::DescriptorSetLayoutBinding, 3> bindings{};
 
         // Binding 0: Input heightmap (readonly)
         bindings[0].binding = 0;
@@ -99,6 +126,12 @@ namespace render::gpudriven
         bindings[1].descriptorType = vk::DescriptorType::eStorageBuffer;
         bindings[1].descriptorCount = 1;
         bindings[1].stageFlags = vk::ShaderStageFlagBits::eCompute;
+
+        // Binding 2: Stamp heightmap data (readonly)
+        bindings[2].binding = 2;
+        bindings[2].descriptorType = vk::DescriptorType::eStorageBuffer;
+        bindings[2].descriptorCount = 1;
+        bindings[2].stageFlags = vk::ShaderStageFlagBits::eCompute;
 
         descriptorSetLayout = core::PipelineUtilities::createUpdateAfterBindLayout(
             vkDevice, bindings.data(), static_cast<uint32_t>(bindings.size()));
@@ -155,7 +188,7 @@ namespace render::gpudriven
 
         std::array<vk::DescriptorPoolSize, 1> poolSizes{};
         poolSizes[0].type = vk::DescriptorType::eStorageBuffer;
-        poolSizes[0].descriptorCount = 2;
+        poolSizes[0].descriptorCount = 3;
 
         descriptorPool = core::PipelineUtilities::createUpdateAfterBindPool(
             vkDevice, 1, poolSizes.data(), static_cast<uint32_t>(poolSizes.size()));
@@ -276,6 +309,82 @@ namespace render::gpudriven
         core::BufferUtilities::destroyBuffer(vkDevice, stagingReadbackBuffer, stagingReadbackAllocation, device.getMemoryManager());
 
         currentBufferSize = 0;
+    }
+
+    void BrushComputePipeline::setStampData(const std::vector<float>& heights,
+                                           uint32_t width, uint32_t height)
+    {
+        if (!initialized || heights.empty() || width == 0 || height == 0)
+        {
+            return;
+        }
+
+        vk::Device vkDevice = device.getLogicalDevice();
+        vk::DeviceSize dataSize = heights.size() * sizeof(float);
+
+        // Destroy old stamp buffer
+        core::BufferUtilities::destroyBuffer(vkDevice, stampBuffer, stampAllocation, device.getMemoryManager());
+
+        // Use host-visible buffer to avoid queue submit (prevents threading errors)
+        core::BufferInfoRequest stampRequest(
+            vkDevice,
+            device.getPhysicalDevice(),
+            dataSize,
+            vk::BufferUsageFlagBits::eStorageBuffer,
+            vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
+        );
+        core::BufferUtilities::createBuffer(stampRequest, stampBuffer, stampAllocation, device.getMemoryManager());
+
+        std::memcpy(stampAllocation.mappedPtr, heights.data(), dataSize);
+
+        // Update descriptor set binding 2
+        vk::DescriptorBufferInfo stampInfo{};
+        stampInfo.buffer = stampBuffer;
+        stampInfo.offset = 0;
+        stampInfo.range = dataSize;
+
+        vk::WriteDescriptorSet stampWrite{};
+        stampWrite.dstSet = descriptorSet;
+        stampWrite.dstBinding = 2;
+        stampWrite.descriptorCount = 1;
+        stampWrite.descriptorType = vk::DescriptorType::eStorageBuffer;
+        stampWrite.pBufferInfo = &stampInfo;
+
+        vkDevice.updateDescriptorSets({stampWrite}, {});
+
+        stampWidth = width;
+        stampHeight = height;
+        hasStampData = true;
+    }
+
+    void BrushComputePipeline::clearStampData()
+    {
+        if (initialized && stampBuffer)
+        {
+            vk::Device vkDevice = device.getLogicalDevice();
+            core::BufferUtilities::destroyBuffer(vkDevice, stampBuffer, stampAllocation, device.getMemoryManager());
+
+            // Rebind dummy buffer for validation
+            core::BufferInfoRequest dummyRequest(
+                vkDevice, device.getPhysicalDevice(), sizeof(float),
+                vk::BufferUsageFlagBits::eStorageBuffer,
+                vk::MemoryPropertyFlagBits::eDeviceLocal
+            );
+            core::BufferUtilities::createBuffer(dummyRequest, stampBuffer, stampAllocation, device.getMemoryManager());
+
+            vk::DescriptorBufferInfo stampInfo{stampBuffer, 0, sizeof(float)};
+            vk::WriteDescriptorSet stampWrite{};
+            stampWrite.dstSet = descriptorSet;
+            stampWrite.dstBinding = 2;
+            stampWrite.descriptorCount = 1;
+            stampWrite.descriptorType = vk::DescriptorType::eStorageBuffer;
+            stampWrite.pBufferInfo = &stampInfo;
+            vkDevice.updateDescriptorSets({stampWrite}, {});
+        }
+
+        stampWidth = 0;
+        stampHeight = 0;
+        hasStampData = false;
     }
 
     bool BrushComputePipeline::applyBrush(std::vector<float>& heightData,

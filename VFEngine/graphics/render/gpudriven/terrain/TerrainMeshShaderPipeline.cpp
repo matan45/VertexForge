@@ -266,6 +266,7 @@ namespace render::gpudriven
 
         terrainLayerBufferMapped = nullptr;
         core::BufferUtilities::destroyBuffer(vkDevice, terrainLayerBuffer, terrainLayerBufferAllocation, device.getMemoryManager());
+        core::BufferUtilities::destroyBuffer(vkDevice, stampDummyBuffer, stampDummyAllocation, device.getMemoryManager());
 
         cleanupDescriptorResources();
 
@@ -310,7 +311,7 @@ namespace render::gpudriven
     {
         vk::Device vkDevice = device.getLogicalDevice();
 
-        std::array<vk::DescriptorSetLayoutBinding, 2> bindings{};
+        std::array<vk::DescriptorSetLayoutBinding, 3> bindings{};
         bindings[0].binding = 0;
         bindings[0].descriptorType = vk::DescriptorType::eStorageBuffer;
         bindings[0].descriptorCount = 1;
@@ -321,11 +322,17 @@ namespace render::gpudriven
         bindings[1].descriptorCount = 1;
         bindings[1].stageFlags = vk::ShaderStageFlagBits::eTaskEXT;
 
+        // Binding 2: Stamp overlay heightmap (readonly, fragment only)
+        bindings[2].binding = 2;
+        bindings[2].descriptorType = vk::DescriptorType::eStorageBuffer;
+        bindings[2].descriptorCount = 1;
+        bindings[2].stageFlags = vk::ShaderStageFlagBits::eFragment;
+
         terrainDataLayout = core::PipelineUtilities::createUpdateAfterBindLayout(vkDevice, bindings.data(), static_cast<uint32_t>(bindings.size()));
 
         vk::DescriptorPoolSize poolSize{};
         poolSize.type = vk::DescriptorType::eStorageBuffer;
-        poolSize.descriptorCount = 2;
+        poolSize.descriptorCount = 3;
 
         terrainDataPool = core::PipelineUtilities::createUpdateAfterBindPool(vkDevice, 1, &poolSize, 1);
 
@@ -337,6 +344,13 @@ namespace render::gpudriven
         terrainDataDescriptorSet = sets[0];
 
         writeTerrainDataDescriptors(vkDevice, terrainDataDescriptorSet, tileDataBuffer, statsBuffer);
+
+        // Create dedicated dummy buffer for stamp overlay binding 2
+        core::BufferInfoRequest dummyRequest(vkDevice, device.getPhysicalDevice(),
+            sizeof(float), vk::BufferUsageFlagBits::eStorageBuffer,
+            vk::MemoryPropertyFlagBits::eDeviceLocal);
+        core::BufferUtilities::createBuffer(dummyRequest, stampDummyBuffer, stampDummyAllocation, device.getMemoryManager());
+        writeStorageBufferDescriptor(vkDevice, terrainDataDescriptorSet, 2, stampDummyBuffer, sizeof(float));
     }
 
     bool TerrainMeshShaderPipeline::loadTerrainShaders()

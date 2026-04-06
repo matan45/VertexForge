@@ -28,6 +28,7 @@
 #include "interfaces/terrain/ICaveModeService.hpp"
 #include "interfaces/terrain/ICaveBrushService.hpp"
 #include "interfaces/terrain/ITerrainRaycastService.hpp"
+#include "interfaces/terrain/ISplineTerrainService.hpp"
 #include "interfaces/vegetation/IGrassService.hpp"
 #include "interfaces/vegetation/IVegetationBrushService.hpp"
 #include "interfaces/vegetation/IVegetationBrushModeService.hpp"
@@ -119,6 +120,7 @@ namespace handlers {
 		std::shared_ptr<services::ICaveModeService> caveModeService;
 		std::shared_ptr<services::ICaveBrushService> caveBrushService;
 		std::shared_ptr<services::ITerrainRaycastService> terrainRaycastService;
+		std::shared_ptr<services::ISplineTerrainService> splineTerrainService;
 		std::shared_ptr<services::IPhysicsAnimationService> physicsAnimationService;
 		std::shared_ptr<services::INavmeshService> navmeshService;
 		std::unique_ptr<core::audio::AudioSceneUpdater> audioSceneUpdater;

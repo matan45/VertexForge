@@ -2,7 +2,11 @@
 #include "events/EventDispatcher.hpp"
 #include "events/editor/SculptModeEvents.hpp"
 #include "events/terrain/BrushEvents.hpp"
+#include "nfd/FileDialog.hpp"
 #include <imgui.h>
+#include <glm/glm.hpp>
+#include <algorithm>
+#include <filesystem>
 
 namespace windows
 {
@@ -21,6 +25,10 @@ namespace windows
         if (brushParamsToken.isValid())
         {
             dispatcher.unsubscribe(brushParamsToken);
+        }
+        if (stampImageToken.isValid())
+        {
+            dispatcher.unsubscribe(stampImageToken);
         }
     }
 
@@ -46,6 +54,13 @@ namespace windows
                     brushStrength = params.strength;
                     falloffIndex = static_cast<int>(params.falloff);
                     shapeIndex = static_cast<int>(params.shape);
+                    stampRotation = params.stampRotation;
+                    stampScale = params.stampScale;
+                    talusAngle = params.talusAngle;
+                    terraceStepHeight = params.terraceStepHeight;
+                    terraceSharpness = params.terraceSharpness;
+                    rampWidth = params.rampWidth;
+                    rampFalloff = params.rampFalloff;
 
                     auto type = d.query(events::brush::GetBrushTypeQuery{});
                     selectedBrushType = static_cast<int>(type);
@@ -65,6 +80,20 @@ namespace windows
                 brushStrength = n.params.strength;
                 falloffIndex = static_cast<int>(n.params.falloff);
                 shapeIndex = static_cast<int>(n.params.shape);
+                stampRotation = n.params.stampRotation;
+                stampScale = n.params.stampScale;
+                talusAngle = n.params.talusAngle;
+                terraceStepHeight = n.params.terraceStepHeight;
+                terraceSharpness = n.params.terraceSharpness;
+                rampWidth = n.params.rampWidth;
+                rampFalloff = n.params.rampFalloff;
+            });
+
+        stampImageToken = dispatcher.subscribe<events::brush::StampImageChangedNotification>(
+            [this](const events::brush::StampImageChangedNotification& n)
+            {
+                stampImagePath = n.filePath;
+                stampLoaded = n.loaded;
             });
 
         subscribed = true;
@@ -92,16 +121,16 @@ namespace windows
         ImGui::Text("Brush Type");
         ImGui::Separator();
 
-        const char* brushLabels[] = {"Raise", "Lower", "Smooth", "Flatten", "Noise"};
+        const char* brushLabels[] = {"Raise", "Lower", "Smooth", "Flatten", "Noise", "Stamp", "Erosion", "Terrace", "Ramp"};
         bool typeChanged = false;
 
-        for (int i = 0; i < 5; ++i)
+        for (int i = 0; i < 9; ++i)
         {
             if (ImGui::RadioButton(brushLabels[i], &selectedBrushType, i))
             {
                 typeChanged = true;
             }
-            if (i < 4)
+            if (i < 8)
             {
                 ImGui::SameLine();
             }
@@ -140,18 +169,175 @@ namespace windows
             dispatcher.execute(cmd);
         }
 
-        const char* shapeLabels[] = {"Circle", "Square"};
-        if (ImGui::Combo("Shape", &shapeIndex, shapeLabels, 2))
+        if (selectedBrushType != static_cast<int>(terrain::BrushType::Stamp))
         {
-            events::brush::SetBrushShapeCommand cmd;
-            cmd.shape = static_cast<terrain::BrushShape>(shapeIndex);
-            dispatcher.execute(cmd);
+            const char* shapeLabels[] = {"Circle", "Square"};
+            if (ImGui::Combo("Shape", &shapeIndex, shapeLabels, 2))
+            {
+                events::brush::SetBrushShapeCommand cmd;
+                cmd.shape = static_cast<terrain::BrushShape>(shapeIndex);
+                dispatcher.execute(cmd);
+            }
+        }
+
+        // Stamp brush controls
+        if (selectedBrushType == static_cast<int>(terrain::BrushType::Stamp))
+        {
+            ImGui::Spacing();
+            ImGui::Text("Stamp Image");
+            ImGui::Separator();
+
+            if (stampLoaded)
+            {
+                std::string filename = std::filesystem::path(stampImagePath).filename().string();
+                ImGui::TextWrapped("Loaded: %s", filename.c_str());
+            }
+            else
+            {
+                ImGui::TextDisabled("No stamp loaded");
+            }
+
+            if (stampLoaded)
+            {
+                ImGui::SameLine();
+                if (ImGui::Button("Clear"))
+                {
+                    events::brush::ClearStampImageCommand cmd;
+                    dispatcher.execute(cmd);
+                }
+            }
+
+            if (ImGui::Button("Load Stamp Image"))
+            {
+                nfd::FileDialog fileDialog;
+                std::vector<std::pair<std::wstring, std::wstring>> filters = {
+                    {L"Heightmap Image", L"*.vfImage"}
+                };
+                std::string selectedPath = fileDialog.openFileDialog(filters);
+                if (!selectedPath.empty())
+                {
+                    selectedPath.erase(
+                        std::remove(selectedPath.begin(), selectedPath.end(), '\0'),
+                        selectedPath.end());
+
+                    events::brush::SetStampImageCommand cmd;
+                    cmd.filePath = selectedPath;
+                    dispatcher.execute(cmd);
+                }
+            }
+
+            const char* modeLabels[] = {"Add", "Subtract"};
+            if (ImGui::Combo("Mode", &stampMode, modeLabels, 2))
+            {
+                events::brush::SetStampModeCommand cmd;
+                cmd.subtract = (stampMode == 1);
+                dispatcher.execute(cmd);
+            }
+
+            float rotationDeg = glm::degrees(stampRotation);
+            if (ImGui::SliderFloat("Rotation", &rotationDeg, 0.0f, 360.0f, "%.1f deg"))
+            {
+                stampRotation = glm::radians(rotationDeg);
+                events::brush::SetStampRotationCommand cmd;
+                cmd.rotation = stampRotation;
+                dispatcher.execute(cmd);
+            }
+
+            if (ImGui::SliderFloat("Scale", &stampScale, 0.1f, 50.0f, "%.1f"))
+            {
+                events::brush::SetStampScaleCommand cmd;
+                cmd.scale = stampScale;
+                dispatcher.execute(cmd);
+            }
+        }
+
+        // Erosion brush controls
+        if (selectedBrushType == static_cast<int>(terrain::BrushType::Erosion))
+        {
+            ImGui::Spacing();
+            ImGui::Text("Erosion Settings");
+            ImGui::Separator();
+
+            if (ImGui::SliderFloat("Talus Angle", &talusAngle, 5.0f, 85.0f, "%.1f deg"))
+            {
+                events::brush::SetTalusAngleCommand cmd;
+                cmd.angle = talusAngle;
+                dispatcher.execute(cmd);
+            }
+            ImGui::TextDisabled("Lower angle = more erosion");
+        }
+
+        // Terrace brush controls
+        if (selectedBrushType == static_cast<int>(terrain::BrushType::Terrace))
+        {
+            ImGui::Spacing();
+            ImGui::Text("Terrace Settings");
+            ImGui::Separator();
+
+            if (ImGui::SliderFloat("Step Height", &terraceStepHeight, 0.5f, 20.0f, "%.1f"))
+            {
+                events::brush::SetTerraceStepHeightCommand cmd;
+                cmd.stepHeight = terraceStepHeight;
+                dispatcher.execute(cmd);
+            }
+
+            if (ImGui::SliderFloat("Sharpness", &terraceSharpness, 0.0f, 1.0f, "%.2f"))
+            {
+                events::brush::SetTerraceSharpnessCommand cmd;
+                cmd.sharpness = terraceSharpness;
+                dispatcher.execute(cmd);
+            }
+        }
+
+        // Ramp brush controls
+        if (selectedBrushType == static_cast<int>(terrain::BrushType::Ramp))
+        {
+            ImGui::Spacing();
+            ImGui::Text("Ramp Settings");
+            ImGui::Separator();
+
+            if (ImGui::SliderFloat("Width", &rampWidth, 1.0f, 50.0f, "%.1f"))
+            {
+                events::brush::SetRampWidthCommand cmd;
+                cmd.width = rampWidth;
+                dispatcher.execute(cmd);
+            }
+
+            if (ImGui::SliderFloat("Edge Falloff", &rampFalloff, 0.0f, 20.0f, "%.1f"))
+            {
+                events::brush::SetRampFalloffCommand cmd;
+                cmd.falloff = rampFalloff;
+                dispatcher.execute(cmd);
+            }
+
+            bool startCaptured = dispatcher.query(events::brush::IsRampStartCapturedQuery{});
+
+            if (startCaptured)
+            {
+                ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "Start point set - click end point");
+                if (ImGui::Button("Reset Start Point"))
+                {
+                    events::brush::ResetRampCommand cmd;
+                    dispatcher.execute(cmd);
+                }
+            }
+            else
+            {
+                ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "Click to set start point");
+            }
         }
 
         ImGui::Spacing();
         ImGui::Separator();
-        ImGui::TextDisabled("Left-click to sculpt");
-        ImGui::TextDisabled("Hold Shift to invert");
+        if (selectedBrushType == static_cast<int>(terrain::BrushType::Ramp))
+        {
+            ImGui::TextDisabled("Click start point, then click end point");
+        }
+        else
+        {
+            ImGui::TextDisabled("Left-click to sculpt");
+            ImGui::TextDisabled("Hold Shift to invert");
+        }
 
         ImGui::End();
 

@@ -171,6 +171,7 @@ namespace windows
             vfxDebugWindow.draw();
             animationDebugWindow.draw();
             sculptToolPanel.draw();
+            splineToolPanel.draw();
             paintToolPanel.draw();
             holeToolPanel.draw();
             caveToolPanel.draw();

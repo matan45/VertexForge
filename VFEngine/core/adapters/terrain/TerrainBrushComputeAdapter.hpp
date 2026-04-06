@@ -21,5 +21,11 @@ namespace core
         bool applyBrushGPU(
             std::vector<float>& heightData,
             const terrain::BrushGPUParams& params) override;
+
+        void setStampData(
+            const std::vector<float>& heights,
+            uint32_t width, uint32_t height) override;
+
+        void clearStampData() override;
     };
 }
