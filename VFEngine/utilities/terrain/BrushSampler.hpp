@@ -14,5 +14,11 @@ namespace terrain
             const glm::vec2& brushCenter,
             float radius,
             float worldTileSize);
+
+        static std::vector<TileCoord> getAffectedTilesForSegment(
+            const glm::vec2& start,
+            const glm::vec2& end,
+            float halfWidth,
+            float worldTileSize);
     };
 }

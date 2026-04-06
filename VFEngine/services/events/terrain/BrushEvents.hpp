@@ -146,6 +146,20 @@ namespace events::brush
         std::string_view getName() const override { return "SetTerraceSharpness"; }
     };
 
+    struct SetRampWidthCommand : ICommand<>
+    {
+        float width = 5.0f;
+
+        std::string_view getName() const override { return "SetRampWidth"; }
+    };
+
+    struct SetRampFalloffCommand : ICommand<>
+    {
+        float falloff = 2.0f;
+
+        std::string_view getName() const override { return "SetRampFalloff"; }
+    };
+
     struct StampImageChangedNotification : INotification
     {
         std::string filePath;

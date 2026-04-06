@@ -30,6 +30,10 @@ namespace windows
         float terraceStepHeight = 2.0f;
         float terraceSharpness = 0.5f;
 
+        // Ramp state
+        float rampWidth = 5.0f;
+        float rampFalloff = 2.0f;
+
         events::SubscriptionToken sculptModeToken;
         events::SubscriptionToken brushTypeToken;
         events::SubscriptionToken brushParamsToken;

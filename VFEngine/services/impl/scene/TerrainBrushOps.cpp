@@ -15,6 +15,7 @@
 #include "../../events/vegetation/VegetationBrushEvents.hpp"
 #include "../../events/vegetation/GrassEvents.hpp"
 #include "../../events/editor/SculptModeEvents.hpp"
+#include "../../events/render/DebugDrawEvents.hpp"
 #include "../../events/terrain/PaintModeEvents.hpp"
 #include "../../events/terrain/HoleModeEvents.hpp"
 
@@ -51,6 +52,10 @@ namespace services
             }
         }
 
+        // Reset ramp state when not using Ramp brush
+        if (brushType != terrain::BrushType::Ramp)
+            rampStartCaptured = false;
+
         if (brushType == terrain::BrushType::Flatten)
         {
             if (isFirstApplication)
@@ -67,6 +72,56 @@ namespace services
         // Stamp is a one-shot operation per click
         if (brushType == terrain::BrushType::Stamp && !isFirstApplication)
             return;
+
+        // Ramp: two-click workflow
+        if (brushType == terrain::BrushType::Ramp)
+        {
+            if (isFirstApplication)
+            {
+                if (!rampStartCaptured)
+                {
+                    rampStartPos = worldPosition;
+                    rampStartCaptured = true;
+                }
+                else
+                {
+                    applyRamp(*targetEntity, grid, rampStartPos, worldPosition, brushParams);
+                    rampStartCaptured = false;
+                }
+            }
+            else if (rampStartCaptured)
+            {
+                // Draw preview lines while dragging after first click
+                float halfWidth = brushParams.rampWidth * 0.5f;
+                glm::vec3 dir = worldPosition - rampStartPos;
+                glm::vec2 dir2D(dir.x, dir.z);
+                float len = glm::length(dir2D);
+                if (len > 0.01f)
+                {
+                    glm::vec2 perp = glm::normalize(glm::vec2(-dir2D.y, dir2D.x)) * halfWidth;
+                    glm::vec3 perpOffset(perp.x, 0.0f, perp.y);
+
+                    events::debugdraw::DrawLineCommand centerLine;
+                    centerLine.start = rampStartPos;
+                    centerLine.end = worldPosition;
+                    centerLine.color = glm::vec4(0.2f, 0.6f, 1.0f, 1.0f);
+                    dispatcher.execute(centerLine);
+
+                    events::debugdraw::DrawLineCommand leftLine;
+                    leftLine.start = rampStartPos + perpOffset;
+                    leftLine.end = worldPosition + perpOffset;
+                    leftLine.color = glm::vec4(0.2f, 0.6f, 1.0f, 0.5f);
+                    dispatcher.execute(leftLine);
+
+                    events::debugdraw::DrawLineCommand rightLine;
+                    rightLine.start = rampStartPos - perpOffset;
+                    rightLine.end = worldPosition - perpOffset;
+                    rightLine.color = glm::vec4(0.2f, 0.6f, 1.0f, 0.5f);
+                    dispatcher.execute(rightLine);
+                }
+            }
+            return;
+        }
 
         glm::vec2 brushCenter(worldPosition.x, worldPosition.z);
         float worldTileSize = 32.0f;
@@ -488,6 +543,107 @@ namespace services
                 }
             }
         }
+    }
+
+    void TerrainService::applyRamp(EntityHandle targetEntity, terrain::TerrainGrid* grid,
+                                    const glm::vec3& startPos, const glm::vec3& endPos,
+                                    const terrain::BrushParams& params)
+    {
+        glm::vec2 start2D(startPos.x, startPos.z);
+        glm::vec2 end2D(endPos.x, endPos.z);
+        glm::vec2 segDir = end2D - start2D;
+        float segLength = glm::length(segDir);
+        if (segLength < 0.01f)
+            return;
+
+        glm::vec2 segNorm = segDir / segLength;
+        float halfWidth = params.rampWidth * 0.5f;
+        float totalHalfWidth = halfWidth + params.rampFalloff;
+
+        // Get affected tiles using AABB of segment + width
+        auto affectedTiles = terrain::BrushSampler::getAffectedTilesForSegment(
+            start2D, end2D, totalHalfWidth,
+            grid->getAllTiles().empty() ? 32.0f : grid->getAllTiles()[0]->config.worldTileSize);
+
+        auto cacheIt = fileCaches.find(targetEntity.id);
+        auto fileCache = (cacheIt != fileCaches.end()) ? cacheIt->second : nullptr;
+
+        std::vector<terrain::TileCoord> modifiedTiles;
+
+        for (const auto& coord : affectedTiles)
+        {
+            terrain::TerrainTile* tile = grid->getTile(coord);
+            if (!tile)
+                continue;
+
+            if (fileCache && !tile->hasHeightData())
+            {
+                if (!fileCache->ensureHeightsLoaded(*tile))
+                    continue;
+            }
+            if (fileCache)
+                fileCache->markDirty(coord);
+
+            uint32_t vertCount = tile->config.getVertexCount();
+            float vertSpacing = tile->config.getVertexSpacing();
+            glm::vec2 tileOrigin(
+                static_cast<float>(tile->coord.x) * tile->config.worldTileSize,
+                static_cast<float>(tile->coord.z) * tile->config.worldTileSize);
+
+            bool tileModified = false;
+
+            for (uint32_t z = 0; z < vertCount; ++z)
+            {
+                for (uint32_t x = 0; x < vertCount; ++x)
+                {
+                    glm::vec2 vertPos = tileOrigin + glm::vec2(static_cast<float>(x), static_cast<float>(z)) * vertSpacing;
+
+                    // Project vertex onto line segment
+                    glm::vec2 toVert = vertPos - start2D;
+                    float t = glm::dot(toVert, segNorm) / segLength;
+                    t = glm::clamp(t, 0.0f, 1.0f);
+
+                    // Closest point on segment
+                    glm::vec2 closestPoint = start2D + segDir * t;
+                    float perpDist = glm::length(vertPos - closestPoint);
+
+                    if (perpDist > totalHalfWidth)
+                        continue;
+
+                    // Target height: linear interpolation along ramp
+                    float targetHeight = glm::mix(startPos.y, endPos.y, t);
+
+                    // Blend factor based on perpendicular distance
+                    float blend = 1.0f;
+                    if (perpDist > halfWidth && params.rampFalloff > 0.0f)
+                    {
+                        float falloffT = (perpDist - halfWidth) / params.rampFalloff;
+                        blend = 1.0f - falloffT * falloffT * (3.0f - 2.0f * falloffT); // smoothstep
+                    }
+
+                    uint32_t idx = z * vertCount + x;
+                    float currentHeight = tile->heightData[idx];
+                    tile->heightData[idx] = glm::mix(currentHeight, targetHeight, blend);
+                    tileModified = true;
+                }
+            }
+
+            if (tileModified)
+            {
+                tile->isDirty = true;
+                tile->setAllLODsDirty();
+                modifiedTiles.push_back(coord);
+            }
+        }
+
+        syncBrushBoundaryHeights(grid, modifiedTiles);
+
+        events::brush::BrushAppliedNotification notification;
+        notification.position = endPos;
+        notification.type = terrain::BrushType::Ramp;
+        events::EventDispatcher::instance().publish(notification);
+
+        rebuildModifiedColliders(targetEntity, grid, modifiedTiles);
     }
 
     void TerrainService::syncBrushBoundaryHeights(terrain::TerrainGrid* grid, const std::vector<terrain::TileCoord>& modifiedTiles)

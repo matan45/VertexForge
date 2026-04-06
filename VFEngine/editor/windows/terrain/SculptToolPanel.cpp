@@ -59,6 +59,8 @@ namespace windows
                     talusAngle = params.talusAngle;
                     terraceStepHeight = params.terraceStepHeight;
                     terraceSharpness = params.terraceSharpness;
+                    rampWidth = params.rampWidth;
+                    rampFalloff = params.rampFalloff;
 
                     auto type = d.query(events::brush::GetBrushTypeQuery{});
                     selectedBrushType = static_cast<int>(type);
@@ -83,6 +85,8 @@ namespace windows
                 talusAngle = n.params.talusAngle;
                 terraceStepHeight = n.params.terraceStepHeight;
                 terraceSharpness = n.params.terraceSharpness;
+                rampWidth = n.params.rampWidth;
+                rampFalloff = n.params.rampFalloff;
             });
 
         stampImageToken = dispatcher.subscribe<events::brush::StampImageChangedNotification>(
@@ -117,16 +121,16 @@ namespace windows
         ImGui::Text("Brush Type");
         ImGui::Separator();
 
-        const char* brushLabels[] = {"Raise", "Lower", "Smooth", "Flatten", "Noise", "Stamp", "Erosion", "Terrace"};
+        const char* brushLabels[] = {"Raise", "Lower", "Smooth", "Flatten", "Noise", "Stamp", "Erosion", "Terrace", "Ramp"};
         bool typeChanged = false;
 
-        for (int i = 0; i < 8; ++i)
+        for (int i = 0; i < 9; ++i)
         {
             if (ImGui::RadioButton(brushLabels[i], &selectedBrushType, i))
             {
                 typeChanged = true;
             }
-            if (i < 7)
+            if (i < 8)
             {
                 ImGui::SameLine();
             }
@@ -285,10 +289,41 @@ namespace windows
             }
         }
 
+        // Ramp brush controls
+        if (selectedBrushType == 8)
+        {
+            ImGui::Spacing();
+            ImGui::Text("Ramp Settings");
+            ImGui::Separator();
+
+            if (ImGui::SliderFloat("Width", &rampWidth, 1.0f, 50.0f, "%.1f"))
+            {
+                events::brush::SetRampWidthCommand cmd;
+                cmd.width = rampWidth;
+                dispatcher.execute(cmd);
+            }
+
+            if (ImGui::SliderFloat("Edge Falloff", &rampFalloff, 0.0f, 20.0f, "%.1f"))
+            {
+                events::brush::SetRampFalloffCommand cmd;
+                cmd.falloff = rampFalloff;
+                dispatcher.execute(cmd);
+            }
+
+            ImGui::TextDisabled("Click start, then click end");
+        }
+
         ImGui::Spacing();
         ImGui::Separator();
-        ImGui::TextDisabled("Left-click to sculpt");
-        ImGui::TextDisabled("Hold Shift to invert");
+        if (selectedBrushType == 8)
+        {
+            ImGui::TextDisabled("Click start point, then click end point");
+        }
+        else
+        {
+            ImGui::TextDisabled("Left-click to sculpt");
+            ImGui::TextDisabled("Hold Shift to invert");
+        }
 
         ImGui::End();
 

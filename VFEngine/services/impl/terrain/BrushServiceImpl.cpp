@@ -156,6 +156,20 @@ namespace services
                 publishParamsChanged();
             });
 
+        dispatcher.registerCommandHandler<events::brush::SetRampWidthCommand>(
+            [this](const events::brush::SetRampWidthCommand& cmd)
+            {
+                currentParams.rampWidth = cmd.width;
+                publishParamsChanged();
+            });
+
+        dispatcher.registerCommandHandler<events::brush::SetRampFalloffCommand>(
+            [this](const events::brush::SetRampFalloffCommand& cmd)
+            {
+                currentParams.rampFalloff = cmd.falloff;
+                publishParamsChanged();
+            });
+
         dispatcher.registerQueryHandler<events::brush::GetStampDataQuery>(
             [this](const events::brush::GetStampDataQuery&)
             {

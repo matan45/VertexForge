@@ -52,6 +52,9 @@ namespace services
         float flattenTargetHeight = 0.0f;
         bool flattenTargetCaptured = false;
 
+        glm::vec3 rampStartPos{0.0f};
+        bool rampStartCaptured = false;
+
         ITerrainBrushComputeProvider* brushComputeProvider = nullptr;
         IPhysicsProvider* physicsProvider = nullptr;
         std::atomic<bool> saveInProgress{false};
@@ -201,6 +204,9 @@ namespace services
                                       const std::vector<terrain::TileCoord>& modifiedTiles);
         void syncHoleBoundaries(terrain::TerrainGrid* grid, const std::vector<terrain::TileCoord>& modifiedTiles);
         void syncBrushBoundaryHeights(terrain::TerrainGrid* grid, const std::vector<terrain::TileCoord>& modifiedTiles);
+        void applyRamp(EntityHandle targetEntity, terrain::TerrainGrid* grid,
+                       const glm::vec3& startPos, const glm::vec3& endPos,
+                       const terrain::BrushParams& params);
         void generateDebugWireframes(EntityHandle terrainEntity, terrain::TerrainGrid* grid);
         static bool applyHoleMaskToHeights(const terrain::TerrainTile& tile, std::vector<float>& physicsHeights);
         static bool isVertexAdjacentToHole(const terrain::TerrainTile& tile, uint32_t vx, uint32_t vz);
