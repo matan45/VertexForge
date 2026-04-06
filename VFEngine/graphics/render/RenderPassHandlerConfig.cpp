@@ -177,8 +177,9 @@ namespace render
                 ssrPipeline->setHiZResources(hiZView, hiZSmplr);
 
             auto normalView = gpuDrivenRenderer->getPrepassNormalImageView();
-            if (normalView)
-                ssrPipeline->setNormalRoughnessView(normalView);
+            auto normalImg = gpuDrivenRenderer->getPrepassNormalImage();
+            if (normalView && normalImg)
+                ssrPipeline->setNormalRoughnessResources(normalView, normalImg);
         }
 
         ssrPipeline->init();

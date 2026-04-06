@@ -195,9 +195,10 @@ namespace render::ssr
         hiZSampler = hiZSmplr;
     }
 
-    void SSRPipeline::setNormalRoughnessView(vk::ImageView normalRoughnessView)
+    void SSRPipeline::setNormalRoughnessResources(vk::ImageView normalRoughnessView, vk::Image normalRoughnessImg)
     {
         normalRoughnessImageView = normalRoughnessView;
+        normalRoughnessImage = normalRoughnessImg;
     }
 
     void SSRPipeline::createSampler()

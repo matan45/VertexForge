@@ -485,6 +485,7 @@ namespace render::gpudriven
 
         std::pair<vk::ImageView, vk::Sampler> getPrepassHiZViewSampler() const;
         vk::ImageView getPrepassNormalImageView() const;
+        vk::Image getPrepassNormalImage() const;
 
         void updateFormats(const std::vector<vk::Format>& colorFormats, vk::Format depthFormat,
                           vk::DescriptorSetLayout newIBLLayout = nullptr);

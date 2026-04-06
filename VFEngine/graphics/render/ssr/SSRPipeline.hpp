@@ -101,6 +101,7 @@ namespace render::ssr
         vk::ImageView hiZImageView;
         vk::Sampler hiZSampler;
         vk::ImageView normalRoughnessImageView;
+        vk::Image normalRoughnessImage;
 
         // UBO
         vk::Buffer paramsBuffer;
@@ -174,7 +175,7 @@ namespace render::ssr
         void updateSettings(const SSRSettings& settings);
 
         void setHiZResources(vk::ImageView hiZView, vk::Sampler hiZSmplr);
-        void setNormalRoughnessView(vk::ImageView normalRoughnessView);
+        void setNormalRoughnessResources(vk::ImageView normalRoughnessView, vk::Image normalRoughnessImg);
 
         [[nodiscard]] bool isInitialized() const { return initialized; }
 

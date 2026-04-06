@@ -21,6 +21,16 @@ namespace render::ssr
             vk::ImageLayout::eDepthStencilReadOnlyOptimal,
             depthAspectMask);
 
+        // Transition depth prepass normal+roughness image to ShaderReadOnly for trace sampling
+        if (normalRoughnessImage)
+        {
+            core::ImageUtilities::transitionImageLayout(commandBuffer,
+                normalRoughnessImage,
+                vk::ImageLayout::eColorAttachmentOptimal,
+                vk::ImageLayout::eShaderReadOnlyOptimal,
+                vk::ImageAspectFlagBits::eColor);
+        }
+
         // Transition ssrRaw to ColorAttachmentOptimal for trace pass
         core::ImageUtilities::transitionImageLayout(commandBuffer,
             ssrRawImage, vk::ImageLayout::eUndefined,
@@ -205,6 +215,16 @@ namespace render::ssr
                 vk::ImageAspectFlagBits::eColor);
         }
 
+        // Restore normalRoughness image to ColorAttachmentOptimal for next frame's depth prepass
+        if (normalRoughnessImage)
+        {
+            core::ImageUtilities::transitionImageLayout(commandBuffer,
+                normalRoughnessImage,
+                vk::ImageLayout::eShaderReadOnlyOptimal,
+                vk::ImageLayout::eColorAttachmentOptimal,
+                vk::ImageAspectFlagBits::eColor);
+        }
+
         core::ImageUtilities::transitionImageLayout(commandBuffer,
             offscreenResources.depthImage.depthImage,
             vk::ImageLayout::eDepthStencilReadOnlyOptimal,
@@ -225,6 +245,16 @@ namespace render::ssr
             vk::ImageLayout::eColorAttachmentOptimal,
             vk::ImageLayout::eShaderReadOnlyOptimal,
             vk::ImageAspectFlagBits::eColor);
+
+        // Transition depth prepass normal+roughness image to ShaderReadOnly for trace sampling
+        if (normalRoughnessImage)
+        {
+            core::ImageUtilities::transitionImageLayout(commandBuffer,
+                normalRoughnessImage,
+                vk::ImageLayout::eColorAttachmentOptimal,
+                vk::ImageLayout::eShaderReadOnlyOptimal,
+                vk::ImageAspectFlagBits::eColor);
+        }
 
         // Transition ssrRaw to ColorAttachmentOptimal
         core::ImageUtilities::transitionImageLayout(commandBuffer,
@@ -402,6 +432,16 @@ namespace render::ssr
                 sizeof(CompositePushConstants), &compositePush);
             commandBuffer.draw(3, 1, 0, 0);
             core::endDynamicRendering(commandBuffer);
+        }
+
+        // Restore normalRoughness image to ColorAttachmentOptimal for next frame's depth prepass
+        if (normalRoughnessImage)
+        {
+            core::ImageUtilities::transitionImageLayout(commandBuffer,
+                normalRoughnessImage,
+                vk::ImageLayout::eShaderReadOnlyOptimal,
+                vk::ImageLayout::eColorAttachmentOptimal,
+                vk::ImageAspectFlagBits::eColor);
         }
 
         // Depth and scene color final transitions handled by render graph

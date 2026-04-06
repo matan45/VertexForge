@@ -27,11 +27,12 @@ float linearizeDepth(float d)
 }
 
 // Bilateral upsample from half-res SSR using full-res depth
-vec3 bilateralUpsample(vec2 uv)
+// Returns vec4(color, confidence) with confidence preserved
+vec4 bilateralUpsample(vec2 uv)
 {
     float centerDepth = linearizeDepth(texture(depthTexture, uv).r);
 
-    vec3 result = vec3(0.0);
+    vec4 result = vec4(0.0);
     float totalWeight = 0.0;
 
     for (int y = -1; y <= 1; y++)
@@ -45,27 +46,29 @@ vec3 bilateralUpsample(vec2 uv)
             float depthDiff = abs(centerDepth - sampleDepth);
             float weight = exp(-depthDiff * depthDiff * 50.0);
 
-            result += sampleColor.rgb * sampleColor.a * weight;
+            result += sampleColor * weight;
             totalWeight += weight;
         }
     }
 
-    return totalWeight > 0.0 ? result / totalWeight : vec3(0.0);
+    return totalWeight > 0.0 ? result / totalWeight : vec4(0.0);
 }
 
 void main()
 {
-    vec3 ssr;
+    vec4 ssrSample;
     if (halfResolution != 0u)
     {
-        ssr = bilateralUpsample(texCoord);
+        ssrSample = bilateralUpsample(texCoord);
     }
     else
     {
-        vec4 ssrSample = texture(ssrTexture, texCoord);
-        ssr = ssrSample.rgb * ssrSample.a;
+        ssrSample = texture(ssrTexture, texCoord);
     }
 
-    // Output SSR contribution — hardware additive blending adds to scene color
-    outColor = vec4(ssr * intensity, 0.0);
+    // .rgb = reflected color, .a = confidence (0-1)
+    // Apply confidence and intensity, output for additive blending
+    vec3 reflection = ssrSample.rgb * ssrSample.a * intensity;
+
+    outColor = vec4(reflection, 0.0);
 }

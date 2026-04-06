@@ -150,8 +150,8 @@ void main()
     {
         vec3 hitColor = texture(sceneColorTexture, rayResult.hitUV).rgb;
 
-        // Roughness-based confidence falloff
-        float roughnessFade = 1.0 - smoothstep(0.0, roughnessThreshold, roughness);
+        // Roughness-based confidence falloff — only fade near the threshold
+        float roughnessFade = 1.0 - smoothstep(roughnessThreshold * 0.5, roughnessThreshold, roughness);
 
         float confidence = rayResult.confidence * roughnessFade;
         outColor = vec4(hitColor, confidence);

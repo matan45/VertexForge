@@ -10,24 +10,13 @@ struct HiZRayResult
     bool hit;
 };
 
-// Advance ray position along the screen-space ray direction
-// Returns the next cell boundary crossing point
-float getHiZCellBoundary(float rayOrigin, float rayDir, float cellCount, float cellSize)
-{
-    float cell = floor(rayOrigin * cellCount);
-    // Move to cell edge in the direction of travel
-    float boundary = (cell + (rayDir > 0.0 ? 1.0 : 0.0)) * cellSize;
-    return boundary;
-}
-
-// Hi-Z ray march
+// Hi-Z ray march using linear screen-space stepping with Hi-Z acceleration
 // viewOrigin: view-space position of the fragment
 // viewDir:    view-space reflection direction (normalized)
 // projection: projection matrix
 // inverseProjection: inverse projection matrix
 // hiZTexture: Hi-Z mip pyramid (max depth reduction)
 // depthTexture: full-resolution depth buffer
-// sceneColorTexture: scene color for sampling hit color
 // resolution: trace resolution
 // nearPlane, farPlane: camera planes
 // maxSteps: maximum march steps
@@ -56,7 +45,7 @@ HiZRayResult hiZRayMarch(
     // Compute ray end point in view space
     vec3 viewEnd = viewOrigin + viewDir * maxDistance;
 
-    // Project start and end to screen space [0,1]
+    // Project start and end to clip space
     vec4 clipStart = projection * vec4(viewOrigin, 1.0);
     vec4 clipEnd = projection * vec4(viewEnd, 1.0);
 
@@ -64,120 +53,92 @@ HiZRayResult hiZRayMarch(
     if (clipStart.w <= 0.0)
         return result;
 
+    // Screen-space coordinates [0,1]
     vec2 screenStart = (clipStart.xy / clipStart.w) * 0.5 + 0.5;
-    vec2 screenEnd;
-    if (clipEnd.w > 0.0)
+
+    // Clamp end point if it goes behind camera
+    float tClip = 1.0;
+    if (clipEnd.w <= 0.0)
     {
-        screenEnd = (clipEnd.xy / clipEnd.w) * 0.5 + 0.5;
-    }
-    else
-    {
-        // Ray goes behind camera — clip to near plane
-        float t = (-viewOrigin.z - nearPlane) / (viewEnd.z - viewOrigin.z);
-        t = clamp(t, 0.0, 1.0);
-        vec3 clippedEnd = viewOrigin + viewDir * maxDistance * t;
-        vec4 clippedClip = projection * vec4(clippedEnd, 1.0);
-        screenEnd = (clippedClip.xy / clippedClip.w) * 0.5 + 0.5;
+        // Find t where the ray reaches near plane in view space
+        // viewOrigin.z + viewDir.z * t * maxDistance = -nearPlane
+        float tNear = (-nearPlane - viewOrigin.z) / (viewDir.z * maxDistance);
+        tClip = clamp(tNear * 0.95, 0.01, 1.0);
+        viewEnd = viewOrigin + viewDir * maxDistance * tClip;
+        clipEnd = projection * vec4(viewEnd, 1.0);
     }
 
+    vec2 screenEnd = (clipEnd.xy / clipEnd.w) * 0.5 + 0.5;
+
+    // Screen-space ray direction and length
     vec2 screenDir = screenEnd - screenStart;
-    float screenLength = length(screenDir * resolution);
+    float screenDist = length(screenDir * resolution);
 
-    if (screenLength < 1.0)
+    if (screenDist < 1.0)
         return result;
 
     // Use perspective-correct interpolation
     float invStartW = 1.0 / clipStart.w;
-    float invEndW = clipEnd.w > 0.0 ? 1.0 / clipEnd.w : invStartW;
-
+    float invEndW = 1.0 / clipEnd.w;
     vec2 startOverW = screenStart * invStartW;
     vec2 endOverW = screenEnd * invEndW;
-    float originZOverW = viewOrigin.z * invStartW;
-    float endZOverW = viewEnd.z * invEndW;
+    float startDepth = clipStart.z / clipStart.w; // NDC depth at start
+    float endDepth = clipEnd.z / clipEnd.w;       // NDC depth at end
 
-    // Hierarchical marching through mip levels
-    int mipCount = textureQueryLevels(hiZTexture);
-    int currentMip = clamp(int(log2(screenLength / float(maxSteps))), 0, mipCount - 1);
+    // Linear march in screen space with depth comparison
+    float thickness = 0.05; // NDC depth thickness for hit detection
 
-    float t = 0.0;
-    float dt = 1.0 / float(maxSteps);
-    float thickness = 0.3;
+    int stepCount = int(min(float(maxSteps), screenDist));
+    stepCount = max(stepCount, 16);
 
-    for (uint step = 0; step < maxSteps; step++)
+    for (int step = 1; step <= stepCount; step++)
     {
-        t += dt;
-        if (t > 1.0)
-            break;
+        float t = float(step) / float(stepCount);
 
-        // Perspective-correct interpolation
+        // Perspective-correct interpolation of UV and depth
         float invW = mix(invStartW, invEndW, t);
         vec2 sampleUV = mix(startOverW, endOverW, t) / invW;
-        float rayZ = mix(originZOverW, endZOverW, t) / invW;
+        float rayDepth = mix(startDepth * invStartW, endDepth * invEndW, t) / invW;
 
         // Out-of-bounds check
-        if (any(lessThan(sampleUV, vec2(0.001))) || any(greaterThan(sampleUV, vec2(0.999))))
+        if (any(lessThan(sampleUV, vec2(0.002))) || any(greaterThan(sampleUV, vec2(0.998))))
             break;
 
-        // Sample Hi-Z at current mip for coarse test
-        float hiZDepth = textureLod(hiZTexture, sampleUV, float(currentMip)).r;
+        // Use Hi-Z for early skip at coarser mips first
+        int mipLevel = clamp(int(log2(float(stepCount) / float(step + 1))), 0, 4);
+        float hiZDepth = textureLod(hiZTexture, sampleUV, float(mipLevel)).r;
 
-        // Reconstruct view Z from Hi-Z depth
-        vec4 hiZClip = vec4(sampleUV * 2.0 - 1.0, hiZDepth, 1.0);
-        vec4 hiZView = inverseProjection * hiZClip;
-        float sceneZ = hiZView.z / hiZView.w;
+        // If ray depth is less than Hi-Z max depth at this mip, no intersection possible here
+        // (Hi-Z stores max depth — if ray is closer than max, it might be in front of everything)
+        if (rayDepth < hiZDepth && mipLevel > 0)
+            continue;
 
-        if (rayZ < sceneZ)
+        // Sample exact depth at mip 0
+        float sceneDepth = texture(depthTexture, sampleUV).r;
+
+        // Skip sky pixels
+        if (sceneDepth >= 1.0)
+            continue;
+
+        // Check intersection: ray depth is behind scene depth (greater depth = farther)
+        float depthDiff = rayDepth - sceneDepth;
+
+        if (depthDiff > 0.0 && depthDiff < thickness)
         {
-            // Ray is in front of surface — advance and try coarser mip
-            if (currentMip < mipCount - 2)
-            {
-                currentMip++;
-                dt *= 2.0;
-            }
-        }
-        else
-        {
-            // Ray is behind surface — potential intersection
-            if (currentMip > 0)
-            {
-                // Refine: step back and descend to finer mip
-                t -= dt;
-                currentMip--;
-                dt *= 0.5;
-            }
-            else
-            {
-                // At finest mip — check exact depth
-                float exactDepth = texture(depthTexture, sampleUV).r;
-                if (exactDepth >= 1.0)
-                    continue;
+            result.hit = true;
+            result.hitUV = sampleUV;
+            result.hitDepth = sceneDepth;
 
-                vec4 exactClip = vec4(sampleUV * 2.0 - 1.0, exactDepth, 1.0);
-                vec4 exactView = inverseProjection * exactClip;
-                float exactZ = exactView.z / exactView.w;
+            // Confidence based on distance and screen-edge fade
+            float rayT = t * tClip;
+            float distanceFade = 1.0 - smoothstep(maxDistance * 0.7, maxDistance, rayT * maxDistance);
 
-                if (rayZ < exactZ && rayZ > exactZ - thickness)
-                {
-                    result.hit = true;
-                    result.hitUV = sampleUV;
-                    result.hitDepth = exactDepth;
+            // Screen-edge fade
+            vec2 edgeDist = abs(sampleUV - 0.5) * 2.0;
+            float edgeFade = 1.0 - smoothstep(edgeFadeStart, 1.0, max(edgeDist.x, edgeDist.y));
 
-                    // Confidence based on distance and edge fade
-                    float rayDist = length(mix(viewOrigin, viewEnd, t) - viewOrigin);
-                    float distanceFade = 1.0 - smoothstep(maxDistance * 0.5, maxDistance, rayDist);
-
-                    // Screen-edge fade
-                    vec2 edgeDist = abs(sampleUV - 0.5) * 2.0;
-                    float edgeFade = 1.0 - smoothstep(edgeFadeStart, 1.0, max(edgeDist.x, edgeDist.y));
-
-                    // Back-face rejection: check if the hit normal faces away from ray
-                    result.confidence = distanceFade * edgeFade;
-                    return result;
-                }
-
-                // Passed through — continue at current mip
-                dt = 1.0 / float(maxSteps);
-            }
+            result.confidence = distanceFade * edgeFade;
+            return result;
         }
     }
 

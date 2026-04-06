@@ -535,6 +535,13 @@ namespace render::gpudriven
         return nullptr;
     }
 
+    vk::Image GPUDrivenRenderer::getPrepassNormalImage() const
+    {
+        if (depthPrepass && depthPrepass->isInitialized())
+            return depthPrepass->getNormalImage();
+        return nullptr;
+    }
+
     void GPUDrivenRenderer::updatePipelineDescriptors()
     {
         if (lightCullingPipeline && clusterGridManager && lightBufferManager)
