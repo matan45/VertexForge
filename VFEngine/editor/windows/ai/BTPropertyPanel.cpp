@@ -49,6 +49,7 @@ namespace editor::windows
         case BTNodeType::ScriptTask: drawScriptTaskProperties(*node); break;
         case BTNodeType::SetBlackboardValue: drawSetBlackboardProperties(*node, graph); break;
         case BTNodeType::CheckBlackboardValue: drawCheckBlackboardProperties(*node, graph); break;
+        case BTNodeType::LineOfSight: drawLineOfSightProperties(*node, graph); break;
         default: break;
         }
     }
@@ -380,5 +381,70 @@ namespace editor::windows
             node.properties["compareValue"] = compareVal;
             notifyChanged();
         }
+    }
+
+    void BTPropertyPanel::drawLineOfSightProperties(BTNode& node, const BTGraph* graph)
+    {
+        // Target key (Entity or Vec3 from blackboard)
+        std::string targetKey = "target";
+        auto keyIt = node.properties.find("targetKey");
+        if (keyIt != node.properties.end() && std::holds_alternative<std::string>(keyIt->second))
+            targetKey = std::get<std::string>(keyIt->second);
+
+        if (graph && !graph->blackboardKeys.empty())
+        {
+            if (ImGui::BeginCombo("Target Key", targetKey.c_str()))
+            {
+                for (const auto& keyDef : graph->blackboardKeys)
+                {
+                    if (keyDef.type == BlackboardValueType::Entity || keyDef.type == BlackboardValueType::Vec3)
+                    {
+                        bool selected = (keyDef.name == targetKey);
+                        if (ImGui::Selectable(keyDef.name.c_str(), selected))
+                        {
+                            node.properties["targetKey"] = keyDef.name;
+                            notifyChanged();
+                        }
+                    }
+                }
+                ImGui::EndCombo();
+            }
+        }
+        else
+        {
+            char keyBuf[64];
+            strncpy(keyBuf, targetKey.c_str(), sizeof(keyBuf) - 1);
+            keyBuf[sizeof(keyBuf) - 1] = '\0';
+            if (ImGui::InputText("Target Key", keyBuf, sizeof(keyBuf)))
+            {
+                node.properties["targetKey"] = std::string(keyBuf);
+                notifyChanged();
+            }
+        }
+
+        // Max distance
+        float maxDist = 50.0f;
+        auto distIt = node.properties.find("maxDistance");
+        if (distIt != node.properties.end() && std::holds_alternative<float>(distIt->second))
+            maxDist = std::get<float>(distIt->second);
+
+        if (ImGui::DragFloat("Max Distance", &maxDist, 1.0f, 0.0f, 500.0f))
+        {
+            node.properties["maxDistance"] = maxDist;
+            notifyChanged();
+        }
+
+        // Eye offset
+        float eyeOffset = 1.6f;
+        auto eyeIt = node.properties.find("eyeOffset");
+        if (eyeIt != node.properties.end() && std::holds_alternative<float>(eyeIt->second))
+            eyeOffset = std::get<float>(eyeIt->second);
+
+        if (ImGui::DragFloat("Eye Offset", &eyeOffset, 0.1f, 0.0f, 10.0f))
+        {
+            node.properties["eyeOffset"] = eyeOffset;
+            notifyChanged();
+        }
+        ImGui::TextDisabled("Height offset for ray origin (eye level)");
     }
 }

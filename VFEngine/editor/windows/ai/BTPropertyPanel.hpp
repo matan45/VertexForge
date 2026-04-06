@@ -28,6 +28,7 @@ namespace editor::windows
         void drawScriptTaskProperties(behaviortree::BTNode& node);
         void drawSetBlackboardProperties(behaviortree::BTNode& node, const behaviortree::BTGraph* graph);
         void drawCheckBlackboardProperties(behaviortree::BTNode& node, const behaviortree::BTGraph* graph);
+        void drawLineOfSightProperties(behaviortree::BTNode& node, const behaviortree::BTGraph* graph);
 
         void notifyChanged();
     };

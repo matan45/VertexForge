@@ -16,6 +16,7 @@
 #include "postprocess/PostProcessPipeline.hpp"
 #include "volumetric/VolumetricFogComposite.hpp"
 #include "gi/SSGIPipeline.hpp"
+#include "ssr/SSRPipeline.hpp"
 #include "transparency/WBOITPipeline.hpp"
 #include "decal/DecalPipeline.hpp"
 #include "atmosphere/AtmospherePipeline.hpp"
@@ -162,6 +163,64 @@ namespace render
     }
     void RenderPassHandler::initSSGI() { if (ssgiPipeline && ssgiPipeline->isInitialized()) return; if (!ssgiPipeline) ssgiPipeline = std::make_unique<gi::SSGIPipeline>(device, swapChain, offscreenResources); ssgiPipeline->init(); }
     void RenderPassHandler::resetSSGI() { if (ssgiPipeline) { ssgiPipeline->cleanup(); ssgiPipeline.reset(); } }
+
+    void RenderPassHandler::initSSR()
+    {
+        if (ssrPipeline && ssrPipeline->isInitialized()) return;
+        if (!ssrPipeline) ssrPipeline = std::make_unique<ssr::SSRPipeline>(device, swapChain, offscreenResources);
+
+        // Supply Hi-Z and normal+roughness resources from GPU-driven renderer
+        if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
+        {
+            auto [hiZView, hiZSmplr] = gpuDrivenRenderer->getPrepassHiZViewSampler();
+            if (hiZView && hiZSmplr)
+                ssrPipeline->setHiZResources(hiZView, hiZSmplr);
+
+            auto normalView = gpuDrivenRenderer->getPrepassNormalImageView();
+            auto normalImg = gpuDrivenRenderer->getPrepassNormalImage();
+            if (normalView && normalImg)
+                ssrPipeline->setNormalRoughnessResources(normalView, normalImg);
+        }
+
+        ssrPipeline->init();
+    }
+
+    void RenderPassHandler::resetSSR()
+    {
+        if (ssrPipeline)
+        {
+            device.getLogicalDevice().waitIdle();
+            ssrPipeline->cleanup();
+            ssrPipeline.reset();
+        }
+    }
+
+    void RenderPassHandler::applySSRSettings(const ::postprocess::SSRSettings& settings)
+    {
+        if (settings.enabled) initSSR();
+        if (ssrPipeline)
+        {
+            bool halfResChanged = ssrPipeline->isInitialized() &&
+                                  ssrPipeline->isHalfResolution() != settings.halfResolution;
+
+            ssr::SSRSettings ssrSettings{};
+            ssrSettings.enabled = settings.enabled;
+            ssrSettings.maxDistance = settings.maxDistance;
+            ssrSettings.intensity = settings.intensity;
+            ssrSettings.roughnessThreshold = settings.roughnessThreshold;
+            ssrSettings.edgeFadeStart = settings.edgeFadeStart;
+            ssrSettings.temporalBlend = settings.temporalBlend;
+            ssrSettings.maxSteps = settings.maxSteps;
+            ssrSettings.halfResolution = settings.halfResolution;
+            ssrPipeline->updateSettings(ssrSettings);
+
+            if (halfResChanged)
+            {
+                device.getLogicalDevice().waitIdle();
+                ssrPipeline->recreate();
+            }
+        }
+    }
 
     void RenderPassHandler::initAtmosphere() { if (atmospherePipeline && atmospherePipeline->isInitialized()) return; if (!atmospherePipeline) atmospherePipeline = std::make_unique<atmosphere::AtmospherePipeline>(device, swapChain, offscreenResources); atmospherePipeline->init(); }
     void RenderPassHandler::resetAtmosphere() { if (atmospherePipeline) { atmospherePipeline->cleanup(); atmospherePipeline.reset(); } }

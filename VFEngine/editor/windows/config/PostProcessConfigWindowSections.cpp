@@ -365,4 +365,89 @@ namespace windows
             ImGui::Unindent(10.0f);
         }
     }
+
+    void PostProcessConfigWindow::drawSSRSection()
+    {
+        if (ImGui::CollapsingHeader("Screen-Space Reflections"))
+        {
+            ImGui::Indent(10.0f);
+
+            if (ImGui::Checkbox("Enable SSR", &settings.ssr.enabled))
+            {
+                isDirty = true;
+            }
+
+            if (settings.ssr.enabled)
+            {
+                ImGui::Spacing();
+
+                if (ImGui::DragFloat("Intensity##ssr", &settings.ssr.intensity, 0.01f, 0.0f, 2.0f, "%.2f"))
+                {
+                    isDirty = true;
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Overall reflection intensity multiplier.");
+                }
+
+                if (ImGui::DragFloat("Max Distance##ssr", &settings.ssr.maxDistance, 1.0f, 1.0f, 500.0f, "%.0f"))
+                {
+                    isDirty = true;
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Maximum ray march distance in view space.\nLonger = more reflections but slower.");
+                }
+
+                int maxSteps = static_cast<int>(settings.ssr.maxSteps);
+                if (ImGui::SliderInt("Max Steps##ssr", &maxSteps, 16, 128))
+                {
+                    settings.ssr.maxSteps = static_cast<uint32_t>(maxSteps);
+                    isDirty = true;
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Maximum ray march steps.\nMore steps = higher quality but slower.");
+                }
+
+                if (ImGui::DragFloat("Roughness Threshold##ssr", &settings.ssr.roughnessThreshold, 0.01f, 0.0f, 1.0f, "%.2f"))
+                {
+                    isDirty = true;
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Surfaces rougher than this will not receive SSR.\nLower = fewer reflections, better performance.");
+                }
+
+                if (ImGui::DragFloat("Edge Fade##ssr", &settings.ssr.edgeFadeStart, 0.01f, 0.5f, 1.0f, "%.2f"))
+                {
+                    isDirty = true;
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Screen-edge fade threshold.\nReflections near screen borders fade out to avoid artifacts.");
+                }
+
+                if (ImGui::DragFloat("Temporal Blend##ssr", &settings.ssr.temporalBlend, 0.01f, 0.01f, 0.5f, "%.2f"))
+                {
+                    isDirty = true;
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Temporal accumulation blend factor.\nLower = more stable but more ghosting.");
+                }
+
+                if (ImGui::Checkbox("Half Resolution##ssr", &settings.ssr.halfResolution))
+                {
+                    isDirty = true;
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Trace at half resolution for better performance.\nUses bilateral upsampling to maintain quality.");
+                }
+            }
+
+            ImGui::Unindent(10.0f);
+        }
+    }
 }

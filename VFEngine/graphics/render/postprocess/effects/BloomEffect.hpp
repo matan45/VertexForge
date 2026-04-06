@@ -52,6 +52,7 @@ namespace render::postprocess
         uint32_t currentPasses = 5;
 
         vk::Extent2D currentExtent{};
+        bool mipLayoutsInitialized = false;
 
     public:
         explicit BloomEffect(core::Device& device);

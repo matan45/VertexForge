@@ -22,6 +22,7 @@ namespace windows
         void drawEdgeDetectionSection();
         void drawColorGradingSection();
         void drawUnderwaterSection();
+        void drawSSRSection();
         void loadSettings();
         void applySettings();
         void resetToDefaults();

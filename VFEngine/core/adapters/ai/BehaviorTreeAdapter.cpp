@@ -6,6 +6,7 @@
 #include "../../../services/events/animation/AnimatorEvents.hpp"
 #include "../../../services/events/ai/EQSEvents.hpp"
 #include "../../../services/events/scene/EntityTransformEvents.hpp"
+#include "../../../services/events/physics/PhysicsEvents.hpp"
 #include "print/Log.hpp"
 
 namespace core
@@ -363,5 +364,75 @@ namespace core
         default:
             return BTNodeStatus::Running;
         }
+    }
+
+    BTNodeStatus BehaviorTreeAdapter::executeLineOfSight(services::EntityHandle entity,
+                                                          const std::string& targetKey,
+                                                          float maxDistance,
+                                                          float eyeOffset,
+                                                          Blackboard& blackboard)
+    {
+        if (!blackboard.has(targetKey))
+        {
+            vfLogWarning("BT LineOfSight: blackboard key '{}' not found", targetKey);
+            return BTNodeStatus::Failure;
+        }
+
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        // Get owner position
+        events::scene::GetWorldTransformQuery ownerTransformQuery;
+        ownerTransformQuery.entity = entity;
+        auto ownerTransform = dispatcher.query(ownerTransformQuery);
+        if (!ownerTransform.has_value())
+            return BTNodeStatus::Failure;
+
+        glm::vec3 origin = ownerTransform->position + glm::vec3(0.0f, eyeOffset, 0.0f);
+
+        // Get target position from blackboard (Entity or Vec3)
+        glm::vec3 targetPos;
+        auto val = blackboard.get(targetKey);
+
+        if (std::holds_alternative<services::EntityHandle>(val))
+        {
+            auto targetEntity = std::get<services::EntityHandle>(val);
+            events::scene::GetWorldTransformQuery targetTransformQuery;
+            targetTransformQuery.entity = targetEntity;
+            auto targetTransform = dispatcher.query(targetTransformQuery);
+            if (!targetTransform.has_value())
+                return BTNodeStatus::Failure;
+            targetPos = targetTransform->position + glm::vec3(0.0f, eyeOffset, 0.0f);
+        }
+        else if (std::holds_alternative<glm::vec3>(val))
+        {
+            targetPos = std::get<glm::vec3>(val);
+        }
+        else
+        {
+            vfLogWarning("BT LineOfSight: key '{}' is not Entity or Vec3", targetKey);
+            return BTNodeStatus::Failure;
+        }
+
+        glm::vec3 toTarget = targetPos - origin;
+        float distance = glm::length(toTarget);
+
+        if (distance > maxDistance || distance < 0.001f)
+            return BTNodeStatus::Failure;
+
+        glm::vec3 direction = toTarget / distance;
+
+        events::physics::RaycastQuery rayQuery;
+        rayQuery.origin = origin;
+        rayQuery.direction = direction;
+        rayQuery.maxDistance = distance;
+
+        auto hit = dispatcher.query(rayQuery);
+
+        // If nothing was hit, or the hit is beyond the target, line of sight is clear
+        if (!hit.hit || hit.distance >= distance - 0.1f)
+            return BTNodeStatus::Success;
+
+        // Something is blocking the view
+        return BTNodeStatus::Failure;
     }
 }

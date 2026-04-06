@@ -43,6 +43,9 @@ namespace render
         renderPassHandler = std::make_unique<render::RenderPassHandler>(device, swapChain, offscreenResources);
         renderPassHandler->init();
 
+        if (auto* dq = core::RenderManager::getGlobalDeletionQueue())
+            renderPassHandler->setDeletionQueue(dq);
+
         renderPassHandler->initHiZ(types::MAIN_CAMERA_ID,
                                    offscreenResources.depthImage.depthImage,
                                    offscreenResources.depthImage.depthImageView,

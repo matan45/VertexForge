@@ -46,6 +46,7 @@ namespace render::postprocess
         vk::Image image;
         core::VulkanAllocation allocation;
         vk::ImageView imageView;
+        vk::ImageLayout currentLayout = vk::ImageLayout::eUndefined;
     };
 
     class PostProcessPipeline

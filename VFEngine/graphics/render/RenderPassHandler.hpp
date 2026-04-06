@@ -1,4 +1,5 @@
 #pragma once
+#include "postprocess/PostProcessTypes.hpp"
 #include "../core/OffScreen.hpp"
 #include "occlusion/CameraOcclusionManager.hpp"
 #include "material/MaterialManager.hpp"
@@ -75,6 +76,12 @@ namespace render::gi
 {
     class SSGIPipeline;
 }
+
+namespace render::ssr
+{
+    class SSRPipeline;
+}
+
 
 namespace render::graph
 {
@@ -153,6 +160,7 @@ namespace render
         std::unique_ptr<postprocess::PostProcessPipeline> postProcessPipeline;
         std::unique_ptr<volumetric::VolumetricFogComposite> volumetricFogComposite;
         std::unique_ptr<gi::SSGIPipeline> ssgiPipeline;
+        std::unique_ptr<ssr::SSRPipeline> ssrPipeline;
         std::unique_ptr<atmosphere::AtmospherePipeline> atmospherePipeline;
         std::unique_ptr<cloud::CloudPipeline> cloudPipeline;
         std::unique_ptr<transparency::WBOITPipeline> wboitPipeline;
@@ -437,6 +445,11 @@ namespace render
         void initSSGI();
         void resetSSGI();
         gi::SSGIPipeline* getSSGIPipeline() const { return ssgiPipeline.get(); }
+
+        void initSSR();
+        void resetSSR();
+        void applySSRSettings(const ::postprocess::SSRSettings& settings);
+        ssr::SSRPipeline* getSSRPipeline() const { return ssrPipeline.get(); }
 
         void initAtmosphere();
         void resetAtmosphere();

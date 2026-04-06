@@ -483,6 +483,7 @@ namespace windows
             drawEdgeDetectionSection();
             drawColorGradingSection();
             drawUnderwaterSection();
+            drawSSRSection();
 
             ImGui::Spacing();
             ImGui::Separator();
