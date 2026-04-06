@@ -41,20 +41,12 @@ namespace services
         auto brushType = dispatcher.query(events::brush::GetBrushTypeQuery{});
         auto brushParams = dispatcher.query(events::brush::GetBrushParamsQuery{});
 
-        // Upload stamp data to GPU if needed
+        // Query stamp data dimensions for GPU params (upload handled by StampImageChangedNotification)
         std::shared_ptr<terrain::HeightmapData> stampData;
-        if (brushType == terrain::BrushType::Stamp && brushComputeProvider)
+        if (brushType == terrain::BrushType::Stamp)
         {
             stampData = dispatcher.query(events::brush::GetStampDataQuery{});
-            if (stampData && stampData->isValid())
-            {
-                brushComputeProvider->setStampData(stampData->heights, stampData->width, stampData->height);
-            }
         }
-
-        // Reset ramp state when not using Ramp brush
-        if (brushType != terrain::BrushType::Ramp)
-            rampStartCaptured = false;
 
         if (brushType == terrain::BrushType::Flatten)
         {

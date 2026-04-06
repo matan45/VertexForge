@@ -20,6 +20,7 @@
 #include "../../events/physics/PhysicsEvents.hpp"
 #include "../../events/world/WorldSectorEvents.hpp"
 #include "../../events/terrain/SplineTerrainEvents.hpp"
+#include "../../events/editor/SculptModeEvents.hpp"
 #include "terrain/BrushSampler.hpp"
 #include "terrain/TerrainTile.hpp"
 #include "terrain/WeightBrushApplicator.hpp"
@@ -249,6 +250,20 @@ namespace services
                 rampStartCaptured = false;
             });
 
+        dispatcher.subscribe<events::brush::BrushTypeChangedNotification>(
+            [this](const events::brush::BrushTypeChangedNotification& n)
+            {
+                if (n.type != terrain::BrushType::Ramp)
+                    rampStartCaptured = false;
+            });
+
+        dispatcher.subscribe<events::sculpt::SculptModeChangedNotification>(
+            [this](const events::sculpt::SculptModeChangedNotification& n)
+            {
+                if (!n.isActive)
+                    rampStartCaptured = false;
+            });
+
         dispatcher.registerQueryHandler<events::brush::IsRampStartCapturedQuery>(
             [this](const events::brush::IsRampStartCapturedQuery&)
             {
@@ -330,20 +345,44 @@ namespace services
 
                     bool tileModified = false;
 
+                    // Precompute tile AABB for segment culling
+                    float tileSize = tile->config.worldTileSize;
+                    glm::vec2 tileMin = tileOrigin - glm::vec2(totalHalfWidth);
+                    glm::vec2 tileMax = tileOrigin + glm::vec2(tileSize + totalHalfWidth);
+
+                    // Filter segments that overlap this tile's AABB
+                    std::vector<size_t> relevantSegments;
+                    for (size_t i = 0; i + 1 < cmd.splineSamples.size(); ++i)
+                    {
+                        glm::vec2 segStart(cmd.splineSamples[i].x, cmd.splineSamples[i].z);
+                        glm::vec2 segEnd(cmd.splineSamples[i + 1].x, cmd.splineSamples[i + 1].z);
+                        glm::vec2 segMin = glm::min(segStart, segEnd) - glm::vec2(totalHalfWidth);
+                        glm::vec2 segMax = glm::max(segStart, segEnd) + glm::vec2(totalHalfWidth);
+
+                        if (segMax.x >= tileOrigin.x && segMin.x <= tileOrigin.x + tileSize &&
+                            segMax.y >= tileOrigin.y && segMin.y <= tileOrigin.y + tileSize)
+                        {
+                            relevantSegments.push_back(i);
+                        }
+                    }
+
+                    if (relevantSegments.empty())
+                        continue;
+
                     for (uint32_t z = 0; z < vertCount; ++z)
                     {
                         for (uint32_t x = 0; x < vertCount; ++x)
                         {
                             glm::vec2 vertPos = tileOrigin + glm::vec2(static_cast<float>(x), static_cast<float>(z)) * vertSpacing;
 
-                            // Find closest point on entire spline
+                            // Find closest point on relevant spline segments
                             float minPerpDist = std::numeric_limits<float>::max();
                             float bestTargetHeight = 0.0f;
 
-                            for (size_t i = 0; i + 1 < cmd.splineSamples.size(); ++i)
+                            for (size_t idx : relevantSegments)
                             {
-                                glm::vec2 segStart(cmd.splineSamples[i].x, cmd.splineSamples[i].z);
-                                glm::vec2 segEnd(cmd.splineSamples[i + 1].x, cmd.splineSamples[i + 1].z);
+                                glm::vec2 segStart(cmd.splineSamples[idx].x, cmd.splineSamples[idx].z);
+                                glm::vec2 segEnd(cmd.splineSamples[idx + 1].x, cmd.splineSamples[idx + 1].z);
                                 glm::vec2 segDir = segEnd - segStart;
                                 float segLen = glm::length(segDir);
                                 if (segLen < 0.001f) continue;
@@ -359,8 +398,8 @@ namespace services
                                 {
                                     minPerpDist = perpDist;
                                     bestTargetHeight = glm::mix(
-                                        cmd.splineSamples[i].y,
-                                        cmd.splineSamples[i + 1].y, t)
+                                        cmd.splineSamples[idx].y,
+                                        cmd.splineSamples[idx + 1].y, t)
                                         + cmd.params.embankmentHeight;
                                 }
                             }

@@ -1,6 +1,8 @@
 #pragma once
 
 #include "events/EventTypes.hpp"
+#include <glm/glm.hpp>
+#include <vector>
 
 namespace windows
 {
@@ -14,6 +16,9 @@ namespace windows
         float embankmentHeight = 0.0f;
         int paintLayer = 1;
         uint32_t pointCount = 0;
+        uint32_t cachedPointCount = 0;
+        float cachedCorridorWidth = 0.0f;
+        std::vector<glm::vec3> cachedSamples;
 
         events::SubscriptionToken modeToken;
         events::SubscriptionToken pointToken;

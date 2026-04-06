@@ -78,7 +78,7 @@ namespace events::splineTerrain
         std::string_view getName() const override { return "SplineModeChanged"; }
     };
 
-    struct SplinePointAddedNotification : INotification
+    struct SplinePointCountChangedNotification : INotification
     {
         uint32_t pointCount = 0;
 

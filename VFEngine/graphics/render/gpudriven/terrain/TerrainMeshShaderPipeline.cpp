@@ -266,6 +266,7 @@ namespace render::gpudriven
 
         terrainLayerBufferMapped = nullptr;
         core::BufferUtilities::destroyBuffer(vkDevice, terrainLayerBuffer, terrainLayerBufferAllocation, device.getMemoryManager());
+        core::BufferUtilities::destroyBuffer(vkDevice, stampDummyBuffer, stampDummyAllocation, device.getMemoryManager());
 
         cleanupDescriptorResources();
 
@@ -344,8 +345,12 @@ namespace render::gpudriven
 
         writeTerrainDataDescriptors(vkDevice, terrainDataDescriptorSet, tileDataBuffer, statsBuffer);
 
-        // Bind dummy stamp buffer (binding 2) - use stats buffer as placeholder
-        writeStorageBufferDescriptor(vkDevice, terrainDataDescriptorSet, 2, statsBuffer, sizeof(float));
+        // Create dedicated dummy buffer for stamp overlay binding 2
+        core::BufferInfoRequest dummyRequest(vkDevice, device.getPhysicalDevice(),
+            sizeof(float), vk::BufferUsageFlagBits::eStorageBuffer,
+            vk::MemoryPropertyFlagBits::eDeviceLocal);
+        core::BufferUtilities::createBuffer(dummyRequest, stampDummyBuffer, stampDummyAllocation, device.getMemoryManager());
+        writeStorageBufferDescriptor(vkDevice, terrainDataDescriptorSet, 2, stampDummyBuffer, sizeof(float));
     }
 
     bool TerrainMeshShaderPipeline::loadTerrainShaders()

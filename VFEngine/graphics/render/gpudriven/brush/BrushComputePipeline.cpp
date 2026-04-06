@@ -359,6 +359,29 @@ namespace render::gpudriven
 
     void BrushComputePipeline::clearStampData()
     {
+        if (initialized && stampBuffer)
+        {
+            vk::Device vkDevice = device.getLogicalDevice();
+            core::BufferUtilities::destroyBuffer(vkDevice, stampBuffer, stampAllocation, device.getMemoryManager());
+
+            // Rebind dummy buffer for validation
+            core::BufferInfoRequest dummyRequest(
+                vkDevice, device.getPhysicalDevice(), sizeof(float),
+                vk::BufferUsageFlagBits::eStorageBuffer,
+                vk::MemoryPropertyFlagBits::eDeviceLocal
+            );
+            core::BufferUtilities::createBuffer(dummyRequest, stampBuffer, stampAllocation, device.getMemoryManager());
+
+            vk::DescriptorBufferInfo stampInfo{stampBuffer, 0, sizeof(float)};
+            vk::WriteDescriptorSet stampWrite{};
+            stampWrite.dstSet = descriptorSet;
+            stampWrite.dstBinding = 2;
+            stampWrite.descriptorCount = 1;
+            stampWrite.descriptorType = vk::DescriptorType::eStorageBuffer;
+            stampWrite.pBufferInfo = &stampInfo;
+            vkDevice.updateDescriptorSets({stampWrite}, {});
+        }
+
         stampWidth = 0;
         stampHeight = 0;
         hasStampData = false;

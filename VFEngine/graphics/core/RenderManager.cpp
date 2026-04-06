@@ -330,6 +330,8 @@ namespace core {
 		presentInfo.pSwapchains = swapChains.data();
 		presentInfo.pImageIndices = &imgIndex;
 
+		// Lock graphics queue mutex: presentQueue may be the same physical queue as
+		// graphicsAndComputeQueue, and brush compute submits from the main thread
 		vk::Result result;
 		{
 			std::lock_guard lock(device.getGraphicsQueueMutex());

@@ -94,7 +94,7 @@ namespace services
     {
         activePoints.push_back({pos});
 
-        events::splineTerrain::SplinePointAddedNotification n;
+        events::splineTerrain::SplinePointCountChangedNotification n;
         n.pointCount = static_cast<uint32_t>(activePoints.size());
         events::EventDispatcher::instance().publish(n);
     }
@@ -105,7 +105,7 @@ namespace services
         {
             activePoints.pop_back();
 
-            events::splineTerrain::SplinePointAddedNotification n;
+            events::splineTerrain::SplinePointCountChangedNotification n;
             n.pointCount = static_cast<uint32_t>(activePoints.size());
             events::EventDispatcher::instance().publish(n);
         }

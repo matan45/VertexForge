@@ -134,6 +134,8 @@ namespace render::gpudriven
         glm::mat4 viewProjection{1.0f};
 
         // Stamp overlay
+        vk::Buffer stampDummyBuffer;
+        core::VulkanAllocation stampDummyAllocation;
         vk::Buffer stampOverlayBuffer;
         uint32_t stampOverlayWidth = 0;
         uint32_t stampOverlayHeight = 0;

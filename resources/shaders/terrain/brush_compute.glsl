@@ -290,6 +290,9 @@ void main()
             }
             break;
         }
+
+        case 8: // Ramp (handled CPU-side, no GPU dispatch)
+            break;
     }
 
     heightsOut[idx] = clamp(newHeight, pc.minHeight, pc.maxHeight);

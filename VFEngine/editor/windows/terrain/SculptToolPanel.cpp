@@ -169,7 +169,7 @@ namespace windows
             dispatcher.execute(cmd);
         }
 
-        if (selectedBrushType != 5)
+        if (selectedBrushType != static_cast<int>(terrain::BrushType::Stamp))
         {
             const char* shapeLabels[] = {"Circle", "Square"};
             if (ImGui::Combo("Shape", &shapeIndex, shapeLabels, 2))
@@ -181,7 +181,7 @@ namespace windows
         }
 
         // Stamp brush controls
-        if (selectedBrushType == 5)
+        if (selectedBrushType == static_cast<int>(terrain::BrushType::Stamp))
         {
             ImGui::Spacing();
             ImGui::Text("Stamp Image");
@@ -252,7 +252,7 @@ namespace windows
         }
 
         // Erosion brush controls
-        if (selectedBrushType == 6)
+        if (selectedBrushType == static_cast<int>(terrain::BrushType::Erosion))
         {
             ImGui::Spacing();
             ImGui::Text("Erosion Settings");
@@ -268,7 +268,7 @@ namespace windows
         }
 
         // Terrace brush controls
-        if (selectedBrushType == 7)
+        if (selectedBrushType == static_cast<int>(terrain::BrushType::Terrace))
         {
             ImGui::Spacing();
             ImGui::Text("Terrace Settings");
@@ -290,7 +290,7 @@ namespace windows
         }
 
         // Ramp brush controls
-        if (selectedBrushType == 8)
+        if (selectedBrushType == static_cast<int>(terrain::BrushType::Ramp))
         {
             ImGui::Spacing();
             ImGui::Text("Ramp Settings");
@@ -329,7 +329,7 @@ namespace windows
 
         ImGui::Spacing();
         ImGui::Separator();
-        if (selectedBrushType == 8)
+        if (selectedBrushType == static_cast<int>(terrain::BrushType::Ramp))
         {
             ImGui::TextDisabled("Click start point, then click end point");
         }

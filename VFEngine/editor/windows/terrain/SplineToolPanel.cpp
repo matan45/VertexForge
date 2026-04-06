@@ -46,8 +46,8 @@ namespace windows
                 }
             });
 
-        pointToken = dispatcher.subscribe<events::splineTerrain::SplinePointAddedNotification>(
-            [this](const events::splineTerrain::SplinePointAddedNotification& n)
+        pointToken = dispatcher.subscribe<events::splineTerrain::SplinePointCountChangedNotification>(
+            [this](const events::splineTerrain::SplinePointCountChangedNotification& n)
             {
                 pointCount = n.pointCount;
             });
@@ -162,11 +162,18 @@ namespace windows
         ImGui::TextDisabled("Click terrain to add points");
         ImGui::TextDisabled("Need at least 2 points to apply");
 
-        // Draw spline preview each frame
+        // Draw spline preview each frame (cached)
         if (pointCount >= 2)
         {
-            events::splineTerrain::GetActiveSplinePreviewQuery previewQuery;
-            auto samples = dispatcher.query(previewQuery);
+            if (pointCount != cachedPointCount || corridorWidth != cachedCorridorWidth)
+            {
+                events::splineTerrain::GetActiveSplinePreviewQuery previewQuery;
+                cachedSamples = dispatcher.query(previewQuery);
+                cachedPointCount = pointCount;
+                cachedCorridorWidth = corridorWidth;
+            }
+
+            const auto& samples = cachedSamples;
             float halfWidth = corridorWidth;
 
             for (size_t i = 0; i + 1 < samples.size(); ++i)
