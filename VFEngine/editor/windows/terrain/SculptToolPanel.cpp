@@ -56,6 +56,7 @@ namespace windows
                     shapeIndex = static_cast<int>(params.shape);
                     stampRotation = params.stampRotation;
                     stampScale = params.stampScale;
+                    talusAngle = params.talusAngle;
 
                     auto type = d.query(events::brush::GetBrushTypeQuery{});
                     selectedBrushType = static_cast<int>(type);
@@ -77,6 +78,7 @@ namespace windows
                 shapeIndex = static_cast<int>(n.params.shape);
                 stampRotation = n.params.stampRotation;
                 stampScale = n.params.stampScale;
+                talusAngle = n.params.talusAngle;
             });
 
         stampImageToken = dispatcher.subscribe<events::brush::StampImageChangedNotification>(
@@ -111,16 +113,16 @@ namespace windows
         ImGui::Text("Brush Type");
         ImGui::Separator();
 
-        const char* brushLabels[] = {"Raise", "Lower", "Smooth", "Flatten", "Noise", "Stamp"};
+        const char* brushLabels[] = {"Raise", "Lower", "Smooth", "Flatten", "Noise", "Stamp", "Erosion"};
         bool typeChanged = false;
 
-        for (int i = 0; i < 6; ++i)
+        for (int i = 0; i < 7; ++i)
         {
             if (ImGui::RadioButton(brushLabels[i], &selectedBrushType, i))
             {
                 typeChanged = true;
             }
-            if (i < 5)
+            if (i < 6)
             {
                 ImGui::SameLine();
             }
@@ -239,6 +241,22 @@ namespace windows
                 cmd.scale = stampScale;
                 dispatcher.execute(cmd);
             }
+        }
+
+        // Erosion brush controls
+        if (selectedBrushType == 6)
+        {
+            ImGui::Spacing();
+            ImGui::Text("Erosion Settings");
+            ImGui::Separator();
+
+            if (ImGui::SliderFloat("Talus Angle", &talusAngle, 5.0f, 85.0f, "%.1f deg"))
+            {
+                events::brush::SetTalusAngleCommand cmd;
+                cmd.angle = talusAngle;
+                dispatcher.execute(cmd);
+            }
+            ImGui::TextDisabled("Lower angle = more erosion");
         }
 
         ImGui::Spacing();

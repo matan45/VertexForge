@@ -200,6 +200,7 @@ namespace services
         void rebuildModifiedColliders(EntityHandle targetEntity, terrain::TerrainGrid* grid,
                                       const std::vector<terrain::TileCoord>& modifiedTiles);
         void syncHoleBoundaries(terrain::TerrainGrid* grid, const std::vector<terrain::TileCoord>& modifiedTiles);
+        void syncBrushBoundaryHeights(terrain::TerrainGrid* grid, const std::vector<terrain::TileCoord>& modifiedTiles);
         void generateDebugWireframes(EntityHandle terrainEntity, terrain::TerrainGrid* grid);
         static bool applyHoleMaskToHeights(const terrain::TerrainTile& tile, std::vector<float>& physicsHeights);
         static bool isVertexAdjacentToHole(const terrain::TerrainTile& tile, uint32_t vx, uint32_t vz);

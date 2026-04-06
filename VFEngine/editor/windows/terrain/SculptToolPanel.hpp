@@ -23,6 +23,9 @@ namespace windows
         int stampMode = 0; // 0=Add, 1=Subtract
         bool stampLoaded = false;
 
+        // Erosion brush state
+        float talusAngle = 45.0f;
+
         events::SubscriptionToken sculptModeToken;
         events::SubscriptionToken brushTypeToken;
         events::SubscriptionToken brushParamsToken;

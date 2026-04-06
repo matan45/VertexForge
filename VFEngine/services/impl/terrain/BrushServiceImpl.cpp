@@ -135,6 +135,13 @@ namespace services
                 publishParamsChanged();
             });
 
+        dispatcher.registerCommandHandler<events::brush::SetTalusAngleCommand>(
+            [this](const events::brush::SetTalusAngleCommand& cmd)
+            {
+                currentParams.talusAngle = cmd.angle;
+                publishParamsChanged();
+            });
+
         dispatcher.registerQueryHandler<events::brush::GetStampDataQuery>(
             [this](const events::brush::GetStampDataQuery&)
             {

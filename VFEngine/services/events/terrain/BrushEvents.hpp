@@ -125,6 +125,13 @@ namespace events::brush
         std::string_view getName() const override { return "SetStampMode"; }
     };
 
+    struct SetTalusAngleCommand : ICommand<>
+    {
+        float angle = 45.0f;
+
+        std::string_view getName() const override { return "SetTalusAngle"; }
+    };
+
     struct StampImageChangedNotification : INotification
     {
         std::string filePath;

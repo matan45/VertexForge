@@ -28,7 +28,7 @@ layout(push_constant) uniform PushConstants
     uint verticesPerSide;
     uint falloffType;
     uint shapeType;
-    uint brushType;     // 0=Raise, 1=Lower, 2=Smooth, 3=Flatten, 4=Noise
+    uint brushType;     // 0=Raise, 1=Lower, 2=Smooth, 3=Flatten, 4=Noise, 5=Stamp, 6=Erosion
     float deltaTime;
     float targetHeight;
     float minHeight;
@@ -38,6 +38,8 @@ layout(push_constant) uniform PushConstants
     uint stampHeight;
     float stampRotation;
     float stampScale;
+    float talusAngle;
+    float _padErosion;
 } pc;
 
 float applyFalloff(float t, uint type)
@@ -221,6 +223,57 @@ void main()
             // One-shot application: stampValue [0,1] scaled to world height
             float direction = (pc.invertFlag != 0) ? -1.0 : 1.0;
             newHeight += direction * stampValue * influence * pc.stampScale;
+            break;
+        }
+
+        case 6: // Erosion (thermal)
+        {
+            float talusThreshold = tan(radians(pc.talusAngle)) * pc.vertexSpacing;
+            float targetSum = 0.0;
+            float violationCount = 0.0;
+
+            for (int dz = -1; dz <= 1; ++dz)
+            {
+                for (int dx = -1; dx <= 1; ++dx)
+                {
+                    if (dx == 0 && dz == 0) continue;
+
+                    int nx = int(x) + dx;
+                    int nz = int(z) + dz;
+
+                    if (nx >= 0 && nx < int(pc.verticesPerSide) &&
+                        nz >= 0 && nz < int(pc.verticesPerSide))
+                    {
+                        float neighborHeight = heightsIn[uint(nz) * pc.verticesPerSide + uint(nx)];
+                        float diff = currentHeight - neighborHeight;
+
+                        if (diff > talusThreshold)
+                        {
+                            // Target: the max height that satisfies the talus constraint
+                            targetSum += neighborHeight + talusThreshold;
+                            violationCount += 1.0;
+                        }
+                    }
+                }
+            }
+
+            if (violationCount > 0.0)
+            {
+                float avgTarget = targetSum / violationCount;
+                float erosionFactor = influence * pc.brushStrength * pc.deltaTime;
+                erosionFactor = clamp(erosionFactor, 0.0, 1.0);
+
+                if (pc.invertFlag != 0)
+                {
+                    // Invert: build up (raise vertices that are too low relative to neighbors)
+                    newHeight = mix(currentHeight, max(currentHeight, avgTarget), erosionFactor);
+                }
+                else
+                {
+                    // Normal: erode down toward the stable height
+                    newHeight = mix(currentHeight, min(currentHeight, avgTarget), erosionFactor);
+                }
+            }
             break;
         }
     }

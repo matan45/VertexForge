@@ -128,6 +128,7 @@ namespace services
                 : invert;
             gpuParams.stampRotation = brushParams.stampRotation;
             gpuParams.stampScale = brushParams.stampScale;
+            gpuParams.talusAngle = brushParams.talusAngle;
             if (stampData && stampData->isValid())
             {
                 gpuParams.stampWidth = stampData->width;
@@ -145,6 +146,9 @@ namespace services
                 vfLogError("GPU brush application failed for tile ({}, {})", coord.x, coord.z);
             }
         }
+
+        // Synchronize boundary heights between adjacent modified tiles
+        syncBrushBoundaryHeights(grid, modifiedTiles);
 
         events::brush::BrushAppliedNotification notification;
         notification.position = worldPosition;
@@ -480,6 +484,52 @@ namespace services
                     neighborNZ->isDirty = true;
                     neighborNZ->setAllLODsDirty();
                 }
+            }
+        }
+    }
+
+    void TerrainService::syncBrushBoundaryHeights(terrain::TerrainGrid* grid, const std::vector<terrain::TileCoord>& modifiedTiles)
+    {
+        if (modifiedTiles.empty())
+            return;
+
+        for (const auto& coord : modifiedTiles)
+        {
+            terrain::TerrainTile* tile = grid->getTile(coord);
+            if (!tile || !tile->hasHeightData())
+                continue;
+
+            uint32_t vertCount = tile->config.getVertexCount();
+            uint32_t lastIdx = vertCount - 1;
+
+            // Sync +X boundary: tile's last column == neighbor's first column
+            terrain::TerrainTile* neighborPX = grid->getTile({coord.x + 1, coord.z});
+            if (neighborPX && neighborPX->hasHeightData())
+            {
+                for (uint32_t z = 0; z < vertCount; ++z)
+                {
+                    float avg = (tile->heightData[z * vertCount + lastIdx] +
+                                 neighborPX->heightData[z * vertCount]) * 0.5f;
+                    tile->heightData[z * vertCount + lastIdx] = avg;
+                    neighborPX->heightData[z * vertCount] = avg;
+                }
+                neighborPX->isDirty = true;
+                neighborPX->setAllLODsDirty();
+            }
+
+            // Sync +Z boundary: tile's last row == neighbor's first row
+            terrain::TerrainTile* neighborPZ = grid->getTile({coord.x, coord.z + 1});
+            if (neighborPZ && neighborPZ->hasHeightData())
+            {
+                for (uint32_t x = 0; x < vertCount; ++x)
+                {
+                    float avg = (tile->heightData[lastIdx * vertCount + x] +
+                                 neighborPZ->heightData[x]) * 0.5f;
+                    tile->heightData[lastIdx * vertCount + x] = avg;
+                    neighborPZ->heightData[x] = avg;
+                }
+                neighborPZ->isDirty = true;
+                neighborPZ->setAllLODsDirty();
             }
         }
     }
