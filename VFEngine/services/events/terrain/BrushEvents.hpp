@@ -1,7 +1,10 @@
 #pragma once
 #include "../EventTypes.hpp"
 #include "../../utilities/terrain/BrushTypes.hpp"
+#include "../../utilities/terrain/HeightmapLoader.hpp"
 #include <glm/glm.hpp>
+#include <string>
+#include <memory>
 
 namespace events::brush
 {
@@ -87,5 +90,39 @@ namespace events::brush
         ::terrain::BrushType type;
 
         std::string_view getName() const override { return "BrushApplied"; }
+    };
+
+    struct SetStampImageCommand : ICommand<>
+    {
+        std::string filePath;
+
+        std::string_view getName() const override { return "SetStampImage"; }
+    };
+
+    struct SetStampRotationCommand : ICommand<>
+    {
+        float rotation = 0.0f;
+
+        std::string_view getName() const override { return "SetStampRotation"; }
+    };
+
+    struct SetStampScaleCommand : ICommand<>
+    {
+        float scale = 1.0f;
+
+        std::string_view getName() const override { return "SetStampScale"; }
+    };
+
+    struct StampImageChangedNotification : INotification
+    {
+        std::string filePath;
+        bool loaded = false;
+
+        std::string_view getName() const override { return "StampImageChanged"; }
+    };
+
+    struct GetStampDataQuery : IQuery<std::shared_ptr<::terrain::HeightmapData>>
+    {
+        std::string_view getName() const override { return "GetStampData"; }
     };
 }

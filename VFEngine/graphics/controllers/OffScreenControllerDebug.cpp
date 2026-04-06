@@ -183,7 +183,24 @@ namespace controllers
         constants.minHeight = params.minHeight;
         constants.maxHeight = params.maxHeight;
         constants.invertFlag = params.invert ? 1u : 0u;
+        constants.stampWidth = params.stampWidth;
+        constants.stampHeight = params.stampHeight;
+        constants.stampRotation = params.stampRotation;
+        constants.stampScale = params.stampScale;
 
         return brushComputePipeline->applyBrush(heightData, constants);
+    }
+
+    void OffScreenController::setStampData(
+        const std::vector<float>& heights,
+        uint32_t width, uint32_t height)
+    {
+        if (!brushComputePipeline)
+        {
+            brushComputePipeline = std::make_unique<render::gpudriven::BrushComputePipeline>(device);
+            brushComputePipeline->init();
+        }
+
+        brushComputePipeline->setStampData(heights, width, height);
     }
 }

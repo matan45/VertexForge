@@ -14,4 +14,11 @@ namespace core
     {
         return offScreen.applyBrushGPU(heightData, params);
     }
+
+    void TerrainBrushComputeAdapter::setStampData(
+        const std::vector<float>& heights,
+        uint32_t width, uint32_t height)
+    {
+        offScreen.setStampData(heights, width, height);
+    }
 }

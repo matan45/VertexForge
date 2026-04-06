@@ -244,6 +244,10 @@ namespace controllers
             std::vector<float>& heightData,
             const terrain::BrushGPUParams& params);
 
+        void setStampData(
+            const std::vector<float>& heights,
+            uint32_t width, uint32_t height);
+
         render::RenderPassHandler* getRenderPassHandler() const;
 
         plugin::RenderHookHandle registerRenderHook(plugin::RenderPassHookPoint hookPoint,

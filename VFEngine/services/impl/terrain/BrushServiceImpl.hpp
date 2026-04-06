@@ -1,6 +1,10 @@
 #pragma once
 #include "../../interfaces/terrain/IBrushService.hpp"
 #include "../../events/EventTypes.hpp"
+#include "terrain/HeightmapLoader.hpp"
+
+#include <memory>
+#include <string>
 
 namespace services
 {
@@ -10,6 +14,11 @@ namespace services
         terrain::BrushParams currentParams;
         terrain::BrushType currentBrushType = terrain::BrushType::Raise;
         bool sculptModeActive = false;
+
+        std::shared_ptr<terrain::HeightmapData> stampData;
+        std::string stampImagePath;
+        float stampRotation = 0.0f;
+        float stampScale = 1.0f;
 
         ::events::SubscriptionToken sculptModeToken;
 

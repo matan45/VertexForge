@@ -13,6 +13,11 @@ layout(std430, set = 0, binding = 1) writeonly buffer HeightmapOut
     float heightsOut[];
 };
 
+layout(std430, set = 0, binding = 2) readonly buffer StampData
+{
+    float stampHeights[];
+};
+
 layout(push_constant) uniform PushConstants
 {
     vec2 brushCenter;
@@ -29,6 +34,10 @@ layout(push_constant) uniform PushConstants
     float minHeight;
     float maxHeight;
     uint invertFlag;    // 0 or 1
+    uint stampWidth;
+    uint stampHeight;
+    float stampRotation;
+    float stampScale;
 } pc;
 
 float applyFalloff(float t, uint type)
@@ -158,6 +167,54 @@ void main()
             float noiseScale = 10.0;
             float noiseVal = hashNoise(worldPos * noiseScale);
             newHeight += direction * noiseVal * influence * pc.brushStrength * pc.deltaTime;
+            break;
+        }
+
+        case 5: // Stamp
+        {
+            if (pc.stampWidth == 0 || pc.stampHeight == 0)
+            {
+                break;
+            }
+
+            // Compute offset from brush center in world space
+            vec2 offset = worldPos - pc.brushCenter;
+
+            // Apply rotation (rotate offset into stamp-local space)
+            float cosR = cos(pc.stampRotation);
+            float sinR = sin(pc.stampRotation);
+            vec2 rotatedOffset = vec2(
+                offset.x * cosR + offset.y * sinR,
+                -offset.x * sinR + offset.y * cosR
+            );
+
+            // Map to stamp UV [0, 1]
+            vec2 stampUV = rotatedOffset / pc.brushRadius + 0.5;
+
+            if (stampUV.x < 0.0 || stampUV.x > 1.0 || stampUV.y < 0.0 || stampUV.y > 1.0)
+            {
+                break;
+            }
+
+            // Bilinear sample the stamp SSBO
+            float fx = stampUV.x * float(pc.stampWidth - 1);
+            float fz = stampUV.y * float(pc.stampHeight - 1);
+            uint sx0 = uint(fx);
+            uint sz0 = uint(fz);
+            uint sx1 = min(sx0 + 1, pc.stampWidth - 1);
+            uint sz1 = min(sz0 + 1, pc.stampHeight - 1);
+            float fracX = fx - float(sx0);
+            float fracZ = fz - float(sz0);
+
+            float h00 = stampHeights[sz0 * pc.stampWidth + sx0];
+            float h10 = stampHeights[sz0 * pc.stampWidth + sx1];
+            float h01 = stampHeights[sz1 * pc.stampWidth + sx0];
+            float h11 = stampHeights[sz1 * pc.stampWidth + sx1];
+
+            float stampValue = mix(mix(h00, h10, fracX), mix(h01, h11, fracX), fracZ);
+
+            float direction = (pc.invertFlag != 0) ? -1.0 : 1.0;
+            newHeight += direction * stampValue * influence * pc.brushStrength * pc.stampScale * pc.deltaTime;
             break;
         }
     }

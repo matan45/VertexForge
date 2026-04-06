@@ -40,6 +40,17 @@ namespace services
         auto brushType = dispatcher.query(events::brush::GetBrushTypeQuery{});
         auto brushParams = dispatcher.query(events::brush::GetBrushParamsQuery{});
 
+        // Upload stamp data to GPU if needed
+        std::shared_ptr<terrain::HeightmapData> stampData;
+        if (brushType == terrain::BrushType::Stamp && brushComputeProvider)
+        {
+            stampData = dispatcher.query(events::brush::GetStampDataQuery{});
+            if (stampData && stampData->isValid())
+            {
+                brushComputeProvider->setStampData(stampData->heights, stampData->width, stampData->height);
+            }
+        }
+
         if (brushType == terrain::BrushType::Flatten)
         {
             if (isFirstApplication)
@@ -109,6 +120,13 @@ namespace services
             gpuParams.minHeight = tile->config.minHeight;
             gpuParams.maxHeight = tile->config.maxHeight;
             gpuParams.invert = invert;
+            gpuParams.stampRotation = brushParams.stampRotation;
+            gpuParams.stampScale = brushParams.stampScale;
+            if (stampData && stampData->isValid())
+            {
+                gpuParams.stampWidth = stampData->width;
+                gpuParams.stampHeight = stampData->height;
+            }
 
             if (brushComputeProvider->applyBrushGPU(tile->heightData, gpuParams))
             {

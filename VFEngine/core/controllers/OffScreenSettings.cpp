@@ -75,6 +75,13 @@ namespace controllers {
 		return offScreenController->applyBrushGPU(heightData, params);
 	}
 
+	void OffScreen::setStampData(
+		const std::vector<float>& heights,
+		uint32_t width, uint32_t height)
+	{
+		offScreenController->setStampData(heights, width, height);
+	}
+
 	render::RenderPassHandler* OffScreen::getRenderPassHandler() const
 	{
 		return offScreenController ? offScreenController->getRenderPassHandler() : nullptr;

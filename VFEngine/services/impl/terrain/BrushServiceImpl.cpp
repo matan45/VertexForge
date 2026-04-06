@@ -79,6 +79,43 @@ namespace services
                 return getBrushType();
             });
 
+        dispatcher.registerCommandHandler<events::brush::SetStampImageCommand>(
+            [this](const events::brush::SetStampImageCommand& cmd)
+            {
+                stampImagePath = cmd.filePath;
+                stampData = terrain::HeightmapLoader::load(cmd.filePath);
+
+                currentParams.stampImagePath = cmd.filePath;
+                publishParamsChanged();
+
+                events::brush::StampImageChangedNotification notification;
+                notification.filePath = cmd.filePath;
+                notification.loaded = (stampData != nullptr && stampData->isValid());
+                events::EventDispatcher::instance().publish(notification);
+            });
+
+        dispatcher.registerCommandHandler<events::brush::SetStampRotationCommand>(
+            [this](const events::brush::SetStampRotationCommand& cmd)
+            {
+                stampRotation = cmd.rotation;
+                currentParams.stampRotation = cmd.rotation;
+                publishParamsChanged();
+            });
+
+        dispatcher.registerCommandHandler<events::brush::SetStampScaleCommand>(
+            [this](const events::brush::SetStampScaleCommand& cmd)
+            {
+                stampScale = cmd.scale;
+                currentParams.stampScale = cmd.scale;
+                publishParamsChanged();
+            });
+
+        dispatcher.registerQueryHandler<events::brush::GetStampDataQuery>(
+            [this](const events::brush::GetStampDataQuery&)
+            {
+                return stampData;
+            });
+
         sculptModeToken = dispatcher.subscribe<events::sculpt::SculptModeChangedNotification>(
             [this](const events::sculpt::SculptModeChangedNotification& n)
             {
