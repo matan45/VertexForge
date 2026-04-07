@@ -473,6 +473,7 @@
     <ClInclude Include="..\dependencies\mtype\mType\vm\runtime\optimization\LoopOptimizer.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\vm\runtime\stack\StackManager.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\vm\runtime\utils\ArrayBoundsChecker.hpp" />
+    <ClInclude Include="..\dependencies\mtype\mType\vm\runtime\utils\BoxingUtils.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\vm\runtime\utils\ErrorLocationHelper.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\vm\runtime\utils\ExceptionHandler.hpp" />
     <ClInclude Include="..\dependencies\mtype\mType\vm\runtime\utils\NullCheckUtils.hpp" />
@@ -759,6 +760,10 @@
     <ClCompile Include="..\dependencies\mtype\mType\project\ProjectConfigParser.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\reflection\ReflectionHandle.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\reflection\ReflectionNatives.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\reflection\ReflectionNatives_Class.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\reflection\ReflectionNatives_CtorAnnotation.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\reflection\ReflectionNatives_Field.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\reflection\ReflectionNatives_Method.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\runtime\EventLoop.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\runtimeTypes\Definition.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\runtimeTypes\global\ArrayOperationsNative.cpp" />
@@ -835,6 +840,7 @@
     <ClCompile Include="..\dependencies\mtype\mType\vm\compiler\variables\VariableTracker.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\vm\compiler\visitors\ArrayCompiler.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\vm\compiler\visitors\ClassCompiler.cpp" />
+    <ClCompile Include="..\dependencies\mtype\mType\vm\compiler\visitors\ClassMethodCallCompiler.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\vm\compiler\visitors\ControlFlowCompiler.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\vm\compiler\visitors\ExpressionCompiler.cpp" />
     <ClCompile Include="..\dependencies\mtype\mType\vm\compiler\visitors\FunctionCallHelper.cpp" />

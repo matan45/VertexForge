@@ -173,8 +173,10 @@ IF EXIST ..\bin\jolt\Release\x64\jolt.dll\ (xcopy /Q /E /Y /I ..\bin\jolt\Releas
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Core\MutexArray.h" />
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Core\NonCopyable.h" />
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Core\ObjectToIDMap.h" />
+    <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Core\Prefetch.h" />
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Core\Profiler.h" />
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Core\QuickSort.h" />
+    <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Core\RISCVVector.h" />
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Core\RTTI.h" />
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Core\Reference.h" />
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Core\Result.h" />
@@ -363,6 +365,7 @@ IF EXIST ..\bin\jolt\Release\x64\jolt.dll\ (xcopy /Q /E /Y /I ..\bin\jolt\Releas
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Physics\Constraints\ConstraintManager.h" />
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Physics\Constraints\ConstraintPart\AngleConstraintPart.h" />
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Physics\Constraints\ConstraintPart\AxisConstraintPart.h" />
+    <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Physics\Constraints\ConstraintPart\ContactConstraintPart.h" />
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Physics\Constraints\ConstraintPart\DualAxisConstraintPart.h" />
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Physics\Constraints\ConstraintPart\GearConstraintPart.h" />
     <ClInclude Include="..\dependencies\JoltPhysics\Jolt\Physics\Constraints\ConstraintPart\HingeRotationConstraintPart.h" />

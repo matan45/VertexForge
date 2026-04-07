@@ -91,13 +91,13 @@
     <ClInclude Include="..\dependencies\glfw\include\GLFW\glfw3native.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\dependencies\glfw\src\cocoa_time.c" />
     <ClCompile Include="..\dependencies\glfw\src\context.c" />
     <ClCompile Include="..\dependencies\glfw\src\egl_context.c" />
     <ClCompile Include="..\dependencies\glfw\src\glx_context.c" />
     <ClCompile Include="..\dependencies\glfw\src\init.c" />
     <ClCompile Include="..\dependencies\glfw\src\input.c" />
     <ClCompile Include="..\dependencies\glfw\src\linux_joystick.c" />
+    <ClCompile Include="..\dependencies\glfw\src\macos_time.c" />
     <ClCompile Include="..\dependencies\glfw\src\monitor.c" />
     <ClCompile Include="..\dependencies\glfw\src\null_init.c" />
     <ClCompile Include="..\dependencies\glfw\src\null_joystick.c" />
