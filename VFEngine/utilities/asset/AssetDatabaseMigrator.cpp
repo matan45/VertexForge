@@ -31,6 +31,7 @@ namespace asset
         if (ext == ".vfterrainmat")   return resource::AssetType::TerrainMaterial;
         if (ext == ".vfbehaviortree") return resource::AssetType::BehaviorTree;
         if (ext == ".vfphysanim")  return resource::AssetType::PhysicsShape;
+        if (ext == ".vfscene")     return resource::AssetType::Scene;
         return resource::AssetType::COUNT;
     }
 
