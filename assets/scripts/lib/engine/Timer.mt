@@ -21,12 +21,12 @@ public class Timer {
     }
 
     // One-shot delay for the specified number of seconds
-    public static async function delay(float seconds): Promise<void> {
-        await Coroutine.waitForSeconds(seconds);
+    public static function async delay(float seconds): Promise<void> {
+        await Coroutine::waitForSeconds(seconds);
     }
 
     // One-shot delay for the specified number of frames
-    public static async function delayFrames(int count): Promise<void> {
-        await Coroutine.waitForFrames(count);
+    public static function async delayFrames(int count): Promise<void> {
+        await Coroutine::waitForFrames(count);
     }
 }

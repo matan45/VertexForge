@@ -12,6 +12,8 @@
 //   Scene::setActive("ui");
 //   bool loaded = Scene::isLoaded("ui");
 
+import * from "ISceneLoadCallback.mt";
+
 public class Scene {
     public constructor() {
     }
@@ -37,7 +39,7 @@ public class Scene {
 
     // Load a scene asynchronously with a completion callback
     // callback receives (bool success, string scenePath)
-    public static function loadAsync(string path, lambda callback): void {
+    public static function loadAsync(string path, ISceneLoadCallback callback): void {
         _native_scene_loadAsync(path, callback);
     }
 

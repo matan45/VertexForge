@@ -1,9 +1,8 @@
 // Int - Object wrapper for integer values
 // Provides a pure OOP interface for integer operations
-import * from "../Object.mt";
 import * from "./Bool.mt";
 
-public value class Int implements Object<Int> {
+public value class Int {
     private int value;
 
     // Constructors
