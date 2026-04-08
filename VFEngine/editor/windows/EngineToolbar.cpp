@@ -58,7 +58,8 @@ namespace windows
         if (!isPlayMode)
         {
             bool isSculptMode = dispatcher.query(events::sculpt::IsSculptModeActiveQuery{});
-            ImGui::BeginDisabled(isSculptMode);
+            bool playDisabled = isSculptMode || !isScriptsCompiled;
+            ImGui::BeginDisabled(playDisabled);
 
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 0.2f, 1.0f));
             ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.7f, 0.3f, 1.0f));
@@ -75,6 +76,8 @@ namespace windows
 
             if (isSculptMode && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
                 ImGui::SetTooltip("Exit Sculpt Mode before entering Play Mode");
+            if (!isScriptsCompiled && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+                ImGui::SetTooltip("Build Scripts before playing");
         }
         else
         {
