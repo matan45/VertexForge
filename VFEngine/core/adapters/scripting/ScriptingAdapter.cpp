@@ -301,6 +301,16 @@ namespace core
         {
             std::string fullPath = scriptLibraryPath.empty() ? scriptPath : scriptLibraryPath + "/" + scriptPath;
 
+            // If path doesn't exist (e.g. relative path from scene), try absolute resolve
+            if (!std::filesystem::exists(fullPath))
+            {
+                // Try the original scriptPath directly (may be absolute from assetdb)
+                if (std::filesystem::exists(scriptPath))
+                {
+                    fullPath = scriptPath;
+                }
+            }
+
             std::string className;
             auto pathIt = pathToClassName.find(scriptPath);
             if (pathIt != pathToClassName.end())
