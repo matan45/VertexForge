@@ -2,6 +2,7 @@
 #include "components/PluginPropertyTypes.hpp"
 #include <nlohmann/json.hpp>
 #include <glm/glm.hpp>
+#include <glm/gtc/quaternion.hpp>
 #include <functional>
 #include <string>
 #include <vector>
@@ -42,6 +43,23 @@ namespace plugin
 
         // End the current object definition and return to the parent builder.
         virtual ComponentBuilder& endObject() = 0;
+
+        // Add an enum/dropdown property. Options are the selectable labels.
+        // Value is stored as the int index into the options array.
+        virtual ComponentBuilder& addEnum(const std::string& name,
+                                          const std::vector<std::string>& options, int defaultIndex = 0) = 0;
+
+        // Add an asset file reference property. Renders with a browse button.
+        // fileFilter format: "Label|*.ext" (e.g. "Mesh Files|*.vfmesh").
+        virtual ComponentBuilder& addAssetRef(const std::string& name,
+                                              const std::string& fileFilter = "") = 0;
+
+        // Add an entity reference property. Renders with an entity picker combo.
+        virtual ComponentBuilder& addEntityRef(const std::string& name) = 0;
+
+        // Add a quaternion rotation property. Displayed as euler angles in the inspector.
+        virtual ComponentBuilder& addQuat(const std::string& name,
+                                          glm::quat defaultVal = glm::quat(1, 0, 0, 0)) = 0;
 
         // Optional: provide a custom ImGui inspector callback.
         // Only used in Editor (ignored in Runtime).

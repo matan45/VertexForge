@@ -30,6 +30,7 @@ namespace plugin {
         std::vector<std::string> registeredComponentNames;
         std::vector<events::SubscriptionToken> pluginEventSubscriptions;
         std::vector<services::AudioHandle> managedAudioHandles;
+        std::vector<services::VFXInstanceId> managedVFXInstances;
         // Keyed by "entityId:qualifiedName" to avoid cross-entity data corruption
         std::unordered_map<std::string, PluginComponentData> componentDataWrappers;
         std::unique_ptr<class ComponentBuilderImpl> activeBuilder;
@@ -109,6 +110,24 @@ namespace plugin {
         bool isActionPressed(const std::string& actionName) override;
         float getAxis1DValue(const std::string& axisName) override;
         glm::vec2 getAxis2DValue(const std::string& axisName) override;
+
+        // NavMesh API
+        void setAgentDestination(entt::entity entity, glm::vec3 target) override;
+        void stopAgent(entt::entity entity) override;
+        glm::vec3 getAgentVelocity(entt::entity entity) override;
+        float getAgentSpeed(entt::entity entity) override;
+        navigation::NavPath findPath(glm::vec3 start, glm::vec3 end) override;
+        glm::vec3 getClosestPointOnNavmesh(glm::vec3 point, float searchRadius) override;
+        bool isPointOnNavmesh(glm::vec3 point, float tolerance) override;
+        bool hasNavmesh() override;
+
+        // VFX API
+        services::VFXInstanceId createVFXInstance(const services::VFXRuntimeParams& params) override;
+        void destroyVFXInstance(services::VFXInstanceId instanceId) override;
+        void setVFXInstanceTransform(services::VFXInstanceId instanceId, const glm::mat4& worldTransform) override;
+        void playVFXInstance(services::VFXInstanceId instanceId) override;
+        void stopVFXInstance(services::VFXInstanceId instanceId) override;
+        bool isVFXInstancePlaying(services::VFXInstanceId instanceId) override;
 
         void finalizeComponentRegistration(class ComponentBuilderImpl& builder);
 

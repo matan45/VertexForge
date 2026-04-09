@@ -2,8 +2,13 @@
 #include "../scene/EntityDetailsPanel.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/plugin/PluginComponentEvents.hpp"
+#include "scene/EntityRegistry.hpp"
+#include "components/CoreComponents.hpp"
+#include "data/EntityConversion.hpp"
+#include "nfd/FileDialog.hpp"
 #include <imgui.h>
 #include <glm/glm.hpp>
+#include <glm/gtc/quaternion.hpp>
 
 namespace windows::details
 {
@@ -314,6 +319,137 @@ namespace windows::details
                                 changed = true;
                         }
                         ImGui::TreePop();
+                    }
+                    break;
+                }
+                case PropertyType::Enum:
+                {
+                    int val = data.value(prop.name, prop.defaultValue.get<int>());
+                    auto getter = [](void* userData, int idx) -> const char* {
+                        auto* opts = static_cast<const std::vector<std::string>*>(userData);
+                        if (idx < 0 || idx >= static_cast<int>(opts->size())) return "";
+                        return (*opts)[idx].c_str();
+                    };
+                    if (ImGui::Combo(prop.name.c_str(), &val, getter,
+                                     const_cast<void*>(static_cast<const void*>(&prop.enumOptions)),
+                                     static_cast<int>(prop.enumOptions.size())))
+                    {
+                        data[prop.name] = val;
+                        changed = true;
+                    }
+                    break;
+                }
+                case PropertyType::AssetRef:
+                {
+                    std::string val = data.value(prop.name, std::string(""));
+                    // Show filename only for display
+                    std::string displayName = val;
+                    auto lastSlash = val.find_last_of("/\\");
+                    if (lastSlash != std::string::npos)
+                        displayName = val.substr(lastSlash + 1);
+
+                    ImGui::Text("%s", prop.name.c_str());
+                    ImGui::SameLine();
+                    float availWidth = ImGui::GetContentRegionAvail().x;
+                    float buttonWidth = 26.0f;
+                    ImGui::SetNextItemWidth(availWidth - buttonWidth * 2 - 8.0f);
+                    char buffer[512];
+                    std::strncpy(buffer, displayName.c_str(), sizeof(buffer));
+                    buffer[sizeof(buffer) - 1] = '\0';
+                    ImGui::InputText(("##" + prop.name).c_str(), buffer, sizeof(buffer), ImGuiInputTextFlags_ReadOnly);
+                    if (ImGui::IsItemHovered() && !val.empty())
+                        ImGui::SetTooltip("%s", val.c_str());
+                    ImGui::SameLine();
+                    if (ImGui::Button(("...##browse_" + prop.name).c_str(), ImVec2(buttonWidth, 0)))
+                    {
+                        nfd::FileDialog dialog;
+                        std::vector<std::pair<std::wstring, std::wstring>> filters;
+                        if (!prop.assetTypeFilter.empty())
+                        {
+                            // Parse "Label|*.ext" format
+                            auto sep = prop.assetTypeFilter.find('|');
+                            if (sep != std::string::npos)
+                            {
+                                std::wstring label(prop.assetTypeFilter.begin(), prop.assetTypeFilter.begin() + sep);
+                                std::wstring pattern(prop.assetTypeFilter.begin() + sep + 1, prop.assetTypeFilter.end());
+                                filters.push_back({label, pattern});
+                            }
+                        }
+                        auto path = dialog.openFileDialog(filters);
+                        if (!path.empty())
+                        {
+                            data[prop.name] = path;
+                            changed = true;
+                        }
+                    }
+                    ImGui::SameLine();
+                    if (ImGui::Button(("X##clear_" + prop.name).c_str(), ImVec2(buttonWidth, 0)))
+                    {
+                        data[prop.name] = "";
+                        changed = true;
+                    }
+                    break;
+                }
+                case PropertyType::EntityRef:
+                {
+                    uint64_t entityId = data.value(prop.name, static_cast<uint64_t>(0));
+                    auto& reg = scene::EntityRegistry::getRegistry();
+
+                    // Find current entity name for preview
+                    std::string preview = "(None)";
+                    if (entityId != 0)
+                    {
+                        auto current = static_cast<entt::entity>(static_cast<uint32_t>(entityId));
+                        if (reg.valid(current) && reg.all_of<components::NameComponent>(current))
+                            preview = reg.get<components::NameComponent>(current).name;
+                        else
+                            preview = "(Invalid)";
+                    }
+
+                    ImGui::Text("%s", prop.name.c_str());
+                    ImGui::SameLine();
+                    ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
+                    if (ImGui::BeginCombo(("##" + prop.name).c_str(), preview.c_str()))
+                    {
+                        // None option
+                        if (ImGui::Selectable("(None)", entityId == 0))
+                        {
+                            data[prop.name] = static_cast<uint64_t>(0);
+                            changed = true;
+                        }
+
+                        // List all named entities
+                        auto view = reg.view<components::NameComponent>();
+                        for (auto entity : view)
+                        {
+                            auto& nameComp = view.get<components::NameComponent>(entity);
+                            uint64_t id = static_cast<uint64_t>(static_cast<uint32_t>(entity));
+                            bool isSelected = (id == entityId);
+                            if (ImGui::Selectable(nameComp.name.c_str(), isSelected))
+                            {
+                                data[prop.name] = id;
+                                changed = true;
+                            }
+                            if (isSelected)
+                                ImGui::SetItemDefaultFocus();
+                        }
+
+                        ImGui::EndCombo();
+                    }
+                    break;
+                }
+                case PropertyType::Quaternion:
+                {
+                    glm::quat q(1.0f, 0.0f, 0.0f, 0.0f); // identity: w,x,y,z
+                    if (auto it = data.find(prop.name); it != data.end() && it->is_array() && it->size() >= 4)
+                        q = glm::quat((*it)[3].get<float>(), (*it)[0].get<float>(),
+                                      (*it)[1].get<float>(), (*it)[2].get<float>());
+                    glm::vec3 euler = glm::degrees(glm::eulerAngles(q));
+                    if (ImGui::DragFloat3(prop.name.c_str(), &euler.x, 0.5f))
+                    {
+                        q = glm::quat(glm::radians(euler));
+                        data[prop.name] = nlohmann::json::array({q.x, q.y, q.z, q.w});
+                        changed = true;
                     }
                     break;
                 }

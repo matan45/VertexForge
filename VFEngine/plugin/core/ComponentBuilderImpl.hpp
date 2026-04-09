@@ -24,6 +24,11 @@ namespace plugin
         ComponentBuilder& addVec3(const std::string& name, glm::vec3 defaultVal) override;
         ComponentBuilder& addVec4(const std::string& name, glm::vec4 defaultVal) override;
         ComponentBuilder& addColor(const std::string& name, glm::vec4 defaultVal) override;
+        ComponentBuilder& addEnum(const std::string& name,
+                                   const std::vector<std::string>& options, int defaultIndex) override;
+        ComponentBuilder& addAssetRef(const std::string& name, const std::string& fileFilter) override;
+        ComponentBuilder& addEntityRef(const std::string& name) override;
+        ComponentBuilder& addQuat(const std::string& name, glm::quat defaultVal) override;
         ComponentBuilder& addArray(const std::string& name) override;
         ComponentBuilder& endArray() override;
         ComponentBuilder& addObject(const std::string& name) override;

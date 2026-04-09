@@ -56,7 +56,9 @@ namespace handlers
             std::string(plugin::capability::scripting),
             std::string(plugin::capability::graphics),
             std::string(plugin::capability::terrain),
-            std::string(plugin::capability::input)
+            std::string(plugin::capability::input),
+            std::string(plugin::capability::navmesh),
+            std::string(plugin::capability::vfx)
         });
         auto exePath = std::filesystem::current_path();
         auto pluginsDir = exePath / "plugins";

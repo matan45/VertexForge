@@ -14,6 +14,8 @@
 #include "events/terrain/TerrainRaycastEvents.hpp"
 #include "events/input/InputEvents.hpp"
 #include "events/input/ActionMappingEvents.hpp"
+#include "events/navmesh/NavmeshEvents.hpp"
+#include "events/vfx/VFXRuntimeEvents.hpp"
 #include "data/EntityConversion.hpp"
 #include "imguiHandler/ImguiWindowHandler.hpp"
 #include "scene/EntityRegistry.hpp"
@@ -668,6 +670,155 @@ namespace plugin {
         return events::EventDispatcher::instance().query(q);
     }
 
+    // ========================================================================
+    // NavMesh API
+    // ========================================================================
+
+    void PluginContextImpl::setAgentDestination(entt::entity entity, glm::vec3 target)
+    {
+        if (!hasCapability(std::string(capability::navmesh))) {
+            vfLogWarning("[Plugin:{}] Cannot set agent destination - navmesh capability not available", pluginName);
+            return;
+        }
+        events::navmesh::SetAgentDestinationCommand cmd;
+        cmd.entity = services::internal::toHandle(entity);
+        cmd.target = target;
+        events::EventDispatcher::instance().execute(cmd);
+    }
+
+    void PluginContextImpl::stopAgent(entt::entity entity)
+    {
+        if (!hasCapability(std::string(capability::navmesh))) {
+            return;
+        }
+        events::navmesh::StopAgentCommand cmd;
+        cmd.entity = services::internal::toHandle(entity);
+        events::EventDispatcher::instance().execute(cmd);
+    }
+
+    glm::vec3 PluginContextImpl::getAgentVelocity(entt::entity entity)
+    {
+        if (!hasCapability(std::string(capability::navmesh))) {
+            return glm::vec3(0.0f);
+        }
+        events::navmesh::GetAgentVelocityQuery q;
+        q.entity = services::internal::toHandle(entity);
+        return events::EventDispatcher::instance().query(q);
+    }
+
+    float PluginContextImpl::getAgentSpeed(entt::entity entity)
+    {
+        if (!hasCapability(std::string(capability::navmesh))) {
+            return 0.0f;
+        }
+        events::navmesh::GetAgentSpeedQuery q;
+        q.entity = services::internal::toHandle(entity);
+        return events::EventDispatcher::instance().query(q);
+    }
+
+    navigation::NavPath PluginContextImpl::findPath(glm::vec3 start, glm::vec3 end)
+    {
+        if (!hasCapability(std::string(capability::navmesh))) {
+            return {};
+        }
+        events::navmesh::FindPathQuery q;
+        q.start = start;
+        q.end = end;
+        return events::EventDispatcher::instance().query(q);
+    }
+
+    glm::vec3 PluginContextImpl::getClosestPointOnNavmesh(glm::vec3 point, float searchRadius)
+    {
+        if (!hasCapability(std::string(capability::navmesh))) {
+            return point;
+        }
+        events::navmesh::GetClosestPointQuery q;
+        q.point = point;
+        q.searchRadius = searchRadius;
+        return events::EventDispatcher::instance().query(q);
+    }
+
+    bool PluginContextImpl::isPointOnNavmesh(glm::vec3 point, float tolerance)
+    {
+        if (!hasCapability(std::string(capability::navmesh))) {
+            return false;
+        }
+        events::navmesh::IsPointOnNavmeshQuery q;
+        q.point = point;
+        q.tolerance = tolerance;
+        return events::EventDispatcher::instance().query(q);
+    }
+
+    bool PluginContextImpl::hasNavmesh()
+    {
+        if (!hasCapability(std::string(capability::navmesh))) {
+            return false;
+        }
+        events::navmesh::HasNavmeshQuery q;
+        return events::EventDispatcher::instance().query(q);
+    }
+
+    // ========================================================================
+    // VFX API
+    // ========================================================================
+
+    services::VFXInstanceId PluginContextImpl::createVFXInstance(const services::VFXRuntimeParams& params)
+    {
+        if (!hasCapability(std::string(capability::vfx))) {
+            vfLogWarning("[Plugin:{}] Cannot create VFX instance - vfx capability not available", pluginName);
+            return 0;
+        }
+        services::events::vfxruntime::CreateVFXInstanceCommand cmd;
+        cmd.params = params;
+        auto id = events::EventDispatcher::instance().execute(cmd);
+        if (id != 0) {
+            managedVFXInstances.push_back(id);
+        }
+        return id;
+    }
+
+    void PluginContextImpl::destroyVFXInstance(services::VFXInstanceId instanceId)
+    {
+        if (instanceId == 0) return;
+        services::events::vfxruntime::DestroyVFXInstanceCommand cmd;
+        cmd.instanceId = instanceId;
+        events::EventDispatcher::instance().execute(cmd);
+        std::erase(managedVFXInstances, instanceId);
+    }
+
+    void PluginContextImpl::setVFXInstanceTransform(services::VFXInstanceId instanceId, const glm::mat4& worldTransform)
+    {
+        if (instanceId == 0) return;
+        services::events::vfxruntime::SetVFXInstanceTransformCommand cmd;
+        cmd.instanceId = instanceId;
+        cmd.worldTransform = worldTransform;
+        events::EventDispatcher::instance().execute(cmd);
+    }
+
+    void PluginContextImpl::playVFXInstance(services::VFXInstanceId instanceId)
+    {
+        if (instanceId == 0) return;
+        services::events::vfxruntime::PlayVFXInstanceCommand cmd;
+        cmd.instanceId = instanceId;
+        events::EventDispatcher::instance().execute(cmd);
+    }
+
+    void PluginContextImpl::stopVFXInstance(services::VFXInstanceId instanceId)
+    {
+        if (instanceId == 0) return;
+        services::events::vfxruntime::StopVFXInstanceCommand cmd;
+        cmd.instanceId = instanceId;
+        events::EventDispatcher::instance().execute(cmd);
+    }
+
+    bool PluginContextImpl::isVFXInstancePlaying(services::VFXInstanceId instanceId)
+    {
+        if (instanceId == 0) return false;
+        services::events::vfxruntime::IsVFXInstancePlayingQuery q;
+        q.instanceId = instanceId;
+        return events::EventDispatcher::instance().query(q);
+    }
+
     void PluginContextImpl::cleanupAll()
     {
         auto& dispatcher = events::EventDispatcher::instance();
@@ -681,6 +832,16 @@ namespace plugin {
             }
         }
         managedAudioHandles.clear();
+
+        // Destroy all managed VFX instances
+        for (auto id : managedVFXInstances) {
+            if (id != 0) {
+                services::events::vfxruntime::DestroyVFXInstanceCommand cmd;
+                cmd.instanceId = id;
+                try { dispatcher.execute(cmd); } catch (...) {}
+            }
+        }
+        managedVFXInstances.clear();
 
         for (const auto& token : managedSubscriptions) {
             if (token.isValid()) {

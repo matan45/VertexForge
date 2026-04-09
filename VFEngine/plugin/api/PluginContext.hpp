@@ -14,6 +14,8 @@
 #include "../../services/interfaces/physics/IPhysicsService.hpp"
 #include "../../utilities/terrain/TerrainHitResult.hpp"
 #include "../../utilities/terrain/TerrainHeightAtResult.hpp"
+#include "../../utilities/navigation/NavmeshData.hpp"
+#include "../../services/data/VFXTypes.hpp"
 
 struct ImGuiContext;
 
@@ -43,6 +45,8 @@ namespace plugin {
         constexpr std::string_view graphics = "graphics";
         constexpr std::string_view terrain  = "terrain";
         constexpr std::string_view input    = "input";
+        constexpr std::string_view navmesh  = "navmesh";
+        constexpr std::string_view vfx      = "vfx";
     }
 
     class PluginContext
@@ -201,6 +205,30 @@ namespace plugin {
         virtual bool isActionPressed(const std::string& actionName) = 0;
         virtual float getAxis1DValue(const std::string& axisName) = 0;
         virtual glm::vec2 getAxis2DValue(const std::string& axisName) = 0;
+
+        // === NavMesh API ===
+        // Only available when hasCapability(capability::navmesh) is true.
+
+        virtual void setAgentDestination(entt::entity entity, glm::vec3 target) = 0;
+        virtual void stopAgent(entt::entity entity) = 0;
+        virtual glm::vec3 getAgentVelocity(entt::entity entity) = 0;
+        virtual float getAgentSpeed(entt::entity entity) = 0;
+        // Find a path between two world positions. Check result.isValid before using waypoints.
+        virtual navigation::NavPath findPath(glm::vec3 start, glm::vec3 end) = 0;
+        virtual glm::vec3 getClosestPointOnNavmesh(glm::vec3 point, float searchRadius = 5.0f) = 0;
+        virtual bool isPointOnNavmesh(glm::vec3 point, float tolerance = 0.5f) = 0;
+        virtual bool hasNavmesh() = 0;
+
+        // === VFX API ===
+        // Only available when hasCapability(capability::vfx) is true.
+
+        // Create a VFX instance from an asset path. Returns instance ID for controlling it.
+        virtual services::VFXInstanceId createVFXInstance(const services::VFXRuntimeParams& params) = 0;
+        virtual void destroyVFXInstance(services::VFXInstanceId instanceId) = 0;
+        virtual void setVFXInstanceTransform(services::VFXInstanceId instanceId, const glm::mat4& worldTransform) = 0;
+        virtual void playVFXInstance(services::VFXInstanceId instanceId) = 0;
+        virtual void stopVFXInstance(services::VFXInstanceId instanceId) = 0;
+        virtual bool isVFXInstancePlaying(services::VFXInstanceId instanceId) = 0;
 
     };
 

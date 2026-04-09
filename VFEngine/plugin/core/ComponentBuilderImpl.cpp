@@ -67,6 +67,46 @@ namespace plugin
         return *this;
     }
 
+    ComponentBuilder& ComponentBuilderImpl::addEnum(const std::string& name,
+                                                     const std::vector<std::string>& options, int defaultIndex)
+    {
+        components::plugin::PropertyDescriptor desc;
+        desc.name = name;
+        desc.type = components::plugin::PropertyType::Enum;
+        desc.defaultValue = nlohmann::json(defaultIndex);
+        desc.enumOptions = options;
+        currentProperties().push_back(std::move(desc));
+        return *this;
+    }
+
+    ComponentBuilder& ComponentBuilderImpl::addAssetRef(const std::string& name, const std::string& fileFilter)
+    {
+        components::plugin::PropertyDescriptor desc;
+        desc.name = name;
+        desc.type = components::plugin::PropertyType::AssetRef;
+        desc.defaultValue = nlohmann::json("");
+        desc.assetTypeFilter = fileFilter;
+        currentProperties().push_back(std::move(desc));
+        return *this;
+    }
+
+    ComponentBuilder& ComponentBuilderImpl::addEntityRef(const std::string& name)
+    {
+        components::plugin::PropertyDescriptor desc;
+        desc.name = name;
+        desc.type = components::plugin::PropertyType::EntityRef;
+        desc.defaultValue = nlohmann::json(static_cast<uint64_t>(0));
+        currentProperties().push_back(std::move(desc));
+        return *this;
+    }
+
+    ComponentBuilder& ComponentBuilderImpl::addQuat(const std::string& name, glm::quat defaultVal)
+    {
+        currentProperties().push_back({name, components::plugin::PropertyType::Quaternion,
+                              nlohmann::json::array({defaultVal.x, defaultVal.y, defaultVal.z, defaultVal.w}), 0, 0, {}});
+        return *this;
+    }
+
     ComponentBuilder& ComponentBuilderImpl::addArray(const std::string& name)
     {
         currentProperties().push_back({name, components::plugin::PropertyType::Array,
