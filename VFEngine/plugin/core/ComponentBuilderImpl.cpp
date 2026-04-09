@@ -161,6 +161,24 @@ namespace plugin
         return *this;
     }
 
+    ComponentBuilder& ComponentBuilderImpl::setOnAdded(std::function<void(entt::entity, const nlohmann::json&)> callback)
+    {
+        onAddedCb = std::move(callback);
+        return *this;
+    }
+
+    ComponentBuilder& ComponentBuilderImpl::setOnRemoved(std::function<void(entt::entity)> callback)
+    {
+        onRemovedCb = std::move(callback);
+        return *this;
+    }
+
+    ComponentBuilder& ComponentBuilderImpl::setOnDataChanged(std::function<void(entt::entity, const nlohmann::json&)> callback)
+    {
+        onDataChangedCb = std::move(callback);
+        return *this;
+    }
+
     void ComponentBuilderImpl::build()
     {
         if (!nestedStack.empty())

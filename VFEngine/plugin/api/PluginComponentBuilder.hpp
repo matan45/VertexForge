@@ -1,6 +1,7 @@
 #pragma once
 #include "components/PluginPropertyTypes.hpp"
 #include <nlohmann/json.hpp>
+#include <entt/entt.hpp>
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <functional>
@@ -65,6 +66,22 @@ namespace plugin
         // Only used in Editor (ignored in Runtime).
         // The callback receives mutable JSON data and returns true if any value was modified.
         virtual ComponentBuilder& setInspector(std::function<bool(nlohmann::json&)> inspectorCallback) = 0;
+
+        // === Lifecycle Hooks (optional) ===
+        // All callbacks execute in the exe's address space (safe across DLL boundary).
+        // Not fired during scene deserialization — only during runtime add/remove/modify.
+
+        // Called when this component is added to an entity. Receives the initial data.
+        virtual ComponentBuilder& setOnAdded(
+            std::function<void(entt::entity, const nlohmann::json&)> callback) = 0;
+
+        // Called when this component is removed from an entity.
+        virtual ComponentBuilder& setOnRemoved(
+            std::function<void(entt::entity)> callback) = 0;
+
+        // Called when component data is modified (e.g. via inspector). Receives the full new data.
+        virtual ComponentBuilder& setOnDataChanged(
+            std::function<void(entt::entity, const nlohmann::json&)> callback) = 0;
 
         // Finalizes registration.
         virtual void build() = 0;

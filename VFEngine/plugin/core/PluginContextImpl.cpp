@@ -98,6 +98,9 @@ namespace plugin {
         info.qualifiedName = qualifiedName;
         info.properties = builder.getProperties();
         info.inspector = builder.getInspector();
+        info.onAdded = builder.getOnAdded();
+        info.onRemoved = builder.getOnRemoved();
+        info.onDataChanged = builder.getOnDataChanged();
 
         // Build default data from property descriptors
         info.defaultData = nlohmann::json::object();
@@ -133,6 +136,11 @@ namespace plugin {
             return false;
 
         pluginComp.components[qualifiedName] = info->defaultData;
+
+        if (info->onAdded)
+        {
+            try { info->onAdded(entity, info->defaultData); } catch (...) {}
+        }
         return true;
     }
 
@@ -143,6 +151,12 @@ namespace plugin {
 
         if (!reg.valid(entity) || !reg.all_of<components::PluginComponentsComponent>(entity))
             return false;
+
+        const auto* info = PluginComponentRegistry::instance().findComponent(qualifiedName);
+        if (info && info->onRemoved)
+        {
+            try { info->onRemoved(entity); } catch (...) {}
+        }
 
         auto& pluginComp = reg.get<components::PluginComponentsComponent>(entity);
         bool erased = pluginComp.components.erase(qualifiedName) > 0;

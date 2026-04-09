@@ -1,5 +1,6 @@
 #pragma once
 #include <nlohmann/json.hpp>
+#include <entt/entt.hpp>
 #include "components/PluginPropertyTypes.hpp"
 #include <functional>
 #include <string>
@@ -17,6 +18,11 @@ namespace plugin
         std::vector<components::plugin::PropertyDescriptor> properties;
         nlohmann::json defaultData; // built from property defaults
         std::function<bool(nlohmann::json&)> inspector; // optional custom override
+
+        // Lifecycle hooks (optional, all execute in exe address space)
+        std::function<void(entt::entity, const nlohmann::json&)> onAdded;
+        std::function<void(entt::entity)> onRemoved;
+        std::function<void(entt::entity, const nlohmann::json&)> onDataChanged;
     };
 
     class PluginComponentRegistry

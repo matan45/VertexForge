@@ -102,6 +102,11 @@ namespace plugin
                     return false;
 
                 pluginComp.components[cmd.qualifiedName] = info->defaultData;
+
+                if (info->onAdded)
+                {
+                    try { info->onAdded(entity, info->defaultData); } catch (...) {}
+                }
                 return true;
             });
 
@@ -113,6 +118,12 @@ namespace plugin
 
                 if (!reg.valid(entity) || !reg.all_of<components::PluginComponentsComponent>(entity))
                     return false;
+
+                const auto* info = PluginComponentRegistry::instance().findComponent(cmd.qualifiedName);
+                if (info && info->onRemoved)
+                {
+                    try { info->onRemoved(entity); } catch (...) {}
+                }
 
                 auto& pluginComp = reg.get<components::PluginComponentsComponent>(entity);
                 bool erased = pluginComp.components.erase(cmd.qualifiedName) > 0;
@@ -135,7 +146,15 @@ namespace plugin
                 auto& pluginComp = reg.get<components::PluginComponentsComponent>(entity);
                 auto it = pluginComp.components.find(cmd.qualifiedName);
                 if (it != pluginComp.components.end())
+                {
                     it->second = cmd.data;
+
+                    const auto* info = PluginComponentRegistry::instance().findComponent(cmd.qualifiedName);
+                    if (info && info->onDataChanged)
+                    {
+                        try { info->onDataChanged(entity, cmd.data); } catch (...) {}
+                    }
+                }
             });
 
         dispatcher.registerQueryHandler<events::plugin::GetPluginComponentDescriptorsQuery>(

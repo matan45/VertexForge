@@ -34,11 +34,17 @@ namespace plugin
         ComponentBuilder& addObject(const std::string& name) override;
         ComponentBuilder& endObject() override;
         ComponentBuilder& setInspector(std::function<bool(nlohmann::json&)> inspectorCallback) override;
+        ComponentBuilder& setOnAdded(std::function<void(entt::entity, const nlohmann::json&)> callback) override;
+        ComponentBuilder& setOnRemoved(std::function<void(entt::entity)> callback) override;
+        ComponentBuilder& setOnDataChanged(std::function<void(entt::entity, const nlohmann::json&)> callback) override;
         void build() override;
 
         const std::string& getComponentName() const { return componentName; }
         const std::vector<components::plugin::PropertyDescriptor>& getProperties() const { return properties; }
         const std::function<bool(nlohmann::json&)>& getInspector() const { return inspector; }
+        const std::function<void(entt::entity, const nlohmann::json&)>& getOnAdded() const { return onAddedCb; }
+        const std::function<void(entt::entity)>& getOnRemoved() const { return onRemovedCb; }
+        const std::function<void(entt::entity, const nlohmann::json&)>& getOnDataChanged() const { return onDataChangedCb; }
 
     private:
         // Returns the property list we're currently adding to (top-level or nested)
@@ -48,6 +54,9 @@ namespace plugin
         std::string componentName;
         std::vector<components::plugin::PropertyDescriptor> properties;
         std::function<bool(nlohmann::json&)> inspector;
+        std::function<void(entt::entity, const nlohmann::json&)> onAddedCb;
+        std::function<void(entt::entity)> onRemovedCb;
+        std::function<void(entt::entity, const nlohmann::json&)> onDataChangedCb;
 
         // Stack for nested array/object building
         // Each entry points to the children vector of the array/object being defined
