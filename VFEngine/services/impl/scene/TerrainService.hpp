@@ -169,7 +169,7 @@ namespace services
         ::events::terrain::TerrainGeometryResult getTerrainGeometryForNavmesh();
         ::events::terrain::TerrainBakeGeometryResult getTerrainBakeGeometry();
         ::events::terrain::TerrainHeightfieldResult getTerrainHeightfield();
-        ::events::terrain::TerrainHeightAtResult getTerrainHeightAt(float worldX, float worldZ);
+        ::terrain::TerrainHeightAtResult getTerrainHeightAt(float worldX, float worldZ);
 
     private:
         void registerTerrainCoreHandlers(::events::EventDispatcher& dispatcher);

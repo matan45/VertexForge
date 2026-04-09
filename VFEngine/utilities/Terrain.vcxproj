@@ -122,6 +122,7 @@ IF EXIST ..\..\bin\Terrain\Release\x64\Terrain.dll\ (xcopy /Q /E /Y /I ..\..\bin
     <ClInclude Include="terrain\TerrainExport.hpp" />
     <ClInclude Include="terrain\TerrainFileCache.hpp" />
     <ClInclude Include="terrain\TerrainGrid.hpp" />
+    <ClInclude Include="terrain\TerrainHeightAtResult.hpp" />
     <ClInclude Include="terrain\TerrainHitResult.hpp" />
     <ClInclude Include="terrain\TerrainMaterialAsset.hpp" />
     <ClInclude Include="terrain\TerrainMaterialTypes.hpp" />

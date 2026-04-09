@@ -6,6 +6,15 @@
 #include "events/EventDispatcher.hpp"
 #include "events/scripting/ScriptingEvents.hpp"
 #include "events/render/RenderHookEvents.hpp"
+#include "events/audio/AudioEvents.hpp"
+#include "events/audio/AudioBusEvents.hpp"
+#include "events/physics/PhysicsEvents.hpp"
+#include "events/physics/ControllerEvents.hpp"
+#include "events/terrain/TerrainEvents.hpp"
+#include "events/terrain/TerrainRaycastEvents.hpp"
+#include "events/input/InputEvents.hpp"
+#include "events/input/ActionMappingEvents.hpp"
+#include "data/EntityConversion.hpp"
 #include "imguiHandler/ImguiWindowHandler.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/PluginComponents.hpp"
@@ -303,9 +312,376 @@ namespace plugin {
         vfLogError("[Plugin:{}] {}", pluginName, message);
     }
 
+    // ========================================================================
+    // Audio API
+    // ========================================================================
+
+    services::AudioHandle PluginContextImpl::playSound3D(const std::string& path, glm::vec3 position,
+                                                          const services::AudioParams& params)
+    {
+        if (!hasCapability(std::string(capability::audio))) {
+            vfLogWarning("[Plugin:{}] Cannot play sound - audio capability not available", pluginName);
+            return {};
+        }
+        events::audio::PlaySound3DCommand cmd;
+        cmd.path = path;
+        cmd.position = position;
+        cmd.params = params;
+        auto handle = events::EventDispatcher::instance().execute(cmd);
+        if (handle.isValid()) {
+            managedAudioHandles.push_back(handle);
+        }
+        return handle;
+    }
+
+    services::AudioHandle PluginContextImpl::playStreamingSound(const std::string& path,
+                                                                 const services::AudioParams& params)
+    {
+        if (!hasCapability(std::string(capability::audio))) {
+            vfLogWarning("[Plugin:{}] Cannot play sound - audio capability not available", pluginName);
+            return {};
+        }
+        events::audio::PlayStreamingSoundCommand cmd;
+        cmd.path = path;
+        cmd.params = params;
+        auto handle = events::EventDispatcher::instance().execute(cmd);
+        if (handle.isValid()) {
+            managedAudioHandles.push_back(handle);
+        }
+        return handle;
+    }
+
+    void PluginContextImpl::stopSound(services::AudioHandle handle)
+    {
+        if (!handle.isValid()) return;
+        events::audio::StopSoundCommand cmd;
+        cmd.handle = handle;
+        events::EventDispatcher::instance().execute(cmd);
+        std::erase_if(managedAudioHandles,
+            [&](const services::AudioHandle& h) { return h.id == handle.id; });
+    }
+
+    void PluginContextImpl::pauseSound(services::AudioHandle handle)
+    {
+        if (!handle.isValid()) return;
+        events::audio::PauseSoundCommand cmd;
+        cmd.handle = handle;
+        events::EventDispatcher::instance().execute(cmd);
+    }
+
+    void PluginContextImpl::resumeSound(services::AudioHandle handle)
+    {
+        if (!handle.isValid()) return;
+        events::audio::ResumeSoundCommand cmd;
+        cmd.handle = handle;
+        events::EventDispatcher::instance().execute(cmd);
+    }
+
+    void PluginContextImpl::setSoundVolume(services::AudioHandle handle, float volume)
+    {
+        if (!handle.isValid()) return;
+        events::audio::SetSoundVolumeCommand cmd;
+        cmd.handle = handle;
+        cmd.volume = volume;
+        events::EventDispatcher::instance().execute(cmd);
+    }
+
+    void PluginContextImpl::setSoundPitch(services::AudioHandle handle, float pitch)
+    {
+        if (!handle.isValid()) return;
+        events::audio::SetSoundPitchCommand cmd;
+        cmd.handle = handle;
+        cmd.pitch = pitch;
+        events::EventDispatcher::instance().execute(cmd);
+    }
+
+    bool PluginContextImpl::isSoundPlaying(services::AudioHandle handle)
+    {
+        if (!handle.isValid()) return false;
+        events::audio::IsSoundPlayingQuery q;
+        q.handle = handle;
+        return events::EventDispatcher::instance().query(q);
+    }
+
+    void PluginContextImpl::setBusVolume(const std::string& busName, float volume)
+    {
+        if (!hasCapability(std::string(capability::audio))) {
+            vfLogWarning("[Plugin:{}] Cannot set bus volume - audio capability not available", pluginName);
+            return;
+        }
+        events::audio::SetBusVolumeCommand cmd;
+        cmd.busName = busName;
+        cmd.volume = volume;
+        events::EventDispatcher::instance().execute(cmd);
+    }
+
+    float PluginContextImpl::getBusVolume(const std::string& busName)
+    {
+        if (!hasCapability(std::string(capability::audio))) {
+            return 0.0f;
+        }
+        events::audio::GetBusVolumeQuery q;
+        q.busName = busName;
+        return events::EventDispatcher::instance().query(q);
+    }
+
+    // ========================================================================
+    // Physics API
+    // ========================================================================
+
+    services::RaycastHit PluginContextImpl::raycast(glm::vec3 origin, glm::vec3 direction,
+                                                     float maxDistance, uint16_t layerMask)
+    {
+        if (!hasCapability(std::string(capability::physics))) {
+            return {};
+        }
+        events::physics::RaycastQuery q;
+        q.origin = origin;
+        q.direction = direction;
+        q.maxDistance = maxDistance;
+        q.layerMask = layerMask;
+        return events::EventDispatcher::instance().query(q);
+    }
+
+    std::vector<services::RaycastHit> PluginContextImpl::raycastAll(glm::vec3 origin, glm::vec3 direction,
+                                                                      float maxDistance, uint16_t layerMask)
+    {
+        if (!hasCapability(std::string(capability::physics))) {
+            return {};
+        }
+        events::physics::RaycastAllQuery q;
+        q.origin = origin;
+        q.direction = direction;
+        q.maxDistance = maxDistance;
+        q.layerMask = layerMask;
+        return events::EventDispatcher::instance().query(q);
+    }
+
+    void PluginContextImpl::applyForce(entt::entity entity, glm::vec3 force)
+    {
+        if (!hasCapability(std::string(capability::physics))) {
+            vfLogWarning("[Plugin:{}] Cannot apply force - physics capability not available", pluginName);
+            return;
+        }
+        events::physics::ApplyForceCommand cmd;
+        cmd.entity = services::internal::toHandle(entity);
+        cmd.force = force;
+        events::EventDispatcher::instance().execute(cmd);
+    }
+
+    void PluginContextImpl::applyImpulse(entt::entity entity, glm::vec3 impulse)
+    {
+        if (!hasCapability(std::string(capability::physics))) {
+            vfLogWarning("[Plugin:{}] Cannot apply impulse - physics capability not available", pluginName);
+            return;
+        }
+        events::physics::ApplyImpulseCommand cmd;
+        cmd.entity = services::internal::toHandle(entity);
+        cmd.impulse = impulse;
+        events::EventDispatcher::instance().execute(cmd);
+    }
+
+    void PluginContextImpl::setLinearVelocity(entt::entity entity, glm::vec3 velocity)
+    {
+        if (!hasCapability(std::string(capability::physics))) {
+            return;
+        }
+        events::physics::SetLinearVelocityCommand cmd;
+        cmd.entity = services::internal::toHandle(entity);
+        cmd.velocity = velocity;
+        events::EventDispatcher::instance().execute(cmd);
+    }
+
+    glm::vec3 PluginContextImpl::getLinearVelocity(entt::entity entity)
+    {
+        if (!hasCapability(std::string(capability::physics))) {
+            return glm::vec3(0.0f);
+        }
+        events::physics::GetLinearVelocityQuery q;
+        q.entity = services::internal::toHandle(entity);
+        return events::EventDispatcher::instance().query(q);
+    }
+
+    glm::vec3 PluginContextImpl::getAngularVelocity(entt::entity entity)
+    {
+        if (!hasCapability(std::string(capability::physics))) {
+            return glm::vec3(0.0f);
+        }
+        events::physics::GetAngularVelocityQuery q;
+        q.entity = services::internal::toHandle(entity);
+        return events::EventDispatcher::instance().query(q);
+    }
+
+    bool PluginContextImpl::isGrounded(entt::entity entity)
+    {
+        if (!hasCapability(std::string(capability::physics))) {
+            return false;
+        }
+        events::controller::IsGroundedQuery q;
+        q.entity = services::internal::toHandle(entity);
+        return events::EventDispatcher::instance().query(q);
+    }
+
+    bool PluginContextImpl::hasRigidBody(entt::entity entity)
+    {
+        if (!hasCapability(std::string(capability::physics))) {
+            return false;
+        }
+        events::physics::HasRigidBodyQuery q;
+        q.entity = services::internal::toHandle(entity);
+        return events::EventDispatcher::instance().query(q);
+    }
+
+    glm::vec3 PluginContextImpl::getPhysicsPosition(entt::entity entity)
+    {
+        if (!hasCapability(std::string(capability::physics))) {
+            return glm::vec3(0.0f);
+        }
+        events::physics::GetPhysicsPositionQuery q;
+        q.entity = services::internal::toHandle(entity);
+        return events::EventDispatcher::instance().query(q);
+    }
+
+    // ========================================================================
+    // Terrain API
+    // ========================================================================
+
+    terrain::TerrainHeightAtResult PluginContextImpl::getTerrainHeightAt(float worldX, float worldZ)
+    {
+        if (!hasCapability(std::string(capability::terrain))) {
+            return {};
+        }
+        events::terrain::GetTerrainHeightAtQuery q;
+        q.worldX = worldX;
+        q.worldZ = worldZ;
+        return events::EventDispatcher::instance().query(q);
+    }
+
+    terrain::TerrainHitResult PluginContextImpl::getTerrainHit()
+    {
+        if (!hasCapability(std::string(capability::terrain))) {
+            return {};
+        }
+        events::terrainRaycast::GetTerrainHitQuery q;
+        return events::EventDispatcher::instance().query(q);
+    }
+
+    bool PluginContextImpl::hasTerrainComponent(entt::entity entity)
+    {
+        if (!hasCapability(std::string(capability::terrain))) {
+            return false;
+        }
+        events::terrain::HasTerrainComponentQuery q;
+        q.entity = services::internal::toHandle(entity);
+        return events::EventDispatcher::instance().query(q);
+    }
+
+    // ========================================================================
+    // Input API
+    // ========================================================================
+
+    bool PluginContextImpl::isKeyDown(int keyCode)
+    {
+        if (!hasCapability(std::string(capability::input))) {
+            return false;
+        }
+        events::input::IsKeyDownQuery q;
+        q.keyCode = keyCode;
+        return events::EventDispatcher::instance().query(q);
+    }
+
+    bool PluginContextImpl::isKeyPressed(int keyCode)
+    {
+        if (!hasCapability(std::string(capability::input))) {
+            return false;
+        }
+        events::input::IsKeyPressedQuery q;
+        q.keyCode = keyCode;
+        return events::EventDispatcher::instance().query(q);
+    }
+
+    bool PluginContextImpl::isMouseButtonDown(int button)
+    {
+        if (!hasCapability(std::string(capability::input))) {
+            return false;
+        }
+        events::input::IsMouseButtonDownQuery q;
+        q.button = button;
+        return events::EventDispatcher::instance().query(q);
+    }
+
+    glm::vec2 PluginContextImpl::getMousePosition()
+    {
+        if (!hasCapability(std::string(capability::input))) {
+            return glm::vec2(0.0f);
+        }
+        events::input::GetMousePositionQuery q;
+        return events::EventDispatcher::instance().query(q);
+    }
+
+    glm::vec2 PluginContextImpl::getMouseDelta()
+    {
+        if (!hasCapability(std::string(capability::input))) {
+            return glm::vec2(0.0f);
+        }
+        events::input::GetMouseDeltaQuery q;
+        return events::EventDispatcher::instance().query(q);
+    }
+
+    bool PluginContextImpl::isActionDown(const std::string& actionName)
+    {
+        if (!hasCapability(std::string(capability::input))) {
+            return false;
+        }
+        events::input::IsActionDownQuery q;
+        q.actionName = actionName;
+        return events::EventDispatcher::instance().query(q);
+    }
+
+    bool PluginContextImpl::isActionPressed(const std::string& actionName)
+    {
+        if (!hasCapability(std::string(capability::input))) {
+            return false;
+        }
+        events::input::IsActionPressedQuery q;
+        q.actionName = actionName;
+        return events::EventDispatcher::instance().query(q);
+    }
+
+    float PluginContextImpl::getAxis1DValue(const std::string& axisName)
+    {
+        if (!hasCapability(std::string(capability::input))) {
+            return 0.0f;
+        }
+        events::input::GetAxis1DValueQuery q;
+        q.axisName = axisName;
+        return events::EventDispatcher::instance().query(q);
+    }
+
+    glm::vec2 PluginContextImpl::getAxis2DValue(const std::string& axisName)
+    {
+        if (!hasCapability(std::string(capability::input))) {
+            return glm::vec2(0.0f);
+        }
+        events::input::GetAxis2DValueQuery q;
+        q.axisName = axisName;
+        return events::EventDispatcher::instance().query(q);
+    }
+
     void PluginContextImpl::cleanupAll()
     {
         auto& dispatcher = events::EventDispatcher::instance();
+
+        // Stop all managed audio handles
+        for (const auto& handle : managedAudioHandles) {
+            if (handle.isValid()) {
+                events::audio::StopSoundCommand cmd;
+                cmd.handle = handle;
+                try { dispatcher.execute(cmd); } catch (...) {}
+            }
+        }
+        managedAudioHandles.clear();
+
         for (const auto& token : managedSubscriptions) {
             if (token.isValid()) {
                 dispatcher.unsubscribe(token);

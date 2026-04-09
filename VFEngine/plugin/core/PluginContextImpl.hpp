@@ -29,6 +29,7 @@ namespace plugin {
         std::vector<plugin::RenderHookHandle> registeredRenderHooks;
         std::vector<std::string> registeredComponentNames;
         std::vector<events::SubscriptionToken> pluginEventSubscriptions;
+        std::vector<services::AudioHandle> managedAudioHandles;
         // Keyed by "entityId:qualifiedName" to avoid cross-entity data corruption
         std::unordered_map<std::string, PluginComponentData> componentDataWrappers;
         std::unique_ptr<class ComponentBuilderImpl> activeBuilder;
@@ -64,6 +65,50 @@ namespace plugin {
         void logInfo(const std::string& message) override;
         void logWarning(const std::string& message) override;
         void logError(const std::string& message) override;
+
+        // Audio API
+        services::AudioHandle playSound3D(const std::string& path, glm::vec3 position,
+                                          const services::AudioParams& params) override;
+        services::AudioHandle playStreamingSound(const std::string& path,
+                                                  const services::AudioParams& params) override;
+        void stopSound(services::AudioHandle handle) override;
+        void pauseSound(services::AudioHandle handle) override;
+        void resumeSound(services::AudioHandle handle) override;
+        void setSoundVolume(services::AudioHandle handle, float volume) override;
+        void setSoundPitch(services::AudioHandle handle, float pitch) override;
+        bool isSoundPlaying(services::AudioHandle handle) override;
+        void setBusVolume(const std::string& busName, float volume) override;
+        float getBusVolume(const std::string& busName) override;
+
+        // Physics API
+        services::RaycastHit raycast(glm::vec3 origin, glm::vec3 direction,
+                                     float maxDistance, uint16_t layerMask) override;
+        std::vector<services::RaycastHit> raycastAll(glm::vec3 origin, glm::vec3 direction,
+                                                      float maxDistance, uint16_t layerMask) override;
+        void applyForce(entt::entity entity, glm::vec3 force) override;
+        void applyImpulse(entt::entity entity, glm::vec3 impulse) override;
+        void setLinearVelocity(entt::entity entity, glm::vec3 velocity) override;
+        glm::vec3 getLinearVelocity(entt::entity entity) override;
+        glm::vec3 getAngularVelocity(entt::entity entity) override;
+        bool isGrounded(entt::entity entity) override;
+        bool hasRigidBody(entt::entity entity) override;
+        glm::vec3 getPhysicsPosition(entt::entity entity) override;
+
+        // Terrain API
+        terrain::TerrainHeightAtResult getTerrainHeightAt(float worldX, float worldZ) override;
+        terrain::TerrainHitResult getTerrainHit() override;
+        bool hasTerrainComponent(entt::entity entity) override;
+
+        // Input API
+        bool isKeyDown(int keyCode) override;
+        bool isKeyPressed(int keyCode) override;
+        bool isMouseButtonDown(int button) override;
+        glm::vec2 getMousePosition() override;
+        glm::vec2 getMouseDelta() override;
+        bool isActionDown(const std::string& actionName) override;
+        bool isActionPressed(const std::string& actionName) override;
+        float getAxis1DValue(const std::string& axisName) override;
+        glm::vec2 getAxis2DValue(const std::string& axisName) override;
 
         void finalizeComponentRegistration(class ComponentBuilderImpl& builder);
 

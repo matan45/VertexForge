@@ -17,7 +17,7 @@ namespace events::terrainRaycast
         std::string_view getName() const override { return "ClearTerrainRaycastCursor"; }
     };
 
-    struct GetTerrainHitQuery : IQuery<terrain::TerrainHitResult>
+    struct GetTerrainHitQuery : IQuery<::terrain::TerrainHitResult>
     {
         std::string_view getName() const override { return "GetTerrainHit"; }
     };
