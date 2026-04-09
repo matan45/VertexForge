@@ -19,6 +19,8 @@
 #include "ScriptCommunicationManager.hpp"
 #include "../api/CoroutineAPI.hpp"
 #include "../api/ScriptCommunicationAPI.hpp"
+#include "../api/PluginComponentAPI.hpp"
+#include "../../../plugin/core/PluginContextImpl.hpp"
 #include <runtime/EventLoop.hpp>
 #include <vm/runtime/VirtualMachine.hpp>
 #include <json/JsonSerializer.hpp>
@@ -57,6 +59,13 @@ namespace core
             api::CoroutineAPI::setCoroutineManager(coroutineManager.get());
             api::ScriptCommunicationAPI::setManager(communicationManager.get());
             apiRegistry->registerEngineAPIs();
+
+            // VK-1290: Set callback so Plugin module can trigger script binding registration
+            auto* interp = interpreter.get();
+            plugin::PluginContextImpl::setScriptBindingRegistrar(
+                [interp](const std::vector<plugin::MetaComponentBridge>& bridges) {
+                    api::PluginComponentAPI::registerAPI(interp, bridges);
+                });
 
             uiEventBridge = std::make_unique<ScriptUIEventBridge>(
                 interpreter.get(), instanceToInterfaces, instanceToObject, instanceToEntity);

@@ -348,7 +348,101 @@ namespace plugin {
             auto q = value.cast<glm::quat>();
             return nlohmann::json::array({q.x, q.y, q.z, q.w});
         }
+
+        // Enums — serialize as string (enum value name)
+        if (type.is_enum())
+        {
+            for (auto [id, member] : type.data())
+            {
+                if (member.get({}) == value)
+                {
+                    const char* n = member.name();
+                    if (n) return std::string(n);
+                }
+            }
+            // Fallback: serialize as underlying integer
+            return value.allow_cast<int>().cast<int>();
+        }
+
+        // Sequence containers (std::vector<T>, etc.)
+        if (type.is_sequence_container())
+        {
+            auto view = value.as_sequence_container();
+            auto arr = nlohmann::json::array();
+            for (std::size_t i = 0, n = view.size(); i < n; ++i)
+            {
+                arr.push_back(serializeMetaAny(view[i], view.value_type()));
+            }
+            return arr;
+        }
+
+        // Associative containers (std::map<K,V>, std::unordered_map<K,V>, etc.)
+        if (type.is_associative_container())
+        {
+            auto view = value.as_associative_container();
+            auto obj = nlohmann::json::object();
+            for (auto it = view.begin(), last = view.end(); it != last; ++it)
+            {
+                auto [key, val] = *it;
+                std::string keyStr;
+                if (auto* s = key.try_cast<std::string>())
+                    keyStr = *s;
+                else if (auto* i = key.try_cast<int>())
+                    keyStr = std::to_string(*i);
+                else
+                    continue;
+                obj[keyStr] = serializeMetaAny(val, view.mapped_type());
+            }
+            return obj;
+        }
+
         return nullptr;
+    }
+
+    // Convert a JSON value to an entt::meta_any matching the expected meta type.
+    static entt::meta_any jsonToMetaAny(const nlohmann::json& j, const entt::meta_type& type)
+    {
+        if (type.info() == entt::type_id<int>() && j.is_number_integer())
+            return j.get<int>();
+        if (type.info() == entt::type_id<float>() && j.is_number())
+            return j.get<float>();
+        if (type.info() == entt::type_id<bool>() && j.is_boolean())
+            return j.get<bool>();
+        if (type.info() == entt::type_id<std::string>() && j.is_string())
+            return j.get<std::string>();
+        if (type.info() == entt::type_id<glm::vec2>() && j.is_array() && j.size() >= 2)
+            return glm::vec2(j[0].get<float>(), j[1].get<float>());
+        if (type.info() == entt::type_id<glm::vec3>() && j.is_array() && j.size() >= 3)
+            return glm::vec3(j[0].get<float>(), j[1].get<float>(), j[2].get<float>());
+        if (type.info() == entt::type_id<glm::vec4>() && j.is_array() && j.size() >= 4)
+            return glm::vec4(j[0].get<float>(), j[1].get<float>(), j[2].get<float>(), j[3].get<float>());
+        if (type.info() == entt::type_id<glm::quat>() && j.is_array() && j.size() >= 4)
+            return glm::quat(j[3].get<float>(), j[0].get<float>(), j[1].get<float>(), j[2].get<float>());
+        // Enum from string name
+        if (type.is_enum() && j.is_string())
+        {
+            std::string valName = j.get<std::string>();
+            for (auto [id, member] : type.data())
+            {
+                const char* n = member.name();
+                if (n && valName == n)
+                    return member.get({});
+            }
+        }
+        return {};
+    }
+
+    // Convert a JSON object key string to an entt::meta_any matching the expected key type.
+    static entt::meta_any jsonKeyToMetaAny(const std::string& key, const entt::meta_type& keyType)
+    {
+        if (keyType.info() == entt::type_id<std::string>())
+            return key;
+        if (keyType.info() == entt::type_id<int>())
+        {
+            try { return std::stoi(key); }
+            catch (...) { return {}; }
+        }
+        return {};
     }
 
     static void deserializeMetaData(entt::meta_data data, entt::meta_any& instance, const nlohmann::json& value)
@@ -370,6 +464,53 @@ namespace plugin {
             data.set(instance, glm::vec4(value[0].get<float>(), value[1].get<float>(), value[2].get<float>(), value[3].get<float>()));
         else if (type.info() == entt::type_id<glm::quat>() && value.is_array() && value.size() >= 4)
             data.set(instance, glm::quat(value[3].get<float>(), value[0].get<float>(), value[1].get<float>(), value[2].get<float>()));
+        // Sequence containers (std::vector<T>, etc.)
+        else if (type.is_sequence_container() && value.is_array())
+        {
+            auto fieldVal = data.get(instance);
+            auto view = fieldVal.as_sequence_container();
+            // Clear existing elements
+            while (view.size() > 0)
+                view.erase(view.begin());
+            // Re-populate from JSON array
+            for (const auto& elem : value)
+            {
+                auto converted = jsonToMetaAny(elem, view.value_type());
+                if (converted)
+                    view.insert(view.end(), converted);
+            }
+        }
+        // Associative containers (std::map<K,V>, etc.)
+        else if (type.is_associative_container() && value.is_object())
+        {
+            auto fieldVal = data.get(instance);
+            auto view = fieldVal.as_associative_container();
+            // Clear existing entries
+            while (view.size() > 0)
+                view.erase(view.begin());
+            // Re-populate from JSON object
+            for (auto& [k, v] : value.items())
+            {
+                auto keyAny = jsonKeyToMetaAny(k, view.key_type());
+                auto valAny = jsonToMetaAny(v, view.mapped_type());
+                if (keyAny && valAny)
+                    view.insert(keyAny, valAny);
+            }
+        }
+        // Enums — deserialize from string name
+        else if (type.is_enum() && value.is_string())
+        {
+            std::string valName = value.get<std::string>();
+            for (auto [id, member] : type.data())
+            {
+                const char* n = member.name();
+                if (n && valName == n)
+                {
+                    data.set(instance, member.get({}));
+                    break;
+                }
+            }
+        }
     }
 
     void PluginManager::initializeAll()
@@ -432,6 +573,12 @@ namespace plugin {
                 }
             }
         );
+
+        // VK-1290: Invoke script binding registrar (set by Core, which has mType access)
+        if (auto registrar = PluginContextImpl::getScriptBindingRegistrar())
+        {
+            registrar(PluginContextImpl::getAllBridges());
+        }
 
         for (auto& plugin : plugins) {
             if (plugin.initialized) {

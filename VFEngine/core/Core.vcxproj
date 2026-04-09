@@ -125,6 +125,7 @@
     <ClInclude Include="adapters\api\PhysicsAnimationAPI.hpp" />
     <ClInclude Include="adapters\api\PhysicsColliderAPI.hpp" />
     <ClInclude Include="adapters\api\PhysicsRigidBodyAPI.hpp" />
+    <ClInclude Include="adapters\api\PluginComponentAPI.hpp" />
     <ClInclude Include="adapters\api\PostProcessAPI.hpp" />
     <ClInclude Include="adapters\api\PostProcessAPIHelpers.hpp" />
     <ClInclude Include="adapters\api\RenderTextureAPI.hpp" />
@@ -226,6 +227,7 @@
     <ClCompile Include="adapters\api\PhysicsAnimationAPI.cpp" />
     <ClCompile Include="adapters\api\PhysicsColliderAPI.cpp" />
     <ClCompile Include="adapters\api\PhysicsRigidBodyAPI.cpp" />
+    <ClCompile Include="adapters\api\PluginComponentAPI.cpp" />
     <ClCompile Include="adapters\api\PostProcessAPI.cpp" />
     <ClCompile Include="adapters\api\PostProcessAPIAdvanced.cpp" />
     <ClCompile Include="adapters\api\PostProcessAPIAdvanced2.cpp" />

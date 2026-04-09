@@ -18,6 +18,10 @@ namespace plugin {
 
     class PluginContextImpl : public PluginContext
     {
+    public:
+        // VK-1290: Callback type for Core to register mType script bindings (avoids mType dep in Plugin)
+        using ScriptBindingRegistrar = std::function<void(const std::vector<MetaComponentBridge>&)>;
+
     private:
         std::string pluginName;
         std::unordered_set<std::string> capabilities;
@@ -29,6 +33,7 @@ namespace plugin {
         std::vector<services::AudioHandle> managedAudioHandles;
         std::vector<services::VFXInstanceId> managedVFXInstances;
         static std::vector<MetaComponentBridge> allBridges;
+        static ScriptBindingRegistrar scriptBindingRegistrar;
 
     public:
         explicit PluginContextImpl(const std::string& pluginName,
@@ -123,6 +128,9 @@ namespace plugin {
         void registerComponentBridge(MetaComponentBridge bridge) override;
 
         static const std::vector<MetaComponentBridge>& getAllBridges() { return allBridges; }
+
+        static void setScriptBindingRegistrar(ScriptBindingRegistrar registrar) { scriptBindingRegistrar = std::move(registrar); }
+        static ScriptBindingRegistrar getScriptBindingRegistrar() { return scriptBindingRegistrar; }
 
         void cleanupAll();
 

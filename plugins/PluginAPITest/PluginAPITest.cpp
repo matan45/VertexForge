@@ -4,6 +4,10 @@
 #include <entt/entt.hpp>
 #include <glm/glm.hpp>
 #include <string>
+#include <vector>
+#include <map>
+
+enum class ElementType : int { Fire = 0, Water, Earth, Wind };
 
 // Native component struct — registered with EnTT meta for cross-DLL type identity
 struct TestComponent
@@ -12,6 +16,9 @@ struct TestComponent
     float speed = 5.0f;
     bool isActive = true;
     glm::vec3 offset{0.0f, 1.0f, 0.0f};
+    std::vector<int> scores{10, 20, 30};
+    std::map<std::string, float> stats{{"strength", 5.0f}, {"agility", 3.5f}};
+    ElementType element = ElementType::Fire;
 };
 
 class PluginAPITest : public plugin::IPlugin
@@ -29,11 +36,21 @@ public:
         // ================================================================
         // VK-1288: Register native component with meta reflection
         // ================================================================
+        // Register enum type with named values
+        entt::meta_factory<ElementType>()
+            .data<ElementType::Fire>("Fire")
+            .data<ElementType::Water>("Water")
+            .data<ElementType::Earth>("Earth")
+            .data<ElementType::Wind>("Wind");
+
         ctx->registerNativeComponent<TestComponent>("TestComponent")
             .data<&TestComponent::health>("health")
             .data<&TestComponent::speed>("speed")
             .data<&TestComponent::isActive>("isActive")
-            .data<&TestComponent::offset>("offset");
+            .data<&TestComponent::offset>("offset")
+            .data<&TestComponent::scores>("scores")
+            .data<&TestComponent::stats>("stats")
+            .data<&TestComponent::element>("element");
 
         ctx->logInfo("PluginAPITest initialized - TestComponent registered via meta");
         return true;

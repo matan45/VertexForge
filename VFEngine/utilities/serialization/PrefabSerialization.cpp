@@ -5,6 +5,7 @@
 #include "../scene/SceneGraphSystem.hpp"
 #include "../components/Components.hpp"
 #include "../components/PhysicsAnimationComponent.hpp"
+#include "../scene/EntityRegistry.hpp"
 
 namespace serialization
 {
@@ -139,6 +140,18 @@ namespace serialization
         json componentsJson = json::object();
         serializeRenderComponents(entity, componentsJson);
         serializePhysicsAndEffectComponents(entity, componentsJson);
+
+        // Plugin components
+        if (SceneSerialization::pluginSerializeHook)
+        {
+            auto pluginJson = SceneSerialization::pluginSerializeHook(
+                scene::EntityRegistry::getRegistry(), entity.getHandle());
+            for (auto& [key, value] : pluginJson.items())
+            {
+                componentsJson[key] = std::move(value);
+            }
+        }
+
         return componentsJson;
     }
 
@@ -349,6 +362,13 @@ namespace serialization
         deserializeSceneComponents(componentsJson, entity);
         deserializeMediaComponents(componentsJson, entity);
         deserializeLightComponents(componentsJson, entity);
+
+        // Plugin components
+        if (SceneSerialization::pluginDeserializeHook)
+        {
+            SceneSerialization::pluginDeserializeHook(componentsJson,
+                scene::EntityRegistry::getRegistry(), entity.getHandle());
+        }
     }
 
     scene::Entity PrefabSerialization::deserializeEntityTree(

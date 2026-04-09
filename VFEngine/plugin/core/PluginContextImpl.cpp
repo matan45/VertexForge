@@ -28,6 +28,7 @@ namespace plugin {
 
     // Static member definitions
     std::vector<MetaComponentBridge> PluginContextImpl::allBridges{};
+    PluginContextImpl::ScriptBindingRegistrar PluginContextImpl::scriptBindingRegistrar{};
 
 
     PluginContextImpl::PluginContextImpl(const std::string& pluginName,
