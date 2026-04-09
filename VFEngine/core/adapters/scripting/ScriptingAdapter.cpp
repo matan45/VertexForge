@@ -19,6 +19,8 @@
 #include "ScriptCommunicationManager.hpp"
 #include "../api/CoroutineAPI.hpp"
 #include "../api/ScriptCommunicationAPI.hpp"
+#include "../api/PluginComponentAPI.hpp"
+#include "../../../plugin/core/PluginContextImpl.hpp"
 #include <runtime/EventLoop.hpp>
 #include <vm/runtime/VirtualMachine.hpp>
 #include <json/JsonSerializer.hpp>
@@ -57,6 +59,13 @@ namespace core
             api::CoroutineAPI::setCoroutineManager(coroutineManager.get());
             api::ScriptCommunicationAPI::setManager(communicationManager.get());
             apiRegistry->registerEngineAPIs();
+
+            // VK-1290: Set callback so Plugin module can trigger script binding registration
+            auto* interp = interpreter.get();
+            plugin::PluginContextImpl::setScriptBindingRegistrar(
+                [interp](const std::vector<plugin::MetaComponentBridge>& bridges) {
+                    api::PluginComponentAPI::registerAPI(interp, bridges);
+                });
 
             uiEventBridge = std::make_unique<ScriptUIEventBridge>(
                 interpreter.get(), instanceToInterfaces, instanceToObject, instanceToEntity);
@@ -300,6 +309,16 @@ namespace core
         try
         {
             std::string fullPath = scriptLibraryPath.empty() ? scriptPath : scriptLibraryPath + "/" + scriptPath;
+
+            // If path doesn't exist (e.g. relative path from scene), try absolute resolve
+            if (!std::filesystem::exists(fullPath))
+            {
+                // Try the original scriptPath directly (may be absolute from assetdb)
+                if (std::filesystem::exists(scriptPath))
+                {
+                    fullPath = scriptPath;
+                }
+            }
 
             std::string className;
             auto pathIt = pathToClassName.find(scriptPath);

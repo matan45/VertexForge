@@ -1,7 +1,9 @@
 #include "AddComponentPopup.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/ui/UIEvents.hpp"
-#include "events/plugin/PluginComponentEvents.hpp"
+#include "core/PluginContextImpl.hpp"
+#include "scene/EntityRegistry.hpp"
+#include "data/EntityConversion.hpp"
 #include <imgui.h>
 
 namespace windows::details
@@ -218,51 +220,28 @@ namespace windows::details
 
     void AddComponentPopup::drawPluginSection(const ComponentPresence& c, const char* filter)
     {
-        auto handle = c.handle;
-        auto& dispatcher = events::EventDispatcher::instance();
-
-        events::plugin::GetRegisteredPluginComponentsQuery listQuery;
-        auto registeredNames = dispatcher.query(listQuery);
-
-        if (registeredNames.empty())
+        auto& bridges = plugin::PluginContextImpl::getAllBridges();
+        if (bridges.empty())
             return;
 
-        std::vector<std::pair<std::string, std::string>> available;
-        for (const auto& qualifiedName : registeredNames)
+        auto& reg = scene::EntityRegistry::getRegistry();
+        auto entity = services::internal::fromHandle(c.handle);
+
+        for (const auto& bridge : bridges)
         {
-            events::plugin::GetPluginComponentDataQuery dataQuery;
-            dataQuery.entity = handle;
-            dataQuery.qualifiedName = qualifiedName;
-            auto dataOpt = dispatcher.query(dataQuery);
-
-            if (!dataOpt.has_value())
-            {
-                std::string displayName = qualifiedName;
-                auto sep = qualifiedName.find("::");
-                if (sep != std::string::npos)
-                {
-                    displayName = qualifiedName.substr(sep + 2) + " (" + qualifiedName.substr(0, sep) + ")";
-                }
-                available.emplace_back(qualifiedName, displayName);
-            }
-        }
-
-        if (available.empty())
-            return;
-
-        for (const auto& [qualifiedName, displayName] : available)
-        {
-            if (!matchesFilter(displayName.c_str(), filter))
+            if (bridge.has(reg, entity))
                 continue;
 
-            std::string label = "  " + displayName;
+            const char* name = bridge.name ? bridge.name : "Unknown";
+            if (filter && !matchesFilter(name, filter))
+                continue;
+
+            std::string label = std::string("  ") + name;
             if (ImGui::Selectable(label.c_str()))
             {
-                events::plugin::AddPluginComponentCommand cmd;
-                cmd.entity = handle;
-                cmd.qualifiedName = qualifiedName;
-                dispatcher.execute(cmd);
+                bridge.emplace(reg, entity);
             }
         }
     }
+
 }

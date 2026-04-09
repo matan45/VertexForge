@@ -8,33 +8,33 @@
 //   @Script
 //   public class MenuController implements IUIButtonListener {
 //       @Override
-//       public function onButtonClicked(int buttonEntityId, String entityName): void {
+//       public function onButtonClicked(int buttonEntityId, string entityName): void {
 //           Log::info("Button clicked: " + entityName);
 //       }
 //
 //       @Override
-//       public function onButtonPressed(int buttonEntityId, String entityName): void { }
+//       public function onButtonPressed(int buttonEntityId, string entityName): void { }
 //       @Override
-//       public function onButtonReleased(int buttonEntityId, String entityName): void { }
+//       public function onButtonReleased(int buttonEntityId, string entityName): void { }
 //       @Override
-//       public function onButtonHoverEnter(int buttonEntityId, String entityName): void { }
+//       public function onButtonHoverEnter(int buttonEntityId, string entityName): void { }
 //       @Override
-//       public function onButtonHoverExit(int buttonEntityId, String entityName): void { }
+//       public function onButtonHoverExit(int buttonEntityId, string entityName): void { }
 //   }
 
 interface IUIButtonListener {
     // Called when a button is clicked (pressed and released while hovered)
-    function onButtonClicked(int buttonEntityId, String entityName): void;
+    function onButtonClicked(int buttonEntityId, string entityName): void;
 
     // Called when a button is first pressed down
-    function onButtonPressed(int buttonEntityId, String entityName): void;
+    function onButtonPressed(int buttonEntityId, string entityName): void;
 
     // Called when a button is released
-    function onButtonReleased(int buttonEntityId, String entityName): void;
+    function onButtonReleased(int buttonEntityId, string entityName): void;
 
     // Called when the mouse enters a button's area
-    function onButtonHoverEnter(int buttonEntityId, String entityName): void;
+    function onButtonHoverEnter(int buttonEntityId, string entityName): void;
 
     // Called when the mouse leaves a button's area
-    function onButtonHoverExit(int buttonEntityId, String entityName): void;
+    function onButtonHoverExit(int buttonEntityId, string entityName): void;
 }

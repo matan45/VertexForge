@@ -2,6 +2,7 @@
 #include "../EventTypes.hpp"
 #include "../../data/EntityHandle.hpp"
 #include "../../data/TerrainData.hpp"
+#include "terrain/TerrainHeightAtResult.hpp"
 #include <glm/glm.hpp>
 #include <optional>
 #include <vector>
@@ -213,13 +214,7 @@ namespace events::terrain
         std::string_view getName() const override { return "GetTerrainHeightfield"; }
     };
 
-    struct TerrainHeightAtResult
-    {
-        float height = 0.0f;
-        bool valid = false;
-    };
-
-    struct GetTerrainHeightAtQuery : IQuery<TerrainHeightAtResult>
+    struct GetTerrainHeightAtQuery : IQuery<::terrain::TerrainHeightAtResult>
     {
         float worldX = 0.0f;
         float worldZ = 0.0f;

@@ -1,9 +1,7 @@
 #pragma once
 #include "../api/PluginContext.hpp"
-#include "../api/PluginComponentData.hpp"
 #include "events/EventTypes.hpp"
 #include <unordered_set>
-#include <unordered_map>
 #include <vector>
 #include <memory>
 #include <string>
@@ -20,6 +18,10 @@ namespace plugin {
 
     class PluginContextImpl : public PluginContext
     {
+    public:
+        // VK-1290: Callback type for Core to register mType script bindings (avoids mType dep in Plugin)
+        using ScriptBindingRegistrar = std::function<void(const std::vector<MetaComponentBridge>&)>;
+
     private:
         std::string pluginName;
         std::unordered_set<std::string> capabilities;
@@ -27,11 +29,11 @@ namespace plugin {
         std::vector<std::shared_ptr<controllers::imguiHandler::ImguiWindow>> registeredWindows;
         std::vector<std::unique_ptr<pipeline::PipelineStage>> registeredImportStages;
         std::vector<plugin::RenderHookHandle> registeredRenderHooks;
-        std::vector<std::string> registeredComponentNames;
         std::vector<events::SubscriptionToken> pluginEventSubscriptions;
-        // Keyed by "entityId:qualifiedName" to avoid cross-entity data corruption
-        std::unordered_map<std::string, PluginComponentData> componentDataWrappers;
-        std::unique_ptr<class ComponentBuilderImpl> activeBuilder;
+        std::vector<services::AudioHandle> managedAudioHandles;
+        std::vector<services::VFXInstanceId> managedVFXInstances;
+        static std::vector<MetaComponentBridge> allBridges;
+        static ScriptBindingRegistrar scriptBindingRegistrar;
 
     public:
         explicit PluginContextImpl(const std::string& pluginName,
@@ -42,13 +44,6 @@ namespace plugin {
         events::SubscriptionToken managedSubscribe(events::SubscriptionToken token) override;
         void registerEditorWindow(std::shared_ptr<controllers::imguiHandler::ImguiWindow> window) override;
         void registerImportStage(std::unique_ptr<pipeline::PipelineStage> stage) override;
-        ComponentBuilder& registerComponent(const std::string& componentName) override;
-        bool addPluginComponent(entt::entity entity, const std::string& componentName) override;
-        bool removePluginComponent(entt::entity entity, const std::string& componentName) override;
-        PluginComponentData* getPluginComponent(entt::entity entity, const std::string& componentName) override;
-        bool hasPluginComponent(entt::entity entity, const std::string& componentName) override;
-        void forEachWithComponent(const std::string& componentName,
-                                   const std::function<void(entt::entity, PluginComponentData&)>& callback) override;
         void publishEvent(const std::string& eventName, const nlohmann::json& data) override;
         events::SubscriptionToken subscribeEvent(const std::string& eventName,
                                                   std::function<void(const nlohmann::json&)> handler) override;
@@ -61,11 +56,81 @@ namespace plugin {
         bool hasCapability(const std::string& capability) const override;
         ImGuiContext* getImGuiContext() override;
         std::string getPluginDataPath() const override;
+        void saveConfig(const nlohmann::json& config) override;
+        nlohmann::json loadConfig() override;
         void logInfo(const std::string& message) override;
         void logWarning(const std::string& message) override;
         void logError(const std::string& message) override;
 
-        void finalizeComponentRegistration(class ComponentBuilderImpl& builder);
+        // Audio API
+        services::AudioHandle playSound3D(const std::string& path, glm::vec3 position,
+                                          const services::AudioParams& params) override;
+        services::AudioHandle playStreamingSound(const std::string& path,
+                                                  const services::AudioParams& params) override;
+        void stopSound(services::AudioHandle handle) override;
+        void pauseSound(services::AudioHandle handle) override;
+        void resumeSound(services::AudioHandle handle) override;
+        void setSoundVolume(services::AudioHandle handle, float volume) override;
+        void setSoundPitch(services::AudioHandle handle, float pitch) override;
+        bool isSoundPlaying(services::AudioHandle handle) override;
+        void setBusVolume(const std::string& busName, float volume) override;
+        float getBusVolume(const std::string& busName) override;
+
+        // Physics API
+        services::RaycastHit raycast(glm::vec3 origin, glm::vec3 direction,
+                                     float maxDistance, uint16_t layerMask) override;
+        std::vector<services::RaycastHit> raycastAll(glm::vec3 origin, glm::vec3 direction,
+                                                      float maxDistance, uint16_t layerMask) override;
+        void applyForce(entt::entity entity, glm::vec3 force) override;
+        void applyImpulse(entt::entity entity, glm::vec3 impulse) override;
+        void setLinearVelocity(entt::entity entity, glm::vec3 velocity) override;
+        glm::vec3 getLinearVelocity(entt::entity entity) override;
+        glm::vec3 getAngularVelocity(entt::entity entity) override;
+        bool isGrounded(entt::entity entity) override;
+        bool hasRigidBody(entt::entity entity) override;
+        glm::vec3 getPhysicsPosition(entt::entity entity) override;
+
+        // Terrain API
+        terrain::TerrainHeightAtResult getTerrainHeightAt(float worldX, float worldZ) override;
+        terrain::TerrainHitResult getTerrainHit() override;
+        bool hasTerrainComponent(entt::entity entity) override;
+
+        // Input API
+        bool isKeyDown(int keyCode) override;
+        bool isKeyPressed(int keyCode) override;
+        bool isMouseButtonDown(int button) override;
+        glm::vec2 getMousePosition() override;
+        glm::vec2 getMouseDelta() override;
+        bool isActionDown(const std::string& actionName) override;
+        bool isActionPressed(const std::string& actionName) override;
+        float getAxis1DValue(const std::string& axisName) override;
+        glm::vec2 getAxis2DValue(const std::string& axisName) override;
+
+        // NavMesh API
+        void setAgentDestination(entt::entity entity, glm::vec3 target) override;
+        void stopAgent(entt::entity entity) override;
+        glm::vec3 getAgentVelocity(entt::entity entity) override;
+        float getAgentSpeed(entt::entity entity) override;
+        navigation::NavPath findPath(glm::vec3 start, glm::vec3 end) override;
+        glm::vec3 getClosestPointOnNavmesh(glm::vec3 point, float searchRadius) override;
+        bool isPointOnNavmesh(glm::vec3 point, float tolerance) override;
+        bool hasNavmesh() override;
+
+        // VFX API
+        services::VFXInstanceId createVFXInstance(const services::VFXRuntimeParams& params) override;
+        void destroyVFXInstance(services::VFXInstanceId instanceId) override;
+        void setVFXInstanceTransform(services::VFXInstanceId instanceId, const glm::mat4& worldTransform) override;
+        void playVFXInstance(services::VFXInstanceId instanceId) override;
+        void stopVFXInstance(services::VFXInstanceId instanceId) override;
+        bool isVFXInstancePlaying(services::VFXInstanceId instanceId) override;
+
+        // Meta component registration
+        void registerComponentBridge(MetaComponentBridge bridge) override;
+
+        static const std::vector<MetaComponentBridge>& getAllBridges() { return allBridges; }
+
+        static void setScriptBindingRegistrar(ScriptBindingRegistrar registrar) { scriptBindingRegistrar = std::move(registrar); }
+        static ScriptBindingRegistrar getScriptBindingRegistrar() { return scriptBindingRegistrar; }
 
         void cleanupAll();
 

@@ -1,10 +1,9 @@
 // Float - Object wrapper for floating-point values
 // Provides a pure OOP interface for float operations
-import * from "../Object.mt";
 import * from "Bool.mt";
 import * from "Int.mt";
 
-public value class Float implements Object<Float> {
+public value class Float {
     private float value;
 
     // Constructors

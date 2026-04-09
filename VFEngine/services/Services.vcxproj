@@ -143,7 +143,6 @@
     <ClInclude Include="events\physics\PhysicsEvents.hpp" />
     <ClInclude Include="events\physics\PhysicsSettingsEvents.hpp" />
     <ClInclude Include="events\physics\SocketEvents.hpp" />
-    <ClInclude Include="events\plugin\PluginComponentEvents.hpp" />
     <ClInclude Include="events\project\ApplicationEvents.hpp" />
     <ClInclude Include="events\project\ExportEvents.hpp" />
     <ClInclude Include="events\project\FileOperationsEvents.hpp" />

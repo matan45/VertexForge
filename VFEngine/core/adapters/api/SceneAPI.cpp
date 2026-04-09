@@ -7,10 +7,32 @@
 #include "../../../services/events/scene/ScenePersistenceEvents.hpp"
 #include "../../../services/events/scene/SceneManagementEvents.hpp"
 #include "../scripting/ScriptSceneEventBridge.hpp"
+#include "../../../services/events/project/ProjectEvents.hpp"
 #include <filesystem>
 
 namespace core::api
 {
+    // Resolve a script-provided scene path relative to the project working directory
+    static std::string resolveScenePath(const std::string& path)
+    {
+        std::filesystem::path p(path);
+        if (p.is_absolute())
+        {
+            return path;
+        }
+
+        auto& dispatcher = events::EventDispatcher::instance();
+        auto projectPathOpt = dispatcher.query(events::project::GetProjectPathQuery{});
+        if (projectPathOpt.has_value())
+        {
+            std::filesystem::path projectFile(projectPathOpt.value());
+            std::filesystem::path projectDir = projectFile.parent_path();
+            return (projectDir / p).lexically_normal().string();
+        }
+
+        return path;
+    }
+
     void SceneAPI::registerAPI(services::ScriptInterpreter* interpreter)
     {
         auto& dispatcher = events::EventDispatcher::instance();
@@ -25,7 +47,7 @@ namespace core::api
                     vfLogError("[Script] Scene.load: missing path argument");
                     return value::Value(std::monostate{});
                 }
-                std::string path = extractString(args[0], "Scene.load");
+                std::string path = resolveScenePath(extractString(args[0], "Scene.load"));
 
                 events::scene::NewSceneCommand newCmd;
                 dispatcher.execute(newCmd);
@@ -47,7 +69,7 @@ namespace core::api
                     vfLogError("[Script] Scene.loadAdditive: missing path argument");
                     return value::Value(std::string(""));
                 }
-                std::string path = extractString(args[0], "Scene.loadAdditive");
+                std::string path = resolveScenePath(extractString(args[0], "Scene.loadAdditive"));
 
                 // Auto-generate scene name from filename stem
                 std::filesystem::path p(path);
@@ -103,7 +125,7 @@ namespace core::api
                     vfLogError("[Script] Scene.loadAsync: missing path or callback argument");
                     return value::Value(std::monostate{});
                 }
-                std::string path = extractString(args[0], "Scene.loadAsync");
+                std::string path = resolveScenePath(extractString(args[0], "Scene.loadAsync"));
                 value::Value callback = args[1];
 
                 // Store callback for later resolution by the event bridge

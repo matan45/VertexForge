@@ -66,7 +66,11 @@ namespace handlers {
         pluginManager = std::make_unique<plugin::PluginManager>(std::unordered_set<std::string>{
             std::string(plugin::capability::audio),
             std::string(plugin::capability::physics),
-            std::string(plugin::capability::scripting)
+            std::string(plugin::capability::scripting),
+            std::string(plugin::capability::terrain),
+            std::string(plugin::capability::input),
+            std::string(plugin::capability::navmesh),
+            std::string(plugin::capability::vfx)
         });
         auto exePath = std::filesystem::current_path();
         auto pluginsDir = exePath / "plugins";

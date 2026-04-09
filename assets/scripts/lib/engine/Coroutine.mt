@@ -22,22 +22,22 @@ public class Coroutine {
     }
 
     // Wait for the specified number of seconds before continuing
-    public static async function waitForSeconds(float seconds): Promise<void> {
+    public static function async waitForSeconds(float seconds): Promise<void> {
         await _native_coroutine_waitForSeconds(seconds);
     }
 
     // Wait for the specified number of frames before continuing
-    public static async function waitForFrames(int frames): Promise<void> {
+    public static function async waitForFrames(int frames): Promise<void> {
         await _native_coroutine_waitForFrames(frames);
     }
 
     // Wait until the next frame
-    public static async function waitForNextFrame(): Promise<void> {
+    public static function async waitForNextFrame(): Promise<void> {
         await _native_coroutine_waitForNextFrame();
     }
 
     // Wait until the next physics fixed update step
-    public static async function waitForFixedUpdate(): Promise<void> {
+    public static function async waitForFixedUpdate(): Promise<void> {
         await _native_coroutine_waitForFixedUpdate();
     }
 }

@@ -7,11 +7,9 @@ namespace serialization
 {
     SceneSerialization::PluginSerializeFn SceneSerialization::pluginSerializeHook;
     SceneSerialization::PluginDeserializeFn SceneSerialization::pluginDeserializeHook;
-    std::shared_mutex SceneSerialization::pluginHookMutex;
 
     void SceneSerialization::setPluginSerializationHooks(PluginSerializeFn serialize, PluginDeserializeFn deserialize)
     {
-        std::unique_lock lock(pluginHookMutex);
         pluginSerializeHook = std::move(serialize);
         pluginDeserializeHook = std::move(deserialize);
     }
@@ -170,15 +168,13 @@ namespace serialization
         serializeMiscComponents(entity, componentsJson);
 
         // Plugin components
+        if (pluginSerializeHook)
         {
-            std::shared_lock lock(pluginHookMutex);
-            if (pluginSerializeHook)
+            auto pluginJson = pluginSerializeHook(
+                scene::EntityRegistry::getRegistry(), entity.getHandle());
+            for (auto& [key, value] : pluginJson.items())
             {
-                auto pluginJson = pluginSerializeHook(entity);
-                for (auto& [key, value] : pluginJson.items())
-                {
-                    componentsJson[key] = std::move(value);
-                }
+                componentsJson[key] = std::move(value);
             }
         }
 

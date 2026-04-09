@@ -1,8 +1,8 @@
 // String - Object wrapper for string values
 // Provides a pure OOP interface for string operations
 // Internally uses string pooling for memory efficiency
-import * from "../Object.mt";
-public value class String implements Object<String> {
+
+public value class String {
     private string value;
 
     // Constructors

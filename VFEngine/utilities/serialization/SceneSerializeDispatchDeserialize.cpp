@@ -372,19 +372,10 @@ namespace serialization
         deserializeMiscComponents(componentsJson, entity);
 
         // Plugin components
+        if (pluginDeserializeHook)
         {
-            std::shared_lock lock(pluginHookMutex);
-            if (pluginDeserializeHook)
-            {
-                json pluginEntries = json::object();
-                for (const auto& [key, value] : componentsJson.items())
-                {
-                    if (key.rfind("plugin:", 0) == 0)
-                        pluginEntries[key] = value;
-                }
-                if (!pluginEntries.empty())
-                    pluginDeserializeHook(pluginEntries, entity);
-            }
+            pluginDeserializeHook(componentsJson,
+                scene::EntityRegistry::getRegistry(), entity.getHandle());
         }
     }
 }

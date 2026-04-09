@@ -2,7 +2,7 @@
 
 ## Overview
 
-VertexForge plugins are shared libraries (`.dll`) that extend engine functionality at runtime. Plugins can register custom ECS components, editor windows, import pipeline stages, render hooks, script functions, and communicate via events.
+VertexForge plugins are shared libraries (`.dll`) that extend engine functionality at runtime. Plugins can register native ECS components, editor windows, import pipeline stages, render hooks, script functions, and communicate via events.
 
 ## Quick Start
 
@@ -12,9 +12,16 @@ VertexForge plugins are shared libraries (`.dll`) that extend engine functionali
 // HelloPlugin.cpp
 #include "api/IPlugin.hpp"
 #include "api/PluginContext.hpp"
-#include "api/PluginComponentBuilder.hpp"
-#include "api/PluginComponentData.hpp"
 #include "api/PluginExport.hpp"
+#include <entt/entt.hpp>
+#include <glm/glm.hpp>
+
+// Define a native component struct
+struct Health {
+    int maxHP = 100;
+    int currentHP = 100;
+    float regenRate = 1.0f;
+};
 
 class HelloPlugin : public plugin::IPlugin
 {
@@ -29,11 +36,28 @@ public:
     bool onInitialize(plugin::PluginContext* context) override
     {
         ctx = context;
+
+        // Register component with meta reflection (enables inspector + Add Component UI)
+        ctx->registerNativeComponent<Health>("Health")
+            .data<&Health::maxHP>("maxHP")
+            .data<&Health::currentHP>("currentHP")
+            .data<&Health::regenRate>("regenRate");
+
         ctx->logInfo("Hello from plugin!");
         return true;
     }
 
-    void onUpdate(float deltaTime) override {}
+    void onUpdate(float deltaTime) override
+    {
+        // Runs every frame in both editor and play mode
+        auto& reg = ctx->getRegistry();
+        for (auto [entity, health] : reg.view<Health>().each())
+        {
+            if (health.currentHP < health.maxHP)
+                health.currentHP += static_cast<int>(health.regenRate * deltaTime);
+        }
+    }
+
     void onShutdown() override {}
 };
 
@@ -48,7 +72,7 @@ Create `HelloPlugin.vfplugin` alongside your DLL:
 {
     "name": "HelloPlugin",
     "version": "1.0.0",
-    "apiVersion": 4,
+    "apiVersion": 5,
     "author": "YourName",
     "description": "My first plugin",
     "capabilities": [],
@@ -62,7 +86,6 @@ Create `HelloPlugin.vfplugin` alongside your DLL:
 ### 3. Build Configuration (premake5.lua)
 
 ```lua
--- Adjust paths to point to your VertexForge installation
 local vfRoot = "path/to/VertexForge"
 local vulkanSdk = os.getenv("VULKAN_SDK")
 
@@ -90,7 +113,14 @@ project "HelloPlugin"
 
 ### 4. Deploy
 
-Copy the built `.dll` and `.vfplugin` file into the engine's `plugins/` directory.
+Copy the built `.dll` and `.vfplugin` file into a subfolder under the engine's `plugins/` directory:
+
+```
+plugins/
+  HelloPlugin/
+    HelloPlugin.dll
+    HelloPlugin.vfplugin
+```
 
 ---
 
@@ -106,142 +136,94 @@ initializeAll()  → Calls onInitialize(context) for each plugin
                    Return false to abort (plugin is unloaded)
 
 updateAll(dt)    → Calls onUpdate(deltaTime) each frame
-                   Run game logic here
+                   Runs in both editor and play mode
 
 shutdownAll()    → Calls onShutdown() in reverse load order
                    Engine auto-cleans registered resources
                    Calls vfDestroyPlugin()
 ```
 
-## Custom Components
+## Native Components
 
-Register components with typed properties. The engine auto-generates serialization and inspector UI.
+Plugins define components as plain C++ structs and register them with `registerNativeComponent<T>()`. The engine auto-generates inspector UI from meta reflection data.
+
+### Registration
 
 ```cpp
+struct Health {
+    int maxHP = 100;
+    int currentHP = 100;
+    float regenRate = 1.0f;
+    bool invincible = false;
+};
+
 bool onInitialize(plugin::PluginContext* context) override
 {
     ctx = context;
 
-    // Declare a component with typed properties
-    ctx->registerComponent("Health")
-        .addInt("maxHP", 100, 1, 10000)       // name, default, min, max
-        .addInt("currentHP", 100, 0, 10000)
-        .addFloat("regenRate", 1.0f, 0.0f, 100.0f)
-        .addBool("invincible", false)
-        .build();
+    ctx->registerNativeComponent<Health>("Health")
+        .data<&Health::maxHP>("maxHP")
+        .data<&Health::currentHP>("currentHP")
+        .data<&Health::regenRate>("regenRate")
+        .data<&Health::invincible>("invincible");
 
     return true;
 }
 ```
 
-### Available Property Types
+### Supported Property Types for Auto-Inspector
 
-| Method | Type | Inspector Control |
-|--------|------|-------------------|
-| `addInt(name, default, min, max)` | int | DragInt |
-| `addFloat(name, default, min, max)` | float | DragFloat |
-| `addBool(name, default)` | bool | Checkbox |
-| `addString(name, default)` | string | InputText |
-| `addVec2(name, default)` | glm::vec2 | DragFloat2 |
-| `addVec3(name, default)` | glm::vec3 | DragFloat3 |
-| `addVec4(name, default)` | glm::vec4 | DragFloat4 |
-| `addColor(name, default)` | glm::vec4 | ColorEdit4 |
-| `addArray(name)...endArray()` | JSON array | Expandable list with +/- buttons |
-| `addObject(name)...endObject()` | JSON object | Expandable tree |
+| C++ Type | Inspector Widget |
+|----------|-----------------|
+| `int` | DragInt |
+| `float` | DragFloat |
+| `bool` | Checkbox |
+| `std::string` | InputText |
+| `glm::vec2` | DragFloat2 |
+| `glm::vec3` | DragFloat3 |
+| `glm::vec4` | DragFloat4 |
+| `glm::quat` | DragFloat3 (euler angles) |
 
-### Arrays and Objects
+### Accessing Components
 
-```cpp
-ctx->registerComponent("Inventory")
-    .addInt("maxSlots", 20, 1, 100)
-    .addArray("items")                  // dynamic list
-        .addString("name", "Empty")     // element schema
-        .addInt("count", 1, 0, 999)
-        .addBool("equipped", false)
-    .endArray()
-    .build();
-
-ctx->registerComponent("Quest")
-    .addString("title", "")
-    .addObject("reward")                // nested object
-        .addInt("gold", 0, 0, 99999)
-        .addInt("experience", 0, 0, 99999)
-    .endObject()
-    .addArray("objectives")
-        .addString("description", "")
-        .addBool("completed", false)
-        .addInt("current", 0, 0, 9999)
-        .addInt("target", 1, 1, 9999)
-    .endArray()
-    .build();
-```
-
-### Accessing Component Data
+Use the EnTT registry directly — zero overhead, cache-friendly:
 
 ```cpp
-// Add component to an entity
-ctx->addPluginComponent(entity, "Health");
+auto& reg = ctx->getRegistry();
 
-// Read/write typed data (DLL-safe)
-auto* health = ctx->getPluginComponent(entity, "Health");
-if (health) {
-    int hp = health->getInt("currentHP");
-    health->setFloat("regenRate", 5.0f);
-}
+// Add component to entity
+reg.emplace<Health>(entity, Health{200, 200, 5.0f, false});
+
+// Read/write
+auto& health = reg.get<Health>(entity);
+health.currentHP -= 10;
 
 // Check existence
-if (ctx->hasPluginComponent(entity, "Health")) { ... }
+if (reg.all_of<Health>(entity)) { ... }
 
 // Remove
-ctx->removePluginComponent(entity, "Health");
+reg.remove<Health>(entity);
 
-// Iterate all entities with a component
-ctx->forEachWithComponent("Health", [](entt::entity e, plugin::PluginComponentData& data) {
-    int hp = data.getInt("currentHP");
+// Iterate all entities with component (fast dense iteration)
+for (auto [entity, health] : reg.view<Health>().each())
+{
     // game logic...
-});
-```
+}
 
-### Array Data Access
-
-```cpp
-auto* inv = ctx->getPluginComponent(entity, "Inventory");
-if (inv) {
-    size_t count = inv->getArraySize("items");
-    auto item = inv->getArrayElement("items", 0);
-    if (item.isValid()) {
-        std::string name = item.getString("name");
-    }
-
-    // Add new element
-    inv->addArrayElement("items", {{"name", "Sword"}, {"count", 1}, {"equipped", true}});
-
-    // Remove element
-    inv->removeArrayElement("items", 0);
+// Multi-component views
+for (auto [entity, health, transform] : reg.view<Health, components::TransformComponent>().each())
+{
+    // ...
 }
 ```
 
-### Custom Inspector Override
+### Add Component UI
 
-For advanced UI needs, provide a custom ImGui inspector:
+Registered components appear in the editor's **Add Component > Plugins** menu. Selecting a component adds it to the selected entity with default values. The inspector auto-generates controls for each registered data member.
 
-```cpp
-ctx->registerComponent("MyComponent")
-    .addFloat("value", 0.0f)
-    .setInspector([](nlohmann::json& data) -> bool {
-        // Custom ImGui drawing (editor-only)
-        // Return true if data was modified
-        float v = data.value("value", 0.0f);
-        if (ImGui::SliderFloat("Custom Slider", &v, 0.0f, 1.0f)) {
-            data["value"] = v;
-            return true;
-        }
-        return false;
-    })
-    .build();
-```
+### Important: Component Names Must Be Unique
 
-**Note:** When using `setInspector()`, call `ImGui::SetCurrentContext(ctx->getImGuiContext())` in `onInitialize()` and gate behind `ctx->hasCapability(plugin::capability::editor)`.
+Component names are hashed to `entt::id_type`. Two plugins registering the same name (e.g. `"Health"`) will collide. Use prefixed names if needed (e.g. `"MyPlugin_Health"`).
 
 ## Plugin Events
 
@@ -279,37 +261,120 @@ auto token = ctx->managedSubscribe(
 
 Use `managedSubscribe()` to ensure automatic cleanup on plugin unload.
 
+## Engine API
+
+PluginContext provides direct API methods for common engine systems. All are capability-gated.
+
+### Audio
+
+```cpp
+auto handle = ctx->playSound3D("assets/audio/explosion.vfAudio", position);
+ctx->setSoundVolume(handle, 0.8f);
+ctx->stopSound(handle);
+bool playing = ctx->isSoundPlaying(handle);
+ctx->setBusVolume("SFX", 0.5f);
+```
+
+### Physics
+
+```cpp
+auto hit = ctx->raycast(origin, direction, 100.0f);
+if (hit.hit) { /* hit.point, hit.normal, hit.distance */ }
+
+auto hits = ctx->raycastAll(origin, direction, 100.0f);
+
+ctx->applyForce(entity, glm::vec3(0, 100, 0));
+ctx->applyImpulse(entity, glm::vec3(10, 0, 0));
+ctx->setLinearVelocity(entity, glm::vec3(0, 5, 0));
+glm::vec3 vel = ctx->getLinearVelocity(entity);
+bool grounded = ctx->isGrounded(entity);
+```
+
+### Terrain
+
+```cpp
+auto result = ctx->getTerrainHeightAt(worldX, worldZ);
+if (result.valid) { float height = result.height; }
+
+auto hit = ctx->getTerrainHit(); // editor cursor raycast
+```
+
+### Input
+
+```cpp
+// Raw input
+if (ctx->isKeyPressed(GLFW_KEY_SPACE)) { /* just pressed this frame */ }
+if (ctx->isKeyDown(GLFW_KEY_W)) { /* held down */ }
+if (ctx->isMouseButtonDown(0)) { /* left mouse held */ }
+glm::vec2 mousePos = ctx->getMousePosition();
+glm::vec2 delta = ctx->getMouseDelta();
+
+// Action-based input (uses registered action mappings)
+if (ctx->isActionPressed("Jump")) { /* ... */ }
+float moveX = ctx->getAxis1DValue("MoveHorizontal");
+glm::vec2 move = ctx->getAxis2DValue("Move");
+```
+
+### NavMesh
+
+```cpp
+ctx->setAgentDestination(entity, targetPos);
+ctx->stopAgent(entity);
+glm::vec3 vel = ctx->getAgentVelocity(entity);
+float speed = ctx->getAgentSpeed(entity);
+
+auto path = ctx->findPath(start, end);
+if (path.isValid) { /* path.waypoints */ }
+
+bool onNav = ctx->isPointOnNavmesh(point);
+glm::vec3 closest = ctx->getClosestPointOnNavmesh(point);
+bool hasNav = ctx->hasNavmesh();
+```
+
+### VFX
+
+```cpp
+services::VFXRuntimeParams params;
+params.vfxAssetPath = "assets/vfx/explosion.vfx";
+params.worldTransform = transform;
+auto id = ctx->createVFXInstance(params);
+
+ctx->playVFXInstance(id);
+ctx->setVFXInstanceTransform(id, newTransform);
+ctx->stopVFXInstance(id);
+ctx->destroyVFXInstance(id);
+```
+
 ## Capabilities
 
 Check engine feature availability before using capability-specific APIs:
 
 ```cpp
-if (ctx->hasCapability(plugin::capability::editor)) {
+if (ctx->hasCapability(std::string(plugin::capability::editor))) {
     // Editor-only features: registerEditorWindow, ImGui context
-}
-if (ctx->hasCapability(plugin::capability::graphics)) {
-    // Render hooks
-}
-if (ctx->hasCapability(plugin::capability::scripting)) {
-    // Script function registration
 }
 ```
 
 | Capability | Editor | Runtime | Features |
 |-----------|--------|---------|----------|
 | `editor` | Yes | No | Editor windows, ImGui |
-| `audio` | Yes | Yes | Audio system |
-| `physics` | Yes | Yes | Physics system |
+| `audio` | Yes | Yes | Sound playback, bus control |
+| `physics` | Yes | Yes | Raycast, forces, velocity |
+| `terrain` | Yes | Yes | Height queries, cursor hit |
+| `input` | Yes | Yes | Key/mouse/action polling |
+| `navmesh` | Yes | Yes | Navigation, pathfinding |
+| `vfx` | Yes | Yes | Particle effects |
 | `import_` | Yes | No | Import pipeline stages |
 | `scripting` | Yes | Yes | mType script functions |
 | `graphics` | Yes | No | Render pass hooks |
 
 ## Editor Windows
 
-Register custom ImGui windows (editor-only):
+Register custom ImGui windows (editor-only). Requires linking `imgui`:
 
 ```cpp
 #include "imguiHandler/ImguiWindow.hpp"
+#include <imgui.h>
 
 class MyWindow : public controllers::imguiHandler::ImguiWindow {
     bool visible = false;
@@ -325,20 +390,22 @@ public:
 };
 
 // In onInitialize:
-if (ctx->hasCapability(plugin::capability::editor)) {
+if (ctx->hasCapability(std::string(plugin::capability::editor))) {
     ImGui::SetCurrentContext(ctx->getImGuiContext());
     auto window = std::make_shared<MyWindow>();
     ctx->registerEditorWindow(window);
 }
 ```
 
+**Note:** Only plugins that draw custom ImGui windows need to link `imgui` and call `SetCurrentContext()`. Plugins that only register components and use the PluginContext API do not need ImGui.
+
 ## Descriptor File (.vfplugin)
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `name` | string | Yes | Plugin display name (must match `getInfo().name`) |
+| `name` | string | Yes | Unique plugin name |
 | `version` | string | Yes | Semantic version `"major.minor.patch"` |
-| `apiVersion` | int | Yes | Must match engine API version (currently 4) |
+| `apiVersion` | int | Yes | Must match engine API version (currently 5) |
 | `author` | string | No | Author name |
 | `description` | string | No | Plugin description |
 | `capabilities` | string[] | No | Required engine capabilities |
@@ -359,17 +426,16 @@ Plugins are loaded via topological sort based on `dependencies`. Within the same
 }
 ```
 
-## DLL Boundary Safety
+## DLL Boundary Notes
 
-EnTT `type_id<T>` differs across DLL boundaries. Never call `registry.emplace<YourType>()` from a plugin DLL. Instead:
+Each plugin DLL has its own EnTT type ID space. This means:
 
-- Use `registerComponent()` + `addPluginComponent()` for custom components
-- Use `forEachWithComponent()` to iterate
-- Use `getPluginComponent()` / `PluginComponentData` for typed access
-- Use `publishEvent()` / `subscribeEvent()` for events (JSON payloads)
-
-The `getRegistry()` method is safe for **built-in** component types (TransformComponent, etc.) since those are defined in the engine executable.
+- `registry.emplace<T>()` / `registry.get<T>()` / `registry.view<T>()` all work **within the same plugin DLL**
+- The engine accesses plugin components through type-erased bridges (created automatically by `registerNativeComponent<T>()`)
+- The engine's auto-inspector and Add Component UI use these bridges — no shared type IDs needed
+- `getRegistry()` is safe for **built-in** engine component types (TransformComponent, etc.) from any plugin
+- Use `publishEvent()` / `subscribeEvent()` with JSON payloads for cross-plugin data exchange
 
 ## Plugin Manager
 
-Access via **Settings > Plugin Manager** in the editor. Browse, inspect, and enable/disable plugins without editing files manually.
+Access via **Settings > Plugins** in the editor. Browse all discovered plugins, view details (version, author, capabilities, dependencies), and enable/disable plugins. Changes take effect on next editor launch.

@@ -31,10 +31,10 @@ public class UI {
     // ============================================
     // Button State Constants
     // ============================================
-    public static const int BUTTON_NORMAL = 0;
-    public static const int BUTTON_HOVERED = 1;
-    public static const int BUTTON_PRESSED = 2;
-    public static const int BUTTON_DISABLED = 3;
+    public static final int BUTTON_NORMAL = 0;
+    public static final int BUTTON_HOVERED = 1;
+    public static final int BUTTON_PRESSED = 2;
+    public static final int BUTTON_DISABLED = 3;
 
     public constructor() {
     }
@@ -72,21 +72,21 @@ public class UI {
     // ============================================
 
     // Get the text of a UILabel on the given entity
-    public static function getLabelText(int entityId): String {
+    public static function getLabelText(int entityId): string {
         return _native_ui_getLabelText(entityId);
     }
 
     // Set the text of a UILabel on the given entity
-    public static function setLabelText(int entityId, String text): void {
+    public static function setLabelText(int entityId, string text): void {
         _native_ui_setLabelText(entityId, text);
     }
 
     // ============================================
     // Checkbox State Constants
     // ============================================
-    public static const int CHECKBOX_NORMAL = 0;
-    public static const int CHECKBOX_HOVERED = 1;
-    public static const int CHECKBOX_DISABLED = 2;
+    public static final int CHECKBOX_NORMAL = 0;
+    public static final int CHECKBOX_HOVERED = 1;
+    public static final int CHECKBOX_DISABLED = 2;
 
     // ============================================
     // Checkbox Queries
@@ -117,17 +117,17 @@ public class UI {
     }
 
     // Get the label text of a checkbox's child UILabel (useful in onCheckboxToggled callbacks)
-    public static function getCheckboxLabelText(int entityId): String {
+    public static function getCheckboxLabelText(int entityId): string {
         return _native_ui_getCheckboxLabelText(entityId);
     }
 
     // ============================================
     // Dropdown State Constants
     // ============================================
-    public static const int DROPDOWN_NORMAL = 0;
-    public static const int DROPDOWN_HOVERED = 1;
-    public static const int DROPDOWN_OPEN = 2;
-    public static const int DROPDOWN_DISABLED = 3;
+    public static final int DROPDOWN_NORMAL = 0;
+    public static final int DROPDOWN_HOVERED = 1;
+    public static final int DROPDOWN_OPEN = 2;
+    public static final int DROPDOWN_DISABLED = 3;
 
     // ============================================
     // Dropdown Queries
@@ -139,7 +139,7 @@ public class UI {
     }
 
     // Get the text of the currently selected option (empty string if none)
-    public static function getDropdownSelectedValue(int entityId): String {
+    public static function getDropdownSelectedValue(int entityId): string {
         return _native_ui_getDropdownSelectedValue(entityId);
     }
 
@@ -164,7 +164,7 @@ public class UI {
 
     // Set dropdown options using pipe-delimited string (e.g. "Option A|Option B|Option C")
     // Note: option text cannot contain the '|' character
-    public static function setDropdownOptions(int entityId, String options): void {
+    public static function setDropdownOptions(int entityId, string options): void {
         _native_ui_setDropdownOptions(entityId, options);
     }
 
@@ -181,10 +181,10 @@ public class UI {
     // ============================================
     // Tabs Bar Position Constants
     // ============================================
-    public static const int TAB_BAR_TOP = 0;
-    public static const int TAB_BAR_BOTTOM = 1;
-    public static const int TAB_BAR_LEFT = 2;
-    public static const int TAB_BAR_RIGHT = 3;
+    public static final int TAB_BAR_TOP = 0;
+    public static final int TAB_BAR_BOTTOM = 1;
+    public static final int TAB_BAR_LEFT = 2;
+    public static final int TAB_BAR_RIGHT = 3;
 
     // ============================================
     // Tabs Queries
@@ -212,16 +212,16 @@ public class UI {
     // ============================================
     // Slider Orientation Constants
     // ============================================
-    public static const int SLIDER_HORIZONTAL = 0;
-    public static const int SLIDER_VERTICAL = 1;
+    public static final int SLIDER_HORIZONTAL = 0;
+    public static final int SLIDER_VERTICAL = 1;
 
     // ============================================
     // Slider State Constants
     // ============================================
-    public static const int SLIDER_NORMAL = 0;
-    public static const int SLIDER_HOVERED = 1;
-    public static const int SLIDER_PRESSED = 2;
-    public static const int SLIDER_DISABLED = 3;
+    public static final int SLIDER_NORMAL = 0;
+    public static final int SLIDER_HOVERED = 1;
+    public static final int SLIDER_PRESSED = 2;
+    public static final int SLIDER_DISABLED = 3;
 
     // ============================================
     // Slider Queries

@@ -297,6 +297,7 @@ namespace serialization
             {
                 components::ScriptEntry entry;
                 entry.scriptRef = readAssetRef(entryJson, "scriptRef", "scriptPath");
+                entry.scriptPath = entry.scriptRef.resolve();
                 if (entryJson.contains("enabled") && entryJson["enabled"].is_boolean())
                 {
                     entry.enabled = entryJson["enabled"].get<bool>();

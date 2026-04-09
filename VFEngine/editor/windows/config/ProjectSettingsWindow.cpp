@@ -125,6 +125,11 @@ namespace windows
     {
         if (!hasProject)
         {
+            loadFromProject();
+        }
+
+        if (!hasProject)
+        {
             ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.4f, 1.0f), "No project loaded");
             ImGui::TextWrapped("Load a project file (.vfproj) to edit project settings.");
             return;

@@ -60,7 +60,7 @@ namespace core
 
         try
         {
-            callScriptMethod(interpreter.get(), instanceToObject, instanceToEntity, instanceId, "onUpdate", {value::Value(deltaTime)});
+            callScriptMethod(interpreter.get(), instanceToObject, instanceToEntity, instanceId, "onUpdate", {value::Value(static_cast<double>(deltaTime))});
         }
         catch (const std::exception& e)
         {

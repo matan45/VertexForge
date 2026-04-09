@@ -377,7 +377,30 @@ namespace services
                 // Load script if needed
                 if (entry.instanceId == 0 && (!entry.scriptPath.empty() || entry.scriptRef.isValid()))
                 {
-                    std::string path = !entry.scriptPath.empty() ? entry.scriptPath : entry.scriptRef.resolve();
+                    // Prefer resolved asset ref (absolute path) over stored scriptPath (may be relative)
+                    std::string path;
+                    if (entry.scriptRef.isValid())
+                    {
+                        std::string resolved = entry.scriptRef.resolve();
+                        if (!resolved.empty())
+                            path = resolved;
+                    }
+                    if (path.empty())
+                        path = entry.scriptPath;
+
+                    // Resolve relative paths against project working directory
+                    if (!path.empty() && !std::filesystem::path(path).is_absolute())
+                    {
+                        auto& disp = ::events::EventDispatcher::instance();
+                        auto projectOpt = disp.query(events::project::GetCurrentProjectQuery{});
+                        if (projectOpt.has_value())
+                        {
+                            auto absPath = std::filesystem::path(projectOpt->workingDirectory) / path;
+                            if (std::filesystem::exists(absPath))
+                                path = absPath.string();
+                        }
+                    }
+
                     auto info = scriptingProvider->loadScript(path, toHandle(entity));
                     if (info.has_value())
                     {

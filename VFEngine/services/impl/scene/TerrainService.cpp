@@ -515,9 +515,9 @@ namespace services
         return result;
     }
 
-    events::terrain::TerrainHeightAtResult TerrainService::getTerrainHeightAt(float worldX, float worldZ)
+    terrain::TerrainHeightAtResult TerrainService::getTerrainHeightAt(float worldX, float worldZ)
     {
-        events::terrain::TerrainHeightAtResult result;
+        terrain::TerrainHeightAtResult result;
 
         if (terrainGrids.empty())
             return result;

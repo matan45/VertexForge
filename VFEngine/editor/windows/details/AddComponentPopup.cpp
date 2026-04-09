@@ -79,6 +79,7 @@ namespace windows::details
                 drawLightingSection(c, filter);
                 drawUISection(c, filter);
                 drawPluginSection(c, filter);
+
             }
             else
             {

@@ -180,6 +180,7 @@ namespace asset
         if (str == "InputMapping")     return resource::AssetType::InputMapping;
         if (str == "Terrain")          return resource::AssetType::Terrain;
         if (str == "World")            return resource::AssetType::World;
+        if (str == "Scene")            return resource::AssetType::Scene;
         return resource::AssetType::COUNT;
     }
 }

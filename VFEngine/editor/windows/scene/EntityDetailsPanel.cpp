@@ -133,8 +133,8 @@ namespace windows
         bool hasUIDraggable = uiDraggableDrawer.draw(handle);
         bool hasUIDropTarget = uiDropTargetDrawer.draw(handle);
 
-        // Plugin components
-        pluginComponentDrawer.draw(handle);
+        // Plugin meta components
+        metaComponentDrawer.draw(handle);
 
         addComponentPopup.draw({handle, hasCamera, hasMesh, hasAudio2D, hasAudio3D, hasScript,
                                 hasCollider, hasRigidBody, hasPhysicsAnimation, hasVFX, hasBillboard,
