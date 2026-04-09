@@ -396,6 +396,23 @@ namespace plugin {
             return obj;
         }
 
+        // Structs/classes — serialize each reflected member
+        if (type.is_class())
+        {
+            auto obj = nlohmann::json::object();
+            for (auto&& [id, member] : type.data())
+            {
+                const char* n = member.name();
+                if (!n) continue;
+                auto val = member.get(value);
+                if (!val) continue;
+                auto serialized = serializeMetaAny(val, member.type());
+                if (!serialized.is_null())
+                    obj[n] = std::move(serialized);
+            }
+            return obj.empty() ? nullptr : obj;
+        }
+
         return nullptr;
     }
 
@@ -428,6 +445,21 @@ namespace plugin {
                 if (n && valName == n)
                     return member.get({});
             }
+        }
+        // Structs/classes — default-construct then populate members from JSON object
+        if (type.is_class() && j.is_object())
+        {
+            auto instance = type.construct();
+            if (!instance) return {};
+            for (auto&& [id, member] : type.data())
+            {
+                const char* n = member.name();
+                if (!n || !j.contains(n)) continue;
+                auto converted = jsonToMetaAny(j[n], member.type());
+                if (converted)
+                    member.set(instance, converted);
+            }
+            return instance;
         }
         return {};
     }
@@ -510,6 +542,13 @@ namespace plugin {
                     break;
                 }
             }
+        }
+        // Structs/classes — deserialize from JSON object
+        else if (type.is_class() && value.is_object())
+        {
+            auto constructed = jsonToMetaAny(value, type);
+            if (constructed)
+                data.set(instance, constructed);
         }
     }
 

@@ -9,6 +9,14 @@
 
 enum class ElementType : int { Fire = 0, Water, Earth, Wind };
 
+struct BuffEntry
+{
+    std::string name = "unnamed";
+    float duration = 0.0f;
+    int stacks = 1;
+    bool isPermanent = false;
+};
+
 // Native component struct — registered with EnTT meta for cross-DLL type identity
 struct TestComponent
 {
@@ -19,6 +27,8 @@ struct TestComponent
     std::vector<int> scores{10, 20, 30};
     std::map<std::string, float> stats{{"strength", 5.0f}, {"agility", 3.5f}};
     ElementType element = ElementType::Fire;
+    std::vector<BuffEntry> buffs{{"Shield", 10.0f, 1, false}, {"Regen", 5.0f, 3, true}};
+    std::map<std::string, BuffEntry> namedBuffs{{"primary", {"Haste", 8.0f, 2, false}}};
 };
 
 class PluginAPITest : public plugin::IPlugin
@@ -43,6 +53,15 @@ public:
             .data<ElementType::Earth>("Earth")
             .data<ElementType::Wind>("Wind");
 
+        // Register struct used as container element
+        entt::meta_factory<BuffEntry>()
+            .type("BuffEntry")
+            .ctor<>()
+            .data<&BuffEntry::name>("name")
+            .data<&BuffEntry::duration>("duration")
+            .data<&BuffEntry::stacks>("stacks")
+            .data<&BuffEntry::isPermanent>("isPermanent");
+
         ctx->registerNativeComponent<TestComponent>("TestComponent")
             .data<&TestComponent::health>("health")
             .data<&TestComponent::speed>("speed")
@@ -50,7 +69,9 @@ public:
             .data<&TestComponent::offset>("offset")
             .data<&TestComponent::scores>("scores")
             .data<&TestComponent::stats>("stats")
-            .data<&TestComponent::element>("element");
+            .data<&TestComponent::element>("element")
+            .data<&TestComponent::buffs>("buffs")
+            .data<&TestComponent::namedBuffs>("namedBuffs");
 
         ctx->logInfo("PluginAPITest initialized - TestComponent registered via meta");
         return true;

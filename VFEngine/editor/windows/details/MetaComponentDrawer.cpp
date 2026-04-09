@@ -8,9 +8,128 @@
 #include <glm/gtc/quaternion.hpp>
 #include <entt/entt.hpp>
 #include <unordered_map>
+#include <optional>
 
 namespace windows::details
 {
+    // Draw a scalar/struct value with the given label. Returns the new meta_any if changed, empty otherwise.
+    static std::optional<entt::meta_any> drawElementValue(const char* label, entt::meta_any& elem, const entt::meta_type& elemType)
+    {
+        if (elemType.info() == entt::type_id<int>()) {
+            int val = elem.cast<int>();
+            if (ImGui::DragInt(label, &val))
+                return entt::meta_any{val};
+        }
+        else if (elemType.info() == entt::type_id<float>()) {
+            float val = elem.cast<float>();
+            if (ImGui::DragFloat(label, &val, 0.1f))
+                return entt::meta_any{val};
+        }
+        else if (elemType.info() == entt::type_id<bool>()) {
+            bool val = elem.cast<bool>();
+            if (ImGui::Checkbox(label, &val))
+                return entt::meta_any{val};
+        }
+        else if (elemType.info() == entt::type_id<std::string>()) {
+            auto str = elem.cast<std::string>();
+            char buffer[256];
+            std::strncpy(buffer, str.c_str(), sizeof(buffer));
+            buffer[sizeof(buffer) - 1] = '\0';
+            if (ImGui::InputText(label, buffer, sizeof(buffer)))
+                return entt::meta_any{std::string(buffer)};
+        }
+        else if (elemType.info() == entt::type_id<glm::vec3>()) {
+            auto val = elem.cast<glm::vec3>();
+            if (ImGui::DragFloat3(label, &val.x, 0.1f))
+                return entt::meta_any{val};
+        }
+        else if (elemType.info() == entt::type_id<glm::vec4>()) {
+            auto val = elem.cast<glm::vec4>();
+            if (ImGui::DragFloat4(label, &val.x, 0.1f))
+                return entt::meta_any{val};
+        }
+        else if (elemType.info() == entt::type_id<glm::vec2>()) {
+            auto val = elem.cast<glm::vec2>();
+            if (ImGui::DragFloat2(label, &val.x, 0.1f))
+                return entt::meta_any{val};
+        }
+        else if (elemType.is_enum()) {
+            const char* currentName = nullptr;
+            int currentIndex = 0;
+            int idx = 0;
+            std::vector<std::pair<const char*, entt::meta_any>> enumEntries;
+            for (auto [id, member] : elemType.data())
+            {
+                const char* entryName = member.name();
+                if (!entryName) continue;
+                auto entryVal = member.get({});
+                if (entryVal == elem) { currentName = entryName; currentIndex = idx; }
+                enumEntries.emplace_back(entryName, entryVal);
+                ++idx;
+            }
+            if (!enumEntries.empty() && ImGui::BeginCombo(label, currentName ? currentName : "???"))
+            {
+                for (int i = 0; i < static_cast<int>(enumEntries.size()); ++i)
+                {
+                    bool selected = (i == currentIndex);
+                    if (ImGui::Selectable(enumEntries[i].first, selected))
+                    {
+                        ImGui::EndCombo();
+                        return enumEntries[i].second;
+                    }
+                    if (selected) ImGui::SetItemDefaultFocus();
+                }
+                ImGui::EndCombo();
+            }
+        }
+        // Struct/class — draw each member as a sub-field
+        else if (elemType.is_class())
+        {
+            bool structChanged = false;
+            if (ImGui::TreeNode(label))
+            {
+                for (auto&& [id, member] : elemType.data())
+                {
+                    const char* fieldName = member.name();
+                    if (!fieldName) continue;
+                    auto fieldVal = member.get(elem);
+                    if (!fieldVal) continue;
+
+                    ImGui::PushID(fieldName);
+                    auto result = drawElementValue(fieldName, fieldVal, member.type());
+                    if (result.has_value())
+                    {
+                        member.set(elem, *result);
+                        structChanged = true;
+                    }
+                    ImGui::PopID();
+                }
+                ImGui::TreePop();
+            }
+            if (structChanged)
+                return elem;
+        }
+        else {
+            ImGui::TextDisabled("%s (unsupported)", label);
+        }
+        return std::nullopt;
+    }
+
+    // Create a default meta_any for a given type (for Add buttons)
+    static entt::meta_any makeDefault(const entt::meta_type& elemType)
+    {
+        if (elemType.info() == entt::type_id<int>()) return 0;
+        if (elemType.info() == entt::type_id<float>()) return 0.0f;
+        if (elemType.info() == entt::type_id<bool>()) return false;
+        if (elemType.info() == entt::type_id<std::string>()) return std::string("");
+        if (elemType.info() == entt::type_id<glm::vec3>()) return glm::vec3(0.0f);
+        if (elemType.info() == entt::type_id<glm::vec4>()) return glm::vec4(0.0f);
+        if (elemType.info() == entt::type_id<glm::vec2>()) return glm::vec2(0.0f);
+        // For structs: try default-constructing via meta
+        if (auto ctor = elemType.construct(); ctor) return ctor;
+        return {};
+    }
+
     static bool drawMetaData(entt::meta_data data, entt::meta_any& instance)
     {
         bool changed = false;
@@ -169,59 +288,20 @@ namespace windows::details
                     auto elem = view[i];
                     std::string label = "[" + std::to_string(i) + "]";
 
-                    if (elemType.info() == entt::type_id<int>()) {
-                        int val = elem.cast<int>();
-                        if (ImGui::DragInt(label.c_str(), &val)) {
-                            view[i].assign(entt::meta_any{val});
-                            containerChanged = true;
-                        }
-                    }
-                    else if (elemType.info() == entt::type_id<float>()) {
-                        float val = elem.cast<float>();
-                        if (ImGui::DragFloat(label.c_str(), &val, 0.1f)) {
-                            view[i].assign(entt::meta_any{val});
-                            containerChanged = true;
-                        }
-                    }
-                    else if (elemType.info() == entt::type_id<bool>()) {
-                        bool val = elem.cast<bool>();
-                        if (ImGui::Checkbox(label.c_str(), &val)) {
-                            view[i].assign(entt::meta_any{val});
-                            containerChanged = true;
-                        }
-                    }
-                    else if (elemType.info() == entt::type_id<std::string>()) {
-                        auto str = elem.cast<std::string>();
-                        char buffer[256];
-                        std::strncpy(buffer, str.c_str(), sizeof(buffer));
-                        buffer[sizeof(buffer) - 1] = '\0';
-                        if (ImGui::InputText(label.c_str(), buffer, sizeof(buffer))) {
-                            view[i].assign(entt::meta_any{std::string(buffer)});
-                            containerChanged = true;
-                        }
-                    }
-                    else if (elemType.info() == entt::type_id<glm::vec3>()) {
-                        auto val = elem.cast<glm::vec3>();
-                        if (ImGui::DragFloat3(label.c_str(), &val.x, 0.1f)) {
-                            view[i].assign(entt::meta_any{val});
-                            containerChanged = true;
-                        }
-                    }
-                    else {
-                        ImGui::TextDisabled("%s (unsupported element)", label.c_str());
+                    auto result = drawElementValue(label.c_str(), elem, elemType);
+                    if (result.has_value())
+                    {
+                        view[i].assign(*result);
+                        containerChanged = true;
                     }
 
                     ImGui::PopID();
                 }
 
                 // Add / Remove buttons
-                if (ImGui::SmallButton("+ Add"))
+                if (auto defVal = makeDefault(elemType); defVal && ImGui::SmallButton("+ Add"))
                 {
-                    if (elemType.info() == entt::type_id<int>()) view.insert(view.end(), entt::meta_any{0});
-                    else if (elemType.info() == entt::type_id<float>()) view.insert(view.end(), entt::meta_any{0.0f});
-                    else if (elemType.info() == entt::type_id<bool>()) view.insert(view.end(), entt::meta_any{false});
-                    else if (elemType.info() == entt::type_id<std::string>()) view.insert(view.end(), entt::meta_any{std::string("")});
-                    else if (elemType.info() == entt::type_id<glm::vec3>()) view.insert(view.end(), entt::meta_any{glm::vec3(0.0f)});
+                    view.insert(view.end(), defVal);
                     containerChanged = true;
                 }
                 if (count > 0)
@@ -287,48 +367,15 @@ namespace windows::details
                             ? entt::meta_any{std::stoi(keyStr)} : entt::meta_any{keyStr};
                     };
 
-                    // Helper: erase then re-insert to update existing key (insert alone won't overwrite)
-                    auto updateEntry = [&](entt::meta_any newVal) {
+                    ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x * 0.5f);
+                    auto result = drawElementValue(valueLabel.c_str(), val, valType);
+                    if (result.has_value())
+                    {
+                        // Erase then re-insert to update (insert alone won't overwrite existing keys)
                         auto k = makeKeyAny();
                         view.erase(k);
-                        view.insert(makeKeyAny(), std::move(newVal));
+                        view.insert(makeKeyAny(), *result);
                         containerChanged = true;
-                    };
-
-                    if (valType.info() == entt::type_id<int>()) {
-                        int v = val.cast<int>();
-                        ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x * 0.5f);
-                        if (ImGui::DragInt(valueLabel.c_str(), &v))
-                            updateEntry(entt::meta_any{v});
-                    }
-                    else if (valType.info() == entt::type_id<float>()) {
-                        float v = val.cast<float>();
-                        ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x * 0.5f);
-                        if (ImGui::DragFloat(valueLabel.c_str(), &v, 0.1f))
-                            updateEntry(entt::meta_any{v});
-                    }
-                    else if (valType.info() == entt::type_id<bool>()) {
-                        bool v = val.cast<bool>();
-                        if (ImGui::Checkbox(valueLabel.c_str(), &v))
-                            updateEntry(entt::meta_any{v});
-                    }
-                    else if (valType.info() == entt::type_id<std::string>()) {
-                        auto str = val.cast<std::string>();
-                        char buffer[256];
-                        std::strncpy(buffer, str.c_str(), sizeof(buffer));
-                        buffer[sizeof(buffer) - 1] = '\0';
-                        ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x * 0.5f);
-                        if (ImGui::InputText(valueLabel.c_str(), buffer, sizeof(buffer)))
-                            updateEntry(entt::meta_any{std::string(buffer)});
-                    }
-                    else if (valType.info() == entt::type_id<glm::vec3>()) {
-                        auto v = val.cast<glm::vec3>();
-                        ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x * 0.5f);
-                        if (ImGui::DragFloat3(valueLabel.c_str(), &v.x, 0.1f))
-                            updateEntry(entt::meta_any{v});
-                    }
-                    else {
-                        ImGui::TextDisabled("(unsupported value)");
                     }
 
                     ImGui::SameLine();
@@ -365,12 +412,7 @@ namespace windows::details
                 {
                     entt::meta_any keyAny = (view.key_type().info() == entt::type_id<int>())
                         ? entt::meta_any{std::stoi(std::string(newKeyBuf))} : entt::meta_any{std::string(newKeyBuf)};
-                    entt::meta_any defVal;
-                    if (valType.info() == entt::type_id<int>()) defVal = 0;
-                    else if (valType.info() == entt::type_id<float>()) defVal = 0.0f;
-                    else if (valType.info() == entt::type_id<bool>()) defVal = false;
-                    else if (valType.info() == entt::type_id<std::string>()) defVal = std::string("");
-                    else if (valType.info() == entt::type_id<glm::vec3>()) defVal = glm::vec3(0.0f);
+                    auto defVal = makeDefault(valType);
                     if (keyAny && defVal)
                     {
                         view.insert(keyAny, defVal);
