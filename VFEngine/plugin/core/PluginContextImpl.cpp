@@ -21,6 +21,7 @@
 #include "Pipeline.hpp"
 #include <imgui.h>
 #include <filesystem>
+#include <fstream>
 #include <algorithm>
 
 namespace plugin {
@@ -178,6 +179,45 @@ namespace plugin {
 
         auto path = std::filesystem::current_path() / "plugins" / "data" / safeName;
         return path.string();
+    }
+
+    void PluginContextImpl::saveConfig(const nlohmann::json& config)
+    {
+        auto dir = std::filesystem::path(getPluginDataPath());
+        std::filesystem::create_directories(dir);
+
+        auto configPath = dir / "config.json";
+        std::ofstream file(configPath);
+        if (!file.is_open())
+        {
+            vfLogError("[Plugin:{}] Failed to save config to {}", pluginName, configPath.string());
+            return;
+        }
+        file << config.dump(4);
+        vfLogInfo("[Plugin:{}] Config saved to {}", pluginName, configPath.string());
+    }
+
+    nlohmann::json PluginContextImpl::loadConfig()
+    {
+        auto configPath = std::filesystem::path(getPluginDataPath()) / "config.json";
+        if (!std::filesystem::exists(configPath))
+            return nlohmann::json::object();
+
+        std::ifstream file(configPath);
+        if (!file.is_open())
+            return nlohmann::json::object();
+
+        try
+        {
+            nlohmann::json config;
+            file >> config;
+            return config;
+        }
+        catch (...)
+        {
+            vfLogWarning("[Plugin:{}] Failed to parse config file {}", pluginName, configPath.string());
+            return nlohmann::json::object();
+        }
     }
 
     void PluginContextImpl::logInfo(const std::string& message)

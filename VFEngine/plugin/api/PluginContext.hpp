@@ -127,6 +127,15 @@ namespace plugin {
         // Returns a persistent directory path for this plugin's data storage.
         virtual std::string getPluginDataPath() const = 0;
 
+        // === Plugin Config Persistence ===
+        // Save plugin settings to a JSON file in the plugin's data directory.
+        // Creates the directory if it doesn't exist.
+        virtual void saveConfig(const nlohmann::json& config) = 0;
+
+        // Load plugin settings from the data directory.
+        // Returns an empty JSON object if no config file exists or if it's corrupt.
+        virtual nlohmann::json loadConfig() = 0;
+
         // === Logging ===
         virtual void logInfo(const std::string& message) = 0;
         virtual void logWarning(const std::string& message) = 0;

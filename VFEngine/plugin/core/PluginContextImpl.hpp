@@ -51,6 +51,8 @@ namespace plugin {
         bool hasCapability(const std::string& capability) const override;
         ImGuiContext* getImGuiContext() override;
         std::string getPluginDataPath() const override;
+        void saveConfig(const nlohmann::json& config) override;
+        nlohmann::json loadConfig() override;
         void logInfo(const std::string& message) override;
         void logWarning(const std::string& message) override;
         void logError(const std::string& message) override;
