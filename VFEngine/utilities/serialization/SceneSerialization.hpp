@@ -46,12 +46,6 @@ namespace serialization
         friend class BinarySceneSerialization;
 
     public:
-        // Extension point for plugin component serialization.
-        // Set by plugin module to bridge Utilities -> Plugin without direct dependency.
-        using PluginSerializeFn = std::function<nlohmann::json(scene::Entity&)>;
-        using PluginDeserializeFn = std::function<void(const nlohmann::json&, scene::Entity&)>;
-        static void setPluginSerializationHooks(PluginSerializeFn serialize, PluginDeserializeFn deserialize);
-
         static scene::SceneGraphSystem loadScene(std::string_view filename);
         static bool loadSceneInto(std::string_view filename, scene::SceneGraphSystem& sceneGraph,
                                   SceneLoadProgressCallback progressCallback = nullptr);
@@ -360,9 +354,6 @@ namespace serialization
         static std::string fontStyleToString(components::FontStyle style);
         static components::FontStyle stringToFontStyle(const std::string& str);
 
-        static PluginSerializeFn pluginSerializeHook;
-        static PluginDeserializeFn pluginDeserializeHook;
-        static std::shared_mutex pluginHookMutex;
     };
     #pragma warning(pop)
 }

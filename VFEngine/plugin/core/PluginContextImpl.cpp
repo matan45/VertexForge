@@ -1,11 +1,10 @@
 #include "print/Log.hpp"
 #include "PluginContextImpl.hpp"
-#include "PluginComponentRegistry.hpp"
-#include "ComponentBuilderImpl.hpp"
 #include "PluginEventBus.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/scripting/ScriptingEvents.hpp"
 #include "events/render/RenderHookEvents.hpp"
+#include "events/vfx/VFXRuntimeEvents.hpp"
 #include "events/audio/AudioEvents.hpp"
 #include "events/audio/AudioBusEvents.hpp"
 #include "events/physics/PhysicsEvents.hpp"
@@ -19,7 +18,6 @@
 #include "data/EntityConversion.hpp"
 #include "imguiHandler/ImguiWindowHandler.hpp"
 #include "scene/EntityRegistry.hpp"
-#include "components/PluginComponents.hpp"
 #include "Pipeline.hpp"
 #include <imgui.h>
 #include <filesystem>
@@ -80,141 +78,6 @@ namespace plugin {
     std::vector<std::unique_ptr<pipeline::PipelineStage>> PluginContextImpl::takeImportStages()
     {
         return std::move(registeredImportStages);
-    }
-
-    ComponentBuilder& PluginContextImpl::registerComponent(const std::string& componentName)
-    {
-        activeBuilder = std::make_unique<ComponentBuilderImpl>(this, componentName);
-        return *activeBuilder;
-    }
-
-    void PluginContextImpl::finalizeComponentRegistration(ComponentBuilderImpl& builder)
-    {
-        std::string qualifiedName = pluginName + "::" + builder.getComponentName();
-
-        PluginComponentInfo info;
-        info.pluginName = pluginName;
-        info.componentName = builder.getComponentName();
-        info.qualifiedName = qualifiedName;
-        info.properties = builder.getProperties();
-        info.inspector = builder.getInspector();
-        info.onAdded = builder.getOnAdded();
-        info.onRemoved = builder.getOnRemoved();
-        info.onDataChanged = builder.getOnDataChanged();
-
-        // Build default data from property descriptors
-        info.defaultData = nlohmann::json::object();
-        for (const auto& prop : info.properties)
-        {
-            info.defaultData[prop.name] = prop.defaultValue;
-        }
-
-        PluginComponentRegistry::instance().registerComponent(info);
-        registeredComponentNames.push_back(qualifiedName);
-
-        vfLogInfo("[Plugin:{}] Registered component: {} ({} properties)",
-                  pluginName, builder.getComponentName(), info.properties.size());
-    }
-
-    bool PluginContextImpl::addPluginComponent(entt::entity entity, const std::string& componentName)
-    {
-        std::string qualifiedName = pluginName + "::" + componentName;
-        auto& reg = scene::EntityRegistry::getRegistry();
-
-        if (!reg.valid(entity))
-            return false;
-
-        const auto* info = PluginComponentRegistry::instance().findComponent(qualifiedName);
-        if (!info)
-        {
-            vfLogWarning("[Plugin:{}] Component '{}' not registered", pluginName, componentName);
-            return false;
-        }
-
-        auto& pluginComp = reg.get_or_emplace<components::PluginComponentsComponent>(entity);
-        if (pluginComp.components.contains(qualifiedName))
-            return false;
-
-        pluginComp.components[qualifiedName] = info->defaultData;
-
-        if (info->onAdded)
-        {
-            try { info->onAdded(entity, info->defaultData); } catch (...) {}
-        }
-        return true;
-    }
-
-    bool PluginContextImpl::removePluginComponent(entt::entity entity, const std::string& componentName)
-    {
-        std::string qualifiedName = pluginName + "::" + componentName;
-        auto& reg = scene::EntityRegistry::getRegistry();
-
-        if (!reg.valid(entity) || !reg.all_of<components::PluginComponentsComponent>(entity))
-            return false;
-
-        const auto* info = PluginComponentRegistry::instance().findComponent(qualifiedName);
-        if (info && info->onRemoved)
-        {
-            try { info->onRemoved(entity); } catch (...) {}
-        }
-
-        auto& pluginComp = reg.get<components::PluginComponentsComponent>(entity);
-        bool erased = pluginComp.components.erase(qualifiedName) > 0;
-
-        if (pluginComp.components.empty())
-            reg.remove<components::PluginComponentsComponent>(entity);
-
-        componentDataWrappers.erase(qualifiedName);
-        return erased;
-    }
-
-    PluginComponentData* PluginContextImpl::getPluginComponent(entt::entity entity, const std::string& componentName)
-    {
-        std::string qualifiedName = pluginName + "::" + componentName;
-        auto& reg = scene::EntityRegistry::getRegistry();
-
-        if (!reg.valid(entity) || !reg.all_of<components::PluginComponentsComponent>(entity))
-            return nullptr;
-
-        auto& pluginComp = reg.get<components::PluginComponentsComponent>(entity);
-        auto it = pluginComp.components.find(qualifiedName);
-        if (it == pluginComp.components.end())
-            return nullptr;
-
-        std::string key = std::to_string(static_cast<uint32_t>(entity)) + ":" + qualifiedName;
-        componentDataWrappers.insert_or_assign(key, PluginComponentData(&it->second));
-        return &componentDataWrappers.at(key);
-    }
-
-    bool PluginContextImpl::hasPluginComponent(entt::entity entity, const std::string& componentName)
-    {
-        std::string qualifiedName = pluginName + "::" + componentName;
-        auto& reg = scene::EntityRegistry::getRegistry();
-
-        if (!reg.valid(entity) || !reg.all_of<components::PluginComponentsComponent>(entity))
-            return false;
-
-        auto& pluginComp = reg.get<components::PluginComponentsComponent>(entity);
-        return pluginComp.components.contains(qualifiedName);
-    }
-
-    void PluginContextImpl::forEachWithComponent(const std::string& componentName,
-                                                  const std::function<void(entt::entity, PluginComponentData&)>& callback)
-    {
-        std::string qualifiedName = pluginName + "::" + componentName;
-        auto& reg = scene::EntityRegistry::getRegistry();
-        auto view = reg.view<components::PluginComponentsComponent>();
-
-        for (auto entity : view)
-        {
-            auto& pluginComp = view.get<components::PluginComponentsComponent>(entity);
-            auto it = pluginComp.components.find(qualifiedName);
-            if (it != pluginComp.components.end())
-            {
-                PluginComponentData data(&it->second);
-                callback(entity, data);
-            }
-        }
     }
 
     void PluginContextImpl::publishEvent(const std::string& eventName, const nlohmann::json& data)
@@ -884,38 +747,6 @@ namespace plugin {
         }
         pluginEventSubscriptions.clear();
 
-        // Clean up plugin components from all entities
-        if (!registeredComponentNames.empty())
-        {
-            auto& reg = scene::EntityRegistry::getRegistry();
-            auto view = reg.view<components::PluginComponentsComponent>();
-
-            // Collect entities to remove component from (can't modify during iteration)
-            std::vector<entt::entity> toRemove;
-
-            for (auto entity : view)
-            {
-                auto& pluginComp = view.get<components::PluginComponentsComponent>(entity);
-                for (const auto& name : registeredComponentNames)
-                {
-                    pluginComp.components.erase(name);
-                }
-                if (pluginComp.components.empty())
-                {
-                    toRemove.push_back(entity);
-                }
-            }
-
-            for (auto entity : toRemove)
-            {
-                reg.remove<components::PluginComponentsComponent>(entity);
-            }
-
-            PluginComponentRegistry::instance().unregisterPlugin(pluginName);
-            registeredComponentNames.clear();
-        }
-
-        componentDataWrappers.clear();
     }
 
 }

@@ -57,7 +57,6 @@
 #include "../details/FogVolumeDrawer.hpp"
 #include "../details/NavmeshRootDrawer.hpp"
 #include "../details/WorldSectorDrawer.hpp"
-#include "../details/PluginComponentDrawer.hpp"
 #include "../details/AddComponentPopup.hpp"
 
 namespace windows
@@ -122,7 +121,6 @@ namespace windows
         details::FogVolumeDrawer fogVolumeDrawer;
         details::NavmeshRootDrawer navmeshRootDrawer;
         details::WorldSectorDrawer worldSectorDrawer;
-        details::PluginComponentDrawer pluginComponentDrawer;
         details::AddComponentPopup addComponentPopup;
 
     public:

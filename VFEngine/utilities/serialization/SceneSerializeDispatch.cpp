@@ -5,17 +5,6 @@
 
 namespace serialization
 {
-    SceneSerialization::PluginSerializeFn SceneSerialization::pluginSerializeHook;
-    SceneSerialization::PluginDeserializeFn SceneSerialization::pluginDeserializeHook;
-    std::shared_mutex SceneSerialization::pluginHookMutex;
-
-    void SceneSerialization::setPluginSerializationHooks(PluginSerializeFn serialize, PluginDeserializeFn deserialize)
-    {
-        std::unique_lock lock(pluginHookMutex);
-        pluginSerializeHook = std::move(serialize);
-        pluginDeserializeHook = std::move(deserialize);
-    }
-
     void SceneSerialization::serializeRenderComponents(scene::Entity& entity, json& out)
     {
         if (entity.hasComponent<components::CameraComponent>())
@@ -168,19 +157,6 @@ namespace serialization
         serializeUIStructuralComponents(entity, componentsJson);
         serializeUIInteractiveComponents(entity, componentsJson);
         serializeMiscComponents(entity, componentsJson);
-
-        // Plugin components
-        {
-            std::shared_lock lock(pluginHookMutex);
-            if (pluginSerializeHook)
-            {
-                auto pluginJson = pluginSerializeHook(entity);
-                for (auto& [key, value] : pluginJson.items())
-                {
-                    componentsJson[key] = std::move(value);
-                }
-            }
-        }
 
         return componentsJson;
     }

@@ -78,7 +78,7 @@ namespace windows::details
                 drawAnimationSection(c, filter);
                 drawLightingSection(c, filter);
                 drawUISection(c, filter);
-                drawPluginSection(c, filter);
+
             }
             else
             {
@@ -105,11 +105,6 @@ namespace windows::details
                 if (ImGui::BeginMenu("UI"))
                 {
                     drawUISection(c);
-                    ImGui::EndMenu();
-                }
-                if (ImGui::BeginMenu("Plugins"))
-                {
-                    drawPluginSection(c);
                     ImGui::EndMenu();
                 }
             }

@@ -1,6 +1,5 @@
 #include "print/Log.hpp"
 #include "PluginManager.hpp"
-#include "PluginSerializationBridge.hpp"
 #include "../api/PluginVersion.hpp"
 #include "Pipeline.hpp"
 #include <algorithm>
@@ -324,8 +323,6 @@ namespace plugin {
 
     void PluginManager::initializeAll()
     {
-        PluginSerializationBridge::init();
-
         for (auto& plugin : plugins) {
             if (plugin.initialized) {
                 continue;
@@ -400,8 +397,6 @@ namespace plugin {
         }
 
         plugins.clear();
-
-        PluginSerializationBridge::shutdown();
     }
 
     const std::vector<LoadedPlugin>& PluginManager::getLoadedPlugins() const

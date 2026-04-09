@@ -15,7 +15,8 @@ workspace "VertexForge"
       buildoptions { "/utf-8", "/MP" }
       defines {
          "VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1",
-         "GLM_FORCE_DEPTH_ZERO_TO_ONE"  -- Vulkan uses [0,1] depth range, not OpenGL's [-1,1]
+         "GLM_FORCE_DEPTH_ZERO_TO_ONE",  -- Vulkan uses [0,1] depth range, not OpenGL's [-1,1]
+         "ENTT_API_IMPORT"               -- Import EnTT symbols from ECSRegistry DLL
       }
    filter {}
 
@@ -545,7 +546,8 @@ project "ECSRegistry"
       "VFEngine/utilities"
    }
 
-   defines { "_CRT_SECURE_NO_WARNINGS", "VF_ECSREGISTRY_BUILD_DLL" }
+   removedefines { "ENTT_API_IMPORT" }  -- Override workspace default
+   defines { "_CRT_SECURE_NO_WARNINGS", "VF_ECSREGISTRY_BUILD_DLL", "ENTT_API_EXPORT" }
 
    links { "spdLog" }
 
@@ -1595,6 +1597,46 @@ project "ispc_texcomp"
       defines { "NDEBUG" }
       optimize "On"
 
+
+-- ============================================================================
+-- Plugin: PluginAPITest (tests VK-1276, VK-1277, VK-1279, VK-1287)
+-- ============================================================================
+group "Plugins"
+
+project "PluginAPITest"
+   kind "SharedLib"
+   language "C++"
+   cppdialect "C++20"
+   location "plugins/PluginAPITest"
+   targetdir "bin/%{prj.name}/%{cfg.buildcfg}/%{cfg.platform}"
+
+   files { "plugins/PluginAPITest/**.hpp", "plugins/PluginAPITest/**.cpp" }
+
+   includedirs {
+      "dependencies/spdlog/include",
+      "dependencies/glm",
+      "dependencies/entt/single_include",
+      "dependencies/imgui",
+      "dependencies/json/single_include",
+      vulkanLibPath.."/Include",
+      "VFEngine/plugin",
+      "VFEngine/utilities",
+      "VFEngine/services"
+   }
+
+   defines { "_CRT_SECURE_NO_WARNINGS" }
+
+   postbuildcommands {
+      "{COPY} ../../bin/PluginAPITest/%{cfg.buildcfg}/%{cfg.platform}/PluginAPITest.dll ../../plugins/PluginAPITest/"
+   }
+
+   filter "configurations:Debug"
+      defines { "DEBUG" }
+      symbols "On"
+
+   filter "configurations:Release"
+      defines { "NDEBUG" }
+      optimize "On"
 
 
 -- Project: assimp and softal need to build with cmake...

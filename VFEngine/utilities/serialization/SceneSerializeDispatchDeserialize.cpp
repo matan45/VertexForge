@@ -370,21 +370,5 @@ namespace serialization
         deserializeUIStructuralComponents(componentsJson, entity);
         deserializeUIInteractiveComponents(componentsJson, entity);
         deserializeMiscComponents(componentsJson, entity);
-
-        // Plugin components
-        {
-            std::shared_lock lock(pluginHookMutex);
-            if (pluginDeserializeHook)
-            {
-                json pluginEntries = json::object();
-                for (const auto& [key, value] : componentsJson.items())
-                {
-                    if (key.rfind("plugin:", 0) == 0)
-                        pluginEntries[key] = value;
-                }
-                if (!pluginEntries.empty())
-                    pluginDeserializeHook(pluginEntries, entity);
-            }
-        }
     }
 }
