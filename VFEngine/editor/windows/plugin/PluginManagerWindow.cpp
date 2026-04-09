@@ -28,6 +28,12 @@ namespace windows
 
     void PluginManagerWindow::drawContent()
     {
+        if (needsRefresh)
+        {
+            refresh();
+            needsRefresh = false;
+        }
+
         // Header
         ImGui::Text("Engine API Version: %u", plugin::VF_PLUGIN_API_VERSION);
 
