@@ -18,6 +18,7 @@
 #include "events/EventDispatcher.hpp"
 #include "events/project/ApplicationEvents.hpp"
 #include "events/project/ProjectEvents.hpp"
+#include "events/scene/ScenePersistenceEvents.hpp"
 #include "Import.hpp"
 #include "core/PluginManager.hpp"
 #include "resource/PathResolver.hpp"
@@ -176,6 +177,27 @@ namespace handlers
         }
 
         vfLogInfo("Project loaded from CLI: {}", projectPath);
+
+        // Load the startup scene from the project config
+        auto projectOpt = dispatcher.query(events::project::GetCurrentProjectQuery{});
+        if (projectOpt.has_value() && !projectOpt->startupScene.empty())
+        {
+            std::filesystem::path scenePath =
+                std::filesystem::path(projectOpt->workingDirectory) / projectOpt->startupScene;
+
+            if (std::filesystem::exists(scenePath))
+            {
+                events::scene::LoadSceneCommand sceneCmd;
+                sceneCmd.filePath = scenePath.string();
+                dispatcher.execute(sceneCmd);
+                vfLogInfo("Startup scene loaded: {}", scenePath.string());
+            }
+            else
+            {
+                vfLogWarning("Startup scene not found: {}", scenePath.string());
+            }
+        }
+
         return true;
     }
 

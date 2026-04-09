@@ -80,14 +80,14 @@ namespace windows
             ImGui::Text("VRAM: %llu MB", static_cast<unsigned long long>(cachedVramMB));
 
             // Scene name on the right
-            const char* sceneLabel = currentSceneName.empty() ? "No Scene" : currentSceneName.c_str();
-            float textWidth = ImGui::CalcTextSize(sceneLabel).x;
+            std::string sceneLabel = currentSceneName.empty() ? "No Scene" : "Scene: " + currentSceneName;
+            float textWidth = ImGui::CalcTextSize(sceneLabel.c_str()).x;
             float rightX = ImGui::GetWindowContentRegionMax().x - textWidth;
             ImGui::SameLine(rightX);
             if (currentSceneName.empty())
-                ImGui::TextDisabled("%s", sceneLabel);
+                ImGui::TextDisabled("%s", sceneLabel.c_str());
             else
-                ImGui::Text("Scene: %s", sceneLabel);
+                ImGui::Text("%s", sceneLabel.c_str());
         }
         ImGui::End();
         ImGui::PopStyleVar();
