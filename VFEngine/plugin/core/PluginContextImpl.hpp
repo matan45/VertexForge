@@ -28,6 +28,7 @@ namespace plugin {
         std::vector<events::SubscriptionToken> pluginEventSubscriptions;
         std::vector<services::AudioHandle> managedAudioHandles;
         std::vector<services::VFXInstanceId> managedVFXInstances;
+        static std::vector<MetaComponentBridge> allBridges;
 
     public:
         explicit PluginContextImpl(const std::string& pluginName,
@@ -115,6 +116,11 @@ namespace plugin {
         void playVFXInstance(services::VFXInstanceId instanceId) override;
         void stopVFXInstance(services::VFXInstanceId instanceId) override;
         bool isVFXInstancePlaying(services::VFXInstanceId instanceId) override;
+
+        // Meta component registration
+        void registerComponentBridge(MetaComponentBridge bridge) override;
+
+        static const std::vector<MetaComponentBridge>& getAllBridges() { return allBridges; }
 
         void cleanupAll();
 

@@ -15,8 +15,7 @@ workspace "VertexForge"
       buildoptions { "/utf-8", "/MP" }
       defines {
          "VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1",
-         "GLM_FORCE_DEPTH_ZERO_TO_ONE",  -- Vulkan uses [0,1] depth range, not OpenGL's [-1,1]
-         "ENTT_API_IMPORT"               -- Import EnTT symbols from ECSRegistry DLL
+         "GLM_FORCE_DEPTH_ZERO_TO_ONE"  -- Vulkan uses [0,1] depth range, not OpenGL's [-1,1]
       }
    filter {}
 
@@ -546,8 +545,7 @@ project "ECSRegistry"
       "VFEngine/utilities"
    }
 
-   removedefines { "ENTT_API_IMPORT" }  -- Override workspace default
-   defines { "_CRT_SECURE_NO_WARNINGS", "VF_ECSREGISTRY_BUILD_DLL", "ENTT_API_EXPORT" }
+   defines { "_CRT_SECURE_NO_WARNINGS", "VF_ECSREGISTRY_BUILD_DLL" }
 
    links { "spdLog" }
 

@@ -14,7 +14,6 @@
 #include "MeshBrushComponents.hpp"
 #include "DecalComponents.hpp"
 #include "VolumetricComponents.hpp"
-#include "PluginComponents.hpp"
 #include "WeatherComponents.hpp"
 #include "DestructionComponents.hpp"
 

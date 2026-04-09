@@ -5,6 +5,7 @@
 #include <any>
 #include <utility>
 #include <vector>
+#include <functional>
 #include <entt/entt.hpp>
 #include <nlohmann/json.hpp>
 #include <glm/glm.hpp>
@@ -32,6 +33,19 @@ namespace pipeline {
 }
 
 namespace plugin {
+
+    // Type-erased bridge for accessing plugin-defined native components from the engine.
+    // Lambdas are instantiated in the plugin DLL (correct type_index) but stored engine-side.
+    struct MetaComponentBridge {
+        entt::id_type typeId = 0;
+        const char* name = nullptr;
+        std::string pluginName;
+        entt::meta_type metaType;  // Resolved from plugin DLL's meta context
+        std::function<void*(entt::registry&, entt::entity)> tryGet;
+        std::function<void(entt::registry&, entt::entity)> emplace;
+        std::function<void(entt::registry&, entt::entity)> remove;
+        std::function<bool(entt::registry&, entt::entity)> has;
+    };
 
     namespace capability {
         constexpr std::string_view editor   = "editor";
@@ -200,6 +214,49 @@ namespace plugin {
         virtual void playVFXInstance(services::VFXInstanceId instanceId) = 0;
         virtual void stopVFXInstance(services::VFXInstanceId instanceId) = 0;
         virtual bool isVFXInstancePlaying(services::VFXInstanceId instanceId) = 0;
+
+        // === Native Component Registration ===
+        // Register native C++ component types so the engine can discover, inspect, and manage them.
+        // Uses type-erased bridges — no shared type IDs needed across DLL boundaries.
+
+        // Register a type-erased component bridge for engine-side access (inspector, Add Component UI).
+        virtual void registerComponentBridge(MetaComponentBridge bridge) = 0;
+
+        // Template helper — registers a native component with a bridge + meta reflection.
+        // Instantiated in the plugin DLL so type_index is correct for that DLL.
+        // Returns entt::meta_factory<T> for chaining .data<>() calls (used by auto-inspector).
+        //
+        // Usage:
+        //   ctx->registerNativeComponent<Health>("Health")
+        //       .data<&Health::maxHP>("maxHP")
+        //       .data<&Health::currentHP>("currentHP");
+        template<typename T>
+        auto registerNativeComponent(const char* name)
+        {
+            entt::id_type id = entt::hashed_string::value(name);
+
+            MetaComponentBridge bridge;
+            bridge.typeId = id;
+            bridge.name = name;
+            bridge.tryGet = [](entt::registry& r, entt::entity e) -> void* {
+                return r.try_get<T>(e);
+            };
+            bridge.emplace = [](entt::registry& r, entt::entity e) {
+                if (!r.all_of<T>(e)) r.emplace<T>(e);
+            };
+            bridge.remove = [](entt::registry& r, entt::entity e) {
+                if (r.all_of<T>(e)) r.remove<T>(e);
+            };
+            bridge.has = [](entt::registry& r, entt::entity e) -> bool {
+                return r.all_of<T>(e);
+            };
+            // Register meta type in plugin DLL's local context
+            auto factory = entt::meta_factory<T>().type(id, name);
+            bridge.metaType = entt::resolve<T>();
+            registerComponentBridge(std::move(bridge));
+
+            return factory;
+        }
 
     };
 

@@ -1,6 +1,9 @@
 #include "AddComponentPopup.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/ui/UIEvents.hpp"
+#include "core/PluginContextImpl.hpp"
+#include "scene/EntityRegistry.hpp"
+#include "data/EntityConversion.hpp"
 #include <imgui.h>
 
 namespace windows::details
@@ -212,6 +215,32 @@ namespace windows::details
             }
             if (ImGui::IsItemHovered())
                 ImGui::SetTooltip("Marks this element as a drop receiver for drag-and-drop");
+        }
+    }
+
+    void AddComponentPopup::drawPluginSection(const ComponentPresence& c, const char* filter)
+    {
+        auto& bridges = plugin::PluginContextImpl::getAllBridges();
+        if (bridges.empty())
+            return;
+
+        auto& reg = scene::EntityRegistry::getRegistry();
+        auto entity = services::internal::fromHandle(c.handle);
+
+        for (const auto& bridge : bridges)
+        {
+            if (bridge.has(reg, entity))
+                continue;
+
+            const char* name = bridge.name ? bridge.name : "Unknown";
+            if (filter && !matchesFilter(name, filter))
+                continue;
+
+            std::string label = std::string("  ") + name;
+            if (ImGui::Selectable(label.c_str()))
+            {
+                bridge.emplace(reg, entity);
+            }
         }
     }
 

@@ -67,6 +67,7 @@ namespace windows::details {
         void drawAnimationSection(const ComponentPresence& c, const char* filter = nullptr);
         void drawLightingSection(const ComponentPresence& c, const char* filter = nullptr);
         void drawUISection(const ComponentPresence& c, const char* filter = nullptr);
+        void drawPluginSection(const ComponentPresence& c, const char* filter = nullptr);
 
         static bool matchesFilter(const char* label, const char* filter);
     };

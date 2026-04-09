@@ -25,6 +25,10 @@
 
 namespace plugin {
 
+    // Static member definitions
+    std::vector<MetaComponentBridge> PluginContextImpl::allBridges{};
+
+
     PluginContextImpl::PluginContextImpl(const std::string& pluginName,
                                          const std::unordered_set<std::string>& capabilities)
         : pluginName(pluginName)
@@ -696,6 +700,17 @@ namespace plugin {
         return events::EventDispatcher::instance().query(q);
     }
 
+    // ========================================================================
+    // Meta Component Registration
+    // ========================================================================
+
+    void PluginContextImpl::registerComponentBridge(MetaComponentBridge bridge)
+    {
+        bridge.pluginName = pluginName;
+        vfLogInfo("[Plugin:{}] Registered component bridge: {}", pluginName, bridge.name ? bridge.name : "unnamed");
+        allBridges.push_back(std::move(bridge));
+    }
+
     void PluginContextImpl::cleanupAll()
     {
         auto& dispatcher = events::EventDispatcher::instance();
@@ -719,6 +734,11 @@ namespace plugin {
             }
         }
         managedVFXInstances.clear();
+
+        // Remove component bridges registered by this plugin
+        std::erase_if(allBridges, [this](const MetaComponentBridge& b) {
+            return b.pluginName == pluginName;
+        });
 
         for (const auto& token : managedSubscriptions) {
             if (token.isValid()) {
