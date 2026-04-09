@@ -370,5 +370,12 @@ namespace serialization
         deserializeUIStructuralComponents(componentsJson, entity);
         deserializeUIInteractiveComponents(componentsJson, entity);
         deserializeMiscComponents(componentsJson, entity);
+
+        // Plugin components
+        if (pluginDeserializeHook)
+        {
+            pluginDeserializeHook(componentsJson,
+                scene::EntityRegistry::getRegistry(), entity.getHandle());
+        }
     }
 }

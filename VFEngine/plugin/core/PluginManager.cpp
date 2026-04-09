@@ -1,10 +1,15 @@
 #include "print/Log.hpp"
 #include "PluginManager.hpp"
+#include "PluginContextImpl.hpp"
 #include "../api/PluginVersion.hpp"
+#include "serialization/SceneSerialization.hpp"
+#include "scene/EntityRegistry.hpp"
 #include "Pipeline.hpp"
 #include <algorithm>
 #include <unordered_set>
 #include <cassert>
+#include <glm/glm.hpp>
+#include <glm/gtc/quaternion.hpp>
 
 namespace plugin {
 
@@ -321,8 +326,113 @@ namespace plugin {
         return true;
     }
 
+    static nlohmann::json serializeMetaAny(const entt::meta_any& value, const entt::meta_type& type)
+    {
+        if (type.info() == entt::type_id<int>()) return value.cast<int>();
+        if (type.info() == entt::type_id<float>()) return value.cast<float>();
+        if (type.info() == entt::type_id<bool>()) return value.cast<bool>();
+        if (type.info() == entt::type_id<std::string>()) return value.cast<std::string>();
+        if (type.info() == entt::type_id<glm::vec2>()) {
+            auto v = value.cast<glm::vec2>();
+            return nlohmann::json::array({v.x, v.y});
+        }
+        if (type.info() == entt::type_id<glm::vec3>()) {
+            auto v = value.cast<glm::vec3>();
+            return nlohmann::json::array({v.x, v.y, v.z});
+        }
+        if (type.info() == entt::type_id<glm::vec4>()) {
+            auto v = value.cast<glm::vec4>();
+            return nlohmann::json::array({v.x, v.y, v.z, v.w});
+        }
+        if (type.info() == entt::type_id<glm::quat>()) {
+            auto q = value.cast<glm::quat>();
+            return nlohmann::json::array({q.x, q.y, q.z, q.w});
+        }
+        return nullptr;
+    }
+
+    static void deserializeMetaData(entt::meta_data data, entt::meta_any& instance, const nlohmann::json& value)
+    {
+        auto type = data.type();
+        if (type.info() == entt::type_id<int>() && value.is_number_integer())
+            data.set(instance, value.get<int>());
+        else if (type.info() == entt::type_id<float>() && value.is_number())
+            data.set(instance, value.get<float>());
+        else if (type.info() == entt::type_id<bool>() && value.is_boolean())
+            data.set(instance, value.get<bool>());
+        else if (type.info() == entt::type_id<std::string>() && value.is_string())
+            data.set(instance, value.get<std::string>());
+        else if (type.info() == entt::type_id<glm::vec2>() && value.is_array() && value.size() >= 2)
+            data.set(instance, glm::vec2(value[0].get<float>(), value[1].get<float>()));
+        else if (type.info() == entt::type_id<glm::vec3>() && value.is_array() && value.size() >= 3)
+            data.set(instance, glm::vec3(value[0].get<float>(), value[1].get<float>(), value[2].get<float>()));
+        else if (type.info() == entt::type_id<glm::vec4>() && value.is_array() && value.size() >= 4)
+            data.set(instance, glm::vec4(value[0].get<float>(), value[1].get<float>(), value[2].get<float>(), value[3].get<float>()));
+        else if (type.info() == entt::type_id<glm::quat>() && value.is_array() && value.size() >= 4)
+            data.set(instance, glm::quat(value[3].get<float>(), value[0].get<float>(), value[1].get<float>(), value[2].get<float>()));
+    }
+
     void PluginManager::initializeAll()
     {
+        // Set up plugin component serialization hooks
+        serialization::SceneSerialization::setPluginSerializationHooks(
+            // Serialize
+            [](entt::registry& reg, entt::entity entity) -> nlohmann::json {
+                nlohmann::json result = nlohmann::json::object();
+                auto& bridges = PluginContextImpl::getAllBridges();
+                for (const auto& bridge : bridges)
+                {
+                    if (!bridge.has(reg, entity)) continue;
+                    void* ptr = bridge.tryGet(reg, entity);
+                    if (!ptr || !bridge.metaType) continue;
+
+                    auto instance = bridge.metaType.from_void(ptr);
+                    if (!instance) continue;
+
+                    nlohmann::json compJson = nlohmann::json::object();
+                    for (auto&& [id, member] : bridge.metaType.data())
+                    {
+                        auto val = member.get(instance);
+                        if (!val) continue;
+                        const char* name = member.name();
+                        if (!name) continue;
+                        auto serialized = serializeMetaAny(val, member.type());
+                        if (!serialized.is_null())
+                            compJson[name] = std::move(serialized);
+                    }
+                    if (!compJson.empty())
+                        result["plugin:" + std::string(bridge.name)] = std::move(compJson);
+                }
+                return result;
+            },
+            // Deserialize
+            [](const nlohmann::json& componentsJson, entt::registry& reg, entt::entity entity) {
+                auto& bridges = PluginContextImpl::getAllBridges();
+                for (const auto& bridge : bridges)
+                {
+                    std::string key = "plugin:" + std::string(bridge.name);
+                    if (!componentsJson.contains(key)) continue;
+
+                    const auto& compJson = componentsJson[key];
+                    if (!compJson.is_object()) continue;
+
+                    bridge.emplace(reg, entity);
+                    void* ptr = bridge.tryGet(reg, entity);
+                    if (!ptr || !bridge.metaType) continue;
+
+                    auto instance = bridge.metaType.from_void(ptr);
+                    if (!instance) continue;
+
+                    for (auto&& [id, member] : bridge.metaType.data())
+                    {
+                        const char* name = member.name();
+                        if (!name || !compJson.contains(name)) continue;
+                        deserializeMetaData(member, instance, compJson[name]);
+                    }
+                }
+            }
+        );
+
         for (auto& plugin : plugins) {
             if (plugin.initialized) {
                 continue;
@@ -397,6 +507,8 @@ namespace plugin {
         }
 
         plugins.clear();
+
+        serialization::SceneSerialization::setPluginSerializationHooks(nullptr, nullptr);
     }
 
     const std::vector<LoadedPlugin>& PluginManager::getLoadedPlugins() const
