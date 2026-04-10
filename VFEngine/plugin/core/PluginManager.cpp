@@ -501,26 +501,21 @@ namespace plugin {
         {
             auto fieldVal = data.get(instance);
             auto view = fieldVal.as_sequence_container();
-            // Clear existing elements
-            while (view.size() > 0)
-                view.erase(view.begin());
-            // Re-populate from JSON array
+            view.clear();
             for (const auto& elem : value)
             {
                 auto converted = jsonToMetaAny(elem, view.value_type());
                 if (converted)
                     view.insert(view.end(), converted);
             }
+            data.set(instance, fieldVal);
         }
         // Associative containers (std::map<K,V>, etc.)
         else if (type.is_associative_container() && value.is_object())
         {
             auto fieldVal = data.get(instance);
             auto view = fieldVal.as_associative_container();
-            // Clear existing entries
-            while (view.size() > 0)
-                view.erase(view.begin());
-            // Re-populate from JSON object
+            view.clear();
             for (auto& [k, v] : value.items())
             {
                 auto keyAny = jsonKeyToMetaAny(k, view.key_type());
@@ -528,6 +523,7 @@ namespace plugin {
                 if (keyAny && valAny)
                     view.insert(keyAny, valAny);
             }
+            data.set(instance, fieldVal);
         }
         // Enums — deserialize from string name
         else if (type.is_enum() && value.is_string())
@@ -613,12 +609,6 @@ namespace plugin {
             }
         );
 
-        // VK-1290: Invoke script binding registrar (set by Core, which has mType access)
-        if (auto registrar = PluginContextImpl::getScriptBindingRegistrar())
-        {
-            registrar(PluginContextImpl::getAllBridges());
-        }
-
         for (auto& plugin : plugins) {
             if (plugin.initialized) {
                 continue;
@@ -646,6 +636,13 @@ namespace plugin {
                     plugin.instance = nullptr;
                 }
             }
+        }
+
+        // VK-1290: Invoke script binding registrar AFTER all plugins have initialized
+        // (plugins register component bridges during onInitialize)
+        if (auto registrar = PluginContextImpl::getScriptBindingRegistrar())
+        {
+            registrar(PluginContextImpl::getAllBridges());
         }
     }
 
