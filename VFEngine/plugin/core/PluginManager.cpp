@@ -613,12 +613,6 @@ namespace plugin {
             }
         );
 
-        // VK-1290: Invoke script binding registrar (set by Core, which has mType access)
-        if (auto registrar = PluginContextImpl::getScriptBindingRegistrar())
-        {
-            registrar(PluginContextImpl::getAllBridges());
-        }
-
         for (auto& plugin : plugins) {
             if (plugin.initialized) {
                 continue;
@@ -646,6 +640,13 @@ namespace plugin {
                     plugin.instance = nullptr;
                 }
             }
+        }
+
+        // VK-1290: Invoke script binding registrar AFTER all plugins have initialized
+        // (plugins register component bridges during onInitialize)
+        if (auto registrar = PluginContextImpl::getScriptBindingRegistrar())
+        {
+            registrar(PluginContextImpl::getAllBridges());
         }
     }
 

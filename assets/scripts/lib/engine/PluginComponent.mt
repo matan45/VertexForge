@@ -135,7 +135,11 @@ public class PluginComponent {
 
     // Set a Vec3f field value
     public static function setVec3(int entityId, string componentName, string fieldName, Vec3f value): bool {
-        return _plugin_setVec3(entityId, componentName, fieldName, new float[]{value.x, value.y, value.z});
+        float[] v = new float[3];
+        v[0] = value.x;
+        v[1] = value.y;
+        v[2] = value.z;
+        return _plugin_setVec3(entityId, componentName, fieldName, v);
     }
 
     // ============================================
@@ -149,22 +153,22 @@ public class PluginComponent {
 
     // Get an int element from an array field
     public static function getArrayInt(int entityId, string componentName, string fieldName, int index): int {
-        return _plugin_getArrayElement(entityId, componentName, fieldName, index) as int;
+        return (int)_plugin_getArrayElement(entityId, componentName, fieldName, index);
     }
 
     // Get a float element from an array field
     public static function getArrayFloat(int entityId, string componentName, string fieldName, int index): float {
-        return _plugin_getArrayElement(entityId, componentName, fieldName, index) as float;
+        return (float)_plugin_getArrayElement(entityId, componentName, fieldName, index);
     }
 
     // Get a string element from an array field
     public static function getArrayString(int entityId, string componentName, string fieldName, int index): string {
-        return _plugin_getArrayElement(entityId, componentName, fieldName, index) as string;
+        return (string)_plugin_getArrayElement(entityId, componentName, fieldName, index);
     }
 
     // Get a bool element from an array field
     public static function getArrayBool(int entityId, string componentName, string fieldName, int index): bool {
-        return _plugin_getArrayElement(entityId, componentName, fieldName, index) as bool;
+        return (bool)_plugin_getArrayElement(entityId, componentName, fieldName, index);
     }
 
     // Set an element in an array field at the given index
@@ -222,19 +226,19 @@ public class PluginComponent {
 
     // Get a typed value from a map field by key
     public static function getMapInt(int entityId, string componentName, string fieldName, string key): int {
-        return _plugin_getMapValue(entityId, componentName, fieldName, key) as int;
+        return (int)_plugin_getMapValue(entityId, componentName, fieldName, key);
     }
 
     public static function getMapFloat(int entityId, string componentName, string fieldName, string key): float {
-        return _plugin_getMapValue(entityId, componentName, fieldName, key) as float;
+        return (float)_plugin_getMapValue(entityId, componentName, fieldName, key);
     }
 
     public static function getMapString(int entityId, string componentName, string fieldName, string key): string {
-        return _plugin_getMapValue(entityId, componentName, fieldName, key) as string;
+        return (string)_plugin_getMapValue(entityId, componentName, fieldName, key);
     }
 
     public static function getMapBool(int entityId, string componentName, string fieldName, string key): bool {
-        return _plugin_getMapValue(entityId, componentName, fieldName, key) as bool;
+        return (bool)_plugin_getMapValue(entityId, componentName, fieldName, key);
     }
 
     // Set or insert a typed value in a map field by key

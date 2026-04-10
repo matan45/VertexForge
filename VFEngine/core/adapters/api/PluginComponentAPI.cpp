@@ -48,12 +48,19 @@ namespace core::api
     static std::shared_ptr<std::vector<plugin::MetaComponentBridge>> storedBridges;
     static services::ScriptInterpreter* storedInterpreter = nullptr;
 
-    // Extract short class name from C++ type name (strip namespaces)
+    // Extract short class name from C++ type name (strip namespaces and struct/class prefix)
     static std::string extractShortName(std::string_view fullName)
     {
+        // Strip namespace (last ::)
         auto pos = fullName.rfind(':');
         if (pos != std::string_view::npos)
-            return std::string(fullName.substr(pos + 1));
+            fullName = fullName.substr(pos + 1);
+        // Strip MSVC "struct " / "class " / "enum " prefix
+        for (auto prefix : {"struct ", "class ", "enum "}) {
+            auto len = std::string_view(prefix).size();
+            if (fullName.size() > len && fullName.substr(0, len) == prefix)
+                return std::string(fullName.substr(len));
+        }
         return std::string(fullName);
     }
 
@@ -784,10 +791,10 @@ namespace core::api
                 for (auto it = view.begin(), last = view.end(); it != last; ++it, ++i)
                 {
                     auto [key, val] = *it;
-                    if (auto* s = key.try_cast<std::string>())
-                        arr->set(i, value::Value(*s));
-                    else if (auto* n = key.try_cast<int>())
-                        arr->set(i, value::Value(std::to_string(*n)));
+                    if (view.key_type().info() == entt::type_id<std::string>())
+                        arr->set(i, value::Value(key.cast<std::string>()));
+                    else if (view.key_type().info() == entt::type_id<int>())
+                        arr->set(i, value::Value(std::to_string(key.cast<int>())));
                     else
                         arr->set(i, value::Value(std::string("?")));
                 }
@@ -970,8 +977,12 @@ namespace core::api
 
                 auto memberType = member.type();
 
-                // Direct struct fields
-                if (memberType.is_class())
+                // Direct struct fields — only register user-defined structs
+                // (must have reflected data members and not be a container or known engine type)
+                if (memberType.is_class()
+                    && !memberType.is_sequence_container()
+                    && !memberType.is_associative_container()
+                    && classifyType(memberType) == FieldKind::STRUCT)
                     registerStructType(memberType, env);
 
                 // Container element types
