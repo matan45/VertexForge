@@ -961,6 +961,9 @@ namespace core::api
     {
         if (!storedBridges || !interpreter) return;
 
+        // Clear previous mappings (may be stale from prior build cycle)
+        structMappings.clear();
+
         storedInterpreter = interpreter;
         auto env = interpreter->getEnvironment();
         if (!env) return;
